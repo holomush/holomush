@@ -19,7 +19,7 @@ import (
 type Destroyer interface {
 	// DestroyDEK soft-deletes the crypto_keys row by primary key id.
 	// Idempotent: a row already destroyed is a no-op success
-	// (INV-E12-PHASE6-IDEMPOTENT).
+	// (INV-CRYPTO-99).
 	DestroyDEK(ctx context.Context, dekID int64) error
 
 	// EvictCachedDEK removes the DEK's context from the local DEK
@@ -39,7 +39,7 @@ func (o *Orchestrator) SetDestroyer(d Destroyer) {
 	o.dekDestroyer = d
 }
 
-// RunPhase6 destroys the old DEK (INV-E12-PHASE6-IDEMPOTENT) and advances
+// RunPhase6 destroys the old DEK (INV-CRYPTO-99) and advances
 // the checkpoint from phase5_invalidate to phase6_destroy_old.
 //
 // Pre-conditions: checkpoint.Status MUST be CheckpointStatusPhase5Invalidate
@@ -57,7 +57,7 @@ func (o *Orchestrator) SetDestroyer(d Destroyer) {
 //     eviction (other replicas already evicted in Phase 5 cluster invalidation).
 //  5. CAS UPDATE: transition phase5_invalidate → phase6_destroy_old.
 //
-// INV-E12-PHASE6-IDEMPOTENT: a second RunPhase6 invocation on an already-
+// INV-CRYPTO-99: a second RunPhase6 invocation on an already-
 // phase6_destroy_old checkpoint returns nil immediately (step 2). The
 // underlying markDestroyedByPK SQL also uses WHERE destroyed_at IS NULL,
 // making the DB write independently idempotent.
@@ -87,7 +87,7 @@ func (o *Orchestrator) RunPhase6(ctx context.Context, rid RequestID) error {
 		}
 	case CheckpointStatusPhase6DestroyOld:
 		// Idempotent re-invoke: old DEK already destroyed. Return nil
-		// per INV-E12-PHASE6-IDEMPOTENT.
+		// per INV-CRYPTO-99.
 		return nil
 	default:
 		return oops.Code("DEK_REKEY_PHASE_PRECONDITION_FAILED").

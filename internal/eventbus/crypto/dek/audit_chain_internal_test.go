@@ -6,7 +6,7 @@
 // extractRekeyPrevHash, extractRekeySelfHash) and are therefore in package dek.
 // The companion external test file (audit_chain_test.go in dek_test package)
 // covers the exported surface (RekeyChainFor, ParseRekeyScopeFromSubject,
-// INV-E26/E27/E28 validation).
+// INV-CRYPTO-113/INV-CRYPTO-114/INV-CRYPTO-115 validation).
 package dek
 
 import (
@@ -75,7 +75,7 @@ func TestExtractRekeyPrevHash_GenesisReturnsNil(t *testing.T) {
 	require.Nil(t, prev)
 }
 
-// TestRekeyChain_INV_E28_RecomputeSelfHashRoundTrip verifies INV-E28:
+// TestRekeyChain_INV_E28_RecomputeSelfHashRoundTrip verifies INV-CRYPTO-115:
 // RecomputeSelfHash over two logically-identical payloads (different key
 // order, different self_hash value) produces the same SHA-256 output.
 func TestRekeyChain_INV_E28_RecomputeSelfHashRoundTrip(t *testing.T) {

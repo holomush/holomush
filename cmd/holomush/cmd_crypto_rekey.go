@@ -37,7 +37,7 @@ type RekeyStreamReader interface {
 
 // rekeyProgressError is a typed error that carries a server-sent error code
 // and message from a RekeyError progress event.  mapToExitCodeErr inspects
-// this type to assign sysexits.h exit codes (INV-E23).
+// this type to assign sysexits.h exit codes (INV-CRYPTO-110).
 type rekeyProgressError struct {
 	code string
 	msg  string
@@ -207,7 +207,7 @@ func streamProgress(stream RekeyStreamReader, noProgress bool, w io.Writer) erro
 }
 
 // mapErrToExitCodeForTest maps any error carrying a known oops code or
-// rekeyProgressError code to its sysexits.h integer (INV-E23).  Returns 1
+// rekeyProgressError code to its sysexits.h integer (INV-CRYPTO-110).  Returns 1
 // for unknown errors.  This testable helper is callable from tests so the
 // exit-code logic is exercisable without invoking os.Exit.
 func mapErrToExitCodeForTest(err error) int {
@@ -238,7 +238,7 @@ func mapErrToExitCodeForTest(err error) int {
 }
 
 // mapToExitCodeErr maps a rekey error to an exitCodeError carrying the
-// appropriate sysexits.h code per INV-E23.  Unknown errors pass through
+// appropriate sysexits.h code per INV-CRYPTO-110.  Unknown errors pass through
 // unchanged.
 func mapToExitCodeErr(err error) error {
 	var pe *rekeyProgressError
@@ -273,7 +273,7 @@ func openApprovalAndWait(
 // --- Sub-subcommands ---
 
 // newRekeyResumeCmd returns `holomush crypto rekey resume <request_id>`.
-// --force-destroy bypasses Phase 5 cluster invalidation (INV-E10 gates this
+// --force-destroy bypasses Phase 5 cluster invalidation (INV-CRYPTO-97 gates this
 // server-side: checkpoint must be at phase5_timeout).  In non-TTY mode the
 // --confirm <context_id> flag is required; missing or empty value exits 64
 // (EX_USAGE).  In TTY mode the operator is prompted interactively.

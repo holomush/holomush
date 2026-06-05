@@ -66,7 +66,7 @@ func TestZeroField_MissingField_NoOp(t *testing.T) {
 // TestRecomputeSelfHash_DeterministicOverPayloadOrder verifies that two
 // logically-equivalent payloads (same keys and values, different insertion
 // order) produce the same SHA-256 hash — proving JCS key-sort is applied.
-// INV-E28: hash = SHA-256(JCS(zero(payload, SelfHashFieldName))).
+// INV-CRYPTO-115: hash = SHA-256(JCS(zero(payload, SelfHashFieldName))).
 func TestRecomputeSelfHash_DeterministicOverPayloadOrder(t *testing.T) {
 	// Build two maps with identical contents but different key insertion order.
 	p1 := map[string]any{
@@ -105,7 +105,7 @@ func TestRecomputeSelfHash_DeterministicOverPayloadOrder(t *testing.T) {
 // ValidateRegistration tests
 // ---------------------------------------------------------------------------
 
-// TestValidateRegistration_RejectsNonEventsPrefix verifies INV-E26: a Chain
+// TestValidateRegistration_RejectsNonEventsPrefix verifies INV-CRYPTO-113: a Chain
 // whose SubjectPrefix does not start with "events." is rejected.
 func TestValidateRegistration_RejectsNonEventsPrefix(t *testing.T) {
 	bad := chain.Chain{
@@ -115,11 +115,11 @@ func TestValidateRegistration_RejectsNonEventsPrefix(t *testing.T) {
 		ScopePayloadField: "scope",
 	}
 	err := chain.ValidateRegistration(bad)
-	require.Error(t, err, "INV-E26: non-events. prefix must be rejected")
+	require.Error(t, err, "INV-CRYPTO-113: non-events. prefix must be rejected")
 	assert.Contains(t, err.Error(), "events.")
 }
 
-// TestValidateRegistration_RejectsMissingScopeFromPayload verifies INV-E27:
+// TestValidateRegistration_RejectsMissingScopeFromPayload verifies INV-CRYPTO-114:
 // a Chain with an empty ScopePayloadField is rejected.
 func TestValidateRegistration_RejectsMissingScopeFromPayload(t *testing.T) {
 	bad := chain.Chain{
@@ -129,7 +129,7 @@ func TestValidateRegistration_RejectsMissingScopeFromPayload(t *testing.T) {
 		ScopePayloadField: "", // missing
 	}
 	err := chain.ValidateRegistration(bad)
-	require.Error(t, err, "INV-E27: empty ScopePayloadField must be rejected")
+	require.Error(t, err, "INV-CRYPTO-114: empty ScopePayloadField must be rejected")
 }
 
 // TestValidateRegistration_AcceptsValidChain verifies that a well-formed Chain

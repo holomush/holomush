@@ -96,7 +96,7 @@ type Checkpoint struct {
 	AbortedReason        *string
 }
 
-// PolicyHash returns the policy_hash captured at Phase 1 (INV-E25) as a
+// PolicyHash returns the policy_hash captured at Phase 1 (INV-CRYPTO-112) as a
 // [32]byte array. Using a fixed-size array rather than []byte preserves
 // INV-CRYPTO-16 (no exported []byte in the dek package). The array is zero-padded
 // if the stored slice is shorter than 32 bytes (should not happen in
@@ -150,7 +150,7 @@ func (c *Checkpoint) Phase5MissingMembers() ([]string, error) {
 
 // Phase5HasMissingMembers reports whether phase5_missing_members is populated
 // (a non-empty JSON value). Useful for the Phase 5 timeout discriminator
-// without paying the JSON-decode cost. INV-E10's force-destroy gate consumes
+// without paying the JSON-decode cost. INV-CRYPTO-97's force-destroy gate consumes
 // this: force-destroy MUST be rejected unless the checkpoint sits in the
 // (status=phase5_invalidate, missing_members!=NULL) state.
 func (c *Checkpoint) Phase5HasMissingMembers() bool {
@@ -181,7 +181,7 @@ func NewCheckpointRepo(pool *pgxpool.Pool) *CheckpointRepo { return &CheckpointR
 // Open inserts a new checkpoint row with status=pending and returns the
 // generated RequestID. Returns DEK_REKEY_ALREADY_IN_PROGRESS if a non-
 // terminal checkpoint already exists for the same (context_type, context_id)
-// pair (INV-E5, enforced by the partial unique index).
+// pair (INV-CRYPTO-92, enforced by the partial unique index).
 // Construct req with NewCheckpointOpenRequest to satisfy hash-length
 // invariants before calling Open.
 func (r *CheckpointRepo) Open(ctx context.Context, req CheckpointOpenRequest) (RequestID, error) {
@@ -239,7 +239,7 @@ func (r *CheckpointRepo) Get(ctx context.Context, rid RequestID) (Checkpoint, er
 
 // UpdateStatus transitions status from → to using a CAS UPDATE that
 // atomically guards against stale writers. Returns DEK_REKEY_STALE_TRANSITION
-// if the row was not in state `from` at commit time (INV-E1).
+// if the row was not in state `from` at commit time (INV-CRYPTO-88).
 // AssertTransitionAllowed gates the FSM semantics before issuing SQL.
 func (r *CheckpointRepo) UpdateStatus(ctx context.Context, rid RequestID, from, to CheckpointStatus) error {
 	if err := AssertTransitionAllowed(from, to); err != nil {
@@ -327,7 +327,7 @@ func (r *CheckpointRepo) FindNonTerminalByContext(ctx context.Context, ctxType, 
 
 // ListExpired returns all non-terminal checkpoints whose
 // last_heartbeat_at is older than ttl ago. Called by the sweep subsystem
-// (INV-E18).
+// (INV-CRYPTO-105).
 func (r *CheckpointRepo) ListExpired(ctx context.Context, ttl time.Duration) ([]Checkpoint, error) {
 	// Bind ttl.Nanoseconds() directly against the BIGINT-ns last_heartbeat_at
 	// column. The prior int64(ttl.Seconds()) truncated sub-second durations
@@ -416,7 +416,7 @@ func (r *CheckpointRepo) SetForceDestroy(ctx context.Context, rid RequestID) err
 
 // UpdateStatusForceDestroy transitions phase5_invalidate → phase6_destroy_old
 // when force_destroy=true, bypassing the normal Phase 5 invalidation wait
-// (INV-E10). The CAS predicate requires both status='phase5_invalidate' AND
+// (INV-CRYPTO-97). The CAS predicate requires both status='phase5_invalidate' AND
 // force_destroy=true.
 func (r *CheckpointRepo) UpdateStatusForceDestroy(ctx context.Context, rid RequestID) error {
 	if err := AssertTransitionAllowed(CheckpointStatusPhase5Invalidate, CheckpointStatusPhase6DestroyOld); err != nil {
@@ -441,7 +441,7 @@ func (r *CheckpointRepo) UpdateStatusForceDestroy(ctx context.Context, rid Reque
 // IncrementPhase3Count atomically increments the cumulative Phase 3
 // row-rewrite count on the checkpoint row by delta. Called by
 // processPhase3Batch INSIDE the batch transaction so the count, the row
-// rewrites, and the cursor advance all commit atomically (INV-E7).
+// rewrites, and the cursor advance all commit atomically (INV-CRYPTO-94).
 // Crash-resume correctness: any successfully-committed batch is reflected
 // in the count; a crashed-mid-batch run leaves the count consistent with
 // the cursor (both unchanged from before the batch began).
@@ -473,7 +473,7 @@ func (r *CheckpointRepo) IncrementPhase3Count(ctx context.Context, tx pgx.Tx, ri
 
 // AdvanceCursor updates last_processed_event_id within the caller's active
 // pgx.Tx so that the cursor advance commits atomically with the events_audit
-// row UPDATEs (INV-E7). The CAS predicate requires status='phase3_reencrypt_cold'.
+// row UPDATEs (INV-CRYPTO-94). The CAS predicate requires status='phase3_reencrypt_cold'.
 func (r *CheckpointRepo) AdvanceCursor(ctx context.Context, tx pgx.Tx, rid RequestID, eventID []byte) error {
 	tag, err := tx.Exec(ctx, `
         UPDATE crypto_rekey_checkpoints

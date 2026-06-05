@@ -664,7 +664,7 @@ type RowResult_NoPlaintextReason struct {
 	// (recipient not authorized by manifest declaration / ABAC grant — Phase 3b
 	// AuthGuard deny), "downgrade_refused" (INV-CRYPTO-42 fence — sensitive event
 	// stored under identity codec), "dek_missing" (INV-CRYPTO-50 fence — no DEK
-	// exists for this row's context), "stale_dek" (INV-E21 — both hot and cold
+	// exists for this row's context), "stale_dek" (INV-CRYPTO-108 — both hot and cold
 	// DEK tiers gone), "audit_queue_full" (plugin audit-emit backpressure), and
 	// "internal" (host-side error, details logged server-side only).
 	NoPlaintextReason string `protobuf:"bytes,3,opt,name=no_plaintext_reason,json=noPlaintextReason,proto3,oneof"`

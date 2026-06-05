@@ -20,7 +20,7 @@ import (
 // newViolationEmitter constructs a ViolationEmitter that publishes
 // `events.<game>.system.plugin_integrity_violation` events on every
 // PluginDowngradeFence INV-CRYPTO-42 refusal. The events.> prefix is required
-// by INV-E26 (Phase 5 sub-epic E §3.6) — only the EVENTS JetStream
+// by INV-CRYPTO-113 (Phase 5 sub-epic E §3.6) — only the EVENTS JetStream
 // SubjectFilter feeds events_audit. The emitter MUST NOT block —
 // the fence already enforces a 100ms ceiling around EmitViolation, but
 // this implementation also serializes the payload into a tiny Event so
@@ -66,7 +66,7 @@ func (e *violationEmitter) EmitViolation(
 		// log an emit-error on every refusal.
 		return nil
 	}
-	// Subject prefix MUST be `events.<game>.` per INV-E26 (Phase 5 sub-epic E
+	// Subject prefix MUST be `events.<game>.` per INV-CRYPTO-113 (Phase 5 sub-epic E
 	// §3.6 supersession of master spec §4.6 line 830): the EVENTS JetStream
 	// SubjectFilter at internal/eventbus/subsystem.go:24,27 is the only path
 	// by which audit projection writes to events_audit, so audit-bearing

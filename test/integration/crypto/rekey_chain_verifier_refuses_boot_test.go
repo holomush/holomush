@@ -3,10 +3,10 @@
 
 //go:build integration
 
-// rekey_chain_verifier_refuses_boot_test.go — E2E spec for INV-E15: the
+// rekey_chain_verifier_refuses_boot_test.go — E2E spec for INV-CRYPTO-102: the
 // audit-chain verifier refuses boot when a rekey chain entry has been tampered.
 //
-// Verifies INV-E15-CHAIN-VERIFIER-BOOT: any tampering with a rekey audit
+// Verifies INV-CRYPTO-102: any tampering with a rekey audit
 // row's self_hash causes the VerifierSubsystem (which runs at boot time) to
 // return AUDIT_CHAIN_HASH_MISMATCH. The clean-fixture boot path (no tampering)
 // must pass to confirm the baseline.
@@ -71,7 +71,7 @@ func buildTamperedRekeyPayload() []byte {
 }
 
 var _ = Describe("Rekey chain verifier", func() {
-	It("refuses to boot when the rekey chain has a break (INV-E15)", func() {
+	It("refuses to boot when the rekey chain has a break (INV-CRYPTO-102)", func() {
 		h := SetupRekeyHarness(suiteT)
 		defer h.Cleanup()
 
@@ -96,7 +96,7 @@ var _ = Describe("Rekey chain verifier", func() {
 			context.Background(), handler, scope,
 		)
 		Expect(cleanErr).NotTo(HaveOccurred(),
-			"INV-E15: clean chain must verify without error before tampering")
+			"INV-CRYPTO-102: clean chain must verify without error before tampering")
 
 		// Tamper: overwrite the most recent rekey audit row's envelope with a
 		// structurally valid JSON body that has a deliberately wrong self_hash.
@@ -119,21 +119,21 @@ var _ = Describe("Rekey chain verifier", func() {
 			rekeySubject)
 		Expect(updateErr).NotTo(HaveOccurred(), "tamper UPDATE must succeed")
 		Expect(tag.RowsAffected()).To(BeNumerically("==", 1),
-			"INV-E15: tamper UPDATE must affect exactly 1 row (subject=%q)", rekeySubject)
+			"INV-CRYPTO-102: tamper UPDATE must affect exactly 1 row (subject=%q)", rekeySubject)
 
 		// Re-verify the chain via VerifyScope — the same operation that
 		// VerifierSubsystem.Start performs internally at boot.
-		// INV-E15: tampering MUST cause an AUDIT_CHAIN_HASH_MISMATCH.
+		// INV-CRYPTO-102: tampering MUST cause an AUDIT_CHAIN_HASH_MISMATCH.
 		// The error is an oops.OopsError with Code()="AUDIT_CHAIN_HASH_MISMATCH";
 		// its .Error() string contains the message "self_hash does not match recompute".
 		bootErr := h.Primary.GetAuditChainVerifier().VerifyScope(
 			context.Background(), handler, scope,
 		)
 		Expect(bootErr).To(HaveOccurred(),
-			"INV-E15: chain verifier MUST detect tampering")
+			"INV-CRYPTO-102: chain verifier MUST detect tampering")
 		// Extract the oops error code (the code is not in .Error() for direct calls;
 		// it is in the oops.Code field). The message confirms hash mismatch.
 		Expect(bootErr.Error()).To(ContainSubstring("self_hash does not match recompute"),
-			"INV-E15: tampered entry MUST produce a self_hash mismatch error")
+			"INV-CRYPTO-102: tampered entry MUST produce a self_hash mismatch error")
 	})
 })

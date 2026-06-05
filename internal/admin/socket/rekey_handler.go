@@ -162,7 +162,7 @@ type RekeyAbortOutcome struct {
 // and dek.RekeyAuditEmitter behind this interface to avoid importing dek
 // (which would create an import cycle via approval → adminauth → socket).
 //
-// INV-E17: the runner MUST accept single-control regardless of site policy.
+// INV-CRYPTO-104: the runner MUST accept single-control regardless of site policy.
 type RekeyAbortRunner interface {
 	RunAbort(ctx context.Context, req RekeyAbortRequest) (RekeyAbortOutcome, error)
 }
@@ -242,7 +242,7 @@ func (h *RekeyHandler) Rekey(
 // session, re-asserts capability + role, and resumes an in-flight rekey by
 // delegating to OrchestratorRunner.Run with the RequestID from the proto.
 //
-// INV-E16 idempotency and INV-E4 same-args resume are enforced inside
+// INV-CRYPTO-103 idempotency and INV-CRYPTO-91 same-args resume are enforced inside
 // Orchestrator.Run — the handler does not need to re-check them.
 func (h *RekeyHandler) RekeyResume(
 	ctx context.Context,
@@ -286,7 +286,7 @@ func (h *RekeyHandler) RekeyResume(
 		ForceDestroy: req.GetForceDestroy(),
 		// ContextType/ContextID/Justification are intentionally zero here.
 		// The OrchestratorRunner adapter looks them up from the checkpoint row
-		// keyed by RequestID before calling dek.Orchestrator.Run (INV-E4/E16).
+		// keyed by RequestID before calling dek.Orchestrator.Run (INV-CRYPTO-91/INV-CRYPTO-103).
 	}
 	return h.runWithProgress(ctx, orchReq, stream)
 }
@@ -294,7 +294,7 @@ func (h *RekeyHandler) RekeyResume(
 // RekeyAbort is the AdminService.RekeyAbort RPC entry point. Validates the
 // session and crypto.operator capability, then delegates to RekeyAbortRunner.
 //
-// INV-E17-ABORT-NO-DUAL-CONTROL: abort is single-control regardless of site
+// INV-CRYPTO-104: abort is single-control regardless of site
 // dual_control_required policy. Any crypto.operator session may abort any
 // non-terminal checkpoint — not just the original primary operator.
 func (h *RekeyHandler) RekeyAbort(
@@ -305,7 +305,7 @@ func (h *RekeyHandler) RekeyAbort(
 	if err != nil {
 		return nil, oops.Wrap(err)
 	}
-	// INV-E17: only the crypto.operator capability is required — no admin role
+	// INV-CRYPTO-104: only the crypto.operator capability is required — no admin role
 	// re-check, no dual-control approval. Abort is a non-destructive control
 	// operation; the destructive phase (DEK destroy) is part of rekey itself.
 	hasCap, err := access.HasPlayerGrant(ctx, h.grants, identity.PlayerID, access.CapabilityCryptoOperator)

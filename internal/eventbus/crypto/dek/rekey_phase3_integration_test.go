@@ -52,7 +52,7 @@ type phase3TestSetup struct {
 	newKey    codec.Key
 	codecName codec.Name
 	// eventIDs records the ULIDs of every seeded event, in insertion order.
-	// Tests use this to look up rows post-rewrite for INV-E8 assertions.
+	// Tests use this to look up rows post-rewrite for INV-CRYPTO-95 assertions.
 	eventIDs []ulid.ULID
 	// plaintexts mirrors eventIDs and records the cleartext payload each
 	// row was encrypted from, so the round-trip assertion can compare bytes
@@ -99,7 +99,7 @@ func newPhase3TestSetup() *phase3TestSetup {
 
 	// Resolve the new DEK material so encrypted-row seeding can verify
 	// round-trip later. We don't actually need newKey at setup, but it's
-	// load-bearing for INV-E8 assertions in the AADRebindOnRewrite spec.
+	// load-bearing for INV-CRYPTO-95 assertions in the AADRebindOnRewrite spec.
 	const newDEKVer uint32 = 2                                                         // GetOrCreate seeded at v1; MintNewDEKForRekey produces v2
 	newKey, err := mgr.Resolve(context.Background(), codec.KeyID(newDEKID), newDEKVer) //nolint:gosec // G115: newDEKID is a BIGSERIAL PK
 	Expect(err).NotTo(HaveOccurred())
@@ -279,7 +279,7 @@ func (s *phase3TestSetup) LoadEventsAuditRow(id ulid.ULID) phase3RewrittenRow {
 // stubBindingResolver / noopInvalidator are shared with manager_integration_test.go
 // (package dek_test). Re-declared here is unnecessary.
 
-var _ = Describe("Phase3_RewriteAllRowsAtomically (INV-E7)", func() {
+var _ = Describe("Phase3_RewriteAllRowsAtomically (INV-CRYPTO-94)", func() {
 	It("rewrites all seeded rows atomically, advances checkpoint to phase3_reencrypt_cold, and sets cursor to largest-id row", func() {
 		setup := newPhase3TestSetup()
 		const eventCount = 100
@@ -289,7 +289,7 @@ var _ = Describe("Phase3_RewriteAllRowsAtomically (INV-E7)", func() {
 		rowsRewritten, err := setup.orch.RunPhase3(context.Background(), rid)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rowsRewritten).To(Equal(eventCount),
-			"INV-E7: every seeded row must be rewritten in one invocation")
+			"INV-CRYPTO-94: every seeded row must be rewritten in one invocation")
 
 		ckpt, err := setup.repo.Get(context.Background(), rid)
 		Expect(err).NotTo(HaveOccurred())
@@ -314,11 +314,11 @@ var _ = Describe("Phase3_RewriteAllRowsAtomically (INV-E7)", func() {
 			}
 		}
 		Expect(finalID).To(Equal(maxSeed),
-			"INV-E7: cursor advances to the largest-id row processed")
+			"INV-CRYPTO-94: cursor advances to the largest-id row processed")
 	})
 })
 
-var _ = Describe("Phase3_CrashResumeIdempotent (INV-E7-COLD-RESUME-CURSOR)", func() {
+var _ = Describe("Phase3_CrashResumeIdempotent (INV-CRYPTO-94)", func() {
 	It("resumes from crash cursor and produces state identical to a non-crashed run", func() {
 		setup := newPhase3TestSetup()
 		const eventCount = 2500
@@ -338,7 +338,7 @@ var _ = Describe("Phase3_CrashResumeIdempotent (INV-E7-COLD-RESUME-CURSOR)", fun
 		})
 
 		firstAttemptCount, firstErr := setup.orch.RunPhase3(ctx, rid)
-		Expect(firstErr).To(HaveOccurred(), "INV-E7: context cancel must surface an error")
+		Expect(firstErr).To(HaveOccurred(), "INV-CRYPTO-94: context cancel must surface an error")
 		Expect(firstAttemptCount).To(BeNumerically(">=", 1000),
 			"first attempt processed at least one batch before crash")
 		Expect(firstAttemptCount).To(BeNumerically("<", eventCount),
@@ -346,7 +346,7 @@ var _ = Describe("Phase3_CrashResumeIdempotent (INV-E7-COLD-RESUME-CURSOR)", fun
 
 		// Verify the cursor advanced ONLY to the last committed batch
 		// boundary. The crashed batch's rows + cursor advance MUST have been
-		// rolled back together (INV-E7).
+		// rolled back together (INV-CRYPTO-94).
 		ckptMid, err := setup.repo.Get(context.Background(), rid)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckptMid.Status).To(Equal(dek.CheckpointStatusPhase3ReencryptCold),
@@ -376,11 +376,11 @@ var _ = Describe("Phase3_CrashResumeIdempotent (INV-E7-COLD-RESUME-CURSOR)", fun
 		// resume-invocation's contribution (eventCount-firstAttemptCount)
 		// and silently drop the firstAttemptCount rows from the audit trail.
 		Expect(ckptFinal.Phase3RowsRewritten).To(Equal(eventCount),
-			"INV-E7 + jxo8.7.54: Phase3RowsRewritten on checkpoint must be cumulative across crash-resume cycles")
+			"INV-CRYPTO-94 + jxo8.7.54: Phase3RowsRewritten on checkpoint must be cumulative across crash-resume cycles")
 
 		// Plaintext round-trip: decrypt each rewritten row under the NEW
 		// DEK + new AAD; bytes MUST equal the seeded plaintext for that
-		// row. This is the strongest form of INV-E7 (final state is
+		// row. This is the strongest form of INV-CRYPTO-94 (final state is
 		// observationally identical to a non-crashed run).
 		codecImpl, err := codec.Resolve(setup.codecName)
 		Expect(err).NotTo(HaveOccurred())
@@ -396,12 +396,12 @@ var _ = Describe("Phase3_CrashResumeIdempotent (INV-E7-COLD-RESUME-CURSOR)", fun
 			decoded, err := codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, aadBytes)
 			Expect(err).NotTo(HaveOccurred(), "row %d (%s) must decrypt under new DEK + new AAD after rewrite", i, id.String())
 			Expect(decoded).To(Equal(setup.plaintexts[i]),
-				"INV-E7: plaintext byte-equal between pre-rewrite and post-rewrite for row %d", i)
+				"INV-CRYPTO-94: plaintext byte-equal between pre-rewrite and post-rewrite for row %d", i)
 		}
 	})
 })
 
-var _ = Describe("Phase3_AADRebindOnRewrite (INV-E8)", func() {
+var _ = Describe("Phase3_AADRebindOnRewrite (INV-CRYPTO-95)", func() {
 	It("old AAD fails AEAD tag check and new AAD succeeds after rewrite", func() {
 		setup := newPhase3TestSetup()
 		setup.InsertEncryptedRows(1)
@@ -427,7 +427,7 @@ var _ = Describe("Phase3_AADRebindOnRewrite (INV-E8)", func() {
 		newAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(rewritten.DEKRef), rewritten.DEKVersion) //nolint:gosec // G115: rewritten.DEKRef is BIGSERIAL PK
 		Expect(err).NotTo(HaveOccurred())
 		_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, newAAD)
-		Expect(err).NotTo(HaveOccurred(), "INV-E8: new AAD MUST decode the rewritten ciphertext")
+		Expect(err).NotTo(HaveOccurred(), "INV-CRYPTO-95: new AAD MUST decode the rewritten ciphertext")
 
 		// Old AAD: must fail. Two distinct mutations probe the rebind
 		// surface: (1) old dek_ref (= setup.oldDEKID) with new version,
@@ -436,16 +436,16 @@ var _ = Describe("Phase3_AADRebindOnRewrite (INV-E8)", func() {
 		oldRefAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(setup.oldDEKID), rewritten.DEKVersion) //nolint:gosec // G115
 		Expect(err).NotTo(HaveOccurred())
 		_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, oldRefAAD)
-		Expect(err).To(HaveOccurred(), "INV-E8: old dek_ref in AAD MUST fail AEAD tag check")
+		Expect(err).To(HaveOccurred(), "INV-CRYPTO-95: old dek_ref in AAD MUST fail AEAD tag check")
 
 		oldVerAAD, err := aad.Build(&envelope, string(rewritten.Codec), uint64(rewritten.DEKRef), setup.oldDEKVer) //nolint:gosec // G115
 		Expect(err).NotTo(HaveOccurred())
 		_, err = codecImpl.Decode(context.Background(), envelope.GetPayload(), setup.newKey, oldVerAAD)
-		Expect(err).To(HaveOccurred(), "INV-E8: old dek_version in AAD MUST fail AEAD tag check")
+		Expect(err).To(HaveOccurred(), "INV-CRYPTO-95: old dek_version in AAD MUST fail AEAD tag check")
 	})
 })
 
-var _ = Describe("Phase3_HeartbeatAdvancesDuringLongRun (INV-E19)", func() {
+var _ = Describe("Phase3_HeartbeatAdvancesDuringLongRun (INV-CRYPTO-106)", func() {
 	It("last_heartbeat_at advances past its pre-run value after RunPhase3 with multiple batches", func() {
 		setup := newPhase3TestSetup()
 		setup.InsertEncryptedRows(2500) // > 2 batches → multiple AdvanceCursor calls
@@ -467,7 +467,7 @@ var _ = Describe("Phase3_HeartbeatAdvancesDuringLongRun (INV-E19)", func() {
 		ckptAfter, err := setup.repo.Get(context.Background(), rid)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckptAfter.LastHeartbeatAt.After(beforeHB)).To(BeTrue(),
-			"INV-E19: heartbeat MUST advance during the Phase 3 loop (before=%s after=%s)",
+			"INV-CRYPTO-106: heartbeat MUST advance during the Phase 3 loop (before=%s after=%s)",
 			beforeHB, ckptAfter.LastHeartbeatAt)
 	})
 })

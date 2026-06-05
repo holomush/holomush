@@ -17,10 +17,10 @@ import (
 )
 
 func TestOperatorReadChainFor_SubjectPrefixSatisfiesINVE26(t *testing.T) {
-	// INV-E26: SubjectPrefix MUST start with "events.".
+	// INV-CRYPTO-113: SubjectPrefix MUST start with "events.".
 	c := readstream.OperatorReadChainFor("g1")
 	err := chain.ValidateRegistration(c)
-	require.NoError(t, err, "OperatorReadChainFor must satisfy chain.ValidateRegistration (INV-E26/E27/E28)")
+	require.NoError(t, err, "OperatorReadChainFor must satisfy chain.ValidateRegistration (INV-CRYPTO-113/INV-CRYPTO-114/INV-CRYPTO-115)")
 }
 
 func TestOperatorReadHandlerFor_AllSevenFieldsPopulated(t *testing.T) {

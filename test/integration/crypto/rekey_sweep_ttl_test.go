@@ -3,10 +3,10 @@
 
 //go:build integration
 
-// rekey_sweep_ttl_test.go — E2E spec for INV-E18: the sweep subsystem aborts
+// rekey_sweep_ttl_test.go — E2E spec for INV-CRYPTO-105: the sweep subsystem aborts
 // stale checkpoints and emits a chained rekey audit event.
 //
-// Verifies INV-E18-SWEEP-TTL-AUDIT:
+// Verifies INV-CRYPTO-105:
 //   - A checkpoint whose last_heartbeat_at is older than TTL is auto-aborted
 //     by CheckpointSweepSubsystem.sweepOnce.
 //   - The sweep emits a chained rekey audit event with aborted_reason="ttl_expired"
@@ -62,7 +62,7 @@ func (p *sweepTestAuditPublisher) PublishAudit(
 }
 
 var _ = Describe("Rekey sweep TTL", func() {
-	It("aborts stale checkpoints and emits a chained audit event (INV-E18)", func() {
+	It("aborts stale checkpoints and emits a chained audit event (INV-CRYPTO-105)", func() {
 		h := SetupRekeyHarness(suiteT, WithEventCount(10))
 		defer h.Cleanup()
 
@@ -104,17 +104,17 @@ var _ = Describe("Rekey sweep TTL", func() {
 		Expect(sub.SweepOnceForTest(context.Background())).To(Succeed(),
 			"SweepOnceForTest must not return an error")
 
-		// INV-E18: the checkpoint MUST be aborted.
+		// INV-CRYPTO-105: the checkpoint MUST be aborted.
 		ckpt1, err := h.findCheckpointByID(rid)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt1.Status).To(Equal(dek.CheckpointStatusAborted),
-			"INV-E18: TTL-expired checkpoint MUST be marked aborted by sweep")
+			"INV-CRYPTO-105: TTL-expired checkpoint MUST be marked aborted by sweep")
 		Expect(ckpt1.AbortedReason).NotTo(BeNil(),
-			"INV-E18: aborted_reason must be set")
+			"INV-CRYPTO-105: aborted_reason must be set")
 		Expect(*ckpt1.AbortedReason).To(Equal("ttl_expired"),
-			"INV-E18: aborted_reason MUST be ttl_expired")
+			"INV-CRYPTO-105: aborted_reason MUST be ttl_expired")
 
-		// INV-E18: a chained rekey audit event MUST be emitted.
+		// INV-CRYPTO-105: a chained rekey audit event MUST be emitted.
 		// The event is written to events_audit by sweepTestAuditPublisher.
 		// Assert it landed by checking the events_audit table directly.
 		h.AssertAuditEventEmitted(
@@ -130,12 +130,12 @@ var _ = Describe("Rekey sweep TTL", func() {
 			  ORDER BY js_seq DESC LIMIT 1`,
 			"events.g1.system.rekey.scene.%").Scan(&envelopeBytes)
 		Expect(queryErr).NotTo(HaveOccurred(),
-			"INV-E18: must be able to read the emitted sweep audit event")
+			"INV-CRYPTO-105: must be able to read the emitted sweep audit event")
 
 		var payload dek.RekeyAuditPayload
 		Expect(json.Unmarshal(envelopeBytes, &payload)).To(Succeed(),
-			"INV-E18: sweep audit payload must be valid RekeyAuditPayload JSON")
+			"INV-CRYPTO-105: sweep audit payload must be valid RekeyAuditPayload JSON")
 		Expect(payload.Justification).To(ContainSubstring("ttl_expired"),
-			"INV-E18: audit Justification MUST reference ttl_expired")
+			"INV-CRYPTO-105: audit Justification MUST reference ttl_expired")
 	})
 })

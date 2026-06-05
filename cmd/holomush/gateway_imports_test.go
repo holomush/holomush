@@ -37,7 +37,7 @@ var coreOnlyFiles = map[string]struct{}{
 	"bootstrap_orphan_test.go":        {},
 	// Phase 5 sub-epic E rekey wiring (holomush-jxo8.7.34). Constructs
 	// dek.PolicyHashSource over auditchain.Repo for the orchestrator's
-	// INV-E25 capture-at-Phase-1 dependency. Core-only.
+	// INV-CRYPTO-112 capture-at-Phase-1 dependency. Core-only.
 	"policy_hash_source.go": {},
 	// Phase 5 sub-epic E rekey wiring (holomush-jxo8.7.44). Production
 	// dek.Manager + Orchestrator + admin RekeyHandler construction. Imports

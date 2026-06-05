@@ -421,7 +421,7 @@ func TestNewCryptoCmdRekeySubcmdRegistered(t *testing.T) {
 	assert.Equal(t, "rekey", cmd.Name())
 }
 
-// --- Tests for mapToExitCodeErr (INV-E23) ---
+// --- Tests for mapToExitCodeErr (INV-CRYPTO-110) ---
 
 // TestMapToExitCodeErr_TEMPFAIL verifies DEK_REKEY_PHASE5_TIMEOUT → exitCode 75.
 func TestMapToExitCodeErr_TEMPFAIL(t *testing.T) {
@@ -783,7 +783,7 @@ func TestCmd_CryptoRekey_Resume_Registered(t *testing.T) {
 
 // TestCmd_CryptoRekey_Resume_ForceDestroy_IgnoredWhenStatusNotTimeout verifies
 // that DEK_REKEY_FORCE_DESTROY_FORBIDDEN from the server surfaces as an error
-// (INV-E10: server-side guard).  The CLI passes the flag through; the server
+// (INV-CRYPTO-97: server-side guard).  The CLI passes the flag through; the server
 // rejects it.
 func TestCmd_CryptoRekey_Resume_ForceDestroy_RejectedByServer(t *testing.T) {
 	h := &fakeAdminHandlerWithRekey{
@@ -1005,7 +1005,7 @@ func TestCmd_CryptoRekey_List_Empty(t *testing.T) {
 	assert.Contains(t, out.String(), "REQUEST_ID")
 }
 
-// --- INV-E23 exit-code invariant test (bead holomush-jxo8.7.33) ---
+// --- INV-CRYPTO-110 exit-code invariant test (bead holomush-jxo8.7.33) ---
 
 // TestCmd_CryptoRekey_ExitCodes_INV_E23 is the table-driven exit-code invariant
 // test.  Every named oops error code must map to its sysexits.h exit code via

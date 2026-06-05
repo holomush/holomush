@@ -372,7 +372,7 @@ func TestDispatcher_PluginAuditQueueFullProducesMetadataOnly(t *testing.T) {
 }
 
 // TestDispatcher_StaleDEKProducesMetadataOnlyWithStaleDEKReason verifies
-// INV-E21: when the resolver returns ErrMetadataOnly (hot+cold double miss),
+// INV-CRYPTO-108: when the resolver returns ErrMetadataOnly (hot+cold double miss),
 // the event is delivered with metadataOnly=true and NoPlaintextReasonStaleDEK
 // (holomush-ojw1.6, dispatcher.go:141-143).
 func TestDispatcher_StaleDEKProducesMetadataOnlyWithStaleDEKReason(t *testing.T) {
@@ -398,7 +398,7 @@ func TestDispatcher_StaleDEKProducesMetadataOnlyWithStaleDEKReason(t *testing.T)
 		&dispatcherAlwaysPermitGuard{},
 		nil,
 	)
-	require.NoError(t, err, "INV-E21: ErrMetadataOnly must not surface as an error")
+	require.NoError(t, err, "INV-CRYPTO-108: ErrMetadataOnly must not surface as an error")
 	assert.True(t, metaOnly, "stale-DEK double miss must stamp metadataOnly=true")
 	assert.Empty(t, ev.Payload, "stale-DEK double miss must redact payload")
 	assert.Equal(t, eventbus.NoPlaintextReasonStaleDEK, ev.NoPlaintextReason,

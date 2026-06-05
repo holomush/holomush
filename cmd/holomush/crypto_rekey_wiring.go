@@ -44,7 +44,7 @@ type rekeyWiring struct {
 	// admin handler's CheckpointStatusReader + RekeyAbortRunner adapters.
 	CheckpointRepo *dek.CheckpointRepo
 	// AuditEmitter is the *dek.RekeyAuditEmitter; the abort path reuses it
-	// to emit the abort audit event (INV-E17).
+	// to emit the abort audit event (INV-CRYPTO-104).
 	AuditEmitter *dek.RekeyAuditEmitter
 	// RekeyHandler is the socket-layer RekeyConnectHandler ready to install
 	// in the admin-socket Config. nil when the upstream wiring (KEK / Manager)
@@ -115,7 +115,7 @@ type coordHolder struct {
 //   - SetDestroyer: *dek.manager (satisfies Destroyer via DestroyDEK +
 //     EvictCachedDEK)
 //   - SetAuditEmitter: the supplied *dek.RekeyAuditEmitter
-//   - SetDataDir: the runtime data directory for INV-E13 fallback log
+//   - SetDataDir: the runtime data directory for INV-CRYPTO-100 fallback log
 func buildRekeyWiring(
 	_ context.Context,
 	deps rekeyWiringDeps,
@@ -268,7 +268,7 @@ type productionOrchestratorRunner struct {
 //
 // Resume path: when req.RequestID is non-zero (RekeyResume RPC), the handler
 // supplies only RequestID + Operator + ForceDestroy. RunByRequestID looks up
-// the checkpoint by ID, enforces INV-E16 operator-binding, and drives the
+// the checkpoint by ID, enforces INV-CRYPTO-103 operator-binding, and drives the
 // remaining phases to completion.
 func (a *productionOrchestratorRunner) Run(ctx context.Context, req socket.RekeyRunRequest) (socket.RekeyRunOutcome, error) {
 	operator := dek.OperatorIdentity{
@@ -316,7 +316,7 @@ func (a *productionOrchestratorRunner) Run(ctx context.Context, req socket.Rekey
 }
 
 // productionRekeyAbortRunner adapts *dek.CheckpointRepo + *dek.RekeyAuditEmitter
-// to socket.RekeyAbortRunner. INV-E17: abort is single-control regardless of
+// to socket.RekeyAbortRunner. INV-CRYPTO-104: abort is single-control regardless of
 // dual_control_required policy.
 type productionRekeyAbortRunner struct {
 	repo    *dek.CheckpointRepo

@@ -64,12 +64,12 @@ func newDispatcher(opts ...DispatcherOption) *dispatcher {
 // short-circuits; AuthGuard decision gates decryption; plugin decrypts
 // produce an audit record.
 //
-// INV-E20: AAD is constructed from resolved.Envelope's fields, not the
+// INV-CRYPTO-107: AAD is constructed from resolved.Envelope's fields, not the
 // original envelope parameter. For TierColdFallback, resolved.Envelope
 // carries the cold-tier substitute proto bytes; its keyID/keyVersion supply
 // the DEK reference that was used to re-encrypt during Rekey.
 //
-// INV-E21: when resolver returns ErrMetadataOnly (double miss), the event is
+// INV-CRYPTO-108: when resolver returns ErrMetadataOnly (double miss), the event is
 // delivered with MetadataOnly=true and empty payload.
 func (d *dispatcher) DispatchFor(
 	ctx context.Context,
@@ -139,7 +139,7 @@ func (d *dispatcher) DispatchFor(
 
 	resolved, err := d.resolver.Resolve(ctx, hotEnv)
 	if errors.Is(err, source.ErrMetadataOnly) {
-		// INV-E21: double miss — deliver metadata-only, no error.
+		// INV-CRYPTO-108: double miss — deliver metadata-only, no error.
 		ev := buildHistoryEventFromEnvelope(eventID, envelope, nil)
 		ev.NoPlaintextReason = eventbus.NoPlaintextReasonStaleDEK
 		return ev, true, nil
@@ -150,7 +150,7 @@ func (d *dispatcher) DispatchFor(
 			Wrap(err)
 	}
 
-	// INV-E20: AAD and ciphertext come from resolved.Envelope, not the
+	// INV-CRYPTO-107: AAD and ciphertext come from resolved.Envelope, not the
 	// original envelope. For TierColdFallback, resolved.Envelope carries
 	// the cold-tier proto bytes (marshaled eventbusv1.Event); we unmarshal
 	// them to obtain the cold envelope's Subject/Type/Actor/Timestamp
@@ -175,7 +175,7 @@ func (d *dispatcher) DispatchFor(
 		ciphertext = resolved.Envelope.Payload()
 	}
 
-	// INV-E20: AAD is built from activeProto (resolved envelope's fields).
+	// INV-CRYPTO-107: AAD is built from activeProto (resolved envelope's fields).
 	aadBytes, err := aad.Build(activeProto, string(codecName), uint64(resolved.KeyID), resolved.KeyVersion)
 	if err != nil {
 		return eventbus.Event{}, false, oops.Code("EVENTBUS_AAD_BUILD_FAILED").Wrap(err)

@@ -49,7 +49,7 @@ const (
 	NoPlaintextReason_NO_PLAINTEXT_REASON_AUTHGUARD_DENY NoPlaintextReason = 1
 	// NO_PLAINTEXT_REASON_STALE_DEK means both the hot and cold tier DEKs were
 	// indecipherable — a production-real outcome after a sub-epic E rekey plus DEK
-	// destruction (INV-E21 double miss).
+	// destruction (INV-CRYPTO-108 double miss).
 	NoPlaintextReason_NO_PLAINTEXT_REASON_STALE_DEK NoPlaintextReason = 2
 	// NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL means a plugin audit-emit hit
 	// backpressure (queue full) — a host-side TOCTOU defense.

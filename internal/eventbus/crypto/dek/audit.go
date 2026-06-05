@@ -59,11 +59,11 @@ func NewRekeyAuditEmitter(ce chain.Emitter, pub AuditPublisher) *RekeyAuditEmitt
 // Returns the published eventID, the finalized payload (with scope,
 // prev_hash, self_hash filled in), and any error. The caller MUST persist
 // the finalized payload to the audit-fallback log on error so the recorded
-// chain-link fields match what would have been published (INV-E13).
+// chain-link fields match what would have been published (INV-CRYPTO-100).
 //
-// INV-E14: prev_hash is the recomputed self-hash of the tail entry, or nil
+// INV-CRYPTO-101: prev_hash is the recomputed self-hash of the tail entry, or nil
 // for genesis (empty chain for this scope).
-// INV-E28: self_hash is SHA-256(JCS(zero(payload, "rekey_chain.self_hash"))).
+// INV-CRYPTO-115: self_hash is SHA-256(JCS(zero(payload, "rekey_chain.self_hash"))).
 func (e *RekeyAuditEmitter) Emit(ctx context.Context, payload RekeyAuditPayload) (ulid.ULID, RekeyAuditPayload, error) {
 	h := RekeyHandlerFor(currentGameIDForRekey)
 	scope := payload.Context.Type + ":" + payload.Context.ID
@@ -80,7 +80,7 @@ func (e *RekeyAuditEmitter) Emit(ctx context.Context, payload RekeyAuditPayload)
 	payload.RekeyChainField.SelfHash = "" // zeroed before self-hash computation
 
 	// Step 2: marshal with zeroed self_hash; compute self_hash via
-	// chain.RecomputeSelfHash (INV-E28 pinned composition).
+	// chain.RecomputeSelfHash (INV-CRYPTO-115 pinned composition).
 	raw, err := json.Marshal(&payload)
 	if err != nil {
 		return ulid.ULID{}, payload, oops.Code("DEK_REKEY_AUDIT_MARSHAL_FAILED").Wrap(err)
@@ -104,7 +104,7 @@ func (e *RekeyAuditEmitter) Emit(ctx context.Context, payload RekeyAuditPayload)
 	// Step 4: publish via the narrow AuditPublisher seam. On failure, the
 	// finalized payload (with chain-link fields populated) is returned so
 	// the caller's fallback log persists the exact record that would have
-	// been emitted (INV-E13).
+	// been emitted (INV-CRYPTO-100).
 	subject := h.SubjectFor(scope)
 	eventID, err := e.publisher.PublishAudit(ctx, subject, rekeyEventType, raw)
 	if err != nil {
@@ -141,8 +141,8 @@ func encodeHashPtr(b []byte) *string {
 // [policy.PolicySetHandlerFor].
 //
 // SubjectFor converts scope "ct:cid" → "events.<game>.system.rekey.<ct>.<cid>".
-// ScopeFromSubject is the inverse (INV-E27).
-// ScopeFromPayload extracts scope from context.type:context.id (INV-E27).
+// ScopeFromSubject is the inverse (INV-CRYPTO-114).
+// ScopeFromPayload extracts scope from context.type:context.id (INV-CRYPTO-114).
 // Canonicalize applies plain JCS (no empty-form normalization needed, spec §3.7).
 // PrevHashOf and SelfHashOf extract the respective chain-link fields.
 //

@@ -99,7 +99,7 @@ func TestRekeyAuditEmitter_Emit_PopulatesChainLinkage(t *testing.T) {
 }
 
 // TestRekeyHandlerFor_ValidateRegistration ensures RekeyHandlerFor produces
-// a Handler whose Chain passes ValidateRegistration (INV-E26/E27/E28).
+// a Handler whose Chain passes ValidateRegistration (INV-CRYPTO-113/INV-CRYPTO-114/INV-CRYPTO-115).
 func TestRekeyHandlerFor_ValidateRegistration(t *testing.T) {
 	h := dek.RekeyHandlerFor("testgame")
 	require.NoError(t, chain.ValidateRegistration(h.Chain))
@@ -122,7 +122,7 @@ func TestRekeyHandlerFor_ScopeFromSubject(t *testing.T) {
 	require.Equal(t, "scene:01ABC", scope)
 }
 
-// TestRekeyHandlerFor_ScopeFromPayload verifies INV-E27 independent extraction.
+// TestRekeyHandlerFor_ScopeFromPayload verifies INV-CRYPTO-114 independent extraction.
 func TestRekeyHandlerFor_ScopeFromPayload(t *testing.T) {
 	h := dek.RekeyHandlerFor("mygame")
 	raw := []byte(`{"context":{"type":"scene","id":"01ABC"}}`)

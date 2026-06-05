@@ -20,10 +20,10 @@ import (
 // audit-event emission. The production implementation is *RekeyAuditEmitter
 // (defined in audit.go). Tests may substitute a fake.
 //
-// Emit fills in the rekey_chain block (INV-E14: prev_hash, INV-E28: self_hash)
+// Emit fills in the rekey_chain block (INV-CRYPTO-101: prev_hash, INV-CRYPTO-115: self_hash)
 // and publishes the rekey audit event. Returns the minted event ULID along
 // with the finalized payload (scope/prev_hash/self_hash populated) so the
-// caller can persist the exact record on publish failure (INV-E13 fallback).
+// caller can persist the exact record on publish failure (INV-CRYPTO-100 fallback).
 type AuditEmitter interface {
 	Emit(ctx context.Context, payload RekeyAuditPayload) (ulid.ULID, RekeyAuditPayload, error)
 }
@@ -48,7 +48,7 @@ func (o *Orchestrator) SetAuditEmitter(e AuditEmitter) {
 // log write is skipped (the caller logs the gap at Error level).
 //
 // The fallback log path is: <data_dir>/audit-fallback/rekey-<request_id>.log
-// Per spec §4.3 Phase 7 and INV-E13.
+// Per spec §4.3 Phase 7 and INV-CRYPTO-100.
 func (o *Orchestrator) SetDataDir(dir string) {
 	o.dataDir = dir
 }
@@ -63,18 +63,18 @@ func (o *Orchestrator) SetDataDir(dir string) {
 //  2. Advance status phase6_destroy_old → phase7_audit (CAS UPDATE).
 //  3. Look up old and new DEK rows to populate version numbers in the payload.
 //  4. Build RekeyAuditPayload from the checkpoint row and request.
-//     INV-E25: policy_hash read from checkpoint row, never re-queried.
-//     INV-E11: force_destroy=true and final_missing_members populated when
+//     INV-CRYPTO-112: policy_hash read from checkpoint row, never re-queried.
+//     INV-CRYPTO-98: force_destroy=true and final_missing_members populated when
 //     the force-destroy path was used.
-//  5. Emit via AuditEmitter (INV-E14: prev_hash from ComputePrevHashFor;
-//     INV-E28: self_hash via RecomputeSelfHash).
+//  5. Emit via AuditEmitter (INV-CRYPTO-101: prev_hash from ComputePrevHashFor;
+//     INV-CRYPTO-115: self_hash via RecomputeSelfHash).
 //  6. On emit failure: write fallback log to
-//     <data_dir>/audit-fallback/rekey-<request_id>.log (INV-E13);
+//     <data_dir>/audit-fallback/rekey-<request_id>.log (INV-CRYPTO-100);
 //     return DEK_REKEY_PHASE7_AUDIT_FAILED. Checkpoint stays at phase7_audit
 //     for retry.
 //  7. On emit success: advance status phase7_audit → complete via MarkComplete.
 //
-// INV-E13-PHASE7-AUDIT-OR-FALLBACK: emit confirmed before complete transition.
+// INV-CRYPTO-100: emit confirmed before complete transition.
 func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRequest) (RekeyOutcome, error) {
 	if o.auditEmitter == nil {
 		return RekeyOutcome{}, oops.Code("DEK_REKEY_AUDIT_EMITTER_NIL").
@@ -123,7 +123,7 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 		newVersion = newRow.Version
 	}
 
-	// Decode missing members for the INV-E11 force-destroy payload field.
+	// Decode missing members for the INV-CRYPTO-98 force-destroy payload field.
 	// Treat decode failure as an empty list — the operator surface will show
 	// an empty list rather than blocking the audit emit.
 	missingMembers, memberErr := ckpt.Phase5MissingMembers()
@@ -139,7 +139,7 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 		missingMembers = []string{}
 	}
 
-	// Build the audit payload. INV-E25: policy_hash is read from the
+	// Build the audit payload. INV-CRYPTO-112: policy_hash is read from the
 	// checkpoint row (frozen at Phase 1) — never re-queried from the chain.
 	policyHashArr := ckpt.PolicyHash()
 	payload := RekeyAuditPayload{
@@ -153,7 +153,7 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 			AuthProviderName: req.Operator.AuthProviderName,
 		},
 		Justification: req.Justification,
-		// INV-E25: encoded verbatim from the row — never re-queried.
+		// INV-CRYPTO-112: encoded verbatim from the row — never re-queried.
 		PolicyHash: fmt.Sprintf("sha256:%s", hex.EncodeToString(policyHashArr[:])),
 		Phases: RekeyAuditPhases{
 			Phase3RowsRewritten:       ckpt.Phase3RowsRewritten,
@@ -161,7 +161,7 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 			Phase5FinalMissingMembers: missingMembers,
 			Phase6DestroyedAt:         time.Now(), // approximate; canonical record is DB state
 		},
-		ForceDestroy:   ckpt.ForceDestroy, // INV-E11: true when force-destroy path used
+		ForceDestroy:   ckpt.ForceDestroy, // INV-CRYPTO-98: true when force-destroy path used
 		StartedAt:      ckpt.StartedAt,
 		CompletedAt:    time.Now(),
 		ServerIdentity: o.serverID,
@@ -177,11 +177,11 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 		}
 	}
 
-	// Step 5: emit via AuditEmitter (INV-E14 + INV-E28 are satisfied by the
+	// Step 5: emit via AuditEmitter (INV-CRYPTO-101 + INV-CRYPTO-115 are satisfied by the
 	// emitter itself — it calls ComputePrevHashFor + RecomputeSelfHash).
 	eventID, finalizedPayload, emitErr := o.auditEmitter.Emit(ctx, payload)
 	if emitErr != nil {
-		// INV-E13: on failure, write fallback log so the rekey record is
+		// INV-CRYPTO-100: on failure, write fallback log so the rekey record is
 		// not silently lost. The rekey state in the DB (DEK rows) is
 		// irreversibly committed; the audit emit is the cross-reference,
 		// not the canonical record. Persist the FINALIZED payload (with
@@ -218,7 +218,7 @@ func (o *Orchestrator) RunPhase7(ctx context.Context, rid RequestID, req RekeyRe
 // <data_dir>/audit-fallback/rekey-<request_id>.log with mode 0600.
 // The directory is created with mode 0700 if it does not already exist.
 //
-// INV-E13: the fallback log is the sole record when Phase 7 audit emission
+// INV-CRYPTO-100: the fallback log is the sole record when Phase 7 audit emission
 // fails. It is NOT the canonical record — that is DB state. Operators MUST
 // consult the operational runbook (§11) for escalation steps.
 func (o *Orchestrator) writeFallbackLog(rid RequestID, p RekeyAuditPayload) error {

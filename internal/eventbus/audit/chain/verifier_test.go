@@ -291,7 +291,7 @@ func TestVerifier_SelfHashTamperDetected(t *testing.T) {
 
 // TestVerifier_ScopeMismatchBetweenSubjectAndPayload_RejectsRow: an entry
 // whose subject says scopeA but payload.scope says scopeB must be rejected
-// with AUDIT_CHAIN_SCOPE_MISMATCH (INV-E27).
+// with AUDIT_CHAIN_SCOPE_MISMATCH (INV-CRYPTO-114).
 func TestVerifier_ScopeMismatchBetweenSubjectAndPayload_RejectsRow(t *testing.T) {
 	h := makeTestHandler(t)
 
@@ -299,7 +299,7 @@ func TestVerifier_ScopeMismatchBetweenSubjectAndPayload_RejectsRow(t *testing.T)
 	// The scope check runs before the hash check, so hash correctness doesn't matter.
 	e := buildValidEntry(t, h, "scopeB", nil, 1)
 	// Overwrite the subject to say scopeA so the Repo returns it for the scopeA query,
-	// while the payload still says scopeB — triggering INV-E27.
+	// while the payload still says scopeB — triggering INV-CRYPTO-114.
 	e.Subject = "events.g1.system.example.scopeA"
 
 	repo := &fakeRepo{

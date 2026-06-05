@@ -23,14 +23,14 @@ import (
 const defaultPhase3BatchSize = 1000
 
 // phase3HeartbeatInterval is the wall-clock cadence at which Phase 3
-// updates last_heartbeat_at to reset the sweep-TTL clock (INV-E19).
+// updates last_heartbeat_at to reset the sweep-TTL clock (INV-CRYPTO-106).
 const phase3HeartbeatInterval = 30 * time.Second
 
 // MaterialResolver supplies decrypted DEK material for Phase 3 cold-tier
 // rewrite. The Orchestrator needs both the OLD DEK (to decrypt existing
 // events_audit rows) and the NEW DEK (to re-encrypt under the rekeyed
 // key). VersionForDEKID maps a crypto_keys primary key to its version
-// column so that AAD construction (INV-E8) sees the correct dek_version.
+// column so that AAD construction (INV-CRYPTO-95) sees the correct dek_version.
 //
 // Production wiring: *dek.manager satisfies this interface via Resolve
 // (resolves by keyID + version) and a thin VersionForDEKID adapter that
@@ -45,7 +45,7 @@ type MaterialResolver interface {
 	// VersionForDEKID returns the version column of the crypto_keys row
 	// whose primary key id equals dekID. Used by Phase 3 to discover the
 	// new DEK's version (the orchestrator's checkpoint row stores only
-	// new_dek_id, not new_dek_version) for AAD construction (INV-E8).
+	// new_dek_id, not new_dek_version) for AAD construction (INV-CRYPTO-95).
 	VersionForDEKID(ctx context.Context, dekID int64) (uint32, error)
 }
 
@@ -73,10 +73,10 @@ func (o *Orchestrator) SetBatchHookForTest(fn func(rowsRewrittenSoFar int)) {
 // rekey checkpoint's old DEK, in deterministic id-order batches. For
 // each row the loop decrypts the existing ciphertext under the OLD DEK +
 // OLD AAD, re-encrypts the plaintext under the NEW DEK with AAD rebuilt
-// from (subject, type, new_key_id, new_version, codec) per INV-E8, and
+// from (subject, type, new_key_id, new_version, codec) per INV-CRYPTO-95, and
 // UPDATEs the events_audit row plus the checkpoint cursor inside one
 // pgx.Tx so a crash mid-batch leaves no partially-rewritten state
-// (INV-E7-COLD-RESUME-CURSOR).
+// (INV-CRYPTO-94).
 //
 // Pre-condition: checkpoint.Status ∈ {Phase2MintDEK,
 // Phase3ReencryptCold}. Phase2MintDEK is the fresh-entry case (Phase 2
@@ -207,7 +207,7 @@ func (o *Orchestrator) RunPhase3(ctx context.Context, rid RequestID) (int, error
 // processPhase3Batch handles a single transactional batch: SELECT rows,
 // decrypt + re-encrypt each, UPDATE events_audit, AdvanceCursor — all
 // committed together so a crashed batch leaves the cursor and the
-// events_audit rows mutually consistent (INV-E7).
+// events_audit rows mutually consistent (INV-CRYPTO-94).
 //
 // Returns (rowsRewritten, newCursor, error). rowsRewritten == 0 with
 // nil cursor + nil error signals "no more rows" to the caller's loop.
@@ -238,7 +238,7 @@ func (o *Orchestrator) processPhase3Batch(
 	// (initial scan, cursor never advanced), match all rows by treating
 	// the comparison as a no-op via the COALESCE'd '\x00'::bytea bound.
 	// Order by id (ULID) so re-running with the same cursor reproduces
-	// the same row sequence on resume — load-bearing for INV-E7.
+	// the same row sequence on resume — load-bearing for INV-CRYPTO-94.
 	rows, err := tx.Query(ctx, `
         SELECT id, subject, type, envelope, codec, dek_version
           FROM events_audit
@@ -297,7 +297,7 @@ func (o *Orchestrator) processPhase3Batch(
 	for _, r := range batch {
 		// Unmarshal the stored envelope so AAD construction sees the
 		// full event metadata (subject/type/timestamp/actor/eventID)
-		// exactly as the original encrypt path did — INV-E8 requires the
+		// exactly as the original encrypt path did — INV-CRYPTO-95 requires the
 		// AAD bytes to differ ONLY in dek_ref + dek_version after rewrite.
 		var envelope eventbusv1.Event
 		if unmarshalErr := proto.Unmarshal(r.envelope, &envelope); unmarshalErr != nil {
@@ -340,7 +340,7 @@ func (o *Orchestrator) processPhase3Batch(
 				With("codec", r.codecName).Wrap(decErr)
 		}
 
-		// AAD rebind (INV-E8): new AAD is built from the same envelope
+		// AAD rebind (INV-CRYPTO-95): new AAD is built from the same envelope
 		// fields but with the NEW (dek_ref, dek_version). Old AAD MUST
 		// fail to decode the rewritten ciphertext — proved by
 		// TestPhase3_AADRebindOnRewrite.
@@ -390,7 +390,7 @@ func (o *Orchestrator) processPhase3Batch(
 
 	// Advance the cursor as the FINAL action inside the transaction so a
 	// rollback reverts both the row UPDATEs and the cursor advance
-	// atomically (INV-E7-COLD-RESUME-CURSOR). The CAS predicate inside
+	// atomically (INV-CRYPTO-94). The CAS predicate inside
 	// AdvanceCursor (status='phase3_reencrypt_cold') guards against a
 	// concurrent abort racing the commit.
 	if cursorErr := o.repo.AdvanceCursor(ctx, tx, rid, lastID); cursorErr != nil {

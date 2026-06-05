@@ -91,7 +91,7 @@ func TestStringifyMember_AllArms(t *testing.T) {
 }
 
 // TestCheckpoint_Phase5HasMissingMembers_Null — the (NULL,
-// "null", "[]") cases all report false. INV-E10's force-destroy gate
+// "null", "[]") cases all report false. INV-CRYPTO-97's force-destroy gate
 // depends on this tolerance: a row with an empty array MUST NOT be
 // treated as "stuck in timeout".
 func TestCheckpoint_Phase5HasMissingMembers_Null(t *testing.T) {

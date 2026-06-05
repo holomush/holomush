@@ -45,7 +45,7 @@ import (
 // the policyName parameter is used to construct the chain handler's
 // gameID-parameterized prefix. When subject and policyName disagree at
 // the suffix level, the test fixtures' "loose" subject is honored — the
-// chain handler's INV-E27 ScopeFromPayload cross-check still rejects
+// chain handler's INV-CRYPTO-114 ScopeFromPayload cross-check still rejects
 // payload-level mismatches.
 func VerifyChain(ctx context.Context, pool *pgxpool.Pool, subject, policyName string) error {
 	gameID, scope, err := parsePolicySubject(subject)

@@ -168,7 +168,7 @@ var _ = Describe("VerifyChain (integration)", func() {
 	Context("with a clean 3-row chain in events_audit", func() {
 		It("verifies cleanly, then surfaces a chain integrity error after envelope tamper", func() {
 			// Subject suffix MUST agree with payload.policy_name post Phase 5
-			// sub-epic E (INV-E27 — chain.Verifier enforces). D's pre-E verifier
+			// sub-epic E (INV-CRYPTO-114 — chain.Verifier enforces). D's pre-E verifier
 			// queried by subject directly and only cross-checked at the typed
 			// struct level, tolerating fixture mismatches like the prior
 			// "crypto_operators_int" subject paired with "crypto.operators"

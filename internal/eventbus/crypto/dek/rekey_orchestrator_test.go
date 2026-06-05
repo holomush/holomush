@@ -106,8 +106,8 @@ func newTestOrchestratorWithProvider(t *testing.T, pool *pgxpool.Pool, gameID st
 }
 
 // TestOrchestrator_Phase1_FreshStart_CapturesPolicyHash verifies:
-//   - checkpoint status transitions pending → phase1_auth (INV-E1)
-//   - policy_hash on the checkpoint row equals the recomputed chain head hash (INV-E25)
+//   - checkpoint status transitions pending → phase1_auth (INV-CRYPTO-88)
+//   - policy_hash on the checkpoint row equals the recomputed chain head hash (INV-CRYPTO-112)
 //   - RequestID is non-zero
 func TestOrchestrator_Phase1_FreshStart_CapturesPolicyHash(t *testing.T) {
 	pool := testIntegrationPool(t)
@@ -146,14 +146,14 @@ func TestOrchestrator_Phase1_FreshStart_CapturesPolicyHash(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, dek.CheckpointStatusPhase1Auth, ckpt.Status,
-		"INV-E1: checkpoint must be in phase1_auth after RunPhase1Fresh")
+		"INV-CRYPTO-88: checkpoint must be in phase1_auth after RunPhase1Fresh")
 
-	// INV-E25: policy_hash MUST be captured at Phase 1 from the chain head.
+	// INV-CRYPTO-112: policy_hash MUST be captured at Phase 1 from the chain head.
 	// Convert wantPolicyHash ([]byte, from ComputePrevHashFor) to [32]byte for comparison.
 	var wantArr [32]byte
 	copy(wantArr[:], wantPolicyHash)
 	require.Equal(t, wantArr, ckpt.PolicyHash(),
-		"INV-E25: policy_hash MUST be captured at Phase 1 from the chain head")
+		"INV-CRYPTO-112: policy_hash MUST be captured at Phase 1 from the chain head")
 }
 
 // TestOrchestrator_Phase1_GenesisPolicy_ZeroHash verifies that when no
@@ -192,7 +192,7 @@ func TestOrchestrator_Phase1_GenesisPolicy_ZeroHash(t *testing.T) {
 
 // TestOrchestrator_Phase1_ConcurrentSameContext_Rejected verifies:
 //   - a second RunPhase1Fresh on the same context while the first is active
-//     returns DEK_REKEY_ALREADY_IN_PROGRESS (INV-E5)
+//     returns DEK_REKEY_ALREADY_IN_PROGRESS (INV-CRYPTO-92)
 func TestOrchestrator_Phase1_ConcurrentSameContext_Rejected(t *testing.T) {
 	pool := testIntegrationPool(t)
 	const gameID = "g1"
@@ -248,7 +248,7 @@ type cryptoKeyRowForTest struct {
 }
 
 // loadCryptoKeyRow loads a crypto_keys row by its primary key id. Used to
-// assert INV-E6 (participants byte-equal between old and new DEK rows).
+// assert INV-CRYPTO-93 (participants byte-equal between old and new DEK rows).
 func loadCryptoKeyRow(t *testing.T, pool *pgxpool.Pool, id int64) cryptoKeyRowForTest {
 	t.Helper()
 	var r cryptoKeyRowForTest
@@ -261,10 +261,10 @@ func loadCryptoKeyRow(t *testing.T, pool *pgxpool.Pool, id int64) cryptoKeyRowFo
 }
 
 // TestOrchestrator_Phase2_MintsNewDEK_PreservesParticipants verifies:
-//   - RunPhase2 advances checkpoint status to phase2_mint_dek (INV-E1)
+//   - RunPhase2 advances checkpoint status to phase2_mint_dek (INV-CRYPTO-88)
 //   - checkpoint.NewDEKID is populated after RunPhase2
 //   - new crypto_keys row has version = old+1
-//   - new row's participants JSON is byte-equal to old (INV-E6-PARTICIPANT-INVARIANCE)
+//   - new row's participants JSON is byte-equal to old (INV-CRYPTO-93)
 func TestOrchestrator_Phase2_MintsNewDEK_PreservesParticipants(t *testing.T) {
 	pool := testIntegrationPool(t)
 	const gameID = "g1"
@@ -296,21 +296,21 @@ func TestOrchestrator_Phase2_MintsNewDEK_PreservesParticipants(t *testing.T) {
 	ckpt, err := repo.Get(context.Background(), rid)
 	require.NoError(t, err)
 	require.Equal(t, dek.CheckpointStatusPhase2MintDEK, ckpt.Status,
-		"INV-E1: checkpoint must advance to phase2_mint_dek after RunPhase2")
+		"INV-CRYPTO-88: checkpoint must advance to phase2_mint_dek after RunPhase2")
 	require.NotNil(t, ckpt.NewDEKID, "NewDEKID must be populated after Phase 2")
 
-	// INV-E6: new DEK row's participants MUST be byte-equal to old.
+	// INV-CRYPTO-93: new DEK row's participants MUST be byte-equal to old.
 	oldRow := loadCryptoKeyRow(t, pool, ckpt.OldDEKID)
 	newRow := loadCryptoKeyRow(t, pool, *ckpt.NewDEKID)
 	require.Equal(t, oldRow.ParticipantsJSON, newRow.ParticipantsJSON,
-		"INV-E6: new DEK row participants must be byte-equal to old")
+		"INV-CRYPTO-93: new DEK row participants must be byte-equal to old")
 	require.Equal(t, oldRow.Version+1, newRow.Version,
 		"new DEK version must be old+1")
 }
 
 // TestOrchestrator_Phase2_RequiresPreconditionPhase1Auth verifies:
 //   - RunPhase2 returns DEK_REKEY_PHASE_PRECONDITION_FAILED when checkpoint
-//     is not in phase1_auth status (INV-E1 / INV-E6 rejection path)
+//     is not in phase1_auth status (INV-CRYPTO-88 / INV-CRYPTO-93 rejection path)
 func TestOrchestrator_Phase2_RequiresPreconditionPhase1Auth(t *testing.T) {
 	pool := testIntegrationPool(t)
 	const gameID = "g1"

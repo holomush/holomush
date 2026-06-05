@@ -94,7 +94,7 @@ func (s *runTestSetup) BasicRequest(playerID string) dek.RekeyRequest {
 	}
 }
 
-var _ = Describe("Orchestrator_Run_FreshStart_RunsAllPhases (INV-E1)", func() {
+var _ = Describe("Orchestrator_Run_FreshStart_RunsAllPhases (INV-CRYPTO-88)", func() {
 	It("drives all phases and lands checkpoint at complete with Resumed=false", func() {
 		setup := newRunTestSetup("01RUN1")
 		req := setup.BasicRequest("01PRIM")
@@ -107,13 +107,13 @@ var _ = Describe("Orchestrator_Run_FreshStart_RunsAllPhases (INV-E1)", func() {
 		ckpt, err := setup.Repo.Get(context.Background(), out.RequestID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusComplete),
-			"INV-E1: fresh-start must drive the checkpoint to complete")
+			"INV-CRYPTO-88: fresh-start must drive the checkpoint to complete")
 		Expect(ckpt.CompletedAt).NotTo(BeNil())
 		Expect(setup.Audit.emitted).To(HaveLen(1), "Phase 7 must emit exactly once")
 	})
 })
 
-var _ = Describe("Orchestrator_Run_Resume_MatchingArgs_BypassesApproval (INV-E16)", func() {
+var _ = Describe("Orchestrator_Run_Resume_MatchingArgs_BypassesApproval (INV-CRYPTO-103)", func() {
 	It("re-uses existing RequestID and signals Resumed=true for same-args same-operator invocation", func() {
 		setup := newRunTestSetup("01RUN2")
 		req := setup.BasicRequest("01PRIM")
@@ -129,9 +129,9 @@ var _ = Describe("Orchestrator_Run_Resume_MatchingArgs_BypassesApproval (INV-E16
 		out, err := setup.Orch.Run(context.Background(), req)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(out.Resumed).To(BeTrue(),
-			"INV-E16: same-args same-operator invocation must signal Resumed=true")
+			"INV-CRYPTO-103: same-args same-operator invocation must signal Resumed=true")
 		Expect(out.RequestID).To(Equal(rid),
-			"INV-E4: resume must re-use the existing RequestID, not allocate a new one")
+			"INV-CRYPTO-91: resume must re-use the existing RequestID, not allocate a new one")
 
 		ckpt, err := setup.Repo.Get(context.Background(), out.RequestID)
 		Expect(err).NotTo(HaveOccurred())
@@ -139,7 +139,7 @@ var _ = Describe("Orchestrator_Run_Resume_MatchingArgs_BypassesApproval (INV-E16
 	})
 })
 
-var _ = Describe("Orchestrator_Run_Resume_DifferentOperator_Rejected (INV-E16)", func() {
+var _ = Describe("Orchestrator_Run_Resume_DifferentOperator_Rejected (INV-CRYPTO-103)", func() {
 	It("rejects resume with DEK_REKEY_RESUME_OPERATOR_MISMATCH for a different operator", func() {
 		setup := newRunTestSetup("01RUN3")
 		req := setup.BasicRequest("01PRIM")
@@ -173,7 +173,7 @@ var _ = Describe("Orchestrator_Run_ArgsConflict", func() {
 	})
 })
 
-var _ = Describe("Orchestrator_Run_AfterPriorComplete_FreshStartSucceeds (INV-E16)", func() {
+var _ = Describe("Orchestrator_Run_AfterPriorComplete_FreshStartSucceeds (INV-CRYPTO-103)", func() {
 	It("succeeds as a new fresh rekey and emits a second audit event after the prior completed rekey", func() {
 		setup := newRunTestSetup("01RUN5")
 		req := setup.BasicRequest("01PRIM")
@@ -196,7 +196,7 @@ var _ = Describe("Orchestrator_Run_AfterPriorComplete_FreshStartSucceeds (INV-E1
 	})
 })
 
-var _ = Describe("Orchestrator_Run_NeverReentersPhase1 (INV-E4)", func() {
+var _ = Describe("Orchestrator_Run_NeverReentersPhase1 (INV-CRYPTO-91)", func() {
 	It("reuses the original RequestID on resume and does not re-enter Phase 1", func() {
 		setup := newRunTestSetup("01RUN6")
 		req := setup.BasicRequest("01PRIM")
@@ -207,7 +207,7 @@ var _ = Describe("Orchestrator_Run_NeverReentersPhase1 (INV-E4)", func() {
 		out, err := setup.Orch.Run(context.Background(), req)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(out.RequestID).To(Equal(rid),
-			"INV-E4: resume MUST NOT re-enter Phase 1 — RequestID must be stable")
+			"INV-CRYPTO-91: resume MUST NOT re-enter Phase 1 — RequestID must be stable")
 		Expect(out.Resumed).To(BeTrue())
 	})
 })
@@ -248,7 +248,7 @@ var _ = Describe("Orchestrator_Run_ResumeFromAborted_TerminalError", func() {
 	})
 })
 
-var _ = Describe("Orchestrator_Run_DispatchFromPhase5Timeout_ForceDestroy (INV-E11)", func() {
+var _ = Describe("Orchestrator_Run_DispatchFromPhase5Timeout_ForceDestroy (INV-CRYPTO-98)", func() {
 	It("routes to RunPhase5WithForceDestroy and completes when ForceDestroy=true", func() {
 		setup := newRunTestSetup("01RUN8")
 		req := setup.BasicRequest("01PRIM")
@@ -285,11 +285,11 @@ var _ = Describe("Orchestrator_Run_DispatchFromPhase5Timeout_ForceDestroy (INV-E
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusComplete))
 		Expect(ckpt.ForceDestroy).To(BeTrue(),
-			"INV-E11: force-destroy must be recorded on the checkpoint")
+			"INV-CRYPTO-98: force-destroy must be recorded on the checkpoint")
 	})
 })
 
-var _ = Describe("Orchestrator_Run_DispatchFromPhase6 (INV-E12)", func() {
+var _ = Describe("Orchestrator_Run_DispatchFromPhase6 (INV-CRYPTO-99)", func() {
 	It("skips Phases 1-5 and runs Phase 6 idempotently then Phase 7 to complete", func() {
 		setup := newRunTestSetup("01RUN9")
 		req := setup.BasicRequest("01PRIM")
@@ -321,7 +321,7 @@ var _ = Describe("Orchestrator_Run_DispatchFromPhase6 (INV-E12)", func() {
 	})
 })
 
-var _ = Describe("Orchestrator_Run_ResumeFromPhase7Audit_ManualRecovery (INV-E4, INV-E1)", func() {
+var _ = Describe("Orchestrator_Run_ResumeFromPhase7Audit_ManualRecovery (INV-CRYPTO-91, INV-CRYPTO-88)", func() {
 	It("surfaces DEK_REKEY_PHASE7_AUDIT_RETRY_REQUIRED for a checkpoint stuck at phase7_audit", func() {
 		setup := newRunTestSetup("01RUN10")
 		req := setup.BasicRequest("01PRIM")
@@ -366,7 +366,7 @@ var _ = Describe("Orchestrator_RunByRequestID_PreservesJustificationInAudit (hol
 
 		// Resume via RunByRequestID — operator supplies a DIFFERENT
 		// justification on the resume request. This pins the
-		// rehydration-wins semantic (INV-E25 analog): the checkpoint row's
+		// rehydration-wins semantic (INV-CRYPTO-112 analog): the checkpoint row's
 		// Justification is authoritative, the resume-call value MUST be
 		// ignored. Without this sentinel, a regression that accidentally
 		// honored req.Justification would only be caught if the resume
@@ -391,7 +391,7 @@ var _ = Describe("Orchestrator_RunByRequestID_PreservesJustificationInAudit (hol
 		Expect(emittedPayload.Justification).To(Equal(originalJustification),
 			"RunByRequestID must rehydrate justification from checkpoint row into Phase 7 audit payload")
 		Expect(emittedPayload.Justification).NotTo(Equal(overrideAttempt),
-			"resume-call Justification MUST NOT win over the stored checkpoint value (INV-E25 analog)")
+			"resume-call Justification MUST NOT win over the stored checkpoint value (INV-CRYPTO-112 analog)")
 
 		// Sanity: checkpoint reached complete.
 		ckpt, err := setup.Repo.Get(context.Background(), rid)

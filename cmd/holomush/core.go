@@ -688,7 +688,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// bead wires; until then those RPCs remain unimplemented).
 	//
 	// The sweep subsystem auto-aborts non-terminal checkpoints whose
-	// last_heartbeat_at has exceeded TTL (INV-E18 / INV-E19, spec §6.2);
+	// last_heartbeat_at has exceeded TTL (INV-CRYPTO-105 / INV-CRYPTO-106, spec §6.2);
 	// it depends only on CheckpointRepo + AuditEmitter, both of which the
 	// host already has at this point.
 	cryptoCfg := cryptoConfig.Defaults()
@@ -697,7 +697,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		chain.NewEmitter(auditChainRepo),
 		&rekeyAuditPublisherAdapter{publisher: auditPublisher, clock: totp.NewRealClock()},
 	)
-	// policyHashSource backs the Phase 1 policy_hash freeze (INV-E25).
+	// policyHashSource backs the Phase 1 policy_hash freeze (INV-CRYPTO-112).
 	// Sub-epic E T44 (holomush-jxo8.7.44) consumes it via buildRekeyWiring
 	// below; earlier beads referenced the constructor but did not wire it
 	// into a Manager yet (no production dek.NewManager call site existed).

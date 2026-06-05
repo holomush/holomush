@@ -80,7 +80,7 @@ func TestDispatcherIdentityCodecPassesThroughResolver(t *testing.T) {
 	assert.Equal(t, []byte("hello via resolver path"), ev.Payload)
 }
 
-// TestDispatcher_AADFromResolvedEnvelope verifies INV-E20: when the resolver
+// TestDispatcher_AADFromResolvedEnvelope verifies INV-CRYPTO-107: when the resolver
 // returns a TierColdFallback result, the dispatcher builds AAD from the cold
 // (resolved) envelope's fields, not the original hot envelope's fields.
 //
@@ -102,7 +102,7 @@ func TestDispatcher_AADFromResolvedEnvelope(t *testing.T) {
 		Type:      "scene.pose",
 		Timestamp: timestamppb.New(dispatcherTestEpoch()),
 	}
-	// Build AAD from cold proto's fields (INV-E20 requires dispatcher to use these).
+	// Build AAD from cold proto's fields (INV-CRYPTO-107 requires dispatcher to use these).
 	coldAADBytes, err := aad.Build(coldProto, string(codec.NameXChaCha20v1), uint64(testKey.ID), testKey.Version)
 	require.NoError(t, err)
 
@@ -161,11 +161,11 @@ func TestDispatcher_AADFromResolvedEnvelope(t *testing.T) {
 		guard,
 		nil,
 	)
-	// INV-E20: must succeed — cold AAD was used.
-	require.NoError(t, dispErr, "INV-E20: dispatcher must use cold envelope fields for AAD after fallback")
+	// INV-CRYPTO-107: must succeed — cold AAD was used.
+	require.NoError(t, dispErr, "INV-CRYPTO-107: dispatcher must use cold envelope fields for AAD after fallback")
 }
 
-// TestDispatcher_MetadataOnlyDeliveryOnDoubleMiss verifies INV-E21: when the
+// TestDispatcher_MetadataOnlyDeliveryOnDoubleMiss verifies INV-CRYPTO-108: when the
 // resolver returns ErrMetadataOnly (double miss), the dispatcher delivers
 // the event with MetadataOnly=true and empty Payload, with no error.
 func TestDispatcher_MetadataOnlyDeliveryOnDoubleMiss(t *testing.T) {
@@ -191,10 +191,10 @@ func TestDispatcher_MetadataOnlyDeliveryOnDoubleMiss(t *testing.T) {
 		guard,
 		nil,
 	)
-	// INV-E21: ErrMetadataOnly MUST produce (event, metadataOnly=true, nil).
-	require.NoError(t, err, "INV-E21: ErrMetadataOnly must not surface as an error")
+	// INV-CRYPTO-108: ErrMetadataOnly MUST produce (event, metadataOnly=true, nil).
+	require.NoError(t, err, "INV-CRYPTO-108: ErrMetadataOnly must not surface as an error")
 	assert.True(t, ok, "metadataOnly flag must be true on double miss")
-	assert.Empty(t, out.Payload, "INV-E21: payload must be empty on double miss")
+	assert.Empty(t, out.Payload, "INV-CRYPTO-108: payload must be empty on double miss")
 }
 
 // TestDispatcherResolverNilAfterPermitFailsClosed asserts that a permit with no

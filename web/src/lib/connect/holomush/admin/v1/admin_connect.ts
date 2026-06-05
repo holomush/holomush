@@ -111,7 +111,7 @@ export const AdminService = {
     /**
      * RekeyResume resumes a paused or interrupted rekey identified by
      * request_id. Requires the crypto.operator capability and admin role
-     * (INV-CRYPTO-83). Idempotency (INV-E16) and same-args invariant (INV-E4) are
+     * (INV-CRYPTO-83). Idempotency (INV-CRYPTO-103) and same-args invariant (INV-CRYPTO-91) are
      * enforced inside the orchestrator, not here. The handler validates that
      * request_id is a non-zero 16-byte ULID and forwards it to the orchestrator
      * adapter, which looks up the checkpoint to resolve ContextType/ContextID.
@@ -130,7 +130,7 @@ export const AdminService = {
      * RekeyAbort cancels an in-progress rekey checkpoint. Requires the
      * crypto.operator capability only; no admin role re-check and no
      * dual-control approval — abort is single-control regardless of site
-     * policy (INV-E17). Any crypto.operator session may abort any non-terminal
+     * policy (INV-CRYPTO-104). Any crypto.operator session may abort any non-terminal
      * checkpoint, not just the primary operator who started it.
      * Handler: internal/admin/socket/rekey_handler.go.
      *

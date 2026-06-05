@@ -1386,7 +1386,7 @@ counterpart here.
 | ---- | ------ | ----------- |
 | NO_PLAINTEXT_REASON_UNSPECIFIED | 0 | NO_PLAINTEXT_REASON_UNSPECIFIED is the zero value and MUST hold when metadata_only=false. A client that sees it together with metadata_only=true MUST treat the delivery as a contract violation (host stamped without classifying). |
 | NO_PLAINTEXT_REASON_AUTHGUARD_DENY | 1 | NO_PLAINTEXT_REASON_AUTHGUARD_DENY means the recipient was not in the DEK&#39;s participant set or lacked the requisite plugin manifest declaration / ABAC grant. Phase 3b AuthGuard deny. |
-| NO_PLAINTEXT_REASON_STALE_DEK | 2 | NO_PLAINTEXT_REASON_STALE_DEK means both the hot and cold tier DEKs were indecipherable — a production-real outcome after a sub-epic E rekey plus DEK destruction (INV-E21 double miss). |
+| NO_PLAINTEXT_REASON_STALE_DEK | 2 | NO_PLAINTEXT_REASON_STALE_DEK means both the hot and cold tier DEKs were indecipherable — a production-real outcome after a sub-epic E rekey plus DEK destruction (INV-CRYPTO-108 double miss). |
 | NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL | 3 | NO_PLAINTEXT_REASON_AUDIT_QUEUE_FULL means a plugin audit-emit hit backpressure (queue full) — a host-side TOCTOU defense. |
 | NO_PLAINTEXT_REASON_DEK_MISSING | 4 | NO_PLAINTEXT_REASON_DEK_MISSING means the cold-tier audit row had no dek_ref (DEK reference column missing or NULL). Stamped exclusively by sub-epic F&#39;s operator-read classifier (INV-CRYPTO-66). |
 | NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS | 5 | NO_PLAINTEXT_REASON_DEK_BAD_COLUMNS means a cold-tier audit row references a DEK whose column set does not match the event&#39;s AAD declaration. Stamped exclusively by sub-epic F&#39;s classifier. |
@@ -1667,7 +1667,7 @@ Phase3Progress reports incremental progress during Phase 3, the bulk
 cold-tier re-encryption phase. The orchestrator rewrites events_audit rows
 in batches of up to 1000, decrypting each under the old DEK and
 re-encrypting under the new DEK with AAD rebound to the new (dek_ref,
-dek_version) — INV-E8. Clients may use these messages to render a
+dek_version) — INV-CRYPTO-95. Clients may use these messages to render a
 progress bar; the stream is terminated by RekeyCompleted or RekeyError.
 
 
@@ -1675,7 +1675,7 @@ progress bar; the stream is terminated by RekeyCompleted or RekeyError.
 | ----- | ---- | ----- | ----------- |
 | rows_rewritten | [int64](#int64) |  | rows_rewritten is the cumulative count of events_audit rows re-encrypted by this Phase 3 invocation so far. Resets to zero on a fresh resume; the checkpoint row&#39;s phase3_rows_rewritten column holds the cross-resume total. |
 | rows_remaining_estimate | [int64](#int64) |  | rows_remaining_estimate is a best-effort count of events_audit rows whose dek_ref still points at the old DEK. Not guaranteed to be exact (rows may be written concurrently); use for display only. |
-| last_processed_event_id | [bytes](#bytes) |  | last_processed_event_id is the ULID bytes of the most recently committed batch&#39;s last row. Stored as the Phase 3 resume cursor in the checkpoint row (INV-E7-COLD-RESUME-CURSOR); a crash and resume picks up exactly where this cursor points. |
+| last_processed_event_id | [bytes](#bytes) |  | last_processed_event_id is the ULID bytes of the most recently committed batch&#39;s last row. Stored as the Phase 3 resume cursor in the checkpoint row (INV-CRYPTO-94); a crash and resume picks up exactly where this cursor points. |
 
 
 
@@ -1741,7 +1741,7 @@ phase-by-phase progress indicator.
 
 ### RekeyAbortRequest
 RekeyAbortRequest cancels a non-terminal rekey operation, transitioning its
-checkpoint to the aborted state. Abort is single-control (INV-E17): any
+checkpoint to the aborted state. Abort is single-control (INV-CRYPTO-104): any
 session holding crypto.operator capability may abort any non-terminal
 checkpoint, regardless of site dual-control policy or which operator
 initiated the rekey. Once aborted the checkpoint is terminal; a new Rekey
@@ -1750,7 +1750,7 @@ call is required to restart.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| session_token | [string](#string) |  | session_token authenticates the aborting operator. Only crypto.operator capability is required — no admin role re-check (INV-E17). |
+| session_token | [string](#string) |  | session_token authenticates the aborting operator. Only crypto.operator capability is required — no admin role re-check (INV-CRYPTO-104). |
 | request_id | [bytes](#bytes) |  | request_id is the 16-byte ULID of the checkpoint to abort. The handler rejects zero bytes with REKEY_INVALID_REQUEST_ID. If the checkpoint is already terminal (complete or aborted), the handler returns DEK_REKEY_CHECKPOINT_TERMINAL. |
 
 
@@ -1885,7 +1885,7 @@ admin_approvals row when dual-control is required by site policy.
 | ----- | ---- | ----- | ----------- |
 | session_token | [string](#string) |  | session_token authenticates the issuing operator. Must be a non-expired token returned by AdminService.Authenticate; the handler re-validates crypto.operator capability and admin role on every call (INV-CRYPTO-83). |
 | context_type | [string](#string) |  | context_type identifies the encryption domain, e.g. &#34;scene&#34;. Together with context_id it resolves the active DEK row (old_dek_id) that the orchestrator&#39;s Phase 1 reads from crypto_keys. |
-| context_id | [string](#string) |  | context_id is the entity identifier within context_type, e.g. a scene ULID. The orchestrator uses (context_type, context_id) to locate the active DEK and enforce INV-E5 (at most one non-terminal checkpoint per context at a time). |
+| context_id | [string](#string) |  | context_id is the entity identifier within context_type, e.g. a scene ULID. The orchestrator uses (context_type, context_id) to locate the active DEK and enforce INV-CRYPTO-92 (at most one non-terminal checkpoint per context at a time). |
 | justification | [string](#string) |  | justification is a free-text operator rationale stored on the checkpoint row and included in the Phase 7 chained audit event. Required for accountability; non-empty values are enforced by the handler. |
 | approval_request_id | [string](#string) | optional | approval_request_id, when present, links a pending admin_approvals row created by the first operator under dual-control policy. Absent for single-control sites. The orchestrator validates the approval row before advancing past Phase 1. |
 
@@ -1899,7 +1899,7 @@ admin_approvals row when dual-control is required by site policy.
 ### RekeyResumeRequest
 RekeyResumeRequest resumes a paused or interrupted rekey operation identified
 by request_id. The orchestrator determines the resume entry point from the
-checkpoint&#39;s current FSM status and drives forward from there. INV-E16:
+checkpoint&#39;s current FSM status and drives forward from there. INV-CRYPTO-103:
 resuming a complete checkpoint is a no-op that re-emits RekeyCompleted.
 Resuming an aborted checkpoint surfaces DEK_REKEY_CHECKPOINT_TERMINAL.
 
@@ -1950,7 +1950,7 @@ crypto_rekey_checkpoints row.
 | status | [string](#string) |  | status is the current FSM state of this checkpoint. Values match the CheckpointStatus constants: &#34;pending&#34;, &#34;phase1_auth&#34;, &#34;phase2_mint_dek&#34;, &#34;phase3_reencrypt_cold&#34;, &#34;phase5_invalidate&#34;, &#34;phase6_destroy_old&#34;, &#34;phase7_audit&#34;, &#34;complete&#34;, or &#34;aborted&#34;. |
 | primary_player_id | [string](#string) |  | primary_player_id is the player ID of the operator who initiated the rekey (the first operator under dual-control). Used for accountability and is included in the Phase 7 audit event. |
 | started_at | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | started_at is the server timestamp when the checkpoint row was opened (Phase 1 INSERT). Combined with completed_at it bounds the total rekey wall-clock time. |
-| last_heartbeat_at | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | last_heartbeat_at is the server timestamp of the most recent heartbeat written by Phase 3. The sweep worker uses this to TTL-abort stalled checkpoints (INV-E18/E19). A value far in the past indicates a stalled or crashed orchestrator run. |
+| last_heartbeat_at | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | last_heartbeat_at is the server timestamp of the most recent heartbeat written by Phase 3. The sweep worker uses this to TTL-abort stalled checkpoints (INV-CRYPTO-105/INV-CRYPTO-106). A value far in the past indicates a stalled or crashed orchestrator run. |
 | completed_at | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | completed_at is the server timestamp when the checkpoint reached a terminal state (complete or aborted). Zero if not yet terminal. |
 | phase5_attempt_count | [int32](#int32) |  | phase5_attempt_count is the total number of cluster cache-invalidation attempts made during Phase 5 for this checkpoint. Incremented before each attempt; zero means Phase 5 has not started yet. |
 | phase5_missing_members | [string](#string) | repeated | phase5_missing_members lists the node identifiers that failed to acknowledge the most recent Phase 5 cache-invalidation request. Non-empty indicates a Phase 5 timeout; the operator may resume or use force_destroy. Empty when Phase 5 has not yet run or succeeded. |
@@ -2123,8 +2123,8 @@ allowing incremental feature deployment without breaking callers.
 | Approve | [ApproveRequest](#holomush-admin-v1-ApproveRequest) | [ApproveResponse](#holomush-admin-v1-ApproveResponse) | Approve is the second-operator signoff on a pending admin_approvals row. The caller supplies their session_token (proving identity and live operator status) and the request_id of the approval row to sign off. Repo.MarkApproved atomically enforces three invariants: INV-CRYPTO-72 (the row must not be expired), INV-CRYPTO-73 (the approver cannot be the same player as the primary operator who opened the row), and INV-CRYPTO-74 (each row may only be approved once). Requires the crypto.operator capability and admin role re-checked at call time (INV-CRYPTO-83); handler in internal/admin/approval. |
 | ResetTOTP | [ResetTOTPRequest](#holomush-admin-v1-ResetTOTPRequest) | [ResetTOTPResponse](#holomush-admin-v1-ResetTOTPResponse) | ResetTOTP clears a target player&#39;s TOTP enrollment, allowing them to re-enroll on next login. On success, AuditingService.ClearTOTP emits a crypto.totp_cleared audit event with cleared_by=&#34;admin_reset&#34; (T13). Response.cleared is false when the player was not enrolled (no-op). Requires a valid session_token with the crypto.operator capability and admin role re-checked at call time (INV-CRYPTO-83); handler in internal/admin/auth (reset_handler.go). |
 | Rekey | [RekeyRequest](#holomush-admin-v1-RekeyRequest) | [RekeyProgress](#holomush-admin-v1-RekeyProgress) stream | Rekey initiates a fresh DEK rekey for the given context. Requires the crypto.operator capability and admin role (re-checked at call time, INV-CRYPTO-83). Streams a single terminal RekeyProgress event: RekeyCompleted on success or RekeyError on orchestrator failure. Per-phase progress updates are pre-defined in the proto but not yet emitted (follow-up). Uses the shared RekeyProgress stream type (also used by RekeyResume) — the buf RPC_REQUEST_RESPONSE_UNIQUE / RPC_RESPONSE_STANDARD_NAME exemptions are intentional (jxo8.7.27). Handler: internal/admin/socket/rekey_handler.go. |
-| RekeyResume | [RekeyResumeRequest](#holomush-admin-v1-RekeyResumeRequest) | [RekeyProgress](#holomush-admin-v1-RekeyProgress) stream | RekeyResume resumes a paused or interrupted rekey identified by request_id. Requires the crypto.operator capability and admin role (INV-CRYPTO-83). Idempotency (INV-E16) and same-args invariant (INV-E4) are enforced inside the orchestrator, not here. The handler validates that request_id is a non-zero 16-byte ULID and forwards it to the orchestrator adapter, which looks up the checkpoint to resolve ContextType/ContextID. Streams a terminal RekeyProgress event — same shared type as Rekey. Handler: internal/admin/socket/rekey_handler.go. |
-| RekeyAbort | [RekeyAbortRequest](#holomush-admin-v1-RekeyAbortRequest) | [RekeyAbortResponse](#holomush-admin-v1-RekeyAbortResponse) | RekeyAbort cancels an in-progress rekey checkpoint. Requires the crypto.operator capability only; no admin role re-check and no dual-control approval — abort is single-control regardless of site policy (INV-E17). Any crypto.operator session may abort any non-terminal checkpoint, not just the primary operator who started it. Handler: internal/admin/socket/rekey_handler.go. |
+| RekeyResume | [RekeyResumeRequest](#holomush-admin-v1-RekeyResumeRequest) | [RekeyProgress](#holomush-admin-v1-RekeyProgress) stream | RekeyResume resumes a paused or interrupted rekey identified by request_id. Requires the crypto.operator capability and admin role (INV-CRYPTO-83). Idempotency (INV-CRYPTO-103) and same-args invariant (INV-CRYPTO-91) are enforced inside the orchestrator, not here. The handler validates that request_id is a non-zero 16-byte ULID and forwards it to the orchestrator adapter, which looks up the checkpoint to resolve ContextType/ContextID. Streams a terminal RekeyProgress event — same shared type as Rekey. Handler: internal/admin/socket/rekey_handler.go. |
+| RekeyAbort | [RekeyAbortRequest](#holomush-admin-v1-RekeyAbortRequest) | [RekeyAbortResponse](#holomush-admin-v1-RekeyAbortResponse) | RekeyAbort cancels an in-progress rekey checkpoint. Requires the crypto.operator capability only; no admin role re-check and no dual-control approval — abort is single-control regardless of site policy (INV-CRYPTO-104). Any crypto.operator session may abort any non-terminal checkpoint, not just the primary operator who started it. Handler: internal/admin/socket/rekey_handler.go. |
 | RekeyStatus | [RekeyStatusRequest](#holomush-admin-v1-RekeyStatusRequest) | [RekeyStatusResponse](#holomush-admin-v1-RekeyStatusResponse) | RekeyStatus returns the current state of a single rekey operation identified by request_id. Requires the crypto.operator capability; no admin role re-check. Reads from the crypto_rekey_checkpoints table via CheckpointStatusReader.GetCheckpoint. Handler: internal/admin/socket/rekey_handler.go. |
 | RekeyList | [RekeyListRequest](#holomush-admin-v1-RekeyListRequest) | [RekeyStatusResponse](#holomush-admin-v1-RekeyStatusResponse) stream | RekeyList streams status records for rekey operations. By default only non-terminal checkpoints are returned; set include_terminal to include completed and aborted rows. Results are capped at 100 rows (any limit above 100 or zero is silently clamped to 100). Requires the crypto.operator capability; no admin role re-check. Handler: internal/admin/socket/rekey_handler.go. |
 | AdminReadStream | [AdminReadStreamRequest](#holomush-admin-v1-AdminReadStreamRequest) | [AdminReadStreamResponse](#holomush-admin-v1-AdminReadStreamResponse) stream | AdminReadStream is the operator break-glass streaming read RPC. Streams EventFrame payloads for the requested context(s) and time bounds, with typed metadata_only and no_plaintext_reason redaction fields for destroyed-DEK and plaintext-suppressed events. When dual_control is set in the request, the handler blocks until a second operator approves via the admin_approvals table before emitting any event frames (INV-CRYPTO-61/INV-CRYPTO-67). Handler: internal/admin/socket/handlers.go (delegated to ReadStreamRPCHandler). |
@@ -2822,7 +2822,7 @@ decrypted; no_plaintext_reason is set iff the row was refused (e.g.
 | ----- | ---- | ----- | ----------- |
 | id | [bytes](#bytes) |  | id echoes AuditRow.id so the caller can correlate results back to their source rows without relying solely on positional ordering. |
 | plaintext | [bytes](#bytes) |  | plaintext holds the decrypted event payload bytes when decryption succeeded. May be empty bytes for zero-length payloads; callers MUST distinguish this from no_plaintext_reason by which oneof arm is set, not by length. |
-| no_plaintext_reason | [string](#string) |  | no_plaintext_reason is a short ASCII token describing why decryption was refused. It is a stable wire contract (the values MUST NOT drift; SDKs switch on them — see readback.go). The full set: &#34;not_owner&#34; (g1 OwnerMap gate — subject belongs to a different plugin), &#34;auth_guard_deny&#34; (recipient not authorized by manifest declaration / ABAC grant — Phase 3b AuthGuard deny), &#34;downgrade_refused&#34; (INV-CRYPTO-42 fence — sensitive event stored under identity codec), &#34;dek_missing&#34; (INV-CRYPTO-50 fence — no DEK exists for this row&#39;s context), &#34;stale_dek&#34; (INV-E21 — both hot and cold DEK tiers gone), &#34;audit_queue_full&#34; (plugin audit-emit backpressure), and &#34;internal&#34; (host-side error, details logged server-side only). |
+| no_plaintext_reason | [string](#string) |  | no_plaintext_reason is a short ASCII token describing why decryption was refused. It is a stable wire contract (the values MUST NOT drift; SDKs switch on them — see readback.go). The full set: &#34;not_owner&#34; (g1 OwnerMap gate — subject belongs to a different plugin), &#34;auth_guard_deny&#34; (recipient not authorized by manifest declaration / ABAC grant — Phase 3b AuthGuard deny), &#34;downgrade_refused&#34; (INV-CRYPTO-42 fence — sensitive event stored under identity codec), &#34;dek_missing&#34; (INV-CRYPTO-50 fence — no DEK exists for this row&#39;s context), &#34;stale_dek&#34; (INV-CRYPTO-108 — both hot and cold DEK tiers gone), &#34;audit_queue_full&#34; (plugin audit-emit backpressure), and &#34;internal&#34; (host-side error, details logged server-side only). |
 
 
 

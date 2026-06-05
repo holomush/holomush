@@ -13,7 +13,7 @@ import (
 // non-terminal FSM state has a defined resume entry decision. The Resume
 // dispatcher (Orchestrator.Run) consumes this decision to pick the first
 // RunPhaseN to invoke; missing coverage would manifest as a silent
-// fall-through to a default error path (INV-E4 violation: never
+// fall-through to a default error path (INV-CRYPTO-91 violation: never
 // re-enter Phase 1 when a checkpoint exists).
 //
 // This is a unit-level meta-test: it does NOT touch the database; it
@@ -58,7 +58,7 @@ func TestDecideResumeEntry_NonTerminalStatusCoverage(t *testing.T) {
 func TestDecideResumeEntry_TerminalStates(t *testing.T) {
 	entry, _ := decideResumeEntry(CheckpointStatusComplete, false, false)
 	require.Equal(t, resumeEntryComplete, entry,
-		"INV-E16: complete checkpoint is idempotent no-op")
+		"INV-CRYPTO-103: complete checkpoint is idempotent no-op")
 
 	entry, _ = decideResumeEntry(CheckpointStatusAborted, false, false)
 	require.Equal(t, resumeEntryAborted, entry,

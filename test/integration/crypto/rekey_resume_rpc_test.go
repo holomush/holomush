@@ -11,9 +11,9 @@
 // directly and delegates to Orchestrator.RunByRequestID.
 //
 // Verifies:
-//   - INV-E4 (resume-not-restart): RekeyResume reuses the original RequestID when
+//   - INV-CRYPTO-91 (resume-not-restart): RekeyResume reuses the original RequestID when
 //     given the exact request_id bytes from Phase 1.
-//   - INV-E16 (operator binding): RekeyResume with a request_id owned by a different
+//   - INV-CRYPTO-103 (operator binding): RekeyResume with a request_id owned by a different
 //     player is rejected with DEK_REKEY_RESUME_OPERATOR_MISMATCH.
 //   - Bug regression (code-reviewer finding, phase5-sub-epic-e): RekeyRunRequest.RequestID
 //     was discarded with `_ = ridFixed` before this fix; Orchestrator.RunByRequestID
@@ -80,7 +80,7 @@ func runRekeyResumeViaUDS(
 }
 
 var _ = Describe("RekeyResume RPC explicit request_id path", func() {
-	It("resumes by request_id and reuses the original RequestID (INV-E4, bug regression)", func() {
+	It("resumes by request_id and reuses the original RequestID (INV-CRYPTO-91, bug regression)", func() {
 		// Boot the harness with default fixture.
 		h := SetupRekeyHarness(suiteT)
 		defer h.Cleanup()
@@ -102,7 +102,7 @@ var _ = Describe("RekeyResume RPC explicit request_id path", func() {
 		ckpt0, err := h.Primary.GetCheckpointRepo().Get(context.Background(), firstRID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt0.Status.IsTerminal()).To(BeFalse(),
-			"INV-E4: checkpoint must be non-terminal before resume")
+			"INV-CRYPTO-91: checkpoint must be non-terminal before resume")
 
 		// Call AdminService.RekeyResume with the explicit request_id.
 		// noopRekeySessionStore echoes the session token as the player_id.
@@ -119,19 +119,19 @@ var _ = Describe("RekeyResume RPC explicit request_id path", func() {
 		var returnedRID dek.RequestID
 		copy(returnedRID[:], out.RequestID)
 
-		// INV-E4: RunByRequestID must re-use the existing RequestID, not
+		// INV-CRYPTO-91: RunByRequestID must re-use the existing RequestID, not
 		// allocate a new one via RunPhase1Fresh.
 		Expect(returnedRID).To(Equal(firstRID),
-			"INV-E4: RekeyResume MUST NOT re-enter Phase 1 — RequestID must be stable")
+			"INV-CRYPTO-91: RekeyResume MUST NOT re-enter Phase 1 — RequestID must be stable")
 
 		// Checkpoint must be complete after the explicit resume.
 		h.AssertCheckpointStatus(firstRID, dek.CheckpointStatusComplete)
 
-		// Audit chain intact (INV-E14/E15).
+		// Audit chain intact (INV-CRYPTO-101/INV-CRYPTO-102).
 		h.AssertRekeyChainIntactForContext(h.SceneContext)
 	})
 
-	It("rejects RekeyResume from a different operator (INV-E16)", func() {
+	It("rejects RekeyResume from a different operator (INV-CRYPTO-103)", func() {
 		h := SetupRekeyHarness(suiteT)
 		defer h.Cleanup()
 
@@ -148,6 +148,6 @@ var _ = Describe("RekeyResume RPC explicit request_id path", func() {
 		)
 		Expect(err).To(HaveOccurred(), "different-operator RekeyResume must fail")
 		Expect(err.Error()).To(ContainSubstring("DEK_REKEY_RESUME_OPERATOR_MISMATCH"),
-			"INV-E16: wrong operator must receive DEK_REKEY_RESUME_OPERATOR_MISMATCH")
+			"INV-CRYPTO-103: wrong operator must receive DEK_REKEY_RESUME_OPERATOR_MISMATCH")
 	})
 })

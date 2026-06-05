@@ -5,7 +5,7 @@
 
 // rekey_abort_test.go — E2E spec for the Rekey abort path.
 //
-// Verifies INV-E17 (ABORT-NO-DUAL-CONTROL): the RekeyAbort RPC accepts a
+// Verifies INV-CRYPTO-104 (ABORT-NO-DUAL-CONTROL): the RekeyAbort RPC accepts a
 // single-control invocation; abort is non-destructive (the in-progress
 // checkpoint is marked aborted, the old DEK remains valid, reads continue).
 // A subsequent fresh-start rekey succeeds after the abort.
@@ -26,7 +26,7 @@ import (
 )
 
 var _ = Describe("Rekey abort", func() {
-	It("aborts an in-flight checkpoint and allows a fresh start (INV-E17)", func() {
+	It("aborts an in-flight checkpoint and allows a fresh start (INV-CRYPTO-104)", func() {
 		h := SetupRekeyHarness(suiteT)
 		defer h.Cleanup()
 
@@ -40,7 +40,7 @@ var _ = Describe("Rekey abort", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt0.Status.IsTerminal()).To(BeFalse(), "checkpoint must be non-terminal before abort")
 
-		// INV-E17: abort must succeed via single-control. The abort handler
+		// INV-CRYPTO-104: abort must succeed via single-control. The abort handler
 		// requires only crypto.operator capability — no dual-control approval
 		// is accepted or required. This test verifies that single-control
 		// RekeyAbort succeeds even for an in-flight checkpoint.
@@ -52,7 +52,7 @@ var _ = Describe("Rekey abort", func() {
 			RequestId:    rid[:],
 		}))
 		Expect(err).NotTo(HaveOccurred(),
-			"INV-E17: RekeyAbort must succeed via single-control")
+			"INV-CRYPTO-104: RekeyAbort must succeed via single-control")
 		Expect(abortResp.Msg.GetAbortedAt()).NotTo(BeNil(),
 			"AbortedAt must be populated in the response")
 		Expect(abortResp.Msg.GetAuditEventId()).NotTo(BeEmpty(),

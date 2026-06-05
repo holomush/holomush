@@ -50,7 +50,7 @@ export type RekeyRequest = Message<"holomush.admin.v1.RekeyRequest"> & {
   /**
    * context_id is the entity identifier within context_type, e.g. a scene
    * ULID. The orchestrator uses (context_type, context_id) to locate the
-   * active DEK and enforce INV-E5 (at most one non-terminal checkpoint per
+   * active DEK and enforce INV-CRYPTO-92 (at most one non-terminal checkpoint per
    * context at a time).
    *
    * @generated from field: string context_id = 3;
@@ -197,7 +197,7 @@ export const PhaseStartedSchema: GenMessage<PhaseStarted> = /*@__PURE__*/
  * cold-tier re-encryption phase. The orchestrator rewrites events_audit rows
  * in batches of up to 1000, decrypting each under the old DEK and
  * re-encrypting under the new DEK with AAD rebound to the new (dek_ref,
- * dek_version) — INV-E8. Clients may use these messages to render a
+ * dek_version) — INV-CRYPTO-95. Clients may use these messages to render a
  * progress bar; the stream is terminated by RekeyCompleted or RekeyError.
  *
  * @generated from message holomush.admin.v1.Phase3Progress
@@ -224,7 +224,7 @@ export type Phase3Progress = Message<"holomush.admin.v1.Phase3Progress"> & {
   /**
    * last_processed_event_id is the ULID bytes of the most recently committed
    * batch's last row. Stored as the Phase 3 resume cursor in the checkpoint
-   * row (INV-E7-COLD-RESUME-CURSOR); a crash and resume picks up exactly
+   * row (INV-CRYPTO-94); a crash and resume picks up exactly
    * where this cursor points.
    *
    * @generated from field: bytes last_processed_event_id = 3;
@@ -431,7 +431,7 @@ export const RekeyErrorSchema: GenMessage<RekeyError> = /*@__PURE__*/
 /**
  * RekeyResumeRequest resumes a paused or interrupted rekey operation identified
  * by request_id. The orchestrator determines the resume entry point from the
- * checkpoint's current FSM status and drives forward from there. INV-E16:
+ * checkpoint's current FSM status and drives forward from there. INV-CRYPTO-103:
  * resuming a complete checkpoint is a no-op that re-emits RekeyCompleted.
  * Resuming an aborted checkpoint surfaces DEK_REKEY_CHECKPOINT_TERMINAL.
  *
@@ -477,7 +477,7 @@ export const RekeyResumeRequestSchema: GenMessage<RekeyResumeRequest> = /*@__PUR
 
 /**
  * RekeyAbortRequest cancels a non-terminal rekey operation, transitioning its
- * checkpoint to the aborted state. Abort is single-control (INV-E17): any
+ * checkpoint to the aborted state. Abort is single-control (INV-CRYPTO-104): any
  * session holding crypto.operator capability may abort any non-terminal
  * checkpoint, regardless of site dual-control policy or which operator
  * initiated the rekey. Once aborted the checkpoint is terminal; a new Rekey
@@ -488,7 +488,7 @@ export const RekeyResumeRequestSchema: GenMessage<RekeyResumeRequest> = /*@__PUR
 export type RekeyAbortRequest = Message<"holomush.admin.v1.RekeyAbortRequest"> & {
   /**
    * session_token authenticates the aborting operator. Only crypto.operator
-   * capability is required — no admin role re-check (INV-E17).
+   * capability is required — no admin role re-check (INV-CRYPTO-104).
    *
    * @generated from field: string session_token = 1;
    */
@@ -640,7 +640,7 @@ export type RekeyStatusResponse = Message<"holomush.admin.v1.RekeyStatusResponse
   /**
    * last_heartbeat_at is the server timestamp of the most recent heartbeat
    * written by Phase 3. The sweep worker uses this to TTL-abort stalled
-   * checkpoints (INV-E18/E19). A value far in the past indicates a stalled
+   * checkpoints (INV-CRYPTO-105/INV-CRYPTO-106). A value far in the past indicates a stalled
    * or crashed orchestrator run.
    *
    * @generated from field: google.protobuf.Timestamp last_heartbeat_at = 7;

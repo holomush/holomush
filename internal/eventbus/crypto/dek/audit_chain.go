@@ -9,9 +9,9 @@
 //
 // RekeyChainFor(gameID) returns the [chain.Chain] descriptor for the
 // system.rekey chain registered in the generalized auditchain verifier.
-// The subject prefix is "events.<gameID>.system.rekey" (INV-E26).
-// ScopePayloadField is "context" (INV-E27).
-// SelfHashField is "rekey_chain.self_hash" (INV-E28).
+// The subject prefix is "events.<gameID>.system.rekey" (INV-CRYPTO-113).
+// ScopePayloadField is "context" (INV-CRYPTO-114).
+// SelfHashField is "rekey_chain.self_hash" (INV-CRYPTO-115).
 package dek
 
 import (
@@ -119,7 +119,7 @@ func canonicalizeRekeyPayload(payload []byte) ([]byte, error) {
 }
 
 // parseRekeyScopeFromPayload extracts the scope key "<context.type>:<context.id>"
-// from the raw JSON payload. Satisfies INV-E27 (independent payload-derived scope).
+// from the raw JSON payload. Satisfies INV-CRYPTO-114 (independent payload-derived scope).
 //
 // Unexported — called from RekeyChain registration and tested internally.
 func parseRekeyScopeFromPayload(payload []byte) (string, error) {
@@ -244,9 +244,9 @@ func GameIDForTest() string { return currentGameIDForRekey }
 // hash chain parameterized by gameID. The subject prefix embeds gameID so
 // the verifier can scope its SQL LIKE query.
 //
-// INV-E26: SubjectPrefix starts with "events.".
-// INV-E27: ScopePayloadField is "context" (non-empty).
-// INV-E28: SelfHashField is "rekey_chain.self_hash".
+// INV-CRYPTO-113: SubjectPrefix starts with "events.".
+// INV-CRYPTO-114: ScopePayloadField is "context" (non-empty).
+// INV-CRYPTO-115: SelfHashField is "rekey_chain.self_hash".
 func RekeyChainFor(gameID string) chain.Chain {
 	return chain.Chain{
 		SubjectPrefix:     fmt.Sprintf("events.%s.system.rekey", gameID),

@@ -6,11 +6,11 @@
 // rekey_force_destroy_test.go — E2E specs for the --force-destroy escape hatch.
 //
 // Covers:
-//   - INV-E10 (FORCE-DESTROY-GATED): --force-destroy is rejected when the
+//   - INV-CRYPTO-97 (FORCE-DESTROY-GATED): --force-destroy is rejected when the
 //     checkpoint is not in the timed-out Phase 5 state (i.e., when
 //     phase5_missing_members IS NULL). Verified at phase1_auth (before Phase 5)
 //     and at phase5_invalidate without missing members (after Phase 5 success).
-//   - INV-E11 (FORCE-DESTROY-AUDITED): when --force-destroy is used after a
+//   - INV-CRYPTO-98 (FORCE-DESTROY-AUDITED): when --force-destroy is used after a
 //     Phase 5 timeout, the rekey completes and the audit event carries
 //     force_destroy=true and final_missing_members populated.
 //
@@ -38,7 +38,7 @@ import (
 
 // assertAuditEventHasForceDestroy queries events_audit for the most recent
 // rekey audit event for SceneContext and asserts force_destroy=true and
-// final_missing_members contains all expected members (INV-E11).
+// final_missing_members contains all expected members (INV-CRYPTO-98).
 func assertAuditEventHasForceDestroy(h *Harness, expectedMissing []string) {
 	GinkgoHelper()
 
@@ -49,22 +49,22 @@ func assertAuditEventHasForceDestroy(h *Harness, expectedMissing []string) {
 		  ORDER BY js_seq DESC LIMIT 1`,
 		"events.g1.system.rekey.scene.%").Scan(&envelopeBytes)
 	Expect(err).NotTo(HaveOccurred(),
-		"INV-E11: rekey audit event must exist in events_audit")
+		"INV-CRYPTO-98: rekey audit event must exist in events_audit")
 
 	var payload dek.RekeyAuditPayload
 	Expect(json.Unmarshal(envelopeBytes, &payload)).To(Succeed(),
-		"INV-E11: audit event envelope must be valid RekeyAuditPayload JSON")
+		"INV-CRYPTO-98: audit event envelope must be valid RekeyAuditPayload JSON")
 
 	Expect(payload.ForceDestroy).To(BeTrue(),
-		"INV-E11: audit payload force_destroy must be true")
+		"INV-CRYPTO-98: audit payload force_destroy must be true")
 	for _, m := range expectedMissing {
 		Expect(payload.Phases.Phase5FinalMissingMembers).To(ContainElement(m),
-			"INV-E11: audit payload final_missing_members must include %q", m)
+			"INV-CRYPTO-98: audit payload final_missing_members must include %q", m)
 	}
 }
 
 var _ = Describe("Rekey force-destroy", func() {
-	It("E2E_ForceDestroyAuditCapture: --force-destroy bypasses invalidation and captures bypass in audit (INV-E10, INV-E11)", func() {
+	It("E2E_ForceDestroyAuditCapture: --force-destroy bypasses invalidation and captures bypass in audit (INV-CRYPTO-97, INV-CRYPTO-98)", func() {
 		h := SetupRekeyHarness(suiteT, WithEventCount(50))
 		defer h.Cleanup()
 
@@ -85,7 +85,7 @@ var _ = Describe("Rekey force-destroy", func() {
 		Expect(timeoutErr).To(HaveOccurred(), "Phase 5 must timeout")
 		Expect(timeoutErr.Error()).To(ContainSubstring("DEK_REKEY_PHASE5_TIMEOUT"))
 
-		// INV-E10: force-destroy is permitted on a timed-out checkpoint.
+		// INV-CRYPTO-97: force-destroy is permitted on a timed-out checkpoint.
 		// Drive it via the orchestrator directly (ForceDestroy=true + same args
 		// → same op_args_hash → auto-resumes the phase5_timeout checkpoint).
 		// The coordinator is still in timeout mode; force-destroy skips it.
@@ -100,21 +100,21 @@ var _ = Describe("Rekey force-destroy", func() {
 			context.Background(), forceReq,
 		)
 		Expect(forceErr).NotTo(HaveOccurred(),
-			"INV-E10: force-destroy on a phase5_timeout checkpoint must succeed")
+			"INV-CRYPTO-97: force-destroy on a phase5_timeout checkpoint must succeed")
 		Expect(outcome.ForceDestroyUsed).To(BeTrue(),
-			"INV-E11: RekeyOutcome.ForceDestroyUsed must be true")
+			"INV-CRYPTO-98: RekeyOutcome.ForceDestroyUsed must be true")
 
 		// Checkpoint must be complete.
 		h.AssertCheckpointStatus(outcome.RequestID, dek.CheckpointStatusComplete)
 
-		// INV-E11: audit event must capture force_destroy=true + missing members.
+		// INV-CRYPTO-98: audit event must capture force_destroy=true + missing members.
 		assertAuditEventHasForceDestroy(h, missingMembers)
 
-		// Audit chain intact (INV-E14/E15).
+		// Audit chain intact (INV-CRYPTO-101/INV-CRYPTO-102).
 		h.AssertRekeyChainIntactForContext(h.SceneContext)
 	})
 
-	It("INV-E10: force-destroy is rejected when Phase 5 has not timed out (pre-timeout)", func() {
+	It("INV-CRYPTO-97: force-destroy is rejected when Phase 5 has not timed out (pre-timeout)", func() {
 		h := SetupRekeyHarness(suiteT, WithEventCount(10))
 		defer h.Cleanup()
 
@@ -131,12 +131,12 @@ var _ = Describe("Rekey force-destroy", func() {
 			context.Background(), rid,
 		)
 		Expect(forceErr).To(HaveOccurred(),
-			"INV-E10: force-destroy must be rejected before phase5_timeout")
+			"INV-CRYPTO-97: force-destroy must be rejected before phase5_timeout")
 		Expect(forceErr.Error()).To(ContainSubstring("phase5_invalidate"),
-			"INV-E10: rejection message must reference required state")
+			"INV-CRYPTO-97: rejection message must reference required state")
 	})
 
-	It("INV-E10: force-destroy is rejected after successful Phase 5 (phase5_complete / no missing members)", func() {
+	It("INV-CRYPTO-97: force-destroy is rejected after successful Phase 5 (phase5_complete / no missing members)", func() {
 		h := SetupRekeyHarness(suiteT, WithEventCount(10))
 		defer h.Cleanup()
 
@@ -161,8 +161,8 @@ var _ = Describe("Rekey force-destroy", func() {
 			context.Background(), rid,
 		)
 		Expect(forceErr).To(HaveOccurred(),
-			"INV-E10: force-destroy must be rejected after a successful Phase 5")
+			"INV-CRYPTO-97: force-destroy must be rejected after a successful Phase 5")
 		Expect(forceErr.Error()).To(ContainSubstring("phase5_invalidate"),
-			"INV-E10: rejection message must reference the required phase5_invalidate+missing_members state")
+			"INV-CRYPTO-97: rejection message must reference the required phase5_invalidate+missing_members state")
 	})
 })

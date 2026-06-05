@@ -89,7 +89,7 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		// Rekey orchestrator via rekeyAuditPublisherAdapter → RenderingPublisher.
 		// AUDIT_ONLY: gRPC Subscribe handler drops it before delivery; the audit
 		// projection persists it to events_audit. Registered here so
-		// RenderingPublisher does not reject it with EMIT_UNKNOWN_VERB (INV-E14).
+		// RenderingPublisher does not reject it with EMIT_UNKNOWN_VERB (INV-CRYPTO-101).
 		{Type: "crypto.system.rekey", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 		// Operator-read audit events (host-emit, persistence-only). Emitted by
 		// F's AdminReadStream handler at stream-start and stream-end respectively.
@@ -103,7 +103,7 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 		// INV-CRYPTO-42 row refusal, via RenderingPublisher. AUDIT_ONLY so the gRPC
 		// Subscribe handler drops the event before delivery; audit projection
 		// persists it to events_audit on subject events.<game>.system.plugin_integrity_violation
-		// (events.> prefix per INV-E26 — only events.> reaches the EVENTS stream filter).
+		// (events.> prefix per INV-CRYPTO-113 — only events.> reaches the EVENTS stream filter).
 		// Registered here so RenderingPublisher does not reject with
 		// EMIT_UNKNOWN_VERB — without this entry the documented operator-facing
 		// integrity-violation signal silently fails on every refusal.

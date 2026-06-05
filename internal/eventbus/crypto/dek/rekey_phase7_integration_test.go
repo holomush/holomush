@@ -124,7 +124,7 @@ func (s *phase7TestSetupImpl) RunUpToPhase6Complete() dek.RequestID {
 
 // RunUpToPhase6CompleteWithForceDestroy seeds a checkpoint row at phase6_destroy_old
 // with force_destroy=true and phase5_missing_members populated to simulate
-// the force-destroy path for INV-E11 assertions.
+// the force-destroy path for INV-CRYPTO-98 assertions.
 func (s *phase7TestSetupImpl) RunUpToPhase6CompleteWithForceDestroy(missingMembers string) dek.RequestID {
 	rid := dek.RequestID(idgen.New())
 	_, err := s.pool.Exec(context.Background(), `
@@ -143,11 +143,11 @@ func (s *phase7TestSetupImpl) RunUpToPhase6CompleteWithForceDestroy(missingMembe
 // Phase 7 — Orchestrator integration specs.
 var _ = Describe("Orchestrator Phase 7", func() {
 	// TestOrchestrator_Phase7_EmitsChainedAudit_AdvancesToComplete verifies:
-	//   - RunPhase7 emits the rekey audit event via the audit emitter (INV-E14)
+	//   - RunPhase7 emits the rekey audit event via the audit emitter (INV-CRYPTO-101)
 	//   - outcome.AuditEventID is non-empty
-	//   - checkpoint advances to status=complete (INV-E1)
+	//   - checkpoint advances to status=complete (INV-CRYPTO-88)
 	//   - completed_at is set
-	It("emits chained audit and advances to complete (INV-E14, INV-E1)", func() {
+	It("emits chained audit and advances to complete (INV-CRYPTO-101, INV-CRYPTO-88)", func() {
 		setup := newPhase7TestSetup()
 		rid := setup.RunUpToPhase6Complete()
 
@@ -159,12 +159,12 @@ var _ = Describe("Orchestrator Phase 7", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(outcome.AuditEventID).NotTo(BeEmpty(),
-			"INV-E14: AuditEventID must be populated after Phase 7")
+			"INV-CRYPTO-101: AuditEventID must be populated after Phase 7")
 
 		ckpt, err := setup.Repo.Get(context.Background(), rid)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusComplete),
-			"INV-E1: checkpoint must advance to complete after RunPhase7")
+			"INV-CRYPTO-88: checkpoint must advance to complete after RunPhase7")
 		Expect(ckpt.CompletedAt).NotTo(BeNil(),
 			"completed_at must be set after Phase 7")
 
@@ -175,11 +175,11 @@ var _ = Describe("Orchestrator Phase 7", func() {
 		Expect(emittedPayload.Context.ID).To(Equal("01PH7"))
 	})
 
-	// TestOrchestrator_Phase7_AuditEmitFailure_FallbackLog verifies (INV-E13):
+	// TestOrchestrator_Phase7_AuditEmitFailure_FallbackLog verifies (INV-CRYPTO-100):
 	//   - on audit emit failure, RunPhase7 returns DEK_REKEY_PHASE7_AUDIT_FAILED
 	//   - the fallback log file is written at <data_dir>/audit-fallback/rekey-<rid>.log
 	//   - the checkpoint does NOT advance to complete (DB state is preserved)
-	It("audit emit failure writes fallback log and does not advance checkpoint (INV-E13)", func() {
+	It("audit emit failure writes fallback log and does not advance checkpoint (INV-CRYPTO-100)", func() {
 		setup := newPhase7TestSetup()
 		rid := setup.RunUpToPhase6Complete()
 		setup.AuditEmitter.SetEmitErrorForTest(errors.New("simulated emit failure"))
@@ -192,23 +192,23 @@ var _ = Describe("Orchestrator Phase 7", func() {
 		Expect(err).To(HaveOccurred())
 		errutil.AssertErrorCode(suiteT, err, "DEK_REKEY_PHASE7_AUDIT_FAILED")
 
-		// INV-E13: fallback log written to <data_dir>/audit-fallback/rekey-<rid>.log.
+		// INV-CRYPTO-100: fallback log written to <data_dir>/audit-fallback/rekey-<rid>.log.
 		logPath := filepath.Join(setup.DataDir, "audit-fallback", "rekey-"+rid.String()+".log")
 		Expect(logPath).To(BeAnExistingFile(),
-			"INV-E13: fallback log must be written on audit emit failure")
+			"INV-CRYPTO-100: fallback log must be written on audit emit failure")
 
 		// The checkpoint must NOT be at complete — rekey DB state is committed,
 		// but the phase7_audit status means retry is possible.
 		ckpt, cerr := setup.Repo.Get(context.Background(), rid)
 		Expect(cerr).NotTo(HaveOccurred())
 		Expect(ckpt.Status).NotTo(Equal(dek.CheckpointStatusComplete),
-			"INV-E13: checkpoint must not advance to complete on audit emit failure")
+			"INV-CRYPTO-100: checkpoint must not advance to complete on audit emit failure")
 	})
 
-	// TestOrchestrator_Phase7_ForceDestroyPath_AuditCaptures verifies (INV-E11):
+	// TestOrchestrator_Phase7_ForceDestroyPath_AuditCaptures verifies (INV-CRYPTO-98):
 	//   - when force_destroy=true on the checkpoint, the emitted payload has
 	//     ForceDestroy=true and the missing_members list is non-nil.
-	It("force-destroy path audit captures ForceDestroy and missing_members (INV-E11)", func() {
+	It("force-destroy path audit captures ForceDestroy and missing_members (INV-CRYPTO-98)", func() {
 		setup := newPhase7TestSetup()
 		rid := setup.RunUpToPhase6CompleteWithForceDestroy(`["m1","m2"]`)
 
@@ -220,19 +220,19 @@ var _ = Describe("Orchestrator Phase 7", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		// INV-E11: audit payload must capture force_destroy and missing_members.
+		// INV-CRYPTO-98: audit payload must capture force_destroy and missing_members.
 		Expect(setup.AuditEmitter.emitted).To(HaveLen(1))
 		p := setup.AuditEmitter.emitted[0]
 		Expect(p.ForceDestroy).To(BeTrue(),
-			"INV-E11: audit payload must have force_destroy=true")
+			"INV-CRYPTO-98: audit payload must have force_destroy=true")
 		Expect(p.Phases.Phase5FinalMissingMembers).To(ConsistOf("m1", "m2"),
-			"INV-E11: audit payload must embed final_missing_members from the checkpoint")
+			"INV-CRYPTO-98: audit payload must embed final_missing_members from the checkpoint")
 	})
 
 	// TestOrchestrator_Phase7_RequiresPreconditionPhase6Complete verifies:
 	//   - RunPhase7 with a checkpoint not in phase6_destroy_old returns
-	//     DEK_REKEY_PHASE_PRECONDITION_FAILED (INV-E1 FSM guard).
-	It("requires phase6_destroy_old precondition (INV-E1 FSM guard)", func() {
+	//     DEK_REKEY_PHASE_PRECONDITION_FAILED (INV-CRYPTO-88 FSM guard).
+	It("requires phase6_destroy_old precondition (INV-CRYPTO-88 FSM guard)", func() {
 		pool := testIntegrationPool(suiteT)
 		const gameID = "g1"
 		dek.SetGameIDForTest(gameID)

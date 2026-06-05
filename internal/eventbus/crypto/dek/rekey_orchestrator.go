@@ -16,7 +16,7 @@ import (
 // chain for a given policyName and return its recomputed self-hash".
 //
 // Phase 1 calls CurrentPolicyHash once and persists the result on the
-// checkpoint row (INV-E25: policy_hash is frozen at Phase 1 and never
+// checkpoint row (INV-CRYPTO-112: policy_hash is frozen at Phase 1 and never
 // re-queried during later phases).
 //
 // Returns nil when the chain is empty (genesis: no policy_set event yet).
@@ -73,7 +73,7 @@ func (s *auditChainPolicyHashSource) CurrentPolicyHash(ctx context.Context, poli
 type Minter interface {
 	// MintNewDEKForRekey generates a fresh DEK, wraps it via Provider, and
 	// INSERTs a new crypto_keys row with version = old.version+1 and
-	// byte-equal participants (INV-E6). Returns the new row's primary key id.
+	// byte-equal participants (INV-CRYPTO-93). Returns the new row's primary key id.
 	MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error)
 }
 
@@ -97,7 +97,7 @@ type Orchestrator struct {
 	phase5Coord      Phase5Coordinator
 	dekDestroyer     Destroyer
 	auditEmitter     AuditEmitter // Phase 7: emit chained audit event (holomush-jxo8.7.24)
-	dataDir          string       // Phase 7: fallback log directory (INV-E13)
+	dataDir          string       // Phase 7: fallback log directory (INV-CRYPTO-100)
 	serverID         string       // Phase 7: server_identity field in audit payload
 	batchHookForTest func(rowsRewrittenSoFar int)
 	logger           *slog.Logger
@@ -134,15 +134,15 @@ func NewOrchestrator(
 }
 
 // RunPhase1Fresh is the entry point for a fresh rekey. It:
-//  1. Computes the op_args_hash (INV-E24: idempotency key binding the WORK).
-//  2. Captures the current policy_set chain head as policy_hash (INV-E25).
+//  1. Computes the op_args_hash (INV-CRYPTO-111: idempotency key binding the WORK).
+//  2. Captures the current policy_set chain head as policy_hash (INV-CRYPTO-112).
 //     If the chain is empty (genesis), stores a 32-byte zero sentinel.
 //  3. Reads the active DEK row to obtain old_dek_id.
 //  4. Opens (INSERTs) the checkpoint row with status=pending.
 //  5. Advances the checkpoint to phase1_auth.
 //
 // Returns DEK_REKEY_ALREADY_IN_PROGRESS if a non-terminal checkpoint
-// already exists for (context_type, context_id) (INV-E5, enforced by the
+// already exists for (context_type, context_id) (INV-CRYPTO-92, enforced by the
 // partial unique index in the Open step).
 //
 // Phase 1 does NOT authenticate the operator — that is the admin handler's
@@ -204,7 +204,7 @@ func (o *Orchestrator) RunPhase1Fresh(ctx context.Context, req RekeyRequest) (Re
 }
 
 // RunPhase2 mints a new DEK for the rekey context, preserving the old DEK's
-// participant set byte-for-byte (INV-E6-PARTICIPANT-INVARIANCE), and advances
+// participant set byte-for-byte (INV-CRYPTO-93), and advances
 // the checkpoint from phase1_auth to phase2_mint_dek atomically.
 //
 // Pre-condition: checkpoint status MUST be phase1_auth.
@@ -213,7 +213,7 @@ func (o *Orchestrator) RunPhase1Fresh(ctx context.Context, req RekeyRequest) (Re
 //  1. Load the checkpoint row to obtain old_dek_id and verify pre-condition.
 //  2. Delegate to Minter.MintNewDEKForRekey to generate a fresh DEK,
 //     wrap it, and INSERT a new crypto_keys row (version = old + 1,
-//     participants byte-equal to old per INV-E6).
+//     participants byte-equal to old per INV-CRYPTO-93).
 //  3. Atomically persist new_dek_id and advance status to phase2_mint_dek
 //     via SetNewDEKAndAdvance (CAS UPDATE on status = 'phase1_auth').
 func (o *Orchestrator) RunPhase2(ctx context.Context, rid RequestID) error {
@@ -229,7 +229,7 @@ func (o *Orchestrator) RunPhase2(ctx context.Context, rid RequestID) error {
 	}
 
 	// Mint new DEK via Minter (which calls Provider.Wrap and INSERTs into
-	// crypto_keys with participants copied from the old row — INV-E6).
+	// crypto_keys with participants copied from the old row — INV-CRYPTO-93).
 	newDEKID, err := o.minter.MintNewDEKForRekey(ctx, ckpt.OldDEKID)
 	if err != nil {
 		return oops.Code("DEK_REKEY_MINT_NEW_DEK_FAILED").Wrap(err)

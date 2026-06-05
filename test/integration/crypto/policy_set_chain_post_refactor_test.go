@@ -70,7 +70,7 @@ var _ = Describe("policy_set chain (post auditchain refactor)", func() {
 		// The oops error code AUDIT_CHAIN_HASH_MISMATCH is in the Code() field;
 		// .Error() surfaces the human-readable message. Either the code or message
 		// must confirm a hash mismatch (matches rekey_chain_verifier_refuses_boot_test.go
-		// assertion pattern — see INV-E15 spec).
+		// assertion pattern — see INV-CRYPTO-102 spec).
 		Expect(err.Error()).To(ContainSubstring("self_hash does not match recompute"),
 			"INV-CRYPTO-77/INV-CRYPTO-78/INV-CRYPTO-79: tampered self_hash must produce a self_hash mismatch error")
 	})
