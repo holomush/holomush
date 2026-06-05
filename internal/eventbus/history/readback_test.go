@@ -163,6 +163,7 @@ func TestDecryptPluginRowRefusesDowngrade(t *testing.T) {
 	assert.Empty(t, deps.audit.records, "downgrade refusal must not emit a decrypt audit")
 }
 
+// Verifies: INV-CRYPTO-28
 // TestDecryptPluginRowFailClosedWithoutAuditEmitter asserts a plugin decrypt
 // with no audit emitter wired fails closed (INV-CRYPTO-28): no plaintext, error set.
 func TestDecryptPluginRowFailClosedWithoutAuditEmitter(t *testing.T) {

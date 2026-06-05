@@ -56,12 +56,12 @@ invariants.
 | `INV-CRYPTO-4` | WithCryptoHot MUST be a no-op when WithHotTier is also supplied — crypto options are not forwarded to a custom tier. | `INV-4` | pending |
 | `INV-CRYPTO-5` | newHistoryReader(nil, nil, nil) MUST preserve the existing nil-auth passthrough behavior (no auth option appended). | `INV-6` | pending |
 | `INV-CRYPTO-6` | A subject NOT in a DEK's participant set MUST NOT receive plaintext via fan-out, even when subscribed to the matching subject. | `INV-9` | pending |
-| `INV-CRYPTO-7` | Add(participant) MUST grant immediate read access to all existing DEK history without rotating the DEK. | `INV-12` | pending |
+| `INV-CRYPTO-7` | Add(participant) MUST grant immediate read access to all existing DEK history without rotating the DEK. | `INV-12` | bound |
 | `INV-CRYPTO-8` | Rotate(context) MUST preserve the old DEK ciphertext and old DEK record unchanged (holds under Phase 3c soft-delete). | `INV-13` | pending |
-| `INV-CRYPTO-9` | A plugin without manifest requests_decryption for an event class MUST receive metadata-only delivery, regardless of subject subscription. | `INV-17` | pending |
-| `INV-CRYPTO-10` | A plugin with manifest declaration but without an active ABAC grant MUST receive metadata-only delivery. | `INV-18` | pending |
-| `INV-CRYPTO-11` | Every plugin decryption MUST emit an audit event on a subject the plugin cannot subscribe to. | `INV-19` | pending |
-| `INV-CRYPTO-12` | A plugin authorization failure MUST NOT block fan-out to other recipients. | `INV-20` | pending |
+| `INV-CRYPTO-9` | A plugin without manifest requests_decryption for an event class MUST receive metadata-only delivery, regardless of subject subscription. | `INV-17` | bound |
+| `INV-CRYPTO-10` | A plugin with manifest declaration but without an active ABAC grant MUST receive metadata-only delivery. | `INV-18` | bound |
+| `INV-CRYPTO-11` | Every plugin decryption MUST emit an audit event on a subject the plugin cannot subscribe to. | `INV-19` | bound |
+| `INV-CRYPTO-12` | A plugin authorization failure MUST NOT block fan-out to other recipients. | `INV-20` | bound |
 | `INV-CRYPTO-13` | events_audit.envelope MUST be byte-equal to the marshaled Event proto envelope on the bus for sensitive events. | `INV-21` | pending |
 | `INV-CRYPTO-14` | An event whose cleartext metadata, codec, or dek_ref has been altered MUST fail decryption with a tag-mismatch error and MUST NOT yield plaintext. | `INV-25` | pending |
 | `INV-CRYPTO-15` | A recipient denied decryption MUST receive the event with metadata_only=true, empty payload bytes, populated cleartext metadata, and no ciphertext. | `INV-26` | pending |
@@ -77,7 +77,7 @@ invariants.
 | `INV-CRYPTO-25` | Envelope byte-equality across emit->audit->cold-read: the marshaled Event proto envelope on JetStream MUST be byte-equal to events_audit.envelope and to the cold-tier reader's recovered envelope bytes. | `INV-49` | pending |
 | `INV-CRYPTO-26` | Read-back decryption MUST occur host-side; the plugin MUST NOT receive or hold a DEK — it receives only plaintext or a refusal. | `INV-RB-1` | pending |
 | `INV-CRYPTO-27` | A plugin read-back decrypt MUST pass two gates evaluated once each (default-deny): (g1) host-side OwnerMap subject-ownership at primitive entry; (g2) manifest crypto.emits[].readback:true via PluginCanReadBack. | `INV-RB-2` | pending |
-| `INV-CRYPTO-28` | Every read-back decrypt MUST emit an INV-19 plugin_decrypt audit event on a subject the plugin cannot subscribe to; the primitive MUST fail closed if the audit emitter is absent. | `INV-RB-3` | pending |
+| `INV-CRYPTO-28` | Every read-back decrypt MUST emit an INV-19 plugin_decrypt audit event on a subject the plugin cannot subscribe to; the primitive MUST fail closed if the audit emitter is absent. | `INV-RB-3` | bound |
 | `INV-CRYPTO-29` | AAD for read-back decrypt MUST be built by routing the row through AuditRowToEvent + aad.Build (delegating to decodeAuthorizeAndDispatch, not reimplementing decode); a row whose fields mismatch the bound AAD MUST fail decrypt. | `INV-RB-4` | pending |
 | `INV-CRYPTO-30` | INV-P7-7 (downgrade refusal) and INV-P7-15 (DEK-existence) MUST apply on every read-back path — snapshot direct entry and routed fence — identically to the pre-existing fence behavior. | `INV-RB-5` | pending |
 | `INV-CRYPTO-31` | The snapshot MUST read its IC events via the plugin's in-tx SQL read + the direct decrypt entry; it MUST NOT route through PluginAuditService.QueryHistory (no self-loop). | `INV-RB-6` | pending |
@@ -170,28 +170,28 @@ invariants.
 
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
-| `INV-PRIVACY-1` | A session may read only events from the interval its session row has existed for that stream's scope (active/idle/detached-within-TTL); the session-row lifetime is the continuity unit. ABAC read_unrestricted_history grants a limited bypass (location hard-gate only; temporal floor still applies). | `I-PRIV-1` | pending |
-| `INV-PRIVACY-2` | Guest sessions get a temporal floor of MAX(scope_floor, guest_character.CreatedAt) on all stream history reads. | `I-PRIV-2` | pending |
-| `INV-PRIVACY-3` | Subscribe.ReattachCAS and SelectCharacter reattach leave LocationArrivedAt UNCHANGED and MUST NOT change the durable's DeliverPolicy/OptStartTime/OptStartSeq (FilterSubjects may change). | `I-PRIV-3` | pending |
-| `INV-PRIVACY-4` | Idle status change and transport/SelectCharacter reattach MUST NOT advance LocationArrivedAt. | `I-PRIV-4` | pending |
-| `INV-PRIVACY-5` | All denial paths (hard-gate, I-17, ABAC, expired/missing session) return the same wire code STREAM_ACCESS_DENIED; the internal denial_reason is slog-only and never crosses the wire. | `I-PRIV-5` | pending |
-| `INV-PRIVACY-6` | ABAC staff override bypasses the hard-gate location-match only, NOT the temporal floor. | `I-PRIV-6` | pending |
-| `INV-PRIVACY-7` | Plugin-owned subjects with divergent history-replay semantics MUST declare history_scope in the manifest and be exercised by a test; silent inheritance of permissive semantics is forbidden. | `I-PRIV-7` | pending |
-| `INV-PRIVACY-8` | OpenSession (incl. reattach) and SetFilters query the existing durable before CreateOrUpdateConsumer; an existing durable's DeliverPolicy/OptStartTime/OptStartSeq are copied verbatim (only FilterSubjects mutates); NATS is the source of truth. | `I-PRIV-8` | pending |
+| `INV-PRIVACY-1` | A session may read only events from the interval its session row has existed for that stream's scope (active/idle/detached-within-TTL); the session-row lifetime is the continuity unit. ABAC read_unrestricted_history grants a limited bypass (location hard-gate only; temporal floor still applies). | `I-PRIV-1` | bound |
+| `INV-PRIVACY-2` | Guest sessions get a temporal floor of MAX(scope_floor, guest_character.CreatedAt) on all stream history reads. | `I-PRIV-2` | bound |
+| `INV-PRIVACY-3` | Subscribe.ReattachCAS and SelectCharacter reattach leave LocationArrivedAt UNCHANGED and MUST NOT change the durable's DeliverPolicy/OptStartTime/OptStartSeq (FilterSubjects may change). | `I-PRIV-3` | bound |
+| `INV-PRIVACY-4` | Idle status change and transport/SelectCharacter reattach MUST NOT advance LocationArrivedAt. | `I-PRIV-4` | bound |
+| `INV-PRIVACY-5` | All denial paths (hard-gate, I-17, ABAC, expired/missing session) return the same wire code STREAM_ACCESS_DENIED; the internal denial_reason is slog-only and never crosses the wire. | `I-PRIV-5` | bound |
+| `INV-PRIVACY-6` | ABAC staff override bypasses the hard-gate location-match only, NOT the temporal floor. | `I-PRIV-6` | bound |
+| `INV-PRIVACY-7` | Plugin-owned subjects with divergent history-replay semantics MUST declare history_scope in the manifest and be exercised by a test; silent inheritance of permissive semantics is forbidden. | `I-PRIV-7` | bound |
+| `INV-PRIVACY-8` | OpenSession (incl. reattach) and SetFilters query the existing durable before CreateOrUpdateConsumer; an existing durable's DeliverPolicy/OptStartTime/OptStartSeq are copied verbatim (only FilterSubjects mutates); NATS is the source of truth. | `I-PRIV-8` | bound |
 
 ### `INV-PRESENCE`
 
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
-| `INV-PRESENCE-1` | Snapshot returns only Active sessions; Detached/Expired excluded. | `I-PRES-1` | pending |
-| `INV-PRESENCE-2` | Snapshot exempt from I-PRIV-1 temporal floor (timeless current state). | `I-PRES-2` | pending |
-| `INV-PRESENCE-3` | Ownership failures collapse to SESSION_NOT_FOUND (enumeration-safe). | `I-PRES-3` | pending |
-| `INV-PRESENCE-4` | RPC ABAC-gated by action=list_presence on resource=location:<id>. | `I-PRES-4` | pending |
-| `INV-PRESENCE-5` | Non-empty FocusMemberships → UNIMPLEMENTED; no silent fallback. | `I-PRES-5` | pending |
-| `INV-PRESENCE-6` | Caller's own session included when status+location qualify. | `I-PRES-6` | pending |
-| `INV-PRESENCE-7` | PresenceEntry has exactly 3 fields: character_id, character_name, state. | `I-PRES-7` | pending |
+| `INV-PRESENCE-1` | Snapshot returns only Active sessions; Detached/Expired excluded. | `I-PRES-1` | bound |
+| `INV-PRESENCE-2` | Snapshot exempt from I-PRIV-1 temporal floor (timeless current state). | `I-PRES-2` | bound |
+| `INV-PRESENCE-3` | Ownership failures collapse to SESSION_NOT_FOUND (enumeration-safe). | `I-PRES-3` | bound |
+| `INV-PRESENCE-4` | RPC ABAC-gated by action=list_presence on resource=location:<id>. | `I-PRES-4` | bound |
+| `INV-PRESENCE-5` | Non-empty FocusMemberships → UNIMPLEMENTED; no silent fallback. | `I-PRES-5` | bound |
+| `INV-PRESENCE-6` | Caller's own session included when status+location qualify. | `I-PRES-6` | bound |
+| `INV-PRESENCE-7` | PresenceEntry has exactly 3 fields: character_id, character_name, state. | `I-PRES-7` | bound |
 | `INV-PRESENCE-8` | Client presence map keyed by character_id; idempotent add/remove. | `I-PRES-8` | pending |
-| `INV-PRESENCE-9` | Response deduplicates by character_id (defense-in-depth). | `I-PRES-9` | pending |
+| `INV-PRESENCE-9` | Response deduplicates by character_id (defense-in-depth). | `I-PRES-9` | bound |
 
 ### `INV-SCENE`
 
@@ -340,15 +340,15 @@ invariants.
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
 | `INV-CLUSTER-1` | KEK rotation issues a cluster-prefixed NATS request-reply cache-invalidate ping and MUST receive N-of-N replica acks (30s timeout; rollback on timeout). | `INV-28` | pending |
-| `INV-CLUSTER-2` | Rotate/Rekey(context) issues a cluster-prefixed cache-invalidate ping and MUST receive N-of-N replica acks before returning (5s timeout; N=1 degenerates to local self-ack; rollback on timeout). | `INV-29` | pending |
-| `INV-CLUSTER-3` | Every cluster.Registry member has a unique MemberID; colliding concurrent registration is rejected with CLUSTER_MEMBER_DUPLICATE_ID. | `INV-53` | pending |
-| `INV-CLUSTER-4` | All Phase-3c internal coordination subjects are cluster_id-prefixed; members drop messages whose payload cluster_id disagrees with their configured cluster_id. | `INV-54` | pending |
-| `INV-CLUSTER-5` | A pill on internal.<cluster_id>.member.poison.<self_id> triggers Pill.Trigger after flushing audit telemetry; the production Pill terminates the process with exit code 125. | `INV-55` | pending |
-| `INV-CLUSTER-6` | invalidation.Coordinator attempts at most one probe-and-pill + retry cycle per RequestInvalidation; after the second timeout it returns INVALIDATION_PARTIAL_FAILURE with the missing-member set. | `INV-56` | pending |
-| `INV-CLUSTER-7` | cluster.Registry.ProbeAndPill issues at most one attempt per (member_id, reason) per PillRateLimit window (claim-then-probe, closing the TOCTOU race); over-limit returns ErrPillRateLimited without reaching the wire. | `INV-57` | pending |
+| `INV-CLUSTER-2` | Rotate/Rekey(context) issues a cluster-prefixed cache-invalidate ping and MUST receive N-of-N replica acks before returning (5s timeout; N=1 degenerates to local self-ack; rollback on timeout). | `INV-29` | bound |
+| `INV-CLUSTER-3` | Every cluster.Registry member has a unique MemberID; colliding concurrent registration is rejected with CLUSTER_MEMBER_DUPLICATE_ID. | `INV-53` | bound |
+| `INV-CLUSTER-4` | All Phase-3c internal coordination subjects are cluster_id-prefixed; members drop messages whose payload cluster_id disagrees with their configured cluster_id. | `INV-54` | bound |
+| `INV-CLUSTER-5` | A pill on internal.<cluster_id>.member.poison.<self_id> triggers Pill.Trigger after flushing audit telemetry; the production Pill terminates the process with exit code 125. | `INV-55` | bound |
+| `INV-CLUSTER-6` | invalidation.Coordinator attempts at most one probe-and-pill + retry cycle per RequestInvalidation; after the second timeout it returns INVALIDATION_PARTIAL_FAILURE with the missing-member set. | `INV-56` | bound |
+| `INV-CLUSTER-7` | cluster.Registry.ProbeAndPill issues at most one attempt per (member_id, reason) per PillRateLimit window (claim-then-probe, closing the TOCTOU race); over-limit returns ErrPillRateLimited without reaching the wire. | `INV-57` | bound |
 | `INV-CLUSTER-8` | No Phase-3c decision is conditioned on cross-host wall-clock comparison (enforced by the noremoteclockcompare analyzer; observability-only skew/latency metrics are the carved-out exceptions). | `INV-58` | pending |
-| `INV-CLUSTER-9` | A successful RequestInvalidation(participants_changed) leaves every other live member's dek.ParticipantsCache with no entry for (ctxType, ctxId, version) on return (re-fetch from PG). | `INV-59` | pending |
-| `INV-CLUSTER-10` | cluster.Registry.ProbeAndPill refuses id==Self() with ErrCannotPillSelf; the Coordinator filters Self() out of the missing-member set (prevents N=1 self-pill). | `INV-60` | pending |
+| `INV-CLUSTER-9` | A successful RequestInvalidation(participants_changed) leaves every other live member's dek.ParticipantsCache with no entry for (ctxType, ctxId, version) on return (re-fetch from PG). | `INV-59` | bound |
+| `INV-CLUSTER-10` | cluster.Registry.ProbeAndPill refuses id==Self() with ErrCannotPillSelf; the Coordinator filters Self() out of the missing-member set (prevents N=1 self-pill). | `INV-60` | bound |
 
 ### `INV-ACCESS`
 
