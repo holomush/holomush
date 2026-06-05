@@ -150,7 +150,7 @@ func buildReadStreamWiring(
 		grants = readstreamGrantsOverrideForTest
 	}
 
-	// Compute the canonical policy_hash string. INV-CRYPTO-112 / INV-F-policy_hash:
+	// Compute the canonical policy_hash string. INV-CRYPTO-112 / INV-CRYPTO-53:
 	// the audit payload stores "sha256:<hex>"; the ReadStarted wire frame
 	// decodes back to the raw 32 bytes via decodeHashString. Genesis (no
 	// crypto.policy_set chain entries) maps to the all-zero 32-byte
