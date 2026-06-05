@@ -1,16 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package meta contains repository-wide meta-tests that enforce structural
-// invariants.
-//
-// This file hosts shared helpers (findRepoRoot, skipDirs) used by many
-// meta-tests in the package. The former Phase-3c per-family coverage test
-// (TestEveryPhase3cInvariantHasAtLeastOneTestBinding) was retired when its
-// INV-53..60 invariants migrated to the registry as INV-CLUSTER-1..10
-// (holomush-hz0v4.14.11); the registry meta-test
-// (TestEveryRegistryInvariantHasBinding) now owns that coverage. The helpers
-// remain here pending relocation by holomush-hz0v4.14.16.
 package meta
 
 import (
@@ -18,6 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 )
+
+// This file is the home for shared helpers used across the test/meta package's
+// structural meta-tests. Relocated from inv_binding_test.go (holomush-hz0v4.14.16)
+// when that file — whose per-family coverage test had already been retired in
+// favour of TestEveryRegistryInvariantHasBinding — was removed.
 
 // skipDirs are directories that meta-tests MUST NOT descend into when scanning
 // the repo tree. Keeping this in sync with project layout avoids false

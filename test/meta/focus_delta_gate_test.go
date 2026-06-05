@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// repoRoot is provided by findRepoRoot in inv_binding_test.go (same package).
+// repoRoot is provided by findRepoRoot in meta_helpers_test.go (same package).
 
 func nonTestGoFilesContaining(t *testing.T, root, needle string) []string {
 	t.Helper()
