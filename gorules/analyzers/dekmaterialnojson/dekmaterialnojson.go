@@ -3,7 +3,7 @@
 
 // Package dekmaterialnojson forbids passing dek.Material (or
 // *dek.Material) to encoding/json sinks (json.Marshal,
-// json.MarshalIndent, (*json.Encoder).Encode). Part of INV-27 (Material
+// json.MarshalIndent, (*json.Encoder).Encode). Part of INV-CRYPTO-16 (Material
 // non-leakage).
 package dekmaterialnojson
 
@@ -27,7 +27,7 @@ var sinks = []holomushlint.Sink{
 
 var Analyzer = &analysis.Analyzer{
 	Name:     "dekmaterialnojson",
-	Doc:      "INV-27: dek.Material MUST NOT be passed to encoding/json",
+	Doc:      "INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/json",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }
@@ -42,7 +42,7 @@ func run(pass *analysis.Pass) (any, error) {
 		for _, arg := range call.Args {
 			if holomushlint.IsDEKMaterialArg(pass, arg) {
 				pass.Reportf(arg.Pos(),
-					"INV-27: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
+					"INV-CRYPTO-16: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
 					sinkDescription)
 				return
 			}

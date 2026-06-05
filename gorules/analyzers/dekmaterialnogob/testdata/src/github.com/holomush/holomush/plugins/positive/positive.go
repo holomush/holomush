@@ -18,9 +18,9 @@ import (
 )
 
 func leakViaEncode(m *dek.Material, w io.Writer) error {
-	return gob.NewEncoder(w).Encode(m) // want `INV-27: dek.Material MUST NOT be passed to encoding/gob`
+	return gob.NewEncoder(w).Encode(m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/gob`
 }
 
 func leakViaRegister(m *dek.Material) {
-	gob.Register(m) // want `INV-27: dek.Material MUST NOT be passed to encoding/gob`
+	gob.Register(m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to encoding/gob`
 }

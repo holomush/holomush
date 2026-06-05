@@ -4,7 +4,7 @@
 // Package dekmaterialnolog forbids passing dek.Material (or
 // *dek.Material) to standard log package sinks (Print, Printf, Println,
 // Fatal, Fatalf, Fatalln, Panic, Panicf, Panicln; both package-level
-// functions and *log.Logger methods). Part of INV-27 (Material
+// functions and *log.Logger methods). Part of INV-CRYPTO-16 (Material
 // non-leakage). See bead holomush-46ya for context.
 package dekmaterialnolog
 
@@ -45,7 +45,7 @@ var sinks = []holomushlint.Sink{
 
 var Analyzer = &analysis.Analyzer{
 	Name:     "dekmaterialnolog",
-	Doc:      "INV-27: dek.Material MUST NOT be passed to log",
+	Doc:      "INV-CRYPTO-16: dek.Material MUST NOT be passed to log",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }
@@ -60,7 +60,7 @@ func run(pass *analysis.Pass) (any, error) {
 		for _, arg := range call.Args {
 			if holomushlint.IsDEKMaterialArg(pass, arg) {
 				pass.Reportf(arg.Pos(),
-					"INV-27: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
+					"INV-CRYPTO-16: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
 					sinkDescription)
 				return
 			}

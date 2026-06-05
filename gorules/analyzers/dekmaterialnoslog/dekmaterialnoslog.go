@@ -5,7 +5,7 @@
 // *dek.Material) to standard log/slog package sinks (Info, Debug, Warn,
 // Error, Log, Any, Group; both package-level functions and *slog.Logger
 // methods, except Any and Group which are not *Logger methods). Part
-// of INV-27 (Material non-leakage). See bead holomush-46ya for context.
+// of INV-CRYPTO-16 (Material non-leakage). See bead holomush-46ya for context.
 package dekmaterialnoslog
 
 import (
@@ -52,7 +52,7 @@ var sinks = []holomushlint.Sink{
 
 var Analyzer = &analysis.Analyzer{
 	Name:     "dekmaterialnoslog",
-	Doc:      "INV-27: dek.Material MUST NOT be passed to log/slog",
+	Doc:      "INV-CRYPTO-16: dek.Material MUST NOT be passed to log/slog",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }
@@ -67,7 +67,7 @@ func run(pass *analysis.Pass) (any, error) {
 		for _, arg := range call.Args {
 			if holomushlint.IsDEKMaterialArg(pass, arg) {
 				pass.Reportf(arg.Pos(),
-					"INV-27: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
+					"INV-CRYPTO-16: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
 					sinkDescription)
 				return
 			}

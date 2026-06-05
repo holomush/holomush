@@ -43,6 +43,15 @@ scopes:
       - "internal/eventbus/audit_row_access.go"
       - "internal/eventbus/audit/**"
       - "test/integration/privacy/scene_history_readback_test.go"
+      # gorules crypto analyzers (.14.28): dek.Material-opacity enforcement (INV-27 → INV-CRYPTO-16);
+      # crypto-exclusive dirs (analyzer + analysistest testdata), separate go module.
+      - "gorules/analyzers/codeckeybytesallowlist/**"
+      - "gorules/analyzers/dekmaterialnofmtformatting/**"
+      - "gorules/analyzers/dekmaterialnogob/**"
+      - "gorules/analyzers/dekmaterialnojson/**"
+      - "gorules/analyzers/dekmaterialnolog/**"
+      - "gorules/analyzers/dekmaterialnoproto/**"
+      - "gorules/analyzers/dekmaterialnoslog/**"
     shared_files:
       # CRYPTO+STORE: history files carrying both P7/RB and TS (nanos) annotations.
       - "internal/eventbus/history/readback.go"
@@ -827,6 +836,27 @@ invariants:
       - {file: "internal/eventbus/crypto/dek/participants_cache.go", token: "INV-27"}
       - {file: "internal/eventbus/crypto/dek/rekey.go", token: "INV-27"}
       - {file: "internal/eventbus/crypto/dek/store.go", token: "INV-27"}
+      - {file: "gorules/analyzers/codeckeybytesallowlist/codeckeybytesallowlist.go", token: "INV-27"}
+      - {file: "gorules/analyzers/codeckeybytesallowlist/testdata/src/github.com/holomush/holomush/plugins/positive/positive.go",
+        token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnofmtformatting/dekmaterialnofmtformatting.go", token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnofmtformatting/testdata/src/github.com/holomush/holomush/plugins/positive/positive.go",
+        token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnogob/dekmaterialnogob.go", token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnogob/testdata/src/github.com/holomush/holomush/plugins/positive/positive.go",
+        token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnojson/dekmaterialnojson.go", token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnojson/testdata/src/github.com/holomush/holomush/plugins/positive/positive.go",
+        token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnolog/dekmaterialnolog.go", token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnolog/testdata/src/github.com/holomush/holomush/plugins/positive/positive.go",
+        token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnoproto/dekmaterialnoproto.go", token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnoproto/testdata/src/github.com/holomush/holomush/plugins/positive/positive.go",
+        token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnoslog/dekmaterialnoslog.go", token: "INV-27"}
+      - {file: "gorules/analyzers/dekmaterialnoslog/testdata/src/github.com/holomush/holomush/plugins/positive/positive.go",
+        token: "INV-27"}
   - id: INV-CRYPTO-17
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"

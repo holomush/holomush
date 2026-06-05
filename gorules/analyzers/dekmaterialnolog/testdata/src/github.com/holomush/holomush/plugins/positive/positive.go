@@ -18,11 +18,11 @@ import (
 )
 
 func leakViaPrintf(m *dek.Material) {
-	log.Printf("material: %v", m) // want `INV-27: dek.Material MUST NOT be passed to log`
+	log.Printf("material: %v", m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to log`
 }
 
 func leakViaLoggerPrintf(m *dek.Material, l *log.Logger) {
-	l.Printf("material: %v", m) // want `INV-27: dek.Material MUST NOT be passed to log`
+	l.Printf("material: %v", m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to log`
 }
 
 // Dot-imported call: with `import . "log"`, the call's Fun is an
@@ -30,5 +30,5 @@ func leakViaLoggerPrintf(m *dek.Material, l *log.Logger) {
 // `call.Fun.(*ast.SelectorExpr)` type assertion misses this entirely.
 // CodeRabbit finding on PR #3457.
 func leakViaDotImport(m *dek.Material) {
-	Printf("material: %v", m) // want `INV-27: dek.Material MUST NOT be passed to log`
+	Printf("material: %v", m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to log`
 }

@@ -17,13 +17,13 @@ import (
 )
 
 func leakViaSprintf(m *dek.Material) string {
-	return fmt.Sprintf("%v", m) // want `INV-27: dek.Material MUST NOT be passed to fmt formatting`
+	return fmt.Sprintf("%v", m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to fmt formatting`
 }
 
 func leakViaErrorf(m *dek.Material) error {
-	return fmt.Errorf("material: %v", m) // want `INV-27: dek.Material MUST NOT be passed to fmt formatting`
+	return fmt.Errorf("material: %v", m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to fmt formatting`
 }
 
 func leakViaPrintf(m *dek.Material) {
-	fmt.Printf("%v\n", m) // want `INV-27: dek.Material MUST NOT be passed to fmt formatting`
+	fmt.Printf("%v\n", m) // want `INV-CRYPTO-16: dek.Material MUST NOT be passed to fmt formatting`
 }
