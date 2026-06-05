@@ -420,6 +420,7 @@ func TestReadbackAuthorizedReturnsPlaintext(t *testing.T) {
 	// INV-CRYPTO-37: id echoes row.id for positional correlation.
 	assert.Equal(t, row.GetId(), results[0].GetId(), "INV-CRYPTO-37: result id must echo row id")
 
+	// Verifies: INV-CRYPTO-28
 	// INV-CRYPTO-28: a clean plugin read-back MUST emit an INV-CRYPTO-11 plugin-decrypt
 	// audit record. The guardaudit.Emitter publishes to the AUDIT stream on
 	// subject audit.<gameID>.plugin_decrypt.<pluginName>; the emitter defaults

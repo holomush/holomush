@@ -171,46 +171,38 @@
   NO trailing-comma ,} noise this time. Counts CRYPTO=67/PLUGIN=39/ACCESS=8/EVENTBUS=28/
   SCENE=60. Encountered: hz0v4.14.27 (2026-06-04) — READY.
 
-- **NEW-scope creation by LAYER split (.14.27 PR B: INV-COMMAND, READY).** A
-  multi-INV design spec (recognized-command-chip INV-1..7) split by LAYER, not
-  number: Go-backend INV-1/2/5 → new scope INV-COMMAND-1/2/3; web-composer
-  presentation INV-3/4/6/7 → LEFT web-local (web/src TS), exempt. Review the
-  split BOTH directions: (1) no Go-backend annotation wrongly left — `rg 'INV-3\b'
-  internal/web/ internal/grpc/` → ZERO confirmed NOTHING to migrate (INV-3
-  gateway-boundary was conceptual, never code-annotated; WebListCommands proxy
-  carries no INV token). (2) No web-presentation token wrongly pulled in — the
-  chip INV-5 is LAYER-OVERLOADED: Go list_available_commands.go INV-5 (self-scoped
-  enum → COMMAND-3) migrated, web composerChip.integration.test.ts INV-5
-  (chip-omission) LEFT. Verify per-SITE, never value-keyed. Web TS INV-N tokens
-  (composerChip/commandListStore/CommandInput INV-4/5/6/7, themeStore INV-1..6,
-  ModeChip INV-1) are ALL distinct invariants — confirm none migrated. Apply the
-  .14.23 whole-tree sweep: `rg '\bINV-[125]\b'` over EVERY .go/.yaml mentioning
-  commandquery/list_commands/ListAvailableCommands/CommandQuerier → ZERO stale =
-  complete (registry guards are blind to unregistered files). New-scope partition:
-  scope owns commandquery/** + specific files; confirm NO other scope globs the
-  same dir — INV-PLUGIN owns specific hostfunc files (evaluate.go/stdlib_settings*
-  /functions_audit_wiring_test/stdlib_emit_registry) NOT commands.go/functions.go,
-  so no collision; functions.go/harness.go/census_test.go correctly shared (carry
-  foreign PLUGIN-27/32 / 13-scope / wholesystem-INV-5 tokens, residual-skipped).
-  Zero executable edits; dense 1..3; no generated artifact. Encountered:
-  hz0v4.14.27 PR B (2026-06-04) — READY.
+- **NEW-scope creation by LAYER split + missed-site mop-up (.14.27 PR B/C,
+  INV-COMMAND, READY).** Multi-INV spec (command-chip INV-1..7) split by LAYER not
+  number: Go-backend INV-1/2/5 → INV-COMMAND-1/2/3; web-composer INV-3/4/6/7 LEFT
+  web-local TS (exempt). Review BOTH directions: no Go annotation wrongly left
+  (rg the legacy bare number over internal/ → ZERO) AND no web token wrongly pulled
+  (per-SITE, never value-keyed — INV-5 was layer-overloaded: Go list_available
+  →COMMAND-3 migrated, web composerChip INV-5 LEFT). New-scope partition: owns
+  commandquery/** + specific files; confirm no other scope globs same dir. PR C
+  mopped 2 missed sites (help_integration_test.go owned, setup/subsystem.go shared-
+  by-4-scopes — legal, only owned_paths must partition; subsystem.go RETAINS its
+  foreign PLUGIN-25/3/SCENE-38/EVENTBUS-11). Spec-token scan trap (.14.23): dropped
+  slots written as LEGACY (INV-TS-8 not INV-STORE-8) = binding-guard-inert.
+  Encountered: hz0v4.14.27 PR B/C (2026-06-04) — READY.
 
-- **.14.27 PR C: 2 missed command-vis sites + residual-classification doc (the
-  .14.17 completeness record) — READY.** Tiny: help_integration_test.go (→
-  COMMAND owned_paths) + setup/subsystem.go (→ COMMAND shared_files), INV-1 →
-  INV-COMMAND-1 comment-only. CRITICAL leftover-token check HELD: subsystem.go
-  RETAINS INV-PLUGIN-25/3, INV-SCENE-38, INV-EVENTBUS-11 (only its INV-1
-  migrated); help_integration_test.go → zero bare INV-N. Partition: help_int is
-  in COMMAND owned_paths ONCE (no collision); subsystem.go is shared by 4 scopes
-  (SCENE/PLUGIN/EVENTBUS/COMMAND shared_files) — legal (only owned_paths must
-  partition). PR-B's 6 ref files ALL already carry canonical INV-COMMAND-1 (this
-  PR only adds the 2 missed). Doc: the spec-token scan trap (.14.23) — `rg -o
-  'INV-<registered-scope>-N'` over the specfile returned ONLY existing tokens
-  (CRYPTO-1/3/16, PLUGIN-22/33, SCENE-3, COMMAND-1); the dropped slot is written
-  as LEGACY `INV-TS-8` (NOT `INV-STORE-8`), so binding-guard-inert. All residual
-  doc claims verified TRUE against repo: INV-BRANDING/INV-DOCS status:pending +
-  0 entries; world service{,_test}.go INV-1/2/2b genuinely bare & NOT registry-
-  owned; gorules dekmaterial*/codeckeybytesallowlist cite INV-27→canonical
-  INV-CRYPTO-16 (legacy line confirms), filed as bead .14.28 (exists). Guards
-  green (provenance/partition/binding). Encountered: hz0v4.14.27 PR C
-  (2026-06-04) — READY.
+- **Verification-BINDING backfill (pending→bound flip, NOT a renumber) —
+  hz0v4 binding-backfill READY.** Distinct recurring shape (trackers hz0v4.11/16/
+  17/18/19 open): flips registry entries pending→bound + adds asserted_by list,
+  ONLY where a `// Verifies: INV-<id>` annotation ALREADY exists; may add the
+  Verifies comment to a pre-existing asserting test. KEY meta-test semantics:
+  TestEveryRegistryInvariantHasBinding walks ALL *_test.go (raw regex, build tags
+  irrelevant — integration files ARE scanned) for `// Verifies: INV-<SCOPE>-N`;
+  a `bound` entry needs ≥1 annotation ANYWHERE, and asserted_by is NOT cross-
+  checked against annotation sites — so a typo'd/fabricated asserted_by path
+  passes the gate. MUST hand-verify each asserted_by file genuinely contains the
+  annotation (rg the canonical token, cross-ref). `pending` MUST NOT carry
+  asserted_by (checkRegistryBindings). For bug-closing flips (0sh1k: 'asserted
+  only in comments'), the `// Verifies:` comment does NOT fix a false-green — READ
+  the cited test and confirm a REAL runtime assertion of each invariant clause
+  (CRYPTO-28: audit-emit clause = WaitForOneJetStreamMsgOnStream on AUDIT stream +
+  header assert; fail-closed clause = audit=nil → res.Err set, no plaintext). Both
+  pre-existed; diff only added the comment. Gates: `go run ./cmd/inv-render -check`
+  exit 0 (md↔yaml sync); meta TestEveryRegistryInvariantHasBinding+TestProvenance
+  green. Roadmap counts cross-foot (bound+pending=total; per-scope remaining =
+  scope_total − bound). No production code; comment-only test edits. Encountered:
+  hz0v4 binding-backfill (2026-06-05) — READY.
