@@ -299,14 +299,25 @@ Binding backfill (`holomush-hz0v4.11`) remains a follow-up.
 - `task lint` and `task test` are green; per-family meta-tests retired only
   after the guard subsumes them.
 
-## Residual classification (epic `holomush-hz0v4.14.27`, final)
+## Residual classification (epics `holomush-hz0v4.14.27`–`.31`, final)
 
 The `.14.26` census surfaced bare `INV-N` tokens in namespaces §2.1 never
 enumerated — per-spec / per-bead **local** numbering. Per the 2026-06-04
 decision (*new scopes for coherent families; exempt one-off / per-bead /
-meta-test local numbering*), the full residual is classified into three
-buckets. This section is the completeness record for `.14.17` — every remaining
-bare `INV-N` in the tree is accounted for here.
+meta-test local numbering*), the full residual is classified into the buckets
+below. This section is the completeness record for `.14.17` — every remaining
+`INV-*` token in the tree is accounted for here.
+
+> **Update (`.14.28`–`.31`).** A second census during `.14.28` surfaced large
+> *prefixed* legacy families the §2.1 map also missed — most importantly the
+> crypto Phase-5 **sub-epic-d (`INV-D1..D20`)** and **sub-epic-e (`INV-E1..E28`)**
+> families, siblings of the already-migrated **sub-epic-f (`INV-F`)**. Per the
+> 2026-06-05 decision they were migrated into `INV-CRYPTO` (D → `INV-CRYPTO-68..87`
+> in `.14.29`; E → `INV-CRYPTO-88..115` in `.14.30`), unifying the whole crypto
+> epic under one scope (`INV-CRYPTO` is now `1..115`). The remaining prefixed
+> families (`INV-L`, `INV-A`, `INV-B`, `INV-LP`) are genuine per-spec local
+> numbering and are exempted in bucket 3 below (`.14.31`). The `gorules INV-27`
+> miss (bucket 4) was closed in `.14.28`.
 
 ### 1. Migrated scopes (12) — done
 
@@ -347,13 +358,20 @@ scope, so none trips the residual guard. Do **not** migrate; do **not** re-flag:
 | gateway fixtures | `internal/gateway_invariants/meta_test.go` (INV-GW-*) | RETAINED regex fixtures for the boundary matcher |
 | wholesystem | `test/integration/wholesystem/census_test.go` (INV-5) | whole-system plugin-load census, distinct local numbering (co-located foreign, `INV-COMMAND` shared_file) |
 | dropped | `internal/store/spec_meta_test.go` (INV-TS-8) | a deliberately dropped invariant — the `INV-STORE` scope intentionally skips that slot (no successor entry) |
+| logging config | `internal/config/**` + `internal/logging/**` (`INV-L1..L7`, e.g. `config.go` per-sink level, `handler.go` trace fields) | logging-subsystem per-spec local numbering, not a cross-cutting family. (`internal/logging/**` is INV-TELEMETRY-owned, but `INV-L*` is letter-prefixed so `bareInvRE` never matches it and it is no recorded legacy token — guard-inert.) |
+| logging policy | `internal/logging/sloglint_policy_test.go` (`INV-LP1/LP2` Tier C sloglint pins) | single-test local numbering for the lint-policy gate |
+| ADR tooling | `scripts/adr-doctor.sh`, `scripts/adr-migrate.py` (`INV-A12/A13` flat-stub rules) | ADR-migration tooling's own local numbering |
+| admin operator | `cmd/holomush/*` + `internal/admin/**` (`INV-B5/B6/B7` — "no public mutation API", operator-validation) | admin sub-epic-b local numbering; not part of the crypto-payload families D/E/F that DID migrate (B is operator-surface, distinct origin) |
+| spec amendments | `internal/access/spec_amendments_test.go` (`INV-{B,D,E}-AMEND` + a literal `"INV-E16"` fingerprint) | amendment-tracking test; the `INV-E16` string is matched against the **un-migrated master spec text**, so it MUST stay (shared in `INV-ACCESS` so the residual legacy-token guard skips it) |
 
-### 4. Deferred miss — `gorules` crypto analyzers
+### 4. Closed misses — `gorules` crypto analyzers + stray `INV-F`
 
-`gorules/analyzers/dekmaterial*` and `codeckeybytesallowlist` cite master
-`INV-27` (dek.Material opacity → canonical `INV-CRYPTO-16`) in their linter `Doc`
-strings and diagnostic messages. This is a genuine *crypto* miss (stale ID in
-user-facing lint output), not cat-B — tracked as its own crypto-sweep bead
-(diagnostic-string change ⇒ crypto-reviewer), out of `.14.27` scope.
+`gorules/analyzers/dekmaterial*` and `codeckeybytesallowlist` cited master
+`INV-27` (dek.Material opacity → `INV-CRYPTO-16`) in their linter `Doc` strings
+and diagnostic messages — a *crypto* miss (stale ID in user-facing lint output),
+closed in **`.14.28`**. A single dangling `INV-F-policy_hash` (a `.14.23`
+dual-form miss in `readstream` wiring) is tracked as its own crypto-cleanup bead;
+it does not trip the residual guard (not bare `INV-N`, not a recorded legacy
+token).
 
 <!-- adr-capture: sha256=54306f703f33c26d; session=cli; ts=2026-06-01T15:03:24Z; adrs= -->
