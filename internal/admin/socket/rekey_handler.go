@@ -83,7 +83,7 @@ type RekeySessionStore interface {
 }
 
 // OperatorRoleChecker is the narrow interface for the role re-check
-// (INV-D16 defense-in-depth). adminauth.PlayerRoleHasher satisfies this
+// (INV-CRYPTO-83 defense-in-depth). adminauth.PlayerRoleHasher satisfies this
 // interface implicitly; defined narrowly to avoid importing adminauth.
 type OperatorRoleChecker interface {
 	PlayerHasRole(ctx context.Context, playerID, role string) (bool, error)
@@ -178,7 +178,7 @@ type RekeyStreamSender interface {
 // and RekeyList admin RPCs.
 //
 // It validates the operator session via RekeySessionStore, re-asserts the
-// crypto.operator capability and admin role (INV-D16 defense-in-depth),
+// crypto.operator capability and admin role (INV-CRYPTO-83 defense-in-depth),
 // then delegates to the OrchestratorRunner for the 7-phase lifecycle,
 // RekeyAbortRunner for the unary abort operation, or CheckpointStatusReader
 // for the read-only status and list operations.
@@ -351,7 +351,7 @@ func (h *RekeyHandler) RekeyAbort(
 	}, nil
 }
 
-// assertOperatorAdmin re-asserts the two INV-D16 defense-in-depth gates:
+// assertOperatorAdmin re-asserts the two INV-CRYPTO-83 defense-in-depth gates:
 // (1) the player still holds the crypto.operator capability, and (2) the
 // player still holds the admin role.
 func (h *RekeyHandler) assertOperatorAdmin(ctx context.Context, playerID string) error {

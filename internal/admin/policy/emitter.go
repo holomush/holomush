@@ -48,7 +48,7 @@ type EmitDeps struct {
 // Idempotent on no-change: if the latest event's PolicySnapshot canonicalizes
 // to the same bytes as the would-be new snapshot, no Publish is issued and
 // nil is returned. Otherwise, Publish error is wrapped and returned per
-// INV-D17 fail-closed semantics.
+// INV-CRYPTO-84 fail-closed semantics.
 func EmitCurrentSnapshot(ctx context.Context, deps EmitDeps, policyName string) error {
 	subjectStr := "events." + deps.GameID + ".system.crypto_policy." + policyName
 

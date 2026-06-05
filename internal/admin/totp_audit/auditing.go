@@ -3,7 +3,7 @@
 
 // Package totpaudit provides the AuditingService decorator that wraps
 // totp.Service to emit crypto.totp_* lifecycle events on observed state
-// transitions. Per design spec §7 and INV-D14.
+// transitions. Per design spec §7 and INV-CRYPTO-81.
 package totpaudit
 
 import (
@@ -60,7 +60,7 @@ func NewAuditingService(
 	return &AuditingService{inner: inner, pub: pub, gameID: gameID, clock: clock, logger: logger}, nil
 }
 
-// emit publishes one audit event. Per INV-D14, Publish failure is
+// emit publishes one audit event. Per INV-CRYPTO-81, Publish failure is
 // logged via slog.Warn and does NOT roll back the inner Service's PG
 // state.
 func (a *AuditingService) emit(ctx context.Context, subjectStr, eventTypeStr string, payload any) {
@@ -85,7 +85,7 @@ func (a *AuditingService) emit(ctx context.Context, subjectStr, eventTypeStr str
 	ev := eventbus.NewEvent(subj, evtType, eventbus.Actor{Kind: eventbus.ActorKindSystem}, body)
 	ev.Timestamp = a.clock.Now() // honour the injected clock rather than time.Now() inside NewEvent
 	if err := a.pub.Publish(ctx, ev); err != nil {
-		a.logger.WarnContext(ctx, "totp_audit: Publish failed; audit event lost (informational, INV-D14)",
+		a.logger.WarnContext(ctx, "totp_audit: Publish failed; audit event lost (informational, INV-CRYPTO-81)",
 			"event_type", eventTypeStr, "subject", subjectStr, "publish_error", err)
 	}
 }

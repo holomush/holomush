@@ -450,14 +450,14 @@ func seedDEKID(base int64, ctxType, ctxID string) int64 {
 // --- policy_set chain helpers (Task 49) ---
 
 // AssertPolicySetChainIntact walks the policy_set chain for policyName via
-// the primary's chain verifier (INV-D10/D11/D12 via the generalized verifier).
+// the primary's chain verifier (INV-CRYPTO-77/INV-CRYPTO-78/INV-CRYPTO-79 via the generalized verifier).
 func (h *Harness) AssertPolicySetChainIntact(policyName string) {
 	handler := policy.PolicySetHandlerFor(h.Game)
 	err := h.Primary.VerifierForChain(handler).VerifyScope(
 		context.Background(), handler, policyName,
 	)
 	Expect(err).NotTo(HaveOccurred(),
-		"INV-D10/D11/D12: policy_set chain must be intact for %q", policyName)
+		"INV-CRYPTO-77/INV-CRYPTO-78/INV-CRYPTO-79: policy_set chain must be intact for %q", policyName)
 }
 
 // TamperPolicySetSelfHash overwrites the policy_hash field in the most recent

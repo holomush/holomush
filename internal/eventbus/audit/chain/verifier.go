@@ -59,8 +59,8 @@ type Handler struct {
 //
 //	SHA-256(JCS(zero(canonicalized_payload, SelfHashField))).
 //
-// Genesis invariant (INV-D10 generalized): the first entry's prev_hash MUST be nil.
-// Link invariant (INV-D11 generalized): each subsequent entry's prev_hash MUST equal
+// Genesis invariant (INV-CRYPTO-77 generalized): the first entry's prev_hash MUST be nil.
+// Link invariant (INV-CRYPTO-78 generalized): each subsequent entry's prev_hash MUST equal
 // the predecessor's recomputed self_hash.
 type Verifier interface {
 	// VerifyScope validates the chain for a single scope.
@@ -188,7 +188,7 @@ func (v *verifier) verifyEntries(_ context.Context, h Handler, scope string, ent
 		}
 	}
 
-	// Genesis invariant (INV-D10 generalized): first entry's prev_hash MUST be nil.
+	// Genesis invariant (INV-CRYPTO-77 generalized): first entry's prev_hash MUST be nil.
 	genPrev, err := h.PrevHashOf(entries[0].Payload)
 	if err != nil {
 		return oops.Code("AUDIT_CHAIN_PREV_HASH_EXTRACT_FAILED").
@@ -222,8 +222,8 @@ func (v *verifier) verifyEntries(_ context.Context, h Handler, scope string, ent
 			Errorf("genesis self_hash does not match recompute")
 	}
 
-	// Walk remaining entries: INV-D11 (prev_hash == predecessor recompute)
-	// and INV-D12 / INV-E28 (stored self_hash == own recompute).
+	// Walk remaining entries: INV-CRYPTO-78 (prev_hash == predecessor recompute)
+	// and INV-CRYPTO-79 / INV-E28 (stored self_hash == own recompute).
 	for i := 1; i < len(entries); i++ {
 		// Predecessor's recomputed hash is what this entry's prev_hash must equal.
 		prevRecompute, err := v.recomputeFor(h, entries[i-1].Payload)

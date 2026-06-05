@@ -7,6 +7,6 @@
 // appending them to the chain.
 //
 // The cyberphone/json-canonicalization dependency is pinned to a specific
-// pseudo-version in go.mod per INV-D13; switching implementations is a
+// pseudo-version in go.mod per INV-CRYPTO-80; switching implementations is a
 // chain-breaking master-spec amendment.
 package policy

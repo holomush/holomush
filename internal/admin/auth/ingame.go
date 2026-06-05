@@ -69,7 +69,7 @@ func NewInGameCredentialsProvider(
 func (p *InGameCredentialsProvider) Name() string { return "ingame-creds-totp" }
 
 // Authenticate runs the 6-step check sequence per design spec §4.
-// Steps later than a failure MUST NOT execute (INV-D1).
+// Steps later than a failure MUST NOT execute (INV-CRYPTO-68).
 func (p *InGameCredentialsProvider) Authenticate(ctx context.Context, req AuthRequest) (OperatorIdentity, error) {
 	// Step 1: credentials.
 	player, err := p.creds.ValidateCredentials(ctx, req.Username, req.Password)
@@ -115,7 +115,7 @@ func (p *InGameCredentialsProvider) Authenticate(ctx context.Context, req AuthRe
 
 	// Steps 4-5: capability allow-list + RoleAdmin (any character).
 	// Both gates are re-asserted at every admin RPC entry point per
-	// INV-D16; the shared helper keeps the three sites in lockstep.
+	// INV-CRYPTO-83; the shared helper keeps the three sites in lockstep.
 	if err := AssertOperatorAdmin(ctx, p.resolver, p.roleStore, player.ID.String()); err != nil {
 		return OperatorIdentity{}, err
 	}

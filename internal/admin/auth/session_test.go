@@ -21,7 +21,7 @@ type fakeClock struct{ t time.Time }
 func (c *fakeClock) Now() time.Time          { return c.t }
 func (c *fakeClock) Advance(d time.Duration) { c.t = c.t.Add(d) }
 
-// TestSessionStoreEmptiedOnConstruction — INV-D3.
+// TestSessionStoreEmptiedOnConstruction — INV-CRYPTO-70.
 func TestSessionStoreEmptiedOnConstruction(t *testing.T) {
 	fc := &fakeClock{t: time.Unix(1700000000, 0)}
 	s := adminauth.NewSessionStore(fc, 10*time.Minute)
@@ -46,7 +46,7 @@ func TestSessionStoreIssueAndGetReturnsIdentity(t *testing.T) {
 	assert.Equal(t, id, got)
 }
 
-// TestSessionStoreRejectsExpiredToken — INV-D2.
+// TestSessionStoreRejectsExpiredToken — INV-CRYPTO-69.
 func TestSessionStoreRejectsExpiredToken(t *testing.T) {
 	fc := &fakeClock{t: time.Unix(1700000000, 0)}
 	s := adminauth.NewSessionStore(fc, 10*time.Minute)

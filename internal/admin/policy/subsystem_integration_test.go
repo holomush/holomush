@@ -19,7 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/admin/policy"
 )
 
-// CryptoPolicySubsystem integration specs (INV-D17 fail-closed posture +
+// CryptoPolicySubsystem integration specs (INV-CRYPTO-84 fail-closed posture +
 // happy-path Start emits one event per configured policy_name). Migrated
 // from testify to Ginkgo/Gomega per project standards (CodeRabbit #8).
 var _ = Describe("CryptoPolicySubsystem (integration)", func() {
@@ -44,7 +44,7 @@ var _ = Describe("CryptoPolicySubsystem (integration)", func() {
 			Expect(ok).To(BeTrue())
 			// oops.Code() returns the deepest code in the chain. The outer wrap is
 			// CRYPTO_POLICY_EMIT_FAILED; the inner cause is POLICY_EMIT_PUBLISH_FAILED.
-			// Both confirm fail-closed per INV-D17 — assert the deepest (publish failure).
+			// Both confirm fail-closed per INV-CRYPTO-84 — assert the deepest (publish failure).
 			Expect(o.Code()).To(Equal("POLICY_EMIT_PUBLISH_FAILED"))
 		})
 	})

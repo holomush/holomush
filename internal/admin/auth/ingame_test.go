@@ -258,7 +258,7 @@ func TestInGameAuthenticateIgnoresPeerCredForGating(t *testing.T) {
 
 	// Same logical inputs (creds, totp, capability, role) → both succeed
 	// regardless of the differing PeerCred.UID. PeerCred surfaces in the
-	// returned identity but does not influence the outcome (INV-D4).
+	// returned identity but does not influence the outcome (INV-CRYPTO-71).
 	assert.NotEqual(t, id1.PeerCred.UID, id2.PeerCred.UID, "peer creds preserved through to identity")
 	assert.Equal(t, pl.ID.String(), id1.PlayerID)
 	assert.Equal(t, pl.ID.String(), id2.PlayerID)

@@ -74,7 +74,7 @@ func (e *adminAuthEnv) approvalRow(id approval.RequestID) (approvedAt *time.Time
 
 // forceExpireApproval directly mutates the row's expires_at into the past so
 // the subsequent Approve call sees an expired row. Mirrors the same SQL the
-// approval/repo_integration_test uses for INV-D5 coverage.
+// approval/repo_integration_test uses for INV-CRYPTO-72 coverage.
 func (e *adminAuthEnv) forceExpireApproval(id approval.RequestID) {
 	tag, err := e.queryPool.Exec(e.ctx,
 		`UPDATE admin_approvals SET expires_at = (EXTRACT(EPOCH FROM now() - interval '1 minute') * 1e9)::BIGINT WHERE request_id = $1`,
@@ -86,6 +86,6 @@ func (e *adminAuthEnv) forceExpireApproval(id approval.RequestID) {
 // Note: client-side error inspection is limited to connect.CodeOf(err)
 // because ConnectRPC does not transmit the server-side oops error chain
 // over the wire — only the connect.Code and message string. The DENY_*
-// oops codes (INV-D5, INV-D6, INV-D7, INV-D16) are server-internal
+// oops codes (INV-CRYPTO-72, INV-CRYPTO-73, INV-CRYPTO-74, INV-CRYPTO-83) are server-internal
 // taxonomy covered by handler-level unit tests (e.g.,
 // internal/admin/approval/handler_test.go and internal/admin/auth/handler_test.go).

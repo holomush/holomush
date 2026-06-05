@@ -68,7 +68,7 @@ var _ = Describe("Approval Repo", func() {
 		})
 	})
 
-	Describe("Get filters expired rows (INV-D5)", func() {
+	Describe("Get filters expired rows (INV-CRYPTO-72)", func() {
 		It("returns APPROVAL_NOT_FOUND for expired rows", func() {
 			r := approval.NewPostgresRepo(testPool, nil)
 			primary := ulid.Make().String()
@@ -113,7 +113,7 @@ var _ = Describe("Approval Repo", func() {
 			Expect(got.ApprovedByPlayerID).To(Equal(secondOp))
 		})
 
-		It("rejects self-approval at the SQL layer (INV-D6)", func() {
+		It("rejects self-approval at the SQL layer (INV-CRYPTO-73)", func() {
 			r := approval.NewPostgresRepo(testPool, nil)
 			primary := ulid.Make().String()
 			insertPlayerForApproval(primary)
@@ -132,7 +132,7 @@ var _ = Describe("Approval Repo", func() {
 			Expect(got.ApprovedAt).To(BeNil(), "row must remain pending after self-approval rejection")
 		})
 
-		It("rejects approval of an expired row (INV-D5)", func() {
+		It("rejects approval of an expired row (INV-CRYPTO-72)", func() {
 			r := approval.NewPostgresRepo(testPool, nil)
 			primary := ulid.Make().String()
 			secondOp := ulid.Make().String()
@@ -155,7 +155,7 @@ var _ = Describe("Approval Repo", func() {
 			assertCode(err, "DENY_APPROVAL_EXPIRED")
 		})
 
-		It("rejects a second MarkApproved on an already-approved row (INV-D7)", func() {
+		It("rejects a second MarkApproved on an already-approved row (INV-CRYPTO-74)", func() {
 			r := approval.NewPostgresRepo(testPool, nil)
 			primary := ulid.Make().String()
 			secondOp := ulid.Make().String()

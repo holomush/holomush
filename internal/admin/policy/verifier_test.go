@@ -145,7 +145,7 @@ func TestVerifyChainEntriesAcceptsValidExtension(t *testing.T) {
 	require.NoError(t, runVerify(t, repo, "crypto.operators"))
 }
 
-// TestVerifyChainEntriesRejectsBrokenGenesis verifies INV-D10: a genesis
+// TestVerifyChainEntriesRejectsBrokenGenesis verifies INV-CRYPTO-77: a genesis
 // row with non-nil prev_hash produces AUDIT_CHAIN_BROKEN_GENESIS (post-E
 // generalization of POLICY_CHAIN_BROKEN_GENESIS).
 func TestVerifyChainEntriesRejectsBrokenGenesis(t *testing.T) {
@@ -158,7 +158,7 @@ func TestVerifyChainEntriesRejectsBrokenGenesis(t *testing.T) {
 	assert.Equal(t, "AUDIT_CHAIN_BROKEN_GENESIS", o.Code())
 }
 
-// TestVerifyChainEntriesRejectsBrokenLink verifies INV-D11: a non-genesis
+// TestVerifyChainEntriesRejectsBrokenLink verifies INV-CRYPTO-78: a non-genesis
 // row whose prev_hash does not match the predecessor produces
 // AUDIT_CHAIN_BROKEN_LINK (post-E generalization).
 func TestVerifyChainEntriesRejectsBrokenLink(t *testing.T) {
@@ -173,7 +173,7 @@ func TestVerifyChainEntriesRejectsBrokenLink(t *testing.T) {
 	assert.Equal(t, "AUDIT_CHAIN_BROKEN_LINK", o.Code())
 }
 
-// TestVerifyChainEntriesRejectsHashMismatch verifies INV-D12: a row whose
+// TestVerifyChainEntriesRejectsHashMismatch verifies INV-CRYPTO-79: a row whose
 // stored policy_hash does not match its recomputed hash produces
 // AUDIT_CHAIN_HASH_MISMATCH (post-E generalization).
 func TestVerifyChainEntriesRejectsHashMismatch(t *testing.T) {

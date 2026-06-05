@@ -37,7 +37,7 @@ type PolicySetPayload struct {
 }
 
 // ComputePolicyHash returns SHA-256 over RFC 8785 JCS-canonicalized JSON
-// of payload with the policy_hash field zeroed out. INV-D12, INV-D13.
+// of payload with the policy_hash field zeroed out. INV-CRYPTO-79, INV-CRYPTO-80.
 //
 // Caller pattern: build the payload with PolicyHash empty, call
 // ComputePolicyHash, set the result onto payload.PolicyHash, then marshal
@@ -48,7 +48,7 @@ type PolicySetPayload struct {
 // so callers cannot accidentally produce different hashes by passing
 // `[]byte{}` vs `nil` — `json.Marshal` emits `null` for nil and `""` for
 // `[]byte{}`, which canonicalize to different bytes. Genesis rows MUST
-// have PrevHash == nil (per INV-D10); this normalization makes the
+// have PrevHash == nil (per INV-CRYPTO-77); this normalization makes the
 // genesis hash stable regardless of which empty form the caller used.
 //
 // Retained post-Phase-5-sub-epic-E refactor as the legacy reference: it
@@ -163,7 +163,7 @@ func decodePolicyPayloadJSON(envOrJSON []byte) ([]byte, error) {
 	return envOrJSON, nil
 }
 
-// canonicalizePolicySetPayload preserves D's INV-D10 PrevHash empty-form → nil
+// canonicalizePolicySetPayload preserves D's INV-CRYPTO-77 PrevHash empty-form → nil
 // normalization. Proto-unmarshals the envelope (or accepts raw JSON for test
 // fakes), parses the JSON payload bytes into PolicySetPayload, normalizes
 // PrevHash, re-marshals, then applies RFC 8785 JCS. This makes the new

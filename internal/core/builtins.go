@@ -78,8 +78,8 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 
 		// Crypto audit (host-emit, persistence-only). DisplayTarget=AUDIT_ONLY
 		// so the gRPC Subscribe handler drops these before send; the audit
-		// projection persists them like any other event. Restores INV-D14
-		// (audit emission persists) and INV-D17 (chain genesis emit persists)
+		// projection persists them like any other event. Restores INV-CRYPTO-81
+		// (audit emission persists) and INV-CRYPTO-84 (chain genesis emit persists)
 		// for the sub-epic D host-emit subsystems (cryptoPolicySub + totpAuditSvc).
 		{Type: "crypto.totp_locked", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},
 		{Type: "crypto.totp_cleared", Category: "system", Format: "audit", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_AUDIT_ONLY, Source: "builtin"},

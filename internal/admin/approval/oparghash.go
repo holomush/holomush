@@ -13,10 +13,10 @@ import (
 // ComputeOpArgsHash returns SHA-256 over the proto-deterministic-marshal
 // of args. Both the primary's CLI (computing the hash for Open) and the
 // server-side proceeding handler (recomputing for verification) use this
-// helper so the hashes byte-equal across processes. INV-D8 + INV-D9.
+// helper so the hashes byte-equal across processes. INV-CRYPTO-75 + INV-CRYPTO-76.
 //
 // Cross-binary stability is load-bearing on the google.golang.org/protobuf
-// version pin (INV-D18); the meta-test in proto_meta_test.go locks that pin.
+// version pin (INV-CRYPTO-85); the meta-test in proto_meta_test.go locks that pin.
 func ComputeOpArgsHash(msg proto.Message) ([]byte, error) {
 	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
 	if err != nil {

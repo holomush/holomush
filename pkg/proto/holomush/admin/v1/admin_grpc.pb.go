@@ -61,23 +61,23 @@ type AdminServiceClient interface {
 	// Approve is the second-operator signoff on a pending admin_approvals row.
 	// The caller supplies their session_token (proving identity and live
 	// operator status) and the request_id of the approval row to sign off.
-	// Repo.MarkApproved atomically enforces three invariants: INV-D5 (the row
-	// must not be expired), INV-D6 (the approver cannot be the same player as
-	// the primary operator who opened the row), and INV-D7 (each row may only
+	// Repo.MarkApproved atomically enforces three invariants: INV-CRYPTO-72 (the row
+	// must not be expired), INV-CRYPTO-73 (the approver cannot be the same player as
+	// the primary operator who opened the row), and INV-CRYPTO-74 (each row may only
 	// be approved once). Requires the crypto.operator capability and admin role
-	// re-checked at call time (INV-D16); handler in internal/admin/approval.
+	// re-checked at call time (INV-CRYPTO-83); handler in internal/admin/approval.
 	Approve(ctx context.Context, in *ApproveRequest, opts ...grpc.CallOption) (*ApproveResponse, error)
 	// ResetTOTP clears a target player's TOTP enrollment, allowing them to
 	// re-enroll on next login. On success, AuditingService.ClearTOTP emits a
 	// crypto.totp_cleared audit event with cleared_by="admin_reset" (T13).
 	// Response.cleared is false when the player was not enrolled (no-op).
 	// Requires a valid session_token with the crypto.operator capability and
-	// admin role re-checked at call time (INV-D16); handler in
+	// admin role re-checked at call time (INV-CRYPTO-83); handler in
 	// internal/admin/auth (reset_handler.go).
 	ResetTOTP(ctx context.Context, in *ResetTOTPRequest, opts ...grpc.CallOption) (*ResetTOTPResponse, error)
 	// Rekey initiates a fresh DEK rekey for the given context. Requires the
 	// crypto.operator capability and admin role (re-checked at call time,
-	// INV-D16). Streams a single terminal RekeyProgress event: RekeyCompleted
+	// INV-CRYPTO-83). Streams a single terminal RekeyProgress event: RekeyCompleted
 	// on success or RekeyError on orchestrator failure. Per-phase progress
 	// updates are pre-defined in the proto but not yet emitted (follow-up).
 	// Uses the shared RekeyProgress stream type (also used by RekeyResume) —
@@ -86,7 +86,7 @@ type AdminServiceClient interface {
 	Rekey(ctx context.Context, in *RekeyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RekeyProgress], error)
 	// RekeyResume resumes a paused or interrupted rekey identified by
 	// request_id. Requires the crypto.operator capability and admin role
-	// (INV-D16). Idempotency (INV-E16) and same-args invariant (INV-E4) are
+	// (INV-CRYPTO-83). Idempotency (INV-E16) and same-args invariant (INV-E4) are
 	// enforced inside the orchestrator, not here. The handler validates that
 	// request_id is a non-zero 16-byte ULID and forwards it to the orchestrator
 	// adapter, which looks up the checkpoint to resolve ContextType/ContextID.
@@ -294,23 +294,23 @@ type AdminServiceServer interface {
 	// Approve is the second-operator signoff on a pending admin_approvals row.
 	// The caller supplies their session_token (proving identity and live
 	// operator status) and the request_id of the approval row to sign off.
-	// Repo.MarkApproved atomically enforces three invariants: INV-D5 (the row
-	// must not be expired), INV-D6 (the approver cannot be the same player as
-	// the primary operator who opened the row), and INV-D7 (each row may only
+	// Repo.MarkApproved atomically enforces three invariants: INV-CRYPTO-72 (the row
+	// must not be expired), INV-CRYPTO-73 (the approver cannot be the same player as
+	// the primary operator who opened the row), and INV-CRYPTO-74 (each row may only
 	// be approved once). Requires the crypto.operator capability and admin role
-	// re-checked at call time (INV-D16); handler in internal/admin/approval.
+	// re-checked at call time (INV-CRYPTO-83); handler in internal/admin/approval.
 	Approve(context.Context, *ApproveRequest) (*ApproveResponse, error)
 	// ResetTOTP clears a target player's TOTP enrollment, allowing them to
 	// re-enroll on next login. On success, AuditingService.ClearTOTP emits a
 	// crypto.totp_cleared audit event with cleared_by="admin_reset" (T13).
 	// Response.cleared is false when the player was not enrolled (no-op).
 	// Requires a valid session_token with the crypto.operator capability and
-	// admin role re-checked at call time (INV-D16); handler in
+	// admin role re-checked at call time (INV-CRYPTO-83); handler in
 	// internal/admin/auth (reset_handler.go).
 	ResetTOTP(context.Context, *ResetTOTPRequest) (*ResetTOTPResponse, error)
 	// Rekey initiates a fresh DEK rekey for the given context. Requires the
 	// crypto.operator capability and admin role (re-checked at call time,
-	// INV-D16). Streams a single terminal RekeyProgress event: RekeyCompleted
+	// INV-CRYPTO-83). Streams a single terminal RekeyProgress event: RekeyCompleted
 	// on success or RekeyError on orchestrator failure. Per-phase progress
 	// updates are pre-defined in the proto but not yet emitted (follow-up).
 	// Uses the shared RekeyProgress stream type (also used by RekeyResume) —
@@ -319,7 +319,7 @@ type AdminServiceServer interface {
 	Rekey(*RekeyRequest, grpc.ServerStreamingServer[RekeyProgress]) error
 	// RekeyResume resumes a paused or interrupted rekey identified by
 	// request_id. Requires the crypto.operator capability and admin role
-	// (INV-D16). Idempotency (INV-E16) and same-args invariant (INV-E4) are
+	// (INV-CRYPTO-83). Idempotency (INV-E16) and same-args invariant (INV-E4) are
 	// enforced inside the orchestrator, not here. The handler validates that
 	// request_id is a non-zero 16-byte ULID and forwards it to the orchestrator
 	// adapter, which looks up the checkpoint to resolve ContextType/ContextID.

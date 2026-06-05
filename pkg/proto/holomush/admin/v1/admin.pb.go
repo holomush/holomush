@@ -260,7 +260,7 @@ type ApproveRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_token is the approving operator's bearer token from Authenticate.
 	// Used to resolve the approver's player identity for the self-approval check
-	// (INV-D6) and for capability/role re-assertion (INV-D16).
+	// (INV-CRYPTO-73) and for capability/role re-assertion (INV-CRYPTO-83).
 	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
 	// request_id is the 16-byte ULID of the admin_approvals row to approve.
 	// Must be non-zero; the all-zero sentinel is rejected as an invalid forgery

@@ -57,7 +57,7 @@ import (
 //     dual-control scenarios. Untouched by T25.
 //   - dave (playerD): operator + admin + TOTP enrolled — second-op in T26
 //     dual-control scenarios. Untouched by T25. His admin role is removed
-//     mid-spec in the T26 INV-D16 scenario, so this scenario MUST run last
+//     mid-spec in the T26 INV-CRYPTO-83 scenario, so this scenario MUST run last
 //     among T26 scenarios.
 //
 // All four are listed in cryptoConfig.Operators. Bob is intentionally
@@ -96,7 +96,7 @@ type adminAuthEnv struct {
 	approvalRepo approval.Repo
 
 	// roleStore is used by T26 to RemoveRole(RoleAdmin) from dave's character
-	// mid-spec to exercise the Approve handler's INV-D16 runtime role re-check.
+	// mid-spec to exercise the Approve handler's INV-CRYPTO-83 runtime role re-check.
 	roleStore store.RoleStore
 
 	// rekeySceneContextType and rekeySceneContextID identify the scene context
@@ -154,14 +154,14 @@ func (e *adminAuthEnv) computeTOTP(secret string) string {
 }
 
 // lockedEventCount returns the number of crypto.totp_locked rows in
-// events_audit for the given player's subject. Used to assert INV-D14.
+// events_audit for the given player's subject. Used to assert INV-CRYPTO-81.
 func (e *adminAuthEnv) lockedEventCount(playerID ulid.ULID) int {
 	subj := totp.SubjectLocked(e.gameID, playerID.String())
 	return e.eventCount(subj, totp.EventTypeLocked)
 }
 
 // clearedEventCount returns the number of crypto.totp_cleared rows for the
-// given player. Used to assert INV-D14.
+// given player. Used to assert INV-CRYPTO-81.
 func (e *adminAuthEnv) clearedEventCount(playerID ulid.ULID) int {
 	subj := totp.SubjectCleared(e.gameID, playerID.String())
 	return e.eventCount(subj, totp.EventTypeCleared)
@@ -523,13 +523,13 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		Eventually(func() int {
 			return env.clearedEventCount(env.playerB)
 		}, "10s", "100ms").Should(Equal(1),
-			"exactly one crypto.totp_cleared row for bob (INV-D14)")
+			"exactly one crypto.totp_cleared row for bob (INV-CRYPTO-81)")
 
 		// Decode the projected envelope + payload and assert the
 		// cleared_by field carries the admin-reset contract value. A
 		// regression that emitted the event with the wrong cleared_by
 		// would still satisfy the count check above; this read closes
-		// that gap (CodeRabbit #1, INV-D14 contract).
+		// that gap (CodeRabbit #1, INV-CRYPTO-81 contract).
 		clearedSubject := totp.SubjectCleared(env.gameID, env.playerB.String())
 		var envelopeBytes []byte
 		err = env.queryPool.QueryRow(
@@ -582,7 +582,7 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		Eventually(func() int {
 			return env.lockedEventCount(env.playerA)
 		}, "10s", "100ms").Should(Equal(1),
-			"exactly one crypto.totp_locked row must persist (INV-D14)")
+			"exactly one crypto.totp_locked row must persist (INV-CRYPTO-81)")
 
 		// Subsequent attempt with a valid TOTP code is rejected with DENY_LOCKED
 		// (mapped to connect.CodeUnavailable per adminauth.denyCodeToConnect).
@@ -602,14 +602,14 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		//
 		// Coverage:
 		//   - Happy path: dave (second-op) approves carol's pending row.
-		//   - DENY_DUAL_CONTROL_SELF (INV-D6): carol tries to approve her own row.
-		//   - DENY_APPROVAL_EXPIRED (INV-D5): force-expire a row, then approve.
-		//   - DENY_APPROVAL_ALREADY_APPROVED (INV-D7): approve once, then again.
-		//   - DENY_NOT_ADMIN_ROLE (INV-D16): authenticate dave, RemoveRole, approve.
+		//   - DENY_DUAL_CONTROL_SELF (INV-CRYPTO-73): carol tries to approve her own row.
+		//   - DENY_APPROVAL_EXPIRED (INV-CRYPTO-72): force-expire a row, then approve.
+		//   - DENY_APPROVAL_ALREADY_APPROVED (INV-CRYPTO-74): approve once, then again.
+		//   - DENY_NOT_ADMIN_ROLE (INV-CRYPTO-83): authenticate dave, RemoveRole, approve.
 		//
 		// Two intentional omissions, documented per Sub-Epic D plan §Task 26:
 		//
-		//   - DENY_NOT_OPERATOR (INV-D16 capability re-check): NOT reachable via
+		//   - DENY_NOT_OPERATOR (INV-CRYPTO-83 capability re-check): NOT reachable via
 		//     the E2E surface. The Approve handler's defense-in-depth re-check
 		//     fires after Authenticate, which itself requires crypto.operator
 		//     capability (InGameCredentialsProvider step 4). The
@@ -657,11 +657,11 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		selfErr := env.approve(carolToken, ridSelf)
 		Expect(selfErr).To(HaveOccurred(), "self-approval must fail")
 		// connect.Code is the over-the-wire contract; the inner oops code
-		// (DENY_DUAL_CONTROL_SELF, INV-D6) is server-internal taxonomy and is
+		// (DENY_DUAL_CONTROL_SELF, INV-CRYPTO-73) is server-internal taxonomy and is
 		// covered by handler_test.go unit tests. ConnectRPC does not transmit
 		// oops metadata to the client.
 		Expect(connectErrCode(selfErr)).To(Equal(connect.CodeFailedPrecondition),
-			"DENY_DUAL_CONTROL_SELF -> connect.CodeFailedPrecondition (INV-D6)")
+			"DENY_DUAL_CONTROL_SELF -> connect.CodeFailedPrecondition (INV-CRYPTO-73)")
 		stillPendingAt, _ := env.approvalRow(ridSelf)
 		Expect(stillPendingAt).To(BeNil(),
 			"self-approval rejection MUST NOT mutate approved_at")
@@ -675,7 +675,7 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		expiredErr := env.approve(daveToken, ridExpired)
 		Expect(expiredErr).To(HaveOccurred(), "expired approval must fail")
 		Expect(connectErrCode(expiredErr)).To(Equal(connect.CodeFailedPrecondition),
-			"DENY_APPROVAL_EXPIRED -> connect.CodeFailedPrecondition (INV-D5)")
+			"DENY_APPROVAL_EXPIRED -> connect.CodeFailedPrecondition (INV-CRYPTO-72)")
 
 		By("T26 scenario 4: dave approves carol's row, then carol tries again -> DENY_APPROVAL_ALREADY_APPROVED / CodeFailedPrecondition")
 		// Need a second-op who is NOT carol (primary) for the first approval —
@@ -692,11 +692,11 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		Expect(alreadyErr).To(HaveOccurred(),
 			"second approval on already-approved row must fail")
 		Expect(connectErrCode(alreadyErr)).To(Equal(connect.CodeFailedPrecondition),
-			"DENY_APPROVAL_ALREADY_APPROVED -> connect.CodeFailedPrecondition (INV-D7)")
+			"DENY_APPROVAL_ALREADY_APPROVED -> connect.CodeFailedPrecondition (INV-CRYPTO-74)")
 
 		By("T26 scenario 5 (LAST — destructive): RemoveRole on dave's character mid-session -> DENY_NOT_ADMIN_ROLE / CodePermissionDenied")
 		// dave authenticated successfully in scenario 1 (admin role present at
-		// the time, INV-D16 step 5 passed). Now we remove the role to simulate
+		// the time, INV-CRYPTO-83 step 5 passed). Now we remove the role to simulate
 		// out-of-band revocation. The Approve handler's runtime role re-check
 		// MUST then reject dave's session even though the in-memory session
 		// store still holds his token.
@@ -708,7 +708,7 @@ var _ = Describe("Admin Authenticate Lifecycle (full-stack E2E)", func() {
 		Expect(roleErr).To(HaveOccurred(),
 			"approve after role revocation must fail")
 		Expect(connectErrCode(roleErr)).To(Equal(connect.CodePermissionDenied),
-			"DENY_NOT_ADMIN_ROLE -> connect.CodePermissionDenied (INV-D16 runtime role re-check)")
+			"DENY_NOT_ADMIN_ROLE -> connect.CodePermissionDenied (INV-CRYPTO-83 runtime role re-check)")
 		rolePending, _ := env.approvalRow(ridRoleRevoked)
 		Expect(rolePending).To(BeNil(),
 			"role-rejected approval MUST NOT mutate approved_at")

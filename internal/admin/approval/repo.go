@@ -67,7 +67,7 @@ func (r *PostgresRepo) Open(ctx context.Context, req OpenRequest) (RequestID, er
 	return id, nil
 }
 
-// Get returns the row by request_id, filtering expired rows. INV-D5.
+// Get returns the row by request_id, filtering expired rows. INV-CRYPTO-72.
 func (r *PostgresRepo) Get(ctx context.Context, id RequestID) (Approval, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT request_id, primary_player_id, op_kind, op_args_hash,
@@ -190,8 +190,8 @@ func (r *PostgresRepo) GetByOpArgsHash(ctx context.Context, opKind string, opArg
 }
 
 // MarkApproved is the atomic single-statement second-op signoff per spec
-// §6 Approve flow. INV-D5 (TTL), INV-D6 (self-approval rejection),
-// INV-D7 (already-approved rejection).
+// §6 Approve flow. INV-CRYPTO-72 (TTL), INV-CRYPTO-73 (self-approval rejection),
+// INV-CRYPTO-74 (already-approved rejection).
 func (r *PostgresRepo) MarkApproved(ctx context.Context, id RequestID, secondOpPlayerID string) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE admin_approvals

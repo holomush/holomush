@@ -663,7 +663,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// required by audit/projection.go::persist (headerRendering check).
 	// Without this wrapping the projection rejects every host-emit audit
 	// event with AUDIT_MISSING_HEADER and they never reach events_audit.
-	// (holomush-jxo8.6.26 / INV-D14, INV-D17.)
+	// (holomush-jxo8.6.26 / INV-CRYPTO-81, INV-CRYPTO-84.)
 	auditPublisher := eventbus.NewRenderingPublisher(eventBusSub.Publisher(), verbRegistry)
 
 	// CryptoPolicySubsystem emits the current policy snapshot after AuditProjection.

@@ -29,6 +29,7 @@ scopes:
       - "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md"
       - "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
       - "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
+      - "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
     owned_paths:
       - "internal/eventbus/crypto/**"
       - "internal/eventbus/history/**"
@@ -52,8 +53,41 @@ scopes:
       - "gorules/analyzers/dekmaterialnolog/**"
       - "gorules/analyzers/dekmaterialnoproto/**"
       - "gorules/analyzers/dekmaterialnoslog/**"
+      # INV-D (.14.29): crypto phase-5 sub-epic-d — admin crypto-operations (operator-admin
+      # auth, dual-control approval, op-args-hash, policy_set chain genesis/verify, dep pins).
+      - "cmd/holomush/admin_e2e_helpers_test.go"
+      - "internal/admin/approval/doc.go"
+      - "internal/admin/approval/handler.go"
+      - "internal/admin/approval/oparghash.go"
+      - "internal/admin/approval/oparghash_test.go"
+      - "internal/admin/approval/proto_meta_test.go"
+      - "internal/admin/auth/ingame.go"
+      - "internal/admin/auth/ingame_test.go"
+      - "internal/admin/auth/operator_admin.go"
+      - "internal/admin/auth/reset_handler.go"
+      - "internal/admin/auth/session.go"
+      - "internal/admin/auth/session_test.go"
+      - "internal/admin/policy/chain_reduction_test.go"
+      - "internal/admin/policy/chain_test.go"
+      - "internal/admin/policy/doc.go"
+      - "internal/admin/policy/emitter.go"
+      - "internal/admin/policy/jcs_meta_test.go"
+      - "internal/admin/policy/subsystem.go"
+      - "internal/admin/policy/subsystem_integration_test.go"
+      - "internal/admin/totp_audit/auditing.go"
+      - "internal/admin/totp_audit/auditing_test.go"
+      - "test/integration/admin_policy_chain_test.go"
+      - "test/integration/eventbus_e2e/audit_only_channel_test.go"
     shared_files:
       # CRYPTO+STORE: history files carrying both P7/RB and TS (nanos) annotations.
+      # INV-D sub-epic-d co-located with sibling INV-E (migrating .14.30) / go.mod dep-pins / multi-scope.
+      - "api/proto/holomush/admin/v1/rekey.proto"
+      - "go.mod"
+      - "internal/admin/policy/chain.go"
+      - "internal/admin/policy/verifier.go"
+      - "internal/admin/policy/verifier_test.go"
+      - "internal/admin/socket/rekey_handler.go"
+      - "internal/grpc/subscribe_loop_test.go"
       - "internal/eventbus/history/readback.go"
       - "internal/eventbus/history/phase7_boundary_meta_test.go"
       - "internal/eventbus/history/plugin_aad_reconstruction_test.go"
@@ -3512,3 +3546,247 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/grpc/list_available_commands.go", token: "INV-5"}
+  - id: INV-CRYPTO-68
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D1@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "OperatorAuthProvider.Authenticate's 6-step check sequence is order-fixed (ValidateCredentials → IsEnrolled →
+      Verify → HasPlayerGrant → PlayerHasRole(RoleAdmin) → PeerCred capture); later steps MUST NOT run on an earlier failure,
+      so no step-leak beyond the typed DENY code."
+    binding: pending
+    refs:
+      - {file: "internal/admin/auth/ingame.go", token: "INV-D1"}
+  - id: INV-CRYPTO-69
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D2@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "An operator session token MUST have a 10-minute TTL from issuance; SessionStore.Get MUST reject any token past
+      its deadline and emit DENY_SESSION_EXPIRED."
+    binding: pending
+    refs:
+      - {file: "internal/admin/auth/session.go", token: "INV-D2"}
+      - {file: "internal/admin/auth/session_test.go", token: "INV-D2"}
+  - id: INV-CRYPTO-70
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D3@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The operator session map is per-process in-memory; a restart loses all sessions by design and operators re-authenticate
+      (operational property, not a security claim)."
+    binding: pending
+    refs:
+      - {file: "internal/admin/auth/session.go", token: "INV-D3"}
+      - {file: "internal/admin/auth/session_test.go", token: "INV-D3"}
+  - id: INV-CRYPTO-71
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D4@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "PeerCred captured by sub-epic C's middleware is recorded in OperatorIdentity.OSUser for audit only; it MUST
+      NOT be consulted in any DENY decision."
+    binding: pending
+    refs:
+      - {file: "internal/admin/auth/ingame_test.go", token: "INV-D4"}
+  - id: INV-CRYPTO-72
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D5@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "admin_approvals.expires_at = created_at + 5 min; read paths MUST filter expires_at < now() so expired approval
+      rows are invisible (no background reaper in v1)."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/admin/v1/admin.proto", token: "INV-D5"}
+      - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-D5"}
+      - {file: "cmd/holomush/admin_e2e_helpers_test.go", token: "INV-D5"}
+      - {file: "internal/admin/approval/repo.go", token: "INV-D5"}
+      - {file: "internal/admin/approval/repo_integration_test.go", token: "INV-D5"}
+  - id: INV-CRYPTO-73
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D6@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "Second-op MarkApproved MUST reject any request where the second-op player_id equals the row's primary_player_id
+      (DENY_DUAL_CONTROL_SELF)."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/admin/v1/admin.proto", token: "INV-D6"}
+      - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-D6"}
+      - {file: "cmd/holomush/admin_e2e_helpers_test.go", token: "INV-D6"}
+      - {file: "internal/admin/approval/repo.go", token: "INV-D6"}
+      - {file: "internal/admin/approval/repo_integration_test.go", token: "INV-D6"}
+  - id: INV-CRYPTO-74
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D7@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The Approve RPC handler MUST verify the second-op's identity holds crypto.operator (already enforced at Authenticate;
+      re-checked here as defense in depth — see INV-CRYPTO-83)."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/admin/v1/admin.proto", token: "INV-D7"}
+      - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-D7"}
+      - {file: "cmd/holomush/admin_e2e_helpers_test.go", token: "INV-D7"}
+      - {file: "internal/admin/approval/repo.go", token: "INV-D7"}
+      - {file: "internal/admin/approval/repo_integration_test.go", token: "INV-D7"}
+  - id: INV-CRYPTO-75
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D8@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "op_args_hash MUST be SHA-256(proto.MarshalOptions{Deterministic: true}.Marshal(args)); every path producing
+      or verifying the hash MUST agree on this exact algorithm, load-bearing on the protobuf-go pin (INV-CRYPTO-85)."
+    binding: pending
+    refs:
+      - {file: "internal/admin/approval/oparghash.go", token: "INV-D8"}
+      - {file: "internal/admin/approval/oparghash_test.go", token: "INV-D8"}
+      - {file: "internal/admin/approval/proto_meta_test.go", token: "INV-D8"}
+  - id: INV-CRYPTO-76
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D9@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "When the primary proceeds post-approval, the server MUST recompute op_args_hash from the proceeding call's args;
+      a mismatch yields DENY_APPROVAL_ARGS_MISMATCH."
+    binding: pending
+    refs:
+      - {file: "internal/admin/approval/oparghash.go", token: "INV-D9"}
+  - id: INV-CRYPTO-77
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D10@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The crypto.policy_set chain genesis condition is prev_hash IS NULL: the first event for a policy_name in a fresh
+      events_audit MUST have prev_hash = null; subsequent events MUST have prev_hash equal to their predecessor's policy_hash."
+    binding: pending
+    refs:
+      - {file: "internal/admin/policy/chain.go", token: "INV-D10"}
+      - {file: "internal/admin/policy/chain_reduction_test.go", token: "INV-D10"}
+      - {file: "internal/admin/policy/chain_test.go", token: "INV-D10"}
+      - {file: "internal/admin/policy/verifier.go", token: "INV-D10"}
+      - {file: "internal/admin/policy/verifier_test.go", token: "INV-D10"}
+      - {file: "internal/eventbus/audit/chain/verifier.go", token: "INV-D10"}
+      - {file: "test/integration/admin_policy_chain_test.go", token: "INV-D10"}
+      - {file: "test/integration/crypto/harness_impl_test.go", token: "INV-D10"}
+      - {file: "test/integration/crypto/policy_set_chain_post_refactor_test.go", token: "INV-D10"}
+  - id: INV-CRYPTO-78
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D11@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The startup crypto.policy_set chain verifier MUST be fail-closed: any mismatch (broken predecessor, wrong policy_hash,
+      missing prev_hash when non-null was expected) makes the server refuse to start."
+    binding: pending
+    refs:
+      - {file: "internal/admin/policy/verifier_test.go", token: "INV-D11"}
+      - {file: "internal/eventbus/audit/chain/verifier.go", token: "INV-D11"}
+      - {file: "test/integration/admin_policy_chain_test.go", token: "INV-D11"}
+      - {file: "test/integration/crypto/policy_set_chain_post_refactor_test.go", token: "INV-D11"}
+  - id: INV-CRYPTO-79
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D12@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "policy_hash = SHA-256(JCS_canonicalize(payload_without_policy_hash_field)); the policy_hash field itself is
+      excluded from the canonicalization input."
+    binding: pending
+    refs:
+      - {file: "internal/admin/policy/chain.go", token: "INV-D12"}
+      - {file: "internal/admin/policy/chain_test.go", token: "INV-D12"}
+      - {file: "internal/admin/policy/verifier_test.go", token: "INV-D12"}
+      - {file: "internal/eventbus/audit/chain/verifier.go", token: "INV-D12"}
+      - {file: "test/integration/admin_policy_chain_test.go", token: "INV-D12"}
+      - {file: "test/integration/crypto/policy_set_chain_post_refactor_test.go", token: "INV-D12"}
+  - id: INV-CRYPTO-80
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D13@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The JCS canonicalizer is pinned in go.mod to a specific pseudo-version; a meta-test asserts the pin so a silent
+      dependency bump cannot land — switching libraries or RFC interpretations is a chain-breaking master-spec amendment."
+    binding: pending
+    refs:
+      - {file: "go.mod", token: "INV-D13"}
+      - {file: "internal/admin/approval/proto_meta_test.go", token: "INV-D13"}
+      - {file: "internal/admin/policy/chain.go", token: "INV-D13"}
+      - {file: "internal/admin/policy/chain_test.go", token: "INV-D13"}
+      - {file: "internal/admin/policy/doc.go", token: "INV-D13"}
+      - {file: "internal/admin/policy/jcs_meta_test.go", token: "INV-D13"}
+      - {file: "internal/eventbus/audit/chain/chain.go", token: "INV-D13"}
+  - id: INV-CRYPTO-81
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D14@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The AuditingService decorator emits exactly once per observed state transition (locked, recovery-consumed, cleared);
+      a publish failure does NOT roll back the inner Service PG state (emission is informational, logged via slog.Warn). Distinct
+      from the hard pre-emit gate INV-CRYPTO-23 for AdminReadStream."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-D14"}
+      - {file: "cmd/holomush/core.go", token: "INV-D14"}
+      - {file: "internal/admin/totp_audit/auditing.go", token: "INV-D14"}
+      - {file: "internal/admin/totp_audit/auditing_test.go", token: "INV-D14"}
+      - {file: "internal/core/builtins.go", token: "INV-D14"}
+      - {file: "internal/grpc/subscribe_loop_test.go", token: "INV-D14"}
+      - {file: "test/integration/eventbus_e2e/audit_only_channel_test.go", token: "INV-D14"}
+  - id: INV-CRYPTO-82
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D15@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "Authenticate MUST reject any request whose verified player_id is not in the crypto.operators allow-list, with
+      DENY_NOT_OPERATOR."
+    binding: pending
+    refs: []
+  - id: INV-CRYPTO-83
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D16@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The ResetTOTP and Approve RPC handlers MUST re-assert BOTH the capability check and the role check on the resolving
+      session's identity (defense in depth against grant or role revocation mid-session)."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/admin/v1/admin.proto", token: "INV-D16"}
+      - {file: "api/proto/holomush/admin/v1/rekey.proto", token: "INV-D16"}
+      - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-D16"}
+      - {file: "cmd/holomush/admin_e2e_helpers_test.go", token: "INV-D16"}
+      - {file: "internal/admin/approval/handler.go", token: "INV-D16"}
+      - {file: "internal/admin/auth/ingame.go", token: "INV-D16"}
+      - {file: "internal/admin/auth/operator_admin.go", token: "INV-D16"}
+      - {file: "internal/admin/auth/reset_handler.go", token: "INV-D16"}
+      - {file: "internal/admin/socket/rekey_handler.go", token: "INV-D16"}
+  - id: INV-CRYPTO-84
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D17@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "CryptoPolicySubsystem.EmitCurrentSnapshot MUST fail-closed on a Publish error (return an error from Subsystem.Start
+      so the server refuses to start); distinct from INV-CRYPTO-81 because chain integrity is a security claim — a dropped
+      policy_set event would silently break chain continuity on the next boot."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/core.go", token: "INV-D17"}
+      - {file: "internal/admin/policy/emitter.go", token: "INV-D17"}
+      - {file: "internal/admin/policy/subsystem.go", token: "INV-D17"}
+      - {file: "internal/admin/policy/subsystem_integration_test.go", token: "INV-D17"}
+      - {file: "internal/core/builtins.go", token: "INV-D17"}
+      - {file: "test/integration/eventbus_e2e/audit_only_channel_test.go", token: "INV-D17"}
+  - id: INV-CRYPTO-85
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D18@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The google.golang.org/protobuf module MUST be pinned in go.mod; a meta-test asserts the pin, because proto.MarshalOptions{Deterministic:
+      true} is documented stable only within a binary version, and cross-process op_args_hash agreement (INV-CRYPTO-75/76)
+      is load-bearing on it."
+    binding: pending
+    refs:
+      - {file: "go.mod", token: "INV-D18"}
+      - {file: "internal/admin/approval/doc.go", token: "INV-D18"}
+      - {file: "internal/admin/approval/oparghash.go", token: "INV-D18"}
+      - {file: "internal/admin/approval/proto_meta_test.go", token: "INV-D18"}
+      - {file: "internal/admin/policy/jcs_meta_test.go", token: "INV-D18"}
+      - {file: "internal/eventbus/crypto/dek/rekey.go", token: "INV-D18"}
+  - id: INV-CRYPTO-86
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D19@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "Authenticate MUST reject any request whose verified player_id does not have at least one character with the
+      admin role (DENY_NOT_ADMIN_ROLE); the crypto.operator capability is narrowing on top of RoleAdmin."
+    binding: pending
+    refs: []
+  - id: INV-CRYPTO-87
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+    legacy: ["INV-D20@docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"]
+    summary: "The verifier MUST distinguish first-boot-no-chain from chain-truncated via a persistent chain-init signal in
+      bootstrap_metadata (key crypto.policy_chain_initialized.<policy_name> = true): after a successful genesis Publish the
+      emitter writes the signal idempotently; a later boot with an empty audit row-set but the signal present returns POLICY_CHAIN_TRUNCATED."
+    binding: pending
+    refs: []
