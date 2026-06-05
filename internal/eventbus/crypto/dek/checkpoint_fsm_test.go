@@ -14,7 +14,7 @@ import (
 //
 //   - If (from, to) is in validTransitions: AssertTransitionAllowed returns nil.
 //   - If (from, to) is NOT in validTransitions: AssertTransitionAllowed returns a
-//     non-nil error carrying code DEK_REKEY_FSM_INVALID_TRANSITION (INV-E1/E2).
+//     non-nil error carrying code DEK_REKEY_FSM_INVALID_TRANSITION (INV-CRYPTO-88/INV-CRYPTO-89).
 //
 // The meta-test also confirms that every declared CheckpointStatus constant
 // appears in the validTransitions map as a key or value (no orphaned states).
@@ -55,7 +55,7 @@ func TestFSM_MetaTest_EveryPairCovered(t *testing.T) {
 }
 
 // TestFSM_AbsorbingStates verifies that Complete and Aborted have no outgoing
-// transitions (INV-E2: terminal states are absorbing).
+// transitions (INV-CRYPTO-89: terminal states are absorbing).
 func TestFSM_AbsorbingStates(t *testing.T) {
 	allStatuses := dek.AllCheckpointStatuses()
 
@@ -68,7 +68,7 @@ func TestFSM_AbsorbingStates(t *testing.T) {
 		for _, to := range allStatuses {
 			err := dek.AssertTransitionAllowed(terminal, to)
 			if err == nil {
-				t.Errorf("terminal state %s -> %s should be rejected (absorbing state, INV-E2)",
+				t.Errorf("terminal state %s -> %s should be rejected (absorbing state, INV-CRYPTO-89)",
 					terminal, to)
 			}
 		}

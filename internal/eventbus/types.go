@@ -38,7 +38,7 @@ const (
 	NoPlaintextReasonAuthGuardDeny NoPlaintextReason = 1
 	// NoPlaintextReasonStaleDEK indicates both hot AND cold tier DEKs are
 	// indecipherable. Production-real post sub-epic E rekey + DEK
-	// destruction. INV-E21 double miss.
+	// destruction. INV-CRYPTO-108 double miss.
 	NoPlaintextReasonStaleDEK NoPlaintextReason = 2
 	// NoPlaintextReasonAuditQueueFull indicates plugin audit-emit
 	// backpressure (queue full). Host-side TOCTOU defense.

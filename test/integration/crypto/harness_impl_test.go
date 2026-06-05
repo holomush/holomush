@@ -43,7 +43,7 @@ type Harness struct {
 	PartnerPlayer holomushtest.PlayerCreds
 	SceneContext  dek.ContextID
 	// OriginalPolicyHash stores the policy_hash captured by RememberCurrentPolicyHash.
-	// Used by INV-E25 tests to assert the hash did not change after a policy edit.
+	// Used by INV-CRYPTO-112 tests to assert the hash did not change after a policy edit.
 	OriginalPolicyHash string
 }
 
@@ -252,13 +252,13 @@ func (h *Harness) AssertAuditEventEmitted(subjectPattern, eventType string) {
 }
 
 // AssertRekeyChainIntactForContext walks the rekey audit chain for ctx via
-// the primary replica's chain verifier (INV-E14/E15).
+// the primary replica's chain verifier (INV-CRYPTO-101/INV-CRYPTO-102).
 func (h *Harness) AssertRekeyChainIntactForContext(ctx dek.ContextID) {
 	scope := ctx.Type + ":" + ctx.ID
 	err := h.Primary.GetAuditChainVerifier().VerifyScope(
 		context.Background(), dek.RekeyHandlerFor(h.Game), scope,
 	)
-	Expect(err).NotTo(HaveOccurred(), "INV-E14/E15: chain intact for %s", scope)
+	Expect(err).NotTo(HaveOccurred(), "INV-CRYPTO-101/INV-CRYPTO-102: chain intact for %s", scope)
 }
 
 // --- Fault injection helpers ---
@@ -498,7 +498,7 @@ func (h *Harness) TamperPolicySetSelfHash(policyName string) {
 // --- policy-hash-frozen helpers (Task 50) ---
 
 // RememberCurrentPolicyHash reads the current tail hash of the policy_set chain
-// for policyName and stores it in h.OriginalPolicyHash. Used by INV-E25 tests
+// for policyName and stores it in h.OriginalPolicyHash. Used by INV-CRYPTO-112 tests
 // to capture the hash before a mid-Rekey policy edit.
 //
 // Encoding mirrors Phase 7's audit payload format:
@@ -519,7 +519,7 @@ func (h *Harness) RememberCurrentPolicyHash(policyName string) {
 
 // LoadRekeyAuditEvent loads and decodes the rekey audit event identified by
 // the given 16-byte raw request_id slice. Returns the decoded RekeyAuditPayload
-// so callers can assert PolicyHash (INV-E25) and other fields.
+// so callers can assert PolicyHash (INV-CRYPTO-112) and other fields.
 //
 // The raw 16 bytes are converted to ULID string format (same as rid.String())
 // and matched against the "request_id" field in the JSON payload.

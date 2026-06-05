@@ -7,7 +7,7 @@
 //
 // Verifies: full fresh rekey completes end-to-end, checkpoint advances to
 // complete, new DEK is active at version+1, old DEK has destroyed_at set,
-// and the rekey audit chain integrity holds (INV-E14/E15).
+// and the rekey audit chain integrity holds (INV-CRYPTO-101/INV-CRYPTO-102).
 //
 // Part of holomush-jxo8.7 (bead jxo8.7.36, merged T39+T40).
 package crypto_test
@@ -118,7 +118,7 @@ var _ = Describe("Rekey happy path", func() {
 		Expect(err2).NotTo(HaveOccurred())
 		h.AssertCryptoKeysDestroyedAtSet(ckpt.OldDEKID)
 
-		// Verify the rekey audit chain is intact (INV-E14/E15).
+		// Verify the rekey audit chain is intact (INV-CRYPTO-101/INV-CRYPTO-102).
 		h.AssertRekeyChainIntactForContext(h.SceneContext)
 	})
 })

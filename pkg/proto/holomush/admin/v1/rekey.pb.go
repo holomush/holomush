@@ -44,7 +44,7 @@ type RekeyRequest struct {
 	ContextType string `protobuf:"bytes,2,opt,name=context_type,json=contextType,proto3" json:"context_type,omitempty"`
 	// context_id is the entity identifier within context_type, e.g. a scene
 	// ULID. The orchestrator uses (context_type, context_id) to locate the
-	// active DEK and enforce INV-E5 (at most one non-terminal checkpoint per
+	// active DEK and enforce INV-CRYPTO-92 (at most one non-terminal checkpoint per
 	// context at a time).
 	ContextId string `protobuf:"bytes,3,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
 	// justification is a free-text operator rationale stored on the checkpoint
@@ -348,7 +348,7 @@ func (x *PhaseStarted) GetPhase() string {
 // cold-tier re-encryption phase. The orchestrator rewrites events_audit rows
 // in batches of up to 1000, decrypting each under the old DEK and
 // re-encrypting under the new DEK with AAD rebound to the new (dek_ref,
-// dek_version) — INV-E8. Clients may use these messages to render a
+// dek_version) — INV-CRYPTO-95. Clients may use these messages to render a
 // progress bar; the stream is terminated by RekeyCompleted or RekeyError.
 type Phase3Progress struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -362,7 +362,7 @@ type Phase3Progress struct {
 	RowsRemainingEstimate int64 `protobuf:"varint,2,opt,name=rows_remaining_estimate,json=rowsRemainingEstimate,proto3" json:"rows_remaining_estimate,omitempty"`
 	// last_processed_event_id is the ULID bytes of the most recently committed
 	// batch's last row. Stored as the Phase 3 resume cursor in the checkpoint
-	// row (INV-E7-COLD-RESUME-CURSOR); a crash and resume picks up exactly
+	// row (INV-CRYPTO-94); a crash and resume picks up exactly
 	// where this cursor points.
 	LastProcessedEventId []byte `protobuf:"bytes,3,opt,name=last_processed_event_id,json=lastProcessedEventId,proto3" json:"last_processed_event_id,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -729,7 +729,7 @@ func (x *RekeyError) GetDetails() []byte {
 
 // RekeyResumeRequest resumes a paused or interrupted rekey operation identified
 // by request_id. The orchestrator determines the resume entry point from the
-// checkpoint's current FSM status and drives forward from there. INV-E16:
+// checkpoint's current FSM status and drives forward from there. INV-CRYPTO-103:
 // resuming a complete checkpoint is a no-op that re-emits RekeyCompleted.
 // Resuming an aborted checkpoint surfaces DEK_REKEY_CHECKPOINT_TERMINAL.
 type RekeyResumeRequest struct {
@@ -804,7 +804,7 @@ func (x *RekeyResumeRequest) GetForceDestroy() bool {
 }
 
 // RekeyAbortRequest cancels a non-terminal rekey operation, transitioning its
-// checkpoint to the aborted state. Abort is single-control (INV-E17): any
+// checkpoint to the aborted state. Abort is single-control (INV-CRYPTO-104): any
 // session holding crypto.operator capability may abort any non-terminal
 // checkpoint, regardless of site dual-control policy or which operator
 // initiated the rekey. Once aborted the checkpoint is terminal; a new Rekey
@@ -812,7 +812,7 @@ func (x *RekeyResumeRequest) GetForceDestroy() bool {
 type RekeyAbortRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_token authenticates the aborting operator. Only crypto.operator
-	// capability is required — no admin role re-check (INV-E17).
+	// capability is required — no admin role re-check (INV-CRYPTO-104).
 	SessionToken string `protobuf:"bytes,1,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
 	// request_id is the 16-byte ULID of the checkpoint to abort. The handler
 	// rejects zero bytes with REKEY_INVALID_REQUEST_ID. If the checkpoint is
@@ -1015,7 +1015,7 @@ type RekeyStatusResponse struct {
 	StartedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	// last_heartbeat_at is the server timestamp of the most recent heartbeat
 	// written by Phase 3. The sweep worker uses this to TTL-abort stalled
-	// checkpoints (INV-E18/E19). A value far in the past indicates a stalled
+	// checkpoints (INV-CRYPTO-105/INV-CRYPTO-106). A value far in the past indicates a stalled
 	// or crashed orchestrator run.
 	LastHeartbeatAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_heartbeat_at,json=lastHeartbeatAt,proto3" json:"last_heartbeat_at,omitempty"`
 	// completed_at is the server timestamp when the checkpoint reached a

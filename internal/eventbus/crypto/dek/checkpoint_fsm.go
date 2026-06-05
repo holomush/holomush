@@ -17,8 +17,8 @@ import "github.com/samber/oops"
 //
 //	Any non-terminal state → Aborted  (operator-abort or sweep-TTL-abort)
 //
-// INV-E1: Transitions MUST follow validTransitions only (monotone forward).
-// INV-E2: Complete and Aborted are absorbing terminal states.
+// INV-CRYPTO-88: Transitions MUST follow validTransitions only (monotone forward).
+// INV-CRYPTO-89: Complete and Aborted are absorbing terminal states.
 type CheckpointStatus string
 
 const (
@@ -36,7 +36,7 @@ const (
 
 	// CheckpointStatusPhase3ReencryptCold indicates Phase 3 (re-encrypt cold
 	// tier / events_audit rows) is in progress. This phase is resumable via
-	// the cursor stored in the checkpoint row (INV-E7/E8).
+	// the cursor stored in the checkpoint row (INV-CRYPTO-94/INV-CRYPTO-95).
 	CheckpointStatusPhase3ReencryptCold CheckpointStatus = "phase3_reencrypt_cold"
 
 	// CheckpointStatusPhase5Invalidate indicates Phase 5 (synchronous
@@ -54,12 +54,12 @@ const (
 	CheckpointStatusPhase7Audit CheckpointStatus = "phase7_audit"
 
 	// CheckpointStatusComplete is the terminal success state. Absorbing:
-	// no transitions out (INV-E2).
+	// no transitions out (INV-CRYPTO-89).
 	CheckpointStatusComplete CheckpointStatus = "complete"
 
 	// CheckpointStatusAborted is the terminal failure/abort state. Set by
-	// operator-initiated abort (INV-E17) or sweep TTL-expiry (INV-E18).
-	// Absorbing: no transitions out (INV-E2).
+	// operator-initiated abort (INV-CRYPTO-104) or sweep TTL-expiry (INV-CRYPTO-105).
+	// Absorbing: no transitions out (INV-CRYPTO-89).
 	CheckpointStatusAborted CheckpointStatus = "aborted"
 )
 
@@ -77,7 +77,7 @@ var validTransitions = map[CheckpointStatus][]CheckpointStatus{
 	CheckpointStatusPhase5Invalidate:    {CheckpointStatusPhase6DestroyOld, CheckpointStatusAborted},
 	CheckpointStatusPhase6DestroyOld:    {CheckpointStatusPhase7Audit, CheckpointStatusAborted},
 	CheckpointStatusPhase7Audit:         {CheckpointStatusComplete, CheckpointStatusAborted},
-	// Terminal states — no outgoing transitions (absorbing per INV-E2).
+	// Terminal states — no outgoing transitions (absorbing per INV-CRYPTO-89).
 	CheckpointStatusComplete: {},
 	CheckpointStatusAborted:  {},
 }
@@ -115,7 +115,7 @@ func ValidTransitionPairs() [][2]CheckpointStatus {
 // in validTransitions, or an oops error with code
 // DEK_REKEY_FSM_INVALID_TRANSITION otherwise.
 //
-// INV-E1: CheckpointRepo.UpdateStatus MUST call AssertTransitionAllowed before
+// INV-CRYPTO-88: CheckpointRepo.UpdateStatus MUST call AssertTransitionAllowed before
 // issuing the CAS UPDATE; the CAS provides the concurrent-write guard but the
 // FSM guard is the semantic correctness gate.
 func AssertTransitionAllowed(from, to CheckpointStatus) error {
@@ -134,10 +134,10 @@ func AssertTransitionAllowed(from, to CheckpointStatus) error {
 	return oops.Code("DEK_REKEY_FSM_INVALID_TRANSITION").
 		With("from", string(from)).
 		With("to", string(to)).
-		Errorf("transition %s → %s is not allowed by the CheckpointStatus FSM (INV-E1)", from, to)
+		Errorf("transition %s → %s is not allowed by the CheckpointStatus FSM (INV-CRYPTO-88)", from, to)
 }
 
-// IsTerminal reports whether s is an absorbing terminal state (INV-E2).
+// IsTerminal reports whether s is an absorbing terminal state (INV-CRYPTO-89).
 // Terminal states have no outgoing transitions: Complete and Aborted.
 func (s CheckpointStatus) IsTerminal() bool {
 	return s == CheckpointStatusComplete || s == CheckpointStatusAborted

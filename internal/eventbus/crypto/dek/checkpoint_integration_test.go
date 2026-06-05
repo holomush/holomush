@@ -99,7 +99,7 @@ var _ = Describe("CheckpointRepo", func() {
 
 		// Row is at 'pending'. Try a transition from Phase2MintDEK → Phase3ReencryptCold
 		// which the FSM allows, but the CAS predicate (status = 'phase2_mint_dek') fails
-		// because the row is actually 'pending'. (INV-E1)
+		// because the row is actually 'pending'. (INV-CRYPTO-88)
 		err := repo.UpdateStatus(
 			context.Background(), rid,
 			dek.CheckpointStatusPhase2MintDEK,

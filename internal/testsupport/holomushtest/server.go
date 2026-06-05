@@ -92,7 +92,7 @@ func (s *Server) GetRekeyOrchestrator() *dek.Orchestrator { return s.orch }
 // GetCheckpointRepo returns the CheckpointRepo for direct DB assertions.
 func (s *Server) GetCheckpointRepo() *dek.CheckpointRepo { return s.ckptRepo }
 
-// GetAuditChainVerifier returns the chain Verifier for INV-E14/E15 assertions.
+// GetAuditChainVerifier returns the chain Verifier for INV-CRYPTO-101/INV-CRYPTO-102 assertions.
 func (s *Server) GetAuditChainVerifier() chain.Verifier { return s.verifier }
 
 // GetDEKManager returns the DEK manager for seeding fixture DEK rows.
@@ -659,7 +659,7 @@ func (a *orchestratorRunnerAdapter) Run(ctx context.Context, req socket.RekeyRun
 }
 
 // rekeyAbortAdapter satisfies socket.RekeyAbortRunner by delegating to
-// CheckpointRepo.MarkAborted and RekeyAuditEmitter.Emit (INV-E17).
+// CheckpointRepo.MarkAborted and RekeyAuditEmitter.Emit (INV-CRYPTO-104).
 type rekeyAbortAdapter struct {
 	repo    *dek.CheckpointRepo
 	emitter *dek.RekeyAuditEmitter
@@ -677,7 +677,7 @@ func (a *rekeyAbortAdapter) RunAbort(ctx context.Context, req socket.RekeyAbortR
 		return socket.RekeyAbortOutcome{}, err
 	}
 
-	// Emit a minimal abort audit event (INV-E17). The payload carries
+	// Emit a minimal abort audit event (INV-CRYPTO-104). The payload carries
 	// only the fields available at abort time.
 	payload := dek.RekeyAuditPayload{
 		RequestID:       rid.String(),

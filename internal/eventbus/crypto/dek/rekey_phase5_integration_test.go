@@ -218,11 +218,11 @@ func (s *phase5TestSetup) RunUpToPhase3Complete() dek.RequestID {
 
 // Phase 5 rekey — Orchestrator integration specs.
 var _ = Describe("Orchestrator Phase 5 rekey", func() {
-	// TestOrchestrator_Phase5_NofN_AdvancesToComplete — INV-E22 happy path.
+	// TestOrchestrator_Phase5_NofN_AdvancesToComplete — INV-CRYPTO-109 happy path.
 	// On full N-of-N ack the checkpoint advances to phase5_invalidate with
 	// phase5_missing_members cleared to NULL (the FSM equivalent of the
 	// plan-symbolic StatusPhase5Complete).
-	It("N-of-N ack advances checkpoint to phase5_invalidate (INV-E22)", func() {
+	It("N-of-N ack advances checkpoint to phase5_invalidate (INV-CRYPTO-109)", func() {
 		setup := newPhase5TestSetup()
 		rid := setup.RunUpToPhase3Complete()
 
@@ -246,20 +246,20 @@ var _ = Describe("Orchestrator Phase 5 rekey", func() {
 		Expect(calls[0].ContextType).To(Equal("scene"))
 		Expect(calls[0].ContextID).To(Equal("01PH5"))
 		// Old DEK was minted at v=1 by GetOrCreate; MintNewDEKForRekey
-		// produces v=old+1 = 2. INV-E22 payload-row table: Version=old,
+		// produces v=old+1 = 2. INV-CRYPTO-109 payload-row table: Version=old,
 		// SuccessorVersion=new.
 		Expect(calls[0].Version).To(Equal(uint32(1)))
 		Expect(calls[0].SuccessorVersion).To(Equal(uint32(2)))
 	})
 
-	// TestOrchestrator_Phase5_PartialTimeout_PersistsMissingMembers — INV-E14
+	// TestOrchestrator_Phase5_PartialTimeout_PersistsMissingMembers — INV-CRYPTO-101
 	// timeout semantics. On partial-ack timeout the orchestrator:
 	//   - returns DEK_REKEY_PHASE5_TIMEOUT (operator-facing typed error)
 	//   - persists missing_members as JSON on the checkpoint row
 	//   - sets phase5_attempt_count to reflect the fan-out attempt
 	//   - leaves status at phase5_invalidate (FSM equiv of plan
 	//     StatusPhase5Timeout — distinguished by missing_members IS NOT NULL)
-	It("partial-ack timeout persists missing_members (INV-E14)", func() {
+	It("partial-ack timeout persists missing_members (INV-CRYPTO-101)", func() {
 		setup := newPhase5TestSetup()
 		rid := setup.RunUpToPhase3Complete()
 
@@ -314,17 +314,17 @@ var _ = Describe("Orchestrator Phase 5 rekey", func() {
 			"two fan-out attempts: one timeout + one success")
 	})
 
-	// TestOrchestrator_Phase5_ForceDestroy_OnlyAfterTimeout — INV-E10 gate
+	// TestOrchestrator_Phase5_ForceDestroy_OnlyAfterTimeout — INV-CRYPTO-97 gate
 	// enforcement. Force-destroy is rejected when the precondition isn't
 	// (status==phase5_invalidate AND missing_members IS NOT NULL); once the
 	// state is in the timed-out slot, force-destroy advances directly to
 	// phase6_destroy_old, skipping the normal phase5_invalidate-clean path.
-	It("ForceDestroy only permitted after timeout (INV-E10)", func() {
+	It("ForceDestroy only permitted after timeout (INV-CRYPTO-97)", func() {
 		setup := newPhase5TestSetup()
 		rid := setup.RunUpToPhase3Complete()
 
 		// At phase3_reencrypt_cold (Phase 5 hasn't run): force-destroy
-		// rejected. INV-E10 rejects fresh checkpoint with no fan-out attempt.
+		// rejected. INV-CRYPTO-97 rejects fresh checkpoint with no fan-out attempt.
 		err := setup.Orch.RunPhase5WithForceDestroy(context.Background(), rid)
 		Expect(err).To(HaveOccurred())
 		errutil.AssertErrorCode(suiteT, err, "DEK_REKEY_FORCE_DESTROY_FORBIDDEN")
@@ -349,7 +349,7 @@ var _ = Describe("Orchestrator Phase 5 rekey", func() {
 
 		// The missing_members set was persisted during the timeout and MUST
 		// remain readable on the row — Phase 7's audit emit consumes it
-		// to populate the INV-E11 final_missing_members audit field
+		// to populate the INV-CRYPTO-98 final_missing_members audit field
 		// (handled in holomush-jxo8.7.24, not this bead).
 		missing, decodeErr := ckpt.Phase5MissingMembers()
 		Expect(decodeErr).NotTo(HaveOccurred())
@@ -359,9 +359,9 @@ var _ = Describe("Orchestrator Phase 5 rekey", func() {
 
 	// TestOrchestrator_Phase5_ForceDestroy_RejectedOnRepeatedInvocation —
 	// the second force-destroy call sees status=phase6_destroy_old and
-	// rejects via INV-E10. Documents the non-idempotency of force-destroy:
+	// rejects via INV-CRYPTO-97. Documents the non-idempotency of force-destroy:
 	// the operator escape hatch is one-shot per checkpoint.
-	It("ForceDestroy rejected on repeated invocation (INV-E10)", func() {
+	It("ForceDestroy rejected on repeated invocation (INV-CRYPTO-97)", func() {
 		setup := newPhase5TestSetup()
 		rid := setup.RunUpToPhase3Complete()
 
@@ -369,19 +369,19 @@ var _ = Describe("Orchestrator Phase 5 rekey", func() {
 		_ = setup.Orch.RunPhase5(context.Background(), rid)
 		Expect(setup.Orch.RunPhase5WithForceDestroy(context.Background(), rid)).To(Succeed())
 
-		// Second force-destroy: status is now phase6_destroy_old, INV-E10
+		// Second force-destroy: status is now phase6_destroy_old, INV-CRYPTO-97
 		// gate trips again.
 		err := setup.Orch.RunPhase5WithForceDestroy(context.Background(), rid)
 		Expect(err).To(HaveOccurred())
 		errutil.AssertErrorCode(suiteT, err, "DEK_REKEY_FORCE_DESTROY_FORBIDDEN")
 	})
 
-	// TestOrchestrator_Phase5_RejectsWrongStatus — INV-E22 / FSM-precondition
+	// TestOrchestrator_Phase5_RejectsWrongStatus — INV-CRYPTO-109 / FSM-precondition
 	// guard. Phase 5 must refuse to run when the checkpoint is at a status
 	// that isn't a valid entry point (phase3_reencrypt_cold or
 	// phase5_invalidate). Tests the pending-state case as the failure
 	// representative.
-	It("rejects checkpoint in wrong status (INV-E22 FSM precondition)", func() {
+	It("rejects checkpoint in wrong status (INV-CRYPTO-109 FSM precondition)", func() {
 		setup := newPhase5TestSetup()
 		// Open a checkpoint via Open() — status='pending'.
 		req, err := dek.NewCheckpointOpenRequest(

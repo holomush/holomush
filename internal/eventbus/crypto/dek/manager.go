@@ -47,13 +47,13 @@ type Manager interface {
 	// MintNewDEKForRekey is used by the Rekey orchestrator's Phase 2.
 	// Generates a fresh DEK, wraps it via Provider, and INSERTs a new
 	// crypto_keys row with version = old.version+1 and byte-equal
-	// participants (INV-E6). Returns the new row's primary key id.
+	// participants (INV-CRYPTO-93). Returns the new row's primary key id.
 	// Manager satisfies dek.Minter via this method.
 	MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error)
 
 	// DestroyDEK soft-deletes the crypto_keys row whose primary key id
 	// equals dekID by setting destroyed_at = NOW(). Idempotent: a row
-	// already destroyed is a no-op success (INV-E12-PHASE6-IDEMPOTENT).
+	// already destroyed is a no-op success (INV-CRYPTO-99).
 	// Used by the Rekey orchestrator's Phase 6.
 	DestroyDEK(ctx context.Context, dekID int64) error
 
@@ -507,7 +507,7 @@ func (m *manager) unwrapAndCache(ctx context.Context, r row) (codec.Key, error) 
 // row with version = old.version+1 and the SAME participants bytes.
 // Returns the new row's primary key id.
 //
-// INV-E6-PARTICIPANT-INVARIANCE: the new row's participants column is
+// INV-CRYPTO-93: the new row's participants column is
 // byte-equal to the old row's (same Go slice re-marshaled).
 func (m *manager) MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64, error) {
 	if err := m.configured(); err != nil {
@@ -560,7 +560,7 @@ func (m *manager) MintNewDEKForRekey(ctx context.Context, oldDEKID int64) (int64
 // DestroyDEK soft-deletes the crypto_keys row with the given primary key by
 // setting destroyed_at = NOW(). Idempotent: a row whose destroyed_at is
 // already set is unaffected — zero rows updated is treated as success,
-// satisfying INV-E12-PHASE6-IDEMPOTENT. Used by the Rekey orchestrator's
+// satisfying INV-CRYPTO-99. Used by the Rekey orchestrator's
 // Phase 6.
 func (m *manager) DestroyDEK(ctx context.Context, dekID int64) error {
 	if err := m.configured(); err != nil {
@@ -600,7 +600,7 @@ func (m *manager) EvictCachedDEK(ctx context.Context, dekID int64) error {
 
 // VersionForDEKID returns the version column of the crypto_keys row whose
 // primary key id equals dekID. Used by the Rekey orchestrator's Phase 3
-// to discover the new DEK's version for AAD construction (INV-E8). The
+// to discover the new DEK's version for AAD construction (INV-CRYPTO-95). The
 // checkpoint row stores only new_dek_id; the version column is the row's
 // natural attribute, not duplicated.
 //

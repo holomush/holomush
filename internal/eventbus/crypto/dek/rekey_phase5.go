@@ -19,7 +19,7 @@ import (
 // dependency on internal/eventbus/crypto/invalidation.
 //
 // Returns nil on N-of-N success. On partial-ack timeout (the case
-// INV-E22 / INV-E11 governs) the implementation MUST return an oops error
+// INV-CRYPTO-109 / INV-CRYPTO-98 governs) the implementation MUST return an oops error
 // whose Context()["missing_members"] is a []string or []cluster.MemberID;
 // the orchestrator extracts that field and persists it on the checkpoint
 // row. Any other error class is treated as fatal — the orchestrator
@@ -79,7 +79,7 @@ func (o *Orchestrator) SetPhase5Coordinator(c Phase5Coordinator) {
 }
 
 // RunPhase5 drives the Phase 5 cluster cache-invalidation fan-out
-// (INV-E22). It is the orchestrator's "publish the new DEK has arrived,
+// (INV-CRYPTO-109). It is the orchestrator's "publish the new DEK has arrived,
 // every replica MUST evict its cached old-DEK material" step.
 //
 // Pre-condition: checkpoint.Status ∈
@@ -157,7 +157,7 @@ func (o *Orchestrator) RunPhase5(ctx context.Context, rid RequestID) error {
 
 	// Resolve the version numbers from the crypto_keys rows. The
 	// orchestrator has the PKs on the checkpoint; selectByPK returns
-	// the version column. INV-E22 calls for Version=old, SuccessorVersion=new
+	// the version column. INV-CRYPTO-109 calls for Version=old, SuccessorVersion=new
 	// per the invalidation.Payload action table (rekey row).
 	oldRow, err := o.store.selectByPK(ctx, ckpt.OldDEKID)
 	if err != nil {
@@ -226,26 +226,26 @@ func (o *Orchestrator) RunPhase5(ctx context.Context, rid RequestID) error {
 // stuck in the "timed-out" state (status=phase5_invalidate AND
 // phase5_missing_members IS NOT NULL).
 //
-// INV-E10-FORCE-DESTROY-GATED: any other status / missing-members combo
+// INV-CRYPTO-97: any other status / missing-members combo
 // MUST be rejected with DEK_REKEY_FORCE_DESTROY_FORBIDDEN. This is the
 // hard gate that prevents force-destroy from skipping Phase 5 when the
 // fan-out has never been attempted.
 //
 // Steps:
-//  1. Load the checkpoint; verify gate (INV-E10).
+//  1. Load the checkpoint; verify gate (INV-CRYPTO-97).
 //  2. SetForceDestroy(true) so the audit projection and operator surface
 //     can see the bypass was used.
 //  3. UpdateStatusForceDestroy advances phase5_invalidate → phase6_destroy_old
 //     with the CAS predicate (status='phase5_invalidate' AND force_destroy=true).
 //
 // On the operator side, the audit emit (Phase 7, holomush-jxo8.7.24) records
-// `force_destroy: true` and `final_missing_members: [...]` per INV-E11.
+// `force_destroy: true` and `final_missing_members: [...]` per INV-CRYPTO-98.
 // That row already persists from RunPhase5's RecordPhase5Timeout call; the
 // Phase 7 emitter reads it back from the checkpoint.
 //
 // This call is NOT idempotent against repeated force-destroy invocations:
 // after the first call advances status to phase6_destroy_old, a second
-// call observes status=phase6_destroy_old and rejects with INV-E10. That's
+// call observes status=phase6_destroy_old and rejects with INV-CRYPTO-97. That's
 // the right shape — repeated force-destroy is a real operator error
 // (Phase 6 is the next step, not another Phase 5 retry).
 func (o *Orchestrator) RunPhase5WithForceDestroy(ctx context.Context, rid RequestID) error {
@@ -253,21 +253,21 @@ func (o *Orchestrator) RunPhase5WithForceDestroy(ctx context.Context, rid Reques
 	if err != nil {
 		return err
 	}
-	// INV-E10: gate is (status==phase5_invalidate AND
+	// INV-CRYPTO-97: gate is (status==phase5_invalidate AND
 	// phase5_missing_members IS NOT NULL). Phase5HasMissingMembers
 	// encodes the NULL / "null" / "[]" tolerance.
 	if ckpt.Status != CheckpointStatusPhase5Invalidate || !ckpt.Phase5HasMissingMembers() {
 		return oops.Code("DEK_REKEY_FORCE_DESTROY_FORBIDDEN").
 			With("status", string(ckpt.Status)).
 			With("phase5_missing_members_set", ckpt.Phase5HasMissingMembers()).
-			Errorf("INV-E10: --force-destroy requires checkpoint at phase5_invalidate with missing_members set")
+			Errorf("INV-CRYPTO-97: --force-destroy requires checkpoint at phase5_invalidate with missing_members set")
 	}
 
 	// Audit signal: emit a structured warn-level log line so the
 	// operator surface and any log-based monitoring catch the split-brain
-	// bypass. INV-E11's audit-event capture is the canonical record
+	// bypass. INV-CRYPTO-98's audit-event capture is the canonical record
 	// (lands in Phase 7); this log is the in-flight signal. A decode
-	// failure here is non-fatal — the row clears INV-E10 by
+	// failure here is non-fatal — the row clears INV-CRYPTO-97 by
 	// Phase5HasMissingMembers, and the log line still fires with a nil
 	// member list.
 	missing, decodeErr := ckpt.Phase5MissingMembers()

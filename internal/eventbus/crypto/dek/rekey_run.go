@@ -41,7 +41,7 @@ const (
 	// resumeEntryPhase5ForceDestroy: status = phase5_invalidate with
 	// phase5_missing_members IS NOT NULL and req.ForceDestroy == true.
 	// The operator chose the split-brain escape hatch; the dispatcher
-	// invokes RunPhase5WithForceDestroy. INV-E10's gate is checked inside
+	// invokes RunPhase5WithForceDestroy. INV-CRYPTO-97's gate is checked inside
 	// that method.
 	resumeEntryPhase5ForceDestroy
 
@@ -55,7 +55,7 @@ const (
 	resumeEntryPhase7
 
 	// resumeEntryComplete: status = complete (terminal success). Resume is
-	// idempotent (INV-E16): Run returns the prior outcome without invoking
+	// idempotent (INV-CRYPTO-103): Run returns the prior outcome without invoking
 	// any phase.
 	resumeEntryComplete
 
@@ -103,7 +103,7 @@ func decideResumeEntry(status CheckpointStatus, hasMissingMembers, forceDestroy 
 		// Phase 7 advanced status before the audit emit failed. The FSM
 		// guard inside RunPhase7 only accepts phase6_destroy_old; we
 		// surface a manual-recovery signal rather than silently retrying
-		// in a way that breaks INV-E1.
+		// in a way that breaks INV-CRYPTO-88.
 		return resumeEntryManual, true
 	case CheckpointStatusComplete:
 		return resumeEntryComplete, false
@@ -123,20 +123,20 @@ func decideResumeEntry(status CheckpointStatus, hasMissingMembers, forceDestroy 
 //   - Fresh-start path: no non-terminal checkpoint exists for
 //     (context_type, context_id). Run computes op_args_hash, opens a new
 //     checkpoint via RunPhase1Fresh, then drives the lifecycle to completion.
-//   - Resume path (INV-E16): a non-terminal checkpoint exists with
+//   - Resume path (INV-CRYPTO-103): a non-terminal checkpoint exists with
 //     op_args_hash matching the request AND primary_player_id matching the
-//     operator's player_id. Run picks up the existing RequestID (INV-E4:
+//     operator's player_id. Run picks up the existing RequestID (INV-CRYPTO-91:
 //     never re-enter Phase 1) and drives the remaining phases.
-//   - Operator-mismatch (INV-E16): matching op_args_hash but different
+//   - Operator-mismatch (INV-CRYPTO-103): matching op_args_hash but different
 //     primary_player_id → DEK_REKEY_RESUME_OPERATOR_MISMATCH.
 //   - Args-conflict: non-terminal checkpoint with DIFFERENT op_args_hash
 //     on the same context → DEK_REKEY_ARGS_CONFLICT.
-//   - Already-complete (INV-E16 idempotency): if a terminal-complete row
+//   - Already-complete (INV-CRYPTO-103 idempotency): if a terminal-complete row
 //     exists matching args, that row is treated as terminal and the
 //     dispatcher proceeds to fresh-start (per FindByContextAndArgs scope,
 //     which already filters terminal rows out of the resume predicate).
 //
-// req.ForceDestroy is only honored on the resume path (INV-E11): a fresh
+// req.ForceDestroy is only honored on the resume path (INV-CRYPTO-98): a fresh
 // rekey never bypasses Phase 5 invalidation.
 func (o *Orchestrator) Run(ctx context.Context, req RekeyRequest) (RekeyOutcome, error) {
 	argsHash, err := ComputeRekeyArgsHash(req)
@@ -144,7 +144,7 @@ func (o *Orchestrator) Run(ctx context.Context, req RekeyRequest) (RekeyOutcome,
 		return RekeyOutcome{}, err
 	}
 
-	// INV-E16 resume predicate: same context + same args + non-terminal status.
+	// INV-CRYPTO-103 resume predicate: same context + same args + non-terminal status.
 	existing, found, err := o.repo.FindByContextAndArgs(ctx, req.ContextType, req.ContextID, argsHash[:])
 	if err != nil {
 		return RekeyOutcome{}, oops.Code("DEK_REKEY_RESUME_LOOKUP_FAILED").Wrap(err)
@@ -153,13 +153,13 @@ func (o *Orchestrator) Run(ctx context.Context, req RekeyRequest) (RekeyOutcome,
 	var rid RequestID
 	resumed := false
 	if found {
-		// Operator-binding check (INV-E16-AUTH-RESUME-NOAPPROVAL).
+		// Operator-binding check (INV-CRYPTO-103).
 		if existing.PrimaryPlayerID != req.Operator.PlayerID {
 			return RekeyOutcome{}, oops.Code("DEK_REKEY_RESUME_OPERATOR_MISMATCH").
 				With("expected_player_id", existing.PrimaryPlayerID).
 				With("got_player_id", req.Operator.PlayerID).
 				With("request_id", existing.RequestID.String()).
-				Errorf("INV-E16: only the original primary may resume")
+				Errorf("INV-CRYPTO-103: only the original primary may resume")
 		}
 		rid = existing.RequestID
 		resumed = true
@@ -210,7 +210,7 @@ func (o *Orchestrator) driveToCompletion(ctx context.Context, rid RequestID, req
 	// invoking any phase.
 	switch entry {
 	case resumeEntryComplete:
-		// INV-E16 idempotency: return the prior outcome. The original
+		// INV-CRYPTO-103 idempotency: return the prior outcome. The original
 		// AuditEventID is not stored on the checkpoint (it lives only on
 		// the events_audit row), so we synthesise a minimal RekeyOutcome
 		// from the row. Callers needing the audit event ID query
@@ -280,11 +280,11 @@ func (o *Orchestrator) driveToCompletion(ctx context.Context, rid RequestID, req
 		}
 		return o.runPhase7AndSetResumed(ctx, rid, req, resumed)
 	case resumeEntryPhase5ForceDestroy:
-		// Operator chose the split-brain escape (INV-E10 / INV-E11).
+		// Operator chose the split-brain escape (INV-CRYPTO-97 / INV-CRYPTO-98).
 		// RunPhase5WithForceDestroy advances directly to phase6_destroy_old
 		// without invoking the destroyer; we still call RunPhase6 to
 		// soft-delete the row (it observes phase6_destroy_old and runs
-		// idempotently — see INV-E12 in rekey_phase6.go).
+		// idempotently — see INV-CRYPTO-99 in rekey_phase6.go).
 		if err := o.RunPhase5WithForceDestroy(ctx, rid); err != nil {
 			return RekeyOutcome{}, err
 		}
@@ -330,7 +330,7 @@ func (o *Orchestrator) runPhase7AndSetResumed(ctx context.Context, rid RequestID
 //  1. Loads the checkpoint row (error on DEK_REKEY_CHECKPOINT_NOT_FOUND).
 //  2. Verifies the checkpoint is non-terminal (returns
 //     DEK_REKEY_CHECKPOINT_TERMINAL on status=complete or status=aborted).
-//  3. Enforces the operator-binding invariant (INV-E16): if the checkpoint's
+//  3. Enforces the operator-binding invariant (INV-CRYPTO-103): if the checkpoint's
 //     primary_player_id does not match req.Operator.PlayerID, returns
 //     DEK_REKEY_RESUME_OPERATOR_MISMATCH.
 //  4. Calls driveToCompletion with the checkpoint's ContextType, ContextID,
@@ -338,7 +338,7 @@ func (o *Orchestrator) runPhase7AndSetResumed(ctx context.Context, rid RequestID
 //     RunPhase7's audit payload carries the operator's original justification
 //     on the explicit-resume path).
 //
-// req.ForceDestroy is honored on the resume path per INV-E11.
+// req.ForceDestroy is honored on the resume path per INV-CRYPTO-98.
 func (o *Orchestrator) RunByRequestID(ctx context.Context, rid RequestID, req RekeyRequest) (RekeyOutcome, error) {
 	ckpt, err := o.repo.Get(ctx, rid)
 	if err != nil {
@@ -360,13 +360,13 @@ func (o *Orchestrator) RunByRequestID(ctx context.Context, rid RequestID, req Re
 			Errorf("checkpoint already aborted; open a fresh rekey to retry")
 	}
 
-	// INV-E16: only the original primary operator may resume.
+	// INV-CRYPTO-103: only the original primary operator may resume.
 	if ckpt.PrimaryPlayerID != req.Operator.PlayerID {
 		return RekeyOutcome{}, oops.Code("DEK_REKEY_RESUME_OPERATOR_MISMATCH").
 			With("expected_player_id", ckpt.PrimaryPlayerID).
 			With("got_player_id", req.Operator.PlayerID).
 			With("request_id", rid.String()).
-			Errorf("INV-E16: only the original primary operator may resume")
+			Errorf("INV-CRYPTO-103: only the original primary operator may resume")
 	}
 
 	// Populate context fields from the stored checkpoint row so RunPhase7's

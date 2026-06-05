@@ -27,7 +27,7 @@ import (
 //
 // The cross-check semantics formerly enforced by POLICY_CHAIN_NAME_MISMATCH
 // now surface as AUDIT_CHAIN_SCOPE_MISMATCH via the chain handler's
-// ScopeFromPayload extractor (INV-E27).
+// ScopeFromPayload extractor (INV-CRYPTO-114).
 
 const testGameID = "testgame"
 
@@ -236,7 +236,7 @@ func TestVerifyChainEntriesAcceptsMultiplePolicyNames(t *testing.T) {
 
 // TestVerifyChainEntriesRejectsPolicyNameMismatchAtGenesis verifies the
 // cross-check between Payload.PolicyName and the expected policy_name arg
-// (now via Handler.ScopeFromPayload — INV-E27). Post-E refactor surfaces
+// (now via Handler.ScopeFromPayload — INV-CRYPTO-114). Post-E refactor surfaces
 // as AUDIT_CHAIN_SCOPE_MISMATCH (was POLICY_CHAIN_NAME_MISMATCH).
 func TestVerifyChainEntriesRejectsPolicyNameMismatchAtGenesis(t *testing.T) {
 	repo := newFakeRepo()

@@ -18,7 +18,7 @@ import (
 // is constructed at the wiring layer where both packages are importable —
 // per the wiring contract documented on dek.NewAuditChainPolicyHashSource.
 //
-// INV-E25 (sub-epic E spec §3.6 / spec §6): Phase 1 calls CurrentPolicyHash
+// INV-CRYPTO-112 (sub-epic E spec §3.6 / spec §6): Phase 1 calls CurrentPolicyHash
 // once and freezes the result on the checkpoint row. Later phases never
 // re-query the policy hash.
 //

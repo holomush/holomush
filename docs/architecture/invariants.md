@@ -137,6 +137,34 @@ invariants.
 | `INV-CRYPTO-85` | The google.golang.org/protobuf module MUST be pinned in go.mod; a meta-test asserts the pin, because proto.MarshalOptions{Deterministic: true} is documented stable only within a binary version, and cross-process op_args_hash agreement (INV-CRYPTO-75/76) is load-bearing on it. | `INV-D18` | pending |
 | `INV-CRYPTO-86` | Authenticate MUST reject any request whose verified player_id does not have at least one character with the admin role (DENY_NOT_ADMIN_ROLE); the crypto.operator capability is narrowing on top of RoleAdmin. | `INV-D19` | pending |
 | `INV-CRYPTO-87` | The verifier MUST distinguish first-boot-no-chain from chain-truncated via a persistent chain-init signal in bootstrap_metadata (key crypto.policy_chain_initialized.<policy_name> = true): after a successful genesis Publish the emitter writes the signal idempotently; a later boot with an empty audit row-set but the signal present returns POLICY_CHAIN_TRUNCATED. | `INV-D20` | pending |
+| `INV-CRYPTO-88` | Rekey checkpoint status MUST only transition forward through the documented sequence or to aborted; status-update SQL MUST use a WHERE status = ? predicate (stale-writer rejection). | `INV-E1` | pending |
+| `INV-CRYPTO-89` | Forward checkpoint transitions MUST be to the immediate next status; the only exception is phase5_timeout → phase6_complete when force_destroy = true. | `INV-E2` | pending |
+| `INV-CRYPTO-90` | The complete and aborted checkpoint statuses are absorbing (terminal); a CHECK constraint enforces consistency. | `INV-E3` | pending |
+| `INV-CRYPTO-91` | A rekey resume invocation MUST match an existing checkpoint by BOTH op_args_hash and primary_player_id. | `INV-E4` | pending |
+| `INV-CRYPTO-92` | At most one non-terminal rekey checkpoint may exist per (context_type, context_id), enforced by a UNIQUE partial index. | `INV-E5` | pending |
+| `INV-CRYPTO-93` | At Phase-2 INSERT the new DEK row's participants MUST be byte-equal to the old DEK row's participants. | `INV-E6` | pending |
+| `INV-CRYPTO-94` | After a crash mid-Phase-3, the next attempt MUST resume from the last committed last_processed_event_id and produce byte-identical final cold-tier content. | `INV-E7` | pending |
+| `INV-CRYPTO-95` | Each cold-tier row's re-encrypted payload AAD MUST be rebuilt from (subject, type, new_key_id, new_version, codec); the old AAD must fail with an AEAD tag mismatch. | `INV-E8` | pending |
+| `INV-CRYPTO-96` | Phase 4 introduces no status transitions in the rekey orchestrator (happy-path trace skips a Phase-4 status). | `INV-E9` | pending |
+| `INV-CRYPTO-97` | --force-destroy MUST be rejected when the checkpoint status is not phase5_timeout. | `INV-E10` | pending |
+| `INV-CRYPTO-98` | Force-destroy completion MUST emit an audit event with force_destroy: true and final_missing_members: [...]. | `INV-E11` | pending |
+| `INV-CRYPTO-99` | The Phase-6 UPDATE MUST be idempotent on retry; a second invocation on an already-destroyed checkpoint is a no-op. | `INV-E12` | pending |
+| `INV-CRYPTO-100` | Phase-7 audit emission MUST be confirmed via projection ack before transition to complete; on failure the payload MUST be written to a host-local fallback log. | `INV-E13` | pending |
+| `INV-CRYPTO-101` | Every events.<game>.system.rekey.* event MUST have rekey_chain.prev_hash equal to auditchain.RecomputeSelfHash(prev event payload), or null for the per-scope genesis. | `INV-E14` | pending |
+| `INV-CRYPTO-102` | Server boot MUST refuse with AUDIT_CHAIN_BROKEN when any registered chain (policy_set or rekey) has a break. | `INV-E15` | pending |
+| `INV-CRYPTO-103` | A rekey resume MUST bypass dual-control approval when a non-terminal checkpoint exists AND the session player_id matches primary_player_id; a different operator MUST be rejected. | `INV-E16` | pending |
+| `INV-CRYPTO-104` | Abort MUST accept single-control regardless of site policy on rekey; the audit captures aborter_player_id distinct from primary_player_id. | `INV-E17` | pending |
+| `INV-CRYPTO-105` | The 24h heartbeat-TTL sweep MUST emit a chained audit event with aborted_reason: "ttl_expired" for every checkpoint it aborts. | `INV-E18` | pending |
+| `INV-CRYPTO-106` | A running orchestrator MUST update last_heartbeat_at within min(30s, sweep_interval/3). | `INV-E19` | pending |
+| `INV-CRYPTO-107` | After a cold-envelope fallback the dispatcher AAD construction MUST use the substituted cold envelope's fields, NOT the original hot envelope's. | `INV-E20` | pending |
+| `INV-CRYPTO-108` | When FallbackResolver returns ErrMetadataOnly, the dispatcher MUST deliver metadata_only=true with empty payload bytes. | `INV-E21` | pending |
+| `INV-CRYPTO-109` | Phase 5 MUST invoke invalidation.Coordinator.RequestInvalidation with Action: ActionRekey — no bespoke invalidation surface. | `INV-E22` | pending |
+| `INV-CRYPTO-110` | Rekey CLI exit codes MUST follow the sysexits.h mappings. | `INV-E23` | pending |
+| `INV-CRYPTO-111` | op_args_hash MUST be computed via the same proto.MarshalOptions{Deterministic: true} helper sub-epic-d ships, against the resolved RekeyRequest proto, and MUST be stable across builds with protobuf-go pinned per INV-CRYPTO-85. | `INV-E24` | pending |
+| `INV-CRYPTO-112` | A rekey event's policy_hash MUST be captured at Phase-1 INSERT into crypto_rekey_checkpoints.policy_hash; Phase-7 emit reads this column verbatim and never re-queries the chain head; a policy_set event mid-rekey MUST NOT change the persisted hash. | `INV-E25` | pending |
+| `INV-CRYPTO-113` | Every registered auditchain.Chain's SubjectFor(scope) MUST return a string starting with events.<game>. so chain-bearing audit events reach events_audit via the EVENTS JetStream events.> SubjectFilter. | `INV-E26` | pending |
+| `INV-CRYPTO-114` | Every registered auditchain.Chain MUST populate ScopeFromPayload; the verifier MUST reject with AUDIT_CHAIN_SCOPE_MISMATCH any row where ScopeFromSubject(subject) != ScopeFromPayload(payload). | `INV-E27` | pending |
+| `INV-CRYPTO-115` | The auditchain.Verifier self-hash recompute MUST be SHA-256(Canonicalize(zero(payload, SelfHashFieldName))); SHA-256 and composition order are pinned at the primitive level, while per-chain Canonicalize MAY apply domain normalization (e.g. PolicySetChain renormalizes empty PrevHash → nil to preserve INV-CRYPTO-77 semantics). | `INV-E28` | pending |
 
 ### `INV-PRIVACY`
 

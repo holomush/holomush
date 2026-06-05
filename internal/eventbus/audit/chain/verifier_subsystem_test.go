@@ -121,7 +121,7 @@ func TestVerifierSubsystem_WalksAllRegisteredChains(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TestVerifierSubsystem_RefusesBootOnBreak (INV-E15): a tampered self_hash
+// TestVerifierSubsystem_RefusesBootOnBreak (INV-CRYPTO-102): a tampered self_hash
 // in the repo causes Start to return AUDIT_CHAIN_HASH_MISMATCH.
 // ---------------------------------------------------------------------------
 
@@ -158,7 +158,7 @@ func TestVerifierSubsystem_RefusesBootOnBreak(t *testing.T) {
 func TestVerifierSubsystem_RejectsInvalidChainRegistration(t *testing.T) {
 	bad := chain.Handler{
 		Chain: chain.Chain{
-			SubjectPrefix:     "audit.bad.chain", // violates INV-E26
+			SubjectPrefix:     "audit.bad.chain", // violates INV-CRYPTO-113
 			SelfHashField:     "self_hash",
 			PrevHashField:     "prev_hash",
 			ScopePayloadField: "scope",

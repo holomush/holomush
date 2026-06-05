@@ -34,7 +34,7 @@ type VerifierSubsystemConfig struct {
 
 // VerifierSubsystem is a [lifecycle.Subsystem] that verifies every registered
 // audit chain at server boot. Start validates the registration shape of each
-// Handler's Chain metadata (INV-E26, INV-E27) and then calls
+// Handler's Chain metadata (INV-CRYPTO-113, INV-CRYPTO-114) and then calls
 // [Verifier.VerifyAll] for each registered chain. Any integrity failure is
 // fatal — the server refuses to start.
 //
@@ -71,7 +71,7 @@ func (s *VerifierSubsystem) DependsOn() []lifecycle.SubsystemID {
 // Start validates each registered Handler's Chain metadata and then walks
 // every chain via [Verifier.VerifyAll]. Returns on the first failure.
 //
-// INV-E15-CHAIN-VERIFIER-BOOT: server boot MUST refuse with
+// INV-CRYPTO-102: server boot MUST refuse with
 // AUDIT_CHAIN_BROKEN (or a more specific AUDIT_CHAIN_* code) when any
 // registered chain has a break.
 func (s *VerifierSubsystem) Start(ctx context.Context) error {

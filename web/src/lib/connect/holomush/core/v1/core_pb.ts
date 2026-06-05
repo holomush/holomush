@@ -2103,7 +2103,7 @@ export enum NoPlaintextReason {
   /**
    * NO_PLAINTEXT_REASON_STALE_DEK means both the hot and cold tier DEKs were
    * indecipherable — a production-real outcome after a sub-epic E rekey plus DEK
-   * destruction (INV-E21 double miss).
+   * destruction (INV-CRYPTO-108 double miss).
    *
    * @generated from enum value: NO_PLAINTEXT_REASON_STALE_DEK = 2;
    */

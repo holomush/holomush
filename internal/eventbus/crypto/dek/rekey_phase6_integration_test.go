@@ -111,10 +111,10 @@ func (s *phase6TestSetupImpl) loadDestroyedAt(dekID int64) *pgnanos.Time {
 // Phase 6 — Orchestrator integration specs.
 var _ = Describe("Orchestrator Phase 6", func() {
 	// TestOrchestrator_Phase6_DestroyOldDEK_Idempotent verifies:
-	//   - RunPhase6 advances checkpoint status to phase6_destroy_old (INV-E1)
-	//   - old crypto_keys row has destroyed_at set after Phase 6 (INV-E12)
-	//   - a second RunPhase6 invocation is a no-op (INV-E12-PHASE6-IDEMPOTENT)
-	It("destroys old DEK and is idempotent (INV-E1, INV-E12, INV-E12-PHASE6-IDEMPOTENT)", func() {
+	//   - RunPhase6 advances checkpoint status to phase6_destroy_old (INV-CRYPTO-88)
+	//   - old crypto_keys row has destroyed_at set after Phase 6 (INV-CRYPTO-99)
+	//   - a second RunPhase6 invocation is a no-op (INV-CRYPTO-99)
+	It("destroys old DEK and is idempotent (INV-CRYPTO-88, INV-CRYPTO-99, INV-CRYPTO-99)", func() {
 		setup := newPhase6TestSetup()
 		rid := setup.RunUpToPhase5Complete()
 
@@ -124,27 +124,27 @@ var _ = Describe("Orchestrator Phase 6", func() {
 		ckpt, err := setup.Repo.Get(context.Background(), rid)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusPhase6DestroyOld),
-			"INV-E1: checkpoint must advance to phase6_destroy_old after RunPhase6")
+			"INV-CRYPTO-88: checkpoint must advance to phase6_destroy_old after RunPhase6")
 
 		destroyedAt := setup.loadDestroyedAt(ckpt.OldDEKID)
 		Expect(destroyedAt).NotTo(BeNil(),
-			"INV-E12: old DEK row must have destroyed_at set after Phase 6")
+			"INV-CRYPTO-99: old DEK row must have destroyed_at set after Phase 6")
 
 		// Second invocation: idempotent — must succeed without error.
 		Expect(setup.Orch.RunPhase6(context.Background(), rid)).To(Succeed(),
-			"INV-E12-PHASE6-IDEMPOTENT: second RunPhase6 on phase6_destroy_old must be a no-op")
+			"INV-CRYPTO-99: second RunPhase6 on phase6_destroy_old must be a no-op")
 
 		// Status must remain phase6_destroy_old (not re-transitioned).
 		ckpt2, err := setup.Repo.Get(context.Background(), rid)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt2.Status).To(Equal(dek.CheckpointStatusPhase6DestroyOld),
-			"INV-E12-PHASE6-IDEMPOTENT: status must remain phase6_destroy_old after idempotent re-invoke")
+			"INV-CRYPTO-99: status must remain phase6_destroy_old after idempotent re-invoke")
 	})
 
 	// TestOrchestrator_Phase6_RequiresPreconditionPhase5Complete verifies:
 	//   - RunPhase6 rejects a checkpoint not in a valid Phase 6 entry state
-	//     with DEK_REKEY_PHASE_PRECONDITION_FAILED (INV-E1 FSM guard)
-	It("requires phase5_invalidate precondition (INV-E1 FSM guard)", func() {
+	//     with DEK_REKEY_PHASE_PRECONDITION_FAILED (INV-CRYPTO-88 FSM guard)
+	It("requires phase5_invalidate precondition (INV-CRYPTO-88 FSM guard)", func() {
 		setup := newPhase6TestSetup()
 
 		// Seed a checkpoint at 'pending' — not a valid Phase 6 entry point.

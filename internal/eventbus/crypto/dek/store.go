@@ -324,7 +324,7 @@ func (s *Store) markDestroyed(ctx context.Context, keyID codec.KeyID, version ui
 // markDestroyedByPK sets destroyed_at on the crypto_keys row with the
 // given primary key id. Idempotent: a row already destroyed (destroyed_at IS
 // NOT NULL) is unaffected — zero rows updated is a no-op success, satisfying
-// INV-E12-PHASE6-IDEMPOTENT. Used by Phase 6 of the Rekey orchestrator.
+// INV-CRYPTO-99. Used by Phase 6 of the Rekey orchestrator.
 func (s *Store) markDestroyedByPK(ctx context.Context, dekID int64) error {
 	_, err := s.pool.Exec(
 		ctx, `
@@ -417,7 +417,7 @@ func (s *Store) selectByPK(ctx context.Context, id int64) (row, error) {
 
 // insertRekeyed INSERTs a crypto_keys row at version = old.Version+1 with
 // the same participants column bytes as old (re-marshaled from the same Go
-// slice). Used by Phase 2 to mint the new DEK with INV-E6-PARTICIPANT-INVARIANCE.
+// slice). Used by Phase 2 to mint the new DEK with INV-CRYPTO-93.
 // Returns the new row's primary key id.
 func (s *Store) insertRekeyed(ctx context.Context, old row, wrapped []byte, wrapKeyID string) (int64, error) {
 	participantsJSON, err := json.Marshal(old.Participants)

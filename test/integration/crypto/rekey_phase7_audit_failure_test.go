@@ -5,7 +5,7 @@
 
 // rekey_phase7_audit_failure_test.go — E2E spec for Phase 7 audit-emit failure.
 //
-// Covers INV-E13-PHASE7-AUDIT-OR-FALLBACK:
+// Covers INV-CRYPTO-100:
 //   - When the Phase 7 audit-event emit fails, the rekey DB state (DEK rows) is
 //     irreversibly committed (old DEK destroyed, new DEK active at version+1).
 //   - A fallback log file is written to <data_dir>/audit-fallback/rekey-<rid>.log.
@@ -13,7 +13,7 @@
 //     possible.
 //   - The Rekey RPC returns DEK_REKEY_PHASE7_AUDIT_FAILED.
 //
-// Spec: §4.3 Phase 7, INV-E13.
+// Spec: §4.3 Phase 7, INV-CRYPTO-100.
 //
 // Part of holomush-jxo8.7 (bead jxo8.7.38, merged T43+T44).
 package crypto_test
@@ -31,7 +31,7 @@ import (
 )
 
 // alwaysFailAuditEmitter satisfies dek.AuditEmitter and always returns an error.
-// Used to simulate Phase 7 audit-emit failure in E2E tests (INV-E13).
+// Used to simulate Phase 7 audit-emit failure in E2E tests (INV-CRYPTO-100).
 type alwaysFailAuditEmitter struct{}
 
 func (*alwaysFailAuditEmitter) Emit(_ context.Context, p dek.RekeyAuditPayload) (ulid.ULID, dek.RekeyAuditPayload, error) {
@@ -39,7 +39,7 @@ func (*alwaysFailAuditEmitter) Emit(_ context.Context, p dek.RekeyAuditPayload) 
 }
 
 var _ = Describe("Rekey Phase 7 audit failure", func() {
-	It("commits DB state and writes fallback log on emit failure (INV-E13)", func() {
+	It("commits DB state and writes fallback log on emit failure (INV-CRYPTO-100)", func() {
 		h := SetupRekeyHarness(suiteT, WithEventCount(20))
 		defer h.Cleanup()
 
@@ -61,9 +61,9 @@ var _ = Describe("Rekey Phase 7 audit failure", func() {
 		)
 		Expect(rekeyErr).To(HaveOccurred(), "rekey must fail when audit emit fails")
 		Expect(rekeyErr.Error()).To(ContainSubstring("DEK_REKEY_PHASE7_AUDIT_FAILED"),
-			"INV-E13: error code must be DEK_REKEY_PHASE7_AUDIT_FAILED")
+			"INV-CRYPTO-100: error code must be DEK_REKEY_PHASE7_AUDIT_FAILED")
 
-		// INV-E13: DB state must be irreversibly committed.
+		// INV-CRYPTO-100: DB state must be irreversibly committed.
 		// Phase 6 destroyed the old DEK and Phase 2 minted version 2 as the active DEK.
 		h.AssertCryptoKeysActiveVersion(h.SceneContext, 2)
 
@@ -79,12 +79,12 @@ var _ = Describe("Rekey Phase 7 audit failure", func() {
 
 		h.AssertCryptoKeysDestroyedAtSet(ckpt.OldDEKID)
 
-		// INV-E13: fallback log must be written at
+		// INV-CRYPTO-100: fallback log must be written at
 		// <data_dir>/audit-fallback/rekey-<request_id>.log.
 		logPath := filepath.Join(dataDir, "audit-fallback",
 			"rekey-"+ckpt.RequestID.String()+".log")
 		Expect(logPath).To(BeAnExistingFile(),
-			"INV-E13: fallback log must be written when Phase 7 audit emit fails")
+			"INV-CRYPTO-100: fallback log must be written when Phase 7 audit emit fails")
 
 		// Checkpoint must be at phase7_audit (not complete) — retry is possible.
 		h.AssertCheckpointStatus(ckpt.RequestID, dek.CheckpointStatusPhase7Audit)

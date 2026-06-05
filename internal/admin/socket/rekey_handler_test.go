@@ -301,7 +301,7 @@ func TestRekeyResumeHandler_RequestID_PassThrough(t *testing.T) {
 
 // TestRekeyResumeHandler_ForceDestroy_PassThrough verifies that
 // ForceDestroy=true from the proto request is forwarded to OrchestratorRunner.Run
-// (INV-E11 force-destroy escape hatch pass-through).
+// (INV-CRYPTO-98 force-destroy escape hatch pass-through).
 func TestRekeyResumeHandler_ForceDestroy_PassThrough(t *testing.T) {
 	capturer := &capturingOrchRunner{}
 	h := newHandlerWithOperator(t, capturer)
@@ -317,7 +317,7 @@ func TestRekeyResumeHandler_ForceDestroy_PassThrough(t *testing.T) {
 		ForceDestroy: true,
 	}, stream)
 	require.True(t, capturer.lastReq.ForceDestroy,
-		"ForceDestroy=true must be forwarded to OrchestratorRunner.Run (INV-E11)")
+		"ForceDestroy=true must be forwarded to OrchestratorRunner.Run (INV-CRYPTO-98)")
 }
 
 // TestRekeyResumeHandler_Streams_Completed verifies the happy path for
@@ -402,7 +402,7 @@ func newAbortHandlerWithOperator(t *testing.T, abort socket.RekeyAbortRunner) *s
 	return socket.NewRekeyHandler(sessions, grants, roles, orch, abort, nil)
 }
 
-// TestRekeyHandler_Abort_SingleControl_Allowed verifies INV-E17: a session with
+// TestRekeyHandler_Abort_SingleControl_Allowed verifies INV-CRYPTO-104: a session with
 // only crypto.operator capability (no dual-control approval) can abort an
 // in-flight checkpoint even when site policy mandates dual-control for rekey.
 func TestRekeyHandler_Abort_SingleControl_Allowed(t *testing.T) {
@@ -427,7 +427,7 @@ func TestRekeyHandler_Abort_SingleControl_Allowed(t *testing.T) {
 		SessionToken: rekeyTestToken,
 		RequestId:    rid[:],
 	})
-	require.NoError(t, err, "INV-E17: Abort accepts single-control even when site mandates dual for rekey")
+	require.NoError(t, err, "INV-CRYPTO-104: Abort accepts single-control even when site mandates dual for rekey")
 	require.NotNil(t, res)
 	require.NotNil(t, res.AbortedAt, "AbortedAt must be populated")
 	require.Equal(t, eventID[:], res.AuditEventId, "AuditEventId must be the runner's returned event ID")

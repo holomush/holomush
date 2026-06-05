@@ -91,7 +91,7 @@ func (s *rekeyTestSetup) LoadEventsAuditBySubject(subject string) []capturedPubl
 	return out
 }
 
-var _ = Describe("Sweep_TTLExpiryEmitsAudit (INV-E18-SWEEP-TTL-AUDIT)", func() {
+var _ = Describe("Sweep_TTLExpiryEmitsAudit (INV-CRYPTO-105)", func() {
 	It("aborts a TTL-expired checkpoint and emits a chained rekey audit event with aborted_reason=ttl_expired", func() {
 		setup := newRekeyTestSetup()
 
@@ -111,15 +111,15 @@ var _ = Describe("Sweep_TTLExpiryEmitsAudit (INV-E18-SWEEP-TTL-AUDIT)", func() {
 		ckpt, err := setup.Repo.Get(context.Background(), rid)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusAborted),
-			"INV-E18: TTL-expired checkpoint MUST be marked aborted by sweep")
+			"INV-CRYPTO-105: TTL-expired checkpoint MUST be marked aborted by sweep")
 		Expect(ckpt.AbortedReason).NotTo(BeNil())
 		Expect(*ckpt.AbortedReason).To(Equal("ttl_expired"),
-			"INV-E18: aborted_reason MUST be ttl_expired")
+			"INV-CRYPTO-105: aborted_reason MUST be ttl_expired")
 
-		// INV-E18: chained audit event MUST be emitted for the aborted context.
+		// INV-CRYPTO-105: chained audit event MUST be emitted for the aborted context.
 		events := setup.LoadEventsAuditBySubject("events.g1.system.rekey.scene.01ABC")
 		Expect(len(events)).To(BeNumerically(">=", 1),
-			"INV-E18: sweep MUST emit a chained audit event for each aborted checkpoint")
+			"INV-CRYPTO-105: sweep MUST emit a chained audit event for each aborted checkpoint")
 
 		// Verify the emitted payload contains the expected context and reason.
 		var payload dek.RekeyAuditPayload
@@ -127,7 +127,7 @@ var _ = Describe("Sweep_TTLExpiryEmitsAudit (INV-E18-SWEEP-TTL-AUDIT)", func() {
 		Expect(payload.Context.Type).To(Equal("scene"))
 		Expect(payload.Context.ID).To(Equal("01ABC"))
 		Expect(payload.Justification).To(ContainSubstring("ttl_expired"),
-			"INV-E18: audit payload Justification MUST reference ttl_expired")
+			"INV-CRYPTO-105: audit payload Justification MUST reference ttl_expired")
 	})
 })
 

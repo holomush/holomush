@@ -7,13 +7,13 @@
 // args-conflict paths.
 //
 // Verifies:
-//   - INV-E4 (resume-not-restart): after a non-terminal checkpoint is opened
+//   - INV-CRYPTO-91 (resume-not-restart): after a non-terminal checkpoint is opened
 //     directly via the orchestrator (simulating a pre-Phase-3 crash), the same
 //     args UDS invocation auto-resumes and completes with Resumed=true, reusing
 //     the original RequestID.
-//   - INV-E16 (operator binding): a different operator attempting to resume
+//   - INV-CRYPTO-103 (operator binding): a different operator attempting to resume
 //     with the same args is rejected with DEK_REKEY_RESUME_OPERATOR_MISMATCH.
-//   - INV-E24 (args-hash idempotency): a concurrent fresh-start attempt with
+//   - INV-CRYPTO-111 (args-hash idempotency): a concurrent fresh-start attempt with
 //     different args is rejected with DEK_REKEY_ARGS_CONFLICT when a
 //     non-terminal checkpoint exists for the same context.
 //
@@ -121,7 +121,7 @@ func openNonTerminalCheckpoint(h *Harness, justification string) dek.RequestID {
 }
 
 var _ = Describe("Rekey resume", func() {
-	It("auto-resumes same-args invocation after pre-Phase-2 park (INV-E4, INV-E16)", func() {
+	It("auto-resumes same-args invocation after pre-Phase-2 park (INV-CRYPTO-91, INV-CRYPTO-103)", func() {
 		// Boot the harness with default fixture.
 		h := SetupRekeyHarness(suiteT)
 		defer h.Cleanup()
@@ -135,12 +135,12 @@ var _ = Describe("Rekey resume", func() {
 		ckpt0, err := h.Primary.GetCheckpointRepo().Get(context.Background(), firstRID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ckpt0.Status.IsTerminal()).To(BeFalse(),
-			"INV-E4: checkpoint must be non-terminal before resume")
+			"INV-CRYPTO-91: checkpoint must be non-terminal before resume")
 
 		// Second call via UDS: same player_id (session token = player ID via
 		// noopRekeySessionStore), same context, same justification → same
 		// op_args_hash → auto-resume path, bypassing dual-control approval
-		// (INV-E16).
+		// (INV-CRYPTO-103).
 		out, resumeErr := runRekeyViaUDSWithPlayer(
 			h,
 			h.AdminPlayer.PlayerID,
@@ -154,18 +154,18 @@ var _ = Describe("Rekey resume", func() {
 		var rid dek.RequestID
 		copy(rid[:], out.RequestID)
 
-		// INV-E4: dispatcher must re-use the existing RequestID, not allocate a new one.
+		// INV-CRYPTO-91: dispatcher must re-use the existing RequestID, not allocate a new one.
 		Expect(rid).To(Equal(firstRID),
-			"INV-E4: resume MUST NOT re-enter Phase 1 — RequestID must be stable")
+			"INV-CRYPTO-91: resume MUST NOT re-enter Phase 1 — RequestID must be stable")
 
 		// Checkpoint must be complete.
 		h.AssertCheckpointStatus(rid, dek.CheckpointStatusComplete)
 
-		// Audit chain intact (INV-E14/E15).
+		// Audit chain intact (INV-CRYPTO-101/INV-CRYPTO-102).
 		h.AssertRekeyChainIntactForContext(h.SceneContext)
 	})
 
-	It("rejects resume from a different operator (INV-E16)", func() {
+	It("rejects resume from a different operator (INV-CRYPTO-103)", func() {
 		h := SetupRekeyHarness(suiteT)
 		defer h.Cleanup()
 
@@ -184,10 +184,10 @@ var _ = Describe("Rekey resume", func() {
 		)
 		Expect(err).To(HaveOccurred(), "different-operator resume must fail")
 		Expect(err.Error()).To(ContainSubstring("DEK_REKEY_RESUME_OPERATOR_MISMATCH"),
-			"INV-E16: wrong operator must receive DEK_REKEY_RESUME_OPERATOR_MISMATCH")
+			"INV-CRYPTO-103: wrong operator must receive DEK_REKEY_RESUME_OPERATOR_MISMATCH")
 	})
 
-	It("rejects concurrent fresh start with different args (INV-E24)", func() {
+	It("rejects concurrent fresh start with different args (INV-CRYPTO-111)", func() {
 		h := SetupRekeyHarness(suiteT)
 		defer h.Cleanup()
 
@@ -205,6 +205,6 @@ var _ = Describe("Rekey resume", func() {
 		)
 		Expect(err).To(HaveOccurred(), "different-args fresh start must fail")
 		Expect(err.Error()).To(ContainSubstring("DEK_REKEY_ARGS_CONFLICT"),
-			"INV-E24: different args on same context must receive DEK_REKEY_ARGS_CONFLICT")
+			"INV-CRYPTO-111: different args on same context must receive DEK_REKEY_ARGS_CONFLICT")
 	})
 })

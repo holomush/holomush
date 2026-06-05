@@ -17,7 +17,7 @@
 // first Rekey call; incremented attempt_count and success on a second Rekey
 // invocation with the same args (auto-resume path).
 //
-// Spec: spec §4.3 Phase 5; INV-E22-INVALIDATION-REUSE.
+// Spec: spec §4.3 Phase 5; INV-CRYPTO-109.
 //
 // Part of holomush-jxo8.7 (bead jxo8.7.38, merged T43+T44).
 package crypto_test
@@ -172,11 +172,11 @@ var _ = Describe("Rekey Phase 5 timeout", func() {
 			"Rekey with same args after cluster heal must complete successfully")
 		Expect(out.RequestID).NotTo(BeEmpty(), "RequestId must be set on completion")
 
-		// The resumed run must reuse the SAME request ID (INV-E4).
+		// The resumed run must reuse the SAME request ID (INV-CRYPTO-91).
 		var resumedRID dek.RequestID
 		copy(resumedRID[:], out.RequestID)
 		Expect(resumedRID).To(Equal(rid),
-			"INV-E4: same-args invocation after timeout must reuse the existing RequestID")
+			"INV-CRYPTO-91: same-args invocation after timeout must reuse the existing RequestID")
 
 		// Checkpoint must be complete.
 		h.AssertCheckpointStatus(resumedRID, dek.CheckpointStatusComplete)
@@ -187,7 +187,7 @@ var _ = Describe("Rekey Phase 5 timeout", func() {
 		Expect(finalStatus.GetPhase5AttemptCount()).To(BeNumerically(">=", 2),
 			"phase5_attempt_count must reflect both the timeout and the retry")
 
-		// Audit chain intact (INV-E14/E15).
+		// Audit chain intact (INV-CRYPTO-101/INV-CRYPTO-102).
 		h.AssertRekeyChainIntactForContext(h.SceneContext)
 	})
 })

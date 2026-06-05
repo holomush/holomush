@@ -30,6 +30,7 @@ scopes:
       - "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
       - "docs/superpowers/specs/2026-05-11-event-payload-crypto-phase5-sub-epic-f-design.md"
       - "docs/superpowers/specs/2026-05-09-event-payload-crypto-phase5-sub-epic-d-design.md"
+      - "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
     owned_paths:
       - "internal/eventbus/crypto/**"
       - "internal/eventbus/history/**"
@@ -78,10 +79,21 @@ scopes:
       - "internal/admin/totp_audit/auditing_test.go"
       - "test/integration/admin_policy_chain_test.go"
       - "test/integration/eventbus_e2e/audit_only_channel_test.go"
+      # INV-E (.14.30): crypto phase-5 sub-epic-e — rekey/checkpoint FSM CLI + admin rekey/policy tests.
+      - "cmd/holomush/cmd_crypto_rekey.go"
+      - "cmd/holomush/cmd_crypto_rekey_errors_test.go"
+      - "cmd/holomush/cmd_crypto_rekey_test.go"
+      - "cmd/holomush/crypto_rekey_wiring.go"
+      - "cmd/holomush/policy_hash_source.go"
+      - "internal/admin/policy/verifier_integration_test.go"
+      - "internal/admin/socket/rekey_handler_test.go"
     shared_files:
       # CRYPTO+STORE: history files carrying both P7/RB and TS (nanos) annotations.
       # INV-D sub-epic-d co-located with sibling INV-E (migrating .14.30) / go.mod dep-pins / multi-scope.
       - "api/proto/holomush/admin/v1/rekey.proto"
+      # INV-E sub-epic-e: readstream policy_hash wiring (+ stray INV-F-policy_hash, holomush bead) / multi-scope test server.
+      - "cmd/holomush/readstream_wiring.go"
+      - "internal/testsupport/holomushtest/server.go"
       - "go.mod"
       - "internal/admin/policy/chain.go"
       - "internal/admin/policy/verifier.go"
@@ -544,8 +556,11 @@ scopes:
       # are PRIVACY-shared (I-PRIV-6 co-located) so they are SHARED below, not owned; these two
       # are ACCESS-exclusive for the deny-policy invariants.
       - "internal/access/policy/seed_smoke_test.go"
-      - "internal/access/spec_amendments_test.go"
     shared_files:
+      # spec-amendment fingerprint test: retains a literal "INV-E16" matched against
+      # the (un-migrated) master spec text — shared so the .14.21 residual legacy-token
+      # walk skips it (INV-E16 became a registered legacy token in .14.30).
+      - "internal/access/spec_amendments_test.go"
       # General integration harness (RA-4 pointer-identity ride-along).
       - "internal/testsupport/integrationtest/harness.go"
       - "internal/testsupport/integrationtest/plugins.go"
@@ -3790,3 +3805,419 @@ invariants:
       emitter writes the signal idempotently; a later boot with an empty audit row-set but the signal present returns POLICY_CHAIN_TRUNCATED."
     binding: pending
     refs: []
+  - id: INV-CRYPTO-88
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E1@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Rekey checkpoint status MUST only transition forward through the documented sequence or to aborted; status-update
+      SQL MUST use a WHERE status = ? predicate (stale-writer rejection)."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/checkpoint.go", token: "INV-E1"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint_fsm.go", token: "INV-E1"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint_fsm_test.go", token: "INV-E1"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint_integration_test.go", token: "INV-E1"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator_test.go", token: "INV-E1"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase6_integration_test.go", token: "INV-E1"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7_integration_test.go", token: "INV-E1"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run.go", token: "INV-E1"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run_integration_test.go", token: "INV-E1"}
+  - id: INV-CRYPTO-89
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E2@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Forward checkpoint transitions MUST be to the immediate next status; the only exception is phase5_timeout →
+      phase6_complete when force_destroy = true."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/checkpoint_fsm.go", token: "INV-E2"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint_fsm_test.go", token: "INV-E2"}
+  - id: INV-CRYPTO-90
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E3@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "The complete and aborted checkpoint statuses are absorbing (terminal); a CHECK constraint enforces consistency."
+    binding: pending
+    refs: []
+  - id: INV-CRYPTO-91
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E4@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "A rekey resume invocation MUST match an existing checkpoint by BOTH op_args_hash and primary_player_id."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/admin/v1/admin.proto", token: "INV-E4"}
+      - {file: "internal/admin/socket/rekey_handler.go", token: "INV-E4"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run.go", token: "INV-E4"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run_integration_test.go", token: "INV-E4"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run_internal_test.go", token: "INV-E4"}
+      - {file: "test/integration/crypto/rekey_phase5_timeout_test.go", token: "INV-E4"}
+      - {file: "test/integration/crypto/rekey_policy_hash_frozen_at_phase1_test.go", token: "INV-E4"}
+      - {file: "test/integration/crypto/rekey_resume_rpc_test.go", token: "INV-E4"}
+      - {file: "test/integration/crypto/rekey_resume_test.go", token: "INV-E4"}
+  - id: INV-CRYPTO-92
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E5@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "At most one non-terminal rekey checkpoint may exist per (context_type, context_id), enforced by a UNIQUE partial
+      index."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/admin/v1/rekey.proto", token: "INV-E5"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint.go", token: "INV-E5"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator.go", token: "INV-E5"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator_test.go", token: "INV-E5"}
+  - id: INV-CRYPTO-93
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E6@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "At Phase-2 INSERT the new DEK row's participants MUST be byte-equal to the old DEK row's participants."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/manager.go", token: "INV-E6-PARTICIPANT-INVARIANCE"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator.go", token: "INV-E6-PARTICIPANT-INVARIANCE"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator_test.go", token: "INV-E6-PARTICIPANT-INVARIANCE"}
+      - {file: "internal/eventbus/crypto/dek/store.go", token: "INV-E6-PARTICIPANT-INVARIANCE"}
+      - {file: "internal/eventbus/crypto/dek/manager.go", token: "INV-E6"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator.go", token: "INV-E6"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator_test.go", token: "INV-E6"}
+      - {file: "internal/eventbus/crypto/dek/store.go", token: "INV-E6"}
+  - id: INV-CRYPTO-94
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E7@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "After a crash mid-Phase-3, the next attempt MUST resume from the last committed last_processed_event_id and
+      produce byte-identical final cold-tier content."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/admin/v1/rekey.proto", token: "INV-E7-COLD-RESUME-CURSOR"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase3.go", token: "INV-E7-COLD-RESUME-CURSOR"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase3_integration_test.go", token: "INV-E7-COLD-RESUME-CURSOR"}
+      - {file: "api/proto/holomush/admin/v1/rekey.proto", token: "INV-E7"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint.go", token: "INV-E7"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint_fsm.go", token: "INV-E7"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase3.go", token: "INV-E7"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase3_integration_test.go", token: "INV-E7"}
+  - id: INV-CRYPTO-95
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E8@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Each cold-tier row's re-encrypted payload AAD MUST be rebuilt from (subject, type, new_key_id, new_version,
+      codec); the old AAD must fail with an AEAD tag mismatch."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/admin/v1/rekey.proto", token: "INV-E8"}
+      - {file: "internal/eventbus/crypto/dek/manager.go", token: "INV-E8"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase3.go", token: "INV-E8"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase3_integration_test.go", token: "INV-E8"}
+  - id: INV-CRYPTO-96
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E9@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Phase 4 introduces no status transitions in the rekey orchestrator (happy-path trace skips a Phase-4 status)."
+    binding: pending
+    refs: []
+  - id: INV-CRYPTO-97
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E10@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "--force-destroy MUST be rejected when the checkpoint status is not phase5_timeout."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5.go", token: "INV-E10-FORCE-DESTROY-GATED"}
+      - {file: "cmd/holomush/cmd_crypto_rekey.go", token: "INV-E10"}
+      - {file: "cmd/holomush/cmd_crypto_rekey_test.go", token: "INV-E10"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint.go", token: "INV-E10"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5.go", token: "INV-E10"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5_integration_test.go", token: "INV-E10"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5_internal_test.go", token: "INV-E10"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run.go", token: "INV-E10"}
+      - {file: "test/integration/crypto/rekey_force_destroy_test.go", token: "INV-E10"}
+  - id: INV-CRYPTO-98
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E11@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Force-destroy completion MUST emit an audit event with force_destroy: true and final_missing_members: [...]."
+    binding: pending
+    refs:
+      - {file: "internal/admin/socket/rekey_handler_test.go", token: "INV-E11"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5.go", token: "INV-E11"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5_integration_test.go", token: "INV-E11"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7.go", token: "INV-E11"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7_integration_test.go", token: "INV-E11"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run.go", token: "INV-E11"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run_integration_test.go", token: "INV-E11"}
+      - {file: "test/integration/crypto/rekey_force_destroy_test.go", token: "INV-E11"}
+  - id: INV-CRYPTO-99
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E12@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "The Phase-6 UPDATE MUST be idempotent on retry; a second invocation on an already-destroyed checkpoint is a
+      no-op."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/manager.go", token: "INV-E12-PHASE6-IDEMPOTENT"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase6.go", token: "INV-E12-PHASE6-IDEMPOTENT"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase6_integration_test.go", token: "INV-E12-PHASE6-IDEMPOTENT"}
+      - {file: "internal/eventbus/crypto/dek/store.go", token: "INV-E12-PHASE6-IDEMPOTENT"}
+      - {file: "internal/eventbus/crypto/dek/manager.go", token: "INV-E12"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase6.go", token: "INV-E12"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase6_integration_test.go", token: "INV-E12"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run.go", token: "INV-E12"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run_integration_test.go", token: "INV-E12"}
+      - {file: "internal/eventbus/crypto/dek/store.go", token: "INV-E12"}
+  - id: INV-CRYPTO-100
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E13@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Phase-7 audit emission MUST be confirmed via projection ack before transition to complete; on failure the payload
+      MUST be written to a host-local fallback log."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7.go", token: "INV-E13-PHASE7-AUDIT-OR-FALLBACK"}
+      - {file: "test/integration/crypto/rekey_phase7_audit_failure_test.go", token: "INV-E13-PHASE7-AUDIT-OR-FALLBACK"}
+      - {file: "cmd/holomush/crypto_rekey_wiring.go", token: "INV-E13"}
+      - {file: "internal/eventbus/crypto/dek/audit.go", token: "INV-E13"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator.go", token: "INV-E13"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7.go", token: "INV-E13"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7_integration_test.go", token: "INV-E13"}
+      - {file: "test/integration/crypto/rekey_phase7_audit_failure_test.go", token: "INV-E13"}
+  - id: INV-CRYPTO-101
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E14@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Every events.<game>.system.rekey.* event MUST have rekey_chain.prev_hash equal to auditchain.RecomputeSelfHash(prev
+      event payload), or null for the per-scope genesis."
+    binding: pending
+    refs:
+      - {file: "internal/core/builtins.go", token: "INV-E14"}
+      - {file: "internal/eventbus/crypto/dek/audit.go", token: "INV-E14"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5_integration_test.go", token: "INV-E14"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7.go", token: "INV-E14"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7_integration_test.go", token: "INV-E14"}
+      - {file: "internal/testsupport/holomushtest/server.go", token: "INV-E14"}
+      - {file: "test/integration/crypto/harness_impl_test.go", token: "INV-E14"}
+      - {file: "test/integration/crypto/rekey_force_destroy_test.go", token: "INV-E14"}
+      - {file: "test/integration/crypto/rekey_happy_path_test.go", token: "INV-E14"}
+      - {file: "test/integration/crypto/rekey_phase5_timeout_test.go", token: "INV-E14"}
+      - {file: "test/integration/crypto/rekey_resume_rpc_test.go", token: "INV-E14"}
+      - {file: "test/integration/crypto/rekey_resume_test.go", token: "INV-E14"}
+  - id: INV-CRYPTO-102
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E15@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Server boot MUST refuse with AUDIT_CHAIN_BROKEN when any registered chain (policy_set or rekey) has a break."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/audit/chain/verifier_subsystem.go", token: "INV-E15-CHAIN-VERIFIER-BOOT"}
+      - {file: "test/integration/crypto/rekey_chain_verifier_refuses_boot_test.go", token: "INV-E15-CHAIN-VERIFIER-BOOT"}
+      - {file: "internal/eventbus/audit/chain/verifier_subsystem.go", token: "INV-E15"}
+      - {file: "internal/eventbus/audit/chain/verifier_subsystem_test.go", token: "INV-E15"}
+      - {file: "test/integration/crypto/policy_set_chain_post_refactor_test.go", token: "INV-E15"}
+      - {file: "test/integration/crypto/rekey_chain_verifier_refuses_boot_test.go", token: "INV-E15"}
+  - id: INV-CRYPTO-103
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E16@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "A rekey resume MUST bypass dual-control approval when a non-terminal checkpoint exists AND the session player_id
+      matches primary_player_id; a different operator MUST be rejected."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/rekey_run.go", token: "INV-E16-AUTH-RESUME-NOAPPROVAL"}
+      - {file: "api/proto/holomush/admin/v1/admin.proto", token: "INV-E16"}
+      - {file: "api/proto/holomush/admin/v1/rekey.proto", token: "INV-E16"}
+      - {file: "cmd/holomush/crypto_rekey_wiring.go", token: "INV-E16"}
+      - {file: "internal/admin/socket/rekey_handler.go", token: "INV-E16"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run.go", token: "INV-E16"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run_integration_test.go", token: "INV-E16"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run_internal_test.go", token: "INV-E16"}
+      - {file: "test/integration/crypto/rekey_policy_hash_frozen_at_phase1_test.go", token: "INV-E16"}
+      - {file: "test/integration/crypto/rekey_resume_rpc_test.go", token: "INV-E16"}
+      - {file: "test/integration/crypto/rekey_resume_test.go", token: "INV-E16"}
+  - id: INV-CRYPTO-104
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E17@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Abort MUST accept single-control regardless of site policy on rekey; the audit captures aborter_player_id distinct
+      from primary_player_id."
+    binding: pending
+    refs:
+      - {file: "internal/admin/socket/rekey_handler.go", token: "INV-E17-ABORT-NO-DUAL-CONTROL"}
+      - {file: "api/proto/holomush/admin/v1/admin.proto", token: "INV-E17"}
+      - {file: "api/proto/holomush/admin/v1/rekey.proto", token: "INV-E17"}
+      - {file: "cmd/holomush/crypto_rekey_wiring.go", token: "INV-E17"}
+      - {file: "internal/admin/socket/rekey_handler.go", token: "INV-E17"}
+      - {file: "internal/admin/socket/rekey_handler_test.go", token: "INV-E17"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint_fsm.go", token: "INV-E17"}
+      - {file: "internal/testsupport/holomushtest/server.go", token: "INV-E17"}
+      - {file: "test/integration/crypto/rekey_abort_test.go", token: "INV-E17"}
+  - id: INV-CRYPTO-105
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E18@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "The 24h heartbeat-TTL sweep MUST emit a chained audit event with aborted_reason: \"ttl_expired\" for every checkpoint
+      it aborts."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/sweep.go", token: "INV-E18-SWEEP-TTL-AUDIT"}
+      - {file: "internal/eventbus/crypto/dek/sweep_integration_test.go", token: "INV-E18-SWEEP-TTL-AUDIT"}
+      - {file: "test/integration/crypto/rekey_sweep_ttl_test.go", token: "INV-E18-SWEEP-TTL-AUDIT"}
+      - {file: "api/proto/holomush/admin/v1/rekey.proto", token: "INV-E18"}
+      - {file: "cmd/holomush/core.go", token: "INV-E18"}
+      - {file: "internal/config/config.go", token: "INV-E18"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint.go", token: "INV-E18"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint_fsm.go", token: "INV-E18"}
+      - {file: "internal/eventbus/crypto/dek/sweep.go", token: "INV-E18"}
+      - {file: "internal/eventbus/crypto/dek/sweep_integration_test.go", token: "INV-E18"}
+      - {file: "test/integration/crypto/rekey_sweep_ttl_test.go", token: "INV-E18"}
+  - id: INV-CRYPTO-106
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E19@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "A running orchestrator MUST update last_heartbeat_at within min(30s, sweep_interval/3)."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/core.go", token: "INV-E19"}
+      - {file: "internal/config/config.go", token: "INV-E19"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase3.go", token: "INV-E19"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase3_integration_test.go", token: "INV-E19"}
+  - id: INV-CRYPTO-107
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E20@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "After a cold-envelope fallback the dispatcher AAD construction MUST use the substituted cold envelope's fields,
+      NOT the original hot envelope's."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/history/dispatcher.go", token: "INV-E20"}
+      - {file: "internal/eventbus/history/dispatcher_test.go", token: "INV-E20"}
+  - id: INV-CRYPTO-108
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E21@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "When FallbackResolver returns ErrMetadataOnly, the dispatcher MUST deliver metadata_only=true with empty payload
+      bytes."
+    binding: pending
+    refs:
+      - {file: "api/proto/holomush/core/v1/core.proto", token: "INV-E21"}
+      - {file: "api/proto/holomush/plugin/v1/audit.proto", token: "INV-E21"}
+      - {file: "internal/eventbus/history/dispatcher.go", token: "INV-E21"}
+      - {file: "internal/eventbus/history/dispatcher_errors_test.go", token: "INV-E21"}
+      - {file: "internal/eventbus/history/dispatcher_test.go", token: "INV-E21"}
+      - {file: "internal/eventbus/types.go", token: "INV-E21"}
+  - id: INV-CRYPTO-109
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E22@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Phase 5 MUST invoke invalidation.Coordinator.RequestInvalidation with Action: ActionRekey — no bespoke invalidation
+      surface."
+    binding: pending
+    refs:
+      - {file: "test/integration/crypto/rekey_phase5_timeout_test.go", token: "INV-E22-INVALIDATION-REUSE"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5.go", token: "INV-E22"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase5_integration_test.go", token: "INV-E22"}
+      - {file: "test/integration/crypto/rekey_phase5_timeout_test.go", token: "INV-E22"}
+  - id: INV-CRYPTO-110
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E23@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Rekey CLI exit codes MUST follow the sysexits.h mappings."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/cmd_crypto_rekey.go", token: "INV-E23"}
+      - {file: "cmd/holomush/cmd_crypto_rekey_errors_test.go", token: "INV-E23"}
+      - {file: "cmd/holomush/cmd_crypto_rekey_test.go", token: "INV-E23"}
+  - id: INV-CRYPTO-111
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E24@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "op_args_hash MUST be computed via the same proto.MarshalOptions{Deterministic: true} helper sub-epic-d ships,
+      against the resolved RekeyRequest proto, and MUST be stable across builds with protobuf-go pinned per INV-CRYPTO-85."
+    binding: pending
+    refs:
+      - {file: "internal/eventbus/crypto/dek/rekey.go", token: "INV-E24"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator.go", token: "INV-E24"}
+      - {file: "test/integration/crypto/rekey_resume_test.go", token: "INV-E24"}
+  - id: INV-CRYPTO-112
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E25@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "A rekey event's policy_hash MUST be captured at Phase-1 INSERT into crypto_rekey_checkpoints.policy_hash; Phase-7
+      emit reads this column verbatim and never re-queries the chain head; a policy_set event mid-rekey MUST NOT change the
+      persisted hash."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/core.go", token: "INV-E25"}
+      - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-E25"}
+      - {file: "cmd/holomush/policy_hash_source.go", token: "INV-E25"}
+      - {file: "cmd/holomush/readstream_wiring.go", token: "INV-E25"}
+      - {file: "internal/eventbus/crypto/dek/checkpoint.go", token: "INV-E25"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator.go", token: "INV-E25"}
+      - {file: "internal/eventbus/crypto/dek/rekey_orchestrator_test.go", token: "INV-E25"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7.go", token: "INV-E25"}
+      - {file: "internal/eventbus/crypto/dek/rekey_run_integration_test.go", token: "INV-E25"}
+      - {file: "test/integration/crypto/harness_impl_test.go", token: "INV-E25"}
+      - {file: "test/integration/crypto/rekey_policy_hash_frozen_at_phase1_test.go", token: "INV-E25"}
+  - id: INV-CRYPTO-113
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E26@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Every registered auditchain.Chain's SubjectFor(scope) MUST return a string starting with events.<game>. so chain-bearing
+      audit events reach events_audit via the EVENTS JetStream events.> SubjectFilter."
+    binding: pending
+    refs:
+      - {file: "cmd/holomush/phase7_fence_wiring.go", token: "INV-E26"}
+      - {file: "internal/admin/policy/chain.go", token: "INV-E26"}
+      - {file: "internal/admin/readstream/chain.go", token: "INV-E26"}
+      - {file: "internal/admin/readstream/chain_test.go", token: "INV-E26"}
+      - {file: "internal/core/builtins.go", token: "INV-E26"}
+      - {file: "internal/eventbus/audit/chain/chain.go", token: "INV-E26"}
+      - {file: "internal/eventbus/audit/chain/chain_test.go", token: "INV-E26"}
+      - {file: "internal/eventbus/audit/chain/verifier_subsystem.go", token: "INV-E26"}
+      - {file: "internal/eventbus/audit/chain/verifier_subsystem_test.go", token: "INV-E26"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain.go", token: "INV-E26"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain_internal_test.go", token: "INV-E26"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain_test.go", token: "INV-E26"}
+      - {file: "internal/eventbus/crypto/dek/audit_test.go", token: "INV-E26"}
+  - id: INV-CRYPTO-114
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E27@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "Every registered auditchain.Chain MUST populate ScopeFromPayload; the verifier MUST reject with AUDIT_CHAIN_SCOPE_MISMATCH
+      any row where ScopeFromSubject(subject) != ScopeFromPayload(payload)."
+    binding: pending
+    refs:
+      - {file: "internal/admin/policy/chain.go", token: "INV-E27"}
+      - {file: "internal/admin/policy/verifier.go", token: "INV-E27"}
+      - {file: "internal/admin/policy/verifier_integration_test.go", token: "INV-E27"}
+      - {file: "internal/admin/policy/verifier_test.go", token: "INV-E27"}
+      - {file: "internal/admin/readstream/chain.go", token: "INV-E27"}
+      - {file: "internal/eventbus/audit/chain/chain.go", token: "INV-E27"}
+      - {file: "internal/eventbus/audit/chain/chain_test.go", token: "INV-E27"}
+      - {file: "internal/eventbus/audit/chain/verifier.go", token: "INV-E27"}
+      - {file: "internal/eventbus/audit/chain/verifier_errors_test.go", token: "INV-E27"}
+      - {file: "internal/eventbus/audit/chain/verifier_subsystem.go", token: "INV-E27"}
+      - {file: "internal/eventbus/audit/chain/verifier_test.go", token: "INV-E27"}
+      - {file: "internal/eventbus/crypto/dek/audit.go", token: "INV-E27"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain.go", token: "INV-E27"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain_test.go", token: "INV-E27"}
+      - {file: "internal/eventbus/crypto/dek/audit_test.go", token: "INV-E27"}
+  - id: INV-CRYPTO-115
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"
+    legacy: ["INV-E28@docs/superpowers/specs/2026-05-10-event-payload-crypto-phase5-sub-epic-e-design.md"]
+    summary: "The auditchain.Verifier self-hash recompute MUST be SHA-256(Canonicalize(zero(payload, SelfHashFieldName)));
+      SHA-256 and composition order are pinned at the primitive level, while per-chain Canonicalize MAY apply domain normalization
+      (e.g. PolicySetChain renormalizes empty PrevHash → nil to preserve INV-CRYPTO-77 semantics)."
+    binding: pending
+    refs:
+      - {file: "internal/admin/policy/chain.go", token: "INV-E28"}
+      - {file: "internal/admin/readstream/chain.go", token: "INV-E28"}
+      - {file: "internal/eventbus/audit/chain/chain.go", token: "INV-E28"}
+      - {file: "internal/eventbus/audit/chain/chain_test.go", token: "INV-E28"}
+      - {file: "internal/eventbus/audit/chain/verifier.go", token: "INV-E28"}
+      - {file: "internal/eventbus/crypto/dek/audit.go", token: "INV-E28"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain.go", token: "INV-E28"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain_internal_test.go", token: "INV-E28"}
+      - {file: "internal/eventbus/crypto/dek/audit_chain_test.go", token: "INV-E28"}
+      - {file: "internal/eventbus/crypto/dek/rekey_phase7.go", token: "INV-E28"}

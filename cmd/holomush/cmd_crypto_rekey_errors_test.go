@@ -12,7 +12,7 @@ import (
 
 // TestRekeyProgressErrorAndExitCodeError covers the Is and Unwrap methods of
 // rekeyProgressError and exitCodeError, which mapToExitCodeErr and friends
-// rely on for sysexits.h code assignment (INV-E23).
+// rely on for sysexits.h code assignment (INV-CRYPTO-110).
 func TestRekeyProgressErrorAndExitCodeError(t *testing.T) {
 	t.Parallel()
 

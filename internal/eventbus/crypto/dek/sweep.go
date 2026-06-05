@@ -6,7 +6,7 @@
 // CheckpointSweepSubsystem runs a boot-time sweep followed by a periodic
 // background scan that aborts non-terminal checkpoints whose last_heartbeat_at
 // is older than TTL (default 24h). Each abort emits a chained rekey audit
-// event satisfying INV-E18-SWEEP-TTL-AUDIT.
+// event satisfying INV-CRYPTO-105.
 //
 // The subsystem depends on SubsystemCryptoChainVerifier (chain integrity
 // confirmed before any new emission), SubsystemEventBus, and
@@ -152,7 +152,7 @@ func (s *CheckpointSweepSubsystem) SweepOnceForTest(ctx context.Context) error {
 }
 
 // abortAndAudit marks the checkpoint aborted via a CAS UPDATE then
-// emits a chained audit event. INV-E18-SWEEP-TTL-AUDIT.
+// emits a chained audit event. INV-CRYPTO-105.
 func (s *CheckpointSweepSubsystem) abortAndAudit(ctx context.Context, ckpt Checkpoint, reason string) error {
 	if err := s.cfg.Repo.MarkAborted(ctx, ckpt.RequestID, reason); err != nil {
 		return oops.Code("DEK_REKEY_SWEEP_ABORT_FAILED").Wrap(err)

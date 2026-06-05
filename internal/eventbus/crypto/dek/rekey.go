@@ -2,7 +2,7 @@
 
 // Package dek provides the orchestrator-internal types for the Rekey lifecycle,
 // including RekeyRequest, RekeyOutcome, OperatorIdentity, DualControlBinding,
-// and ComputeRekeyArgsHash for INV-E24 request idempotency.
+// and ComputeRekeyArgsHash for INV-CRYPTO-111 request idempotency.
 package dek
 
 import (
@@ -82,7 +82,7 @@ type ArgsHash [32]byte
 
 // ComputeRekeyArgsHash matches the algorithm D ships in approval.ComputeOpArgsHash:
 // SHA-256 over proto.MarshalOptions{Deterministic: true}.Marshal(args) where
-// args is the proto RekeyRequest. INV-E24 (stable across binary builds with
+// args is the proto RekeyRequest. INV-CRYPTO-111 (stable across binary builds with
 // protobuf-go pinned per INV-CRYPTO-85).
 //
 // The hash binds the WORK (context_type, context_id, justification), not WHO.

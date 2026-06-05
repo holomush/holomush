@@ -3,11 +3,11 @@
 
 //go:build integration
 
-// rekey_policy_hash_frozen_at_phase1_test.go — E2E spec for INV-E25:
+// rekey_policy_hash_frozen_at_phase1_test.go — E2E spec for INV-CRYPTO-112:
 // the policy_hash captured at Phase 1 INSERT is frozen for the lifetime
 // of the rekey operation.
 //
-// Verifies INV-E25: a mid-Rekey policy edit (which emits a new policy_set
+// Verifies INV-CRYPTO-112: a mid-Rekey policy edit (which emits a new policy_set
 // chain event and changes the policy_set chain's tail hash) does NOT change
 // the policy_hash embedded in the rekey audit event. The Phase 7 audit emit
 // reads policy_hash from the checkpoint row (set at Phase 1), not from the
@@ -32,7 +32,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 )
 
-var _ = Describe("Rekey policy_hash frozen at Phase 1 (INV-E25)", func() {
+var _ = Describe("Rekey policy_hash frozen at Phase 1 (INV-CRYPTO-112)", func() {
 	It("captures policy_hash at Phase 1 INSERT; mid-Rekey policy edit does not change it", func() {
 		h := SetupRekeyHarness(suiteT)
 		defer h.Cleanup()
@@ -43,33 +43,33 @@ var _ = Describe("Rekey policy_hash frozen at Phase 1 (INV-E25)", func() {
 		h.RememberCurrentPolicyHash("dual_control_required")
 
 		// Drive Phase 1 directly (bypassing the UDS). This inserts a non-terminal
-		// checkpoint row with policy_hash = zeros (genesis sentinel per INV-E25).
+		// checkpoint row with policy_hash = zeros (genesis sentinel per INV-CRYPTO-112).
 		// The checkpoint is left at phase1_auth so the dispatcher treats it as
 		// non-terminal (resume path, not fresh-start) on the next UDS call.
 		firstRID := openNonTerminalCheckpoint(h, "inv-e25-test-justification")
 
 		// Edit the policy mid-Rekey: emit a new crypto.policy_set genesis event.
 		// This advances the policy chain tail hash to a non-zero value.
-		// The checkpoint's policy_hash MUST NOT reflect this change (INV-E25).
+		// The checkpoint's policy_hash MUST NOT reflect this change (INV-CRYPTO-112).
 		require.NoError(suiteT, h.Primary.EditDualControlRequired([]string{"admin_read_stream"}))
 
 		// Resume via the UDS. The dispatcher auto-resumes the existing non-terminal
-		// checkpoint (same op_args_hash, same operator = INV-E4 + INV-E16). Phase 7
+		// checkpoint (same op_args_hash, same operator = INV-CRYPTO-91 + INV-CRYPTO-103). Phase 7
 		// must read policy_hash from the checkpoint row — NOT from the live chain.
 		out, err := h.AdminCli.Rekey(h.SceneContext, "inv-e25-test-justification")
 		Expect(err).NotTo(HaveOccurred(),
-			"INV-E25: resumed rekey must complete without error")
+			"INV-CRYPTO-112: resumed rekey must complete without error")
 
-		// The resumed rekey MUST reuse the original request_id (INV-E4).
+		// The resumed rekey MUST reuse the original request_id (INV-CRYPTO-91).
 		var resumedRID dek.RequestID
 		copy(resumedRID[:], out.RequestID())
 		Expect(resumedRID).To(Equal(firstRID),
-			"INV-E4: resume MUST reuse the original RequestID")
+			"INV-CRYPTO-91: resume MUST reuse the original RequestID")
 
 		// Load the rekey audit event emitted by Phase 7 and assert its
 		// policy_hash equals the hash captured at Phase 1 (before the policy edit).
 		evt := h.LoadRekeyAuditEvent(out.RequestID())
 		Expect(evt.PolicyHash).To(Equal(h.OriginalPolicyHash),
-			"INV-E25: Phase 7 audit event policy_hash MUST equal the Phase 1 captured hash — a mid-Rekey policy edit MUST NOT shift it")
+			"INV-CRYPTO-112: Phase 7 audit event policy_hash MUST equal the Phase 1 captured hash — a mid-Rekey policy edit MUST NOT shift it")
 	})
 })

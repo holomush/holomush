@@ -16,7 +16,7 @@ import (
 
 // TestVerifyEntries_ScopeMismatch confirms that when ScopeFromPayload returns a
 // value different from the query scope, the verifier rejects with
-// AUDIT_CHAIN_SCOPE_MISMATCH (INV-E27). This is a focused error-path test
+// AUDIT_CHAIN_SCOPE_MISMATCH (INV-CRYPTO-114). This is a focused error-path test
 // constructed via a custom handler so that the hash machinery does not need
 // to be valid.
 func TestVerifyEntries_ScopeMismatch(t *testing.T) {

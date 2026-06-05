@@ -22,9 +22,9 @@ import (
 // LoadEntriesByScope returns both rows ordered by js_seq ASC, giving the
 // completed event its predecessor naturally.
 //
-// INV-E26: SubjectPrefix starts with "events.".
-// INV-E27: ScopePayloadField is "request_id" (non-empty).
-// INV-E28: SelfHashField is "self_hash"; PrevHashField is "prev_hash".
+// INV-CRYPTO-113: SubjectPrefix starts with "events.".
+// INV-CRYPTO-114: ScopePayloadField is "request_id" (non-empty).
+// INV-CRYPTO-115: SelfHashField is "self_hash"; PrevHashField is "prev_hash".
 // INV-CRYPTO-59: Both events share the same NATS subject pattern.
 func OperatorReadChainFor(gameID string) chain.Chain {
 	return chain.Chain{
@@ -126,7 +126,7 @@ func canonicalizeOperatorReadPayload(envOrJSON []byte) ([]byte, error) {
 }
 
 // operatorReadScopeFromPayload extracts request_id from the envelope (or raw
-// JSON for test fakes). Satisfies INV-E27 (independent payload-derived scope).
+// JSON for test fakes). Satisfies INV-CRYPTO-114 (independent payload-derived scope).
 func operatorReadScopeFromPayload(envOrJSON []byte) (string, error) {
 	payload, err := decodeOperatorReadPayloadJSON(envOrJSON)
 	if err != nil {

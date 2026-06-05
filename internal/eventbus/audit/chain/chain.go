@@ -10,7 +10,7 @@
 // identifier. [ValidateRegistration] enforces the structural invariants before
 // a chain is wired into a subsystem.
 //
-// Hash algorithm (INV-E28):
+// Hash algorithm (INV-CRYPTO-115):
 //
 //	self_hash = SHA-256(JCS_canonicalize(zero(payload, SelfHashFieldName)))
 //
@@ -37,13 +37,13 @@ import (
 // fields (e.g. "meta.self_hash" addresses payload["meta"]["self_hash"]).
 type Chain struct {
 	// SubjectPrefix is the NATS subject prefix for this chain family.
-	// MUST start with "events." (INV-E26).
+	// MUST start with "events." (INV-CRYPTO-113).
 	// Example: "events.game.system.rekey"
 	SubjectPrefix string
 
 	// SelfHashField is the dot-path name of the payload field that holds
 	// this event's own hash. This field is zeroed before canonicalization
-	// to prevent the hash from being its own input (INV-E28).
+	// to prevent the hash from being its own input (INV-CRYPTO-115).
 	SelfHashField string
 
 	// PrevHashField is the dot-path name of the payload field that holds
@@ -52,26 +52,26 @@ type Chain struct {
 
 	// ScopePayloadField is the dot-path name of the payload field that
 	// identifies the chain's scope (e.g. policy name, context ID).
-	// MUST be non-empty (INV-E27).
+	// MUST be non-empty (INV-CRYPTO-114).
 	ScopePayloadField string
 }
 
 // ValidateRegistration returns an error if c does not satisfy the structural
 // invariants required of every chain registration.
 //
-// INV-E26: SubjectPrefix MUST start with "events.".
-// INV-E27: ScopePayloadField MUST be non-empty.
+// INV-CRYPTO-113: SubjectPrefix MUST start with "events.".
+// INV-CRYPTO-114: ScopePayloadField MUST be non-empty.
 // Additionally: SelfHashField and PrevHashField MUST be non-empty.
 func ValidateRegistration(c Chain) error {
 	if !strings.HasPrefix(c.SubjectPrefix, "events.") {
 		return fmt.Errorf(
-			"auditchain: SubjectPrefix %q must start with \"events.\" (INV-E26)",
+			"auditchain: SubjectPrefix %q must start with \"events.\" (INV-CRYPTO-113)",
 			c.SubjectPrefix,
 		)
 	}
 	if c.ScopePayloadField == "" {
 		return fmt.Errorf(
-			"auditchain: ScopePayloadField must not be empty for chain %q (INV-E27)",
+			"auditchain: ScopePayloadField must not be empty for chain %q (INV-CRYPTO-114)",
 			c.SubjectPrefix,
 		)
 	}
@@ -131,7 +131,7 @@ func ZeroField(payload map[string]any, fieldPath string) map[string]any {
 }
 
 // RecomputeSelfHash computes SHA-256 over the RFC 8785 JCS-canonicalized JSON
-// of payload with selfHashField zeroed out. This implements INV-E28:
+// of payload with selfHashField zeroed out. This implements INV-CRYPTO-115:
 //
 //	self_hash = SHA-256(JCS_canonicalize(zero(payload, SelfHashFieldName)))
 //

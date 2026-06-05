@@ -86,9 +86,9 @@ const PolicySetChainName = "crypto.policy_set"
 // the chain's existing event-type name; the stutter against the package
 // name is unavoidable without renaming the chain.
 //
-// INV-E26: SubjectPrefix starts with "events.".
-// INV-E27: ScopePayloadField is "policy_name" (non-empty).
-// INV-E28: SelfHashField is "policy_hash"; PrevHashField is "prev_hash".
+// INV-CRYPTO-113: SubjectPrefix starts with "events.".
+// INV-CRYPTO-114: ScopePayloadField is "policy_name" (non-empty).
+// INV-CRYPTO-115: SelfHashField is "policy_hash"; PrevHashField is "prev_hash".
 //
 //nolint:revive // name is canonical per master crypto spec §6 and matches the chain's event type
 func PolicySetChainFor(gameID string) chain.Chain {
@@ -196,7 +196,7 @@ func canonicalizePolicySetPayload(envOrJSON []byte) ([]byte, error) {
 }
 
 // policyScopeFromPayload extracts policy_name from the envelope (or raw JSON
-// for test fakes). Satisfies INV-E27 (independent payload-derived scope).
+// for test fakes). Satisfies INV-CRYPTO-114 (independent payload-derived scope).
 func policyScopeFromPayload(envOrJSON []byte) (string, error) {
 	payload, err := decodePolicyPayloadJSON(envOrJSON)
 	if err != nil {

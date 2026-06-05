@@ -29,11 +29,11 @@ type Handler struct {
 	SubjectFor func(scope string) string
 
 	// ScopeFromSubject is the inverse of SubjectFor. Parses the domain scope
-	// from a full NATS subject. Used for INV-E27 cross-check.
+	// from a full NATS subject. Used for INV-CRYPTO-114 cross-check.
 	ScopeFromSubject func(subject string) (string, error)
 
 	// ScopeFromPayload extracts the domain scope from raw payload bytes.
-	// This is an independent extraction path for the INV-E27 cross-check —
+	// This is an independent extraction path for the INV-CRYPTO-114 cross-check —
 	// the verifier asserts ScopeFromSubject(entry.Subject) == ScopeFromPayload(entry.Payload).
 	ScopeFromPayload func(payload []byte) (string, error)
 
@@ -54,8 +54,8 @@ type Handler struct {
 // Verifier walks one chain scope or all scopes of a chain, validating the
 // tamper-evident hash chain invariants.
 //
-// INV-E27: for each entry, ScopeFromSubject(subject) MUST equal ScopeFromPayload(payload).
-// INV-E28: for each entry, the stored self_hash MUST equal
+// INV-CRYPTO-114: for each entry, ScopeFromSubject(subject) MUST equal ScopeFromPayload(payload).
+// INV-CRYPTO-115: for each entry, the stored self_hash MUST equal
 //
 //	SHA-256(JCS(zero(canonicalized_payload, SelfHashField))).
 //
@@ -100,7 +100,7 @@ func (v *verifier) VerifyAll(ctx context.Context, h Handler) error {
 		// chain's ScopeFromSubject. For chains that use a different separator
 		// in the scope (e.g. colon) vs the subject (dot), this converts
 		// "scene.01ABC" → "scene:01ABC" so ScopeFromPayload's return value
-		// agrees with the scope passed to VerifyScope (INV-E27 cross-check).
+		// agrees with the scope passed to VerifyScope (INV-CRYPTO-114 cross-check).
 		canonicalScope, scopeErr := h.ScopeFromSubject(h.Chain.SubjectPrefix + "." + suffix)
 		if scopeErr != nil {
 			return oops.Code("AUDIT_CHAIN_SCOPE_CONVERT_FAILED").
@@ -159,7 +159,7 @@ func (v *verifier) VerifyScope(ctx context.Context, h Handler, scope string) err
 		return nil
 	}
 
-	// Pass the canonical scope to verifyEntries for the INV-E27 cross-check:
+	// Pass the canonical scope to verifyEntries for the INV-CRYPTO-114 cross-check:
 	// ScopeFromPayload(entry.Payload) must equal scope.
 	return v.verifyEntries(ctx, h, scope, entries)
 }
@@ -167,7 +167,7 @@ func (v *verifier) VerifyScope(ctx context.Context, h Handler, scope string) err
 // verifyEntries performs the actual chain-walk integrity checks on a non-empty
 // slice of entries (ordered by js_seq ASC).
 func (v *verifier) verifyEntries(_ context.Context, h Handler, scope string, entries []Entry) error {
-	// INV-E27: for every entry, ScopeFromPayload MUST agree with the query scope.
+	// INV-CRYPTO-114: for every entry, ScopeFromPayload MUST agree with the query scope.
 	// (The query scope is derived from ScopeFromSubject on the stored subject, but
 	// we check against the caller-supplied scope for simplicity — the Repo query
 	// is authoritative for which rows are returned for a given scope.)
@@ -184,7 +184,7 @@ func (v *verifier) verifyEntries(_ context.Context, h Handler, scope string, ent
 				With("subject_scope", scope).
 				With("payload_scope", payloadScope).
 				With("js_seq", e.JSSeq).
-				Errorf("INV-E27: subject and payload scope disagree")
+				Errorf("INV-CRYPTO-114: subject and payload scope disagree")
 		}
 	}
 
@@ -203,7 +203,7 @@ func (v *verifier) verifyEntries(_ context.Context, h Handler, scope string, ent
 			Errorf("genesis prev_hash must be nil")
 	}
 
-	// INV-E28: genesis self_hash MUST equal recomputed hash.
+	// INV-CRYPTO-115: genesis self_hash MUST equal recomputed hash.
 	genHash, err := v.recomputeFor(h, entries[0].Payload)
 	if err != nil {
 		return err
@@ -223,7 +223,7 @@ func (v *verifier) verifyEntries(_ context.Context, h Handler, scope string, ent
 	}
 
 	// Walk remaining entries: INV-CRYPTO-78 (prev_hash == predecessor recompute)
-	// and INV-CRYPTO-79 / INV-E28 (stored self_hash == own recompute).
+	// and INV-CRYPTO-79 / INV-CRYPTO-115 (stored self_hash == own recompute).
 	for i := 1; i < len(entries); i++ {
 		// Predecessor's recomputed hash is what this entry's prev_hash must equal.
 		prevRecompute, err := v.recomputeFor(h, entries[i-1].Payload)
@@ -267,7 +267,7 @@ func (v *verifier) verifyEntries(_ context.Context, h Handler, scope string, ent
 
 // recomputeFor runs h.Canonicalize on payload, unmarshals the canonical bytes
 // into map[string]any, then calls chain.RecomputeSelfHash.
-// This is the INV-E28 recompute path: caller applies chain-specific
+// This is the INV-CRYPTO-115 recompute path: caller applies chain-specific
 // normalization (via h.Canonicalize) before RecomputeSelfHash zeroes
 // and hashes.
 func (v *verifier) recomputeFor(h Handler, payload []byte) ([]byte, error) {
