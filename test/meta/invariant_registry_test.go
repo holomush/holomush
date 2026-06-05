@@ -242,14 +242,13 @@ func TestEveryRegistryInvariantHasBinding(t *testing.T) {
 		t.Fatalf("parse invariants.yaml: %v", err)
 	}
 	if len(reg.Invariants) == 0 {
-		// Scaffolding phase: the registry is populated per-scope during the
-		// holomush-hz0v4.14 migration. Until the first scope lands, an empty
-		// registry is expected — skip rather than fail so the scaffold can land
-		// green. Once any invariant exists, the binding assertions below enforce.
-		// TEMPORARY: this skip MUST be removed once the registry is populated —
-		// tracked by holomush-hz0v4.14.18 (gates final verification .14.17), so a
-		// later regression that empties the registry fails loudly instead of skipping.
-		t.Skip("invariants.yaml has no entries yet — populated per-scope by the holomush-hz0v4.14 migration (skip removed by holomush-hz0v4.14.18)")
+		// The registry is fully populated by the holomush-hz0v4.14 migration. A
+		// zero-entry registry can now only mean a regression (a bad edit, a parse
+		// that silently dropped the invariants: block, or a wrong path), so fail
+		// loudly rather than vacuously pass. The scaffolding-phase t.Skip that
+		// tolerated an empty registry while scopes landed one-by-one was removed
+		// here (holomush-hz0v4.14.18).
+		t.Fatal("invariants.yaml has zero invariant entries — the registry must be populated; an empty registry is a regression, not a valid state")
 	}
 
 	// 2. Walk the repo for // Verifies: annotations.
