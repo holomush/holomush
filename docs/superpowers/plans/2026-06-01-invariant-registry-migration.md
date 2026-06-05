@@ -923,6 +923,36 @@ Expected: PASS (the guard still fails on a seeded mislabel — the F2 defense is
 
 `jj commit -m "chore(invariants): final verification — registry complete, provenance guard live (holomush-hz0v4.14)"`
 
+### Verification result (2026-06-05, `holomush-hz0v4.14.17`) — CERTIFIED
+
+- **Step 1 — no residual.** Zero bare `INV-N` in any `migrated`-scope `owned_paths` file
+  (mechanical sweep across all 12 migrated scopes). Letter-prefixed legacy tokens
+  (`INV-L/A/B/LP`, `INV-GW` fixtures, …) are accounted for in the redesign spec's
+  **Residual classification** record — every `INV-*` in the tree is classified.
+- **Step 2 — gates green.** `task test -- ./test/meta/` (53), `task lint:invariants`
+  (`inv-render -check`), `task lint`, build all green. Registry holds **300 invariant
+  entries** across **14 scopes**; `INV-CRYPTO` is `1..115` (the whole crypto epic —
+  master + RB + P7 + sub-epics D (→68..87) / E (→88..115) / F (→53..67, `.14.23`) — unified under one scope).
+- **Step 3 — F2 defense live.** `TestProvenanceGuardFailsOnMislabel` +
+  `…FailsOnResidualLegacyToken` + `…FailsOnMalformedGlob` + `TestOwnedPathsPartitionSemantics`
+  all bite. The guard fails loudly on a seeded mislabel, a leftover legacy token, a
+  malformed glob, and an ambiguous ownership overlap.
+
+**Scope status:** 12 scopes `migrated`; **2 scopes (`INV-BRANDING`, `INV-DOCS`) remain
+`pending` by design** — these are separate per-scope migrations of local-numbered subsystem
+invariants the original §2.1 family map did not cover, deferred and tracked as their own
+beads. Their pending `owned_paths` are not residual-walked, so their bare `INV-N` is expected
+and guard-inert. The migration epic (`holomush-hz0v4.14`) is **COMPLETE** for every
+cross-cutting and crypto family; BRANDING/DOCS are acknowledged future work, not a gap.
+
+> **Scope expansion (`.14.27`–`.32`).** A census during `.14.28` found large prefixed
+> families the §2.1 map missed — crypto sub-epics **D** (`INV-D`→`INV-CRYPTO-68..87`) and
+> **E** (`INV-E`→`INV-CRYPTO-88..115`), migrated in `.14.29`/`.14.30`; the guard was
+> hardened to catch leftover *legacy* tokens + walk file-globs + detect semantic ownership
+> overlaps (`.14.20`/`.14.21`); per-spec local families (`INV-L/A/B/LP`, world, auth,
+> settings, web, meta-tests) were classified exempt (`.14.27`/`.14.31`). The redesign spec's
+> Residual classification section is the authoritative completeness record.
+
 ---
 
 ## Out of scope
