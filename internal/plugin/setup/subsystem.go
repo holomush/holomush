@@ -461,7 +461,7 @@ func (s *PluginSubsystem) CommandRegistry() *command.Registry {
 
 // CommandQuerier returns the shared command querier. Panics if called before Start().
 // Consumed by the gRPC subsystem (holoGRPC.WithCommandQuerier) and the binary
-// PluginHostService (bead .8) to ensure a single command-visibility filter (INV-1).
+// PluginHostService (bead .8) to ensure a single command-visibility filter (INV-COMMAND-1).
 func (s *PluginSubsystem) CommandQuerier() *commandquery.Querier {
 	if s.commandQuerier == nil {
 		panic("plugin/setup: CommandQuerier() called before Start()")
