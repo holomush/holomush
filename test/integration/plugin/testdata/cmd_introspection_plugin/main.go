@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 // Package main implements the cmd_introspection_plugin: a test-only binary
-// plugin used by command_introspection_parity_test.go to prove INV-2
+// plugin used by command_introspection_parity_test.go to prove INV-COMMAND-2
 // (runtime parity): the binary PluginHostService.ListCommands and the Lua
 // holomush.list_commands host function delegate to the same
 // commandquery.Querier and return identical filtered command-name sets.

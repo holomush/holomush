@@ -34,6 +34,7 @@ The prose outside the regions is hand-authored. CI runs `inv-render -check`
 | `INV-TELEMETRY` | Logging discipline, trace context, metric naming, sloglint policy | Observability contracts. |
 | `INV-BRANDING` | Asset integrity, palette tokens, logo generation | Visual identity invariants. Does NOT include: docs quality (separate concern). |
 | `INV-DOCS` | Proto doc comments, doc IA, contributor onboarding surface | Documentation quality invariants. |
+| `INV-COMMAND` | Command surfacing: the single command-visibility/ABAC filter, runtime parity across the Lua hostfunc + binary PluginHostService + CoreService RPC surfaces, and self-scoped enumeration. | Backend command-surfacing contract (origin 2026-05-29-recognized-command-chip-design.md, §INV-1/2/5). Does NOT include: web-composer chip presentation — INV-3 gateway boundary (→ .claude/rules/gateway-boundary.md), INV-4 server-sourced recognition, INV-6 graceful incompleteness, INV-7 speech-mode chips — those are web-frontend per-feature local numbering, exempt (.14.27), living in web/src TS (composerChip.ts/CommandInput.svelte/commandListStore.ts). Also does NOT include whole-system plugin load/census (wholesystem INV-5, distinct local numbering — co-located foreign in census_test.go, residual-skipped via shared_files). |
 
 <!-- END GENERATED: scope-index -->
 
@@ -348,5 +349,13 @@ invariants.
 | `INV-TELEMETRY-6` | Load scenario must not issue command verbs not registered in the running server (command-availability gating). | `INV-LOAD-6` | pending |
 | `INV-TELEMETRY-7` | Load action selection is seeded deterministically so two runs of the same scenario config produce the same action sequence. | `INV-LOAD-7` | pending |
 | `INV-TELEMETRY-8` | The load harness must not be wired into task pr-prep (fast lane). | `INV-LOAD-8` | pending |
+
+### `INV-COMMAND`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-COMMAND-1` | There MUST be exactly one command-visibility/ABAC-filter implementation (commandquery.Querier) in core; the Lua hostfunc shim, the binary PluginHostService handler, and the CoreService RPC MUST all delegate to it — none may reimplement the filter. | `INV-1` | pending |
+| `INV-COMMAND-2` | ListCommands and GetCommandHelp MUST be reachable by both Lua plugins (in-VM hostfunc bridge) and binary plugins (PluginHostService), both delegating to the same commandquery.Querier, so the ABAC-filtered command set is identical across runtimes. | `INV-2` | pending |
+| `INV-COMMAND-3` | The self-scoped enumeration RPC (WebListCommands / ListAvailableCommands) MUST return only commands the requesting character can execute, never ABAC-filtered-out ones; ownership failures collapse to SESSION_NOT_FOUND. | `INV-5` | pending |
 
 <!-- END GENERATED: invariant-tables -->

@@ -628,7 +628,7 @@ func (s *Server) CommandRegistry() *command.Registry {
 // production PluginSubsystem.Start() path (subsystem.go) and late-bound into the
 // Lua host via SetCommandQuerier. Panics if WithInTreePlugins was not passed.
 // Used by the whole-system wiring regression to prove Start() yields a non-nil
-// querier (design spec INV-1: single command-visibility filter).
+// querier (design spec INV-COMMAND-1: single command-visibility filter).
 func (s *Server) CommandQuerier() *commandquery.Querier {
 	s.requirePlugins("CommandQuerier")
 	return s.pluginSub.CommandQuerier()

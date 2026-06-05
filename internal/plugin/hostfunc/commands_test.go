@@ -19,7 +19,7 @@ import (
 )
 
 // These tests cover ONLY the list_commands / get_command_help host-function
-// SHIMS — the thin Go↔Lua bridge over commandquery.Querier (design spec INV-1).
+// SHIMS — the thin Go↔Lua bridge over commandquery.Querier (design spec INV-COMMAND-1).
 // The ABAC filter itself (deny/error/infra-failure/circuit-breaker/AND-logic,
 // no-capability visibility, capability-gated denial) is exercised exhaustively
 // in internal/command/commandquery/query_test.go and is NOT re-tested here.

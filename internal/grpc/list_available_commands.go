@@ -16,7 +16,7 @@ import (
 
 // ListAvailableCommands returns the commands the session's own character may
 // execute. Self-scoped (the subject is the session character, never an arbitrary
-// id) per design INV-5. Ownership failures collapse to SESSION_NOT_FOUND, mirroring
+// id) per design INV-COMMAND-3. Ownership failures collapse to SESSION_NOT_FOUND, mirroring
 // ListFocusPresence.
 func (s *CoreServer) ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
 	if req == nil {

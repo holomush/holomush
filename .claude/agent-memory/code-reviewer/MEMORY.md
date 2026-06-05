@@ -1,42 +1,17 @@
-- **Per-family `// Verifies:`-grep coverage meta-test MUST be DELETED on registry
-  migration (hz0v4.14.9 NOT-READY).** `test/meta/i_<old>_coverage_test.go` greps
-  `// Verifies: I-<OLD>-N` and requires each 1..N bound. Migration renames every
-  annotation to `INV-<SCOPE>-N`, so the stale test finds ZERO and fails ALL N. `.14.5`
-  DELETED it; `.14.9` MISSED → I-PRIV-1..8 failed. Coverage is absorbed by registry-driven
-  `TestEveryRegistryInvariantHasBinding`. CHECK: after `rg 'Verifies:\s*I-<OLD>-[0-9]'
-  *_test.go`→ZERO, the `i_<old>_coverage_test.go` MUST be absent (if present = guaranteed
-  FAIL). FROM-anchor: `checkProvenance` greps canonical `e.ID` not `r.Token`, so refs
-  recording legacy tokens is harmless. Bare `go vet -tags=integration` `lostcancel`
-  warnings at //nolint:govet sites are NOT findings (`task lint` is the gate).
-  hz0v4.14.9 (2026-06-02) — NOT READY.
-
-- **Bare-INV-N (CLUSTER) migration is the same shape as I-<OLD>-N but the
-  per-family test lives in `test/meta/inv_binding_test.go`, not a separate
-  `i_<old>_coverage_test.go` (hz0v4.14.11 READY).** Phase-3c invariants
-  (INV-53..60 + INV-28/29) were tracked by
-  `TestEveryPhase3cInvariantHasAtLeastOneTestBinding` (scanned `// Verifies:
-  INV-<digits>`). On migration this test + its 3 locals
-  (`phase3cInvariants`/`invLintEnforced`/`verifiesRE`) MUST be removed, but the
-  shared `findRepoRoot`/`skipDirs` helpers in the SAME file MUST be KEPT (used by
-  10+ meta files — `liveness_invariants_test.go`, `proto_doc_comments_test.go`,
-  `invariant_registry_test.go`, etc.). Verify file still compiles via `task test
-  -- ./test/meta/`. The lone surviving `TestEveryPhase3c...` mention is fine if
-  it's in the rewritten doc-comment explaining the retirement (not a symbol ref).
-  Review pattern for bare-INV-N: (1) `rg '\bINV-(28|29|53..60)\b' -g '!docs/**'
-  -g '!*.md' -g '!test/meta/**'` → exit 1 (NO matches); (2) closed-world
-  {file,token} rewrite preserves co-located non-set bare tokens — INV-27 in
-  participants_cache.go must read "INV-CLUSTER-9 + INV-27", and CRYPTO tokens
-  (INV-9,12,13,17-21,25,26,30,32,33,34,37,39,49) elsewhere untouched; (3) DENSE
-  renumber: non-contiguous legacy maps ascending-by-position to 1..N — verify each
-  entry's `legacy:` AND every `refs[].token` equals the legacy token (awk
-  block-scan), no dup legacy; (4) gorules is a SEPARATE module — its analyzer
-  user-facing diagnostic message + Doc + testdata `// want` directives rename in
-  lockstep (INV-58→INV-CLUSTER-8); run `task test:gorules` after `go clean
-  -testcache` (else cached `ok` masks the testdata edit); (5) `task
-  lint:invariants` (= `inv-render -check`) must exit 0 for invariants.md sync.
-  Origin SPEC is NOT migrated (spec line still says INV-58) — by design; legacy
-  column in invariants.md/yaml records the link. Encountered: hz0v4.14.11
-  (2026-06-02) — READY.
+- **Early registry-migration lessons (.14.9 NOT-READY, .14.11 READY) — consolidated.**
+  (a) Fragile `// Verifies:`-grep coverage meta-tests (`test/meta/i_<old>_coverage_test.go`,
+  per-family `TestEveryPhase3c...` scanning `// Verifies: I-<OLD>-N`/`INV-<digits>`) MUST be
+  DELETED on migration — renamed annotations make them find ZERO and fail ALL N (.14.9 missed →
+  I-PRIV-1..8 failed). Coverage is absorbed by `TestEveryRegistryInvariantHasBinding`. DISTINCT
+  from robust `testName`-EXISTENCE checks (go/parser Test* names) which MIGRATE in lockstep. Keep
+  shared helpers (`findRepoRoot`/`skipDirs`) in a gutted meta file — 10+ files use them; verify
+  it still compiles. (b) FROM-anchor: `checkProvenance` greps canonical `e.ID`, NOT `r.Token`, so
+  refs recording legacy tokens is harmless/correct. (c) Origin SPEC is NOT migrated by design;
+  legacy column records the link. (d) gorules is a SEPARATE module — analyzer diagnostic + Doc +
+  testdata `// want` rename in lockstep; `go clean -testcache` before `task test:gorules`.
+  (e) `task lint:invariants` (= `inv-render -check`) must exit 0 for invariants.md sync. (f) DENSE
+  renumber maps non-contiguous legacy ascending-by-position; verify each entry's legacy + every
+  refs[].token. hz0v4.14.9 NOT-READY / .14.11 READY (2026-06-02).
 
 - **Multi-family + dense letter-suffix renumber (EVENTBUS=GW+ROPS+P7-split .14.12;
   SCENE=P4/P5/P6/FS/Y5INX/SH+bare → 59 ids/86 files .14.13; both READY).** GW dense
@@ -195,3 +170,27 @@
   foreign EVENTBUS-11/W9ML-8/CRYPTO/regen). Zero executable edits; dense PLUGIN 1..39.
   NO trailing-comma ,} noise this time. Counts CRYPTO=67/PLUGIN=39/ACCESS=8/EVENTBUS=28/
   SCENE=60. Encountered: hz0v4.14.27 (2026-06-04) — READY.
+
+- **NEW-scope creation by LAYER split (.14.27 PR B: INV-COMMAND, READY).** A
+  multi-INV design spec (recognized-command-chip INV-1..7) split by LAYER, not
+  number: Go-backend INV-1/2/5 → new scope INV-COMMAND-1/2/3; web-composer
+  presentation INV-3/4/6/7 → LEFT web-local (web/src TS), exempt. Review the
+  split BOTH directions: (1) no Go-backend annotation wrongly left — `rg 'INV-3\b'
+  internal/web/ internal/grpc/` → ZERO confirmed NOTHING to migrate (INV-3
+  gateway-boundary was conceptual, never code-annotated; WebListCommands proxy
+  carries no INV token). (2) No web-presentation token wrongly pulled in — the
+  chip INV-5 is LAYER-OVERLOADED: Go list_available_commands.go INV-5 (self-scoped
+  enum → COMMAND-3) migrated, web composerChip.integration.test.ts INV-5
+  (chip-omission) LEFT. Verify per-SITE, never value-keyed. Web TS INV-N tokens
+  (composerChip/commandListStore/CommandInput INV-4/5/6/7, themeStore INV-1..6,
+  ModeChip INV-1) are ALL distinct invariants — confirm none migrated. Apply the
+  .14.23 whole-tree sweep: `rg '\bINV-[125]\b'` over EVERY .go/.yaml mentioning
+  commandquery/list_commands/ListAvailableCommands/CommandQuerier → ZERO stale =
+  complete (registry guards are blind to unregistered files). New-scope partition:
+  scope owns commandquery/** + specific files; confirm NO other scope globs the
+  same dir — INV-PLUGIN owns specific hostfunc files (evaluate.go/stdlib_settings*
+  /functions_audit_wiring_test/stdlib_emit_registry) NOT commands.go/functions.go,
+  so no collision; functions.go/harness.go/census_test.go correctly shared (carry
+  foreign PLUGIN-27/32 / 13-scope / wholesystem-INV-5 tokens, residual-skipped).
+  Zero executable edits; dense 1..3; no generated artifact. Encountered:
+  hz0v4.14.27 PR B (2026-06-04) — READY.
