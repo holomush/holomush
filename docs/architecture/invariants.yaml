@@ -401,6 +401,12 @@ scopes:
       - "api/proto/holomush/core/v1/core.proto"
       - "api/proto/holomush/web/v1/web.proto"
       - "api/proto/holomush/plugin/v1/audit.proto"
+      # Gateway-family coverage meta-test: RETAINS INV-GW-* tokens as DELIBERATE
+      # regex fixtures (they test the word-boundary matcher, e.g. INV-GW-1 must
+      # not match INV-GW-10). Shared so the hardened residual walk (holomush-hz0v4.14.21
+      # — now also flags prefixed legacy tokens like INV-GW-N) skips it; the
+      # fixtures are intentional, not an un-migrated annotation.
+      - "internal/gateway_invariants/meta_test.go"
       # EVENTBUS+CRYPTO+STORE: publisher/types (see CRYPTO.shared_files). types carries P7 too.
       - "internal/eventbus/publisher.go"
       - "internal/eventbus/types.go"
