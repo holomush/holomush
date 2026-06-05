@@ -22,7 +22,7 @@ export const file_holomush_admin_v1_rekey: GenFile = /*@__PURE__*/
  * context (context_type + context_id). The caller must hold an authenticated
  * operator session (session_token from AdminService.Authenticate) and the
  * crypto.operator in-game capability plus the admin role — both are re-asserted
- * at dispatch time (INV-D16 defense-in-depth). Justification is recorded on
+ * at dispatch time (INV-CRYPTO-83 defense-in-depth). Justification is recorded on
  * the checkpoint row for audit; approval_request_id links a pending
  * admin_approvals row when dual-control is required by site policy.
  *
@@ -32,7 +32,7 @@ export type RekeyRequest = Message<"holomush.admin.v1.RekeyRequest"> & {
   /**
    * session_token authenticates the issuing operator. Must be a non-expired
    * token returned by AdminService.Authenticate; the handler re-validates
-   * crypto.operator capability and admin role on every call (INV-D16).
+   * crypto.operator capability and admin role on every call (INV-CRYPTO-83).
    *
    * @generated from field: string session_token = 1;
    */
@@ -440,7 +440,7 @@ export const RekeyErrorSchema: GenMessage<RekeyError> = /*@__PURE__*/
 export type RekeyResumeRequest = Message<"holomush.admin.v1.RekeyResumeRequest"> & {
   /**
    * session_token authenticates the resuming operator. The handler re-asserts
-   * crypto.operator capability and admin role (INV-D16).
+   * crypto.operator capability and admin role (INV-CRYPTO-83).
    *
    * @generated from field: string session_token = 1;
    */

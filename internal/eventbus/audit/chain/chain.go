@@ -16,7 +16,7 @@
 //
 // where JCS is RFC 8785 JSON Canonicalization Scheme implemented by
 // github.com/cyberphone/json-canonicalization (version pinned in go.mod per
-// INV-D13 — changing the library is a chain-breaking master-spec amendment).
+// INV-CRYPTO-80 — changing the library is a chain-breaking master-spec amendment).
 package chain
 
 import (

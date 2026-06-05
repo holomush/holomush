@@ -249,7 +249,7 @@ func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 }
 
 // TestDispatchDeliverySkipsAuditOnlyEvents is the dispatch-side regression
-// lock for INV-D14 / holomush-jxo8.6.26: events tagged with
+// lock for INV-CRYPTO-81 / holomush-jxo8.6.26: events tagged with
 // EventChannelAuditOnly (e.g. crypto.totp_*, crypto.policy_set) MUST be
 // ack'd and silently dropped before stream.Send. The persist-side
 // counterpart lives at test/integration/eventbus_e2e/audit_only_channel_test.go;
@@ -275,7 +275,7 @@ func TestDispatchDeliverySkipsAuditOnlyEvents(t *testing.T) {
 	assert.Equal(t, 1, d.acks(), "audit-only event must be ack'd so JS can age it out")
 	assert.Equal(t, 0, d.nacks())
 	assert.Empty(t, stream.sent,
-		"audit-only event must NOT reach client streams (INV-D14)")
+		"audit-only event must NOT reach client streams (INV-CRYPTO-81)")
 }
 
 // makeLocationDelivery builds a fakeDelivery carrying an event on the given

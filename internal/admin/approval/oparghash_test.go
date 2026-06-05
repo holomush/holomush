@@ -16,13 +16,13 @@ import (
 )
 
 // TestOpArgsHashAlgorithmStableAgainstGolden locks the SHA-256 over
-// proto-deterministic-marshal output for representative messages. INV-D8.
-// Updates require an INV-D8 review per the master-spec amendment in T23.
+// proto-deterministic-marshal output for representative messages. INV-CRYPTO-75.
+// Updates require an INV-CRYPTO-75 review per the master-spec amendment in T23.
 func TestOpArgsHashAlgorithmStableAgainstGolden(t *testing.T) {
 	tests := []struct {
 		name    string
 		msg     proto.Message
-		wantHex string // captured on first green run; do NOT change without an INV-D8 review
+		wantHex string // captured on first green run; do NOT change without an INV-CRYPTO-75 review
 	}{
 		{name: "empty AuthenticateRequest", msg: &adminv1.AuthenticateRequest{}, wantHex: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 		{name: "AuthenticateRequest with creds", msg: &adminv1.AuthenticateRequest{Username: "alice", Password: "p", TotpCode: "123456"}, wantHex: "0a9d3a4e69fc47797af5c93a0ea86665508c0b5d8e5db26b3637daa000f06708"},

@@ -209,7 +209,7 @@ func TestAuditingServiceRecoverAndClearEmitsBoth(t *testing.T) {
 	assert.Equal(t, totp.ClearReasonRecoveryCode, got.ClearedBy)
 }
 
-// TestAuditingServiceLogsAndContinuesOnPublishError — INV-D14: Publish
+// TestAuditingServiceLogsAndContinuesOnPublishError — INV-CRYPTO-81: Publish
 // failure logs at slog.Warn and does NOT cause the inner method's success
 // to roll back (the inner Service has already committed PG state).
 func TestAuditingServiceLogsAndContinuesOnPublishError(t *testing.T) {
@@ -226,7 +226,7 @@ func TestAuditingServiceLogsAndContinuesOnPublishError(t *testing.T) {
 	assert.True(t, res.LockoutTransition)
 	logs := logBuf.String()
 	require.Contains(t, logs, "Publish failed")
-	require.Contains(t, logs, "INV-D14")
+	require.Contains(t, logs, "INV-CRYPTO-81")
 }
 
 // TestAuditingServiceWrapsAllStateTransitionMethods asserts the decorator

@@ -11,7 +11,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 )
 
-// AssertOperatorAdmin re-asserts the two INV-D16 defense-in-depth gates
+// AssertOperatorAdmin re-asserts the two INV-CRYPTO-83 defense-in-depth gates
 // for an authenticated operator: (1) the player still holds the
 // crypto.operator capability, and (2) at least one of their characters
 // still holds the admin role.

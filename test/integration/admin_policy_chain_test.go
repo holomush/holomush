@@ -31,10 +31,10 @@ import (
 // Bead:           holomush-jxo8.6.25.
 //
 // Spec invariants validated:
-//   - INV-D10: genesis row of a chain has prev_hash == nil.
-//   - INV-D11: every chain extension's prev_hash equals the predecessor's
+//   - INV-CRYPTO-77: genesis row of a chain has prev_hash == nil.
+//   - INV-CRYPTO-78: every chain extension's prev_hash equals the predecessor's
 //     recomputed policy_hash.
-//   - INV-D12: every row's stored policy_hash equals the recomputed hash
+//   - INV-CRYPTO-79: every row's stored policy_hash equals the recomputed hash
 //     over its own canonicalized payload.
 //
 // Strategy deviation from plan §Task 27 step text ("boot the full server"):
@@ -58,7 +58,7 @@ import (
 // Each "boot" is modeled as a fresh subsystem instantiation against the
 // same persistent pool + JetStream — exactly what production reboot
 // semantics produce: a fresh process re-reads the persisted chain.
-var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
+var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78/INV-CRYPTO-79)", func() {
 	const (
 		gameID     = "main"
 		policyName = "dual_control_required"
@@ -146,7 +146,7 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 		return entries
 	}
 
-	It("Spec 1 (INV-D10): genesis on fresh DB writes a single policy_set row with prev_hash IS NULL", func() {
+	It("Spec 1 (INV-CRYPTO-77): genesis on fresh DB writes a single policy_set row with prev_hash IS NULL", func() {
 		startEmitterEpoch(policy.CryptoEffectiveConfig{DualControlRequired: []string{}})
 		hostSub.AwaitDrained(suiteT, 10*time.Second)
 		awaitChainLength(1)
@@ -154,14 +154,14 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 		entries := loadChain()
 		Expect(entries).To(HaveLen(1), "exactly one chain row at genesis")
 		Expect(entries[0].PrevHash).To(BeNil(),
-			"INV-D10: genesis row prev_hash MUST be nil")
+			"INV-CRYPTO-77: genesis row prev_hash MUST be nil")
 		Expect(entries[0].PolicyName).To(Equal(policyName))
 
-		// INV-D12: genesis row's stored policy_hash matches recomputed hash.
+		// INV-CRYPTO-79: genesis row's stored policy_hash matches recomputed hash.
 		recomputed, err := policy.ComputePolicyHash(&entries[0])
 		Expect(err).NotTo(HaveOccurred(), "ComputePolicyHash on genesis")
 		Expect(entries[0].PolicyHash).To(Equal(recomputed),
-			"INV-D12: stored policy_hash MUST equal recomputed hash")
+			"INV-CRYPTO-79: stored policy_hash MUST equal recomputed hash")
 
 		// Production verifier path (loads from events_audit, two-step decode,
 		// walks chain): clean genesis chain MUST verify.
@@ -174,7 +174,7 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 			"genesis chain MUST pass verifier")
 	})
 
-	It("Spec 2 (INV-D11): chain-extends across simulated reboot with config change; second row's prev_hash matches first row's recomputed hash", func() {
+	It("Spec 2 (INV-CRYPTO-78): chain-extends across simulated reboot with config change; second row's prev_hash matches first row's recomputed hash", func() {
 		// Epoch 1: genesis with empty config.
 		startEmitterEpoch(policy.CryptoEffectiveConfig{DualControlRequired: []string{}})
 		hostSub.AwaitDrained(suiteT, 10*time.Second)
@@ -197,13 +197,13 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 		firstRecomputed, err := policy.ComputePolicyHash(&entries[0])
 		Expect(err).NotTo(HaveOccurred(), "ComputePolicyHash on first")
 		Expect(entries[1].PrevHash).To(Equal(firstRecomputed),
-			"INV-D11: extension prev_hash MUST equal predecessor's recomputed policy_hash")
+			"INV-CRYPTO-78: extension prev_hash MUST equal predecessor's recomputed policy_hash")
 
-		// INV-D12: extension row's stored policy_hash matches its recomputed hash.
+		// INV-CRYPTO-79: extension row's stored policy_hash matches its recomputed hash.
 		extRecomputed, err := policy.ComputePolicyHash(&entries[1])
 		Expect(err).NotTo(HaveOccurred(), "ComputePolicyHash on extension")
 		Expect(entries[1].PolicyHash).To(Equal(extRecomputed),
-			"INV-D12: stored policy_hash MUST equal recomputed hash on extension row")
+			"INV-CRYPTO-79: stored policy_hash MUST equal recomputed hash on extension row")
 
 		// The two rows must reflect the configuration change (snapshot
 		// content differed across epochs — otherwise the emitter's
@@ -221,7 +221,7 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 			"two-row chain MUST pass verifier on second-boot path")
 	})
 
-	It("Spec 3 (INV-D11/D12): tampered events_audit row causes verifier subsystem to fail-closed at next boot with POLICY_CHAIN_HASH_MISMATCH or POLICY_CHAIN_BROKEN_LINK", func() {
+	It("Spec 3 (INV-CRYPTO-78/INV-CRYPTO-79): tampered events_audit row causes verifier subsystem to fail-closed at next boot with POLICY_CHAIN_HASH_MISMATCH or POLICY_CHAIN_BROKEN_LINK", func() {
 		// Build a clean two-row chain across two epochs.
 		startEmitterEpoch(policy.CryptoEffectiveConfig{DualControlRequired: []string{}})
 		hostSub.AwaitDrained(suiteT, 10*time.Second)
@@ -264,7 +264,7 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-D10/D11/D12)", func() {
 		})
 		err := tamperedVerifier.Start(ctx)
 		Expect(err).To(HaveOccurred(),
-			"verifier MUST fail-closed on tampered chain (INV-D11/D12)")
+			"verifier MUST fail-closed on tampered chain (INV-CRYPTO-78/INV-CRYPTO-79)")
 
 		o, ok := oops.AsOops(err)
 		Expect(ok).To(BeTrue(), "expected oops error; got %T: %v", err, err)

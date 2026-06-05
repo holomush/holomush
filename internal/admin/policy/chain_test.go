@@ -16,7 +16,7 @@ import (
 
 // fixedPayload returns a deterministic PolicySetPayload for golden-vector
 // testing. PolicyHash field is intentionally non-nil to verify it is
-// excluded from the canonicalized hash input (INV-D12).
+// excluded from the canonicalized hash input (INV-CRYPTO-79).
 func fixedPayload() *policy.PolicySetPayload {
 	return &policy.PolicySetPayload{
 		PolicyName: "crypto.operators",
@@ -34,9 +34,9 @@ func fixedPayload() *policy.PolicySetPayload {
 }
 
 // TestComputePolicyHashGoldenValue locks the canonicalization output to
-// a known SHA-256 value. INV-D12. If this test starts failing, the JCS
+// a known SHA-256 value. INV-CRYPTO-79. If this test starts failing, the JCS
 // canonicalizer or json.Marshal output changed shape — treat as a
-// chain-breaking master-spec amendment per INV-D13.
+// chain-breaking master-spec amendment per INV-CRYPTO-80.
 //
 // The expected hex is computed from the fixedPayload above with
 // PolicyHash zeroed; if you change the fixture, recompute via:
@@ -49,14 +49,14 @@ func TestComputePolicyHashGoldenValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 32, "SHA-256 output must be 32 bytes")
 	// Golden vector — locked. If this fails, the JCS canonicalizer or
-	// json.Marshal output changed; treat as a chain-breaking amendment (INV-D13).
+	// json.Marshal output changed; treat as a chain-breaking amendment (INV-CRYPTO-80).
 	const expectedHex = "032be94de2221bf7643d5c1ecdf07e7da5ac203d82d8cd3aefc0a72efbde096c"
 	assert.Equal(t, expectedHex, hex.EncodeToString(got))
 }
 
 // TestComputePolicyHashExcludesPolicyHashField verifies the PolicyHash
 // field is zeroed before canonicalization, so two payloads differing
-// only in PolicyHash produce the same hash. INV-D12.
+// only in PolicyHash produce the same hash. INV-CRYPTO-79.
 func TestComputePolicyHashExcludesPolicyHashField(t *testing.T) {
 	p1 := fixedPayload()
 	p1.PolicyHash = []byte("AAA")
@@ -73,7 +73,7 @@ func TestComputePolicyHashExcludesPolicyHashField(t *testing.T) {
 
 // TestComputePolicyHashNormalizesEmptyPrevHashToNil verifies that a
 // genesis-shaped payload with PrevHash=[]byte{} produces the same hash as
-// PrevHash=nil. INV-D10 says genesis prev_hash is nil; this guards against
+// PrevHash=nil. INV-CRYPTO-77 says genesis prev_hash is nil; this guards against
 // json.Marshal's `null` vs `""` divergence silently producing two distinct
 // genesis hashes for callers that initialize PrevHash differently.
 func TestComputePolicyHashNormalizesEmptyPrevHashToNil(t *testing.T) {
@@ -92,7 +92,7 @@ func TestComputePolicyHashNormalizesEmptyPrevHashToNil(t *testing.T) {
 }
 
 // TestComputePolicyHashStableUnderJSONFieldReorder verifies JCS sorts
-// keys deterministically. INV-D13 (the canonicalizer's own contract;
+// keys deterministically. INV-CRYPTO-80 (the canonicalizer's own contract;
 // guards against future field-order changes in PolicySetPayload struct
 // silently breaking chain integrity).
 func TestComputePolicyHashStableUnderJSONFieldReorder(t *testing.T) {

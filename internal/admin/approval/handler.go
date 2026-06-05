@@ -32,7 +32,7 @@ func NewApproveHandler(s adminauth.SessionStore, r Repo, g access.SubjectResolve
 
 // Approve is the AdminService.Approve RPC entry point. It resolves the
 // session_token, re-asserts capability + role (defense-in-depth per
-// INV-D16) via adminauth.AssertOperatorAdmin, then calls Repo.MarkApproved
+// INV-CRYPTO-83) via adminauth.AssertOperatorAdmin, then calls Repo.MarkApproved
 // which atomically rejects self-approval, expired rows, and already-approved
 // rows.
 func (h *ApproveHandler) Approve(

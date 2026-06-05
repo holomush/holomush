@@ -29,7 +29,7 @@ import (
 // persist() check (audit/projection.go:headerRendering) rejected every
 // such event with AUDIT_MISSING_HEADER and the row never landed.
 //
-// Restores INV-D14 (audit emission persists) and INV-D17 (chain genesis
+// Restores INV-CRYPTO-81 (audit emission persists) and INV-CRYPTO-84 (chain genesis
 // emit persists). The spec exercises the full publish→persist round-trip
 // for every host-emit AUDIT_ONLY event type registered in builtins.go.
 var _ = Describe("Audit-only channel persists to events_audit", func() {

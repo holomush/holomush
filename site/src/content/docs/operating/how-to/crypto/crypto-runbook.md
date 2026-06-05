@@ -126,8 +126,8 @@ Exit codes follow `sysexits.h`:
     holomush crypto rekey list --context scene:01ABC --since 24h
     ```
 
-    If a non-terminal checkpoint exists with different arguments, you must
-    abort it before starting a new one (see [Abort procedure](#abort-procedure)).
+   If a non-terminal checkpoint exists with different arguments, you must
+   abort it before starting a new one (see [Abort procedure](#abort-procedure)).
 
 2. **Start the rekey:**
 
@@ -135,8 +135,8 @@ Exit codes follow `sysexits.h`:
     holomush crypto rekey scene:01ABC --justification "Suspected key compromise"
     ```
 
-    The CLI streams progress for each phase. Phase 3 emits row-count updates
-    roughly every 30 seconds for large cold-tier datasets.
+   The CLI streams progress for each phase. Phase 3 emits row-count updates
+   roughly every 30 seconds for large cold-tier datasets.
 
 3. **On success** the CLI prints the completed `request_id` and the
    `audit_event_id`. Record both for the incident log.
@@ -147,7 +147,7 @@ Exit codes follow `sysexits.h`:
     holomush crypto rekey status <request_id>
     ```
 
-    Expect `status: complete` and a non-null `completed_at`.
+   Expect `status: complete` and a non-null `completed_at`.
 
 ## Resume procedure
 
@@ -221,7 +221,7 @@ CLI exit code: 75 (EX_TEMPFAIL)
     holomush admin cluster status
     ```
 
-    Check for replicas that are unreachable, recently restarted, or lagging.
+   Check for replicas that are unreachable, recently restarted, or lagging.
 
 2. **Wait for replicas to heal** and retry:
 
@@ -229,7 +229,7 @@ CLI exit code: 75 (EX_TEMPFAIL)
     holomush crypto rekey resume <request_id>
     ```
 
-    This retries Phase 5 without re-running Phases 1–3.
+   This retries Phase 5 without re-running Phases 1–3.
 
 3. **If replicas cannot be healed** in a reasonable time window, escalate
    to [force-destroy](#force-destroy-escalation).

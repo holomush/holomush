@@ -83,7 +83,7 @@ type ArgsHash [32]byte
 // ComputeRekeyArgsHash matches the algorithm D ships in approval.ComputeOpArgsHash:
 // SHA-256 over proto.MarshalOptions{Deterministic: true}.Marshal(args) where
 // args is the proto RekeyRequest. INV-E24 (stable across binary builds with
-// protobuf-go pinned per INV-D18).
+// protobuf-go pinned per INV-CRYPTO-85).
 //
 // The hash binds the WORK (context_type, context_id, justification), not WHO.
 // Different operators attempting the same rekey args produce the same hash,

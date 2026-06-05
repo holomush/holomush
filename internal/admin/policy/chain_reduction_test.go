@@ -23,7 +23,7 @@ import (
 //
 // This is the structural guarantee that motivates the Phase 5 sub-epic E
 // refactor: the policy_set chain rides the generalized auditchain primitive
-// without altering the hash that's stored in events_audit. D's INV-D10
+// without altering the hash that's stored in events_audit. D's INV-CRYPTO-77
 // PrevHash empty-form → nil normalization is preserved by
 // canonicalizePolicySetPayload (chain.go) — a part of the
 // PolicySetHandlerFor.Canonicalize contract.

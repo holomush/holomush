@@ -86,9 +86,9 @@ In the Cloudflare dashboard:
     openssl rand -base64 48 | tr -d '=/+' | head -c 64
     ```
 
-    **Store this password somewhere recoverable** (1Password, a sealed
-    secret, etc.). If it is lost, every snapshot in the repository becomes
-    unrecoverable — Kopia encrypts client-side with no recovery.
+   **Store this password somewhere recoverable** (1Password, a sealed
+   secret, etc.). If it is lost, every snapshot in the repository becomes
+   unrecoverable — Kopia encrypts client-side with no recovery.
 5. No Spaces lifecycle rule is needed. Kopia manages retention
    internally: pinned `pre-deploy:*` snapshots live forever, others are
    pruned by policy.
@@ -307,8 +307,8 @@ in the repository becomes unreadable. There is no "re-encrypt" operation.
         --secret-access-key="${BACKUP_S3_SECRET_KEY}"
     ```
 
-    Old snapshots remain encrypted with the old password — keep a copy if
-    they matter.
+   Old snapshots remain encrypted with the old password — keep a copy if
+   they matter.
 
 ### Restore a backup
 

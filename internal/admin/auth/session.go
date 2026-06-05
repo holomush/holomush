@@ -13,7 +13,7 @@ import (
 )
 
 // SessionStore is the in-memory map of issued operator session tokens.
-// Per spec §4 / INV-D2 / INV-D3:
+// Per spec §4 / INV-CRYPTO-69 / INV-CRYPTO-70:
 //   - Tokens are ULIDs.
 //   - TTL is per-construction (production: 10 min).
 //   - The map is per-process; restart loses all sessions by design.

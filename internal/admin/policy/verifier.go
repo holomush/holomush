@@ -13,7 +13,7 @@ import (
 )
 
 // VerifyChain validates the integrity of the policy_set chain for one
-// policy_name (identified by subject). Per INV-D10/D11/D12. Reads
+// policy_name (identified by subject). Per INV-CRYPTO-77/INV-CRYPTO-78/INV-CRYPTO-79. Reads
 // events_audit ORDER BY js_seq via the auditchain primitive, walks the
 // chain, and recomputes each event's policy_hash via the chain handler's
 // canonicalize step.
@@ -21,7 +21,7 @@ import (
 // Post Phase 5 sub-epic E refactor: this is a thin shim over
 // [chain.Verifier.VerifyScope] backed by [chain.NewPostgresRepo]. The
 // per-chain canonicalize / scope / hash extractors live as standalone
-// functions registered via [PolicySetHandlerFor] (chain.go). D's INV-D10
+// functions registered via [PolicySetHandlerFor] (chain.go). D's INV-CRYPTO-77
 // PrevHash empty-form → nil normalization is preserved in
 // canonicalizePolicySetPayload.
 //
@@ -35,7 +35,7 @@ import (
 //
 // Returns a typed AUDIT_CHAIN_* error on any integrity failure, wrapped in
 // POLICY_CHAIN_VERIFY_FAILED to identify the policy-set chain at the
-// caller boundary. INV-D10/D11/D12 invariants are generalized to
+// caller boundary. INV-CRYPTO-77/INV-CRYPTO-78/INV-CRYPTO-79 invariants are generalized to
 // AUDIT_CHAIN_BROKEN_GENESIS / AUDIT_CHAIN_BROKEN_LINK /
 // AUDIT_CHAIN_HASH_MISMATCH respectively.
 //

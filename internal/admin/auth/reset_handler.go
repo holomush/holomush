@@ -23,7 +23,7 @@ type ClearTOTPCaller interface {
 	ClearTOTP(ctx context.Context, playerID ulid.ULID, by totp.ClearReason) (totp.ClearResult, error)
 }
 
-// PlayerRoleHasher is the narrow surface for INV-D16 role re-check.
+// PlayerRoleHasher is the narrow surface for INV-CRYPTO-83 role re-check.
 // Used by AssertOperatorAdmin and by the Approve / ResetTOTP handlers,
 // which import this canonical definition from this package (the previous
 // per-package duplicate in approval/handler.go was collapsed when
@@ -46,7 +46,7 @@ func NewResetTOTPHandler(s SessionStore, g access.SubjectResolver, rh PlayerRole
 }
 
 // ResetTOTP is the AdminService.ResetTOTP RPC entry point. Resolves
-// session, re-asserts capability + role (INV-D16), validates the
+// session, re-asserts capability + role (INV-CRYPTO-83), validates the
 // target_player_id is a valid ULID, then calls AuditingService.ClearTOTP
 // with ClearReasonAdminReset (which emits crypto.totp_cleared on success
 // per T13). Response.Cleared = ClearResult.WasEnrolled (false if the
