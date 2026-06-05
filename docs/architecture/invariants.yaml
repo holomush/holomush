@@ -91,7 +91,8 @@ scopes:
       # CRYPTO+STORE: history files carrying both P7/RB and TS (nanos) annotations.
       # INV-D sub-epic-d co-located with sibling INV-E (migrating .14.30) / go.mod dep-pins / multi-scope.
       - "api/proto/holomush/admin/v1/rekey.proto"
-      # INV-E sub-epic-e: readstream policy_hash wiring (+ stray INV-F-policy_hash, holomush bead) / multi-scope test server.
+      # INV-E sub-epic-e: readstream policy_hash wiring (INV-CRYPTO-112/53; the .14.23 stray
+      # INV-F-policy_hash descriptive label was normalized to INV-CRYPTO-53 in .14.32) / multi-scope test server.
       - "cmd/holomush/readstream_wiring.go"
       - "internal/testsupport/holomushtest/server.go"
       - "go.mod"
