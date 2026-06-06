@@ -108,6 +108,14 @@ Specs define requirements. They MUST include:
 2. **Requirements** using RFC2119 keywords
 3. **Non-goals** to clarify scope
 
+When a spec introduces or changes a **system-level invariant** (a durable
+cross-cutting guarantee, not a local feature requirement), it MUST capture it in
+the registry (`docs/architecture/invariants.yaml`) with a canonical
+`INV-<SCOPE>-N` id, and MUST consult existing entries in the relevant scope so it
+does not duplicate, contradict, or silently renumber one. See
+`.claude/rules/invariants.md` for what rises to an invariant and the full
+workflow. Do NOT mint ad-hoc invariant families in prose.
+
 Naming: `YYYY-MM-DD-<feature-name>.md`
 
 ### Roadmap (`docs/roadmap.md`)

@@ -114,6 +114,22 @@ assert.Contains(t, slice, element)
 | **SHOULD** use error codes | Prefer `errutil.AssertErrorCode` or `assert.ErrorIs` over string matching |
 | **MUST** use `require` for preconditions | `require.NoError` for setup, `assert.*` for the check under test |
 
+## Invariant Bindings (`// Verifies:`)
+
+When a test genuinely asserts a named system invariant from the registry
+(`docs/architecture/invariants.yaml`), annotate it so the registry can bind it:
+
+```go
+// Verifies: INV-CRYPTO-28
+func TestDecryptPluginRowFailClosedWithoutAuditEmitter(t *testing.T) { ... }
+```
+
+| Requirement | Rule |
+| ----------- | ---- |
+| **MUST** annotate invariant-asserting tests | A test that proves an `INV-<SCOPE>-N` carries `// Verifies: INV-<SCOPE>-N` immediately above the test (or the assertion block). This is what flips the registry entry from `binding: pending` to `bound`. |
+| **MUST NOT** annotate a test that does not prove it | A `// Verifies:` on a test that only touches the code is a false-green (the INV-RB-3 bug, `holomush-0sh1k`). No genuine assertion ⇒ leave it pending and file a coverage bug. |
+| **SHOULD** read the rule | Full workflow (define / respect / bind / regenerate) is in `.claude/rules/invariants.md`. |
+
 ## Mockery
 
 Generate mocks with mockery (config in `.mockery.yaml`):
