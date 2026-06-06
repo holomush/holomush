@@ -36,8 +36,8 @@ func TestSceneResolverGetSchemaReturnsSceneAttributes(t *testing.T) {
 // log, or content_entries). The hard privacy boundary (INV-SCENE-60) keeps log
 // content out of the ABAC attribute path entirely; this is the regression
 // lock. It passes today — GetSchema exposes only id/owner/state/visibility/
-// location/participants/invitees — and fails any future PR that adds a
-// content-bearing attribute to the resolver schema.
+// location/has_location/participants/invitees — and fails any future PR that
+// adds a content-bearing attribute to the resolver schema.
 func TestResolverNeverExposesContentByForbiddenAttributeName(t *testing.T) {
 	t.Parallel()
 	r := NewSceneResolver(newFakeStore())
@@ -76,6 +76,74 @@ func TestSceneResolverResolveResourceReturnsSceneAttributes(t *testing.T) {
 	assert.Equal(t, "active", attrs["state"].GetStringValue())
 	require.NotNil(t, attrs["visibility"])
 	assert.Equal(t, "open", attrs["visibility"].GetStringValue())
+}
+
+// TestResolveResourceLocationWitness exercises the omit-optional-attrs contract
+// for the scene location attribute (.claude/rules/abac-providers.md, ADR
+// holomush-ti1b): the resolver emits the "location" key only when LocationID
+// resolves to a non-empty value, and the has_location boolean witness is always
+// present. An empty-string sentinel ("location": "") would fail-open in the DSL
+// evaluator — a present "" is a value, not a missing key — so an absent or
+// empty-string location omits the key entirely.
+func TestResolveResourceLocationWitness(t *testing.T) {
+	empty := ""
+	loc := "loc-tavern"
+	tests := []struct {
+		name        string
+		locationID  *string
+		wantPresent bool
+		wantValue   string
+	}{
+		{"omits location when LocationID is nil", nil, false, ""},
+		{"omits location when LocationID derefs to empty string", &empty, false, ""},
+		{"emits location when LocationID is set", &loc, true, "loc-tavern"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeStore()
+			store.scenes["scene-loc"] = &SceneRow{
+				ID:         "scene-loc",
+				OwnerID:    "char-alice",
+				State:      string(SceneStateActive),
+				Visibility: string(SceneVisibilityOpen),
+				LocationID: tt.locationID,
+			}
+			r := NewSceneResolver(store)
+
+			resp, err := r.ResolveResource(context.Background(), &pluginv1.ResolveResourceRequest{
+				ResourceType: "scene",
+				ResourceId:   "scene-loc",
+			})
+			require.NoError(t, err)
+			attrs := resp.GetAttributes()
+
+			require.NotNil(t, attrs["has_location"], "has_location witness MUST always be present")
+			assert.Equal(t, tt.wantPresent, attrs["has_location"].GetBoolValue(),
+				"has_location witness MUST reflect whether location resolved")
+			if tt.wantPresent {
+				require.NotNil(t, attrs["location"], "location key MUST be present when LocationID is set")
+				assert.Equal(t, tt.wantValue, attrs["location"].GetStringValue())
+			} else {
+				assert.NotContains(t, attrs, "location",
+					"abac-providers.md: location key MUST be absent (no empty-string sentinel)")
+			}
+		})
+	}
+}
+
+// TestGetSchemaDeclaresHasLocationWitness verifies the has_location witness is
+// declared in the schema as a BOOL so policies can type-check it.
+func TestGetSchemaDeclaresHasLocationWitness(t *testing.T) {
+	r := NewSceneResolver(newFakeStore())
+
+	resp, err := r.GetSchema(context.Background(), &pluginv1.GetSchemaRequest{})
+	require.NoError(t, err)
+	sceneSchema, ok := resp.GetResourceTypes()["scene"]
+	require.True(t, ok, "schema must include 'scene' resource type")
+	assert.Equal(t, pluginv1.AttributeType_ATTRIBUTE_TYPE_BOOL,
+		sceneSchema.GetAttributes()["has_location"],
+		"has_location MUST be declared as a BOOL witness")
 }
 
 func TestSceneResolverResolveResourceRejectsForeignResourceType(t *testing.T) {
