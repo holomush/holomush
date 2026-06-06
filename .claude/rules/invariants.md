@@ -33,13 +33,22 @@ The live binding-backfill status lives in `docs/roadmap.md` → Maintenance.
 
 ## What rises to a registry invariant
 
-Register a guarantee when it is a **durable, system-level property** — a
-cross-cutting MUST/MUST NOT that future work could silently break and that you
-want a test to pin forever (fail-closed ABAC defaults, no-plaintext-to-non-participant,
-runtime symmetry, ordering ownership). Do NOT register every RFC2119 MUST: a
-local feature requirement ("the create-scene RPC MUST return the new ID") is not
-an invariant. Rule of thumb: if violating it is a *regression in a guarantee*
-rather than a *missing feature*, it is an invariant.
+Register a guarantee when it is a **durable property that future work could
+silently break and that a test can pin forever**. Rule of thumb: if violating it
+is a *regression in a guarantee* rather than a *missing feature*, it is an
+invariant. Do NOT register every RFC2119 MUST: a local feature requirement ("the
+create-scene RPC MUST return the new ID") is not an invariant.
+
+### In scope vs. out of scope
+
+| In scope | Out of scope |
+| --- | --- |
+| **System-behavior guarantees** — fail-closed ABAC defaults, no-plaintext-to-non-participant, runtime symmetry, ordering ownership. The core of the registry. | **Migration / refactor-completeness bookkeeping** — "every pre-consolidation test is named in a `// replaces:` chain". Tracks a one-time migration, not a durable guarantee. |
+| **Test-infrastructure fidelity** — durable guarantees about *how the system is verified* (e.g. "the load harness drives the real Connect/TCP path, never a stub"; "`sessiontest.NewStore` returns an isolated store per call"). These can be silently broken and are worth pinning. Keep them, but make the summary state the **guarantee**, not the harness wiring. | **Self-admitted documentary / non-testable notes** — anything whose own summary says "documentary", "verified by spec review", "operational property, not an invariant", or describes a transient phase-implementation detail ("Phase 4 introduces no status transitions"). If no test can fail when it's violated, it is not an invariant. |
+
+Borderline test-infra entries SHOULD be phrased as the property under test, not
+the test's construction ("no `t.Fatalf`", "adds zero production code", "E6
+acceptance" are PR acceptance criteria, not invariants).
 
 Pick the **scope** by its declared `boundary` in `invariants.yaml` (CRYPTO,
 SCENE, PLUGIN, EVENTBUS, CLUSTER, ACCESS, SESSION, STORE, TELEMETRY, PRIVACY,
@@ -75,11 +84,12 @@ An invariant is only *proven* when a test asserts it. The mechanism:
 3. In `invariants.yaml`, set the entry `binding: bound` and add `asserted_by:`
    listing the verifying test file(s).
 4. Regenerate: `go run ./cmd/inv-render`.
-5. Confirm: `task test -- -run 'TestEveryRegistryInvariantHasBinding|TestProvenanceGuard' ./test/meta/`.
+5. Confirm: `task test -- -run 'TestEveryRegistryInvariantHasBinding|TestProvenanceGuard|TestBoundInvariantsAreGenuinelyAsserted' ./test/meta/`.
 
 | Requirement | Rule |
 | --- | --- |
-| **MUST NOT** fabricate a binding | If no test genuinely asserts the invariant, that is a real coverage gap — file `bd create -t bug` and leave it `binding: pending`. A `// Verifies:` on a test that doesn't actually prove the invariant is a false-green (this is precisely what bug `holomush-0sh1k`/INV-RB-3 was). |
+| **MUST NOT** fabricate a binding | If no test genuinely asserts the invariant, that is a real coverage gap — file `bd create -t bug` and leave it `binding: pending`. A `// Verifies:` on a test that doesn't actually prove the invariant is a false-green (this is precisely what bug `holomush-0sh1k`/INV-RB-3 was, and INV-PRIVACY-7 bound to a `Skip()` placeholder). |
+| **MUST NOT** bind a `Skip`/placeholder test | `TestBoundInvariantsAreGenuinelyAsserted` fails CI if a `bound` entry's every `// Verifies:` site is a Skip-only placeholder with no assertion. Note its limit: it cannot detect a *partial* binding (a test that asserts only one clause of a multi-clause invariant — that needs human review, as INV-PRIVACY-6 did). |
 | **MUST NOT** carry `asserted_by` while pending | The meta-test rejects a `binding: pending` entry that lists `asserted_by` — no fabricated provenance. |
 | **MAY** stay pending | `pending` is a tolerated state (decision `holomush-hz0v4.10`); backfill is a ratchet, not a blocker. Per-scope backfill is tracked under epic `holomush-hz0v4`. |
 

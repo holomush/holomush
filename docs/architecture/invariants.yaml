@@ -1961,9 +1961,11 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
     legacy: ["I-PRIV-6@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
     summary: "ABAC staff override bypasses the hard-gate location-match only, NOT the temporal floor."
-    asserted_by:
-      - "test/integration/privacy/privacy_test.go"
-    binding: bound
+    # binding: pending — only the gate-bypass arm is exercised; the
+    # floor-preservation arm (staff still bounded by their own LocationArrivedAt)
+    # is NOT tested (the integrationtest harness can't emit timestamp-controlled
+    # events across a session boundary yet). Re-bind once that arm has a test.
+    binding: pending
     refs:
       - {file: "internal/access/policy/seed.go", token: "I-PRIV-6"}
       - {file: "internal/access/policy/seed_test.go", token: "I-PRIV-6"}
@@ -1978,9 +1980,10 @@ invariants:
     legacy: ["I-PRIV-7@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
     summary: "Plugin-owned subjects with divergent history-replay semantics MUST declare history_scope in the manifest and
       be exercised by a test; silent inheritance of permissive semantics is forbidden."
-    asserted_by:
-      - "test/integration/privacy/privacy_test.go"
-    binding: bound
+    # binding: pending — the only annotated test is a Skip() placeholder
+    # (no plugin currently declares history_scope: custom). Re-bind when a
+    # custom-scope plugin lands and the test replaces Skip with a real assertion.
+    binding: pending
     refs:
       - {file: "internal/plugin/manifest.go", token: "I-PRIV-7"}
       - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-7"}
