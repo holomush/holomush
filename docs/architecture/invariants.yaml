@@ -3466,7 +3466,10 @@ invariants:
     legacy: ["INV-6@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
     summary: "Emitting an event with Sensitive=true whose type is not declared in the plugin's crypto.emits as 'may' or 'always'
       MUST fail at the emit-time fence with EVENT_SENSITIVITY_NOT_DECLARED (over-claim reject)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/sensitivity_fence_test.go"
+      - "internal/plugin/corecomm_crypto_correct_test.go"
     refs:
       - {file: "internal/plugin/sensitivity_fence.go", token: "INV-6"}
       - {file: "internal/plugin/sensitivity_fence_test.go", token: "INV-6"}
@@ -3482,7 +3485,10 @@ invariants:
     legacy: ["INV-7@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
     summary: "A plugin declaring an event type as sensitivity:always MUST NOT publish that event with Sensitive=false; the
       emit-time fence rejects with EVENT_SENSITIVITY_REQUIRED (under-claim reject)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/sensitivity_fence_test.go"
+      - "internal/plugin/corecomm_crypto_correct_test.go"
     refs:
       - {file: "internal/plugin/sensitivity_fence.go", token: "INV-7"}
       - {file: "internal/plugin/sensitivity_fence_test.go", token: "INV-7"}

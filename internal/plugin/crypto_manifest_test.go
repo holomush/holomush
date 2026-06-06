@@ -96,6 +96,42 @@ func TestLookupEmitSensitivity(t *testing.T) {
 			eventType: "anything",
 			want:      plugins.SensitivityNever,
 		},
+		// holomush-50zqs: a bare crypto.emits entry must match a plugin-
+		// qualified WIRE type (core-communication:page) via composition with
+		// the plugin's own name.
+		{
+			name: "matches bare entry against own-qualified wire type",
+			manifest: &plugins.Manifest{
+				Name: "core-communication",
+				Crypto: &plugins.CryptoSection{
+					Emits: []plugins.CryptoEmit{{EventType: "page", Sensitivity: plugins.SensitivityAlways}},
+				},
+			},
+			eventType: "core-communication:page",
+			want:      plugins.SensitivityAlways,
+		},
+		{
+			name: "still matches a bare wire type (core-scenes convention)",
+			manifest: &plugins.Manifest{
+				Name: "core-scenes",
+				Crypto: &plugins.CryptoSection{
+					Emits: []plugins.CryptoEmit{{EventType: "scene_pose", Sensitivity: plugins.SensitivityAlways}},
+				},
+			},
+			eventType: "scene_pose",
+			want:      plugins.SensitivityAlways,
+		},
+		{
+			name: "does not match a foreign plugin prefix",
+			manifest: &plugins.Manifest{
+				Name: "core-communication",
+				Crypto: &plugins.CryptoSection{
+					Emits: []plugins.CryptoEmit{{EventType: "page", Sensitivity: plugins.SensitivityAlways}},
+				},
+			},
+			eventType: "other-plugin:page",
+			want:      plugins.SensitivityNever,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
