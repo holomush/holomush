@@ -1011,3 +1011,284 @@ func TestOwnedPathsPartitionSemantics(t *testing.T) {
 		})
 	}
 }
+
+// assertionCallRE matches a real assertion *call* (testify / gomega / std), not a
+// prose mention of the word "assert" in a comment. Used to tell a genuine test
+// from a Skip-only placeholder when validating bound invariants.
+var assertionCallRE = regexp.MustCompile(`(?:assert|require)\.[A-Za-z]+\(|\bExpect\(|\bEventually\(|\bConsistently\(|\.Should(?:Not)?\(|\bt\.(?:Errorf?|Fatalf?)\(`)
+
+// skipCallRE matches a test-skip call (std `t.Skip(` or ginkgo `Skip(`).
+var skipCallRE = regexp.MustCompile(`\b(?:t\.)?Skip\(`)
+
+// blockStartRE matches the start of a test block — a top-level Go decl
+// (`func `, `var _ = `) OR a (possibly indented, possibly focus/pending-prefixed)
+// Ginkgo container/spec opener (`Describe`/`Context`/`When`/`It`/`Specify`/
+// `DescribeTable`/`Entry`). The leading-whitespace capture group records the
+// block's indentation so a nested spec can be scoped to itself rather than its
+// outer `Describe` (Qodo finding on PR #4393: top-level-only scoping let a
+// Skip-only nested spec be masked by an asserting sibling).
+var blockStartRE = regexp.MustCompile(`^(\s*)(?:func |var _ = |(?:F|P|X)?(?:Describe|Context|When|It|Specify)\(|DescribeTable(?:Subtree)?\(|Entry\()`)
+
+// blockStart is one block opener: its line index and indentation width.
+type blockStart struct {
+	line   int
+	indent int
+}
+
+// findBlockStarts returns every block opener in source order.
+func findBlockStarts(lines []string) []blockStart {
+	var bs []blockStart
+	for i, l := range lines {
+		if m := blockStartRE.FindStringSubmatch(l); m != nil {
+			bs = append(bs, blockStart{line: i, indent: len(m[1])})
+		}
+	}
+	return bs
+}
+
+// scopedBlock returns the source block that a `// Verifies:` annotation at line
+// annLine documents: the nearest following opener, bounded by the next opener at
+// the SAME-or-shallower indentation (a sibling or an outer block). This scopes an
+// indented Ginkgo spec to itself — its own nested children (deeper indent) are
+// included, but a sibling spec is not — so a Skip-only nested spec is classified
+// on its own merits and cannot be masked by an asserting sibling.
+func scopedBlock(lines []string, starts []blockStart, annLine int) string {
+	own := -1
+	ownIndent := 0
+	for _, b := range starts {
+		if b.line >= annLine {
+			own, ownIndent = b.line, b.indent
+			break
+		}
+	}
+	if own == -1 {
+		return "" // annotation after the last opener — nothing to classify
+	}
+	end := len(lines)
+	for _, b := range starts {
+		if b.line > own && b.indent <= ownIndent {
+			end = b.line
+			break
+		}
+	}
+	return strings.Join(lines[own:end], "\n")
+}
+
+// classifyTestBlock classifies one top-level test block:
+//
+//	"asserts"  — contains at least one assertion call (genuine)
+//	"skiponly" — contains a Skip() and NO assertion call (placeholder)
+//	"bare"     — neither (e.g. asserts only via an unrecognized helper) — not
+//	             flagged, to avoid false-positives on helper-based assertions
+//
+// Factored out so the decision is unit-testable (TestClassifyTestBlock).
+func classifyTestBlock(block string) string {
+	if assertionCallRE.MatchString(block) {
+		return "asserts"
+	}
+	if skipCallRE.MatchString(block) {
+		return "skiponly"
+	}
+	return "bare"
+}
+
+// isPlaceholderOnly reports whether a bound invariant's `// Verifies:` sites are
+// EVERY one a Skip-only placeholder — the only state the guard flags. A single
+// "asserts" site means genuine; a "bare" site (assertion via a helper the
+// classifier doesn't recognize) is TOLERATED, not treated as a placeholder, so a
+// mixed bare+skiponly binding is NOT flagged (the verdict must match the
+// "every site is Skip-only" contract — CodeRabbit, PR #4393). Empty input is not
+// a placeholder: the missing-annotation case belongs to
+// TestEveryRegistryInvariantHasBinding.
+func isPlaceholderOnly(classes []string) bool {
+	if len(classes) == 0 {
+		return false
+	}
+	for _, c := range classes {
+		if c != "skiponly" {
+			return false
+		}
+	}
+	return true
+}
+
+// TestBoundInvariantsAreGenuinelyAsserted guards against false-green bindings:
+// a registry entry marked binding: bound whose every `// Verifies:` annotation
+// sits on a Skip-only placeholder. The binding-presence check
+// (TestEveryRegistryInvariantHasBinding) only checks the annotation EXISTS — it
+// cannot tell a real assertion from a Skip("not implemented yet") placeholder.
+// Regression: INV-PRIVACY-7 was bound to a Skip placeholder and INV-PRIVACY-6 to
+// a half-covered test; both were caught only by a manual audit before this guard
+// existed.
+//
+// It flags ONLY the unambiguous failure mode (every site is Skip-only with no
+// assertion). A "bare" block (no assertion call, no Skip — e.g. assertion via an
+// unrecognized helper) is tolerated to avoid false-positives; the
+// binding-presence test still owns the "annotation entirely missing" case.
+func TestBoundInvariantsAreGenuinelyAsserted(t *testing.T) {
+	root := findRepoRoot(t)
+	reg := loadRegistry(t)
+
+	bound := make(map[string]bool)
+	for _, e := range reg.Invariants {
+		if e.External || e.Binding == "" || e.Binding == "pending" {
+			continue
+		}
+		bound[e.ID] = true
+	}
+
+	// Read test files through an os.Root rooted at the repo so the read path is
+	// constrained to the repo tree (no Gosec G304 suppression needed — same
+	// pattern as TestEveryRegistryInvariantHasBinding).
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatalf("open repo root: %v", err)
+	}
+	defer func() { _ = rootFS.Close() }()
+
+	classes := make(map[string][]string) // INV-ID -> block classification per site
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if _, skip := skipDirs[d.Name()]; skip {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), "_test.go") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		f, openErr := rootFS.Open(rel)
+		if openErr != nil {
+			return openErr
+		}
+		data, readErr := io.ReadAll(f)
+		closeErr := f.Close()
+		if readErr != nil {
+			return readErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		lines := strings.Split(string(data), "\n")
+		starts := findBlockStarts(lines)
+		for i, l := range lines {
+			m := registryVerifiesRE.FindStringSubmatch(l)
+			if m == nil || !bound[m[1]] {
+				continue
+			}
+			block := scopedBlock(lines, starts, i)
+			if block == "" {
+				continue
+			}
+			classes[m[1]] = append(classes[m[1]], classifyTestBlock(block))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk repo: %v", err)
+	}
+
+	for id := range bound {
+		if isPlaceholderOnly(classes[id]) {
+			t.Errorf("%s: binding: bound but every // Verifies: site is a Skip-only placeholder with no assertion — false-green. Revert to binding: pending until a genuine assertion exists.", id)
+		}
+	}
+}
+
+// TestClassifyTestBlock unit-tests the genuine/placeholder classifier.
+func TestClassifyTestBlock(t *testing.T) {
+	cases := []struct{ name, block, want string }{
+		{"testify assert", "func TestX(t *testing.T) {\n\tassert.Equal(t, 1, 1)\n}", "asserts"},
+		{"testify require", "func TestX(t *testing.T) {\n\trequire.NoError(t, err)\n}", "asserts"},
+		{"gomega Expect", "var _ = It(\"x\", func() {\n\tExpect(got).To(Equal(1))\n})", "asserts"},
+		{"gomega Eventually", "var _ = It(\"x\", func() {\n\tEventually(f).Should(Succeed())\n})", "asserts"},
+		{"std t.Fatalf", "func TestX(t *testing.T) {\n\tif err != nil {\n\t\tt.Fatalf(\"x\")\n\t}\n}", "asserts"},
+		{"skip-only ginkgo", "var _ = It(\"x\", func() {\n\tSkip(\"not yet\")\n})", "skiponly"},
+		{"skip-only std", "func TestX(t *testing.T) {\n\tt.Skip(\"todo\")\n}", "skiponly"},
+		{"assert wins over conditional skip", "func TestX(t *testing.T) {\n\tif c {\n\t\tt.Skip(\"flaky precondition\")\n\t}\n\tassert.True(t, ok)\n}", "asserts"},
+		{"bare (helper-based)", "func TestX(t *testing.T) {\n\thelper(t)\n}", "bare"},
+		{"prose 'asserts' in a comment is not a call", "// this test asserts the thing\nfunc TestX(t *testing.T) {\n\thelper(t)\n}", "bare"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyTestBlock(tc.block); got != tc.want {
+				t.Errorf("classifyTestBlock(%s) = %q, want %q", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestScopedBlockNestedGinkgoNotMasked reproduces the Qodo PR #4393 finding: with
+// top-level-only block scoping, a Skip-only NESTED Ginkgo spec was masked by an
+// asserting sibling under the same outer Describe and wrongly classified
+// "asserts". Indentation-aware scoping must classify the nested Skip-only spec on
+// its own merits ("skiponly") while the sibling is "asserts".
+func TestScopedBlockNestedGinkgoNotMasked(t *testing.T) {
+	src := "package x\n" +
+		"\n" +
+		"var _ = Describe(\"outer suite\", func() {\n" +
+		"\t// Verifies: INV-FOO-1\n" +
+		"\tDescribe(\"skip-only nested spec\", func() {\n" +
+		"\t\tIt(\"placeholder\", func() {\n" +
+		"\t\t\tSkip(\"not implemented\")\n" +
+		"\t\t})\n" +
+		"\t})\n" +
+		"\n" +
+		"\t// Verifies: INV-FOO-2\n" +
+		"\tDescribe(\"asserting sibling\", func() {\n" +
+		"\t\tIt(\"does a thing\", func() {\n" +
+		"\t\t\tExpect(got).To(Equal(want))\n" +
+		"\t\t})\n" +
+		"\t})\n" +
+		"})\n"
+
+	lines := strings.Split(src, "\n")
+	starts := findBlockStarts(lines)
+	got := make(map[string]string)
+	for i, l := range lines {
+		m := registryVerifiesRE.FindStringSubmatch(l)
+		if m == nil {
+			continue
+		}
+		got[m[1]] = classifyTestBlock(scopedBlock(lines, starts, i))
+	}
+	if got["INV-FOO-1"] != "skiponly" {
+		t.Errorf("nested Skip-only spec: got %q, want skiponly (must not be masked by the asserting sibling)", got["INV-FOO-1"])
+	}
+	if got["INV-FOO-2"] != "asserts" {
+		t.Errorf("asserting sibling spec: got %q, want asserts", got["INV-FOO-2"])
+	}
+}
+
+// TestIsPlaceholderOnly unit-tests the verdict: a bound entry is a false-green
+// only when EVERY annotation site is Skip-only. A "bare" site (helper-asserted)
+// must NOT trip the failure even alongside a skiponly site (CodeRabbit, PR #4393).
+func TestIsPlaceholderOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want bool
+	}{
+		{"empty → not flagged", nil, false},
+		{"single skiponly → flagged", []string{"skiponly"}, true},
+		{"all skiponly → flagged", []string{"skiponly", "skiponly"}, true},
+		{"any asserts → not flagged", []string{"asserts"}, false},
+		{"asserts + skiponly → not flagged", []string{"asserts", "skiponly"}, false},
+		{"mixed bare + skiponly → not flagged", []string{"bare", "skiponly"}, false},
+		{"all bare → not flagged", []string{"bare"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isPlaceholderOnly(tc.in); got != tc.want {
+				t.Errorf("isPlaceholderOnly(%v) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
