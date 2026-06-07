@@ -220,6 +220,11 @@ message SceneInfo {
   // The current participant roster (owners and members; invited rows are not
   // surfaced as participants here).
   repeated ParticipantInfo participants = 13;
+  // The watching (role=observer) participants, listed separately from the
+  // acting roster and excluded from pose order and publish votes (INV-SCENE-61).
+  // Not yet populated by any RPC; the scene-watch read path (E9.5 Task 3+)
+  // fills it from the store's observers query.
+  repeated ParticipantInfo observers = 14;
 }
 
 // ParticipantInfo is one entry in a scene's roster — a character's relationship
