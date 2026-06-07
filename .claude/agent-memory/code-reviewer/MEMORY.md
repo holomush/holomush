@@ -133,3 +133,11 @@
   pc3bg "No plugin-side ReadSceneLog exists" vs spec's own D8/V6) — grep the spec for every
   mechanism an ADR says was REJECTED. Also: probe index missed `ReadSceneLogForSnapshot`
   (publish_store.go:632); confirm probe zero-results with rg before claiming absence.
+
+- **Plugin migrations: `.down.sql` is NEVER executed** — `RunMigrationsFS` filters `.up.sql` only
+  (pkg/plugin/storage/storage.go:68) and embed is `migrations/*.up.sql` (core-scenes store.go:50).
+  Downs are manual-rollback docs; "reversible" is inspection-only. Also: `DROP CONSTRAINT IF EXISTS
+  <wrong-name>` silently no-ops and `ADD` then stacks a 2nd constraint, leaving the old tight CHECK
+  live — test:int can't catch this until something INSERTs the newly-admitted value. PG auto-name
+  for inline column CHECK = `{table}_{column}_check` (verified: neon docs + ChooseConstraintName).
+  Encountered: 5rh.8.1 (2026-06-07) — READY.
