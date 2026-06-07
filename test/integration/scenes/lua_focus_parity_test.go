@@ -113,12 +113,12 @@ var _ = Describe("INV-SCENE-40: Lua-runtime auto_focus_on_join parity — live I
 		// Lua hostfunc or coordinator wiring) this would time out because no
 		// subscription was ever added. Post-fix the frame arrives once the
 		// Lua auto_focus_on_join call succeeds and registers the subscription.
-		frame := joiner.WaitForEvent(ctx, "scene_pose")
+		frame := joiner.WaitForEvent(ctx, "core-scenes:scene_pose")
 		Expect(frame).NotTo(BeNil(),
 			"INV-SCENE-40: post-join pose MUST be delivered via the Lua-runtime "+
 				"auto_focus_on_join path — the scene IC subscription must be "+
 				"wired into the joiner's live Subscribe filter set")
-		Expect(frame.GetType()).To(Equal("scene_pose"))
+		Expect(frame.GetType()).To(Equal("core-scenes:scene_pose"))
 		// The joiner is a non-DEK-participant, so the delivered frame MUST be
 		// metadata-only (no plaintext payload). Mirrors the binary assertion in
 		// scene_command_join_delivery_test.go: fail-closed, no plaintext leak.

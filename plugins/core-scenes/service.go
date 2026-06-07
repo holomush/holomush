@@ -798,7 +798,7 @@ func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID
 
 	intent := pluginsdk.EmitIntent{
 		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
-		Type:      "scene_join_ic",
+		Type:      "core-scenes:scene_join_ic",
 		Payload:   string(payload),
 		Sensitive: false, // sensitivity:never per crypto.emits manifest
 	}
@@ -839,7 +839,7 @@ func (s *SceneServiceImpl) emitSceneLeaveIC(ctx context.Context, sceneID, actorI
 
 	intent := pluginsdk.EmitIntent{
 		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
-		Type:      "scene_leave_ic",
+		Type:      "core-scenes:scene_leave_ic",
 		Payload:   string(payload),
 		Sensitive: false, // sensitivity:never per crypto.emits manifest
 	}
@@ -876,7 +876,7 @@ func (s *SceneServiceImpl) emitScenePoseOrderChangedIC(ctx context.Context, scen
 
 	intent := pluginsdk.EmitIntent{
 		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
-		Type:      "scene_pose_order_changed_ic",
+		Type:      "core-scenes:scene_pose_order_changed_ic",
 		Payload:   string(payload),
 		Sensitive: false, // sensitivity:never per crypto.emits manifest
 	}

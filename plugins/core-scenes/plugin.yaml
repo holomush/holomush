@@ -62,6 +62,70 @@ actions:
 
 storage: postgres
 
+verbs:
+  # IC content types (sensitivity: always per crypto.emits)
+  - type: core-scenes:scene_pose
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-scenes:scene_say
+    category: communication
+    format: speech
+    label: says
+    display_target: terminal
+  - type: core-scenes:scene_emit
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-scenes:scene_ooc
+    category: communication
+    format: action
+    display_target: terminal
+
+  # Notice types (sensitivity: never per crypto.emits)
+  - type: core-scenes:scene_join_ic
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-scenes:scene_leave_ic
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-scenes:scene_pose_order_changed_ic
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-scenes:scene_idle_nudge
+    category: system
+    format: notification
+    display_target: terminal
+
+  # Publication notice types (sensitivity: never per crypto.emits)
+  - type: core-scenes:scene_publish_started
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-scenes:scene_publish_vote_cast
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-scenes:scene_publish_cooloff_started
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-scenes:scene_publish_resolved
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-scenes:scene_publish_withdrawn
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-scenes:scene_publish_vote_attempts_extended
+    category: system
+    format: notification
+    display_target: terminal
+
 crypto:
   emits:
     # Content events (sensitivity: always) — participant-only IC/OOC RP

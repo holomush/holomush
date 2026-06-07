@@ -45,7 +45,7 @@ func TestEmitPublishStartedSetsSubjectTypeAndPayload(t *testing.T) {
 	intent := sink.intents[0]
 
 	assert.Equal(t, dotStyleSceneSubjectIC("test-game", "scene-1"), intent.Subject)
-	assert.Equal(t, pluginsdk.EventType("scene_publish_started"), intent.Type)
+	assert.Equal(t, pluginsdk.EventType("core-scenes:scene_publish_started"), intent.Type)
 	assert.False(t, intent.Sensitive, "scene_publish_started is sensitivity:never")
 
 	var ev scenev1.ScenePublishStartedEvent
@@ -76,7 +76,7 @@ func TestEmitPublishVoteCastSetsSubjectTypeAndPayload(t *testing.T) {
 	intent := sink.intents[0]
 
 	assert.Equal(t, dotStyleSceneSubjectIC("test-game", "scene-2"), intent.Subject)
-	assert.Equal(t, pluginsdk.EventType("scene_publish_vote_cast"), intent.Type)
+	assert.Equal(t, pluginsdk.EventType("core-scenes:scene_publish_vote_cast"), intent.Type)
 	assert.False(t, intent.Sensitive)
 
 	var ev scenev1.ScenePublishVoteCastEvent
@@ -107,7 +107,7 @@ func TestEmitPublishCoolOffStartedSetsSubjectTypeAndPayload(t *testing.T) {
 	intent := sink.intents[0]
 
 	assert.Equal(t, dotStyleSceneSubjectIC("test-game", "scene-3"), intent.Subject)
-	assert.Equal(t, pluginsdk.EventType("scene_publish_cooloff_started"), intent.Type)
+	assert.Equal(t, pluginsdk.EventType("core-scenes:scene_publish_cooloff_started"), intent.Type)
 	assert.False(t, intent.Sensitive)
 
 	var ev scenev1.ScenePublishCoolOffStartedEvent
@@ -136,7 +136,7 @@ func TestEmitPublishResolvedSetsSubjectTypeAndPayload(t *testing.T) {
 	intent := sink.intents[0]
 
 	assert.Equal(t, dotStyleSceneSubjectIC("test-game", "scene-4"), intent.Subject)
-	assert.Equal(t, pluginsdk.EventType("scene_publish_resolved"), intent.Type)
+	assert.Equal(t, pluginsdk.EventType("core-scenes:scene_publish_resolved"), intent.Type)
 	assert.False(t, intent.Sensitive)
 
 	var ev scenev1.ScenePublishResolvedEvent
@@ -166,7 +166,7 @@ func TestEmitPublishWithdrawnSetsSubjectTypeAndPayload(t *testing.T) {
 	intent := sink.intents[0]
 
 	assert.Equal(t, dotStyleSceneSubjectIC("test-game", "scene-5"), intent.Subject)
-	assert.Equal(t, pluginsdk.EventType("scene_publish_withdrawn"), intent.Type)
+	assert.Equal(t, pluginsdk.EventType("core-scenes:scene_publish_withdrawn"), intent.Type)
 	assert.False(t, intent.Sensitive)
 
 	var ev scenev1.ScenePublishWithdrawnEvent
@@ -191,7 +191,7 @@ func TestEmitPublishAttemptsExtendedSetsSubjectTypeAndPayload(t *testing.T) {
 	intent := sink.intents[0]
 
 	assert.Equal(t, dotStyleSceneSubjectIC("test-game", "scene-6"), intent.Subject)
-	assert.Equal(t, pluginsdk.EventType("scene_publish_vote_attempts_extended"), intent.Type)
+	assert.Equal(t, pluginsdk.EventType("core-scenes:scene_publish_vote_attempts_extended"), intent.Type)
 	assert.False(t, intent.Sensitive)
 
 	var ev scenev1.ScenePublishVoteAttemptsExtendedEvent

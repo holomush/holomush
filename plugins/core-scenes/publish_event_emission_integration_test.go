@@ -224,8 +224,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		// Wait for the scene_publish_started row to appear in scene_log.
 		// Payload fields: AttemptId, AttemptNumber, InitiatedBy,
 		//   VoteWindowSeconds, CooloffWindowSeconds, RosterCharacterIds.
-		rows := pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_started", 1)
-		startRow := findAuditRowByType(rows, "scene_publish_started")
+		rows := pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_started", 1)
+		startRow := findAuditRowByType(rows, "core-scenes:scene_publish_started")
 		Expect(startRow).NotTo(BeNil(), "D4/started: scene_log must have a scene_publish_started row")
 
 		var startedEv scenev1.ScenePublishStartedEvent
@@ -259,8 +259,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		Expect(err).NotTo(HaveOccurred(), "CastPublishSceneVote (alice, yes) must succeed")
 
 		// Wait for the first vote_cast row. IsChange=false for a first cast.
-		rows = pollAtLeastAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_vote_cast", 1)
-		voteCastRows := findAllAuditRowsByType(rows, "scene_publish_vote_cast")
+		rows = pollAtLeastAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_vote_cast", 1)
+		voteCastRows := findAllAuditRowsByType(rows, "core-scenes:scene_publish_vote_cast")
 
 		// Find the first alice-yes row (IsChange=false).
 		var firstAliceYes *scenev1.ScenePublishVoteCastEvent
@@ -288,8 +288,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		Expect(err).NotTo(HaveOccurred(), "CastPublishSceneVote (alice, no) must succeed")
 
 		// Wait for a second vote_cast row where alice changes to no.
-		rows = pollAtLeastAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_vote_cast", 2)
-		voteCastRows = findAllAuditRowsByType(rows, "scene_publish_vote_cast")
+		rows = pollAtLeastAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_vote_cast", 2)
+		voteCastRows = findAllAuditRowsByType(rows, "core-scenes:scene_publish_vote_cast")
 
 		var aliceChangeToNo *scenev1.ScenePublishVoteCastEvent
 		for _, r := range voteCastRows {
@@ -328,8 +328,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 
 		// Wait for the bob-yes vote_cast row AND the cooloff_started row.
 		// Bob's vote is his first, so IsChange=false.
-		rows = pollAtLeastAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_vote_cast", 4)
-		voteCastRows = findAllAuditRowsByType(rows, "scene_publish_vote_cast")
+		rows = pollAtLeastAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_vote_cast", 4)
+		voteCastRows = findAllAuditRowsByType(rows, "core-scenes:scene_publish_vote_cast")
 		var bobFirstYes *scenev1.ScenePublishVoteCastEvent
 		for _, r := range voteCastRows {
 			var ev scenev1.ScenePublishVoteCastEvent
@@ -344,8 +344,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		Expect(bobFirstYes.GetAttemptId()).To(Equal(attemptID))
 
 		// Now wait for scene_publish_cooloff_started.
-		rows = pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_cooloff_started", 1)
-		cooloffRow := findAuditRowByType(rows, "scene_publish_cooloff_started")
+		rows = pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_cooloff_started", 1)
+		cooloffRow := findAuditRowByType(rows, "core-scenes:scene_publish_cooloff_started")
 		Expect(cooloffRow).NotTo(BeNil(), "D4/cooloff_started: scene_log must have a scene_publish_cooloff_started row")
 
 		var cooloffEv scenev1.ScenePublishCoolOffStartedEvent
@@ -360,8 +360,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		// The scheduler sweeps every ~20ms with a ~1ms cooloff_window. Poll for
 		// the scene_publish_resolved row to appear in scene_log (async after
 		// the scheduler fires applyTrigger → emitResolved).
-		rows = pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_resolved", 1)
-		resolvedRow := findAuditRowByType(rows, "scene_publish_resolved")
+		rows = pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_resolved", 1)
+		resolvedRow := findAuditRowByType(rows, "core-scenes:scene_publish_resolved")
 		Expect(resolvedRow).NotTo(BeNil(), "D4/resolved: scene_log must have a scene_publish_resolved row")
 
 		var resolvedEv scenev1.ScenePublishResolvedEvent
@@ -405,7 +405,7 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		Expect(attemptID).NotTo(BeEmpty())
 
 		// Wait for the started row so we know the attempt is live.
-		pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_started", 1)
+		pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_started", 1)
 
 		// ── scene_publish_withdrawn ──────────────────────────────────────────
 		// WithdrawScenePublish emits scene_publish_withdrawn synchronously
@@ -418,8 +418,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		Expect(err).NotTo(HaveOccurred(), "WithdrawScenePublish must succeed")
 
 		// Wait for the scene_publish_withdrawn row.
-		rows := pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_withdrawn", 1)
-		withdrawnRow := findAuditRowByType(rows, "scene_publish_withdrawn")
+		rows := pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_withdrawn", 1)
+		withdrawnRow := findAuditRowByType(rows, "core-scenes:scene_publish_withdrawn")
 		Expect(withdrawnRow).NotTo(BeNil(), "D4/withdrawn: scene_log must have a scene_publish_withdrawn row")
 
 		var withdrawnEv scenev1.ScenePublishWithdrawnEvent
@@ -432,8 +432,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 
 		// WithdrawScenePublish also fires applyTrigger which emits
 		// scene_publish_resolved (outcome=ATTEMPT_FAILED, reason=WITHDRAWN).
-		rows = pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_resolved", 1)
-		resolvedRow := findAuditRowByType(rows, "scene_publish_resolved")
+		rows = pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_resolved", 1)
+		resolvedRow := findAuditRowByType(rows, "core-scenes:scene_publish_resolved")
 		Expect(resolvedRow).NotTo(BeNil(), "D4/withdrawn: scene_log must also have a scene_publish_resolved row")
 
 		var resolvedEv scenev1.ScenePublishResolvedEvent
@@ -468,7 +468,7 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		Expect(startResp.GetPublishedSceneId()).NotTo(BeEmpty())
 
 		// Wait for started row so the scene row exists in published_scenes.
-		pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_started", 1)
+		pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_started", 1)
 
 		// ── scene_publish_vote_attempts_extended ──────────────────────────────
 		// ExtendScenePublishVoteAttempts emits scene_publish_vote_attempts_extended
@@ -486,8 +486,8 @@ var _ = Describe("D4: Phase-6 publish lifecycle events", func() {
 		expectedNewMax := extResp.GetNewMax() // use the RPC-returned value as ground truth for the event assertion
 
 		// Wait for the scene_publish_vote_attempts_extended row.
-		rows := pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "scene_publish_vote_attempts_extended", 1)
-		extRow := findAuditRowByType(rows, "scene_publish_vote_attempts_extended")
+		rows := pollAuditRows(ctx, ts, "core-scenes", sceneICSubject, "core-scenes:scene_publish_vote_attempts_extended", 1)
+		extRow := findAuditRowByType(rows, "core-scenes:scene_publish_vote_attempts_extended")
 		Expect(extRow).NotTo(BeNil(), "D4/extended: scene_log must have a scene_publish_vote_attempts_extended row")
 
 		var extEv scenev1.ScenePublishVoteAttemptsExtendedEvent

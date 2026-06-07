@@ -230,14 +230,15 @@ func buildSnapshotRealEnv(ctx context.Context, pluginName string) *snapshotRealE
 	hostSub := audit.NewSubsystem(snapFixedJS{js: bus.JS}, snapFixedPool{pool: cryptoPool}, audit.Config{})
 	Expect(hostSub.Start(ctx)).To(Succeed())
 
-	// Production scene IC events are emitted with BARE types (scene_pose /
-	// scene_say / scene_emit — commands.go:516-520), so the AAD binds the bare
-	// type and scene_log stores it bare. The fixture mirrors that exactly:
-	// verb registry, manifest, alwaysSensitive, and the manifest lookup all key
-	// on bare types, and the emit uses the bare type.
+	// Production scene IC events are emitted with QUALIFIED wire types
+	// (core-scenes:scene_pose / :scene_say / :scene_emit — commands.go:516-520,
+	// holomush-r0kup), so the AAD binds the qualified type and scene_log stores
+	// it qualified. The fixture mirrors that exactly: verb registry, manifest,
+	// alwaysSensitive, and the manifest lookup all key on the qualified types,
+	// and the emit uses the qualified type.
 	registry, err := core.BootstrapVerbRegistry("test")
 	Expect(err).NotTo(HaveOccurred())
-	for _, et := range []string{"scene_pose", "scene_say", "scene_emit"} {
+	for _, et := range []string{"core-scenes:scene_pose", "core-scenes:scene_say", "core-scenes:scene_emit"} {
 		Expect(registry.RegisterWithSource(core.VerbRegistration{
 			Type:          et,
 			Category:      "communication",
@@ -254,9 +255,9 @@ func buildSnapshotRealEnv(ctx context.Context, pluginName string) *snapshotRealE
 	manifestLookup := &snapManifestLookup{
 		pluginName: pluginName,
 		eventTypes: map[string]struct{}{
-			"scene_pose": {},
-			"scene_say":  {},
-			"scene_emit": {},
+			"core-scenes:scene_pose": {},
+			"core-scenes:scene_say":  {},
+			"core-scenes:scene_emit": {},
 		},
 	}
 	guardCore, err := authguard.New(
@@ -284,9 +285,9 @@ func buildSnapshotRealEnv(ctx context.Context, pluginName string) *snapshotRealE
 	})
 	Expect(err).NotTo(HaveOccurred())
 	alwaysSensitive := map[string]struct{}{
-		"scene_pose": {},
-		"scene_say":  {},
-		"scene_emit": {},
+		"core-scenes:scene_pose": {},
+		"core-scenes:scene_say":  {},
+		"core-scenes:scene_emit": {},
 	}
 
 	decryptor := history.NewReadbackDecryptor(
@@ -473,7 +474,7 @@ func seedScenePoseLog(ctx context.Context, store *SceneStore, sceneID, actorID, 
 	_, err = store.Pool().Exec(
 		ctx, `
 		INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
-		VALUES ($1, $2, 'scene_pose', $3, 'character', $4, $5, 1, 'identity')`,
+		VALUES ($1, $2, 'core-scenes:scene_pose', $3, 'character', $4, $5, 1, 'identity')`,
 		id, subject, time.Now().UnixNano(), []byte(actorID), payload,
 	)
 	Expect(err).NotTo(HaveOccurred())
@@ -524,7 +525,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 
 		// Seed a real encrypted pose into scene_log; use the EXACT subject it
 		// was stored under (the AAD binds it).
-		seededSubject := env.emitAndSeed(ctx, sceneID, "scene_pose", `{"actor_id":"`+ownerID+`","text":"`+text+`"}`,
+		seededSubject := env.emitAndSeed(ctx, sceneID, "core-scenes:scene_pose", `{"actor_id":"`+ownerID+`","text":"`+text+`"}`,
 			[]dek.Participant{{
 				PlayerID: "01C7SNAPHAPPYPLAYER00000A", CharacterID: ownerID,
 				BindingID: "01C7SNAPHAPPYBIND00000A", JoinedAt: time.Now().UTC(), AddedVia: "c7_test",
@@ -603,7 +604,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		const sceneID = "01C7SNAPRENDER0000000000A"
 		const ownerID = "01C7SNAPRENDEROWNER00000A"
 		dec := &fakeSnapshotDecryptor{plaintextFor: map[string][]byte{
-			"scene_pose": []byte("this is not json"),
+			"core-scenes:scene_pose": []byte("this is not json"),
 		}}
 		store, svc := newSnapshotPlainEnv(dec)
 
@@ -625,7 +626,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		const sceneID = "01C7SNAPIDEMPOTENT00000A0"
 		const ownerID = "01C7SNAPIDEMPOTENTOWN000A"
 		dec := &fakeSnapshotDecryptor{plaintextFor: map[string][]byte{
-			"scene_pose": []byte(`{"actor_id":"` + ownerID + `","text":"once"}`),
+			"core-scenes:scene_pose": []byte(`{"actor_id":"` + ownerID + `","text":"once"}`),
 		}}
 		store, svc := newSnapshotPlainEnv(dec)
 
@@ -652,7 +653,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		const sceneID = "01C7SNAPINVARIANT00000A00"
 		const ownerID = "01C7SNAPINVARIANTOWNER0A0"
 		dec := &fakeSnapshotDecryptor{plaintextFor: map[string][]byte{
-			"scene_pose": []byte(`{"actor_id":"` + ownerID + `","text":"x"}`),
+			"core-scenes:scene_pose": []byte(`{"actor_id":"` + ownerID + `","text":"x"}`),
 		}}
 		store, svc := newSnapshotPlainEnv(dec)
 
@@ -683,7 +684,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		const sceneID = "01C7SNAPFKGONE00000000A00"
 		const ownerID = "01C7SNAPFKGONEOWNER0000A0"
 		dec := &fakeSnapshotDecryptor{plaintextFor: map[string][]byte{
-			"scene_pose": []byte(`{"actor_id":"` + ownerID + `","text":"survives deletion"}`),
+			"core-scenes:scene_pose": []byte(`{"actor_id":"` + ownerID + `","text":"survives deletion"}`),
 		}}
 		store, svc := newSnapshotPlainEnv(dec)
 
@@ -716,7 +717,7 @@ var _ = Describe("C7 snapshot pipeline (COOLOFF → PUBLISHED)", func() {
 		const sceneID = "01C7SNAPCHUNK00000000A000"
 		const ownerID = "01C7SNAPCHUNKOWNER0000A00"
 		dec := &fakeSnapshotDecryptor{plaintextFor: map[string][]byte{
-			"scene_pose": []byte(`{"actor_id":"` + ownerID + `","text":"chunk"}`),
+			"core-scenes:scene_pose": []byte(`{"actor_id":"` + ownerID + `","text":"chunk"}`),
 		}}
 		store, svc := newSnapshotPlainEnv(dec)
 

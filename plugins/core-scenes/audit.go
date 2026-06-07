@@ -396,7 +396,7 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 	// scenes.total_pose_count UPDATE + scene_participants metadata UPDATE
 	// transactionally per T7/INV-SCENE-10); all other event types route
 	// through plain Insert (existing behaviour).
-	if eventType == "scene_pose" {
+	if eventType == "core-scenes:scene_pose" {
 		// scene_pose MUST come from a character actor carrying a full
 		// 16-byte ULID. Earlier code copied actorID into a fixed array
 		// with `copy(posedCharULID[:], actorID)`, which silently zero-

@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,7 +36,6 @@ import (
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
-	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -102,13 +102,11 @@ func newPluginCrypto(t *testing.T, bus *eventbustest.Embedded, pool *pgxpool.Poo
 	require.NoError(t, err, "newPluginCrypto: dek.NewManager")
 
 	// The RenderingPublisher (wrapped below) looks up a verb for every emitted
-	// event type. core-scenes registers its scene event types as crypto.emits
-	// (not manifest verbs:), so the bootstrap registry has no entry — register
-	// them here so plugin emits resolve. Mirrors the reference round-trip test
-	// (test/integration/crypto/readback_test.go:141) which registers the scene
-	// emit type as a verb before emitting.
-	registerSceneEmitVerbs(t, verbReg)
-
+	// event type. verbReg is the SAME registry the plugin subsystem populates
+	// from each loaded plugin's manifest verbs: block (harness.go shares one
+	// instance), and WithPluginCrypto REQUIRES WithInTreePlugins — so core-scenes'
+	// qualified scene verbs (core-scenes:scene_pose, …) are registered from its
+	// manifest at load (holomush-r0kup). No standalone seeding needed.
 	sel := cryptowiring.KeySelector()
 	raw := bus.Bus.Publisher(eventbus.WithDEKManager(dekMgr), eventbus.WithCodecSelector(sel))
 	return &pluginCrypto{
@@ -117,32 +115,6 @@ func newPluginCrypto(t *testing.T, bus *eventbustest.Embedded, pool *pgxpool.Poo
 		publisher: eventbus.NewRenderingPublisher(raw, verbReg),
 		actorID:   idgen.New(),
 		sceneID:   idgen.New(),
-	}
-}
-
-// registerSceneEmitVerbs registers core-scenes' plugin-owned scene event types
-// as rendering verbs so the RenderingPublisher resolves them on the plugin emit
-// path. The list mirrors core-scenes' phase4EmitTypes (sensitive IC content) +
-// phase6EmitTypes (publication notices); the harness can't import the
-// `package main` plugin, so the set is duplicated here. RegisterWithSource is
-// idempotent-safe for fresh per-test registries.
-func registerSceneEmitVerbs(t *testing.T, verbReg *core.VerbRegistry) {
-	t.Helper()
-	sceneEmitTypes := []string{
-		"scene_pose", "scene_say", "scene_emit", "scene_ooc",
-		"scene_join_ic", "scene_leave_ic", "scene_pose_order_changed_ic", "scene_idle_nudge",
-		"scene_publish_started", "scene_publish_vote_cast", "scene_publish_cooloff_started",
-		"scene_publish_resolved", "scene_publish_withdrawn", "scene_publish_vote_attempts_extended",
-	}
-	for _, et := range sceneEmitTypes {
-		require.NoErrorf(t, verbReg.RegisterWithSource(core.VerbRegistration{
-			Type:          et,
-			Category:      "communication",
-			Format:        "speech",
-			Label:         et,
-			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
-			Source:        "core-scenes",
-		}, "1.0.0"), "registerSceneEmitVerbs: register %q", et)
 	}
 }
 
@@ -240,9 +212,18 @@ func (s *Server) emitPluginEventForScene(ctx context.Context, plugin, sceneSubje
 	// stable per emit.
 	ctx = core.WithActor(ctx, core.Actor{Kind: core.ActorCharacter, ID: actorID.String()})
 
+	// Mirror the real plugin: emit the plugin-qualified wire type (<plugin>:<verb>)
+	// so it resolves against the manifest-sourced verb registry instead of the
+	// removed seeding (holomush-r0kup). The guard keeps it idempotent if a caller
+	// already passes a qualified type.
+	wireType := eventType
+	if !strings.Contains(wireType, ":") {
+		wireType = plugin + ":" + eventType
+	}
+
 	err := s.pluginSub.Manager().EmitPluginEvent(ctx, plugin, pluginsdk.EmitEvent{
 		Stream:    natsSubject, // already a dot-style events.<gid>.scene.<id>.ic subject; passed through unchanged
-		Type:      pluginsdk.EventType(eventType),
+		Type:      pluginsdk.EventType(wireType),
 		Payload:   payloadJSON,
 		Sensitive: sensitive,
 	})

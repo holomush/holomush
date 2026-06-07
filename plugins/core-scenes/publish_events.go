@@ -56,7 +56,7 @@ func (e *publishEventEmitter) emitPublishStarted(ctx context.Context, pub *Publi
 	}
 	return e.sink.Emit(ctx, pluginsdk.EmitIntent{ //nolint:wrapcheck // EventSink error passes through as-is; caller decides logging
 		Subject:   dotStyleSceneSubjectIC(e.gameID, pub.SceneID),
-		Type:      pluginsdk.EventType("scene_publish_started"),
+		Type:      pluginsdk.EventType("core-scenes:scene_publish_started"),
 		Payload:   string(payload),
 		Sensitive: false,
 	})
@@ -82,7 +82,7 @@ func (e *publishEventEmitter) emitVoteCast(ctx context.Context, attemptID, chara
 	}
 	return e.sink.Emit(ctx, pluginsdk.EmitIntent{ //nolint:wrapcheck // EventSink error passes through as-is; caller decides logging
 		Subject:   dotStyleSceneSubjectIC(e.gameID, pub.SceneID),
-		Type:      pluginsdk.EventType("scene_publish_vote_cast"),
+		Type:      pluginsdk.EventType("core-scenes:scene_publish_vote_cast"),
 		Payload:   string(payload),
 		Sensitive: false,
 	})
@@ -113,7 +113,7 @@ func (e *publishEventEmitter) emitCoolOffStarted(ctx context.Context, attemptID 
 	}
 	return e.sink.Emit(ctx, pluginsdk.EmitIntent{ //nolint:wrapcheck // EventSink error passes through as-is; caller decides logging
 		Subject:   dotStyleSceneSubjectIC(e.gameID, pub.SceneID),
-		Type:      pluginsdk.EventType("scene_publish_cooloff_started"),
+		Type:      pluginsdk.EventType("core-scenes:scene_publish_cooloff_started"),
 		Payload:   string(payload),
 		Sensitive: false,
 	})
@@ -151,7 +151,7 @@ func (e *publishEventEmitter) emitResolved(ctx context.Context, attemptID string
 	}
 	return e.sink.Emit(ctx, pluginsdk.EmitIntent{ //nolint:wrapcheck // EventSink error passes through as-is; caller decides logging
 		Subject:   dotStyleSceneSubjectIC(e.gameID, pub.SceneID),
-		Type:      pluginsdk.EventType("scene_publish_resolved"),
+		Type:      pluginsdk.EventType("core-scenes:scene_publish_resolved"),
 		Payload:   string(payload),
 		Sensitive: false,
 	})
@@ -175,7 +175,7 @@ func (e *publishEventEmitter) emitWithdrawn(ctx context.Context, attemptID, with
 	}
 	return e.sink.Emit(ctx, pluginsdk.EmitIntent{ //nolint:wrapcheck // EventSink error passes through as-is; caller decides logging
 		Subject:   dotStyleSceneSubjectIC(e.gameID, pub.SceneID),
-		Type:      pluginsdk.EventType("scene_publish_withdrawn"),
+		Type:      pluginsdk.EventType("core-scenes:scene_publish_withdrawn"),
 		Payload:   string(payload),
 		Sensitive: false,
 	})
@@ -193,7 +193,7 @@ func (e *publishEventEmitter) emitAttemptsExtended(ctx context.Context, sceneID,
 	}
 	return e.sink.Emit(ctx, pluginsdk.EmitIntent{ //nolint:wrapcheck // EventSink error passes through as-is; caller decides logging
 		Subject:   dotStyleSceneSubjectIC(e.gameID, sceneID),
-		Type:      pluginsdk.EventType("scene_publish_vote_attempts_extended"),
+		Type:      pluginsdk.EventType("core-scenes:scene_publish_vote_attempts_extended"),
 		Payload:   string(payload),
 		Sensitive: false,
 	})

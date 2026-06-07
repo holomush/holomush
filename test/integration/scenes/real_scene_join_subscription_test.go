@@ -101,12 +101,12 @@ var _ = Describe("INV-SCENE-48: bare-ULID scene join opens a live subscription",
 		// Subscribe stream receives a scene_pose frame. Pre-fix this always
 		// timed out because the subscription was never registered. Post-fix
 		// the frame arrives once AutoFocusOnJoin succeeds.
-		frame := joiner.WaitForEvent(ctx, "scene_pose")
+		frame := joiner.WaitForEvent(ctx, "core-scenes:scene_pose")
 		Expect(frame).NotTo(BeNil(),
 			"INV-SCENE-48: post-join pose MUST be delivered — pre-fix: "+
 				"protoToFocusKey could not parse the prefixed join key, "+
 				"so AutoFocusOnJoin never registered the subscription")
-		Expect(frame.GetType()).To(Equal("scene_pose"))
+		Expect(frame.GetType()).To(Equal("core-scenes:scene_pose"))
 		// The joiner is not a DEK participant, so the frame MUST be
 		// metadata-only — no plaintext payload leak (fail-closed).
 		Expect(frame.GetMetadataOnly()).To(BeTrue(),

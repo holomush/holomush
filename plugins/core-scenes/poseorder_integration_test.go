@@ -77,7 +77,7 @@ func rebuildMetadataFromSceneLog(ctx context.Context, pool *pgxpool.Pool, sceneI
 		SELECT actor_id, timestamp
 		FROM scene_log
 		WHERE subject LIKE 'events.%.scene.' || $1 || '.ic'
-		  AND type = 'scene_pose'
+		  AND type = 'core-scenes:scene_pose'
 		ORDER BY id ASC
 	`, sceneID)
 	Expect(err).NotTo(HaveOccurred())
@@ -198,7 +198,7 @@ var _ = Describe("INV-SCENE-8: pose-order metadata is a function of scene_log", 
 			Expect(audit.InsertScenePose(
 				ctx,
 				eventID,
-				subject, "scene_pose",
+				subject, "core-scenes:scene_pose",
 				timestamppb.New(poseTs[i]),
 				"character", p.bytes,
 				[]byte(`{}`), 1, "identity", nil, nil,

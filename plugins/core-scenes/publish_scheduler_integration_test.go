@@ -217,7 +217,7 @@ var _ = Describe("E5 publishScheduler", func() {
 
 		// Seed a real encrypted pose under the PRODUCTION .ic subject.
 		// emitAndSeedIC inserts into scene_log with subject=dotStyleSceneSubjectIC(gameID, sceneID).
-		emitAndSeedIC(ctx, env, sceneID, "scene_pose",
+		emitAndSeedIC(ctx, env, sceneID, "core-scenes:scene_pose",
 			`{"actor_id":"`+ownerID+`","text":"`+text+`"}`,
 			[]dek.Participant{{
 				PlayerID:    "01E5SCHED_COOLOFFPLAYER0A",
