@@ -3599,6 +3599,14 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/plugin/goplugin/manager_parity_test.go", token: "INV-M7"}
+  - id: INV-PLUGIN-40
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-06-event-type-wire-convention-design.md"
+    summary: "Every emitted wire event type and every verbs[].type MUST be plugin-qualified <owning-plugin>:<verb> (one colon).
+      The registered-emit set and crypto.emits[].event_type stay bare (INV-PLUGIN-32 set-equality + requests_decryption);
+      the host bridges bare<->qualified only via emitEntryMatchesWireType. Manifest.Validate rejects an unqualified verbs[].type
+      with PLUGIN_WIRE_TYPE_NOT_QUALIFIED."
+    binding: pending
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"
