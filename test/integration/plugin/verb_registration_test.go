@@ -50,12 +50,12 @@ name: verb-plugin
 version: 1.0.0
 type: lua
 verbs:
-  - type: custom_say
+  - type: verb-plugin:custom_say
     category: communication
     format: speech
     label: "says"
     display_target: terminal
-  - type: custom_action
+  - type: verb-plugin:custom_action
     category: communication
     format: action
     display_target: both
@@ -71,22 +71,23 @@ lua-plugin:
 		Expect(mgrErr).NotTo(HaveOccurred())
 		Expect(mgr.LoadAll(context.Background())).To(Succeed())
 
-		reg, ok := verbReg.Lookup("custom_say")
+		reg, ok := verbReg.Lookup("verb-plugin:custom_say")
 		Expect(ok).To(BeTrue(), "custom_say should be registered")
 		Expect(reg.Category).To(Equal("communication"))
 		Expect(reg.Format).To(Equal("speech"))
 		Expect(reg.Label).To(Equal("says"))
 		Expect(reg.Source).To(Equal("verb-plugin"))
 
-		reg, ok = verbReg.Lookup("custom_action")
+		reg, ok = verbReg.Lookup("verb-plugin:custom_action")
 		Expect(ok).To(BeTrue(), "custom_action should be registered")
 		Expect(reg.Source).To(Equal("verb-plugin"))
 	})
 
-	It("rejects a plugin whose verb type conflicts with a builtin", func() {
-		// "system" is a host-owned event type registered by RegisterBuiltinTypes.
-		// (Plugin-owned types like say/pose are no longer registered as builtins
-		// per the plugin-boundary discipline; they're owned by their plugin.)
+	It("skips a plugin that declares an unqualified (bare) verb type", func() {
+		// The qualification gate (INV-PLUGIN-40, holomush-aneim) rejects a bare
+		// verb type at manifest parse, so the plugin is skipped at discovery
+		// (warn + continue). A plugin can no longer shadow a host-owned builtin
+		// like "system": every plugin verb MUST be <plugin>:<verb>.
 		writePlugin("conflict-plugin", `
 name: conflict-plugin
 version: 1.0.0
@@ -106,15 +107,16 @@ lua-plugin:
 			plugins.WithVerbRegistry(verbReg),
 		)
 		Expect(mgrErr).NotTo(HaveOccurred())
-		err := mgr.LoadAll(context.Background())
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("already registered"))
+		// An invalid manifest is skipped, not a hard load error.
+		Expect(mgr.LoadAll(context.Background())).To(Succeed())
+		_, loaded := mgr.GetLoadedPlugin("conflict-plugin")
+		Expect(loaded).To(BeFalse(), "plugin with a bare verb type must be skipped at discovery")
 	})
 
 	It("cleans up verbs when plugin load fails partway through verb list", func() {
-		// Pre-register "conflict" so the second verb in the manifest fails
+		// Pre-register "partial-fail:conflict" so the second verb in the manifest fails
 		Expect(verbReg.RegisterWithSource(core.VerbRegistration{
-			Type: "conflict", Category: "system", Format: "notification",
+			Type: "partial-fail:conflict", Category: "system", Format: "notification",
 			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "pre-existing",
 		}, "1.0.0")).To(Succeed())
 
@@ -123,11 +125,11 @@ name: partial-fail
 version: 1.0.0
 type: lua
 verbs:
-  - type: good_verb
+  - type: partial-fail:good_verb
     category: communication
     format: action
     display_target: terminal
-  - type: conflict
+  - type: partial-fail:conflict
     category: system
     format: notification
     display_target: terminal
@@ -145,7 +147,7 @@ lua-plugin:
 		Expect(err).To(HaveOccurred())
 
 		// good_verb should have been cleaned up by UnregisterBySource
-		_, ok := verbReg.Lookup("good_verb")
+		_, ok := verbReg.Lookup("partial-fail:good_verb")
 		Expect(ok).To(BeFalse(), "good_verb should have been cleaned up after partial failure")
 	})
 })

@@ -1708,12 +1708,12 @@ func TestManagerLoadAllRegistersVerbsFromManifest(t *testing.T) {
 version: 1.0.0
 type: lua
 verbs:
-  - type: whisper
+  - type: chat-plugin:whisper
     category: communication
     format: speech
     label: whispers to
     display_target: terminal
-  - type: shout
+  - type: chat-plugin:shout
     category: communication
     format: speech
     label: shouts
@@ -1735,14 +1735,14 @@ lua-plugin:
 	require.NoError(t, mgrErr)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
-	whisper, ok := reg.Lookup("whisper")
+	whisper, ok := reg.Lookup("chat-plugin:whisper")
 	require.True(t, ok, "whisper verb should be registered")
 	assert.Equal(t, "communication", whisper.Category)
 	assert.Equal(t, "speech", whisper.Format)
 	assert.Equal(t, "whispers to", whisper.Label)
 	assert.Equal(t, "chat-plugin", whisper.Source)
 
-	shout, ok := reg.Lookup("shout")
+	shout, ok := reg.Lookup("chat-plugin:shout")
 	require.True(t, ok, "shout verb should be registered")
 	assert.Equal(t, "chat-plugin", shout.Source)
 
@@ -1763,7 +1763,7 @@ func TestManagerLoadAllRejectsPluginWithDuplicateVerbType(t *testing.T) {
 version: 1.0.0
 type: lua
 verbs:
-  - type: existing_verb
+  - type: dup-plugin:existing_verb
     category: communication
     format: action
     display_target: terminal
@@ -1778,7 +1778,7 @@ lua-plugin:
 	reg := core.NewVerbRegistry()
 	// Pre-register a verb that the plugin also declares.
 	require.NoError(t, reg.RegisterWithSource(core.VerbRegistration{
-		Type:          "existing_verb",
+		Type:          "dup-plugin:existing_verb",
 		Category:      "state",
 		Format:        "snapshot",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
@@ -1807,11 +1807,11 @@ func TestManagerLoadAllCleansUpVerbsOnPartialFailure(t *testing.T) {
 version: 1.0.0
 type: lua
 verbs:
-  - type: good_verb
+  - type: partial-plugin:good_verb
     category: communication
     format: action
     display_target: terminal
-  - type: conflict
+  - type: partial-plugin:conflict
     category: state
     format: snapshot
     display_target: state
@@ -1826,7 +1826,7 @@ lua-plugin:
 	reg := core.NewVerbRegistry()
 	// Pre-register the conflict verb so the second registration fails.
 	require.NoError(t, reg.RegisterWithSource(core.VerbRegistration{
-		Type:          "conflict",
+		Type:          "partial-plugin:conflict",
 		Category:      "state",
 		Format:        "snapshot",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
@@ -1843,11 +1843,11 @@ lua-plugin:
 	require.Error(t, err)
 
 	// good_verb should have been cleaned up via UnregisterBySource.
-	_, ok := reg.Lookup("good_verb")
+	_, ok := reg.Lookup("partial-plugin:good_verb")
 	assert.False(t, ok, "good_verb should have been cleaned up after partial failure")
 
 	// The pre-existing conflict verb should remain (owned by builtin, not the plugin).
-	conflict, ok := reg.Lookup("conflict")
+	conflict, ok := reg.Lookup("partial-plugin:conflict")
 	require.True(t, ok, "builtin conflict verb should still exist")
 	assert.Equal(t, "builtin", conflict.Source)
 }

@@ -526,6 +526,18 @@ func (m *Manifest) Validate() error {
 			return oops.In("manifest").With("plugin", m.Name).With("verb_index", i).
 				New("verb type must not be empty")
 		}
+		// The wire event type and verbs[].type MUST be plugin-qualified
+		// <owning-plugin>:<verb> (exactly one colon, non-empty verb), or
+		// RenderingPublisher.Lookup hard-fails EMIT_UNKNOWN_VERB in production.
+		// The registered-emit set and crypto.emits[].event_type stay bare
+		// (INV-PLUGIN-32); only the wire/verb-registry vocabulary is qualified
+		// (INV-PLUGIN-40, holomush-aneim).
+		if want := m.Name + ":"; !strings.HasPrefix(v.Type, want) ||
+			len(v.Type) <= len(want) || strings.Count(v.Type, ":") != 1 {
+			return oops.Code("PLUGIN_WIRE_TYPE_NOT_QUALIFIED").
+				In("manifest").With("plugin", m.Name).With("verb", v.Type).
+				Errorf("verbs[].type must be %q-prefixed (<plugin>:<verb>, one colon); got %q", m.Name, v.Type)
+		}
 		if !validVerbCategories[v.Category] {
 			return oops.In("manifest").With("plugin", m.Name).With("verb", v.Type).
 				With("category", v.Category).New("unknown verb category")
