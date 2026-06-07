@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -2029,12 +2030,12 @@ type: lua
 lua-plugin:
   entry: main.lua
 verbs:
-  - type: channel.say
+  - type: channels:say
     category: communication
     format: speech
     label: says
     display_target: terminal
-  - type: channel.pose
+  - type: channels:pose
     category: communication
     format: action
     display_target: both
@@ -2043,13 +2044,13 @@ verbs:
 	require.NoError(t, err)
 	require.Len(t, m.Verbs, 2)
 
-	assert.Equal(t, "channel.say", m.Verbs[0].Type)
+	assert.Equal(t, "channels:say", m.Verbs[0].Type)
 	assert.Equal(t, "communication", m.Verbs[0].Category)
 	assert.Equal(t, "speech", m.Verbs[0].Format)
 	assert.Equal(t, "says", m.Verbs[0].Label)
 	assert.Equal(t, "terminal", m.Verbs[0].DisplayTarget)
 
-	assert.Equal(t, "channel.pose", m.Verbs[1].Type)
+	assert.Equal(t, "channels:pose", m.Verbs[1].Type)
 	assert.Equal(t, "action", m.Verbs[1].Format)
 	assert.Equal(t, "both", m.Verbs[1].DisplayTarget)
 }
@@ -2062,7 +2063,7 @@ type: binary
 binary-plugin:
   executable: scenes
 verbs:
-  - type: scene.narrate
+  - type: scenes:narrate
     category: state
     format: narrative
     display_target: terminal
@@ -2070,7 +2071,7 @@ verbs:
 	m, err := plugins.ParseManifest(data)
 	require.NoError(t, err)
 	require.Len(t, m.Verbs, 1)
-	assert.Equal(t, "scene.narrate", m.Verbs[0].Type)
+	assert.Equal(t, "scenes:narrate", m.Verbs[0].Type)
 }
 
 func TestManifestRejectsSettingPluginWithVerbs(t *testing.T) {
@@ -2112,6 +2113,46 @@ verbs:
 	assert.Contains(t, err.Error(), "verb type must not be empty")
 }
 
+// Verifies: INV-PLUGIN-40
+func TestManifestValidateRejectsUnqualifiedVerbType(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"bare":        "say",
+		"foreign":     "other:say",
+		"multi-colon": "demo:say:extra",
+		"prefix-only": "demo:",
+	}
+	for name, verbType := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := &plugins.Manifest{
+				Name: "demo", Version: "1.0.0", Type: plugins.TypeLua,
+				LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+				Verbs: []plugins.VerbSpec{{
+					Type: verbType, Category: "communication", Format: "action", DisplayTarget: "terminal",
+				}},
+			}
+			err := m.Validate()
+			require.Error(t, err)
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok, "error must be an oops error")
+			require.Equal(t, "PLUGIN_WIRE_TYPE_NOT_QUALIFIED", oopsErr.Code())
+		})
+	}
+}
+
+func TestManifestValidateAcceptsQualifiedVerbType(t *testing.T) {
+	t.Parallel()
+	m := &plugins.Manifest{
+		Name: "demo", Version: "1.0.0", Type: plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+		Verbs: []plugins.VerbSpec{{
+			Type: "demo:say", Category: "communication", Format: "action", DisplayTarget: "terminal",
+		}},
+	}
+	require.NoError(t, m.Validate())
+}
+
 func TestManifestRejectsVerbWithUnknownCategory(t *testing.T) {
 	data := []byte(`
 name: channels
@@ -2120,7 +2161,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 verbs:
-  - type: channel.say
+  - type: channels:say
     category: unknown-category
     format: speech
     label: says
@@ -2139,7 +2180,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 verbs:
-  - type: channel.say
+  - type: channels:say
     category: communication
     format: unknown-format
     display_target: terminal
@@ -2157,7 +2198,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 verbs:
-  - type: channel.say
+  - type: channels:say
     category: communication
     format: action
     display_target: unknown-target
@@ -2175,7 +2216,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 verbs:
-  - type: channel.say
+  - type: channels:say
     category: communication
     format: speech
     display_target: terminal
@@ -2193,11 +2234,11 @@ type: lua
 lua-plugin:
   entry: main.lua
 verbs:
-  - type: channel.say
+  - type: channels:say
     category: communication
     format: action
     display_target: terminal
-  - type: channel.say
+  - type: channels:say
     category: communication
     format: narrative
     display_target: both
@@ -2218,7 +2259,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 verbs:
-  - type: channel.say
+  - type: channels:say
     category: communication
     format: action
     display_target: %s

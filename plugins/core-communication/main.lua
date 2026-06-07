@@ -175,7 +175,7 @@ local function handle_emit(ctx)
     local payload = '{"message":' .. json_string(msg) .. '}'
 
     return ok_events({
-        {subject ="location." .. loc, type = "emit", payload = payload}
+        {subject ="location." .. loc, type = "core-communication:emit", payload = payload}
     })
 end
 

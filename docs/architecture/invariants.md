@@ -301,7 +301,7 @@ invariants.
 | `INV-PLUGIN-37` | The INV-S5 validator MUST fire in manager.go::loadPlugin AFTER host.Load returns successfully and BEFORE the plugin is added to the manager's ready plugin cache. | `INV-M5` | pending |
 | `INV-PLUGIN-38` | Lua Load-pass DoString errors MUST fail plugin load with the same wrapper shape as the syntax-check error (oops.In("lua"), operation=load); the Hint string is branch-specific ("INV-S5 capture pass execution error" for crypto plugins). | `INV-M6` | pending |
 | `INV-PLUGIN-39` | Every primitive in the INV-S5 mechanism MUST ship a Go SDK method + Lua hostfunc + parity test together (per parent substrate invariant INV-S3 / INV-PLUGIN-31). | `INV-M7` | pending |
-| `INV-PLUGIN-40` | Every emitted wire event type and every verbs[].type MUST be plugin-qualified <owning-plugin>:<verb> (one colon). The registered-emit set and crypto.emits[].event_type stay bare (INV-PLUGIN-32 set-equality + requests_decryption); the host bridges bare<->qualified only via emitEntryMatchesWireType. Manifest.Validate rejects an unqualified verbs[].type with PLUGIN_WIRE_TYPE_NOT_QUALIFIED. | — | pending |
+| `INV-PLUGIN-40` | Every emitted wire event type and every verbs[].type MUST be plugin-qualified <owning-plugin>:<verb> (one colon). The registered-emit set and crypto.emits[].event_type stay bare (INV-PLUGIN-32 set-equality + requests_decryption); the host bridges bare<->qualified only via emitEntryMatchesWireType. Manifest.Validate rejects an unqualified verbs[].type with PLUGIN_WIRE_TYPE_NOT_QUALIFIED. | — | bound |
 
 ### `INV-EVENTBUS`
 

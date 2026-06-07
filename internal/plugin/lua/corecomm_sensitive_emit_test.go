@@ -64,6 +64,26 @@ func TestCoreCommunicationAlwaysEmitsClaimSensitive(t *testing.T) {
 	}
 }
 
+// TestCoreCommunicationEmitUsesQualifiedWireType pins holomush-aneim: the
+// generic `emit` command in main.lua MUST emit the plugin-qualified wire type
+// `core-communication:emit`, matching its verbs[].type declaration. A bare
+// `type = "emit"` fails RenderingPublisher.Lookup with EMIT_UNKNOWN_VERB in
+// production (the verb registry is keyed on the qualified type).
+//
+// Verifies: INV-PLUGIN-40
+func TestCoreCommunicationEmitUsesQualifiedWireType(t *testing.T) {
+	root := repoRoot(t)
+	mainLua := filepath.Join(root, "plugins", "core-communication", "main.lua")
+	raw, err := os.ReadFile(mainLua)
+	require.NoError(t, err, "read core-communication main.lua")
+	src := string(raw)
+
+	require.Contains(t, src, `type = "core-communication:emit"`,
+		"the generic emit command MUST emit the qualified wire type (matches verbs[].type; holomush-aneim)")
+	require.NotContains(t, src, `type = "emit"`,
+		"bare emit wire type must be gone (EMIT_UNKNOWN_VERB in production)")
+}
+
 // enclosingEmitTables returns, for every occurrence of needle in src, the text
 // of the innermost brace-delimited table { ... } that encloses it. Brace
 // matching is scoped to the nearest unbalanced "{" before the needle and its

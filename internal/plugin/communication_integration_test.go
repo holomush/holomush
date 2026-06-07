@@ -364,10 +364,11 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 				Expect(resp.Events).To(HaveLen(1))
 				Expect(resp.Events[0].Stream).To(Equal("location.loc456"))
-				// The Lua emit handler returns type = "emit" (unqualified); the host
-				// namespace-qualifies emitted types only when going through PluginEventEmitter.Emit,
-				// not on the direct DeliverCommand path.
-				Expect(string(resp.Events[0].Type)).To(Equal("emit"))
+				// The Lua emit handler now returns the plugin-qualified wire type
+				// core-communication:emit directly (holomush-aneim), matching its
+				// verbs[].type so RenderingPublisher.Lookup resolves it instead of
+				// hard-failing EMIT_UNKNOWN_VERB.
+				Expect(string(resp.Events[0].Type)).To(Equal("core-communication:emit"))
 				Expect(resp.Events[0].Payload).To(ContainSubstring(`The room shakes!`))
 			})
 		})
