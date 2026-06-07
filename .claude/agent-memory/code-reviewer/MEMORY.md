@@ -141,3 +141,17 @@
   live — test:int can't catch this until something INSERTs the newly-admitted value. PG auto-name
   for inline column CHECK = `{table}_{column}_check` (verified: neon docs + ChooseConstraintName).
   Encountered: 5rh.8.1 (2026-06-07) — READY.
+
+- **Store-layer observer support (5rh.8.2 NOT READY, 2026-06-07).** Recurring shapes: (1) When a
+  diff WIDENS an emit guard (`result == A || B || NEW`), READ the emit helper body — payload
+  mapping written for the old result set silently misreports the new one (emitSceneJoinIC
+  `fromRole` only maps OpPromoted→"invited"; ParticipantUpgraded fell to "none"). (2)
+  SELECT-then-INSERT inside a tx is NOT race-safe even with FOR SHARE on the parent row —
+  FOR SHARE locks are mutually compatible and don't serialize child-table inserts; with
+  PK(scene_id,character_id) (migration 000003:16) concurrent duplicates → PK violation instead
+  of the documented idempotent result. AddParticipant's ON CONFLICT is the repo-correct shape.
+  (3) Pre-upsert plain SELECT for prior-role classification races with concurrent inserts —
+  needs FOR UPDATE or RETURNING-based classification. (4) Check bead acceptance verbatim against
+  the diff: "SceneInfo.observers populated" unmet (rowToProto sets neither participants nor
+  observers; new store method had zero production callers) — implementer claims of "deferred by
+  design" need a recorded deferral in bead/plan, not just assertion.

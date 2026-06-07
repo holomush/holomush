@@ -2668,3 +2668,144 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 			"INV-SCENE-56: content_warnings must not be stripped from returned rows")
 	})
 })
+
+var _ = Describe("AddObserver", func() {
+	It("inserts observer row for open active scene and GetParticipant returns it", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-1", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+		got, result, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverAdded))
+		Expect(got.CharacterID).To(Equal("char-watcher"))
+		Expect(got.Role).To(Equal("observer"))
+
+		p, err := store.GetParticipant(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.Role).To(Equal("observer"))
+	})
+
+	It("returns ObserverSceneNotOpen for a private scene", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-priv", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityPrivate),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+		_, result, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverSceneNotOpen))
+	})
+
+	It("returns ObserverSceneNotActive for an ended scene", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-ended", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+		_, err := store.End(ctx, row.ID)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, result, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverSceneNotActive))
+	})
+
+	It("returns ObserverAlreadyParticipant for an existing member without changing the row", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-mem", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+		_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+		Expect(err).NotTo(HaveOccurred())
+
+		_, result, err := store.AddObserver(ctx, row.ID, "char-bob")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverAlreadyParticipant))
+
+		// Row must be unchanged (still member, not observer).
+		p, err := store.GetParticipant(ctx, row.ID, "char-bob")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.Role).To(Equal("member"))
+	})
+
+	It("scene load returns observer under Observers field and not in Participants", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-load", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+		_, result, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverAdded))
+
+		_, participants, invitees, observers, err := store.GetWithMembershipAndObservers(ctx, row.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(participants).To(ConsistOf("char-alice")) // owner only
+		Expect(invitees).To(BeEmpty())
+		Expect(observers).To(ConsistOf("char-watcher"))
+	})
+
+	It("upgrades observer to member via AddParticipant returning ParticipantUpgraded", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-upgrade", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+		_, aoResult, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(aoResult).To(Equal(ObserverAdded))
+
+		got, apResult, err := store.AddParticipant(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(apResult).To(Equal(ParticipantUpgraded))
+		Expect(got.Role).To(Equal("member"))
+
+		p, err := store.GetParticipant(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.Role).To(Equal("member"))
+	})
+
+	It("returns ObserverSceneNotFound for a nonexistent scene ID", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		_, result, err := store.AddObserver(ctx, "scene-does-not-exist", "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverSceneNotFound))
+	})
+})

@@ -301,6 +301,46 @@ func (f *fakeStore) GetWithMembership(ctx context.Context, id string) (*SceneRow
 	return row, participants, invitees, nil
 }
 
+func (f *fakeStore) GetWithMembershipAndObservers(ctx context.Context, id string) (*SceneRow, []string, []string, []string, error) {
+	row, err := f.Get(ctx, id)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	var participants, invitees, observers []string
+	for cid, role := range f.participants[id] {
+		switch role {
+		case "owner", "member":
+			participants = append(participants, cid)
+		case "invited":
+			invitees = append(invitees, cid)
+		case "observer":
+			observers = append(observers, cid)
+		}
+	}
+	return row, participants, invitees, observers, nil
+}
+
+func (f *fakeStore) AddObserver(_ context.Context, sceneID, characterID string) (*ParticipantRow, ObserverAddResult, error) {
+	scene, ok := f.scenes[sceneID]
+	if !ok {
+		return nil, ObserverSceneNotFound, nil
+	}
+	if scene.Visibility != string(SceneVisibilityOpen) {
+		return nil, ObserverSceneNotOpen, nil
+	}
+	if scene.State != string(SceneStateActive) && scene.State != string(SceneStatePaused) {
+		return nil, ObserverSceneNotActive, nil
+	}
+	if f.participants[sceneID] == nil {
+		f.participants[sceneID] = make(map[string]string)
+	}
+	if existing, exists := f.participants[sceneID][characterID]; exists {
+		return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: existing}, ObserverAlreadyParticipant, nil
+	}
+	f.participants[sceneID][characterID] = "observer"
+	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "observer"}, ObserverAdded, nil
+}
+
 func (f *fakeStore) AddParticipant(_ context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error) {
 	if f.addParticipantErr != nil {
 		return nil, OpNoChange, f.addParticipantErr
@@ -321,6 +361,10 @@ func (f *fakeStore) AddParticipant(_ context.Context, sceneID, characterID strin
 		if existing == "invited" {
 			f.participants[sceneID][characterID] = "member"
 			return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "member"}, OpPromoted, nil
+		}
+		if existing == "observer" {
+			f.participants[sceneID][characterID] = "member"
+			return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "member"}, ParticipantUpgraded, nil
 		}
 		return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: existing}, OpNoChange, nil
 	}
@@ -1449,6 +1493,30 @@ func TestJoinScene_NoEmit_OnNoChange(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 0, joinCount, "idempotent join MUST NOT emit scene_join_ic")
+}
+
+func TestJoinScene_EmitsSceneJoinIC_OnObserverUpgrade(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-upgrade", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// Pre-seed char-bob as observer so AddParticipant returns ParticipantUpgraded.
+	store.participants["scene-join-upgrade"]["char-bob"] = "observer"
+	sink := &recordingEventSink{}
+	svc := newTestService(t, store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		SceneId:     "scene-join-upgrade",
+		CharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "core-scenes:scene_join_ic")
+	require.NotNil(t, found, "JoinScene MUST auto-emit scene_join_ic on ParticipantUpgraded")
+	assert.Contains(t, found.Payload, `"from_role":"observer"`)
 }
 
 func TestLeaveScene_EmitsSceneLeaveIC_ReasonLeft(t *testing.T) {

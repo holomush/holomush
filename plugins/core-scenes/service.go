@@ -39,6 +39,15 @@ type sceneStorer interface {
 	CreateWithOwner(ctx context.Context, row *SceneRow) error
 	Get(ctx context.Context, id string) (*SceneRow, error)
 	GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error)
+	// GetWithMembershipAndObservers extends GetWithMembership with a fourth
+	// slice of observer character IDs (role='observer'). Used to populate
+	// SceneInfo.Observers (INV-SCENE-61). The participants filter is unchanged.
+	GetWithMembershipAndObservers(ctx context.Context, id string) (*SceneRow, []string, []string, []string, error)
+	// AddObserver inserts a role=observer row for an open, active/paused scene.
+	// Returns ObserverAlreadyParticipant unchanged when the character already
+	// has any row. Returns ObserverSceneNotOpen/NotActive/NotFound without error
+	// when the scene gates reject the request.
+	AddObserver(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ObserverAddResult, error)
 	End(ctx context.Context, id string) (*SceneRow, error)
 	Pause(ctx context.Context, id string) (*SceneRow, error)
 	Resume(ctx context.Context, id string) (*SceneRow, error)
@@ -754,9 +763,10 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 	}
 
 	// Auto-emit scene_join_ic notice event when this is a NEW membership
-	// (OpInserted = fresh row; OpPromoted = invited→member). Skipped on
-	// OpNoChange per Phase 3 D5 retry-idempotency.
-	if result == OpInserted || result == OpPromoted {
+	// (OpInserted = fresh row; OpPromoted = invited→member;
+	// ParticipantUpgraded = observer→member). Skipped on OpNoChange per
+	// Phase 3 D5 retry-idempotency.
+	if result == OpInserted || result == OpPromoted || result == ParticipantUpgraded {
 		s.emitSceneJoinIC(ctx, req.GetSceneId(), req.GetCharacterId(), result)
 	}
 
@@ -781,8 +791,11 @@ func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID
 	}
 
 	fromRole := "none"
-	if result == OpPromoted {
+	switch result {
+	case OpPromoted:
 		fromRole = "invited"
+	case ParticipantUpgraded:
+		fromRole = "observer"
 	}
 
 	payload, err := json.Marshal(map[string]string{
