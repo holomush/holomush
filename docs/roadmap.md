@@ -95,7 +95,7 @@ know they exist; neither has code yet.
 
 | Use          | Epic           | Frontier bead                                                | State                                    |
 | ------------ | -------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| **Scenes**   | `holomush-5rh` | Phases 4-6 shipped — Phase 8 scene board (`5rh.17`) → web Scenes Portal (`5rh.8`/`5rh.18`) next (`holomush-ztiqj`) | Phases 4-6 shipped (#4279 / #4302 / #4308) |
+| **Scenes**   | `holomush-5rh` | Phases 4-6 + 8 shipped — web Scenes Portal (`5rh.8`) + Phase 9 chat (`5rh.18`) next (`holomush-ztiqj`) | Phases 4-6 (#4279/#4302/#4308) + Phase 8 (`iokti`, #4353) shipped |
 | **Channels** | `holomush-0sc` | `0sc.12` Channel plugin rework on plugin ABAC                | In progress                              |
 | **Forums**   | `holomush-djj` | (undesigned)                                                 | Needs brainstorm + spec                  |
 | **Discord**  | `holomush-aqq` | `aqq.5` Discord OAuth linking (`dwk.7` overlap closed today) | Blocked on Channels + OAuth substrate    |
@@ -114,14 +114,17 @@ know they exist; neither has code yet.
    shipped** (`5rh.20`, 2026-05-29) — scene logs + publish vote + hard
    privacy boundary: feature PR #4279, bare-ULID scene identity fix #4302
    (`holomush-y5inx`, surfaced by the Phase 6 E2E work), E2E tier PR #4308.
-   Scenes (Phases 4-6) is now the shipped reference implementation. The next
-   scenes slice is the **Phase 8 → Web Portal arc** (decision
-   `holomush-ztiqj`): Phase 8 (`5rh.17`) builds the scene board — a browsable
-   directory of open scenes plus content-warning filtering — as the
-   discoverability backend, then the web Scenes Portal (`5rh.8`, folding/
-   scoping the `5rh.18` chat view) surfaces that board over ConnectRPC. The
-   portal's core "browse active scenes" view needs the board as its data
-   source, so the board precedes the portal rather than the reverse. Phase 7
+   Scenes (Phases 4-6) is the shipped reference implementation. **Phase 8
+   shipped** (epic `holomush-iokti`, PR #4353, 2026-05-31) — the scene board
+   (browsable directory of open scenes + content-warning filtering) plus the
+   owner-partitioned settings substrate it required; 21/21 children landed.
+   (Phase 8 materialized as `iokti`; the original v2-plan placeholder `5rh.17`
+   was closed-as-superseded on ship, the same pattern as `5rh.15`→`5rh.20` for
+   Phase 6.) With the discoverability backend in place, the next slice of the
+   **Phase 8 → Web Portal arc** (decision `holomush-ztiqj`) is the web Scenes
+   Portal (`5rh.8`, folding/scoping the `5rh.18` Phase 9 chat view), which
+   surfaces the board over ConnectRPC — its "browse active scenes" view needs
+   the board as its data source, which is why the board shipped first. Phase 7
    templates (`5rh.16`) is orthogonal authoring work, deprioritized relative
    to discoverability.
 2. **Channels in parallel where unblocked** (`0sc.12`). The channel plugin
@@ -322,11 +325,14 @@ annotation, at which point it flips to `bound` (per the `binding: pending`
 tolerance decision `holomush-hz0v4.10`). The meta-test tolerates `pending`, so
 this lands incrementally rather than as a mega-PR.
 
-As of 2026-06-05: 30 of 300 entries `bound` (INV-PRIVACY fully bound). Remaining
-backfill is tracked per scope under the still-open epic: `hz0v4.11` (CRYPTO,
-109), `hz0v4.16` (SCENE, 60), `hz0v4.17` (PLUGIN, 39), `hz0v4.18` (EVENTBUS,
-28), `hz0v4.19` (long-tail, 34). Pick-from-`bd`-ready gardening, like the repo
-audit above — not a strategic theme. Remaining count:
+As of 2026-06-07: 31 of 301 entries `bound` (INV-PRIVACY fully bound;
+INV-PLUGIN-40, added by the event-type wire-convention work, is now bound).
+Remaining backfill is tracked per scope under the still-open epic — `hz0v4.11`
+(CRYPTO), `hz0v4.16` (SCENE), `hz0v4.17` (PLUGIN), `hz0v4.18` (EVENTBUS),
+`hz0v4.19` (long-tail); the pending counts in each child-bead title are
+filing-time snapshots, so derive the live numbers from the queries below rather
+than from prose. Pick-from-`bd`-ready gardening, like the repo audit above —
+not a strategic theme. Remaining count:
 
 ```bash
 rg -c 'binding: pending' docs/architecture/invariants.yaml
