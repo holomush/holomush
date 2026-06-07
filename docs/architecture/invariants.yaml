@@ -258,6 +258,7 @@ scopes:
       - "docs/superpowers/specs/2026-05-28-scene-bare-ulid-identity-design.md"
       - "docs/superpowers/specs/2026-05-27-shcyu-harness-publish-driving-design.md"
       - "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md"
+      - "docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md"
     owned_paths:
       - "plugins/core-scenes/**"
       - "internal/grpc/focus/**"
@@ -3182,6 +3183,39 @@ invariants:
       - {file: "plugins/core-scenes/store.go", token: "INV-S9"}
       - {file: "plugins/core-scenes/store_integration_test.go", token: "INV-S9"}
       - {file: "test/integration/scenes/publish_e2e_test.go", token: "INV-S9",}
+  - id: INV-SCENE-61
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md"
+    legacy: []
+    summary: "Observer-join (watch) is fail-closed: the visibility == open check is plugin-code-enforced and evaluated BEFORE
+      the ABAC spectate action; non-open scenes fail before ABAC is consulted; observer-role participants have no emit path,
+      no pose-order slot, and no publish vote."
+    binding: pending
+    refs: []
+  - id: INV-SCENE-62
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md"
+    legacy: []
+    summary: "scene_activity notifications fan out only to connections of sessions whose FocusMemberships include the scene;
+      non-participant sessions never receive them."
+    binding: pending
+    refs: []
+  - id: INV-SCENE-63
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md"
+    legacy: []
+    summary: "Every web scene read/write/export path derives the acting character from the authenticated session server-side;
+      client-supplied character_id/player_id request fields are never trusted (the scene-access facade overrides them)."
+    binding: pending
+    refs: []
+  - id: INV-SCENE-64
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md"
+    legacy: []
+    summary: "Scene web-portal surfaces (board, workspace, archive, export) require an authenticated non-guest player; is_guest
+      subjects are denied at the scene-access facade."
+    binding: pending
+    refs: []
 
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride
