@@ -16,6 +16,9 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Canonical wire event-type is plugin-qualified &lt;plugin&gt;:&lt;verb&gt;](holomush-yl3mf-canonical-wire-event-type-is-plugin-qualified-plugin-verb.md) | 2026-06-07 | Accepted | `holomush-yl3mf` |
+| [Three-vocabulary event-type model: bare crypto/registered, qualified wire/verbs, one bridge](holomush-8aure-three-vocabulary-event-type-model-bare-crypto-registered-qua.md) | 2026-06-07 | Accepted | `holomush-8aure` |
+| [Qualify core-scenes event types end-to-end (no backward-compat transformation layer)](holomush-1gwns-qualify-core-scenes-event-types-end-end-no-backward-compat-t.md) | 2026-06-07 | Accepted | `holomush-1gwns` |
 | [INV-<SCOPE>-<N> canonical invariant naming convention](holomush-6wcf2-adr-inv-scope-n-canonical-invariant-naming-convention.md) | 2026-05-31 | Accepted | `holomush-6wcf2` |
 | [Paired YAML+markdown invariant registry with drift meta-test](holomush-4v2dq-adr-paired-yaml-markdown-invariant-registry-drift-meta-test.md) | 2026-05-31 | Accepted | `holomush-4v2dq` |
 | [Derive world-read subject host-side; no subject field on wire](holomush-nthq6-derive-world-read-subject-host-side-no-subject-field-wire.md) | 2026-05-30 | Accepted | `holomush-nthq6` |
