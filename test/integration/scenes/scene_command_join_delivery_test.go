@@ -99,11 +99,11 @@ var _ = Describe("holomush-y5inx.9: real scene join command delivers post-join I
 		// stream receives a scene_pose frame. Pre-fix this times out (no
 		// subscription was ever added). A frame whose Type == "scene_pose"
 		// proves the scene IC stream reached the live loop.
-		frame := joiner.WaitForEvent(ctx, "scene_pose")
+		frame := joiner.WaitForEvent(ctx, "core-scenes:scene_pose")
 		Expect(frame).NotTo(BeNil(),
 			"holomush-y5inx.9: the post-join pose MUST be delivered to the joiner's "+
 				"live Subscribe stream once the focus coordinator + stream registry are wired")
-		Expect(frame.GetType()).To(Equal("scene_pose"))
+		Expect(frame.GetType()).To(Equal("core-scenes:scene_pose"))
 		// The joiner is a non-DEK-participant, so the delivered frame MUST be
 		// metadata-only (no plaintext payload). This pins the live-path fail-closed
 		// (no-plaintext-leak) invariant — defense-in-depth per abac-reviewer.

@@ -61,7 +61,7 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 			ctx,
 			eventID,
 			"events.main.scene."+sceneID+".ic",
-			"scene_pose",
+			"core-scenes:scene_pose",
 			timestamppb.New(eventTime),
 			"character", []byte("char-isp-owner-actor"),
 			[]byte(`{"pose":"waves"}`), 1, "identity", nil, nil,
@@ -115,7 +115,7 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 		err := audit.InsertScenePose(
 			ctx,
 			eventID,
-			"events.main.scene.nonexistent-scene.ic", "scene_pose",
+			"events.main.scene.nonexistent-scene.ic", "core-scenes:scene_pose",
 			timestamppb.Now(),
 			"character", []byte("char-rollback-actor"),
 			[]byte("{}"), 1, "identity", nil, nil,
@@ -155,7 +155,7 @@ var _ = Describe("SceneAuditStore.InsertScenePose", func() {
 		err := audit.InsertScenePose(
 			ctx,
 			eventID,
-			"events.main.scene."+sceneID+".ic", "scene_pose",
+			"events.main.scene."+sceneID+".ic", "core-scenes:scene_pose",
 			timestamppb.Now(),
 			"character", []byte("char-orphan-actor"),
 			[]byte("{}"), 1, "identity", nil, nil,
@@ -256,7 +256,7 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 		eventID := newPoseULID()
 		subject := "events.main.scene." + sceneID + ".ic"
 
-		req := makeAuditRow(eventID, subject, "scene_pose", timestamppb.New(eventTime), ownerBytes[:])
+		req := makeAuditRow(eventID, subject, "core-scenes:scene_pose", timestamppb.New(eventTime), ownerBytes[:])
 		_, err := srv.AuditEvent(ctx, req)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -312,7 +312,7 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 		subject := "events.main.scene." + sceneID + ".ic"
 		actorBytes := newPoseULID() // arbitrary 16-byte actor; type is scene_join_ic not scene_pose
 
-		req := makeAuditRow(eventID, subject, "scene_join_ic", timestamppb.Now(), actorBytes)
+		req := makeAuditRow(eventID, subject, "core-scenes:scene_join_ic", timestamppb.Now(), actorBytes)
 		_, err := srv.AuditEvent(ctx, req)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -342,7 +342,7 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 
 		eventID := newPoseULID()
 		// Subject missing the required scene segment — parseSceneSubject rejects it.
-		req := makeAuditRow(eventID, "events.main.bad", "scene_pose", timestamppb.Now(), newPoseULID())
+		req := makeAuditRow(eventID, "events.main.bad", "core-scenes:scene_pose", timestamppb.Now(), newPoseULID())
 		_, err := srv.AuditEvent(ctx, req)
 		Expect(err).To(HaveOccurred())
 		// parseSceneSubject is the sole oops wrapper on this path; the
@@ -374,7 +374,7 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 			Row: &pluginv1.AuditRow{
 				Id:        eventID,
 				Subject:   subject,
-				Type:      "scene_pose",
+				Type:      "core-scenes:scene_pose",
 				Timestamp: timestamppb.Now(),
 				Actor: &eventbusv1.Actor{
 					Kind: eventbusv1.ActorKind_ACTOR_KIND_PLUGIN,
@@ -419,7 +419,7 @@ var _ = Describe("SceneAuditServer.AuditEvent dispatcher", func() {
 		subject := "events.main.scene." + sceneID + ".ic"
 		shortActor := []byte{0x01, 0x02, 0x03} // not 16 bytes
 
-		req := makeAuditRow(eventID, subject, "scene_pose", timestamppb.Now(), shortActor)
+		req := makeAuditRow(eventID, subject, "core-scenes:scene_pose", timestamppb.Now(), shortActor)
 		_, err := srv.AuditEvent(ctx, req)
 		Expect(err).To(HaveOccurred())
 		errutil.AssertErrorCode(suiteT, err, "SCENE_AUDIT_INVALID_ACTOR_ID")

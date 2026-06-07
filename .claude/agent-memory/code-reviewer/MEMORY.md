@@ -2,207 +2,100 @@
   (a) Fragile `// Verifies:`-grep coverage meta-tests (`test/meta/i_<old>_coverage_test.go`,
   per-family `TestEveryPhase3c...` scanning `// Verifies: I-<OLD>-N`/`INV-<digits>`) MUST be
   DELETED on migration — renamed annotations make them find ZERO and fail ALL N (.14.9 missed →
-  I-PRIV-1..8 failed). Coverage is absorbed by `TestEveryRegistryInvariantHasBinding`. DISTINCT
+  I-PRIV-1..8 failed). Coverage absorbed by `TestEveryRegistryInvariantHasBinding`. DISTINCT
   from robust `testName`-EXISTENCE checks (go/parser Test* names) which MIGRATE in lockstep. Keep
   shared helpers (`findRepoRoot`/`skipDirs`) in a gutted meta file — 10+ files use them; verify
   it still compiles. (b) FROM-anchor: `checkProvenance` greps canonical `e.ID`, NOT `r.Token`, so
   refs recording legacy tokens is harmless/correct. (c) Origin SPEC is NOT migrated by design;
   legacy column records the link. (d) gorules is a SEPARATE module — analyzer diagnostic + Doc +
   testdata `// want` rename in lockstep; `go clean -testcache` before `task test:gorules`.
-  (e) `task lint:invariants` (= `inv-render -check`) must exit 0 for invariants.md sync. (f) DENSE
-  renumber maps non-contiguous legacy ascending-by-position; verify each entry's legacy + every
-  refs[].token. hz0v4.14.9 NOT-READY / .14.11 READY (2026-06-02).
+  (e) `task lint:invariants` (= `inv-render -check`) must exit 0 for invariants.md sync.
 
-- **Multi-family + dense letter-suffix renumber (EVENTBUS=GW+ROPS+P7-split .14.12;
-  SCENE=P4/P5/P6/FS/Y5INX/SH+bare → 59 ids/86 files .14.13; both READY).** GW dense
-  over {1,2,3,3a,4..11,13..16} (letter-suffix 3a); P7 SPLIT (audit-half →25/26/27,
-  rest bare for later). `awk` ref/legacy scans FALSE-mismatch on `3a`/`refs:[]`/`,}`
-  — hand-read. Coverage-test taxonomy: per-family `TestAll*RegistryInvariantsHaveTests`
-  + `inv_p4/p5_coverage_meta_test.go` are `testName`-EXISTENCE checks (go/parser Test*
-  names; `{inv,testName}` table) — robust to rename when testName strings + funcs move
-  in lockstep; DISTINCT from fragile `// Verifies:` scanners (DELETE those, .14.9).
-  Confirm which kind before delete-vs-migrate. Manual `\b`-unreachable underscore
-  renames (TestINV_P4_4→_SCENE_4): grep old→ZERO + chase string/cross-file cites.
-  Generic `TestInvariantTokenBoundariesRejectFalsePositives` KEPT (INV-GW-* fixtures
-  intentional). Partition: other scopes MAY list a foreign-owned file in THEIR
-  shared_files. Trailing-comma `,}` noise — Low non-blocking.
+- **Registry-renumber series (.14.12–.14.27, ~9 legs, all READY except .14.23) — CONSOLIDATED.**
+  Each leg renames a legacy invariant family (GW/ROPS/P7-split/P4/P5/P6/FS/SCENE/PLUGIN/ACCESS/
+  CRYPTO/S*/M*/COMMAND) to canonical `INV-<SCOPE>-N`, dense non-contiguous ascending-by-position.
+  Recurring checks that HOLD: (1) Per-file token scan of EVERY owned file → ONLY `INV-<SCOPE>-N`;
+  residual walk `bareInvRE = \bINV-\d+\b` (invariant_registry_test.go:488) matches ONLY bare
+  NUMERIC `INV-9` — NOT `INV-P7-1`/`INV-RB-1`/`INV-PLUGIN-22` (the `-XX-` segment breaks `\d+`),
+  and `continue`s on shared files (~line 554). So foreign/deferred tokens survive ONLY in
+  shared_files, and descriptive prose like `INV-P7-1..16` in an owned file is INERT. (2)
+  checkProvenance greps CANONICAL `e.ID` at each ref site, NOT `r.Token` — refs recording legacy
+  `token:"INV-15"` is the standing FROM-anchor convention; the canonical id must ALSO be
+  physically present. (3) TestOwnedPathsPartition only forbids the SAME glob in two scopes'
+  owned_paths; an unowned shared file is permissible (checkProvenance accepts shared-OR-owned).
+  Genuinely multi-scope files carry BOTH tokens, listed in both scopes (one owned, one shared).
+  (4) PER-SITE not per-number: same bare number → different outcome per file (bare INV-1 →
+  PLUGIN-22 in plugin-evaluate files, LEFT bare in command-visibility files). (5) Coverage
+  meta-tests: distinguish `testName`-EXISTENCE checks (go/parser Test* names; t.Run `inv` labels
+  robust to rename, MIGRATE in lockstep) from fragile `// Verifies:`-grep scanners (DELETE —
+  .14.9). (6) refs:[] spec-only/binding:pending is HONEST when the origin spec maps a mechanism
+  to the PARENT token's code site, not its own (M4/5/6→parent PLUGIN-32; W9ML 1..6).
+  TestEveryRegistryInvariantHasBinding tolerates pending+refs:[]. (7) Generated artifacts
+  (.pb.go/_grpc.pb.go/.connect.go/_pb.ts/_connect.ts/grpc-api.md) must regen in sync when a proto
+  INV-comment is renamed. (8) Deferred-bare-INV + foreign tokens → use file-path owned_paths NOT
+  `dir/**` globs (else residual walk trips on left-behind tokens) — .14.14. (9) Trailing-comma
+  `token:"...",}` noise recurs ~6×; renderer-inert, Low non-blocking. (10) Zero executable-line
+  edits expected — every .go diff line is a comment or test-assertion string-literal token swap.
+  Final counts: CRYPTO=67/PLUGIN=39/ACCESS=8/EVENTBUS=28/SCENE=60; COMMAND-scope created by LAYER
+  split (Go-backend→COMMAND, web-composer TS LEFT exempt). Encountered .14.12–.14.27 (2026-06-02..04).
 
-- **Scope with DEFERRED bare-INV-N + foreign tokens uses file-path owned_paths
-  (NOT /** globs) to keep the residual walk clean (hz0v4.14.14 PLUGIN READY).**
-  When a scope's directory holds un-migrated bare INV-N (deferred to a later pass)
-  or foreign-family tokens, owning the `dir/**` glob would make the residual walk
-  trip on those left-behind tokens. Fix: list only the specific migrated files in
-  `owned_paths`; put every mixed/foreign-carrying file in `shared_files` (shared ≠
-  residual-walked). PLUGIN: `pluginauthz/**`, `wholesystem/**`, `plugin/**` REMOVED
-  from scaffold globs → only `config.go`, `identity_registry.go`, `plugin_repo.go`,
-  2 eventbus grep tests, 3 WS harness files owned. Review checks that HELD: (1)
-  per-file token scan of every owned file → ONLY INV-<SCOPE>-N (no bare/foreign
-  leftover) ⇒ residual walk clean; (2) every mixed file in shared_files actually
-  carries a foreign/deferred token (lua/host.go=INV-6/7/8/S5, manager.go=EVENTBUS-11/
-  M1/S5, subsystem.go=INV-1/4/SCENE-38, harness.go=PRIVACY/ACCESS-4/P7-9/bare-1,
-  plugins.go=ACCESS-4) — justifies shared-not-owned; (3) STORE-owned
-  no_delete_grep_test.go is in PLUGIN shared (not owned); (4) deferred bare INV-1..5/8/11
-  LEFT in pluginauthz/hostfunc untouched. P7-split sanity: PLUGIN block has NO P7 entry,
-  no P7 token rewritten (pre-existing EVENTBUS P7-3/4/10 refs untouched). W9ML source
-  spec defines 1..9 (redesign §2.1 undercounted to 1..8) — code reality authoritative;
-  spec-only refs:[] = exactly W9ML-1..6 (6). Same `token: "...",}` trailing-comma noise
-  recurred AGAIN (3rd time: SCENE INV-7 ref) — Low non-blocking; renderer-inert.
-  Encountered: hz0v4.14.14 (2026-06-03) — READY.
+- **First NOT-READY in the series: registry guards are BLIND to unregistered files, so a green
+  meta-test run does NOT prove a family migration is complete (hz0v4.14.23 INV-F NOT READY).**
+  Two defects survived a fully-green run (lint:invariants, provenance, partition, binding, 617
+  unit tests, int-compile): (A) **51 residual bare `INV-F*` token refs** in THREE cmd/holomush
+  files NOT in the diff (admin_read_stream_e2e_test.go ×45, readstream_wiring_test.go ×4,
+  admin_authenticate_e2e_test.go ×2) — same family migrated, but files neither owned_paths nor
+  shared_files nor in any `refs[]`, so residual walk + provenance never look → green despite
+  incomplete. 4 are STALE cross-file func-name cites (`TestINV_F2/F6/...`) pointing at funcs THIS
+  diff RENAMED → dangling. (B) **Range-rewrite corruption**: `INV-P7-1..16` → `INV-CRYPTO-38..16`
+  (tool rewrote left side of a `..N` range, left suffix); substring `INV-CRYPTO-38` keeps
+  provenance green, CI blind. **Review pattern for family migrations: do NOT trust green guards
+  as proof of completeness. ALWAYS `rg -c '\bINV-<OLD>[0-9]' --glob '!docs/**'` over the WHOLE
+  tree (not just diffed files) — residual hits in unregistered files = incomplete. Also
+  `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range corruption, `rg 'TestINV_<OLD>[0-9]'` for
+  dangling renamed-func cites.** Encountered: hz0v4.14.23 (2026-06-03) — NOT READY.
 
-- **Final/hardest CRYPTO leg (52 ids: reader-opts 1..6→1..5 + master-crypto bare
-  9..49 + RB-1..12 + P7-crypto-half) is the same shape; all checks held (hz0v4.14.15
-  READY).** Key residual-walk subtlety confirmed at source: `bareInvRE` in
-  `test/meta/invariant_registry_test.go:488` is `\bINV-\d+\b` — matches ONLY bare
-  NUMERIC `INV-9`. It does NOT match `INV-P7-1` / `INV-RB-1` (the `-P7-`/`-RB-`
-  segment breaks `\d+` right after `INV-`). So a surviving descriptive prose
-  reference like `// the legacy INV-P7-1..16 set, migrated to...` in an OWNED file
-  (phase7_boundary_meta_test.go:25) is INERT to the residual walk — NOT a finding.
-  Residual walk also `continue`s on shared files (line 554). The
-  `phase7_boundary_meta_test.go` is a `testName`-EXISTENCE meta-test (collects Go
-  Test* func names via go/parser; `tc.inv` is a t.Run label only, robust to rename)
-  — distinct from `// Verifies:`-grep scanners that MUST be deleted (.14.9). Its
-  `cases` table `inv` strings migrate in lockstep. Shared_files MAY be unowned by
-  any scope: `TestOwnedPathsPartition` (line 113) only forbids the SAME glob in two
-  scopes' owned_paths; an unowned shared file (crypto_manifest.go carrying only
-  INV-CRYPTO-27; plugin_role_permissions_test.go only INV-CRYPTO-48) is permissible —
-  `checkProvenance` line 524 accepts shared-OR-owned. Dense renumber maps
-  non-contiguous legacy ascending-by-position (reader INV-5 was never a real inv →
-  1,2,3,4,6→1,2,3,4,5; master INV-17→CRYPTO-9). Provenance check greps canonical
-  `e.ID` (line 520), NOT `r.Token` (legacy FROM-anchor) — so 209 refs showing
-  "legacy TOKEN-ABSENT" is EXPECTED/correct; re-scan for canonical id instead.
-  grpc-api.md table-row "non-comment" diffs are doc prose; verify each ± pair
-  differs ONLY in the token. No `token:",}` trailing-comma noise this time.
-  Encountered: hz0v4.14.15 (2026-06-03) — READY.
+- **Verification-BINDING backfill (pending→bound flip, NOT a renumber) — hz0v4 binding-backfill
+  READY.** Flips registry entries pending→bound + adds asserted_by, ONLY where a `// Verifies:
+  INV-<id>` annotation ALREADY exists; may add the comment to a pre-existing asserting test.
+  TestEveryRegistryInvariantHasBinding walks ALL *_test.go (raw regex, build tags irrelevant —
+  integration files ARE scanned); a `bound` entry needs ≥1 annotation ANYWHERE, and asserted_by
+  is NOT cross-checked against annotation sites — so a typo'd/fabricated asserted_by path passes
+  the gate. MUST hand-verify each asserted_by file genuinely contains the annotation. `pending`
+  MUST NOT carry asserted_by. For bug-closing flips (0sh1k 'asserted only in comments'), the
+  `// Verifies:` comment does NOT fix a false-green — READ the cited test and confirm a REAL
+  runtime assertion of EACH invariant clause (CRYPTO-28: audit-emit = WaitForOneJetStreamMsg on
+  AUDIT stream + header assert; fail-closed = audit=nil → res.Err set, no plaintext). Gates:
+  `inv-render -check` exit 0; meta binding+provenance green. Encountered: 2026-06-05 — READY.
 
-- **Final bare-INV-N PER-SITE pass (tri-overloaded namespace: same bare number
-  → DIFFERENT outcomes per file) — all checks held (hz0v4.14.22 READY).** The
-  whole point: bare INV-1 → INV-PLUGIN-22 ONLY in plugin-evaluate files
-  (pluginauthz/evaluate.go, hostfunc/evaluate.go, hostfunc/stdlib_settings.go,
-  goplugin/evaluate_invariants_test.go), while command-visibility INV-1 (commands.go,
-  functions.go, setup/subsystem.go) LEFT bare; settings INV-6 (host_service.go) +
-  fence INV-6/7 (lua/host.go) LEFT. Verify per-file, not per-number. Key checks:
-  (1) `rg '\bINV-[0-9]+\b'` over EVERY owned file → ZERO (residual walk = `bareInvRE
-  \bINV-\d+\b` at invariant_registry_test.go:488); foreign bare tokens survive ONLY
-  in shared_files (residual `continue`s on shared, line ~550). (2) checkProvenance
-  (line 492) greps CANONICAL `e.ID` at each ref site, NOT `r.Token` — so refs
-  recording legacy `token: "INV-15"/"INV-A16"/"INV-4"` is the standing FROM-anchor
-  convention, NOT a finding; the canonical token must ALSO be physically present
-  (it is). (3) Cross-scope ownership is legit: access/setup/subsystem.go +
-  setup_warn_integ_test.go are PLUGIN-owned (INV-4 audit-wiring is plugin-evaluate,
-  not ABAC) — confirm each appears ONCE in owned_paths and carries ONLY the migrated
-  token; no scope owns `internal/access/**` glob so TestOwnedPathsPartition is safe.
-  (4) seed.go/seed_test.go genuinely multi-scope (PRIVACY I-PRIV-6 + now ACCESS) →
-  ACCESS-shared not owned; seed_smoke_test.go/spec_amendments_test.go ACCESS-owned.
-  (5) Bare `A16` prose (no INV- prefix) MUST stay — `\bA16\b` rewrite would corrupt
-  `INV-A16`; `INV-A16` → INV-ACCESS-8 cleanly. (6) Zero `.go` executable-line edits;
-  every .go diff line is a comment or test-assertion string-literal token swap.
-  (7) This diff CLEANED a pre-existing `,}` (INV-RA-6 line 1657) but ADDED a new one
-  (INV-A16 line 1682) — 5th recurrence, Low non-blocking, renderer-inert. PLUGIN dense
-  1..28, ACCESS dense 1..8. Encountered: hz0v4.14.22 (2026-06-03) — READY.
-
-- **First NOT-READY in the .14.x classification series: registry guards are
-  BLIND to unregistered files, so a green meta-test run does NOT prove a family
-  migration is complete (hz0v4.14.23 INV-F NOT READY).** Two defects survived a
-  fully-green run (lint:invariants, provenance, partition, binding, 617 unit tests,
-  int-compile): (A) **51 residual bare `INV-F*` token refs** (INV-F1/2/3/6/9/10/11/
-  12/14/15/17) in THREE cmd/holomush files NOT in the diff: admin_read_stream_e2e_test.go
-  (45), readstream_wiring_test.go (4), admin_authenticate_e2e_test.go (2). These are
-  the SAME family the bead migrates, but the files are neither owned_paths nor
-  shared_files nor in any registry `refs[]`, so the residual walk + provenance guard
-  never look at them → green despite incomplete migration. 4 of those are STALE
-  cross-file func-name cites (`TestINV_F2/F6/F3/F17_...` at lines 1124/1159/1245/2137)
-  pointing at funcs THIS diff RENAMED to TestINV_CRYPTO_54/56/55/67 — now dangling.
-  (B) **Range-rewrite corruption**: phase7_boundary_meta_test.go:25 prose
-  `INV-P7-1..16` → `INV-CRYPTO-38..16` (tool rewrote left side of a `..N` range,
-  left suffix). `INV-P7-1` is a P7 token (handled in .14.15), OUT OF SCOPE for the
-  F pass — tool should not have touched it. Substring `INV-CRYPTO-38` keeps
-  provenance green (real anchor is the table row at line 54), so CI is blind.
-  Redesign spec (2026-06-01-...-redesign.md:42) DOCUMENTS this exact class:
-  "INV-CRYPTO-1..5 — nonsensical as crypto. Every CI gate passed." Same bug the
-  crypto-reviewer caught on F-compound-refs (INV-CRYPTO-56/F7), recurred on a
-  `..N` range. **Review pattern for family migrations: do NOT trust green guards
-  as proof of completeness. ALWAYS run `rg -c '\bINV-<OLD>[0-9]' --glob '!docs/**'`
-  over the WHOLE tree (not just diffed files) — residual hits in unregistered files
-  = incomplete migration. Also `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range
-  corruption, and `rg 'TestINV_<OLD>[0-9]'` for dangling renamed-func cites.**
-  Mechanical search-replace correct part: 35 diffed files all comment/string/test-func
-  swaps, dense 53..67, no executable edits, generated artifacts in sync. The DEFECT
-  is what was MISSED, not what was changed. Encountered: hz0v4.14.23 (2026-06-03) — NOT READY.
-
-- **INV-S\* substrate-contract per-token SPLIT across THREE scopes + master-crypto
-  fence (hz0v4.14.24 READY).** S3→PLUGIN-31, S5→PLUGIN-32, S4→EVENTBUS-28,
-  S9→SCENE-60; master fence INV-6→PLUGIN-29, INV-7→PLUGIN-30. Checks that held:
-  (1) tri+-overload: 8 fence files (sensitivity_fence{,_test}.go, event_emitter{,_crypto_test}.go,
-  lua/host.go, pkg/plugin/event.go, integrationtest/crypto.go, plugin.proto) → ZERO bare
-  INV-6/7; foreign INV-6/7 LEFT in web frontend (themeStore/commandListStore/composerChip),
-  CI-tooling (tooling_no_mandatory_int_test.go), reader-opts (cmd/holomush/sub_grpc_test.go),
-  settings (goplugin/host_service.go:610), AND phase-8 board-content SCENE-58/59 legacy
-  (a DIFFERENT INV-6/7 namespace — its legacy column STAYS INV-6/7). (2) S1/S2/S6/S7/S8/S10
-  have ZERO code/manifest refs → split is complete; only S3/S4/S5/S9 were ever code-bound.
-  Remaining INV-S* hits are ONLY docs/roadmap.md + site/docs + ADRs (prose, not annotations) +
-  invariants.yaml legacy/refs.token (FROM-anchor). (3) service.go + store.go genuinely
-  multi-scope → carry BOTH INV-EVENTBUS-28 (S4) AND INV-SCENE-60 (S9): EVENTBUS-shared +
-  SCENE-owned, listed in both. (4) checked cmd/ + api/proto/ (prior-pass blind spots, see
-  .14.23) → clean. Dense: PLUGIN 1..32, EVENTBUS 1..28, SCENE 1..60, no dup/gap. Trailing-comma
-  ,} noise recurred (6th time): added 2 (EVENTBUS-28/SCENE-60 last refs), cleaned 2 — Low
-  non-blocking, renderer-inert. Encountered: hz0v4.14.24 (2026-06-04) — READY.
-
-- **INV-S5 MECHANISM family (M1..M7 → PLUGIN-33..39) + missed plugin.proto INV-1
-  api/proto site → PLUGIN-22 (hz0v4.14.27 READY).** Companion pass to .14.24's
-  INV-S5 substrate token (S5→PLUGIN-32): adds the 7 mechanism sub-invariants.
-  Key: M4/M5/M6 are `refs: []` spec-only/binding:pending — HONEST because the
-  origin spec (2026-05-17-inv-s5-mechanism-design.md:62-68) maps those mechanisms
-  to code sites that annotate with the PARENT token INV-PLUGIN-32 (lua/host.go:39,237;
-  stdlib_emit_registry.go:14,47), NOT their own INV-M4/5/6 tokens. The migrate tool
-  can only rename tokens physically present; M4/5/6 never existed as annotations →
-  refs:[] is correct, NOT an incomplete migration. (Same convention as .14.14 W9ML
-  1..6.) `TestEveryRegistryInvariantHasBinding` tolerates binding:pending+refs:[].
-  M1/M2/M3/M7 DID have annotations → canonical PLUGIN-33/34/35/39 verified physically
-  present in their ref files. The .14.22 missed plugin.proto INV-1 ('no subject field'
-  plugin-host-evaluate) → PLUGIN-22 now closed across proto + 5 generated artifacts
-  (.pb.go/_grpc.pb.go/.connect.go/_pb.ts/_connect.ts/grpc-api.md) — all in sync, zero
-  stale '(spec §2, INV-1)'. CRITICAL non-collision: command-vis INV-1 (commandquery/
-  query.go, hostfunc/commands.go+functions.go, setup/subsystem.go, help_integration_test.go,
-  harness.go) + world/service_test.go per-property INV-1 ALL untouched — diff only
-  touched plugin.proto's INV-1, a distinct namespace. Owned emit_type_validator{,_test}.go
-  carry ONLY INV-PLUGIN-* (bareInvRE \bINV-\d+\b doesn't match INV-PLUGIN-NN, residual
-  clean). manager.go/manager_test.go/manager_parity_test.go/plugin.proto are SHARED (carry
-  foreign EVENTBUS-11/W9ML-8/CRYPTO/regen). Zero executable edits; dense PLUGIN 1..39.
-  NO trailing-comma ,} noise this time. Counts CRYPTO=67/PLUGIN=39/ACCESS=8/EVENTBUS=28/
-  SCENE=60. Encountered: hz0v4.14.27 (2026-06-04) — READY.
-
-- **NEW-scope creation by LAYER split + missed-site mop-up (.14.27 PR B/C,
-  INV-COMMAND, READY).** Multi-INV spec (command-chip INV-1..7) split by LAYER not
-  number: Go-backend INV-1/2/5 → INV-COMMAND-1/2/3; web-composer INV-3/4/6/7 LEFT
-  web-local TS (exempt). Review BOTH directions: no Go annotation wrongly left
-  (rg the legacy bare number over internal/ → ZERO) AND no web token wrongly pulled
-  (per-SITE, never value-keyed — INV-5 was layer-overloaded: Go list_available
-  →COMMAND-3 migrated, web composerChip INV-5 LEFT). New-scope partition: owns
-  commandquery/** + specific files; confirm no other scope globs same dir. PR C
-  mopped 2 missed sites (help_integration_test.go owned, setup/subsystem.go shared-
-  by-4-scopes — legal, only owned_paths must partition; subsystem.go RETAINS its
-  foreign PLUGIN-25/3/SCENE-38/EVENTBUS-11). Spec-token scan trap (.14.23): dropped
-  slots written as LEGACY (INV-TS-8 not INV-STORE-8) = binding-guard-inert.
-  Encountered: hz0v4.14.27 PR B/C (2026-06-04) — READY.
-
-- **Verification-BINDING backfill (pending→bound flip, NOT a renumber) —
-  hz0v4 binding-backfill READY.** Distinct recurring shape (trackers hz0v4.11/16/
-  17/18/19 open): flips registry entries pending→bound + adds asserted_by list,
-  ONLY where a `// Verifies: INV-<id>` annotation ALREADY exists; may add the
-  Verifies comment to a pre-existing asserting test. KEY meta-test semantics:
-  TestEveryRegistryInvariantHasBinding walks ALL *_test.go (raw regex, build tags
-  irrelevant — integration files ARE scanned) for `// Verifies: INV-<SCOPE>-N`;
-  a `bound` entry needs ≥1 annotation ANYWHERE, and asserted_by is NOT cross-
-  checked against annotation sites — so a typo'd/fabricated asserted_by path
-  passes the gate. MUST hand-verify each asserted_by file genuinely contains the
-  annotation (rg the canonical token, cross-ref). `pending` MUST NOT carry
-  asserted_by (checkRegistryBindings). For bug-closing flips (0sh1k: 'asserted
-  only in comments'), the `// Verifies:` comment does NOT fix a false-green — READ
-  the cited test and confirm a REAL runtime assertion of each invariant clause
-  (CRYPTO-28: audit-emit clause = WaitForOneJetStreamMsgOnStream on AUDIT stream +
-  header assert; fail-closed clause = audit=nil → res.Err set, no plaintext). Both
-  pre-existed; diff only added the comment. Gates: `go run ./cmd/inv-render -check`
-  exit 0 (md↔yaml sync); meta TestEveryRegistryInvariantHasBinding+TestProvenance
-  green. Roadmap counts cross-foot (bound+pending=total; per-scope remaining =
-  scope_total − bound). No production code; comment-only test edits. Encountered:
-  hz0v4 binding-backfill (2026-06-05) — READY.
+- **NEW shape — wire event-type qualification migration (bare scene_* → core-scenes:<verb>),
+  aneim Phase 1 / holomush-r0kup READY.** Distinct from the .14.x renumbers. Three vocabularies,
+  DIFFERENT rules: (1) registered-emit set (main.go phase4/phase6EmitTypes) + (2)
+  crypto.emits[].event_type MUST stay BARE (INV-PLUGIN-32 set-equality + splitQualifiedRef);
+  (3) wire type + verbs[].type MUST be qualified `<plugin>:<verb>`. So per-SITE judgement, not
+  per-token: bare main.go/crypto.emits/main_test.go assertions are CORRECT, not misses. Checklist
+  that held: (a) whole-tree `rg scene_pose|scene_say|...` ex-core-scenes/docs — only proto
+  doc-comments, generated *.pb.go/_pb.ts, crypto-bridge unit tests, and raw-bus `mintEvent`/
+  `eventbus.Type` synthetic integration tests (published via `bus.Bus.Publisher()` NOT
+  RenderingPublisher → bypass verb registry, self-consistent bare). (b) ALL scene_log INSERTs incl
+  SQL single-quote literals (seedScenePoseLog, poseorder `type='...'`, publish_store.go `WHERE
+  type IN (...)`) — silent zero-row risk; both late-found literals qualified. (c) audit dispatch
+  `eventType := row.GetType()` (qualified stored) vs `if eventType == "core-scenes:scene_pose"` —
+  match. (d) handleEmit `strings.TrimPrefix(eventType,"core-scenes:scene_")` clean for
+  pose/say/emit/ooc; `verb` only feeds user output, wire `Type` stays qualified. (e) DOWNGRADE
+  FENCE NON-DEFEAT: `cryptowiring.AlwaysSensitiveSet` already PREFIXES bare crypto.emits with
+  `<plugin>:`, so fence `alwaysSensitive` was always qualified — qualifying scene_log.type CLOSES
+  a pre-existing keying gap (row.GetType() now matches), does not open fail-open; fenceCheckRow
+  only consults alwaysSensitive on identity-codec rows (encrypted use DEK-exists). (f)
+  `emitEntryMatchesWireType` (crypto_manifest.go:89) bridges bare entry ↔ qualified wire for
+  LookupEmitSensitivity + PluginCanReadBack — emit/readback unaffected. (g) harness regression
+  validity: SAME verbRegistry instance wrapped into crypto RenderingPublisher AND populated by
+  plugin loader from manifest (harness.go:333→347 & →376→plugins.go:311); EmitSceneICContent's
+  internal require.NoError surfaces EMIT_UNKNOWN_VERB so the spec genuinely fails w/o the verbs
+  block. (h) harness emit helper qualifies bare→qualified IDEMPOTENTLY (`if !strings.Contains
+  (wireType,":")`), so untouched tests passing bare verbs still work; readback/privacy tests
+  already used `pluginName+":scene_pose"`. (i) manifest enums closed (manifest.go:176-187):
+  category{communication,movement,state,system,command}, format{speech,action,narrative,
+  notification,error,snapshot,delta}, speech needs label. Design: IC content (pose/say/emit/ooc)→
+  communication; lifecycle/publish notices→system+notification. No false-green (no `// Verifies:
+  INV-PLUGIN-40`; loader-gate aneim.10 + meta-test aneim.11 deferred). 2026-06-07 — READY.

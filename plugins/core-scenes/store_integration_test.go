@@ -2417,12 +2417,12 @@ var _ = Describe("Publish store — ReadSceneLogForSnapshot", func() {
 				id.Bytes(), subj, eventType, []byte(eventType))
 			Expect(err).NotTo(HaveOccurred())
 		}
-		insertLog(subject, "scene_pose")
-		insertLog(subject, "scene_ooc") // OOC — excluded
-		insertLog(subject, "scene_say")
-		insertLog(subject, "scene_leave_ic") // ops/notice — excluded
-		insertLog(subject, "scene_emit")
-		insertLog("events.main.scene.other.ic", "scene_pose") // different scene — excluded by subject
+		insertLog(subject, "core-scenes:scene_pose")
+		insertLog(subject, "core-scenes:scene_ooc") // OOC — excluded
+		insertLog(subject, "core-scenes:scene_say")
+		insertLog(subject, "core-scenes:scene_leave_ic") // ops/notice — excluded
+		insertLog(subject, "core-scenes:scene_emit")
+		insertLog("events.main.scene.other.ic", "core-scenes:scene_pose") // different scene — excluded by subject
 
 		tx, err := store.pool.Begin(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -2431,9 +2431,9 @@ var _ = Describe("Publish store — ReadSceneLogForSnapshot", func() {
 		logs, err := store.ReadSceneLogForSnapshot(ctx, tx, subject)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(logs).To(HaveLen(3), "only pose/say/emit for this subject; OOC + ops + other-scene excluded")
-		Expect(logs[0].Type).To(Equal("scene_pose"))
-		Expect(logs[1].Type).To(Equal("scene_say"))
-		Expect(logs[2].Type).To(Equal("scene_emit"), "chronological order preserved via ULID id ASC")
+		Expect(logs[0].Type).To(Equal("core-scenes:scene_pose"))
+		Expect(logs[1].Type).To(Equal("core-scenes:scene_say"))
+		Expect(logs[2].Type).To(Equal("core-scenes:scene_emit"), "chronological order preserved via ULID id ASC")
 		Expect(logs[0].Codec).To(Equal("identity"))
 		Expect(logs[0].DEKRef).To(BeNil(), "identity-codec rows have NULL dek_ref")
 	})
