@@ -155,3 +155,16 @@
   the diff: "SceneInfo.observers populated" unmet (rowToProto sets neither participants nor
   observers; new store method had zero production callers) — implementer claims of "deferred by
   design" need a recorded deferral in bead/plan, not just assertion.
+
+- **WatchScene RPC (5rh.8.3 NOT READY, 2026-06-07).** (1) `focus.Coordinator.JoinFocus` is NOT
+  idempotent — duplicate membership errors `FOCUS_ALREADY_MEMBER` (focus/join.go:38-42); repo
+  precedent commands.go:832-845 special-cases it. Any handler claiming "JoinFocus is idempotent"
+  is wrong; fakeFocusClient returns nil on duplicates → false-green idempotency tests. ALWAYS
+  read the real coordinator + check joinErr code handling. (2) Premature partial binding:
+  multi-clause invariant flipped bound when only one clause has tests and the proving task
+  (.8.4 role-gates) is still open; plan scheduled flip for final Task 20 — check WHICH task owns
+  the registry flip. (3) `hostEvaluateClient.Evaluate` needs the x-holomush-emit-token, minted
+  ONLY in DeliverEvent/DeliverCommand (host.go:854,929); a plugin service-RPC handler calling
+  Evaluate is unreachable from a plain registry-conn caller (facade) — EMIT_TOKEN_MISSING.
+  Subject is token-derived dispatch actor, never bound to req.character_id. Cross-task risk to
+  flag whenever a SceneService RPC consults s.evaluator.

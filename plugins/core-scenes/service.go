@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
@@ -153,6 +154,14 @@ type SceneServiceImpl struct {
 	// nil until SetSettingsClient wires it; effectiveTaxonomy falls back to
 	// DefaultCWTaxonomy when nil (INV-SCENE-57).
 	settings pluginsdk.SettingsClient
+	// evaluator is the host ABAC evaluator used by WatchScene's spectate
+	// gate. nil until scenePlugin.SetHostEvaluator forwards it; WatchScene
+	// fails closed when nil (mirrors handleEmit's nil-evaluator handling).
+	evaluator pluginsdk.HostEvaluator
+	// focusClient drives session focus state for service-owned RPCs
+	// (WatchScene registers the watcher's scene FocusMembership). nil until
+	// scenePlugin.SetFocusClient forwards it; WatchScene fails closed when nil.
+	focusClient pluginsdk.FocusClient
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
@@ -197,6 +206,21 @@ func (s *SceneServiceImpl) SetSnapshotDecryptor(d snapshotDecryptor) {
 // Wired via scenePlugin.SetSettingsClient before Init; nil until then.
 func (s *SceneServiceImpl) SetSettingsClient(c pluginsdk.SettingsClient) {
 	s.settings = c
+}
+
+// SetHostEvaluator installs the host ABAC evaluator used by WatchScene's
+// spectate gate. Wired via scenePlugin.SetHostEvaluator before Init; nil
+// until then (WatchScene fails closed).
+func (s *SceneServiceImpl) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
+	s.evaluator = ev
+}
+
+// SetFocusClient installs the SDK-injected focus client used by WatchScene
+// to register the watcher's scene FocusMembership. Wired via
+// scenePlugin.SetFocusClient before Init; nil until then (WatchScene fails
+// closed).
+func (s *SceneServiceImpl) SetFocusClient(c pluginsdk.FocusClient) {
+	s.focusClient = c
 }
 
 // CreateScene generates a new scene ID, persists the scene, and returns it.
@@ -820,6 +844,128 @@ func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID
 			"scene_id", sceneID, "actor_id", actorID, "error", err)
 		// Non-fatal: membership is committed; the notice is best-effort.
 	}
+}
+
+// WatchScene auto-joins the requesting character into an OPEN scene as a
+// role=observer participant and registers the scene FocusMembership on the
+// supplied session so focus/Subscribe/history gates admit the watcher.
+//
+// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+// visibility==open and state∈{active,paused} checks run BEFORE the ABAC
+// spectate action is evaluated — a non-open scene is rejected without
+// consulting ABAC. The store re-checks both gates inside the AddObserver
+// transaction (TOCTOU guard).
+//
+// Per-field validation (character_id/scene_id/session_id non-empty) happens
+// via the protovalidate interceptor before this handler runs.
+func (s *SceneServiceImpl) WatchScene(ctx context.Context, req *scenev1.WatchSceneRequest) (*scenev1.WatchSceneResponse, error) {
+	ctx, span := startSpan(
+		ctx, "scene.service.watch_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	// 1. Load the scene and run the CODE GATES FIRST (INV-SCENE-61): a
+	// non-open or non-watchable-state scene MUST fail before ABAC is
+	// consulted.
+	scene, err := s.store.Get(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		return nil, mapStoreErr(ctx, err)
+	}
+	if scene.Visibility != string(SceneVisibilityOpen) ||
+		(scene.State != string(SceneStateActive) && scene.State != string(SceneStatePaused)) {
+		gateErr := oops.Code("SCENE_NOT_WATCHABLE").
+			With("scene_id", req.GetSceneId()).
+			With("visibility", scene.Visibility).
+			With("state", scene.State).
+			Errorf("scene is not watchable")
+		recordError(span, gateErr)
+		return nil, mapStoreErr(ctx, gateErr)
+	}
+
+	// 2. ABAC spectate gate — fails closed when no evaluator is configured
+	// (mirrors handleEmit's nil-evaluator handling).
+	if s.evaluator == nil {
+		slog.WarnContext(
+			ctx, "scene.service.watch_scene evaluator not configured",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	dec, evalErr := s.evaluator.Evaluate(ctx, "spectate", "scene:"+req.GetSceneId())
+	if evalErr != nil {
+		recordError(span, evalErr)
+		errutil.LogErrorContext(ctx, "scene.service.watch_scene spectate evaluation failed", evalErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque Internal per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return nil, status.Error(codes.PermissionDenied, "not permitted to watch this scene") //nolint:wrapcheck // gRPC status is the wire contract
+	}
+
+	// 3. Insert the observer row. The store re-checks the visibility/state
+	// gates under a shared lock in-tx; map its result classifications.
+	row, result, err := s.store.AddObserver(ctx, req.GetSceneId(), req.GetCharacterId())
+	if err != nil {
+		recordError(span, err)
+		return nil, mapStoreErr(ctx, err)
+	}
+	switch result {
+	case ObserverAdded, ObserverAlreadyParticipant:
+		// proceed — row is valid for both.
+	case ObserverSceneNotFound:
+		return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+	case ObserverSceneNotOpen, ObserverSceneNotActive:
+		return nil, status.Error(codes.FailedPrecondition, "SCENE_NOT_WATCHABLE") //nolint:wrapcheck // gRPC status is the wire contract; code as message mirrors mapStoreErr
+	}
+
+	// 4. Register the scene FocusMembership on the watcher's session.
+	// Fail closed: a watcher without focus membership cannot read the scene,
+	// so a missing client or an unexpected join failure surfaces as an error
+	// rather than a silent half-join.
+	// FOCUS_ALREADY_MEMBER is idempotent success — the session is already a
+	// focus member (e.g. joined via `scene join`, or a retry/page-reload).
+	// Mirror the precedent at commands.go JoinFocus handling.
+	if s.focusClient == nil {
+		slog.WarnContext(
+			ctx, "scene.service.watch_scene focus client not configured",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.Internal, "focus registration unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	if joinErr := s.focusClient.JoinFocus(ctx, req.GetSessionId(), pluginsdk.FocusKey{
+		Kind:     pluginsdk.FocusKindScene,
+		TargetID: req.GetSceneId(),
+	}); joinErr != nil {
+		var oe oops.OopsError
+		if !errors.As(joinErr, &oe) || oe.Code() != "FOCUS_ALREADY_MEMBER" {
+			recordError(span, joinErr)
+			errutil.LogErrorContext(ctx, "scene.service.watch_scene focus join failed", joinErr)
+			return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque Internal per grpc-errors.md
+		}
+	}
+
+	slog.InfoContext(
+		ctx, "scene.service.watch_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"role", row.Role,
+		"pre_existing", result == ObserverAlreadyParticipant,
+	)
+
+	return &scenev1.WatchSceneResponse{
+		Participant: &scenev1.ParticipantInfo{
+			CharacterId: row.CharacterID,
+			// Best-effort display name: no name resolver is wired in the
+			// service, so fall back to the ID per the proto contract.
+			CharacterName: row.CharacterID,
+			Role:          row.Role,
+			JoinedAt:      timestamppb.New(row.JoinedAt.Time()),
+		},
+	}, nil
 }
 
 // emitSceneLeaveIC emits a scene_leave_ic notice event. reason discriminates

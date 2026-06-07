@@ -81,6 +81,15 @@ service SceneService {
   // service.go::JoinScene.
   rpc JoinScene(JoinSceneRequest) returns (JoinSceneResponse);
 
+  // WatchScene auto-joins the requesting character into an OPEN scene as a
+  // role=observer participant and registers the focus membership for the
+  // supplied session, so focus/Subscribe/history gates admit the watcher.
+  // Gate order is fail-closed per INV-SCENE-61: the plugin-code
+  // visibility==open and state checks run BEFORE the ABAC spectate action is
+  // evaluated; non-open scenes are rejected without consulting ABAC.
+  // See service.go::WatchScene.
+  rpc WatchScene(WatchSceneRequest) returns (WatchSceneResponse);
+
   // LeaveScene removes the calling character from a scene. The scene owner
   // cannot leave (codes.FailedPrecondition) — they must end the scene or
   // transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -469,6 +478,26 @@ message JoinSceneRequest {
 // JoinSceneResponse is intentionally empty — a successful join carries no
 // body; the caller refetches scene state if needed.
 message JoinSceneResponse {}
+
+// WatchSceneRequest identifies the watcher, target scene, and the watcher's
+// game session (host-supplied; the session receives the FocusMembership).
+message WatchSceneRequest {
+  // The watching character's ID; required. Trusted host-supplied identity
+  // per the SceneService caller contract (service.go's ABAC note).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to watch; required. Must be visibility=open and active/paused.
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The watcher's game session ULID; required — JoinFocus registers the
+  // scene FocusMembership on this session.
+  string session_id = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// WatchSceneResponse confirms the observer row.
+message WatchSceneResponse {
+  // The resulting participant entry (role=observer, or the pre-existing row
+  // when the character was already a participant of any role).
+  ParticipantInfo participant = 1;
+}
 
 // LeaveSceneRequest identifies the scene to leave and the leaving character.
 message LeaveSceneRequest {
