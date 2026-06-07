@@ -16,6 +16,11 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Use player-scoped workspace over terminal focus-pivot for scenes](holomush-wf4zj-use-player-scoped-workspace-over-terminal-focus-pivot-scenes.md) | 2026-06-07 | Accepted | `holomush-wf4zj` |
+| [Observer auto-join preserves INV-SCENE-60 participant-list boundary](holomush-zukuh-observer-auto-join-preserves-inv-scene-60-participant-list-b.md) | 2026-06-07 | Accepted | `holomush-zukuh` |
+| [Scene log reads ride QueryStreamHistory; no plugin-side ReadSceneLog](holomush-pc3bg-scene-log-reads-ride-querystreamhistory-no-plugin-side-reads.md) | 2026-06-07 | Accepted | `holomush-pc3bg` |
+| [All web scene paths use BFF RPCs; hybrid public-proxy rejected](holomush-b0365-all-web-scene-paths-use-bff-rpcs-hybrid-public-proxy-rejecte.md) | 2026-06-07 | Accepted | `holomush-b0365` |
+| [scene_activity uses in-consumer control-frame downgrade, not a new stream](holomush-0qnnr-scene-activity-uses-consumer-control-frame-downgrade-not-new.md) | 2026-06-07 | Accepted | `holomush-0qnnr` |
 | [Canonical wire event-type is plugin-qualified &lt;plugin&gt;:&lt;verb&gt;](holomush-yl3mf-canonical-wire-event-type-is-plugin-qualified-plugin-verb.md) | 2026-06-07 | Accepted | `holomush-yl3mf` |
 | [Three-vocabulary event-type model: bare crypto/registered, qualified wire/verbs, one bridge](holomush-8aure-three-vocabulary-event-type-model-bare-crypto-registered-qua.md) | 2026-06-07 | Accepted | `holomush-8aure` |
 | [Qualify core-scenes event types end-to-end (no backward-compat transformation layer)](holomush-1gwns-qualify-core-scenes-event-types-end-end-no-backward-compat-t.md) | 2026-06-07 | Accepted | `holomush-1gwns` |

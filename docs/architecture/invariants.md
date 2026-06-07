@@ -257,6 +257,10 @@ invariants.
 | `INV-SCENE-58` | content.cw_block resolution MUST be the union of GAME, PLAYER, and CHARACTER scope lists (safety-accumulating), not first-match-wins. | `INV-6` | pending |
 | `INV-SCENE-59` | Scene settings/sensitivity access MUST be ABAC-authorized and default-deny: a principal may read/write its own PLAYER/CHARACTER settings; GAME-scope writes require an operator action. | `INV-7` | pending |
 | `INV-SCENE-60` | The hard privacy boundary for scene-log reads MUST remain plugin-code-enforced; ABAC MUST NOT be in the path for scene-log reads (a non-participant read fails before the ABAC engine is consulted). | `INV-S9` | pending |
+| `INV-SCENE-61` | Observer-join (watch) is fail-closed: the visibility == open check is plugin-code-enforced and evaluated BEFORE the ABAC spectate action; non-open scenes fail before ABAC is consulted; observer-role participants have no emit path, no pose-order slot, and no publish vote. | — | pending |
+| `INV-SCENE-62` | scene_activity notifications fan out only to connections of sessions whose FocusMemberships include the scene; non-participant sessions never receive them. | — | pending |
+| `INV-SCENE-63` | Every web scene read/write/export path derives the acting character from the authenticated session server-side; client-supplied character_id/player_id request fields are never trusted (the scene-access facade overrides them). | — | pending |
+| `INV-SCENE-64` | Scene web-portal surfaces (board, workspace, archive, export) require an authenticated non-guest player; is_guest subjects are denied at the scene-access facade. | — | pending |
 
 ### `INV-PLUGIN`
 

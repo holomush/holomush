@@ -120,3 +120,16 @@
   cfg.Crypto-gated framing predating the change (DEK-wiring clause still accurate); function-doc
   37-43 is the authoritative+correct one. `_ eventbus.Config` unused param: no lint risk (unparam
   skips exported funcs; `_` signals intent). 746 unit tests green. 2026-06-07 — READY.
+
+- **Docs-only ADR-capture branch: ALWAYS check `@` is empty before verdict (holomush-5rh.8
+  NOT READY, 2026-06-07).** Two recurring traps: (1) `task pr-prep`/fmt runs AFTER the commits
+  leave license-eye SPDX headers + yamlfmt normalization (docs/** IS in .licenserc.yaml paths;
+  .yamlfmt has no docs/ exclude, Taskfile.yaml:528 `yamlfmt -lint .`) sitting UNCOMMITTED in `@`
+  — pr-prep validates the jj SNAPSHOT (includes @), the push unit (@-) fails CI. `jj st` +
+  `jj diff -r @` is mandatory; reading files with cat/Read shows the @-fixed state, NOT what
+  ships — compare `jj file show -r @-` vs main sibling for header checks. (2) Spec revised
+  during plan grounding (V-resolutions) leaves STALE pre-revision instructions in §4/§5.2
+  tables contradicting the freshly captured ADR (spec:62,97 "Implement ReadSceneLog" vs ADR
+  pc3bg "No plugin-side ReadSceneLog exists" vs spec's own D8/V6) — grep the spec for every
+  mechanism an ADR says was REJECTED. Also: probe index missed `ReadSceneLogForSnapshot`
+  (publish_store.go:632); confirm probe zero-results with rg before claiming absence.
