@@ -382,6 +382,7 @@ func TestParticipantRoleIsValidReturnsExpectedResults(t *testing.T) {
 		{"owner is valid", ParticipantRoleOwner, true},
 		{"member is valid", ParticipantRoleMember, true},
 		{"invited is valid", ParticipantRoleInvited, true},
+		{"observer is valid", ParticipantRoleObserver, true},
 		{"empty string is invalid", ParticipantRole(""), false},
 		{"arbitrary string is invalid", ParticipantRole("admin"), false},
 	}

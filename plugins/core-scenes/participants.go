@@ -18,12 +18,16 @@ const (
 	ParticipantRoleOwner   ParticipantRole = "owner"
 	ParticipantRoleMember  ParticipantRole = "member"
 	ParticipantRoleInvited ParticipantRole = "invited"
+	// ParticipantRoleObserver marks a watching, non-acting participant (E9.5
+	// observer auto-join, INV-SCENE-61): present in the roster, excluded from
+	// the emit path, pose order, and publish votes.
+	ParticipantRoleObserver ParticipantRole = "observer"
 )
 
 // IsValid reports whether r is a recognized participant role.
 func (r ParticipantRole) IsValid() bool {
 	switch r {
-	case ParticipantRoleOwner, ParticipantRoleMember, ParticipantRoleInvited:
+	case ParticipantRoleOwner, ParticipantRoleMember, ParticipantRoleInvited, ParticipantRoleObserver:
 		return true
 	}
 	return false
