@@ -273,7 +273,7 @@ local function handle_page(ctx)
     end
 
     return ok_events(
-        {{subject ="character." .. target_session.character_id, type = "core-communication:page", payload = payload}},
+        {{subject ="character." .. target_session.character_id, type = "core-communication:page", payload = payload, sensitive = true}},
         formatted_for_sender
     )
 end
@@ -395,7 +395,7 @@ local function handle_whisper(ctx)
     return ok_events(
         {
             {subject ="location." .. loc, type = "core-communication:whisper_notice", payload = notice_payload},
-            {subject ="character." .. target.character_id, type = "core-communication:whisper", payload = whisper_payload},
+            {subject ="character." .. target.character_id, type = "core-communication:whisper", payload = whisper_payload, sensitive = true},
         },
         sender_msg
     )
@@ -440,7 +440,7 @@ local function handle_pemit(ctx)
                     ',"message":' .. json_string(message) .. '}'
 
     return ok_events(
-        {{subject ="character." .. target_session.character_id, type = "core-communication:pemit", payload = payload}},
+        {{subject ="character." .. target_session.character_id, type = "core-communication:pemit", payload = payload, sensitive = true}},
         "Pemit sent to " .. target_session.character_name .. "."
     )
 end

@@ -58,7 +58,8 @@ type CryptoConsume struct {
 //   - manifest.Crypto is nil (the crypto: block is optional in YAML;
 //     plugins that don't use crypto leave it absent)
 //   - manifest.Crypto.Emits is empty
-//   - eventType is not listed in manifest.Crypto.Emits
+//   - the emitted wire type matches no crypto.emits entry (see
+//     emitEntryMatchesWireType for how bare entries match qualified wire types)
 //
 // The caller is responsible for any plugin-name lookup; this helper
 // operates on an already-resolved *Manifest.
@@ -66,10 +67,28 @@ func LookupEmitSensitivity(manifest *Manifest, eventType string) Sensitivity {
 	if manifest == nil || manifest.Crypto == nil {
 		return SensitivityNever
 	}
-	for _, emit := range manifest.Crypto.Emits {
-		if emit.EventType == eventType {
-			return emit.Sensitivity
+	for i := range manifest.Crypto.Emits {
+		if emitEntryMatchesWireType(manifest.Name, manifest.Crypto.Emits[i].EventType, eventType) {
+			return manifest.Crypto.Emits[i].Sensitivity
 		}
 	}
 	return SensitivityNever
+}
+
+// emitEntryMatchesWireType reports whether a crypto.emits entry (entryType, a
+// bare or fully-qualified event_type from a plugin's manifest) corresponds to
+// the emitted wire type. A plugin MAY emit either bare wire types (core-scenes:
+// "scene_pose") or plugin-qualified ones (core-communication:
+// "core-communication:page"); crypto.emits entries are conventionally bare.
+// The entry matches when it equals the wire type, OR when prefixing the
+// plugin's own "<name>:" to a bare entry yields the wire type. Composition is
+// scoped to pluginName so a foreign "<other>:..." token can never collide with
+// this plugin's verbs. Shared by LookupEmitSensitivity and
+// Manager.PluginCanReadBack so emit-sensitivity and readback resolution stay
+// in lockstep (holomush-50zqs).
+func emitEntryMatchesWireType(pluginName, entryType, wireType string) bool {
+	if entryType == wireType {
+		return true
+	}
+	return pluginName != "" && pluginName+":"+entryType == wireType
 }

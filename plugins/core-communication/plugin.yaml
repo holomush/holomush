@@ -284,6 +284,13 @@ crypto:
     - event_type: emit
       sensitivity: never
       description: "Generic emit to the current location."
+    # event_type is the BARE verb. The host fence (LookupEmitSensitivity)
+    # composes this plugin's own "<name>:" prefix onto the bare entry when
+    # matching the emitted wire type, so a plugin that emits plugin-qualified
+    # wire types (core-communication:page) still resolves to this bare entry.
+    # (Other consumers differ: another plugin's requests_decryption names this
+    # event with a fully-qualified "<plugin>:<verb>" ref matched by equality.)
+    # See holomush-50zqs.
     - event_type: page
       sensitivity: always
       description: "OOC private message between two characters; participants only."

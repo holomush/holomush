@@ -1867,6 +1867,11 @@ func TestPluginCanReadBack(t *testing.T) {
 	assert.False(t, m.PluginCanReadBack("core-scenes", "scene_join_ic"), "readback not set")
 	assert.False(t, m.PluginCanReadBack("core-scenes", "unknown"), "type not emitted")
 	assert.False(t, m.PluginCanReadBack("other", "scene_pose"), "wrong plugin")
+	// holomush-50zqs: a plugin-qualified wire type resolves to the bare
+	// crypto.emits entry via composition — same matcher as the sensitivity
+	// lookup, so readback stays in lockstep with emit-time enforcement.
+	assert.True(t, m.PluginCanReadBack("core-scenes", "core-scenes:scene_pose"),
+		"qualified wire type must resolve to the bare readback entry")
 }
 
 // TestNewManagerRequiresVerbRegistry pins INV-EVENTBUS-11: every plugin manager

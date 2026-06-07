@@ -13,6 +13,8 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+// Verifies: INV-PLUGIN-29
+// Verifies: INV-PLUGIN-30
 func TestEnforceSensitivity(t *testing.T) {
 	tests := []struct {
 		name     string

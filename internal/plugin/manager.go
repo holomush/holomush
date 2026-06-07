@@ -1581,9 +1581,9 @@ func (m *Manager) PluginCanReadBack(pluginName, eventType string) bool {
 	if manifest == nil || manifest.Crypto == nil {
 		return false
 	}
-	for _, e := range manifest.Crypto.Emits {
-		if e.EventType == eventType {
-			return e.Readback
+	for i := range manifest.Crypto.Emits {
+		if emitEntryMatchesWireType(manifest.Name, manifest.Crypto.Emits[i].EventType, eventType) {
+			return manifest.Crypto.Emits[i].Readback
 		}
 	}
 	return false
