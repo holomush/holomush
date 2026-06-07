@@ -3609,6 +3609,7 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/plugin/manifest_test.go"
+      - "internal/plugin/lua/corecomm_sensitive_emit_test.go"
       - "test/meta/plugin_verb_qualification_test.go"
   - id: INV-COMMAND-1
     scope: INV-COMMAND

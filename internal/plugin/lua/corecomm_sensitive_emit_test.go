@@ -69,6 +69,8 @@ func TestCoreCommunicationAlwaysEmitsClaimSensitive(t *testing.T) {
 // `core-communication:emit`, matching its verbs[].type declaration. A bare
 // `type = "emit"` fails RenderingPublisher.Lookup with EMIT_UNKNOWN_VERB in
 // production (the verb registry is keyed on the qualified type).
+//
+// Verifies: INV-PLUGIN-40
 func TestCoreCommunicationEmitUsesQualifiedWireType(t *testing.T) {
 	root := repoRoot(t)
 	mainLua := filepath.Join(root, "plugins", "core-communication", "main.lua")
