@@ -536,7 +536,7 @@ func (m *Manifest) Validate() error {
 			len(v.Type) <= len(want) || strings.Count(v.Type, ":") != 1 {
 			return oops.Code("PLUGIN_WIRE_TYPE_NOT_QUALIFIED").
 				In("manifest").With("plugin", m.Name).With("verb", v.Type).
-				Errorf("verbs[].type must be %q-prefixed (<plugin>:<verb>, one colon); got %q", m.Name, v.Type)
+				Errorf("verbs[].type must be %q-prefixed (<plugin>:<verb>, one colon); got %q", want, v.Type)
 		}
 		if !validVerbCategories[v.Category] {
 			return oops.In("manifest").With("plugin", m.Name).With("verb", v.Type).

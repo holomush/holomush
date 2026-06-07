@@ -16,6 +16,8 @@ paths:
 
 These conventions apply when emitting, declaring, or consuming events. The full design is in `docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md`.
 
+The keywords **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in this document are to be interpreted as described in RFC 2119 and RFC 8174 (see the root `CLAUDE.md` "RFC2119 Keywords" table).
+
 ## Subject naming
 
 Subjects are NATS dot-delimited:
