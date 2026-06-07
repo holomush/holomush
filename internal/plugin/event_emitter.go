@@ -51,7 +51,6 @@ type PluginEventEmitter struct {
 	lookupManifest ManifestLookup
 	resolveActor   ActorResolver
 	gameID         GameIDProvider
-	cryptoEnabled  bool
 }
 
 // EmitterOption customizes PluginEventEmitter construction.
@@ -61,25 +60,6 @@ type EmitterOption func(*PluginEventEmitter)
 // "main" (matches eventbus.Config default game_id).
 func WithGameID(p GameIDProvider) EmitterOption {
 	return func(e *PluginEventEmitter) { e.gameID = p }
-}
-
-// WithCryptoEnabled toggles the Phase 3a sensitivity fence. When false
-// (the default and the production state at Phase 3a merge time), the
-// emitter skips the manifest sensitivity lookup + EnforceSensitivity
-// check and stamps event.Sensitive=false unconditionally — matching
-// pre-Phase-3a behavior. When true, the fence runs and INV-PLUGIN-29/INV-PLUGIN-30 are
-// enforced. The flag is sourced from eventbus.Config.Crypto.Enabled in
-// internal/bootstrap.
-//
-// This gate is required because production manifests already declare
-// sensitivity: always for events like core-communication's page,
-// whisper, and pemit (plugins/core-communication/plugin.yaml), and
-// neither the Lua nor binary plugin SDK currently surfaces
-// EmitIntent.Sensitive over the wire. Running the fence unconditionally
-// would reject every page/whisper/pemit emit with
-// EVENT_SENSITIVITY_REQUIRED until the plugin SDK gains the field.
-func WithCryptoEnabled(enabled bool) EmitterOption {
-	return func(e *PluginEventEmitter) { e.cryptoEnabled = enabled }
 }
 
 // NewPluginEventEmitter wires a new shared host event emitter.
@@ -155,28 +135,23 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 			Errorf("plugin manifest does not declare %q as a claimable actor kind", actor.Kind.String())
 	}
 
-	// Phase 3a: resolve manifest sensitivity + run the host-side fence.
-	// Result is stamped on event.Sensitive; the publisher acts on it.
-	//
-	// The fence is gated behind WithCryptoEnabled because production
-	// manifests already declare sensitivity: always for events whose
-	// emit path cannot yet set EmitIntent.Sensitive=true (the proto
-	// EmitEventRequest has no sensitive field). Running the fence
-	// unconditionally would break those emits. When crypto is off the
-	// emitter behaves as it did pre-Phase-3a: event.Sensitive=false
-	// regardless of manifest declaration.
-	sensitive := false
-	if e.cryptoEnabled {
-		manifestSensitivity := LookupEmitSensitivity(manifest, string(intent.Type))
-		effective, fenceErr := EnforceSensitivity(manifestSensitivity, intent.Sensitive)
-		if fenceErr != nil {
-			return oops.With("plugin", pluginName).
-				With("subject", subjectRaw).
-				With("event_type", string(intent.Type)).
-				Wrap(fenceErr)
-		}
-		sensitive = effective == SensitivityAlways
+	// Resolve manifest sensitivity + run the host-side fence on every emit.
+	// The manifest sensitivity declaration is the single source of truth
+	// (INV-PLUGIN-29/INV-PLUGIN-30): the SDK plumbs EmitIntent.Sensitive
+	// end-to-end for both Lua and binary runtimes, so there is no runtime
+	// override — a sensitivity:always event under-claimed as Sensitive=false
+	// is rejected (EVENT_SENSITIVITY_REQUIRED) rather than silently shipped
+	// as plaintext. The result is stamped on event.Sensitive; the publisher
+	// acts on it (holomush-dj95.3 removed the WithCryptoEnabled gate fossil).
+	manifestSensitivity := LookupEmitSensitivity(manifest, string(intent.Type))
+	effective, fenceErr := EnforceSensitivity(manifestSensitivity, intent.Sensitive)
+	if fenceErr != nil {
+		return oops.With("plugin", pluginName).
+			With("subject", subjectRaw).
+			With("event_type", string(intent.Type)).
+			Wrap(fenceErr)
 	}
+	sensitive := effective == SensitivityAlways
 
 	if e.publisher == nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).

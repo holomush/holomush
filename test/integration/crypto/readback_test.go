@@ -283,7 +283,6 @@ func emitSensitiveScenePose(
 	}
 	emitter := plugins.NewPluginEventEmitter(
 		env.pluginPub, manifestLookupFn, actorResolver,
-		plugins.WithCryptoEnabled(true),
 	)
 	intent := pluginsdk.EmitIntent{
 		Subject:   "scene." + sceneID,
@@ -568,7 +567,7 @@ func TestReadbackWithoutReadbackFlagDenied(t *testing.T) {
 	actorFn := func(_ context.Context, _ string) (core.Actor, error) {
 		return core.Actor{Kind: core.ActorPlugin, ID: pluginActorID}, nil
 	}
-	emitter := plugins.NewPluginEventEmitter(hostPub, manifestFn, actorFn, plugins.WithCryptoEnabled(true))
+	emitter := plugins.NewPluginEventEmitter(hostPub, manifestFn, actorFn)
 	intent := pluginsdk.EmitIntent{
 		Subject:   "scene." + sceneID,
 		Type:      pluginsdk.EventType(pluginName + ":scene_pose"),

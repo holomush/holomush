@@ -99,3 +99,24 @@
   notification,error,snapshot,delta}, speech needs label. Design: IC content (pose/say/emit/ooc)→
   communication; lifecycle/publish notices→system+notification. No false-green (no `// Verifies:
   INV-PLUGIN-40`; loader-gate aneim.10 + meta-test aneim.11 deferred). 2026-06-07 — READY.
+
+- **Gate-removal (delete WithCryptoEnabled emit fence gate, run fence unconditionally) —
+  holomush-dj95.3 READY.** Deleting a runtime safety-gate is only safe once EVERY emit path
+  that the now-unconditional check could reject is already compliant. Review pattern that held:
+  (1) Completeness: `rg WithCryptoEnabled|cryptoEnabled` whole-tree — plugins-package gate fully
+  gone; SEPARATE `internal/grpc/` read-side gate (server.go:178, auth_handlers.go:156) is a
+  DISTINCT Phase-3b binding-lookup gate that MUST remain (don't flag). (2) Production-safety is
+  the crux, NOT completeness: enumerate ALL `sensitivity: always` manifest entries
+  (`rg always plugins/*/plugin.yaml`) and verify each emit SITE claims Sensitive=true — core-scenes
+  IC content commands.go:1325 (Sensitive:true), core-communication Lua page/whisper/pemit main.lua
+  carry `sensitive = true` (guarded by lua/corecomm_sensitive_emit_test.go, the 50zqs regression).
+  (3) Undeclared-event safety: LookupEmitSensitivity (crypto_manifest.go:66) defaults
+  SensitivityNever for nil-manifest AND unmatched type → EnforceSensitivity(never,false)=never,nil →
+  Sensitive=false, IDENTICAL to pre-gate behavior; only NEW rejection is over-claim (claim=true on
+  never/undeclared) which no production path does. (4) Precursor dep (50zqs, SDK Sensitive plumbing)
+  CLOSED; proto sensitive=4 + bidirectional event_marshal.go + Lua flush `sensitive` key all landed.
+  (5) Bead acceptance criterion `rg ... internal/ → zero hits` is STALE (grpc gate legitimately
+  remains) — note for close, not a code defect. (6) Minor: package-doc wire_crypto.go:6-10 retains
+  cfg.Crypto-gated framing predating the change (DEK-wiring clause still accurate); function-doc
+  37-43 is the authoritative+correct one. `_ eventbus.Config` unused param: no lint risk (unparam
+  skips exported funcs; `_` signals intent). 746 unit tests green. 2026-06-07 — READY.

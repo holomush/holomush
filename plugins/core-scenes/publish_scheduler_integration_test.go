@@ -76,7 +76,7 @@ func emitAndSeedIC(ctx context.Context, env *snapshotRealEnv, sceneID, eventType
 	actorFn := func(_ context.Context, _ string) (core.Actor, error) {
 		return core.Actor{Kind: core.ActorPlugin, ID: pluginActorID}, nil
 	}
-	emitter := plugins.NewPluginEventEmitter(env.pluginPub, manifestFn, actorFn, plugins.WithCryptoEnabled(true))
+	emitter := plugins.NewPluginEventEmitter(env.pluginPub, manifestFn, actorFn)
 	intent := pluginsdk.EmitIntent{
 		Subject:   icSubject, // DOT-STYLE .ic subject — AAD binds this exact string
 		Type:      pluginsdk.EventType(eventType),

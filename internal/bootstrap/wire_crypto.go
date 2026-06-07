@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package bootstrap — Phase 3a crypto wiring (holomush-ojw1.1).
+// Package bootstrap — plugin crypto wiring (holomush-ojw1.1).
 //
-// BuildPluginEmitter constructs a PluginEventEmitter; when
-// cfg.Crypto.Enabled is true, the caller MUST also wire a DEK manager
-// into the publisher via eventbus.WithDEKManager (this happens during
-// JetStreamPublisher construction, not here — this helper produces
-// the emitter half only).
+// BuildPluginEmitter produces the emitter half of the plugin-crypto path; its
+// host-side sensitivity fence runs unconditionally (holomush-dj95.3), so it
+// does not branch on cfg.Crypto. Separately, when cfg.Crypto.Enabled is true
+// the caller MUST also wire a DEK manager into the publisher via
+// eventbus.WithDEKManager — that happens during JetStreamPublisher
+// construction, not here.
 package bootstrap
 
 import (
@@ -34,17 +35,15 @@ type PluginEmitterDeps struct {
 	Resolver  plugins.ActorResolver
 }
 
-// BuildPluginEmitter constructs a PluginEventEmitter from cfg + deps.
-// cfg.Crypto.IsEnabled() gates the host-side sensitivity fence inside
-// the emitter (see plugins.WithCryptoEnabled). As of Phase 3d the
-// effective default is true; when explicitly set to false (e.g. for
-// dev/test deployments), the emitter skips the fence and stamps
-// Sensitive=false unconditionally, matching pre-Phase-3a behavior.
-// When true, the fence runs and the publisher's DEK-manager-aware
-// crypto branch activates downstream.
-func BuildPluginEmitter(_ context.Context, cfg eventbus.Config, deps PluginEmitterDeps) (*plugins.PluginEventEmitter, error) {
+// BuildPluginEmitter constructs a PluginEventEmitter from deps. The emitter
+// runs the host-side sensitivity fence unconditionally — the plugin manifest
+// declaration is the single source of truth, with no runtime gate
+// (holomush-dj95.3 removed the WithCryptoEnabled fossil). The cfg argument is
+// retained for call-site symmetry; crypto's downstream effect (DEK-manager
+// wiring on the publisher) is configured during JetStreamPublisher
+// construction, not here.
+func BuildPluginEmitter(_ context.Context, _ eventbus.Config, deps PluginEmitterDeps) (*plugins.PluginEventEmitter, error) {
 	return plugins.NewPluginEventEmitter(
 		deps.Publisher, deps.Manifests, deps.Resolver,
-		plugins.WithCryptoEnabled(cfg.Crypto.IsEnabled()),
 	), nil
 }
