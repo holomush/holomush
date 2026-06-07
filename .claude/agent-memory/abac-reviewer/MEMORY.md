@@ -359,3 +359,15 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   (Host validateNamespace:true vs Plugin:false); (c) confirm dedup helpers take the per-scope
   distinguisher as a param, not a hardcoded constant. Lone straggler found: spec mermaid node
   (spec:34) still says "owner BOUND to authenticated caller" — cosmetic Low, not blocking.
+- **WatchScene spectate gate (5rh.8.3, 2026-06-07)**: INV-SCENE-61 pattern verified — plugin-code
+  visibility/state gate BEFORE `HostEvaluator.Evaluate("spectate", "scene:"+id)`, store re-checks
+  in-tx, nil-evaluator/nil-focusClient fail closed. Two recurring checks for HostEvaluator-in-service
+  handlers: (1) the ABAC subject is the DISPATCH-TOKEN actor (host_service.go:565), NOT any
+  request-supplied character_id — flag when the effect (row insert, focus join) uses req fields
+  the gate never compared against the token actor; principal-conditioned policies on that action
+  would gate the wrong subject. (2) The admin wildcard seed (seed.go:104, `action, resource` —
+  no action list) permits ANY new action on ANY resource for admins — defense-in-depth on new
+  actions exists ONLY if the code gate runs first. Also: observers excluded from the `participants`
+  ABAC attr (store.go GetWithMembership role IN ('owner','member')) so observer auto-join grants
+  no participant-clause permits. INV-SCENE-61 binding is PARTIAL (gate-order asserted; observer
+  no-emit/no-pose/no-vote clause structural-only) — same shape as INV-PRIVACY-6.

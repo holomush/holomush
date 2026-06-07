@@ -30,6 +30,7 @@ const (
 	SceneService_ResumeScene_FullMethodName                    = "/holomush.scene.v1.SceneService/ResumeScene"
 	SceneService_UpdateScene_FullMethodName                    = "/holomush.scene.v1.SceneService/UpdateScene"
 	SceneService_JoinScene_FullMethodName                      = "/holomush.scene.v1.SceneService/JoinScene"
+	SceneService_WatchScene_FullMethodName                     = "/holomush.scene.v1.SceneService/WatchScene"
 	SceneService_LeaveScene_FullMethodName                     = "/holomush.scene.v1.SceneService/LeaveScene"
 	SceneService_InviteToScene_FullMethodName                  = "/holomush.scene.v1.SceneService/InviteToScene"
 	SceneService_KickFromScene_FullMethodName                  = "/holomush.scene.v1.SceneService/KickFromScene"
@@ -113,6 +114,14 @@ type SceneServiceClient interface {
 	// existing member succeeds without re-emitting a join notice. See
 	// service.go::JoinScene.
 	JoinScene(ctx context.Context, in *JoinSceneRequest, opts ...grpc.CallOption) (*JoinSceneResponse, error)
+	// WatchScene auto-joins the requesting character into an OPEN scene as a
+	// role=observer participant and registers the focus membership for the
+	// supplied session, so focus/Subscribe/history gates admit the watcher.
+	// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+	// visibility==open and state checks run BEFORE the ABAC spectate action is
+	// evaluated; non-open scenes are rejected without consulting ABAC.
+	// See service.go::WatchScene.
+	WatchScene(ctx context.Context, in *WatchSceneRequest, opts ...grpc.CallOption) (*WatchSceneResponse, error)
 	// LeaveScene removes the calling character from a scene. The scene owner
 	// cannot leave (codes.FailedPrecondition) — they must end the scene or
 	// transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -283,6 +292,16 @@ func (c *sceneServiceClient) JoinScene(ctx context.Context, in *JoinSceneRequest
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(JoinSceneResponse)
 	err := c.cc.Invoke(ctx, SceneService_JoinScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) WatchScene(ctx context.Context, in *WatchSceneRequest, opts ...grpc.CallOption) (*WatchSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WatchSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_WatchScene_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -505,6 +524,14 @@ type SceneServiceServer interface {
 	// existing member succeeds without re-emitting a join notice. See
 	// service.go::JoinScene.
 	JoinScene(context.Context, *JoinSceneRequest) (*JoinSceneResponse, error)
+	// WatchScene auto-joins the requesting character into an OPEN scene as a
+	// role=observer participant and registers the focus membership for the
+	// supplied session, so focus/Subscribe/history gates admit the watcher.
+	// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+	// visibility==open and state checks run BEFORE the ABAC spectate action is
+	// evaluated; non-open scenes are rejected without consulting ABAC.
+	// See service.go::WatchScene.
+	WatchScene(context.Context, *WatchSceneRequest) (*WatchSceneResponse, error)
 	// LeaveScene removes the calling character from a scene. The scene owner
 	// cannot leave (codes.FailedPrecondition) — they must end the scene or
 	// transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -624,6 +651,9 @@ func (UnimplementedSceneServiceServer) UpdateScene(context.Context, *UpdateScene
 }
 func (UnimplementedSceneServiceServer) JoinScene(context.Context, *JoinSceneRequest) (*JoinSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method JoinScene not implemented")
+}
+func (UnimplementedSceneServiceServer) WatchScene(context.Context, *WatchSceneRequest) (*WatchSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WatchScene not implemented")
 }
 func (UnimplementedSceneServiceServer) LeaveScene(context.Context, *LeaveSceneRequest) (*LeaveSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LeaveScene not implemented")
@@ -831,6 +861,24 @@ func _SceneService_JoinScene_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SceneServiceServer).JoinScene(ctx, req.(*JoinSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_WatchScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WatchSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).WatchScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_WatchScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).WatchScene(ctx, req.(*WatchSceneRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1143,6 +1191,10 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "JoinScene",
 			Handler:    _SceneService_JoinScene_Handler,
+		},
+		{
+			MethodName: "WatchScene",
+			Handler:    _SceneService_WatchScene_Handler,
 		},
 		{
 			MethodName: "LeaveScene",

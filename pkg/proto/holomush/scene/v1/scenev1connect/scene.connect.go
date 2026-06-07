@@ -55,6 +55,8 @@ const (
 	SceneServiceUpdateSceneProcedure = "/holomush.scene.v1.SceneService/UpdateScene"
 	// SceneServiceJoinSceneProcedure is the fully-qualified name of the SceneService's JoinScene RPC.
 	SceneServiceJoinSceneProcedure = "/holomush.scene.v1.SceneService/JoinScene"
+	// SceneServiceWatchSceneProcedure is the fully-qualified name of the SceneService's WatchScene RPC.
+	SceneServiceWatchSceneProcedure = "/holomush.scene.v1.SceneService/WatchScene"
 	// SceneServiceLeaveSceneProcedure is the fully-qualified name of the SceneService's LeaveScene RPC.
 	SceneServiceLeaveSceneProcedure = "/holomush.scene.v1.SceneService/LeaveScene"
 	// SceneServiceInviteToSceneProcedure is the fully-qualified name of the SceneService's
@@ -145,6 +147,14 @@ type SceneServiceClient interface {
 	// existing member succeeds without re-emitting a join notice. See
 	// service.go::JoinScene.
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
+	// WatchScene auto-joins the requesting character into an OPEN scene as a
+	// role=observer participant and registers the focus membership for the
+	// supplied session, so focus/Subscribe/history gates admit the watcher.
+	// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+	// visibility==open and state checks run BEFORE the ABAC spectate action is
+	// evaluated; non-open scenes are rejected without consulting ABAC.
+	// See service.go::WatchScene.
+	WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error)
 	// LeaveScene removes the calling character from a scene. The scene owner
 	// cannot leave (codes.FailedPrecondition) — they must end the scene or
 	// transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -292,6 +302,12 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(sceneServiceMethods.ByName("JoinScene")),
 			connect.WithClientOptions(opts...),
 		),
+		watchScene: connect.NewClient[v1.WatchSceneRequest, v1.WatchSceneResponse](
+			httpClient,
+			baseURL+SceneServiceWatchSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("WatchScene")),
+			connect.WithClientOptions(opts...),
+		),
 		leaveScene: connect.NewClient[v1.LeaveSceneRequest, v1.LeaveSceneResponse](
 			httpClient,
 			baseURL+SceneServiceLeaveSceneProcedure,
@@ -395,6 +411,7 @@ type sceneServiceClient struct {
 	resumeScene                    *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
 	updateScene                    *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
 	joinScene                      *connect.Client[v1.JoinSceneRequest, v1.JoinSceneResponse]
+	watchScene                     *connect.Client[v1.WatchSceneRequest, v1.WatchSceneResponse]
 	leaveScene                     *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
 	inviteToScene                  *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
 	kickFromScene                  *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
@@ -450,6 +467,11 @@ func (c *sceneServiceClient) UpdateScene(ctx context.Context, req *connect.Reque
 // JoinScene calls holomush.scene.v1.SceneService.JoinScene.
 func (c *sceneServiceClient) JoinScene(ctx context.Context, req *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error) {
 	return c.joinScene.CallUnary(ctx, req)
+}
+
+// WatchScene calls holomush.scene.v1.SceneService.WatchScene.
+func (c *sceneServiceClient) WatchScene(ctx context.Context, req *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error) {
+	return c.watchScene.CallUnary(ctx, req)
 }
 
 // LeaveScene calls holomush.scene.v1.SceneService.LeaveScene.
@@ -572,6 +594,14 @@ type SceneServiceHandler interface {
 	// existing member succeeds without re-emitting a join notice. See
 	// service.go::JoinScene.
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
+	// WatchScene auto-joins the requesting character into an OPEN scene as a
+	// role=observer participant and registers the focus membership for the
+	// supplied session, so focus/Subscribe/history gates admit the watcher.
+	// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+	// visibility==open and state checks run BEFORE the ABAC spectate action is
+	// evaluated; non-open scenes are rejected without consulting ABAC.
+	// See service.go::WatchScene.
+	WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error)
 	// LeaveScene removes the calling character from a scene. The scene owner
 	// cannot leave (codes.FailedPrecondition) — they must end the scene or
 	// transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -715,6 +745,12 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(sceneServiceMethods.ByName("JoinScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneServiceWatchSceneHandler := connect.NewUnaryHandler(
+		SceneServiceWatchSceneProcedure,
+		svc.WatchScene,
+		connect.WithSchema(sceneServiceMethods.ByName("WatchScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sceneServiceLeaveSceneHandler := connect.NewUnaryHandler(
 		SceneServiceLeaveSceneProcedure,
 		svc.LeaveScene,
@@ -823,6 +859,8 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServiceUpdateSceneHandler.ServeHTTP(w, r)
 		case SceneServiceJoinSceneProcedure:
 			sceneServiceJoinSceneHandler.ServeHTTP(w, r)
+		case SceneServiceWatchSceneProcedure:
+			sceneServiceWatchSceneHandler.ServeHTTP(w, r)
 		case SceneServiceLeaveSceneProcedure:
 			sceneServiceLeaveSceneHandler.ServeHTTP(w, r)
 		case SceneServiceInviteToSceneProcedure:
@@ -892,6 +930,10 @@ func (UnimplementedSceneServiceHandler) UpdateScene(context.Context, *connect.Re
 
 func (UnimplementedSceneServiceHandler) JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.JoinScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.WatchScene is not implemented"))
 }
 
 func (UnimplementedSceneServiceHandler) LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error) {

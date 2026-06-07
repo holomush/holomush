@@ -55,7 +55,8 @@ func mapStoreErr(ctx context.Context, err error) error {
 				"SCENE_PUBLISH_ALREADY_PUBLISHED",
 				"SCENE_PUBLISH_ATTEMPTS_EXHAUSTED",
 				"SCENE_PUBLISH_NO_ELIGIBLE_VOTERS",
-				"SCENE_PUBLISH_INVALID_STATE":
+				"SCENE_PUBLISH_INVALID_STATE",
+				"SCENE_NOT_WATCHABLE":
 				return status.Error(codes.FailedPrecondition, code) //nolint:wrapcheck // gRPC status is the wire contract; oops would shadow the code
 			// SCENE_PUBLISH_INVALID_TRANSITION is intentionally NOT mapped here:
 			// per spec §5.2 it is a defensive "impossible transition" signal

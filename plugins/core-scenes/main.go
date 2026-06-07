@@ -114,16 +114,24 @@ func (p *scenePlugin) RegisterAttributeResolver(registrar grpc.ServiceRegistrar)
 // SetFocusClient is called by the SDK adapter during Init when the plugin
 // declares FocusClientAware. The client is used by command handlers to
 // drive session focus state via PluginHostService.{JoinFocus,LeaveFocus,
-// PresentFocus}.
+// PresentFocus}, and is forwarded to the scene service for WatchScene's
+// observer focus registration.
 func (p *scenePlugin) SetFocusClient(client pluginsdk.FocusClient) {
 	p.focusClient = client
+	if p.service != nil {
+		p.service.SetFocusClient(client)
+	}
 }
 
 // SetHostEvaluator is called by the SDK adapter during Init when the plugin
 // declares HostEvaluatorAware. The evaluator is used by admin-gated command
-// handlers (e.g., handleVoteExtend) to perform host ABAC checks.
+// handlers (e.g., handleVoteExtend) to perform host ABAC checks, and is
+// forwarded to the scene service for WatchScene's spectate gate.
 func (p *scenePlugin) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
 	p.evaluator = ev
+	if p.service != nil {
+		p.service.SetHostEvaluator(ev)
+	}
 }
 
 // SetEventSink forwards the SDK-injected event sink to the scene service so
