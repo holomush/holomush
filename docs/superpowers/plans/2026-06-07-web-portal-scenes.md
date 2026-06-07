@@ -41,7 +41,7 @@
 | ABAC | `internal/access/policy/attribute/player.go` (is_guest) |
 | Web proto/gateway | `api/proto/holomush/web/v1/web.proto`, `internal/web/handler.go`, `internal/web/scene_handlers.go` (new), `cmd/holomush/gateway.go` |
 | Frontend | `web/src/routes/(authed)/scenes/**` (new), `web/src/lib/scenes/**` (new), `web/src/lib/components/scenes/**` (new) |
-| E2E | `web/e2e/scenes.spec.ts` (new) |
+| E2E | `web/e2e/scenes.spec.ts` (extend — file already exists; append the E9.5 describe block per Task 19) |
 | Registry | `docs/architecture/invariants.yaml` (+ `go run ./cmd/inv-render`) |
 
 ---
@@ -934,4 +934,4 @@ export function downloadBlob(content: Uint8Array | string, mime: string, filenam
 ## Out of scope (follow-up beads, filed at materialization)
 
 Persisted read markers · telnet `scene watch` command (uses Task 3's `WatchScene` + Task 7's focus plumbing) · composer preview/rich text · published-archive full-text search.
-<!-- adr-capture: sha256=f308b8f5968f5973; session=66ca5652; ts=2026-06-07T20:32:25Z; adrs=holomush-wf4zj,holomush-zukuh,holomush-pc3bg,holomush-b0365,holomush-0qnnr -->
+<!-- adr-capture: sha256=e73ebf1036cf856c; session=66ca5652; ts=2026-06-07T20:32:25Z; adrs=holomush-wf4zj,holomush-zukuh,holomush-pc3bg,holomush-b0365,holomush-0qnnr -->
