@@ -3606,7 +3606,10 @@ invariants:
       The registered-emit set and crypto.emits[].event_type stay bare (INV-PLUGIN-32 set-equality + requests_decryption);
       the host bridges bare<->qualified only via emitEntryMatchesWireType. Manifest.Validate rejects an unqualified verbs[].type
       with PLUGIN_WIRE_TYPE_NOT_QUALIFIED."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/manifest_test.go"
+      - "test/meta/plugin_verb_qualification_test.go"
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

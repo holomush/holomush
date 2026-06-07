@@ -54,6 +54,24 @@ events.<game_id>.<domain>.<entity-id>[.<facet>...]
 - Host-side ABAC infra (e.g., `ResourceChannel`, channel resource type, action validations) IS allowed in `internal/`
 - Rationale: the boundary keeps `internal/core/` independent of any specific plugin's event vocabulary. Plugin authors don't need to modify `internal/` to add new event types or verbs.
 
+## Event-type vocabularies (qualified wire / bare crypto)
+
+An event type appears in three places, governed differently (INV-PLUGIN-40):
+
+- **Wire type + `verbs[].type` + downstream stored type** MUST be plugin-qualified
+  `<plugin>:<verb>` (one colon, non-empty verb). `RenderingPublisher.Lookup`
+  resolves the wire type against `verbs[].type` and hard-fails `EMIT_UNKNOWN_VERB`
+  on a miss. `Manifest.Validate()` rejects an unqualified `verbs[].type` at
+  discovery with `PLUGIN_WIRE_TYPE_NOT_QUALIFIED`.
+- **Registered-emit set (`RegisterEmitTypes` / `register_emit_type`) and
+  `crypto.emits[].event_type`** stay **bare** `<verb>`. INV-PLUGIN-32 forces the
+  two set-equal; `requests_decryption` refs are `<plugin>:<verb>` and
+  `splitQualifiedRef` recovers the bare verb. Qualifying these trips
+  `EVENT_TYPE_REGISTRY_MISMATCH` at load.
+- `emitEntryMatchesWireType` (`internal/plugin/crypto_manifest.go`) is the single
+  bridge: it matches a bare `crypto.emits` entry against the qualified wire type
+  by composing the plugin name. Do not add other bare↔qualified shims.
+
 ## Emitting from plugins
 
 - Lua: return events from handler functions; the host translates and publishes

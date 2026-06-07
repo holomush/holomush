@@ -2113,6 +2113,7 @@ verbs:
 	assert.Contains(t, err.Error(), "verb type must not be empty")
 }
 
+// Verifies: INV-PLUGIN-40
 func TestManifestValidateRejectsUnqualifiedVerbType(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
