@@ -48,7 +48,7 @@ func TestSceneSubcommand_Pose_EmitsSceneEventOnICFacet(t *testing.T) {
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "You pose: smiles at the room")
 
-	found := findIntentByType(sink.intents, "scene_pose")
+	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
 	require.NotNil(t, found, "scene pose MUST emit scene_pose")
 	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-pose-test"), found.Subject)
 	assert.True(t, found.Sensitive, "scene_pose MUST be Sensitive=true (sensitivity:always)")
@@ -70,7 +70,7 @@ func TestSceneSubcommand_Say_EmitsSceneEventOnICFacet(t *testing.T) {
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "You say: hello everyone")
 
-	found := findIntentByType(sink.intents, "scene_say")
+	found := findIntentByType(sink.intents, "core-scenes:scene_say")
 	require.NotNil(t, found, "scene say MUST emit scene_say")
 	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-say-test"), found.Subject)
 	assert.True(t, found.Sensitive, "scene_say MUST be Sensitive=true (sensitivity:always)")
@@ -90,7 +90,7 @@ func TestSceneSubcommand_Emit_EmitsSceneEventOnICFacet(t *testing.T) {
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "You emit: A bell rings in the distance.")
 
-	found := findIntentByType(sink.intents, "scene_emit")
+	found := findIntentByType(sink.intents, "core-scenes:scene_emit")
 	require.NotNil(t, found, "scene emit MUST emit scene_emit")
 	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-emit-test"), found.Subject)
 	assert.True(t, found.Sensitive, "scene_emit MUST be Sensitive=true (sensitivity:always)")
@@ -110,7 +110,7 @@ func TestSceneSubcommand_OOC_EmitsSceneEventOnOOCFacet(t *testing.T) {
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "You ooc: brb getting coffee")
 
-	found := findIntentByType(sink.intents, "scene_ooc")
+	found := findIntentByType(sink.intents, "core-scenes:scene_ooc")
 	require.NotNil(t, found, "scene ooc MUST emit scene_ooc")
 	assert.Equal(t, dotStyleSceneSubjectOOC("main", "scene-ooc-test"), found.Subject,
 		"scene_ooc MUST land on the .ooc facet, not .ic")

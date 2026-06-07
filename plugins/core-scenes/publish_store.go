@@ -637,7 +637,7 @@ func (s *SceneStore) ReadSceneLogForSnapshot(ctx context.Context, tx pgx.Tx, sub
 	rows, err := tx.Query(ctx, `
 		SELECT id, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec, dek_ref, dek_version
 		FROM scene_log
-		WHERE subject = $1 AND type IN ('scene_pose', 'scene_say', 'scene_emit')
+		WHERE subject = $1 AND type IN ('core-scenes:scene_pose', 'core-scenes:scene_say', 'core-scenes:scene_emit')
 		ORDER BY id ASC
 	`, subject)
 	if err != nil {

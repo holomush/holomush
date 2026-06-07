@@ -1389,7 +1389,7 @@ func TestJoinScene_EmitsSceneJoinIC_OnInsert(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	found := findIntentByType(sink.intents, "scene_join_ic")
+	found := findIntentByType(sink.intents, "core-scenes:scene_join_ic")
 	require.NotNil(t, found, "JoinScene MUST auto-emit scene_join_ic on OpInserted")
 	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-join-emit"), found.Subject)
 	assert.False(t, found.Sensitive, "scene_join_ic is sensitivity:never")
@@ -1417,7 +1417,7 @@ func TestJoinScene_EmitsSceneJoinIC_OnPromote(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	found := findIntentByType(sink.intents, "scene_join_ic")
+	found := findIntentByType(sink.intents, "core-scenes:scene_join_ic")
 	require.NotNil(t, found, "JoinScene MUST auto-emit scene_join_ic on OpPromoted")
 	assert.Contains(t, found.Payload, `"from_role":"invited"`)
 }
@@ -1444,7 +1444,7 @@ func TestJoinScene_NoEmit_OnNoChange(t *testing.T) {
 
 	joinCount := 0
 	for _, it := range sink.intents {
-		if string(it.Type) == "scene_join_ic" {
+		if string(it.Type) == "core-scenes:scene_join_ic" {
 			joinCount++
 		}
 	}
@@ -1470,7 +1470,7 @@ func TestLeaveScene_EmitsSceneLeaveIC_ReasonLeft(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	found := findIntentByType(sink.intents, "scene_leave_ic")
+	found := findIntentByType(sink.intents, "core-scenes:scene_leave_ic")
 	require.NotNil(t, found, "LeaveScene MUST auto-emit scene_leave_ic")
 	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-leave-emit"), found.Subject)
 	assert.False(t, found.Sensitive, "scene_leave_ic is sensitivity:never")
@@ -1500,7 +1500,7 @@ func TestKickFromScene_EmitsSceneLeaveIC_ReasonKicked(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	found := findIntentByType(sink.intents, "scene_leave_ic")
+	found := findIntentByType(sink.intents, "core-scenes:scene_leave_ic")
 	require.NotNil(t, found, "KickFromScene MUST auto-emit scene_leave_ic")
 	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-kick-emit"), found.Subject)
 	assert.False(t, found.Sensitive, "scene_leave_ic is sensitivity:never")
@@ -1534,7 +1534,7 @@ func TestUpdateScene_EmitsPoseOrderChangedIC_OnModeChange(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	found := findIntentByType(sink.intents, "scene_pose_order_changed_ic")
+	found := findIntentByType(sink.intents, "core-scenes:scene_pose_order_changed_ic")
 	require.NotNil(t, found, "UpdateScene MUST auto-emit scene_pose_order_changed_ic on mode change")
 	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-mode-change"), found.Subject)
 	assert.False(t, found.Sensitive, "scene_pose_order_changed_ic is sensitivity:never")
@@ -1570,7 +1570,7 @@ func TestUpdateScene_NoEmit_OnNoModeChange(t *testing.T) {
 
 	count := 0
 	for _, it := range sink.intents {
-		if it.Type == "scene_pose_order_changed_ic" {
+		if it.Type == "core-scenes:scene_pose_order_changed_ic" {
 			count++
 		}
 	}
@@ -1603,7 +1603,7 @@ func TestUpdateScene_NoEmit_OnNonModeUpdate(t *testing.T) {
 
 	count := 0
 	for _, it := range sink.intents {
-		if it.Type == "scene_pose_order_changed_ic" {
+		if it.Type == "core-scenes:scene_pose_order_changed_ic" {
 			count++
 		}
 	}

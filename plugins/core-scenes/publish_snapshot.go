@@ -30,9 +30,9 @@ const snapshotDecryptBatch = 500
 // PublishedSceneEntry kind. scene_ooc and all notice/ops events are excluded by
 // ReadSceneLogForSnapshot's type filter, so any other type here is unreachable.
 var snapshotEventKinds = map[string]EntryKind{
-	"scene_pose": EntryKindPose,
-	"scene_say":  EntryKindSay,
-	"scene_emit": EntryKindEmit,
+	"core-scenes:scene_pose": EntryKindPose,
+	"core-scenes:scene_say":  EntryKindSay,
+	"core-scenes:scene_emit": EntryKindEmit,
 }
 
 // snapshotDecryptor is the narrow host-mediated read-back decrypt seam the

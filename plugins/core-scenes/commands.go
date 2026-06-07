@@ -78,9 +78,9 @@ const sceneLogReplayLimit = 50
 // these three are replayed by "scene log"; joins, ops, OOC, and publish-
 // lifecycle notices are skipped.
 var replayEventKinds = map[string]EntryKind{
-	"scene_pose": EntryKindPose,
-	"scene_say":  EntryKindSay,
-	"scene_emit": EntryKindEmit,
+	"core-scenes:scene_pose": EntryKindPose,
+	"core-scenes:scene_say":  EntryKindSay,
+	"core-scenes:scene_emit": EntryKindEmit,
 }
 
 // decodeReplayEntries converts QueryStreamHistory events (oldest→newest) into
@@ -516,13 +516,13 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		}
 		return p.handleSceneGrid(ctx, req)
 	case "pose":
-		return p.handleEmit(ctx, req, rest, "scene_pose", false)
+		return p.handleEmit(ctx, req, rest, "core-scenes:scene_pose", false)
 	case "say":
-		return p.handleEmit(ctx, req, rest, "scene_say", false)
+		return p.handleEmit(ctx, req, rest, "core-scenes:scene_say", false)
 	case "emit":
-		return p.handleEmit(ctx, req, rest, "scene_emit", false)
+		return p.handleEmit(ctx, req, rest, "core-scenes:scene_emit", false)
 	case "ooc":
-		return p.handleEmit(ctx, req, rest, "scene_ooc", true)
+		return p.handleEmit(ctx, req, rest, "core-scenes:scene_ooc", true)
 	case "order":
 		return p.handleOrder(ctx, req, rest)
 	case "publish":
@@ -1227,7 +1227,7 @@ func (p *scenePlugin) handleEmit(
 	eventType string,
 	ooc bool,
 ) (*pluginsdk.CommandResponse, error) {
-	verb := strings.TrimPrefix(eventType, "scene_")
+	verb := strings.TrimPrefix(eventType, "core-scenes:scene_")
 	ctx, span := startSpan(
 		ctx, "scene.command.emit",
 		attribute.String("subject_id", req.CharacterID),

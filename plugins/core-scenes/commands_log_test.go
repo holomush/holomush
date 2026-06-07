@@ -32,10 +32,10 @@ func newSceneLogFixture(t *testing.T, events ...pluginsdk.Event) (p *scenePlugin
 func TestDecodeReplayEntries(t *testing.T) {
 	t.Parallel()
 	events := []pluginsdk.Event{
-		{ID: "1", Type: pluginsdk.EventType("scene_pose"), Payload: `{"actor_id":"Alice","text":"smiles warmly."}`},
-		{ID: "2", Type: pluginsdk.EventType("scene_join_ic"), Payload: `{"actor_id":"Bob"}`}, // non-content → skipped
-		{ID: "3", Type: pluginsdk.EventType("scene_say"), Payload: `{"actor_id":"Bob","text":"Hello."}`},
-		{ID: "4", Type: pluginsdk.EventType("scene_emit"), Payload: `{"actor_id":"Cara","text":"A bell rings."}`},
+		{ID: "1", Type: pluginsdk.EventType("core-scenes:scene_pose"), Payload: `{"actor_id":"Alice","text":"smiles warmly."}`},
+		{ID: "2", Type: pluginsdk.EventType("core-scenes:scene_join_ic"), Payload: `{"actor_id":"Bob"}`}, // non-content → skipped
+		{ID: "3", Type: pluginsdk.EventType("core-scenes:scene_say"), Payload: `{"actor_id":"Bob","text":"Hello."}`},
+		{ID: "4", Type: pluginsdk.EventType("core-scenes:scene_emit"), Payload: `{"actor_id":"Cara","text":"A bell rings."}`},
 	}
 
 	entries, err := decodeReplayEntries(events)
@@ -52,7 +52,7 @@ func TestDecodeReplayEntries(t *testing.T) {
 func TestDecodeReplayEntriesRejectsMalformedPayload(t *testing.T) {
 	t.Parallel()
 	_, err := decodeReplayEntries([]pluginsdk.Event{
-		{ID: "x", Type: pluginsdk.EventType("scene_say"), Payload: `{not json}`},
+		{ID: "x", Type: pluginsdk.EventType("core-scenes:scene_say"), Payload: `{not json}`},
 	})
 	require.Error(t, err)
 }
@@ -81,8 +81,8 @@ func TestHandleLogRendersForParticipant(t *testing.T) {
 	store.installRoster("scene-x", "owner-char")
 	svc := newTestService(t, store)
 	fc := &fakeFocusClient{queryHistoryEvents: []pluginsdk.Event{
-		{ID: "1", Type: pluginsdk.EventType("scene_say"), Payload: `{"actor_id":"owner-char","text":"Hello."}`},
-		{ID: "2", Type: pluginsdk.EventType("scene_pose"), Payload: `{"actor_id":"owner-char","text":"waves."}`},
+		{ID: "1", Type: pluginsdk.EventType("core-scenes:scene_say"), Payload: `{"actor_id":"owner-char","text":"Hello."}`},
+		{ID: "2", Type: pluginsdk.EventType("core-scenes:scene_pose"), Payload: `{"actor_id":"owner-char","text":"waves."}`},
 	}}
 	p := &scenePlugin{service: svc, focusClient: fc}
 
@@ -99,7 +99,7 @@ func TestHandleLogRendersForParticipant(t *testing.T) {
 func TestHandleLogExportMarkdown(t *testing.T) {
 	t.Parallel()
 	p, sceneID, caller := newSceneLogFixture(t,
-		pluginsdk.Event{ID: "1", Type: pluginsdk.EventType("scene_say"), Payload: `{"actor_id":"Alice","text":"Hi."}`})
+		pluginsdk.Event{ID: "1", Type: pluginsdk.EventType("core-scenes:scene_say"), Payload: `{"actor_id":"Alice","text":"Hi."}`})
 
 	resp, err := p.handleLog(context.Background(),
 		pluginsdk.CommandRequest{CharacterID: caller}, "export markdown #"+sceneID)
@@ -113,7 +113,7 @@ func TestHandleLogExportMarkdown(t *testing.T) {
 func TestHandleLogExportJSONL(t *testing.T) {
 	t.Parallel()
 	p, sceneID, caller := newSceneLogFixture(t,
-		pluginsdk.Event{ID: "1", Type: pluginsdk.EventType("scene_say"), Payload: `{"actor_id":"Alice","text":"Hi."}`})
+		pluginsdk.Event{ID: "1", Type: pluginsdk.EventType("core-scenes:scene_say"), Payload: `{"actor_id":"Alice","text":"Hi."}`})
 
 	resp, err := p.handleLog(context.Background(),
 		pluginsdk.CommandRequest{CharacterID: caller}, "export jsonl #"+sceneID)
