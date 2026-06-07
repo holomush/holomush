@@ -2031,9 +2031,9 @@ func TestEmitPluginEventPropagatesSensitive(t *testing.T) {
 	mgr.RegisterHost(plugins.TypeLua, mockLua)
 	mgr.TestLoadPlugin("core-test", manifest)
 
-	// Wire the shared emitter with crypto enabled so the fence runs and
+	// The shared emitter runs the sensitivity fence unconditionally, so it
 	// stamps sensitive=true (manifest=may + intent.Sensitive=true → SensitivityAlways).
-	mgr.ConfigureEventEmitter(pub, plugins.WithCryptoEnabled(true))
+	mgr.ConfigureEventEmitter(pub)
 
 	// Emit must run with a plugin-actor context so the emitter resolves
 	// an actor; ActorPlugin matches the manifest's actor_kinds_claimable.

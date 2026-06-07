@@ -214,7 +214,6 @@ func emitSensitivePluginEvent(
 	}
 	emitter := plugins.NewPluginEventEmitter(
 		env.publisher, manifestLookup, actorResolver,
-		plugins.WithCryptoEnabled(true),
 	)
 	intent := pluginsdk.EmitIntent{
 		Subject:   subject,

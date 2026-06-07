@@ -321,15 +321,14 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	// Wire the plugin event emitter to the crypto-enabled publisher when
 	// WithPluginCrypto supplied one. WithGameID takes a GameIDProvider
 	// (func() string), NOT a string (event_emitter.go:63-64) — wrap the
-	// captured gameID in a closure. WithCryptoEnabled(true) turns on the Phase
-	// 3a sensitivity fence so sensitivity:always emits (e.g. scene_pose) that
-	// claim Sensitive=true publish encrypted.
+	// captured gameID in a closure. The host-side sensitivity fence runs
+	// unconditionally (holomush-dj95.3), so sensitivity:always emits (e.g.
+	// scene_pose) that claim Sensitive=true publish encrypted.
 	if d.cryptoPublisher != nil {
 		gameID := d.gameID
 		ps.Manager().ConfigureEventEmitter(
 			d.cryptoPublisher,
 			plugins.WithGameID(func() string { return gameID }),
-			plugins.WithCryptoEnabled(true),
 		)
 	}
 	return ps

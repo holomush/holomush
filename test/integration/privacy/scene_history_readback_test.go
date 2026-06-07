@@ -422,7 +422,6 @@ func emitSensitiveScenePoseForPrivacy(
 	}
 	emitter := plugins.NewPluginEventEmitter(
 		env.pluginPub, manifestLookupFn, actorResolver,
-		plugins.WithCryptoEnabled(true),
 	)
 	intent := pluginsdk.EmitIntent{
 		Subject:   "scene." + sceneID,

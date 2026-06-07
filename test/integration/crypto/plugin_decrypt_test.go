@@ -303,7 +303,6 @@ func emitSensitiveWhisper(t *testing.T, h *pluginDecryptHarness, sceneID, plaint
 	}
 	emitter := plugins.NewPluginEventEmitter(
 		h.publisher, manifestLookup, actorResolver,
-		plugins.WithCryptoEnabled(true),
 	)
 
 	intent := pluginsdk.EmitIntent{

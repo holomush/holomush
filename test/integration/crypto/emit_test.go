@@ -143,11 +143,10 @@ var _ = Describe("Sensitive emit produces ciphertext on bus and in audit (INV-CR
 		// projection requires; it is the single writer of that header.
 		hostPub := eventbus.NewRenderingPublisher(rawPub, registry)
 
-		// Phase 3a sensitivity fence is gated behind WithCryptoEnabled —
-		// this E2E exercises the enabled path end-to-end (encrypt + audit).
+		// The host-side sensitivity fence runs unconditionally; this E2E
+		// exercises the encrypt + audit path end-to-end.
 		emitter := plugins.NewPluginEventEmitter(
 			hostPub, manifestLookup, actorResolver,
-			plugins.WithCryptoEnabled(true),
 		)
 
 		const plaintext = `{"text":"hello, secret world"}`

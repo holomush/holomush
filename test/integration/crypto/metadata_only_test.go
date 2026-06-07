@@ -231,7 +231,6 @@ var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly 
 		}
 		emitter := plugins.NewPluginEventEmitter(
 			h.publisher, manifestLookup, actorResolver,
-			plugins.WithCryptoEnabled(true),
 		)
 
 		const plaintext = `{"text":"secret message for participant only"}`
@@ -332,7 +331,6 @@ var _ = Describe("Subscribe with participant identity delivers plaintext (INV-CR
 		}
 		emitter := plugins.NewPluginEventEmitter(
 			h.publisher, manifestLookup, actorResolver,
-			plugins.WithCryptoEnabled(true),
 		)
 
 		const plaintext = `{"text":"hello participant"}`

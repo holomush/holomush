@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,21 +40,20 @@ func newCryptoTestEmitter(t *testing.T, pub eventbus.Publisher, manifest *plugin
 	resolve := func(_ context.Context, _ string) (core.Actor, error) {
 		return core.Actor{Kind: core.ActorPlugin, ID: fixturePluginULID.String()}, nil
 	}
-	// These tests exercise the Phase 3a sensitivity fence directly, so
-	// they MUST explicitly enable crypto. The default (off) bypasses
-	// the fence — see TestEmitterDoesNotRunFenceWhenCryptoDisabled.
-	return plugins.NewPluginEventEmitter(pub, lookup, resolve, plugins.WithCryptoEnabled(true))
+	// The host-side sensitivity fence runs on every emit (no gate), so a
+	// plainly-constructed emitter exercises it directly.
+	return plugins.NewPluginEventEmitter(pub, lookup, resolve)
 }
 
-// TestEmitterDoesNotRunFenceWhenCryptoDisabled is the regression test
-// for the Phase 3a-merge-time bug where production manifests declare
-// sensitivity: always for events the SDK cannot yet flag as sensitive
-// (proto EmitEventRequest has no sensitive field). With crypto
-// disabled (the Phase 3a default), the emitter MUST skip the fence
-// and emit successfully even if the manifest would otherwise
-// EVENT_SENSITIVITY_REQUIRED-reject.
-func TestEmitterDoesNotRunFenceWhenCryptoDisabled(t *testing.T) {
-	pub := &recordingPublisher{}
+// TestEmitterRunsFenceUnconditionallyWithoutFlag is the holomush-dj95.3
+// regression. With the WithCryptoEnabled gate removed, the host-side
+// sensitivity fence runs on EVERY emit: the plugin manifest declaration is
+// the single source of truth with no runtime override. A plainly-constructed
+// emitter (no options — mirroring production after the fossil deletion) MUST
+// stamp Sensitive per the manifest and MUST reject an under-claimed
+// sensitivity:always emit, where the old gate would have silently bypassed it
+// and shipped plaintext.
+func TestEmitterRunsFenceUnconditionallyWithoutFlag(t *testing.T) {
 	manifest := newSensitiveTestManifest([]plugins.CryptoEmit{
 		{EventType: "test-plugin:secret", Sensitivity: plugins.SensitivityAlways},
 	})
@@ -66,20 +66,38 @@ func TestEmitterDoesNotRunFenceWhenCryptoDisabled(t *testing.T) {
 	resolve := func(_ context.Context, _ string) (core.Actor, error) {
 		return core.Actor{Kind: core.ActorPlugin, ID: fixturePluginULID.String()}, nil
 	}
-	// Construct without WithCryptoEnabled — defaults to false.
-	emitter := plugins.NewPluginEventEmitter(pub, lookup, resolve)
 
-	intent := pluginsdk.EmitIntent{
-		Subject:   "scene.01HXXXTESTSCENE000000000",
-		Type:      pluginsdk.EventType("test-plugin:secret"),
-		Payload:   `{}`,
-		Sensitive: false, // would trigger INV-PLUGIN-30 if the fence ran
-	}
-	require.NoError(t, emitter.Emit(context.Background(), "test-plugin", intent),
-		"crypto disabled: fence MUST be skipped")
-	require.Len(t, pub.events, 1)
-	assert.False(t, pub.events[0].Sensitive,
-		"crypto disabled: event.Sensitive MUST be false regardless of manifest")
+	t.Run("manifest always + claim true stamps Sensitive=true with no flag", func(t *testing.T) {
+		pub := &recordingPublisher{}
+		emitter := plugins.NewPluginEventEmitter(pub, lookup, resolve)
+		intent := pluginsdk.EmitIntent{
+			Subject:   "scene.01HXXXTESTSCENE000000000",
+			Type:      pluginsdk.EventType("test-plugin:secret"),
+			Payload:   `{}`,
+			Sensitive: true,
+		}
+		require.NoError(t, emitter.Emit(context.Background(), "test-plugin", intent))
+		require.Len(t, pub.events, 1)
+		assert.True(t, pub.events[0].Sensitive,
+			"manifest sensitivity:always MUST stamp Sensitive=true with no game-config flag set")
+	})
+
+	t.Run("manifest always + claim false is rejected unconditionally", func(t *testing.T) {
+		pub := &recordingPublisher{}
+		emitter := plugins.NewPluginEventEmitter(pub, lookup, resolve)
+		intent := pluginsdk.EmitIntent{
+			Subject:   "scene.01HXXXTESTSCENE000000000",
+			Type:      pluginsdk.EventType("test-plugin:secret"),
+			Payload:   `{}`,
+			Sensitive: false, // under-claims an always-sensitive event
+		}
+		err := emitter.Emit(context.Background(), "test-plugin", intent)
+		require.Error(t, err, "the fence MUST reject an under-claimed always-sensitive emit (no bypass)")
+		oopsErr, ok := oops.AsOops(err)
+		require.True(t, ok, "error must be an oops error")
+		assert.Equal(t, "EVENT_SENSITIVITY_REQUIRED", oopsErr.Code())
+		assert.Empty(t, pub.events, "a rejected emit MUST NOT publish")
+	})
 }
 
 func TestEmitterStampsSensitiveTrueForManifestMayPlusClaimTrue(t *testing.T) {

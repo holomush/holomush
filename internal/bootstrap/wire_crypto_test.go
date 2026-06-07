@@ -14,30 +14,29 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 )
 
-func TestPluginEmitterDepsBuildSucceedsWithCryptoDisabled(t *testing.T) {
-	falseV := false
-	cfg := eventbus.Config{Crypto: eventbus.CryptoConfig{Enabled: &falseV}}
-	deps := bootstrap.PluginEmitterDeps{
-		Publisher: &noopPublisher{},
-		Manifests: func(string) *bootstrap.Manifest { return nil },
-		Resolver:  func(context.Context, string) (bootstrap.Actor, error) { return bootstrap.Actor{}, nil },
+// TestBuildPluginEmitterSucceedsRegardlessOfCryptoConfig pins that the emitter
+// constructor is crypto-config-agnostic: holomush-dj95.3 removed the
+// WithCryptoEnabled gate, so the host-side sensitivity fence runs
+// unconditionally and BuildPluginEmitter no longer branches on cfg.Crypto.
+func TestBuildPluginEmitterSucceedsRegardlessOfCryptoConfig(t *testing.T) {
+	for _, cryptoEnabled := range []bool{false, true} {
+		name := "crypto config disabled"
+		if cryptoEnabled {
+			name = "crypto config enabled"
+		}
+		t.Run(name, func(t *testing.T) {
+			enabled := cryptoEnabled
+			cfg := eventbus.Config{Crypto: eventbus.CryptoConfig{Enabled: &enabled}}
+			deps := bootstrap.PluginEmitterDeps{
+				Publisher: &noopPublisher{},
+				Manifests: func(string) *bootstrap.Manifest { return nil },
+				Resolver:  func(context.Context, string) (bootstrap.Actor, error) { return bootstrap.Actor{}, nil },
+			}
+			emitter, err := bootstrap.BuildPluginEmitter(context.Background(), cfg, deps)
+			require.NoError(t, err)
+			assert.NotNil(t, emitter)
+		})
 	}
-	emitter, err := bootstrap.BuildPluginEmitter(context.Background(), cfg, deps)
-	require.NoError(t, err)
-	assert.NotNil(t, emitter)
-}
-
-func TestPluginEmitterDepsBuildSucceedsWithCryptoEnabled(t *testing.T) {
-	trueV := true
-	cfg := eventbus.Config{Crypto: eventbus.CryptoConfig{Enabled: &trueV}}
-	deps := bootstrap.PluginEmitterDeps{
-		Publisher: &noopPublisher{},
-		Manifests: func(string) *bootstrap.Manifest { return nil },
-		Resolver:  func(context.Context, string) (bootstrap.Actor, error) { return bootstrap.Actor{}, nil },
-	}
-	emitter, err := bootstrap.BuildPluginEmitter(context.Background(), cfg, deps)
-	require.NoError(t, err)
-	assert.NotNil(t, emitter)
 }
 
 type noopPublisher struct{}
