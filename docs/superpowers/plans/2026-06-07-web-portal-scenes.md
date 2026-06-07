@@ -934,3 +934,4 @@ export function downloadBlob(content: Uint8Array | string, mime: string, filenam
 ## Out of scope (follow-up beads, filed at materialization)
 
 Persisted read markers · telnet `scene watch` command (uses Task 3's `WatchScene` + Task 7's focus plumbing) · composer preview/rich text · published-archive full-text search.
+<!-- adr-capture: sha256=f308b8f5968f5973; session=66ca5652; ts=2026-06-07T20:32:25Z; adrs=holomush-wf4zj,holomush-zukuh,holomush-pc3bg,holomush-b0365,holomush-0qnnr -->

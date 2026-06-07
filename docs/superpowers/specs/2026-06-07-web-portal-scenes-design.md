@@ -180,3 +180,4 @@ Existing invariants this design leans on (unchanged): INV-SCENE-38 (coordinator 
 ## 10. Follow-up beads (filed at plan time)
 
 Persisted read markers · telnet `scene watch` command · composer preview/rich-text · HTML export (if demand returns).
+<!-- adr-capture: sha256=cf68661983dda3af; session=66ca5652; ts=2026-06-07T20:32:25Z; adrs=holomush-wf4zj,holomush-zukuh,holomush-pc3bg,holomush-b0365,holomush-0qnnr -->

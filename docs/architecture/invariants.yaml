@@ -3182,7 +3182,7 @@ invariants:
       - {file: "plugins/core-scenes/service_test.go", token: "INV-S9"}
       - {file: "plugins/core-scenes/store.go", token: "INV-S9"}
       - {file: "plugins/core-scenes/store_integration_test.go", token: "INV-S9"}
-      - {file: "test/integration/scenes/publish_e2e_test.go", token: "INV-S9",}
+      - {file: "test/integration/scenes/publish_e2e_test.go", token: "INV-S9"}
   - id: INV-SCENE-61
     scope: INV-SCENE
     origin_spec: "docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md"
