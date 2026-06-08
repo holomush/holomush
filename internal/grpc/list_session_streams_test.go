@@ -65,6 +65,10 @@ func (f *fakeFocusCoordinator) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID
 	panic("unused in list_session_streams_test")
 }
 
+func (f *fakeFocusCoordinator) GetConnectionFocus(_ context.Context, _ ulid.ULID) (*session.FocusKey, error) {
+	panic("unused in list_session_streams_test")
+}
+
 // fakeStreamContributor is a minimal SessionStreamContributor implementation
 // that returns a canned stream list.
 type fakeStreamContributor struct {

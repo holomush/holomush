@@ -33,6 +33,8 @@ type mockFocusOps struct {
 	joinErr             error
 	leaveErr            error
 	presentErr          error
+	getConnFocusResult  *session.FocusKey
+	getConnFocusErr     error
 }
 
 // setConnFocusCall captures inputs to SetConnectionFocus so tests
@@ -80,6 +82,10 @@ func (m *mockFocusOps) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID) ([]uli
 
 func (m *mockFocusOps) IsAnyConnFocused(_ context.Context, _, _ ulid.ULID) (bool, error) {
 	return false, nil
+}
+
+func (m *mockFocusOps) GetConnectionFocus(_ context.Context, _ ulid.ULID) (*session.FocusKey, error) {
+	return m.getConnFocusResult, m.getConnFocusErr
 }
 
 type mockHistoryReader struct {
@@ -590,7 +596,7 @@ func TestFocusHostfunc_PhaseFive_LuaParity(t *testing.T) {
 	mod := ls.NewTable()
 	hostfunc.RegisterFocusFuncs(ls, mod /* mocks */, nil, nil)
 
-	for _, name := range []string{"set_connection_focus", "auto_focus_on_join", "is_any_conn_focused"} {
+	for _, name := range []string{"set_connection_focus", "auto_focus_on_join", "is_any_conn_focused", "get_connection_focus"} {
 		fn := ls.GetField(mod, name)
 		require.NotEqual(t, lua.LNil, fn, "hostfunc %q MUST be registered for INV-SCENE-19 parity", name)
 	}
@@ -618,4 +624,51 @@ func TestFocusHostfunc_ULIDRoundTrip(t *testing.T) {
 	assert.Equal(t, sceneID, call.focusKey.TargetID, "target_id MUST round-trip Lua string → ulid.ULID")
 	assert.Equal(t, session.FocusKindScene, call.focusKey.Kind)
 	assert.False(t, call.isSceneGrid)
+}
+
+func TestGetConnectionFocusReturnsFocusKeyTableForFocusedConnection(t *testing.T) {
+	t.Parallel()
+	connID := ulid.Make()
+	sceneID := ulid.Make()
+	fo := &mockFocusOps{
+		getConnFocusResult: &session.FocusKey{
+			Kind:     session.FocusKindScene,
+			TargetID: sceneID,
+		},
+	}
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`local fk, err = holomush.get_connection_focus("` + connID.String() + `")
+assert(err == nil, "expected no error, got: " .. tostring(err))
+assert(type(fk) == "table", "expected table for focused connection")
+assert(fk.kind == "scene", "expected kind=scene, got: " .. tostring(fk.kind))
+assert(fk.target_id == "` + sceneID.String() + `", "wrong target_id: " .. tostring(fk.target_id))`)
+	require.NoError(t, err)
+}
+
+func TestGetConnectionFocusReturnsNilForGridFocusedConnection(t *testing.T) {
+	t.Parallel()
+	connID := ulid.Make()
+	fo := &mockFocusOps{getConnFocusResult: nil} // nil = grid focus / no scene focus
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`
+local fk, err = holomush.get_connection_focus("` + connID.String() + `")
+assert(err == nil, "expected no error for grid-focused conn, got: " .. tostring(err))
+assert(fk == nil, "expected nil for grid-focused connection, got: " .. tostring(fk))
+`)
+	require.NoError(t, err)
+}
+
+func TestGetConnectionFocusReturnsErrorForInvalidULID(t *testing.T) {
+	t.Parallel()
+	fo := &mockFocusOps{}
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`
+local fk, err = holomush.get_connection_focus("not-a-ulid")
+assert(fk == nil, "expected nil on invalid ULID")
+assert(err ~= nil, "expected error for invalid ULID")
+`)
+	require.NoError(t, err)
 }

@@ -487,6 +487,11 @@ type fakeFocusClient struct {
 	isAnyConnFocusedResult map[string]bool
 	isAnyConnFocusedErr    error
 
+	// getConnFocusResult / getConnFocusErr control GetConnectionFocus.
+	// Nil result means grid-focused (no per-connection focus).
+	getConnFocusResult *pluginsdk.FocusKey
+	getConnFocusErr    error
+
 	// queryHistoryEvents / queryHistoryErr drive QueryStreamHistory (scene log).
 	queryHistoryEvents []pluginsdk.Event
 	queryHistoryErr    error
@@ -525,6 +530,10 @@ func (f *fakeFocusClient) SetConnectionFocus(_ context.Context, connID string, f
 func (f *fakeFocusClient) AutoFocusOnJoin(_ context.Context, characterID, sceneID string) (pluginsdk.AutoFocusOnJoinResult, error) {
 	f.autoFocusOnJoinCalls = append(f.autoFocusOnJoinCalls, autoFocusOnJoinCall{characterID: characterID, sceneID: sceneID})
 	return f.autoFocusOnJoinResult, f.autoFocusOnJoinErr
+}
+
+func (f *fakeFocusClient) GetConnectionFocus(_ context.Context, _ string) (*pluginsdk.FocusKey, error) {
+	return f.getConnFocusResult, f.getConnFocusErr
 }
 
 func (f *fakeFocusClient) IsAnyConnFocused(_ context.Context, _ string, sceneID string) (bool, error) {
