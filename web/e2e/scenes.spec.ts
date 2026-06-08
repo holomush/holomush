@@ -395,14 +395,11 @@ test.describe('Scenes workspace (E9.5)', () => {
   // goes disabled again) and no client-side error is shown.
   //
   // Scope: this test covers the composer UI submit flow ONLY — it does NOT
-  // verify that the pose persists or appears live, which is the plan's actual
-  // scenario 3. That end-to-end flow is BROKEN: the workspace's alt session
-  // (comms_hub) never receives a JoinFocus for the scene, so SetConnectionFocus
-  // fails FOCUS_WITHOUT_MEMBERSHIP and sendSceneCommand swallows the
-  // {success:false} response. Tracked as bug holomush-5rh.8.26 (P1) — when that
-  // lands, STRENGTHEN this test to assert the pose card appears live (no reload).
-  // Until then this asserts only that the submit handler runs and clears the
-  // draft, so the suite stays green without masking the gap (the gap is the bead).
+  // verify that the pose persists or appears live. The end-to-end flow
+  // (SetSceneFocus → JoinFocus → pose routes to scene_log) is proven by the
+  // integration test in test/integration/scenes/set_scene_focus_participation_test.go
+  // (holomush-5rh.8.26). Asserting the pose card appears live in E2E requires
+  // E2E crypto key provisioning, deferred to holomush-5rh.8.27.
   test('workspace composer accepts pose and clears draft without error', async ({ page }) => {
     await registerAndEnterTerminal(page, 'prt');
 

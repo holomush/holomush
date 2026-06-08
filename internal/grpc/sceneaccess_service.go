@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
@@ -276,7 +277,13 @@ func (s *SceneAccessServer) ExportScene(ctx context.Context, req *sceneaccessv1.
 
 // SetSceneFocus sets per-connection focus for a web-portal connection. The
 // facade verifies that the connection belongs to a game session owned by one
-// of the player's characters (INV-SCENE-63), then delegates to the coordinator.
+// of the player's characters (INV-SCENE-63), then:
+//   - when setting a non-nil scene focus: verifies the character is a participant
+//     of that scene (privacy gate — focusing a scene the char has no row in would
+//     subscribe the session to its streams), then calls JoinFocus idempotently, then
+//     calls SetConnectionFocus (which now succeeds because the membership exists);
+//   - when clearing focus (scene_id=""): calls SetConnectionFocus directly (no
+//     JoinFocus needed; membership is irrelevant for the grid).
 func (s *SceneAccessServer) SetSceneFocus(ctx context.Context, req *sceneaccessv1.SetSceneFocusRequest) (*sceneaccessv1.SetSceneFocusResponse, error) {
 	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
 	if err != nil {
@@ -305,7 +312,8 @@ func (s *SceneAccessServer) SetSceneFocus(ctx context.Context, req *sceneaccessv
 	}
 
 	// Verify the session's character is owned by this player (INV-SCENE-63).
-	if _, err = s.ownedCharacter(ctx, ps.PlayerID, gameSession.CharacterID.String()); err != nil {
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, gameSession.CharacterID.String())
+	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, "connection does not belong to your character") //nolint:wrapcheck // gRPC status error at handler boundary
 	}
 
@@ -316,7 +324,52 @@ func (s *SceneAccessServer) SetSceneFocus(ctx context.Context, req *sceneaccessv
 		if parseErr != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid scene_id") //nolint:wrapcheck // gRPC status error at handler boundary
 		}
-		focusKey = &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+		fk := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+		focusKey = &fk
+
+		// Privacy gate: verify the character has a participant row in the target
+		// scene before establishing focus membership. JoinFocus subscribes the
+		// session to the scene's streams — focusing a scene the char has no row
+		// in would leak its events to an unauthorized session.
+		dctx, release, dispatchErr := s.beginDispatch(ctx, char, ps.PlayerID)
+		if dispatchErr != nil {
+			return nil, dispatchErr
+		}
+		defer release()
+
+		myScenes, listErr := s.sceneClient.ListCharacterScenes(dctx, &scenev1.ListCharacterScenesRequest{
+			CharacterId: char.ID.String(),
+		})
+		if listErr != nil {
+			slog.ErrorContext(ctx, "scene access: SetSceneFocus participant check failed", "error", listErr)
+			return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
+		}
+		isParticipant := false
+		for _, info := range myScenes.GetScenes() {
+			if info.GetScene().GetId() == sceneIDStr {
+				isParticipant = true
+				break
+			}
+		}
+		if !isParticipant {
+			return nil, status.Error(codes.PermissionDenied, "not a participant of this scene") //nolint:wrapcheck // gRPC status error at handler boundary
+		}
+
+		// Establish focus membership idempotently so SetConnectionFocus (which
+		// gates on FocusMemberships — INV-SCENE-14) succeeds for fresh comms_hub
+		// sessions that have not yet called JoinFocus.
+		// FOCUS_ALREADY_MEMBER is success: session is already a member (e.g.
+		// joined via `scene join` on the terminal). Mirror the precedent at
+		// plugins/core-scenes/service.go WatchScene and commands.go handleJoin.
+		joinErr := s.coordinator.JoinFocus(ctx, gameSession.ID, fk)
+		if joinErr != nil {
+			var oe oops.OopsError
+			if !errors.As(joinErr, &oe) || oe.Code() != "FOCUS_ALREADY_MEMBER" {
+				slog.ErrorContext(ctx, "scene access: SetSceneFocus JoinFocus failed", "error", joinErr)
+				return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
+			}
+			// FOCUS_ALREADY_MEMBER — membership already present; proceed to SetConnectionFocus.
+		}
 	}
 
 	_, err = s.coordinator.SetConnectionFocus(ctx, connID, focusKey, false)

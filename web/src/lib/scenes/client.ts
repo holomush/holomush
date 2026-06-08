@@ -94,13 +94,19 @@ export async function setSceneFocus(
 /**
  * Sends a raw command text on behalf of the given session.
  * Used by the composer to issue scene pose/say/ooc/<verb> commands.
+ * Throws with the server's error_message when success===false so the
+ * composer's catch block surfaces the failure instead of silently clearing
+ * the draft (holomush-5rh.8.26 fix).
  */
 export async function sendSceneCommand(
 	sessionId: string,
 	connectionId: string,
 	cmd: string,
 ): Promise<void> {
-	await client.sendCommand({ sessionId, connectionId, text: cmd });
+	const res = await client.sendCommand({ sessionId, connectionId, text: cmd });
+	if (!res.success) {
+		throw new Error(res.errorMessage || 'Command failed');
+	}
 }
 
 /**

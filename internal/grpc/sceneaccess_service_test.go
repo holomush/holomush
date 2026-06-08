@@ -52,10 +52,13 @@ func buildSASessionRepo(t *testing.T, ps *auth.PlayerSession) *authmocks.MockPla
 // stubFocusCoordinator is a minimal Coordinator stub that records calls.
 type stubFocusCoordinator struct {
 	setConnFocusErr error
+	joinFocusErr    error
+	joinFocusCalls  int
 }
 
 func (s *stubFocusCoordinator) JoinFocus(_ context.Context, _ string, _ session.FocusKey) error {
-	return nil
+	s.joinFocusCalls++
+	return s.joinFocusErr
 }
 
 func (s *stubFocusCoordinator) LeaveFocus(_ context.Context, _ string, _ session.FocusKey) error {
@@ -431,4 +434,166 @@ func TestSceneAccessDispatchActorEqualsVerifiedCharacter(t *testing.T) {
 		assert.Equal(t, playerID.String(), mgr.capturedPlayerID,
 			"dispatch ownerPlayerID MUST be the authenticated player")
 	})
+}
+
+// buildSetSceneFocusServer wires a SceneAccessServer for SetSceneFocus tests:
+// a non-guest player who owns exactly one character, whose game session has
+// an auto-generated sessionID, and whose connection has the returned connID.
+// Returns (server, charID, connID) — the two values callers need for requests.
+func buildSetSceneFocusServer(
+	t *testing.T,
+	coord *stubFocusCoordinator,
+	sceneMock scenev1.SceneServiceClient,
+) (srv *SceneAccessServer, charID ulid.ULID, connID ulid.ULID) {
+	t.Helper()
+	playerID := idgen.New()
+	charID = idgen.New()
+	connID = idgen.New()
+	sessionID := "sess-" + idgen.New().String()
+
+	ps := buildSATestPS(t, playerID)
+	psRepo := buildSASessionRepo(t, ps)
+
+	player := &auth.Player{ID: playerID, IsGuest: false}
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).Return(player, nil).Maybe()
+
+	ownedChar := &world.Character{ID: charID, PlayerID: playerID}
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{ownedChar}, nil).Maybe()
+
+	conn := &session.Connection{ID: connID, SessionID: sessionID, ClientType: "comms_hub"}
+	gameSession := &session.Info{ID: sessionID, CharacterID: charID}
+
+	sessStore := sessionmocks.NewMockStore(t)
+	sessStore.EXPECT().GetConnection(mock.Anything, connID).Return(conn, nil).Maybe()
+	sessStore.EXPECT().Get(mock.Anything, sessionID).Return(gameSession, nil).Maybe()
+
+	mgr := &stubPluginManager{}
+	srv = newTestSceneAccessServer(t, psRepo, playerRepo, charRepo, sessStore, coord, sceneMock, mgr)
+	return
+}
+
+// TestSetSceneFocusDeniesNonParticipant verifies the privacy gate: a character
+// that is not a participant of the target scene is rejected with PermissionDenied
+// and JoinFocus is never called.
+func TestSetSceneFocusDeniesNonParticipant(t *testing.T) {
+	ctx := context.Background()
+	coord := &stubFocusCoordinator{}
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+
+	srv, _, connID := buildSetSceneFocusServer(t, coord, sceneMock)
+
+	sceneID := idgen.New()
+	// ListCharacterScenes returns a list that does NOT include sceneID.
+	otherSceneID := idgen.New()
+	otherScene := &scenev1.SceneInfo{Id: otherSceneID.String()}
+	sceneMock.EXPECT().ListCharacterScenes(mock.Anything, mock.Anything).Return(
+		&scenev1.ListCharacterScenesResponse{
+			Scenes: []*scenev1.CharacterSceneInfo{
+				{Scene: otherScene},
+			},
+		}, nil,
+	).Once()
+
+	_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: testSAToken,
+		ConnectionId:       connID.String(),
+		SceneId:            sceneID.String(),
+	})
+
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"non-participant MUST receive PermissionDenied")
+	assert.Equal(t, 0, coord.joinFocusCalls,
+		"JoinFocus MUST NOT be called when participation check fails")
+}
+
+// TestSetSceneFocusJoinsFocusThenSetsConnectionFocus verifies the happy path for
+// a participant: JoinFocus is called once, then SetConnectionFocus succeeds.
+func TestSetSceneFocusJoinsFocusThenSetsConnectionFocus(t *testing.T) {
+	ctx := context.Background()
+	coord := &stubFocusCoordinator{}
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+
+	srv, charID, connID := buildSetSceneFocusServer(t, coord, sceneMock)
+
+	sceneID := idgen.New()
+	// ListCharacterScenes returns a list that DOES include sceneID.
+	sceneInfo := &scenev1.SceneInfo{Id: sceneID.String()}
+	sceneMock.EXPECT().ListCharacterScenes(mock.Anything, mock.MatchedBy(func(req *scenev1.ListCharacterScenesRequest) bool {
+		return req.GetCharacterId() == charID.String()
+	})).Return(
+		&scenev1.ListCharacterScenesResponse{
+			Scenes: []*scenev1.CharacterSceneInfo{
+				{Scene: sceneInfo},
+			},
+		}, nil,
+	).Once()
+
+	_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: testSAToken,
+		ConnectionId:       connID.String(),
+		SceneId:            sceneID.String(),
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, coord.joinFocusCalls,
+		"JoinFocus MUST be called exactly once for a valid participant")
+}
+
+// TestSetSceneFocusTreatsFocusAlreadyMemberAsSuccess verifies idempotency: when
+// JoinFocus returns FOCUS_ALREADY_MEMBER the RPC succeeds (session already joined
+// e.g. via terminal `scene join`).
+func TestSetSceneFocusTreatsFocusAlreadyMemberAsSuccess(t *testing.T) {
+	ctx := context.Background()
+	coord := &stubFocusCoordinator{
+		joinFocusErr: oops.Code("FOCUS_ALREADY_MEMBER").Errorf("already joined"),
+	}
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+
+	srv, charID, connID := buildSetSceneFocusServer(t, coord, sceneMock)
+
+	sceneID := idgen.New()
+	sceneInfo := &scenev1.SceneInfo{Id: sceneID.String()}
+	sceneMock.EXPECT().ListCharacterScenes(mock.Anything, mock.MatchedBy(func(req *scenev1.ListCharacterScenesRequest) bool {
+		return req.GetCharacterId() == charID.String()
+	})).Return(
+		&scenev1.ListCharacterScenesResponse{
+			Scenes: []*scenev1.CharacterSceneInfo{
+				{Scene: sceneInfo},
+			},
+		}, nil,
+	).Once()
+
+	_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: testSAToken,
+		ConnectionId:       connID.String(),
+		SceneId:            sceneID.String(),
+	})
+
+	require.NoError(t, err, "FOCUS_ALREADY_MEMBER MUST be treated as success")
+}
+
+// TestSetSceneFocusClearToGridSkipsJoinFocus verifies that clearing focus
+// (scene_id="") does NOT call JoinFocus or the participant check.
+func TestSetSceneFocusClearToGridSkipsJoinFocus(t *testing.T) {
+	ctx := context.Background()
+	coord := &stubFocusCoordinator{}
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+
+	srv, _, connID := buildSetSceneFocusServer(t, coord, sceneMock)
+
+	_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: testSAToken,
+		ConnectionId:       connID.String(),
+		SceneId:            "", // clear to grid
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, coord.joinFocusCalls,
+		"JoinFocus MUST NOT be called when clearing focus to grid")
+	sceneMock.AssertNotCalled(t, "ListCharacterScenes",
+		"participant check MUST NOT run on clear-to-grid")
 }

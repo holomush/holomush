@@ -15,10 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
+	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
 
 // Tunable timeouts for the Subscribe-stream transport lifecycle. Set high
@@ -602,6 +604,53 @@ func (s *Session) SetSceneFocus(ctx context.Context, sceneID ulid.ULID) {
 	})
 	err := s.server.sessionStore.UpdateSessionConnection(ctx, s.SessionID, connID, m)
 	require.NoError(s.server.t, err, "integrationtest.Session.SetSceneFocus: UpdateSessionConnection")
+}
+
+// FacadeSetSceneFocus calls the REAL SceneAccessServer.SetSceneFocus for this
+// session's active connection, exercising the full production path:
+// participant-gate (ListCharacterScenes) → JoinFocus → SetConnectionFocus.
+//
+// Unlike Session.SetSceneFocus (which writes directly to the session store and
+// bypasses the coordinator), this drives the facade handler so the real
+// focus.Coordinator.JoinFocus is called, establishing the FocusMembership that
+// SetConnectionFocus (INV-SCENE-14) requires. Requires WithFocusDelivery so the
+// coordinator is non-nil; panics otherwise via t.Fatalf.
+//
+// Returns the gRPC error from SetSceneFocus (or nil on success) so callers can
+// assert both the happy path and the denial path.
+func (s *Session) FacadeSetSceneFocus(ctx context.Context, sceneID ulid.ULID) error {
+	s.server.t.Helper()
+	if s.server.focusCoord == nil {
+		s.server.t.Fatalf("integrationtest.Session.FacadeSetSceneFocus: requires WithFocusDelivery (focusCoord is nil)")
+	}
+	s.transportMu.Lock()
+	connID := s.transportConnID
+	s.transportMu.Unlock()
+	if connID == (ulid.ULID{}) {
+		s.server.t.Fatalf("integrationtest.Session.FacadeSetSceneFocus: no active transport (call ConnectAuthed first)")
+	}
+
+	// Build a SceneAccessServer using the harness's real repos + coordinator.
+	// The pluginManager's BeginServiceDispatch is needed for the participant
+	// check path. Requires WithInTreePlugins.
+	if s.server.pluginSub == nil {
+		s.server.t.Fatalf("integrationtest.Session.FacadeSetSceneFocus: requires WithInTreePlugins (pluginSub is nil)")
+	}
+	facade := holoGRPC.NewSceneAccessServer(
+		s.server.playerSessionStore,
+		s.server.playerRepo,
+		s.server.charRepo,
+		s.server.sessionStore,
+		s.server.focusCoord,
+		s.server.SceneServiceClient(),
+		s.server.pluginSub.Manager(),
+	)
+	_, err := facade.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: s.playerSessionToken,
+		ConnectionId:       connID.String(),
+		SceneId:            sceneID.String(),
+	})
+	return err
 }
 
 // QueryStreamHistory fetches the event history for the given stream subject.

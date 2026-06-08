@@ -404,3 +404,20 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   err into PermissionDenied (:308 — fail-closed, but masks infra failure; slog still
   fires); (2) doc-only: SetSceneFocus has no token by design. `resolvePlayerSessionWithRepo`
   (auth_handlers.go:183) is the shared CoreServer+facade impl; nil-repo→NOT_CONFIGURED.
+- **SetSceneFocus JoinFocus privacy gate (5rh.8.26, 2026-06-08) — READY**: SetSceneFocus
+  now establishes scene FocusMembership via `coordinator.JoinFocus` (so comms_hub subscribes
+  to scene streams). CRITICAL: `JoinFocus` (`internal/grpc/focus/join.go:17-59`) is
+  UNCONDITIONAL — adds membership + `streamSender.Send(add=true)`, no participation re-check
+  (FOCUS_ALREADY_MEMBER is just dedup). So the facade's pre-JoinFocus participation check
+  (`sceneaccess_service.go:340-356`) is the SOLE authz barrier before private-scene stream
+  subscription. Gate is airtight: (a) char from `ownedCharacter(ps.PlayerID, gameSession.CharacterID)`
+  — verified-owned, never client-supplied (only `req.SceneId` target is client input);
+  (b) oracle `ListCharacterScenes` (`plugins/core-scenes/store.go:1774`) is
+  `JOIN scene_participants WHERE character_id=$1 AND archived_at IS NULL` — exactly the
+  char's participant rows, ANY role (no role filter — owner/member/observer all count);
+  (c) `listErr→Internal` deny (fail-closed, no fall-through to JoinFocus); (d) non-participant
+  → PermissionDenied before JoinFocus; (e) clear-to-grid (`sceneId==""`) skips the whole
+  block. Deny test asserts `joinFocusCalls==0` — genuinely pins no-leak. Pattern to remember:
+  when a facade calls an UNCONDITIONAL substrate mutation that subscribes streams, the
+  facade-side participation check is load-bearing — trace that it runs on EVERY path reaching
+  the mutation, and that an oracle error fails closed (not skip).

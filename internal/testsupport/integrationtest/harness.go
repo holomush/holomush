@@ -178,6 +178,12 @@ type Server struct {
 
 	// guestStartLocationID is the location all guests are placed into.
 	guestStartLocationID ulid.ULID
+
+	// focusCoord is the real focus.Coordinator wired under WithFocusDelivery;
+	// nil when WithFocusDelivery was not passed. Exposed via FocusCoordinator()
+	// so Session.FacadeSetSceneFocus can build a SceneAccessServer that
+	// exercises the real JoinFocus → SetConnectionFocus path (holomush-5rh.8.26).
+	focusCoord focus.Coordinator
 }
 
 // StartOption tunes Start construction. Tests pass options to override
@@ -580,6 +586,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		histCrypto:           histCrypto,
 		accessEngine:         pe,
 		guestStartLocationID: guestLocID,
+		focusCoord:           focusCoord,
 	}
 
 	// Plugin-crypto links 3+4 (Task 8): the audit projection (PluginConsumerManager
