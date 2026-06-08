@@ -267,7 +267,10 @@ type SceneServiceClient interface {
 	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
 	// fail before ABAC, which is never consulted here). Decryption flows
 	// through the host-mediated snapshot decrypt seam; supported formats are
-	// "markdown" and "jsonl". See export.go::ExportSceneLog.
+	// "markdown" and "jsonl". Scenes whose IC log exceeds the server-side row
+	// ceiling (exportLogMaxRows = 10 000) return FAILED_PRECONDITION /
+	// SCENE_EXPORT_TOO_LARGE rather than silently truncating the document.
+	// See export.go::ExportSceneLog.
 	ExportSceneLog(context.Context, *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error)
 }
 
@@ -769,7 +772,10 @@ type SceneServiceHandler interface {
 	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
 	// fail before ABAC, which is never consulted here). Decryption flows
 	// through the host-mediated snapshot decrypt seam; supported formats are
-	// "markdown" and "jsonl". See export.go::ExportSceneLog.
+	// "markdown" and "jsonl". Scenes whose IC log exceeds the server-side row
+	// ceiling (exportLogMaxRows = 10 000) return FAILED_PRECONDITION /
+	// SCENE_EXPORT_TOO_LARGE rather than silently truncating the document.
+	// See export.go::ExportSceneLog.
 	ExportSceneLog(context.Context, *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error)
 }
 

@@ -108,8 +108,7 @@ func (s *SceneServiceImpl) ExportSceneLog(ctx context.Context, req *scenev1.Expo
 	logRows, err := s.store.ReadSceneLogForExport(ctx, fullICSubject)
 	if err != nil {
 		recordError(span, err)
-		errutil.LogErrorContext(ctx, "scene.service.export_scene_log read log failed", err)
-		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque Internal per grpc-errors.md
+		return nil, mapStoreErr(ctx, err)
 	}
 
 	// 5. Decrypt in snapshotDecryptBatch chunks via the same snapshotDecryptor
@@ -133,9 +132,22 @@ func (s *SceneServiceImpl) ExportSceneLog(ctx context.Context, req *scenev1.Expo
 			errutil.LogErrorContext(ctx, "scene.service.export_scene_log render failed", renderErr)
 			return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque Internal per grpc-errors.md
 		}
+	default:
+		// Defensive: format was validated against exportRenderMime at step 1, so
+		// this arm is unreachable in practice. Return SCENE_EXPORT_BAD_FORMAT so
+		// any future map/switch divergence is caught explicitly rather than
+		// silently producing empty content (mirrors publish_service.go:309).
+		badFmt := oops.Code("SCENE_EXPORT_BAD_FORMAT").
+			With("format", req.GetFormat()).Errorf("unsupported export format (defensive)")
+		recordError(span, badFmt)
+		return nil, mapStoreErr(ctx, badFmt)
 	}
 
-	filename := slugify(scene.Title) + exportFileExt[req.GetFormat()]
+	slug := slugify(scene.Title)
+	if slug == "" {
+		slug = "scene"
+	}
+	filename := slug + exportFileExt[req.GetFormat()]
 
 	slog.InfoContext(ctx, "scene.service.export_scene_log ok",
 		"scene_id", req.GetSceneId(),

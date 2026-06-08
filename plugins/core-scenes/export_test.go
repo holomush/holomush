@@ -5,10 +5,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -229,4 +231,189 @@ func TestExportSceneLogPropagatesFullICSubjectToDecryptSeam(t *testing.T) {
 	// Also assert the store received the same subject for the SQL query.
 	assert.Equal(t, wantSubject, store.exportLogSubject,
 		"ReadSceneLogForExport must receive the full IC subject (not a bare sceneID)")
+}
+
+// ── error-arm coverage ──────────────────────────────────────────────────────
+
+// exportTooLargeErr builds the oops error that ReadSceneLogForExport returns
+// when the IC log exceeds exportLogMaxRows. Shared by tests that inject the
+// error via fakeStore.exportLogErr so they don't have to allocate 10001 rows.
+func exportTooLargeErr() error {
+	return oops.Code("SCENE_EXPORT_TOO_LARGE").
+		With("limit", exportLogMaxRows).
+		Errorf("scene log exceeds %d-row export ceiling", exportLogMaxRows)
+}
+
+// errorDecryptor is a snapshotDecryptor fake that always returns an error from
+// DecryptOwnAuditRows (simulates a transient decrypt failure or key-service
+// outage).
+type errorDecryptor struct{ err error }
+
+func (f *errorDecryptor) DecryptOwnAuditRows(_ context.Context, _ []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
+	return nil, f.err
+}
+
+// refusalDecryptor is a snapshotDecryptor fake that marks every row as refused
+// (simulates key-not-found or policy-denied at the host crypto layer).
+type refusalDecryptor struct{ reason string }
+
+func (f *refusalDecryptor) DecryptOwnAuditRows(_ context.Context, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
+	out := make([]*pluginv1.RowResult, len(rows))
+	for i, r := range rows {
+		out[i] = &pluginv1.RowResult{
+			Id:      r.GetId(),
+			Outcome: &pluginv1.RowResult_NoPlaintextReason{NoPlaintextReason: f.reason},
+		}
+	}
+	return out, nil
+}
+
+func TestExportSceneLogReturnsInternalOnStoreReadError(t *testing.T) {
+	t.Parallel()
+	store, svc, _, ownerID, sceneID := newExportFixture(t)
+	store.exportLogErr = errors.New("pgx: connection closed")
+
+	_, err := svc.ExportSceneLog(context.Background(), &scenev1.ExportSceneLogRequest{
+		CharacterId: ownerID,
+		SceneId:     sceneID,
+		Format:      "markdown",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.Internal, status.Code(err),
+		"store read error must surface as opaque Internal")
+	assert.Equal(t, "internal error", status.Convert(err).Message(),
+		"inner error text must not leak past the trust boundary")
+}
+
+func TestExportSceneLogReturnsFailedPreconditionWhenLogExceedsCap(t *testing.T) {
+	t.Parallel()
+	store, svc, dec, ownerID, sceneID := newExportFixture(t)
+
+	// Seed cap+1 rows into exportLogRows so the fake store's ReadSceneLogForExport
+	// returns more than exportLogMaxRows rows, triggering the overflow check in
+	// the handler. The fake returns rows verbatim (no SQL LIMIT), so we simulate
+	// the overflow by pre-loading the error the real store would return.
+	// Using exportLogErr is cheaper than allocating 10001 LogRow structs and
+	// keeps the test focused on the handler's routing of the error code.
+	store.exportLogErr = exportTooLargeErr()
+
+	_, err := svc.ExportSceneLog(context.Background(), &scenev1.ExportSceneLogRequest{
+		CharacterId: ownerID,
+		SceneId:     sceneID,
+		Format:      "markdown",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err),
+		"SCENE_EXPORT_TOO_LARGE must map to FailedPrecondition")
+	assert.Equal(t, "SCENE_EXPORT_TOO_LARGE", status.Convert(err).Message())
+	require.Empty(t, dec.calls, "decrypt seam must not be invoked when the read fails")
+}
+
+func TestExportSceneLogReturnsInternalWhenDecryptorIsNil(t *testing.T) {
+	t.Parallel()
+	store, svc, _, ownerID, sceneID := newExportFixture(t)
+	// Append directly — no decryptor to register plaintext with (the nil-decryptor
+	// check fires before the decrypt loop).
+	store.exportLogRows = append(store.exportLogRows, LogRow{
+		ID: []byte("row-1"), Type: "core-scenes:scene_pose", Codec: "identity",
+	})
+	// Clear the decryptor that newExportFixture installed — nil means unconfigured.
+	svc.SetSnapshotDecryptor(nil)
+
+	_, err := svc.ExportSceneLog(context.Background(), &scenev1.ExportSceneLogRequest{
+		CharacterId: ownerID,
+		SceneId:     sceneID,
+		Format:      "markdown",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.Internal, status.Code(err),
+		"nil decryptor must return opaque Internal (fail-closed)")
+	assert.Equal(t, "internal error", status.Convert(err).Message(),
+		"inner detail must not leak when decryptor is unconfigured")
+}
+
+func TestExportSceneLogReturnsInternalWhenDecryptorReturnsError(t *testing.T) {
+	t.Parallel()
+	store, svc, _, ownerID, sceneID := newExportFixture(t)
+	store.exportLogRows = append(store.exportLogRows, LogRow{
+		ID: []byte("row-1"), Type: "core-scenes:scene_pose", Codec: "identity",
+	})
+	svc.SetSnapshotDecryptor(&errorDecryptor{err: errors.New("key service unavailable")})
+
+	_, err := svc.ExportSceneLog(context.Background(), &scenev1.ExportSceneLogRequest{
+		CharacterId: ownerID,
+		SceneId:     sceneID,
+		Format:      "markdown",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.Internal, status.Code(err),
+		"decryptor error must surface as opaque Internal")
+	assert.Equal(t, "internal error", status.Convert(err).Message(),
+		"key service error text must not leak past the trust boundary")
+}
+
+func TestExportSceneLogReturnsInternalWhenDecryptorRefusesRow(t *testing.T) {
+	t.Parallel()
+	store, svc, _, ownerID, sceneID := newExportFixture(t)
+	store.exportLogRows = append(store.exportLogRows, LogRow{
+		ID: []byte("row-1"), Type: "core-scenes:scene_pose", Codec: "identity",
+	})
+	svc.SetSnapshotDecryptor(&refusalDecryptor{reason: "KEY_NOT_FOUND"})
+
+	resp, err := svc.ExportSceneLog(context.Background(), &scenev1.ExportSceneLogRequest{
+		CharacterId: ownerID,
+		SceneId:     sceneID,
+		Format:      "markdown",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, resp, "no partial document may accompany a refusal error")
+	require.Equal(t, codes.Internal, status.Code(err),
+		"per-row refusal must surface as opaque Internal (fail-closed)")
+	assert.Equal(t, "internal error", status.Convert(err).Message(),
+		"refusal reason must not leak past the trust boundary")
+}
+
+func TestExportSceneLogReturnsInternalOnDecodeFailure(t *testing.T) {
+	t.Parallel()
+	store, svc, dec, ownerID, sceneID := newExportFixture(t)
+	// Seed a valid log row but register INVALID JSON as its plaintext — this
+	// causes decodeSnapshotEntry to return a non-nil error (JSON unmarshal fails).
+	installExportLogRow(store, dec, "row-1", "core-scenes:scene_pose",
+		[]byte(`not-valid-json`))
+
+	_, err := svc.ExportSceneLog(context.Background(), &scenev1.ExportSceneLogRequest{
+		CharacterId: ownerID,
+		SceneId:     sceneID,
+		Format:      "markdown",
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.Internal, status.Code(err),
+		"entry decode failure must surface as opaque Internal")
+	assert.Equal(t, "internal error", status.Convert(err).Message(),
+		"decode error detail must not leak past the trust boundary")
+}
+
+func TestExportSceneLogUsesSceneFallbackFilenameWhenTitleSlugIsEmpty(t *testing.T) {
+	t.Parallel()
+	store, svc, dec, ownerID, sceneID := newExportFixture(t)
+	// Override the scene title to one that slugifies to "" (only non-alnum chars).
+	store.scenes[sceneID].Title = "!!!"
+	installExportLogRow(store, dec, "row-1", "core-scenes:scene_pose",
+		[]byte(`{"actor_id":"Aria","text":"waves."}`))
+
+	resp, err := svc.ExportSceneLog(context.Background(), &scenev1.ExportSceneLogRequest{
+		CharacterId: ownerID,
+		SceneId:     sceneID,
+		Format:      "markdown",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "scene.md", resp.GetFilename(),
+		"empty slug must fall back to the stem 'scene'")
 }

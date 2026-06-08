@@ -3044,3 +3044,46 @@ var _ = Describe("SceneStore.ListPublishedScenes", func() {
 		Expect(first[1].ID).NotTo(Equal(second[1].ID))
 	})
 })
+
+var _ = Describe("ReadSceneLogForExport", func() {
+	// Pins the REAL overflow branch (len > exportLogMaxRows → SCENE_EXPORT_TOO_LARGE):
+	// the unit-level cap test injects a fake error, so without this spec the
+	// store-side LIMIT cap+1 + overflow check has no coverage (holomush-5rh.8.22).
+	It("returns SCENE_EXPORT_TOO_LARGE when the IC log exceeds the export ceiling", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		subject := "events.test.scene.scene-export-cap.ic"
+		// Bulk-seed exportLogMaxRows+1 pose rows in one statement. The 16-byte
+		// ids are monotonically increasing hex so ORDER BY id stays stable.
+		_, err := store.pool.Exec(ctx, `
+			INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
+			SELECT decode(lpad(to_hex(i), 32, '0'), 'hex'), $1, 'core-scenes:scene_pose',
+			       (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, 'character', NULL, ''::BYTEA, 1, 'identity'
+			FROM generate_series(1, $2) AS i`,
+			subject, exportLogMaxRows+1)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = store.ReadSceneLogForExport(ctx, subject)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_EXPORT_TOO_LARGE")
+	})
+
+	It("returns all rows in id order when under the ceiling", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		subject := "events.test.scene.scene-export-small.ic"
+		_, err := store.pool.Exec(ctx, `
+			INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
+			SELECT decode(lpad(to_hex(i), 32, '0'), 'hex'), $1, 'core-scenes:scene_pose',
+			       (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, 'character', NULL, ''::BYTEA, 1, 'identity'
+			FROM generate_series(1, 3) AS i`,
+			subject)
+		Expect(err).NotTo(HaveOccurred())
+
+		rows, err := store.ReadSceneLogForExport(ctx, subject)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(HaveLen(3))
+	})
+})
