@@ -274,6 +274,7 @@ var _ = Describe("INV-SCENE-8: pose-order metadata is a function of scene_log", 
 	})
 })
 
+// Verifies: INV-SCENE-61
 var _ = Describe("holomush-5rh.8.4: observer excluded from the pose-order roster", func() {
 	// Pins the DB-level structural exclusion: ListParticipantsWithPoseMeta's
 	// SQL filters `p.role IN ('owner', 'member')` (store.go), so a REAL

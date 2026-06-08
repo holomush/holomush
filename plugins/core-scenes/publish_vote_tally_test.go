@@ -21,6 +21,8 @@ import (
 // ('owner','member') only. An observer added to the scene has no vote row
 // and therefore CastPublishSceneVote returns SCENE_PUBLISH_NOT_A_VOTER.
 // The tally's eligible count (Yes+No+Pending) likewise excludes the observer.
+//
+// Verifies: INV-SCENE-61
 func TestObserverIsNotSeededIntoVoteRosterAndCannotCastVote(t *testing.T) {
 	t.Parallel()
 

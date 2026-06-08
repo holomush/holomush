@@ -50,6 +50,8 @@ import (
 //   - TestResolveResourceExcludesObserverFromParticipantsAttribute (resolver_test.go)
 //   - TestComputeHasNoRoleAwarenessSoStoreFilterIsLoadBearing (poseorder_test.go)
 //   - TestObserverIsNotSeededIntoVoteRosterAndCannotCastVote (publish_vote_tally_test.go)
+//
+// Verifies: INV-SCENE-61
 var _ = Describe("holomush-5rh.8.4: observer denied emit by write-scene-as-participant structural gate", func() {
 	var (
 		ts       *integrationtest.Server

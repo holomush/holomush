@@ -220,6 +220,8 @@ func TestResolveResourceReturnsParticipantsAndInviteesLists(t *testing.T) {
 // GetWithMembership filters role IN ('owner','member'), so an observer row
 // MUST NOT appear in the resolved resource.scene.participants list.
 // This is the attribute-path gate referenced by INV-SCENE-61.
+//
+// Verifies: INV-SCENE-61
 func TestResolveResourceExcludesObserverFromParticipantsAttribute(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
