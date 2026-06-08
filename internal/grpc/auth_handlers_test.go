@@ -2464,3 +2464,158 @@ func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
 	assert.WithinDuration(t, charCreatedAt, info.GuestCharacterCreatedAt, time.Second,
 		"GuestCharacterCreatedAt must match character.CreatedAt")
 }
+
+// TestSelectCharacterSkipsArriveForCommsHubFreshSession asserts that a fresh
+// session created with ClientType "comms_hub" does not emit a grid arrive event,
+// while still creating the session and returning success.
+func TestSelectCharacterSkipsArriveForCommsHubFreshSession(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+	sessionID := core.NewULID()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+		}, nil)
+
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
+
+	eventStore := coretest.NewMemoryEventStore()
+	server := &CoreServer{
+		engine:            core.NewEngine(eventStore),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		newSessionID:      func() ulid.ULID { return sessionID },
+	}
+
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+		ClientType:         "comms_hub",
+	})
+	require.NoError(t, err)
+
+	// Session is still created.
+	assert.True(t, resp.Success)
+	assert.Equal(t, sessionID.String(), resp.SessionId)
+	assert.False(t, resp.Reattached)
+
+	// No arrive event was emitted to the location stream.
+	events, err := eventStore.Replay(ctx, "location."+locID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+	for _, e := range events {
+		assert.NotEqual(t, core.EventTypeArrive, e.Type,
+			"comms_hub session must not emit arrive event")
+	}
+}
+
+// TestSelectCharacterStillEmitsArriveByDefault asserts that a fresh session
+// created with an empty ClientType emits a grid arrive event (legacy behavior).
+func TestSelectCharacterStillEmitsArriveByDefault(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+	sessionID := core.NewULID()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+		}, nil)
+
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
+
+	eventStore := coretest.NewMemoryEventStore()
+	server := &CoreServer{
+		engine:            core.NewEngine(eventStore),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		newSessionID:      func() ulid.ULID { return sessionID },
+	}
+
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+		// ClientType deliberately empty — legacy behavior.
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+	assert.False(t, resp.Reattached)
+
+	// Arrive event must be present on the location stream.
+	events, err := eventStore.Replay(ctx, "location."+locID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+	var arriveCount int
+	for _, e := range events {
+		if e.Type == core.EventTypeArrive {
+			arriveCount++
+		}
+	}
+	assert.Equal(t, 1, arriveCount, "empty client_type must emit exactly one arrive event")
+}
+
+// TestSelectCharacterStillEmitsArriveForTerminalClientType asserts that a fresh
+// session created with ClientType "terminal" still emits a grid arrive event
+// (only "comms_hub" suppresses arrive).
+func TestSelectCharacterStillEmitsArriveForTerminalClientType(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+	sessionID := core.NewULID()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+		}, nil)
+
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
+
+	eventStore := coretest.NewMemoryEventStore()
+	server := &CoreServer{
+		engine:            core.NewEngine(eventStore),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		newSessionID:      func() ulid.ULID { return sessionID },
+	}
+
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+		ClientType:         "terminal",
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+	assert.False(t, resp.Reattached)
+
+	// Arrive event must be present for terminal client type.
+	events, err := eventStore.Replay(ctx, "location."+locID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+	var arriveCount int
+	for _, e := range events {
+		if e.Type == core.EventTypeArrive {
+			arriveCount++
+		}
+	}
+	assert.Equal(t, 1, arriveCount, "terminal client_type must emit exactly one arrive event")
+}

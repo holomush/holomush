@@ -396,10 +396,14 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		return nil, oops.Code("SESSION_CREATE_FAILED").Wrap(err)
 	}
 
-	// Emit arrive event (best-effort).
-	char := core.CharacterRef{ID: charID, Name: selectedChar.Name, LocationID: locationID}
-	if err := s.engine.HandleConnect(ctx, char); err != nil {
-		slog.WarnContext(ctx, "arrive event failed", "error", err)
+	// Emit arrive event (best-effort). Skipped for comms_hub client type:
+	// scenes-workspace sessions must not announce the character on the grid
+	// (spec 2026-06-07 §V2).
+	if req.GetClientType() != "comms_hub" {
+		char := core.CharacterRef{ID: charID, Name: selectedChar.Name, LocationID: locationID}
+		if err := s.engine.HandleConnect(ctx, char); err != nil {
+			slog.WarnContext(ctx, "arrive event failed", "error", err)
+		}
 	}
 
 	return &corev1.SelectCharacterResponse{

@@ -2220,7 +2220,14 @@ type SelectCharacterRequest struct {
 	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
 	// character_id names the character to enter the game as; it must belong to the
 	// authenticated player.
-	CharacterId   string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	CharacterId string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// client_type declares the surface establishing the session
+	// (terminal/comms_hub/telnet — the session_connections vocabulary). When
+	// "comms_hub", a FRESH session creation skips the grid arrive emission:
+	// scenes-workspace sessions must not announce the character on the grid
+	// (spec 2026-06-07 §V2). Empty preserves the legacy behavior (arrive).
+	// Reattach paths never re-emit arrive regardless of this field.
+	ClientType    string `protobuf:"bytes,3,opt,name=client_type,json=clientType,proto3" json:"client_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2265,6 +2272,13 @@ func (x *SelectCharacterRequest) GetPlayerSessionToken() string {
 func (x *SelectCharacterRequest) GetCharacterId() string {
 	if x != nil {
 		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *SelectCharacterRequest) GetClientType() string {
+	if x != nil {
+		return x.ClientType
 	}
 	return ""
 }
@@ -4137,10 +4151,12 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"characters\x18\x04 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
 	"characters\x120\n" +
 	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\x12.\n" +
-	"\x13session_ttl_seconds\x18\x06 \x01(\x03R\x11sessionTtlSeconds\"m\n" +
+	"\x13session_ttl_seconds\x18\x06 \x01(\x03R\x11sessionTtlSeconds\"\x8e\x01\n" +
 	"\x16SelectCharacterRequest\x120\n" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\x12!\n" +
-	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\"\xbe\x01\n" +
+	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\x12\x1f\n" +
+	"\vclient_type\x18\x03 \x01(\tR\n" +
+	"clientType\"\xbe\x01\n" +
 	"\x17SelectCharacterResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1d\n" +
 	"\n" +

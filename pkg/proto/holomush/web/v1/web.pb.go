@@ -1276,7 +1276,13 @@ type WebSelectCharacterRequest struct {
 	// character_id is the ULID of the character to select. Field number is 2;
 	// field 1 was retired with the cookie cutover (the token now travels in the
 	// cookie header, not the request body).
-	CharacterId   string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	CharacterId string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// client_type declares the surface establishing the session
+	// (terminal/comms_hub/telnet — the session_connections vocabulary). When
+	// "comms_hub", a FRESH session creation skips the grid arrive emission:
+	// the web portal's scenes workspace must not announce the character on the
+	// grid (spec 2026-06-07 §V2). Empty preserves the legacy behavior (arrive).
+	ClientType    string `protobuf:"bytes,3,opt,name=client_type,json=clientType,proto3" json:"client_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1314,6 +1320,13 @@ func (*WebSelectCharacterRequest) Descriptor() ([]byte, []int) {
 func (x *WebSelectCharacterRequest) GetCharacterId() string {
 	if x != nil {
 		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *WebSelectCharacterRequest) GetClientType() string {
+	if x != nil {
+		return x.ClientType
 	}
 	return ""
 }
@@ -3663,9 +3676,11 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\x06 \x01(\tR\terrorCode\x12.\n" +
-	"\x13current_player_name\x18\a \x01(\tR\x11currentPlayerNameJ\x04\b\x02\x10\x03R\x14player_session_token\">\n" +
+	"\x13current_player_name\x18\a \x01(\tR\x11currentPlayerNameJ\x04\b\x02\x10\x03R\x14player_session_token\"_\n" +
 	"\x19WebSelectCharacterRequest\x12!\n" +
-	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\"\xc1\x01\n" +
+	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\x12\x1f\n" +
+	"\vclient_type\x18\x03 \x01(\tR\n" +
+	"clientType\"\xc1\x01\n" +
 	"\x1aWebSelectCharacterResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1d\n" +
 	"\n" +

@@ -164,6 +164,7 @@ func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[w
 	coreResp, err := h.client.SelectCharacter(rpcCtx, &corev1.SelectCharacterRequest{
 		PlayerSessionToken: token,
 		CharacterId:        req.Msg.GetCharacterId(),
+		ClientType:         req.Msg.GetClientType(),
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "web: select character RPC failed", "error", err)

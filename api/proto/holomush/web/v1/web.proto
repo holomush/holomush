@@ -438,6 +438,13 @@ message WebSelectCharacterRequest {
   // field 1 was retired with the cookie cutover (the token now travels in the
   // cookie header, not the request body).
   string character_id = 2;
+
+  // client_type declares the surface establishing the session
+  // (terminal/comms_hub/telnet — the session_connections vocabulary). When
+  // "comms_hub", a FRESH session creation skips the grid arrive emission:
+  // the web portal's scenes workspace must not announce the character on the
+  // grid (spec 2026-06-07 §V2). Empty preserves the legacy behavior (arrive).
+  string client_type = 3;
 }
 
 // WebSelectCharacterResponse reports the result of binding a character,
