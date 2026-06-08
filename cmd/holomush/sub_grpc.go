@@ -56,6 +56,8 @@ import (
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
+	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
 
 // grpcSubsystemConfig configures the gRPC subsystem.
@@ -506,6 +508,31 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	// 9. Create ContentService, register with gRPC.
 	contentStore := content.NewPostgresStore(pool)
 	contentv1.RegisterContentServiceServer(s.grpcServer, holoGRPC.NewContentServiceServer(contentStore))
+
+	// 9a. Create SceneAccessService facade, register with gRPC.
+	// The facade wraps the plugin SceneService with host-side player auth,
+	// server-verified identity resolution (INV-SCENE-63), and guest rejection
+	// (INV-SCENE-64). The SceneService client is resolved from the plugin
+	// service registry; if the plugin is absent the facade falls back to its
+	// embedded UnimplementedSceneAccessServiceServer (Unimplemented for all RPCs).
+	const sceneServiceName = "holomush.scene.v1.SceneService"
+	var sceneAccessSrv sceneaccessv1.SceneAccessServiceServer
+	if sceneSvc, resolveErr := serviceRegistry.Resolve(sceneServiceName); resolveErr == nil {
+		sceneAccessSrv = holoGRPC.NewSceneAccessServer(
+			authPlayerSessionRepo,
+			authPlayerRepo,
+			authCharRepo,
+			sessionStore,
+			focusCoord,
+			scenev1.NewSceneServiceClient(sceneSvc.Conn),
+			pluginManager,
+		)
+		slog.InfoContext(ctx, "sceneAccessService facade registered")
+	} else {
+		slog.WarnContext(ctx, "sceneAccessService unavailable: plugin absent", "service", sceneServiceName)
+		sceneAccessSrv = &sceneaccessv1.UnimplementedSceneAccessServiceServer{}
+	}
+	sceneaccessv1.RegisterSceneAccessServiceServer(s.grpcServer, sceneAccessSrv)
 
 	// 10. Create and start session reaper.
 	reaperCtx, reaperCancel := context.WithCancel(context.Background())

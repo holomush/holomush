@@ -382,3 +382,25 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   (`plugins/core-scenes/service.go:878`) is skippable by omitting metadata; today all three minting
   paths (DeliverEvent host.go:860, DeliverCommand host.go:935, BeginServiceDispatch host.go:987)
   pair them, so token subject stays authoritative.
+- **SceneAccessService facade (5rh.8.11, 2026-06-08) — READY**: host-side web scene
+  authz seam (`internal/grpc/sceneaccess_service.go`, 9 RPCs). Closes the .8.21
+  re-verify list. Uniform gate order on all 9: `resolveAndGate` (resolve→player
+  load→IsGuest deny PermissionDenied, INV-SCENE-64) → `ownedCharacter`
+  (ULID parse + ListByPlayer membership, NotFound on miss) → `beginDispatch`
+  (actor=`core.Actor{ActorCharacter, verifiedChar.ID}`, INV-SCENE-63). INV-SCENE-63
+  key check: token actor AND downstream `CharacterId` BOTH derive from the single
+  `char` returned by `ownedCharacter` — `req.GetCharacterId()` is NEVER forwarded raw;
+  they cannot diverge. Pinned by `TestSceneAccessDispatchActorEqualsVerifiedCharacter`
+  (spoof-ID asserts capturedActor stays zero) + `...OverridesClientSuppliedCharacterWithOwnedAlt`
+  (`// Verifies: INV-SCENE-63`). All 9 RPCs (incl. 3 public-archive + SetSceneFocus)
+  enumerated in `TestSceneAccessDeniesGuestPlayersEverywhere` w/ AssertNotCalled.
+  SetSceneFocus is the ONE RPC that doesn't mint a dispatch token — it delegates to
+  `coordinator.SetConnectionFocus` (substrate auth, ADR x0ph); its gate is the
+  connection-ownership trace: GetConnection→conn.SessionID→Store.Get→Info.CharacterID
+  (session.go:203)→`ownedCharacter(playerID, CharacterID)`. Sound; can't pivot another
+  player's connection. Fail-closed everywhere (NOT_CONFIGURED→Unimplemented,
+  resolve-fail→Unauthenticated, dispatch-err→Internal-before-delegate). No seed/policy
+  change. Two Lows (non-blocking): (1) SetSceneFocus collapses ownedCharacter's Internal
+  err into PermissionDenied (:308 — fail-closed, but masks infra failure; slog still
+  fires); (2) doc-only: SetSceneFocus has no token by design. `resolvePlayerSessionWithRepo`
+  (auth_handlers.go:183) is the shared CoreServer+facade impl; nil-repo→NOT_CONFIGURED.

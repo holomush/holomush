@@ -177,20 +177,27 @@ func isPlayerSessionAuthError(err error) bool {
 	return false
 }
 
-// resolvePlayerSession looks up a PlayerSession by raw token, validates it,
-// and refreshes the TTL. Returns the session or an error.
-func (s *CoreServer) resolvePlayerSession(ctx context.Context, rawToken string) (*auth.PlayerSession, error) {
-	if s.playerSessionRepo == nil {
+// resolvePlayerSessionWithRepo looks up a PlayerSession by raw token, validates
+// it, and refreshes the TTL. It is the package-level implementation shared by
+// CoreServer and SceneAccessServer (same package). Returns the session or an error.
+func resolvePlayerSessionWithRepo(ctx context.Context, repo auth.PlayerSessionRepository, rawToken string) (*auth.PlayerSession, error) {
+	if repo == nil {
 		return nil, oops.Code("NOT_CONFIGURED").Errorf("player session service not configured")
 	}
 	tokenHash := auth.HashSessionToken(rawToken)
-	ps, err := s.playerSessionRepo.GetByTokenHash(ctx, tokenHash)
+	ps, err := repo.GetByTokenHash(ctx, tokenHash)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // intentional: preserve repository error codes (PLAYER_SESSION_NOT_FOUND / PLAYER_SESSION_EXPIRED)
 	}
 	// Best-effort TTL refresh — intentionally ignore errors.
-	s.playerSessionRepo.RefreshTTL(ctx, ps.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
+	repo.RefreshTTL(ctx, ps.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
 	return ps, nil
+}
+
+// resolvePlayerSession looks up a PlayerSession by raw token, validates it,
+// and refreshes the TTL. Returns the session or an error.
+func (s *CoreServer) resolvePlayerSession(ctx context.Context, rawToken string) (*auth.PlayerSession, error) {
+	return resolvePlayerSessionWithRepo(ctx, s.playerSessionRepo, rawToken)
 }
 
 // AuthenticatePlayer validates credentials and returns a player session token for character selection.
