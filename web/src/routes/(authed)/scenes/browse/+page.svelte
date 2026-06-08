@@ -48,7 +48,7 @@
     loading = true;
     fetchError = '';
     try {
-      scenes = await listScenes(sessionId, { tags });
+      scenes = await listScenes(sessionId, { tags, characterId: primaryCharId });
     } catch (e) {
       fetchError = e instanceof Error ? e.message : 'Failed to load scenes';
     } finally {

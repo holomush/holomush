@@ -197,3 +197,17 @@
   has no timestamp → timestampMs:0 → PoseCard renders 1970/12:00AM (Low). jsonlToLogEntries try-guarded,
   blank/trailing-line safe, matches backend `{"speaker","kind","content"}\n` render; downloadBlob
   SSR-safe (document only in click handler) + revokes — all sound.
+- **E2E scenes-workspace suite (5rh.8.19, 2026-06-08) — READY.** 8 Playwright tests reusing
+  existing helpers. KEY: the two prior NOT-READY app blockers WERE FIXED upstream — .8.16
+  hardcoded `asCharacterId:''` (now refresh() fans out alts tagging real charId) and .8.17 dead
+  `?watch`/`?join` nav (now +page.svelte:143-160 reads param + selects). Always re-check whether a
+  prior blocker still holds in CURRENT source before failing a dependent test PR. Honest-degradation
+  pattern that is ACCEPTABLE (not a hide-the-bug like the weakened S3 original): a test scoped by its
+  OWN title+comment to a narrower assertion than the plan scenario, referencing a real tracked bead
+  (.8.26 P1). S2 owner-sees-composer ≠ plan's watcher→Join-CTA (observer branch SceneComposer.svelte:99
+  never exercised) — Medium non-blocking, recommend a follow-up bead so the observer E2E gap isn't lost.
+  S3 asserts draft-clears only; passes because .8.26's broken path resolves {success:false} silently
+  (no throw → success branch clears draft); catch does NOT clear draft, so a real throw WOULD fail it.
+  Flakiness checklist that held: no sleeps; expect.poll/waitForEvent/toPass; conn-pill data-status
+  =connected gate before commands; unique per-test titles. App-fix listScenes(...characterId) correct;
+  char-less player → primaryCharId='' → facade NotFound caught into fetchError (Low, not in test scope).
