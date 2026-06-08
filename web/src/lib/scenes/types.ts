@@ -25,6 +25,16 @@ export interface WorkspaceScene {
 	entryCount: bigint;
 	/** In-session unread badge count; cleared on select(). */
 	unread: number;
+	/**
+	 * Scene participants (role=owner or member). Populated by select() via
+	 * getScene(); empty until .8.25 backend bead lands roster population.
+	 */
+	participants?: { id: string; name: string }[];
+	/**
+	 * Scene observers (role=observer). Populated by select() via getScene();
+	 * listed separately per INV-SCENE-61.
+	 */
+	observers?: { id: string; name: string }[];
 }
 
 /**

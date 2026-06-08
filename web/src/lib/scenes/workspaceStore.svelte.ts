@@ -7,17 +7,23 @@
  * counts, and the currently selected sceneId.
  *
  * State mutations:
- *   refresh()      – snapshot ListMyScenes → seed myScenes + badge/activity
- *   select(id)     – ensure alt session + stream, wait for connectionId,
- *                    call setSceneFocus, clear unread, backfill gap
- *   ingestEvent()  – append LogEntry to the focused scene's log
- *   bumpUnread()   – increment badge (skip when sceneId === selectedSceneId)
+ *   refresh(characters) – fan-out ListMyScenes across all owned alts →
+ *                         seed myScenes + badge/activity. Each WorkspaceScene
+ *                         is tagged with the asCharacterId/asCharacterName of
+ *                         the alt that found it. One-alt failure is tolerated
+ *                         (Promise.allSettled); partial results are merged.
+ *   select(id)          – ensure alt session + stream, wait for connectionId,
+ *                         call setSceneFocus, clear unread, backfill gap,
+ *                         then best-effort enrich roster from getScene.
+ *   ingestEvent()       – append LogEntry to the focused scene's log
+ *   bumpUnread()        – increment badge (skip when sceneId === selectedSceneId)
  */
 
 import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 import { eventFrameToLogEntry, type LogEntry, type WorkspaceScene } from './types';
 import {
 	listMyScenes,
+	getScene,
 	setSceneFocus,
 	queryStreamHistory,
 } from './client';
@@ -44,38 +50,62 @@ let logsBySceneId = $state<Record<string, LogEntry[]>>({});
 /** Per-scene unread badge counts keyed by sceneId. */
 let unreadBySceneId = $state<Record<string, number>>({});
 
-// ── derived: character state for active alt sessions ─────────────────────────
-
-/** characterId → sessionId cache populated by refresh() via ListMyScenes. */
-const characterIdBySceneId = new Map<string, string>();
-
 // ── actions ──────────────────────────────────────────────────────────────────
 
 /**
- * Snapshots ListMyScenes and seeds myScenes/watching with badge and activity
- * data. Accepts the player-session id used for the request.
- * Called on workspace mount and after watch/join actions.
+ * Refreshes the workspace by fanning out ListMyScenes across all owned alts.
+ *
+ * For each character in `characters`:
+ *   1. ensureSession(characterId) → per-alt comms_hub sessionId
+ *   2. listMyScenes(sessionId, characterId) → CharacterSceneInfo[]
+ *   3. Map each result to WorkspaceScene, tagging asCharacterId/asCharacterName
+ *
+ * All per-alt fetches run concurrently via Promise.allSettled — one failing
+ * alt does not abort the others. Failed alts are logged and skipped.
+ *
+ * If the same sceneId appears for two alts, both rows are preserved (a player
+ * participating via two alts → two workspace rows, one per alt).
  */
-async function refresh(sessionId: string): Promise<void> {
-	const scenes = await listMyScenes(sessionId);
+async function refresh(
+	characters: { characterId: string; name?: string; characterName?: string }[],
+): Promise<void> {
+	const results = await Promise.allSettled(
+		characters.map(async (char) => {
+			const characterId = char.characterId;
+			// Support both `name` (authStore.CharacterSummary) and `characterName`
+			// (layout data CharacterSummary from webCheckSession).
+			const characterName = char.characterName ?? char.name ?? characterId;
+			const sessionId = await ensureSession(characterId);
+			const scenes = await listMyScenes(sessionId, characterId);
+			return { characterId, characterName, scenes };
+		}),
+	);
 
-	const next: WorkspaceScene[] = scenes.map((csi) => {
-		const si = csi.scene;
-		const sceneId = si?.id ?? '';
-		return {
-			sceneId,
-			title: si?.title ?? '',
-			locationId: si?.locationId ?? '',
-			state: si?.state ?? '',
-			tags: si?.tags ?? [],
-			role: csi.role,
-			asCharacterId: '',
-			asCharacterName: '',
-			lastActivityMs: csi.lastActivityMs,
-			entryCount: csi.entryCount,
-			unread: unreadBySceneId[sceneId] ?? 0,
-		};
-	});
+	const next: WorkspaceScene[] = [];
+	for (const result of results) {
+		if (result.status === 'rejected') {
+			console.warn('[workspaceStore] refresh: alt fetch failed', result.reason);
+			continue;
+		}
+		const { characterId, characterName, scenes } = result.value;
+		for (const csi of scenes) {
+			const si = csi.scene;
+			const sceneId = si?.id ?? '';
+			next.push({
+				sceneId,
+				title: si?.title ?? '',
+				locationId: si?.locationId ?? '',
+				state: si?.state ?? '',
+				tags: si?.tags ?? [],
+				role: csi.role,
+				asCharacterId: characterId,
+				asCharacterName: characterName,
+				lastActivityMs: csi.lastActivityMs,
+				entryCount: csi.entryCount,
+				unread: unreadBySceneId[sceneId] ?? 0,
+			});
+		}
+	}
 
 	myScenes = next;
 	watching = next.filter((s) => s.role === 'observer');
@@ -95,11 +125,17 @@ async function refresh(sessionId: string): Promise<void> {
  *   3. Backfill runs via webQueryStreamHistory on the scene .ic subject if
  *      the replay tail left a gap (notAfterMs = attachMomentMs from
  *      REPLAY_COMPLETE; 0 means no upper bound per spec).
+ *   4. Best-effort roster enrichment via getScene populates participants/observers
+ *      on the WorkspaceScene (ready for when .8.25 backend bead lands).
+ *
+ * Uses the scene's asCharacterId (populated by refresh fan-out) for all
+ * per-alt session operations. The playerSessionId parameter is no longer used
+ * for backfill — per-alt sessionId from ensureSession is used throughout.
  */
 async function select(
 	sceneId: string,
-	/** The player's primary session ID (used for setSceneFocus and backfill). */
-	playerSessionId: string,
+	/** Unused legacy parameter kept for call-site compatibility. */
+	_playerSessionId: string,
 	/** The character ID whose alt session should be used. */
 	characterId: string,
 ): Promise<void> {
@@ -118,11 +154,12 @@ async function select(
 	await setSceneFocus(altSessionId, connectionId, sceneId);
 
 	// 5. Backfill: query IC stream history to fill any gap.
-	//    notAfterMs = attachMomentMs to avoid the connect-time race (iu8j).
+	//    Uses per-alt sessionId (not playerId). notAfterMs = attachMomentMs
+	//    to avoid the connect-time race (iu8j).
 	const attachMomentMs = getAttachMomentMs(characterId);
 	const icStream = `scene.${sceneId}.ic`;
 	try {
-		const history = await queryStreamHistory(playerSessionId, icStream, {
+		const history = await queryStreamHistory(altSessionId, icStream, {
 			notAfterMs: attachMomentMs,
 		});
 		const entries = history.events
@@ -141,6 +178,27 @@ async function select(
 		}
 	} catch {
 		// Non-fatal: backfill is best-effort.
+	}
+
+	// 6. Best-effort roster enrichment from getScene. Populates
+	//    participants/observers on the WorkspaceScene for SceneContextRail.
+	//    Empty roster is fine until .8.25 lands backend population.
+	try {
+		const si = await getScene(altSessionId, characterId, sceneId);
+		if (si) {
+			const participants = si.participants.map((p) => ({ id: p.characterId, name: p.characterName }));
+			const observers = si.observers.map((p) => ({ id: p.characterId, name: p.characterName }));
+			// Enrich the matching WorkspaceScene in myScenes.
+			myScenes = myScenes.map((s) =>
+				s.sceneId === sceneId && s.asCharacterId === characterId
+					? { ...s, participants, observers }
+					: s,
+			);
+			// Keep watching in sync.
+			watching = myScenes.filter((s) => s.role === 'observer');
+		}
+	} catch {
+		// Non-fatal: roster is best-effort until .8.25.
 	}
 }
 
@@ -222,8 +280,6 @@ export const workspaceStore = {
 	select,
 	ingestEvent,
 	bumpUnread,
-	/** Internal: characterIdBySceneId map (for alt session routing). */
-	_characterIdBySceneId: characterIdBySceneId,
 };
 
 // Named exports for direct import in tests.

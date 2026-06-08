@@ -14,12 +14,24 @@ import { transport } from '$lib/transport';
 export const client = createClient(WebService, transport);
 
 /**
- * Lists the scenes the current character participates in (owned, member,
- * observer). Returns the raw CharacterSceneInfo array from the response.
+ * Lists the scenes the given character participates in (owned, member,
+ * observer). characterId identifies which alt to query; sessionId is the
+ * per-alt comms_hub session from ensureSession().
+ * Returns the raw CharacterSceneInfo array from the response.
  */
-export async function listMyScenes(sessionId: string) {
-	const res = await client.webListMyScenes({ sessionId });
+export async function listMyScenes(sessionId: string, characterId: string) {
+	const res = await client.webListMyScenes({ sessionId, characterId });
 	return res.scenes;
+}
+
+/**
+ * Fetches full scene metadata for one scene on behalf of the given character.
+ * Returns the SceneInfo (participants/observers populated once .8.25 lands).
+ * sessionId is the per-alt comms_hub session from ensureSession().
+ */
+export async function getScene(sessionId: string, characterId: string, sceneId: string) {
+	const res = await client.webGetScene({ sessionId, characterId, sceneId });
+	return res.scene;
 }
 
 /**

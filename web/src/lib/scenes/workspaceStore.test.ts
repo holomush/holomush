@@ -10,7 +10,9 @@
  *   3. ingestEvent — appends to correct scene, ignores non-scene frames
  *   4. select() connectionId ordering — setSceneFocus MUST NOT be called
  *      before connectionId arrives from STREAM_OPENED
- *   5. refresh() — seeds myScenes with badge/activity data
+ *   5. refresh() fan-out — seeds myScenes with asCharacterId/asCharacterName
+ *      tagged per-alt across 2 characters; one failing alt doesn't abort
+ *   6. select() roster enrichment — participants/observers populated from getScene
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -133,6 +135,7 @@ vi.mock('./altSessions.svelte', () => ({
 vi.mock('./client', () => ({
 	client: {},
 	listMyScenes: vi.fn().mockResolvedValue([]),
+	getScene: vi.fn().mockResolvedValue(undefined),
 	listScenes: vi.fn().mockResolvedValue([]),
 	watchScene: vi.fn().mockResolvedValue(undefined),
 	exportScene: vi.fn().mockResolvedValue(undefined),
@@ -287,45 +290,214 @@ describe('ingestEvent cross-scene routing (medium fix)', () => {
 	});
 });
 
-describe('refresh', () => {
+// ── 5. refresh() fan-out ──────────────────────────────────────────────────────
+
+describe('refresh fan-out', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
 
-	it('seeds myScenes from listMyScenes response', async () => {
+	function makeCharacterSceneInfo(sceneId: string, role = 'member') {
+		return {
+			$typeName: 'holomush.scene.v1.CharacterSceneInfo',
+			role,
+			lastActivityMs: 1_717_000_000_000n,
+			entryCount: 5n,
+			scene: {
+				$typeName: 'holomush.scene.v1.SceneInfo',
+				id: sceneId,
+				title: `Scene ${sceneId}`,
+				locationId: 'LOC1',
+				state: 'active',
+				tags: [],
+				description: '',
+				poseOrderMode: 'free',
+				contentWarnings: [],
+				visibility: 'open',
+				ownerId: 'CHAR_OWNER',
+				participants: [],
+				observers: [],
+			},
+		} as never;
+	}
+
+	it('tags each WorkspaceScene with asCharacterId and asCharacterName from the queried alt', async () => {
+		const clientMod = await import('./client');
+		const altSessions = await import('./altSessions.svelte');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		// Two characters with distinct sessions.
+		vi.mocked(altSessions.ensureSession)
+			.mockResolvedValueOnce('SESSION_CHAR_A')
+			.mockResolvedValueOnce('SESSION_CHAR_B');
+
+		// Each alt returns one scene.
+		vi.mocked(clientMod.listMyScenes)
+			.mockResolvedValueOnce([makeCharacterSceneInfo('SCENE_FROM_A')])
+			.mockResolvedValueOnce([makeCharacterSceneInfo('SCENE_FROM_B')]);
+
+		await workspaceStore.refresh([
+			{ characterId: 'CHAR_A', characterName: 'Alice' },
+			{ characterId: 'CHAR_B', characterName: 'Bob' },
+		]);
+
+		expect(workspaceStore.myScenes).toHaveLength(2);
+
+		const sceneA = workspaceStore.myScenes.find((s) => s.sceneId === 'SCENE_FROM_A');
+		expect(sceneA?.asCharacterId).toBe('CHAR_A');
+		expect(sceneA?.asCharacterName).toBe('Alice');
+
+		const sceneB = workspaceStore.myScenes.find((s) => s.sceneId === 'SCENE_FROM_B');
+		expect(sceneB?.asCharacterId).toBe('CHAR_B');
+		expect(sceneB?.asCharacterName).toBe('Bob');
+	});
+
+	it('passes the per-alt sessionId (from ensureSession) to listMyScenes, not playerId', async () => {
+		const clientMod = await import('./client');
+		const altSessions = await import('./altSessions.svelte');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		vi.mocked(altSessions.ensureSession).mockResolvedValue('ALT_SESSION_XYZ');
+		vi.mocked(clientMod.listMyScenes).mockResolvedValue([]);
+
+		await workspaceStore.refresh([{ characterId: 'CHAR_Z', characterName: 'Zara' }]);
+
+		// listMyScenes must receive the per-alt sessionId, not an empty string or playerId.
+		expect(clientMod.listMyScenes).toHaveBeenCalledWith('ALT_SESSION_XYZ', 'CHAR_Z');
+	});
+
+	it('tolerates one failing alt and still populates scenes from the healthy alt', async () => {
+		const clientMod = await import('./client');
+		const altSessions = await import('./altSessions.svelte');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		vi.mocked(altSessions.ensureSession)
+			.mockRejectedValueOnce(new Error('auth expired for CHAR_BAD'))
+			.mockResolvedValueOnce('SESSION_CHAR_GOOD');
+
+		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce([
+			makeCharacterSceneInfo('SCENE_GOOD'),
+		]);
+
+		await workspaceStore.refresh([
+			{ characterId: 'CHAR_BAD', characterName: 'BadAlt' },
+			{ characterId: 'CHAR_GOOD', characterName: 'GoodAlt' },
+		]);
+
+		// Only the healthy alt's scene appears; failed alt is silently skipped.
+		expect(workspaceStore.myScenes).toHaveLength(1);
+		expect(workspaceStore.myScenes[0]?.sceneId).toBe('SCENE_GOOD');
+		expect(workspaceStore.myScenes[0]?.asCharacterName).toBe('GoodAlt');
+	});
+
+	it('seeds myScenes from listMyScenes response (legacy compat)', async () => {
 		const clientMod = await import('./client');
 		const { workspaceStore } = await import('./workspaceStore.svelte');
 
 		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce([
+			makeCharacterSceneInfo('SCENE_REFRESH_1'),
+		]);
+
+		await workspaceStore.refresh([{ characterId: 'CHAR_X', characterName: 'Xeno' }]);
+
+		expect(workspaceStore.myScenes).toHaveLength(1);
+		expect(workspaceStore.myScenes[0]?.sceneId).toBe('SCENE_REFRESH_1');
+		expect(workspaceStore.myScenes[0]?.title).toBe('Scene SCENE_REFRESH_1');
+		expect(workspaceStore.myScenes[0]?.role).toBe('member');
+		expect(workspaceStore.myScenes[0]?.entryCount).toBe(5n);
+	});
+});
+
+// ── 6. select() roster enrichment ────────────────────────────────────────────
+
+describe('select roster enrichment', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('enriches participants and observers on the WorkspaceScene after select', async () => {
+		const clientMod = await import('./client');
+		const altSessions = await import('./altSessions.svelte');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		vi.mocked(altSessions.ensureSession).mockResolvedValue('SESSION_ENRICH');
+		vi.mocked(clientMod.getScene).mockResolvedValueOnce({
+			$typeName: 'holomush.scene.v1.SceneInfo',
+			id: 'SCENE_ENRICH',
+			title: 'The Lab',
+			locationId: 'LOC2',
+			state: 'active',
+			tags: [],
+			description: '',
+			poseOrderMode: 'free',
+			contentWarnings: [],
+			visibility: 'open',
+			ownerId: 'CHAR_P1',
+			participants: [
+				{ $typeName: 'holomush.scene.v1.ParticipantInfo', characterId: 'CHAR_P1', characterName: 'Petra' },
+				{ $typeName: 'holomush.scene.v1.ParticipantInfo', characterId: 'CHAR_P2', characterName: 'Quinn' },
+			],
+			observers: [
+				{ $typeName: 'holomush.scene.v1.ParticipantInfo', characterId: 'CHAR_O1', characterName: 'Orin' },
+			],
+		} as never);
+
+		// Seed myScenes with a scene for CHAR_P1.
+		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce([
 			{
 				$typeName: 'holomush.scene.v1.CharacterSceneInfo',
-				role: 'member',
-				lastActivityMs: 1_717_000_000_000n,
-				entryCount: 42n,
+				role: 'owner',
+				lastActivityMs: 0n,
+				entryCount: 0n,
 				scene: {
 					$typeName: 'holomush.scene.v1.SceneInfo',
-					id: 'SCENE_REFRESH_1',
-					title: 'The Grand Hall',
-					locationId: 'LOC1',
+					id: 'SCENE_ENRICH',
+					title: 'The Lab',
+					locationId: 'LOC2',
 					state: 'active',
-					tags: ['fantasy'],
+					tags: [],
 					description: '',
 					poseOrderMode: 'free',
 					contentWarnings: [],
 					visibility: 'open',
-					ownerId: 'CHAR_OWNER',
+					ownerId: 'CHAR_P1',
 					participants: [],
 					observers: [],
 				},
-			} as unknown as Awaited<ReturnType<typeof clientMod.listMyScenes>>[number],
+			} as never,
 		]);
+		await workspaceStore.refresh([{ characterId: 'CHAR_P1', characterName: 'Petra' }]);
 
-		await workspaceStore.refresh('SESSION_X');
+		await workspaceStore.select('SCENE_ENRICH', '', 'CHAR_P1');
 
-		expect(workspaceStore.myScenes).toHaveLength(1);
-		expect(workspaceStore.myScenes[0]?.sceneId).toBe('SCENE_REFRESH_1');
-		expect(workspaceStore.myScenes[0]?.title).toBe('The Grand Hall');
-		expect(workspaceStore.myScenes[0]?.role).toBe('member');
-		expect(workspaceStore.myScenes[0]?.entryCount).toBe(42n);
+		const scene = workspaceStore.myScenes.find(
+			(s) => s.sceneId === 'SCENE_ENRICH' && s.asCharacterId === 'CHAR_P1',
+		);
+		expect(scene?.participants).toHaveLength(2);
+		expect(scene?.participants?.[0]).toEqual({ id: 'CHAR_P1', name: 'Petra' });
+		expect(scene?.participants?.[1]).toEqual({ id: 'CHAR_P2', name: 'Quinn' });
+		expect(scene?.observers).toHaveLength(1);
+		expect(scene?.observers?.[0]).toEqual({ id: 'CHAR_O1', name: 'Orin' });
+	});
+
+	it('does not abort select when getScene fails', async () => {
+		const clientMod = await import('./client');
+		const altSessions = await import('./altSessions.svelte');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		vi.mocked(altSessions.ensureSession).mockResolvedValue('SESSION_NOENRICH');
+		vi.mocked(clientMod.getScene).mockRejectedValueOnce(new Error('backend not ready'));
+
+		// Should complete without throwing even if getScene fails.
+		await expect(
+			workspaceStore.select('SCENE_NOENRICH', '', 'CHAR_NE'),
+		).resolves.not.toThrow();
+
+		// setSceneFocus was still called (the main path succeeded).
+		expect(clientMod.setSceneFocus).toHaveBeenCalledWith(
+			'SESSION_NOENRICH',
+			expect.any(String), // connectionId from awaitConnectionId (may vary across mock reset cycles)
+			'SCENE_NOENRICH',
+		);
 	});
 });
