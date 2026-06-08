@@ -54,6 +54,10 @@ type fakeStore struct {
 	// ListPublishedScenes control fields.
 	listPublishedScenesRows []PublishedSceneArchiveSummary
 	listPublishedScenesErr  error
+	// ReadSceneLogForExport control fields (Task 6 export suite).
+	exportLogRows    []LogRow
+	exportLogErr     error
+	exportLogSubject string // records the fullSubject passed by the service
 }
 
 type recordingEventSink struct {
@@ -647,6 +651,18 @@ func (f *fakeStore) TallyVotesTx(ctx context.Context, _ pgx.Tx, publishedSceneID
 
 func (f *fakeStore) ReadSceneLogForSnapshot(_ context.Context, _ pgx.Tx, _ string) ([]LogRow, error) {
 	return nil, nil
+}
+
+// ReadSceneLogForExport returns the rows injected via fakeStore.exportLogRows
+// (or the injected error). Backs the ExportSceneLog unit suite.
+// fullSubject is the complete IC subject passed by the service; recorded in
+// exportLogSubject so tests can assert the correct AAD subject was propagated.
+func (f *fakeStore) ReadSceneLogForExport(_ context.Context, fullSubject string) ([]LogRow, error) {
+	f.exportLogSubject = fullSubject
+	if f.exportLogErr != nil {
+		return nil, f.exportLogErr
+	}
+	return f.exportLogRows, nil
 }
 
 func (f *fakeStore) ReadSceneMetaForSnapshot(_ context.Context, _ pgx.Tx, _ string) (SnapshotSceneMeta, error) {

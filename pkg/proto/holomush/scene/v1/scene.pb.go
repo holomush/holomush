@@ -3829,6 +3829,137 @@ func (x *ListPublishedScenesResponse) GetArchives() []*PublicSceneArchive {
 	return nil
 }
 
+// ExportSceneLogRequest asks for a scene's IC log rendered to a downloadable
+// document. Participant-gated in plugin code (any role); see ExportSceneLog.
+type ExportSceneLogRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The exporting character; required; must hold a participant row (any role).
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// The scene to export; required. Works for active, paused, and ended scenes.
+	SceneId string `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	// The render format; required: "markdown" or "jsonl".
+	Format        string `protobuf:"bytes,3,opt,name=format,proto3" json:"format,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportSceneLogRequest) Reset() {
+	*x = ExportSceneLogRequest{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportSceneLogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportSceneLogRequest) ProtoMessage() {}
+
+func (x *ExportSceneLogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportSceneLogRequest.ProtoReflect.Descriptor instead.
+func (*ExportSceneLogRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *ExportSceneLogRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *ExportSceneLogRequest) GetSceneId() string {
+	if x != nil {
+		return x.SceneId
+	}
+	return ""
+}
+
+func (x *ExportSceneLogRequest) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+// ExportSceneLogResponse carries the rendered scene-log document and download
+// metadata.
+type ExportSceneLogResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The rendered document bytes.
+	Content []byte `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	// The content's MIME type (text/markdown or application/jsonl) — mirrors
+	// DownloadPublishedScene's MIME vocabulary.
+	MimeType string `protobuf:"bytes,2,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	// Suggested download filename (slugified title + extension).
+	Filename      string `protobuf:"bytes,3,opt,name=filename,proto3" json:"filename,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportSceneLogResponse) Reset() {
+	*x = ExportSceneLogResponse{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportSceneLogResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportSceneLogResponse) ProtoMessage() {}
+
+func (x *ExportSceneLogResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportSceneLogResponse.ProtoReflect.Descriptor instead.
+func (*ExportSceneLogResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *ExportSceneLogResponse) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *ExportSceneLogResponse) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *ExportSceneLogResponse) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
 // ScenePublishStartedEvent announces a newly opened publication attempt and its
 // frozen vote roster. Emitted as scene_publish_started.
 type ScenePublishStartedEvent struct {
@@ -3851,7 +3982,7 @@ type ScenePublishStartedEvent struct {
 
 func (x *ScenePublishStartedEvent) Reset() {
 	*x = ScenePublishStartedEvent{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[60]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3863,7 +3994,7 @@ func (x *ScenePublishStartedEvent) String() string {
 func (*ScenePublishStartedEvent) ProtoMessage() {}
 
 func (x *ScenePublishStartedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[60]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3876,7 +4007,7 @@ func (x *ScenePublishStartedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScenePublishStartedEvent.ProtoReflect.Descriptor instead.
 func (*ScenePublishStartedEvent) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{60}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ScenePublishStartedEvent) GetAttemptId() string {
@@ -3939,7 +4070,7 @@ type ScenePublishVoteCastEvent struct {
 
 func (x *ScenePublishVoteCastEvent) Reset() {
 	*x = ScenePublishVoteCastEvent{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[61]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3951,7 +4082,7 @@ func (x *ScenePublishVoteCastEvent) String() string {
 func (*ScenePublishVoteCastEvent) ProtoMessage() {}
 
 func (x *ScenePublishVoteCastEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[61]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3964,7 +4095,7 @@ func (x *ScenePublishVoteCastEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScenePublishVoteCastEvent.ProtoReflect.Descriptor instead.
 func (*ScenePublishVoteCastEvent) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{61}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ScenePublishVoteCastEvent) GetAttemptId() string {
@@ -4011,7 +4142,7 @@ type ScenePublishCoolOffStartedEvent struct {
 
 func (x *ScenePublishCoolOffStartedEvent) Reset() {
 	*x = ScenePublishCoolOffStartedEvent{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[62]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4023,7 +4154,7 @@ func (x *ScenePublishCoolOffStartedEvent) String() string {
 func (*ScenePublishCoolOffStartedEvent) ProtoMessage() {}
 
 func (x *ScenePublishCoolOffStartedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[62]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4036,7 +4167,7 @@ func (x *ScenePublishCoolOffStartedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScenePublishCoolOffStartedEvent.ProtoReflect.Descriptor instead.
 func (*ScenePublishCoolOffStartedEvent) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{62}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ScenePublishCoolOffStartedEvent) GetAttemptId() string {
@@ -4075,7 +4206,7 @@ type ScenePublishResolvedEvent struct {
 
 func (x *ScenePublishResolvedEvent) Reset() {
 	*x = ScenePublishResolvedEvent{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[63]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4087,7 +4218,7 @@ func (x *ScenePublishResolvedEvent) String() string {
 func (*ScenePublishResolvedEvent) ProtoMessage() {}
 
 func (x *ScenePublishResolvedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[63]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4100,7 +4231,7 @@ func (x *ScenePublishResolvedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScenePublishResolvedEvent.ProtoReflect.Descriptor instead.
 func (*ScenePublishResolvedEvent) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{63}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ScenePublishResolvedEvent) GetAttemptId() string {
@@ -4160,7 +4291,7 @@ type ScenePublishWithdrawnEvent struct {
 
 func (x *ScenePublishWithdrawnEvent) Reset() {
 	*x = ScenePublishWithdrawnEvent{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[64]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4172,7 +4303,7 @@ func (x *ScenePublishWithdrawnEvent) String() string {
 func (*ScenePublishWithdrawnEvent) ProtoMessage() {}
 
 func (x *ScenePublishWithdrawnEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[64]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4185,7 +4316,7 @@ func (x *ScenePublishWithdrawnEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScenePublishWithdrawnEvent.ProtoReflect.Descriptor instead.
 func (*ScenePublishWithdrawnEvent) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{64}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *ScenePublishWithdrawnEvent) GetAttemptId() string {
@@ -4220,7 +4351,7 @@ type ScenePublishVoteAttemptsExtendedEvent struct {
 
 func (x *ScenePublishVoteAttemptsExtendedEvent) Reset() {
 	*x = ScenePublishVoteAttemptsExtendedEvent{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[65]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4232,7 +4363,7 @@ func (x *ScenePublishVoteAttemptsExtendedEvent) String() string {
 func (*ScenePublishVoteAttemptsExtendedEvent) ProtoMessage() {}
 
 func (x *ScenePublishVoteAttemptsExtendedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[65]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4245,7 +4376,7 @@ func (x *ScenePublishVoteAttemptsExtendedEvent) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use ScenePublishVoteAttemptsExtendedEvent.ProtoReflect.Descriptor instead.
 func (*ScenePublishVoteAttemptsExtendedEvent) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{65}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ScenePublishVoteAttemptsExtendedEvent) GetSceneId() string {
@@ -4525,7 +4656,15 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\x06offset\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offset\x12\x12\n" +
 	"\x04tags\x18\x03 \x03(\tR\x04tags\"`\n" +
 	"\x1bListPublishedScenesResponse\x12A\n" +
-	"\barchives\x18\x01 \x03(\v2%.holomush.scene.v1.PublicSceneArchiveR\barchives\"\x9b\x02\n" +
+	"\barchives\x18\x01 \x03(\v2%.holomush.scene.v1.PublicSceneArchiveR\barchives\"\x88\x01\n" +
+	"\x15ExportSceneLogRequest\x12*\n" +
+	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x12\"\n" +
+	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\x12\x1f\n" +
+	"\x06format\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06format\"k\n" +
+	"\x16ExportSceneLogResponse\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\fR\acontent\x12\x1b\n" +
+	"\tmime_type\x18\x02 \x01(\tR\bmimeType\x12\x1a\n" +
+	"\bfilename\x18\x03 \x01(\tR\bfilename\"\x9b\x02\n" +
 	"\x18ScenePublishStartedEvent\x12\x1d\n" +
 	"\n" +
 	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12%\n" +
@@ -4562,7 +4701,7 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"additional\x18\x02 \x01(\x05R\n" +
 	"additional\x12\x17\n" +
 	"\anew_max\x18\x03 \x01(\x05R\x06newMax\x12\x19\n" +
-	"\badmin_id\x18\x04 \x01(\tR\aadminId2\xfc\x15\n" +
+	"\badmin_id\x18\x04 \x01(\tR\aadminId2\xe3\x16\n" +
 	"\fSceneService\x12Y\n" +
 	"\n" +
 	"ListScenes\x12$.holomush.scene.v1.ListScenesRequest\x1a%.holomush.scene.v1.ListScenesResponse\x12S\n" +
@@ -4593,7 +4732,8 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\x1aDownloadPublicSceneArchive\x124.holomush.scene.v1.DownloadPublicSceneArchiveRequest\x1a5.holomush.scene.v1.DownloadPublicSceneArchiveResponse\x12\x95\x01\n" +
 	"\x1eExtendScenePublishVoteAttempts\x128.holomush.scene.v1.ExtendScenePublishVoteAttemptsRequest\x1a9.holomush.scene.v1.ExtendScenePublishVoteAttemptsResponse\x12t\n" +
 	"\x13ListCharacterScenes\x12-.holomush.scene.v1.ListCharacterScenesRequest\x1a..holomush.scene.v1.ListCharacterScenesResponse\x12t\n" +
-	"\x13ListPublishedScenes\x12-.holomush.scene.v1.ListPublishedScenesRequest\x1a..holomush.scene.v1.ListPublishedScenesResponseB\xcb\x01\n" +
+	"\x13ListPublishedScenes\x12-.holomush.scene.v1.ListPublishedScenesRequest\x1a..holomush.scene.v1.ListPublishedScenesResponse\x12e\n" +
+	"\x0eExportSceneLog\x12(.holomush.scene.v1.ExportSceneLogRequest\x1a).holomush.scene.v1.ExportSceneLogResponseB\xcb\x01\n" +
 	"\x15com.holomush.scene.v1B\n" +
 	"SceneProtoP\x01Z@github.com/holomush/holomush/pkg/proto/holomush/scene/v1;scenev1\xa2\x02\x03HSX\xaa\x02\x11Holomush.Scene.V1\xca\x02\x11Holomush\\Scene\\V1\xe2\x02\x1dHolomush\\Scene\\V1\\GPBMetadata\xea\x02\x13Holomush::Scene::V1b\x06proto3"
 
@@ -4609,7 +4749,7 @@ func file_holomush_scene_v1_scene_proto_rawDescGZIP() []byte {
 	return file_holomush_scene_v1_scene_proto_rawDescData
 }
 
-var file_holomush_scene_v1_scene_proto_msgTypes = make([]protoimpl.MessageInfo, 66)
+var file_holomush_scene_v1_scene_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
 var file_holomush_scene_v1_scene_proto_goTypes = []any{
 	(*SceneInfo)(nil),                              // 0: holomush.scene.v1.SceneInfo
 	(*ParticipantInfo)(nil),                        // 1: holomush.scene.v1.ParticipantInfo
@@ -4671,31 +4811,33 @@ var file_holomush_scene_v1_scene_proto_goTypes = []any{
 	(*PublicSceneArchive)(nil),                     // 57: holomush.scene.v1.PublicSceneArchive
 	(*ListPublishedScenesRequest)(nil),             // 58: holomush.scene.v1.ListPublishedScenesRequest
 	(*ListPublishedScenesResponse)(nil),            // 59: holomush.scene.v1.ListPublishedScenesResponse
-	(*ScenePublishStartedEvent)(nil),               // 60: holomush.scene.v1.ScenePublishStartedEvent
-	(*ScenePublishVoteCastEvent)(nil),              // 61: holomush.scene.v1.ScenePublishVoteCastEvent
-	(*ScenePublishCoolOffStartedEvent)(nil),        // 62: holomush.scene.v1.ScenePublishCoolOffStartedEvent
-	(*ScenePublishResolvedEvent)(nil),              // 63: holomush.scene.v1.ScenePublishResolvedEvent
-	(*ScenePublishWithdrawnEvent)(nil),             // 64: holomush.scene.v1.ScenePublishWithdrawnEvent
-	(*ScenePublishVoteAttemptsExtendedEvent)(nil),  // 65: holomush.scene.v1.ScenePublishVoteAttemptsExtendedEvent
-	(*timestamppb.Timestamp)(nil),                  // 66: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),                  // 67: google.protobuf.FieldMask
+	(*ExportSceneLogRequest)(nil),                  // 60: holomush.scene.v1.ExportSceneLogRequest
+	(*ExportSceneLogResponse)(nil),                 // 61: holomush.scene.v1.ExportSceneLogResponse
+	(*ScenePublishStartedEvent)(nil),               // 62: holomush.scene.v1.ScenePublishStartedEvent
+	(*ScenePublishVoteCastEvent)(nil),              // 63: holomush.scene.v1.ScenePublishVoteCastEvent
+	(*ScenePublishCoolOffStartedEvent)(nil),        // 64: holomush.scene.v1.ScenePublishCoolOffStartedEvent
+	(*ScenePublishResolvedEvent)(nil),              // 65: holomush.scene.v1.ScenePublishResolvedEvent
+	(*ScenePublishWithdrawnEvent)(nil),             // 66: holomush.scene.v1.ScenePublishWithdrawnEvent
+	(*ScenePublishVoteAttemptsExtendedEvent)(nil),  // 67: holomush.scene.v1.ScenePublishVoteAttemptsExtendedEvent
+	(*timestamppb.Timestamp)(nil),                  // 68: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),                  // 69: google.protobuf.FieldMask
 }
 var file_holomush_scene_v1_scene_proto_depIdxs = []int32{
-	66, // 0: holomush.scene.v1.SceneInfo.created_at:type_name -> google.protobuf.Timestamp
-	66, // 1: holomush.scene.v1.SceneInfo.ended_at:type_name -> google.protobuf.Timestamp
+	68, // 0: holomush.scene.v1.SceneInfo.created_at:type_name -> google.protobuf.Timestamp
+	68, // 1: holomush.scene.v1.SceneInfo.ended_at:type_name -> google.protobuf.Timestamp
 	1,  // 2: holomush.scene.v1.SceneInfo.participants:type_name -> holomush.scene.v1.ParticipantInfo
 	1,  // 3: holomush.scene.v1.SceneInfo.observers:type_name -> holomush.scene.v1.ParticipantInfo
-	66, // 4: holomush.scene.v1.ParticipantInfo.joined_at:type_name -> google.protobuf.Timestamp
+	68, // 4: holomush.scene.v1.ParticipantInfo.joined_at:type_name -> google.protobuf.Timestamp
 	0,  // 5: holomush.scene.v1.ListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 6: holomush.scene.v1.GetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 7: holomush.scene.v1.CreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 8: holomush.scene.v1.EndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 9: holomush.scene.v1.PauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 10: holomush.scene.v1.ResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	67, // 11: holomush.scene.v1.UpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
+	69, // 11: holomush.scene.v1.UpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
 	0,  // 12: holomush.scene.v1.UpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	1,  // 13: holomush.scene.v1.WatchSceneResponse.participant:type_name -> holomush.scene.v1.ParticipantInfo
-	66, // 14: holomush.scene.v1.PoseOrderEntry.last_posed_at:type_name -> google.protobuf.Timestamp
+	68, // 14: holomush.scene.v1.PoseOrderEntry.last_posed_at:type_name -> google.protobuf.Timestamp
 	31, // 15: holomush.scene.v1.GetPoseOrderResponse.entries:type_name -> holomush.scene.v1.PoseOrderEntry
 	40, // 16: holomush.scene.v1.GetPublishedSceneResponse.tally:type_name -> holomush.scene.v1.PublishedSceneVoteSummary
 	39, // 17: holomush.scene.v1.GetPublishedSceneResponse.content_entries:type_name -> holomush.scene.v1.PublishedSceneEntry
@@ -4731,34 +4873,36 @@ var file_holomush_scene_v1_scene_proto_depIdxs = []int32{
 	52, // 47: holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts:input_type -> holomush.scene.v1.ExtendScenePublishVoteAttemptsRequest
 	54, // 48: holomush.scene.v1.SceneService.ListCharacterScenes:input_type -> holomush.scene.v1.ListCharacterScenesRequest
 	58, // 49: holomush.scene.v1.SceneService.ListPublishedScenes:input_type -> holomush.scene.v1.ListPublishedScenesRequest
-	3,  // 50: holomush.scene.v1.SceneService.ListScenes:output_type -> holomush.scene.v1.ListScenesResponse
-	5,  // 51: holomush.scene.v1.SceneService.GetScene:output_type -> holomush.scene.v1.GetSceneResponse
-	7,  // 52: holomush.scene.v1.SceneService.CreateScene:output_type -> holomush.scene.v1.CreateSceneResponse
-	9,  // 53: holomush.scene.v1.SceneService.EndScene:output_type -> holomush.scene.v1.EndSceneResponse
-	11, // 54: holomush.scene.v1.SceneService.PauseScene:output_type -> holomush.scene.v1.PauseSceneResponse
-	13, // 55: holomush.scene.v1.SceneService.ResumeScene:output_type -> holomush.scene.v1.ResumeSceneResponse
-	15, // 56: holomush.scene.v1.SceneService.UpdateScene:output_type -> holomush.scene.v1.UpdateSceneResponse
-	17, // 57: holomush.scene.v1.SceneService.JoinScene:output_type -> holomush.scene.v1.JoinSceneResponse
-	19, // 58: holomush.scene.v1.SceneService.WatchScene:output_type -> holomush.scene.v1.WatchSceneResponse
-	21, // 59: holomush.scene.v1.SceneService.LeaveScene:output_type -> holomush.scene.v1.LeaveSceneResponse
-	23, // 60: holomush.scene.v1.SceneService.InviteToScene:output_type -> holomush.scene.v1.InviteToSceneResponse
-	25, // 61: holomush.scene.v1.SceneService.KickFromScene:output_type -> holomush.scene.v1.KickFromSceneResponse
-	27, // 62: holomush.scene.v1.SceneService.TransferOwnership:output_type -> holomush.scene.v1.TransferOwnershipResponse
-	29, // 63: holomush.scene.v1.SceneService.CastPublishVote:output_type -> holomush.scene.v1.CastPublishVoteResponse
-	32, // 64: holomush.scene.v1.SceneService.GetPoseOrder:output_type -> holomush.scene.v1.GetPoseOrderResponse
-	34, // 65: holomush.scene.v1.SceneService.StartScenePublish:output_type -> holomush.scene.v1.StartScenePublishResponse
-	36, // 66: holomush.scene.v1.SceneService.CastPublishSceneVote:output_type -> holomush.scene.v1.CastPublishSceneVoteResponse
-	38, // 67: holomush.scene.v1.SceneService.WithdrawScenePublish:output_type -> holomush.scene.v1.WithdrawScenePublishResponse
-	42, // 68: holomush.scene.v1.SceneService.GetPublishedScene:output_type -> holomush.scene.v1.GetPublishedSceneResponse
-	44, // 69: holomush.scene.v1.SceneService.DownloadPublishedScene:output_type -> holomush.scene.v1.DownloadPublishedSceneResponse
-	46, // 70: holomush.scene.v1.SceneService.ListScenePublishAttempts:output_type -> holomush.scene.v1.ListScenePublishAttemptsResponse
-	49, // 71: holomush.scene.v1.SceneService.GetPublicSceneArchive:output_type -> holomush.scene.v1.GetPublicSceneArchiveResponse
-	51, // 72: holomush.scene.v1.SceneService.DownloadPublicSceneArchive:output_type -> holomush.scene.v1.DownloadPublicSceneArchiveResponse
-	53, // 73: holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts:output_type -> holomush.scene.v1.ExtendScenePublishVoteAttemptsResponse
-	56, // 74: holomush.scene.v1.SceneService.ListCharacterScenes:output_type -> holomush.scene.v1.ListCharacterScenesResponse
-	59, // 75: holomush.scene.v1.SceneService.ListPublishedScenes:output_type -> holomush.scene.v1.ListPublishedScenesResponse
-	50, // [50:76] is the sub-list for method output_type
-	24, // [24:50] is the sub-list for method input_type
+	60, // 50: holomush.scene.v1.SceneService.ExportSceneLog:input_type -> holomush.scene.v1.ExportSceneLogRequest
+	3,  // 51: holomush.scene.v1.SceneService.ListScenes:output_type -> holomush.scene.v1.ListScenesResponse
+	5,  // 52: holomush.scene.v1.SceneService.GetScene:output_type -> holomush.scene.v1.GetSceneResponse
+	7,  // 53: holomush.scene.v1.SceneService.CreateScene:output_type -> holomush.scene.v1.CreateSceneResponse
+	9,  // 54: holomush.scene.v1.SceneService.EndScene:output_type -> holomush.scene.v1.EndSceneResponse
+	11, // 55: holomush.scene.v1.SceneService.PauseScene:output_type -> holomush.scene.v1.PauseSceneResponse
+	13, // 56: holomush.scene.v1.SceneService.ResumeScene:output_type -> holomush.scene.v1.ResumeSceneResponse
+	15, // 57: holomush.scene.v1.SceneService.UpdateScene:output_type -> holomush.scene.v1.UpdateSceneResponse
+	17, // 58: holomush.scene.v1.SceneService.JoinScene:output_type -> holomush.scene.v1.JoinSceneResponse
+	19, // 59: holomush.scene.v1.SceneService.WatchScene:output_type -> holomush.scene.v1.WatchSceneResponse
+	21, // 60: holomush.scene.v1.SceneService.LeaveScene:output_type -> holomush.scene.v1.LeaveSceneResponse
+	23, // 61: holomush.scene.v1.SceneService.InviteToScene:output_type -> holomush.scene.v1.InviteToSceneResponse
+	25, // 62: holomush.scene.v1.SceneService.KickFromScene:output_type -> holomush.scene.v1.KickFromSceneResponse
+	27, // 63: holomush.scene.v1.SceneService.TransferOwnership:output_type -> holomush.scene.v1.TransferOwnershipResponse
+	29, // 64: holomush.scene.v1.SceneService.CastPublishVote:output_type -> holomush.scene.v1.CastPublishVoteResponse
+	32, // 65: holomush.scene.v1.SceneService.GetPoseOrder:output_type -> holomush.scene.v1.GetPoseOrderResponse
+	34, // 66: holomush.scene.v1.SceneService.StartScenePublish:output_type -> holomush.scene.v1.StartScenePublishResponse
+	36, // 67: holomush.scene.v1.SceneService.CastPublishSceneVote:output_type -> holomush.scene.v1.CastPublishSceneVoteResponse
+	38, // 68: holomush.scene.v1.SceneService.WithdrawScenePublish:output_type -> holomush.scene.v1.WithdrawScenePublishResponse
+	42, // 69: holomush.scene.v1.SceneService.GetPublishedScene:output_type -> holomush.scene.v1.GetPublishedSceneResponse
+	44, // 70: holomush.scene.v1.SceneService.DownloadPublishedScene:output_type -> holomush.scene.v1.DownloadPublishedSceneResponse
+	46, // 71: holomush.scene.v1.SceneService.ListScenePublishAttempts:output_type -> holomush.scene.v1.ListScenePublishAttemptsResponse
+	49, // 72: holomush.scene.v1.SceneService.GetPublicSceneArchive:output_type -> holomush.scene.v1.GetPublicSceneArchiveResponse
+	51, // 73: holomush.scene.v1.SceneService.DownloadPublicSceneArchive:output_type -> holomush.scene.v1.DownloadPublicSceneArchiveResponse
+	53, // 74: holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts:output_type -> holomush.scene.v1.ExtendScenePublishVoteAttemptsResponse
+	56, // 75: holomush.scene.v1.SceneService.ListCharacterScenes:output_type -> holomush.scene.v1.ListCharacterScenesResponse
+	59, // 76: holomush.scene.v1.SceneService.ListPublishedScenes:output_type -> holomush.scene.v1.ListPublishedScenesResponse
+	61, // 77: holomush.scene.v1.SceneService.ExportSceneLog:output_type -> holomush.scene.v1.ExportSceneLogResponse
+	51, // [51:78] is the sub-list for method output_type
+	24, // [24:51] is the sub-list for method input_type
 	24, // [24:24] is the sub-list for extension type_name
 	24, // [24:24] is the sub-list for extension extendee
 	0,  // [0:24] is the sub-list for field type_name
@@ -4776,7 +4920,7 @@ func file_holomush_scene_v1_scene_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_scene_v1_scene_proto_rawDesc), len(file_holomush_scene_v1_scene_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   66,
+			NumMessages:   68,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

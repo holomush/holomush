@@ -107,6 +107,9 @@ const (
 	// SceneServiceListPublishedScenesProcedure is the fully-qualified name of the SceneService's
 	// ListPublishedScenes RPC.
 	SceneServiceListPublishedScenesProcedure = "/holomush.scene.v1.SceneService/ListPublishedScenes"
+	// SceneServiceExportSceneLogProcedure is the fully-qualified name of the SceneService's
+	// ExportSceneLog RPC.
+	SceneServiceExportSceneLogProcedure = "/holomush.scene.v1.SceneService/ExportSceneLog"
 )
 
 // SceneServiceClient is a client for the holomush.scene.v1.SceneService service.
@@ -259,6 +262,13 @@ type SceneServiceClient interface {
 	// newest first, with optional tag filtering. Powers the archive browse
 	// page. See publish_service.go::ListPublishedScenes.
 	ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error)
+	// ExportSceneLog renders a scene's IC log to a downloadable document for a
+	// participant of ANY role (observers may export what they may read;
+	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+	// fail before ABAC, which is never consulted here). Decryption flows
+	// through the host-mediated snapshot decrypt seam; supported formats are
+	// "markdown" and "jsonl". See export.go::ExportSceneLog.
+	ExportSceneLog(context.Context, *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error)
 }
 
 // NewSceneServiceClient constructs a client for the holomush.scene.v1.SceneService service. By
@@ -428,6 +438,12 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(sceneServiceMethods.ByName("ListPublishedScenes")),
 			connect.WithClientOptions(opts...),
 		),
+		exportSceneLog: connect.NewClient[v1.ExportSceneLogRequest, v1.ExportSceneLogResponse](
+			httpClient,
+			baseURL+SceneServiceExportSceneLogProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ExportSceneLog")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -459,6 +475,7 @@ type sceneServiceClient struct {
 	extendScenePublishVoteAttempts *connect.Client[v1.ExtendScenePublishVoteAttemptsRequest, v1.ExtendScenePublishVoteAttemptsResponse]
 	listCharacterScenes            *connect.Client[v1.ListCharacterScenesRequest, v1.ListCharacterScenesResponse]
 	listPublishedScenes            *connect.Client[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse]
+	exportSceneLog                 *connect.Client[v1.ExportSceneLogRequest, v1.ExportSceneLogResponse]
 }
 
 // ListScenes calls holomush.scene.v1.SceneService.ListScenes.
@@ -590,6 +607,11 @@ func (c *sceneServiceClient) ListCharacterScenes(ctx context.Context, req *conne
 // ListPublishedScenes calls holomush.scene.v1.SceneService.ListPublishedScenes.
 func (c *sceneServiceClient) ListPublishedScenes(ctx context.Context, req *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error) {
 	return c.listPublishedScenes.CallUnary(ctx, req)
+}
+
+// ExportSceneLog calls holomush.scene.v1.SceneService.ExportSceneLog.
+func (c *sceneServiceClient) ExportSceneLog(ctx context.Context, req *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error) {
+	return c.exportSceneLog.CallUnary(ctx, req)
 }
 
 // SceneServiceHandler is an implementation of the holomush.scene.v1.SceneService service.
@@ -742,6 +764,13 @@ type SceneServiceHandler interface {
 	// newest first, with optional tag filtering. Powers the archive browse
 	// page. See publish_service.go::ListPublishedScenes.
 	ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error)
+	// ExportSceneLog renders a scene's IC log to a downloadable document for a
+	// participant of ANY role (observers may export what they may read;
+	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+	// fail before ABAC, which is never consulted here). Decryption flows
+	// through the host-mediated snapshot decrypt seam; supported formats are
+	// "markdown" and "jsonl". See export.go::ExportSceneLog.
+	ExportSceneLog(context.Context, *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error)
 }
 
 // NewSceneServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -907,6 +936,12 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(sceneServiceMethods.ByName("ListPublishedScenes")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneServiceExportSceneLogHandler := connect.NewUnaryHandler(
+		SceneServiceExportSceneLogProcedure,
+		svc.ExportSceneLog,
+		connect.WithSchema(sceneServiceMethods.ByName("ExportSceneLog")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.scene.v1.SceneService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SceneServiceListScenesProcedure:
@@ -961,6 +996,8 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServiceListCharacterScenesHandler.ServeHTTP(w, r)
 		case SceneServiceListPublishedScenesProcedure:
 			sceneServiceListPublishedScenesHandler.ServeHTTP(w, r)
+		case SceneServiceExportSceneLogProcedure:
+			sceneServiceExportSceneLogHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1072,4 +1109,8 @@ func (UnimplementedSceneServiceHandler) ListCharacterScenes(context.Context, *co
 
 func (UnimplementedSceneServiceHandler) ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ListPublishedScenes is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ExportSceneLog(context.Context, *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ExportSceneLog is not implemented"))
 }

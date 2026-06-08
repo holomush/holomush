@@ -204,6 +204,14 @@ service SceneService {
   // newest first, with optional tag filtering. Powers the archive browse
   // page. See publish_service.go::ListPublishedScenes.
   rpc ListPublishedScenes(ListPublishedScenesRequest) returns (ListPublishedScenesResponse);
+
+  // ExportSceneLog renders a scene's IC log to a downloadable document for a
+  // participant of ANY role (observers may export what they may read;
+  // INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+  // fail before ABAC, which is never consulted here). Decryption flows
+  // through the host-mediated snapshot decrypt seam; supported formats are
+  // "markdown" and "jsonl". See export.go::ExportSceneLog.
+  rpc ExportSceneLog(ExportSceneLogRequest) returns (ExportSceneLogResponse);
 }
 
 // SceneInfo is the wire projection of a scene row plus its roster, returned by
@@ -930,6 +938,29 @@ message ListPublishedScenesRequest {
 message ListPublishedScenesResponse {
   // Public-safe published-archive summaries, newest first.
   repeated PublicSceneArchive archives = 1;
+}
+
+// ExportSceneLogRequest asks for a scene's IC log rendered to a downloadable
+// document. Participant-gated in plugin code (any role); see ExportSceneLog.
+message ExportSceneLogRequest {
+  // The exporting character; required; must hold a participant row (any role).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to export; required. Works for active, paused, and ended scenes.
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The render format; required: "markdown" or "jsonl".
+  string format = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// ExportSceneLogResponse carries the rendered scene-log document and download
+// metadata.
+message ExportSceneLogResponse {
+  // The rendered document bytes.
+  bytes content = 1;
+  // The content's MIME type (text/markdown or application/jsonl) — mirrors
+  // DownloadPublishedScene's MIME vocabulary.
+  string mime_type = 2;
+  // Suggested download filename (slugified title + extension).
+  string filename = 3;
 }
 
 // The following messages are the JSON payloads (protojson-marshaled by

@@ -64,14 +64,16 @@ func mapStoreErr(ctx context.Context, err error) error {
 			case "SCENE_PUBLISH_NOT_A_VOTER",
 				"SCENE_PUBLISH_NOT_OWNER",
 				"SCENE_PUBLISH_NOT_PARTICIPANT",
-				"SCENE_PRIVACY_BOUNDARY_BLOCK":
+				"SCENE_PRIVACY_BOUNDARY_BLOCK",
+				"SCENE_EXPORT_NOT_PARTICIPANT":
 				return status.Error(codes.PermissionDenied, code) //nolint:wrapcheck // gRPC status is the wire contract; oops would shadow the code
 			case "SCENE_PUBLISH_CALLER_REQUIRED",
 				"SCENE_PUBLISH_CALLER_MALFORMED",
 				"SCENE_PUBLISH_FORMAT_UNSUPPORTED",
 				"SCENE_PUBLISH_REF_INVALID",
 				"SCENE_PUBLISH_EXTEND_INVALID",
-				"SCENE_PUBLISH_NO_FOCUSED_SCENE":
+				"SCENE_PUBLISH_NO_FOCUSED_SCENE",
+				"SCENE_EXPORT_BAD_FORMAT":
 				return status.Error(codes.InvalidArgument, code) //nolint:wrapcheck // gRPC status is the wire contract; oops would shadow the code
 			case "SCENE_PUBLISH_NOT_FOUND", "SCENE_NOT_FOUND":
 				return status.Error(codes.NotFound, code) //nolint:wrapcheck // gRPC status is the wire contract; oops would shadow the code

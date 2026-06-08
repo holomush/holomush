@@ -48,6 +48,7 @@ const (
 	SceneService_ExtendScenePublishVoteAttempts_FullMethodName = "/holomush.scene.v1.SceneService/ExtendScenePublishVoteAttempts"
 	SceneService_ListCharacterScenes_FullMethodName            = "/holomush.scene.v1.SceneService/ListCharacterScenes"
 	SceneService_ListPublishedScenes_FullMethodName            = "/holomush.scene.v1.SceneService/ListPublishedScenes"
+	SceneService_ExportSceneLog_FullMethodName                 = "/holomush.scene.v1.SceneService/ExportSceneLog"
 )
 
 // SceneServiceClient is the client API for SceneService service.
@@ -222,6 +223,13 @@ type SceneServiceClient interface {
 	// newest first, with optional tag filtering. Powers the archive browse
 	// page. See publish_service.go::ListPublishedScenes.
 	ListPublishedScenes(ctx context.Context, in *ListPublishedScenesRequest, opts ...grpc.CallOption) (*ListPublishedScenesResponse, error)
+	// ExportSceneLog renders a scene's IC log to a downloadable document for a
+	// participant of ANY role (observers may export what they may read;
+	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+	// fail before ABAC, which is never consulted here). Decryption flows
+	// through the host-mediated snapshot decrypt seam; supported formats are
+	// "markdown" and "jsonl". See export.go::ExportSceneLog.
+	ExportSceneLog(ctx context.Context, in *ExportSceneLogRequest, opts ...grpc.CallOption) (*ExportSceneLogResponse, error)
 }
 
 type sceneServiceClient struct {
@@ -492,6 +500,16 @@ func (c *sceneServiceClient) ListPublishedScenes(ctx context.Context, in *ListPu
 	return out, nil
 }
 
+func (c *sceneServiceClient) ExportSceneLog(ctx context.Context, in *ExportSceneLogRequest, opts ...grpc.CallOption) (*ExportSceneLogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExportSceneLogResponse)
+	err := c.cc.Invoke(ctx, SceneService_ExportSceneLog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SceneServiceServer is the server API for SceneService service.
 // All implementations must embed UnimplementedSceneServiceServer
 // for forward compatibility.
@@ -664,6 +682,13 @@ type SceneServiceServer interface {
 	// newest first, with optional tag filtering. Powers the archive browse
 	// page. See publish_service.go::ListPublishedScenes.
 	ListPublishedScenes(context.Context, *ListPublishedScenesRequest) (*ListPublishedScenesResponse, error)
+	// ExportSceneLog renders a scene's IC log to a downloadable document for a
+	// participant of ANY role (observers may export what they may read;
+	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+	// fail before ABAC, which is never consulted here). Decryption flows
+	// through the host-mediated snapshot decrypt seam; supported formats are
+	// "markdown" and "jsonl". See export.go::ExportSceneLog.
+	ExportSceneLog(context.Context, *ExportSceneLogRequest) (*ExportSceneLogResponse, error)
 	mustEmbedUnimplementedSceneServiceServer()
 }
 
@@ -751,6 +776,9 @@ func (UnimplementedSceneServiceServer) ListCharacterScenes(context.Context, *Lis
 }
 func (UnimplementedSceneServiceServer) ListPublishedScenes(context.Context, *ListPublishedScenesRequest) (*ListPublishedScenesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPublishedScenes not implemented")
+}
+func (UnimplementedSceneServiceServer) ExportSceneLog(context.Context, *ExportSceneLogRequest) (*ExportSceneLogResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExportSceneLog not implemented")
 }
 func (UnimplementedSceneServiceServer) mustEmbedUnimplementedSceneServiceServer() {}
 func (UnimplementedSceneServiceServer) testEmbeddedByValue()                      {}
@@ -1241,6 +1269,24 @@ func _SceneService_ListPublishedScenes_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SceneService_ExportSceneLog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportSceneLogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ExportSceneLog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ExportSceneLog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ExportSceneLog(ctx, req.(*ExportSceneLogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SceneService_ServiceDesc is the grpc.ServiceDesc for SceneService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1351,6 +1397,10 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPublishedScenes",
 			Handler:    _SceneService_ListPublishedScenes_Handler,
+		},
+		{
+			MethodName: "ExportSceneLog",
+			Handler:    _SceneService_ExportSceneLog_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

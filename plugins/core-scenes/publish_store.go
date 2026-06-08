@@ -1006,3 +1006,46 @@ func (s *SceneStore) ReadSceneMetaForSnapshot(ctx context.Context, tx pgx.Tx, sc
 	}
 	return meta, nil
 }
+
+// ReadSceneLogForExport reads the IC log rows for a scene in chronological
+// order (ORDER BY id ASC) without a transaction — used by ExportSceneLog.
+// fullSubject is the complete NATS dot-style IC subject
+// (events.<game_id>.scene.<scene_id>.ic) and is matched with an exact
+// WHERE subject = $1, mirroring ReadSceneLogForSnapshot. A LIKE pattern
+// is avoided: it is wildcard-injectable via % and _ characters and diverges
+// from the exact subject the AEAD AAD was bound to at encrypt time.
+func (s *SceneStore) ReadSceneLogForExport(ctx context.Context, fullSubject string) ([]LogRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.read_scene_log_for_export",
+		attribute.String("subject", fullSubject))
+	defer span.End()
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec, dek_ref, dek_version
+		FROM scene_log
+		WHERE subject = $1
+		  AND type IN ('core-scenes:scene_pose', 'core-scenes:scene_say', 'core-scenes:scene_emit')
+		ORDER BY id ASC
+	`, fullSubject)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_EXPORT_LOG_READ_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []LogRow
+	for rows.Next() {
+		var r LogRow
+		if err := rows.Scan(
+			&r.ID, &r.Type, &r.Timestamp, &r.ActorKind, &r.ActorID, &r.Payload, &r.SchemaVer, &r.Codec, &r.DEKRef, &r.DEKVersion,
+		); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_EXPORT_LOG_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_EXPORT_LOG_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}

@@ -123,6 +123,13 @@ type sceneStorer interface {
 	// with optional tag filtering and LIMIT/OFFSET paging.
 	ListPublishedScenes(ctx context.Context, q ListPublishedScenesQuery) ([]PublishedSceneArchiveSummary, error)
 
+	// ReadSceneLogForExport reads the full IC log for a scene in chronological
+	// order (ORDER BY id ASC) without a transaction — used by ExportSceneLog
+	// where snapshot-level consistency is not required. fullSubject is the
+	// complete NATS dot-style IC subject (events.<game_id>.scene.<scene_id>.ic)
+	// and is matched with an exact WHERE subject = $1 (not LIKE).
+	ReadSceneLogForExport(ctx context.Context, fullSubject string) ([]LogRow, error)
+
 	// ── C7 snapshot pipeline (COOLOFF→PUBLISHED) ──────────────────────────
 	// SnapshotPool exposes the connection pool so runSnapshot can orchestrate
 	// the read-tx → decrypt(outside tx) → write-tx sequence (read-back design
