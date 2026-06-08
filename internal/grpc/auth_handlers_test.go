@@ -2619,3 +2619,93 @@ func TestSelectCharacterStillEmitsArriveForTerminalClientType(t *testing.T) {
 	}
 	assert.Equal(t, 1, arriveCount, "terminal client_type must emit exactly one arrive event")
 }
+
+// TestSelectCharacterCommsHubFreshSessionHasGridPresentFalse asserts that a
+// fresh session created with ClientType "comms_hub" has GridPresent=false.
+// The EXISTS predicate in ListActiveByLocation is the authoritative presence
+// gate; GridPresent=false here is consistency-only (holomush-5rh.8.9).
+func TestSelectCharacterCommsHubFreshSessionHasGridPresentFalse(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+	sessionID := core.NewULID()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+		}, nil)
+
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
+
+	eventStore := coretest.NewMemoryEventStore()
+	server := &CoreServer{
+		engine:            core.NewEngine(eventStore),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		newSessionID:      func() ulid.ULID { return sessionID },
+	}
+
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+		ClientType:         "comms_hub",
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+
+	info, err := sessionStore.Get(ctx, sessionID.String())
+	require.NoError(t, err)
+	assert.False(t, info.GridPresent,
+		"comms_hub fresh session MUST have GridPresent=false (holomush-5rh.8.9)")
+}
+
+// TestSelectCharacterTerminalFreshSessionHasGridPresentTrue asserts that a
+// fresh session created with ClientType "terminal" has GridPresent=true.
+func TestSelectCharacterTerminalFreshSessionHasGridPresentTrue(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+	sessionID := core.NewULID()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+		}, nil)
+
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
+
+	eventStore := coretest.NewMemoryEventStore()
+	server := &CoreServer{
+		engine:            core.NewEngine(eventStore),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		newSessionID:      func() ulid.ULID { return sessionID },
+	}
+
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+		ClientType:         "terminal",
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+
+	info, err := sessionStore.Get(ctx, sessionID.String())
+	require.NoError(t, err)
+	assert.True(t, info.GridPresent,
+		"terminal fresh session MUST have GridPresent=true (holomush-5rh.8.9)")
+}

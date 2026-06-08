@@ -376,15 +376,19 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	}
 
 	sessionInfo := &session.Info{
-		ID:                      sessionID.String(),
-		CharacterID:             charID,
-		PlayerID:                playerSession.PlayerID,
-		PlayerSessionID:         playerSession.ID,
-		CharacterName:           selectedChar.Name,
-		LocationID:              locationID,
-		LocationArrivedAt:       now,
-		Status:                  session.StatusActive,
-		GridPresent:             true,
+		ID:                sessionID.String(),
+		CharacterID:       charID,
+		PlayerID:          playerSession.PlayerID,
+		PlayerSessionID:   playerSession.ID,
+		CharacterName:     selectedChar.Name,
+		LocationID:        locationID,
+		LocationArrivedAt: now,
+		Status:            session.StatusActive,
+		// comms_hub sessions must not appear on the grid: the EXISTS predicate in
+		// ListActiveByLocation is the authoritative presence gate, but setting
+		// GridPresent=false here keeps the flag consistent with reality and avoids
+		// the reaper needing to correct it on first sweep (holomush-5rh.8.9).
+		GridPresent:             req.GetClientType() != "comms_hub",
 		TTLSeconds:              ttlSeconds,
 		MaxHistory:              maxHistory,
 		GuestCharacterCreatedAt: guestCharCreatedAt,

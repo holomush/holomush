@@ -245,6 +245,13 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 		Status:        session.StatusActive,
 		GridPresent:   true,
 	})
+	// ListActiveByLocation requires EXISTS(terminal/telnet) as of holomush-5rh.8.9.
+	_ = ss.AddConnection(context.Background(), &session.Connection{
+		ID:         ulid.Make(),
+		SessionID:  "s1",
+		ClientType: "terminal",
+		Streams:    []string{},
+	})
 
 	lf := &locationFollower{worldQuerier: wq, sessionStore: ss, verbRegistry: testVerbRegistry(t)}
 	ev, err := lf.buildLocationState(context.Background(), locID)

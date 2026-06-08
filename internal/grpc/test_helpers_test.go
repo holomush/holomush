@@ -117,6 +117,19 @@ func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) sessio
 			info.Status = session.StatusActive
 		}
 		require.NoError(t, store.Set(ctx, id, info))
+		// ListActiveByLocation requires EXISTS(terminal/telnet connection) as of
+		// holomush-5rh.8.9. Add a synthetic terminal row for every grid-present
+		// session so that helpers calling newTestSessionStore do not need to be
+		// individually updated. Non-grid-present sessions (GridPresent=false)
+		// intentionally receive no connection row so the filter still excludes them.
+		if info.GridPresent {
+			require.NoError(t, store.AddConnection(ctx, &session.Connection{
+				ID:         ulid.Make(),
+				SessionID:  info.ID,
+				ClientType: "terminal",
+				Streams:    []string{},
+			}))
+		}
 	}
 	return store
 }
