@@ -11,9 +11,37 @@ services:
     environment:
       POSTGRES_DB: holomush_test
 
+  # One-shot init container: generates the KEK file before the core server
+  # starts. Uses the same holomush image so the kek init subcommand is
+  # available without a separate tool image.
+  #
+  # The KEK file is written into the certs volume at the path the holomush
+  # user already owns (Dockerfile: mkdir -p /home/holomush/.config/holomush/certs
+  # && chown -R holomush:holomush /home/holomush). Docker named volumes mount
+  # with root ownership at the volume root, so we write into a subdirectory
+  # that was chowned by the image's own RUN step.
+  #
+  # The passphrase is intentionally weak — this is a throwaway per-run key
+  # used only for the duration of the E2E test suite.
+  kek-init:
+    image: holomush
+    entrypoint: ["./holomush", "kek", "init", "/home/holomush/.config/holomush/certs/master.key.enc"]
+    environment:
+      HOLOMUSH_KEK_PASSPHRASE: e2e-test-kek-passphrase-not-for-prod
+    volumes:
+      - certs:/home/holomush/.config/holomush/certs
+    networks:
+      - backend
+    restart: "no"
+
   core:
     environment:
       DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush_test?sslmode=disable
+      HOLOMUSH_KEK_FILE: /home/holomush/.config/holomush/certs/master.key.enc
+      HOLOMUSH_KEK_PASSPHRASE: e2e-test-kek-passphrase-not-for-prod
+    depends_on:
+      kek-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9100/healthz/readiness || exit 1"]
       interval: 2s

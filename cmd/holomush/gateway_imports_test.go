@@ -70,6 +70,12 @@ var coreOnlyFiles = map[string]struct{}{
 	// call. Imports internal/plugin; core-only (matches phase7_fence_wiring.go
 	// precedent).
 	"cryptowiring_adapter.go": {},
+	// `holomush kek init` CLI generates a KEK file for first-time provisioning
+	// and CI/E2E init containers. Imports internal/eventbus/crypto/kek;
+	// core-only by design (same KEK package as cmd_admin_totp_deps.go).
+	// (holomush-5rh.8.27)
+	"cmd_kek.go":      {},
+	"cmd_kek_init.go": {},
 }
 
 var forbidden = []string{

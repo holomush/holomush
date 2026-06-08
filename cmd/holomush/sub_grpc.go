@@ -200,7 +200,15 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		return oops.Code("GRPC_EVENTBUS_MISSING").
 			Errorf("gRPC subsystem requires EventBus subsystem for plugin emit routing")
 	}
-	rawPublisher := s.cfg.EventBus.Publisher()
+	// Wire the DEK manager when available so sensitive events (event.Sensitive=true)
+	// can be encrypted at publish time. When KEK is not configured (RekeyManager==nil),
+	// Publisher() falls back to plaintext-only mode — which is the degraded-but-safe
+	// behaviour for deployments without a KEK. See WithDEKManager docs.
+	var rawPublisherOpts []eventbus.PublishOption
+	if s.cfg.RekeyManager != nil {
+		rawPublisherOpts = append(rawPublisherOpts, eventbus.WithDEKManager(s.cfg.RekeyManager))
+	}
+	rawPublisher := s.cfg.EventBus.Publisher(rawPublisherOpts...)
 	if rawPublisher == nil {
 		return oops.Code("GRPC_EVENTBUS_NOT_STARTED").
 			Errorf("EventBus publisher is nil; subsystem not started")
@@ -318,14 +326,10 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 
 	// 8. Create CoreServer and register with gRPC.
 	// F3: wire the JetStream event bus subscriber into the Subscribe RPC.
-	// The bus owns per-session durable consumers; the gRPC handler pumps
-	// deliveries through Send → Ack. EventBus subsystem is a DependsOn
-	// above, so Subscriber is guaranteed non-nil by the time Start runs.
-	subscriber := s.cfg.EventBus.Subscriber()
-	if subscriber == nil {
-		return oops.Code("GRPC_EVENTBUS_SUBSCRIBER_NIL").
-			Errorf("EventBus subscriber is nil; subsystem not started")
-	}
+	// The subscriber is constructed AFTER the AuthGuard block (below) so
+	// WithSubscriberAuthGuard/DEKManager/AuditEmitter can be threaded in
+	// when KEK is configured (holomush-5rh.8.27). Placeholder assigned here;
+	// the actual Subscriber() call happens after the auth guard block.
 
 	// F4: wire the JetStream/PostgreSQL tier crossover history reader into
 	// QueryStreamHistory. Both the JetStream context and the PG pool are
@@ -371,6 +375,27 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 				}
 			}
 		}
+	}
+
+	// Construct the subscriber now that historyAuthGuard/historyDEKMgr/historyAuditEm are
+	// resolved. When KEK is configured, the auth guard + DEK manager are injected so
+	// decodeDeliveryWithAuth can decrypt sensitive events before pushing them to subscribed
+	// clients (holomush-5rh.8.27). When KEK is absent, bare subscriber with no-op decode.
+	var subscriberOpts []eventbus.SubscribeOption
+	if historyAuthGuard != nil {
+		subscriberOpts = append(
+			subscriberOpts,
+			eventbus.WithSubscriberAuthGuard(historyAuthGuard),
+			eventbus.WithSubscriberDEKManager(historyDEKMgr),
+		)
+		if historyAuditEm != nil {
+			subscriberOpts = append(subscriberOpts, eventbus.WithSubscriberDecryptAuditEmitter(historyAuditEm))
+		}
+	}
+	subscriber := s.cfg.EventBus.Subscriber(subscriberOpts...)
+	if subscriber == nil {
+		return oops.Code("GRPC_EVENTBUS_SUBSCRIBER_NIL").
+			Errorf("EventBus subscriber is nil; subsystem not started")
 	}
 
 	// Phase 7 INV-CRYPTO-42 + INV-CRYPTO-50: assemble the PluginDowngradeFence
@@ -518,7 +543,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	const sceneServiceName = "holomush.scene.v1.SceneService"
 	var sceneAccessSrv sceneaccessv1.SceneAccessServiceServer
 	if sceneSvc, resolveErr := serviceRegistry.Resolve(sceneServiceName); resolveErr == nil {
-		sceneAccessSrv = holoGRPC.NewSceneAccessServer(
+		saSrv := holoGRPC.NewSceneAccessServer(
 			authPlayerSessionRepo,
 			authPlayerRepo,
 			authCharRepo,
@@ -527,6 +552,14 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			scenev1.NewSceneServiceClient(sceneSvc.Conn),
 			pluginManager,
 		)
+		// Wire DEK participant seeding when the KEK/DEK stack is present
+		// (RekeyManager is non-nil). This seeds the character as a DEK
+		// participant on SetSceneFocus so the authguard permits decryption
+		// of sensitive scene events (e.g. scene_pose) for that session.
+		if s.cfg.RekeyManager != nil {
+			saSrv.WithSceneDEKAdder(s.cfg.RekeyManager)
+		}
+		sceneAccessSrv = saSrv
 		slog.InfoContext(ctx, "sceneAccessService facade registered")
 	} else {
 		slog.WarnContext(ctx, "sceneAccessService unavailable: plugin absent", "service", sceneServiceName)

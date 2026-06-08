@@ -29,10 +29,12 @@ export const file_holomush_sceneaccess_v1_sceneaccess: GenFile = /*@__PURE__*/
 export type ListScenesForViewerRequest = Message<"holomush.sceneaccess.v1.ListScenesForViewerRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -129,10 +131,12 @@ export const ListScenesForViewerResponseSchema: GenMessage<ListScenesForViewerRe
 export type GetSceneForViewerRequest = Message<"holomush.sceneaccess.v1.GetSceneForViewerRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -205,10 +209,12 @@ export const GetSceneForViewerResponseSchema: GenMessage<GetSceneForViewerRespon
 export type ListMyScenesRequest = Message<"holomush.sceneaccess.v1.ListMyScenesRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -276,10 +282,12 @@ export const ListMyScenesResponseSchema: GenMessage<ListMyScenesResponse> = /*@_
 export type WatchSceneRequest = Message<"holomush.sceneaccess.v1.WatchSceneRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -355,10 +363,12 @@ export const WatchSceneResponseSchema: GenMessage<WatchSceneResponse> = /*@__PUR
 export type ExportSceneRequest = Message<"holomush.sceneaccess.v1.ExportSceneRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -453,10 +463,12 @@ export const ExportSceneResponseSchema: GenMessage<ExportSceneResponse> = /*@__P
 export type SetSceneFocusRequest = Message<"holomush.sceneaccess.v1.SetSceneFocusRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -522,10 +534,12 @@ export const SetSceneFocusResponseSchema: GenMessage<SetSceneFocusResponse> = /*
 export type ListPublishedScenesRequest = Message<"holomush.sceneaccess.v1.ListPublishedScenesRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -604,10 +618,12 @@ export const ListPublishedScenesResponseSchema: GenMessage<ListPublishedScenesRe
 export type GetPublicSceneArchiveRequest = Message<"holomush.sceneaccess.v1.GetPublicSceneArchiveRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -702,10 +718,12 @@ export const GetPublicSceneArchiveResponseSchema: GenMessage<GetPublicSceneArchi
 export type DownloadPublicSceneArchiveRequest = Message<"holomush.sceneaccess.v1.DownloadPublicSceneArchiveRequest"> & {
   /**
    * session_id is the client-declared player-session ULID. Authentication is
-   * performed solely against player_session_token (below); session_id is
-   * currently NOT consulted by the facade and is reserved for a future
-   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-   * SHOULD send the player session they authenticated with.
+   * performed SOLELY against player_session_token (below, the authoritative
+   * bearer); session_id is NOT consulted. A session↔token cross-check was
+   * deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+   * over the authoritative token and would risk rejecting valid clients whose
+   * session_id semantics differ. The field is retained as a forward-looking
+   * hint — clients SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */

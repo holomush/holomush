@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -26,6 +28,13 @@ import (
 // the plugin manager — only BeginServiceDispatch.
 type sceneAccessPluginManager interface {
 	BeginServiceDispatch(ctx context.Context, pluginName string, actor core.Actor, ownerPlayerID string) (context.Context, func(), error)
+}
+
+// sceneDEKAdder seeds a character as a DEK participant so that the
+// authguard hot-tier permits the subscriber to decrypt sensitive events.
+// Satisfied structurally by *dek.manager (dek.Manager.Add).
+type sceneDEKAdder interface {
+	Add(ctx context.Context, ctxID dek.ContextID, p dek.Participant) error
 }
 
 // SceneAccessServer is the host-side facade that owns player authentication,
@@ -43,6 +52,11 @@ type SceneAccessServer struct {
 	coordinator       holoFocus.Coordinator
 	sceneClient       scenev1.SceneServiceClient
 	pluginManager     sceneAccessPluginManager
+	// dekAdder is optional. When non-nil, SetSceneFocus seeds the
+	// character as a DEK participant after the privacy gate passes, so
+	// the authguard hot-tier permits the session to decrypt sensitive
+	// scene events (e.g. scene_pose). Nil in tests that don't need crypto.
+	dekAdder sceneDEKAdder
 }
 
 // NewSceneAccessServer constructs a SceneAccessServer. All fields are required;
@@ -65,6 +79,14 @@ func NewSceneAccessServer(
 		sceneClient:       sceneClient,
 		pluginManager:     pluginManager,
 	}
+}
+
+// WithSceneDEKAdder attaches a DEK participant adder to the server. Call
+// this when the core process is running with a KEK/DEK stack so that
+// SetSceneFocus seeds the character as a DEK participant after the privacy
+// gate passes. Omit in tests that do not exercise the encrypted path.
+func (s *SceneAccessServer) WithSceneDEKAdder(a sceneDEKAdder) {
+	s.dekAdder = a
 }
 
 // ownedCharacter verifies that charIDStr is a valid ULID and is owned by
@@ -376,6 +398,27 @@ func (s *SceneAccessServer) SetSceneFocus(ctx context.Context, req *sceneaccessv
 				return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
 			}
 			// FOCUS_ALREADY_MEMBER — membership already present; proceed to SetConnectionFocus.
+		}
+
+		// Seed the character as a DEK participant so the authguard hot-tier
+		// permits this session to decrypt sensitive scene events (e.g.
+		// scene_pose). Non-fatal: if the DEK stack is absent or the Add
+		// fails transiently, the session continues; events will be delivered
+		// as metadata-only until the participant is seeded (e.g. on retry).
+		if s.dekAdder != nil {
+			ctxID := dek.ContextID{Type: "scene", ID: sceneIDStr}
+			addErr := s.dekAdder.Add(ctx, ctxID, dek.Participant{
+				PlayerID:    ps.PlayerID.String(),
+				CharacterID: gameSession.CharacterID.String(),
+				JoinedAt:    time.Now().UTC(),
+				AddedVia:    "sceneaccess.SetSceneFocus",
+			})
+			if addErr != nil {
+				slog.WarnContext(ctx, "scene access: DEK participant seed failed (non-fatal)",
+					"scene_id", sceneIDStr,
+					"character_id", gameSession.CharacterID.String(),
+					"error", addErr)
+			}
 		}
 	}
 
