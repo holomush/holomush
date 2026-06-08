@@ -168,3 +168,17 @@
   Evaluate is unreachable from a plain registry-conn caller (facade) — EMIT_TOKEN_MISSING.
   Subject is token-derived dispatch actor, never bound to req.character_id. Cross-task risk to
   flag whenever a SceneService RPC consults s.evaluator.
+
+- **5rh.8.21 RESOLVES the facade EMIT_TOKEN_MISSING gap (prev entry) — READY (2026-06-07).**
+  `Host.BeginServiceDispatch` (goplugin/host.go:968) mints a dispatch token for caller-supplied
+  actor+ownerPlayerID, returns ctx w/ token + advisory actor md (same coreActorKindToSDK as
+  DeliverCommand:936) + release func (`Revoke` = map delete, idempotent; 5min TTL sweeper backs
+  forgotten release; store terminal-on-close + Close clears items). Manager routes via
+  `findOptional[ServiceDispatcher]` (Unwrap-chain capability, matches PluginAuditClientProvider
+  shape) → typed SERVICE_DISPATCH_UNSUPPORTED for Lua host. Binary-only is transport-specific,
+  NOT a symmetry violation (Lua serves no gRPC). WatchScene advisory check (service.go:878) is
+  restriction-only: rejects PermissionDenied iff incoming md kind==character && id!=req.character_id;
+  absent/non-character md proceeds (token-derived subject stays authoritative) — correct
+  defense-in-depth polarity; spoofed md can only restore baseline, never grant. Pattern to
+  re-check on .8.11 facade: caller MUST pass server-side-verified actor; token outlives plugin
+  unload until release/TTL (Low, accepted).

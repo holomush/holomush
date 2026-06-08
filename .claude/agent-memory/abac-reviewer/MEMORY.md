@@ -371,3 +371,14 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   ABAC attr (store.go GetWithMembership role IN ('owner','member')) so observer auto-join grants
   no participant-clause permits. INV-SCENE-61 binding is PARTIAL (gate-order asserted; observer
   no-emit/no-pose/no-vote clause structural-only) — same shape as INV-PRIVACY-6.
+- **BeginServiceDispatch token plumbing (5rh.8.21, 2026-06-07)**: host-internal mint-any-actor API
+  (`goplugin/host.go:970`, `Manager.BeginServiceDispatch` via optional `ServiceDispatcher` capability)
+  reuses `emitTokenStore`; per-plugin scoping enforced at `Lookup` (`emit_token_store.go:125`,
+  `entry.pluginName != pluginName` → false). Identical semantics to DeliverCommand character tokens —
+  no emit widening; `actor_kinds_claimable` gate at `event_emitter.go:125-134` unchanged. Reviewed
+  READY. Two things to re-verify when bead .8.11 (SceneAccessService facade) lands: (1) facade actor
+  MUST come from server-side-verified session state (contract is doc-comment-only); (2) the
+  token+advisory-metadata pairing is convention, not enforced — WatchScene's mismatch deny
+  (`plugins/core-scenes/service.go:878`) is skippable by omitting metadata; today all three minting
+  paths (DeliverEvent host.go:860, DeliverCommand host.go:935, BeginServiceDispatch host.go:987)
+  pair them, so token subject stays authoritative.
