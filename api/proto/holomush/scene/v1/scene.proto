@@ -190,6 +190,20 @@ service SceneService {
   // role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
   // publish_service.go::ExtendScenePublishVoteAttempts.
   rpc ExtendScenePublishVoteAttempts(ExtendScenePublishVoteAttemptsRequest) returns (ExtendScenePublishVoteAttemptsResponse);
+
+  // ListCharacterScenes returns every non-archived scene the character has a
+  // participant row in (any role, including observer), with the character's
+  // role and per-scene activity metadata for workspace badges. Serves the
+  // web workspace's "my scenes" list; intended for use by the host facade
+  // fanning this out across a player's owned characters. See
+  // service.go::ListCharacterScenes.
+  rpc ListCharacterScenes(ListCharacterScenesRequest) returns (ListCharacterScenesResponse);
+
+  // ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+  // fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+  // newest first, with optional tag filtering. Powers the archive browse
+  // page. See publish_service.go::ListPublishedScenes.
+  rpc ListPublishedScenes(ListPublishedScenesRequest) returns (ListPublishedScenesResponse);
 }
 
 // SceneInfo is the wire projection of a scene row plus its roster, returned by
@@ -844,6 +858,78 @@ message ExtendScenePublishVoteAttemptsRequest {
 message ExtendScenePublishVoteAttemptsResponse {
   // The scene's max-publish-attempts budget after the extension.
   int32 new_max = 1;
+}
+
+// ListCharacterScenesRequest requests the non-archived scene participations
+// for a single character.
+message ListCharacterScenesRequest {
+  // The character whose participations to list; required (host-trusted).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// CharacterSceneInfo pairs a scene with the requesting character's role and
+// recent-activity metadata for workspace badge rendering.
+message CharacterSceneInfo {
+  // The scene's metadata projection via the standard row conversion; the
+  // roster fields (participants, observers) are unset on this surface —
+  // workspace clients fetch rosters via GetScene/scene-load paths.
+  SceneInfo scene = 1;
+  // This character's participant role in the scene (owner/member/observer).
+  string role = 2;
+  // Epoch-ms timestamp of the newest scene_log row on the scene's IC
+  // subject; 0 when the log is empty.
+  int64 last_activity_ms = 3;
+  // Total scene_log rows on the IC subject (workspace activity panel).
+  int64 entry_count = 4;
+}
+
+// ListCharacterScenesResponse carries the character's scene participations,
+// most recently active first.
+message ListCharacterScenesResponse {
+  // The character's scenes, most recently active first.
+  repeated CharacterSceneInfo scenes = 1;
+}
+
+// PublicSceneArchive is the public-safe view of a published scene archive,
+// carrying only the published artifact — never vote state, per-voter data, or
+// failure_reason. Covers the GetPublicSceneArchive field set (INV-SCENE-35
+// status gate) plus current scene tags, which that response does not carry.
+// Used as the element type in ListPublishedScenes.
+message PublicSceneArchive {
+  // The publication attempt's ID.
+  string id = 1;
+  // The scene title snapshotted at publish time.
+  string title_snapshot = 2;
+  // The participant character names snapshotted at publish time.
+  repeated string participants_snapshot = 3;
+  // The frozen published content entries.
+  repeated PublishedSceneEntry content_entries = 4;
+  // Epoch-nanosecond publish time.
+  int64 published_at_unix_ns = 5;
+  // The CURRENT tags on the source scene row (read at list time, not
+  // snapshotted at publish): post-publish tag edits are reflected here.
+  // Tags are public metadata (already exposed by ListScenes).
+  repeated string tags = 6;
+}
+
+// ListPublishedScenesRequest pages through PUBLISHED scene archives.
+message ListPublishedScenesRequest {
+  // Page size; 0 means server default, capped at 200 (mirrors ListScenes).
+  int32 limit = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Leading results to skip.
+  int32 offset = 2 [(buf.validate.field).int32.gte = 0];
+  // Restrict to archives whose scene carries all of these tags.
+  repeated string tags = 3;
+}
+
+// ListPublishedScenesResponse carries the public-safe archive summaries,
+// newest first.
+message ListPublishedScenesResponse {
+  // Public-safe published-archive summaries, newest first.
+  repeated PublicSceneArchive archives = 1;
 }
 
 // The following messages are the JSON payloads (protojson-marshaled by

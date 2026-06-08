@@ -1737,6 +1737,74 @@ func (s *SceneStore) classifyTransitionMiss(ctx context.Context, id string, span
 		Errorf("scene in state %q cannot be %sed", currentState, op)
 }
 
+// CharacterSceneResult is the row returned by ListCharacterScenes: a scene
+// plus the character's role in it, plus per-scene activity aggregates.
+type CharacterSceneResult struct {
+	Scene          *SceneRow
+	Role           string
+	LastActivityMS int64 // epoch-ms of newest IC log row; 0 when empty
+	EntryCount     int64 // total IC log rows for the scene
+}
+
+// ListCharacterScenes returns every non-archived scene the character has a
+// participant row in (any role: owner, member, observer, invited), with the
+// character's role and IC-subject activity aggregates, ordered by
+// last_activity_ms DESC. The icSubjectPrefix is "events.<gameID>.scene." —
+// the service supplies it so the store remains gameID-agnostic.
+func (s *SceneStore) ListCharacterScenes(ctx context.Context, characterID, icSubjectPrefix string) ([]CharacterSceneResult, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_character_scenes",
+		attribute.String("character_id", characterID))
+	defer span.End()
+
+	const q = `
+		SELECT ` + sceneSelectColumns + `, p.role,
+		  COALESCE((
+		    SELECT (MAX(l.timestamp) / 1000000)
+		    FROM scene_log l WHERE l.subject = $2 || s.id || '.ic'
+		  ), 0) AS last_activity_ms,
+		  COALESCE((
+		    SELECT COUNT(*)
+		    FROM scene_log l WHERE l.subject = $2 || s.id || '.ic'
+		  ), 0) AS entry_count
+		FROM scenes s
+		JOIN scene_participants p ON p.scene_id = s.id
+		WHERE p.character_id = $1 AND s.archived_at IS NULL
+		ORDER BY last_activity_ms DESC
+	`
+	rows, err := s.pool.Query(ctx, q, characterID, icSubjectPrefix)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_CHARACTER_SCENES_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []CharacterSceneResult
+	for rows.Next() {
+		var r CharacterSceneResult
+		r.Scene = &SceneRow{}
+		// Scan all columns in a single call: sceneSelectColumns + role + last_activity_ms + entry_count.
+		if err := rows.Scan(
+			&r.Scene.ID, &r.Scene.Title, &r.Scene.Description, &r.Scene.LocationID, &r.Scene.OwnerID,
+			&r.Scene.State, &r.Scene.PoseOrder, &r.Scene.Visibility, &r.Scene.IdleTimeoutSecs,
+			&r.Scene.TemplateID, &r.Scene.ContentWarnings, &r.Scene.Tags,
+			&r.Scene.CreatedAt, &r.Scene.EndedAt, &r.Scene.ArchivedAt,
+			&r.Role, &r.LastActivityMS, &r.EntryCount,
+		); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_CHARACTER_SCENES_SCAN_FAILED").
+				With("character_id", characterID).Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_CHARACTER_SCENES_ITER_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	return out, nil
+}
+
 // dotStyleSceneSubject returns the NATS dot-style entity-level subject
 // for a scene per substrate INV-EVENTBUS-28: events.<gameID>.scene.<sceneID>.
 // Used for lifecycle/system events that target the scene itself, not

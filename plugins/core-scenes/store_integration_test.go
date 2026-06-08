@@ -2833,3 +2833,214 @@ var _ = Describe("AddObserver", func() {
 		Expect(result).To(Equal(ObserverSceneNotFound))
 	})
 })
+
+// ── ListCharacterScenes integration tests ─────────────────────────────────────
+
+var _ = Describe("SceneStore.ListCharacterScenes", func() {
+	// gameID used for IC subject construction — must match the prefix passed
+	// to ListCharacterScenes. Tests use "test-game" directly.
+	const testGameID = "test-game"
+	const icPrefix = "events." + testGameID + ".scene."
+
+	// seedSceneLogRow inserts a minimal identity-codec scene_log row under
+	// the given IC subject so the activity aggregates have something to count.
+	seedLogRow := func(store *SceneStore, subject string, tsNS int64) {
+		GinkgoHelper()
+		id := newPoseULID()
+		_, err := store.Pool().Exec(
+			context.Background(), `
+			INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
+			VALUES ($1, $2, 'core-scenes:scene_pose', $3, 'character', $4, $5, 1, 'identity')`,
+			id, subject, tsNS, []byte("char-alice"), []byte(`{}`),
+		)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	It("returns both member and observer scenes ordered by last_activity_ms DESC", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		memberScene := mustCreateScene(store, "lcs-scene-member-01", "char-owner", string(SceneVisibilityOpen))
+		observerScene := mustCreateScene(store, "lcs-scene-observer-01", "char-owner", string(SceneVisibilityOpen))
+
+		// char-alice is a member on scene 1, observer on scene 2.
+		mustAddParticipant(store, memberScene.ID, "char-alice", "member")
+		mustAddParticipant(store, observerScene.ID, "char-alice", "observer")
+
+		// Seed scene_log rows: observer scene is newer (higher epoch-ms → higher last_activity).
+		olderNS := time.Now().Add(-2 * time.Hour).UnixNano()
+		newerNS := time.Now().Add(-1 * time.Hour).UnixNano()
+		seedLogRow(store, icPrefix+memberScene.ID+".ic", olderNS)
+		seedLogRow(store, icPrefix+observerScene.ID+".ic", newerNS)
+
+		results, err := store.ListCharacterScenes(ctx, "char-alice", icPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(2))
+
+		// Observer scene is newer → appears first.
+		Expect(results[0].Scene.ID).To(Equal(observerScene.ID))
+		Expect(results[0].Role).To(Equal("observer"))
+		Expect(results[0].LastActivityMS).To(BeNumerically(">", 0))
+		Expect(results[0].EntryCount).To(BeNumerically("==", 1))
+
+		Expect(results[1].Scene.ID).To(Equal(memberScene.ID))
+		Expect(results[1].Role).To(Equal("member"))
+		Expect(results[1].LastActivityMS).To(BeNumerically(">", 0))
+		Expect(results[1].LastActivityMS).To(BeNumerically("<", results[0].LastActivityMS))
+	})
+
+	It("excludes archived scenes", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		activeScene := mustCreateScene(store, "lcs-archived-active-01", "char-owner", string(SceneVisibilityOpen))
+		archivedScene := mustCreateScene(store, "lcs-archived-scene-01", "char-owner", string(SceneVisibilityOpen))
+
+		mustAddParticipant(store, activeScene.ID, "char-bob", "member")
+		mustAddParticipant(store, archivedScene.ID, "char-bob", "member")
+
+		// Archive scene by setting archived_at to a non-null epoch-ns.
+		_, err := store.Pool().Exec(
+			ctx,
+			`UPDATE scenes SET archived_at = $1 WHERE id = $2`,
+			time.Now().UnixNano(), archivedScene.ID,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		results, err := store.ListCharacterScenes(ctx, "char-bob", icPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(1))
+		Expect(results[0].Scene.ID).To(Equal(activeScene.ID))
+	})
+
+	It("returns entry_count zero when no scene_log rows exist", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		emptyScene := mustCreateScene(store, "lcs-empty-log-01", "char-owner", string(SceneVisibilityOpen))
+		mustAddParticipant(store, emptyScene.ID, "char-carol", "member")
+
+		results, err := store.ListCharacterScenes(ctx, "char-carol", icPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(1))
+		Expect(results[0].EntryCount).To(BeNumerically("==", 0))
+		Expect(results[0].LastActivityMS).To(BeNumerically("==", 0))
+	})
+
+	It("returns empty slice when character has no participant rows", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		results, err := store.ListCharacterScenes(ctx, "char-nobody", icPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(BeEmpty())
+	})
+})
+
+// ── ListPublishedScenes integration tests ─────────────────────────────────────
+
+var _ = Describe("SceneStore.ListPublishedScenes", func() {
+	// seedPublishedScene inserts a scene + a PUBLISHED published_scenes row
+	// with the given published_at epoch-ns so the list query has rows.
+	seedPublishedScene := func(store *SceneStore, sceneID, pubID string, tags []string, publishedAtNS int64) {
+		GinkgoHelper()
+		ctx := context.Background()
+		row := &SceneRow{
+			ID: sceneID, Title: "Pub " + sceneID, OwnerID: "char-pub-owner",
+			State:           string(SceneStateEnded),
+			PoseOrder:       string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{},
+			Tags:            tags,
+		}
+		Expect(store.Create(ctx, row)).NotTo(HaveOccurred())
+
+		// Insert directly — CreatePublishAttempt starts in COLLECTING; we
+		// need PUBLISHED status and a specific published_at for ordering tests.
+		_, err := store.Pool().Exec(
+			ctx, `
+			INSERT INTO published_scenes
+			  (id, scene_id, attempt_number, status, initiated_by, initiated_at,
+			   vote_window, cooloff_window, max_attempts_snapshot,
+			   title_snapshot, participants_snapshot, published_at, content_entries)
+			VALUES ($1, $2, 1, 'PUBLISHED', 'char-pub-owner',
+			        $3, '7 days', '30 minutes', 3,
+			        $4, '[]', $3, '[]')`,
+			pubID, sceneID, publishedAtNS, "Pub "+sceneID,
+		)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	It("returns only PUBLISHED rows ordered by published_at DESC", func() {
+		store := newTestStore()
+
+		older := time.Now().Add(-2 * time.Hour).UnixNano()
+		newer := time.Now().Add(-1 * time.Hour).UnixNano()
+		seedPublishedScene(store, "lps-scene-a", "lps-pub-a", []string{}, older)
+		seedPublishedScene(store, "lps-scene-b", "lps-pub-b", []string{}, newer)
+
+		// Also insert a non-PUBLISHED row to verify it is excluded.
+		_, err := store.Pool().Exec(
+			context.Background(), `
+			INSERT INTO published_scenes
+			  (id, scene_id, attempt_number, status, initiated_by, initiated_at,
+			   vote_window, cooloff_window, max_attempts_snapshot)
+			VALUES ('lps-collecting', 'lps-scene-a', 2, 'COLLECTING', 'char-pub-owner',
+			        $1, '7 days', '30 minutes', 3)`,
+			time.Now().UnixNano(),
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		results, err := store.ListPublishedScenes(context.Background(), ListPublishedScenesQuery{Limit: 10})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(2))
+		// Newest first.
+		Expect(results[0].ID).To(Equal("lps-pub-b"))
+		Expect(results[1].ID).To(Equal("lps-pub-a"))
+	})
+
+	It("filters by tags when tags are specified", func() {
+		store := newTestStore()
+
+		seedPublishedScene(store, "lps-tag-scene-a", "lps-tag-pub-a", []string{"drama", "romance"}, time.Now().UnixNano())
+		seedPublishedScene(store, "lps-tag-scene-b", "lps-tag-pub-b", []string{"drama"}, time.Now().UnixNano())
+		seedPublishedScene(store, "lps-tag-scene-c", "lps-tag-pub-c", []string{"comedy"}, time.Now().UnixNano())
+
+		results, err := store.ListPublishedScenes(context.Background(), ListPublishedScenesQuery{
+			Limit: 10,
+			Tags:  []string{"drama"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(2))
+
+		ids := []string{results[0].ID, results[1].ID}
+		Expect(ids).To(ContainElement("lps-tag-pub-a"))
+		Expect(ids).To(ContainElement("lps-tag-pub-b"))
+	})
+
+	It("respects limit and offset pagination", func() {
+		store := newTestStore()
+
+		for i := range 5 {
+			ts := time.Now().Add(time.Duration(-i) * time.Hour).UnixNano()
+			seedPublishedScene(
+				store,
+				"lps-page-scene-"+string(rune('a'+i)),
+				"lps-page-pub-"+string(rune('a'+i)),
+				[]string{}, ts,
+			)
+		}
+
+		first, err := store.ListPublishedScenes(context.Background(), ListPublishedScenesQuery{Limit: 2, Offset: 0})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(first).To(HaveLen(2))
+
+		second, err := store.ListPublishedScenes(context.Background(), ListPublishedScenesQuery{Limit: 2, Offset: 2})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(second).To(HaveLen(2))
+
+		// No overlap.
+		Expect(first[0].ID).NotTo(Equal(second[0].ID))
+		Expect(first[1].ID).NotTo(Equal(second[1].ID))
+	})
+})

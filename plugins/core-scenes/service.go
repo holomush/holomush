@@ -114,6 +114,14 @@ type sceneStorer interface {
 	// `additional` and returns the new budget. Backs the admin-only
 	// ExtendScenePublishVoteAttempts RPC (E1).
 	ExtendMaxPublishAttempts(ctx context.Context, sceneID string, additional int) (int, error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role), with activity aggregates. The
+	// icSubjectPrefix is "events.<gameID>.scene." — supplied by the service.
+	// Ordered by last_activity_ms DESC.
+	ListCharacterScenes(ctx context.Context, characterID, icSubjectPrefix string) ([]CharacterSceneResult, error)
+	// ListPublishedScenes returns PUBLISHED archive summaries newest first,
+	// with optional tag filtering and LIMIT/OFFSET paging.
+	ListPublishedScenes(ctx context.Context, q ListPublishedScenesQuery) ([]PublishedSceneArchiveSummary, error)
 
 	// ── C7 snapshot pipeline (COOLOFF→PUBLISHED) ──────────────────────────
 	// SnapshotPool exposes the connection pool so runSnapshot can orchestrate
@@ -506,6 +514,36 @@ func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScen
 		scenes = append(scenes, rowToProto(row, row.CreatedAt.Time()))
 	}
 	return &scenev1.ListScenesResponse{Scenes: scenes}, nil
+}
+
+// ListCharacterScenes returns every non-archived scene the character has a
+// participant row in (any role, including observer), with the character's
+// role and IC-subject activity metadata. Ordered by last_activity_ms DESC.
+// Caller validation is minimal (non-empty character_id, handled by
+// protovalidate before this handler runs).
+func (s *SceneServiceImpl) ListCharacterScenes(ctx context.Context, req *scenev1.ListCharacterScenesRequest) (*scenev1.ListCharacterScenesResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.list_character_scenes",
+		attribute.String("character_id", req.GetCharacterId()))
+	defer span.End()
+
+	icPrefix := "events." + s.gameID + ".scene."
+	results, err := s.store.ListCharacterScenes(ctx, req.GetCharacterId(), icPrefix)
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(ctx, "scene.service.list_character_scenes store error", "error", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+
+	out := make([]*scenev1.CharacterSceneInfo, 0, len(results))
+	for _, r := range results {
+		out = append(out, &scenev1.CharacterSceneInfo{
+			Scene:          rowToProto(r.Scene, r.Scene.CreatedAt.Time()),
+			Role:           r.Role,
+			LastActivityMs: r.LastActivityMS,
+			EntryCount:     r.EntryCount,
+		})
+	}
+	return &scenev1.ListCharacterScenesResponse{Scenes: out}, nil
 }
 
 // EndScene transitions a scene to the ended state. Only the scene owner is

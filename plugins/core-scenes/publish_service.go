@@ -12,8 +12,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/pgnanos"
+	"github.com/holomush/holomush/pkg/errutil"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
@@ -372,6 +375,47 @@ func assemblePublicResponse(pub *PublishedScene, entries []PublishedSceneEntry) 
 		})
 	}
 	return resp
+}
+
+// ListPublishedScenes pages through PUBLISHED scene archives newest first,
+// with optional tag filtering. Applies the same status gate as
+// GetPublicSceneArchive (INV-SCENE-35): only PUBLISHED rows are returned.
+// Pagination is via limit/offset; the default limit is 50, capped at 200.
+func (s *SceneServiceImpl) ListPublishedScenes(ctx context.Context, req *scenev1.ListPublishedScenesRequest) (*scenev1.ListPublishedScenesResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.list_published_scenes")
+	defer span.End()
+
+	q := ListPublishedScenesQuery{
+		Limit:  int(req.GetLimit()),
+		Offset: int(req.GetOffset()),
+		Tags:   req.GetTags(),
+	}
+	summaries, err := s.store.ListPublishedScenes(ctx, q)
+	if err != nil {
+		recordError(span, err)
+		errutil.LogErrorContext(ctx, "scene.service.list_published_scenes store error", err)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque Internal per grpc-errors.md
+	}
+
+	archives := make([]*scenev1.PublicSceneArchive, 0, len(summaries))
+	for _, sum := range summaries {
+		arc := &scenev1.PublicSceneArchive{
+			Id:                   sum.ID,
+			TitleSnapshot:        sum.TitleSnapshot,
+			ParticipantsSnapshot: sum.ParticipantsSnapshot,
+			Tags:                 sum.Tags,
+			PublishedAtUnixNs:    unixNanoOrZero(sum.PublishedAtNS),
+		}
+		for _, e := range sum.ContentEntries {
+			arc.ContentEntries = append(arc.ContentEntries, &scenev1.PublishedSceneEntry{
+				Speaker: e.Speaker,
+				Kind:    string(e.Kind),
+				Content: e.Content,
+			})
+		}
+		archives = append(archives, arc)
+	}
+	return &scenev1.ListPublishedScenesResponse{Archives: archives}, nil
 }
 
 // DownloadPublicSceneArchive is the PUBLIC, unauthenticated download of a

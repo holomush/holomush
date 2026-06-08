@@ -46,6 +46,8 @@ const (
 	SceneService_GetPublicSceneArchive_FullMethodName          = "/holomush.scene.v1.SceneService/GetPublicSceneArchive"
 	SceneService_DownloadPublicSceneArchive_FullMethodName     = "/holomush.scene.v1.SceneService/DownloadPublicSceneArchive"
 	SceneService_ExtendScenePublishVoteAttempts_FullMethodName = "/holomush.scene.v1.SceneService/ExtendScenePublishVoteAttempts"
+	SceneService_ListCharacterScenes_FullMethodName            = "/holomush.scene.v1.SceneService/ListCharacterScenes"
+	SceneService_ListPublishedScenes_FullMethodName            = "/holomush.scene.v1.SceneService/ListPublishedScenes"
 )
 
 // SceneServiceClient is the client API for SceneService service.
@@ -208,6 +210,18 @@ type SceneServiceClient interface {
 	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(ctx context.Context, in *ExtendScenePublishVoteAttemptsRequest, opts ...grpc.CallOption) (*ExtendScenePublishVoteAttemptsResponse, error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role, including observer), with the character's
+	// role and per-scene activity metadata for workspace badges. Serves the
+	// web workspace's "my scenes" list; intended for use by the host facade
+	// fanning this out across a player's owned characters. See
+	// service.go::ListCharacterScenes.
+	ListCharacterScenes(ctx context.Context, in *ListCharacterScenesRequest, opts ...grpc.CallOption) (*ListCharacterScenesResponse, error)
+	// ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+	// fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+	// newest first, with optional tag filtering. Powers the archive browse
+	// page. See publish_service.go::ListPublishedScenes.
+	ListPublishedScenes(ctx context.Context, in *ListPublishedScenesRequest, opts ...grpc.CallOption) (*ListPublishedScenesResponse, error)
 }
 
 type sceneServiceClient struct {
@@ -458,6 +472,26 @@ func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context,
 	return out, nil
 }
 
+func (c *sceneServiceClient) ListCharacterScenes(ctx context.Context, in *ListCharacterScenesRequest, opts ...grpc.CallOption) (*ListCharacterScenesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCharacterScenesResponse)
+	err := c.cc.Invoke(ctx, SceneService_ListCharacterScenes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) ListPublishedScenes(ctx context.Context, in *ListPublishedScenesRequest, opts ...grpc.CallOption) (*ListPublishedScenesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPublishedScenesResponse)
+	err := c.cc.Invoke(ctx, SceneService_ListPublishedScenes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SceneServiceServer is the server API for SceneService service.
 // All implementations must embed UnimplementedSceneServiceServer
 // for forward compatibility.
@@ -618,6 +652,18 @@ type SceneServiceServer interface {
 	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *ExtendScenePublishVoteAttemptsRequest) (*ExtendScenePublishVoteAttemptsResponse, error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role, including observer), with the character's
+	// role and per-scene activity metadata for workspace badges. Serves the
+	// web workspace's "my scenes" list; intended for use by the host facade
+	// fanning this out across a player's owned characters. See
+	// service.go::ListCharacterScenes.
+	ListCharacterScenes(context.Context, *ListCharacterScenesRequest) (*ListCharacterScenesResponse, error)
+	// ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+	// fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+	// newest first, with optional tag filtering. Powers the archive browse
+	// page. See publish_service.go::ListPublishedScenes.
+	ListPublishedScenes(context.Context, *ListPublishedScenesRequest) (*ListPublishedScenesResponse, error)
 	mustEmbedUnimplementedSceneServiceServer()
 }
 
@@ -699,6 +745,12 @@ func (UnimplementedSceneServiceServer) DownloadPublicSceneArchive(context.Contex
 }
 func (UnimplementedSceneServiceServer) ExtendScenePublishVoteAttempts(context.Context, *ExtendScenePublishVoteAttemptsRequest) (*ExtendScenePublishVoteAttemptsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExtendScenePublishVoteAttempts not implemented")
+}
+func (UnimplementedSceneServiceServer) ListCharacterScenes(context.Context, *ListCharacterScenesRequest) (*ListCharacterScenesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCharacterScenes not implemented")
+}
+func (UnimplementedSceneServiceServer) ListPublishedScenes(context.Context, *ListPublishedScenesRequest) (*ListPublishedScenesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPublishedScenes not implemented")
 }
 func (UnimplementedSceneServiceServer) mustEmbedUnimplementedSceneServiceServer() {}
 func (UnimplementedSceneServiceServer) testEmbeddedByValue()                      {}
@@ -1153,6 +1205,42 @@ func _SceneService_ExtendScenePublishVoteAttempts_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SceneService_ListCharacterScenes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCharacterScenesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ListCharacterScenes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ListCharacterScenes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ListCharacterScenes(ctx, req.(*ListCharacterScenesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_ListPublishedScenes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPublishedScenesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ListPublishedScenes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ListPublishedScenes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ListPublishedScenes(ctx, req.(*ListPublishedScenesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SceneService_ServiceDesc is the grpc.ServiceDesc for SceneService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1255,6 +1343,14 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExtendScenePublishVoteAttempts",
 			Handler:    _SceneService_ExtendScenePublishVoteAttempts_Handler,
+		},
+		{
+			MethodName: "ListCharacterScenes",
+			Handler:    _SceneService_ListCharacterScenes_Handler,
+		},
+		{
+			MethodName: "ListPublishedScenes",
+			Handler:    _SceneService_ListPublishedScenes_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

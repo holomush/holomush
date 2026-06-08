@@ -48,6 +48,12 @@ type fakeStore struct {
 	listBoardRows []*SceneRow
 	listBoardErr  error
 	listBoardGot  *BoardQuery // records the last query received
+	// ListCharacterScenes control fields.
+	listCharacterScenesRows []CharacterSceneResult
+	listCharacterScenesErr  error
+	// ListPublishedScenes control fields.
+	listPublishedScenesRows []PublishedSceneArchiveSummary
+	listPublishedScenesErr  error
 }
 
 type recordingEventSink struct {
@@ -657,6 +663,25 @@ func (f *fakeStore) ArchiveSceneStateForPublish(_ context.Context, _ pgx.Tx, _ s
 
 func (f *fakeStore) FailAttemptTx(_ context.Context, _ pgx.Tx, _ string, _ PublishFailureReason) error {
 	return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").Errorf("fakeStore: FailAttemptTx not supported")
+}
+
+// ListCharacterScenes returns a fixed slice injected via
+// fakeStore.listCharacterScenesRows. The icSubjectPrefix is accepted but
+// ignored — unit tests control results directly.
+func (f *fakeStore) ListCharacterScenes(_ context.Context, _ string, _ string) ([]CharacterSceneResult, error) {
+	if f.listCharacterScenesErr != nil {
+		return nil, f.listCharacterScenesErr
+	}
+	return f.listCharacterScenesRows, nil
+}
+
+// ListPublishedScenes returns a fixed slice injected via
+// fakeStore.listPublishedScenesRows.
+func (f *fakeStore) ListPublishedScenes(_ context.Context, _ ListPublishedScenesQuery) ([]PublishedSceneArchiveSummary, error) {
+	if f.listPublishedScenesErr != nil {
+		return nil, f.listPublishedScenesErr
+	}
+	return f.listPublishedScenesRows, nil
 }
 
 func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testing.T) {
@@ -2140,4 +2165,133 @@ func TestListScenesPassesEmptyBlockedCWWhenNoBlocksAreConfigured(t *testing.T) {
 	require.NotNil(t, store.listBoardGot)
 	assert.Empty(t, store.listBoardGot.BlockedCW,
 		"no blocks configured → BlockedCW must be empty so IS NULL skips the filter")
+}
+
+// ── ListCharacterScenes unit tests ───────────────────────────────────────────
+
+// TestListCharacterScenesReturnsMappedRowsWithRoleAndActivityMetadata asserts
+// that the handler passes characterID to the store and maps each result to a
+// CharacterSceneInfo with the correct role, last_activity_ms, and entry_count.
+func TestListCharacterScenesReturnsMappedRowsWithRoleAndActivityMetadata(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesRows = []CharacterSceneResult{
+		{
+			Scene: &SceneRow{
+				ID: "scene-lcs-1", Title: "First", OwnerID: "char-owner",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			},
+			Role:           "observer",
+			LastActivityMS: 1_700_000_000_000,
+			EntryCount:     5,
+		},
+		{
+			Scene: &SceneRow{
+				ID: "scene-lcs-2", Title: "Second", OwnerID: "char-owner",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			},
+			Role:           "member",
+			LastActivityMS: 1_600_000_000_000,
+			EntryCount:     3,
+		},
+	}
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetScenes(), 2)
+
+	first := resp.GetScenes()[0]
+	assert.Equal(t, "scene-lcs-1", first.GetScene().GetId())
+	assert.Equal(t, "observer", first.GetRole())
+	assert.Equal(t, int64(1_700_000_000_000), first.GetLastActivityMs())
+	assert.Equal(t, int64(5), first.GetEntryCount())
+
+	second := resp.GetScenes()[1]
+	assert.Equal(t, "scene-lcs-2", second.GetScene().GetId())
+	assert.Equal(t, "member", second.GetRole())
+	assert.Equal(t, int64(1_600_000_000_000), second.GetLastActivityMs())
+	assert.Equal(t, int64(3), second.GetEntryCount())
+}
+
+// TestListCharacterScenesReturnsEmptySliceWhenNoResults asserts that the
+// handler returns an empty scenes list (not an error) when the store has no
+// participant rows for the character.
+func TestListCharacterScenesReturnsEmptySliceWhenNoResults(t *testing.T) {
+	store := newFakeStore()
+	// listCharacterScenesRows is nil by default → store returns nil, nil.
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-nobody",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetScenes())
+}
+
+// TestListCharacterScenesStoreErrorMapsToInternal asserts that a store error
+// is mapped to gRPC Internal and does not leak the inner message.
+func TestListCharacterScenesStoreErrorMapsToInternal(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesErr = oops.Code("SCENE_LIST_CHARACTER_SCENES_FAILED").Errorf("db error")
+
+	svc := newTestService(t, store)
+	_, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.Error(t, err)
+	st := status.Convert(err)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Equal(t, "internal error", st.Message(), "store error MUST NOT leak through the wire message")
+}
+
+// ── ListPublishedScenes unit tests ───────────────────────────────────────────
+
+// TestListPublishedScenesReturnsMappedArchiveSummariesNewestFirst asserts that
+// the handler maps PublishedSceneArchiveSummary rows to PublicSceneArchive
+// protos with correct field mapping.
+func TestListPublishedScenesReturnsMappedArchiveSummariesNewestFirst(t *testing.T) {
+	now := pgnanos.From(time.Now())
+	store := newFakeStore()
+	store.listPublishedScenesRows = []PublishedSceneArchiveSummary{
+		{
+			ID:                   "pub-lps-1",
+			TitleSnapshot:        "Newest Scene",
+			ParticipantsSnapshot: []string{"Alice", "Bob"},
+			PublishedAtNS:        &now,
+			Tags:                 []string{"drama"},
+		},
+	}
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListPublishedScenes(context.Background(), &scenev1.ListPublishedScenesRequest{
+		Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetArchives(), 1)
+
+	arc := resp.GetArchives()[0]
+	assert.Equal(t, "pub-lps-1", arc.GetId())
+	assert.Equal(t, "Newest Scene", arc.GetTitleSnapshot())
+	assert.Equal(t, []string{"Alice", "Bob"}, arc.GetParticipantsSnapshot())
+	assert.Equal(t, []string{"drama"}, arc.GetTags())
+	assert.NotZero(t, arc.GetPublishedAtUnixNs())
+}
+
+// TestListPublishedScenesStoreErrorMapsToInternal asserts that a store error
+// is wrapped as gRPC Internal without leaking the inner error message.
+func TestListPublishedScenesStoreErrorMapsToInternal(t *testing.T) {
+	store := newFakeStore()
+	store.listPublishedScenesErr = oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_FAILED").Errorf("db gone")
+
+	svc := newTestService(t, store)
+	_, err := svc.ListPublishedScenes(context.Background(), &scenev1.ListPublishedScenesRequest{})
+	require.Error(t, err)
+	st := status.Convert(err)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Equal(t, "internal error", st.Message(), "store error MUST NOT leak through the wire message")
 }

@@ -101,6 +101,12 @@ const (
 	// SceneServiceExtendScenePublishVoteAttemptsProcedure is the fully-qualified name of the
 	// SceneService's ExtendScenePublishVoteAttempts RPC.
 	SceneServiceExtendScenePublishVoteAttemptsProcedure = "/holomush.scene.v1.SceneService/ExtendScenePublishVoteAttempts"
+	// SceneServiceListCharacterScenesProcedure is the fully-qualified name of the SceneService's
+	// ListCharacterScenes RPC.
+	SceneServiceListCharacterScenesProcedure = "/holomush.scene.v1.SceneService/ListCharacterScenes"
+	// SceneServiceListPublishedScenesProcedure is the fully-qualified name of the SceneService's
+	// ListPublishedScenes RPC.
+	SceneServiceListPublishedScenesProcedure = "/holomush.scene.v1.SceneService/ListPublishedScenes"
 )
 
 // SceneServiceClient is a client for the holomush.scene.v1.SceneService service.
@@ -241,6 +247,18 @@ type SceneServiceClient interface {
 	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role, including observer), with the character's
+	// role and per-scene activity metadata for workspace badges. Serves the
+	// web workspace's "my scenes" list; intended for use by the host facade
+	// fanning this out across a player's owned characters. See
+	// service.go::ListCharacterScenes.
+	ListCharacterScenes(context.Context, *connect.Request[v1.ListCharacterScenesRequest]) (*connect.Response[v1.ListCharacterScenesResponse], error)
+	// ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+	// fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+	// newest first, with optional tag filtering. Powers the archive browse
+	// page. See publish_service.go::ListPublishedScenes.
+	ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error)
 }
 
 // NewSceneServiceClient constructs a client for the holomush.scene.v1.SceneService service. By
@@ -398,6 +416,18 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(sceneServiceMethods.ByName("ExtendScenePublishVoteAttempts")),
 			connect.WithClientOptions(opts...),
 		),
+		listCharacterScenes: connect.NewClient[v1.ListCharacterScenesRequest, v1.ListCharacterScenesResponse](
+			httpClient,
+			baseURL+SceneServiceListCharacterScenesProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ListCharacterScenes")),
+			connect.WithClientOptions(opts...),
+		),
+		listPublishedScenes: connect.NewClient[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse](
+			httpClient,
+			baseURL+SceneServiceListPublishedScenesProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ListPublishedScenes")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -427,6 +457,8 @@ type sceneServiceClient struct {
 	getPublicSceneArchive          *connect.Client[v1.GetPublicSceneArchiveRequest, v1.GetPublicSceneArchiveResponse]
 	downloadPublicSceneArchive     *connect.Client[v1.DownloadPublicSceneArchiveRequest, v1.DownloadPublicSceneArchiveResponse]
 	extendScenePublishVoteAttempts *connect.Client[v1.ExtendScenePublishVoteAttemptsRequest, v1.ExtendScenePublishVoteAttemptsResponse]
+	listCharacterScenes            *connect.Client[v1.ListCharacterScenesRequest, v1.ListCharacterScenesResponse]
+	listPublishedScenes            *connect.Client[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse]
 }
 
 // ListScenes calls holomush.scene.v1.SceneService.ListScenes.
@@ -548,6 +580,16 @@ func (c *sceneServiceClient) DownloadPublicSceneArchive(ctx context.Context, req
 // holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts.
 func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context, req *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error) {
 	return c.extendScenePublishVoteAttempts.CallUnary(ctx, req)
+}
+
+// ListCharacterScenes calls holomush.scene.v1.SceneService.ListCharacterScenes.
+func (c *sceneServiceClient) ListCharacterScenes(ctx context.Context, req *connect.Request[v1.ListCharacterScenesRequest]) (*connect.Response[v1.ListCharacterScenesResponse], error) {
+	return c.listCharacterScenes.CallUnary(ctx, req)
+}
+
+// ListPublishedScenes calls holomush.scene.v1.SceneService.ListPublishedScenes.
+func (c *sceneServiceClient) ListPublishedScenes(ctx context.Context, req *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error) {
+	return c.listPublishedScenes.CallUnary(ctx, req)
 }
 
 // SceneServiceHandler is an implementation of the holomush.scene.v1.SceneService service.
@@ -688,6 +730,18 @@ type SceneServiceHandler interface {
 	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role, including observer), with the character's
+	// role and per-scene activity metadata for workspace badges. Serves the
+	// web workspace's "my scenes" list; intended for use by the host facade
+	// fanning this out across a player's owned characters. See
+	// service.go::ListCharacterScenes.
+	ListCharacterScenes(context.Context, *connect.Request[v1.ListCharacterScenesRequest]) (*connect.Response[v1.ListCharacterScenesResponse], error)
+	// ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+	// fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+	// newest first, with optional tag filtering. Powers the archive browse
+	// page. See publish_service.go::ListPublishedScenes.
+	ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error)
 }
 
 // NewSceneServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -841,6 +895,18 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(sceneServiceMethods.ByName("ExtendScenePublishVoteAttempts")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneServiceListCharacterScenesHandler := connect.NewUnaryHandler(
+		SceneServiceListCharacterScenesProcedure,
+		svc.ListCharacterScenes,
+		connect.WithSchema(sceneServiceMethods.ByName("ListCharacterScenes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceListPublishedScenesHandler := connect.NewUnaryHandler(
+		SceneServiceListPublishedScenesProcedure,
+		svc.ListPublishedScenes,
+		connect.WithSchema(sceneServiceMethods.ByName("ListPublishedScenes")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.scene.v1.SceneService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SceneServiceListScenesProcedure:
@@ -891,6 +957,10 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServiceDownloadPublicSceneArchiveHandler.ServeHTTP(w, r)
 		case SceneServiceExtendScenePublishVoteAttemptsProcedure:
 			sceneServiceExtendScenePublishVoteAttemptsHandler.ServeHTTP(w, r)
+		case SceneServiceListCharacterScenesProcedure:
+			sceneServiceListCharacterScenesHandler.ServeHTTP(w, r)
+		case SceneServiceListPublishedScenesProcedure:
+			sceneServiceListPublishedScenesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -994,4 +1064,12 @@ func (UnimplementedSceneServiceHandler) DownloadPublicSceneArchive(context.Conte
 
 func (UnimplementedSceneServiceHandler) ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ListCharacterScenes(context.Context, *connect.Request[v1.ListCharacterScenesRequest]) (*connect.Response[v1.ListCharacterScenesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ListCharacterScenes is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ListPublishedScenes is not implemented"))
 }

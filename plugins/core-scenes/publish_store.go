@@ -692,6 +692,108 @@ func (s *SceneStore) ListSceneAttempts(ctx context.Context, sceneID string) ([]P
 	return out, nil
 }
 
+// ListPublishedScenesQuery parameterises the archive-browse listing.
+type ListPublishedScenesQuery struct {
+	// Limit is the page size. 0 means server-default (50), capped at 200.
+	Limit int
+	// Offset is the zero-based row skip. Negative values are clamped to 0.
+	Offset int
+	// Tags, when non-empty, restricts results to scenes carrying all listed
+	// tags (array containment: scenes.tags @> $tags).
+	Tags []string
+}
+
+// PublishedSceneArchiveSummary is the persistence-layer projection for
+// ListPublishedScenes — the public-safe archive fields plus the source
+// scene's tags for client-side filtering.
+type PublishedSceneArchiveSummary struct {
+	ID                   string
+	TitleSnapshot        string
+	ParticipantsSnapshot []string
+	ContentEntries       []PublishedSceneEntry
+	PublishedAtNS        *pgnanos.Time
+	Tags                 []string // from scenes.tags at list time
+}
+
+const (
+	defaultPublishedLimit = 50
+	maxPublishedLimit     = 200
+)
+
+// ListPublishedScenes returns PUBLISHED scene archive summaries in
+// published_at DESC order. Only PUBLISHED rows are returned (same status
+// gate as GetPublicSceneArchive / INV-SCENE-35). Tags is applied as an
+// array-containment predicate on scenes.tags. Supports LIMIT/OFFSET paging.
+func (s *SceneStore) ListPublishedScenes(ctx context.Context, q ListPublishedScenesQuery) ([]PublishedSceneArchiveSummary, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_published_scenes")
+	defer span.End()
+
+	if q.Limit <= 0 {
+		q.Limit = defaultPublishedLimit
+	} else if q.Limit > maxPublishedLimit {
+		q.Limit = maxPublishedLimit
+	}
+	if q.Offset < 0 {
+		q.Offset = 0
+	}
+
+	var tagsArg interface{}
+	if len(q.Tags) > 0 {
+		tagsArg = q.Tags
+	}
+
+	const query = `
+		SELECT ps.id, ps.title_snapshot, ps.participants_snapshot,
+		       ps.content_entries, ps.published_at, s.tags
+		FROM published_scenes ps
+		JOIN scenes s ON s.id = ps.scene_id
+		WHERE ps.status = 'PUBLISHED'
+		  AND ($1::text[] IS NULL OR s.tags @> $1)
+		ORDER BY ps.published_at DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := s.pool.Query(ctx, query, tagsArg, q.Limit, q.Offset)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []PublishedSceneArchiveSummary
+	for rows.Next() {
+		var item PublishedSceneArchiveSummary
+		var titleSnapshot *string
+		var participantsRaw []byte
+		var contentRaw []byte
+		if err := rows.Scan(
+			&item.ID, &titleSnapshot, &participantsRaw,
+			&contentRaw, &item.PublishedAtNS, &item.Tags,
+		); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_SCAN_FAILED").Wrap(err)
+		}
+		if titleSnapshot != nil {
+			item.TitleSnapshot = *titleSnapshot
+		}
+		if len(participantsRaw) > 0 {
+			if err := json.Unmarshal(participantsRaw, &item.ParticipantsSnapshot); err != nil {
+				return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_PARTICIPANTS_DECODE_FAILED").Wrap(err)
+			}
+		}
+		if len(contentRaw) > 0 {
+			if err := json.Unmarshal(contentRaw, &item.ContentEntries); err != nil {
+				return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_CONTENT_DECODE_FAILED").Wrap(err)
+			}
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
 // SnapshotPool exposes the underlying connection pool for the C7 snapshot
 // pipeline, which orchestrates a read-tx → decrypt(outside tx) → write-tx
 // sequence (read-back design §6). It is the same pool as Pool(); the distinct
