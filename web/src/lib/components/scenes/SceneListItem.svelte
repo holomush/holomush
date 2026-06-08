@@ -11,13 +11,26 @@
   let {
     scene,
     onSelect,
+    tabindex = 0,
   }: {
     scene: WorkspaceScene;
     onSelect?: (scene: WorkspaceScene) => void;
+    tabindex?: number;
   } = $props();
 
   const isActive = $derived(workspaceStore.selectedSceneId === scene.sceneId);
   const unread = $derived(workspaceStore.unreadBySceneId[scene.sceneId] ?? 0);
+
+  // Accessible name: "scene <title>, as <character>, <n> unread"
+  const accessibleName = $derived(
+    [
+      `scene ${scene.title}`,
+      scene.asCharacterName ? `as ${scene.asCharacterName}` : null,
+      unread > 0 ? `${unread} unread` : null,
+    ]
+      .filter(Boolean)
+      .join(', '),
+  );
 </script>
 
 <button
@@ -28,8 +41,10 @@
       ? 'bg-accent text-accent-foreground'
       : 'hover:bg-muted/60 text-foreground',
   )}
+  {tabindex}
   onclick={() => (onSelect ? onSelect(scene) : workspaceStore.select(scene.sceneId, '', scene.asCharacterId))}
   aria-current={isActive ? 'true' : undefined}
+  aria-label={accessibleName}
 >
   <span class="mt-0.5 size-2 shrink-0 rounded-full bg-[var(--brand-cyan-bright)] mt-1.5"></span>
   <span class="min-w-0 flex-1">
