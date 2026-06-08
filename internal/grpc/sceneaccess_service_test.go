@@ -645,3 +645,173 @@ func TestSetSceneFocusClearToGridSkipsJoinFocus(t *testing.T) {
 	sceneMock.AssertNotCalled(t, "ListCharacterScenes",
 		"participant check MUST NOT run on clear-to-grid")
 }
+
+// --- name resolver tests ---
+
+// stubSceneNameResolver is a minimal sceneNameResolver for unit tests.
+type stubSceneNameResolver struct {
+	names map[string]string
+	err   error
+}
+
+func (s *stubSceneNameResolver) NamesByIDs(_ context.Context, _ []string) (map[string]string, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.names, nil
+}
+
+// buildGetSceneServer returns a SceneAccessServer wired for GetSceneForViewer tests.
+func buildGetSceneServer(
+	t *testing.T,
+	nr sceneNameResolver,
+	sceneResp *scenev1.GetSceneResponse,
+	sceneErr error,
+) (*SceneAccessServer, ulid.ULID) {
+	t.Helper()
+	playerID := idgen.New()
+	charID := idgen.New()
+
+	ps := buildSATestPS(t, playerID)
+	psRepo := buildSASessionRepo(t, ps)
+
+	player := &auth.Player{ID: playerID, IsGuest: false}
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).Return(player, nil).Maybe()
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	ownedChar := &world.Character{ID: charID, PlayerID: playerID}
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{ownedChar}, nil).Maybe()
+
+	sessStore := sessionmocks.NewMockStore(t)
+	mgr := &stubPluginManager{}
+
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+	sceneMock.EXPECT().GetScene(mock.Anything, mock.Anything).Return(sceneResp, sceneErr).Maybe()
+
+	srv := newTestSceneAccessServer(t, psRepo, playerRepo, charRepo, sessStore, &stubFocusCoordinator{}, sceneMock, mgr)
+	if nr != nil {
+		srv.WithSceneNameResolver(nr)
+	}
+	return srv, charID
+}
+
+// TestGetSceneForViewerRosterNamesPopulatedFromResolver verifies that when a
+// name resolver is wired, the Participants and Observers in the response carry
+// the resolved names instead of the raw character IDs.
+func TestGetSceneForViewerRosterNamesPopulatedFromResolver(t *testing.T) {
+	ctx := context.Background()
+
+	part1ID := idgen.New().String()
+	obs1ID := idgen.New().String()
+
+	sceneResp := &scenev1.GetSceneResponse{
+		Scene: &scenev1.SceneInfo{
+			Id: idgen.New().String(),
+			Participants: []*scenev1.ParticipantInfo{
+				{CharacterId: part1ID, CharacterName: part1ID}, // plugin sets CharacterName=ID
+			},
+			Observers: []*scenev1.ParticipantInfo{
+				{CharacterId: obs1ID, CharacterName: obs1ID},
+			},
+		},
+	}
+	nr := &stubSceneNameResolver{
+		names: map[string]string{
+			part1ID: "Alice",
+			obs1ID:  "Bob",
+		},
+	}
+
+	srv, charID := buildGetSceneServer(t, nr, sceneResp, nil)
+
+	resp, err := srv.GetSceneForViewer(ctx, &sceneaccessv1.GetSceneForViewerRequest{
+		PlayerSessionToken: testSAToken,
+		CharacterId:        charID.String(),
+		SceneId:            idgen.New().String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetScene().GetParticipants(), 1)
+	require.Len(t, resp.GetScene().GetObservers(), 1)
+	assert.Equal(t, "Alice", resp.GetScene().GetParticipants()[0].GetCharacterName(),
+		"participant name MUST be resolved from the name resolver")
+	assert.Equal(t, "Bob", resp.GetScene().GetObservers()[0].GetCharacterName(),
+		"observer name MUST be resolved from the name resolver")
+}
+
+// TestGetSceneForViewerRosterFallsBackToIDOnResolverMiss verifies that a
+// roster entry whose ID is absent from the resolver result retains the
+// existing CharacterName value (the raw ID set by the plugin).
+func TestGetSceneForViewerRosterFallsBackToIDOnResolverMiss(t *testing.T) {
+	ctx := context.Background()
+
+	knownID := idgen.New().String()
+	unknownID := idgen.New().String()
+
+	sceneResp := &scenev1.GetSceneResponse{
+		Scene: &scenev1.SceneInfo{
+			Id: idgen.New().String(),
+			Participants: []*scenev1.ParticipantInfo{
+				{CharacterId: knownID, CharacterName: knownID},
+				{CharacterId: unknownID, CharacterName: unknownID}, // resolver will not return this
+			},
+		},
+	}
+	nr := &stubSceneNameResolver{
+		names: map[string]string{
+			knownID: "Alice", // unknownID intentionally absent
+		},
+	}
+
+	srv, charID := buildGetSceneServer(t, nr, sceneResp, nil)
+
+	resp, err := srv.GetSceneForViewer(ctx, &sceneaccessv1.GetSceneForViewerRequest{
+		PlayerSessionToken: testSAToken,
+		CharacterId:        charID.String(),
+		SceneId:            idgen.New().String(),
+	})
+	require.NoError(t, err)
+	parts := resp.GetScene().GetParticipants()
+	require.Len(t, parts, 2)
+
+	nameByID := make(map[string]string, len(parts))
+	for _, p := range parts {
+		nameByID[p.GetCharacterId()] = p.GetCharacterName()
+	}
+	assert.Equal(t, "Alice", nameByID[knownID], "resolved entry MUST carry the real name")
+	assert.Equal(t, unknownID, nameByID[unknownID],
+		"unresolved entry MUST retain its original CharacterName (the raw ID)")
+}
+
+// TestGetSceneForViewerRosterIsNonFatalOnResolverError verifies that a resolver
+// error does not fail the RPC — the scene is still returned with the original
+// CharacterName values (raw IDs) intact.
+func TestGetSceneForViewerRosterIsNonFatalOnResolverError(t *testing.T) {
+	ctx := context.Background()
+
+	charIDInRoster := idgen.New().String()
+
+	sceneResp := &scenev1.GetSceneResponse{
+		Scene: &scenev1.SceneInfo{
+			Id: idgen.New().String(),
+			Participants: []*scenev1.ParticipantInfo{
+				{CharacterId: charIDInRoster, CharacterName: charIDInRoster},
+			},
+		},
+	}
+	nr := &stubSceneNameResolver{
+		err: errors.New("database connection failed"),
+	}
+
+	srv, charID := buildGetSceneServer(t, nr, sceneResp, nil)
+
+	resp, err := srv.GetSceneForViewer(ctx, &sceneaccessv1.GetSceneForViewerRequest{
+		PlayerSessionToken: testSAToken,
+		CharacterId:        charID.String(),
+		SceneId:            idgen.New().String(),
+	})
+	require.NoError(t, err, "resolver error MUST NOT fail the GetSceneForViewer RPC")
+	require.Len(t, resp.GetScene().GetParticipants(), 1)
+	assert.Equal(t, charIDInRoster, resp.GetScene().GetParticipants()[0].GetCharacterName(),
+		"on resolver error the original CharacterName (the raw ID) MUST be preserved")
+}

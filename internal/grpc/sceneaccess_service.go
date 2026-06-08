@@ -37,6 +37,16 @@ type sceneDEKAdder interface {
 	Add(ctx context.Context, ctxID dek.ContextID, p dek.Participant) error
 }
 
+// sceneNameResolver resolves character display names for the GetScene roster.
+// Narrow seam so SceneAccessServer stays free of world-repo plumbing and tests
+// can substitute a simple stub. Mirrors the dekAdder optional-dep pattern.
+type sceneNameResolver interface {
+	// NamesByIDs returns a map[characterID]name for the given string IDs.
+	// Missing IDs are absent from the result (not an error). Best-effort:
+	// callers MUST continue on error and leave roster entries as-is.
+	NamesByIDs(ctx context.Context, ids []string) (map[string]string, error)
+}
+
 // SceneAccessServer is the host-side facade that owns player authentication,
 // server-side identity resolution (INV-SCENE-63), and guest-player rejection
 // (INV-SCENE-64) for all scene-surface RPCs. It wraps the plugin SceneService,
@@ -57,6 +67,10 @@ type SceneAccessServer struct {
 	// the authguard hot-tier permits the session to decrypt sensitive
 	// scene events (e.g. scene_pose). Nil in tests that don't need crypto.
 	dekAdder sceneDEKAdder
+	// nameResolver is optional. When non-nil, GetSceneForViewer enriches
+	// the Participants and Observers roster with real character names.
+	// Nil in tests that do not exercise name resolution.
+	nameResolver sceneNameResolver
 }
 
 // NewSceneAccessServer constructs a SceneAccessServer. All fields are required;
@@ -87,6 +101,15 @@ func NewSceneAccessServer(
 // gate passes. Omit in tests that do not exercise the encrypted path.
 func (s *SceneAccessServer) WithSceneDEKAdder(a sceneDEKAdder) {
 	s.dekAdder = a
+}
+
+// WithSceneNameResolver attaches a character name resolver to the server.
+// When set, GetSceneForViewer enriches the Participants and Observers roster
+// with real character names from the host characters table (best-effort: a
+// resolver error or a per-id miss leaves the entry's existing value intact).
+// Omit in tests that do not exercise name resolution.
+func (s *SceneAccessServer) WithSceneNameResolver(r sceneNameResolver) {
+	s.nameResolver = r
 }
 
 // ownedCharacter verifies that charIDStr is a valid ULID and is owned by
@@ -197,7 +220,58 @@ func (s *SceneAccessServer) GetSceneForViewer(ctx context.Context, req *sceneacc
 	if err != nil {
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
-	return &sceneaccessv1.GetSceneForViewerResponse{Scene: resp.GetScene()}, nil
+
+	scene := resp.GetScene()
+	s.enrichRosterNames(ctx, scene)
+	return &sceneaccessv1.GetSceneForViewerResponse{Scene: scene}, nil
+}
+
+// enrichRosterNames resolves character names for all Participants and Observers
+// in the scene and writes them back in-place. Best-effort: on any resolver error
+// or per-id miss the entry retains its current CharacterName value (the raw ID
+// set by the plugin). The RPC is never failed due to a name-resolution problem.
+func (s *SceneAccessServer) enrichRosterNames(ctx context.Context, scene *scenev1.SceneInfo) {
+	if s.nameResolver == nil || scene == nil {
+		return
+	}
+
+	// Collect the unique character IDs from both roster slices.
+	seen := make(map[string]struct{})
+	for _, p := range scene.GetParticipants() {
+		if id := p.GetCharacterId(); id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	for _, o := range scene.GetObservers() {
+		if id := o.GetCharacterId(); id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	if len(seen) == 0 {
+		return
+	}
+
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+
+	names, err := s.nameResolver.NamesByIDs(ctx, ids)
+	if err != nil {
+		slog.WarnContext(ctx, "scene access: name resolution failed (non-fatal, roster degraded to IDs)", "error", err)
+		return
+	}
+
+	for _, p := range scene.Participants {
+		if name, ok := names[p.GetCharacterId()]; ok {
+			p.CharacterName = name
+		}
+	}
+	for _, o := range scene.Observers {
+		if name, ok := names[o.GetCharacterId()]; ok {
+			o.CharacterName = name
+		}
+	}
 }
 
 // ListMyScenes returns the verified character's scene participations.

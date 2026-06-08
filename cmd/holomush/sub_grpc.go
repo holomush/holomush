@@ -559,6 +559,11 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		if s.cfg.RekeyManager != nil {
 			saSrv.WithSceneDEKAdder(s.cfg.RekeyManager)
 		}
+		// Wire the character name resolver so GetSceneForViewer returns real
+		// names in the Participants/Observers roster instead of raw IDs.
+		// Uses charRepo (worldpostgres.CharacterRepository) already constructed
+		// above; reuses the same resolver wired for ListFocusPresence (5b2j).
+		saSrv.WithSceneNameResolver(holoGRPC.NewRepoCharacterNameResolver(charRepo))
 		sceneAccessSrv = saSrv
 		slog.InfoContext(ctx, "sceneAccessService facade registered")
 	} else {
