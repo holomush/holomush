@@ -215,6 +215,41 @@ func TestResolveResourceReturnsParticipantsAndInviteesLists(t *testing.T) {
 	assert.Empty(t, inviteesAttr.GetStringListValue().GetValues())
 }
 
+// TestResolveResourceExcludesObserverFromParticipantsAttribute pins the
+// structural exclusion that makes write-scene-as-participant deny observers:
+// GetWithMembership filters role IN ('owner','member'), so an observer row
+// MUST NOT appear in the resolved resource.scene.participants list.
+// This is the attribute-path gate referenced by INV-SCENE-61.
+func TestResolveResourceExcludesObserverFromParticipantsAttribute(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-obs-excl",
+		Title:      "Observer Exclusion",
+		OwnerID:    "char-member",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}))
+	// Seed an observer row directly into the fake store's participants map.
+	store.participants["scene-obs-excl"]["char-observer"] = "observer"
+
+	resolver := NewSceneResolver(store)
+	resp, err := resolver.ResolveResource(context.Background(), &pluginv1.ResolveResourceRequest{
+		ResourceType: "scene",
+		ResourceId:   "scene-obs-excl",
+	})
+	require.NoError(t, err)
+
+	participantsAttr := resp.GetAttributes()["participants"]
+	require.NotNil(t, participantsAttr)
+	vals := participantsAttr.GetStringListValue().GetValues()
+	assert.Contains(t, vals, "char-member",
+		"the owner/member must appear in the participants attribute")
+	assert.NotContains(t, vals, "char-observer",
+		"observer MUST NOT appear in participants attribute — "+
+			"this is the gate that denies observer write access via write-scene-as-participant policy")
+}
+
 // TestResolveResourceDoesNotLeakPoseOrderMetadata pins INV-SCENE-5: the ABAC
 // attribute path MUST NOT expose pose-order metadata (last_pose_at,
 // last_pose_seq, total_pose_count). Even when a scene has those fields

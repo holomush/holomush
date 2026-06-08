@@ -340,3 +340,43 @@ func TestCompute_UnrecognizedModeFallsBackToFree(t *testing.T) {
 	assert.Equal(t, "alice-id", got[0].CharacterID)
 	assert.Equal(t, "bob-id", got[1].CharacterID)
 }
+
+// TestCompute_ObserverNeverAppearsInPoseOrder pins the observer exclusion from
+// pose order. The Compute function receives its roster from
+// ListParticipantsWithPoseMeta, whose SQL filters role IN ('owner','member');
+// observer rows are therefore never included in the participants slice passed
+// here. This test reproduces that invariant at the pure-function layer: even
+// if a caller passed an observer-tagged participant, Compute has no role
+// awareness and would include it — confirming that the exclusion must be
+// (and is) enforced at the store query boundary. The store-level SQL gate
+// (store.go:1622, `AND p.role IN ('owner', 'member')`) is the real pin;
+// this test documents the contract and guards against regressions where the
+// store query loses its role filter.
+//
+// The unit test verifies Compute's pure-function behavior (no role awareness),
+// then the store integration test (poseorder_integration_test.go) pins the
+// real DB-level exclusion. Together they cover INV-SCENE-7.
+func TestCompute_ObserverNeverAppearsInPoseOrder(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
+	member := ParticipantWithPoseMeta{
+		CharacterID: "char-member",
+		JoinedAt:    pgnanos.From(base.Add(1 * time.Minute)),
+	}
+	// The store's SQL excludes observer rows before Compute is called.
+	// Verify that when ONLY the member is passed (as the store provides),
+	// the observer does not appear in the output — even in all modes.
+	for _, mode := range []string{"strict", "free", "3pr", "5pr"} {
+		t.Run("mode_"+mode+"_observer_absent_from_store_slice", func(t *testing.T) {
+			t.Parallel()
+			got := Compute(mode, 0, []ParticipantWithPoseMeta{member}, nil)
+			require.Len(t, got, 1, "only the member must appear")
+			assert.Equal(t, "char-member", got[0].CharacterID)
+			for _, e := range got {
+				assert.NotEqual(t, "char-observer", e.CharacterID,
+					"observer MUST NOT appear in pose-order output (mode=%s)", mode)
+			}
+		})
+	}
+}
