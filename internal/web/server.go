@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/http2"
 
+	"connectrpc.com/connect"
+
 	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
@@ -65,8 +67,14 @@ func NewServer(cfg Config) (*Server, error) {
 
 	mux := http.NewServeMux()
 
-	// Register ConnectRPC handler
-	path, connectHandler := webv1connect.NewWebServiceHandler(cfg.Handler)
+	// Register ConnectRPC handler with gRPC→connect status code translation.
+	// The interceptor converts oops-wrapped grpc *status.Status errors into
+	// *connect.Error so browsers receive specific codes (PermissionDenied,
+	// NotFound, Unauthenticated) instead of the default CodeUnknown / HTTP 500.
+	path, connectHandler := webv1connect.NewWebServiceHandler(
+		cfg.Handler,
+		connect.WithInterceptors(statusTranslationInterceptor()),
+	)
 	mux.Handle(path, connectHandler)
 
 	// Register Sentry envelope relay if SENTRY_DSN is configured. The
