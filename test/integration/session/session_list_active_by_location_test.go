@@ -46,6 +46,21 @@ var _ = Describe("PostgresSessionStore.ListActiveByLocation (INV-PRESENCE-1)", f
 			id, charID.String(), "TestChar-"+id, locID.String(), status, status == "active",
 		)
 		Expect(err).NotTo(HaveOccurred(), "seed session %q", id)
+
+		// ListActiveByLocation now requires EXISTS(terminal/telnet connection) as of
+		// holomush-5rh.8.9. Insert a synthetic terminal row for active sessions so
+		// integration tests reflect a realistic session that has at least one live
+		// grid connection. Non-active sessions intentionally receive no connection row.
+		if status == "active" {
+			connID := idgen.New().String()
+			_, err = env.pool.Exec(
+				env.ctx,
+				`INSERT INTO session_connections (id, session_id, client_type, streams)
+				 VALUES ($1, $2, 'terminal', '{}')`,
+				connID, id,
+			)
+			Expect(err).NotTo(HaveOccurred(), "seed connection for session %q", id)
+		}
 	}
 
 	// Verifies: INV-PRESENCE-1

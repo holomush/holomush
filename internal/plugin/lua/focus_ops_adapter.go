@@ -81,3 +81,9 @@ func (a *coordinatorFocusOpsAdapter) AutoFocusOnJoin(ctx context.Context, charac
 func (a *coordinatorFocusOpsAdapter) IsAnyConnFocused(ctx context.Context, characterID, sceneID ulid.ULID) (bool, error) {
 	return a.c.IsAnyConnFocused(ctx, characterID, sceneID) //nolint:wrapcheck // coordinator errors are already oops-coded
 }
+
+// GetConnectionFocus delegates to the coordinator, returning the current focus
+// key for the connection, or nil for grid focus or unknown connection ID.
+func (a *coordinatorFocusOpsAdapter) GetConnectionFocus(ctx context.Context, connectionID ulid.ULID) (*session.FocusKey, error) {
+	return a.c.GetConnectionFocus(ctx, connectionID) //nolint:wrapcheck // coordinator errors are already oops-coded
+}

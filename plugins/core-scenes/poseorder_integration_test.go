@@ -273,3 +273,44 @@ var _ = Describe("INV-SCENE-8: pose-order metadata is a function of scene_log", 
 			"INV-SCENE-8: rebuilt char2.last_pose_at MUST equal maintained value at ns precision")
 	})
 })
+
+// Verifies: INV-SCENE-61
+var _ = Describe("holomush-5rh.8.4: observer excluded from the pose-order roster", func() {
+	// Pins the DB-level structural exclusion: ListParticipantsWithPoseMeta's
+	// SQL filters `p.role IN ('owner', 'member')` (store.go), so a REAL
+	// role='observer' row never reaches poseorder.Compute. This is the
+	// authoritative pin for the pose-order clause of the observer exclusions;
+	// the unit test in poseorder_test.go only documents that Compute itself
+	// has no role awareness.
+	It("omits a role='observer' row from ListParticipantsWithPoseMeta", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		ownerID := ulid.Make().String()
+		memberID := ulid.Make().String()
+		observerID := ulid.Make().String()
+
+		sceneID := "scene-poseorder-observer-excl"
+		Expect(store.CreateWithOwner(ctx, &SceneRow{
+			ID: sceneID, Title: "Observer Pose-Order Exclusion", OwnerID: ownerID,
+			State:           string(SceneStateActive),
+			PoseOrder:       string(PoseOrderModeStrict),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		})).NotTo(HaveOccurred())
+		mustAddParticipant(store, sceneID, memberID, "member")
+		mustAddParticipant(store, sceneID, observerID, "observer")
+
+		meta, err := store.ListParticipantsWithPoseMeta(ctx, sceneID)
+		Expect(err).NotTo(HaveOccurred())
+
+		ids := make([]string, 0, len(meta.Participants))
+		for _, p := range meta.Participants {
+			ids = append(ids, p.CharacterID)
+		}
+		Expect(ids).To(ConsistOf(ownerID, memberID),
+			"pose-order roster MUST contain exactly the owner and member")
+		Expect(ids).NotTo(ContainElement(observerID),
+			"role='observer' row MUST be excluded by the role IN ('owner','member') filter")
+	})
+})

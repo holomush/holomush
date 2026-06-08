@@ -1,0 +1,412 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.sceneaccess.v1;
+
+import "holomush/scene/v1/scene.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1;sceneaccessv1";
+
+// SceneAccessService is the host-side facade that owns player authentication,
+// identity resolution, and guest-player rejection for all scene-surface RPCs
+// exposed through the web portal. It wraps the plugin SceneService, ensuring
+// that every downstream call carries a server-verified, player-owned character
+// identity rather than a client-supplied one (INV-SCENE-63). Guests are denied
+// at this layer before any plugin call is attempted (INV-SCENE-64).
+//
+// Implemented by SceneAccessServer in internal/grpc/sceneaccess_service.go.
+// Registered on the core gRPC server (not the plugin proxy) in
+// cmd/holomush/sub_grpc.go.
+service SceneAccessService {
+  // ListScenesForViewer returns the public scene board filtered by the
+  // verified player's character-scope and player-scope content-warning
+  // blocks. The facade resolves the acting character from the player
+  // session (INV-SCENE-63) and forwards a ListScenes call to the plugin
+  // SceneService with the server-verified character_id.
+  rpc ListScenesForViewer(ListScenesForViewerRequest) returns (ListScenesForViewerResponse);
+
+  // GetSceneForViewer loads one scene's metadata for the verified player's
+  // owned character. The facade resolves the acting character from the
+  // player session (INV-SCENE-63) and forwards a GetScene call to the
+  // plugin SceneService with the server-verified character_id.
+  rpc GetSceneForViewer(GetSceneForViewerRequest) returns (GetSceneForViewerResponse);
+
+  // ListMyScenes returns every non-archived scene the verified player's
+  // owned character participates in (any role), with activity metadata
+  // for workspace badge rendering. The facade resolves the acting character
+  // from the player session (INV-SCENE-63) and forwards a
+  // ListCharacterScenes call to the plugin SceneService with the
+  // server-verified character_id.
+  rpc ListMyScenes(ListMyScenesRequest) returns (ListMyScenesResponse);
+
+  // WatchScene auto-joins the verified player's owned character into an
+  // OPEN, active scene as a role=observer participant and registers a
+  // FocusMembership on the character's existing game session (which must
+  // already exist — use SelectCharacter first). The facade resolves the
+  // acting character from the player session (INV-SCENE-63), looks up the
+  // character's game session via FindByCharacter, and forwards a
+  // WatchScene call to the plugin SceneService with the server-verified
+  // character_id and session_id. Returns FailedPrecondition when no game
+  // session exists for the character (select the character first).
+  rpc WatchScene(WatchSceneRequest) returns (WatchSceneResponse);
+
+  // ExportScene renders the verified player's owned character's scene IC
+  // log to a downloadable document. The facade resolves the acting character
+  // from the player session (INV-SCENE-63) and forwards an ExportSceneLog
+  // call to the plugin SceneService with the server-verified character_id.
+  rpc ExportScene(ExportSceneRequest) returns (ExportSceneResponse);
+
+  // SetSceneFocus sets the per-connection focus for a web portal connection
+  // belonging to the verified player's character. The facade verifies that
+  // the connection belongs to a session owned by one of the player's
+  // characters (INV-SCENE-63) before calling the focus coordinator's
+  // SetConnectionFocus.
+  rpc SetSceneFocus(SetSceneFocusRequest) returns (SetSceneFocusResponse);
+
+  // ListPublishedScenes pages through publicly visible PUBLISHED scene
+  // archives, newest first, with optional tag filtering. No character
+  // identity is required for the underlying query, but the player session
+  // token + guest gate are still enforced (INV-SCENE-64). The facade
+  // forwards a ListPublishedScenes call to the plugin SceneService.
+  rpc ListPublishedScenes(ListPublishedScenesRequest) returns (ListPublishedScenesResponse);
+
+  // GetPublicSceneArchive reads a published scene archive without participant
+  // authentication. The only gate on the plugin call is status==PUBLISHED
+  // (INV-SCENE-35); the facade adds the player-session token check and
+  // guest-player denial (INV-SCENE-64). Forwards a GetPublicSceneArchive
+  // call to the plugin SceneService.
+  rpc GetPublicSceneArchive(GetPublicSceneArchiveRequest) returns (GetPublicSceneArchiveResponse);
+
+  // DownloadPublicSceneArchive returns a PUBLISHED scene archive rendered in
+  // the requested format. Same status-gate and opacity contract as
+  // GetPublicSceneArchive (INV-SCENE-35); the facade enforces the
+  // player-session token check and guest-player denial (INV-SCENE-64).
+  // Forwards a DownloadPublicSceneArchive call to the plugin SceneService.
+  rpc DownloadPublicSceneArchive(DownloadPublicSceneArchiveRequest) returns (DownloadPublicSceneArchiveResponse);
+}
+
+// ListScenesForViewerRequest is the facade request for the public scene board.
+// player_session_token authenticates the calling player (session_id is a
+// reserved client hint, not yet consulted); the facade resolves the acting
+// character SERVER-SIDE and ignores/overrides any client-supplied identity
+// (INV-SCENE-63).
+message ListScenesForViewerRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated. The client-supplied character_id
+  // is then verified as owned by this session's player (INV-SCENE-63).
+  string player_session_token = 2;
+  // character_id is the "act as this alt" selector. The facade verifies
+  // ownership against the authenticated player before passing the
+  // server-verified ID downstream; a character not owned by the player
+  // returns codes.NotFound (INV-SCENE-63).
+  string character_id = 3;
+  // limit is the maximum number of scenes to return; 0 means server default,
+  // capped at 200 by the plugin.
+  int32 limit = 4;
+  // offset is the number of leading results to skip for pagination.
+  int32 offset = 5;
+  // tags restricts results to scenes carrying all of these tags.
+  repeated string tags = 6;
+  // exclude_content_warnings adds extra content-warning categories to hide
+  // for this query, on top of the player's and character's stored block sets.
+  repeated string exclude_content_warnings = 7;
+}
+
+// ListScenesForViewerResponse wraps the plugin's scene-board result page.
+message ListScenesForViewerResponse {
+  // scenes is the matching public scenes for this page.
+  repeated holomush.scene.v1.SceneInfo scenes = 1;
+}
+
+// GetSceneForViewerRequest is the facade request for loading one scene.
+// player_session_token authenticates the calling player (session_id is a
+// reserved client hint, not yet consulted); the facade resolves the acting
+// character SERVER-SIDE and ignores/overrides any client-supplied identity
+// (INV-SCENE-63).
+message GetSceneForViewerRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated. The client-supplied character_id
+  // is then verified as owned by this session's player (INV-SCENE-63).
+  string player_session_token = 2;
+  // character_id is the "act as this alt" selector. The facade verifies
+  // ownership against the authenticated player before passing the
+  // server-verified ID downstream; a character not owned by the player
+  // returns codes.NotFound (INV-SCENE-63).
+  string character_id = 3;
+  // scene_id identifies the scene to load; required.
+  string scene_id = 4;
+}
+
+// GetSceneForViewerResponse wraps the plugin's single-scene response.
+message GetSceneForViewerResponse {
+  // scene is the loaded scene's full metadata projection.
+  holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// ListMyScenesRequest is the facade request for a character's scene
+// participations. session_id and player_session_token authenticate the calling
+// player; the facade resolves the acting character SERVER-SIDE and
+// ignores/overrides any client-supplied identity (INV-SCENE-63).
+message ListMyScenesRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated. The client-supplied character_id
+  // is then verified as owned by this session's player (INV-SCENE-63).
+  string player_session_token = 2;
+  // character_id is the "act as this alt" selector. The facade verifies
+  // ownership against the authenticated player before passing the
+  // server-verified ID downstream; a character not owned by the player
+  // returns codes.NotFound (INV-SCENE-63).
+  string character_id = 3;
+}
+
+// ListMyScenesResponse wraps the plugin's character-scene participations list.
+message ListMyScenesResponse {
+  // scenes is the character's scene participations, most recently active first.
+  repeated holomush.scene.v1.CharacterSceneInfo scenes = 1;
+}
+
+// WatchSceneRequest is the facade request for observer auto-join. session_id
+// and player_session_token authenticate the calling player; the facade
+// resolves the acting character SERVER-SIDE and ignores/overrides any
+// client-supplied identity (INV-SCENE-63). The character's existing game
+// session is looked up server-side via FindByCharacter; the caller MUST have
+// selected the character (via SelectCharacter) before calling WatchScene.
+message WatchSceneRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated. The client-supplied character_id
+  // is then verified as owned by this session's player (INV-SCENE-63).
+  string player_session_token = 2;
+  // character_id is the "act as this alt" selector. The facade verifies
+  // ownership against the authenticated player before passing the
+  // server-verified ID downstream; a character not owned by the player
+  // returns codes.NotFound (INV-SCENE-63).
+  string character_id = 3;
+  // scene_id identifies the scene to watch; required. Must be visibility=open
+  // and active or paused.
+  string scene_id = 4;
+}
+
+// WatchSceneResponse wraps the plugin's observer-join confirmation.
+message WatchSceneResponse {
+  // participant is the resulting participant entry (role=observer), or the
+  // pre-existing row when the character was already a participant.
+  holomush.scene.v1.ParticipantInfo participant = 1;
+}
+
+// ExportSceneRequest is the facade request for scene IC log export.
+// player_session_token authenticates the calling player (session_id is a
+// reserved client hint, not yet consulted); the facade resolves the acting
+// character SERVER-SIDE and ignores/overrides any client-supplied identity
+// (INV-SCENE-63).
+message ExportSceneRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated. The client-supplied character_id
+  // is then verified as owned by this session's player (INV-SCENE-63).
+  string player_session_token = 2;
+  // character_id is the "act as this alt" selector. The facade verifies
+  // ownership against the authenticated player before passing the
+  // server-verified ID downstream; a character not owned by the player
+  // returns codes.NotFound (INV-SCENE-63).
+  string character_id = 3;
+  // scene_id identifies the scene to export; required.
+  string scene_id = 4;
+  // format is the render format; required. Supported: "markdown" or "jsonl".
+  string format = 5;
+}
+
+// ExportSceneResponse wraps the plugin's rendered scene-log document.
+message ExportSceneResponse {
+  // content is the rendered document bytes.
+  bytes content = 1;
+  // mime_type is the content's MIME type (text/markdown or application/jsonl).
+  string mime_type = 2;
+  // filename is the suggested download filename (slugified title + extension).
+  string filename = 3;
+}
+
+// SetSceneFocusRequest is the facade request to set per-connection scene focus
+// for a web portal connection. session_id and player_session_token authenticate
+// the calling player; the facade verifies that the connection belongs to a game
+// session owned by one of the player's characters before calling
+// SetConnectionFocus (INV-SCENE-63).
+message SetSceneFocusRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated (INV-SCENE-63).
+  string player_session_token = 2;
+  // connection_id is the ULID of the web portal connection whose focus to set;
+  // required. The facade verifies the connection belongs to a game session
+  // owned by one of this player's characters.
+  string connection_id = 3;
+  // scene_id is the scene to focus on; optional. When empty, the focus is
+  // cleared (grid default).
+  string scene_id = 4;
+}
+
+// SetSceneFocusResponse is intentionally empty — a successful focus set
+// carries no body; the client may update its local focus state optimistically.
+message SetSceneFocusResponse {}
+
+// ListPublishedScenesRequest is the facade request to page through publicly
+// visible PUBLISHED scene archives. session_id and player_session_token
+// authenticate the calling player; guest players are rejected (INV-SCENE-64).
+message ListPublishedScenesRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated. Guest players are denied with
+  // codes.PermissionDenied (INV-SCENE-64).
+  string player_session_token = 2;
+  // limit is the page size; 0 means server default, capped at 200.
+  int32 limit = 3;
+  // offset is the number of leading results to skip.
+  int32 offset = 4;
+  // tags restricts results to archives whose source scene carries all of
+  // these tags.
+  repeated string tags = 5;
+}
+
+// ListPublishedScenesResponse wraps the plugin's public archive list.
+message ListPublishedScenesResponse {
+  // archives is the public-safe published-archive summaries, newest first.
+  repeated holomush.scene.v1.PublicSceneArchive archives = 1;
+}
+
+// GetPublicSceneArchiveRequest is the facade request for reading a single
+// published scene archive without participant authentication. session_id and
+// player_session_token authenticate the calling player; guest players are
+// rejected (INV-SCENE-64). The only gate on the plugin call is
+// status==PUBLISHED (INV-SCENE-35).
+message GetPublicSceneArchiveRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated. Guest players are denied with
+  // codes.PermissionDenied (INV-SCENE-64).
+  string player_session_token = 2;
+  // published_scene_id identifies the publication attempt to read; required.
+  // A missing id or any non-PUBLISHED attempt returns one opaque NOT_FOUND
+  // (INV-SCENE-35).
+  string published_scene_id = 3;
+}
+
+// GetPublicSceneArchiveResponse wraps the plugin's public archive view.
+message GetPublicSceneArchiveResponse {
+  // id is the publication attempt's ID.
+  string id = 1;
+  // title_snapshot is the scene title snapshotted at publish time.
+  string title_snapshot = 2;
+  // participants_snapshot is the participant character names snapshotted at
+  // publish time.
+  repeated string participants_snapshot = 3;
+  // content_entries is the frozen published content.
+  repeated holomush.scene.v1.PublishedSceneEntry content_entries = 4;
+  // published_at_unix_ns is the epoch-nanosecond publish time.
+  int64 published_at_unix_ns = 5;
+}
+
+// DownloadPublicSceneArchiveRequest is the facade request for downloading a
+// PUBLISHED scene archive without participant authentication. session_id and
+// player_session_token authenticate the calling player; guest players are
+// rejected (INV-SCENE-64). Same opacity contract as GetPublicSceneArchiveRequest
+// (INV-SCENE-35).
+message DownloadPublicSceneArchiveRequest {
+  // session_id is the client-declared player-session ULID. Authentication is
+  // performed SOLELY against player_session_token (below, the authoritative
+  // bearer); session_id is NOT consulted. A session↔token cross-check was
+  // deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+  // over the authoritative token and would risk rejecting valid clients whose
+  // session_id semantics differ. The field is retained as a forward-looking
+  // hint — clients SHOULD send the player session they authenticated with.
+  string session_id = 1;
+  // player_session_token is the raw bearer token for the player session. The
+  // facade looks up the session by token hash and rejects unauthenticated
+  // callers with codes.Unauthenticated. Guest players are denied with
+  // codes.PermissionDenied (INV-SCENE-64).
+  string player_session_token = 2;
+  // published_scene_id identifies the publication attempt to download; required.
+  // Same opacity contract as GetPublicSceneArchiveRequest (INV-SCENE-35).
+  string published_scene_id = 3;
+  // format is the render format; required. Supported: "markdown", "plain_text",
+  // "jsonl".
+  string format = 4;
+}
+
+// DownloadPublicSceneArchiveResponse wraps the plugin's rendered public-archive
+// bytes and their MIME type.
+message DownloadPublicSceneArchiveResponse {
+  // content is the rendered file content.
+  bytes content = 1;
+  // mime_type is the content's MIME type (text/markdown, text/plain, or
+  // application/jsonl).
+  string mime_type = 2;
+}

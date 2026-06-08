@@ -1819,6 +1819,10 @@ func (s *stubLuaTestCoordinator) AutoFocusOnJoin(_ context.Context, _, _ ulid.UL
 	return focus.AutoFocusOnJoinResponse{}, nil
 }
 
+func (s *stubLuaTestCoordinator) GetConnectionFocus(_ context.Context, _ ulid.ULID) (*session.FocusKey, error) {
+	return nil, nil
+}
+
 var _ focus.Coordinator = (*stubLuaTestCoordinator)(nil)
 
 func TestLuaHostSetFocusCoordinatorWithNilHostFuncsIsNoOp(t *testing.T) {

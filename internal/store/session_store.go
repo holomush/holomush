@@ -664,10 +664,20 @@ func (s *PostgresSessionStore) UpdateGridPresent(ctx context.Context, id string,
 	return nil
 }
 
-// ListActiveByLocation returns active sessions whose location_id matches.
+// ListActiveByLocation returns active sessions whose location_id matches and
+// that have at least one live terminal or telnet connection. The grid_present
+// flag (belt-and-suspenders: set reactively by the reaper) is retained as a
+// fast-path filter; the EXISTS predicate is the authoritative presence gate
+// that excludes comms_hub-only sessions even before the reaper runs
+// (holomush-5rh.8.9).
 func (s *PostgresSessionStore) ListActiveByLocation(ctx context.Context, locationID ulid.ULID) ([]*session.Info, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+sessionSelectColumns+` FROM sessions WHERE location_id = $1 AND status = 'active' AND grid_present = true`,
+		`SELECT `+sessionSelectColumns+` FROM sessions `+
+			`WHERE location_id = $1 AND status = 'active' AND grid_present = true `+
+			`AND EXISTS (`+
+			`SELECT 1 FROM session_connections c `+
+			`WHERE c.session_id = sessions.id `+
+			`AND c.client_type IN ('terminal', 'telnet'))`,
 		locationID.String())
 	if err != nil {
 		return nil, oops.With("operation", "list active by location").

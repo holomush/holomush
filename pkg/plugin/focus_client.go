@@ -80,6 +80,13 @@ type FocusClient interface {
 	// signal without surfacing an error.
 	AutoFocusOnJoin(ctx context.Context, characterID, sceneID string) (AutoFocusOnJoinResult, error)
 
+	// GetConnectionFocus returns the current focus for the named connection, or
+	// nil when the connection is grid-focused or unknown. connectionID is the
+	// 26-char base32 ULID string from CommandRequest.ConnectionID. Read-only
+	// counterpart of SetConnectionFocus; lets plugins route connection-scoped
+	// operations (e.g. scene pose) to the focused target without a store query.
+	GetConnectionFocus(ctx context.Context, connectionID string) (*FocusKey, error)
+
 	// IsAnyConnFocused reports whether any of the character's connections has
 	// FocusKey == {scene, sceneID}. Read-only: does not mutate any state.
 	// characterID and sceneID are 26-char base32 ULID strings.
@@ -219,6 +226,15 @@ func newPluginHostFocusClient(client pluginv1.PluginHostServiceClient) FocusClie
 	return &pluginHostFocusClient{client: client}
 }
 
+func fromProtoFocusKind(k pluginv1.FocusKind) FocusKind {
+	switch k {
+	case pluginv1.FocusKind_FOCUS_KIND_SCENE:
+		return FocusKindScene
+	default:
+		return FocusKind("")
+	}
+}
+
 func toProtoFocusKind(k FocusKind) pluginv1.FocusKind {
 	switch k {
 	case FocusKindScene:
@@ -333,6 +349,43 @@ func (c *pluginHostFocusClient) SetConnectionFocus(ctx context.Context, connecti
 			Wrap(err)
 	}
 	return nil
+}
+
+func (c *pluginHostFocusClient) GetConnectionFocus(ctx context.Context, connectionID string) (*FocusKey, error) {
+	if c.client == nil {
+		return nil, oops.New("plugin host focus client is not configured")
+	}
+	connULID, err := ulid.Parse(connectionID)
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").With("connection_id", connectionID).Wrap(err)
+	}
+	resp, err := c.client.GetConnectionFocus(ctx, &pluginv1.PluginHostServiceGetConnectionFocusRequest{
+		ConnectionId: connULID.Bytes(),
+	})
+	if err != nil {
+		return nil, oops.Code("GET_CONNECTION_FOCUS_FAILED").
+			With("connection_id", connectionID).
+			Wrap(err)
+	}
+	if pk := resp.GetFocusKey(); pk != nil {
+		// Fail closed on an unrecognized kind: fromProtoFocusKind maps unknown
+		// enums to FocusKind(""), which would silently propagate an invalid focus
+		// state to routing logic. A non-nil focus key with no resolvable kind is a
+		// host contract violation, not an empty focus.
+		kind := fromProtoFocusKind(pk.GetKind())
+		if kind == FocusKind("") {
+			return nil, oops.Code("UNKNOWN_FOCUS_KIND").
+				With("connection_id", connectionID).
+				With("proto_kind", pk.GetKind().String()).
+				Errorf("host returned a focus key with an unrecognized kind")
+		}
+		fk := FocusKey{
+			Kind:     kind,
+			TargetID: pk.GetTargetId(),
+		}
+		return &fk, nil
+	}
+	return nil, nil
 }
 
 func (c *pluginHostFocusClient) IsAnyConnFocused(ctx context.Context, characterID, sceneID string) (bool, error) {

@@ -91,3 +91,9 @@ packages:
     interfaces:
       Repository:
       RecoveryCodeHasher:
+  github.com/holomush/holomush/pkg/proto/holomush/scene/v1:
+    config:
+      dir: internal/grpc/scenemocks
+      outpkg: scenemocks
+    interfaces:
+      SceneServiceClient:

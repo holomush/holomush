@@ -39,6 +39,10 @@ type FocusOps interface {
 	SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) error
 	AutoFocusOnJoin(ctx context.Context, characterID, sceneID ulid.ULID) (focused, skipped []ulid.ULID, failed []FocusFailure, totalConnCount uint32, err error)
 	IsAnyConnFocused(ctx context.Context, characterID, sceneID ulid.ULID) (bool, error)
+	// GetConnectionFocus returns the current FocusKey for the given connection,
+	// or nil when grid-focused or unknown. Ships paired with the Go SDK method
+	// (runtime-symmetry parity with SetConnectionFocus).
+	GetConnectionFocus(ctx context.Context, connectionID ulid.ULID) (*session.FocusKey, error)
 }
 
 // HistoryReader provides read-only event history access for Lua plugins.
@@ -69,6 +73,7 @@ func RegisterFocusFuncs(ls *lua.LState, mod *lua.LTable, fo FocusOps, hr History
 	ls.SetField(mod, "set_connection_focus", ls.NewFunction(setConnectionFocusFn))
 	ls.SetField(mod, "auto_focus_on_join", ls.NewFunction(autoFocusOnJoinFn))
 	ls.SetField(mod, "is_any_conn_focused", ls.NewFunction(isAnyConnFocusedFn))
+	ls.SetField(mod, "get_connection_focus", ls.NewFunction(getConnectionFocusFn))
 }
 
 func getFocusOps(ls *lua.LState) FocusOps {
@@ -595,5 +600,46 @@ func isAnyConnFocusedFn(ls *lua.LState) int {
 		return 2
 	}
 	ls.Push(lua.LBool(isFocused))
+	return 1
+}
+
+// getConnectionFocusFn implements holomush.get_connection_focus(connection_id_str).
+// Returns {kind=..., target_id=...} for a focused connection, or nil for
+// grid-focused or unknown connections (absent = grid). On error returns (nil, error_string).
+func getConnectionFocusFn(ls *lua.LState) int {
+	fo := getFocusOps(ls)
+	if fo == nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("focus_ops not registered"))
+		return 2
+	}
+	connIDStr := ls.CheckString(1)
+	connID, err := ulid.Parse(connIDStr)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("INVALID_ULID: " + err.Error()))
+		return 2
+	}
+	ctx := ls.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultPluginQueryTimeout)
+	defer cancel()
+	fk, err := fo.GetConnectionFocus(ctx, connID)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString(err.Error()))
+		return 2
+	}
+	if fk == nil {
+		// Grid-focused or unknown connection — return nil (no focus key).
+		ls.Push(lua.LNil)
+		return 1
+	}
+	result := ls.NewTable()
+	ls.SetField(result, "kind", lua.LString(string(fk.Kind)))
+	ls.SetField(result, "target_id", lua.LString(fk.TargetID.String()))
+	ls.Push(result)
 	return 1
 }

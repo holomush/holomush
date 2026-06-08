@@ -153,7 +153,7 @@ func TestDispatchDeliveryForwardsAndAcks(t *testing.T) {
 	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, d.acks())
 	assert.Equal(t, 0, d.nacks())
@@ -169,7 +169,7 @@ func TestDispatchDeliveryNacksOnSendError(t *testing.T) {
 	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, 0, d.acks(), "no ack on send failure — JS must redeliver")
 	assert.Equal(t, 1, d.nacks())
@@ -184,7 +184,7 @@ func TestDispatchDeliveryAckFailureLogsButReturnsNil(t *testing.T) {
 	d := makeDelivery(t, "say", charID)
 	d.ackErr = errors.New("ack boom")
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err, "ack failure must not propagate — JS will redeliver")
 	assert.Equal(t, 1, d.acks())
 }
@@ -204,7 +204,7 @@ func TestDispatchDeliveryTerminatesOnMatchingSessionEnded(t *testing.T) {
 	})
 	d.ev.Payload = payload
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	assert.ErrorIs(t, err, errStreamTerminated)
 	// One event frame, plus one STREAM_CLOSED control frame.
 	require.Len(t, stream.sent, 2)
@@ -226,7 +226,7 @@ func TestDispatchDeliveryIgnoresNonMatchingSessionEnded(t *testing.T) {
 	})
 	d.ev.Payload = payload
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	// Forwarded verbatim, no STREAM_CLOSED.
 	require.Len(t, stream.sent, 1)
@@ -243,7 +243,7 @@ func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
 	d.ev.Payload = []byte("not-json")
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err, "unmarshal failure must not error the stream")
 	require.Len(t, stream.sent, 1)
 }
@@ -270,7 +270,7 @@ func TestDispatchDeliverySkipsAuditOnlyEvents(t *testing.T) {
 		Category:      "system",
 	}
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, d.acks(), "audit-only event must be ack'd so JS can age it out")
 	assert.Equal(t, 0, d.nacks())
@@ -340,7 +340,7 @@ func TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival(t *testing.T
 	evTs := arrivedAt.Add(-1 * time.Nanosecond)
 	d := makeLocationDelivery(t, locID.String(), evTs)
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, stream.sent, 0,
 		"INV-STORE-6: event one ns below floor MUST be filtered at dispatchDelivery")
@@ -372,7 +372,7 @@ func TestDispatchDeliveryIncludesEventAtExactFloorNanosecond(t *testing.T) {
 	// Event timestamp exactly equal to the floor.
 	d := makeLocationDelivery(t, locID.String(), arrivedAt)
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, stream.sent, 1,
 		"INV-STORE-7: event at exact floor ns MUST be included (>= semantics)")
@@ -402,7 +402,7 @@ func TestDispatchDeliveryDropsBelowScopeFloor(t *testing.T) {
 	// Event timestamp one hour BEFORE LocationArrivedAt → below floor.
 	d := makeLocationDelivery(t, locID.String(), arrivedAt.Add(-time.Hour))
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, d.acks(),
 		"below-floor event must be ack'd so JS does not redeliver indefinitely")
@@ -430,7 +430,7 @@ func TestDispatchDeliveryForwardsAtOrAboveScopeFloor(t *testing.T) {
 	// Event timestamp one minute AFTER LocationArrivedAt → above floor.
 	d := makeLocationDelivery(t, locID.String(), arrivedAt.Add(time.Minute))
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, d.acks())
 	assert.Equal(t, 0, d.nacks())
@@ -464,7 +464,7 @@ func TestDispatchDeliveryFallsBackToCachedInfoOnLookupFailure(t *testing.T) {
 	// With fallback to cached info, the event passes through.
 	d := makeLocationDelivery(t, locID.String(), arrivedAt.Add(time.Minute))
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err,
 		"lookup failure must not propagate — JS would redeliver forever")
 	assert.Equal(t, 1, d.acks())
@@ -493,7 +493,7 @@ func TestDispatchDeliveryUsesCachedFloorOnLookupFailure(t *testing.T) {
 	// Event timestamp BEFORE cached LocationArrivedAt → still dropped.
 	d := makeLocationDelivery(t, locID.String(), arrivedAt.Add(-time.Hour))
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, d.acks(), "below-cached-floor event must still be ack'd and dropped")
 	assert.Empty(t, stream.sent,
@@ -688,7 +688,7 @@ func TestRunSubscribeLoopDeliversEventsThenReturnsOnCtxCancel(t *testing.T) {
 	// Run loop in goroutine; wait for acks then cancel.
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- s.runSubscribeLoop(ctx, info, bs, filterSet, stream, nil, ctrlCh)
+		errCh <- s.runSubscribeLoop(ctx, info, bs, filterSet, stream, nil, ctrlCh, nil)
 	}()
 
 	// Wait for both deliveries to be acked.
@@ -722,7 +722,7 @@ func TestRunSubscribeLoopReturnsOnSendError(t *testing.T) {
 	ctrlCh := make(chan sessionStreamUpdate, 1)
 	filterSet := map[eventbus.Subject]struct{}{}
 
-	err := s.runSubscribeLoop(ctx, info, bs, filterSet, stream, nil, ctrlCh)
+	err := s.runSubscribeLoop(ctx, info, bs, filterSet, stream, nil, ctrlCh, nil)
 	require.Error(t, err)
 	assert.Equal(t, 0, d1.acks(), "must not ack on send failure")
 	assert.Equal(t, 1, d1.nacks())
@@ -745,7 +745,7 @@ func TestRunSubscribeLoopReturnsNilOnSessionEnded(t *testing.T) {
 	ctrlCh := make(chan sessionStreamUpdate, 1)
 	filterSet := map[eventbus.Subject]struct{}{}
 
-	err := s.runSubscribeLoop(ctx, info, bs, filterSet, stream, nil, ctrlCh)
+	err := s.runSubscribeLoop(ctx, info, bs, filterSet, stream, nil, ctrlCh, nil)
 	assert.NoError(t, err, "errStreamTerminated collapses to nil at caller boundary")
 }
 
@@ -767,7 +767,7 @@ func TestRunSubscribeLoopAppliesFilterCtrl(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- s.runSubscribeLoop(ctx, info, bs, filterSet, stream, nil, ctrlCh)
+		errCh <- s.runSubscribeLoop(ctx, info, bs, filterSet, stream, nil, ctrlCh, nil)
 	}()
 
 	// Wait for SetFilters to be called once (only the character:add succeeds).
@@ -792,7 +792,7 @@ func TestRunSubscribeLoopReturnsNilOnCtrlChClose(t *testing.T) {
 	ctrlCh := make(chan sessionStreamUpdate)
 	close(ctrlCh)
 
-	err := s.runSubscribeLoop(ctx, info, bs, map[eventbus.Subject]struct{}{}, stream, nil, ctrlCh)
+	err := s.runSubscribeLoop(ctx, info, bs, map[eventbus.Subject]struct{}{}, stream, nil, ctrlCh, nil)
 	assert.NoError(t, err)
 }
 
@@ -807,7 +807,7 @@ func TestRunSubscribeLoopReturnsNilOnDeliveriesClose(t *testing.T) {
 	stream := &fakeSubscribeStream{ctx: ctx}
 	ctrlCh := make(chan sessionStreamUpdate, 1)
 
-	err := s.runSubscribeLoop(ctx, info, bs, map[eventbus.Subject]struct{}{}, stream, nil, ctrlCh)
+	err := s.runSubscribeLoop(ctx, info, bs, map[eventbus.Subject]struct{}{}, stream, nil, ctrlCh, nil)
 	assert.NoError(t, err)
 }
 
@@ -822,7 +822,7 @@ func TestRunSubscribeLoopPropagatesNextError(t *testing.T) {
 	stream := &fakeSubscribeStream{ctx: ctx}
 	ctrlCh := make(chan sessionStreamUpdate, 1)
 
-	err := s.runSubscribeLoop(ctx, info, bs, map[eventbus.Subject]struct{}{}, stream, nil, ctrlCh)
+	err := s.runSubscribeLoop(ctx, info, bs, map[eventbus.Subject]struct{}{}, stream, nil, ctrlCh, nil)
 	require.Error(t, err)
 	o, ok := oops.AsOops(err)
 	require.True(t, ok)
@@ -864,7 +864,7 @@ func TestDispatchDeliveryStampsMetadataOnlyWhenDeliveryReportsTrue(t *testing.T)
 	d := makeDelivery(t, "say", charID)
 	d.metadataOnly = true
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, stream.sent, 1)
 	assert.True(t, stream.sent[0].GetEvent().GetMetadataOnly(),
@@ -881,9 +881,99 @@ func TestDispatchDeliveryDoesNotStampMetadataOnlyWhenFalse(t *testing.T) {
 	d := makeDelivery(t, "say", charID)
 	// metadataOnly defaults to false
 
-	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, stream.sent, 1)
 	assert.False(t, stream.sent[0].GetEvent().GetMetadataOnly(),
 		"EventFrame.metadata_only must be false when delivery.MetadataOnly() returns false")
+}
+
+// --- Tests: scene_activity badge downgrade (INV-SCENE-62) ---------------
+
+// makeSceneDelivery builds a fakeDelivery carrying an event on the given
+// scene IC subject (events.main.scene.<sceneID>.ic).
+func makeSceneDelivery(t *testing.T, evType, sceneID string) *fakeDelivery {
+	t.Helper()
+	id := core.NewULID()
+	return &fakeDelivery{
+		ev: eventbus.Event{
+			ID:        id,
+			Subject:   eventbus.Subject("events.main.scene." + sceneID + ".ic"),
+			Type:      eventbus.Type(evType),
+			Timestamp: time.Now(),
+			Payload:   []byte("{}"),
+		},
+	}
+}
+
+// TestDispatchDeliveryDowngradesSceneEventForNonFocusedMemberConnection
+// verifies that a scene event delivered to a member connection NOT focused on
+// that scene becomes a CONTROL_SIGNAL_SCENE_ACTIVITY badge frame — no
+// EventFrame is sent, the delivery is acked, and SceneId is set.
+func TestDispatchDeliveryDowngradesSceneEventForNonFocusedMemberConnection(t *testing.T) {
+	t.Parallel()
+	sceneID := ulid.Make()
+	connID := ulid.Make()
+	info := &session.Info{
+		ID: "s1",
+		FocusMemberships: []session.FocusMembership{
+			{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now().Add(-time.Hour)},
+		},
+	}
+	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	// Add connection with NO focus (nil FocusKey = grid / scene-grid, not focused on any scene).
+	require.NoError(t, store.AddConnection(context.Background(), &session.Connection{
+		ID:         connID,
+		SessionID:  "s1",
+		ClientType: "terminal",
+		Streams:    []string{},
+		FocusKey:   nil, // not focused on any scene
+	}))
+
+	s := &CoreServer{sessionStore: store}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, d.acks(), "badge downgrade must ack the delivery")
+	assert.Equal(t, 0, d.nacks())
+	require.Len(t, stream.sent, 1, "must send exactly one control frame (the badge)")
+	ctrl := stream.sent[0].GetControl()
+	require.NotNil(t, ctrl, "frame must be a control frame, not an event frame")
+	assert.Equal(t, corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY, ctrl.GetSignal())
+	assert.Equal(t, sceneID.String(), ctrl.GetSceneId())
+}
+
+// TestDispatchDeliveryForwardsFocusedSceneEventNormally verifies that when the
+// connection IS focused on the scene from which the event arrives, the event
+// frame is forwarded normally (no downgrade).
+func TestDispatchDeliveryForwardsFocusedSceneEventNormally(t *testing.T) {
+	t.Parallel()
+	sceneID := ulid.Make()
+	connID := ulid.Make()
+	info := &session.Info{
+		ID: "s1",
+		FocusMemberships: []session.FocusMembership{
+			{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now().Add(-time.Hour)},
+		},
+	}
+	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	fk := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+	require.NoError(t, store.AddConnection(context.Background(), &session.Connection{
+		ID:         connID,
+		SessionID:  "s1",
+		ClientType: "terminal",
+		Streams:    []string{},
+		FocusKey:   &fk, // focused on this scene
+	}))
+
+	s := &CoreServer{sessionStore: store}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
+	require.NoError(t, err)
+	require.Len(t, stream.sent, 1, "focused connection must receive the EventFrame")
+	assert.NotNil(t, stream.sent[0].GetEvent(), "frame must be an EventFrame, not a control frame")
 }

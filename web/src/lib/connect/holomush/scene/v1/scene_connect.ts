@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CastPublishSceneVoteRequest, CastPublishSceneVoteResponse, CastPublishVoteRequest, CastPublishVoteResponse, CreateSceneRequest, CreateSceneResponse, DownloadPublicSceneArchiveRequest, DownloadPublicSceneArchiveResponse, DownloadPublishedSceneRequest, DownloadPublishedSceneResponse, EndSceneRequest, EndSceneResponse, ExtendScenePublishVoteAttemptsRequest, ExtendScenePublishVoteAttemptsResponse, GetPoseOrderRequest, GetPoseOrderResponse, GetPublicSceneArchiveRequest, GetPublicSceneArchiveResponse, GetPublishedSceneRequest, GetPublishedSceneResponse, GetSceneRequest, GetSceneResponse, InviteToSceneRequest, InviteToSceneResponse, JoinSceneRequest, JoinSceneResponse, KickFromSceneRequest, KickFromSceneResponse, LeaveSceneRequest, LeaveSceneResponse, ListScenePublishAttemptsRequest, ListScenePublishAttemptsResponse, ListScenesRequest, ListScenesResponse, PauseSceneRequest, PauseSceneResponse, ResumeSceneRequest, ResumeSceneResponse, StartScenePublishRequest, StartScenePublishResponse, TransferOwnershipRequest, TransferOwnershipResponse, UpdateSceneRequest, UpdateSceneResponse, WithdrawScenePublishRequest, WithdrawScenePublishResponse } from "./scene_pb.js";
+import { CastPublishSceneVoteRequest, CastPublishSceneVoteResponse, CastPublishVoteRequest, CastPublishVoteResponse, CreateSceneRequest, CreateSceneResponse, DownloadPublicSceneArchiveRequest, DownloadPublicSceneArchiveResponse, DownloadPublishedSceneRequest, DownloadPublishedSceneResponse, EndSceneRequest, EndSceneResponse, ExportSceneLogRequest, ExportSceneLogResponse, ExtendScenePublishVoteAttemptsRequest, ExtendScenePublishVoteAttemptsResponse, GetPoseOrderRequest, GetPoseOrderResponse, GetPublicSceneArchiveRequest, GetPublicSceneArchiveResponse, GetPublishedSceneRequest, GetPublishedSceneResponse, GetSceneRequest, GetSceneResponse, InviteToSceneRequest, InviteToSceneResponse, JoinSceneRequest, JoinSceneResponse, KickFromSceneRequest, KickFromSceneResponse, LeaveSceneRequest, LeaveSceneResponse, ListCharacterScenesRequest, ListCharacterScenesResponse, ListPublishedScenesRequest, ListPublishedScenesResponse, ListScenePublishAttemptsRequest, ListScenePublishAttemptsResponse, ListScenesRequest, ListScenesResponse, PauseSceneRequest, PauseSceneResponse, ResumeSceneRequest, ResumeSceneResponse, StartScenePublishRequest, StartScenePublishResponse, TransferOwnershipRequest, TransferOwnershipResponse, UpdateSceneRequest, UpdateSceneResponse, WatchSceneRequest, WatchSceneResponse, WithdrawScenePublishRequest, WithdrawScenePublishResponse } from "./scene_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -147,6 +147,23 @@ export const SceneService = {
       name: "JoinScene",
       I: JoinSceneRequest,
       O: JoinSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WatchScene auto-joins the requesting character into an OPEN scene as a
+     * role=observer participant and registers the focus membership for the
+     * supplied session, so focus/Subscribe/history gates admit the watcher.
+     * Gate order is fail-closed per INV-SCENE-61: the plugin-code
+     * visibility==open and state checks run BEFORE the ABAC spectate action is
+     * evaluated; non-open scenes are rejected without consulting ABAC.
+     * See service.go::WatchScene.
+     *
+     * @generated from rpc holomush.scene.v1.SceneService.WatchScene
+     */
+    watchScene: {
+      name: "WatchScene",
+      I: WatchSceneRequest,
+      O: WatchSceneResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -368,6 +385,55 @@ export const SceneService = {
       name: "ExtendScenePublishVoteAttempts",
       I: ExtendScenePublishVoteAttemptsRequest,
       O: ExtendScenePublishVoteAttemptsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ListCharacterScenes returns every non-archived scene the character has a
+     * participant row in (any role, including observer), with the character's
+     * role and per-scene activity metadata for workspace badges. Serves the
+     * web workspace's "my scenes" list; intended for use by the host facade
+     * fanning this out across a player's owned characters. See
+     * service.go::ListCharacterScenes.
+     *
+     * @generated from rpc holomush.scene.v1.SceneService.ListCharacterScenes
+     */
+    listCharacterScenes: {
+      name: "ListCharacterScenes",
+      I: ListCharacterScenesRequest,
+      O: ListCharacterScenesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+     * fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+     * newest first, with optional tag filtering. Powers the archive browse
+     * page. See publish_service.go::ListPublishedScenes.
+     *
+     * @generated from rpc holomush.scene.v1.SceneService.ListPublishedScenes
+     */
+    listPublishedScenes: {
+      name: "ListPublishedScenes",
+      I: ListPublishedScenesRequest,
+      O: ListPublishedScenesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ExportSceneLog renders a scene's IC log to a downloadable document for a
+     * participant of ANY role (observers may export what they may read;
+     * INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+     * fail before ABAC, which is never consulted here). Decryption flows
+     * through the host-mediated snapshot decrypt seam; supported formats are
+     * "markdown" and "jsonl". Scenes whose IC log exceeds the server-side row
+     * ceiling (exportLogMaxRows = 10 000) return FAILED_PRECONDITION /
+     * SCENE_EXPORT_TOO_LARGE rather than silently truncating the document.
+     * See export.go::ExportSceneLog.
+     *
+     * @generated from rpc holomush.scene.v1.SceneService.ExportSceneLog
+     */
+    exportSceneLog: {
+      name: "ExportSceneLog",
+      I: ExportSceneLogRequest,
+      O: ExportSceneLogResponse,
       kind: MethodKind.Unary,
     },
   }

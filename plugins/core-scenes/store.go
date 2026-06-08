@@ -72,6 +72,7 @@ type SceneRow struct {
 	CreatedAt       pgnanos.Time
 	EndedAt         *pgnanos.Time
 	ArchivedAt      *pgnanos.Time
+	LastActivityMs  int64
 }
 
 // SceneStore provides PostgreSQL persistence for scenes.
@@ -314,6 +315,60 @@ func (s *SceneStore) GetWithMembership(ctx context.Context, id string) (scene *S
 		return nil, nil, nil, oops.Code("SCENE_GET_FAILED").With("scene_id", id).Wrap(err)
 	}
 	return row, participants, invitees, nil
+}
+
+// GetWithMembershipAndObservers extends GetWithMembership with a fourth
+// array containing observer character IDs (role = 'observer'). Used by scene
+// load paths that need to populate SceneInfo.Observers (INV-SCENE-61).
+// The participants filter (role IN ('owner','member')) is unchanged.
+func (s *SceneStore) GetWithMembershipAndObservers(ctx context.Context, id string) (scene *SceneRow, participants, invitees, observers []string, err error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.get_with_membership_and_observers",
+		attribute.String("scene_id", id),
+	)
+	defer span.End()
+
+	row := &SceneRow{}
+	err = s.pool.QueryRow(
+		ctx, `
+		SELECT
+			s.id, s.title, s.description, s.location_id, s.owner_id,
+			s.state, s.pose_order, s.visibility, s.idle_timeout_secs,
+			s.template_id, s.content_warnings, s.tags,
+			s.created_at, s.ended_at, s.archived_at,
+			COALESCE(
+				(SELECT array_agg(character_id) FROM scene_participants
+				 WHERE scene_id = s.id AND role IN ('owner', 'member')),
+				'{}'::TEXT[]
+			) AS participants,
+			COALESCE(
+				(SELECT array_agg(character_id) FROM scene_participants
+				 WHERE scene_id = s.id AND role = 'invited'),
+				'{}'::TEXT[]
+			) AS invitees,
+			COALESCE(
+				(SELECT array_agg(character_id) FROM scene_participants
+				 WHERE scene_id = s.id AND role = 'observer'),
+				'{}'::TEXT[]
+			) AS observers
+		FROM scenes s
+		WHERE s.id = $1`,
+		id,
+	).Scan(
+		&row.ID, &row.Title, &row.Description, &row.LocationID, &row.OwnerID,
+		&row.State, &row.PoseOrder, &row.Visibility, &row.IdleTimeoutSecs,
+		&row.TemplateID, &row.ContentWarnings, &row.Tags,
+		&row.CreatedAt, &row.EndedAt, &row.ArchivedAt,
+		&participants, &invitees, &observers,
+	)
+	if err != nil {
+		recordError(span, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, nil, nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Wrap(err)
+		}
+		return nil, nil, nil, nil, oops.Code("SCENE_GET_FAILED").With("scene_id", id).Wrap(err)
+	}
+	return row, participants, invitees, observers, nil
 }
 
 // IsMember reports whether characterID has an owner or member row in
@@ -706,6 +761,19 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
+	// Capture the prior role before the upsert so we can distinguish
+	// observer-upgrade (ParticipantUpgraded) from invited-promotion (OpPromoted)
+	// after the fact. The row may not exist; empty string means no prior row.
+	var priorRole string
+	if scanErr := tx.QueryRow(
+		ctx, `SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, characterID,
+	).Scan(&priorRole); scanErr != nil && !errors.Is(scanErr, pgx.ErrNoRows) {
+		// Non-ErrNoRows failure: treat as no prior role; the main upsert will
+		// surface any real DB error on its own path.
+		priorRole = ""
+	}
+
 	row := &ParticipantRow{}
 	var wasInserted bool
 	err = tx.QueryRow(
@@ -719,12 +787,18 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		    visibility = 'open'
 		    OR EXISTS (
 		      SELECT 1 FROM scene_participants
-		      WHERE scene_id = $1 AND character_id = $2 AND role IN ('invited', 'member', 'owner')
+		      WHERE scene_id = $1 AND character_id = $2 AND role IN ('invited', 'member', 'owner', 'observer')
 		    )
 		  )
 		ON CONFLICT (scene_id, character_id) DO UPDATE
-		  SET role = CASE WHEN scene_participants.role = 'invited' THEN 'member' ELSE scene_participants.role END,
-		      joined_at = CASE WHEN scene_participants.role = 'invited' THEN (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT ELSE scene_participants.joined_at END
+		  SET role = CASE
+		        WHEN scene_participants.role IN ('invited', 'observer') THEN 'member'
+		        ELSE scene_participants.role
+		      END,
+		      joined_at = CASE
+		        WHEN scene_participants.role IN ('invited', 'observer') THEN (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT
+		        ELSE scene_participants.joined_at
+		      END
 		RETURNING scene_id, character_id, role, joined_at, (xmax = 0) AS was_inserted`,
 		sceneID, characterID,
 	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt, &wasInserted)
@@ -739,45 +813,48 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 	}
 
 	// Determine the result. wasInserted=true → OpInserted. Otherwise either
-	// promoted (the existing row was 'invited' and is now 'member') or no
-	// change (the existing row was already 'member' or 'owner').
+	// promoted (invited→member), upgraded (observer→member), or no-change
+	// (the existing row was already 'member' or 'owner').
+	//
+	// priorRole was captured before the upsert; empty means no prior row
+	// (insert case, already handled by wasInserted). The joined_at heuristic
+	// distinguishes an actual update from a no-op UPSERT.
 	var result ParticipantOpResult
 	if wasInserted {
 		result = OpInserted
 	} else {
-		// We need to figure out if this was a promotion or no-op. The post-
-		// update row's role is 'member' in both cases, so we can't tell from
-		// the row itself. Compare the row's joined_at to the transaction
-		// start time: if joined_at >= transaction_timestamp(), the CASE
-		// branch fired within THIS txn (promotion). If joined_at predates
-		// the txn start, the row was already a member (no-change).
-		//
-		// transaction_timestamp() (alias for xact_start()) is fixed for the
-		// duration of the txn and is exact — it does not suffer the false-
-		// positive problem of statement_timestamp() heuristics under rapid
-		// back-to-back retries.
-		var promoted bool
+		// Compare joined_at to the transaction start time. If the CASE branch
+		// fired within this txn, joined_at >= transaction_timestamp(). If it
+		// predates the txn, the row was already a member/owner (no-change).
+		// transaction_timestamp() is fixed for the duration of the txn and is
+		// exact — no false-positive risk from rapid back-to-back retries.
+		var changedInTxn bool
 		err = tx.QueryRow(
 			ctx, `
 			SELECT joined_at >= (EXTRACT(EPOCH FROM transaction_timestamp()) * 1e9)::BIGINT
 			FROM scene_participants
 			WHERE scene_id = $1 AND character_id = $2`,
 			sceneID, characterID,
-		).Scan(&promoted)
+		).Scan(&changedInTxn)
 		if err != nil {
 			recordError(span, err)
 			return nil, OpNoChange, oops.Code("SCENE_JOIN_CLASSIFY_FAILED").
 				With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
 		}
-		if promoted {
-			result = OpPromoted
-		} else {
+		switch {
+		case !changedInTxn:
 			result = OpNoChange
+		case priorRole == string(ParticipantRoleObserver):
+			// Observer rows are upgraded to member on explicit join.
+			result = ParticipantUpgraded
+		default:
+			// prior role was 'invited' (the only other upgradeable role).
+			result = OpPromoted
 		}
 	}
 
-	// Emit ops event ONLY for OpInserted and OpPromoted; OpNoChange must
-	// not pollute the audit log with retry events.
+	// Emit ops event for OpInserted, OpPromoted, and ParticipantUpgraded;
+	// OpNoChange must not pollute the audit log with retry events.
 	if result != OpNoChange {
 		// Determine visibility for the payload by reading the scene row.
 		var visibility string
@@ -787,8 +864,9 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 			return nil, OpNoChange, oops.Code("SCENE_JOIN_OPS_EVENT_FAILED").Wrap(err)
 		}
 		payload := map[string]any{
-			"visibility":   visibility,
-			"from_invited": result == OpPromoted,
+			"visibility":    visibility,
+			"from_invited":  result == OpPromoted,
+			"from_observer": result == ParticipantUpgraded,
 		}
 		if err := recordOpsEventTx(ctx, tx, sceneID, OpsKindMembershipJoin, characterID, characterID, payload); err != nil {
 			recordError(span, err)
@@ -801,6 +879,107 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		return nil, OpNoChange, oops.Code("SCENE_JOIN_FAILED").Wrap(err)
 	}
 	return row, result, nil
+}
+
+// AddObserver inserts a role=observer participant row for an OPEN, active or
+// paused scene. The visibility and state checks are plugin-code-enforced
+// inside the transaction (INV-SCENE-61: they re-check under a FOR SHARE lock
+// regardless of any ABAC outcome). Idempotent: an existing row of any role is
+// returned unchanged as ObserverAlreadyParticipant.
+func (s *SceneStore) AddObserver(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ObserverAddResult, error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.add_observer",
+		attribute.String("scene_id", sceneID),
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, ObserverSceneNotFound, oops.Code("SCENE_OBSERVE_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	// Re-check visibility and state under a shared lock to prevent TOCTOU
+	// between the ABAC check (which runs outside the tx) and this write.
+	var visibility, state string
+	err = tx.QueryRow(
+		ctx, `SELECT visibility, state FROM scenes WHERE id = $1 FOR SHARE`,
+		sceneID,
+	).Scan(&visibility, &state)
+	if err != nil {
+		recordError(span, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ObserverSceneNotFound, nil
+		}
+		return nil, ObserverSceneNotFound, oops.Code("SCENE_OBSERVE_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+
+	if visibility != string(SceneVisibilityOpen) {
+		return nil, ObserverSceneNotOpen, nil
+	}
+	if state != string(SceneStateActive) && state != string(SceneStatePaused) {
+		return nil, ObserverSceneNotActive, nil
+	}
+
+	// INSERT ... ON CONFLICT DO NOTHING eliminates the SELECT-then-INSERT TOCTOU:
+	// concurrent calls on the same (scene_id, character_id) PK will race to
+	// insert; the loser gets 0 rows affected and falls through to the
+	// ObserverAlreadyParticipant classification below.
+	tag, err := tx.Exec(
+		ctx, `INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
+		      VALUES ($1, $2, 'observer', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
+		      ON CONFLICT (scene_id, character_id) DO NOTHING`,
+		sceneID, characterID,
+	)
+	if err != nil {
+		recordError(span, err)
+		return nil, ObserverSceneNotFound, oops.Code("SCENE_OBSERVE_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		// A concurrent insert (or a pre-existing row) won the race. SELECT the
+		// existing row to return it, mirroring AddParticipant's idempotency shape.
+		existing := &ParticipantRow{}
+		err = tx.QueryRow(
+			ctx, `SELECT scene_id, character_id, role, joined_at FROM scene_participants
+			      WHERE scene_id = $1 AND character_id = $2`,
+			sceneID, characterID,
+		).Scan(&existing.SceneID, &existing.CharacterID, &existing.Role, &existing.JoinedAt)
+		if err != nil {
+			recordError(span, err)
+			return nil, ObserverSceneNotFound, oops.Code("SCENE_OBSERVE_FAILED").
+				With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+		}
+		if err = tx.Commit(ctx); err != nil {
+			recordError(span, err)
+			return nil, ObserverSceneNotFound, oops.Code("SCENE_OBSERVE_FAILED").Wrap(err)
+		}
+		return existing, ObserverAlreadyParticipant, nil
+	}
+
+	// Insert succeeded — fetch the committed row so callers get a consistent value.
+	row := &ParticipantRow{}
+	err = tx.QueryRow(
+		ctx, `SELECT scene_id, character_id, role, joined_at FROM scene_participants
+		      WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, characterID,
+	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt)
+	if err != nil {
+		recordError(span, err)
+		return nil, ObserverSceneNotFound, oops.Code("SCENE_OBSERVE_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, ObserverSceneNotFound, oops.Code("SCENE_OBSERVE_FAILED").Wrap(err)
+	}
+	return row, ObserverAdded, nil
 }
 
 // RemoveParticipant deletes the participant row for characterID in sceneID.
@@ -1357,7 +1536,11 @@ const (
 //
 // Mirrors ListScenesForCharacter: startSpan, oops.Code error wrapping, pool
 // query, defer rows.Close, scan loop, rows.Err check.
-func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, error) {
+// ListBoard returns the public scene board filtered by q, including the
+// epoch-ms of the newest IC scene_log entry for each scene. The
+// icSubjectPrefix is "events.<gameID>.scene." — the service supplies it so
+// the store remains gameID-agnostic.
+func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery, icSubjectPrefix string) ([]*SceneRow, error) {
 	// Normalise pagination parameters.
 	if q.Limit <= 0 {
 		q.Limit = defaultBoardLimit
@@ -1387,8 +1570,17 @@ func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, 
 		blockedCWArg = q.BlockedCW
 	}
 
+	// $5 is the IC subject prefix (e.g. "events.<gameID>.scene.") used to
+	// compute last_activity_ms via a correlated subquery against scene_log.
+	// The conversion (MAX(l.timestamp) / 1000000) mirrors ListCharacterScenes:
+	// scene_log.timestamp is BIGINT epoch-nanoseconds, so dividing by 1 000 000
+	// yields epoch-milliseconds.
 	const boardQuery = `
-		SELECT ` + sceneSelectColumns + `
+		SELECT ` + sceneSelectColumns + `,
+		  COALESCE((
+		    SELECT (MAX(l.timestamp) / 1000000)
+		    FROM scene_log l WHERE l.subject = $5 || scenes.id || '.ic'
+		  ), 0) AS last_activity_ms
 		FROM scenes
 		WHERE visibility = 'open'
 		  AND state IN ('active', 'paused')
@@ -1397,7 +1589,7 @@ func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, 
 		ORDER BY created_at DESC, id ASC
 		LIMIT $2 OFFSET $3
 	`
-	rows, err := s.pool.Query(ctx, boardQuery, tagsArg, q.Limit, q.Offset, blockedCWArg)
+	rows, err := s.pool.Query(ctx, boardQuery, tagsArg, q.Limit, q.Offset, blockedCWArg, icSubjectPrefix)
 	if err != nil {
 		recordError(span, err)
 		return nil, oops.Code("SCENE_LIST_BOARD_FAILED").Wrap(err)
@@ -1407,7 +1599,13 @@ func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, 
 	var out []*SceneRow
 	for rows.Next() {
 		row := &SceneRow{}
-		if err := scanSceneRow(rows, row); err != nil {
+		if err := rows.Scan(
+			&row.ID, &row.Title, &row.Description, &row.LocationID, &row.OwnerID,
+			&row.State, &row.PoseOrder, &row.Visibility, &row.IdleTimeoutSecs,
+			&row.TemplateID, &row.ContentWarnings, &row.Tags,
+			&row.CreatedAt, &row.EndedAt, &row.ArchivedAt,
+			&row.LastActivityMs,
+		); err != nil {
 			recordError(span, err)
 			return nil, oops.Code("SCENE_LIST_BOARD_SCAN_FAILED").Wrap(err)
 		}
@@ -1557,6 +1755,74 @@ func (s *SceneStore) classifyTransitionMiss(ctx context.Context, id string, span
 		With("op", op).
 		With("current_state", currentState).
 		Errorf("scene in state %q cannot be %sed", currentState, op)
+}
+
+// CharacterSceneResult is the row returned by ListCharacterScenes: a scene
+// plus the character's role in it, plus per-scene activity aggregates.
+type CharacterSceneResult struct {
+	Scene          *SceneRow
+	Role           string
+	LastActivityMS int64 // epoch-ms of newest IC log row; 0 when empty
+	EntryCount     int64 // total IC log rows for the scene
+}
+
+// ListCharacterScenes returns every non-archived scene the character has a
+// participant row in (any role: owner, member, observer, invited), with the
+// character's role and IC-subject activity aggregates, ordered by
+// last_activity_ms DESC. The icSubjectPrefix is "events.<gameID>.scene." —
+// the service supplies it so the store remains gameID-agnostic.
+func (s *SceneStore) ListCharacterScenes(ctx context.Context, characterID, icSubjectPrefix string) ([]CharacterSceneResult, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_character_scenes",
+		attribute.String("character_id", characterID))
+	defer span.End()
+
+	const q = `
+		SELECT ` + sceneSelectColumns + `, p.role,
+		  COALESCE((
+		    SELECT (MAX(l.timestamp) / 1000000)
+		    FROM scene_log l WHERE l.subject = $2 || s.id || '.ic'
+		  ), 0) AS last_activity_ms,
+		  COALESCE((
+		    SELECT COUNT(*)
+		    FROM scene_log l WHERE l.subject = $2 || s.id || '.ic'
+		  ), 0) AS entry_count
+		FROM scenes s
+		JOIN scene_participants p ON p.scene_id = s.id
+		WHERE p.character_id = $1 AND s.archived_at IS NULL
+		ORDER BY last_activity_ms DESC
+	`
+	rows, err := s.pool.Query(ctx, q, characterID, icSubjectPrefix)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_CHARACTER_SCENES_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []CharacterSceneResult
+	for rows.Next() {
+		var r CharacterSceneResult
+		r.Scene = &SceneRow{}
+		// Scan all columns in a single call: sceneSelectColumns + role + last_activity_ms + entry_count.
+		if err := rows.Scan(
+			&r.Scene.ID, &r.Scene.Title, &r.Scene.Description, &r.Scene.LocationID, &r.Scene.OwnerID,
+			&r.Scene.State, &r.Scene.PoseOrder, &r.Scene.Visibility, &r.Scene.IdleTimeoutSecs,
+			&r.Scene.TemplateID, &r.Scene.ContentWarnings, &r.Scene.Tags,
+			&r.Scene.CreatedAt, &r.Scene.EndedAt, &r.Scene.ArchivedAt,
+			&r.Role, &r.LastActivityMS, &r.EntryCount,
+		); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_CHARACTER_SCENES_SCAN_FAILED").
+				With("character_id", characterID).Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_CHARACTER_SCENES_ITER_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	return out, nil
 }
 
 // dotStyleSceneSubject returns the NATS dot-style entity-level subject

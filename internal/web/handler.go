@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
@@ -92,6 +93,22 @@ type ContentClient interface {
 	ListContent(ctx context.Context, req *contentv1.ListContentRequest) (*contentv1.ListContentResponse, error)
 }
 
+// SceneAccessClient is the gRPC interface used by Handler to reach the
+// core scene-access facade. One method per Web* scene RPC, all using
+// sceneaccessv1 types. The gateway is a pure translation layer — the
+// facade (SceneAccessService) owns all authorization and identity resolution.
+type SceneAccessClient interface {
+	ListScenesForViewer(ctx context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error)
+	GetSceneForViewer(ctx context.Context, req *sceneaccessv1.GetSceneForViewerRequest) (*sceneaccessv1.GetSceneForViewerResponse, error)
+	ListMyScenes(ctx context.Context, req *sceneaccessv1.ListMyScenesRequest) (*sceneaccessv1.ListMyScenesResponse, error)
+	WatchScene(ctx context.Context, req *sceneaccessv1.WatchSceneRequest) (*sceneaccessv1.WatchSceneResponse, error)
+	ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error)
+	SetSceneFocus(ctx context.Context, req *sceneaccessv1.SetSceneFocusRequest) (*sceneaccessv1.SetSceneFocusResponse, error)
+	ListPublishedScenes(ctx context.Context, req *sceneaccessv1.ListPublishedScenesRequest) (*sceneaccessv1.ListPublishedScenesResponse, error)
+	GetPublicSceneArchive(ctx context.Context, req *sceneaccessv1.GetPublicSceneArchiveRequest) (*sceneaccessv1.GetPublicSceneArchiveResponse, error)
+	DownloadPublicSceneArchive(ctx context.Context, req *sceneaccessv1.DownloadPublicSceneArchiveRequest) (*sceneaccessv1.DownloadPublicSceneArchiveResponse, error)
+}
+
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
 // The gateway is a protocol translation layer only — it MUST NOT access
 // WorldService or other internal services directly. All game state flows
@@ -101,6 +118,7 @@ type ContentClient interface {
 type Handler struct {
 	client        CoreClient
 	contentClient ContentClient
+	sceneAccess   SceneAccessClient
 	// heartbeatInterval controls the StreamEvents heartbeat ticker period.
 	// Zero means 15 seconds (production default). Overridable in tests.
 	heartbeatInterval time.Duration
@@ -119,6 +137,11 @@ type HandlerOption func(*Handler)
 // WithContentClient sets the content service client for content RPCs.
 func WithContentClient(c ContentClient) HandlerOption {
 	return func(h *Handler) { h.contentClient = c }
+}
+
+// WithSceneAccessClient sets the scene-access facade client for scene Web* RPCs.
+func WithSceneAccessClient(c SceneAccessClient) HandlerOption {
+	return func(h *Handler) { h.sceneAccess = c }
 }
 
 // NewHandler creates a new Handler with the given core client and options.
@@ -516,6 +539,25 @@ func reconnectedControlFrame() *webv1.StreamEventsResponse {
 	}
 }
 
+// mapCoreSignalToWeb translates a core ControlSignal enum value to the
+// corresponding web ControlSignal. The two enums share the same low values
+// (UNSPECIFIED=0, REPLAY_COMPLETE=1, STREAM_CLOSED=2) but diverge above 2 —
+// the web proto reserves 3–5 for gateway-synthesised signals (STREAM_OPENED,
+// RECONNECTING, RECONNECTED) that have no core counterpart. An explicit switch
+// prevents a silent misroute when new values are added to either side.
+func mapCoreSignalToWeb(sig corev1.ControlSignal) webv1.ControlSignal {
+	switch sig {
+	case corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE:
+		return webv1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE
+	case corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED:
+		return webv1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED
+	case corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY:
+		return webv1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY
+	default:
+		return webv1.ControlSignal_CONTROL_SIGNAL_UNSPECIFIED
+	}
+}
+
 // forwardFrame translates and sends a single upstream frame to the web client.
 func (h *Handler) forwardFrame(
 	ctx context.Context,
@@ -544,9 +586,10 @@ func (h *Handler) forwardFrame(
 		if sendErr := stream.Send(&webv1.StreamEventsResponse{
 			Frame: &webv1.StreamEventsResponse_Control{
 				Control: &webv1.ControlFrame{
-					Signal:         webv1.ControlSignal(frame.Control.GetSignal()),
+					Signal:         mapCoreSignalToWeb(frame.Control.GetSignal()),
 					Message:        frame.Control.GetMessage(),
 					AttachMomentMs: frame.Control.GetAttachMomentMs(),
+					SceneId:        frame.Control.GetSceneId(),
 				},
 			},
 		}); sendErr != nil {

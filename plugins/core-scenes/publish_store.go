@@ -692,6 +692,108 @@ func (s *SceneStore) ListSceneAttempts(ctx context.Context, sceneID string) ([]P
 	return out, nil
 }
 
+// ListPublishedScenesQuery parameterises the archive-browse listing.
+type ListPublishedScenesQuery struct {
+	// Limit is the page size. 0 means server-default (50), capped at 200.
+	Limit int
+	// Offset is the zero-based row skip. Negative values are clamped to 0.
+	Offset int
+	// Tags, when non-empty, restricts results to scenes carrying all listed
+	// tags (array containment: scenes.tags @> $tags).
+	Tags []string
+}
+
+// PublishedSceneArchiveSummary is the persistence-layer projection for
+// ListPublishedScenes — the public-safe archive fields plus the source
+// scene's tags for client-side filtering.
+type PublishedSceneArchiveSummary struct {
+	ID                   string
+	TitleSnapshot        string
+	ParticipantsSnapshot []string
+	ContentEntries       []PublishedSceneEntry
+	PublishedAtNS        *pgnanos.Time
+	Tags                 []string // from scenes.tags at list time
+}
+
+const (
+	defaultPublishedLimit = 50
+	maxPublishedLimit     = 200
+)
+
+// ListPublishedScenes returns PUBLISHED scene archive summaries in
+// published_at DESC order. Only PUBLISHED rows are returned (same status
+// gate as GetPublicSceneArchive / INV-SCENE-35). Tags is applied as an
+// array-containment predicate on scenes.tags. Supports LIMIT/OFFSET paging.
+func (s *SceneStore) ListPublishedScenes(ctx context.Context, q ListPublishedScenesQuery) ([]PublishedSceneArchiveSummary, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_published_scenes")
+	defer span.End()
+
+	if q.Limit <= 0 {
+		q.Limit = defaultPublishedLimit
+	} else if q.Limit > maxPublishedLimit {
+		q.Limit = maxPublishedLimit
+	}
+	if q.Offset < 0 {
+		q.Offset = 0
+	}
+
+	var tagsArg interface{}
+	if len(q.Tags) > 0 {
+		tagsArg = q.Tags
+	}
+
+	const query = `
+		SELECT ps.id, ps.title_snapshot, ps.participants_snapshot,
+		       ps.content_entries, ps.published_at, s.tags
+		FROM published_scenes ps
+		JOIN scenes s ON s.id = ps.scene_id
+		WHERE ps.status = 'PUBLISHED'
+		  AND ($1::text[] IS NULL OR s.tags @> $1)
+		ORDER BY ps.published_at DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := s.pool.Query(ctx, query, tagsArg, q.Limit, q.Offset)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []PublishedSceneArchiveSummary
+	for rows.Next() {
+		var item PublishedSceneArchiveSummary
+		var titleSnapshot *string
+		var participantsRaw []byte
+		var contentRaw []byte
+		if err := rows.Scan(
+			&item.ID, &titleSnapshot, &participantsRaw,
+			&contentRaw, &item.PublishedAtNS, &item.Tags,
+		); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_SCAN_FAILED").Wrap(err)
+		}
+		if titleSnapshot != nil {
+			item.TitleSnapshot = *titleSnapshot
+		}
+		if len(participantsRaw) > 0 {
+			if err := json.Unmarshal(participantsRaw, &item.ParticipantsSnapshot); err != nil {
+				return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_PARTICIPANTS_DECODE_FAILED").Wrap(err)
+			}
+		}
+		if len(contentRaw) > 0 {
+			if err := json.Unmarshal(contentRaw, &item.ContentEntries); err != nil {
+				return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_CONTENT_DECODE_FAILED").Wrap(err)
+			}
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
 // SnapshotPool exposes the underlying connection pool for the C7 snapshot
 // pipeline, which orchestrates a read-tx → decrypt(outside tx) → write-tx
 // sequence (read-back design §6). It is the same pool as Pool(); the distinct
@@ -903,4 +1005,72 @@ func (s *SceneStore) ReadSceneMetaForSnapshot(ctx context.Context, tx pgx.Tx, sc
 		return SnapshotSceneMeta{}, oops.Code("SCENE_PUBLISH_META_PARTICIPANTS_ITER_FAILED").Wrap(err)
 	}
 	return meta, nil
+}
+
+// exportLogMaxRows is the maximum number of IC log rows ReadSceneLogForExport
+// will return. The query fetches cap+1 rows so the caller can distinguish "at
+// cap" from "over cap" without a second COUNT query. When the result exceeds
+// exportLogMaxRows rows the method returns SCENE_EXPORT_TOO_LARGE rather than
+// silently truncating a legal document (silent truncation is a data-integrity
+// lie). 10 000 rows covers ≥20 typical RP sessions of 500 poses each; a
+// snapshotDecryptBatch of 500 means 20 decrypt round-trips — an acceptable
+// synchronous cost ceiling before the export warrants offline processing.
+const exportLogMaxRows = 10_000
+
+// ReadSceneLogForExport reads the IC log rows for a scene in chronological
+// order (ORDER BY id ASC) without a transaction — used by ExportSceneLog.
+// fullSubject is the complete NATS dot-style IC subject
+// (events.<game_id>.scene.<scene_id>.ic) and is matched with an exact
+// WHERE subject = $1, mirroring ReadSceneLogForSnapshot. A LIKE pattern
+// is avoided: it is wildcard-injectable via % and _ characters and diverges
+// from the exact subject the AEAD AAD was bound to at encrypt time.
+//
+// At most exportLogMaxRows rows are returned. If the scene log exceeds that
+// ceiling the method returns SCENE_EXPORT_TOO_LARGE (mapped to
+// FailedPrecondition by mapStoreErr) rather than silently truncating the
+// document.
+func (s *SceneStore) ReadSceneLogForExport(ctx context.Context, fullSubject string) ([]LogRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.read_scene_log_for_export",
+		attribute.String("subject", fullSubject))
+	defer span.End()
+
+	// Fetch cap+1 so we can detect overflow without a separate COUNT query.
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec, dek_ref, dek_version
+		FROM scene_log
+		WHERE subject = $1
+		  AND type IN ('core-scenes:scene_pose', 'core-scenes:scene_say', 'core-scenes:scene_emit')
+		ORDER BY id ASC
+		LIMIT $2
+	`, fullSubject, exportLogMaxRows+1)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_EXPORT_LOG_READ_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []LogRow
+	for rows.Next() {
+		var r LogRow
+		if err := rows.Scan(
+			&r.ID, &r.Type, &r.Timestamp, &r.ActorKind, &r.ActorID, &r.Payload, &r.SchemaVer, &r.Codec, &r.DEKRef, &r.DEKVersion,
+		); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_EXPORT_LOG_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_EXPORT_LOG_ITER_FAILED").Wrap(err)
+	}
+	if len(out) > exportLogMaxRows {
+		tooLargeErr := oops.Code("SCENE_EXPORT_TOO_LARGE").
+			With("subject", fullSubject).
+			With("limit", exportLogMaxRows).
+			Errorf("scene log exceeds %d-row export ceiling", exportLogMaxRows)
+		recordError(span, tooLargeErr)
+		return nil, tooLargeErr
+	}
+	return out, nil
 }

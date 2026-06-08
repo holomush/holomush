@@ -18,12 +18,16 @@ const (
 	ParticipantRoleOwner   ParticipantRole = "owner"
 	ParticipantRoleMember  ParticipantRole = "member"
 	ParticipantRoleInvited ParticipantRole = "invited"
+	// ParticipantRoleObserver marks a watching, non-acting participant (E9.5
+	// observer auto-join, INV-SCENE-61): present in the roster, excluded from
+	// the emit path, pose order, and publish votes.
+	ParticipantRoleObserver ParticipantRole = "observer"
 )
 
 // IsValid reports whether r is a recognized participant role.
 func (r ParticipantRole) IsValid() bool {
 	switch r {
-	case ParticipantRoleOwner, ParticipantRoleMember, ParticipantRoleInvited:
+	case ParticipantRoleOwner, ParticipantRoleMember, ParticipantRoleInvited, ParticipantRoleObserver:
 		return true
 	}
 	return false
@@ -52,4 +56,27 @@ const (
 	// OpNoChange indicates the caller was already a member or owner; the
 	// upsert was a no-op.
 	OpNoChange
+	// ParticipantUpgraded indicates an existing observer row was upgraded to
+	// member via AddParticipant on an open scene. The row's role is now
+	// "member"; the store records an OpsKindMembershipJoin ops event in-tx.
+	ParticipantUpgraded
+)
+
+// ObserverAddResult classifies AddObserver outcomes.
+type ObserverAddResult int
+
+const (
+	// ObserverAdded indicates a fresh role=observer row was inserted.
+	ObserverAdded ObserverAddResult = iota
+	// ObserverAlreadyParticipant indicates the character already has a row of
+	// any role in the scene; the existing row is returned unchanged.
+	ObserverAlreadyParticipant
+	// ObserverSceneNotFound indicates no scene with the given ID exists.
+	ObserverSceneNotFound
+	// ObserverSceneNotOpen indicates the scene's visibility is not "open";
+	// observer auto-join requires an open scene (INV-SCENE-61).
+	ObserverSceneNotOpen
+	// ObserverSceneNotActive indicates the scene is not in an active or paused
+	// state; observers may only join live scenes.
+	ObserverSceneNotActive
 )

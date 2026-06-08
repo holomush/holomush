@@ -311,6 +311,7 @@ const (
 	PluginHostService_DecryptOwnAuditRows_FullMethodName = "/holomush.plugin.v1.PluginHostService/DecryptOwnAuditRows"
 	PluginHostService_RequestEmitToken_FullMethodName    = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
 	PluginHostService_SetConnectionFocus_FullMethodName  = "/holomush.plugin.v1.PluginHostService/SetConnectionFocus"
+	PluginHostService_GetConnectionFocus_FullMethodName  = "/holomush.plugin.v1.PluginHostService/GetConnectionFocus"
 	PluginHostService_AutoFocusOnJoin_FullMethodName     = "/holomush.plugin.v1.PluginHostService/AutoFocusOnJoin"
 	PluginHostService_IsAnyConnFocused_FullMethodName    = "/holomush.plugin.v1.PluginHostService/IsAnyConnFocused"
 	PluginHostService_Evaluate_FullMethodName            = "/holomush.plugin.v1.PluginHostService/Evaluate"
@@ -432,6 +433,12 @@ type PluginHostServiceClient interface {
 	// FocusMemberships (D4), then writes Connection.FocusKey and (D9-gated)
 	// Info.PresentingFocus atomically under one Store-lock acquisition (D7).
 	SetConnectionFocus(ctx context.Context, in *PluginHostServiceSetConnectionFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceSetConnectionFocusResponse, error)
+	// GetConnectionFocus returns the named connection's current per-connection
+	// focus, or absent when the connection is grid-focused (FocusKey nil) or
+	// unknown. Read-only counterpart of SetConnectionFocus; lets plugins route
+	// connection-scoped operations (e.g. scene pose) to the focused target.
+	// See goplugin/host_service.go::GetConnectionFocus.
+	GetConnectionFocus(ctx context.Context, in *PluginHostServiceGetConnectionFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceGetConnectionFocusResponse, error)
 	// AutoFocusOnJoin is the Phase-5 fan-out that focuses all of a character's
 	// terminal/telnet connections on a scene at once. SERVED:
 	// pluginHostServiceServer.AutoFocusOnJoin. Connections already explicitly
@@ -635,6 +642,16 @@ func (c *pluginHostServiceClient) SetConnectionFocus(ctx context.Context, in *Pl
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) GetConnectionFocus(ctx context.Context, in *PluginHostServiceGetConnectionFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceGetConnectionFocusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceGetConnectionFocusResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_GetConnectionFocus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginHostServiceClient) AutoFocusOnJoin(ctx context.Context, in *PluginHostServiceAutoFocusOnJoinRequest, opts ...grpc.CallOption) (*PluginHostServiceAutoFocusOnJoinResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PluginHostServiceAutoFocusOnJoinResponse)
@@ -817,6 +834,12 @@ type PluginHostServiceServer interface {
 	// FocusMemberships (D4), then writes Connection.FocusKey and (D9-gated)
 	// Info.PresentingFocus atomically under one Store-lock acquisition (D7).
 	SetConnectionFocus(context.Context, *PluginHostServiceSetConnectionFocusRequest) (*PluginHostServiceSetConnectionFocusResponse, error)
+	// GetConnectionFocus returns the named connection's current per-connection
+	// focus, or absent when the connection is grid-focused (FocusKey nil) or
+	// unknown. Read-only counterpart of SetConnectionFocus; lets plugins route
+	// connection-scoped operations (e.g. scene pose) to the focused target.
+	// See goplugin/host_service.go::GetConnectionFocus.
+	GetConnectionFocus(context.Context, *PluginHostServiceGetConnectionFocusRequest) (*PluginHostServiceGetConnectionFocusResponse, error)
 	// AutoFocusOnJoin is the Phase-5 fan-out that focuses all of a character's
 	// terminal/telnet connections on a scene at once. SERVED:
 	// pluginHostServiceServer.AutoFocusOnJoin. Connections already explicitly
@@ -914,6 +937,9 @@ func (UnimplementedPluginHostServiceServer) RequestEmitToken(context.Context, *P
 }
 func (UnimplementedPluginHostServiceServer) SetConnectionFocus(context.Context, *PluginHostServiceSetConnectionFocusRequest) (*PluginHostServiceSetConnectionFocusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetConnectionFocus not implemented")
+}
+func (UnimplementedPluginHostServiceServer) GetConnectionFocus(context.Context, *PluginHostServiceGetConnectionFocusRequest) (*PluginHostServiceGetConnectionFocusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetConnectionFocus not implemented")
 }
 func (UnimplementedPluginHostServiceServer) AutoFocusOnJoin(context.Context, *PluginHostServiceAutoFocusOnJoinRequest) (*PluginHostServiceAutoFocusOnJoinResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AutoFocusOnJoin not implemented")
@@ -1227,6 +1253,24 @@ func _PluginHostService_SetConnectionFocus_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_GetConnectionFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceGetConnectionFocusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).GetConnectionFocus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_GetConnectionFocus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).GetConnectionFocus(ctx, req.(*PluginHostServiceGetConnectionFocusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginHostService_AutoFocusOnJoin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PluginHostServiceAutoFocusOnJoinRequest)
 	if err := dec(in); err != nil {
@@ -1419,6 +1463,10 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetConnectionFocus",
 			Handler:    _PluginHostService_SetConnectionFocus_Handler,
+		},
+		{
+			MethodName: "GetConnectionFocus",
+			Handler:    _PluginHostService_GetConnectionFocus_Handler,
 		},
 		{
 			MethodName: "AutoFocusOnJoin",

@@ -38,10 +38,10 @@ type membershipLookup interface {
 // scene; zero or multiple returns SCENE_PUBLISH_NO_FOCUSED_SCENE prompting the
 // player to pass "#<id>". Whitespace-only args are treated as no-arg.
 //
-// The plugin SDK exposes no per-connection "focused scene" query
-// (pluginsdk.FocusClient has no GetConnectionFocus), so single-membership
-// inference is the established pattern, reused here rather than inventing a new
-// abstraction.
+// This publish-target path has no emitting-connection context, so it does not
+// consult per-connection focus (unlike handleEmit, which routes via
+// GetConnectionFocus); single-membership inference is the established pattern
+// here rather than inventing a new abstraction.
 func resolveSceneRef(ctx context.Context, look membershipLookup, characterID, args string) (string, error) {
 	args = strings.TrimSpace(args)
 	if strings.HasPrefix(args, "#") {
@@ -1240,22 +1240,33 @@ func (p *scenePlugin) handleEmit(
 		return pluginsdk.Errorf("Usage: scene %s <text>", verb), nil
 	}
 
-	// Resolve target scene via single-membership inference. Phase 5 will
-	// replace this with focus-aware routing that consults the character's
-	// focus context.
-	sceneID, userErr, internalErr := p.resolveSingleSceneMembership(ctx, req.CharacterID)
-	if internalErr != nil {
-		recordError(span, internalErr)
-		slog.WarnContext(
-			ctx, "scene.command.emit membership lookup failed",
-			"subject_id", req.CharacterID,
-			"event_type", eventType,
-			"error", internalErr,
-		)
-		return nil, internalErr
+	// Focus-aware scene routing: when the connection carries an explicit scene
+	// focus, route the emit there directly. Fall back to single-membership
+	// inference only when no focus is set or focusClient is unavailable.
+	sceneID := ""
+	if req.ConnectionID != "" && p.focusClient != nil {
+		if fk, fkErr := p.focusClient.GetConnectionFocus(ctx, req.ConnectionID); fkErr == nil &&
+			fk != nil && fk.Kind == pluginsdk.FocusKindScene {
+			sceneID = fk.TargetID
+		}
 	}
-	if userErr != "" {
-		return pluginsdk.Errorf("%s", userErr), nil
+	if sceneID == "" {
+		var userErr string
+		var internalErr error
+		sceneID, userErr, internalErr = p.resolveSingleSceneMembership(ctx, req.CharacterID)
+		if internalErr != nil {
+			recordError(span, internalErr)
+			slog.WarnContext(
+				ctx, "scene.command.emit membership lookup failed",
+				"subject_id", req.CharacterID,
+				"event_type", eventType,
+				"error", internalErr,
+			)
+			return nil, internalErr
+		}
+		if userErr != "" {
+			return pluginsdk.Errorf("%s", userErr), nil
+		}
 	}
 	span.SetAttributes(attribute.String("scene_id", sceneID))
 
@@ -1474,8 +1485,9 @@ func poseOrderDisplayName(e *scenev1.PoseOrderEntry) string {
 // message in userErr when membership count is ambiguous (zero or >1);
 // returns internalErr for genuine lookup failures.
 //
-// Phase 5 will replace this with focus-aware routing that consults the
-// character's focus context.
+// This is the FALLBACK path: handleEmit first consults the emitting
+// connection's focus via GetConnectionFocus and only calls this when no scene
+// focus is set (e.g. a connectionless caller, or a grid-focused connection).
 func (p *scenePlugin) resolveSingleSceneMembership(ctx context.Context, characterID string) (sceneID, userErr string, internalErr error) {
 	scenes, err := p.service.store.ListScenesForCharacter(ctx, characterID)
 	if err != nil {
@@ -1489,7 +1501,7 @@ func (p *scenePlugin) resolveSingleSceneMembership(ctx context.Context, characte
 		return scenes[0], "", nil
 	default:
 		return "", fmt.Sprintf(
-			"You are in %d scenes. Phase 5 will add focus-aware routing; for now, explicit scene targeting is not yet supported.",
+			"You are in %d scenes. Focus one (so this connection routes to it) or pose from a connection focused on the target scene.",
 			len(scenes),
 		), nil
 	}

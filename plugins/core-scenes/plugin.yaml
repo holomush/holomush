@@ -280,6 +280,14 @@ policies:
     dsl: >-
       permit(principal is character, action in ["join"], resource is scene) when { resource.scene.visibility == "private"
       && principal.id in resource.scene.invitees && resource.scene.state in ["active", "paused"] };
+  # spectate gates WatchScene's observer auto-join. The visibility clause is
+  # deliberate defense-in-depth behind the plugin-code gate (INV-SCENE-61):
+  # service.go::WatchScene rejects non-open scenes BEFORE consulting ABAC,
+  # and the store re-checks in-tx — this policy is the third layer.
+  - name: spectate-open-scene
+    dsl: >-
+      permit(principal is character, action in ["spectate"], resource is scene) when { resource.scene.visibility == "open"
+      };
   - name: leave-scene
     dsl: >-
       permit(principal is character, action in ["leave"], resource is scene) when { principal.id in resource.scene.participants

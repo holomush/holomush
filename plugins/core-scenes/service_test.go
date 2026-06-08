@@ -48,6 +48,16 @@ type fakeStore struct {
 	listBoardRows []*SceneRow
 	listBoardErr  error
 	listBoardGot  *BoardQuery // records the last query received
+	// ListCharacterScenes control fields.
+	listCharacterScenesRows []CharacterSceneResult
+	listCharacterScenesErr  error
+	// ListPublishedScenes control fields.
+	listPublishedScenesRows []PublishedSceneArchiveSummary
+	listPublishedScenesErr  error
+	// ReadSceneLogForExport control fields (Task 6 export suite).
+	exportLogRows    []LogRow
+	exportLogErr     error
+	exportLogSubject string // records the fullSubject passed by the service
 }
 
 type recordingEventSink struct {
@@ -301,6 +311,46 @@ func (f *fakeStore) GetWithMembership(ctx context.Context, id string) (*SceneRow
 	return row, participants, invitees, nil
 }
 
+func (f *fakeStore) GetWithMembershipAndObservers(ctx context.Context, id string) (*SceneRow, []string, []string, []string, error) {
+	row, err := f.Get(ctx, id)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	var participants, invitees, observers []string
+	for cid, role := range f.participants[id] {
+		switch role {
+		case "owner", "member":
+			participants = append(participants, cid)
+		case "invited":
+			invitees = append(invitees, cid)
+		case "observer":
+			observers = append(observers, cid)
+		}
+	}
+	return row, participants, invitees, observers, nil
+}
+
+func (f *fakeStore) AddObserver(_ context.Context, sceneID, characterID string) (*ParticipantRow, ObserverAddResult, error) {
+	scene, ok := f.scenes[sceneID]
+	if !ok {
+		return nil, ObserverSceneNotFound, nil
+	}
+	if scene.Visibility != string(SceneVisibilityOpen) {
+		return nil, ObserverSceneNotOpen, nil
+	}
+	if scene.State != string(SceneStateActive) && scene.State != string(SceneStatePaused) {
+		return nil, ObserverSceneNotActive, nil
+	}
+	if f.participants[sceneID] == nil {
+		f.participants[sceneID] = make(map[string]string)
+	}
+	if existing, exists := f.participants[sceneID][characterID]; exists {
+		return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: existing}, ObserverAlreadyParticipant, nil
+	}
+	f.participants[sceneID][characterID] = "observer"
+	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "observer"}, ObserverAdded, nil
+}
+
 func (f *fakeStore) AddParticipant(_ context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error) {
 	if f.addParticipantErr != nil {
 		return nil, OpNoChange, f.addParticipantErr
@@ -321,6 +371,10 @@ func (f *fakeStore) AddParticipant(_ context.Context, sceneID, characterID strin
 		if existing == "invited" {
 			f.participants[sceneID][characterID] = "member"
 			return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "member"}, OpPromoted, nil
+		}
+		if existing == "observer" {
+			f.participants[sceneID][characterID] = "member"
+			return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "member"}, ParticipantUpgraded, nil
 		}
 		return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: existing}, OpNoChange, nil
 	}
@@ -469,7 +523,7 @@ func (f *fakeStore) ListScenesForCharacter(_ context.Context, characterID string
 
 // ListBoard records the query it received and returns the configured rows/err.
 // Satisfies sceneStorer for iokti.12 unit tests.
-func (f *fakeStore) ListBoard(_ context.Context, q BoardQuery) ([]*SceneRow, error) {
+func (f *fakeStore) ListBoard(_ context.Context, q BoardQuery, _ string) ([]*SceneRow, error) {
 	got := q
 	f.listBoardGot = &got
 	if f.listBoardErr != nil {
@@ -599,6 +653,18 @@ func (f *fakeStore) ReadSceneLogForSnapshot(_ context.Context, _ pgx.Tx, _ strin
 	return nil, nil
 }
 
+// ReadSceneLogForExport returns the rows injected via fakeStore.exportLogRows
+// (or the injected error). Backs the ExportSceneLog unit suite.
+// fullSubject is the complete IC subject passed by the service; recorded in
+// exportLogSubject so tests can assert the correct AAD subject was propagated.
+func (f *fakeStore) ReadSceneLogForExport(_ context.Context, fullSubject string) ([]LogRow, error) {
+	f.exportLogSubject = fullSubject
+	if f.exportLogErr != nil {
+		return nil, f.exportLogErr
+	}
+	return f.exportLogRows, nil
+}
+
 func (f *fakeStore) ReadSceneMetaForSnapshot(_ context.Context, _ pgx.Tx, _ string) (SnapshotSceneMeta, error) {
 	return SnapshotSceneMeta{}, nil
 }
@@ -613,6 +679,25 @@ func (f *fakeStore) ArchiveSceneStateForPublish(_ context.Context, _ pgx.Tx, _ s
 
 func (f *fakeStore) FailAttemptTx(_ context.Context, _ pgx.Tx, _ string, _ PublishFailureReason) error {
 	return oops.Code("SCENE_PUBLISH_INVALID_TRANSITION").Errorf("fakeStore: FailAttemptTx not supported")
+}
+
+// ListCharacterScenes returns a fixed slice injected via
+// fakeStore.listCharacterScenesRows. The icSubjectPrefix is accepted but
+// ignored — unit tests control results directly.
+func (f *fakeStore) ListCharacterScenes(_ context.Context, _ string, _ string) ([]CharacterSceneResult, error) {
+	if f.listCharacterScenesErr != nil {
+		return nil, f.listCharacterScenesErr
+	}
+	return f.listCharacterScenesRows, nil
+}
+
+// ListPublishedScenes returns a fixed slice injected via
+// fakeStore.listPublishedScenesRows.
+func (f *fakeStore) ListPublishedScenes(_ context.Context, _ ListPublishedScenesQuery) ([]PublishedSceneArchiveSummary, error) {
+	if f.listPublishedScenesErr != nil {
+		return nil, f.listPublishedScenesErr
+	}
+	return f.listPublishedScenesRows, nil
 }
 
 func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testing.T) {
@@ -781,13 +866,13 @@ func TestSceneServiceSceneCreatedIntentBuildsLifecyclePayload(t *testing.T) {
 
 func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {
 	store := newFakeStore()
-	store.scenes["scene-known"] = &SceneRow{
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
 		ID:         "scene-known",
 		Title:      "Existing",
 		OwnerID:    "char-alice",
 		State:      string(SceneStateActive),
 		Visibility: string(SceneVisibilityOpen),
-	}
+	}))
 	svc := newTestService(t, store)
 
 	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
@@ -797,6 +882,124 @@ func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "scene-known", resp.GetScene().GetId())
 	assert.Equal(t, "Existing", resp.GetScene().GetTitle())
+}
+
+// TestGetScenePopulatesRosterForOpenSceneWithOwnerMemberAndObserver asserts
+// that GetScene on an open scene returns participants (owner + member) and
+// observers (watcher) with correct roles, and that observers are distinct from
+// participants.
+func TestGetScenePopulatesRosterForOpenSceneWithOwnerMemberAndObserver(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-roster",
+		Title:      "Roster Test",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}))
+	store.participants["scene-roster"]["char-member"] = "member"
+	store.participants["scene-roster"]["char-watcher"] = "observer"
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-owner",
+		SceneId:     "scene-roster",
+	})
+	require.NoError(t, err)
+
+	// Collect participant IDs and roles for order-independent assertions.
+	participantRoles := make(map[string]string, len(resp.GetScene().GetParticipants()))
+	for _, p := range resp.GetScene().GetParticipants() {
+		participantRoles[p.GetCharacterId()] = p.GetRole()
+	}
+	assert.Equal(t, "owner", participantRoles["char-owner"], "owner must have role=owner")
+	assert.Equal(t, "member", participantRoles["char-member"], "member must have role=member")
+	assert.NotContains(t, participantRoles, "char-watcher", "observer must NOT appear in participants")
+
+	observerIDs := make([]string, 0, len(resp.GetScene().GetObservers()))
+	for _, o := range resp.GetScene().GetObservers() {
+		observerIDs = append(observerIDs, o.GetCharacterId())
+		assert.Equal(t, "observer", o.GetRole(), "observer role must be 'observer'")
+	}
+	assert.Contains(t, observerIDs, "char-watcher", "watcher must appear in observers")
+	assert.NotContains(t, observerIDs, "char-owner", "owner must NOT appear in observers")
+	assert.NotContains(t, observerIDs, "char-member", "member must NOT appear in observers")
+}
+
+// TestGetSceneReturnsFullRosterForPrivateSceneViewedByParticipant asserts
+// that a participant (owner or member) of a private scene receives the full
+// roster including observers.
+func TestGetSceneReturnsFullRosterForPrivateSceneViewedByParticipant(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-private",
+		Title:      "Private Scene",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+	}))
+	store.participants["scene-private"]["char-member"] = "member"
+	store.participants["scene-private"]["char-watcher"] = "observer"
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-member",
+		SceneId:     "scene-private",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "scene-private", resp.GetScene().GetId())
+	assert.Len(t, resp.GetScene().GetParticipants(), 2, "owner+member must appear in participants")
+	assert.Len(t, resp.GetScene().GetObservers(), 1, "watcher must appear in observers")
+}
+
+// TestGetSceneReturnsNotFoundForPrivateSceneViewedByNonParticipant is the
+// privacy gate test: a character with no membership row for a private scene
+// receives NotFound — neither the scene's existence nor its roster is revealed.
+func TestGetSceneReturnsNotFoundForPrivateSceneViewedByNonParticipant(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-priv-gate",
+		Title:      "Private Gate",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+	}))
+	svc := newTestService(t, store)
+
+	_, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-outsider",
+		SceneId:     "scene-priv-gate",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, st.Code(),
+		"a non-participant must receive NotFound (not the scene detail) for a private scene")
+	// The error message must be generic — no scene ID interpolated.
+	assert.Equal(t, "scene not found", st.Message())
+}
+
+// TestGetSceneAllowsObserverToViewPrivateScene asserts that an observer (watcher)
+// is treated as a member for visibility-gate purposes and receives the full roster.
+func TestGetSceneAllowsObserverToViewPrivateScene(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-priv-obs",
+		Title:      "Private Observed",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+	}))
+	store.participants["scene-priv-obs"]["char-watcher"] = "observer"
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-watcher",
+		SceneId:     "scene-priv-obs",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "scene-priv-obs", resp.GetScene().GetId(),
+		"observer of a private scene must be allowed to view the scene")
 }
 
 func TestSceneServiceGetSceneReturnsNotFoundWhenSceneIsMissing(t *testing.T) {
@@ -810,6 +1013,8 @@ func TestSceneServiceGetSceneReturnsNotFoundWhenSceneIsMissing(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.NotFound, st.Code())
+	// Must be generic — no scene ID in the message.
+	assert.Equal(t, "scene not found", st.Message())
 }
 
 func TestSceneServiceGetSceneReturnsInternalForUnknownStoreError(t *testing.T) {
@@ -824,6 +1029,8 @@ func TestSceneServiceGetSceneReturnsInternalForUnknownStoreError(t *testing.T) {
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())
+	// Must be opaque — no inner error text leaked.
+	assert.Equal(t, "internal error", st.Message())
 }
 
 func TestSceneServiceEndSceneTransitionsScene(t *testing.T) {
@@ -1451,6 +1658,30 @@ func TestJoinScene_NoEmit_OnNoChange(t *testing.T) {
 	assert.Equal(t, 0, joinCount, "idempotent join MUST NOT emit scene_join_ic")
 }
 
+func TestJoinScene_EmitsSceneJoinIC_OnObserverUpgrade(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-upgrade", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// Pre-seed char-bob as observer so AddParticipant returns ParticipantUpgraded.
+	store.participants["scene-join-upgrade"]["char-bob"] = "observer"
+	sink := &recordingEventSink{}
+	svc := newTestService(t, store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		SceneId:     "scene-join-upgrade",
+		CharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+
+	found := findIntentByType(sink.intents, "core-scenes:scene_join_ic")
+	require.NotNil(t, found, "JoinScene MUST auto-emit scene_join_ic on ParticipantUpgraded")
+	assert.Contains(t, found.Payload, `"from_role":"observer"`)
+}
+
 func TestLeaveScene_EmitsSceneLeaveIC_ReasonLeft(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
@@ -2072,4 +2303,133 @@ func TestListScenesPassesEmptyBlockedCWWhenNoBlocksAreConfigured(t *testing.T) {
 	require.NotNil(t, store.listBoardGot)
 	assert.Empty(t, store.listBoardGot.BlockedCW,
 		"no blocks configured → BlockedCW must be empty so IS NULL skips the filter")
+}
+
+// ── ListCharacterScenes unit tests ───────────────────────────────────────────
+
+// TestListCharacterScenesReturnsMappedRowsWithRoleAndActivityMetadata asserts
+// that the handler passes characterID to the store and maps each result to a
+// CharacterSceneInfo with the correct role, last_activity_ms, and entry_count.
+func TestListCharacterScenesReturnsMappedRowsWithRoleAndActivityMetadata(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesRows = []CharacterSceneResult{
+		{
+			Scene: &SceneRow{
+				ID: "scene-lcs-1", Title: "First", OwnerID: "char-owner",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			},
+			Role:           "observer",
+			LastActivityMS: 1_700_000_000_000,
+			EntryCount:     5,
+		},
+		{
+			Scene: &SceneRow{
+				ID: "scene-lcs-2", Title: "Second", OwnerID: "char-owner",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			},
+			Role:           "member",
+			LastActivityMS: 1_600_000_000_000,
+			EntryCount:     3,
+		},
+	}
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetScenes(), 2)
+
+	first := resp.GetScenes()[0]
+	assert.Equal(t, "scene-lcs-1", first.GetScene().GetId())
+	assert.Equal(t, "observer", first.GetRole())
+	assert.Equal(t, int64(1_700_000_000_000), first.GetLastActivityMs())
+	assert.Equal(t, int64(5), first.GetEntryCount())
+
+	second := resp.GetScenes()[1]
+	assert.Equal(t, "scene-lcs-2", second.GetScene().GetId())
+	assert.Equal(t, "member", second.GetRole())
+	assert.Equal(t, int64(1_600_000_000_000), second.GetLastActivityMs())
+	assert.Equal(t, int64(3), second.GetEntryCount())
+}
+
+// TestListCharacterScenesReturnsEmptySliceWhenNoResults asserts that the
+// handler returns an empty scenes list (not an error) when the store has no
+// participant rows for the character.
+func TestListCharacterScenesReturnsEmptySliceWhenNoResults(t *testing.T) {
+	store := newFakeStore()
+	// listCharacterScenesRows is nil by default → store returns nil, nil.
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-nobody",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetScenes())
+}
+
+// TestListCharacterScenesStoreErrorMapsToInternal asserts that a store error
+// is mapped to gRPC Internal and does not leak the inner message.
+func TestListCharacterScenesStoreErrorMapsToInternal(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesErr = oops.Code("SCENE_LIST_CHARACTER_SCENES_FAILED").Errorf("db error")
+
+	svc := newTestService(t, store)
+	_, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.Error(t, err)
+	st := status.Convert(err)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Equal(t, "internal error", st.Message(), "store error MUST NOT leak through the wire message")
+}
+
+// ── ListPublishedScenes unit tests ───────────────────────────────────────────
+
+// TestListPublishedScenesReturnsMappedArchiveSummariesNewestFirst asserts that
+// the handler maps PublishedSceneArchiveSummary rows to PublicSceneArchive
+// protos with correct field mapping.
+func TestListPublishedScenesReturnsMappedArchiveSummariesNewestFirst(t *testing.T) {
+	now := pgnanos.From(time.Now())
+	store := newFakeStore()
+	store.listPublishedScenesRows = []PublishedSceneArchiveSummary{
+		{
+			ID:                   "pub-lps-1",
+			TitleSnapshot:        "Newest Scene",
+			ParticipantsSnapshot: []string{"Alice", "Bob"},
+			PublishedAtNS:        &now,
+			Tags:                 []string{"drama"},
+		},
+	}
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListPublishedScenes(context.Background(), &scenev1.ListPublishedScenesRequest{
+		Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetArchives(), 1)
+
+	arc := resp.GetArchives()[0]
+	assert.Equal(t, "pub-lps-1", arc.GetId())
+	assert.Equal(t, "Newest Scene", arc.GetTitleSnapshot())
+	assert.Equal(t, []string{"Alice", "Bob"}, arc.GetParticipantsSnapshot())
+	assert.Equal(t, []string{"drama"}, arc.GetTags())
+	assert.NotZero(t, arc.GetPublishedAtUnixNs())
+}
+
+// TestListPublishedScenesStoreErrorMapsToInternal asserts that a store error
+// is wrapped as gRPC Internal without leaking the inner error message.
+func TestListPublishedScenesStoreErrorMapsToInternal(t *testing.T) {
+	store := newFakeStore()
+	store.listPublishedScenesErr = oops.Code("SCENE_PUBLISH_LIST_PUBLISHED_FAILED").Errorf("db gone")
+
+	svc := newTestService(t, store)
+	_, err := svc.ListPublishedScenes(context.Background(), &scenev1.ListPublishedScenesRequest{})
+	require.Error(t, err)
+	st := status.Convert(err)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Equal(t, "internal error", st.Message(), "store error MUST NOT leak through the wire message")
 }

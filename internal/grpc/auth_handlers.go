@@ -177,20 +177,27 @@ func isPlayerSessionAuthError(err error) bool {
 	return false
 }
 
-// resolvePlayerSession looks up a PlayerSession by raw token, validates it,
-// and refreshes the TTL. Returns the session or an error.
-func (s *CoreServer) resolvePlayerSession(ctx context.Context, rawToken string) (*auth.PlayerSession, error) {
-	if s.playerSessionRepo == nil {
+// resolvePlayerSessionWithRepo looks up a PlayerSession by raw token, validates
+// it, and refreshes the TTL. It is the package-level implementation shared by
+// CoreServer and SceneAccessServer (same package). Returns the session or an error.
+func resolvePlayerSessionWithRepo(ctx context.Context, repo auth.PlayerSessionRepository, rawToken string) (*auth.PlayerSession, error) {
+	if repo == nil {
 		return nil, oops.Code("NOT_CONFIGURED").Errorf("player session service not configured")
 	}
 	tokenHash := auth.HashSessionToken(rawToken)
-	ps, err := s.playerSessionRepo.GetByTokenHash(ctx, tokenHash)
+	ps, err := repo.GetByTokenHash(ctx, tokenHash)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // intentional: preserve repository error codes (PLAYER_SESSION_NOT_FOUND / PLAYER_SESSION_EXPIRED)
 	}
 	// Best-effort TTL refresh — intentionally ignore errors.
-	s.playerSessionRepo.RefreshTTL(ctx, ps.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
+	repo.RefreshTTL(ctx, ps.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
 	return ps, nil
+}
+
+// resolvePlayerSession looks up a PlayerSession by raw token, validates it,
+// and refreshes the TTL. Returns the session or an error.
+func (s *CoreServer) resolvePlayerSession(ctx context.Context, rawToken string) (*auth.PlayerSession, error) {
+	return resolvePlayerSessionWithRepo(ctx, s.playerSessionRepo, rawToken)
 }
 
 // AuthenticatePlayer validates credentials and returns a player session token for character selection.
@@ -376,15 +383,19 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	}
 
 	sessionInfo := &session.Info{
-		ID:                      sessionID.String(),
-		CharacterID:             charID,
-		PlayerID:                playerSession.PlayerID,
-		PlayerSessionID:         playerSession.ID,
-		CharacterName:           selectedChar.Name,
-		LocationID:              locationID,
-		LocationArrivedAt:       now,
-		Status:                  session.StatusActive,
-		GridPresent:             true,
+		ID:                sessionID.String(),
+		CharacterID:       charID,
+		PlayerID:          playerSession.PlayerID,
+		PlayerSessionID:   playerSession.ID,
+		CharacterName:     selectedChar.Name,
+		LocationID:        locationID,
+		LocationArrivedAt: now,
+		Status:            session.StatusActive,
+		// comms_hub sessions must not appear on the grid: the EXISTS predicate in
+		// ListActiveByLocation is the authoritative presence gate, but setting
+		// GridPresent=false here keeps the flag consistent with reality and avoids
+		// the reaper needing to correct it on first sweep (holomush-5rh.8.9).
+		GridPresent:             req.GetClientType() != "comms_hub",
 		TTLSeconds:              ttlSeconds,
 		MaxHistory:              maxHistory,
 		GuestCharacterCreatedAt: guestCharCreatedAt,
@@ -396,10 +407,14 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		return nil, oops.Code("SESSION_CREATE_FAILED").Wrap(err)
 	}
 
-	// Emit arrive event (best-effort).
-	char := core.CharacterRef{ID: charID, Name: selectedChar.Name, LocationID: locationID}
-	if err := s.engine.HandleConnect(ctx, char); err != nil {
-		slog.WarnContext(ctx, "arrive event failed", "error", err)
+	// Emit arrive event (best-effort). Skipped for comms_hub client type:
+	// scenes-workspace sessions must not announce the character on the grid
+	// (spec 2026-06-07 §V2).
+	if req.GetClientType() != "comms_hub" {
+		char := core.CharacterRef{ID: charID, Name: selectedChar.Name, LocationID: locationID}
+		if err := s.engine.HandleConnect(ctx, char); err != nil {
+			slog.WarnContext(ctx, "arrive event failed", "error", err)
+		}
 	}
 
 	return &corev1.SelectCharacterResponse{

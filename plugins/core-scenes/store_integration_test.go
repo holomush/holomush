@@ -717,6 +717,30 @@ var _ = Describe("SceneStore", func() {
 			Expect(invitees).To(ConsistOf("char-carol"))
 		})
 
+		It("excludes a role='observer' row from both participants and invitees (holomush-5rh.8.4)", func() {
+			store := newTestStore()
+			ctx := context.Background()
+
+			row := &SceneRow{
+				ID: "scene-gwm-obs", Title: "T", OwnerID: "char-alice",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			mustAddParticipant(store, row.ID, "char-watcher", "observer")
+
+			// The real SQL filter (role IN ('owner','member')) is the gate that
+			// makes write-scene-as-participant deny observers — pin it at the
+			// real-query layer, not just the fake-store layer (resolver_test.go).
+			_, participants, invitees, err := store.GetWithMembership(ctx, row.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(participants).To(ConsistOf("char-alice"),
+				"observer row MUST NOT appear in participants")
+			Expect(invitees).To(BeEmpty(),
+				"observer row MUST NOT appear in invitees either")
+		})
+
 		It("returns empty lists when scene has no participants", func() {
 			store := newTestStore()
 			ctx := context.Background()
@@ -2481,7 +2505,7 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		// Excluded: open + active but no "plot" tag.
 		mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{"social"})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rows).To(HaveLen(1))
 		Expect(rows[0].ID).To(Equal(plotTagged.ID))
@@ -2493,7 +2517,7 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		// Excluded: ended.
 		mustCreateSceneWithState(ulid.Make().String(), "ended", "open", []string{})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{})
+		rows, err := store.ListBoard(ctx, BoardQuery{}, "")
 		Expect(err).NotTo(HaveOccurred())
 		ids := make([]string, len(rows))
 		for i, r := range rows {
@@ -2511,7 +2535,7 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		// Only one tag: excluded by the @> containment requirement.
 		mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{"plot"})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot", "action"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot", "action"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rows).To(HaveLen(1))
 		Expect(rows[0].ID).To(Equal(both.ID))
@@ -2524,12 +2548,12 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		}
 
 		// First page: limit 2.
-		page1, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 0})
+		page1, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 0}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(page1).To(HaveLen(2))
 
 		// Second page: offset 2, should return the remaining 1.
-		page2, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 2})
+		page2, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 2}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(page2).To(HaveLen(1))
 
@@ -2544,9 +2568,77 @@ var _ = Describe("SceneStore.ListBoard", func() {
 	})
 
 	It("normalises zero Limit to defaultBoardLimit and does not panic on empty result", func() {
-		rows, err := store.ListBoard(ctx, BoardQuery{Limit: 0})
+		rows, err := store.ListBoard(ctx, BoardQuery{Limit: 0}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rows).To(BeEmpty(), "no scenes seeded, so empty result is expected")
+	})
+})
+
+// ── ListBoard last_activity_ms integration tests (holomush-5rh.8.17.2) ───────
+
+var _ = Describe("SceneStore.ListBoard last_activity_ms", func() {
+	var (
+		store  *SceneStore
+		ctx    context.Context
+		gameID string
+	)
+
+	BeforeEach(func() {
+		store = newTestStore()
+		ctx = context.Background()
+		gameID = "testgame"
+	})
+
+	mustSeedScene := func(visibility, state string) *SceneRow {
+		GinkgoHelper()
+		row := &SceneRow{
+			ID:              ulid.Make().String(),
+			Title:           "Board Activity Scene",
+			OwnerID:         ulid.Make().String(),
+			State:           state,
+			PoseOrder:       string(PoseOrderModeFree),
+			Visibility:      visibility,
+			ContentWarnings: []string{},
+			Tags:            []string{},
+		}
+		Expect(store.Create(ctx, row)).NotTo(HaveOccurred())
+		return row
+	}
+
+	mustInsertSceneLogRow := func(sceneID string, tsNs int64) {
+		GinkgoHelper()
+		subject := "events." + gameID + ".scene." + sceneID + ".ic"
+		_, err := store.pool.Exec(ctx, `
+			INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
+			VALUES (decode(lpad(to_hex($1::BIGINT), 32, '0'), 'hex'), $2, 'core-scenes:scene_pose',
+			        $3, 'character', 'char-001', ''::BYTEA, 1, 'identity')`,
+			tsNs%0x7FFFFFFFFFFFFFFF, subject, tsNs)
+		Expect(err).NotTo(HaveOccurred(), "failed to seed scene_log row for scene %s", sceneID)
+	}
+
+	icPrefix := func() string { return "events." + gameID + ".scene." }
+
+	It("returns LastActivityMs equal to newest scene_log IC timestamp converted to ms when log is non-empty", func() {
+		scene := mustSeedScene("open", "active")
+		// Seed two IC entries; the later one should win.
+		tsNs1 := int64(1_700_000_000_000_000_000) // 1700000000000 ms
+		tsNs2 := int64(1_800_000_000_000_000_000) // 1800000000000 ms
+		mustInsertSceneLogRow(scene.ID, tsNs1)
+		mustInsertSceneLogRow(scene.ID, tsNs2)
+
+		rows, err := store.ListBoard(ctx, BoardQuery{}, icPrefix())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(HaveLen(1))
+		Expect(rows[0].LastActivityMs).To(Equal(tsNs2 / 1_000_000))
+	})
+
+	It("returns LastActivityMs of 0 when the scene has no scene_log IC entries", func() {
+		mustSeedScene("open", "active")
+
+		rows, err := store.ListBoard(ctx, BoardQuery{}, icPrefix())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(HaveLen(1))
+		Expect(rows[0].LastActivityMs).To(Equal(int64(0)))
 	})
 })
 
@@ -2587,7 +2679,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		safe := mustCreateBoardScene(ulid.Make().String(), []string{"romance"})
 		noTags := mustCreateBoardScene(ulid.Make().String(), []string{})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		ids := make([]string, len(rows))
@@ -2605,7 +2697,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		a := mustCreateBoardScene(ulid.Make().String(), []string{"death"})
 		b := mustCreateBoardScene(ulid.Make().String(), []string{"romance"})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{}})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{}}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		ids := make([]string, len(rows))
@@ -2620,7 +2712,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		a := mustCreateBoardScene(ulid.Make().String(), []string{"violence"})
 		b := mustCreateBoardScene(ulid.Make().String(), []string{})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: nil})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: nil}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		ids := make([]string, len(rows))
@@ -2637,7 +2729,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		// Scene has only violence — no overlap with the block set.
 		safe := mustCreateBoardScene(ulid.Make().String(), []string{"violence"})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"romance"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"romance"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		ids := make([]string, len(rows))
@@ -2653,7 +2745,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		safe := mustCreateBoardScene(ulid.Make().String(), []string{"romance", "violence"})
 
 		// Block "death" — safe scene has no overlap, so it is returned.
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		var found *SceneRow
@@ -2666,5 +2758,400 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		Expect(found).NotTo(BeNil(), "safe scene must appear in board results")
 		Expect(found.ContentWarnings).To(ConsistOf("romance", "violence"),
 			"INV-SCENE-56: content_warnings must not be stripped from returned rows")
+	})
+})
+
+var _ = Describe("AddObserver", func() {
+	It("inserts observer row for open active scene and GetParticipant returns it", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-1", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+		got, result, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverAdded))
+		Expect(got.CharacterID).To(Equal("char-watcher"))
+		Expect(got.Role).To(Equal("observer"))
+
+		p, err := store.GetParticipant(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.Role).To(Equal("observer"))
+	})
+
+	It("returns ObserverSceneNotOpen for a private scene", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-priv", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityPrivate),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+
+		_, result, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverSceneNotOpen))
+	})
+
+	It("returns ObserverSceneNotActive for an ended scene", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-ended", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+		_, err := store.End(ctx, row.ID)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, result, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverSceneNotActive))
+	})
+
+	It("returns ObserverAlreadyParticipant for an existing member without changing the row", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-mem", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+		_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+		Expect(err).NotTo(HaveOccurred())
+
+		_, result, err := store.AddObserver(ctx, row.ID, "char-bob")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverAlreadyParticipant))
+
+		// Row must be unchanged (still member, not observer).
+		p, err := store.GetParticipant(ctx, row.ID, "char-bob")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.Role).To(Equal("member"))
+	})
+
+	It("scene load returns observer under Observers field and not in Participants", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-load", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+		_, result, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverAdded))
+
+		_, participants, invitees, observers, err := store.GetWithMembershipAndObservers(ctx, row.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(participants).To(ConsistOf("char-alice")) // owner only
+		Expect(invitees).To(BeEmpty())
+		Expect(observers).To(ConsistOf("char-watcher"))
+	})
+
+	It("upgrades observer to member via AddParticipant returning ParticipantUpgraded", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		row := &SceneRow{
+			ID: "scene-ao-upgrade", Title: "T", OwnerID: "char-alice",
+			State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{}, Tags: []string{},
+		}
+		Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+		_, aoResult, err := store.AddObserver(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(aoResult).To(Equal(ObserverAdded))
+
+		got, apResult, err := store.AddParticipant(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(apResult).To(Equal(ParticipantUpgraded))
+		Expect(got.Role).To(Equal("member"))
+
+		p, err := store.GetParticipant(ctx, row.ID, "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.Role).To(Equal("member"))
+	})
+
+	It("returns ObserverSceneNotFound for a nonexistent scene ID", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		_, result, err := store.AddObserver(ctx, "scene-does-not-exist", "char-watcher")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ObserverSceneNotFound))
+	})
+})
+
+// ── ListCharacterScenes integration tests ─────────────────────────────────────
+
+var _ = Describe("SceneStore.ListCharacterScenes", func() {
+	// gameID used for IC subject construction — must match the prefix passed
+	// to ListCharacterScenes. Tests use "test-game" directly.
+	const testGameID = "test-game"
+	const icPrefix = "events." + testGameID + ".scene."
+
+	// seedSceneLogRow inserts a minimal identity-codec scene_log row under
+	// the given IC subject so the activity aggregates have something to count.
+	seedLogRow := func(store *SceneStore, subject string, tsNS int64) {
+		GinkgoHelper()
+		id := newPoseULID()
+		_, err := store.Pool().Exec(
+			context.Background(), `
+			INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
+			VALUES ($1, $2, 'core-scenes:scene_pose', $3, 'character', $4, $5, 1, 'identity')`,
+			id, subject, tsNS, []byte("char-alice"), []byte(`{}`),
+		)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	It("returns both member and observer scenes ordered by last_activity_ms DESC", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		memberScene := mustCreateScene(store, "lcs-scene-member-01", "char-owner", string(SceneVisibilityOpen))
+		observerScene := mustCreateScene(store, "lcs-scene-observer-01", "char-owner", string(SceneVisibilityOpen))
+
+		// char-alice is a member on scene 1, observer on scene 2.
+		mustAddParticipant(store, memberScene.ID, "char-alice", "member")
+		mustAddParticipant(store, observerScene.ID, "char-alice", "observer")
+
+		// Seed scene_log rows: observer scene is newer (higher epoch-ms → higher last_activity).
+		olderNS := time.Now().Add(-2 * time.Hour).UnixNano()
+		newerNS := time.Now().Add(-1 * time.Hour).UnixNano()
+		seedLogRow(store, icPrefix+memberScene.ID+".ic", olderNS)
+		seedLogRow(store, icPrefix+observerScene.ID+".ic", newerNS)
+
+		results, err := store.ListCharacterScenes(ctx, "char-alice", icPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(2))
+
+		// Observer scene is newer → appears first.
+		Expect(results[0].Scene.ID).To(Equal(observerScene.ID))
+		Expect(results[0].Role).To(Equal("observer"))
+		Expect(results[0].LastActivityMS).To(BeNumerically(">", 0))
+		Expect(results[0].EntryCount).To(BeNumerically("==", 1))
+
+		Expect(results[1].Scene.ID).To(Equal(memberScene.ID))
+		Expect(results[1].Role).To(Equal("member"))
+		Expect(results[1].LastActivityMS).To(BeNumerically(">", 0))
+		Expect(results[1].LastActivityMS).To(BeNumerically("<", results[0].LastActivityMS))
+	})
+
+	It("excludes archived scenes", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		activeScene := mustCreateScene(store, "lcs-archived-active-01", "char-owner", string(SceneVisibilityOpen))
+		archivedScene := mustCreateScene(store, "lcs-archived-scene-01", "char-owner", string(SceneVisibilityOpen))
+
+		mustAddParticipant(store, activeScene.ID, "char-bob", "member")
+		mustAddParticipant(store, archivedScene.ID, "char-bob", "member")
+
+		// Archive scene by setting archived_at to a non-null epoch-ns.
+		_, err := store.Pool().Exec(
+			ctx,
+			`UPDATE scenes SET archived_at = $1 WHERE id = $2`,
+			time.Now().UnixNano(), archivedScene.ID,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		results, err := store.ListCharacterScenes(ctx, "char-bob", icPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(1))
+		Expect(results[0].Scene.ID).To(Equal(activeScene.ID))
+	})
+
+	It("returns entry_count zero when no scene_log rows exist", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		emptyScene := mustCreateScene(store, "lcs-empty-log-01", "char-owner", string(SceneVisibilityOpen))
+		mustAddParticipant(store, emptyScene.ID, "char-carol", "member")
+
+		results, err := store.ListCharacterScenes(ctx, "char-carol", icPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(1))
+		Expect(results[0].EntryCount).To(BeNumerically("==", 0))
+		Expect(results[0].LastActivityMS).To(BeNumerically("==", 0))
+	})
+
+	It("returns empty slice when character has no participant rows", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		results, err := store.ListCharacterScenes(ctx, "char-nobody", icPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(BeEmpty())
+	})
+})
+
+// ── ListPublishedScenes integration tests ─────────────────────────────────────
+
+var _ = Describe("SceneStore.ListPublishedScenes", func() {
+	// seedPublishedScene inserts a scene + a PUBLISHED published_scenes row
+	// with the given published_at epoch-ns so the list query has rows.
+	seedPublishedScene := func(store *SceneStore, sceneID, pubID string, tags []string, publishedAtNS int64) {
+		GinkgoHelper()
+		ctx := context.Background()
+		row := &SceneRow{
+			ID: sceneID, Title: "Pub " + sceneID, OwnerID: "char-pub-owner",
+			State:           string(SceneStateEnded),
+			PoseOrder:       string(PoseOrderModeFree),
+			Visibility:      string(SceneVisibilityOpen),
+			ContentWarnings: []string{},
+			Tags:            tags,
+		}
+		Expect(store.Create(ctx, row)).NotTo(HaveOccurred())
+
+		// Insert directly — CreatePublishAttempt starts in COLLECTING; we
+		// need PUBLISHED status and a specific published_at for ordering tests.
+		_, err := store.Pool().Exec(
+			ctx, `
+			INSERT INTO published_scenes
+			  (id, scene_id, attempt_number, status, initiated_by, initiated_at,
+			   vote_window, cooloff_window, max_attempts_snapshot,
+			   title_snapshot, participants_snapshot, published_at, content_entries)
+			VALUES ($1, $2, 1, 'PUBLISHED', 'char-pub-owner',
+			        $3, '7 days', '30 minutes', 3,
+			        $4, '[]', $3, '[]')`,
+			pubID, sceneID, publishedAtNS, "Pub "+sceneID,
+		)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	It("returns only PUBLISHED rows ordered by published_at DESC", func() {
+		store := newTestStore()
+
+		older := time.Now().Add(-2 * time.Hour).UnixNano()
+		newer := time.Now().Add(-1 * time.Hour).UnixNano()
+		seedPublishedScene(store, "lps-scene-a", "lps-pub-a", []string{}, older)
+		seedPublishedScene(store, "lps-scene-b", "lps-pub-b", []string{}, newer)
+
+		// Also insert a non-PUBLISHED row to verify it is excluded.
+		_, err := store.Pool().Exec(
+			context.Background(), `
+			INSERT INTO published_scenes
+			  (id, scene_id, attempt_number, status, initiated_by, initiated_at,
+			   vote_window, cooloff_window, max_attempts_snapshot)
+			VALUES ('lps-collecting', 'lps-scene-a', 2, 'COLLECTING', 'char-pub-owner',
+			        $1, '7 days', '30 minutes', 3)`,
+			time.Now().UnixNano(),
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		results, err := store.ListPublishedScenes(context.Background(), ListPublishedScenesQuery{Limit: 10})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(2))
+		// Newest first.
+		Expect(results[0].ID).To(Equal("lps-pub-b"))
+		Expect(results[1].ID).To(Equal("lps-pub-a"))
+	})
+
+	It("filters by tags when tags are specified", func() {
+		store := newTestStore()
+
+		seedPublishedScene(store, "lps-tag-scene-a", "lps-tag-pub-a", []string{"drama", "romance"}, time.Now().UnixNano())
+		seedPublishedScene(store, "lps-tag-scene-b", "lps-tag-pub-b", []string{"drama"}, time.Now().UnixNano())
+		seedPublishedScene(store, "lps-tag-scene-c", "lps-tag-pub-c", []string{"comedy"}, time.Now().UnixNano())
+
+		results, err := store.ListPublishedScenes(context.Background(), ListPublishedScenesQuery{
+			Limit: 10,
+			Tags:  []string{"drama"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(2))
+
+		ids := []string{results[0].ID, results[1].ID}
+		Expect(ids).To(ContainElement("lps-tag-pub-a"))
+		Expect(ids).To(ContainElement("lps-tag-pub-b"))
+	})
+
+	It("respects limit and offset pagination", func() {
+		store := newTestStore()
+
+		for i := range 5 {
+			ts := time.Now().Add(time.Duration(-i) * time.Hour).UnixNano()
+			seedPublishedScene(
+				store,
+				"lps-page-scene-"+string(rune('a'+i)),
+				"lps-page-pub-"+string(rune('a'+i)),
+				[]string{}, ts,
+			)
+		}
+
+		first, err := store.ListPublishedScenes(context.Background(), ListPublishedScenesQuery{Limit: 2, Offset: 0})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(first).To(HaveLen(2))
+
+		second, err := store.ListPublishedScenes(context.Background(), ListPublishedScenesQuery{Limit: 2, Offset: 2})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(second).To(HaveLen(2))
+
+		// No overlap.
+		Expect(first[0].ID).NotTo(Equal(second[0].ID))
+		Expect(first[1].ID).NotTo(Equal(second[1].ID))
+	})
+})
+
+var _ = Describe("ReadSceneLogForExport", func() {
+	// Pins the REAL overflow branch (len > exportLogMaxRows → SCENE_EXPORT_TOO_LARGE):
+	// the unit-level cap test injects a fake error, so without this spec the
+	// store-side LIMIT cap+1 + overflow check has no coverage (holomush-5rh.8.22).
+	It("returns SCENE_EXPORT_TOO_LARGE when the IC log exceeds the export ceiling", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		subject := "events.test.scene.scene-export-cap.ic"
+		// Bulk-seed exportLogMaxRows+1 pose rows in one statement. The 16-byte
+		// ids are monotonically increasing hex so ORDER BY id stays stable.
+		_, err := store.pool.Exec(ctx, `
+			INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
+			SELECT decode(lpad(to_hex(i), 32, '0'), 'hex'), $1, 'core-scenes:scene_pose',
+			       (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, 'character', NULL, ''::BYTEA, 1, 'identity'
+			FROM generate_series(1, $2) AS i`,
+			subject, exportLogMaxRows+1)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = store.ReadSceneLogForExport(ctx, subject)
+		Expect(err).To(HaveOccurred())
+		errutil.AssertErrorCode(suiteT, err, "SCENE_EXPORT_TOO_LARGE")
+	})
+
+	It("returns all rows in id order when under the ceiling", func() {
+		store := newTestStore()
+		ctx := context.Background()
+
+		subject := "events.test.scene.scene-export-small.ic"
+		_, err := store.pool.Exec(ctx, `
+			INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
+			SELECT decode(lpad(to_hex(i), 32, '0'), 'hex'), $1, 'core-scenes:scene_pose',
+			       (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, 'character', NULL, ''::BYTEA, 1, 'identity'
+			FROM generate_series(1, 3) AS i`,
+			subject)
+		Expect(err).NotTo(HaveOccurred())
+
+		rows, err := store.ReadSceneLogForExport(ctx, subject)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(HaveLen(3))
 	})
 })

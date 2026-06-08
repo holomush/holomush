@@ -55,6 +55,8 @@ const (
 	SceneServiceUpdateSceneProcedure = "/holomush.scene.v1.SceneService/UpdateScene"
 	// SceneServiceJoinSceneProcedure is the fully-qualified name of the SceneService's JoinScene RPC.
 	SceneServiceJoinSceneProcedure = "/holomush.scene.v1.SceneService/JoinScene"
+	// SceneServiceWatchSceneProcedure is the fully-qualified name of the SceneService's WatchScene RPC.
+	SceneServiceWatchSceneProcedure = "/holomush.scene.v1.SceneService/WatchScene"
 	// SceneServiceLeaveSceneProcedure is the fully-qualified name of the SceneService's LeaveScene RPC.
 	SceneServiceLeaveSceneProcedure = "/holomush.scene.v1.SceneService/LeaveScene"
 	// SceneServiceInviteToSceneProcedure is the fully-qualified name of the SceneService's
@@ -99,6 +101,15 @@ const (
 	// SceneServiceExtendScenePublishVoteAttemptsProcedure is the fully-qualified name of the
 	// SceneService's ExtendScenePublishVoteAttempts RPC.
 	SceneServiceExtendScenePublishVoteAttemptsProcedure = "/holomush.scene.v1.SceneService/ExtendScenePublishVoteAttempts"
+	// SceneServiceListCharacterScenesProcedure is the fully-qualified name of the SceneService's
+	// ListCharacterScenes RPC.
+	SceneServiceListCharacterScenesProcedure = "/holomush.scene.v1.SceneService/ListCharacterScenes"
+	// SceneServiceListPublishedScenesProcedure is the fully-qualified name of the SceneService's
+	// ListPublishedScenes RPC.
+	SceneServiceListPublishedScenesProcedure = "/holomush.scene.v1.SceneService/ListPublishedScenes"
+	// SceneServiceExportSceneLogProcedure is the fully-qualified name of the SceneService's
+	// ExportSceneLog RPC.
+	SceneServiceExportSceneLogProcedure = "/holomush.scene.v1.SceneService/ExportSceneLog"
 )
 
 // SceneServiceClient is a client for the holomush.scene.v1.SceneService service.
@@ -145,6 +156,14 @@ type SceneServiceClient interface {
 	// existing member succeeds without re-emitting a join notice. See
 	// service.go::JoinScene.
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
+	// WatchScene auto-joins the requesting character into an OPEN scene as a
+	// role=observer participant and registers the focus membership for the
+	// supplied session, so focus/Subscribe/history gates admit the watcher.
+	// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+	// visibility==open and state checks run BEFORE the ABAC spectate action is
+	// evaluated; non-open scenes are rejected without consulting ABAC.
+	// See service.go::WatchScene.
+	WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error)
 	// LeaveScene removes the calling character from a scene. The scene owner
 	// cannot leave (codes.FailedPrecondition) — they must end the scene or
 	// transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -231,6 +250,28 @@ type SceneServiceClient interface {
 	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role, including observer), with the character's
+	// role and per-scene activity metadata for workspace badges. Serves the
+	// web workspace's "my scenes" list; intended for use by the host facade
+	// fanning this out across a player's owned characters. See
+	// service.go::ListCharacterScenes.
+	ListCharacterScenes(context.Context, *connect.Request[v1.ListCharacterScenesRequest]) (*connect.Response[v1.ListCharacterScenesResponse], error)
+	// ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+	// fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+	// newest first, with optional tag filtering. Powers the archive browse
+	// page. See publish_service.go::ListPublishedScenes.
+	ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error)
+	// ExportSceneLog renders a scene's IC log to a downloadable document for a
+	// participant of ANY role (observers may export what they may read;
+	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+	// fail before ABAC, which is never consulted here). Decryption flows
+	// through the host-mediated snapshot decrypt seam; supported formats are
+	// "markdown" and "jsonl". Scenes whose IC log exceeds the server-side row
+	// ceiling (exportLogMaxRows = 10 000) return FAILED_PRECONDITION /
+	// SCENE_EXPORT_TOO_LARGE rather than silently truncating the document.
+	// See export.go::ExportSceneLog.
+	ExportSceneLog(context.Context, *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error)
 }
 
 // NewSceneServiceClient constructs a client for the holomush.scene.v1.SceneService service. By
@@ -290,6 +331,12 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+SceneServiceJoinSceneProcedure,
 			connect.WithSchema(sceneServiceMethods.ByName("JoinScene")),
+			connect.WithClientOptions(opts...),
+		),
+		watchScene: connect.NewClient[v1.WatchSceneRequest, v1.WatchSceneResponse](
+			httpClient,
+			baseURL+SceneServiceWatchSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("WatchScene")),
 			connect.WithClientOptions(opts...),
 		),
 		leaveScene: connect.NewClient[v1.LeaveSceneRequest, v1.LeaveSceneResponse](
@@ -382,6 +429,24 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(sceneServiceMethods.ByName("ExtendScenePublishVoteAttempts")),
 			connect.WithClientOptions(opts...),
 		),
+		listCharacterScenes: connect.NewClient[v1.ListCharacterScenesRequest, v1.ListCharacterScenesResponse](
+			httpClient,
+			baseURL+SceneServiceListCharacterScenesProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ListCharacterScenes")),
+			connect.WithClientOptions(opts...),
+		),
+		listPublishedScenes: connect.NewClient[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse](
+			httpClient,
+			baseURL+SceneServiceListPublishedScenesProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ListPublishedScenes")),
+			connect.WithClientOptions(opts...),
+		),
+		exportSceneLog: connect.NewClient[v1.ExportSceneLogRequest, v1.ExportSceneLogResponse](
+			httpClient,
+			baseURL+SceneServiceExportSceneLogProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ExportSceneLog")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -395,6 +460,7 @@ type sceneServiceClient struct {
 	resumeScene                    *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
 	updateScene                    *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
 	joinScene                      *connect.Client[v1.JoinSceneRequest, v1.JoinSceneResponse]
+	watchScene                     *connect.Client[v1.WatchSceneRequest, v1.WatchSceneResponse]
 	leaveScene                     *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
 	inviteToScene                  *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
 	kickFromScene                  *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
@@ -410,6 +476,9 @@ type sceneServiceClient struct {
 	getPublicSceneArchive          *connect.Client[v1.GetPublicSceneArchiveRequest, v1.GetPublicSceneArchiveResponse]
 	downloadPublicSceneArchive     *connect.Client[v1.DownloadPublicSceneArchiveRequest, v1.DownloadPublicSceneArchiveResponse]
 	extendScenePublishVoteAttempts *connect.Client[v1.ExtendScenePublishVoteAttemptsRequest, v1.ExtendScenePublishVoteAttemptsResponse]
+	listCharacterScenes            *connect.Client[v1.ListCharacterScenesRequest, v1.ListCharacterScenesResponse]
+	listPublishedScenes            *connect.Client[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse]
+	exportSceneLog                 *connect.Client[v1.ExportSceneLogRequest, v1.ExportSceneLogResponse]
 }
 
 // ListScenes calls holomush.scene.v1.SceneService.ListScenes.
@@ -450,6 +519,11 @@ func (c *sceneServiceClient) UpdateScene(ctx context.Context, req *connect.Reque
 // JoinScene calls holomush.scene.v1.SceneService.JoinScene.
 func (c *sceneServiceClient) JoinScene(ctx context.Context, req *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error) {
 	return c.joinScene.CallUnary(ctx, req)
+}
+
+// WatchScene calls holomush.scene.v1.SceneService.WatchScene.
+func (c *sceneServiceClient) WatchScene(ctx context.Context, req *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error) {
+	return c.watchScene.CallUnary(ctx, req)
 }
 
 // LeaveScene calls holomush.scene.v1.SceneService.LeaveScene.
@@ -528,6 +602,21 @@ func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context,
 	return c.extendScenePublishVoteAttempts.CallUnary(ctx, req)
 }
 
+// ListCharacterScenes calls holomush.scene.v1.SceneService.ListCharacterScenes.
+func (c *sceneServiceClient) ListCharacterScenes(ctx context.Context, req *connect.Request[v1.ListCharacterScenesRequest]) (*connect.Response[v1.ListCharacterScenesResponse], error) {
+	return c.listCharacterScenes.CallUnary(ctx, req)
+}
+
+// ListPublishedScenes calls holomush.scene.v1.SceneService.ListPublishedScenes.
+func (c *sceneServiceClient) ListPublishedScenes(ctx context.Context, req *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error) {
+	return c.listPublishedScenes.CallUnary(ctx, req)
+}
+
+// ExportSceneLog calls holomush.scene.v1.SceneService.ExportSceneLog.
+func (c *sceneServiceClient) ExportSceneLog(ctx context.Context, req *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error) {
+	return c.exportSceneLog.CallUnary(ctx, req)
+}
+
 // SceneServiceHandler is an implementation of the holomush.scene.v1.SceneService service.
 type SceneServiceHandler interface {
 	// ListScenes returns the public scene board: open scenes in state `active`
@@ -572,6 +661,14 @@ type SceneServiceHandler interface {
 	// existing member succeeds without re-emitting a join notice. See
 	// service.go::JoinScene.
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
+	// WatchScene auto-joins the requesting character into an OPEN scene as a
+	// role=observer participant and registers the focus membership for the
+	// supplied session, so focus/Subscribe/history gates admit the watcher.
+	// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+	// visibility==open and state checks run BEFORE the ABAC spectate action is
+	// evaluated; non-open scenes are rejected without consulting ABAC.
+	// See service.go::WatchScene.
+	WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error)
 	// LeaveScene removes the calling character from a scene. The scene owner
 	// cannot leave (codes.FailedPrecondition) — they must end the scene or
 	// transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -658,6 +755,28 @@ type SceneServiceHandler interface {
 	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role, including observer), with the character's
+	// role and per-scene activity metadata for workspace badges. Serves the
+	// web workspace's "my scenes" list; intended for use by the host facade
+	// fanning this out across a player's owned characters. See
+	// service.go::ListCharacterScenes.
+	ListCharacterScenes(context.Context, *connect.Request[v1.ListCharacterScenesRequest]) (*connect.Response[v1.ListCharacterScenesResponse], error)
+	// ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+	// fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+	// newest first, with optional tag filtering. Powers the archive browse
+	// page. See publish_service.go::ListPublishedScenes.
+	ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error)
+	// ExportSceneLog renders a scene's IC log to a downloadable document for a
+	// participant of ANY role (observers may export what they may read;
+	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+	// fail before ABAC, which is never consulted here). Decryption flows
+	// through the host-mediated snapshot decrypt seam; supported formats are
+	// "markdown" and "jsonl". Scenes whose IC log exceeds the server-side row
+	// ceiling (exportLogMaxRows = 10 000) return FAILED_PRECONDITION /
+	// SCENE_EXPORT_TOO_LARGE rather than silently truncating the document.
+	// See export.go::ExportSceneLog.
+	ExportSceneLog(context.Context, *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error)
 }
 
 // NewSceneServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -713,6 +832,12 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		SceneServiceJoinSceneProcedure,
 		svc.JoinScene,
 		connect.WithSchema(sceneServiceMethods.ByName("JoinScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceWatchSceneHandler := connect.NewUnaryHandler(
+		SceneServiceWatchSceneProcedure,
+		svc.WatchScene,
+		connect.WithSchema(sceneServiceMethods.ByName("WatchScene")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sceneServiceLeaveSceneHandler := connect.NewUnaryHandler(
@@ -805,6 +930,24 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(sceneServiceMethods.ByName("ExtendScenePublishVoteAttempts")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneServiceListCharacterScenesHandler := connect.NewUnaryHandler(
+		SceneServiceListCharacterScenesProcedure,
+		svc.ListCharacterScenes,
+		connect.WithSchema(sceneServiceMethods.ByName("ListCharacterScenes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceListPublishedScenesHandler := connect.NewUnaryHandler(
+		SceneServiceListPublishedScenesProcedure,
+		svc.ListPublishedScenes,
+		connect.WithSchema(sceneServiceMethods.ByName("ListPublishedScenes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceExportSceneLogHandler := connect.NewUnaryHandler(
+		SceneServiceExportSceneLogProcedure,
+		svc.ExportSceneLog,
+		connect.WithSchema(sceneServiceMethods.ByName("ExportSceneLog")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.scene.v1.SceneService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SceneServiceListScenesProcedure:
@@ -823,6 +966,8 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServiceUpdateSceneHandler.ServeHTTP(w, r)
 		case SceneServiceJoinSceneProcedure:
 			sceneServiceJoinSceneHandler.ServeHTTP(w, r)
+		case SceneServiceWatchSceneProcedure:
+			sceneServiceWatchSceneHandler.ServeHTTP(w, r)
 		case SceneServiceLeaveSceneProcedure:
 			sceneServiceLeaveSceneHandler.ServeHTTP(w, r)
 		case SceneServiceInviteToSceneProcedure:
@@ -853,6 +998,12 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServiceDownloadPublicSceneArchiveHandler.ServeHTTP(w, r)
 		case SceneServiceExtendScenePublishVoteAttemptsProcedure:
 			sceneServiceExtendScenePublishVoteAttemptsHandler.ServeHTTP(w, r)
+		case SceneServiceListCharacterScenesProcedure:
+			sceneServiceListCharacterScenesHandler.ServeHTTP(w, r)
+		case SceneServiceListPublishedScenesProcedure:
+			sceneServiceListPublishedScenesHandler.ServeHTTP(w, r)
+		case SceneServiceExportSceneLogProcedure:
+			sceneServiceExportSceneLogHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -892,6 +1043,10 @@ func (UnimplementedSceneServiceHandler) UpdateScene(context.Context, *connect.Re
 
 func (UnimplementedSceneServiceHandler) JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.JoinScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.WatchScene is not implemented"))
 }
 
 func (UnimplementedSceneServiceHandler) LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error) {
@@ -952,4 +1107,16 @@ func (UnimplementedSceneServiceHandler) DownloadPublicSceneArchive(context.Conte
 
 func (UnimplementedSceneServiceHandler) ExtendScenePublishVoteAttempts(context.Context, *connect.Request[v1.ExtendScenePublishVoteAttemptsRequest]) (*connect.Response[v1.ExtendScenePublishVoteAttemptsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ExtendScenePublishVoteAttempts is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ListCharacterScenes(context.Context, *connect.Request[v1.ListCharacterScenesRequest]) (*connect.Response[v1.ListCharacterScenesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ListCharacterScenes is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ListPublishedScenes(context.Context, *connect.Request[v1.ListPublishedScenesRequest]) (*connect.Response[v1.ListPublishedScenesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ListPublishedScenes is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ExportSceneLog(context.Context, *connect.Request[v1.ExportSceneLogRequest]) (*connect.Response[v1.ExportSceneLogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ExportSceneLog is not implemented"))
 }

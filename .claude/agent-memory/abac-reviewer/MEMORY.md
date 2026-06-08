@@ -359,3 +359,65 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   (Host validateNamespace:true vs Plugin:false); (c) confirm dedup helpers take the per-scope
   distinguisher as a param, not a hardcoded constant. Lone straggler found: spec mermaid node
   (spec:34) still says "owner BOUND to authenticated caller" — cosmetic Low, not blocking.
+- **WatchScene spectate gate (5rh.8.3, 2026-06-07)**: INV-SCENE-61 pattern verified — plugin-code
+  visibility/state gate BEFORE `HostEvaluator.Evaluate("spectate", "scene:"+id)`, store re-checks
+  in-tx, nil-evaluator/nil-focusClient fail closed. Two recurring checks for HostEvaluator-in-service
+  handlers: (1) the ABAC subject is the DISPATCH-TOKEN actor (host_service.go:565), NOT any
+  request-supplied character_id — flag when the effect (row insert, focus join) uses req fields
+  the gate never compared against the token actor; principal-conditioned policies on that action
+  would gate the wrong subject. (2) The admin wildcard seed (seed.go:104, `action, resource` —
+  no action list) permits ANY new action on ANY resource for admins — defense-in-depth on new
+  actions exists ONLY if the code gate runs first. Also: observers excluded from the `participants`
+  ABAC attr (store.go GetWithMembership role IN ('owner','member')) so observer auto-join grants
+  no participant-clause permits. INV-SCENE-61 binding is PARTIAL (gate-order asserted; observer
+  no-emit/no-pose/no-vote clause structural-only) — same shape as INV-PRIVACY-6.
+- **BeginServiceDispatch token plumbing (5rh.8.21, 2026-06-07)**: host-internal mint-any-actor API
+  (`goplugin/host.go:970`, `Manager.BeginServiceDispatch` via optional `ServiceDispatcher` capability)
+  reuses `emitTokenStore`; per-plugin scoping enforced at `Lookup` (`emit_token_store.go:125`,
+  `entry.pluginName != pluginName` → false). Identical semantics to DeliverCommand character tokens —
+  no emit widening; `actor_kinds_claimable` gate at `event_emitter.go:125-134` unchanged. Reviewed
+  READY. Two things to re-verify when bead .8.11 (SceneAccessService facade) lands: (1) facade actor
+  MUST come from server-side-verified session state (contract is doc-comment-only); (2) the
+  token+advisory-metadata pairing is convention, not enforced — WatchScene's mismatch deny
+  (`plugins/core-scenes/service.go:878`) is skippable by omitting metadata; today all three minting
+  paths (DeliverEvent host.go:860, DeliverCommand host.go:935, BeginServiceDispatch host.go:987)
+  pair them, so token subject stays authoritative.
+- **SceneAccessService facade (5rh.8.11, 2026-06-08) — READY**: host-side web scene
+  authz seam (`internal/grpc/sceneaccess_service.go`, 9 RPCs). Closes the .8.21
+  re-verify list. Uniform gate order on all 9: `resolveAndGate` (resolve→player
+  load→IsGuest deny PermissionDenied, INV-SCENE-64) → `ownedCharacter`
+  (ULID parse + ListByPlayer membership, NotFound on miss) → `beginDispatch`
+  (actor=`core.Actor{ActorCharacter, verifiedChar.ID}`, INV-SCENE-63). INV-SCENE-63
+  key check: token actor AND downstream `CharacterId` BOTH derive from the single
+  `char` returned by `ownedCharacter` — `req.GetCharacterId()` is NEVER forwarded raw;
+  they cannot diverge. Pinned by `TestSceneAccessDispatchActorEqualsVerifiedCharacter`
+  (spoof-ID asserts capturedActor stays zero) + `...OverridesClientSuppliedCharacterWithOwnedAlt`
+  (`// Verifies: INV-SCENE-63`). All 9 RPCs (incl. 3 public-archive + SetSceneFocus)
+  enumerated in `TestSceneAccessDeniesGuestPlayersEverywhere` w/ AssertNotCalled.
+  SetSceneFocus is the ONE RPC that doesn't mint a dispatch token — it delegates to
+  `coordinator.SetConnectionFocus` (substrate auth, ADR x0ph); its gate is the
+  connection-ownership trace: GetConnection→conn.SessionID→Store.Get→Info.CharacterID
+  (session.go:203)→`ownedCharacter(playerID, CharacterID)`. Sound; can't pivot another
+  player's connection. Fail-closed everywhere (NOT_CONFIGURED→Unimplemented,
+  resolve-fail→Unauthenticated, dispatch-err→Internal-before-delegate). No seed/policy
+  change. Two Lows (non-blocking): (1) SetSceneFocus collapses ownedCharacter's Internal
+  err into PermissionDenied (:308 — fail-closed, but masks infra failure; slog still
+  fires); (2) doc-only: SetSceneFocus has no token by design. `resolvePlayerSessionWithRepo`
+  (auth_handlers.go:183) is the shared CoreServer+facade impl; nil-repo→NOT_CONFIGURED.
+- **SetSceneFocus JoinFocus privacy gate (5rh.8.26, 2026-06-08) — READY**: SetSceneFocus
+  now establishes scene FocusMembership via `coordinator.JoinFocus` (so comms_hub subscribes
+  to scene streams). CRITICAL: `JoinFocus` (`internal/grpc/focus/join.go:17-59`) is
+  UNCONDITIONAL — adds membership + `streamSender.Send(add=true)`, no participation re-check
+  (FOCUS_ALREADY_MEMBER is just dedup). So the facade's pre-JoinFocus participation check
+  (`sceneaccess_service.go:340-356`) is the SOLE authz barrier before private-scene stream
+  subscription. Gate is airtight: (a) char from `ownedCharacter(ps.PlayerID, gameSession.CharacterID)`
+  — verified-owned, never client-supplied (only `req.SceneId` target is client input);
+  (b) oracle `ListCharacterScenes` (`plugins/core-scenes/store.go:1774`) is
+  `JOIN scene_participants WHERE character_id=$1 AND archived_at IS NULL` — exactly the
+  char's participant rows, ANY role (no role filter — owner/member/observer all count);
+  (c) `listErr→Internal` deny (fail-closed, no fall-through to JoinFocus); (d) non-participant
+  → PermissionDenied before JoinFocus; (e) clear-to-grid (`sceneId==""`) skips the whole
+  block. Deny test asserts `joinFocusCalls==0` — genuinely pins no-leak. Pattern to remember:
+  when a facade calls an UNCONDITIONAL substrate mutation that subscribes streams, the
+  facade-side participation check is load-bearing — trace that it runs on EVERY path reaching
+  the mutation, and that an oracle error fails closed (not skip).

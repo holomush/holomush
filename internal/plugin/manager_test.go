@@ -1925,6 +1925,10 @@ func (s *stubFocusCoordinator) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID
 	return focus.AutoFocusOnJoinResponse{}, nil
 }
 
+func (s *stubFocusCoordinator) GetConnectionFocus(_ context.Context, _ ulid.ULID) (*session.FocusKey, error) {
+	return nil, nil
+}
+
 var _ focus.Coordinator = (*stubFocusCoordinator)(nil)
 
 func TestConfigureFocusDepsInjectsCoordinatorIntoLuaHost(t *testing.T) {

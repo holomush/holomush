@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/observability"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
 
 // mockControlServer implements ControlServer for testing.
@@ -187,6 +188,42 @@ func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRe
 }
 
 func (m *mockGRPCClient) ListContent(_ context.Context, _ *contentv1.ListContentRequest) (*contentv1.ListContentResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ListScenesForViewer(_ context.Context, _ *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) GetSceneForViewer(_ context.Context, _ *sceneaccessv1.GetSceneForViewerRequest) (*sceneaccessv1.GetSceneForViewerResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ListMyScenes(_ context.Context, _ *sceneaccessv1.ListMyScenesRequest) (*sceneaccessv1.ListMyScenesResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) WatchScene(_ context.Context, _ *sceneaccessv1.WatchSceneRequest) (*sceneaccessv1.WatchSceneResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ExportScene(_ context.Context, _ *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) SetSceneFocus(_ context.Context, _ *sceneaccessv1.SetSceneFocusRequest) (*sceneaccessv1.SetSceneFocusResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ListPublishedScenes(_ context.Context, _ *sceneaccessv1.ListPublishedScenesRequest) (*sceneaccessv1.ListPublishedScenesResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) GetPublicSceneArchive(_ context.Context, _ *sceneaccessv1.GetPublicSceneArchiveRequest) (*sceneaccessv1.GetPublicSceneArchiveResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) DownloadPublicSceneArchive(_ context.Context, _ *sceneaccessv1.DownloadPublicSceneArchiveRequest) (*sceneaccessv1.DownloadPublicSceneArchiveResponse, error) {
 	return nil, nil
 }
 

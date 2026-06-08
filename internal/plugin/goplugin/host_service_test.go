@@ -48,6 +48,8 @@ type stubCoordinator struct {
 	autoFocusErr       error
 	isAnyFocusedResult bool
 	isAnyFocusedErr    error
+	getConnFocusResult *session.FocusKey
+	getConnFocusErr    error
 }
 
 type focusCall struct {
@@ -93,6 +95,10 @@ func (s *stubCoordinator) SetConnectionFocus(_ context.Context, _ ulid.ULID, _ *
 
 func (s *stubCoordinator) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID) (focus.AutoFocusOnJoinResponse, error) {
 	return s.autoFocusResult, s.autoFocusErr
+}
+
+func (s *stubCoordinator) GetConnectionFocus(_ context.Context, _ ulid.ULID) (*session.FocusKey, error) {
+	return s.getConnFocusResult, s.getConnFocusErr
 }
 
 var _ focus.Coordinator = (*stubCoordinator)(nil)
@@ -1521,4 +1527,50 @@ func TestDecryptOwnAuditRowsReturnsErrorWhenDecryptorNil(t *testing.T) {
 		Rows: []*pluginv1.AuditRow{{Id: []byte("row-1"), Subject: "events.main.scene.01ABC.ic"}},
 	})
 	require.Error(t, err)
+}
+
+// TestGetConnectionFocus_MapsAFocusedConnectionToFocusKey verifies that
+// GetConnectionFocus returns the connection's scene focus key when the
+// coordinator has a result.
+func TestGetConnectionFocus_MapsAFocusedConnectionToFocusKey(t *testing.T) {
+	t.Parallel()
+	connID := ulid.Make()
+	sceneID := ulid.Make()
+	var connIDBuf [16]byte
+	copy(connIDBuf[:], connID.Bytes())
+
+	fc := &stubCoordinator{
+		getConnFocusResult: &session.FocusKey{
+			Kind:     session.FocusKindScene,
+			TargetID: sceneID,
+		},
+	}
+	srv := newTestServer(fc, nil)
+
+	resp, err := srv.GetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceGetConnectionFocusRequest{
+		ConnectionId: connIDBuf[:],
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetFocusKey(), "focused connection MUST return a focus key")
+	assert.Equal(t, pluginv1.FocusKind_FOCUS_KIND_SCENE, resp.GetFocusKey().GetKind())
+	assert.Equal(t, sceneID.String(), resp.GetFocusKey().GetTargetId())
+}
+
+// TestGetConnectionFocus_ReturnsAbsentFocusKeyForGridFocusedConnection verifies
+// that when the coordinator returns nil (connection not found or grid focus),
+// the handler returns a nil focus_key in the response without error.
+func TestGetConnectionFocus_ReturnsAbsentFocusKeyForGridFocusedConnection(t *testing.T) {
+	t.Parallel()
+	connID := ulid.Make()
+	var connIDBuf [16]byte
+	copy(connIDBuf[:], connID.Bytes())
+
+	fc := &stubCoordinator{getConnFocusResult: nil}
+	srv := newTestServer(fc, nil)
+
+	resp, err := srv.GetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceGetConnectionFocusRequest{
+		ConnectionId: connIDBuf[:],
+	})
+	require.NoError(t, err)
+	assert.Nil(t, resp.GetFocusKey(), "grid-focused or absent connection MUST return nil focus_key")
 }

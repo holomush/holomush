@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
@@ -39,6 +40,15 @@ type sceneStorer interface {
 	CreateWithOwner(ctx context.Context, row *SceneRow) error
 	Get(ctx context.Context, id string) (*SceneRow, error)
 	GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error)
+	// GetWithMembershipAndObservers extends GetWithMembership with a fourth
+	// slice of observer character IDs (role='observer'). Used to populate
+	// SceneInfo.Observers (INV-SCENE-61). The participants filter is unchanged.
+	GetWithMembershipAndObservers(ctx context.Context, id string) (*SceneRow, []string, []string, []string, error)
+	// AddObserver inserts a role=observer row for an open, active/paused scene.
+	// Returns ObserverAlreadyParticipant unchanged when the character already
+	// has any row. Returns ObserverSceneNotOpen/NotActive/NotFound without error
+	// when the scene gates reject the request.
+	AddObserver(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ObserverAddResult, error)
 	End(ctx context.Context, id string) (*SceneRow, error)
 	Pause(ctx context.Context, id string) (*SceneRow, error)
 	Resume(ctx context.Context, id string) (*SceneRow, error)
@@ -70,8 +80,10 @@ type sceneStorer interface {
 	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
 	// ListBoard returns the paginated public scene board: open scenes in state
 	// 'active' or 'paused', optionally filtered by tags. CW and identity
-	// filtering are applied by the caller (iokti.13).
-	ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, error)
+	// filtering are applied by the caller (iokti.13). The icSubjectPrefix is
+	// "events.<gameID>.scene." — used for the last_activity_ms correlated
+	// subquery; pass empty string when activity timestamps are not needed.
+	ListBoard(ctx context.Context, q BoardQuery, icSubjectPrefix string) ([]*SceneRow, error)
 	// Phase 6 publication reads used by the publish-vote handlers. The
 	// header read deliberately EXCLUDES content_entries so the INV-SCENE-60
 	// participant gate runs between the header read and the content read
@@ -104,6 +116,23 @@ type sceneStorer interface {
 	// `additional` and returns the new budget. Backs the admin-only
 	// ExtendScenePublishVoteAttempts RPC (E1).
 	ExtendMaxPublishAttempts(ctx context.Context, sceneID string, additional int) (int, error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role), with activity aggregates. The
+	// icSubjectPrefix is "events.<gameID>.scene." — supplied by the service.
+	// Ordered by last_activity_ms DESC.
+	ListCharacterScenes(ctx context.Context, characterID, icSubjectPrefix string) ([]CharacterSceneResult, error)
+	// ListPublishedScenes returns PUBLISHED archive summaries newest first,
+	// with optional tag filtering and LIMIT/OFFSET paging.
+	ListPublishedScenes(ctx context.Context, q ListPublishedScenesQuery) ([]PublishedSceneArchiveSummary, error)
+
+	// ReadSceneLogForExport reads the IC log for a scene in chronological order
+	// (ORDER BY id ASC) without a transaction — used by ExportSceneLog where
+	// snapshot-level consistency is not required. fullSubject is the complete
+	// NATS dot-style IC subject (events.<game_id>.scene.<scene_id>.ic) and is
+	// matched with an exact WHERE subject = $1 (not LIKE). Returns at most
+	// exportLogMaxRows rows; returns SCENE_EXPORT_TOO_LARGE (FailedPrecondition)
+	// when the log exceeds that ceiling rather than silently truncating.
+	ReadSceneLogForExport(ctx context.Context, fullSubject string) ([]LogRow, error)
 
 	// ── C7 snapshot pipeline (COOLOFF→PUBLISHED) ──────────────────────────
 	// SnapshotPool exposes the connection pool so runSnapshot can orchestrate
@@ -144,6 +173,14 @@ type SceneServiceImpl struct {
 	// nil until SetSettingsClient wires it; effectiveTaxonomy falls back to
 	// DefaultCWTaxonomy when nil (INV-SCENE-57).
 	settings pluginsdk.SettingsClient
+	// evaluator is the host ABAC evaluator used by WatchScene's spectate
+	// gate. nil until scenePlugin.SetHostEvaluator forwards it; WatchScene
+	// fails closed when nil (mirrors handleEmit's nil-evaluator handling).
+	evaluator pluginsdk.HostEvaluator
+	// focusClient drives session focus state for service-owned RPCs
+	// (WatchScene registers the watcher's scene FocusMembership). nil until
+	// scenePlugin.SetFocusClient forwards it; WatchScene fails closed when nil.
+	focusClient pluginsdk.FocusClient
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
@@ -188,6 +225,21 @@ func (s *SceneServiceImpl) SetSnapshotDecryptor(d snapshotDecryptor) {
 // Wired via scenePlugin.SetSettingsClient before Init; nil until then.
 func (s *SceneServiceImpl) SetSettingsClient(c pluginsdk.SettingsClient) {
 	s.settings = c
+}
+
+// SetHostEvaluator installs the host ABAC evaluator used by WatchScene's
+// spectate gate. Wired via scenePlugin.SetHostEvaluator before Init; nil
+// until then (WatchScene fails closed).
+func (s *SceneServiceImpl) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
+	s.evaluator = ev
+}
+
+// SetFocusClient installs the SDK-injected focus client used by WatchScene
+// to register the watcher's scene FocusMembership. Wired via
+// scenePlugin.SetFocusClient before Init; nil until then (WatchScene fails
+// closed).
+func (s *SceneServiceImpl) SetFocusClient(c pluginsdk.FocusClient) {
+	s.focusClient = c
 }
 
 // CreateScene generates a new scene ID, persists the scene, and returns it.
@@ -341,12 +393,18 @@ func (s *SceneServiceImpl) sceneCreatedIntent(row *SceneRow) (pluginsdk.EmitInte
 	}, nil
 }
 
-// GetScene loads a scene by ID and returns it. The host's ABAC engine has
-// already evaluated the read-own-scene policy before this RPC is invoked,
-// so the service does not perform an additional ownership check.
+// GetScene loads a scene by ID, gates private-scene roster exposure on viewer
+// membership, and returns the scene with its participant and observer roster
+// populated.
 //
-// Per-field validation (scene_id non-empty) happens via the protovalidate
-// interceptor before this handler runs.
+// Visibility gate (privacy boundary): if the scene's visibility is not "open"
+// AND req.character_id is not in the participants, invitees, or observers set,
+// NotFound is returned — the scene's existence and roster are not revealed to
+// non-members of a private scene.
+//
+// The host ABAC engine evaluates the read-own-scene policy before this RPC is
+// invoked. Per-field validation (scene_id non-empty) happens via the
+// protovalidate interceptor before this handler runs.
 func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRequest) (*scenev1.GetSceneResponse, error) {
 	ctx, span := startSpan(
 		ctx, "scene.service.get_scene",
@@ -354,19 +412,54 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 	)
 	defer span.End()
 
-	row, err := s.store.Get(ctx, req.GetSceneId())
+	row, participants, invitees, observers, err := s.store.GetWithMembershipAndObservers(ctx, req.GetSceneId())
 	if err != nil {
 		recordError(span, err)
 		var oe oops.OopsError
 		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
-			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+			return nil, status.Error(codes.NotFound, "scene not found") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
 		}
 		slog.WarnContext(
 			ctx, "scene.service.get_scene store error",
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to get scene: %v", err)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
+	// Privacy gate: private scenes are not visible to non-members.
+	// This is the canonical plugin-code visibility boundary — the plugin has
+	// the membership data and MUST enforce it before returning any scene detail.
+	// An open scene's roster is visible board metadata (no gate needed).
+	if row.Visibility != string(SceneVisibilityOpen) {
+		viewerID := req.GetCharacterId()
+		inMembership := false
+		for _, id := range participants {
+			if id == viewerID {
+				inMembership = true
+				break
+			}
+		}
+		if !inMembership {
+			for _, id := range invitees {
+				if id == viewerID {
+					inMembership = true
+					break
+				}
+			}
+		}
+		if !inMembership {
+			for _, id := range observers {
+				if id == viewerID {
+					inMembership = true
+					break
+				}
+			}
+		}
+		if !inMembership {
+			// Return NotFound — do NOT reveal the scene's existence or roster.
+			return nil, status.Error(codes.NotFound, "scene not found") //nolint:wrapcheck // gRPC status is the wire contract; existence non-disclosure for private scenes
+		}
 	}
 
 	slog.InfoContext(
@@ -374,9 +467,35 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 		"scene_id", row.ID,
 	)
 
-	return &scenev1.GetSceneResponse{
-		Scene: rowToProto(row, row.CreatedAt.Time()),
-	}, nil
+	resp := rowToProto(row, row.CreatedAt.Time())
+
+	// Populate participants roster: owners and members.
+	resp.Participants = make([]*scenev1.ParticipantInfo, 0, len(participants))
+	for _, id := range participants {
+		role := "member"
+		if id == row.OwnerID {
+			role = "owner"
+		}
+		resp.Participants = append(resp.Participants, &scenev1.ParticipantInfo{
+			CharacterId: id,
+			// Best-effort display name: no name resolver is wired in the plugin,
+			// so fall back to the ID per the proto contract.
+			CharacterName: id,
+			Role:          role,
+		})
+	}
+
+	// Populate observers roster (distinct from participants).
+	resp.Observers = make([]*scenev1.ParticipantInfo, 0, len(observers))
+	for _, id := range observers {
+		resp.Observers = append(resp.Observers, &scenev1.ParticipantInfo{
+			CharacterId:   id,
+			CharacterName: id,
+			Role:          "observer",
+		})
+	}
+
+	return &scenev1.GetSceneResponse{Scene: resp}, nil
 }
 
 // resolveBlockedCW returns the effective CW block set for a board request.
@@ -457,8 +576,9 @@ func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScen
 		Tags:      req.GetTags(),
 		BlockedCW: s.resolveBlockedCW(ctx, req),
 	}
+	icPrefix := "events." + s.gameID + ".scene."
 
-	rows, err := s.store.ListBoard(ctx, q)
+	rows, err := s.store.ListBoard(ctx, q, icPrefix)
 	if err != nil {
 		recordError(span, err)
 		slog.WarnContext(
@@ -473,6 +593,36 @@ func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScen
 		scenes = append(scenes, rowToProto(row, row.CreatedAt.Time()))
 	}
 	return &scenev1.ListScenesResponse{Scenes: scenes}, nil
+}
+
+// ListCharacterScenes returns every non-archived scene the character has a
+// participant row in (any role, including observer), with the character's
+// role and IC-subject activity metadata. Ordered by last_activity_ms DESC.
+// Caller validation is minimal (non-empty character_id, handled by
+// protovalidate before this handler runs).
+func (s *SceneServiceImpl) ListCharacterScenes(ctx context.Context, req *scenev1.ListCharacterScenesRequest) (*scenev1.ListCharacterScenesResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.list_character_scenes",
+		attribute.String("character_id", req.GetCharacterId()))
+	defer span.End()
+
+	icPrefix := "events." + s.gameID + ".scene."
+	results, err := s.store.ListCharacterScenes(ctx, req.GetCharacterId(), icPrefix)
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(ctx, "scene.service.list_character_scenes store error", "error", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+
+	out := make([]*scenev1.CharacterSceneInfo, 0, len(results))
+	for _, r := range results {
+		out = append(out, &scenev1.CharacterSceneInfo{
+			Scene:          rowToProto(r.Scene, r.Scene.CreatedAt.Time()),
+			Role:           r.Role,
+			LastActivityMs: r.LastActivityMS,
+			EntryCount:     r.EntryCount,
+		})
+	}
+	return &scenev1.ListCharacterScenesResponse{Scenes: out}, nil
 }
 
 // EndScene transitions a scene to the ended state. Only the scene owner is
@@ -754,9 +904,10 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 	}
 
 	// Auto-emit scene_join_ic notice event when this is a NEW membership
-	// (OpInserted = fresh row; OpPromoted = invited→member). Skipped on
-	// OpNoChange per Phase 3 D5 retry-idempotency.
-	if result == OpInserted || result == OpPromoted {
+	// (OpInserted = fresh row; OpPromoted = invited→member;
+	// ParticipantUpgraded = observer→member). Skipped on OpNoChange per
+	// Phase 3 D5 retry-idempotency.
+	if result == OpInserted || result == OpPromoted || result == ParticipantUpgraded {
 		s.emitSceneJoinIC(ctx, req.GetSceneId(), req.GetCharacterId(), result)
 	}
 
@@ -781,8 +932,11 @@ func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID
 	}
 
 	fromRole := "none"
-	if result == OpPromoted {
+	switch result {
+	case OpPromoted:
 		fromRole = "invited"
+	case ParticipantUpgraded:
+		fromRole = "observer"
 	}
 
 	payload, err := json.Marshal(map[string]string{
@@ -807,6 +961,148 @@ func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID
 			"scene_id", sceneID, "actor_id", actorID, "error", err)
 		// Non-fatal: membership is committed; the notice is best-effort.
 	}
+}
+
+// WatchScene auto-joins the requesting character into an OPEN scene as a
+// role=observer participant and registers the scene FocusMembership on the
+// supplied session so focus/Subscribe/history gates admit the watcher.
+//
+// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+// visibility==open and state∈{active,paused} checks run BEFORE the ABAC
+// spectate action is evaluated — a non-open scene is rejected without
+// consulting ABAC. The store re-checks both gates inside the AddObserver
+// transaction (TOCTOU guard).
+//
+// Per-field validation (character_id/scene_id/session_id non-empty) happens
+// via the protovalidate interceptor before this handler runs.
+//
+// Identity contract: the ABAC subject for the spectate check is derived
+// host-side from the dispatch token, NOT from req.character_id. The host
+// attaches advisory actor metadata alongside the token; when that metadata
+// names a character that differs from req.character_id the request is
+// rejected (PermissionDenied) as defense-in-depth against a payload/subject
+// mismatch. Absent metadata proceeds — the token still gates the subject.
+func (s *SceneServiceImpl) WatchScene(ctx context.Context, req *scenev1.WatchSceneRequest) (*scenev1.WatchSceneResponse, error) {
+	ctx, span := startSpan(
+		ctx, "scene.service.watch_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	// 0. Defense-in-depth identity cross-check (see contract above): runs
+	// before any store or ABAC work so a mismatched request does no work.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.watch_scene actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to watch this scene") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
+	// 1. Load the scene and run the CODE GATES FIRST (INV-SCENE-61): a
+	// non-open or non-watchable-state scene MUST fail before ABAC is
+	// consulted.
+	scene, err := s.store.Get(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		return nil, mapStoreErr(ctx, err)
+	}
+	if scene.Visibility != string(SceneVisibilityOpen) ||
+		(scene.State != string(SceneStateActive) && scene.State != string(SceneStatePaused)) {
+		gateErr := oops.Code("SCENE_NOT_WATCHABLE").
+			With("scene_id", req.GetSceneId()).
+			With("visibility", scene.Visibility).
+			With("state", scene.State).
+			Errorf("scene is not watchable")
+		recordError(span, gateErr)
+		return nil, mapStoreErr(ctx, gateErr)
+	}
+
+	// 2. ABAC spectate gate — fails closed when no evaluator is configured
+	// (mirrors handleEmit's nil-evaluator handling).
+	if s.evaluator == nil {
+		slog.WarnContext(
+			ctx, "scene.service.watch_scene evaluator not configured",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	dec, evalErr := s.evaluator.Evaluate(ctx, "spectate", "scene:"+req.GetSceneId())
+	if evalErr != nil {
+		recordError(span, evalErr)
+		errutil.LogErrorContext(ctx, "scene.service.watch_scene spectate evaluation failed", evalErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque Internal per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return nil, status.Error(codes.PermissionDenied, "not permitted to watch this scene") //nolint:wrapcheck // gRPC status is the wire contract
+	}
+
+	// 3. Insert the observer row. The store re-checks the visibility/state
+	// gates under a shared lock in-tx; map its result classifications.
+	row, result, err := s.store.AddObserver(ctx, req.GetSceneId(), req.GetCharacterId())
+	if err != nil {
+		recordError(span, err)
+		return nil, mapStoreErr(ctx, err)
+	}
+	switch result {
+	case ObserverAdded, ObserverAlreadyParticipant:
+		// proceed — row is valid for both.
+	case ObserverSceneNotFound:
+		return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+	case ObserverSceneNotOpen, ObserverSceneNotActive:
+		return nil, status.Error(codes.FailedPrecondition, "SCENE_NOT_WATCHABLE") //nolint:wrapcheck // gRPC status is the wire contract; code as message mirrors mapStoreErr
+	}
+
+	// 4. Register the scene FocusMembership on the watcher's session.
+	// Fail closed: a watcher without focus membership cannot read the scene,
+	// so a missing client or an unexpected join failure surfaces as an error
+	// rather than a silent half-join.
+	// FOCUS_ALREADY_MEMBER is idempotent success — the session is already a
+	// focus member (e.g. joined via `scene join`, or a retry/page-reload).
+	// Mirror the precedent at commands.go JoinFocus handling.
+	if s.focusClient == nil {
+		slog.WarnContext(
+			ctx, "scene.service.watch_scene focus client not configured",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.Internal, "focus registration unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	if joinErr := s.focusClient.JoinFocus(ctx, req.GetSessionId(), pluginsdk.FocusKey{
+		Kind:     pluginsdk.FocusKindScene,
+		TargetID: req.GetSceneId(),
+	}); joinErr != nil {
+		var oe oops.OopsError
+		if !errors.As(joinErr, &oe) || oe.Code() != "FOCUS_ALREADY_MEMBER" {
+			recordError(span, joinErr)
+			errutil.LogErrorContext(ctx, "scene.service.watch_scene focus join failed", joinErr)
+			return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque Internal per grpc-errors.md
+		}
+	}
+
+	slog.InfoContext(
+		ctx, "scene.service.watch_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"role", row.Role,
+		"pre_existing", result == ObserverAlreadyParticipant,
+	)
+
+	return &scenev1.WatchSceneResponse{
+		Participant: &scenev1.ParticipantInfo{
+			CharacterId: row.CharacterID,
+			// Best-effort display name: no name resolver is wired in the
+			// service, so fall back to the ID per the proto contract.
+			CharacterName: row.CharacterID,
+			Role:          row.Role,
+			JoinedAt:      timestamppb.New(row.JoinedAt.Time()),
+		},
+	}, nil
 }
 
 // emitSceneLeaveIC emits a scene_leave_ic notice event. reason discriminates
@@ -1280,6 +1576,7 @@ func rowToProto(row *SceneRow, createdAt time.Time) *scenev1.SceneInfo {
 		ContentWarnings: row.ContentWarnings,
 		Tags:            row.Tags,
 		CreatedAt:       timestamppb.New(createdAt),
+		LastActivityMs:  row.LastActivityMs,
 	}
 	if row.LocationID != nil {
 		info.LocationId = *row.LocationID

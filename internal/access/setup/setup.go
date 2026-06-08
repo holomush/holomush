@@ -93,6 +93,12 @@ type ABACConfig struct {
 	// construction. Empty / nil → no operators (break-glass disabled).
 	// Sub-epic B (Phase 5).
 	CryptoOperators []string
+	// PlayerKindLookup is an optional func that resolves whether a player is
+	// an ephemeral guest. When nil the PlayerAttributeProvider omits the
+	// is_guest key (has_is_guest=false) per the omit-don't-sentinel rule
+	// (ADR holomush-ti1b). Production wiring at subsystem.go always supplies
+	// this via auth/postgres.PlayerRepository.
+	PlayerKindLookup attribute.PlayerKindLookup
 }
 
 // BuildABACStack constructs and wires all ABAC components in the correct dependency order:
@@ -216,9 +222,14 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 			"reference", "holomush-72ou")
 	}
 
-	// 8a. Player provider (subject namespace; resolves player.id and
-	// player.grants for "player:<ulid>" subjects). Sub-epic B (Phase 5).
-	playerProvider := attribute.NewPlayerAttributeProvider(cfg.CryptoOperators)
+	// 8a. Player provider (subject namespace; resolves player.id, player.grants,
+	// player.is_guest, player.has_is_guest for "player:<ulid>" subjects).
+	// Sub-epic B (Phase 5); is_guest added per holomush-5rh.8.13.
+	playerOpts := []attribute.PlayerAttributeProviderOption{}
+	if cfg.PlayerKindLookup != nil {
+		playerOpts = append(playerOpts, attribute.WithPlayerKindLookup(cfg.PlayerKindLookup))
+	}
+	playerProvider := attribute.NewPlayerAttributeProvider(cfg.CryptoOperators, playerOpts...)
 	if err := resolver.RegisterProvider(playerProvider); err != nil {
 		return nil, eb.Wrapf(err, "register player provider")
 	}

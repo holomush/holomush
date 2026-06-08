@@ -92,6 +92,23 @@ type AttributeResolverProvider interface {
 	AttributeResolverClient(pluginName string) pluginv1.AttributeResolverServiceClient
 }
 
+// ServiceDispatcher is an optional interface that binary-plugin hosts
+// implement so host-side callers (e.g. service facades) can mint a dispatch
+// token before calling a plugin's registered gRPC services directly. The
+// returned context carries the token + advisory actor metadata; the release
+// func revokes the token and MUST be deferred around the downstream call(s).
+//
+// Binary-only by construction: Lua plugins do not serve gRPC services, so
+// there is no Lua-side dispatch surface. This is a runtime-specific transport
+// concern, not a policy asymmetry (see
+// .claude/rules/plugin-runtime-symmetry.md) — the policy gates the token
+// feeds (Evaluate subject resolution, settings ownership) are shared.
+type ServiceDispatcher interface {
+	// BeginServiceDispatch mints a dispatch token storing actor (the ABAC
+	// subject host-side Evaluate resolves) and ownerPlayerID for pluginName.
+	BeginServiceDispatch(ctx context.Context, pluginName string, actor core.Actor, ownerPlayerID string) (context.Context, func(), error)
+}
+
 // PluginAuditClientProvider is an optional interface that binary-plugin
 // hosts implement so the eventbus/audit per-plugin consumer and history
 // router can reach the plugin's PluginAuditService. Returns nil when the

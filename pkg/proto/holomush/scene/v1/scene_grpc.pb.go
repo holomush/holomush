@@ -30,6 +30,7 @@ const (
 	SceneService_ResumeScene_FullMethodName                    = "/holomush.scene.v1.SceneService/ResumeScene"
 	SceneService_UpdateScene_FullMethodName                    = "/holomush.scene.v1.SceneService/UpdateScene"
 	SceneService_JoinScene_FullMethodName                      = "/holomush.scene.v1.SceneService/JoinScene"
+	SceneService_WatchScene_FullMethodName                     = "/holomush.scene.v1.SceneService/WatchScene"
 	SceneService_LeaveScene_FullMethodName                     = "/holomush.scene.v1.SceneService/LeaveScene"
 	SceneService_InviteToScene_FullMethodName                  = "/holomush.scene.v1.SceneService/InviteToScene"
 	SceneService_KickFromScene_FullMethodName                  = "/holomush.scene.v1.SceneService/KickFromScene"
@@ -45,6 +46,9 @@ const (
 	SceneService_GetPublicSceneArchive_FullMethodName          = "/holomush.scene.v1.SceneService/GetPublicSceneArchive"
 	SceneService_DownloadPublicSceneArchive_FullMethodName     = "/holomush.scene.v1.SceneService/DownloadPublicSceneArchive"
 	SceneService_ExtendScenePublishVoteAttempts_FullMethodName = "/holomush.scene.v1.SceneService/ExtendScenePublishVoteAttempts"
+	SceneService_ListCharacterScenes_FullMethodName            = "/holomush.scene.v1.SceneService/ListCharacterScenes"
+	SceneService_ListPublishedScenes_FullMethodName            = "/holomush.scene.v1.SceneService/ListPublishedScenes"
+	SceneService_ExportSceneLog_FullMethodName                 = "/holomush.scene.v1.SceneService/ExportSceneLog"
 )
 
 // SceneServiceClient is the client API for SceneService service.
@@ -113,6 +117,14 @@ type SceneServiceClient interface {
 	// existing member succeeds without re-emitting a join notice. See
 	// service.go::JoinScene.
 	JoinScene(ctx context.Context, in *JoinSceneRequest, opts ...grpc.CallOption) (*JoinSceneResponse, error)
+	// WatchScene auto-joins the requesting character into an OPEN scene as a
+	// role=observer participant and registers the focus membership for the
+	// supplied session, so focus/Subscribe/history gates admit the watcher.
+	// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+	// visibility==open and state checks run BEFORE the ABAC spectate action is
+	// evaluated; non-open scenes are rejected without consulting ABAC.
+	// See service.go::WatchScene.
+	WatchScene(ctx context.Context, in *WatchSceneRequest, opts ...grpc.CallOption) (*WatchSceneResponse, error)
 	// LeaveScene removes the calling character from a scene. The scene owner
 	// cannot leave (codes.FailedPrecondition) — they must end the scene or
 	// transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -199,6 +211,28 @@ type SceneServiceClient interface {
 	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(ctx context.Context, in *ExtendScenePublishVoteAttemptsRequest, opts ...grpc.CallOption) (*ExtendScenePublishVoteAttemptsResponse, error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role, including observer), with the character's
+	// role and per-scene activity metadata for workspace badges. Serves the
+	// web workspace's "my scenes" list; intended for use by the host facade
+	// fanning this out across a player's owned characters. See
+	// service.go::ListCharacterScenes.
+	ListCharacterScenes(ctx context.Context, in *ListCharacterScenesRequest, opts ...grpc.CallOption) (*ListCharacterScenesResponse, error)
+	// ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+	// fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+	// newest first, with optional tag filtering. Powers the archive browse
+	// page. See publish_service.go::ListPublishedScenes.
+	ListPublishedScenes(ctx context.Context, in *ListPublishedScenesRequest, opts ...grpc.CallOption) (*ListPublishedScenesResponse, error)
+	// ExportSceneLog renders a scene's IC log to a downloadable document for a
+	// participant of ANY role (observers may export what they may read;
+	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+	// fail before ABAC, which is never consulted here). Decryption flows
+	// through the host-mediated snapshot decrypt seam; supported formats are
+	// "markdown" and "jsonl". Scenes whose IC log exceeds the server-side row
+	// ceiling (exportLogMaxRows = 10 000) return FAILED_PRECONDITION /
+	// SCENE_EXPORT_TOO_LARGE rather than silently truncating the document.
+	// See export.go::ExportSceneLog.
+	ExportSceneLog(ctx context.Context, in *ExportSceneLogRequest, opts ...grpc.CallOption) (*ExportSceneLogResponse, error)
 }
 
 type sceneServiceClient struct {
@@ -283,6 +317,16 @@ func (c *sceneServiceClient) JoinScene(ctx context.Context, in *JoinSceneRequest
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(JoinSceneResponse)
 	err := c.cc.Invoke(ctx, SceneService_JoinScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) WatchScene(ctx context.Context, in *WatchSceneRequest, opts ...grpc.CallOption) (*WatchSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WatchSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_WatchScene_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -439,6 +483,36 @@ func (c *sceneServiceClient) ExtendScenePublishVoteAttempts(ctx context.Context,
 	return out, nil
 }
 
+func (c *sceneServiceClient) ListCharacterScenes(ctx context.Context, in *ListCharacterScenesRequest, opts ...grpc.CallOption) (*ListCharacterScenesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCharacterScenesResponse)
+	err := c.cc.Invoke(ctx, SceneService_ListCharacterScenes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) ListPublishedScenes(ctx context.Context, in *ListPublishedScenesRequest, opts ...grpc.CallOption) (*ListPublishedScenesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPublishedScenesResponse)
+	err := c.cc.Invoke(ctx, SceneService_ListPublishedScenes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) ExportSceneLog(ctx context.Context, in *ExportSceneLogRequest, opts ...grpc.CallOption) (*ExportSceneLogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExportSceneLogResponse)
+	err := c.cc.Invoke(ctx, SceneService_ExportSceneLog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SceneServiceServer is the server API for SceneService service.
 // All implementations must embed UnimplementedSceneServiceServer
 // for forward compatibility.
@@ -505,6 +579,14 @@ type SceneServiceServer interface {
 	// existing member succeeds without re-emitting a join notice. See
 	// service.go::JoinScene.
 	JoinScene(context.Context, *JoinSceneRequest) (*JoinSceneResponse, error)
+	// WatchScene auto-joins the requesting character into an OPEN scene as a
+	// role=observer participant and registers the focus membership for the
+	// supplied session, so focus/Subscribe/history gates admit the watcher.
+	// Gate order is fail-closed per INV-SCENE-61: the plugin-code
+	// visibility==open and state checks run BEFORE the ABAC spectate action is
+	// evaluated; non-open scenes are rejected without consulting ABAC.
+	// See service.go::WatchScene.
+	WatchScene(context.Context, *WatchSceneRequest) (*WatchSceneResponse, error)
 	// LeaveScene removes the calling character from a scene. The scene owner
 	// cannot leave (codes.FailedPrecondition) — they must end the scene or
 	// transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -591,6 +673,28 @@ type SceneServiceServer interface {
 	// role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
 	// publish_service.go::ExtendScenePublishVoteAttempts.
 	ExtendScenePublishVoteAttempts(context.Context, *ExtendScenePublishVoteAttemptsRequest) (*ExtendScenePublishVoteAttemptsResponse, error)
+	// ListCharacterScenes returns every non-archived scene the character has a
+	// participant row in (any role, including observer), with the character's
+	// role and per-scene activity metadata for workspace badges. Serves the
+	// web workspace's "my scenes" list; intended for use by the host facade
+	// fanning this out across a player's owned characters. See
+	// service.go::ListCharacterScenes.
+	ListCharacterScenes(context.Context, *ListCharacterScenesRequest) (*ListCharacterScenesResponse, error)
+	// ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+	// fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+	// newest first, with optional tag filtering. Powers the archive browse
+	// page. See publish_service.go::ListPublishedScenes.
+	ListPublishedScenes(context.Context, *ListPublishedScenesRequest) (*ListPublishedScenesResponse, error)
+	// ExportSceneLog renders a scene's IC log to a downloadable document for a
+	// participant of ANY role (observers may export what they may read;
+	// INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+	// fail before ABAC, which is never consulted here). Decryption flows
+	// through the host-mediated snapshot decrypt seam; supported formats are
+	// "markdown" and "jsonl". Scenes whose IC log exceeds the server-side row
+	// ceiling (exportLogMaxRows = 10 000) return FAILED_PRECONDITION /
+	// SCENE_EXPORT_TOO_LARGE rather than silently truncating the document.
+	// See export.go::ExportSceneLog.
+	ExportSceneLog(context.Context, *ExportSceneLogRequest) (*ExportSceneLogResponse, error)
 	mustEmbedUnimplementedSceneServiceServer()
 }
 
@@ -624,6 +728,9 @@ func (UnimplementedSceneServiceServer) UpdateScene(context.Context, *UpdateScene
 }
 func (UnimplementedSceneServiceServer) JoinScene(context.Context, *JoinSceneRequest) (*JoinSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method JoinScene not implemented")
+}
+func (UnimplementedSceneServiceServer) WatchScene(context.Context, *WatchSceneRequest) (*WatchSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WatchScene not implemented")
 }
 func (UnimplementedSceneServiceServer) LeaveScene(context.Context, *LeaveSceneRequest) (*LeaveSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LeaveScene not implemented")
@@ -669,6 +776,15 @@ func (UnimplementedSceneServiceServer) DownloadPublicSceneArchive(context.Contex
 }
 func (UnimplementedSceneServiceServer) ExtendScenePublishVoteAttempts(context.Context, *ExtendScenePublishVoteAttemptsRequest) (*ExtendScenePublishVoteAttemptsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExtendScenePublishVoteAttempts not implemented")
+}
+func (UnimplementedSceneServiceServer) ListCharacterScenes(context.Context, *ListCharacterScenesRequest) (*ListCharacterScenesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCharacterScenes not implemented")
+}
+func (UnimplementedSceneServiceServer) ListPublishedScenes(context.Context, *ListPublishedScenesRequest) (*ListPublishedScenesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPublishedScenes not implemented")
+}
+func (UnimplementedSceneServiceServer) ExportSceneLog(context.Context, *ExportSceneLogRequest) (*ExportSceneLogResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExportSceneLog not implemented")
 }
 func (UnimplementedSceneServiceServer) mustEmbedUnimplementedSceneServiceServer() {}
 func (UnimplementedSceneServiceServer) testEmbeddedByValue()                      {}
@@ -831,6 +947,24 @@ func _SceneService_JoinScene_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SceneServiceServer).JoinScene(ctx, req.(*JoinSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_WatchScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WatchSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).WatchScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_WatchScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).WatchScene(ctx, req.(*WatchSceneRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1105,6 +1239,60 @@ func _SceneService_ExtendScenePublishVoteAttempts_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SceneService_ListCharacterScenes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCharacterScenesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ListCharacterScenes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ListCharacterScenes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ListCharacterScenes(ctx, req.(*ListCharacterScenesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_ListPublishedScenes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPublishedScenesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ListPublishedScenes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ListPublishedScenes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ListPublishedScenes(ctx, req.(*ListPublishedScenesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_ExportSceneLog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportSceneLogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ExportSceneLog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ExportSceneLog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ExportSceneLog(ctx, req.(*ExportSceneLogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SceneService_ServiceDesc is the grpc.ServiceDesc for SceneService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1143,6 +1331,10 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "JoinScene",
 			Handler:    _SceneService_JoinScene_Handler,
+		},
+		{
+			MethodName: "WatchScene",
+			Handler:    _SceneService_WatchScene_Handler,
 		},
 		{
 			MethodName: "LeaveScene",
@@ -1203,6 +1395,18 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExtendScenePublishVoteAttempts",
 			Handler:    _SceneService_ExtendScenePublishVoteAttempts_Handler,
+		},
+		{
+			MethodName: "ListCharacterScenes",
+			Handler:    _SceneService_ListCharacterScenes_Handler,
+		},
+		{
+			MethodName: "ListPublishedScenes",
+			Handler:    _SceneService_ListPublishedScenes_Handler,
+		},
+		{
+			MethodName: "ExportSceneLog",
+			Handler:    _SceneService_ExportSceneLog_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -943,6 +943,64 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	return protoCommandResponseToSDK(resp.GetResponse()), nil
 }
 
+// BeginServiceDispatch mints a dispatch token for a host-initiated call INTO
+// the named binary plugin's registered gRPC services (e.g. a host-side facade
+// calling SceneService.WatchScene over the registry conn). It returns a
+// derived context carrying the `x-holomush-emit-token` outgoing metadata plus
+// the advisory actor-kind/-id headers, and a release func that revokes the
+// token.
+//
+// Without this, a plain client on the registry conn attaches no token, so any
+// plugin-side evaluator.Evaluate call — which ferries the incoming token back
+// to PluginHostService.Evaluate — fails EMIT_TOKEN_MISSING.
+//
+// Contract:
+//   - The caller MUST pass the server-side-verified acting character (or other
+//     vouched identity) as actor, and the same identity in the request payload.
+//     The token's stored actor is what host-side Evaluate resolves as the ABAC
+//     subject (INV-SCENE-63 alignment) — a payload/actor mismatch would make
+//     ABAC authorize one identity while the handler acts for another.
+//   - release MUST be deferred around the downstream plugin call(s); after
+//     release the token is revoked and further token-authenticated RPCs fail
+//     EMIT_TOKEN_REJECTED.
+//   - ownerPlayerID is the host-vouched owning player of the acting character
+//     ("" when no player context exists; PLAYER-scope settings then fail
+//     closed, matching DeliverEvent/DeliverCommand).
+func (h *Host) BeginServiceDispatch(ctx context.Context, pluginName string, actor core.Actor, ownerPlayerID string) (context.Context, func(), error) {
+	h.mu.RLock()
+	if h.closed {
+		h.mu.RUnlock()
+		return nil, nil, ErrHostClosed
+	}
+	_, ok := h.plugins[pluginName]
+	h.mu.RUnlock()
+
+	if !ok {
+		return nil, nil, oops.In("goplugin").With("plugin", pluginName).With("operation", "begin_service_dispatch").Wrap(ErrPluginNotLoaded)
+	}
+
+	token, err := h.tokenStore.Issue(pluginName, actor, ownerPlayerID)
+	if err != nil {
+		return nil, nil, oops.In("goplugin").With("plugin", pluginName).With("operation", "issue_emit_token").Wrap(err)
+	}
+
+	// Overwrite (not append) the emit token: if the incoming ctx already carries
+	// an x-holomush-emit-token from an outer dispatch, appending would leave two
+	// values and the host service reads tokens[0] — selecting the stale one. Set
+	// replaces all values for the key so the freshly issued token is present once.
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if ok {
+		md = md.Copy()
+	} else {
+		md = metadata.New(nil)
+	}
+	md.Set("x-holomush-emit-token", token)
+	dispatchCtx := metadata.NewOutgoingContext(ctx, md)
+	dispatchCtx = pluginsdk.WithOutgoingActorMetadata(dispatchCtx, coreActorKindToSDK(actor.Kind), actor.ID)
+
+	return dispatchCtx, func() { h.tokenStore.Revoke(token) }, nil
+}
+
 // protoCommandResponseToSDK converts a proto CommandResponse to an SDK CommandResponse.
 func protoCommandResponseToSDK(r *pluginv1.CommandResponse) *pluginsdk.CommandResponse {
 	if r == nil {

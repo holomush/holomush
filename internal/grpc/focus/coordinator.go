@@ -95,6 +95,12 @@ type Coordinator interface {
 		ctx context.Context,
 		characterID, sceneID ulid.ULID,
 	) (AutoFocusOnJoinResponse, error)
+	// GetConnectionFocus returns the current FocusKey for the given connection,
+	// or nil when the connection is grid-focused. Returns CONNECTION_NOT_FOUND
+	// when the connection does not exist; callers SHOULD treat this as absent
+	// focus rather than an error (the connection may have disconnected between
+	// the command dispatch and this lookup).
+	GetConnectionFocus(ctx context.Context, connectionID ulid.ULID) (*session.FocusKey, error)
 }
 
 // RestorePlan is the ordered list of streams and their replay modes to

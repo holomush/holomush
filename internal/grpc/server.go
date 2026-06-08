@@ -1103,7 +1103,16 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}
 	subscribeSpan.AddEvent("subscribe.replay_complete_sent")
 
-	return s.runSubscribeLoop(ctx, info, busStream, filterSet, stream, lf, ctrlCh)
+	// Resolve the connection's current FocusKey for badge downgrade.
+	// connID is only non-zero when connection_id was supplied in the request.
+	var connID *ulid.ULID
+	if req.GetConnectionId() != "" {
+		if parsed, parseErr := ulid.Parse(req.GetConnectionId()); parseErr == nil {
+			connID = &parsed
+		}
+	}
+
+	return s.runSubscribeLoop(ctx, info, busStream, filterSet, stream, lf, ctrlCh, connID)
 }
 
 // runSubscribeLoop is the post-REPLAY_COMPLETE live pump. It multiplexes
@@ -1122,6 +1131,7 @@ func (s *CoreServer) runSubscribeLoop(
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 	lf *locationFollower,
 	ctrlCh chan sessionStreamUpdate,
+	connID *ulid.ULID,
 ) error {
 	type busResult struct {
 		delivery eventbus.Delivery
@@ -1180,7 +1190,7 @@ func (s *CoreServer) runSubscribeLoop(
 				}
 				return oops.Code("SUBSCRIPTION_ERROR").With("session_id", info.ID).Wrap(r.err)
 			}
-			if sendErr := s.dispatchDelivery(ctx, info, r.delivery, stream, lf); sendErr != nil {
+			if sendErr := s.dispatchDelivery(ctx, info, r.delivery, stream, lf, connID); sendErr != nil {
 				if errors.Is(sendErr, errStreamTerminated) {
 					return nil
 				}
@@ -1205,12 +1215,19 @@ func (s *CoreServer) runSubscribeLoop(
 // event when a cross-location move is detected. session_ended events that
 // match this handler's session surface errStreamTerminated so the caller
 // closes the stream gracefully.
+//
+// connID is the per-connection ULID for the Subscribe handler. When non-nil,
+// the connection's FocusKey is read from the session store to determine
+// whether a scene event should be downgraded to a SCENE_ACTIVITY badge
+// (INV-SCENE-62) — non-focused member connections never receive event content
+// for scenes they are not currently focused on.
 func (s *CoreServer) dispatchDelivery(
 	ctx context.Context,
 	info *session.Info,
 	delivery eventbus.Delivery,
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 	lf *locationFollower,
+	connID *ulid.ULID,
 ) error {
 	event := delivery.Event()
 
@@ -1274,6 +1291,47 @@ func (s *CoreServer) dispatchDelivery(
 				"session_id", info.ID, "event_id", event.ID.String(), "error", ackErr)
 		}
 		return nil
+	}
+
+	// E9.5 badge downgrade (INV-SCENE-62): a scene event delivered to a
+	// member connection that is NOT focused on that scene becomes a
+	// content-free SCENE_ACTIVITY ping. The event content (which may be
+	// encrypted) is never forwarded. Lossy by design — clients re-sync
+	// badge state via ListMyScenes. The below-floor check above ensures
+	// only temporally-eligible events reach this guard.
+	//
+	// connID nil → no connection-level focus tracking (e.g., legacy callers
+	// without connection_id) — fall through to normal send.
+	if connID != nil {
+		if sid, ok := extractSceneID(string(event.Subject)); ok {
+			var currentFocus *session.FocusKey
+			if conn, getErr := s.sessionStore.GetConnection(ctx, *connID); getErr == nil {
+				currentFocus = conn.FocusKey
+			}
+			focusedOn := currentFocus != nil &&
+				currentFocus.Kind == session.FocusKindScene &&
+				currentFocus.TargetID.String() == sid
+			if !focusedOn {
+				badge := &corev1.SubscribeResponse{Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal:  corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY,
+						SceneId: sid,
+					},
+				}}
+				if sendErr := stream.Send(badge); sendErr != nil {
+					if nackErr := delivery.Nack(); nackErr != nil {
+						slog.DebugContext(ctx, "subscribe: nack after badge send failure",
+							"session_id", info.ID, "error", nackErr)
+					}
+					return oops.With("event_id", event.ID.String()).Wrap(sendErr)
+				}
+				if ackErr := delivery.Ack(); ackErr != nil {
+					slog.WarnContext(ctx, "subscribe: ack failed on badge downgrade; will redeliver",
+						"session_id", info.ID, "event_id", event.ID.String(), "error", ackErr)
+				}
+				return nil
+			}
+		}
 	}
 
 	// locationFollower consumes move events on character streams and

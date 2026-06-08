@@ -1,72 +1,25 @@
-- **Early registry-migration lessons (.14.9 NOT-READY, .14.11 READY) — consolidated.**
-  (a) Fragile `// Verifies:`-grep coverage meta-tests (`test/meta/i_<old>_coverage_test.go`,
-  per-family `TestEveryPhase3c...` scanning `// Verifies: I-<OLD>-N`/`INV-<digits>`) MUST be
-  DELETED on migration — renamed annotations make them find ZERO and fail ALL N (.14.9 missed →
-  I-PRIV-1..8 failed). Coverage absorbed by `TestEveryRegistryInvariantHasBinding`. DISTINCT
-  from robust `testName`-EXISTENCE checks (go/parser Test* names) which MIGRATE in lockstep. Keep
-  shared helpers (`findRepoRoot`/`skipDirs`) in a gutted meta file — 10+ files use them; verify
-  it still compiles. (b) FROM-anchor: `checkProvenance` greps canonical `e.ID`, NOT `r.Token`, so
-  refs recording legacy tokens is harmless/correct. (c) Origin SPEC is NOT migrated by design;
-  legacy column records the link. (d) gorules is a SEPARATE module — analyzer diagnostic + Doc +
-  testdata `// want` rename in lockstep; `go clean -testcache` before `task test:gorules`.
-  (e) `task lint:invariants` (= `inv-render -check`) must exit 0 for invariants.md sync.
-
-- **Registry-renumber series (.14.12–.14.27, ~9 legs, all READY except .14.23) — CONSOLIDATED.**
-  Each leg renames a legacy invariant family (GW/ROPS/P7-split/P4/P5/P6/FS/SCENE/PLUGIN/ACCESS/
-  CRYPTO/S*/M*/COMMAND) to canonical `INV-<SCOPE>-N`, dense non-contiguous ascending-by-position.
-  Recurring checks that HOLD: (1) Per-file token scan of EVERY owned file → ONLY `INV-<SCOPE>-N`;
-  residual walk `bareInvRE = \bINV-\d+\b` (invariant_registry_test.go:488) matches ONLY bare
-  NUMERIC `INV-9` — NOT `INV-P7-1`/`INV-RB-1`/`INV-PLUGIN-22` (the `-XX-` segment breaks `\d+`),
-  and `continue`s on shared files (~line 554). So foreign/deferred tokens survive ONLY in
-  shared_files, and descriptive prose like `INV-P7-1..16` in an owned file is INERT. (2)
-  checkProvenance greps CANONICAL `e.ID` at each ref site, NOT `r.Token` — refs recording legacy
-  `token:"INV-15"` is the standing FROM-anchor convention; the canonical id must ALSO be
-  physically present. (3) TestOwnedPathsPartition only forbids the SAME glob in two scopes'
-  owned_paths; an unowned shared file is permissible (checkProvenance accepts shared-OR-owned).
-  Genuinely multi-scope files carry BOTH tokens, listed in both scopes (one owned, one shared).
-  (4) PER-SITE not per-number: same bare number → different outcome per file (bare INV-1 →
-  PLUGIN-22 in plugin-evaluate files, LEFT bare in command-visibility files). (5) Coverage
-  meta-tests: distinguish `testName`-EXISTENCE checks (go/parser Test* names; t.Run `inv` labels
-  robust to rename, MIGRATE in lockstep) from fragile `// Verifies:`-grep scanners (DELETE —
-  .14.9). (6) refs:[] spec-only/binding:pending is HONEST when the origin spec maps a mechanism
-  to the PARENT token's code site, not its own (M4/5/6→parent PLUGIN-32; W9ML 1..6).
-  TestEveryRegistryInvariantHasBinding tolerates pending+refs:[]. (7) Generated artifacts
-  (.pb.go/_grpc.pb.go/.connect.go/_pb.ts/_connect.ts/grpc-api.md) must regen in sync when a proto
-  INV-comment is renamed. (8) Deferred-bare-INV + foreign tokens → use file-path owned_paths NOT
-  `dir/**` globs (else residual walk trips on left-behind tokens) — .14.14. (9) Trailing-comma
-  `token:"...",}` noise recurs ~6×; renderer-inert, Low non-blocking. (10) Zero executable-line
-  edits expected — every .go diff line is a comment or test-assertion string-literal token swap.
-  Final counts: CRYPTO=67/PLUGIN=39/ACCESS=8/EVENTBUS=28/SCENE=60; COMMAND-scope created by LAYER
-  split (Go-backend→COMMAND, web-composer TS LEFT exempt). Encountered .14.12–.14.27 (2026-06-02..04).
-
-- **First NOT-READY in the series: registry guards are BLIND to unregistered files, so a green
-  meta-test run does NOT prove a family migration is complete (hz0v4.14.23 INV-F NOT READY).**
-  Two defects survived a fully-green run (lint:invariants, provenance, partition, binding, 617
-  unit tests, int-compile): (A) **51 residual bare `INV-F*` token refs** in THREE cmd/holomush
-  files NOT in the diff (admin_read_stream_e2e_test.go ×45, readstream_wiring_test.go ×4,
-  admin_authenticate_e2e_test.go ×2) — same family migrated, but files neither owned_paths nor
-  shared_files nor in any `refs[]`, so residual walk + provenance never look → green despite
-  incomplete. 4 are STALE cross-file func-name cites (`TestINV_F2/F6/...`) pointing at funcs THIS
-  diff RENAMED → dangling. (B) **Range-rewrite corruption**: `INV-P7-1..16` → `INV-CRYPTO-38..16`
-  (tool rewrote left side of a `..N` range, left suffix); substring `INV-CRYPTO-38` keeps
-  provenance green, CI blind. **Review pattern for family migrations: do NOT trust green guards
-  as proof of completeness. ALWAYS `rg -c '\bINV-<OLD>[0-9]' --glob '!docs/**'` over the WHOLE
-  tree (not just diffed files) — residual hits in unregistered files = incomplete. Also
-  `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range corruption, `rg 'TestINV_<OLD>[0-9]'` for
-  dangling renamed-func cites.** Encountered: hz0v4.14.23 (2026-06-03) — NOT READY.
-
-- **Verification-BINDING backfill (pending→bound flip, NOT a renumber) — hz0v4 binding-backfill
-  READY.** Flips registry entries pending→bound + adds asserted_by, ONLY where a `// Verifies:
-  INV-<id>` annotation ALREADY exists; may add the comment to a pre-existing asserting test.
-  TestEveryRegistryInvariantHasBinding walks ALL *_test.go (raw regex, build tags irrelevant —
-  integration files ARE scanned); a `bound` entry needs ≥1 annotation ANYWHERE, and asserted_by
-  is NOT cross-checked against annotation sites — so a typo'd/fabricated asserted_by path passes
-  the gate. MUST hand-verify each asserted_by file genuinely contains the annotation. `pending`
-  MUST NOT carry asserted_by. For bug-closing flips (0sh1k 'asserted only in comments'), the
-  `// Verifies:` comment does NOT fix a false-green — READ the cited test and confirm a REAL
-  runtime assertion of EACH invariant clause (CRYPTO-28: audit-emit = WaitForOneJetStreamMsg on
-  AUDIT stream + header assert; fail-closed = audit=nil → res.Err set, no plaintext). Gates:
-  `inv-render -check` exit 0; meta binding+provenance green. Encountered: 2026-06-05 — READY.
+- **Invariant-registry family-renumber series (.14.12–.14.27, epic hz0v4) — CONSOLIDATED.** Each leg
+  renames a legacy family (GW/ROPS/P7/P4-6/FS/SCENE/PLUGIN/ACCESS/CRYPTO/S*/M*/COMMAND) → canonical
+  `INV-<SCOPE>-N`. Recurring HOLDS: (1) residual walk `bareInvRE=\bINV-\d+\b` matches ONLY bare NUMERIC
+  `INV-9` — NOT `INV-P7-1`/`INV-PLUGIN-22` (the `-XX-` breaks `\d+`); `continue`s on shared files →
+  foreign/deferred tokens survive ONLY in shared_files, descriptive `INV-P7-1..16` prose is inert.
+  (2) checkProvenance greps CANONICAL `e.ID` at each ref site, NOT `r.Token`; legacy `token:"INV-15"`
+  refs are the standing FROM-anchor convention (canonical id must ALSO be physically present).
+  (3) PER-SITE not per-number: same bare number → different outcome per file. (4) Generated artifacts
+  (.pb.go/_pb.ts/grpc-api.md) must regen when a proto INV-comment is renamed.
+- **CRITICAL family-migration lesson (.14.23 NOT READY): registry guards are BLIND to UNREGISTERED
+  files.** A fully-green run (lint:invariants, provenance, partition, binding, units, int-compile) does
+  NOT prove a migration is complete: residual bare `INV-F*` tokens in files neither owned_paths nor
+  shared_files nor any `refs[]` → never scanned. Also range-rewrite corruption (`INV-P7-1..16` →
+  `INV-CRYPTO-38..16`, substring keeps provenance green). ALWAYS `rg -c '\bINV-<OLD>[0-9]' --glob
+  '!docs/**'` over the WHOLE tree; `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range corruption;
+  `rg 'TestINV_<OLD>[0-9]'` for dangling renamed-func cites.
+- **Verification-BINDING backfill (pending→bound flip) — hz0v4 READY.** Flips registry entries
+  pending→bound + adds asserted_by ONLY where `// Verifies: INV-<id>` ALREADY exists. Meta-test does
+  NOT cross-check asserted_by against annotation sites → typo'd/fabricated path passes. MUST hand-verify
+  each asserted_by file genuinely contains the annotation. For bug-closing flips (false-green fixes),
+  READ the cited test + confirm a REAL runtime assertion of EACH invariant clause. `pending` MUST NOT
+  carry asserted_by.
 
 - **NEW shape — wire event-type qualification migration (bare scene_* → core-scenes:<verb>),
   aneim Phase 1 / holomush-r0kup READY.** Distinct from the .14.x renumbers. Three vocabularies,
@@ -133,3 +86,128 @@
   pc3bg "No plugin-side ReadSceneLog exists" vs spec's own D8/V6) — grep the spec for every
   mechanism an ADR says was REJECTED. Also: probe index missed `ReadSceneLogForSnapshot`
   (publish_store.go:632); confirm probe zero-results with rg before claiming absence.
+
+- **Plugin migrations: `.down.sql` is NEVER executed** — `RunMigrationsFS` filters `.up.sql` only
+  (pkg/plugin/storage/storage.go:68) and embed is `migrations/*.up.sql` (core-scenes store.go:50).
+  Downs are manual-rollback docs; "reversible" is inspection-only. Also: `DROP CONSTRAINT IF EXISTS
+  <wrong-name>` silently no-ops and `ADD` then stacks a 2nd constraint, leaving the old tight CHECK
+  live — test:int can't catch this until something INSERTs the newly-admitted value. PG auto-name
+  for inline column CHECK = `{table}_{column}_check` (verified: neon docs + ChooseConstraintName).
+  Encountered: 5rh.8.1 (2026-06-07) — READY.
+
+- **Store-layer observer support (5rh.8.2 NOT READY, 2026-06-07).** Recurring shapes: (1) When a
+  diff WIDENS an emit guard (`result == A || B || NEW`), READ the emit helper body — payload
+  mapping written for the old result set silently misreports the new one (emitSceneJoinIC
+  `fromRole` only maps OpPromoted→"invited"; ParticipantUpgraded fell to "none"). (2)
+  SELECT-then-INSERT inside a tx is NOT race-safe even with FOR SHARE on the parent row —
+  FOR SHARE locks are mutually compatible and don't serialize child-table inserts; with
+  PK(scene_id,character_id) (migration 000003:16) concurrent duplicates → PK violation instead
+  of the documented idempotent result. AddParticipant's ON CONFLICT is the repo-correct shape.
+  (3) Pre-upsert plain SELECT for prior-role classification races with concurrent inserts —
+  needs FOR UPDATE or RETURNING-based classification. (4) Check bead acceptance verbatim against
+  the diff: "SceneInfo.observers populated" unmet (rowToProto sets neither participants nor
+  observers; new store method had zero production callers) — implementer claims of "deferred by
+  design" need a recorded deferral in bead/plan, not just assertion.
+
+- **WatchScene RPC (5rh.8.3 NOT READY, 2026-06-07).** (1) `focus.Coordinator.JoinFocus` is NOT
+  idempotent — duplicate membership errors `FOCUS_ALREADY_MEMBER` (focus/join.go:38-42); repo
+  precedent commands.go:832-845 special-cases it. Any handler claiming "JoinFocus is idempotent"
+  is wrong; fakeFocusClient returns nil on duplicates → false-green idempotency tests. ALWAYS
+  read the real coordinator + check joinErr code handling. (2) Premature partial binding:
+  multi-clause invariant flipped bound when only one clause has tests and the proving task
+  (.8.4 role-gates) is still open; plan scheduled flip for final Task 20 — check WHICH task owns
+  the registry flip. (3) `hostEvaluateClient.Evaluate` needs the x-holomush-emit-token, minted
+  ONLY in DeliverEvent/DeliverCommand (host.go:854,929); a plugin service-RPC handler calling
+  Evaluate is unreachable from a plain registry-conn caller (facade) — EMIT_TOKEN_MISSING.
+  Subject is token-derived dispatch actor, never bound to req.character_id. Cross-task risk to
+  flag whenever a SceneService RPC consults s.evaluator.
+
+- **5rh.8.21 RESOLVES the facade EMIT_TOKEN_MISSING gap (prev entry) — READY (2026-06-07).**
+  `Host.BeginServiceDispatch` (goplugin/host.go:968) mints a dispatch token for caller-supplied
+  actor+ownerPlayerID, returns ctx w/ token + advisory actor md (same coreActorKindToSDK as
+  DeliverCommand:936) + release func (`Revoke` = map delete, idempotent; 5min TTL sweeper backstops
+  forgotten release; store terminal-on-close + Close clears items). Manager routes via
+  `findOptional[ServiceDispatcher]` (Unwrap-chain capability, matches PluginAuditClientProvider
+  shape) → typed SERVICE_DISPATCH_UNSUPPORTED for Lua host. Binary-only is transport-specific,
+  NOT a symmetry violation (Lua serves no gRPC). WatchScene advisory check (service.go:878) is
+  restriction-only: rejects PermissionDenied iff incoming md kind==character && id!=req.character_id;
+  absent/non-character md proceeds (token-derived subject stays authoritative) — correct
+  defense-in-depth polarity; spoofed md can only restore baseline, never grant. Pattern to
+  re-check on .8.11 facade: caller MUST pass server-side-verified actor; token outlives plugin
+  unload until release/TTL (Low, accepted).
+
+- **Harness event-path parity (5rh.8.4, 2026-06-07): production busEventAppender publishes via
+  wrapPublisher's RenderingPublisher (sub_grpc.go:207,219) — any harness mirror using raw
+  `bus.Bus.Publisher()` ships nil-Rendering frames (INV-EVENTBUS-6: gateway drops those).
+  Check publisher wrapping, not just Append-translation fidelity. Also: harness.go is a SHARED
+  int helper — a change there that un-drops events (eventStore was nil → command_response/
+  command_error now publish) affects EVERY harness suite (privacy's empty-registry SendCommand
+  → unknown-command command_error now hits bus + events_audit); require full `task test:int`,
+  not just the touched suites. Fake-level "exclusion pins" (fakeStore.GetWithMembership
+  re-implements role filter in Go) pin the fake, not the SQL — demand a DB-level twin.
+
+- **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** 9 `Web*` RPCs proxying
+  SceneAccessService facade. KEY recurring trap: `*grpc.Client` wrappers wrap with
+  `oops.Code("RPC_FAILED").Wrap(err)` — and the web handler returns that to connect-go with
+  `//nolint:wrapcheck // gRPC status errors pass through as-is`. That comment is FALSE: core is
+  reached via plain grpc-go (status.Status err), browser side is connect-go with NO error
+  interceptor (server.go:69 NewWebServiceHandler, no WithInterceptors). connect-go wrapIfUncoded/
+  CodeOf only recognize `*connect.Error` via errors.As → an oops-wrapped status err becomes
+  CodeUnknown/HTTP 500. So facade PERMISSION_DENIED/NOT_FOUND/UNAUTHENTICATED all collapse to
+  Unknown at the browser. BUT this is the IDENTICAL pre-existing pattern of WebListFocusPresence
+  (handler.go:792) / WebListContent / WebListSessionStreams — NOT a new defect → non-blocking,
+  track separately. Unit `...PassesStatusErrorThroughAsIs` tests use the MOCK (no wrap) so they
+  prove handler transparency but CANNOT catch this (mock substitutes for the wrapper). Boundary/
+  seam side: interface-based SceneAccessClient option-wired in handler.go; nil-client guard returns
+  CodeUnimplemented; token from headerInjectSessionToken (never body, never logged); proto requests
+  OMIT player_session_token (header-injected). All clean. Whenever reviewing a web/gateway PR,
+  re-check this status→connect code gap; it is gateway-wide accepted behavior, not per-PR.
+
+- **alt-session stream-loop port (5rh.8.15): R1 NOT READY → R2 (mmwsokrtpwpl) READY.** Recurring
+  ports-drop-the-hard-parts bugs to grep for when a .svelte.ts "mirrors terminal hydrateAndStream":
+  backoff declared inside recursive fn (hoist to session+while-loop); connectionId gate resolved
+  ONLY in STREAM_OPENED (must reject on close/error/10s-timeout + reinstall fresh gate);
+  streamGeneration declared-but-never-incremented = inert guard (grep the increment site);
+  Map keyed by characterId but delete(sessionId) = dead session cached. R2 fixed all in code +
+  altSessions.test.ts 7 fake-iterator tests. "241 pass" is whole-suite, proves nothing about new
+  async surface — `grep -c 'it('` the NEW test file. (2026-06-08)
+- **Frontend UI consuming a runes store (5rh.8.16 scenes workspace, 2026-06-08) — NOT READY.**
+  6 Svelte components + page wiring. Runes reactivity ($derived reading store getters), drafts (two
+  $effects, no cross-scene clobber since draftKey is $derived), localStorage SSR guards, a11y, send-
+  path error handling — all CORRECT. BUT the load-bearing BLOCKER was in the CONSUMED store, not the
+  diff's own .svelte files: `workspaceStore.refresh()` hardcodes `asCharacterId:'' / asCharacterName:''`
+  for every scene (workspaceStore.svelte.ts:72-73). This UI is the FIRST consumer to make those fields
+  load-bearing → composer `ensureSession(scene.asCharacterId)` = `ensureSession('')`, select() opens an
+  empty-character alt, roster/strip/"posing as" render blank. pnpm-check-0-errors + 241-pass prove
+  TYPE-correctness only (`''` is a valid string) — ZERO tests render these components with real store
+  state. LESSON: for UI-consumes-store PRs, trace each consumed field back to its PRODUCER and check it
+  is actually populated, not just typed; a green type-check + whole-suite-pass is blind to empty-but-
+  valid data. Also: `data.playerId` passed as the `sessionId` arg (refresh/select/queryStreamHistory) —
+  type confusion, inert today (header-token auth INV-SCENE-63) but breaks if session_id ever binds;
+  Medium non-blocking.
+- **Scene board UI (5rh.8.17, 2026-06-08) — NOT READY. STATE vs VISIBILITY string confusion.**
+  `SceneInfo.state` ∈ {active,paused,ended,archived} (core-scenes/types.go:23-26); `"open"` is a
+  VISIBILITY value ({open,private}), NOT a state. SceneBoardRow gated Watch/Join on
+  `scene.state === 'open'` → NEVER true → primary board actions never render, only "View"; stateColor
+  green-dot likewise dead. pnpm-check 0-errors is BLIND (both are valid strings). LESSON: whenever a
+  .svelte compares a proto string field to a literal, grep the proto/Go const set for that field — UI
+  authors routinely cross state↔visibility↔role vocabularies. Also recurring: nav params (?watch/?join
+  via goto) are DEAD unless the target +page.svelte reads $page.url.searchParams — workspace page
+  doesn't; board passes characterId="" hardcoded so even the watchScene RPC never fires. JSONL export
+  has no timestamp → timestampMs:0 → PoseCard renders 1970/12:00AM (Low). jsonlToLogEntries try-guarded,
+  blank/trailing-line safe, matches backend `{"speaker","kind","content"}\n` render; downloadBlob
+  SSR-safe (document only in click handler) + revokes — all sound.
+- **E2E scenes-workspace suite (5rh.8.19, 2026-06-08) — READY.** 8 Playwright tests reusing
+  existing helpers. KEY: the two prior NOT-READY app blockers WERE FIXED upstream — .8.16
+  hardcoded `asCharacterId:''` (now refresh() fans out alts tagging real charId) and .8.17 dead
+  `?watch`/`?join` nav (now +page.svelte:143-160 reads param + selects). Always re-check whether a
+  prior blocker still holds in CURRENT source before failing a dependent test PR. Honest-degradation
+  pattern that is ACCEPTABLE (not a hide-the-bug like the weakened S3 original): a test scoped by its
+  OWN title+comment to a narrower assertion than the plan scenario, referencing a real tracked bead
+  (.8.26 P1). S2 owner-sees-composer ≠ plan's watcher→Join-CTA (observer branch SceneComposer.svelte:99
+  never exercised) — Medium non-blocking, recommend a follow-up bead so the observer E2E gap isn't lost.
+  S3 asserts draft-clears only; passes because .8.26's broken path resolves {success:false} silently
+  (no throw → success branch clears draft); catch does NOT clear draft, so a real throw WOULD fail it.
+  Flakiness checklist that held: no sleeps; expect.poll/waitForEvent/toPass; conn-pill data-status
+  =connected gate before commands; unique per-test titles. App-fix listScenes(...characterId) correct;
+  char-less player → primaryCharId='' → facade NotFound caught into fetchError (Low, not in test scope).

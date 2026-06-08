@@ -167,6 +167,13 @@ service PluginHostService {
   // Info.PresentingFocus atomically under one Store-lock acquisition (D7).
   rpc SetConnectionFocus(PluginHostServiceSetConnectionFocusRequest) returns (PluginHostServiceSetConnectionFocusResponse);
 
+  // GetConnectionFocus returns the named connection's current per-connection
+  // focus, or absent when the connection is grid-focused (FocusKey nil) or
+  // unknown. Read-only counterpart of SetConnectionFocus; lets plugins route
+  // connection-scoped operations (e.g. scene pose) to the focused target.
+  // See goplugin/host_service.go::GetConnectionFocus.
+  rpc GetConnectionFocus(PluginHostServiceGetConnectionFocusRequest) returns (PluginHostServiceGetConnectionFocusResponse);
+
   // AutoFocusOnJoin is the Phase-5 fan-out that focuses all of a character's
   // terminal/telnet connections on a scene at once. SERVED:
   // pluginHostServiceServer.AutoFocusOnJoin. Connections already explicitly
@@ -736,6 +743,20 @@ message PluginHostServiceSetConnectionFocusRequest {
 message PluginHostServiceSetConnectionFocusResponse {
   // The connection's focus after the write; absent if the connection was
   // cleared/unfocused.
+  optional FocusKey focus_key = 1;
+}
+
+// PluginHostServiceGetConnectionFocusRequest carries the connection ID whose
+// focus is being read. Read-only counterpart of SetConnectionFocus.
+message PluginHostServiceGetConnectionFocusRequest {
+  // ULID bytes of the connection whose focus is being read.
+  bytes connection_id = 1;
+}
+
+// PluginHostServiceGetConnectionFocusResponse returns the connection's current
+// focus key, if any. Absent when the connection is grid-focused or unknown.
+message PluginHostServiceGetConnectionFocusResponse {
+  // The connection's focus; absent for grid focus or unknown connection.
   optional FocusKey focus_key = 1;
 }
 

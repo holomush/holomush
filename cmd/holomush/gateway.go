@@ -305,7 +305,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 	// (Phase 1.6): it reads rendering metadata from EventFrame.Rendering on
 	// the wire instead of holding a local VerbRegistry. The core process is
 	// the sole owner of rendering enrichment via core/v1/RenderingMetadata.
-	webHandler := web.NewHandler(grpcClient, web.WithContentClient(grpcClient))
+	webHandler := web.NewHandler(grpcClient, web.WithContentClient(grpcClient), web.WithSceneAccessClient(grpcClient))
 	webServer, err := web.NewServer(web.Config{
 		Addr:        cfg.WebAddr,
 		Handler:     webHandler,

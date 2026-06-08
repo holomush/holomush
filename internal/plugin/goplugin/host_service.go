@@ -256,6 +256,41 @@ func (s *pluginHostServiceServer) SetConnectionFocus(ctx context.Context, req *p
 	return resp, nil
 }
 
+func (s *pluginHostServiceServer) GetConnectionFocus(ctx context.Context, req *pluginv1.PluginHostServiceGetConnectionFocusRequest) (*pluginv1.PluginHostServiceGetConnectionFocusResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	connID, err := bytesToULID(req.GetConnectionId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "connection_id").
+			Wrap(err)
+	}
+
+	fk, err := fc.GetConnectionFocus(ctx, connID)
+	if err != nil {
+		slog.ErrorContext(
+			ctx, "plugin host service GetConnectionFocus failed",
+			"plugin", s.pluginName,
+			"connection_id", connID.String(),
+			"error", err,
+		)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	resp := &pluginv1.PluginHostServiceGetConnectionFocusResponse{}
+	if fk != nil {
+		resp.FocusKey = focusKeyToProto(*fk)
+	}
+	return resp, nil
+}
+
 func (s *pluginHostServiceServer) AutoFocusOnJoin(ctx context.Context, req *pluginv1.PluginHostServiceAutoFocusOnJoinRequest) (*pluginv1.PluginHostServiceAutoFocusOnJoinResponse, error) {
 	if s.host == nil {
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")

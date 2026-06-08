@@ -81,6 +81,15 @@ service SceneService {
   // service.go::JoinScene.
   rpc JoinScene(JoinSceneRequest) returns (JoinSceneResponse);
 
+  // WatchScene auto-joins the requesting character into an OPEN scene as a
+  // role=observer participant and registers the focus membership for the
+  // supplied session, so focus/Subscribe/history gates admit the watcher.
+  // Gate order is fail-closed per INV-SCENE-61: the plugin-code
+  // visibility==open and state checks run BEFORE the ABAC spectate action is
+  // evaluated; non-open scenes are rejected without consulting ABAC.
+  // See service.go::WatchScene.
+  rpc WatchScene(WatchSceneRequest) returns (WatchSceneResponse);
+
   // LeaveScene removes the calling character from a scene. The scene owner
   // cannot leave (codes.FailedPrecondition) — they must end the scene or
   // transfer ownership first. Emits a leave IC notice with reason=left. See
@@ -181,6 +190,31 @@ service SceneService {
   // role check (the inverse of INV-SCENE-60's plugin-code privacy gate). See
   // publish_service.go::ExtendScenePublishVoteAttempts.
   rpc ExtendScenePublishVoteAttempts(ExtendScenePublishVoteAttemptsRequest) returns (ExtendScenePublishVoteAttemptsResponse);
+
+  // ListCharacterScenes returns every non-archived scene the character has a
+  // participant row in (any role, including observer), with the character's
+  // role and per-scene activity metadata for workspace badges. Serves the
+  // web workspace's "my scenes" list; intended for use by the host facade
+  // fanning this out across a player's owned characters. See
+  // service.go::ListCharacterScenes.
+  rpc ListCharacterScenes(ListCharacterScenesRequest) returns (ListCharacterScenesResponse);
+
+  // ListPublishedScenes pages through PUBLISHED scene archives (public-safe
+  // fields only, same status gate as GetPublicSceneArchive / INV-SCENE-35),
+  // newest first, with optional tag filtering. Powers the archive browse
+  // page. See publish_service.go::ListPublishedScenes.
+  rpc ListPublishedScenes(ListPublishedScenesRequest) returns (ListPublishedScenesResponse);
+
+  // ExportSceneLog renders a scene's IC log to a downloadable document for a
+  // participant of ANY role (observers may export what they may read;
+  // INV-SCENE-60's participant gate is plugin-code-enforced — non-participants
+  // fail before ABAC, which is never consulted here). Decryption flows
+  // through the host-mediated snapshot decrypt seam; supported formats are
+  // "markdown" and "jsonl". Scenes whose IC log exceeds the server-side row
+  // ceiling (exportLogMaxRows = 10 000) return FAILED_PRECONDITION /
+  // SCENE_EXPORT_TOO_LARGE rather than silently truncating the document.
+  // See export.go::ExportSceneLog.
+  rpc ExportSceneLog(ExportSceneLogRequest) returns (ExportSceneLogResponse);
 }
 
 // SceneInfo is the wire projection of a scene row plus its roster, returned by
@@ -220,6 +254,16 @@ message SceneInfo {
   // The current participant roster (owners and members; invited rows are not
   // surfaced as participants here).
   repeated ParticipantInfo participants = 13;
+  // The watching (role=observer) participants, listed separately from the
+  // acting roster and excluded from pose order and publish votes (INV-SCENE-61).
+  // Not yet populated by any RPC; the scene-watch read path (E9.5 Task 3+)
+  // fills it from the store's observers query.
+  repeated ParticipantInfo observers = 14;
+  // Epoch-milliseconds of the newest scene_log row on the scene's IC subject
+  // (events.<gameID>.scene.<sceneID>.ic). 0 when the log is empty or the read
+  // path does not compute the value (e.g. GetScene). Mirrors
+  // CharacterSceneInfo.last_activity_ms.
+  int64 last_activity_ms = 15;
 }
 
 // ParticipantInfo is one entry in a scene's roster — a character's relationship
@@ -230,9 +274,9 @@ message ParticipantInfo {
   // Display name of the character (best-effort; falls back to the ID when no
   // name resolver is wired).
   string character_name = 2;
-  // Participant role: "owner", "member", or the transient "invited" (the
-  // last exists only on private scenes and is promoted to member on join). See
-  // ParticipantRole in participants.go.
+  // Participant role: "owner", "member", "observer", or the transient "invited"
+  // (the last exists only on private scenes and is promoted to member on join).
+  // See ParticipantRole in participants.go.
   string role = 3;
   // When the participant joined (for invited rows, when the invitation was
   // recorded; reset to join time on promotion).
@@ -464,6 +508,26 @@ message JoinSceneRequest {
 // JoinSceneResponse is intentionally empty — a successful join carries no
 // body; the caller refetches scene state if needed.
 message JoinSceneResponse {}
+
+// WatchSceneRequest identifies the watcher, target scene, and the watcher's
+// game session (host-supplied; the session receives the FocusMembership).
+message WatchSceneRequest {
+  // The watching character's ID; required. Trusted host-supplied identity
+  // per the SceneService caller contract (service.go's ABAC note).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to watch; required. Must be visibility=open and active/paused.
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The watcher's game session ULID; required — JoinFocus registers the
+  // scene FocusMembership on this session.
+  string session_id = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// WatchSceneResponse confirms the observer row.
+message WatchSceneResponse {
+  // The resulting participant entry (role=observer, or the pre-existing row
+  // when the character was already a participant of any role).
+  ParticipantInfo participant = 1;
+}
 
 // LeaveSceneRequest identifies the scene to leave and the leaving character.
 message LeaveSceneRequest {
@@ -810,6 +874,101 @@ message ExtendScenePublishVoteAttemptsRequest {
 message ExtendScenePublishVoteAttemptsResponse {
   // The scene's max-publish-attempts budget after the extension.
   int32 new_max = 1;
+}
+
+// ListCharacterScenesRequest requests the non-archived scene participations
+// for a single character.
+message ListCharacterScenesRequest {
+  // The character whose participations to list; required (host-trusted).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// CharacterSceneInfo pairs a scene with the requesting character's role and
+// recent-activity metadata for workspace badge rendering.
+message CharacterSceneInfo {
+  // The scene's metadata projection via the standard row conversion; the
+  // roster fields (participants, observers) are unset on this surface —
+  // workspace clients fetch rosters via GetScene/scene-load paths.
+  SceneInfo scene = 1;
+  // This character's participant role in the scene (owner/member/observer).
+  string role = 2;
+  // Epoch-ms timestamp of the newest scene_log row on the scene's IC
+  // subject; 0 when the log is empty.
+  int64 last_activity_ms = 3;
+  // Total scene_log rows on the IC subject (workspace activity panel).
+  int64 entry_count = 4;
+}
+
+// ListCharacterScenesResponse carries the character's scene participations,
+// most recently active first.
+message ListCharacterScenesResponse {
+  // The character's scenes, most recently active first.
+  repeated CharacterSceneInfo scenes = 1;
+}
+
+// PublicSceneArchive is the public-safe view of a published scene archive,
+// carrying only the published artifact — never vote state, per-voter data, or
+// failure_reason. Covers the GetPublicSceneArchive field set (INV-SCENE-35
+// status gate) plus current scene tags, which that response does not carry.
+// Used as the element type in ListPublishedScenes.
+message PublicSceneArchive {
+  // The publication attempt's ID.
+  string id = 1;
+  // The scene title snapshotted at publish time.
+  string title_snapshot = 2;
+  // The participant character names snapshotted at publish time.
+  repeated string participants_snapshot = 3;
+  // The frozen published content entries.
+  repeated PublishedSceneEntry content_entries = 4;
+  // Epoch-nanosecond publish time.
+  int64 published_at_unix_ns = 5;
+  // The CURRENT tags on the source scene row (read at list time, not
+  // snapshotted at publish): post-publish tag edits are reflected here.
+  // Tags are public metadata (already exposed by ListScenes).
+  repeated string tags = 6;
+}
+
+// ListPublishedScenesRequest pages through PUBLISHED scene archives.
+message ListPublishedScenesRequest {
+  // Page size; 0 means server default, capped at 200 (mirrors ListScenes).
+  int32 limit = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Leading results to skip.
+  int32 offset = 2 [(buf.validate.field).int32.gte = 0];
+  // Restrict to archives whose scene carries all of these tags.
+  repeated string tags = 3;
+}
+
+// ListPublishedScenesResponse carries the public-safe archive summaries,
+// newest first.
+message ListPublishedScenesResponse {
+  // Public-safe published-archive summaries, newest first.
+  repeated PublicSceneArchive archives = 1;
+}
+
+// ExportSceneLogRequest asks for a scene's IC log rendered to a downloadable
+// document. Participant-gated in plugin code (any role); see ExportSceneLog.
+message ExportSceneLogRequest {
+  // The exporting character; required; must hold a participant row (any role).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to export; required. Works for active, paused, and ended scenes.
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The render format; required: "markdown" or "jsonl".
+  string format = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// ExportSceneLogResponse carries the rendered scene-log document and download
+// metadata.
+message ExportSceneLogResponse {
+  // The rendered document bytes.
+  bytes content = 1;
+  // The content's MIME type (text/markdown or application/jsonl) — mirrors
+  // DownloadPublishedScene's MIME vocabulary.
+  string mime_type = 2;
+  // Suggested download filename (slugified title + extension).
+  string filename = 3;
 }
 
 // The following messages are the JSON payloads (protojson-marshaled by

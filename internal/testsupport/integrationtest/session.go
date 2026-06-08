@@ -15,10 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
+	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
 
 // Tunable timeouts for the Subscribe-stream transport lifecycle. Set high
@@ -69,7 +71,7 @@ type Session struct {
 
 	// Transport state — auto-managed by ConnectAuthed/ConnectGuest/
 	// OpenWebSession (via s.attach), cycled by DetachTransport/
-	// ReattachTransport. Mutex protects all four fields so the
+	// ReattachTransport. Mutex protects all five fields so the
 	// detach-during-reattach race is well-defined.
 	transportMu     sync.Mutex
 	transportStream *subscribeStream
@@ -78,6 +80,10 @@ type Session struct {
 	// the error it received (if any) is stored on transportErr.
 	transportDone chan struct{}
 	transportErr  error
+	// transportConnID is the connection_id ULID used for the active Subscribe
+	// call (stamped in session_connections). Set in attach(), cleared in
+	// teardownTransport(). Used by SetSceneFocus to call SetConnectionFocus.
+	transportConnID ulid.ULID
 }
 
 // SendCommand dispatches a text command via HandleCommand. Returns the RPC
@@ -152,6 +158,51 @@ func (s *Session) WaitForEvent(ctx context.Context, eventType string) *corev1.Ev
 			return nil
 		case <-ctx.Done():
 			s.server.t.Fatalf("integrationtest.Session.WaitForEvent: ctx cancelled before matching event %q (overflow=%d)", eventType, stream.overflowCount())
+			return nil
+		}
+	}
+}
+
+// WaitForSceneActivityBadge blocks until a CONTROL_SIGNAL_SCENE_ACTIVITY
+// frame carrying sceneID is received on the session's live stream, the
+// transport is detached, or ctx is cancelled. Badges for other scenes are
+// skipped (consumed from the buffer but ignored). On failure the test is
+// killed via t.Fatalf.
+//
+// Callers MUST NOT call this on a session whose transport is detached.
+func (s *Session) WaitForSceneActivityBadge(ctx context.Context, sceneID string) *corev1.ControlFrame {
+	s.server.t.Helper()
+	s.transportMu.Lock()
+	stream := s.transportStream
+	done := s.transportDone
+	s.transportMu.Unlock()
+	if stream == nil {
+		s.server.t.Fatalf("integrationtest.Session.WaitForSceneActivityBadge: no active transport (call AttachTransport first)")
+		return nil
+	}
+
+	for {
+		select {
+		case ctrl := <-stream.sceneActivityBadges:
+			if ctrl == nil {
+				continue
+			}
+			if ctrl.GetSceneId() == sceneID {
+				return ctrl
+			}
+			// Badge for a different scene — keep waiting.
+		case <-done:
+			s.transportMu.Lock()
+			err := s.transportErr
+			s.transportMu.Unlock()
+			if err != nil {
+				s.server.t.Fatalf("integrationtest.Session.WaitForSceneActivityBadge: transport exited before badge for scene %q (err=%v)", sceneID, err)
+			} else {
+				s.server.t.Fatalf("integrationtest.Session.WaitForSceneActivityBadge: transport detached before badge for scene %q", sceneID)
+			}
+			return nil
+		case <-ctx.Done():
+			s.server.t.Fatalf("integrationtest.Session.WaitForSceneActivityBadge: ctx cancelled before badge for scene %q (overflow=%d)", sceneID, stream.overflowCount())
 			return nil
 		}
 	}
@@ -295,6 +346,7 @@ func (s *Session) DetachTransport(ctx context.Context) {
 	}
 	s.transportStream = nil
 	s.transportCancel = nil
+	s.transportConnID = ulid.ULID{}
 	s.transportMu.Unlock()
 
 	// Transition the session row to StatusDetached via the production
@@ -348,13 +400,13 @@ func (s *Session) attach(ctx context.Context) {
 	streamCtx, cancel := context.WithCancel(context.Background())
 	stream := newSubscribeStream(streamCtx, 0)
 	done := make(chan struct{})
+	connID := idgen.New()
 	s.transportStream = stream
 	s.transportCancel = cancel
 	s.transportDone = done
 	s.transportErr = nil
+	s.transportConnID = connID
 	s.transportMu.Unlock()
-
-	connID := idgen.New()
 	req := &corev1.SubscribeRequest{
 		SessionId:          s.SessionID,
 		PlayerSessionToken: s.playerSessionToken,
@@ -412,6 +464,7 @@ func (s *Session) teardownTransport() {
 	stream := s.transportStream
 	s.transportStream = nil
 	s.transportCancel = nil
+	s.transportConnID = ulid.ULID{}
 	s.transportMu.Unlock()
 	if cancel == nil {
 		return
@@ -509,6 +562,95 @@ func (s *Session) JoinScene(ctx context.Context, sceneID ulid.ULID) time.Time {
 	))
 	require.NoError(s.server.t, err, "integrationtest.Session.JoinScene: update focus memberships")
 	return now
+}
+
+// SceneActivityBadgeCount returns the number of SCENE_ACTIVITY control frames
+// currently buffered on the session's badge channel, without blocking. Used by
+// tests that assert a session receives NO badge (non-members, etc.).
+// The count is taken at the moment of the call; concurrent deliveries may
+// race — callers should allow brief settle time (e.g. after an emit).
+func (s *Session) SceneActivityBadgeCount() int {
+	s.transportMu.Lock()
+	stream := s.transportStream
+	s.transportMu.Unlock()
+	if stream == nil {
+		return 0
+	}
+	return len(stream.sceneActivityBadges)
+}
+
+// SetSceneFocus updates this connection's FocusKey in the session store to
+// point at sceneID. The session must already have sceneID in its FocusMemberships
+// (JoinScene first). This bypasses the FocusCoordinator's filter-delta delivery
+// path (which would also update the Subscribe loop's active filter set); it is
+// sufficient for badge-downgrade tests, which only need GetConnection().FocusKey
+// to return the right value inside dispatchDelivery.
+//
+// Requires an active transport (attach must have been called first) so that
+// transportConnID is set.
+func (s *Session) SetSceneFocus(ctx context.Context, sceneID ulid.ULID) {
+	s.server.t.Helper()
+	s.transportMu.Lock()
+	connID := s.transportConnID
+	s.transportMu.Unlock()
+	if connID == (ulid.ULID{}) {
+		s.server.t.Fatalf("integrationtest.Session.SetSceneFocus: no active transport (call AttachTransport / ConnectAuthed first)")
+		return
+	}
+	fk := &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+	m := session.NewSessionConnectionMutator(func(info session.Info, conn session.Connection) (session.Info, session.Connection, error) {
+		conn.FocusKey = fk
+		return info, conn, nil
+	})
+	err := s.server.sessionStore.UpdateSessionConnection(ctx, s.SessionID, connID, m)
+	require.NoError(s.server.t, err, "integrationtest.Session.SetSceneFocus: UpdateSessionConnection")
+}
+
+// FacadeSetSceneFocus calls the REAL SceneAccessServer.SetSceneFocus for this
+// session's active connection, exercising the full production path:
+// participant-gate (ListCharacterScenes) → JoinFocus → SetConnectionFocus.
+//
+// Unlike Session.SetSceneFocus (which writes directly to the session store and
+// bypasses the coordinator), this drives the facade handler so the real
+// focus.Coordinator.JoinFocus is called, establishing the FocusMembership that
+// SetConnectionFocus (INV-SCENE-14) requires. Requires WithFocusDelivery so the
+// coordinator is non-nil; panics otherwise via t.Fatalf.
+//
+// Returns the gRPC error from SetSceneFocus (or nil on success) so callers can
+// assert both the happy path and the denial path.
+func (s *Session) FacadeSetSceneFocus(ctx context.Context, sceneID ulid.ULID) error {
+	s.server.t.Helper()
+	if s.server.focusCoord == nil {
+		s.server.t.Fatalf("integrationtest.Session.FacadeSetSceneFocus: requires WithFocusDelivery (focusCoord is nil)")
+	}
+	s.transportMu.Lock()
+	connID := s.transportConnID
+	s.transportMu.Unlock()
+	if connID == (ulid.ULID{}) {
+		s.server.t.Fatalf("integrationtest.Session.FacadeSetSceneFocus: no active transport (call ConnectAuthed first)")
+	}
+
+	// Build a SceneAccessServer using the harness's real repos + coordinator.
+	// The pluginManager's BeginServiceDispatch is needed for the participant
+	// check path. Requires WithInTreePlugins.
+	if s.server.pluginSub == nil {
+		s.server.t.Fatalf("integrationtest.Session.FacadeSetSceneFocus: requires WithInTreePlugins (pluginSub is nil)")
+	}
+	facade := holoGRPC.NewSceneAccessServer(
+		s.server.playerSessionStore,
+		s.server.playerRepo,
+		s.server.charRepo,
+		s.server.sessionStore,
+		s.server.focusCoord,
+		s.server.SceneServiceClient(),
+		s.server.pluginSub.Manager(),
+	)
+	_, err := facade.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: s.playerSessionToken,
+		ConnectionId:       connID.String(),
+		SceneId:            sceneID.String(),
+	})
+	return err
 }
 
 // QueryStreamHistory fetches the event history for the given stream subject.

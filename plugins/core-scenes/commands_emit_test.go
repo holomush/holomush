@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -207,8 +208,8 @@ func TestSceneSubcommand_NoScene_ActionableError(t *testing.T) {
 func TestSceneSubcommand_MultipleScenes_AmbiguousError(t *testing.T) {
 	t.Parallel()
 	// char-alice is a member of two scenes; single-membership inference
-	// cannot disambiguate. Phase 5 will add focus-aware routing; Phase 4
-	// returns a clear error.
+	// cannot disambiguate, and no connection focus is set, so the emit
+	// returns a clear ambiguity error.
 	store := newFakeStore()
 	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
 		ID: "scene-a", OwnerID: "char-owner-a",
@@ -236,7 +237,7 @@ func TestSceneSubcommand_MultipleScenes_AmbiguousError(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, pluginsdk.CommandError, resp.Status)
-	assert.Contains(t, resp.Output, "Phase 5")
+	assert.Contains(t, resp.Output, "2 scenes")
 	assert.Empty(t, sink.intents, "ambiguous-scene path MUST NOT emit")
 }
 
@@ -258,6 +259,146 @@ func TestSceneSubcommand_EmptyArgs_UsageHint(t *testing.T) {
 		})
 	}
 	assert.Empty(t, sink.intents, "empty-args path MUST NOT emit")
+}
+
+// --- Focus-aware emit routing tests ---
+
+// TestHandleEmit_FocusedConnectionRoutesToFocusedScene verifies that when a
+// connection carries an explicit scene focus, the emit is routed to that scene
+// rather than falling back to single-membership inference (focus-aware routing,
+// Task 7 of the web-portal-scenes plan).
+func TestHandleEmit_FocusedConnectionRoutesToFocusedScene(t *testing.T) {
+	t.Parallel()
+	// char-alice is a member of both scene-a and scene-b; without focus the
+	// single-membership fallback would return the ambiguous-scene error.
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-a", OwnerID: "char-owner",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-b", OwnerID: "char-owner",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	_, _, err := store.AddParticipant(context.Background(), "scene-a", "char-alice")
+	require.NoError(t, err)
+	_, _, err = store.AddParticipant(context.Background(), "scene-b", "char-alice")
+	require.NoError(t, err)
+
+	sink := &recordingEventSink{}
+	svc := newTestService(t, store)
+	svc.SetEventSink(sink)
+	fc := &fakeFocusClient{
+		getConnFocusResult: &pluginsdk.FocusKey{
+			Kind:     pluginsdk.FocusKindScene,
+			TargetID: "scene-b",
+		},
+	}
+	p := &scenePlugin{service: svc, focusClient: fc, evaluator: allowEvaluator{}}
+
+	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:      "scene",
+		Args:         "pose hello from scene b",
+		CharacterID:  "char-alice",
+		ConnectionID: "conn-focused",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+
+	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
+	require.NotNil(t, found, "focused connection MUST emit scene_pose")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-b"), found.Subject,
+		"emit MUST land on the focused scene, not scene-a")
+}
+
+// TestHandleEmit_UnfocusedConnectionFallsBackToSingleMembership verifies that
+// when a connection has no focus, the single-membership inference fallback
+// still resolves correctly for a character in exactly one scene.
+func TestHandleEmit_UnfocusedConnectionFallsBackToSingleMembership(t *testing.T) {
+	t.Parallel()
+	p, sink := newTestPluginWithMember(t, "scene-fallback")
+	fc := &fakeFocusClient{getConnFocusResult: nil} // nil = no focus / grid
+	p.focusClient = fc
+
+	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:      "scene",
+		Args:         "pose waves to the room",
+		CharacterID:  "char-alice",
+		ConnectionID: "conn-unfocused",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+
+	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
+	require.NotNil(t, found, "unfocused single-member MUST still emit scene_pose via fallback")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-fallback"), found.Subject)
+}
+
+// TestHandleEmit_UnfocusedTwoMembershipsPreservesAmbiguityError verifies that
+// when no focus is set and a character is in multiple scenes, the existing
+// ambiguity error is preserved unchanged. The focus-routing change MUST NOT
+// alter the fallback error path.
+func TestHandleEmit_UnfocusedTwoMembershipsPreservesAmbiguityError(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-c", OwnerID: "char-owner",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-d", OwnerID: "char-owner",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	_, _, err := store.AddParticipant(context.Background(), "scene-c", "char-alice")
+	require.NoError(t, err)
+	_, _, err = store.AddParticipant(context.Background(), "scene-d", "char-alice")
+	require.NoError(t, err)
+
+	sink := &recordingEventSink{}
+	svc := newTestService(t, store)
+	svc.SetEventSink(sink)
+	fc := &fakeFocusClient{getConnFocusResult: nil} // nil = no focus
+	p := &scenePlugin{service: svc, focusClient: fc}
+
+	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:      "scene",
+		Args:         "pose hello",
+		CharacterID:  "char-alice",
+		ConnectionID: "conn-unfocused",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "2 scenes",
+		"ambiguous-scene error MUST still fire when no focus is set")
+	assert.Empty(t, sink.intents, "ambiguous-scene path MUST NOT emit")
+}
+
+// TestHandleEmit_FocusLookupErrorDegradesToMembershipFallback verifies a
+// focus-service blip (GetConnectionFocus returns an error) does NOT break
+// posing: the emit degrades to single-membership inference exactly as if the
+// connection had no focus. A focus outage must never strand a poser.
+func TestHandleEmit_FocusLookupErrorDegradesToMembershipFallback(t *testing.T) {
+	t.Parallel()
+	p, sink := newTestPluginWithMember(t, "scene-blip")
+	p.focusClient = &fakeFocusClient{getConnFocusErr: errors.New("focus coordinator unreachable")}
+
+	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:      "scene",
+		Args:         "pose carries on",
+		CharacterID:  "char-alice",
+		ConnectionID: "conn-blip",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status,
+		"a focus-lookup error MUST degrade to the membership fallback, not fail the pose")
+
+	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
+	require.NotNil(t, found, "fallback MUST still emit scene_pose despite the focus blip")
+	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-blip"), found.Subject)
 }
 
 // TestSceneSubcommand_Order_NoScene verifies the user-friendly error when

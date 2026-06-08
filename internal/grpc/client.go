@@ -20,13 +20,15 @@ import (
 
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
 
 // Client wraps a gRPC connection to the Core service.
 type Client struct {
-	conn          *grpc.ClientConn
-	client        corev1.CoreServiceClient
-	contentClient contentv1.ContentServiceClient
+	conn              *grpc.ClientConn
+	client            corev1.CoreServiceClient
+	contentClient     contentv1.ContentServiceClient
+	sceneAccessClient sceneaccessv1.SceneAccessServiceClient
 }
 
 // ClientConfig holds configuration for the gRPC client.
@@ -83,9 +85,10 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 	}
 
 	return &Client{
-		conn:          conn,
-		client:        corev1.NewCoreServiceClient(conn),
-		contentClient: contentv1.NewContentServiceClient(conn),
+		conn:              conn,
+		client:            corev1.NewCoreServiceClient(conn),
+		contentClient:     contentv1.NewContentServiceClient(conn),
+		sceneAccessClient: sceneaccessv1.NewSceneAccessServiceClient(conn),
 	}, nil
 }
 
@@ -366,4 +369,85 @@ func (c *Client) ListContent(ctx context.Context, req *contentv1.ListContentRequ
 // CoreClient returns the underlying gRPC CoreClient interface for advanced usage.
 func (c *Client) CoreClient() corev1.CoreServiceClient {
 	return c.client
+}
+
+// ListScenesForViewer returns the public scene board filtered by the player's preferences.
+func (c *Client) ListScenesForViewer(ctx context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
+	resp, err := c.sceneAccessClient.ListScenesForViewer(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListScenesForViewer").Wrap(err)
+	}
+	return resp, nil
+}
+
+// GetSceneForViewer loads one scene's metadata for the verified player's owned character.
+func (c *Client) GetSceneForViewer(ctx context.Context, req *sceneaccessv1.GetSceneForViewerRequest) (*sceneaccessv1.GetSceneForViewerResponse, error) {
+	resp, err := c.sceneAccessClient.GetSceneForViewer(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetSceneForViewer").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ListMyScenes returns every non-archived scene the verified player's owned character participates in.
+func (c *Client) ListMyScenes(ctx context.Context, req *sceneaccessv1.ListMyScenesRequest) (*sceneaccessv1.ListMyScenesResponse, error) {
+	resp, err := c.sceneAccessClient.ListMyScenes(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListMyScenes").Wrap(err)
+	}
+	return resp, nil
+}
+
+// WatchScene auto-joins the verified player's owned character into an open active scene as an observer.
+func (c *Client) WatchScene(ctx context.Context, req *sceneaccessv1.WatchSceneRequest) (*sceneaccessv1.WatchSceneResponse, error) {
+	resp, err := c.sceneAccessClient.WatchScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "WatchScene").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ExportScene renders the verified player's owned character's scene IC log to a downloadable document.
+func (c *Client) ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
+	resp, err := c.sceneAccessClient.ExportScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ExportScene").Wrap(err)
+	}
+	return resp, nil
+}
+
+// SetSceneFocus sets the per-connection scene focus for the verified player's character.
+func (c *Client) SetSceneFocus(ctx context.Context, req *sceneaccessv1.SetSceneFocusRequest) (*sceneaccessv1.SetSceneFocusResponse, error) {
+	resp, err := c.sceneAccessClient.SetSceneFocus(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "SetSceneFocus").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ListPublishedScenes pages through publicly visible PUBLISHED scene archives.
+func (c *Client) ListPublishedScenes(ctx context.Context, req *sceneaccessv1.ListPublishedScenesRequest) (*sceneaccessv1.ListPublishedScenesResponse, error) {
+	resp, err := c.sceneAccessClient.ListPublishedScenes(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListPublishedScenes").Wrap(err)
+	}
+	return resp, nil
+}
+
+// GetPublicSceneArchive reads a published scene archive without participant authentication.
+func (c *Client) GetPublicSceneArchive(ctx context.Context, req *sceneaccessv1.GetPublicSceneArchiveRequest) (*sceneaccessv1.GetPublicSceneArchiveResponse, error) {
+	resp, err := c.sceneAccessClient.GetPublicSceneArchive(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetPublicSceneArchive").Wrap(err)
+	}
+	return resp, nil
+}
+
+// DownloadPublicSceneArchive returns a PUBLISHED scene archive rendered in the requested format.
+func (c *Client) DownloadPublicSceneArchive(ctx context.Context, req *sceneaccessv1.DownloadPublicSceneArchiveRequest) (*sceneaccessv1.DownloadPublicSceneArchiveResponse, error) {
+	resp, err := c.sceneAccessClient.DownloadPublicSceneArchive(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "DownloadPublicSceneArchive").Wrap(err)
+	}
+	return resp, nil
 }
