@@ -393,12 +393,18 @@ func (s *SceneServiceImpl) sceneCreatedIntent(row *SceneRow) (pluginsdk.EmitInte
 	}, nil
 }
 
-// GetScene loads a scene by ID and returns it. The host's ABAC engine has
-// already evaluated the read-own-scene policy before this RPC is invoked,
-// so the service does not perform an additional ownership check.
+// GetScene loads a scene by ID, gates private-scene roster exposure on viewer
+// membership, and returns the scene with its participant and observer roster
+// populated.
 //
-// Per-field validation (scene_id non-empty) happens via the protovalidate
-// interceptor before this handler runs.
+// Visibility gate (privacy boundary): if the scene's visibility is not "open"
+// AND req.character_id is not in the participants, invitees, or observers set,
+// NotFound is returned — the scene's existence and roster are not revealed to
+// non-members of a private scene.
+//
+// The host ABAC engine evaluates the read-own-scene policy before this RPC is
+// invoked. Per-field validation (scene_id non-empty) happens via the
+// protovalidate interceptor before this handler runs.
 func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRequest) (*scenev1.GetSceneResponse, error) {
 	ctx, span := startSpan(
 		ctx, "scene.service.get_scene",
@@ -406,19 +412,54 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 	)
 	defer span.End()
 
-	row, err := s.store.Get(ctx, req.GetSceneId())
+	row, participants, invitees, observers, err := s.store.GetWithMembershipAndObservers(ctx, req.GetSceneId())
 	if err != nil {
 		recordError(span, err)
 		var oe oops.OopsError
 		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
-			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+			return nil, status.Error(codes.NotFound, "scene not found") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
 		}
 		slog.WarnContext(
 			ctx, "scene.service.get_scene store error",
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to get scene: %v", err)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
+	// Privacy gate: private scenes are not visible to non-members.
+	// This is the canonical plugin-code visibility boundary — the plugin has
+	// the membership data and MUST enforce it before returning any scene detail.
+	// An open scene's roster is visible board metadata (no gate needed).
+	if row.Visibility != string(SceneVisibilityOpen) {
+		viewerID := req.GetCharacterId()
+		inMembership := false
+		for _, id := range participants {
+			if id == viewerID {
+				inMembership = true
+				break
+			}
+		}
+		if !inMembership {
+			for _, id := range invitees {
+				if id == viewerID {
+					inMembership = true
+					break
+				}
+			}
+		}
+		if !inMembership {
+			for _, id := range observers {
+				if id == viewerID {
+					inMembership = true
+					break
+				}
+			}
+		}
+		if !inMembership {
+			// Return NotFound — do NOT reveal the scene's existence or roster.
+			return nil, status.Error(codes.NotFound, "scene not found") //nolint:wrapcheck // gRPC status is the wire contract; existence non-disclosure for private scenes
+		}
 	}
 
 	slog.InfoContext(
@@ -426,9 +467,35 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 		"scene_id", row.ID,
 	)
 
-	return &scenev1.GetSceneResponse{
-		Scene: rowToProto(row, row.CreatedAt.Time()),
-	}, nil
+	resp := rowToProto(row, row.CreatedAt.Time())
+
+	// Populate participants roster: owners and members.
+	resp.Participants = make([]*scenev1.ParticipantInfo, 0, len(participants))
+	for _, id := range participants {
+		role := "member"
+		if id == row.OwnerID {
+			role = "owner"
+		}
+		resp.Participants = append(resp.Participants, &scenev1.ParticipantInfo{
+			CharacterId: id,
+			// Best-effort display name: no name resolver is wired in the plugin,
+			// so fall back to the ID per the proto contract.
+			CharacterName: id,
+			Role:          role,
+		})
+	}
+
+	// Populate observers roster (distinct from participants).
+	resp.Observers = make([]*scenev1.ParticipantInfo, 0, len(observers))
+	for _, id := range observers {
+		resp.Observers = append(resp.Observers, &scenev1.ParticipantInfo{
+			CharacterId:   id,
+			CharacterName: id,
+			Role:          "observer",
+		})
+	}
+
+	return &scenev1.GetSceneResponse{Scene: resp}, nil
 }
 
 // resolveBlockedCW returns the effective CW block set for a board request.

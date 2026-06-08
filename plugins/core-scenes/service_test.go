@@ -866,13 +866,13 @@ func TestSceneServiceSceneCreatedIntentBuildsLifecyclePayload(t *testing.T) {
 
 func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {
 	store := newFakeStore()
-	store.scenes["scene-known"] = &SceneRow{
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
 		ID:         "scene-known",
 		Title:      "Existing",
 		OwnerID:    "char-alice",
 		State:      string(SceneStateActive),
 		Visibility: string(SceneVisibilityOpen),
-	}
+	}))
 	svc := newTestService(t, store)
 
 	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
@@ -882,6 +882,124 @@ func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "scene-known", resp.GetScene().GetId())
 	assert.Equal(t, "Existing", resp.GetScene().GetTitle())
+}
+
+// TestGetScenePopulatesRosterForOpenSceneWithOwnerMemberAndObserver asserts
+// that GetScene on an open scene returns participants (owner + member) and
+// observers (watcher) with correct roles, and that observers are distinct from
+// participants.
+func TestGetScenePopulatesRosterForOpenSceneWithOwnerMemberAndObserver(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-roster",
+		Title:      "Roster Test",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}))
+	store.participants["scene-roster"]["char-member"] = "member"
+	store.participants["scene-roster"]["char-watcher"] = "observer"
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-owner",
+		SceneId:     "scene-roster",
+	})
+	require.NoError(t, err)
+
+	// Collect participant IDs and roles for order-independent assertions.
+	participantRoles := make(map[string]string, len(resp.GetScene().GetParticipants()))
+	for _, p := range resp.GetScene().GetParticipants() {
+		participantRoles[p.GetCharacterId()] = p.GetRole()
+	}
+	assert.Equal(t, "owner", participantRoles["char-owner"], "owner must have role=owner")
+	assert.Equal(t, "member", participantRoles["char-member"], "member must have role=member")
+	assert.NotContains(t, participantRoles, "char-watcher", "observer must NOT appear in participants")
+
+	observerIDs := make([]string, 0, len(resp.GetScene().GetObservers()))
+	for _, o := range resp.GetScene().GetObservers() {
+		observerIDs = append(observerIDs, o.GetCharacterId())
+		assert.Equal(t, "observer", o.GetRole(), "observer role must be 'observer'")
+	}
+	assert.Contains(t, observerIDs, "char-watcher", "watcher must appear in observers")
+	assert.NotContains(t, observerIDs, "char-owner", "owner must NOT appear in observers")
+	assert.NotContains(t, observerIDs, "char-member", "member must NOT appear in observers")
+}
+
+// TestGetSceneReturnsFullRosterForPrivateSceneViewedByParticipant asserts
+// that a participant (owner or member) of a private scene receives the full
+// roster including observers.
+func TestGetSceneReturnsFullRosterForPrivateSceneViewedByParticipant(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-private",
+		Title:      "Private Scene",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+	}))
+	store.participants["scene-private"]["char-member"] = "member"
+	store.participants["scene-private"]["char-watcher"] = "observer"
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-member",
+		SceneId:     "scene-private",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "scene-private", resp.GetScene().GetId())
+	assert.Len(t, resp.GetScene().GetParticipants(), 2, "owner+member must appear in participants")
+	assert.Len(t, resp.GetScene().GetObservers(), 1, "watcher must appear in observers")
+}
+
+// TestGetSceneReturnsNotFoundForPrivateSceneViewedByNonParticipant is the
+// privacy gate test: a character with no membership row for a private scene
+// receives NotFound — neither the scene's existence nor its roster is revealed.
+func TestGetSceneReturnsNotFoundForPrivateSceneViewedByNonParticipant(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-priv-gate",
+		Title:      "Private Gate",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+	}))
+	svc := newTestService(t, store)
+
+	_, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-outsider",
+		SceneId:     "scene-priv-gate",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, st.Code(),
+		"a non-participant must receive NotFound (not the scene detail) for a private scene")
+	// The error message must be generic — no scene ID interpolated.
+	assert.Equal(t, "scene not found", st.Message())
+}
+
+// TestGetSceneAllowsObserverToViewPrivateScene asserts that an observer (watcher)
+// is treated as a member for visibility-gate purposes and receives the full roster.
+func TestGetSceneAllowsObserverToViewPrivateScene(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-priv-obs",
+		Title:      "Private Observed",
+		OwnerID:    "char-owner",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+	}))
+	store.participants["scene-priv-obs"]["char-watcher"] = "observer"
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-watcher",
+		SceneId:     "scene-priv-obs",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "scene-priv-obs", resp.GetScene().GetId(),
+		"observer of a private scene must be allowed to view the scene")
 }
 
 func TestSceneServiceGetSceneReturnsNotFoundWhenSceneIsMissing(t *testing.T) {
@@ -895,6 +1013,8 @@ func TestSceneServiceGetSceneReturnsNotFoundWhenSceneIsMissing(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.NotFound, st.Code())
+	// Must be generic — no scene ID in the message.
+	assert.Equal(t, "scene not found", st.Message())
 }
 
 func TestSceneServiceGetSceneReturnsInternalForUnknownStoreError(t *testing.T) {
@@ -909,6 +1029,8 @@ func TestSceneServiceGetSceneReturnsInternalForUnknownStoreError(t *testing.T) {
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())
+	// Must be opaque — no inner error text leaked.
+	assert.Equal(t, "internal error", st.Message())
 }
 
 func TestSceneServiceEndSceneTransitionsScene(t *testing.T) {
