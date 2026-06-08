@@ -196,3 +196,28 @@
   CodeUnimplemented; token from headerInjectSessionToken (never body, never logged); proto requests
   OMIT player_session_token (header-injected). All clean. Whenever reviewing a web/gateway PR,
   re-check this status→connect code gap; it is gateway-wide accepted behavior, not per-PR.
+
+- **Frontend stream-loop port (alt sessions / scenes workspace, holomush-5rh.8.15) — NOT READY.**
+  When a .svelte.ts module claims to "mirror the terminal hydrateAndStream pattern", DIFF it against
+  terminal/+page.svelte — ports drop the hard parts. Concrete bugs found, all green-passing: (1)
+  Backoff `let reconnectDelayMs=1000` declared INSIDE the recursive openStream → re-init to 1000 every
+  reconnect; 1s→30s cap is dead code, recursion grows stack. Hoist backoff to session + loop, don't
+  recurse. (2) connectionIdPromise resolved ONLY in STREAM_OPENED branch; error/close-before-open
+  never reject → consumer `await awaitConnectionId` deadlocks. Terminal ref has waitForStreamReady w/
+  10s timeout + rejectStreamReady on close — ports omit both. (3) `streamGeneration` field declared but
+  NEVER incremented anywhere → the entire `gen !== session.streamGeneration` stale-frame guard is INERT
+  (grep for the increment site; if absent the guard is theater). (4) Map keyed by characterId but
+  delete called with sessionId → no-op delete, dead session cached forever. (5) Test-count claim is
+  whole-suite ("241 pass") but commit adds N tests, ZERO exercising the async surface — no fake
+  streamEvents async-iterator test → all the above survive green. ALWAYS `grep -c it(` the actual new
+  test file and check a fake-iterator test exists. Encountered 2026-06-08 — NOT READY.
+  ROUND 2 (2026-06-08, commit mmwsokrtpwpl) — READY. All 6 blockers + Medium genuinely fixed in
+  CODE (not just test-greened): backoff hoisted to AltSession.reconnectDelayMs + while-loop +
+  30s cap + reset on STREAM_OPENED; awaitConnectionId rejects on close/error + 10s timeout +
+  fresh gate reinstalled; STREAM_CLOSED rejects+evicts; all delete sites use characterId;
+  streamGeneration NOW incremented (line 183) + controller swapped/aborted + closeSession aborts;
+  altSessions.test.ts (7 fake-iterator tests) pins it; ingestEvent routes by parsed scene_id.
+  Caveat noted: generation guard's `localGen!==streamGeneration` branch is unreachable in current
+  topology (single sequential loop, ensureSession dedups) — defensive not dead. Non-blocking.
+  makeGate's promise.catch(()=>{}) defuses unhandled-rejection on no-consumer gate. (MEMORY now
+  >200 lines — collapse this 5rh.8.15 two-part entry to one line next curation pass.)
