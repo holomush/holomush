@@ -132,6 +132,11 @@ const (
 	// CONTROL_SIGNAL_RECONNECTED: the gateway re-established the core stream; the
 	// client may clear the reconnecting indicator.
 	ControlSignal_CONTROL_SIGNAL_RECONNECTED ControlSignal = 5
+	// CONTROL_SIGNAL_SCENE_ACTIVITY notifies the client that a scene it is a
+	// member of received an event while this connection was NOT focused on it.
+	// Carries scene_id only — no event content. Drives workspace unread badges;
+	// lossy by design (clients re-sync via ListMyScenes snapshots).
+	ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY ControlSignal = 6
 )
 
 // Enum value maps for ControlSignal.
@@ -143,6 +148,7 @@ var (
 		3: "CONTROL_SIGNAL_STREAM_OPENED",
 		4: "CONTROL_SIGNAL_RECONNECTING",
 		5: "CONTROL_SIGNAL_RECONNECTED",
+		6: "CONTROL_SIGNAL_SCENE_ACTIVITY",
 	}
 	ControlSignal_value = map[string]int32{
 		"CONTROL_SIGNAL_UNSPECIFIED":     0,
@@ -151,6 +157,7 @@ var (
 		"CONTROL_SIGNAL_STREAM_OPENED":   3,
 		"CONTROL_SIGNAL_RECONNECTING":    4,
 		"CONTROL_SIGNAL_RECONNECTED":     5,
+		"CONTROL_SIGNAL_SCENE_ACTIVITY":  6,
 	}
 )
 
@@ -331,8 +338,12 @@ type ControlFrame struct {
 	// legacy/pre-iu8j servers; clients MUST treat 0 as "no upper bound"
 	// (back-compat).
 	AttachMomentMs int64 `protobuf:"varint,4,opt,name=attach_moment_ms,json=attachMomentMs,proto3" json:"attach_moment_ms,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// scene_id identifies the scene that produced a SCENE_ACTIVITY signal;
+	// the bare scene ULID (not a subject). Set ONLY on
+	// CONTROL_SIGNAL_SCENE_ACTIVITY; clients reading other signals MUST ignore it.
+	SceneId       string `protobuf:"bytes,5,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ControlFrame) Reset() {
@@ -391,6 +402,13 @@ func (x *ControlFrame) GetAttachMomentMs() int64 {
 		return x.AttachMomentMs
 	}
 	return 0
+}
+
+func (x *ControlFrame) GetSceneId() string {
+	if x != nil {
+		return x.SceneId
+	}
+	return ""
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -3611,12 +3629,13 @@ var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
 
 const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
-	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaf\x01\n" +
+	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xca\x01\n" +
 	"\fControlFrame\x126\n" +
 	"\x06signal\x18\x01 \x01(\x0e2\x1e.holomush.web.v1.ControlSignalR\x06signal\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12#\n" +
 	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\x12(\n" +
-	"\x10attach_moment_ms\x18\x04 \x01(\x03R\x0eattachMomentMs\"l\n" +
+	"\x10attach_moment_ms\x18\x04 \x01(\x03R\x0eattachMomentMs\x12\x19\n" +
+	"\bscene_id\x18\x05 \x01(\tR\asceneId\"l\n" +
 	"\x12SendCommandRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
@@ -3844,14 +3863,15 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
 	"\x13EVENT_CHANNEL_STATE\x10\x02\x12\x16\n" +
 	"\x12EVENT_CHANNEL_BOTH\x10\x03\x12\x1c\n" +
-	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*\xd8\x01\n" +
+	"\x18EVENT_CHANNEL_AUDIT_ONLY\x10\x04*\xfb\x01\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
 	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x02\x12 \n" +
 	"\x1cCONTROL_SIGNAL_STREAM_OPENED\x10\x03\x12\x1f\n" +
 	"\x1bCONTROL_SIGNAL_RECONNECTING\x10\x04\x12\x1e\n" +
-	"\x1aCONTROL_SIGNAL_RECONNECTED\x10\x05*}\n" +
+	"\x1aCONTROL_SIGNAL_RECONNECTED\x10\x05\x12!\n" +
+	"\x1dCONTROL_SIGNAL_SCENE_ACTIVITY\x10\x06*}\n" +
 	"\x12WebPresenceContext\x12$\n" +
 	" WEB_PRESENCE_CONTEXT_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dWEB_PRESENCE_CONTEXT_LOCATION\x10\x01\x12\x1e\n" +

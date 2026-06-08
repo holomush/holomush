@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceGetCommandHelpRequest, PluginHostServiceGetCommandHelpResponse, PluginHostServiceGetSettingRequest, PluginHostServiceGetSettingResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceListCommandsRequest, PluginHostServiceListCommandsResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, PluginHostServiceSetSettingRequest, PluginHostServiceSetSettingResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceAutoFocusOnJoinRequest, PluginHostServiceAutoFocusOnJoinResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceEvaluateRequest, PluginHostServiceEvaluateResponse, PluginHostServiceGetCommandHelpRequest, PluginHostServiceGetCommandHelpResponse, PluginHostServiceGetConnectionFocusRequest, PluginHostServiceGetConnectionFocusResponse, PluginHostServiceGetSettingRequest, PluginHostServiceGetSettingResponse, PluginHostServiceIsAnyConnFocusedRequest, PluginHostServiceIsAnyConnFocusedResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceListCommandsRequest, PluginHostServiceListCommandsResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, PluginHostServiceRequestEmitTokenRequest, PluginHostServiceRequestEmitTokenResponse, PluginHostServiceSetConnectionFocusRequest, PluginHostServiceSetConnectionFocusResponse, PluginHostServiceSetSettingRequest, PluginHostServiceSetSettingResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 import { DecryptOwnAuditRowsRequest, DecryptOwnAuditRowsResponse } from "./audit_pb.js";
 
@@ -336,6 +336,21 @@ export const PluginHostService = {
       name: "SetConnectionFocus",
       I: PluginHostServiceSetConnectionFocusRequest,
       O: PluginHostServiceSetConnectionFocusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetConnectionFocus returns the named connection's current per-connection
+     * focus, or absent when the connection is grid-focused (FocusKey nil) or
+     * unknown. Read-only counterpart of SetConnectionFocus; lets plugins route
+     * connection-scoped operations (e.g. scene pose) to the focused target.
+     * See goplugin/host_service.go::GetConnectionFocus.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.GetConnectionFocus
+     */
+    getConnectionFocus: {
+      name: "GetConnectionFocus",
+      I: PluginHostServiceGetConnectionFocusRequest,
+      O: PluginHostServiceGetConnectionFocusResponse,
       kind: MethodKind.Unary,
     },
     /**

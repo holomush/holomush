@@ -67,6 +67,11 @@ enum ControlSignal {
   // CONTROL_SIGNAL_RECONNECTED: the gateway re-established the core stream; the
   // client may clear the reconnecting indicator.
   CONTROL_SIGNAL_RECONNECTED = 5;
+  // CONTROL_SIGNAL_SCENE_ACTIVITY notifies the client that a scene it is a
+  // member of received an event while this connection was NOT focused on it.
+  // Carries scene_id only — no event content. Drives workspace unread badges;
+  // lossy by design (clients re-sync via ListMyScenes snapshots).
+  CONTROL_SIGNAL_SCENE_ACTIVITY = 6;
 }
 
 // ControlFrame is the out-of-band stream-lifecycle message carried in the
@@ -97,6 +102,10 @@ message ControlFrame {
   // legacy/pre-iu8j servers; clients MUST treat 0 as "no upper bound"
   // (back-compat).
   int64 attach_moment_ms = 4;
+  // scene_id identifies the scene that produced a SCENE_ACTIVITY signal;
+  // the bare scene ULID (not a subject). Set ONLY on
+  // CONTROL_SIGNAL_SCENE_ACTIVITY; clients reading other signals MUST ignore it.
+  string scene_id = 5;
 }
 
 // WebService is the ConnectRPC surface the SvelteKit web client speaks to. Per

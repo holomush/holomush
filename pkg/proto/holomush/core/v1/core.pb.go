@@ -324,6 +324,12 @@ const (
 	// CONTROL_SIGNAL_STREAM_CLOSED tells the client the server is ending the stream
 	// (e.g. the session was disconnected or booted).
 	ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED ControlSignal = 2
+	// CONTROL_SIGNAL_SCENE_ACTIVITY notifies the client that a scene it is a
+	// member of received an event while this connection was NOT focused on it.
+	// Carries scene_id only — never event content (the payload may be
+	// encrypted; the ping requires no decryption). Drives workspace unread
+	// badges; lossy by design (clients re-sync via ListMyScenes snapshots).
+	ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY ControlSignal = 3
 )
 
 // Enum value maps for ControlSignal.
@@ -332,11 +338,13 @@ var (
 		0: "CONTROL_SIGNAL_UNSPECIFIED",
 		1: "CONTROL_SIGNAL_REPLAY_COMPLETE",
 		2: "CONTROL_SIGNAL_STREAM_CLOSED",
+		3: "CONTROL_SIGNAL_SCENE_ACTIVITY",
 	}
 	ControlSignal_value = map[string]int32{
 		"CONTROL_SIGNAL_UNSPECIFIED":     0,
 		"CONTROL_SIGNAL_REPLAY_COMPLETE": 1,
 		"CONTROL_SIGNAL_STREAM_CLOSED":   2,
+		"CONTROL_SIGNAL_SCENE_ACTIVITY":  3,
 	}
 )
 
@@ -1414,8 +1422,12 @@ type ControlFrame struct {
 	// appear both as a dimmed backfill row and a live Subscribe delivery. It is 0
 	// on legacy servers; clients MUST treat 0 as "no upper bound" (back-compat).
 	AttachMomentMs int64 `protobuf:"varint,3,opt,name=attach_moment_ms,json=attachMomentMs,proto3" json:"attach_moment_ms,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// scene_id identifies the scene that produced a SCENE_ACTIVITY signal; the
+	// bare scene ULID (not a subject). Set ONLY on
+	// CONTROL_SIGNAL_SCENE_ACTIVITY; clients reading other signals MUST ignore it.
+	SceneId       string `protobuf:"bytes,4,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ControlFrame) Reset() {
@@ -1467,6 +1479,13 @@ func (x *ControlFrame) GetAttachMomentMs() int64 {
 		return x.AttachMomentMs
 	}
 	return 0
+}
+
+func (x *ControlFrame) GetSceneId() string {
+	if x != nil {
+		return x.SceneId
+	}
+	return ""
 }
 
 // SubscribeResponse is one item on the Subscribe stream: either a game event or
@@ -4094,11 +4113,12 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\rdisplayTarget\x12,\n" +
 	"\rsource_plugin\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourcePlugin\x12;\n" +
 	"\x15source_plugin_version\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x13sourcePluginVersion:\x8d\x01\xbaH\x89\x01\x1a\x86\x01\n" +
-	",rendering_metadata.label_required_for_speech\x12)label must be set when format is 'speech'\x1a+this.format != 'speech' || this.label != ''\"\x8b\x01\n" +
+	",rendering_metadata.label_required_for_speech\x12)label must be set when format is 'speech'\x1a+this.format != 'speech' || this.label != ''\"\xa6\x01\n" +
 	"\fControlFrame\x127\n" +
 	"\x06signal\x18\x01 \x01(\x0e2\x1f.holomush.core.v1.ControlSignalR\x06signal\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12(\n" +
-	"\x10attach_moment_ms\x18\x03 \x01(\x03R\x0eattachMomentMs\"\x8e\x01\n" +
+	"\x10attach_moment_ms\x18\x03 \x01(\x03R\x0eattachMomentMs\x12\x19\n" +
+	"\bscene_id\x18\x04 \x01(\tR\asceneId\"\x8e\x01\n" +
 	"\x11SubscribeResponse\x124\n" +
 	"\x05event\x18\x01 \x01(\v2\x1c.holomush.core.v1.EventFrameH\x00R\x05event\x12:\n" +
 	"\acontrol\x18\x02 \x01(\v2\x1e.holomush.core.v1.ControlFrameH\x00R\acontrolB\a\n" +
@@ -4300,11 +4320,12 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x1aPRESENCE_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESENCE_STATE_ACTIVE\x10\x01\x12\x1b\n" +
 	"\x17PRESENCE_STATE_DETACHED\x10\x02\x12\x1b\n" +
-	"\x17PRESENCE_STATE_INACTIVE\x10\x03*u\n" +
+	"\x17PRESENCE_STATE_INACTIVE\x10\x03*\x98\x01\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
-	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xbf\x12\n" +
+	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x02\x12!\n" +
+	"\x1dCONTROL_SIGNAL_SCENE_ACTIVITY\x10\x032\xbf\x12\n" +
 	"\vCoreService\x12`\n" +
 	"\rHandleCommand\x12&.holomush.core.v1.HandleCommandRequest\x1a'.holomush.core.v1.HandleCommandResponse\x12V\n" +
 	"\tSubscribe\x12\".holomush.core.v1.SubscribeRequest\x1a#.holomush.core.v1.SubscribeResponse0\x01\x12W\n" +

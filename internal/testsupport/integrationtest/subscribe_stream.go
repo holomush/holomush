@@ -28,21 +28,23 @@ const defaultEventBufferSize = 256
 // stream. The harness:
 //
 //   - Push Event frames onto the events channel for downstream WaitForEvent reads.
+//   - Push CONTROL_SIGNAL_SCENE_ACTIVITY frames onto the sceneActivityBadges
+//     channel for downstream WaitForSceneActivityBadge reads.
 //   - Signal replayDone the first time CONTROL_SIGNAL_REPLAY_COMPLETE arrives so
 //     Attach can block until the durable consumer is fully wired (avoids races
 //     between "Attach returned" and "events published just after" disappearing
 //     into a not-yet-created durable).
 //   - Drop other Control frames silently — none of the harness's invariant
-//     assertions depend on them today.
+//     assertions depend on them.
 //
-// Send is non-blocking on the events channel: if the buffer is full, the
-// event is dropped and an overflow counter increments. Tests that need
-// every event MUST size the buffer to fit; tests that don't care about
-// volume see no impact.
+// Send is non-blocking on both channels: if a buffer is full, the frame is
+// dropped and an overflow counter increments. Tests that need every frame MUST
+// size the buffer to fit; tests that don't care about volume see no impact.
 type subscribeStream struct {
-	ctx        context.Context //nolint:containedctx // gRPC ServerStreamingServer interface contract
-	events     chan *corev1.EventFrame
-	replayDone chan struct{}
+	ctx                 context.Context //nolint:containedctx // gRPC ServerStreamingServer interface contract
+	events              chan *corev1.EventFrame
+	sceneActivityBadges chan *corev1.ControlFrame
+	replayDone          chan struct{}
 
 	mu             sync.Mutex
 	closed         bool
@@ -62,9 +64,10 @@ func newSubscribeStream(ctx context.Context, bufferSize int) *subscribeStream {
 		bufferSize = defaultEventBufferSize
 	}
 	return &subscribeStream{
-		ctx:        ctx,
-		events:     make(chan *corev1.EventFrame, bufferSize),
-		replayDone: make(chan struct{}),
+		ctx:                 ctx,
+		events:              make(chan *corev1.EventFrame, bufferSize),
+		sceneActivityBadges: make(chan *corev1.ControlFrame, bufferSize),
+		replayDone:          make(chan struct{}),
 	}
 }
 
@@ -78,22 +81,27 @@ func (s *subscribeStream) SendMsg(_ any) error            { return nil }
 func (s *subscribeStream) RecvMsg(_ any) error            { return nil }
 
 // Send is called by the production Subscribe loop for every outbound frame.
-// Routes Event frames to the events channel (non-blocking) and signals
-// replayDone on CONTROL_SIGNAL_REPLAY_COMPLETE.
+// Routes Event frames to the events channel, SCENE_ACTIVITY control frames to
+// the sceneActivityBadges channel (non-blocking), and signals replayDone on
+// CONTROL_SIGNAL_REPLAY_COMPLETE.
 func (s *subscribeStream) Send(r *corev1.SubscribeResponse) error {
 	if ev := r.GetEvent(); ev != nil {
 		s.pushEvent(ev)
 		return nil
 	}
-	if ctrl := r.GetControl(); ctrl != nil &&
-		ctrl.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
-		// Capture attach_moment_ms BEFORE signaling so a racing
-		// AttachMomentMs() reader who wakes on replayDone observes the
-		// stamped value, not the zero default.
-		s.mu.Lock()
-		s.attachMomentMs = ctrl.GetAttachMomentMs()
-		s.mu.Unlock()
-		s.signalReplayComplete()
+	if ctrl := r.GetControl(); ctrl != nil {
+		switch ctrl.GetSignal() {
+		case corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE:
+			// Capture attach_moment_ms BEFORE signaling so a racing
+			// AttachMomentMs() reader who wakes on replayDone observes the
+			// stamped value, not the zero default.
+			s.mu.Lock()
+			s.attachMomentMs = ctrl.GetAttachMomentMs()
+			s.mu.Unlock()
+			s.signalReplayComplete()
+		case corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY:
+			s.pushSceneActivityBadge(ctrl)
+		}
 	}
 	// Other control frames: drop silently.
 	return nil
@@ -118,6 +126,26 @@ func (s *subscribeStream) pushEvent(ev *corev1.EventFrame) {
 		// Stream context canceled — drop and return.
 	default:
 		// Buffer full — drop and count.
+		s.mu.Lock()
+		s.overflowed++
+		s.mu.Unlock()
+	}
+}
+
+// pushSceneActivityBadge enqueues ctrl on the sceneActivityBadges channel.
+// Non-blocking: drops on full buffer (mirrors pushEvent behaviour).
+func (s *subscribeStream) pushSceneActivityBadge(ctrl *corev1.ControlFrame) {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+
+	select {
+	case s.sceneActivityBadges <- ctrl:
+	case <-s.ctx.Done():
+	default:
 		s.mu.Lock()
 		s.overflowed++
 		s.mu.Unlock()

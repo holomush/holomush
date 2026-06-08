@@ -1363,3 +1363,52 @@ func TestStreamEventsTerminatesOnSessionNotFoundFromRecv(t *testing.T) {
 	require.Equal(t, int32(1), subscribeCalls.Load(),
 		"terminal SESSION_NOT_FOUND on Recv MUST NOT trigger a re-Subscribe")
 }
+
+// TestForwardFrameMapsSceneActivityControlFrameSceneId verifies that a
+// CONTROL_SIGNAL_SCENE_ACTIVITY core ControlFrame is translated by forwardFrame
+// into the matching web ControlFrame with SceneId preserved (INV-SCENE-62
+// badge passthrough). Uses the real HTTP/Connect path so the proto codec is
+// live, mirroring TestStreamEvents_ForwardsControlFrame.
+func TestForwardFrameMapsSceneActivityControlFrameSceneId(t *testing.T) {
+	t.Parallel()
+	const testSceneID = "01HYSCENE00000000000000001"
+
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal:  corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY,
+						SceneId: testSceneID,
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{subStream: sub}
+	wsc, cleanup := newStreamEventsServer(t, client)
+	defer cleanup()
+
+	stream, err := wsc.StreamEvents(context.Background(), connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "sess-scene-activity",
+	}))
+	require.NoError(t, err)
+	defer stream.Close()
+
+	// First frame is the gateway-synthesised STREAM_OPENED.
+	ok := stream.Receive()
+	require.True(t, ok, "expected STREAM_OPENED frame")
+	openCtrl := stream.Msg().GetControl()
+	require.NotNil(t, openCtrl)
+	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_STREAM_OPENED, openCtrl.GetSignal())
+
+	// Second frame: the forwarded SCENE_ACTIVITY badge.
+	ok = stream.Receive()
+	require.True(t, ok, "expected to receive forwarded SCENE_ACTIVITY frame")
+	ctrl := stream.Msg().GetControl()
+	require.NotNil(t, ctrl, "forwarded frame must be a ControlFrame")
+	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY, ctrl.GetSignal(),
+		"web ControlSignal must match SCENE_ACTIVITY")
+	assert.Equal(t, testSceneID, ctrl.GetSceneId(),
+		"scene_id must round-trip through forwardFrame unchanged (INV-SCENE-62 badge passthrough)")
+}

@@ -516,6 +516,25 @@ func reconnectedControlFrame() *webv1.StreamEventsResponse {
 	}
 }
 
+// mapCoreSignalToWeb translates a core ControlSignal enum value to the
+// corresponding web ControlSignal. The two enums share the same low values
+// (UNSPECIFIED=0, REPLAY_COMPLETE=1, STREAM_CLOSED=2) but diverge above 2 —
+// the web proto reserves 3–5 for gateway-synthesised signals (STREAM_OPENED,
+// RECONNECTING, RECONNECTED) that have no core counterpart. An explicit switch
+// prevents a silent misroute when new values are added to either side.
+func mapCoreSignalToWeb(sig corev1.ControlSignal) webv1.ControlSignal {
+	switch sig {
+	case corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE:
+		return webv1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE
+	case corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED:
+		return webv1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED
+	case corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY:
+		return webv1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY
+	default:
+		return webv1.ControlSignal_CONTROL_SIGNAL_UNSPECIFIED
+	}
+}
+
 // forwardFrame translates and sends a single upstream frame to the web client.
 func (h *Handler) forwardFrame(
 	ctx context.Context,
@@ -544,9 +563,10 @@ func (h *Handler) forwardFrame(
 		if sendErr := stream.Send(&webv1.StreamEventsResponse{
 			Frame: &webv1.StreamEventsResponse_Control{
 				Control: &webv1.ControlFrame{
-					Signal:         webv1.ControlSignal(frame.Control.GetSignal()),
+					Signal:         mapCoreSignalToWeb(frame.Control.GetSignal()),
 					Message:        frame.Control.GetMessage(),
 					AttachMomentMs: frame.Control.GetAttachMomentMs(),
+					SceneId:        frame.Control.GetSceneId(),
 				},
 			},
 		}); sendErr != nil {

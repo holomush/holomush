@@ -548,6 +548,13 @@ enum ControlSignal {
   // CONTROL_SIGNAL_STREAM_CLOSED tells the client the server is ending the stream
   // (e.g. the session was disconnected or booted).
   CONTROL_SIGNAL_STREAM_CLOSED = 2;
+
+  // CONTROL_SIGNAL_SCENE_ACTIVITY notifies the client that a scene it is a
+  // member of received an event while this connection was NOT focused on it.
+  // Carries scene_id only — never event content (the payload may be
+  // encrypted; the ping requires no decryption). Drives workspace unread
+  // badges; lossy by design (clients re-sync via ListMyScenes snapshots).
+  CONTROL_SIGNAL_SCENE_ACTIVITY = 3;
 }
 
 // ControlFrame is a non-event control message delivered on the Subscribe stream.
@@ -567,6 +574,11 @@ message ControlFrame {
   // appear both as a dimmed backfill row and a live Subscribe delivery. It is 0
   // on legacy servers; clients MUST treat 0 as "no upper bound" (back-compat).
   int64 attach_moment_ms = 3;
+
+  // scene_id identifies the scene that produced a SCENE_ACTIVITY signal; the
+  // bare scene ULID (not a subject). Set ONLY on
+  // CONTROL_SIGNAL_SCENE_ACTIVITY; clients reading other signals MUST ignore it.
+  string scene_id = 4;
 }
 
 // SubscribeResponse is one item on the Subscribe stream: either a game event or
