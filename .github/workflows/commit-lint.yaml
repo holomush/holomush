@@ -22,7 +22,7 @@ jobs:
       # Check out the PR branch so the local composite action resolves against
       # it. The owner/repo@main form cannot be used: install-cog is introduced
       # in this same change, so @main predates it until this PR merges.
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
 
