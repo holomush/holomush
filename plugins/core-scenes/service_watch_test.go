@@ -6,12 +6,14 @@ package main
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -249,4 +251,85 @@ func TestWatchSceneTreatesFocusAlreadyMemberAsSuccess(t *testing.T) {
 	assert.Equal(t, "observer", resp.GetParticipant().GetRole())
 	// The join attempt was still made.
 	require.Len(t, fc.joinCalls, 1)
+}
+
+// watchCtxWithActorMetadata builds an incoming gRPC context carrying the
+// advisory actor-kind/-id headers the host attaches via
+// pluginsdk.WithOutgoingActorMetadata on dispatch contexts.
+func watchCtxWithActorMetadata(kind pluginsdk.ActorKind, id string) context.Context {
+	md := metadata.New(map[string]string{
+		"x-holomush-actor-kind": strconv.Itoa(int(kind)),
+		"x-holomush-actor-id":   id,
+	})
+	return metadata.NewIncomingContext(context.Background(), md)
+}
+
+// Verifies the defense-in-depth identity check: advisory character metadata
+// that contradicts the request's character_id is rejected before any store
+// or ABAC work.
+func TestWatchSceneRejectsRequestWhenAdvisoryActorMetadataMismatchesCharacter(t *testing.T) {
+	ev := &recordingEvaluator{decision: pluginsdk.EvaluateDecision{Allowed: true}}
+	svc, store, fc := newWatchFixture(t, ev)
+	sceneID := installWatchableScene(t, store, string(SceneVisibilityOpen), string(SceneStateActive))
+
+	ctx := watchCtxWithActorMetadata(pluginsdk.ActorCharacter, "char-actual")
+	_, err := svc.WatchScene(ctx, &scenev1.WatchSceneRequest{
+		CharacterId: "char-forged",
+		SceneId:     sceneID,
+		SessionId:   "sess-1",
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Empty(t, ev.calls, "mismatch must be rejected before consulting ABAC")
+	assert.Empty(t, fc.joinCalls)
+	assert.Empty(t, store.participants[sceneID])
+}
+
+func TestWatchSceneSucceedsWhenAdvisoryActorMetadataMatchesCharacter(t *testing.T) {
+	svc, store, fc := newWatchFixture(t, allowEvaluator{})
+	sceneID := installWatchableScene(t, store, string(SceneVisibilityOpen), string(SceneStateActive))
+
+	ctx := watchCtxWithActorMetadata(pluginsdk.ActorCharacter, "char-watcher")
+	resp, err := svc.WatchScene(ctx, &scenev1.WatchSceneRequest{
+		CharacterId: "char-watcher",
+		SceneId:     sceneID,
+		SessionId:   "sess-1",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "observer", resp.GetParticipant().GetRole())
+	require.Len(t, fc.joinCalls, 1)
+}
+
+func TestWatchSceneSucceedsWhenAdvisoryActorMetadataAbsent(t *testing.T) {
+	svc, store, _ := newWatchFixture(t, allowEvaluator{})
+	sceneID := installWatchableScene(t, store, string(SceneVisibilityOpen), string(SceneStateActive))
+
+	// No gRPC metadata at all — the dispatch token still gates the ABAC
+	// subject host-side; the advisory check simply has nothing to compare.
+	resp, err := svc.WatchScene(context.Background(), &scenev1.WatchSceneRequest{
+		CharacterId: "char-watcher",
+		SceneId:     sceneID,
+		SessionId:   "sess-1",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "observer", resp.GetParticipant().GetRole())
+}
+
+func TestWatchSceneIgnoresNonCharacterAdvisoryActorMetadata(t *testing.T) {
+	svc, store, _ := newWatchFixture(t, allowEvaluator{})
+	sceneID := installWatchableScene(t, store, string(SceneVisibilityOpen), string(SceneStateActive))
+
+	// Plugin-kind metadata carries no character identity to cross-check.
+	ctx := watchCtxWithActorMetadata(pluginsdk.ActorPlugin, "some-plugin")
+	resp, err := svc.WatchScene(ctx, &scenev1.WatchSceneRequest{
+		CharacterId: "char-watcher",
+		SceneId:     sceneID,
+		SessionId:   "sess-1",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "observer", resp.GetParticipant().GetRole())
 }

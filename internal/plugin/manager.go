@@ -323,6 +323,47 @@ func (m *Manager) DeliverCommand(ctx context.Context, pluginName string, cmd plu
 	return resp, nil
 }
 
+// BeginServiceDispatch resolves the named plugin's host and delegates to its
+// ServiceDispatcher capability, minting a dispatch token for a host-initiated
+// call into the plugin's registered gRPC services. See the ServiceDispatcher
+// doc for the actor/release contract and why this is binary-only by
+// construction.
+//
+// Typed errors: PLUGIN_NOT_LOADED when no host owns pluginName;
+// SERVICE_DISPATCH_UNSUPPORTED when the owning host lacks the capability
+// (e.g. the Lua host).
+func (m *Manager) BeginServiceDispatch(ctx context.Context, pluginName string, actor core.Actor, ownerPlayerID string) (context.Context, func(), error) {
+	m.mu.RLock()
+	host, ok := m.pluginHosts[pluginName]
+	var dispatcher ServiceDispatcher
+	if ok {
+		// hostCaps is written under m.mu in RegisterHost; read it inside the
+		// same critical section that resolves the host.
+		dispatcher = m.capabilitiesFor(host).dispatcher
+	}
+	m.mu.RUnlock()
+
+	if !ok {
+		return nil, nil, oops.Code("PLUGIN_NOT_LOADED").In("manager").
+			With("plugin", pluginName).
+			With("operation", "begin_service_dispatch").
+			New("plugin not loaded or unknown")
+	}
+
+	if dispatcher == nil {
+		return nil, nil, oops.Code("SERVICE_DISPATCH_UNSUPPORTED").In("manager").
+			With("plugin", pluginName).
+			With("operation", "begin_service_dispatch").
+			New("plugin's host does not support service dispatch (binary plugins only)")
+	}
+
+	dispatchCtx, release, err := dispatcher.BeginServiceDispatch(ctx, pluginName, actor, ownerPlayerID)
+	if err != nil {
+		return nil, nil, oops.In("manager").With("plugin", pluginName).With("operation", "begin_service_dispatch").Wrap(err)
+	}
+	return dispatchCtx, release, nil
+}
+
 // ConfigureEventEmitter wires the shared plugin event emitter to the provided
 // EventBus publisher. Production startup MUST call this before plugin response
 // events are routed through the manager.
@@ -698,6 +739,7 @@ func (m *Manager) seedAliases(ctx context.Context) error {
 type hostCapabilities struct {
 	connProvider ServiceConnProvider       // nil if host doesn't support
 	arProvider   AttributeResolverProvider // nil if host doesn't support
+	dispatcher   ServiceDispatcher         // nil if host doesn't support
 }
 
 // discoverCapabilities walks a chain of Host wrappers (via the optional Unwrap
@@ -707,6 +749,7 @@ func discoverCapabilities(h Host) hostCapabilities {
 	return hostCapabilities{
 		connProvider: findOptional[ServiceConnProvider](h),
 		arProvider:   findOptional[AttributeResolverProvider](h),
+		dispatcher:   findOptional[ServiceDispatcher](h),
 	}
 }
 
