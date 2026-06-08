@@ -368,8 +368,19 @@ func (c *pluginHostFocusClient) GetConnectionFocus(ctx context.Context, connecti
 			Wrap(err)
 	}
 	if pk := resp.GetFocusKey(); pk != nil {
+		// Fail closed on an unrecognized kind: fromProtoFocusKind maps unknown
+		// enums to FocusKind(""), which would silently propagate an invalid focus
+		// state to routing logic. A non-nil focus key with no resolvable kind is a
+		// host contract violation, not an empty focus.
+		kind := fromProtoFocusKind(pk.GetKind())
+		if kind == FocusKind("") {
+			return nil, oops.Code("UNKNOWN_FOCUS_KIND").
+				With("connection_id", connectionID).
+				With("proto_kind", pk.GetKind().String()).
+				Errorf("host returned a focus key with an unrecognized kind")
+		}
 		fk := FocusKey{
-			Kind:     fromProtoFocusKind(pk.GetKind()),
+			Kind:     kind,
 			TargetID: pk.GetTargetId(),
 		}
 		return &fk, nil

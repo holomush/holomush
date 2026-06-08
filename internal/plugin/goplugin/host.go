@@ -984,7 +984,18 @@ func (h *Host) BeginServiceDispatch(ctx context.Context, pluginName string, acto
 		return nil, nil, oops.In("goplugin").With("plugin", pluginName).With("operation", "issue_emit_token").Wrap(err)
 	}
 
-	dispatchCtx := metadata.AppendToOutgoingContext(ctx, "x-holomush-emit-token", token)
+	// Overwrite (not append) the emit token: if the incoming ctx already carries
+	// an x-holomush-emit-token from an outer dispatch, appending would leave two
+	// values and the host service reads tokens[0] — selecting the stale one. Set
+	// replaces all values for the key so the freshly issued token is present once.
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if ok {
+		md = md.Copy()
+	} else {
+		md = metadata.New(nil)
+	}
+	md.Set("x-holomush-emit-token", token)
+	dispatchCtx := metadata.NewOutgoingContext(ctx, md)
 	dispatchCtx = pluginsdk.WithOutgoingActorMetadata(dispatchCtx, coreActorKindToSDK(actor.Kind), actor.ID)
 
 	return dispatchCtx, func() { h.tokenStore.Revoke(token) }, nil

@@ -11,7 +11,6 @@ package webv1
 
 import (
 	v1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
-	_ "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -4717,7 +4716,7 @@ var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
 
 const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
-	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dholomush/scene/v1/scene.proto\x1a)holomush/sceneaccess/v1/sceneaccess.proto\"\xca\x01\n" +
+	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dholomush/scene/v1/scene.proto\"\xca\x01\n" +
 	"\fControlFrame\x126\n" +
 	"\x06signal\x18\x01 \x01(\x0e2\x1e.holomush.web.v1.ControlSignalR\x06signal\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12#\n" +

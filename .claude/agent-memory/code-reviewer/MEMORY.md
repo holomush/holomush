@@ -125,7 +125,7 @@
 - **5rh.8.21 RESOLVES the facade EMIT_TOKEN_MISSING gap (prev entry) — READY (2026-06-07).**
   `Host.BeginServiceDispatch` (goplugin/host.go:968) mints a dispatch token for caller-supplied
   actor+ownerPlayerID, returns ctx w/ token + advisory actor md (same coreActorKindToSDK as
-  DeliverCommand:936) + release func (`Revoke` = map delete, idempotent; 5min TTL sweeper backs
+  DeliverCommand:936) + release func (`Revoke` = map delete, idempotent; 5min TTL sweeper backstops
   forgotten release; store terminal-on-close + Close clears items). Manager routes via
   `findOptional[ServiceDispatcher]` (Unwrap-chain capability, matches PluginAuditClientProvider
   shape) → typed SERVICE_DISPATCH_UNSUPPORTED for Lua host. Binary-only is transport-specific,
@@ -146,13 +146,13 @@
   not just the touched suites. Fake-level "exclusion pins" (fakeStore.GetWithMembership
   re-implements role filter in Go) pin the fake, not the SQL — demand a DB-level twin.
 
-- **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** 9 Web* RPCs proxying
+- **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** 9 `Web*` RPCs proxying
   SceneAccessService facade. KEY recurring trap: `*grpc.Client` wrappers wrap with
   `oops.Code("RPC_FAILED").Wrap(err)` — and the web handler returns that to connect-go with
   `//nolint:wrapcheck // gRPC status errors pass through as-is`. That comment is FALSE: core is
   reached via plain grpc-go (status.Status err), browser side is connect-go with NO error
   interceptor (server.go:69 NewWebServiceHandler, no WithInterceptors). connect-go wrapIfUncoded/
-  CodeOf only recognize *connect.Error via errors.As → an oops-wrapped status err becomes
+  CodeOf only recognize `*connect.Error` via errors.As → an oops-wrapped status err becomes
   CodeUnknown/HTTP 500. So facade PERMISSION_DENIED/NOT_FOUND/UNAUTHENTICATED all collapse to
   Unknown at the browser. BUT this is the IDENTICAL pre-existing pattern of WebListFocusPresence
   (handler.go:792) / WebListContent / WebListSessionStreams — NOT a new defect → non-blocking,

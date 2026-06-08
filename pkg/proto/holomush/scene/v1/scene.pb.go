@@ -223,9 +223,9 @@ type ParticipantInfo struct {
 	// Display name of the character (best-effort; falls back to the ID when no
 	// name resolver is wired).
 	CharacterName string `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	// Participant role: "owner", "member", or the transient "invited" (the
-	// last exists only on private scenes and is promoted to member on join). See
-	// ParticipantRole in participants.go.
+	// Participant role: "owner", "member", "observer", or the transient "invited"
+	// (the last exists only on private scenes and is promoted to member on join).
+	// See ParticipantRole in participants.go.
 	Role string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
 	// When the participant joined (for invited rows, when the invitation was
 	// recorded; reset to join time on promotion).

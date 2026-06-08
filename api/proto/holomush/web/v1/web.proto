@@ -8,7 +8,6 @@ package holomush.web.v1;
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "holomush/scene/v1/scene.proto";
-import "holomush/sceneaccess/v1/sceneaccess.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1";
 

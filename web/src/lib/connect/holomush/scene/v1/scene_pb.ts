@@ -175,9 +175,9 @@ export type ParticipantInfo = Message<"holomush.scene.v1.ParticipantInfo"> & {
   characterName: string;
 
   /**
-   * Participant role: "owner", "member", or the transient "invited" (the
-   * last exists only on private scenes and is promoted to member on join). See
-   * ParticipantRole in participants.go.
+   * Participant role: "owner", "member", "observer", or the transient "invited"
+   * (the last exists only on private scenes and is promoted to member on join).
+   * See ParticipantRole in participants.go.
    *
    * @generated from field: string role = 3;
    */
