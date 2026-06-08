@@ -53,6 +53,46 @@ export interface LogEntry {
 }
 
 /**
+ * Parses JSONL export bytes (from ExportSceneLog or DownloadPublicSceneArchive)
+ * into LogEntry[]. Each line is a PublishedSceneEntry shape:
+ *   {"speaker": string, "kind": string, "content": string}
+ * kind values from the plugin renderer: "pose", "say", "ooc", "emit" (→ system).
+ * Synthesises a stable id from the line index; timestampMs is 0 (not present
+ * in the export format — callers render in file order, not by timestamp).
+ */
+export function jsonlToLogEntries(bytes: Uint8Array | string): LogEntry[] {
+	const text = typeof bytes === 'string' ? bytes : new TextDecoder().decode(bytes);
+	const entries: LogEntry[] = [];
+	let idx = 0;
+	for (const line of text.split('\n')) {
+		const trimmed = line.trim();
+		if (!trimmed) continue;
+		try {
+			const obj = JSON.parse(trimmed) as { speaker?: string; kind?: string; content?: string };
+			const rawKind = obj.kind ?? '';
+			// Map plugin renderer kind values to LogEntry kinds.
+			let kind: LogEntry['kind'];
+			if (rawKind === 'pose') kind = 'pose';
+			else if (rawKind === 'say') kind = 'say';
+			else if (rawKind === 'ooc') kind = 'ooc';
+			else kind = 'system'; // "emit" and any unknown kind → system narration
+			entries.push({
+				id: `export-${idx}`,
+				kind,
+				actorId: '',
+				actorName: obj.speaker ?? '',
+				text: obj.content ?? '',
+				timestampMs: 0,
+			});
+		} catch {
+			// Malformed line — skip silently; spec says do NOT throw
+		}
+		idx++;
+	}
+	return entries;
+}
+
+/**
  * Map from plugin-qualified event type to LogEntry kind.
  * Covers the four verbs emitted by core-scenes for IC events:
  *   core-scenes:scene_pose  → 'pose'

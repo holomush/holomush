@@ -36,12 +36,14 @@
         <span class="text-sm font-semibold text-[var(--brand-cyan-bright)]">
           {entry.actorName || entry.actorId || 'Unknown'}
         </span>
-        <time
-          datetime={new Date(entry.timestampMs).toISOString()}
-          class="text-[10px] text-muted-foreground"
-        >
-          {formatTime(entry.timestampMs)}
-        </time>
+        {#if entry.timestampMs}
+          <time
+            datetime={new Date(entry.timestampMs).toISOString()}
+            class="text-[10px] text-muted-foreground"
+          >
+            {formatTime(entry.timestampMs)}
+          </time>
+        {/if}
       </div>
       <!-- Body text -->
       {#if entry.contentWarning}

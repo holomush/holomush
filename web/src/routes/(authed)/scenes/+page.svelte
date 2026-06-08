@@ -5,6 +5,9 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
+  import { get } from 'svelte/store';
   import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
   import { workspaceStore } from '$lib/scenes/workspaceStore.svelte';
   import SceneListItem from '$lib/components/scenes/SceneListItem.svelte';
@@ -58,9 +61,25 @@
     }
   });
 
-  onMount(() => {
+  onMount(async () => {
     // Seed the workspace by fanning out across all owned alts.
-    workspaceStore.refresh(characters);
+    await workspaceStore.refresh(characters);
+
+    // Consume ?watch=<id> or ?join=<id> — select that scene so the user lands
+    // in it immediately after the board's Watch/Join navigation.
+    // Both params select the scene; for ?join the composer's Join CTA handles
+    // the actual `scene join` command once the scene is selected.
+    const params = get(page).url.searchParams;
+    const targetId = params.get('watch') ?? params.get('join');
+    if (targetId) {
+      // Find the scene in the refreshed store to get its asCharacterId.
+      const allScenes = [...workspaceStore.myScenes, ...workspaceStore.watching];
+      const target = allScenes.find((s) => s.sceneId === targetId);
+      const actingCharId = target?.asCharacterId ?? (data.characters ?? [])[0]?.characterId ?? '';
+      workspaceStore.select(targetId, playerSessionId, actingCharId);
+      // Clear the query param so a refresh doesn't re-select.
+      goto('/scenes', { replaceState: true });
+    }
   });
 </script>
 

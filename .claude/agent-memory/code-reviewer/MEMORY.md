@@ -185,3 +185,15 @@
   valid data. Also: `data.playerId` passed as the `sessionId` arg (refresh/select/queryStreamHistory) —
   type confusion, inert today (header-token auth INV-SCENE-63) but breaks if session_id ever binds;
   Medium non-blocking.
+- **Scene board UI (5rh.8.17, 2026-06-08) — NOT READY. STATE vs VISIBILITY string confusion.**
+  `SceneInfo.state` ∈ {active,paused,ended,archived} (core-scenes/types.go:23-26); `"open"` is a
+  VISIBILITY value ({open,private}), NOT a state. SceneBoardRow gated Watch/Join on
+  `scene.state === 'open'` → NEVER true → primary board actions never render, only "View"; stateColor
+  green-dot likewise dead. pnpm-check 0-errors is BLIND (both are valid strings). LESSON: whenever a
+  .svelte compares a proto string field to a literal, grep the proto/Go const set for that field — UI
+  authors routinely cross state↔visibility↔role vocabularies. Also recurring: nav params (?watch/?join
+  via goto) are DEAD unless the target +page.svelte reads $page.url.searchParams — workspace page
+  doesn't; board passes characterId="" hardcoded so even the watchScene RPC never fires. JSONL export
+  has no timestamp → timestampMs:0 → PoseCard renders 1970/12:00AM (Low). jsonlToLogEntries try-guarded,
+  blank/trailing-line safe, matches backend `{"speaker","kind","content"}\n` render; downloadBlob
+  SSR-safe (document only in click handler) + revokes — all sound.

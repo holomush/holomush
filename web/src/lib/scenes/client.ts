@@ -5,6 +5,7 @@ import { createClient } from '@connectrpc/connect';
 import {
 	WebService,
 	type WebListScenesRequest,
+	type WebListPublishedScenesRequest,
 	type WebWatchSceneRequest,
 	type WebExportSceneRequest,
 } from '$lib/connect/holomush/web/v1/web_pb';
@@ -100,6 +101,46 @@ export async function sendSceneCommand(
 	cmd: string,
 ): Promise<void> {
 	await client.sendCommand({ sessionId, connectionId, text: cmd });
+}
+
+/**
+ * Lists published (archived) scenes visible to any authenticated player.
+ * Returns PublicSceneArchive summaries ordered newest-first.
+ */
+export async function listPublishedScenes(
+	sessionId: string,
+	opts: Partial<Pick<WebListPublishedScenesRequest, 'limit' | 'offset' | 'tags'>> = {},
+) {
+	const res = await client.webListPublishedScenes({
+		sessionId,
+		limit: opts.limit ?? 0,
+		offset: opts.offset ?? 0,
+		tags: opts.tags ?? [],
+	});
+	return res.archives;
+}
+
+/**
+ * Fetches full public archive metadata for a published scene.
+ * publishedSceneId is the publication-attempt ID (PublicSceneArchive.id).
+ */
+export async function getPublicSceneArchive(sessionId: string, publishedSceneId: string) {
+	const res = await client.webGetPublicSceneArchive({ sessionId, publishedSceneId });
+	return res;
+}
+
+/**
+ * Downloads a published scene archive as rendered content bytes.
+ * format is 'jsonl' or 'markdown'. Returns content bytes, MIME type, and
+ * (for markdown) the content. The response carries only content + mime_type;
+ * callers supply the filename.
+ */
+export async function downloadPublicSceneArchive(
+	sessionId: string,
+	publishedSceneId: string,
+	format: string,
+) {
+	return client.webDownloadPublicSceneArchive({ sessionId, publishedSceneId, format });
 }
 
 /**
