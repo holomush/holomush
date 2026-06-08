@@ -858,6 +858,13 @@ func (s *SceneServiceImpl) emitSceneJoinIC(ctx context.Context, sceneID, actorID
 //
 // Per-field validation (character_id/scene_id/session_id non-empty) happens
 // via the protovalidate interceptor before this handler runs.
+//
+// Identity contract: the ABAC subject for the spectate check is derived
+// host-side from the dispatch token, NOT from req.character_id. The host
+// attaches advisory actor metadata alongside the token; when that metadata
+// names a character that differs from req.character_id the request is
+// rejected (PermissionDenied) as defense-in-depth against a payload/subject
+// mismatch. Absent metadata proceeds — the token still gates the subject.
 func (s *SceneServiceImpl) WatchScene(ctx context.Context, req *scenev1.WatchSceneRequest) (*scenev1.WatchSceneResponse, error) {
 	ctx, span := startSpan(
 		ctx, "scene.service.watch_scene",
@@ -865,6 +872,19 @@ func (s *SceneServiceImpl) WatchScene(ctx context.Context, req *scenev1.WatchSce
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
+
+	// 0. Defense-in-depth identity cross-check (see contract above): runs
+	// before any store or ABAC work so a mismatched request does no work.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.watch_scene actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to watch this scene") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
 
 	// 1. Load the scene and run the CODE GATES FIRST (INV-SCENE-61): a
 	// non-open or non-watchable-state scene MUST fail before ABAC is
