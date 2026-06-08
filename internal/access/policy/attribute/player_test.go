@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,7 +36,9 @@ func TestPlayerProviderSchema(t *testing.T) {
 	require.NotNil(t, schema)
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["id"])
 	assert.Equal(t, types.AttrTypeStringList, schema.Attributes["grants"])
-	assert.Len(t, schema.Attributes, 2, "v1 schema exposes only id and grants")
+	assert.Equal(t, types.AttrTypeBool, schema.Attributes["is_guest"])
+	assert.Equal(t, types.AttrTypeBool, schema.Attributes["has_is_guest"])
+	assert.Len(t, schema.Attributes, 4, "v1 schema exposes id, grants, is_guest, has_is_guest")
 }
 
 func TestPlayerProviderResolveResourceAlwaysNil(t *testing.T) {
@@ -205,4 +208,70 @@ func TestPlayerProviderNoMutationAPI(t *testing.T) {
 			)
 		}
 	}
+}
+
+// --- Task 13: is_guest attribute (omit-don't-sentinel, ADR holomush-ti1b) ----
+
+// TestPlayerProviderEmitsIsGuestWitnessWhenLookupConfigured verifies that when
+// a PlayerKindLookup is configured, ResolveSubject emits both is_guest and
+// has_is_guest on every code path: true/true for a guest player, false/true for
+// a registered player. Per ADR holomush-ti1b: the value key is always emitted
+// when the lookup resolves, and the witness is always present.
+func TestPlayerProviderEmitsIsGuestWitnessWhenLookupConfigured(t *testing.T) {
+	guestID := testOperatorULID
+	regularID := testNonOperatorULID
+
+	lookup := func(_ context.Context, playerID string) (bool, error) {
+		return playerID == guestID, nil
+	}
+
+	p := NewPlayerAttributeProvider(nil, WithPlayerKindLookup(lookup))
+
+	t.Run("guest player emits is_guest true and has_is_guest true", func(t *testing.T) {
+		attrs, err := p.ResolveSubject(context.Background(), "player:"+guestID)
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+		assert.Equal(t, true, attrs["is_guest"], "is_guest must be true for guest player")
+		assert.Equal(t, true, attrs["has_is_guest"], "has_is_guest must always be present when lookup configured")
+	})
+
+	t.Run("registered player emits is_guest false and has_is_guest true", func(t *testing.T) {
+		attrs, err := p.ResolveSubject(context.Background(), "player:"+regularID)
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+		assert.Equal(t, false, attrs["is_guest"], "is_guest must be false for registered player")
+		assert.Equal(t, true, attrs["has_is_guest"], "has_is_guest must always be present when lookup configured")
+	})
+}
+
+// TestPlayerProviderOmitsIsGuestWhenLookupAbsentOrFails verifies the
+// omit-don't-sentinel invariant (ADR holomush-ti1b): when no lookup is
+// configured or the lookup returns an error, the "is_guest" key MUST be absent
+// from the attribute bag (never emitted as "" or false). The witness
+// has_is_guest MUST be false on every unresolved path.
+func TestPlayerProviderOmitsIsGuestWhenLookupAbsentOrFails(t *testing.T) {
+	t.Run("no lookup configured: is_guest key absent and has_is_guest false", func(t *testing.T) {
+		p := NewPlayerAttributeProvider(nil)
+		attrs, err := p.ResolveSubject(context.Background(), "player:"+testOperatorULID)
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+
+		_, ok := attrs["is_guest"]
+		assert.False(t, ok, "is_guest key MUST be absent when no lookup configured (omit-don't-sentinel, ADR holomush-ti1b)")
+		assert.Equal(t, false, attrs["has_is_guest"], "has_is_guest must be false when lookup not configured")
+	})
+
+	t.Run("lookup returns error: is_guest key absent and has_is_guest false", func(t *testing.T) {
+		lookup := func(_ context.Context, _ string) (bool, error) {
+			return false, oops.Code("PLAYER_NOT_FOUND").Errorf("player not found")
+		}
+		p := NewPlayerAttributeProvider(nil, WithPlayerKindLookup(lookup))
+		attrs, err := p.ResolveSubject(context.Background(), "player:"+testOperatorULID)
+		require.NoError(t, err, "lookup errors must not bubble out of ResolveSubject")
+		require.NotNil(t, attrs)
+
+		_, ok := attrs["is_guest"]
+		assert.False(t, ok, "is_guest key MUST be absent when lookup errors (omit-don't-sentinel, ADR holomush-ti1b)")
+		assert.Equal(t, false, attrs["has_is_guest"], "has_is_guest must be false when lookup fails")
+	})
 }

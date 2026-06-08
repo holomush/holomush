@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access"
@@ -15,6 +16,7 @@ import (
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
+	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -77,6 +79,7 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 	pool := s.cfg.DB.Pool()
 
 	roleStore := store.NewPostgresRoleStore(pool)
+	playerRepo := authpostgres.NewPlayerRepository(pool)
 	stack, err := BuildABACStack(ctx, ABACConfig{
 		Pool:                   pool,
 		CharacterRepo:          postgres.NewCharacterRepository(pool),
@@ -87,6 +90,17 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 		RoleStore:              roleStore,
 		AuditMode:              s.cfg.AuditMode,
 		CryptoOperators:        s.cfg.CryptoOperators,
+		PlayerKindLookup: func(ctx context.Context, playerID string) (bool, error) {
+			id, err := ulid.Parse(playerID)
+			if err != nil {
+				return false, oops.Code("INVALID_PLAYER_ID").With("player_id", playerID).Wrap(err)
+			}
+			player, err := playerRepo.GetByID(ctx, id)
+			if err != nil {
+				return false, oops.Wrap(err)
+			}
+			return player.IsGuest, nil
+		},
 	})
 	if err != nil {
 		return oops.Code("ABAC_SETUP_FAILED").Wrap(err)
