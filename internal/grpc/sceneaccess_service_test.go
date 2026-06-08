@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -508,6 +509,53 @@ func TestSetSceneFocusDeniesNonParticipant(t *testing.T) {
 		"non-participant MUST receive PermissionDenied")
 	assert.Equal(t, 0, coord.joinFocusCalls,
 		"JoinFocus MUST NOT be called when participation check fails")
+}
+
+// TestSetSceneFocusPropagatesInternalFromOwnershipInfraFailure verifies error
+// fidelity (holomush-5rh.8.23): when the connection-ownership check fails due to
+// an INFRA error (charRepo.ListByPlayer DB failure → ownedCharacter returns
+// codes.Internal), SetSceneFocus propagates Internal rather than collapsing it
+// into PermissionDenied — the denial code is reserved for a genuine not-owned
+// connection, so an infra failure stays observable as a server error.
+func TestSetSceneFocusPropagatesInternalFromOwnershipInfraFailure(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	charID := idgen.New()
+	connID := idgen.New()
+	sessionID := "sess-" + idgen.New().String()
+
+	ps := buildSATestPS(t, playerID)
+	psRepo := buildSASessionRepo(t, ps)
+
+	player := &auth.Player{ID: playerID, IsGuest: false}
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).Return(player, nil).Maybe()
+
+	// charRepo.ListByPlayer fails — ownedCharacter returns codes.Internal.
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return(nil, errors.New("db connection lost")).Maybe()
+
+	conn := &session.Connection{ID: connID, SessionID: sessionID, ClientType: "comms_hub"}
+	gameSession := &session.Info{ID: sessionID, CharacterID: charID}
+	sessStore := sessionmocks.NewMockStore(t)
+	sessStore.EXPECT().GetConnection(mock.Anything, connID).Return(conn, nil).Maybe()
+	sessStore.EXPECT().Get(mock.Anything, sessionID).Return(gameSession, nil).Maybe()
+
+	coord := &stubFocusCoordinator{}
+	srv := newTestSceneAccessServer(t, psRepo, playerRepo, charRepo, sessStore, coord,
+		scenemocks.NewMockSceneServiceClient(t), &stubPluginManager{})
+
+	_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: testSAToken,
+		ConnectionId:       connID.String(),
+		SceneId:            idgen.New().String(),
+	})
+
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Internal, st.Code(),
+		"an infra failure in the ownership check MUST surface as Internal, not PermissionDenied")
+	assert.Equal(t, 0, coord.joinFocusCalls, "JoinFocus MUST NOT be called when ownership check errors")
 }
 
 // TestSetSceneFocusJoinsFocusThenSetsConnectionFocus verifies the happy path for

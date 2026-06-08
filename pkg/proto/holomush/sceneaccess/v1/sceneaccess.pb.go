@@ -33,10 +33,12 @@ const (
 type ListScenesForViewerRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated
@@ -195,10 +197,12 @@ func (x *ListScenesForViewerResponse) GetScenes() []*v1.SceneInfo {
 type GetSceneForViewerRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated
@@ -327,10 +331,12 @@ func (x *GetSceneForViewerResponse) GetScene() *v1.SceneInfo {
 type ListMyScenesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated
@@ -452,10 +458,12 @@ func (x *ListMyScenesResponse) GetScenes() []*v1.CharacterSceneInfo {
 type WatchSceneRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated
@@ -587,10 +595,12 @@ func (x *WatchSceneResponse) GetParticipant() *v1.ParticipantInfo {
 type ExportSceneRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated
@@ -747,10 +757,12 @@ func (x *ExportSceneResponse) GetFilename() string {
 type SetSceneFocusRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated
@@ -869,10 +881,12 @@ func (*SetSceneFocusResponse) Descriptor() ([]byte, []int) {
 type ListPublishedScenesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated
@@ -1009,10 +1023,12 @@ func (x *ListPublishedScenesResponse) GetArchives() []*v1.PublicSceneArchive {
 type GetPublicSceneArchiveRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated
@@ -1169,10 +1185,12 @@ func (x *GetPublicSceneArchiveResponse) GetPublishedAtUnixNs() int64 {
 type DownloadPublicSceneArchiveRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// session_id is the client-declared player-session ULID. Authentication is
-	// performed solely against player_session_token (below); session_id is
-	// currently NOT consulted by the facade and is reserved for a future
-	// session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
-	// SHOULD send the player session they authenticated with.
+	// performed SOLELY against player_session_token (below, the authoritative
+	// bearer); session_id is NOT consulted. A session↔token cross-check was
+	// deliberately NOT wired (holomush-5rh.8.23 decision): it adds no security
+	// over the authoritative token and would risk rejecting valid clients whose
+	// session_id semantics differ. The field is retained as a forward-looking
+	// hint — clients SHOULD send the player session they authenticated with.
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// player_session_token is the raw bearer token for the player session. The
 	// facade looks up the session by token hash and rejects unauthenticated

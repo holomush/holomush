@@ -312,8 +312,15 @@ func (s *SceneAccessServer) SetSceneFocus(ctx context.Context, req *sceneaccessv
 	}
 
 	// Verify the session's character is owned by this player (INV-SCENE-63).
+	// ownedCharacter returns Internal on an infra failure (ListByPlayer) and
+	// NotFound when the character is genuinely not owned. Propagate the infra
+	// failure as-is for observability; only the not-owned case collapses to the
+	// connection-ownership denial.
 	char, err := s.ownedCharacter(ctx, ps.PlayerID, gameSession.CharacterID.String())
 	if err != nil {
+		if status.Code(err) == codes.Internal {
+			return nil, err
+		}
 		return nil, status.Error(codes.PermissionDenied, "connection does not belong to your character") //nolint:wrapcheck // gRPC status error at handler boundary
 	}
 
