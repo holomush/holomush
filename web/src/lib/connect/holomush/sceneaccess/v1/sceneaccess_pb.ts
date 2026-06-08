@@ -19,16 +19,20 @@ export const file_holomush_sceneaccess_v1_sceneaccess: GenFile = /*@__PURE__*/
 
 /**
  * ListScenesForViewerRequest is the facade request for the public scene board.
- * session_id and player_session_token authenticate the calling player; the
- * facade resolves the acting character SERVER-SIDE and ignores/overrides any
- * client-supplied identity (INV-SCENE-63).
+ * player_session_token authenticates the calling player (session_id is a
+ * reserved client hint, not yet consulted); the facade resolves the acting
+ * character SERVER-SIDE and ignores/overrides any client-supplied identity
+ * (INV-SCENE-63).
  *
  * @generated from message holomush.sceneaccess.v1.ListScenesForViewerRequest
  */
 export type ListScenesForViewerRequest = Message<"holomush.sceneaccess.v1.ListScenesForViewerRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -115,16 +119,20 @@ export const ListScenesForViewerResponseSchema: GenMessage<ListScenesForViewerRe
 
 /**
  * GetSceneForViewerRequest is the facade request for loading one scene.
- * session_id and player_session_token authenticate the calling player; the
- * facade resolves the acting character SERVER-SIDE and ignores/overrides any
- * client-supplied identity (INV-SCENE-63).
+ * player_session_token authenticates the calling player (session_id is a
+ * reserved client hint, not yet consulted); the facade resolves the acting
+ * character SERVER-SIDE and ignores/overrides any client-supplied identity
+ * (INV-SCENE-63).
  *
  * @generated from message holomush.sceneaccess.v1.GetSceneForViewerRequest
  */
 export type GetSceneForViewerRequest = Message<"holomush.sceneaccess.v1.GetSceneForViewerRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -196,8 +204,11 @@ export const GetSceneForViewerResponseSchema: GenMessage<GetSceneForViewerRespon
  */
 export type ListMyScenesRequest = Message<"holomush.sceneaccess.v1.ListMyScenesRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -264,8 +275,11 @@ export const ListMyScenesResponseSchema: GenMessage<ListMyScenesResponse> = /*@_
  */
 export type WatchSceneRequest = Message<"holomush.sceneaccess.v1.WatchSceneRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -331,16 +345,20 @@ export const WatchSceneResponseSchema: GenMessage<WatchSceneResponse> = /*@__PUR
 
 /**
  * ExportSceneRequest is the facade request for scene IC log export.
- * session_id and player_session_token authenticate the calling player; the
- * facade resolves the acting character SERVER-SIDE and ignores/overrides any
- * client-supplied identity (INV-SCENE-63).
+ * player_session_token authenticates the calling player (session_id is a
+ * reserved client hint, not yet consulted); the facade resolves the acting
+ * character SERVER-SIDE and ignores/overrides any client-supplied identity
+ * (INV-SCENE-63).
  *
  * @generated from message holomush.sceneaccess.v1.ExportSceneRequest
  */
 export type ExportSceneRequest = Message<"holomush.sceneaccess.v1.ExportSceneRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -434,8 +452,11 @@ export const ExportSceneResponseSchema: GenMessage<ExportSceneResponse> = /*@__P
  */
 export type SetSceneFocusRequest = Message<"holomush.sceneaccess.v1.SetSceneFocusRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -500,8 +521,11 @@ export const SetSceneFocusResponseSchema: GenMessage<SetSceneFocusResponse> = /*
  */
 export type ListPublishedScenesRequest = Message<"holomush.sceneaccess.v1.ListPublishedScenesRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -579,8 +603,11 @@ export const ListPublishedScenesResponseSchema: GenMessage<ListPublishedScenesRe
  */
 export type GetPublicSceneArchiveRequest = Message<"holomush.sceneaccess.v1.GetPublicSceneArchiveRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */
@@ -674,8 +701,11 @@ export const GetPublicSceneArchiveResponseSchema: GenMessage<GetPublicSceneArchi
  */
 export type DownloadPublicSceneArchiveRequest = Message<"holomush.sceneaccess.v1.DownloadPublicSceneArchiveRequest"> & {
   /**
-   * session_id identifies the player session — used together with
-   * player_session_token to authenticate the calling player.
+   * session_id is the client-declared player-session ULID. Authentication is
+   * performed solely against player_session_token (below); session_id is
+   * currently NOT consulted by the facade and is reserved for a future
+   * session↔token binding cross-check (holomush-5rh.8.11 follow-up). Clients
+   * SHOULD send the player session they authenticated with.
    *
    * @generated from field: string session_id = 1;
    */

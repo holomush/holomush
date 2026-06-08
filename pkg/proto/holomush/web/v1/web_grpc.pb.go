@@ -22,29 +22,38 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WebService_SendCommand_FullMethodName                  = "/holomush.web.v1.WebService/SendCommand"
-	WebService_StreamEvents_FullMethodName                 = "/holomush.web.v1.WebService/StreamEvents"
-	WebService_Disconnect_FullMethodName                   = "/holomush.web.v1.WebService/Disconnect"
-	WebService_GetCommandHistory_FullMethodName            = "/holomush.web.v1.WebService/GetCommandHistory"
-	WebService_WebAuthenticatePlayer_FullMethodName        = "/holomush.web.v1.WebService/WebAuthenticatePlayer"
-	WebService_WebSelectCharacter_FullMethodName           = "/holomush.web.v1.WebService/WebSelectCharacter"
-	WebService_WebCreatePlayer_FullMethodName              = "/holomush.web.v1.WebService/WebCreatePlayer"
-	WebService_WebCreateGuest_FullMethodName               = "/holomush.web.v1.WebService/WebCreateGuest"
-	WebService_WebCreateCharacter_FullMethodName           = "/holomush.web.v1.WebService/WebCreateCharacter"
-	WebService_WebListCharacters_FullMethodName            = "/holomush.web.v1.WebService/WebListCharacters"
-	WebService_WebLogout_FullMethodName                    = "/holomush.web.v1.WebService/WebLogout"
-	WebService_WebRequestPasswordReset_FullMethodName      = "/holomush.web.v1.WebService/WebRequestPasswordReset"
-	WebService_WebConfirmPasswordReset_FullMethodName      = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
-	WebService_WebCheckSession_FullMethodName              = "/holomush.web.v1.WebService/WebCheckSession"
-	WebService_WebGetContent_FullMethodName                = "/holomush.web.v1.WebService/WebGetContent"
-	WebService_WebListContent_FullMethodName               = "/holomush.web.v1.WebService/WebListContent"
-	WebService_WebQueryStreamHistory_FullMethodName        = "/holomush.web.v1.WebService/WebQueryStreamHistory"
-	WebService_WebListSessionStreams_FullMethodName        = "/holomush.web.v1.WebService/WebListSessionStreams"
-	WebService_WebListPlayerSessions_FullMethodName        = "/holomush.web.v1.WebService/WebListPlayerSessions"
-	WebService_WebRevokePlayerSession_FullMethodName       = "/holomush.web.v1.WebService/WebRevokePlayerSession"
-	WebService_WebRevokeOtherPlayerSessions_FullMethodName = "/holomush.web.v1.WebService/WebRevokeOtherPlayerSessions"
-	WebService_WebListFocusPresence_FullMethodName         = "/holomush.web.v1.WebService/WebListFocusPresence"
-	WebService_WebListCommands_FullMethodName              = "/holomush.web.v1.WebService/WebListCommands"
+	WebService_SendCommand_FullMethodName                   = "/holomush.web.v1.WebService/SendCommand"
+	WebService_StreamEvents_FullMethodName                  = "/holomush.web.v1.WebService/StreamEvents"
+	WebService_Disconnect_FullMethodName                    = "/holomush.web.v1.WebService/Disconnect"
+	WebService_GetCommandHistory_FullMethodName             = "/holomush.web.v1.WebService/GetCommandHistory"
+	WebService_WebAuthenticatePlayer_FullMethodName         = "/holomush.web.v1.WebService/WebAuthenticatePlayer"
+	WebService_WebSelectCharacter_FullMethodName            = "/holomush.web.v1.WebService/WebSelectCharacter"
+	WebService_WebCreatePlayer_FullMethodName               = "/holomush.web.v1.WebService/WebCreatePlayer"
+	WebService_WebCreateGuest_FullMethodName                = "/holomush.web.v1.WebService/WebCreateGuest"
+	WebService_WebCreateCharacter_FullMethodName            = "/holomush.web.v1.WebService/WebCreateCharacter"
+	WebService_WebListCharacters_FullMethodName             = "/holomush.web.v1.WebService/WebListCharacters"
+	WebService_WebLogout_FullMethodName                     = "/holomush.web.v1.WebService/WebLogout"
+	WebService_WebRequestPasswordReset_FullMethodName       = "/holomush.web.v1.WebService/WebRequestPasswordReset"
+	WebService_WebConfirmPasswordReset_FullMethodName       = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
+	WebService_WebCheckSession_FullMethodName               = "/holomush.web.v1.WebService/WebCheckSession"
+	WebService_WebGetContent_FullMethodName                 = "/holomush.web.v1.WebService/WebGetContent"
+	WebService_WebListContent_FullMethodName                = "/holomush.web.v1.WebService/WebListContent"
+	WebService_WebQueryStreamHistory_FullMethodName         = "/holomush.web.v1.WebService/WebQueryStreamHistory"
+	WebService_WebListSessionStreams_FullMethodName         = "/holomush.web.v1.WebService/WebListSessionStreams"
+	WebService_WebListPlayerSessions_FullMethodName         = "/holomush.web.v1.WebService/WebListPlayerSessions"
+	WebService_WebRevokePlayerSession_FullMethodName        = "/holomush.web.v1.WebService/WebRevokePlayerSession"
+	WebService_WebRevokeOtherPlayerSessions_FullMethodName  = "/holomush.web.v1.WebService/WebRevokeOtherPlayerSessions"
+	WebService_WebListFocusPresence_FullMethodName          = "/holomush.web.v1.WebService/WebListFocusPresence"
+	WebService_WebListCommands_FullMethodName               = "/holomush.web.v1.WebService/WebListCommands"
+	WebService_WebListScenes_FullMethodName                 = "/holomush.web.v1.WebService/WebListScenes"
+	WebService_WebGetScene_FullMethodName                   = "/holomush.web.v1.WebService/WebGetScene"
+	WebService_WebListMyScenes_FullMethodName               = "/holomush.web.v1.WebService/WebListMyScenes"
+	WebService_WebWatchScene_FullMethodName                 = "/holomush.web.v1.WebService/WebWatchScene"
+	WebService_WebExportScene_FullMethodName                = "/holomush.web.v1.WebService/WebExportScene"
+	WebService_WebSetSceneFocus_FullMethodName              = "/holomush.web.v1.WebService/WebSetSceneFocus"
+	WebService_WebListPublishedScenes_FullMethodName        = "/holomush.web.v1.WebService/WebListPublishedScenes"
+	WebService_WebGetPublicSceneArchive_FullMethodName      = "/holomush.web.v1.WebService/WebGetPublicSceneArchive"
+	WebService_WebDownloadPublicSceneArchive_FullMethodName = "/holomush.web.v1.WebService/WebDownloadPublicSceneArchive"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -168,6 +177,47 @@ type WebServiceClient interface {
 	// CoreService.ListAvailableCommands; player_session_token is read from the
 	// cookie by gateway middleware.
 	WebListCommands(ctx context.Context, in *WebListCommandsRequest, opts ...grpc.CallOption) (*WebListCommandsResponse, error)
+	// WebListScenes returns the public scene board filtered by the verified
+	// player's content-warning preferences. Proxies to
+	// SceneAccessService.ListScenesForViewer; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebListScenes(ctx context.Context, in *WebListScenesRequest, opts ...grpc.CallOption) (*WebListScenesResponse, error)
+	// WebGetScene loads one scene's metadata for the verified player's owned
+	// character. Proxies to SceneAccessService.GetSceneForViewer;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebGetScene(ctx context.Context, in *WebGetSceneRequest, opts ...grpc.CallOption) (*WebGetSceneResponse, error)
+	// WebListMyScenes returns every non-archived scene the verified player's
+	// owned character participates in. Proxies to
+	// SceneAccessService.ListMyScenes; player_session_token is read from the
+	// HTTP cookie by gateway middleware.
+	WebListMyScenes(ctx context.Context, in *WebListMyScenesRequest, opts ...grpc.CallOption) (*WebListMyScenesResponse, error)
+	// WebWatchScene auto-joins the verified player's owned character into an
+	// open active scene as an observer. Proxies to
+	// SceneAccessService.WatchScene; player_session_token is read from the
+	// HTTP cookie by gateway middleware.
+	WebWatchScene(ctx context.Context, in *WebWatchSceneRequest, opts ...grpc.CallOption) (*WebWatchSceneResponse, error)
+	// WebExportScene renders the verified player's owned character's scene IC
+	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebExportScene(ctx context.Context, in *WebExportSceneRequest, opts ...grpc.CallOption) (*WebExportSceneResponse, error)
+	// WebSetSceneFocus sets the per-connection focus for a web portal connection.
+	// Proxies to SceneAccessService.SetSceneFocus; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebSetSceneFocus(ctx context.Context, in *WebSetSceneFocusRequest, opts ...grpc.CallOption) (*WebSetSceneFocusResponse, error)
+	// WebListPublishedScenes pages through publicly visible PUBLISHED scene
+	// archives. Proxies to SceneAccessService.ListPublishedScenes;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebListPublishedScenes(ctx context.Context, in *WebListPublishedScenesRequest, opts ...grpc.CallOption) (*WebListPublishedScenesResponse, error)
+	// WebGetPublicSceneArchive reads a published scene archive without
+	// participant authentication. Proxies to
+	// SceneAccessService.GetPublicSceneArchive; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebGetPublicSceneArchive(ctx context.Context, in *WebGetPublicSceneArchiveRequest, opts ...grpc.CallOption) (*WebGetPublicSceneArchiveResponse, error)
+	// WebDownloadPublicSceneArchive returns a PUBLISHED scene archive rendered
+	// in the requested format. Proxies to
+	// SceneAccessService.DownloadPublicSceneArchive; player_session_token is
+	// read from the HTTP cookie by gateway middleware.
+	WebDownloadPublicSceneArchive(ctx context.Context, in *WebDownloadPublicSceneArchiveRequest, opts ...grpc.CallOption) (*WebDownloadPublicSceneArchiveResponse, error)
 }
 
 type webServiceClient struct {
@@ -417,6 +467,96 @@ func (c *webServiceClient) WebListCommands(ctx context.Context, in *WebListComma
 	return out, nil
 }
 
+func (c *webServiceClient) WebListScenes(ctx context.Context, in *WebListScenesRequest, opts ...grpc.CallOption) (*WebListScenesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListScenesResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListScenes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebGetScene(ctx context.Context, in *WebGetSceneRequest, opts ...grpc.CallOption) (*WebGetSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebGetSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebGetScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebListMyScenes(ctx context.Context, in *WebListMyScenesRequest, opts ...grpc.CallOption) (*WebListMyScenesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListMyScenesResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListMyScenes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebWatchScene(ctx context.Context, in *WebWatchSceneRequest, opts ...grpc.CallOption) (*WebWatchSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebWatchSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebWatchScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebExportScene(ctx context.Context, in *WebExportSceneRequest, opts ...grpc.CallOption) (*WebExportSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebExportSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebExportScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebSetSceneFocus(ctx context.Context, in *WebSetSceneFocusRequest, opts ...grpc.CallOption) (*WebSetSceneFocusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebSetSceneFocusResponse)
+	err := c.cc.Invoke(ctx, WebService_WebSetSceneFocus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebListPublishedScenes(ctx context.Context, in *WebListPublishedScenesRequest, opts ...grpc.CallOption) (*WebListPublishedScenesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListPublishedScenesResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListPublishedScenes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebGetPublicSceneArchive(ctx context.Context, in *WebGetPublicSceneArchiveRequest, opts ...grpc.CallOption) (*WebGetPublicSceneArchiveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebGetPublicSceneArchiveResponse)
+	err := c.cc.Invoke(ctx, WebService_WebGetPublicSceneArchive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebDownloadPublicSceneArchive(ctx context.Context, in *WebDownloadPublicSceneArchiveRequest, opts ...grpc.CallOption) (*WebDownloadPublicSceneArchiveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebDownloadPublicSceneArchiveResponse)
+	err := c.cc.Invoke(ctx, WebService_WebDownloadPublicSceneArchive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -538,6 +678,47 @@ type WebServiceServer interface {
 	// CoreService.ListAvailableCommands; player_session_token is read from the
 	// cookie by gateway middleware.
 	WebListCommands(context.Context, *WebListCommandsRequest) (*WebListCommandsResponse, error)
+	// WebListScenes returns the public scene board filtered by the verified
+	// player's content-warning preferences. Proxies to
+	// SceneAccessService.ListScenesForViewer; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebListScenes(context.Context, *WebListScenesRequest) (*WebListScenesResponse, error)
+	// WebGetScene loads one scene's metadata for the verified player's owned
+	// character. Proxies to SceneAccessService.GetSceneForViewer;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebGetScene(context.Context, *WebGetSceneRequest) (*WebGetSceneResponse, error)
+	// WebListMyScenes returns every non-archived scene the verified player's
+	// owned character participates in. Proxies to
+	// SceneAccessService.ListMyScenes; player_session_token is read from the
+	// HTTP cookie by gateway middleware.
+	WebListMyScenes(context.Context, *WebListMyScenesRequest) (*WebListMyScenesResponse, error)
+	// WebWatchScene auto-joins the verified player's owned character into an
+	// open active scene as an observer. Proxies to
+	// SceneAccessService.WatchScene; player_session_token is read from the
+	// HTTP cookie by gateway middleware.
+	WebWatchScene(context.Context, *WebWatchSceneRequest) (*WebWatchSceneResponse, error)
+	// WebExportScene renders the verified player's owned character's scene IC
+	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebExportScene(context.Context, *WebExportSceneRequest) (*WebExportSceneResponse, error)
+	// WebSetSceneFocus sets the per-connection focus for a web portal connection.
+	// Proxies to SceneAccessService.SetSceneFocus; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebSetSceneFocus(context.Context, *WebSetSceneFocusRequest) (*WebSetSceneFocusResponse, error)
+	// WebListPublishedScenes pages through publicly visible PUBLISHED scene
+	// archives. Proxies to SceneAccessService.ListPublishedScenes;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebListPublishedScenes(context.Context, *WebListPublishedScenesRequest) (*WebListPublishedScenesResponse, error)
+	// WebGetPublicSceneArchive reads a published scene archive without
+	// participant authentication. Proxies to
+	// SceneAccessService.GetPublicSceneArchive; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebGetPublicSceneArchive(context.Context, *WebGetPublicSceneArchiveRequest) (*WebGetPublicSceneArchiveResponse, error)
+	// WebDownloadPublicSceneArchive returns a PUBLISHED scene archive rendered
+	// in the requested format. Proxies to
+	// SceneAccessService.DownloadPublicSceneArchive; player_session_token is
+	// read from the HTTP cookie by gateway middleware.
+	WebDownloadPublicSceneArchive(context.Context, *WebDownloadPublicSceneArchiveRequest) (*WebDownloadPublicSceneArchiveResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -616,6 +797,33 @@ func (UnimplementedWebServiceServer) WebListFocusPresence(context.Context, *WebL
 }
 func (UnimplementedWebServiceServer) WebListCommands(context.Context, *WebListCommandsRequest) (*WebListCommandsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListCommands not implemented")
+}
+func (UnimplementedWebServiceServer) WebListScenes(context.Context, *WebListScenesRequest) (*WebListScenesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListScenes not implemented")
+}
+func (UnimplementedWebServiceServer) WebGetScene(context.Context, *WebGetSceneRequest) (*WebGetSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebGetScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebListMyScenes(context.Context, *WebListMyScenesRequest) (*WebListMyScenesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListMyScenes not implemented")
+}
+func (UnimplementedWebServiceServer) WebWatchScene(context.Context, *WebWatchSceneRequest) (*WebWatchSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebWatchScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebExportScene(context.Context, *WebExportSceneRequest) (*WebExportSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebExportScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebSetSceneFocus(context.Context, *WebSetSceneFocusRequest) (*WebSetSceneFocusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebSetSceneFocus not implemented")
+}
+func (UnimplementedWebServiceServer) WebListPublishedScenes(context.Context, *WebListPublishedScenesRequest) (*WebListPublishedScenesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListPublishedScenes not implemented")
+}
+func (UnimplementedWebServiceServer) WebGetPublicSceneArchive(context.Context, *WebGetPublicSceneArchiveRequest) (*WebGetPublicSceneArchiveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebGetPublicSceneArchive not implemented")
+}
+func (UnimplementedWebServiceServer) WebDownloadPublicSceneArchive(context.Context, *WebDownloadPublicSceneArchiveRequest) (*WebDownloadPublicSceneArchiveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebDownloadPublicSceneArchive not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -1045,6 +1253,168 @@ func _WebService_WebListCommands_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebListScenes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListScenesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListScenes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListScenes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListScenes(ctx, req.(*WebListScenesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebGetScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebGetSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebGetScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebGetScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebGetScene(ctx, req.(*WebGetSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebListMyScenes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListMyScenesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListMyScenes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListMyScenes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListMyScenes(ctx, req.(*WebListMyScenesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebWatchScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebWatchSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebWatchScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebWatchScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebWatchScene(ctx, req.(*WebWatchSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebExportScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebExportSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebExportScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebExportScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebExportScene(ctx, req.(*WebExportSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebSetSceneFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebSetSceneFocusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebSetSceneFocus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebSetSceneFocus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebSetSceneFocus(ctx, req.(*WebSetSceneFocusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebListPublishedScenes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListPublishedScenesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListPublishedScenes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListPublishedScenes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListPublishedScenes(ctx, req.(*WebListPublishedScenesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebGetPublicSceneArchive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebGetPublicSceneArchiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebGetPublicSceneArchive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebGetPublicSceneArchive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebGetPublicSceneArchive(ctx, req.(*WebGetPublicSceneArchiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebDownloadPublicSceneArchive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebDownloadPublicSceneArchiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebDownloadPublicSceneArchive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebDownloadPublicSceneArchive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebDownloadPublicSceneArchive(ctx, req.(*WebDownloadPublicSceneArchiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1139,6 +1509,42 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebListCommands",
 			Handler:    _WebService_WebListCommands_Handler,
+		},
+		{
+			MethodName: "WebListScenes",
+			Handler:    _WebService_WebListScenes_Handler,
+		},
+		{
+			MethodName: "WebGetScene",
+			Handler:    _WebService_WebGetScene_Handler,
+		},
+		{
+			MethodName: "WebListMyScenes",
+			Handler:    _WebService_WebListMyScenes_Handler,
+		},
+		{
+			MethodName: "WebWatchScene",
+			Handler:    _WebService_WebWatchScene_Handler,
+		},
+		{
+			MethodName: "WebExportScene",
+			Handler:    _WebService_WebExportScene_Handler,
+		},
+		{
+			MethodName: "WebSetSceneFocus",
+			Handler:    _WebService_WebSetSceneFocus_Handler,
+		},
+		{
+			MethodName: "WebListPublishedScenes",
+			Handler:    _WebService_WebListPublishedScenes_Handler,
+		},
+		{
+			MethodName: "WebGetPublicSceneArchive",
+			Handler:    _WebService_WebGetPublicSceneArchive_Handler,
+		},
+		{
+			MethodName: "WebDownloadPublicSceneArchive",
+			Handler:    _WebService_WebDownloadPublicSceneArchive_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

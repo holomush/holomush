@@ -1,16 +1,3 @@
-- **Early registry-migration lessons (.14.9 NOT-READY, .14.11 READY) — consolidated.**
-  (a) Fragile `// Verifies:`-grep coverage meta-tests (`test/meta/i_<old>_coverage_test.go`,
-  per-family `TestEveryPhase3c...` scanning `// Verifies: I-<OLD>-N`/`INV-<digits>`) MUST be
-  DELETED on migration — renamed annotations make them find ZERO and fail ALL N (.14.9 missed →
-  I-PRIV-1..8 failed). Coverage absorbed by `TestEveryRegistryInvariantHasBinding`. DISTINCT
-  from robust `testName`-EXISTENCE checks (go/parser Test* names) which MIGRATE in lockstep. Keep
-  shared helpers (`findRepoRoot`/`skipDirs`) in a gutted meta file — 10+ files use them; verify
-  it still compiles. (b) FROM-anchor: `checkProvenance` greps canonical `e.ID`, NOT `r.Token`, so
-  refs recording legacy tokens is harmless/correct. (c) Origin SPEC is NOT migrated by design;
-  legacy column records the link. (d) gorules is a SEPARATE module — analyzer diagnostic + Doc +
-  testdata `// want` rename in lockstep; `go clean -testcache` before `task test:gorules`.
-  (e) `task lint:invariants` (= `inv-render -check`) must exit 0 for invariants.md sync.
-
 - **Registry-renumber series (.14.12–.14.27, ~9 legs, all READY except .14.23) — CONSOLIDATED.**
   Each leg renames a legacy invariant family (GW/ROPS/P7-split/P4/P5/P6/FS/SCENE/PLUGIN/ACCESS/
   CRYPTO/S*/M*/COMMAND) to canonical `INV-<SCOPE>-N`, dense non-contiguous ascending-by-position.
@@ -192,3 +179,20 @@
   → unknown-command command_error now hits bus + events_audit); require full `task test:int`,
   not just the touched suites. Fake-level "exclusion pins" (fakeStore.GetWithMembership
   re-implements role filter in Go) pin the fake, not the SQL — demand a DB-level twin.
+
+- **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** 9 Web* RPCs proxying
+  SceneAccessService facade. KEY recurring trap: `*grpc.Client` wrappers wrap with
+  `oops.Code("RPC_FAILED").Wrap(err)` — and the web handler returns that to connect-go with
+  `//nolint:wrapcheck // gRPC status errors pass through as-is`. That comment is FALSE: core is
+  reached via plain grpc-go (status.Status err), browser side is connect-go with NO error
+  interceptor (server.go:69 NewWebServiceHandler, no WithInterceptors). connect-go wrapIfUncoded/
+  CodeOf only recognize *connect.Error via errors.As → an oops-wrapped status err becomes
+  CodeUnknown/HTTP 500. So facade PERMISSION_DENIED/NOT_FOUND/UNAUTHENTICATED all collapse to
+  Unknown at the browser. BUT this is the IDENTICAL pre-existing pattern of WebListFocusPresence
+  (handler.go:792) / WebListContent / WebListSessionStreams — NOT a new defect → non-blocking,
+  track separately. Unit `...PassesStatusErrorThroughAsIs` tests use the MOCK (no wrap) so they
+  prove handler transparency but CANNOT catch this (mock substitutes for the wrapper). Boundary/
+  seam side: interface-based SceneAccessClient option-wired in handler.go; nil-client guard returns
+  CodeUnimplemented; token from headerInjectSessionToken (never body, never logged); proto requests
+  OMIT player_session_token (header-injected). All clean. Whenever reviewing a web/gateway PR,
+  re-check this status→connect code gap; it is gateway-wide accepted behavior, not per-PR.

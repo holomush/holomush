@@ -9,13 +9,16 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { CharacterSceneInfo, ParticipantInfo, PublicSceneArchive, PublishedSceneEntry, SceneInfo } from "../../scene/v1/scene_pb";
+import { file_holomush_scene_v1_scene } from "../../scene/v1/scene_pb";
+import { file_holomush_sceneaccess_v1_sceneaccess } from "../../sceneaccess/v1/sceneaccess_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file holomush/web/v1/web.proto.
  */
 export const file_holomush_web_v1_web: GenFile = /*@__PURE__*/
-  fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEikgEKDENvbnRyb2xGcmFtZRIuCgZzaWduYWwYASABKA4yHi5ob2xvbXVzaC53ZWIudjEuQ29udHJvbFNpZ25hbBIPCgdtZXNzYWdlGAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkSGAoQYXR0YWNoX21vbWVudF9tcxgEIAEoAxIQCghzY2VuZV9pZBgFIAEoCSJNChJTZW5kQ29tbWFuZFJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgR0ZXh0GAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkiTQoTU2VuZENvbW1hbmRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg4KBm91dHB1dBgCIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAMgASgJIkMKE1N0cmVhbUV2ZW50c1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCUoECAIQA1IScmVwbGF5X2Zyb21fY3Vyc29yIoECCglHYW1lRXZlbnQSDAoEdHlwZRgBIAEoCRIQCghjYXRlZ29yeRgCIAEoCRIOCgZmb3JtYXQYAyABKAkSNQoOZGlzcGxheV90YXJnZXQYBCABKA4yHS5ob2xvbXVzaC53ZWIudjEuRXZlbnRDaGFubmVsEhEKCXRpbWVzdGFtcBgFIAEoAxINCgVhY3RvchgGIAEoCRIMCgR0ZXh0GAcgASgJEikKCG1ldGFkYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIQCghldmVudF9pZBgJIAEoCRIOCgZjdXJzb3IYCiABKAwSEAoIYWN0b3JfaWQYCyABKAkifgoUU3RyZWFtRXZlbnRzUmVzcG9uc2USKwoFZXZlbnQYASABKAsyGi5ob2xvbXVzaC53ZWIudjEuR2FtZUV2ZW50SAASMAoHY29udHJvbBgCIAEoCzIdLmhvbG9tdXNoLndlYi52MS5Db250cm9sRnJhbWVIAEIHCgVmcmFtZSInChFEaXNjb25uZWN0UmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIhQKEkRpc2Nvbm5lY3RSZXNwb25zZSIuChhHZXRDb21tYW5kSGlzdG9yeVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSItChlHZXRDb21tYW5kSGlzdG9yeVJlc3BvbnNlEhAKCGNvbW1hbmRzGAEgAygJIqMBChBDaGFyYWN0ZXJTdW1tYXJ5EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgCIAEoCRIaChJoYXNfYWN0aXZlX3Nlc3Npb24YAyABKAgSFgoOc2Vzc2lvbl9zdGF0dXMYBCABKAkSFQoNbGFzdF9sb2NhdGlvbhgFIAEoCRIWCg5sYXN0X3BsYXllZF9hdBgGIAEoAyJXChxXZWJBdXRoZW50aWNhdGVQbGF5ZXJSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJEhMKC3JlbWVtYmVyX21lGAMgASgIIukBCh1XZWJBdXRoZW50aWNhdGVQbGF5ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAyABKAkSNQoKY2hhcmFjdGVycxgEIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5EhwKFGRlZmF1bHRfY2hhcmFjdGVyX2lkGAUgASgJEhIKCmVycm9yX2NvZGUYBiABKAkSGwoTY3VycmVudF9wbGF5ZXJfbmFtZRgHIAEoCUoECAIQA1IUcGxheWVyX3Nlc3Npb25fdG9rZW4iRgoZV2ViU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYAiABKAkSEwoLY2xpZW50X3R5cGUYAyABKAkihAEKGldlYlNlbGVjdENoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSEgoKc2Vzc2lvbl9pZBgCIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgDIAEoCRISCgpyZWF0dGFjaGVkGAQgASgIEhUKDWVycm9yX21lc3NhZ2UYBSABKAkiSwoWV2ViQ3JlYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRINCgVlbWFpbBgDIAEoCSLFAQoXV2ViQ3JlYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBI1CgpjaGFyYWN0ZXJzGAMgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkSFQoNZXJyb3JfbWVzc2FnZRgEIAEoCRISCgplcnJvcl9jb2RlGAUgASgJEhsKE2N1cnJlbnRfcGxheWVyX25hbWUYBiABKAlKBAgCEANSFHBsYXllcl9zZXNzaW9uX3Rva2VuIhcKFVdlYkNyZWF0ZUd1ZXN0UmVxdWVzdCLGAQoWV2ViQ3JlYXRlR3Vlc3RSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkSNQoKY2hhcmFjdGVycxgDIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5EhwKFGRlZmF1bHRfY2hhcmFjdGVyX2lkGAQgASgJEhIKCmVycm9yX2NvZGUYBSABKAkSGwoTY3VycmVudF9wbGF5ZXJfbmFtZRgGIAEoCSIzChlXZWJDcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0EhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJInIKGldlYkNyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMY2hhcmFjdGVyX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiGgoYV2ViTGlzdENoYXJhY3RlcnNSZXF1ZXN0IlIKGVdlYkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USNQoKY2hhcmFjdGVycxgBIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5IhIKEFdlYkxvZ291dFJlcXVlc3QiEwoRV2ViTG9nb3V0UmVzcG9uc2UiLwoeV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0Eg0KBWVtYWlsGAEgASgJIjIKH1dlYlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJFCh5XZWJDb25maXJtUGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIkkKH1dlYkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJIhgKFldlYkNoZWNrU2Vzc2lvblJlcXVlc3QiigEKF1dlYkNoZWNrU2Vzc2lvblJlc3BvbnNlEhMKC3BsYXllcl9uYW1lGAEgASgJEhEKCXBsYXllcl9pZBgCIAEoCRIQCghpc19ndWVzdBgDIAEoCBI1CgpjaGFyYWN0ZXJzGAQgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkiIwoUV2ViR2V0Q29udGVudFJlcXVlc3QSCwoDa2V5GAEgASgJIkYKFVdlYkdldENvbnRlbnRSZXNwb25zZRItCgRpdGVtGAEgASgLMh8uaG9sb211c2gud2ViLnYxLldlYkNvbnRlbnRJdGVtIkYKFVdlYkxpc3RDb250ZW50UmVxdWVzdBIOCgZwcmVmaXgYASABKAkSDQoFbGltaXQYAiABKAUSDgoGY3Vyc29yGAMgASgJIl0KFldlYkxpc3RDb250ZW50UmVzcG9uc2USLgoFaXRlbXMYASADKAsyHy5ob2xvbXVzaC53ZWIudjEuV2ViQ29udGVudEl0ZW0SEwoLbmV4dF9jdXJzb3IYAiABKAkiswEKDldlYkNvbnRlbnRJdGVtEgsKA2tleRgBIAEoCRIUCgxjb250ZW50X3R5cGUYAiABKAkSDAoEYm9keRgDIAEoDBI/CghtZXRhZGF0YRgEIAMoCzItLmhvbG9tdXNoLndlYi52MS5XZWJDb250ZW50SXRlbS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKOAQocV2ViUXVlcnlTdHJlYW1IaXN0b3J5UmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBnN0cmVhbRgCIAEoCRINCgVjb3VudBgDIAEoBRIVCg1ub3RfYmVmb3JlX21zGAQgASgDEg4KBmN1cnNvchgFIAEoDBIUCgxub3RfYWZ0ZXJfbXMYBiABKAMicgodV2ViUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USKgoGZXZlbnRzGAEgAygLMhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudBIQCghoYXNfbW9yZRgCIAEoCBITCgtuZXh0X2N1cnNvchgDIAEoDCIyChxXZWJMaXN0U2Vzc2lvblN0cmVhbXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiMAodV2ViTGlzdFNlc3Npb25TdHJlYW1zUmVzcG9uc2USDwoHc3RyZWFtcxgBIAMoCSIeChxXZWJMaXN0UGxheWVyU2Vzc2lvbnNSZXF1ZXN0Ir8BChRXZWJQbGF5ZXJTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRIuCgpjcmVhdGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtsYXN0X2FjdGl2ZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKdXNlcl9hZ2VudBgEIAEoCRISCgppcF9hZGRyZXNzGAUgASgJEhIKCmlzX2N1cnJlbnQYBiABKAgiWAodV2ViTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2USNwoIc2Vzc2lvbnMYASADKAsyJS5ob2xvbXVzaC53ZWIudjEuV2ViUGxheWVyU2Vzc2lvbkluZm8iOgodV2ViUmV2b2tlUGxheWVyU2Vzc2lvblJlcXVlc3QSGQoRdGFyZ2V0X3Nlc3Npb25faWQYASABKAkiSAoeV2ViUmV2b2tlUGxheWVyU2Vzc2lvblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSIlCiNXZWJSZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVxdWVzdCJOCiRXZWJSZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1yZXZva2VkX2NvdW50GAIgASgFInIKEFdlYlByZXNlbmNlRW50cnkSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEjAKBXN0YXRlGAMgASgOMiEuaG9sb211c2gud2ViLnYxLldlYlByZXNlbmNlU3RhdGUiMQobV2ViTGlzdEZvY3VzUHJlc2VuY2VSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkinAEKHFdlYkxpc3RGb2N1c1ByZXNlbmNlUmVzcG9uc2USNAoHY29udGV4dBgBIAEoDjIjLmhvbG9tdXNoLndlYi52MS5XZWJQcmVzZW5jZUNvbnRleHQSEgoKY29udGV4dF9pZBgCIAEoCRIyCgdlbnRyaWVzGAMgAygLMiEuaG9sb211c2gud2ViLnYxLldlYlByZXNlbmNlRW50cnkiUAoTV2ViQXZhaWxhYmxlQ29tbWFuZBIMCgRuYW1lGAEgASgJEgwKBGhlbHAYAiABKAkSDQoFdXNhZ2UYAyABKAkSDgoGc291cmNlGAQgASgJIiwKFldlYkxpc3RDb21tYW5kc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSLdAQoXV2ViTGlzdENvbW1hbmRzUmVzcG9uc2USNgoIY29tbWFuZHMYASADKAsyJC5ob2xvbXVzaC53ZWIudjEuV2ViQXZhaWxhYmxlQ29tbWFuZBJGCgdhbGlhc2VzGAIgAygLMjUuaG9sb211c2gud2ViLnYxLldlYkxpc3RDb21tYW5kc1Jlc3BvbnNlLkFsaWFzZXNFbnRyeRISCgppbmNvbXBsZXRlGAMgASgIGi4KDEFsaWFzZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBKpgBCgxFdmVudENoYW5uZWwSHQoZRVZFTlRfQ0hBTk5FTF9VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NIQU5ORUxfVEVSTUlOQUwQARIXChNFVkVOVF9DSEFOTkVMX1NUQVRFEAISFgoSRVZFTlRfQ0hBTk5FTF9CT1RIEAMSHAoYRVZFTlRfQ0hBTk5FTF9BVURJVF9PTkxZEAQq+wEKDUNvbnRyb2xTaWduYWwSHgoaQ09OVFJPTF9TSUdOQUxfVU5TUEVDSUZJRUQQABIiCh5DT05UUk9MX1NJR05BTF9SRVBMQVlfQ09NUExFVEUQARIgChxDT05UUk9MX1NJR05BTF9TVFJFQU1fQ0xPU0VEEAISIAocQ09OVFJPTF9TSUdOQUxfU1RSRUFNX09QRU5FRBADEh8KG0NPTlRST0xfU0lHTkFMX1JFQ09OTkVDVElORxAEEh4KGkNPTlRST0xfU0lHTkFMX1JFQ09OTkVDVEVEEAUSIQodQ09OVFJPTF9TSUdOQUxfU0NFTkVfQUNUSVZJVFkQBip9ChJXZWJQcmVzZW5jZUNvbnRleHQSJAogV0VCX1BSRVNFTkNFX0NPTlRFWFRfVU5TUEVDSUZJRUQQABIhCh1XRUJfUFJFU0VOQ0VfQ09OVEVYVF9MT0NBVElPThABEh4KGldFQl9QUkVTRU5DRV9DT05URVhUX1NDRU5FEAIqlwEKEFdlYlByZXNlbmNlU3RhdGUSIgoeV0VCX1BSRVNFTkNFX1NUQVRFX1VOU1BFQ0lGSUVEEAASHQoZV0VCX1BSRVNFTkNFX1NUQVRFX0FDVElWRRABEh8KG1dFQl9QUkVTRU5DRV9TVEFURV9ERVRBQ0hFRBACEh8KG1dFQl9QUkVTRU5DRV9TVEFURV9JTkFDVElWRRADMtgTCgpXZWJTZXJ2aWNlElgKC1NlbmRDb21tYW5kEiMuaG9sb211c2gud2ViLnYxLlNlbmRDb21tYW5kUmVxdWVzdBokLmhvbG9tdXNoLndlYi52MS5TZW5kQ29tbWFuZFJlc3BvbnNlEl0KDFN0cmVhbUV2ZW50cxIkLmhvbG9tdXNoLndlYi52MS5TdHJlYW1FdmVudHNSZXF1ZXN0GiUuaG9sb211c2gud2ViLnYxLlN0cmVhbUV2ZW50c1Jlc3BvbnNlMAESVQoKRGlzY29ubmVjdBIiLmhvbG9tdXNoLndlYi52MS5EaXNjb25uZWN0UmVxdWVzdBojLmhvbG9tdXNoLndlYi52MS5EaXNjb25uZWN0UmVzcG9uc2USagoRR2V0Q29tbWFuZEhpc3RvcnkSKS5ob2xvbXVzaC53ZWIudjEuR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0GiouaG9sb211c2gud2ViLnYxLkdldENvbW1hbmRIaXN0b3J5UmVzcG9uc2USdgoVV2ViQXV0aGVudGljYXRlUGxheWVyEi0uaG9sb211c2gud2ViLnYxLldlYkF1dGhlbnRpY2F0ZVBsYXllclJlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USbQoSV2ViU2VsZWN0Q2hhcmFjdGVyEiouaG9sb211c2gud2ViLnYxLldlYlNlbGVjdENoYXJhY3RlclJlcXVlc3QaKy5ob2xvbXVzaC53ZWIudjEuV2ViU2VsZWN0Q2hhcmFjdGVyUmVzcG9uc2USZAoPV2ViQ3JlYXRlUGxheWVyEicuaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZVBsYXllclJlcXVlc3QaKC5ob2xvbXVzaC53ZWIudjEuV2ViQ3JlYXRlUGxheWVyUmVzcG9uc2USYQoOV2ViQ3JlYXRlR3Vlc3QSJi5ob2xvbXVzaC53ZWIudjEuV2ViQ3JlYXRlR3Vlc3RSZXF1ZXN0GicuaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZUd1ZXN0UmVzcG9uc2USbQoSV2ViQ3JlYXRlQ2hhcmFjdGVyEiouaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZUNoYXJhY3RlclJlcXVlc3QaKy5ob2xvbXVzaC53ZWIudjEuV2ViQ3JlYXRlQ2hhcmFjdGVyUmVzcG9uc2USagoRV2ViTGlzdENoYXJhY3RlcnMSKS5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdENoYXJhY3RlcnNSZXF1ZXN0GiouaG9sb211c2gud2ViLnYxLldlYkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USUgoJV2ViTG9nb3V0EiEuaG9sb211c2gud2ViLnYxLldlYkxvZ291dFJlcXVlc3QaIi5ob2xvbXVzaC53ZWIudjEuV2ViTG9nb3V0UmVzcG9uc2USfAoXV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXQSLy5ob2xvbXVzaC53ZWIudjEuV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0GjAuaG9sb211c2gud2ViLnYxLldlYlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USfAoXV2ViQ29uZmlybVBhc3N3b3JkUmVzZXQSLy5ob2xvbXVzaC53ZWIudjEuV2ViQ29uZmlybVBhc3N3b3JkUmVzZXRSZXF1ZXN0GjAuaG9sb211c2gud2ViLnYxLldlYkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USZAoPV2ViQ2hlY2tTZXNzaW9uEicuaG9sb211c2gud2ViLnYxLldlYkNoZWNrU2Vzc2lvblJlcXVlc3QaKC5ob2xvbXVzaC53ZWIudjEuV2ViQ2hlY2tTZXNzaW9uUmVzcG9uc2USXgoNV2ViR2V0Q29udGVudBIlLmhvbG9tdXNoLndlYi52MS5XZWJHZXRDb250ZW50UmVxdWVzdBomLmhvbG9tdXNoLndlYi52MS5XZWJHZXRDb250ZW50UmVzcG9uc2USYQoOV2ViTGlzdENvbnRlbnQSJi5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdENvbnRlbnRSZXF1ZXN0GicuaG9sb211c2gud2ViLnYxLldlYkxpc3RDb250ZW50UmVzcG9uc2USdgoVV2ViUXVlcnlTdHJlYW1IaXN0b3J5Ei0uaG9sb211c2gud2ViLnYxLldlYlF1ZXJ5U3RyZWFtSGlzdG9yeVJlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USdgoVV2ViTGlzdFNlc3Npb25TdHJlYW1zEi0uaG9sb211c2gud2ViLnYxLldlYkxpc3RTZXNzaW9uU3RyZWFtc1JlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdFNlc3Npb25TdHJlYW1zUmVzcG9uc2USdgoVV2ViTGlzdFBsYXllclNlc3Npb25zEi0uaG9sb211c2gud2ViLnYxLldlYkxpc3RQbGF5ZXJTZXNzaW9uc1JlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2USeQoWV2ViUmV2b2tlUGxheWVyU2Vzc2lvbhIuLmhvbG9tdXNoLndlYi52MS5XZWJSZXZva2VQbGF5ZXJTZXNzaW9uUmVxdWVzdBovLmhvbG9tdXNoLndlYi52MS5XZWJSZXZva2VQbGF5ZXJTZXNzaW9uUmVzcG9uc2USiwEKHFdlYlJldm9rZU90aGVyUGxheWVyU2Vzc2lvbnMSNC5ob2xvbXVzaC53ZWIudjEuV2ViUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1JlcXVlc3QaNS5ob2xvbXVzaC53ZWIudjEuV2ViUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1Jlc3BvbnNlEnMKFFdlYkxpc3RGb2N1c1ByZXNlbmNlEiwuaG9sb211c2gud2ViLnYxLldlYkxpc3RGb2N1c1ByZXNlbmNlUmVxdWVzdBotLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0Rm9jdXNQcmVzZW5jZVJlc3BvbnNlEmQKD1dlYkxpc3RDb21tYW5kcxInLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0Q29tbWFuZHNSZXF1ZXN0GiguaG9sb211c2gud2ViLnYxLldlYkxpc3RDb21tYW5kc1Jlc3BvbnNlQj5aPGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3dlYi92MTt3ZWJ2MWIGcHJvdG8z", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEikgEKDENvbnRyb2xGcmFtZRIuCgZzaWduYWwYASABKA4yHi5ob2xvbXVzaC53ZWIudjEuQ29udHJvbFNpZ25hbBIPCgdtZXNzYWdlGAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkSGAoQYXR0YWNoX21vbWVudF9tcxgEIAEoAxIQCghzY2VuZV9pZBgFIAEoCSJNChJTZW5kQ29tbWFuZFJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgR0ZXh0GAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkiTQoTU2VuZENvbW1hbmRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg4KBm91dHB1dBgCIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAMgASgJIkMKE1N0cmVhbUV2ZW50c1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCUoECAIQA1IScmVwbGF5X2Zyb21fY3Vyc29yIoECCglHYW1lRXZlbnQSDAoEdHlwZRgBIAEoCRIQCghjYXRlZ29yeRgCIAEoCRIOCgZmb3JtYXQYAyABKAkSNQoOZGlzcGxheV90YXJnZXQYBCABKA4yHS5ob2xvbXVzaC53ZWIudjEuRXZlbnRDaGFubmVsEhEKCXRpbWVzdGFtcBgFIAEoAxINCgVhY3RvchgGIAEoCRIMCgR0ZXh0GAcgASgJEikKCG1ldGFkYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIQCghldmVudF9pZBgJIAEoCRIOCgZjdXJzb3IYCiABKAwSEAoIYWN0b3JfaWQYCyABKAkifgoUU3RyZWFtRXZlbnRzUmVzcG9uc2USKwoFZXZlbnQYASABKAsyGi5ob2xvbXVzaC53ZWIudjEuR2FtZUV2ZW50SAASMAoHY29udHJvbBgCIAEoCzIdLmhvbG9tdXNoLndlYi52MS5Db250cm9sRnJhbWVIAEIHCgVmcmFtZSInChFEaXNjb25uZWN0UmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIhQKEkRpc2Nvbm5lY3RSZXNwb25zZSIuChhHZXRDb21tYW5kSGlzdG9yeVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSItChlHZXRDb21tYW5kSGlzdG9yeVJlc3BvbnNlEhAKCGNvbW1hbmRzGAEgAygJIqMBChBDaGFyYWN0ZXJTdW1tYXJ5EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgCIAEoCRIaChJoYXNfYWN0aXZlX3Nlc3Npb24YAyABKAgSFgoOc2Vzc2lvbl9zdGF0dXMYBCABKAkSFQoNbGFzdF9sb2NhdGlvbhgFIAEoCRIWCg5sYXN0X3BsYXllZF9hdBgGIAEoAyJXChxXZWJBdXRoZW50aWNhdGVQbGF5ZXJSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJEhMKC3JlbWVtYmVyX21lGAMgASgIIukBCh1XZWJBdXRoZW50aWNhdGVQbGF5ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAyABKAkSNQoKY2hhcmFjdGVycxgEIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5EhwKFGRlZmF1bHRfY2hhcmFjdGVyX2lkGAUgASgJEhIKCmVycm9yX2NvZGUYBiABKAkSGwoTY3VycmVudF9wbGF5ZXJfbmFtZRgHIAEoCUoECAIQA1IUcGxheWVyX3Nlc3Npb25fdG9rZW4iRgoZV2ViU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYAiABKAkSEwoLY2xpZW50X3R5cGUYAyABKAkihAEKGldlYlNlbGVjdENoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSEgoKc2Vzc2lvbl9pZBgCIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgDIAEoCRISCgpyZWF0dGFjaGVkGAQgASgIEhUKDWVycm9yX21lc3NhZ2UYBSABKAkiSwoWV2ViQ3JlYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRINCgVlbWFpbBgDIAEoCSLFAQoXV2ViQ3JlYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBI1CgpjaGFyYWN0ZXJzGAMgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkSFQoNZXJyb3JfbWVzc2FnZRgEIAEoCRISCgplcnJvcl9jb2RlGAUgASgJEhsKE2N1cnJlbnRfcGxheWVyX25hbWUYBiABKAlKBAgCEANSFHBsYXllcl9zZXNzaW9uX3Rva2VuIhcKFVdlYkNyZWF0ZUd1ZXN0UmVxdWVzdCLGAQoWV2ViQ3JlYXRlR3Vlc3RSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkSNQoKY2hhcmFjdGVycxgDIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5EhwKFGRlZmF1bHRfY2hhcmFjdGVyX2lkGAQgASgJEhIKCmVycm9yX2NvZGUYBSABKAkSGwoTY3VycmVudF9wbGF5ZXJfbmFtZRgGIAEoCSIzChlXZWJDcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0EhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJInIKGldlYkNyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMY2hhcmFjdGVyX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiGgoYV2ViTGlzdENoYXJhY3RlcnNSZXF1ZXN0IlIKGVdlYkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USNQoKY2hhcmFjdGVycxgBIAMoCzIhLmhvbG9tdXNoLndlYi52MS5DaGFyYWN0ZXJTdW1tYXJ5IhIKEFdlYkxvZ291dFJlcXVlc3QiEwoRV2ViTG9nb3V0UmVzcG9uc2UiLwoeV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0Eg0KBWVtYWlsGAEgASgJIjIKH1dlYlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJFCh5XZWJDb25maXJtUGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIkkKH1dlYkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJIhgKFldlYkNoZWNrU2Vzc2lvblJlcXVlc3QiigEKF1dlYkNoZWNrU2Vzc2lvblJlc3BvbnNlEhMKC3BsYXllcl9uYW1lGAEgASgJEhEKCXBsYXllcl9pZBgCIAEoCRIQCghpc19ndWVzdBgDIAEoCBI1CgpjaGFyYWN0ZXJzGAQgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkiIwoUV2ViR2V0Q29udGVudFJlcXVlc3QSCwoDa2V5GAEgASgJIkYKFVdlYkdldENvbnRlbnRSZXNwb25zZRItCgRpdGVtGAEgASgLMh8uaG9sb211c2gud2ViLnYxLldlYkNvbnRlbnRJdGVtIkYKFVdlYkxpc3RDb250ZW50UmVxdWVzdBIOCgZwcmVmaXgYASABKAkSDQoFbGltaXQYAiABKAUSDgoGY3Vyc29yGAMgASgJIl0KFldlYkxpc3RDb250ZW50UmVzcG9uc2USLgoFaXRlbXMYASADKAsyHy5ob2xvbXVzaC53ZWIudjEuV2ViQ29udGVudEl0ZW0SEwoLbmV4dF9jdXJzb3IYAiABKAkiswEKDldlYkNvbnRlbnRJdGVtEgsKA2tleRgBIAEoCRIUCgxjb250ZW50X3R5cGUYAiABKAkSDAoEYm9keRgDIAEoDBI/CghtZXRhZGF0YRgEIAMoCzItLmhvbG9tdXNoLndlYi52MS5XZWJDb250ZW50SXRlbS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKOAQocV2ViUXVlcnlTdHJlYW1IaXN0b3J5UmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBnN0cmVhbRgCIAEoCRINCgVjb3VudBgDIAEoBRIVCg1ub3RfYmVmb3JlX21zGAQgASgDEg4KBmN1cnNvchgFIAEoDBIUCgxub3RfYWZ0ZXJfbXMYBiABKAMicgodV2ViUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USKgoGZXZlbnRzGAEgAygLMhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudBIQCghoYXNfbW9yZRgCIAEoCBITCgtuZXh0X2N1cnNvchgDIAEoDCIyChxXZWJMaXN0U2Vzc2lvblN0cmVhbXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiMAodV2ViTGlzdFNlc3Npb25TdHJlYW1zUmVzcG9uc2USDwoHc3RyZWFtcxgBIAMoCSIeChxXZWJMaXN0UGxheWVyU2Vzc2lvbnNSZXF1ZXN0Ir8BChRXZWJQbGF5ZXJTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRIuCgpjcmVhdGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtsYXN0X2FjdGl2ZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKdXNlcl9hZ2VudBgEIAEoCRISCgppcF9hZGRyZXNzGAUgASgJEhIKCmlzX2N1cnJlbnQYBiABKAgiWAodV2ViTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2USNwoIc2Vzc2lvbnMYASADKAsyJS5ob2xvbXVzaC53ZWIudjEuV2ViUGxheWVyU2Vzc2lvbkluZm8iOgodV2ViUmV2b2tlUGxheWVyU2Vzc2lvblJlcXVlc3QSGQoRdGFyZ2V0X3Nlc3Npb25faWQYASABKAkiSAoeV2ViUmV2b2tlUGxheWVyU2Vzc2lvblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSIlCiNXZWJSZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVxdWVzdCJOCiRXZWJSZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1yZXZva2VkX2NvdW50GAIgASgFInIKEFdlYlByZXNlbmNlRW50cnkSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEjAKBXN0YXRlGAMgASgOMiEuaG9sb211c2gud2ViLnYxLldlYlByZXNlbmNlU3RhdGUiMQobV2ViTGlzdEZvY3VzUHJlc2VuY2VSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkinAEKHFdlYkxpc3RGb2N1c1ByZXNlbmNlUmVzcG9uc2USNAoHY29udGV4dBgBIAEoDjIjLmhvbG9tdXNoLndlYi52MS5XZWJQcmVzZW5jZUNvbnRleHQSEgoKY29udGV4dF9pZBgCIAEoCRIyCgdlbnRyaWVzGAMgAygLMiEuaG9sb211c2gud2ViLnYxLldlYlByZXNlbmNlRW50cnkiUAoTV2ViQXZhaWxhYmxlQ29tbWFuZBIMCgRuYW1lGAEgASgJEgwKBGhlbHAYAiABKAkSDQoFdXNhZ2UYAyABKAkSDgoGc291cmNlGAQgASgJIiwKFldlYkxpc3RDb21tYW5kc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSLdAQoXV2ViTGlzdENvbW1hbmRzUmVzcG9uc2USNgoIY29tbWFuZHMYASADKAsyJC5ob2xvbXVzaC53ZWIudjEuV2ViQXZhaWxhYmxlQ29tbWFuZBJGCgdhbGlhc2VzGAIgAygLMjUuaG9sb211c2gud2ViLnYxLldlYkxpc3RDb21tYW5kc1Jlc3BvbnNlLkFsaWFzZXNFbnRyeRISCgppbmNvbXBsZXRlGAMgASgIGi4KDEFsaWFzZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIo8BChRXZWJMaXN0U2NlbmVzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhQKDGNoYXJhY3Rlcl9pZBgCIAEoCRINCgVsaW1pdBgDIAEoBRIOCgZvZmZzZXQYBCABKAUSDAoEdGFncxgFIAMoCRIgChhleGNsdWRlX2NvbnRlbnRfd2FybmluZ3MYBiADKAkiRQoVV2ViTGlzdFNjZW5lc1Jlc3BvbnNlEiwKBnNjZW5lcxgBIAMoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyJQChJXZWJHZXRTY2VuZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAiABKAkSEAoIc2NlbmVfaWQYAyABKAkiQgoTV2ViR2V0U2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyJCChZXZWJMaXN0TXlTY2VuZXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJIlAKF1dlYkxpc3RNeVNjZW5lc1Jlc3BvbnNlEjUKBnNjZW5lcxgBIAMoCzIlLmhvbG9tdXNoLnNjZW5lLnYxLkNoYXJhY3RlclNjZW5lSW5mbyJSChRXZWJXYXRjaFNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhQKDGNoYXJhY3Rlcl9pZBgCIAEoCRIQCghzY2VuZV9pZBgDIAEoCSJQChVXZWJXYXRjaFNjZW5lUmVzcG9uc2USNwoLcGFydGljaXBhbnQYASABKAsyIi5ob2xvbXVzaC5zY2VuZS52MS5QYXJ0aWNpcGFudEluZm8iYwoVV2ViRXhwb3J0U2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJEhAKCHNjZW5lX2lkGAMgASgJEg4KBmZvcm1hdBgEIAEoCSJOChZXZWJFeHBvcnRTY2VuZVJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSEQoJbWltZV90eXBlGAIgASgJEhAKCGZpbGVuYW1lGAMgASgJIlYKF1dlYlNldFNjZW5lRm9jdXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSFQoNY29ubmVjdGlvbl9pZBgCIAEoCRIQCghzY2VuZV9pZBgDIAEoCSIaChhXZWJTZXRTY2VuZUZvY3VzUmVzcG9uc2UiYAodV2ViTGlzdFB1Ymxpc2hlZFNjZW5lc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRINCgVsaW1pdBgCIAEoBRIOCgZvZmZzZXQYAyABKAUSDAoEdGFncxgEIAMoCSJZCh5XZWJMaXN0UHVibGlzaGVkU2NlbmVzUmVzcG9uc2USNwoIYXJjaGl2ZXMYASADKAsyJS5ob2xvbXVzaC5zY2VuZS52MS5QdWJsaWNTY2VuZUFyY2hpdmUiUQofV2ViR2V0UHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhoKEnB1Ymxpc2hlZF9zY2VuZV9pZBgCIAEoCSLEAQogV2ViR2V0UHVibGljU2NlbmVBcmNoaXZlUmVzcG9uc2USCgoCaWQYASABKAkSFgoOdGl0bGVfc25hcHNob3QYAiABKAkSHQoVcGFydGljaXBhbnRzX3NuYXBzaG90GAMgAygJEj8KD2NvbnRlbnRfZW50cmllcxgEIAMoCzImLmhvbG9tdXNoLnNjZW5lLnYxLlB1Ymxpc2hlZFNjZW5lRW50cnkSHAoUcHVibGlzaGVkX2F0X3VuaXhfbnMYBSABKAMiZgokV2ViRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSGgoScHVibGlzaGVkX3NjZW5lX2lkGAIgASgJEg4KBmZvcm1hdBgDIAEoCSJLCiVXZWJEb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSEQoJbWltZV90eXBlGAIgASgJKpgBCgxFdmVudENoYW5uZWwSHQoZRVZFTlRfQ0hBTk5FTF9VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NIQU5ORUxfVEVSTUlOQUwQARIXChNFVkVOVF9DSEFOTkVMX1NUQVRFEAISFgoSRVZFTlRfQ0hBTk5FTF9CT1RIEAMSHAoYRVZFTlRfQ0hBTk5FTF9BVURJVF9PTkxZEAQq+wEKDUNvbnRyb2xTaWduYWwSHgoaQ09OVFJPTF9TSUdOQUxfVU5TUEVDSUZJRUQQABIiCh5DT05UUk9MX1NJR05BTF9SRVBMQVlfQ09NUExFVEUQARIgChxDT05UUk9MX1NJR05BTF9TVFJFQU1fQ0xPU0VEEAISIAocQ09OVFJPTF9TSUdOQUxfU1RSRUFNX09QRU5FRBADEh8KG0NPTlRST0xfU0lHTkFMX1JFQ09OTkVDVElORxAEEh4KGkNPTlRST0xfU0lHTkFMX1JFQ09OTkVDVEVEEAUSIQodQ09OVFJPTF9TSUdOQUxfU0NFTkVfQUNUSVZJVFkQBip9ChJXZWJQcmVzZW5jZUNvbnRleHQSJAogV0VCX1BSRVNFTkNFX0NPTlRFWFRfVU5TUEVDSUZJRUQQABIhCh1XRUJfUFJFU0VOQ0VfQ09OVEVYVF9MT0NBVElPThABEh4KGldFQl9QUkVTRU5DRV9DT05URVhUX1NDRU5FEAIqlwEKEFdlYlByZXNlbmNlU3RhdGUSIgoeV0VCX1BSRVNFTkNFX1NUQVRFX1VOU1BFQ0lGSUVEEAASHQoZV0VCX1BSRVNFTkNFX1NUQVRFX0FDVElWRRABEh8KG1dFQl9QUkVTRU5DRV9TVEFURV9ERVRBQ0hFRBACEh8KG1dFQl9QUkVTRU5DRV9TVEFURV9JTkFDVElWRRADMrEbCgpXZWJTZXJ2aWNlElgKC1NlbmRDb21tYW5kEiMuaG9sb211c2gud2ViLnYxLlNlbmRDb21tYW5kUmVxdWVzdBokLmhvbG9tdXNoLndlYi52MS5TZW5kQ29tbWFuZFJlc3BvbnNlEl0KDFN0cmVhbUV2ZW50cxIkLmhvbG9tdXNoLndlYi52MS5TdHJlYW1FdmVudHNSZXF1ZXN0GiUuaG9sb211c2gud2ViLnYxLlN0cmVhbUV2ZW50c1Jlc3BvbnNlMAESVQoKRGlzY29ubmVjdBIiLmhvbG9tdXNoLndlYi52MS5EaXNjb25uZWN0UmVxdWVzdBojLmhvbG9tdXNoLndlYi52MS5EaXNjb25uZWN0UmVzcG9uc2USagoRR2V0Q29tbWFuZEhpc3RvcnkSKS5ob2xvbXVzaC53ZWIudjEuR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0GiouaG9sb211c2gud2ViLnYxLkdldENvbW1hbmRIaXN0b3J5UmVzcG9uc2USdgoVV2ViQXV0aGVudGljYXRlUGxheWVyEi0uaG9sb211c2gud2ViLnYxLldlYkF1dGhlbnRpY2F0ZVBsYXllclJlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USbQoSV2ViU2VsZWN0Q2hhcmFjdGVyEiouaG9sb211c2gud2ViLnYxLldlYlNlbGVjdENoYXJhY3RlclJlcXVlc3QaKy5ob2xvbXVzaC53ZWIudjEuV2ViU2VsZWN0Q2hhcmFjdGVyUmVzcG9uc2USZAoPV2ViQ3JlYXRlUGxheWVyEicuaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZVBsYXllclJlcXVlc3QaKC5ob2xvbXVzaC53ZWIudjEuV2ViQ3JlYXRlUGxheWVyUmVzcG9uc2USYQoOV2ViQ3JlYXRlR3Vlc3QSJi5ob2xvbXVzaC53ZWIudjEuV2ViQ3JlYXRlR3Vlc3RSZXF1ZXN0GicuaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZUd1ZXN0UmVzcG9uc2USbQoSV2ViQ3JlYXRlQ2hhcmFjdGVyEiouaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZUNoYXJhY3RlclJlcXVlc3QaKy5ob2xvbXVzaC53ZWIudjEuV2ViQ3JlYXRlQ2hhcmFjdGVyUmVzcG9uc2USagoRV2ViTGlzdENoYXJhY3RlcnMSKS5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdENoYXJhY3RlcnNSZXF1ZXN0GiouaG9sb211c2gud2ViLnYxLldlYkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USUgoJV2ViTG9nb3V0EiEuaG9sb211c2gud2ViLnYxLldlYkxvZ291dFJlcXVlc3QaIi5ob2xvbXVzaC53ZWIudjEuV2ViTG9nb3V0UmVzcG9uc2USfAoXV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXQSLy5ob2xvbXVzaC53ZWIudjEuV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0GjAuaG9sb211c2gud2ViLnYxLldlYlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USfAoXV2ViQ29uZmlybVBhc3N3b3JkUmVzZXQSLy5ob2xvbXVzaC53ZWIudjEuV2ViQ29uZmlybVBhc3N3b3JkUmVzZXRSZXF1ZXN0GjAuaG9sb211c2gud2ViLnYxLldlYkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USZAoPV2ViQ2hlY2tTZXNzaW9uEicuaG9sb211c2gud2ViLnYxLldlYkNoZWNrU2Vzc2lvblJlcXVlc3QaKC5ob2xvbXVzaC53ZWIudjEuV2ViQ2hlY2tTZXNzaW9uUmVzcG9uc2USXgoNV2ViR2V0Q29udGVudBIlLmhvbG9tdXNoLndlYi52MS5XZWJHZXRDb250ZW50UmVxdWVzdBomLmhvbG9tdXNoLndlYi52MS5XZWJHZXRDb250ZW50UmVzcG9uc2USYQoOV2ViTGlzdENvbnRlbnQSJi5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdENvbnRlbnRSZXF1ZXN0GicuaG9sb211c2gud2ViLnYxLldlYkxpc3RDb250ZW50UmVzcG9uc2USdgoVV2ViUXVlcnlTdHJlYW1IaXN0b3J5Ei0uaG9sb211c2gud2ViLnYxLldlYlF1ZXJ5U3RyZWFtSGlzdG9yeVJlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USdgoVV2ViTGlzdFNlc3Npb25TdHJlYW1zEi0uaG9sb211c2gud2ViLnYxLldlYkxpc3RTZXNzaW9uU3RyZWFtc1JlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdFNlc3Npb25TdHJlYW1zUmVzcG9uc2USdgoVV2ViTGlzdFBsYXllclNlc3Npb25zEi0uaG9sb211c2gud2ViLnYxLldlYkxpc3RQbGF5ZXJTZXNzaW9uc1JlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2USeQoWV2ViUmV2b2tlUGxheWVyU2Vzc2lvbhIuLmhvbG9tdXNoLndlYi52MS5XZWJSZXZva2VQbGF5ZXJTZXNzaW9uUmVxdWVzdBovLmhvbG9tdXNoLndlYi52MS5XZWJSZXZva2VQbGF5ZXJTZXNzaW9uUmVzcG9uc2USiwEKHFdlYlJldm9rZU90aGVyUGxheWVyU2Vzc2lvbnMSNC5ob2xvbXVzaC53ZWIudjEuV2ViUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1JlcXVlc3QaNS5ob2xvbXVzaC53ZWIudjEuV2ViUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1Jlc3BvbnNlEnMKFFdlYkxpc3RGb2N1c1ByZXNlbmNlEiwuaG9sb211c2gud2ViLnYxLldlYkxpc3RGb2N1c1ByZXNlbmNlUmVxdWVzdBotLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0Rm9jdXNQcmVzZW5jZVJlc3BvbnNlEmQKD1dlYkxpc3RDb21tYW5kcxInLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0Q29tbWFuZHNSZXF1ZXN0GiguaG9sb211c2gud2ViLnYxLldlYkxpc3RDb21tYW5kc1Jlc3BvbnNlEl4KDVdlYkxpc3RTY2VuZXMSJS5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdFNjZW5lc1JlcXVlc3QaJi5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdFNjZW5lc1Jlc3BvbnNlElgKC1dlYkdldFNjZW5lEiMuaG9sb211c2gud2ViLnYxLldlYkdldFNjZW5lUmVxdWVzdBokLmhvbG9tdXNoLndlYi52MS5XZWJHZXRTY2VuZVJlc3BvbnNlEmQKD1dlYkxpc3RNeVNjZW5lcxInLmhvbG9tdXNoLndlYi52MS5XZWJMaXN0TXlTY2VuZXNSZXF1ZXN0GiguaG9sb211c2gud2ViLnYxLldlYkxpc3RNeVNjZW5lc1Jlc3BvbnNlEl4KDVdlYldhdGNoU2NlbmUSJS5ob2xvbXVzaC53ZWIudjEuV2ViV2F0Y2hTY2VuZVJlcXVlc3QaJi5ob2xvbXVzaC53ZWIudjEuV2ViV2F0Y2hTY2VuZVJlc3BvbnNlEmEKDldlYkV4cG9ydFNjZW5lEiYuaG9sb211c2gud2ViLnYxLldlYkV4cG9ydFNjZW5lUmVxdWVzdBonLmhvbG9tdXNoLndlYi52MS5XZWJFeHBvcnRTY2VuZVJlc3BvbnNlEmcKEFdlYlNldFNjZW5lRm9jdXMSKC5ob2xvbXVzaC53ZWIudjEuV2ViU2V0U2NlbmVGb2N1c1JlcXVlc3QaKS5ob2xvbXVzaC53ZWIudjEuV2ViU2V0U2NlbmVGb2N1c1Jlc3BvbnNlEnkKFldlYkxpc3RQdWJsaXNoZWRTY2VuZXMSLi5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdFB1Ymxpc2hlZFNjZW5lc1JlcXVlc3QaLy5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdFB1Ymxpc2hlZFNjZW5lc1Jlc3BvbnNlEn8KGFdlYkdldFB1YmxpY1NjZW5lQXJjaGl2ZRIwLmhvbG9tdXNoLndlYi52MS5XZWJHZXRQdWJsaWNTY2VuZUFyY2hpdmVSZXF1ZXN0GjEuaG9sb211c2gud2ViLnYxLldlYkdldFB1YmxpY1NjZW5lQXJjaGl2ZVJlc3BvbnNlEo4BCh1XZWJEb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZRI1LmhvbG9tdXNoLndlYi52MS5XZWJEb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QaNi5ob2xvbXVzaC53ZWIudjEuV2ViRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZUI+WjxnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC93ZWIvdjE7d2VidjFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_holomush_scene_v1_scene, file_holomush_sceneaccess_v1_sceneaccess]);
 
 /**
  * ControlFrame is the out-of-band stream-lifecycle message carried in the
@@ -1842,6 +1845,589 @@ export const WebListCommandsResponseSchema: GenMessage<WebListCommandsResponse> 
   messageDesc(file_holomush_web_v1_web, 52);
 
 /**
+ * WebListScenesRequest proxies to SceneAccessService.ListScenesForViewer.
+ * session_id is the client-declared player-session ULID; player_session_token
+ * is injected from the X-Session-Token cookie by gateway middleware and is NOT
+ * a body field — it is forwarded as the facade's player_session_token.
+ *
+ * @generated from message holomush.web.v1.WebListScenesRequest
+ */
+export type WebListScenesRequest = Message<"holomush.web.v1.WebListScenesRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * character_id is the "act as this alt" selector forwarded to the facade.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+
+  /**
+   * limit is the maximum number of scenes to return; 0 means server default.
+   *
+   * @generated from field: int32 limit = 3;
+   */
+  limit: number;
+
+  /**
+   * offset is the number of leading results to skip for pagination.
+   *
+   * @generated from field: int32 offset = 4;
+   */
+  offset: number;
+
+  /**
+   * tags restricts results to scenes carrying all of these tags.
+   *
+   * @generated from field: repeated string tags = 5;
+   */
+  tags: string[];
+
+  /**
+   * exclude_content_warnings adds extra content-warning categories to suppress.
+   *
+   * @generated from field: repeated string exclude_content_warnings = 6;
+   */
+  excludeContentWarnings: string[];
+};
+
+/**
+ * Describes the message holomush.web.v1.WebListScenesRequest.
+ * Use `create(WebListScenesRequestSchema)` to create a new message.
+ */
+export const WebListScenesRequestSchema: GenMessage<WebListScenesRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 53);
+
+/**
+ * WebListScenesResponse re-exports the scene board result from the facade.
+ *
+ * @generated from message holomush.web.v1.WebListScenesResponse
+ */
+export type WebListScenesResponse = Message<"holomush.web.v1.WebListScenesResponse"> & {
+  /**
+   * scenes is the matching public scenes for this page.
+   *
+   * @generated from field: repeated holomush.scene.v1.SceneInfo scenes = 1;
+   */
+  scenes: SceneInfo[];
+};
+
+/**
+ * Describes the message holomush.web.v1.WebListScenesResponse.
+ * Use `create(WebListScenesResponseSchema)` to create a new message.
+ */
+export const WebListScenesResponseSchema: GenMessage<WebListScenesResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 54);
+
+/**
+ * WebGetSceneRequest proxies to SceneAccessService.GetSceneForViewer.
+ * player_session_token is injected from the X-Session-Token cookie.
+ *
+ * @generated from message holomush.web.v1.WebGetSceneRequest
+ */
+export type WebGetSceneRequest = Message<"holomush.web.v1.WebGetSceneRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * character_id is the "act as this alt" selector forwarded to the facade.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+
+  /**
+   * scene_id identifies the scene to load; required.
+   *
+   * @generated from field: string scene_id = 3;
+   */
+  sceneId: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebGetSceneRequest.
+ * Use `create(WebGetSceneRequestSchema)` to create a new message.
+ */
+export const WebGetSceneRequestSchema: GenMessage<WebGetSceneRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 55);
+
+/**
+ * WebGetSceneResponse re-exports the single-scene metadata from the facade.
+ *
+ * @generated from message holomush.web.v1.WebGetSceneResponse
+ */
+export type WebGetSceneResponse = Message<"holomush.web.v1.WebGetSceneResponse"> & {
+  /**
+   * scene is the loaded scene's full metadata projection.
+   *
+   * @generated from field: holomush.scene.v1.SceneInfo scene = 1;
+   */
+  scene?: SceneInfo | undefined;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebGetSceneResponse.
+ * Use `create(WebGetSceneResponseSchema)` to create a new message.
+ */
+export const WebGetSceneResponseSchema: GenMessage<WebGetSceneResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 56);
+
+/**
+ * WebListMyScenesRequest proxies to SceneAccessService.ListMyScenes.
+ * player_session_token is injected from the X-Session-Token cookie.
+ *
+ * @generated from message holomush.web.v1.WebListMyScenesRequest
+ */
+export type WebListMyScenesRequest = Message<"holomush.web.v1.WebListMyScenesRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * character_id is the "act as this alt" selector forwarded to the facade.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebListMyScenesRequest.
+ * Use `create(WebListMyScenesRequestSchema)` to create a new message.
+ */
+export const WebListMyScenesRequestSchema: GenMessage<WebListMyScenesRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 57);
+
+/**
+ * WebListMyScenesResponse re-exports the character's scene participations from the facade.
+ *
+ * @generated from message holomush.web.v1.WebListMyScenesResponse
+ */
+export type WebListMyScenesResponse = Message<"holomush.web.v1.WebListMyScenesResponse"> & {
+  /**
+   * scenes is the character's scene participations, most recently active first.
+   *
+   * @generated from field: repeated holomush.scene.v1.CharacterSceneInfo scenes = 1;
+   */
+  scenes: CharacterSceneInfo[];
+};
+
+/**
+ * Describes the message holomush.web.v1.WebListMyScenesResponse.
+ * Use `create(WebListMyScenesResponseSchema)` to create a new message.
+ */
+export const WebListMyScenesResponseSchema: GenMessage<WebListMyScenesResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 58);
+
+/**
+ * WebWatchSceneRequest proxies to SceneAccessService.WatchScene.
+ * player_session_token is injected from the X-Session-Token cookie.
+ *
+ * @generated from message holomush.web.v1.WebWatchSceneRequest
+ */
+export type WebWatchSceneRequest = Message<"holomush.web.v1.WebWatchSceneRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * character_id is the "act as this alt" selector forwarded to the facade.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+
+  /**
+   * scene_id identifies the scene to watch; required.
+   *
+   * @generated from field: string scene_id = 3;
+   */
+  sceneId: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebWatchSceneRequest.
+ * Use `create(WebWatchSceneRequestSchema)` to create a new message.
+ */
+export const WebWatchSceneRequestSchema: GenMessage<WebWatchSceneRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 59);
+
+/**
+ * WebWatchSceneResponse re-exports the observer-join confirmation from the facade.
+ *
+ * @generated from message holomush.web.v1.WebWatchSceneResponse
+ */
+export type WebWatchSceneResponse = Message<"holomush.web.v1.WebWatchSceneResponse"> & {
+  /**
+   * participant is the resulting participant entry (role=observer), or the
+   * pre-existing row when the character was already a participant.
+   *
+   * @generated from field: holomush.scene.v1.ParticipantInfo participant = 1;
+   */
+  participant?: ParticipantInfo | undefined;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebWatchSceneResponse.
+ * Use `create(WebWatchSceneResponseSchema)` to create a new message.
+ */
+export const WebWatchSceneResponseSchema: GenMessage<WebWatchSceneResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 60);
+
+/**
+ * WebExportSceneRequest proxies to SceneAccessService.ExportScene.
+ * player_session_token is injected from the X-Session-Token cookie.
+ *
+ * @generated from message holomush.web.v1.WebExportSceneRequest
+ */
+export type WebExportSceneRequest = Message<"holomush.web.v1.WebExportSceneRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * character_id is the "act as this alt" selector forwarded to the facade.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+
+  /**
+   * scene_id identifies the scene to export; required.
+   *
+   * @generated from field: string scene_id = 3;
+   */
+  sceneId: string;
+
+  /**
+   * format is the render format; required. Supported: "markdown" or "jsonl".
+   *
+   * @generated from field: string format = 4;
+   */
+  format: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebExportSceneRequest.
+ * Use `create(WebExportSceneRequestSchema)` to create a new message.
+ */
+export const WebExportSceneRequestSchema: GenMessage<WebExportSceneRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 61);
+
+/**
+ * WebExportSceneResponse re-exports the rendered scene-log document from the facade.
+ *
+ * @generated from message holomush.web.v1.WebExportSceneResponse
+ */
+export type WebExportSceneResponse = Message<"holomush.web.v1.WebExportSceneResponse"> & {
+  /**
+   * content is the rendered document bytes.
+   *
+   * @generated from field: bytes content = 1;
+   */
+  content: Uint8Array;
+
+  /**
+   * mime_type is the content's MIME type (text/markdown or application/jsonl).
+   *
+   * @generated from field: string mime_type = 2;
+   */
+  mimeType: string;
+
+  /**
+   * filename is the suggested download filename.
+   *
+   * @generated from field: string filename = 3;
+   */
+  filename: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebExportSceneResponse.
+ * Use `create(WebExportSceneResponseSchema)` to create a new message.
+ */
+export const WebExportSceneResponseSchema: GenMessage<WebExportSceneResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 62);
+
+/**
+ * WebSetSceneFocusRequest proxies to SceneAccessService.SetSceneFocus.
+ * player_session_token is injected from the X-Session-Token cookie.
+ *
+ * @generated from message holomush.web.v1.WebSetSceneFocusRequest
+ */
+export type WebSetSceneFocusRequest = Message<"holomush.web.v1.WebSetSceneFocusRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * connection_id is the ULID of the web portal connection whose focus to set.
+   *
+   * @generated from field: string connection_id = 2;
+   */
+  connectionId: string;
+
+  /**
+   * scene_id is the scene to focus on; empty clears the focus (grid default).
+   *
+   * @generated from field: string scene_id = 3;
+   */
+  sceneId: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebSetSceneFocusRequest.
+ * Use `create(WebSetSceneFocusRequestSchema)` to create a new message.
+ */
+export const WebSetSceneFocusRequestSchema: GenMessage<WebSetSceneFocusRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 63);
+
+/**
+ * WebSetSceneFocusResponse is intentionally empty — a successful focus set
+ * carries no body; the client may update its local focus state optimistically.
+ *
+ * @generated from message holomush.web.v1.WebSetSceneFocusResponse
+ */
+export type WebSetSceneFocusResponse = Message<"holomush.web.v1.WebSetSceneFocusResponse"> & {
+};
+
+/**
+ * Describes the message holomush.web.v1.WebSetSceneFocusResponse.
+ * Use `create(WebSetSceneFocusResponseSchema)` to create a new message.
+ */
+export const WebSetSceneFocusResponseSchema: GenMessage<WebSetSceneFocusResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 64);
+
+/**
+ * WebListPublishedScenesRequest proxies to SceneAccessService.ListPublishedScenes.
+ * player_session_token is injected from the X-Session-Token cookie.
+ *
+ * @generated from message holomush.web.v1.WebListPublishedScenesRequest
+ */
+export type WebListPublishedScenesRequest = Message<"holomush.web.v1.WebListPublishedScenesRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * limit is the page size; 0 means server default.
+   *
+   * @generated from field: int32 limit = 2;
+   */
+  limit: number;
+
+  /**
+   * offset is the number of leading results to skip.
+   *
+   * @generated from field: int32 offset = 3;
+   */
+  offset: number;
+
+  /**
+   * tags restricts results to archives whose source scene carries all of these tags.
+   *
+   * @generated from field: repeated string tags = 4;
+   */
+  tags: string[];
+};
+
+/**
+ * Describes the message holomush.web.v1.WebListPublishedScenesRequest.
+ * Use `create(WebListPublishedScenesRequestSchema)` to create a new message.
+ */
+export const WebListPublishedScenesRequestSchema: GenMessage<WebListPublishedScenesRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 65);
+
+/**
+ * WebListPublishedScenesResponse re-exports the public archive list from the facade.
+ *
+ * @generated from message holomush.web.v1.WebListPublishedScenesResponse
+ */
+export type WebListPublishedScenesResponse = Message<"holomush.web.v1.WebListPublishedScenesResponse"> & {
+  /**
+   * archives is the public-safe published-archive summaries, newest first.
+   *
+   * @generated from field: repeated holomush.scene.v1.PublicSceneArchive archives = 1;
+   */
+  archives: PublicSceneArchive[];
+};
+
+/**
+ * Describes the message holomush.web.v1.WebListPublishedScenesResponse.
+ * Use `create(WebListPublishedScenesResponseSchema)` to create a new message.
+ */
+export const WebListPublishedScenesResponseSchema: GenMessage<WebListPublishedScenesResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 66);
+
+/**
+ * WebGetPublicSceneArchiveRequest proxies to SceneAccessService.GetPublicSceneArchive.
+ * player_session_token is injected from the X-Session-Token cookie.
+ *
+ * @generated from message holomush.web.v1.WebGetPublicSceneArchiveRequest
+ */
+export type WebGetPublicSceneArchiveRequest = Message<"holomush.web.v1.WebGetPublicSceneArchiveRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * published_scene_id identifies the publication attempt to read; required.
+   *
+   * @generated from field: string published_scene_id = 2;
+   */
+  publishedSceneId: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebGetPublicSceneArchiveRequest.
+ * Use `create(WebGetPublicSceneArchiveRequestSchema)` to create a new message.
+ */
+export const WebGetPublicSceneArchiveRequestSchema: GenMessage<WebGetPublicSceneArchiveRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 67);
+
+/**
+ * WebGetPublicSceneArchiveResponse re-exports the public archive view from the facade.
+ *
+ * @generated from message holomush.web.v1.WebGetPublicSceneArchiveResponse
+ */
+export type WebGetPublicSceneArchiveResponse = Message<"holomush.web.v1.WebGetPublicSceneArchiveResponse"> & {
+  /**
+   * id is the publication attempt's ID.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * title_snapshot is the scene title snapshotted at publish time.
+   *
+   * @generated from field: string title_snapshot = 2;
+   */
+  titleSnapshot: string;
+
+  /**
+   * participants_snapshot is the participant character names snapshotted at publish time.
+   *
+   * @generated from field: repeated string participants_snapshot = 3;
+   */
+  participantsSnapshot: string[];
+
+  /**
+   * content_entries is the frozen published content.
+   *
+   * @generated from field: repeated holomush.scene.v1.PublishedSceneEntry content_entries = 4;
+   */
+  contentEntries: PublishedSceneEntry[];
+
+  /**
+   * published_at_unix_ns is the epoch-nanosecond publish time.
+   *
+   * @generated from field: int64 published_at_unix_ns = 5;
+   */
+  publishedAtUnixNs: bigint;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebGetPublicSceneArchiveResponse.
+ * Use `create(WebGetPublicSceneArchiveResponseSchema)` to create a new message.
+ */
+export const WebGetPublicSceneArchiveResponseSchema: GenMessage<WebGetPublicSceneArchiveResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 68);
+
+/**
+ * WebDownloadPublicSceneArchiveRequest proxies to
+ * SceneAccessService.DownloadPublicSceneArchive.
+ * player_session_token is injected from the X-Session-Token cookie.
+ *
+ * @generated from message holomush.web.v1.WebDownloadPublicSceneArchiveRequest
+ */
+export type WebDownloadPublicSceneArchiveRequest = Message<"holomush.web.v1.WebDownloadPublicSceneArchiveRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID forwarded to the facade.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * published_scene_id identifies the publication attempt to download; required.
+   *
+   * @generated from field: string published_scene_id = 2;
+   */
+  publishedSceneId: string;
+
+  /**
+   * format is the render format; required. Supported: "markdown", "plain_text", "jsonl".
+   *
+   * @generated from field: string format = 3;
+   */
+  format: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebDownloadPublicSceneArchiveRequest.
+ * Use `create(WebDownloadPublicSceneArchiveRequestSchema)` to create a new message.
+ */
+export const WebDownloadPublicSceneArchiveRequestSchema: GenMessage<WebDownloadPublicSceneArchiveRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 69);
+
+/**
+ * WebDownloadPublicSceneArchiveResponse re-exports the rendered public-archive
+ * bytes from the facade.
+ *
+ * @generated from message holomush.web.v1.WebDownloadPublicSceneArchiveResponse
+ */
+export type WebDownloadPublicSceneArchiveResponse = Message<"holomush.web.v1.WebDownloadPublicSceneArchiveResponse"> & {
+  /**
+   * content is the rendered file content.
+   *
+   * @generated from field: bytes content = 1;
+   */
+  content: Uint8Array;
+
+  /**
+   * mime_type is the content's MIME type.
+   *
+   * @generated from field: string mime_type = 2;
+   */
+  mimeType: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebDownloadPublicSceneArchiveResponse.
+ * Use `create(WebDownloadPublicSceneArchiveResponseSchema)` to create a new message.
+ */
+export const WebDownloadPublicSceneArchiveResponseSchema: GenMessage<WebDownloadPublicSceneArchiveResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 70);
+
+/**
  * EventChannel is the web mirror of corev1.EventChannel: it tells the web
  * client which surface a GameEvent should render on. The gateway forwards the
  * core RenderingMetadata.display_target verbatim onto GameEvent.display_target
@@ -2373,6 +2959,119 @@ export const WebService: GenService<{
     methodKind: "unary";
     input: typeof WebListCommandsRequestSchema;
     output: typeof WebListCommandsResponseSchema;
+  },
+  /**
+   * WebListScenes returns the public scene board filtered by the verified
+   * player's content-warning preferences. Proxies to
+   * SceneAccessService.ListScenesForViewer; player_session_token is read
+   * from the HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebListScenes
+   */
+  webListScenes: {
+    methodKind: "unary";
+    input: typeof WebListScenesRequestSchema;
+    output: typeof WebListScenesResponseSchema;
+  },
+  /**
+   * WebGetScene loads one scene's metadata for the verified player's owned
+   * character. Proxies to SceneAccessService.GetSceneForViewer;
+   * player_session_token is read from the HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebGetScene
+   */
+  webGetScene: {
+    methodKind: "unary";
+    input: typeof WebGetSceneRequestSchema;
+    output: typeof WebGetSceneResponseSchema;
+  },
+  /**
+   * WebListMyScenes returns every non-archived scene the verified player's
+   * owned character participates in. Proxies to
+   * SceneAccessService.ListMyScenes; player_session_token is read from the
+   * HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebListMyScenes
+   */
+  webListMyScenes: {
+    methodKind: "unary";
+    input: typeof WebListMyScenesRequestSchema;
+    output: typeof WebListMyScenesResponseSchema;
+  },
+  /**
+   * WebWatchScene auto-joins the verified player's owned character into an
+   * open active scene as an observer. Proxies to
+   * SceneAccessService.WatchScene; player_session_token is read from the
+   * HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebWatchScene
+   */
+  webWatchScene: {
+    methodKind: "unary";
+    input: typeof WebWatchSceneRequestSchema;
+    output: typeof WebWatchSceneResponseSchema;
+  },
+  /**
+   * WebExportScene renders the verified player's owned character's scene IC
+   * log to a downloadable document. Proxies to SceneAccessService.ExportScene;
+   * player_session_token is read from the HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebExportScene
+   */
+  webExportScene: {
+    methodKind: "unary";
+    input: typeof WebExportSceneRequestSchema;
+    output: typeof WebExportSceneResponseSchema;
+  },
+  /**
+   * WebSetSceneFocus sets the per-connection focus for a web portal connection.
+   * Proxies to SceneAccessService.SetSceneFocus; player_session_token is read
+   * from the HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebSetSceneFocus
+   */
+  webSetSceneFocus: {
+    methodKind: "unary";
+    input: typeof WebSetSceneFocusRequestSchema;
+    output: typeof WebSetSceneFocusResponseSchema;
+  },
+  /**
+   * WebListPublishedScenes pages through publicly visible PUBLISHED scene
+   * archives. Proxies to SceneAccessService.ListPublishedScenes;
+   * player_session_token is read from the HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebListPublishedScenes
+   */
+  webListPublishedScenes: {
+    methodKind: "unary";
+    input: typeof WebListPublishedScenesRequestSchema;
+    output: typeof WebListPublishedScenesResponseSchema;
+  },
+  /**
+   * WebGetPublicSceneArchive reads a published scene archive without
+   * participant authentication. Proxies to
+   * SceneAccessService.GetPublicSceneArchive; player_session_token is read
+   * from the HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebGetPublicSceneArchive
+   */
+  webGetPublicSceneArchive: {
+    methodKind: "unary";
+    input: typeof WebGetPublicSceneArchiveRequestSchema;
+    output: typeof WebGetPublicSceneArchiveResponseSchema;
+  },
+  /**
+   * WebDownloadPublicSceneArchive returns a PUBLISHED scene archive rendered
+   * in the requested format. Proxies to
+   * SceneAccessService.DownloadPublicSceneArchive; player_session_token is
+   * read from the HTTP cookie by gateway middleware.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebDownloadPublicSceneArchive
+   */
+  webDownloadPublicSceneArchive: {
+    methodKind: "unary";
+    input: typeof WebDownloadPublicSceneArchiveRequestSchema;
+    output: typeof WebDownloadPublicSceneArchiveResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_web_v1_web, 0);

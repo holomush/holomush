@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListCommandsRequest, WebListCommandsResponse, WebListContentRequest, WebListContentResponse, WebListFocusPresenceRequest, WebListFocusPresenceResponse, WebListPlayerSessionsRequest, WebListPlayerSessionsResponse, WebListSessionStreamsRequest, WebListSessionStreamsResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebRevokeOtherPlayerSessionsRequest, WebRevokeOtherPlayerSessionsResponse, WebRevokePlayerSessionRequest, WebRevokePlayerSessionResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebDownloadPublicSceneArchiveRequest, WebDownloadPublicSceneArchiveResponse, WebExportSceneRequest, WebExportSceneResponse, WebGetContentRequest, WebGetContentResponse, WebGetPublicSceneArchiveRequest, WebGetPublicSceneArchiveResponse, WebGetSceneRequest, WebGetSceneResponse, WebListCharactersRequest, WebListCharactersResponse, WebListCommandsRequest, WebListCommandsResponse, WebListContentRequest, WebListContentResponse, WebListFocusPresenceRequest, WebListFocusPresenceResponse, WebListMyScenesRequest, WebListMyScenesResponse, WebListPlayerSessionsRequest, WebListPlayerSessionsResponse, WebListPublishedScenesRequest, WebListPublishedScenesResponse, WebListScenesRequest, WebListScenesResponse, WebListSessionStreamsRequest, WebListSessionStreamsResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebRevokeOtherPlayerSessionsRequest, WebRevokeOtherPlayerSessionsResponse, WebRevokePlayerSessionRequest, WebRevokePlayerSessionResponse, WebSelectCharacterRequest, WebSelectCharacterResponse, WebSetSceneFocusRequest, WebSetSceneFocusResponse, WebWatchSceneRequest, WebWatchSceneResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -337,6 +337,128 @@ export const WebService = {
       name: "WebListCommands",
       I: WebListCommandsRequest,
       O: WebListCommandsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebListScenes returns the public scene board filtered by the verified
+     * player's content-warning preferences. Proxies to
+     * SceneAccessService.ListScenesForViewer; player_session_token is read
+     * from the HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebListScenes
+     */
+    webListScenes: {
+      name: "WebListScenes",
+      I: WebListScenesRequest,
+      O: WebListScenesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebGetScene loads one scene's metadata for the verified player's owned
+     * character. Proxies to SceneAccessService.GetSceneForViewer;
+     * player_session_token is read from the HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebGetScene
+     */
+    webGetScene: {
+      name: "WebGetScene",
+      I: WebGetSceneRequest,
+      O: WebGetSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebListMyScenes returns every non-archived scene the verified player's
+     * owned character participates in. Proxies to
+     * SceneAccessService.ListMyScenes; player_session_token is read from the
+     * HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebListMyScenes
+     */
+    webListMyScenes: {
+      name: "WebListMyScenes",
+      I: WebListMyScenesRequest,
+      O: WebListMyScenesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebWatchScene auto-joins the verified player's owned character into an
+     * open active scene as an observer. Proxies to
+     * SceneAccessService.WatchScene; player_session_token is read from the
+     * HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebWatchScene
+     */
+    webWatchScene: {
+      name: "WebWatchScene",
+      I: WebWatchSceneRequest,
+      O: WebWatchSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebExportScene renders the verified player's owned character's scene IC
+     * log to a downloadable document. Proxies to SceneAccessService.ExportScene;
+     * player_session_token is read from the HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebExportScene
+     */
+    webExportScene: {
+      name: "WebExportScene",
+      I: WebExportSceneRequest,
+      O: WebExportSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebSetSceneFocus sets the per-connection focus for a web portal connection.
+     * Proxies to SceneAccessService.SetSceneFocus; player_session_token is read
+     * from the HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebSetSceneFocus
+     */
+    webSetSceneFocus: {
+      name: "WebSetSceneFocus",
+      I: WebSetSceneFocusRequest,
+      O: WebSetSceneFocusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebListPublishedScenes pages through publicly visible PUBLISHED scene
+     * archives. Proxies to SceneAccessService.ListPublishedScenes;
+     * player_session_token is read from the HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebListPublishedScenes
+     */
+    webListPublishedScenes: {
+      name: "WebListPublishedScenes",
+      I: WebListPublishedScenesRequest,
+      O: WebListPublishedScenesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebGetPublicSceneArchive reads a published scene archive without
+     * participant authentication. Proxies to
+     * SceneAccessService.GetPublicSceneArchive; player_session_token is read
+     * from the HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebGetPublicSceneArchive
+     */
+    webGetPublicSceneArchive: {
+      name: "WebGetPublicSceneArchive",
+      I: WebGetPublicSceneArchiveRequest,
+      O: WebGetPublicSceneArchiveResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebDownloadPublicSceneArchive returns a PUBLISHED scene archive rendered
+     * in the requested format. Proxies to
+     * SceneAccessService.DownloadPublicSceneArchive; player_session_token is
+     * read from the HTTP cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebDownloadPublicSceneArchive
+     */
+    webDownloadPublicSceneArchive: {
+      name: "WebDownloadPublicSceneArchive",
+      I: WebDownloadPublicSceneArchiveRequest,
+      O: WebDownloadPublicSceneArchiveResponse,
       kind: MethodKind.Unary,
     },
   }

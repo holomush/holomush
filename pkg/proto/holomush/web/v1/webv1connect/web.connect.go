@@ -101,6 +101,32 @@ const (
 	// WebServiceWebListCommandsProcedure is the fully-qualified name of the WebService's
 	// WebListCommands RPC.
 	WebServiceWebListCommandsProcedure = "/holomush.web.v1.WebService/WebListCommands"
+	// WebServiceWebListScenesProcedure is the fully-qualified name of the WebService's WebListScenes
+	// RPC.
+	WebServiceWebListScenesProcedure = "/holomush.web.v1.WebService/WebListScenes"
+	// WebServiceWebGetSceneProcedure is the fully-qualified name of the WebService's WebGetScene RPC.
+	WebServiceWebGetSceneProcedure = "/holomush.web.v1.WebService/WebGetScene"
+	// WebServiceWebListMyScenesProcedure is the fully-qualified name of the WebService's
+	// WebListMyScenes RPC.
+	WebServiceWebListMyScenesProcedure = "/holomush.web.v1.WebService/WebListMyScenes"
+	// WebServiceWebWatchSceneProcedure is the fully-qualified name of the WebService's WebWatchScene
+	// RPC.
+	WebServiceWebWatchSceneProcedure = "/holomush.web.v1.WebService/WebWatchScene"
+	// WebServiceWebExportSceneProcedure is the fully-qualified name of the WebService's WebExportScene
+	// RPC.
+	WebServiceWebExportSceneProcedure = "/holomush.web.v1.WebService/WebExportScene"
+	// WebServiceWebSetSceneFocusProcedure is the fully-qualified name of the WebService's
+	// WebSetSceneFocus RPC.
+	WebServiceWebSetSceneFocusProcedure = "/holomush.web.v1.WebService/WebSetSceneFocus"
+	// WebServiceWebListPublishedScenesProcedure is the fully-qualified name of the WebService's
+	// WebListPublishedScenes RPC.
+	WebServiceWebListPublishedScenesProcedure = "/holomush.web.v1.WebService/WebListPublishedScenes"
+	// WebServiceWebGetPublicSceneArchiveProcedure is the fully-qualified name of the WebService's
+	// WebGetPublicSceneArchive RPC.
+	WebServiceWebGetPublicSceneArchiveProcedure = "/holomush.web.v1.WebService/WebGetPublicSceneArchive"
+	// WebServiceWebDownloadPublicSceneArchiveProcedure is the fully-qualified name of the WebService's
+	// WebDownloadPublicSceneArchive RPC.
+	WebServiceWebDownloadPublicSceneArchiveProcedure = "/holomush.web.v1.WebService/WebDownloadPublicSceneArchive"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -212,6 +238,47 @@ type WebServiceClient interface {
 	// CoreService.ListAvailableCommands; player_session_token is read from the
 	// cookie by gateway middleware.
 	WebListCommands(context.Context, *connect.Request[v1.WebListCommandsRequest]) (*connect.Response[v1.WebListCommandsResponse], error)
+	// WebListScenes returns the public scene board filtered by the verified
+	// player's content-warning preferences. Proxies to
+	// SceneAccessService.ListScenesForViewer; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebListScenes(context.Context, *connect.Request[v1.WebListScenesRequest]) (*connect.Response[v1.WebListScenesResponse], error)
+	// WebGetScene loads one scene's metadata for the verified player's owned
+	// character. Proxies to SceneAccessService.GetSceneForViewer;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebGetScene(context.Context, *connect.Request[v1.WebGetSceneRequest]) (*connect.Response[v1.WebGetSceneResponse], error)
+	// WebListMyScenes returns every non-archived scene the verified player's
+	// owned character participates in. Proxies to
+	// SceneAccessService.ListMyScenes; player_session_token is read from the
+	// HTTP cookie by gateway middleware.
+	WebListMyScenes(context.Context, *connect.Request[v1.WebListMyScenesRequest]) (*connect.Response[v1.WebListMyScenesResponse], error)
+	// WebWatchScene auto-joins the verified player's owned character into an
+	// open active scene as an observer. Proxies to
+	// SceneAccessService.WatchScene; player_session_token is read from the
+	// HTTP cookie by gateway middleware.
+	WebWatchScene(context.Context, *connect.Request[v1.WebWatchSceneRequest]) (*connect.Response[v1.WebWatchSceneResponse], error)
+	// WebExportScene renders the verified player's owned character's scene IC
+	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebExportScene(context.Context, *connect.Request[v1.WebExportSceneRequest]) (*connect.Response[v1.WebExportSceneResponse], error)
+	// WebSetSceneFocus sets the per-connection focus for a web portal connection.
+	// Proxies to SceneAccessService.SetSceneFocus; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebSetSceneFocus(context.Context, *connect.Request[v1.WebSetSceneFocusRequest]) (*connect.Response[v1.WebSetSceneFocusResponse], error)
+	// WebListPublishedScenes pages through publicly visible PUBLISHED scene
+	// archives. Proxies to SceneAccessService.ListPublishedScenes;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebListPublishedScenes(context.Context, *connect.Request[v1.WebListPublishedScenesRequest]) (*connect.Response[v1.WebListPublishedScenesResponse], error)
+	// WebGetPublicSceneArchive reads a published scene archive without
+	// participant authentication. Proxies to
+	// SceneAccessService.GetPublicSceneArchive; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebGetPublicSceneArchive(context.Context, *connect.Request[v1.WebGetPublicSceneArchiveRequest]) (*connect.Response[v1.WebGetPublicSceneArchiveResponse], error)
+	// WebDownloadPublicSceneArchive returns a PUBLISHED scene archive rendered
+	// in the requested format. Proxies to
+	// SceneAccessService.DownloadPublicSceneArchive; player_session_token is
+	// read from the HTTP cookie by gateway middleware.
+	WebDownloadPublicSceneArchive(context.Context, *connect.Request[v1.WebDownloadPublicSceneArchiveRequest]) (*connect.Response[v1.WebDownloadPublicSceneArchiveResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -363,34 +430,97 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebListCommands")),
 			connect.WithClientOptions(opts...),
 		),
+		webListScenes: connect.NewClient[v1.WebListScenesRequest, v1.WebListScenesResponse](
+			httpClient,
+			baseURL+WebServiceWebListScenesProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListScenes")),
+			connect.WithClientOptions(opts...),
+		),
+		webGetScene: connect.NewClient[v1.WebGetSceneRequest, v1.WebGetSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebGetSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebGetScene")),
+			connect.WithClientOptions(opts...),
+		),
+		webListMyScenes: connect.NewClient[v1.WebListMyScenesRequest, v1.WebListMyScenesResponse](
+			httpClient,
+			baseURL+WebServiceWebListMyScenesProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListMyScenes")),
+			connect.WithClientOptions(opts...),
+		),
+		webWatchScene: connect.NewClient[v1.WebWatchSceneRequest, v1.WebWatchSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebWatchSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebWatchScene")),
+			connect.WithClientOptions(opts...),
+		),
+		webExportScene: connect.NewClient[v1.WebExportSceneRequest, v1.WebExportSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebExportSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebExportScene")),
+			connect.WithClientOptions(opts...),
+		),
+		webSetSceneFocus: connect.NewClient[v1.WebSetSceneFocusRequest, v1.WebSetSceneFocusResponse](
+			httpClient,
+			baseURL+WebServiceWebSetSceneFocusProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebSetSceneFocus")),
+			connect.WithClientOptions(opts...),
+		),
+		webListPublishedScenes: connect.NewClient[v1.WebListPublishedScenesRequest, v1.WebListPublishedScenesResponse](
+			httpClient,
+			baseURL+WebServiceWebListPublishedScenesProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListPublishedScenes")),
+			connect.WithClientOptions(opts...),
+		),
+		webGetPublicSceneArchive: connect.NewClient[v1.WebGetPublicSceneArchiveRequest, v1.WebGetPublicSceneArchiveResponse](
+			httpClient,
+			baseURL+WebServiceWebGetPublicSceneArchiveProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebGetPublicSceneArchive")),
+			connect.WithClientOptions(opts...),
+		),
+		webDownloadPublicSceneArchive: connect.NewClient[v1.WebDownloadPublicSceneArchiveRequest, v1.WebDownloadPublicSceneArchiveResponse](
+			httpClient,
+			baseURL+WebServiceWebDownloadPublicSceneArchiveProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebDownloadPublicSceneArchive")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // webServiceClient implements WebServiceClient.
 type webServiceClient struct {
-	sendCommand                  *connect.Client[v1.SendCommandRequest, v1.SendCommandResponse]
-	streamEvents                 *connect.Client[v1.StreamEventsRequest, v1.StreamEventsResponse]
-	disconnect                   *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
-	getCommandHistory            *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
-	webAuthenticatePlayer        *connect.Client[v1.WebAuthenticatePlayerRequest, v1.WebAuthenticatePlayerResponse]
-	webSelectCharacter           *connect.Client[v1.WebSelectCharacterRequest, v1.WebSelectCharacterResponse]
-	webCreatePlayer              *connect.Client[v1.WebCreatePlayerRequest, v1.WebCreatePlayerResponse]
-	webCreateGuest               *connect.Client[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse]
-	webCreateCharacter           *connect.Client[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse]
-	webListCharacters            *connect.Client[v1.WebListCharactersRequest, v1.WebListCharactersResponse]
-	webLogout                    *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
-	webRequestPasswordReset      *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
-	webConfirmPasswordReset      *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
-	webCheckSession              *connect.Client[v1.WebCheckSessionRequest, v1.WebCheckSessionResponse]
-	webGetContent                *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
-	webListContent               *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
-	webQueryStreamHistory        *connect.Client[v1.WebQueryStreamHistoryRequest, v1.WebQueryStreamHistoryResponse]
-	webListSessionStreams        *connect.Client[v1.WebListSessionStreamsRequest, v1.WebListSessionStreamsResponse]
-	webListPlayerSessions        *connect.Client[v1.WebListPlayerSessionsRequest, v1.WebListPlayerSessionsResponse]
-	webRevokePlayerSession       *connect.Client[v1.WebRevokePlayerSessionRequest, v1.WebRevokePlayerSessionResponse]
-	webRevokeOtherPlayerSessions *connect.Client[v1.WebRevokeOtherPlayerSessionsRequest, v1.WebRevokeOtherPlayerSessionsResponse]
-	webListFocusPresence         *connect.Client[v1.WebListFocusPresenceRequest, v1.WebListFocusPresenceResponse]
-	webListCommands              *connect.Client[v1.WebListCommandsRequest, v1.WebListCommandsResponse]
+	sendCommand                   *connect.Client[v1.SendCommandRequest, v1.SendCommandResponse]
+	streamEvents                  *connect.Client[v1.StreamEventsRequest, v1.StreamEventsResponse]
+	disconnect                    *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	getCommandHistory             *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
+	webAuthenticatePlayer         *connect.Client[v1.WebAuthenticatePlayerRequest, v1.WebAuthenticatePlayerResponse]
+	webSelectCharacter            *connect.Client[v1.WebSelectCharacterRequest, v1.WebSelectCharacterResponse]
+	webCreatePlayer               *connect.Client[v1.WebCreatePlayerRequest, v1.WebCreatePlayerResponse]
+	webCreateGuest                *connect.Client[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse]
+	webCreateCharacter            *connect.Client[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse]
+	webListCharacters             *connect.Client[v1.WebListCharactersRequest, v1.WebListCharactersResponse]
+	webLogout                     *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
+	webRequestPasswordReset       *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
+	webConfirmPasswordReset       *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
+	webCheckSession               *connect.Client[v1.WebCheckSessionRequest, v1.WebCheckSessionResponse]
+	webGetContent                 *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
+	webListContent                *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
+	webQueryStreamHistory         *connect.Client[v1.WebQueryStreamHistoryRequest, v1.WebQueryStreamHistoryResponse]
+	webListSessionStreams         *connect.Client[v1.WebListSessionStreamsRequest, v1.WebListSessionStreamsResponse]
+	webListPlayerSessions         *connect.Client[v1.WebListPlayerSessionsRequest, v1.WebListPlayerSessionsResponse]
+	webRevokePlayerSession        *connect.Client[v1.WebRevokePlayerSessionRequest, v1.WebRevokePlayerSessionResponse]
+	webRevokeOtherPlayerSessions  *connect.Client[v1.WebRevokeOtherPlayerSessionsRequest, v1.WebRevokeOtherPlayerSessionsResponse]
+	webListFocusPresence          *connect.Client[v1.WebListFocusPresenceRequest, v1.WebListFocusPresenceResponse]
+	webListCommands               *connect.Client[v1.WebListCommandsRequest, v1.WebListCommandsResponse]
+	webListScenes                 *connect.Client[v1.WebListScenesRequest, v1.WebListScenesResponse]
+	webGetScene                   *connect.Client[v1.WebGetSceneRequest, v1.WebGetSceneResponse]
+	webListMyScenes               *connect.Client[v1.WebListMyScenesRequest, v1.WebListMyScenesResponse]
+	webWatchScene                 *connect.Client[v1.WebWatchSceneRequest, v1.WebWatchSceneResponse]
+	webExportScene                *connect.Client[v1.WebExportSceneRequest, v1.WebExportSceneResponse]
+	webSetSceneFocus              *connect.Client[v1.WebSetSceneFocusRequest, v1.WebSetSceneFocusResponse]
+	webListPublishedScenes        *connect.Client[v1.WebListPublishedScenesRequest, v1.WebListPublishedScenesResponse]
+	webGetPublicSceneArchive      *connect.Client[v1.WebGetPublicSceneArchiveRequest, v1.WebGetPublicSceneArchiveResponse]
+	webDownloadPublicSceneArchive *connect.Client[v1.WebDownloadPublicSceneArchiveRequest, v1.WebDownloadPublicSceneArchiveResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -508,6 +638,51 @@ func (c *webServiceClient) WebListCommands(ctx context.Context, req *connect.Req
 	return c.webListCommands.CallUnary(ctx, req)
 }
 
+// WebListScenes calls holomush.web.v1.WebService.WebListScenes.
+func (c *webServiceClient) WebListScenes(ctx context.Context, req *connect.Request[v1.WebListScenesRequest]) (*connect.Response[v1.WebListScenesResponse], error) {
+	return c.webListScenes.CallUnary(ctx, req)
+}
+
+// WebGetScene calls holomush.web.v1.WebService.WebGetScene.
+func (c *webServiceClient) WebGetScene(ctx context.Context, req *connect.Request[v1.WebGetSceneRequest]) (*connect.Response[v1.WebGetSceneResponse], error) {
+	return c.webGetScene.CallUnary(ctx, req)
+}
+
+// WebListMyScenes calls holomush.web.v1.WebService.WebListMyScenes.
+func (c *webServiceClient) WebListMyScenes(ctx context.Context, req *connect.Request[v1.WebListMyScenesRequest]) (*connect.Response[v1.WebListMyScenesResponse], error) {
+	return c.webListMyScenes.CallUnary(ctx, req)
+}
+
+// WebWatchScene calls holomush.web.v1.WebService.WebWatchScene.
+func (c *webServiceClient) WebWatchScene(ctx context.Context, req *connect.Request[v1.WebWatchSceneRequest]) (*connect.Response[v1.WebWatchSceneResponse], error) {
+	return c.webWatchScene.CallUnary(ctx, req)
+}
+
+// WebExportScene calls holomush.web.v1.WebService.WebExportScene.
+func (c *webServiceClient) WebExportScene(ctx context.Context, req *connect.Request[v1.WebExportSceneRequest]) (*connect.Response[v1.WebExportSceneResponse], error) {
+	return c.webExportScene.CallUnary(ctx, req)
+}
+
+// WebSetSceneFocus calls holomush.web.v1.WebService.WebSetSceneFocus.
+func (c *webServiceClient) WebSetSceneFocus(ctx context.Context, req *connect.Request[v1.WebSetSceneFocusRequest]) (*connect.Response[v1.WebSetSceneFocusResponse], error) {
+	return c.webSetSceneFocus.CallUnary(ctx, req)
+}
+
+// WebListPublishedScenes calls holomush.web.v1.WebService.WebListPublishedScenes.
+func (c *webServiceClient) WebListPublishedScenes(ctx context.Context, req *connect.Request[v1.WebListPublishedScenesRequest]) (*connect.Response[v1.WebListPublishedScenesResponse], error) {
+	return c.webListPublishedScenes.CallUnary(ctx, req)
+}
+
+// WebGetPublicSceneArchive calls holomush.web.v1.WebService.WebGetPublicSceneArchive.
+func (c *webServiceClient) WebGetPublicSceneArchive(ctx context.Context, req *connect.Request[v1.WebGetPublicSceneArchiveRequest]) (*connect.Response[v1.WebGetPublicSceneArchiveResponse], error) {
+	return c.webGetPublicSceneArchive.CallUnary(ctx, req)
+}
+
+// WebDownloadPublicSceneArchive calls holomush.web.v1.WebService.WebDownloadPublicSceneArchive.
+func (c *webServiceClient) WebDownloadPublicSceneArchive(ctx context.Context, req *connect.Request[v1.WebDownloadPublicSceneArchiveRequest]) (*connect.Response[v1.WebDownloadPublicSceneArchiveResponse], error) {
+	return c.webDownloadPublicSceneArchive.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -617,6 +792,47 @@ type WebServiceHandler interface {
 	// CoreService.ListAvailableCommands; player_session_token is read from the
 	// cookie by gateway middleware.
 	WebListCommands(context.Context, *connect.Request[v1.WebListCommandsRequest]) (*connect.Response[v1.WebListCommandsResponse], error)
+	// WebListScenes returns the public scene board filtered by the verified
+	// player's content-warning preferences. Proxies to
+	// SceneAccessService.ListScenesForViewer; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebListScenes(context.Context, *connect.Request[v1.WebListScenesRequest]) (*connect.Response[v1.WebListScenesResponse], error)
+	// WebGetScene loads one scene's metadata for the verified player's owned
+	// character. Proxies to SceneAccessService.GetSceneForViewer;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebGetScene(context.Context, *connect.Request[v1.WebGetSceneRequest]) (*connect.Response[v1.WebGetSceneResponse], error)
+	// WebListMyScenes returns every non-archived scene the verified player's
+	// owned character participates in. Proxies to
+	// SceneAccessService.ListMyScenes; player_session_token is read from the
+	// HTTP cookie by gateway middleware.
+	WebListMyScenes(context.Context, *connect.Request[v1.WebListMyScenesRequest]) (*connect.Response[v1.WebListMyScenesResponse], error)
+	// WebWatchScene auto-joins the verified player's owned character into an
+	// open active scene as an observer. Proxies to
+	// SceneAccessService.WatchScene; player_session_token is read from the
+	// HTTP cookie by gateway middleware.
+	WebWatchScene(context.Context, *connect.Request[v1.WebWatchSceneRequest]) (*connect.Response[v1.WebWatchSceneResponse], error)
+	// WebExportScene renders the verified player's owned character's scene IC
+	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebExportScene(context.Context, *connect.Request[v1.WebExportSceneRequest]) (*connect.Response[v1.WebExportSceneResponse], error)
+	// WebSetSceneFocus sets the per-connection focus for a web portal connection.
+	// Proxies to SceneAccessService.SetSceneFocus; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebSetSceneFocus(context.Context, *connect.Request[v1.WebSetSceneFocusRequest]) (*connect.Response[v1.WebSetSceneFocusResponse], error)
+	// WebListPublishedScenes pages through publicly visible PUBLISHED scene
+	// archives. Proxies to SceneAccessService.ListPublishedScenes;
+	// player_session_token is read from the HTTP cookie by gateway middleware.
+	WebListPublishedScenes(context.Context, *connect.Request[v1.WebListPublishedScenesRequest]) (*connect.Response[v1.WebListPublishedScenesResponse], error)
+	// WebGetPublicSceneArchive reads a published scene archive without
+	// participant authentication. Proxies to
+	// SceneAccessService.GetPublicSceneArchive; player_session_token is read
+	// from the HTTP cookie by gateway middleware.
+	WebGetPublicSceneArchive(context.Context, *connect.Request[v1.WebGetPublicSceneArchiveRequest]) (*connect.Response[v1.WebGetPublicSceneArchiveResponse], error)
+	// WebDownloadPublicSceneArchive returns a PUBLISHED scene archive rendered
+	// in the requested format. Proxies to
+	// SceneAccessService.DownloadPublicSceneArchive; player_session_token is
+	// read from the HTTP cookie by gateway middleware.
+	WebDownloadPublicSceneArchive(context.Context, *connect.Request[v1.WebDownloadPublicSceneArchiveRequest]) (*connect.Response[v1.WebDownloadPublicSceneArchiveResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -764,6 +980,60 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebListCommands")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebListScenesHandler := connect.NewUnaryHandler(
+		WebServiceWebListScenesProcedure,
+		svc.WebListScenes,
+		connect.WithSchema(webServiceMethods.ByName("WebListScenes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebGetSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebGetSceneProcedure,
+		svc.WebGetScene,
+		connect.WithSchema(webServiceMethods.ByName("WebGetScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebListMyScenesHandler := connect.NewUnaryHandler(
+		WebServiceWebListMyScenesProcedure,
+		svc.WebListMyScenes,
+		connect.WithSchema(webServiceMethods.ByName("WebListMyScenes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebWatchSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebWatchSceneProcedure,
+		svc.WebWatchScene,
+		connect.WithSchema(webServiceMethods.ByName("WebWatchScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebExportSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebExportSceneProcedure,
+		svc.WebExportScene,
+		connect.WithSchema(webServiceMethods.ByName("WebExportScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebSetSceneFocusHandler := connect.NewUnaryHandler(
+		WebServiceWebSetSceneFocusProcedure,
+		svc.WebSetSceneFocus,
+		connect.WithSchema(webServiceMethods.ByName("WebSetSceneFocus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebListPublishedScenesHandler := connect.NewUnaryHandler(
+		WebServiceWebListPublishedScenesProcedure,
+		svc.WebListPublishedScenes,
+		connect.WithSchema(webServiceMethods.ByName("WebListPublishedScenes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebGetPublicSceneArchiveHandler := connect.NewUnaryHandler(
+		WebServiceWebGetPublicSceneArchiveProcedure,
+		svc.WebGetPublicSceneArchive,
+		connect.WithSchema(webServiceMethods.ByName("WebGetPublicSceneArchive")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebDownloadPublicSceneArchiveHandler := connect.NewUnaryHandler(
+		WebServiceWebDownloadPublicSceneArchiveProcedure,
+		svc.WebDownloadPublicSceneArchive,
+		connect.WithSchema(webServiceMethods.ByName("WebDownloadPublicSceneArchive")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -812,6 +1082,24 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebListFocusPresenceHandler.ServeHTTP(w, r)
 		case WebServiceWebListCommandsProcedure:
 			webServiceWebListCommandsHandler.ServeHTTP(w, r)
+		case WebServiceWebListScenesProcedure:
+			webServiceWebListScenesHandler.ServeHTTP(w, r)
+		case WebServiceWebGetSceneProcedure:
+			webServiceWebGetSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebListMyScenesProcedure:
+			webServiceWebListMyScenesHandler.ServeHTTP(w, r)
+		case WebServiceWebWatchSceneProcedure:
+			webServiceWebWatchSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebExportSceneProcedure:
+			webServiceWebExportSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebSetSceneFocusProcedure:
+			webServiceWebSetSceneFocusHandler.ServeHTTP(w, r)
+		case WebServiceWebListPublishedScenesProcedure:
+			webServiceWebListPublishedScenesHandler.ServeHTTP(w, r)
+		case WebServiceWebGetPublicSceneArchiveProcedure:
+			webServiceWebGetPublicSceneArchiveHandler.ServeHTTP(w, r)
+		case WebServiceWebDownloadPublicSceneArchiveProcedure:
+			webServiceWebDownloadPublicSceneArchiveHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -911,4 +1199,40 @@ func (UnimplementedWebServiceHandler) WebListFocusPresence(context.Context, *con
 
 func (UnimplementedWebServiceHandler) WebListCommands(context.Context, *connect.Request[v1.WebListCommandsRequest]) (*connect.Response[v1.WebListCommandsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListCommands is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListScenes(context.Context, *connect.Request[v1.WebListScenesRequest]) (*connect.Response[v1.WebListScenesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListScenes is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebGetScene(context.Context, *connect.Request[v1.WebGetSceneRequest]) (*connect.Response[v1.WebGetSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListMyScenes(context.Context, *connect.Request[v1.WebListMyScenesRequest]) (*connect.Response[v1.WebListMyScenesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListMyScenes is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebWatchScene(context.Context, *connect.Request[v1.WebWatchSceneRequest]) (*connect.Response[v1.WebWatchSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebWatchScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebExportScene(context.Context, *connect.Request[v1.WebExportSceneRequest]) (*connect.Response[v1.WebExportSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebExportScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebSetSceneFocus(context.Context, *connect.Request[v1.WebSetSceneFocusRequest]) (*connect.Response[v1.WebSetSceneFocusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebSetSceneFocus is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListPublishedScenes(context.Context, *connect.Request[v1.WebListPublishedScenesRequest]) (*connect.Response[v1.WebListPublishedScenesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListPublishedScenes is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebGetPublicSceneArchive(context.Context, *connect.Request[v1.WebGetPublicSceneArchiveRequest]) (*connect.Response[v1.WebGetPublicSceneArchiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetPublicSceneArchive is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebDownloadPublicSceneArchive(context.Context, *connect.Request[v1.WebDownloadPublicSceneArchiveRequest]) (*connect.Response[v1.WebDownloadPublicSceneArchiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebDownloadPublicSceneArchive is not implemented"))
 }

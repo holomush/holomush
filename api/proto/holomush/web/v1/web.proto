@@ -7,6 +7,8 @@ package holomush.web.v1;
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "holomush/scene/v1/scene.proto";
+import "holomush/sceneaccess/v1/sceneaccess.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1";
 
@@ -247,6 +249,56 @@ service WebService {
   // CoreService.ListAvailableCommands; player_session_token is read from the
   // cookie by gateway middleware.
   rpc WebListCommands(WebListCommandsRequest) returns (WebListCommandsResponse);
+
+  // WebListScenes returns the public scene board filtered by the verified
+  // player's content-warning preferences. Proxies to
+  // SceneAccessService.ListScenesForViewer; player_session_token is read
+  // from the HTTP cookie by gateway middleware.
+  rpc WebListScenes(WebListScenesRequest) returns (WebListScenesResponse);
+
+  // WebGetScene loads one scene's metadata for the verified player's owned
+  // character. Proxies to SceneAccessService.GetSceneForViewer;
+  // player_session_token is read from the HTTP cookie by gateway middleware.
+  rpc WebGetScene(WebGetSceneRequest) returns (WebGetSceneResponse);
+
+  // WebListMyScenes returns every non-archived scene the verified player's
+  // owned character participates in. Proxies to
+  // SceneAccessService.ListMyScenes; player_session_token is read from the
+  // HTTP cookie by gateway middleware.
+  rpc WebListMyScenes(WebListMyScenesRequest) returns (WebListMyScenesResponse);
+
+  // WebWatchScene auto-joins the verified player's owned character into an
+  // open active scene as an observer. Proxies to
+  // SceneAccessService.WatchScene; player_session_token is read from the
+  // HTTP cookie by gateway middleware.
+  rpc WebWatchScene(WebWatchSceneRequest) returns (WebWatchSceneResponse);
+
+  // WebExportScene renders the verified player's owned character's scene IC
+  // log to a downloadable document. Proxies to SceneAccessService.ExportScene;
+  // player_session_token is read from the HTTP cookie by gateway middleware.
+  rpc WebExportScene(WebExportSceneRequest) returns (WebExportSceneResponse);
+
+  // WebSetSceneFocus sets the per-connection focus for a web portal connection.
+  // Proxies to SceneAccessService.SetSceneFocus; player_session_token is read
+  // from the HTTP cookie by gateway middleware.
+  rpc WebSetSceneFocus(WebSetSceneFocusRequest) returns (WebSetSceneFocusResponse);
+
+  // WebListPublishedScenes pages through publicly visible PUBLISHED scene
+  // archives. Proxies to SceneAccessService.ListPublishedScenes;
+  // player_session_token is read from the HTTP cookie by gateway middleware.
+  rpc WebListPublishedScenes(WebListPublishedScenesRequest) returns (WebListPublishedScenesResponse);
+
+  // WebGetPublicSceneArchive reads a published scene archive without
+  // participant authentication. Proxies to
+  // SceneAccessService.GetPublicSceneArchive; player_session_token is read
+  // from the HTTP cookie by gateway middleware.
+  rpc WebGetPublicSceneArchive(WebGetPublicSceneArchiveRequest) returns (WebGetPublicSceneArchiveResponse);
+
+  // WebDownloadPublicSceneArchive returns a PUBLISHED scene archive rendered
+  // in the requested format. Proxies to
+  // SceneAccessService.DownloadPublicSceneArchive; player_session_token is
+  // read from the HTTP cookie by gateway middleware.
+  rpc WebDownloadPublicSceneArchive(WebDownloadPublicSceneArchiveRequest) returns (WebDownloadPublicSceneArchiveResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -889,4 +941,182 @@ message WebListCommandsResponse {
   map<string, string> aliases = 2;
   // incomplete is true when engine errors hid some commands.
   bool incomplete = 3;
+}
+
+// --- Scene access messages ---
+
+// WebListScenesRequest proxies to SceneAccessService.ListScenesForViewer.
+// session_id is the client-declared player-session ULID; player_session_token
+// is injected from the X-Session-Token cookie by gateway middleware and is NOT
+// a body field — it is forwarded as the facade's player_session_token.
+message WebListScenesRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id is the "act as this alt" selector forwarded to the facade.
+  string character_id = 2;
+  // limit is the maximum number of scenes to return; 0 means server default.
+  int32 limit = 3;
+  // offset is the number of leading results to skip for pagination.
+  int32 offset = 4;
+  // tags restricts results to scenes carrying all of these tags.
+  repeated string tags = 5;
+  // exclude_content_warnings adds extra content-warning categories to suppress.
+  repeated string exclude_content_warnings = 6;
+}
+
+// WebListScenesResponse re-exports the scene board result from the facade.
+message WebListScenesResponse {
+  // scenes is the matching public scenes for this page.
+  repeated holomush.scene.v1.SceneInfo scenes = 1;
+}
+
+// WebGetSceneRequest proxies to SceneAccessService.GetSceneForViewer.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebGetSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id is the "act as this alt" selector forwarded to the facade.
+  string character_id = 2;
+  // scene_id identifies the scene to load; required.
+  string scene_id = 3;
+}
+
+// WebGetSceneResponse re-exports the single-scene metadata from the facade.
+message WebGetSceneResponse {
+  // scene is the loaded scene's full metadata projection.
+  holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// WebListMyScenesRequest proxies to SceneAccessService.ListMyScenes.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebListMyScenesRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id is the "act as this alt" selector forwarded to the facade.
+  string character_id = 2;
+}
+
+// WebListMyScenesResponse re-exports the character's scene participations from the facade.
+message WebListMyScenesResponse {
+  // scenes is the character's scene participations, most recently active first.
+  repeated holomush.scene.v1.CharacterSceneInfo scenes = 1;
+}
+
+// WebWatchSceneRequest proxies to SceneAccessService.WatchScene.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebWatchSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id is the "act as this alt" selector forwarded to the facade.
+  string character_id = 2;
+  // scene_id identifies the scene to watch; required.
+  string scene_id = 3;
+}
+
+// WebWatchSceneResponse re-exports the observer-join confirmation from the facade.
+message WebWatchSceneResponse {
+  // participant is the resulting participant entry (role=observer), or the
+  // pre-existing row when the character was already a participant.
+  holomush.scene.v1.ParticipantInfo participant = 1;
+}
+
+// WebExportSceneRequest proxies to SceneAccessService.ExportScene.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebExportSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id is the "act as this alt" selector forwarded to the facade.
+  string character_id = 2;
+  // scene_id identifies the scene to export; required.
+  string scene_id = 3;
+  // format is the render format; required. Supported: "markdown" or "jsonl".
+  string format = 4;
+}
+
+// WebExportSceneResponse re-exports the rendered scene-log document from the facade.
+message WebExportSceneResponse {
+  // content is the rendered document bytes.
+  bytes content = 1;
+  // mime_type is the content's MIME type (text/markdown or application/jsonl).
+  string mime_type = 2;
+  // filename is the suggested download filename.
+  string filename = 3;
+}
+
+// WebSetSceneFocusRequest proxies to SceneAccessService.SetSceneFocus.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebSetSceneFocusRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // connection_id is the ULID of the web portal connection whose focus to set.
+  string connection_id = 2;
+  // scene_id is the scene to focus on; empty clears the focus (grid default).
+  string scene_id = 3;
+}
+
+// WebSetSceneFocusResponse is intentionally empty — a successful focus set
+// carries no body; the client may update its local focus state optimistically.
+message WebSetSceneFocusResponse {}
+
+// WebListPublishedScenesRequest proxies to SceneAccessService.ListPublishedScenes.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebListPublishedScenesRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // limit is the page size; 0 means server default.
+  int32 limit = 2;
+  // offset is the number of leading results to skip.
+  int32 offset = 3;
+  // tags restricts results to archives whose source scene carries all of these tags.
+  repeated string tags = 4;
+}
+
+// WebListPublishedScenesResponse re-exports the public archive list from the facade.
+message WebListPublishedScenesResponse {
+  // archives is the public-safe published-archive summaries, newest first.
+  repeated holomush.scene.v1.PublicSceneArchive archives = 1;
+}
+
+// WebGetPublicSceneArchiveRequest proxies to SceneAccessService.GetPublicSceneArchive.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebGetPublicSceneArchiveRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // published_scene_id identifies the publication attempt to read; required.
+  string published_scene_id = 2;
+}
+
+// WebGetPublicSceneArchiveResponse re-exports the public archive view from the facade.
+message WebGetPublicSceneArchiveResponse {
+  // id is the publication attempt's ID.
+  string id = 1;
+  // title_snapshot is the scene title snapshotted at publish time.
+  string title_snapshot = 2;
+  // participants_snapshot is the participant character names snapshotted at publish time.
+  repeated string participants_snapshot = 3;
+  // content_entries is the frozen published content.
+  repeated holomush.scene.v1.PublishedSceneEntry content_entries = 4;
+  // published_at_unix_ns is the epoch-nanosecond publish time.
+  int64 published_at_unix_ns = 5;
+}
+
+// WebDownloadPublicSceneArchiveRequest proxies to
+// SceneAccessService.DownloadPublicSceneArchive.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebDownloadPublicSceneArchiveRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // published_scene_id identifies the publication attempt to download; required.
+  string published_scene_id = 2;
+  // format is the render format; required. Supported: "markdown", "plain_text", "jsonl".
+  string format = 3;
+}
+
+// WebDownloadPublicSceneArchiveResponse re-exports the rendered public-archive
+// bytes from the facade.
+message WebDownloadPublicSceneArchiveResponse {
+  // content is the rendered file content.
+  bytes content = 1;
+  // mime_type is the content's MIME type.
+  string mime_type = 2;
 }
