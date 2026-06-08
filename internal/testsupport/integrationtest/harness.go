@@ -496,6 +496,17 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		// Wire embedded bus subscriber so Subscribe calls succeed for
 		// WaitForEvent / DrainEvents paths.
 		holoGRPC.WithSubscriber(subscriber),
+		// Wire embedded bus publisher as the event store so emitCommandResponse
+		// (command_error / command_response events) reaches JetStream and is
+		// therefore deliverable to WaitForEvent. Without this, emitCommandResponse
+		// hits its nil-guard and silently drops the event. Mirrors production's
+		// busEventAppender in cmd/holomush/sub_grpc.go, including the
+		// RenderingPublisher wrap (wrapPublisher) so frames carry rendering
+		// metadata — the gateway drops nil-Rendering events (INV-EVENTBUS-6).
+		holoGRPC.WithEventStore(&busEventAppenderAdapter{
+			publisher: eventbus.NewRenderingPublisher(bus.Bus.Publisher(), verbRegistry),
+			gameID:    bus.Bus.GameID,
+		}),
 		// HistoryReader powers QueryStreamHistory end-to-end so privacy
 		// integration tests can exercise the full RPC path.
 		holoGRPC.WithHistoryReader(historyReader),
@@ -1052,6 +1063,73 @@ type noopEventAppender struct{}
 func (*noopEventAppender) Append(_ context.Context, _ core.Event) error { return nil }
 
 var _ core.EventAppender = (*noopEventAppender)(nil)
+
+// busEventAppenderAdapter implements core.EventAppender by translating
+// core.Events to eventbus.Events and publishing them to the embedded JetStream
+// bus. This mirrors production's busEventAppender in cmd/holomush/sub_grpc.go,
+// allowing emitCommandResponse (command_error / command_response events on the
+// character stream) to reach the JetStream bus and be delivered via WaitForEvent.
+//
+// Without this adapter, s.eventStore is nil in the CoreServer, emitCommandResponse
+// hits its nil-guard and silently no-ops, and WaitForEvent for command_error events
+// always times out (holomush-5rh.8.4 root-cause analysis).
+type busEventAppenderAdapter struct {
+	publisher eventbus.Publisher
+	gameID    func() string
+}
+
+var _ core.EventAppender = (*busEventAppenderAdapter)(nil)
+
+// Append translates a core.Event to an eventbus.Event and publishes it to
+// the embedded JetStream bus. Domain-relative stream references (e.g.
+// "character.01ABC") are qualified to full subjects via eventbus.Qualify.
+func (b *busEventAppenderAdapter) Append(ctx context.Context, event core.Event) error {
+	gid := b.gameID()
+	if gid == "" {
+		gid = "main"
+	}
+	sub, err := eventbus.Qualify(gid, event.Stream)
+	if err != nil {
+		return oops.With("stream", event.Stream).Wrap(err)
+	}
+	typ, err := eventbus.NewType(string(event.Type))
+	if err != nil {
+		return oops.With("type", string(event.Type)).Wrap(err)
+	}
+	busEvent := eventbus.Event{
+		ID:        event.ID,
+		Subject:   sub,
+		Type:      typ,
+		Timestamp: event.Timestamp,
+		Actor:     harnessCoreToBusActor(event.Actor),
+		Payload:   event.Payload,
+	}
+	return oops.Wrap(b.publisher.Publish(ctx, busEvent))
+}
+
+// harnessCoreToBusActor translates a core.Actor to an eventbus.Actor.
+// Mirrors production's coreToBusActor in cmd/holomush/sub_grpc.go.
+func harnessCoreToBusActor(a core.Actor) eventbus.Actor {
+	out := eventbus.Actor{Kind: harnessCoreActorKindToBus(a.Kind)}
+	if a.ID == "" {
+		return out
+	}
+	if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
+		out.ID = parsed
+	}
+	return out
+}
+
+func harnessCoreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
+	switch k {
+	case core.ActorCharacter:
+		return eventbus.ActorKindCharacter
+	case core.ActorPlugin:
+		return eventbus.ActorKindPlugin
+	default:
+		return eventbus.ActorKindSystem
+	}
+}
 
 // authCharRepoAdapter wraps *worldpg.CharacterRepository to satisfy
 // auth.CharacterRepository. Mirrors test/integration/auth/auth_suite_test.go.

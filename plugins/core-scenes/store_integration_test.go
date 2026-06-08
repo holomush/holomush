@@ -717,6 +717,30 @@ var _ = Describe("SceneStore", func() {
 			Expect(invitees).To(ConsistOf("char-carol"))
 		})
 
+		It("excludes a role='observer' row from both participants and invitees (holomush-5rh.8.4)", func() {
+			store := newTestStore()
+			ctx := context.Background()
+
+			row := &SceneRow{
+				ID: "scene-gwm-obs", Title: "T", OwnerID: "char-alice",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility:      string(SceneVisibilityOpen),
+				ContentWarnings: []string{}, Tags: []string{},
+			}
+			Expect(store.CreateWithOwner(ctx, row)).NotTo(HaveOccurred())
+			mustAddParticipant(store, row.ID, "char-watcher", "observer")
+
+			// The real SQL filter (role IN ('owner','member')) is the gate that
+			// makes write-scene-as-participant deny observers — pin it at the
+			// real-query layer, not just the fake-store layer (resolver_test.go).
+			_, participants, invitees, err := store.GetWithMembership(ctx, row.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(participants).To(ConsistOf("char-alice"),
+				"observer row MUST NOT appear in participants")
+			Expect(invitees).To(BeEmpty(),
+				"observer row MUST NOT appear in invitees either")
+		})
+
 		It("returns empty lists when scene has no participants", func() {
 			store := newTestStore()
 			ctx := context.Background()

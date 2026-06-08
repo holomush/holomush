@@ -340,3 +340,42 @@ func TestCompute_UnrecognizedModeFallsBackToFree(t *testing.T) {
 	assert.Equal(t, "alice-id", got[0].CharacterID)
 	assert.Equal(t, "bob-id", got[1].CharacterID)
 }
+
+// TestComputeHasNoRoleAwarenessSoStoreFilterIsLoadBearing proves that the
+// pose-order exclusion of observers CANNOT live in Compute: the function
+// includes every participant it is handed, so the role filter in
+// ListParticipantsWithPoseMeta's SQL (`AND p.role IN ('owner', 'member')`,
+// store.go) is the load-bearing gate. If a refactor ever routed an unfiltered
+// roster into Compute, observers would enter pose order — this test makes that
+// failure mode explicit. The authoritative DB-level exclusion pin lives in
+// poseorder_integration_test.go ("omits a role='observer' row from
+// ListParticipantsWithPoseMeta").
+func TestComputeHasNoRoleAwarenessSoStoreFilterIsLoadBearing(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
+	member := ParticipantWithPoseMeta{
+		CharacterID: "char-member",
+		JoinedAt:    pgnanos.From(base.Add(1 * time.Minute)),
+	}
+	// Simulate a bug where an observer row leaks past the store filter:
+	// ParticipantWithPoseMeta carries no role, so Compute happily includes it.
+	leakedObserver := ParticipantWithPoseMeta{
+		CharacterID: "char-observer",
+		JoinedAt:    pgnanos.From(base.Add(2 * time.Minute)),
+	}
+	for _, mode := range []string{"strict", "free", "3pr", "5pr"} {
+		t.Run("mode_"+mode+"_includes_leaked_observer", func(t *testing.T) {
+			t.Parallel()
+			got := Compute(mode, 0, []ParticipantWithPoseMeta{member, leakedObserver}, nil)
+			ids := make([]string, 0, len(got))
+			for _, e := range got {
+				ids = append(ids, e.CharacterID)
+			}
+			assert.Contains(t, ids, "char-observer",
+				"Compute is role-blind by design (mode=%s) — the SQL filter in "+
+					"ListParticipantsWithPoseMeta is the ONLY thing keeping observers "+
+					"out of pose order", mode)
+		})
+	}
+}

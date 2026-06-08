@@ -182,3 +182,13 @@
   defense-in-depth polarity; spoofed md can only restore baseline, never grant. Pattern to
   re-check on .8.11 facade: caller MUST pass server-side-verified actor; token outlives plugin
   unload until release/TTL (Low, accepted).
+
+- **Harness event-path parity (5rh.8.4, 2026-06-07): production busEventAppender publishes via
+  wrapPublisher's RenderingPublisher (sub_grpc.go:207,219) — any harness mirror using raw
+  `bus.Bus.Publisher()` ships nil-Rendering frames (INV-EVENTBUS-6: gateway drops those).
+  Check publisher wrapping, not just Append-translation fidelity. Also: harness.go is a SHARED
+  int helper — a change there that un-drops events (eventStore was nil → command_response/
+  command_error now publish) affects EVERY harness suite (privacy's empty-registry SendCommand
+  → unknown-command command_error now hits bus + events_audit); require full `task test:int`,
+  not just the touched suites. Fake-level "exclusion pins" (fakeStore.GetWithMembership
+  re-implements role filter in Go) pin the fake, not the SQL — demand a DB-level twin.
