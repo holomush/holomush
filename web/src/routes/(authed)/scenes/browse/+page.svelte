@@ -95,7 +95,7 @@
     <ul class="flex-1 overflow-y-auto" aria-label="Scene list">
       {#each filteredScenes as scene (scene.id)}
         <li>
-          <SceneBoardRow {scene} {sessionId} characterId={primaryCharId} />
+          <SceneBoardRow {scene} {sessionId} characterId={primaryCharId} lastActivityMs={scene.lastActivityMs} />
         </li>
       {/each}
     </ul>

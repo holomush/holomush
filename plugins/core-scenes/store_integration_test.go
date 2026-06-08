@@ -2505,7 +2505,7 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		// Excluded: open + active but no "plot" tag.
 		mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{"social"})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rows).To(HaveLen(1))
 		Expect(rows[0].ID).To(Equal(plotTagged.ID))
@@ -2517,7 +2517,7 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		// Excluded: ended.
 		mustCreateSceneWithState(ulid.Make().String(), "ended", "open", []string{})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{})
+		rows, err := store.ListBoard(ctx, BoardQuery{}, "")
 		Expect(err).NotTo(HaveOccurred())
 		ids := make([]string, len(rows))
 		for i, r := range rows {
@@ -2535,7 +2535,7 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		// Only one tag: excluded by the @> containment requirement.
 		mustCreateSceneWithState(ulid.Make().String(), "active", "open", []string{"plot"})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot", "action"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{Tags: []string{"plot", "action"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rows).To(HaveLen(1))
 		Expect(rows[0].ID).To(Equal(both.ID))
@@ -2548,12 +2548,12 @@ var _ = Describe("SceneStore.ListBoard", func() {
 		}
 
 		// First page: limit 2.
-		page1, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 0})
+		page1, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 0}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(page1).To(HaveLen(2))
 
 		// Second page: offset 2, should return the remaining 1.
-		page2, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 2})
+		page2, err := store.ListBoard(ctx, BoardQuery{Limit: 2, Offset: 2}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(page2).To(HaveLen(1))
 
@@ -2568,9 +2568,77 @@ var _ = Describe("SceneStore.ListBoard", func() {
 	})
 
 	It("normalises zero Limit to defaultBoardLimit and does not panic on empty result", func() {
-		rows, err := store.ListBoard(ctx, BoardQuery{Limit: 0})
+		rows, err := store.ListBoard(ctx, BoardQuery{Limit: 0}, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rows).To(BeEmpty(), "no scenes seeded, so empty result is expected")
+	})
+})
+
+// ── ListBoard last_activity_ms integration tests (holomush-5rh.8.17.2) ───────
+
+var _ = Describe("SceneStore.ListBoard last_activity_ms", func() {
+	var (
+		store  *SceneStore
+		ctx    context.Context
+		gameID string
+	)
+
+	BeforeEach(func() {
+		store = newTestStore()
+		ctx = context.Background()
+		gameID = "testgame"
+	})
+
+	mustSeedScene := func(visibility, state string) *SceneRow {
+		GinkgoHelper()
+		row := &SceneRow{
+			ID:              ulid.Make().String(),
+			Title:           "Board Activity Scene",
+			OwnerID:         ulid.Make().String(),
+			State:           state,
+			PoseOrder:       string(PoseOrderModeFree),
+			Visibility:      visibility,
+			ContentWarnings: []string{},
+			Tags:            []string{},
+		}
+		Expect(store.Create(ctx, row)).NotTo(HaveOccurred())
+		return row
+	}
+
+	mustInsertSceneLogRow := func(sceneID string, tsNs int64) {
+		GinkgoHelper()
+		subject := "events." + gameID + ".scene." + sceneID + ".ic"
+		_, err := store.pool.Exec(ctx, `
+			INSERT INTO scene_log (id, subject, type, timestamp, actor_kind, actor_id, payload, schema_ver, codec)
+			VALUES (decode(lpad(to_hex($1::BIGINT), 32, '0'), 'hex'), $2, 'core-scenes:scene_pose',
+			        $3, 'character', 'char-001', ''::BYTEA, 1, 'identity')`,
+			tsNs%0x7FFFFFFFFFFFFFFF, subject, tsNs)
+		Expect(err).NotTo(HaveOccurred(), "failed to seed scene_log row for scene %s", sceneID)
+	}
+
+	icPrefix := func() string { return "events." + gameID + ".scene." }
+
+	It("returns LastActivityMs equal to newest scene_log IC timestamp converted to ms when log is non-empty", func() {
+		scene := mustSeedScene("open", "active")
+		// Seed two IC entries; the later one should win.
+		tsNs1 := int64(1_700_000_000_000_000_000) // 1700000000000 ms
+		tsNs2 := int64(1_800_000_000_000_000_000) // 1800000000000 ms
+		mustInsertSceneLogRow(scene.ID, tsNs1)
+		mustInsertSceneLogRow(scene.ID, tsNs2)
+
+		rows, err := store.ListBoard(ctx, BoardQuery{}, icPrefix())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(HaveLen(1))
+		Expect(rows[0].LastActivityMs).To(Equal(tsNs2 / 1_000_000))
+	})
+
+	It("returns LastActivityMs of 0 when the scene has no scene_log IC entries", func() {
+		mustSeedScene("open", "active")
+
+		rows, err := store.ListBoard(ctx, BoardQuery{}, icPrefix())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rows).To(HaveLen(1))
+		Expect(rows[0].LastActivityMs).To(Equal(int64(0)))
 	})
 })
 
@@ -2611,7 +2679,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		safe := mustCreateBoardScene(ulid.Make().String(), []string{"romance"})
 		noTags := mustCreateBoardScene(ulid.Make().String(), []string{})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		ids := make([]string, len(rows))
@@ -2629,7 +2697,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		a := mustCreateBoardScene(ulid.Make().String(), []string{"death"})
 		b := mustCreateBoardScene(ulid.Make().String(), []string{"romance"})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{}})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{}}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		ids := make([]string, len(rows))
@@ -2644,7 +2712,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		a := mustCreateBoardScene(ulid.Make().String(), []string{"violence"})
 		b := mustCreateBoardScene(ulid.Make().String(), []string{})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: nil})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: nil}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		ids := make([]string, len(rows))
@@ -2661,7 +2729,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		// Scene has only violence — no overlap with the block set.
 		safe := mustCreateBoardScene(ulid.Make().String(), []string{"violence"})
 
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"romance"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"romance"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		ids := make([]string, len(rows))
@@ -2677,7 +2745,7 @@ var _ = Describe("SceneStore.ListBoard CW exclusion", func() {
 		safe := mustCreateBoardScene(ulid.Make().String(), []string{"romance", "violence"})
 
 		// Block "death" — safe scene has no overlap, so it is returned.
-		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}})
+		rows, err := store.ListBoard(ctx, BoardQuery{BlockedCW: []string{"death"}}, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		var found *SceneRow

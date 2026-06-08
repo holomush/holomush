@@ -523,7 +523,7 @@ func (f *fakeStore) ListScenesForCharacter(_ context.Context, characterID string
 
 // ListBoard records the query it received and returns the configured rows/err.
 // Satisfies sceneStorer for iokti.12 unit tests.
-func (f *fakeStore) ListBoard(_ context.Context, q BoardQuery) ([]*SceneRow, error) {
+func (f *fakeStore) ListBoard(_ context.Context, q BoardQuery, _ string) ([]*SceneRow, error) {
 	got := q
 	f.listBoardGot = &got
 	if f.listBoardErr != nil {

@@ -72,6 +72,7 @@ type SceneRow struct {
 	CreatedAt       pgnanos.Time
 	EndedAt         *pgnanos.Time
 	ArchivedAt      *pgnanos.Time
+	LastActivityMs  int64
 }
 
 // SceneStore provides PostgreSQL persistence for scenes.
@@ -1535,7 +1536,11 @@ const (
 //
 // Mirrors ListScenesForCharacter: startSpan, oops.Code error wrapping, pool
 // query, defer rows.Close, scan loop, rows.Err check.
-func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, error) {
+// ListBoard returns the public scene board filtered by q, including the
+// epoch-ms of the newest IC scene_log entry for each scene. The
+// icSubjectPrefix is "events.<gameID>.scene." — the service supplies it so
+// the store remains gameID-agnostic.
+func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery, icSubjectPrefix string) ([]*SceneRow, error) {
 	// Normalise pagination parameters.
 	if q.Limit <= 0 {
 		q.Limit = defaultBoardLimit
@@ -1565,8 +1570,17 @@ func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, 
 		blockedCWArg = q.BlockedCW
 	}
 
+	// $5 is the IC subject prefix (e.g. "events.<gameID>.scene.") used to
+	// compute last_activity_ms via a correlated subquery against scene_log.
+	// The conversion (MAX(l.timestamp) / 1000000) mirrors ListCharacterScenes:
+	// scene_log.timestamp is BIGINT epoch-nanoseconds, so dividing by 1 000 000
+	// yields epoch-milliseconds.
 	const boardQuery = `
-		SELECT ` + sceneSelectColumns + `
+		SELECT ` + sceneSelectColumns + `,
+		  COALESCE((
+		    SELECT (MAX(l.timestamp) / 1000000)
+		    FROM scene_log l WHERE l.subject = $5 || scenes.id || '.ic'
+		  ), 0) AS last_activity_ms
 		FROM scenes
 		WHERE visibility = 'open'
 		  AND state IN ('active', 'paused')
@@ -1575,7 +1589,7 @@ func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, 
 		ORDER BY created_at DESC, id ASC
 		LIMIT $2 OFFSET $3
 	`
-	rows, err := s.pool.Query(ctx, boardQuery, tagsArg, q.Limit, q.Offset, blockedCWArg)
+	rows, err := s.pool.Query(ctx, boardQuery, tagsArg, q.Limit, q.Offset, blockedCWArg, icSubjectPrefix)
 	if err != nil {
 		recordError(span, err)
 		return nil, oops.Code("SCENE_LIST_BOARD_FAILED").Wrap(err)
@@ -1585,7 +1599,13 @@ func (s *SceneStore) ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, 
 	var out []*SceneRow
 	for rows.Next() {
 		row := &SceneRow{}
-		if err := scanSceneRow(rows, row); err != nil {
+		if err := rows.Scan(
+			&row.ID, &row.Title, &row.Description, &row.LocationID, &row.OwnerID,
+			&row.State, &row.PoseOrder, &row.Visibility, &row.IdleTimeoutSecs,
+			&row.TemplateID, &row.ContentWarnings, &row.Tags,
+			&row.CreatedAt, &row.EndedAt, &row.ArchivedAt,
+			&row.LastActivityMs,
+		); err != nil {
 			recordError(span, err)
 			return nil, oops.Code("SCENE_LIST_BOARD_SCAN_FAILED").Wrap(err)
 		}

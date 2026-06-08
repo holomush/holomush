@@ -69,9 +69,14 @@ type SceneInfo struct {
 	// acting roster and excluded from pose order and publish votes (INV-SCENE-61).
 	// Not yet populated by any RPC; the scene-watch read path (E9.5 Task 3+)
 	// fills it from the store's observers query.
-	Observers     []*ParticipantInfo `protobuf:"bytes,14,rep,name=observers,proto3" json:"observers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Observers []*ParticipantInfo `protobuf:"bytes,14,rep,name=observers,proto3" json:"observers,omitempty"`
+	// Epoch-milliseconds of the newest scene_log row on the scene's IC subject
+	// (events.<gameID>.scene.<sceneID>.ic). 0 when the log is empty or the read
+	// path does not compute the value (e.g. GetScene). Mirrors
+	// CharacterSceneInfo.last_activity_ms.
+	LastActivityMs int64 `protobuf:"varint,15,opt,name=last_activity_ms,json=lastActivityMs,proto3" json:"last_activity_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SceneInfo) Reset() {
@@ -200,6 +205,13 @@ func (x *SceneInfo) GetObservers() []*ParticipantInfo {
 		return x.Observers
 	}
 	return nil
+}
+
+func (x *SceneInfo) GetLastActivityMs() int64 {
+	if x != nil {
+		return x.LastActivityMs
+	}
+	return 0
 }
 
 // ParticipantInfo is one entry in a scene's roster — a character's relationship
@@ -4411,7 +4423,7 @@ var File_holomush_scene_v1_scene_proto protoreflect.FileDescriptor
 
 const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\n" +
-	"\x1dholomush/scene/v1/scene.proto\x12\x11holomush.scene.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa8\x04\n" +
+	"\x1dholomush/scene/v1/scene.proto\x12\x11holomush.scene.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd2\x04\n" +
 	"\tSceneInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -4431,7 +4443,8 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x125\n" +
 	"\bended_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12F\n" +
 	"\fparticipants\x18\r \x03(\v2\".holomush.scene.v1.ParticipantInfoR\fparticipants\x12@\n" +
-	"\tobservers\x18\x0e \x03(\v2\".holomush.scene.v1.ParticipantInfoR\tobservers\"\xa8\x01\n" +
+	"\tobservers\x18\x0e \x03(\v2\".holomush.scene.v1.ParticipantInfoR\tobservers\x12(\n" +
+	"\x10last_activity_ms\x18\x0f \x01(\x03R\x0elastActivityMs\"\xa8\x01\n" +
 	"\x0fParticipantInfo\x12!\n" +
 	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x12\n" +

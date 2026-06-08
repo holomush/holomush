@@ -80,8 +80,10 @@ type sceneStorer interface {
 	ListScenesForCharacter(ctx context.Context, characterID string) ([]string, error)
 	// ListBoard returns the paginated public scene board: open scenes in state
 	// 'active' or 'paused', optionally filtered by tags. CW and identity
-	// filtering are applied by the caller (iokti.13).
-	ListBoard(ctx context.Context, q BoardQuery) ([]*SceneRow, error)
+	// filtering are applied by the caller (iokti.13). The icSubjectPrefix is
+	// "events.<gameID>.scene." — used for the last_activity_ms correlated
+	// subquery; pass empty string when activity timestamps are not needed.
+	ListBoard(ctx context.Context, q BoardQuery, icSubjectPrefix string) ([]*SceneRow, error)
 	// Phase 6 publication reads used by the publish-vote handlers. The
 	// header read deliberately EXCLUDES content_entries so the INV-SCENE-60
 	// participant gate runs between the header read and the content read
@@ -507,8 +509,9 @@ func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScen
 		Tags:      req.GetTags(),
 		BlockedCW: s.resolveBlockedCW(ctx, req),
 	}
+	icPrefix := "events." + s.gameID + ".scene."
 
-	rows, err := s.store.ListBoard(ctx, q)
+	rows, err := s.store.ListBoard(ctx, q, icPrefix)
 	if err != nil {
 		recordError(span, err)
 		slog.WarnContext(
@@ -1506,6 +1509,7 @@ func rowToProto(row *SceneRow, createdAt time.Time) *scenev1.SceneInfo {
 		ContentWarnings: row.ContentWarnings,
 		Tags:            row.Tags,
 		CreatedAt:       timestamppb.New(createdAt),
+		LastActivityMs:  row.LastActivityMs,
 	}
 	if row.LocationID != nil {
 		info.LocationId = *row.LocationID

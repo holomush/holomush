@@ -259,6 +259,11 @@ message SceneInfo {
   // Not yet populated by any RPC; the scene-watch read path (E9.5 Task 3+)
   // fills it from the store's observers query.
   repeated ParticipantInfo observers = 14;
+  // Epoch-milliseconds of the newest scene_log row on the scene's IC subject
+  // (events.<gameID>.scene.<sceneID>.ic). 0 when the log is empty or the read
+  // path does not compute the value (e.g. GetScene). Mirrors
+  // CharacterSceneInfo.last_activity_ms.
+  int64 last_activity_ms = 15;
 }
 
 // ParticipantInfo is one entry in a scene's roster — a character's relationship
