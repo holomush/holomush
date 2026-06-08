@@ -3,7 +3,7 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { LogOut, ArrowLeftRight, Palette, PanelRightOpen, Command as CommandIcon } from '@lucide/svelte';
+  import { LogOut, ArrowLeftRight, Palette, PanelRightOpen, Command as CommandIcon, Clapperboard } from '@lucide/svelte';
   import { page } from '$app/stores';
   import { authState, clearAuth } from '$lib/stores/authStore';
   import {
@@ -137,6 +137,9 @@
       <a href="/register" class="nav-link accent">Register</a>
     {:else if $authState.sessionId && $authState.characterName}
       <span class="char-name" data-testid="topbar-char-name">{$authState.characterName}</span>
+      <a href="/scenes" class="icon-btn" title="Scenes" aria-label="Scenes">
+        <Clapperboard size={16} />
+      </a>
       <button class="icon-btn" onclick={handleSwitchCharacter} title="Switch character" aria-label="Switch character">
         <ArrowLeftRight size={16} />
       </button>
