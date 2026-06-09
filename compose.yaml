@@ -27,9 +27,15 @@ services:
 
   core:
     image: holomush
-    command: ["core", "--log-format", "text", "--grpc-addr", "0.0.0.0:9000", "--metrics-addr", "0.0.0.0:9100"]
+    command: ["core", "--log-format", "text", "--grpc-addr", "0.0.0.0:9000", "--metrics-addr", "0.0.0.0:9100", "--auto-gen-kek"]
     environment:
       DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
+      # KEK is required to boot. The keyfile is minted on first start via
+      # --auto-gen-kek and persisted in the certs volume; subsequent starts
+      # reuse it. HOLOMUSH_KEK_PASSPHRASE is a fixed dev value — change this
+      # for production deployments (or use HOLOMUSH_KEK_PASSPHRASE_FILE).
+      HOLOMUSH_KEK_FILE: /home/holomush/.config/holomush/certs/master.key.enc
+      HOLOMUSH_KEK_PASSPHRASE: ${HOLOMUSH_KEK_PASSPHRASE:-dev-local-passphrase}
       # Set unconditionally — when the observability profile is inactive, the OTel SDK
       # retries silently with a no-op error handler (see internal/telemetry/provider.go).
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317

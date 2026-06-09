@@ -58,8 +58,10 @@ package integrationtest
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -79,6 +81,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	authguardaudit "github.com/holomush/holomush/internal/eventbus/authguard/audit"
+	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -258,6 +261,31 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	t.Helper()
 
 	ctx := context.Background()
+
+	// Provision boot-KEK env vars so any code path that reads
+	// HOLOMUSH_KEK_FILE / HOLOMUSH_KEK_PASSPHRASE (e.g. future helpers that
+	// call through to the production provisioning path) finds a valid, per-test
+	// ephemeral keyfile. A real sealed keyfile is persisted at the path so the
+	// env vars are truthful — an env reader would load it successfully rather
+	// than hit os.ErrNotExist. The harness itself constructs CoreServer
+	// directly (newPluginCrypto wires the active DEK manager) and never calls
+	// provisionBootKEKProvider; this complements that substrate, it does not
+	// replace it.
+	//
+	// t.Setenv is safe: the harness callers do not call t.Parallel (verified
+	// 2026-06-09; re-verify if t.Parallel is ever added to integration suites).
+	kekFile := filepath.Join(t.TempDir(), "integration-test-master.key.enc")
+	kekPassphrase := func(context.Context) ([]byte, error) {
+		return []byte("integration-test-passphrase"), nil
+	}
+	kekSource, err := kek.NewFileSource(kekFile, kekPassphrase)
+	require.NoError(t, err, "harness: build KEK file source")
+	bootMaster := make([]byte, kek.KEKByteLength)
+	_, err = rand.Read(bootMaster)
+	require.NoError(t, err, "harness: generate boot KEK")
+	require.NoError(t, kekSource.Persist(ctx, bootMaster), "harness: persist boot keyfile")
+	t.Setenv("HOLOMUSH_KEK_FILE", kekFile)
+	t.Setenv("HOLOMUSH_KEK_PASSPHRASE", "integration-test-passphrase")
 
 	// Postgres: shared container, fresh per-test database.
 	shared := testutil.SharedPostgres(t)
