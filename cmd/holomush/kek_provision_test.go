@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,5 +42,38 @@ func TestResolvePassphrase(t *testing.T) {
 		_, err := resolvePassphrase(passphraseSources{interactive: false})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "KEK_PASSPHRASE_FILE_READ_FAILED")
+	})
+}
+
+func TestEnsureKeyfile(t *testing.T) {
+	t.Run("absent + autoGen mints and persists, reused on second call", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "master.key.enc")
+		pf := func(_ context.Context) ([]byte, error) { return []byte("pw"), nil }
+		require.NoError(t, ensureKeyfile(context.Background(), path, pf, true))
+		info1, err := os.Stat(path)
+		require.NoError(t, err)
+		require.NoError(t, ensureKeyfile(context.Background(), path, pf, true)) // idempotent
+		info2, err := os.Stat(path)
+		require.NoError(t, err)
+		require.Equal(t, info1.ModTime(), info2.ModTime(), "MUST NOT regenerate an existing keyfile")
+	})
+	t.Run("absent + NOT autoGen refuses", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "master.key.enc")
+		err := ensureKeyfile(context.Background(), path, func(_ context.Context) ([]byte, error) { return []byte("pw"), nil }, false)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "KEK_FILE_NOT_FOUND")
+	})
+	t.Run("wrong passphrase surfaces error, never regenerates", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "master.key.enc")
+		right := func(_ context.Context) ([]byte, error) { return []byte("right"), nil }
+		wrong := func(_ context.Context) ([]byte, error) { return []byte("wrong"), nil }
+		require.NoError(t, ensureKeyfile(context.Background(), path, right, true))
+		info1, err := os.Stat(path)
+		require.NoError(t, err)
+		err = ensureKeyfile(context.Background(), path, wrong, true)
+		require.Error(t, err, "a keyfile that fails to unseal MUST surface, not be regenerated")
+		info2, err := os.Stat(path)
+		require.NoError(t, err)
+		require.Equal(t, info1.ModTime(), info2.ModTime(), "keyfile MUST be untouched after a failed unseal")
 	})
 }
