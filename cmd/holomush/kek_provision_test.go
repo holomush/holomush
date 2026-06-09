@@ -84,7 +84,19 @@ func TestProvisionBootKEKProviderBootMatrix(t *testing.T) {
 		t.Setenv("HOLOMUSH_KEK_FILE", filepath.Join(t.TempDir(), "m.key.enc"))
 		t.Setenv("HOLOMUSH_KEK_PASSPHRASE", "")
 		t.Setenv("HOLOMUSH_KEK_PASSPHRASE_FILE", "")
-		_, err := provisionBootKEKProvider(context.Background(), nil, true)
+		// Replace stdin with a pipe so the provisioner sees a non-TTY even when
+		// the test process itself runs with a terminal attached — otherwise
+		// resolvePassphrase would prompt and block instead of erroring.
+		pipeR, pipeW, err := os.Pipe()
+		require.NoError(t, err)
+		savedStdin := os.Stdin
+		os.Stdin = pipeR
+		t.Cleanup(func() {
+			os.Stdin = savedStdin
+			require.NoError(t, pipeR.Close())
+			require.NoError(t, pipeW.Close())
+		})
+		_, err = provisionBootKEKProvider(context.Background(), nil, true)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "KEK_PASSPHRASE_UNAVAILABLE")
 	})

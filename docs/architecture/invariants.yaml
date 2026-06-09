@@ -779,9 +779,11 @@ invariants:
       matching subject."
     asserted_by:
       - "test/integration/crypto/metadata_only_test.go"
+      - "test/integration/crypto/decrypt_to_participant_test.go"
     binding: bound
     refs:
       - {file: "test/integration/crypto/metadata_only_test.go", token: "INV-9"}
+      - {file: "test/integration/crypto/decrypt_to_participant_test.go", token: "INV-CRYPTO-6"}
   - id: INV-CRYPTO-7
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -4370,9 +4372,11 @@ invariants:
     summary: "A subject in a DEK's participant set MUST receive plaintext via live fan-out when policy permits."
     asserted_by:
       - "test/integration/crypto/genesis_seed_test.go"
+      - "test/integration/crypto/decrypt_to_participant_test.go"
     binding: bound
     refs:
       - {file: "test/integration/crypto/genesis_seed_test.go", token: "INV-CRYPTO-116"}
+      - {file: "test/integration/crypto/decrypt_to_participant_test.go", token: "INV-CRYPTO-116"}
   - id: INV-CRYPTO-117
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-06-08-sensitive-event-crypto-production-golive-design.md"

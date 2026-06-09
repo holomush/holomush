@@ -85,6 +85,13 @@ func ensureKeyfile(ctx context.Context, path string, pf kek.PassphraseFunc, auto
 		return oops.Code("KEK_FILE_CREATE_FAILED").With("path", path).Wrap(claimErr)
 	}
 	if closeErr := claim.Close(); closeErr != nil {
+		// Remove the zero-byte placeholder so a retry sees a clean "absent"
+		// state — as in the persist-failure path below, but tolerating an
+		// already-absent file.
+		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) { //nolint:gosec // path is operator-supplied via env var, not user input
+			slog.WarnContext(ctx, "failed to remove placeholder keyfile after close failure",
+				"path", path, "error", removeErr)
+		}
 		return oops.Code("KEK_FILE_CREATE_FAILED").With("path", path).Wrap(closeErr)
 	}
 	master := make([]byte, kek.KEKByteLength)

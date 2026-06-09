@@ -114,6 +114,8 @@ func emitSensitivePage(ctx context.Context, h *subscribeHarness, recipientCharID
 // (The individual legs are also covered separately in metadata_only_test.go;
 // this Describe shows both in a single harness invocation for clarity.)
 var _ = Describe("Decrypt-to-participant: scene combined three-party proof", func() {
+	// Verifies: INV-CRYPTO-116
+	// Verifies: INV-CRYPTO-6
 	It("participant receives plaintext and non-participant receives metadata-only in the same run", func() {
 		ctx := context.Background()
 		h := buildCommsHarness(suiteT)
@@ -241,6 +243,8 @@ var _ = Describe("Decrypt-to-participant: scene combined three-party proof", fun
 // This proves the decrypt-to-participant behaviour is domain-generic
 // (character context, not just scene context).
 var _ = Describe("Decrypt-to-participant: comms (character subject) domain proof", func() {
+	// Verifies: INV-CRYPTO-116
+	// Verifies: INV-CRYPTO-6
 	It("comms recipient receives plaintext and non-recipient receives metadata-only", func() {
 		ctx := context.Background()
 		// buildCommsHarness registers both test-plugin:whisper and test-plugin:page
