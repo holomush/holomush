@@ -111,6 +111,12 @@ In `cmd/holomush/sub_grpc.go::Start`:
   when `RekeyManager != nil`. When `RekeyManager == nil` (no KEK configured),
   the publisher MUST remain in its current plaintext-only mode — a KEK-less
   deployment is a supported degraded posture and MUST NOT fail to start.
+  > **Superseded (2026-06-09):** the KEK-less degraded posture is retired by
+  > [the sensitive-event crypto activation design](2026-06-09-sensitive-event-crypto-activation-design.md)
+  > — a KEK is now REQUIRED to boot (`BOOT_KEK_REQUIRED`, INV-CRYPTO-119);
+  > `--auto-gen-kek` provisions the keyfile on first start. The
+  > `RekeyManager == nil` publisher branch survives only as a defensive
+  > guard, never as a supported deployment mode.
 - The live **Subscriber** MUST be constructed with
   `WithSubscriberAuthGuard(historyAuthGuard)` +
   `WithSubscriberDEKManager(historyDEKMgr)` +
