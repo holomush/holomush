@@ -561,7 +561,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	if cfg.withPluginCrypto {
 		coreServerOpts = append(
 			coreServerOpts,
-			holoGRPC.WithCryptoEnabled(true),
+			holoGRPC.WithCryptoActive(true),
 			holoGRPC.WithBindingRepository(worldpg.NewBindingRepository(pool)),
 		)
 	}
@@ -914,7 +914,7 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 	require.NoError(s.t, s.charRepo.Create(ctx, char),
 		"integrationtest.ConnectAuthedWithRoles: persist character")
 
-	// Under WithPluginCrypto the CoreServer runs with WithCryptoEnabled(true), so
+	// Under WithPluginCrypto the CoreServer runs with WithCryptoActive(true), so
 	// Subscribe / QueryStreamHistory perform a binding lookup
 	// (BindingRepository.Current) to build the typed CHARACTER identity. Create
 	// the binding row here — production characters always have one; the harness's
