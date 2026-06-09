@@ -388,25 +388,21 @@ test.describe('Scenes workspace (E9.5)', () => {
     await expect(page.locator('textarea[name="scene-composer"]')).toBeEnabled();
   });
 
-  // ── S3: Participate — workspace composer submit flow ─────────────────────
+  // ── S3: Participate — pose appears live in the scene log ─────────────────
   //
   // Owner enters the workspace, types a pose in the composer, clicks Pose,
-  // and verifies the submit path completes cleanly: the draft clears (button
-  // goes disabled again) and no client-side error is shown.
+  // and verifies the full end-to-end flow:
+  //   1. Draft clears (button goes disabled again) — send() succeeded.
+  //   2. No client-side error is shown.
+  //   3. The PoseCard for the submitted text appears in the scene log — the
+  //      encrypted scene_pose event was emitted, decrypted by the server, and
+  //      pushed to the browser stream. Requires E2E KEK provisioning
+  //      (holomush-5rh.8.27) so sensitive events can be emitted and decrypted.
   //
-  // Scope: this test covers the composer UI submit flow ONLY — it does NOT
-  // verify that the pose persists or appears live. The end-to-end flow
-  // (SetSceneFocus → JoinFocus → pose routes to scene_log) is proven by the
-  // integration test in test/integration/scenes/set_scene_focus_participation_test.go
-  // (holomush-5rh.8.26). Asserting the pose card appears live in E2E requires
-  // E2E crypto key provisioning, deferred to holomush-5rh.8.27.
-  //
-  // QUARANTINED (holomush-5rh.8.27): the pose submit POSTs a sensitive scene
-  // event, which the production live Subscribe/Publish path cannot yet encrypt
-  // (DEK/KEK wiring deferred to holomush-5rh.8.29) — the send 500s, so the draft
-  // never clears and the button stays enabled. Un-quarantine when the crypto
-  // follow-up (.8.27/.8.29) lands. Runs locally with HOLOMUSH_RUN_QUARANTINED=1.
-  test('workspace composer accepts pose and clears draft without error', { tag: ['@quarantine', '@holomush-5rh.8.27'] }, async ({ page }) => {
+  // The end-to-end flow (SetSceneFocus → JoinFocus → pose routes to scene_log)
+  // is also proven by the integration test in
+  // test/integration/scenes/set_scene_focus_participation_test.go (holomush-5rh.8.26).
+  test('workspace composer submits pose and pose card appears live in the scene log', async ({ page }) => {
     await registerAndEnterTerminal(page, 'prt');
 
     const title = `PoseTest ${Date.now()}`;
@@ -432,10 +428,20 @@ test.describe('Scenes workspace (E9.5)', () => {
     await expect(sendPoseBtn).toBeEnabled({ timeout: 5000 });
     await sendPoseBtn.click();
 
-    // Successful send() invocation clears the draft → button goes disabled.
-    // No client-side errorMsg paragraph should be rendered.
+    // 1. Successful send() invocation clears the draft → button goes disabled.
     await expect(sendPoseBtn).toBeDisabled({ timeout: 5000 });
+
+    // 2. No client-side errorMsg paragraph should be rendered.
     await expect(page.locator('p.text-destructive')).not.toBeVisible();
+
+    // 3. The pose card must appear in the scene log. The log region is
+    //    role="log" aria-label="scene log"; each entry renders as <article>
+    //    containing a <p> with the pose text. Playwright auto-waits here;
+    //    the 15s timeout covers JetStream fan-out + decrypt + WebSocket push.
+    const sceneLog = page.getByRole('log', { name: 'scene log' });
+    await expect(sceneLog.locator('article').filter({ hasText: poseText })).toBeVisible({
+      timeout: 15000,
+    });
   });
 
   // ── S4: Terminal isolation — workspace focus doesn't disturb terminal ──────

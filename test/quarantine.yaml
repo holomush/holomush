@@ -34,9 +34,3 @@ entries:
     bead: holomush-0jzs
     since: 2026-05-25
     reason: WebSocket reconnect timing flakes in CI (reconnect/replay/history/draft)
-  - id: scenes.spec.ts workspace composer accepts pose and clears draft
-    kind: playwright
-    bead: holomush-5rh.8.27
-    since: 2026-06-08
-    reason: pose submit POSTs a sensitive scene event the live path cannot encrypt until the DEK/KEK crypto wiring lands (.8.27/.8.29);
-      send 500s so the draft never clears
