@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [KEK presence is the single activation gate for sensitive-event crypto](holomush-gkw77-kek-presence-is-single-activation-gate-sensitive-event-crypt.md) | 2026-06-09 | Accepted | `holomush-gkw77` |
+| [Require a provisioned KEK to boot; auto-generate keyfile, never the passphrase](holomush-kddop-require-provisioned-kek-boot-auto-generate-keyfile-never-pas.md) | 2026-06-09 | Accepted | `holomush-kddop` |
 | [DEK seed failure is FATAL and refuses scene focus](holomush-mihtk-dek-seed-failure-is-fatal-and-refuses-scene-focus.md) | 2026-06-09 | Accepted | `holomush-mihtk` |
 | [Seed comms recipients host-side at the publisher genesis boundary](holomush-olpdd-seed-comms-recipients-host-side-at-publisher-genesis-boundar.md) | 2026-06-09 | Accepted | `holomush-olpdd` |
 | [Use player-scoped workspace over terminal focus-pivot for scenes](holomush-wf4zj-use-player-scoped-workspace-over-terminal-focus-pivot-scenes.md) | 2026-06-07 | Accepted | `holomush-wf4zj` |
