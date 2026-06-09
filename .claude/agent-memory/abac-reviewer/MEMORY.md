@@ -421,3 +421,26 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   when a facade calls an UNCONDITIONAL substrate mutation that subscribes streams, the
   facade-side participation check is load-bearing — trace that it runs on EVERY path reaching
   the mutation, and that an oracle error fails closed (not skip).
+- **SetSceneFocus DEK-participant seed (5rh.8.29.4, 2026-06-09) — READY**: extends the .8.26
+  gate. After the participation gate → JoinFocus, seeds the focusing char into the scene DEK
+  participant set via `s.dekAdder.Add` (`sceneaccess_service.go:411-426`) so AuthGuard
+  `checkCharacter` (`guard.go:69-80`) permits decrypt. Order MUST be gate→JoinFocus→Add(fatal)
+  →SetConnectionFocus. Fatal on Add err = `codes.Internal` + NO SetConnectionFocus (test pins
+  `setConnFocusCall==0`). KEY INSIGHT: AuthGuard `checkCharacter` permits decrypt on
+  DEK-participant-set membership ALONE (binding_id match) — NOT on focused connection or
+  FocusMembership. So a dangling DEK-participant entry (after a fatal SetConnectionFocus) DOES
+  confer standalone decrypt capability — but it's benign because the participation gate already
+  authorized that char to decrypt the scene, and no-focus = no stream = no ciphertext to decrypt.
+  Idempotent Add (`manager.go:357-359` added=false) self-heals on retry. `s.dekAdder==nil` is a
+  legit degraded mode (T5 wires only when `RekeyManager != nil`, i.e. crypto stack present), NOT
+  a bypass — no crypto stack = no encrypted events = nothing to gate. Identity: `gameSession.CharacterID`
+  is `session.Info.CharacterID` (session.go:203, server-stored), validated by
+  `ownedCharacter(ps.PlayerID, ...)`; only `req.SceneId`/`req.ConnectionId` are client input.
+  ADR `holomush-mihtk` documents the fatal-refuse decision + benign-dangling rationale.
+  Two Lows: (1) `// Verifies: INV-CRYPTO-116` references a registry id NOT YET in invariants.yaml
+  — registered in plan Task 11 of the SAME epic (forward-ref within sequenced epic, NOT a
+  fabricated binding; orphaned master INV-8 being registered); (2) dangling DEK-participant residue
+  is broader than the plan's "dangling FocusMembership" framing but equally benign. Pattern: when
+  a host facade seeds a crypto-participant set, the AuthGuard char-branch gates on set-membership
+  alone — confirm the seed is preceded by an authz gate that ALREADY licenses decrypt, else the
+  seed over-grants.

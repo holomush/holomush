@@ -161,6 +161,47 @@ func (s *grpcSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
+// publisherOptionsFor returns the PublishOptions for the live publisher.
+// When a DEK manager (RekeyManager) is configured, the publisher is DEK-aware
+// so Sensitive=true events take the encrypt branch (publisher.go:208); when
+// nil, the publisher stays plaintext-only and the subsystem still starts
+// (degraded-but-safe for KEK-less deployments).
+func publisherOptionsFor(cfg grpcSubsystemConfig) []eventbus.PublishOption {
+	if cfg.RekeyManager == nil {
+		return nil
+	}
+	return []eventbus.PublishOption{eventbus.WithDEKManager(cfg.RekeyManager)}
+}
+
+// subscriberOptionsFor returns the SubscribeOptions for the live subscriber.
+// When the AuthGuard is present (KEK configured), the subscriber decodes and
+// authorizes sensitive events (subscriber.go:505 decodeAndAuthorize),
+// delivering plaintext to DEK participants and metadata-only to others. When
+// the guard is nil, the bare subscriber preserves the pre-flag-flip
+// passthrough (subscriber.go:514).
+func subscriberOptionsFor(
+	guard eventbus.SessionAuthGuard,
+	dekMgr eventbus.SessionDEKManager,
+	auditEm eventbus.SessionAuditEmitter,
+) []eventbus.SubscribeOption {
+	// Require both guard and dekMgr: a guard without a DEK manager is a
+	// half-configured decrypt path. This mirrors newHistoryReader's
+	// all-or-nothing contract (see this file's newHistoryReader doc); the
+	// inner fail-closed at subscriber.go:645 (EVENTBUS_DEK_MANAGER_NIL) is the
+	// deeper guard if the subscriber is ever built directly without this seam.
+	if guard == nil || dekMgr == nil {
+		return nil
+	}
+	opts := []eventbus.SubscribeOption{
+		eventbus.WithSubscriberAuthGuard(guard),
+		eventbus.WithSubscriberDEKManager(dekMgr),
+	}
+	if auditEm != nil {
+		opts = append(opts, eventbus.WithSubscriberDecryptAuditEmitter(auditEm))
+	}
+	return opts
+}
+
 // Start wires all dependencies and starts the gRPC server.
 // Start is idempotent: if the gRPC server is already running, it returns nil.
 // codecov:ignore — tested by integration and E2E tests
@@ -200,7 +241,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		return oops.Code("GRPC_EVENTBUS_MISSING").
 			Errorf("gRPC subsystem requires EventBus subsystem for plugin emit routing")
 	}
-	rawPublisher := s.cfg.EventBus.Publisher()
+	rawPublisher := s.cfg.EventBus.Publisher(publisherOptionsFor(s.cfg)...)
 	if rawPublisher == nil {
 		return oops.Code("GRPC_EVENTBUS_NOT_STARTED").
 			Errorf("EventBus publisher is nil; subsystem not started")
@@ -317,16 +358,6 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	}
 
 	// 8. Create CoreServer and register with gRPC.
-	// F3: wire the JetStream event bus subscriber into the Subscribe RPC.
-	// The bus owns per-session durable consumers; the gRPC handler pumps
-	// deliveries through Send → Ack. EventBus subsystem is a DependsOn
-	// above, so Subscriber is guaranteed non-nil by the time Start runs.
-	subscriber := s.cfg.EventBus.Subscriber()
-	if subscriber == nil {
-		return oops.Code("GRPC_EVENTBUS_SUBSCRIBER_NIL").
-			Errorf("EventBus subscriber is nil; subsystem not started")
-	}
-
 	// F4: wire the JetStream/PostgreSQL tier crossover history reader into
 	// QueryStreamHistory. Both the JetStream context and the PG pool are
 	// in scope here, making Option B the natural construction site. The
@@ -371,6 +402,22 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 				}
 			}
 		}
+	}
+
+	// F3 / Phase 3d flag flip (holomush-5rh.8.29): wire the JetStream event bus
+	// subscriber into the Subscribe RPC. The bus owns per-session durable
+	// consumers; the gRPC handler pumps deliveries through Send → Ack. The
+	// subscriber is built AFTER the AuthGuard/DEK/audit triad is resolved so
+	// decode-on-fan-out can decrypt sensitive events for DEK participants. When
+	// KEK is absent (historyAuthGuard==nil) the bare subscriber preserves the
+	// pre-flag-flip passthrough. EventBus subsystem is a DependsOn above, so
+	// Subscriber is guaranteed non-nil by the time Start runs.
+	subscriber := s.cfg.EventBus.Subscriber(
+		subscriberOptionsFor(historyAuthGuard, historyDEKMgr, historyAuditEm)...,
+	)
+	if subscriber == nil {
+		return oops.Code("GRPC_EVENTBUS_SUBSCRIBER_NIL").
+			Errorf("EventBus subscriber is nil; subsystem not started")
 	}
 
 	// Phase 7 INV-CRYPTO-42 + INV-CRYPTO-50: assemble the PluginDowngradeFence
@@ -518,7 +565,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	const sceneServiceName = "holomush.scene.v1.SceneService"
 	var sceneAccessSrv sceneaccessv1.SceneAccessServiceServer
 	if sceneSvc, resolveErr := serviceRegistry.Resolve(sceneServiceName); resolveErr == nil {
-		sceneAccessSrv = holoGRPC.NewSceneAccessServer(
+		saSrv := holoGRPC.NewSceneAccessServer(
 			authPlayerSessionRepo,
 			authPlayerRepo,
 			authCharRepo,
@@ -527,6 +574,14 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			scenev1.NewSceneServiceClient(sceneSvc.Conn),
 			pluginManager,
 		)
+		// Seed DEK participants on SetSceneFocus when the KEK/DEK stack is
+		// present so the AuthGuard permits decryption of sensitive scene
+		// events for the focusing session (holomush-5rh.8.29). Gated on
+		// RekeyManager != nil to mirror the publisher/subscriber gating.
+		if s.cfg.RekeyManager != nil {
+			saSrv.WithSceneDEKAdder(s.cfg.RekeyManager)
+		}
+		sceneAccessSrv = saSrv
 		slog.InfoContext(ctx, "sceneAccessService facade registered")
 	} else {
 		slog.WarnContext(ctx, "sceneAccessService unavailable: plugin absent", "service", sceneServiceName)

@@ -276,6 +276,33 @@ var _ = Describe("Manager", func() {
 			"INV-STORE-1: JoinedAt ns precision MUST survive round-trip")
 	})
 
+	It("resolves an empty BindingID on genesis via the BindingResolver", func() {
+		ctx := context.Background()
+		connStr, teardown := newTestPGPool(suiteT)
+		DeferCleanup(teardown)
+		pool, err := pgxpool.New(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(pool.Close)
+
+		provider := newTestProvider(suiteT)
+		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		const wantBinding = "01RESOLVEDBINDING0000000"
+		mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache,
+			noopInvalidator, &stubBindingResolver{bindingID: wantBinding})
+		Expect(err).NotTo(HaveOccurred())
+
+		ctxID := dek.ContextID{Type: "character", ID: "01HRECIPIENTCHAR000000000"}
+		key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{{CharacterID: "01HRECIPIENTCHAR000000000"}})
+		Expect(err).NotTo(HaveOccurred())
+
+		parts, err := mgr.Participants(ctx, key.ID, key.Version)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parts).To(HaveLen(1))
+		Expect(parts[0].BindingID).To(Equal(wantBinding),
+			"genesis must resolve empty BindingID via BindingResolver.Current")
+	})
+
 	It("Participants not found returns DEK_NOT_FOUND", func() {
 		ctx := context.Background()
 		connStr, teardown := newTestPGPool(suiteT)
