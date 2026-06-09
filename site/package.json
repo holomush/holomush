@@ -20,6 +20,6 @@
     "starlight-sidebar-topics": "^0.7.1"
   },
   "devDependencies": {
-    "opentype.js": "^2.0.0"
+    "opentype.js": "2.0.0"
   }
 }
