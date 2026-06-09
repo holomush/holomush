@@ -55,7 +55,7 @@ invariants.
 | `INV-CRYPTO-3` | NewReader MUST forward accumulated hotOpts to newJetStreamHotTier when building the default hot tier. | `INV-3` | pending |
 | `INV-CRYPTO-4` | WithCryptoHot MUST be a no-op when WithHotTier is also supplied — crypto options are not forwarded to a custom tier. | `INV-4` | pending |
 | `INV-CRYPTO-5` | newHistoryReader(nil, nil, nil) MUST preserve the existing nil-auth passthrough behavior (no auth option appended). | `INV-6` | pending |
-| `INV-CRYPTO-6` | A subject NOT in a DEK's participant set MUST NOT receive plaintext via fan-out, even when subscribed to the matching subject. | `INV-9` | pending |
+| `INV-CRYPTO-6` | A subject NOT in a DEK's participant set MUST NOT receive plaintext via fan-out, even when subscribed to the matching subject. | `INV-9` | bound |
 | `INV-CRYPTO-7` | Add(participant) MUST grant immediate read access to all existing DEK history without rotating the DEK. | `INV-12` | bound |
 | `INV-CRYPTO-8` | Rotate(context) MUST preserve the old DEK ciphertext and old DEK record unchanged (holds under Phase 3c soft-delete). | `INV-13` | pending |
 | `INV-CRYPTO-9` | A plugin without manifest requests_decryption for an event class MUST receive metadata-only delivery, regardless of subject subscription. | `INV-17` | bound |
@@ -165,6 +165,8 @@ invariants.
 | `INV-CRYPTO-113` | Every registered auditchain.Chain's SubjectFor(scope) MUST return a string starting with events.<game>. so chain-bearing audit events reach events_audit via the EVENTS JetStream events.> SubjectFilter. | `INV-E26` | pending |
 | `INV-CRYPTO-114` | Every registered auditchain.Chain MUST populate ScopeFromPayload; the verifier MUST reject with AUDIT_CHAIN_SCOPE_MISMATCH any row where ScopeFromSubject(subject) != ScopeFromPayload(payload). | `INV-E27` | pending |
 | `INV-CRYPTO-115` | The auditchain.Verifier self-hash recompute MUST be SHA-256(Canonicalize(zero(payload, SelfHashFieldName))); SHA-256 and composition order are pinned at the primitive level, while per-chain Canonicalize MAY apply domain normalization (e.g. PolicySetChain renormalizes empty PrevHash → nil to preserve INV-CRYPTO-77 semantics). | `INV-E28` | pending |
+| `INV-CRYPTO-116` | A subject in a DEK's participant set MUST receive plaintext via live fan-out when policy permits. | `INV-8` | bound |
+| `INV-CRYPTO-117` | When RekeyManager is non-nil the production gRPC subsystem MUST build the live Publisher DEK-aware and the live Subscriber AuthGuard-wired; when nil, both MUST preserve plaintext/passthrough and the subsystem MUST start. | — | bound |
 
 ### `INV-PRIVACY`
 

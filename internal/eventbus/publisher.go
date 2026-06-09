@@ -135,7 +135,8 @@ type JetStreamPublisher struct {
 	// nil → publisher rejects sensitive events with
 	// EVENTBUS_SENSITIVE_EVENT_NO_DEK_MANAGER and takes the legacy
 	// identity/selector path for non-sensitive events. Wired via
-	// WithDEKManager; bootstrap supplies it when CryptoConfig.Enabled.
+	// WithDEKManager; bootstrap supplies it when a KEK is configured
+	// (RekeyManager present) — not gated on CryptoConfig.Enabled.
 	dekMgr DEKManager
 }
 
@@ -212,7 +213,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 				With("subject", string(event.Subject)).
 				Wrap(ctxErr)
 		}
-		k, dekErr := p.dekMgr.GetOrCreate(ctx, ctxID, nil)
+		k, dekErr := p.dekMgr.GetOrCreate(ctx, ctxID, initialParticipantsForContext(ctxID))
 		if dekErr != nil {
 			return oops.Code("EVENTBUS_DEK_GETORCREATE_FAILED").
 				With("subject", string(event.Subject)).
@@ -488,6 +489,24 @@ func (identityKeySelector) SelectForEncrypt(_ context.Context, _ string) (codec.
 
 func (identityKeySelector) SelectForDecrypt(_ context.Context, _ codec.Name, _ codec.KeyID) (codec.Key, error) {
 	return codec.NoKey, nil
+}
+
+// initialParticipantsForContext returns the DEK participant set to seed at
+// genesis for a context, derived from the subject. A character.<id> context is
+// a personal stream whose owner (the recipient of a private message —
+// page/whisper/pemit) must be able to decrypt, so seed that character. The
+// BindingID is left empty; GetOrCreate resolves it via the BindingResolver on
+// its create branch (manager.go). Scene and other contexts seed nothing here
+// (scene readers are seeded at SetSceneFocus).
+func initialParticipantsForContext(ctxID dek.ContextID) []dek.Participant {
+	if ctxID.Type != "character" {
+		return nil
+	}
+	return []dek.Participant{{
+		CharacterID: ctxID.ID,
+		JoinedAt:    time.Now().UTC(),
+		AddedVia:    "publisher.genesis",
+	}}
 }
 
 // contextIDFromSubject derives a dek.ContextID from a NATS-native subject

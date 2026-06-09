@@ -233,6 +233,26 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 	if validateErr := validateProviderWrapOutput(wrapped, kekKeyID); validateErr != nil {
 		return codec.Key{}, validateErr
 	}
+	// Resolve any participant supplied without a BindingID (e.g. the publisher's
+	// genesis-seed for a character.<id> context). Pre-bound participants pass
+	// through unchanged. m.bindings is guaranteed non-nil (NewManager:175).
+	// Mirrors the resolution Add performs (manager.go:364). Genesis-only: the
+	// active-row short-circuit above means this never runs once the DEK exists.
+	resolved := initial
+	if len(initial) > 0 {
+		resolved = make([]Participant, len(initial))
+		for i, p := range initial {
+			if p.BindingID == "" {
+				bindingID, bErr := m.bindings.Current(ctx, p.CharacterID)
+				if bErr != nil {
+					return codec.Key{}, oops.Code("DEK_BINDING_RESOLVE_FAILED").
+						With("character_id", p.CharacterID).Wrap(bErr)
+				}
+				p.BindingID = bindingID
+			}
+			resolved[i] = p
+		}
+	}
 	in := row{
 		ContextType:  ctxID.Type,
 		ContextID:    ctxID.ID,
@@ -240,7 +260,7 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 		WrappedDEK:   wrapped,
 		WrapProvider: m.provider.Name(),
 		WrapKeyID:    kekKeyID,
-		Participants: initial,
+		Participants: resolved,
 	}
 	id, err := m.store.insert(ctx, in)
 	if err != nil {
@@ -264,7 +284,7 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 	m.cache.Put(CacheKey{KeyID: keyID, Version: 1}, ctxID, material)
 	m.partCache.Put(
 		ParticipantsCacheKey{ContextType: ctxID.Type, ContextID: ctxID.ID, Version: 1},
-		initial,
+		resolved,
 	)
 	return material.AsCodecKey(keyID, 1), nil
 }

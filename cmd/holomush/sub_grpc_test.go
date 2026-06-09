@@ -14,9 +14,34 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+// stubDEKManager satisfies dek.Manager via embedding; its methods are nil and
+// unused — these tests only assert option construction, never invoke the manager.
+type stubDEKManager struct{ dek.Manager }
+
+// stubSessionAuthGuard / stubSessionAuditEmitter satisfy their interfaces via
+// embedding; methods are nil and unused — subscriber-option tests only assert
+// construction, never invoke the guard or emitter.
+type (
+	stubSessionAuthGuard    struct{ eventbus.SessionAuthGuard }
+	stubSessionAuditEmitter struct{ eventbus.SessionAuditEmitter }
+)
+
+// Verifies: INV-CRYPTO-117
+func TestPublisherOptionsIncludeDEKManagerWhenRekeySet(t *testing.T) {
+	cfg := grpcSubsystemConfig{RekeyManager: &stubDEKManager{}}
+	require.Len(t, publisherOptionsFor(cfg), 1, "RekeyManager set ⇒ exactly the WithDEKManager option")
+}
+
+// Verifies: INV-CRYPTO-117
+func TestPublisherOptionsEmptyWhenRekeyNil(t *testing.T) {
+	require.Empty(t, publisherOptionsFor(grpcSubsystemConfig{RekeyManager: nil}),
+		"no KEK ⇒ plaintext-only publisher, no DEK option")
+}
 
 // TestGRPCSubsystemImplementsSubsystem is a compile-time interface check.
 func TestGRPCSubsystemImplementsSubsystem(_ *testing.T) {
@@ -197,4 +222,22 @@ type grpcTestAuditEmitter struct{}
 
 func (s *grpcTestAuditEmitter) EmitPluginDecrypt(_ context.Context, _ eventbus.PluginDecryptRecord) error {
 	return nil
+}
+
+// Verifies: INV-CRYPTO-117
+func TestSubscriberOptionsIncludeAuthGuardWhenGuardPresent(t *testing.T) {
+	opts := subscriberOptionsFor(stubSessionAuthGuard{}, &stubDEKManager{}, stubSessionAuditEmitter{})
+	require.Len(t, opts, 3, "guard present ⇒ AuthGuard + DEKManager + DecryptAuditEmitter")
+}
+
+// Verifies: INV-CRYPTO-117
+func TestSubscriberOptionsEmptyWhenGuardNil(t *testing.T) {
+	require.Empty(t, subscriberOptionsFor(nil, nil, nil),
+		"no guard ⇒ bare subscriber preserves guard==nil passthrough")
+}
+
+// Verifies: INV-CRYPTO-117
+func TestSubscriberOptionsEmptyWhenGuardPresentButDEKManagerNil(t *testing.T) {
+	require.Empty(t, subscriberOptionsFor(stubSessionAuthGuard{}, nil, stubSessionAuditEmitter{}),
+		"guard without a DEK manager is a half-configured decrypt path ⇒ all-or-nothing returns no options")
 }

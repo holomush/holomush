@@ -771,7 +771,9 @@ invariants:
     legacy: ["INV-9@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
     summary: "A subject NOT in a DEK's participant set MUST NOT receive plaintext via fan-out, even when subscribed to the
       matching subject."
-    binding: pending
+    asserted_by:
+      - "test/integration/crypto/metadata_only_test.go"
+    binding: bound
     refs:
       - {file: "test/integration/crypto/metadata_only_test.go", token: "INV-9"}
   - id: INV-CRYPTO-7
@@ -4355,3 +4357,23 @@ invariants:
       - {file: "internal/eventbus/crypto/dek/audit_chain_internal_test.go", token: "INV-E28"}
       - {file: "internal/eventbus/crypto/dek/audit_chain_test.go", token: "INV-E28"}
       - {file: "internal/eventbus/crypto/dek/rekey_phase7.go", token: "INV-E28"}
+  - id: INV-CRYPTO-116
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-06-08-sensitive-event-crypto-production-golive-design.md"
+    legacy: ["INV-8@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
+    summary: "A subject in a DEK's participant set MUST receive plaintext via live fan-out when policy permits."
+    asserted_by:
+      - "test/integration/crypto/genesis_seed_test.go"
+    binding: bound
+    refs:
+      - {file: "test/integration/crypto/genesis_seed_test.go", token: "INV-CRYPTO-116"}
+  - id: INV-CRYPTO-117
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-06-08-sensitive-event-crypto-production-golive-design.md"
+    summary: "When RekeyManager is non-nil the production gRPC subsystem MUST build the live Publisher DEK-aware and the live
+      Subscriber AuthGuard-wired; when nil, both MUST preserve plaintext/passthrough and the subsystem MUST start."
+    asserted_by:
+      - "cmd/holomush/sub_grpc_test.go"
+    binding: bound
+    refs:
+      - {file: "cmd/holomush/sub_grpc_test.go", token: "INV-CRYPTO-117"}

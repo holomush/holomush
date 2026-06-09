@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -19,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	authmocks "github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/scenemocks"
 	"github.com/holomush/holomush/internal/idgen"
@@ -28,6 +30,16 @@ import (
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
+
+func TestWithSceneDEKAdderSetsField(t *testing.T) {
+	s := &SceneAccessServer{}
+	s.WithSceneDEKAdder(stubSceneDEKAdder{})
+	require.NotNil(t, s.dekAdder, "WithSceneDEKAdder must set the dekAdder field")
+}
+
+type stubSceneDEKAdder struct{}
+
+func (stubSceneDEKAdder) Add(_ context.Context, _ dek.ContextID, _ dek.Participant) error { return nil }
 
 const testSAToken = "test-scene-access-token"
 
@@ -52,9 +64,10 @@ func buildSASessionRepo(t *testing.T, ps *auth.PlayerSession) *authmocks.MockPla
 
 // stubFocusCoordinator is a minimal Coordinator stub that records calls.
 type stubFocusCoordinator struct {
-	setConnFocusErr error
-	joinFocusErr    error
-	joinFocusCalls  int
+	setConnFocusErr  error
+	joinFocusErr     error
+	joinFocusCalls   int
+	setConnFocusCall int
 }
 
 func (s *stubFocusCoordinator) JoinFocus(_ context.Context, _ string, _ session.FocusKey) error {
@@ -87,6 +100,7 @@ func (s *stubFocusCoordinator) RestoreConnectionFocus(_ context.Context, _ strin
 }
 
 func (s *stubFocusCoordinator) SetConnectionFocus(_ context.Context, _ ulid.ULID, _ *session.FocusKey, _ bool) (holoFocus.SetConnectionFocusResult, error) {
+	s.setConnFocusCall++
 	return holoFocus.SetConnectionFocusResult{}, s.setConnFocusErr
 }
 
@@ -589,6 +603,114 @@ func TestSetSceneFocusJoinsFocusThenSetsConnectionFocus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, coord.joinFocusCalls,
 		"JoinFocus MUST be called exactly once for a valid participant")
+}
+
+// failingSceneDEKAdder is a sceneDEKAdder whose Add always fails, used to drive
+// the fatal-seed branch of SetSceneFocus.
+type failingSceneDEKAdder struct{}
+
+func (failingSceneDEKAdder) Add(_ context.Context, _ dek.ContextID, _ dek.Participant) error {
+	return oops.Code("DEK_ADD_FAILED").Errorf("seed failed")
+}
+
+// capturingSceneDEKAdder records the (ctxID, participant) passed to Add so tests
+// can assert the seeded values.
+type capturingSceneDEKAdder struct {
+	called   bool
+	gotCtxID dek.ContextID
+	gotPart  dek.Participant
+}
+
+func (c *capturingSceneDEKAdder) Add(_ context.Context, ctxID dek.ContextID, p dek.Participant) error {
+	c.called = true
+	c.gotCtxID = ctxID
+	c.gotPart = p
+	return nil
+}
+
+// TestSetSceneFocusReturnsInternalWhenDEKSeedFails verifies the fatal-seed
+// contract: when a dekAdder is attached and its Add fails, SetSceneFocus returns
+// codes.Internal and MUST NOT proceed to SetConnectionFocus — a focused
+// connection that cannot decrypt would receive blank (metadata-only) poses.
+func TestSetSceneFocusReturnsInternalWhenDEKSeedFails(t *testing.T) {
+	ctx := context.Background()
+	coord := &stubFocusCoordinator{}
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+
+	srv, charID, connID := buildSetSceneFocusServer(t, coord, sceneMock)
+	srv.WithSceneDEKAdder(failingSceneDEKAdder{})
+
+	sceneID := idgen.New()
+	sceneInfo := &scenev1.SceneInfo{Id: sceneID.String()}
+	sceneMock.EXPECT().ListCharacterScenes(mock.Anything, mock.MatchedBy(func(req *scenev1.ListCharacterScenesRequest) bool {
+		return req.GetCharacterId() == charID.String()
+	})).Return(
+		&scenev1.ListCharacterScenesResponse{
+			Scenes: []*scenev1.CharacterSceneInfo{
+				{Scene: sceneInfo},
+			},
+		}, nil,
+	).Once()
+
+	_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: testSAToken,
+		ConnectionId:       connID.String(),
+		SceneId:            sceneID.String(),
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.Internal, status.Code(err),
+		"a failed DEK seed MUST surface as Internal")
+	require.Equal(t, 1, coord.joinFocusCalls,
+		"the seed runs AFTER JoinFocus — JoinFocus must have been called once")
+	require.Equal(t, 0, coord.setConnFocusCall,
+		"a fatal DEK seed MUST refuse focus — SetConnectionFocus must not run")
+}
+
+// TestSetSceneFocusSeedsParticipantThenSetsConnectionFocus verifies the happy
+// path with a dekAdder attached: the focusing character is seeded as a DEK
+// participant on context {scene, sceneID} with a populated JoinedAt and
+// AddedVia, and only then is SetConnectionFocus called.
+func TestSetSceneFocusSeedsParticipantThenSetsConnectionFocus(t *testing.T) {
+	ctx := context.Background()
+	coord := &stubFocusCoordinator{}
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+
+	srv, charID, connID := buildSetSceneFocusServer(t, coord, sceneMock)
+	adder := &capturingSceneDEKAdder{}
+	srv.WithSceneDEKAdder(adder)
+
+	sceneID := idgen.New()
+	sceneInfo := &scenev1.SceneInfo{Id: sceneID.String()}
+	sceneMock.EXPECT().ListCharacterScenes(mock.Anything, mock.MatchedBy(func(req *scenev1.ListCharacterScenesRequest) bool {
+		return req.GetCharacterId() == charID.String()
+	})).Return(
+		&scenev1.ListCharacterScenesResponse{
+			Scenes: []*scenev1.CharacterSceneInfo{
+				{Scene: sceneInfo},
+			},
+		}, nil,
+	).Once()
+
+	_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
+		PlayerSessionToken: testSAToken,
+		ConnectionId:       connID.String(),
+		SceneId:            sceneID.String(),
+	})
+
+	require.NoError(t, err)
+	require.True(t, adder.called, "the seed MUST run on the focus path")
+	require.Equal(t, dek.ContextID{Type: "scene", ID: sceneID.String()}, adder.gotCtxID,
+		"the DEK context MUST be {scene, sceneID}")
+	require.Equal(t, charID.String(), adder.gotPart.CharacterID,
+		"the seeded participant MUST carry the focusing character's ID")
+	require.False(t, adder.gotPart.JoinedAt.IsZero(),
+		"the seeded participant MUST carry a JoinedAt timestamp")
+	require.NotEmpty(t, adder.gotPart.AddedVia, "the seeded participant MUST carry an AddedVia provenance")
+	require.WithinDuration(t, time.Now(), adder.gotPart.JoinedAt, time.Minute,
+		"JoinedAt MUST be a recent UTC timestamp")
+	require.Equal(t, 1, coord.setConnFocusCall,
+		"a successful seed MUST proceed to SetConnectionFocus")
 }
 
 // TestSetSceneFocusTreatsFocusAlreadyMemberAsSuccess verifies idempotency: when

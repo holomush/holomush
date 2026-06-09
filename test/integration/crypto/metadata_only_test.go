@@ -172,6 +172,7 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 //   - Opens a session as a different identity (non-participant binding_id).
 //   - Asserts: MetadataOnly()==true, Event().Payload is empty.
 var _ = Describe("Subscribe with non-participant identity delivers MetadataOnly (INV-CRYPTO-15, INV-CRYPTO-6)", func() {
+	// Verifies: INV-CRYPTO-6
 	It("non-participant receives MetadataOnly=true with empty payload", func() {
 		ctx := context.Background()
 		h := buildSubscribeHarness(suiteT)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -26,6 +28,13 @@ import (
 // the plugin manager — only BeginServiceDispatch.
 type sceneAccessPluginManager interface {
 	BeginServiceDispatch(ctx context.Context, pluginName string, actor core.Actor, ownerPlayerID string) (context.Context, func(), error)
+}
+
+// sceneDEKAdder seeds a character as a DEK participant so the AuthGuard's
+// hot-tier checkCharacter branch permits this session to decrypt sensitive
+// scene events (e.g. scene_pose). Satisfied by dek.Manager (its Add method).
+type sceneDEKAdder interface {
+	Add(ctx context.Context, ctxID dek.ContextID, p dek.Participant) error
 }
 
 // SceneAccessServer is the host-side facade that owns player authentication,
@@ -43,6 +52,12 @@ type SceneAccessServer struct {
 	coordinator       holoFocus.Coordinator
 	sceneClient       scenev1.SceneServiceClient
 	pluginManager     sceneAccessPluginManager
+
+	// dekAdder is optional. When non-nil, SetSceneFocus seeds the focusing
+	// character as a DEK participant after the participation gate passes, so
+	// the AuthGuard permits decryption of sensitive scene events. nil disables
+	// seeding (KEK-less deployments / tests).
+	dekAdder sceneDEKAdder
 }
 
 // NewSceneAccessServer constructs a SceneAccessServer. All fields are required;
@@ -65,6 +80,13 @@ func NewSceneAccessServer(
 		sceneClient:       sceneClient,
 		pluginManager:     pluginManager,
 	}
+}
+
+// WithSceneDEKAdder attaches a DEK participant adder. Call after construction;
+// when set, SetSceneFocus seeds the focusing character as a DEK participant
+// (fatal on failure).
+func (s *SceneAccessServer) WithSceneDEKAdder(a sceneDEKAdder) {
+	s.dekAdder = a
 }
 
 // ownedCharacter verifies that charIDStr is a valid ULID and is owned by
@@ -376,6 +398,31 @@ func (s *SceneAccessServer) SetSceneFocus(ctx context.Context, req *sceneaccessv
 				return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
 			}
 			// FOCUS_ALREADY_MEMBER — membership already present; proceed to SetConnectionFocus.
+		}
+
+		// Seed the character as a DEK participant so the AuthGuard hot-tier
+		// permits this session to decrypt sensitive scene events (scene_pose,
+		// scene_say, scene_emit, scene_ooc). FATAL: if the seed fails the
+		// connection MUST NOT be focused — a focused connection that cannot
+		// decrypt would receive blank (metadata-only) poses. Refusing focus
+		// surfaces the error so the client retries; Add is idempotent
+		// (manager.go:377) so retry is a safe no-op. (Invariant: a connection
+		// is focused on a scene only if its character can decrypt that scene.)
+		if s.dekAdder != nil {
+			ctxID := dek.ContextID{Type: "scene", ID: sceneIDStr}
+			addErr := s.dekAdder.Add(ctx, ctxID, dek.Participant{
+				PlayerID:    ps.PlayerID.String(),
+				CharacterID: gameSession.CharacterID.String(),
+				JoinedAt:    time.Now().UTC(),
+				AddedVia:    "sceneaccess.SetSceneFocus",
+			})
+			if addErr != nil {
+				slog.ErrorContext(ctx, "scene access: SetSceneFocus DEK seed failed",
+					"scene_id", sceneIDStr,
+					"character_id", gameSession.CharacterID.String(),
+					"error", addErr)
+				return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
+			}
 		}
 	}
 
