@@ -901,3 +901,5 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 | §7 Testing (int) | Task 8 |
 | §7 Testing (e2e, .8.27 surface) | Task 10 |
 | §8 Out of scope (comms sender-echo) | n/a — holomush-jq34t |
+
+<!-- adr-capture: sha256=af4b6090c9209f11; session=cli; ts=2026-06-09T01:04:40Z; adrs=holomush-mihtk,holomush-olpdd -->
