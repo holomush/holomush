@@ -19,7 +19,6 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -302,26 +301,9 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	// Build the typed authenticated identity for the hot-tier AuthGuard path.
 	// Decision 2 (Phase 3b grounding doc): derived solely from the server-side
 	// session record — never from client-supplied fields.
-	var historyIdentity eventbus.SessionIdentity
-	if s.bindings != nil && s.cryptoEnabled {
-		// Binding lookup is only needed when crypto is enabled (Phase 3b+).
-		// With crypto disabled (current production default), we skip this so
-		// characters without a binding row don't break QueryStreamHistory.
-		bindingID, bindingErr := s.bindings.Current(ctx, info.CharacterID.String())
-		if bindingErr != nil {
-			return nil, oops.Code("HISTORY_BINDING_LOOKUP_FAILED").
-				With("character_id", info.CharacterID.String()).
-				Wrap(bindingErr)
-		}
-		historyAuthIdentity, identityErr := authguard.NewCharacterIdentity(
-			info.PlayerID.String(),
-			info.CharacterID.String(),
-			bindingID,
-		)
-		if identityErr != nil {
-			return nil, oops.Code("HISTORY_IDENTITY_INVALID").Wrap(identityErr)
-		}
-		historyIdentity = authguard.ToSessionIdentity(historyAuthIdentity)
+	historyIdentity, identityErr := s.buildCharacterIdentity(ctx, info.PlayerID.String(), info.CharacterID.String())
+	if identityErr != nil {
+		return nil, oops.Code("HISTORY_BINDING_LOOKUP_FAILED").Wrap(identityErr)
 	}
 
 	frames, fetchErr := fetchHistoryFramesFromBus(

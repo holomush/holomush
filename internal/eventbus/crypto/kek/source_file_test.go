@@ -6,6 +6,7 @@ package kek_test
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -73,6 +74,15 @@ func TestFileSource_Load_FailsOnMissingFile(t *testing.T) {
 	_, err = src.Load(context.Background())
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "KEK_FILE_LOAD_FAILED")
+}
+
+func TestFileSource_Load_AbsentFileIsDistinguishable(t *testing.T) {
+	src, err := kek.NewFileSource("/nonexistent/master.key.enc", staticPassphraseFunc("x"))
+	require.NoError(t, err)
+	_, loadErr := src.Load(context.Background())
+	require.Error(t, loadErr)
+	require.True(t, errors.Is(loadErr, os.ErrNotExist),
+		"absent keyfile MUST be distinguishable via errors.Is(os.ErrNotExist) through the oops wrap")
 }
 
 func TestFileSource_New_FailsWhenPassphraseFuncIsNil(t *testing.T) {

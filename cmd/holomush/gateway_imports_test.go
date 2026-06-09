@@ -70,6 +70,11 @@ var coreOnlyFiles = map[string]struct{}{
 	// call. Imports internal/plugin; core-only (matches phase7_fence_wiring.go
 	// precedent).
 	"cryptowiring_adapter.go": {},
+	// KEK passphrase resolution + keyfile provisioning (holomush-5rh.8.29.12).
+	// Imports internal/eventbus/crypto/kek for FileSource and KEKByteLength;
+	// core-only (matches cmd_admin_totp_deps.go precedent).
+	"kek_provision.go":      {},
+	"kek_provision_test.go": {},
 }
 
 var forbidden = []string{

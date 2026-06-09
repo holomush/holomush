@@ -372,3 +372,54 @@ func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
 	assert.Nil(t, result)
 	errutil.AssertErrorCode(t, err, "GUEST_CREATE_FAILED")
 }
+
+// Verifies: INV-CRYPTO-120
+// Asserts guest creation mints a binding with reason "initial_bind_guest" in the
+// same transaction, and that the returned binding ID is non-empty so a subsequent
+// bindings.Current call resolves it (i.e., no orphan character row without a binding).
+func TestCreateGuestMintsBinding(t *testing.T) {
+	ctx := context.Background()
+	startLoc := ulid.MustNew(ulid.Now(), nil)
+	guestName := "Onyx_River"
+
+	namer := mocks.NewMockGuestNamer(t)
+	players := mocks.NewMockPlayerRepository(t)
+	chars := mocks.NewMockGuestCharacterRepository(t)
+	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := passthroughTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
+
+	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
+	namer.EXPECT().StartLocation().Return(startLoc)
+	chars.EXPECT().ExistsByName(ctx, "Onyx River").Return(false, nil).Once()
+	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
+	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+
+	var (
+		capturedPlayerID string
+		capturedCharID   string
+		capturedReason   string
+	)
+	bindings.EXPECT().
+		Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").
+		RunAndReturn(func(_ context.Context, playerID, characterID, reason string) (string, error) {
+			capturedPlayerID = playerID
+			capturedCharID = characterID
+			capturedReason = reason
+			return "bind-guest-mint-1", nil
+		}).Once()
+
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	require.NoError(t, err)
+
+	result, err := svc.CreateGuest(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Create was called with reason "initial_bind_guest" for the guest character.
+	assert.Equal(t, "initial_bind_guest", capturedReason)
+	assert.Equal(t, result.Character.ID.String(), capturedCharID)
+	assert.Equal(t, result.Player.ID.String(), capturedPlayerID)
+}

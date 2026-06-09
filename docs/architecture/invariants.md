@@ -167,6 +167,9 @@ invariants.
 | `INV-CRYPTO-115` | The auditchain.Verifier self-hash recompute MUST be SHA-256(Canonicalize(zero(payload, SelfHashFieldName))); SHA-256 and composition order are pinned at the primitive level, while per-chain Canonicalize MAY apply domain normalization (e.g. PolicySetChain renormalizes empty PrevHash → nil to preserve INV-CRYPTO-77 semantics). | `INV-E28` | pending |
 | `INV-CRYPTO-116` | A subject in a DEK's participant set MUST receive plaintext via live fan-out when policy permits. | `INV-8` | bound |
 | `INV-CRYPTO-117` | When RekeyManager is non-nil the production gRPC subsystem MUST build the live Publisher DEK-aware and the live Subscriber AuthGuard-wired; when nil, both MUST preserve plaintext/passthrough and the subsystem MUST start. | — | bound |
+| `INV-CRYPTO-118` | Subscriber identity-build MUST be gated solely on KEK presence (cryptoActive wired from RekeyManager != nil), never an independent flag; when the gate is false or no binding repo is wired, the built identity MUST be the zero passthrough identity. The publisher half of the same RekeyManager-sourced lockstep is INV-CRYPTO-117. | — | bound |
+| `INV-CRYPTO-119` | The server MUST refuse to boot without a provisionable KEK; missing keyfile path, missing passphrase, or keyfile absent without auto-gen all produce a fatal error — degraded KEK-less boot is never permitted. | — | bound |
+| `INV-CRYPTO-120` | Every character-creation path (normal and guest) MUST mint a current DEK binding in the same transaction, so bindings.Current always resolves for a newly created character with no orphan row. | — | bound |
 
 ### `INV-PRIVACY`
 

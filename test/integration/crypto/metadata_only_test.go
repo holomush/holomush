@@ -56,7 +56,11 @@ type subscribeHarness struct {
 // JetStream, DEK manager, AuthGuard, audit emitter — and returns the harness.
 // The harness is self-contained: the publisher can emit sensitive events and the
 // subscriber can open sessions and receive deliveries.
-func buildSubscribeHarness(t *testing.T) *subscribeHarness {
+//
+// test-plugin:whisper is always registered; callers needing additional verbs
+// in the RenderingPublisher's registry (e.g. test-plugin:page for the comms
+// domain in decrypt_to_participant_test.go) pass them as extraVerbs.
+func buildSubscribeHarness(t *testing.T, extraVerbs ...core.VerbRegistration) *subscribeHarness {
 	t.Helper()
 	ctx := context.Background()
 
@@ -109,6 +113,11 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 		Source:        "test-plugin",
 	}, "1.0.0"); err != nil {
 		t.Fatalf("buildSubscribeHarness: RegisterWithSource: %v", err)
+	}
+	for _, reg := range extraVerbs {
+		if err := registry.RegisterWithSource(reg, "1.0.0"); err != nil {
+			t.Fatalf("buildSubscribeHarness: RegisterWithSource(%s): %v", reg.Type, err)
+		}
 	}
 
 	rawPub := eventbus.NewJetStreamPublisher(

@@ -34,7 +34,6 @@ import (
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
@@ -173,9 +172,9 @@ type CoreServer struct {
 
 	// Phase 3b: transactor and binding repository for atomic character + binding INSERTs
 	// (Create) and current-binding lookup for Subscribe / QueryStreamHistory (Current).
-	transactor    Transactor
-	bindings      BindingRepo
-	cryptoEnabled bool // Phase 3b flag; gates binding lookup in Subscribe / QueryStreamHistory
+	transactor   Transactor
+	bindings     BindingRepo
+	cryptoActive bool // true when KEK (RekeyManager) is wired; gates binding lookup in Subscribe / QueryStreamHistory
 
 	// Plugin stream contribution and mid-session stream control.
 	streamContributor SessionStreamContributor
@@ -991,26 +990,9 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// Decision 2 (Phase 3b grounding doc): the gRPC handler is the
 	// authentication boundary; identity is derived solely from the
 	// server-side session record — never from client-supplied fields.
-	var sessionIdentity eventbus.SessionIdentity
-	if s.bindings != nil && s.cryptoEnabled {
-		// Binding lookup is only needed when crypto is enabled (Phase 3b+).
-		// With crypto disabled (current production default), we skip this so
-		// characters without a binding row don't break Subscribe.
-		bindingID, bindingErr := s.bindings.Current(ctx, info.CharacterID.String())
-		if bindingErr != nil {
-			return oops.Code("SUBSCRIBE_BINDING_LOOKUP_FAILED").
-				With("character_id", info.CharacterID.String()).
-				Wrap(bindingErr)
-		}
-		identity, identityErr := authguard.NewCharacterIdentity(
-			info.PlayerID.String(),
-			info.CharacterID.String(),
-			bindingID,
-		)
-		if identityErr != nil {
-			return oops.Code("SUBSCRIBE_IDENTITY_INVALID").Wrap(identityErr)
-		}
-		sessionIdentity = authguard.ToSessionIdentity(identity)
+	sessionIdentity, identityErr := s.buildCharacterIdentity(ctx, info.PlayerID.String(), info.CharacterID.String())
+	if identityErr != nil {
+		return oops.Code("SUBSCRIBE_BINDING_LOOKUP_FAILED").Wrap(identityErr)
 	}
 
 	// Compute minFloor across all subscribed subjects per holomush-iwzt §6.2 Tier 1.

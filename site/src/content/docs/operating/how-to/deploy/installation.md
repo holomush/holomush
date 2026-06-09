@@ -6,6 +6,27 @@ sidebar:
 
 This guide covers installing HoloMUSH using Docker or pre-built binaries.
 
+## KEK requirement
+
+HoloMUSH requires a Key Encryption Key (KEK) to boot. The core server reads
+the keyfile path from `HOLOMUSH_KEK_FILE` and the unlock passphrase from one
+of three sources (first hit wins):
+
+| Source                         | Description                                       |
+| ------------------------------ | ------------------------------------------------- |
+| `HOLOMUSH_KEK_PASSPHRASE`      | Passphrase as a plain env var                     |
+| `HOLOMUSH_KEK_PASSPHRASE_FILE` | Path to a file containing the passphrase          |
+| Interactive prompt             | Prompted on stdin when a TTY is attached          |
+
+On first boot, pass `--auto-gen-kek` to mint the keyfile automatically. After
+that the keyfile is never overwritten — if the file exists, `--auto-gen-kek`
+is a no-op. Providing a wrong passphrase or a corrupt keyfile surfaces an error
+at startup rather than silently degrading.
+
+The admin-totp CLI (`holomush admin totp …`) uses the same `HOLOMUSH_KEK_FILE`
+and `HOLOMUSH_KEK_PASSPHRASE` env vars but does not support `--auto-gen-kek`.
+It requires a pre-existing keyfile.
+
 ## Docker Installation (Recommended)
 
 Docker provides the simplest deployment method with automatic dependency management.
@@ -85,10 +106,15 @@ services:
 
   core:
     image: ghcr.io/holomush/holomush:latest
-    command: ["core", "--grpc-addr=0.0.0.0:9000", "--metrics-addr=0.0.0.0:9100"]
+    command: ["core", "--grpc-addr=0.0.0.0:9000", "--metrics-addr=0.0.0.0:9100", "--auto-gen-kek"]
     environment:
       DATABASE_URL: postgres://holomush:${POSTGRES_PASSWORD}@postgres:5432/holomush?sslmode=disable
       HOME: /home/holomush
+      # KEK is required. --auto-gen-kek mints the keyfile on first boot;
+      # subsequent starts reuse it. Store the passphrase in a secrets manager
+      # and reference it via HOLOMUSH_KEK_PASSPHRASE_FILE for production.
+      HOLOMUSH_KEK_FILE: /home/holomush/.config/holomush/certs/master.key.enc
+      HOLOMUSH_KEK_PASSPHRASE: ${HOLOMUSH_KEK_PASSPHRASE}
     volumes:
       - holomush_config:/home/holomush/.config/holomush
     depends_on:
@@ -182,10 +208,21 @@ DATABASE_URL="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable
 
 HoloMUSH uses a two-process architecture. Start both processes:
 
-**Terminal 1 - Core:**
+**Terminal 1 - Core (first start):**
 
 ```bash
 DATABASE_URL="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable" \
+  HOLOMUSH_KEK_FILE="/etc/holomush/master.key.enc" \
+  HOLOMUSH_KEK_PASSPHRASE="your-passphrase" \
+  holomush core --auto-gen-kek
+```
+
+On subsequent starts, `--auto-gen-kek` is a no-op if the keyfile already exists:
+
+```bash
+DATABASE_URL="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable" \
+  HOLOMUSH_KEK_FILE="/etc/holomush/master.key.enc" \
+  HOLOMUSH_KEK_PASSPHRASE="your-passphrase" \
   holomush core
 ```
 
@@ -255,6 +292,10 @@ Type=simple
 User=holomush
 Group=holomush
 Environment=DATABASE_URL=postgres://holomush:secret@localhost:5432/holomush?sslmode=disable
+Environment=HOLOMUSH_KEK_FILE=/etc/holomush/master.key.enc
+# Use EnvironmentFile or HOLOMUSH_KEK_PASSPHRASE_FILE for the passphrase
+# to avoid it appearing in systemd logs or process listings.
+EnvironmentFile=/etc/holomush/kek-passphrase.env
 ExecStart=/usr/local/bin/holomush core
 Restart=on-failure
 RestartSec=5

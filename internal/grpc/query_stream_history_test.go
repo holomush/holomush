@@ -1008,7 +1008,7 @@ func TestQueryStreamHistoryPassesIdentityFromBindingsToHistoryQuery(t *testing.T
 		historyReader: reader,
 		accessEngine:  policytest.AllowAllEngine(),
 		bindings:      &fakeBindingRepo{bindingID: bindingID},
-		cryptoEnabled: true, // required to activate binding lookup (Phase 3b gate)
+		cryptoActive:  true, // required to activate binding lookup (KEK-presence gate)
 	}
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
@@ -1049,7 +1049,7 @@ func TestQueryStreamHistoryBindingLookupFailureReturnsError(t *testing.T) {
 		historyReader: reader,
 		accessEngine:  policytest.AllowAllEngine(),
 		bindings:      &fakeBindingRepo{err: errors.New("db error")},
-		cryptoEnabled: true, // required to activate binding lookup (Phase 3b gate)
+		cryptoActive:  true, // required to activate binding lookup (KEK-presence gate)
 	}
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{

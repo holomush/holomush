@@ -12,8 +12,14 @@ services:
       POSTGRES_DB: holomush_test
 
   core:
+    command: ["core", "--log-format", "text", "--grpc-addr", "0.0.0.0:9000", "--metrics-addr", "0.0.0.0:9100", "--auto-gen-kek"]
     environment:
       DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush_test?sslmode=disable
+      # KEK is required to boot. --auto-gen-kek mints a fresh ephemeral keyfile
+      # each E2E run (the container is recreated); a fixed test passphrase is
+      # sufficient because the keyfile does not leave the container.
+      HOLOMUSH_KEK_FILE: /home/holomush/.config/holomush/certs/master.key.enc
+      HOLOMUSH_KEK_PASSPHRASE: e2e-test-passphrase
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9100/healthz/readiness || exit 1"]
       interval: 2s

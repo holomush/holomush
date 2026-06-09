@@ -241,3 +241,22 @@ func TestSubscriberOptionsEmptyWhenGuardPresentButDEKManagerNil(t *testing.T) {
 	require.Empty(t, subscriberOptionsFor(stubSessionAuthGuard{}, nil, stubSessionAuditEmitter{}),
 		"guard without a DEK manager is a half-configured decrypt path ⇒ all-or-nothing returns no options")
 }
+
+// Verifies: INV-CRYPTO-118
+// Asserts the activation gate is wired from KEK presence, not a standalone flag.
+func TestCoreServerCryptoActiveTracksKEKPresence(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  grpcSubsystemConfig
+		want bool
+	}{
+		{"RekeyManager set ⇒ crypto active", grpcSubsystemConfig{RekeyManager: &stubDEKManager{}}, true},
+		{"no RekeyManager ⇒ crypto inactive", grpcSubsystemConfig{}, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, cryptoActiveFor(tc.cfg))
+		})
+	}
+}

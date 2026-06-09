@@ -148,14 +148,14 @@ func WithBindingRepository(b BindingRepo) CoreServerOption {
 	}
 }
 
-// WithCryptoEnabled gates Phase 3b crypto features (binding lookup in Subscribe
-// and QueryStreamHistory). Default false so crypto-off production servers skip
-// binding resolution rather than failing with BINDING_NOT_FOUND for characters
-// that have no active binding row. Flip to true when Crypto.Enabled=true in
-// the server config (Phase 3d wiring).
-func WithCryptoEnabled(enabled bool) CoreServerOption {
+// WithCryptoActive gates sensitive-event crypto features (binding lookup in
+// Subscribe and QueryStreamHistory) on KEK presence. Pass true when
+// RekeyManager != nil (wired via cryptoActiveFor in the gRPC subsystem).
+// Default false so KEK-less deployments skip binding resolution rather than
+// failing with BINDING_NOT_FOUND.
+func WithCryptoActive(active bool) CoreServerOption {
 	return func(s *CoreServer) {
-		s.cryptoEnabled = enabled
+		s.cryptoActive = active
 	}
 }
 
