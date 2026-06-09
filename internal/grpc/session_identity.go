@@ -25,6 +25,9 @@ import (
 // Errors are returned without a top-level oops code so call sites can wrap
 // them with the appropriate surface-specific code (SUBSCRIBE_BINDING_LOOKUP_FAILED
 // or HISTORY_BINDING_LOOKUP_FAILED) that remains observable via oops.AsOops.
+// The binding is minted at character creation (auth_handlers.go createCharacterAtomic;
+// guest_service.go CreateGuest), so a Current failure here is a misconfiguration
+// assertion, never an expected path once KEK is mandatory.
 func (s *CoreServer) buildCharacterIdentity(ctx context.Context, playerID, characterID string) (eventbus.SessionIdentity, error) {
 	if s.bindings == nil || !s.cryptoActive {
 		return eventbus.SessionIdentity{}, nil
