@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 	"golang.org/x/term"
 )
@@ -70,7 +71,7 @@ func ensureKeyfile(ctx context.Context, path string, pf kek.PassphraseFunc, auto
 	// boots mints the KEK. Without this, two first boots could each Persist an
 	// independent key and the rename of one would silently discard the other —
 	// any DEKs already sealed under the discarded key would be unrecoverable.
-	claim, claimErr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	claim, claimErr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // path is operator-supplied via env var, not user input
 	if claimErr != nil {
 		if errors.Is(claimErr, os.ErrExist) {
 			// Lost the creation race: a sibling boot owns the file. Reuse it via
@@ -94,13 +95,43 @@ func ensureKeyfile(ctx context.Context, path string, pf kek.PassphraseFunc, auto
 	if persistErr := src.Persist(ctx, master); persistErr != nil {
 		// Remove the empty placeholder so a retry sees a clean "absent" state
 		// instead of a corrupt zero-byte keyfile.
-		if removeErr := os.Remove(path); removeErr != nil {
+		if removeErr := os.Remove(path); removeErr != nil { //nolint:gosec // path is operator-supplied via env var, not user input
 			slog.WarnContext(ctx, "failed to remove placeholder keyfile after persist failure",
 				"path", path, "error", removeErr)
 		}
 		return oops.Wrap(persistErr)
 	}
 	return nil
+}
+
+// provisionBootKEKProvider builds the KEK provider for SERVER BOOT: it resolves
+// the passphrase (env / file-ref / prompt), auto-generates the sealed keyfile when
+// absent and autoGen is set, then loads it. Distinct from buildKEKProviderFromConfig
+// (the admin-CLI path, which requires a pre-existing keyfile and never auto-gens).
+func provisionBootKEKProvider(ctx context.Context, pool *pgxpool.Pool, autoGen bool) (kek.Provider, error) {
+	keyFile := os.Getenv(envKEKFile)
+	if keyFile == "" {
+		return nil, oops.Code("BOOT_KEK_FILE_MISSING").With("env_var", envKEKFile).
+			Errorf("%s is required", envKEKFile)
+	}
+	stdinFD := int(os.Stdin.Fd()) //nolint:gosec // G115: fd fits int on all supported platforms
+	pass, err := resolvePassphrase(passphraseSources{interactive: term.IsTerminal(stdinFD)})
+	if err != nil {
+		return nil, err // KEK_PASSPHRASE_UNAVAILABLE / KEK_PASSPHRASE_FILE_READ_FAILED
+	}
+	pf := func(context.Context) ([]byte, error) { return pass, nil } // capture; don't re-resolve
+	if ensureErr := ensureKeyfile(ctx, keyFile, pf, autoGen); ensureErr != nil {
+		return nil, ensureErr // KEK_FILE_NOT_FOUND when absent && !autoGen
+	}
+	source, err := kek.NewFileSource(keyFile, pf)
+	if err != nil {
+		return nil, oops.Code("BOOT_KEK_FILE_SOURCE_FAILED").Wrap(err)
+	}
+	provider, err := kek.NewLocalAEADProvider(ctx, source, pool) // calls Load internally; file now exists
+	if err != nil {
+		return nil, oops.Code("BOOT_KEK_PROVIDER_FAILED").Wrap(err)
+	}
+	return provider, nil
 }
 
 // promptPassphrase reads a passphrase from stdin without echoing it.

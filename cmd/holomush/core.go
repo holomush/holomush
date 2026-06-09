@@ -77,6 +77,7 @@ type coreConfig struct {
 	SessionBootGrace      string        `koanf:"session_boot_grace"`
 	Setting               string        `koanf:"setting"`
 	ResetSetting          bool          `koanf:"reset_setting"`
+	AutoGenKEK            bool          `koanf:"auto_gen_kek"`
 	LuaTimeout            time.Duration `koanf:"lua_timeout"`
 	LuaRegistryMaxSize    int           `koanf:"lua_registry_max_size"`
 }
@@ -163,6 +164,8 @@ manages plugins, and handles game state.`,
 	cmd.Flags().StringVar(&cfg.SessionBootGrace, "session-boot-grace", "60s", "lease-sweep suppression window after core start")
 	cmd.Flags().StringVar(&cfg.Setting, "setting", "crossroads", "setting plugin to bootstrap on first boot")
 	cmd.Flags().BoolVar(&cfg.ResetSetting, "reset-setting", false, "force re-bootstrap from setting plugin")
+	cmd.Flags().BoolVar(&cfg.AutoGenKEK, "auto-gen-kek", false,
+		"generate a KEK file if absent on first boot (passphrase still required)")
 	cmd.Flags().DurationVar(&cfg.LuaTimeout, "plugin-lua-timeout", defaultPluginLuaTimeout, "per-invocation CPU deadline for Lua plugins")
 	cmd.Flags().IntVar(&cfg.LuaRegistryMaxSize, "plugin-lua-registry-max", defaultPluginLuaRegistryMax, "max Lua registry size per plugin state")
 	registerLogSinkFlags(cmd)
@@ -737,16 +740,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// totp.NewRealClock() satisfies adminauth.Clock (both require Now() time.Time).
 	adminSessionStore := adminauth.NewSessionStore(totp.NewRealClock(), 10*time.Minute)
 
-	// Construct the TOTP service for use in the admin handlers. KEK provider is
-	// read from the same env-var path used by the admin-totp CLI (HOLOMUSH_KEK_FILE
-	// + HOLOMUSH_KEK_PASSPHRASE). On first boot without KEK env vars, Start will
-	// fail-open: the admin handlers will return errors on TOTP operations but the
-	// server continues to start (handler construction itself is always successful).
-	kekProvider, kekErr := buildKEKProviderFromConfig(ctx, dbSub.Pool())
+	// Provision the boot KEK provider: a KEK is REQUIRED to start. The keyfile
+	// path comes from HOLOMUSH_KEK_FILE and the passphrase from env / file-ref /
+	// prompt (resolvePassphrase); --auto-gen-kek mints the keyfile on first boot.
+	// Any provisioning failure is fatal (BOOT_KEK_REQUIRED) — there is no
+	// degraded KEK-less mode. The admin-totp CLI keeps its own stricter path
+	// (buildKEKProviderFromConfig: pre-existing keyfile only, never auto-gen).
+	kekProvider, kekErr := provisionBootKEKProvider(ctx, dbSub.Pool(), cfg.AutoGenKEK)
 	if kekErr != nil {
-		slog.WarnContext(ctx, "admin handlers: KEK provider unavailable — TOTP-gated admin RPCs will fail at runtime",
-			"error", kekErr)
-		kekProvider = nil
+		return oops.Code("BOOT_KEK_REQUIRED").
+			Errorf("a KEK is required to start: %w (set %s + a passphrase source, or pass --auto-gen-kek)", kekErr, envKEKFile)
 	}
 
 	var adminTOTPSvc totp.Service

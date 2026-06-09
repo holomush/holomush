@@ -77,3 +77,28 @@ func TestEnsureKeyfile(t *testing.T) {
 		require.Equal(t, info1.ModTime(), info2.ModTime(), "keyfile MUST be untouched after a failed unseal")
 	})
 }
+
+func TestProvisionBootKEKProviderBootMatrix(t *testing.T) {
+	t.Run("no passphrase, non-interactive ⇒ KEK_PASSPHRASE_UNAVAILABLE", func(t *testing.T) {
+		t.Setenv("HOLOMUSH_KEK_FILE", filepath.Join(t.TempDir(), "m.key.enc"))
+		t.Setenv("HOLOMUSH_KEK_PASSPHRASE", "")
+		t.Setenv("HOLOMUSH_KEK_PASSPHRASE_FILE", "")
+		_, err := provisionBootKEKProvider(context.Background(), nil, true)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "KEK_PASSPHRASE_UNAVAILABLE")
+	})
+	t.Run("passphrase set, keyfile absent, autoGen off ⇒ KEK_FILE_NOT_FOUND", func(t *testing.T) {
+		t.Setenv("HOLOMUSH_KEK_FILE", filepath.Join(t.TempDir(), "m.key.enc"))
+		t.Setenv("HOLOMUSH_KEK_PASSPHRASE", "pw")
+		_, err := provisionBootKEKProvider(context.Background(), nil, false)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "KEK_FILE_NOT_FOUND")
+	})
+	t.Run("no KEK file path ⇒ BOOT_KEK_FILE_MISSING", func(t *testing.T) {
+		t.Setenv("HOLOMUSH_KEK_FILE", "")
+		t.Setenv("HOLOMUSH_KEK_PASSPHRASE", "pw")
+		_, err := provisionBootKEKProvider(context.Background(), nil, true)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "BOOT_KEK_FILE_MISSING")
+	})
+}
