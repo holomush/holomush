@@ -242,6 +242,7 @@ func TestSubscriberOptionsEmptyWhenGuardPresentButDEKManagerNil(t *testing.T) {
 		"guard without a DEK manager is a half-configured decrypt path ⇒ all-or-nothing returns no options")
 }
 
+// Verifies: INV-CRYPTO-118
 // Asserts the activation gate is wired from KEK presence, not a standalone flag.
 func TestCoreServerCryptoActiveTracksKEKPresence(t *testing.T) {
 	require.True(t, cryptoActiveFor(grpcSubsystemConfig{RekeyManager: &stubDEKManager{}}),

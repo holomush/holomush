@@ -373,6 +373,7 @@ func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "GUEST_CREATE_FAILED")
 }
 
+// Verifies: INV-CRYPTO-120
 // Asserts guest creation mints a binding with reason "initial_bind_guest" in the
 // same transaction, and that the returned binding ID is non-empty so a subsequent
 // bindings.Current call resolves it (i.e., no orphan character row without a binding).

@@ -78,6 +78,7 @@ func TestEnsureKeyfile(t *testing.T) {
 	})
 }
 
+// Verifies: INV-CRYPTO-119
 func TestProvisionBootKEKProviderBootMatrix(t *testing.T) {
 	t.Run("no passphrase, non-interactive ⇒ KEK_PASSPHRASE_UNAVAILABLE", func(t *testing.T) {
 		t.Setenv("HOLOMUSH_KEK_FILE", filepath.Join(t.TempDir(), "m.key.enc"))

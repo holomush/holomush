@@ -813,6 +813,7 @@ func (passthroughTransactorForGRPC) InTransaction(ctx context.Context, fn func(c
 
 var _ Transactor = passthroughTransactorForGRPC{}
 
+// Verifies: INV-CRYPTO-120
 // Asserts createCharacterAtomic mints a current binding so bindings.Current resolves.
 func TestCreateCharacterMintsBindingResolvableByCurrent(t *testing.T) {
 	ctx := context.Background()

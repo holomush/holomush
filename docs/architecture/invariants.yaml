@@ -175,6 +175,12 @@ scopes:
       - "cmd/holomush/phase7_fence_wiring_test.go"
       - "cmd/holomush/gateway_imports_test.go"
       - "cmd/holomush/admin_rekey_e2e_test.go"
+      # INV-CRYPTO-118/119/120 (single-gate / boot-refusal / creation-time binding): activation
+      # gate, KEK boot provision, and character/guest binding tests — multi-scope files shared here.
+      - "cmd/holomush/kek_provision_test.go"
+      - "internal/grpc/session_identity_test.go"
+      - "internal/grpc/auth_handlers_test.go"
+      - "internal/auth/guest_service_test.go"
 
   - name: INV-PRIVACY
     description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
@@ -4377,3 +4383,38 @@ invariants:
     binding: bound
     refs:
       - {file: "cmd/holomush/sub_grpc_test.go", token: "INV-CRYPTO-117"}
+  - id: INV-CRYPTO-118
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-06-09-sensitive-event-crypto-activation-design.md"
+    summary: "Subscriber identity-build MUST be gated solely on KEK presence (cryptoActive wired from RekeyManager != nil),
+      never an independent flag; when the gate is false or no binding repo is wired, the built identity MUST be the zero passthrough
+      identity. The publisher half of the same RekeyManager-sourced lockstep is INV-CRYPTO-117."
+    asserted_by:
+      - "cmd/holomush/sub_grpc_test.go"
+      - "internal/grpc/session_identity_test.go"
+    binding: bound
+    refs:
+      - {file: "cmd/holomush/sub_grpc_test.go", token: "INV-CRYPTO-118"}
+      - {file: "internal/grpc/session_identity_test.go", token: "INV-CRYPTO-118"}
+  - id: INV-CRYPTO-119
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-06-09-sensitive-event-crypto-activation-design.md"
+    summary: "The server MUST refuse to boot without a provisionable KEK; missing keyfile path, missing passphrase, or keyfile
+      absent without auto-gen all produce a fatal error — degraded KEK-less boot is never permitted."
+    asserted_by:
+      - "cmd/holomush/kek_provision_test.go"
+    binding: bound
+    refs:
+      - {file: "cmd/holomush/kek_provision_test.go", token: "INV-CRYPTO-119"}
+  - id: INV-CRYPTO-120
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-06-09-sensitive-event-crypto-activation-design.md"
+    summary: "Every character-creation path (normal and guest) MUST mint a current DEK binding in the same transaction, so
+      bindings.Current always resolves for a newly created character with no orphan row."
+    asserted_by:
+      - "internal/grpc/auth_handlers_test.go"
+      - "internal/auth/guest_service_test.go"
+    binding: bound
+    refs:
+      - {file: "internal/grpc/auth_handlers_test.go", token: "INV-CRYPTO-120"}
+      - {file: "internal/auth/guest_service_test.go", token: "INV-CRYPTO-120"}

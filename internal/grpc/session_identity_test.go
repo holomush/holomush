@@ -14,6 +14,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 )
 
+// Verifies: INV-CRYPTO-118
 func TestBuildCharacterIdentity(t *testing.T) {
 	pid := core.NewULID().String()
 	cid := core.NewULID().String()
