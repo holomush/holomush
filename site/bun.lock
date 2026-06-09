@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "holomush-docs",
@@ -13,7 +14,7 @@
         "starlight-sidebar-topics": "^0.7.1",
       },
       "devDependencies": {
-        "opentype.js": "^2.0.0",
+        "opentype.js": "2.0.0",
       },
     },
   },
