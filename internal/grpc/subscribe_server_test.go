@@ -350,7 +350,7 @@ func TestSubscribeBindingLookupFailureReturnsError(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(playerID),
 		bindings:          &fakeBindingRepo{err: errors.New("db down")},
-		cryptoEnabled:     true, // required to activate binding lookup (Phase 3b gate)
+		cryptoActive:      true, // required to activate binding lookup (KEK-presence gate)
 	}
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "s1",
@@ -383,7 +383,7 @@ func TestSubscribePassesNonZeroSessionIdentityWhenBindingsWired(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(playerID),
 		bindings:          &fakeBindingRepo{bindingID: bindingID},
-		cryptoEnabled:     true, // required to activate binding lookup (Phase 3b gate)
+		cryptoActive:      true, // required to activate binding lookup (KEK-presence gate)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

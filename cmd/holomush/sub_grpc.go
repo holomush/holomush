@@ -161,6 +161,11 @@ func (s *grpcSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
+// cryptoActiveFor reports whether sensitive-event crypto is active for this
+// subsystem config: true iff a KEK (RekeyManager) is wired. This is the single
+// activation gate (replaces the vestigial cryptoEnabled flag).
+func cryptoActiveFor(cfg grpcSubsystemConfig) bool { return cfg.RekeyManager != nil }
+
 // publisherOptionsFor returns the PublishOptions for the live publisher.
 // When a DEK manager (RekeyManager) is configured, the publisher is DEK-aware
 // so Sensitive=true events take the encrypt branch (publisher.go:208); when
@@ -463,6 +468,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		holoGRPC.WithGuestService(guestService),
 		holoGRPC.WithTransactor(transactor),
 		holoGRPC.WithBindingRepository(bindingRepo),
+		holoGRPC.WithCryptoActive(cryptoActiveFor(s.cfg)),
 		holoGRPC.WithStreamContributor(pluginManager),
 		holoGRPC.WithAccessEngine(policyEngine),
 		holoGRPC.WithCommandQuerier(s.cfg.Plugins.CommandQuerier()),

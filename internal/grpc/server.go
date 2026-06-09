@@ -173,9 +173,9 @@ type CoreServer struct {
 
 	// Phase 3b: transactor and binding repository for atomic character + binding INSERTs
 	// (Create) and current-binding lookup for Subscribe / QueryStreamHistory (Current).
-	transactor    Transactor
-	bindings      BindingRepo
-	cryptoEnabled bool // Phase 3b flag; gates binding lookup in Subscribe / QueryStreamHistory
+	transactor   Transactor
+	bindings     BindingRepo
+	cryptoActive bool // true when KEK (RekeyManager) is wired; gates binding lookup in Subscribe / QueryStreamHistory
 
 	// Plugin stream contribution and mid-session stream control.
 	streamContributor SessionStreamContributor
@@ -992,10 +992,10 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// authentication boundary; identity is derived solely from the
 	// server-side session record — never from client-supplied fields.
 	var sessionIdentity eventbus.SessionIdentity
-	if s.bindings != nil && s.cryptoEnabled {
-		// Binding lookup is only needed when crypto is enabled (Phase 3b+).
-		// With crypto disabled (current production default), we skip this so
-		// characters without a binding row don't break Subscribe.
+	if s.bindings != nil && s.cryptoActive {
+		// Binding lookup is only needed when a KEK is wired (cryptoActive).
+		// Without a KEK, skip this so characters without a binding row don't
+		// break Subscribe in KEK-less deployments.
 		bindingID, bindingErr := s.bindings.Current(ctx, info.CharacterID.String())
 		if bindingErr != nil {
 			return oops.Code("SUBSCRIBE_BINDING_LOOKUP_FAILED").

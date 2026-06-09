@@ -303,10 +303,10 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	// Decision 2 (Phase 3b grounding doc): derived solely from the server-side
 	// session record — never from client-supplied fields.
 	var historyIdentity eventbus.SessionIdentity
-	if s.bindings != nil && s.cryptoEnabled {
-		// Binding lookup is only needed when crypto is enabled (Phase 3b+).
-		// With crypto disabled (current production default), we skip this so
-		// characters without a binding row don't break QueryStreamHistory.
+	if s.bindings != nil && s.cryptoActive {
+		// Binding lookup is only needed when a KEK is wired (cryptoActive).
+		// Without a KEK, skip this so characters without a binding row don't
+		// break QueryStreamHistory in KEK-less deployments.
 		bindingID, bindingErr := s.bindings.Current(ctx, info.CharacterID.String())
 		if bindingErr != nil {
 			return nil, oops.Code("HISTORY_BINDING_LOOKUP_FAILED").
