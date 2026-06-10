@@ -98,7 +98,7 @@ func newPluginCrypto(t *testing.T, bus *eventbustest.Embedded, pool *pgxpool.Poo
 		provider, dek.NewStore(pool),
 		dek.NewCache(cacheCfg), dek.NewParticipantsCache(cacheCfg),
 		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil }, // noop invalidator
-		worldpg.NewBindingRepository(pool),                                                   // satisfies dek.BindingResolver via Current
+		worldpg.NewBindingRepository(pool),                                                   // satisfies dek.BindingResolver via CurrentWithPlayer
 	)
 	require.NoError(t, err, "newPluginCrypto: dek.NewManager")
 

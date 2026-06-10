@@ -166,10 +166,10 @@ func buildRekeyWiring(
 
 	// BindingResolver: production uses worldpostgres.NewBindingRepository.
 	// dek.NewManager requires a non-nil BindingResolver at construction
-	// time; the BindingRepository's Current method satisfies the interface
-	// shape directly. The rekey path itself does not invoke BindingResolver
-	// — it is only consumed by Manager.Add for character participant
-	// management.
+	// time; the BindingRepository's CurrentWithPlayer method satisfies the
+	// interface shape directly. The rekey path itself does not invoke
+	// BindingResolver — it is only consumed by Manager.GetOrCreate/Add for
+	// character participant management.
 	bindings := worldpostgres.NewBindingRepository(deps.Pool)
 
 	mgr, mgrErr := dek.NewManager(deps.KEKProvider, dekStore, dekCache, partCache, invFn, bindings)

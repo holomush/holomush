@@ -171,6 +171,7 @@ invariants.
 | `INV-CRYPTO-119` | The server MUST refuse to boot without a provisionable KEK; missing keyfile path, missing passphrase, or keyfile absent without auto-gen all produce a fatal error — degraded KEK-less boot is never permitted. | — | bound |
 | `INV-CRYPTO-120` | Every character-creation path (normal and guest) MUST mint a current DEK binding in the same transaction, so bindings.Current always resolves for a newly created character with no orphan row. | — | bound |
 | `INV-CRYPTO-121` | The first SetSceneFocus on a scene context with no active DEK MUST genesis the DEK, seeded with the focusing reader as a participant; a participant-seeding focus MUST NOT fail solely because no DEK pre-existed. The publisher's scene-context genesis remains participant-empty (the scene genesis asymmetry, publisher.go initialParticipantsForContext, preserved). | — | bound |
+| `INV-CRYPTO-122` | Comms DEK genesis for a character.<id> context MUST resolve and record the recipient's player_id (from the recipient's active player↔character binding row) on the seeded participant, so the AuthGuard player-history branch (guard.go checkPlayer, §7.2 Branch 2) can match after a later binding rotation — symmetric with the scene-focus seed (INV-CRYPTO-121). The fill MUST NOT overwrite a caller-supplied player_id (the scene seed supplies its own). | — | bound |
 
 ### `INV-PRIVACY`
 

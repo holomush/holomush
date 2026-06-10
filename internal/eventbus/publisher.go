@@ -495,9 +495,12 @@ func (identityKeySelector) SelectForDecrypt(_ context.Context, _ codec.Name, _ c
 // genesis for a context, derived from the subject. A character.<id> context is
 // a personal stream whose owner (the recipient of a private message —
 // page/whisper/pemit) must be able to decrypt, so seed that character. The
-// BindingID is left empty; GetOrCreate resolves it via the BindingResolver on
-// its create branch (manager.go). Scene and other contexts seed nothing here
-// (scene readers are seeded at SetSceneFocus).
+// BindingID and PlayerID are left empty; GetOrCreate resolves both from the
+// recipient's active binding row via the BindingResolver on its create branch
+// (manager.go). The PlayerID lets the AuthGuard player-history branch match
+// after a later binding rotation — symmetric with the scene-focus seed
+// (holomush-5rh.8.29.11). Scene and other contexts seed nothing here (scene
+// readers are seeded at SetSceneFocus).
 func initialParticipantsForContext(ctxID dek.ContextID) []dek.Participant {
 	if ctxID.Type != "character" {
 		return nil

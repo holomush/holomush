@@ -119,8 +119,8 @@ func (snapNoopBackpressure) ShouldThrottle(_ string) bool { return false }
 
 type snapDEKBindingStub struct{ bindingID string }
 
-func (s *snapDEKBindingStub) Current(_ context.Context, _ string) (string, error) {
-	return s.bindingID, nil
+func (s *snapDEKBindingStub) CurrentWithPlayer(_ context.Context, _ string) (bindingID, playerID string, err error) {
+	return s.bindingID, "", nil
 }
 
 type snapAlwaysTrueCryptoKeysLookup struct{}

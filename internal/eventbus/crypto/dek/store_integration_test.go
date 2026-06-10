@@ -25,11 +25,11 @@ type testBindingStub struct {
 	err       error
 }
 
-func (s *testBindingStub) Current(_ context.Context, _ string) (string, error) {
+func (s *testBindingStub) CurrentWithPlayer(_ context.Context, _ string) (bindingID, playerID string, err error) {
 	if s.err != nil {
-		return "", s.err
+		return "", "", s.err
 	}
-	return s.bindingID, nil
+	return s.bindingID, "", nil
 }
 
 // TestSoftDeletedDEKAppearsAsNoRowsForProductionReads asserts that

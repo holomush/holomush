@@ -54,8 +54,8 @@ type dekBindingStub struct {
 	bindingID string
 }
 
-func (s *dekBindingStub) Current(_ context.Context, _ string) (string, error) {
-	return s.bindingID, nil
+func (s *dekBindingStub) CurrentWithPlayer(_ context.Context, _ string) (bindingID, playerID string, err error) {
+	return s.bindingID, "", nil
 }
 
 // e2eEnv groups the bus + crypto + audit + reader fixture used by the

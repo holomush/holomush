@@ -18,11 +18,12 @@ import (
 // stubBindingResolver implements dek.BindingResolver for tests.
 type stubBindingResolver struct {
 	bindingID string
+	playerID  string
 	err       error
 }
 
-func (s *stubBindingResolver) Current(_ context.Context, _ string) (string, error) {
-	return s.bindingID, s.err
+func (s *stubBindingResolver) CurrentWithPlayer(_ context.Context, _ string) (bindingID, playerID string, err error) {
+	return s.bindingID, s.playerID, s.err
 }
 
 // TestNewManager_RejectsNilProvider verifies NewManager returns

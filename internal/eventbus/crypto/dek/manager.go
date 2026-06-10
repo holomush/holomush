@@ -116,9 +116,15 @@ type ActiveDEKRecord struct {
 // action is one of "rotate", "participants_changed", or "rekey".
 type Invalidator func(ctx context.Context, ctxID ContextID, action string, version, successorVersion uint32) error
 
-// BindingResolver resolves a character's current binding_id.
+// BindingResolver resolves a character's current binding: the active
+// binding_id and the player_id it is bound to. The player_id is recorded on
+// the seeded participant so the AuthGuard player-history branch (§7.2 Branch 2,
+// guard.go checkPlayer) can match after a later binding rotation — symmetric
+// with the scene-focus seed (sceneaccess_service.go), which carries the
+// session player_id. Both values come from the same active binding row so they
+// are atomically consistent (holomush-5rh.8.29.11).
 type BindingResolver interface {
-	Current(ctx context.Context, characterID string) (string, error)
+	CurrentWithPlayer(ctx context.Context, characterID string) (bindingID, playerID string, err error)
 }
 
 // manager is the concrete impl.
@@ -242,21 +248,29 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 		return codec.Key{}, validateErr
 	}
 	// Resolve any participant supplied without a BindingID (e.g. the publisher's
-	// genesis-seed for a character.<id> context). Pre-bound participants pass
-	// through unchanged. m.bindings is guaranteed non-nil (NewManager:175).
-	// Mirrors the resolution Add performs (manager.go:364). Genesis-only: the
-	// active-row short-circuit above means this never runs once the DEK exists.
+	// genesis-seed for a character.<id> context). m.bindings is guaranteed
+	// non-nil (NewManager). Mirrors the resolution Add performs. Genesis-only:
+	// the active-row short-circuit above means this never runs once the DEK
+	// exists. PlayerID is filled from the same binding row only when the caller
+	// left it empty — the publisher comms seed supplies neither, while the scene
+	// seed (sceneaccess_service.go) supplies an explicit PlayerID we MUST NOT
+	// clobber (INV-CRYPTO-122). Caller contract: a participant supplied WITH a
+	// BindingID skips resolution entirely, so such a caller MUST also supply
+	// PlayerID if it needs the AuthGuard player-history branch to match.
 	resolved := initial
 	if len(initial) > 0 {
 		resolved = make([]Participant, len(initial))
 		for i, p := range initial {
 			if p.BindingID == "" {
-				bindingID, bErr := m.bindings.Current(ctx, p.CharacterID)
+				bindingID, playerID, bErr := m.bindings.CurrentWithPlayer(ctx, p.CharacterID)
 				if bErr != nil {
 					return codec.Key{}, oops.Code("DEK_BINDING_RESOLVE_FAILED").
 						With("character_id", p.CharacterID).Wrap(bErr)
 				}
 				p.BindingID = bindingID
+				if p.PlayerID == "" {
+					p.PlayerID = playerID
+				}
 			}
 			resolved[i] = p
 		}
@@ -370,12 +384,15 @@ func (m *manager) Add(ctx context.Context, ctxID ContextID, p Participant) error
 	}
 
 	if p.BindingID == "" {
-		bindingID, err := m.bindings.Current(ctx, p.CharacterID)
+		bindingID, playerID, err := m.bindings.CurrentWithPlayer(ctx, p.CharacterID)
 		if err != nil {
 			return oops.Code("DEK_BINDING_RESOLVE_FAILED").
 				With("character_id", p.CharacterID).Wrap(err)
 		}
 		p.BindingID = bindingID
+		if p.PlayerID == "" {
+			p.PlayerID = playerID
+		}
 	}
 
 	activeRow, added, err := m.store.updateParticipants(ctx, ctxID, p)
