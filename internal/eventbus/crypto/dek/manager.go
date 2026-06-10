@@ -34,6 +34,14 @@ type Manager interface {
 
 	// Phase 4 stub — see holomush-fi0n.
 	Add(ctx context.Context, ctxID ContextID, p Participant) error
+
+	// EnsureParticipant guarantees the active DEK for ctxID exists and that p
+	// is a participant. Unlike Add (which requires a pre-existing active DEK),
+	// it genesises the DEK seeded with p when none exists — the genesis-safe
+	// form used by the first reader to focus a never-posed scene
+	// (INV-CRYPTO-121). Idempotent.
+	EnsureParticipant(ctx context.Context, ctxID ContextID, p Participant) error
+
 	Rotate(ctx context.Context, ctxID ContextID, newParticipants []Participant, reason string) error
 
 	// Phase 5 stub — see holomush-jxo8.
@@ -384,6 +392,25 @@ func (m *manager) Add(ctx context.Context, ctxID ContextID, p Participant) error
 	)
 
 	return m.invalidate(ctx, ctxID, "participants_changed", activeRow.Version, 0)
+}
+
+// EnsureParticipant guarantees the active DEK for ctxID exists and contains p.
+//
+//   - No active DEK: GetOrCreate mints v1 seeded with p (genesis). The
+//     subsequent Add hits the idempotency branch (p already present) and is a
+//     no-op.
+//   - Active DEK without p: GetOrCreate short-circuits (existing-row branch
+//     ignores initial); Add appends p under SELECT … FOR UPDATE.
+//   - Active DEK with p: GetOrCreate no-op; Add idempotent no-op.
+//
+// Concurrency: GetOrCreate resolves the INSERT race via unique-violation
+// re-select (manager.go GetOrCreate); Add serializes via updateParticipants'
+// row lock. Both orderings converge on one active DEK with p present.
+func (m *manager) EnsureParticipant(ctx context.Context, ctxID ContextID, p Participant) error {
+	if _, err := m.GetOrCreate(ctx, ctxID, []Participant{p}); err != nil {
+		return err
+	}
+	return m.Add(ctx, ctxID, p)
 }
 
 // Rotate mints a new DEK version and marks the old one rotated.

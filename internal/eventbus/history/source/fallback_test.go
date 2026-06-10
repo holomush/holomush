@@ -52,6 +52,10 @@ func (f *fakeDEKManager) Participants(context.Context, codec.KeyID, uint32) ([]d
 
 func (f *fakeDEKManager) Add(context.Context, dek.ContextID, dek.Participant) error { panic("unused") }
 
+func (f *fakeDEKManager) EnsureParticipant(context.Context, dek.ContextID, dek.Participant) error {
+	panic("unused")
+}
+
 func (f *fakeDEKManager) Rotate(context.Context, dek.ContextID, []dek.Participant, string) error {
 	panic("unused")
 }

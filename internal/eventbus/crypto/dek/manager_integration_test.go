@@ -940,6 +940,90 @@ var _ = Describe("Manager", func() {
 		Expect(parts).To(HaveLen(2))
 		Expect(parts[1].BindingID).To(Equal("bind-explicit"))
 	})
+
+	It("EnsureParticipant genesises the DEK seeded with p when none exists", func() {
+		ctx := context.Background()
+		connStr, teardown := newTestPGPool(suiteT)
+		DeferCleanup(teardown)
+		pool, err := pgxpool.New(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(pool.Close)
+
+		provider := newTestProvider(suiteT)
+		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
+		Expect(err).NotTo(HaveOccurred())
+
+		ctxID := dek.ContextID{Type: "scene", ID: "01GENESISFOCUS01"}
+		p := dek.Participant{PlayerID: "01PLAYER0000000001", CharacterID: "01CHAR00000000001", AddedVia: "test.first_focus"}
+
+		// No DEK exists yet — bare Add would fail with ErrNoRows; EnsureParticipant must genesis.
+		Expect(mgr.EnsureParticipant(ctx, ctxID, p)).To(Succeed())
+
+		key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
+		Expect(err).NotTo(HaveOccurred())
+		parts, err := mgr.Participants(ctx, key.ID, 1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parts).To(HaveLen(1))
+		Expect(parts[0].PlayerID).To(Equal(p.PlayerID))
+	})
+
+	It("EnsureParticipant appends p when an active DEK already exists without p", func() {
+		ctx := context.Background()
+		connStr, teardown := newTestPGPool(suiteT)
+		DeferCleanup(teardown)
+		pool, err := pgxpool.New(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(pool.Close)
+
+		provider := newTestProvider(suiteT)
+		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
+		Expect(err).NotTo(HaveOccurred())
+
+		ctxID := dek.ContextID{Type: "scene", ID: "01GENESISFOCUS02"}
+		// Publisher-style empty genesis (no participants), mirroring initialParticipantsForContext nil.
+		_, err = mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
+		Expect(err).NotTo(HaveOccurred())
+
+		p := dek.Participant{PlayerID: "01PLAYER0000000002", CharacterID: "01CHAR00000000002", AddedVia: "test.focus_after_pose"}
+		Expect(mgr.EnsureParticipant(ctx, ctxID, p)).To(Succeed())
+
+		key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
+		Expect(err).NotTo(HaveOccurred())
+		parts, err := mgr.Participants(ctx, key.ID, 1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parts).To(HaveLen(1))
+		Expect(parts[0].PlayerID).To(Equal(p.PlayerID))
+	})
+
+	It("EnsureParticipant is an idempotent no-op when p already present", func() {
+		ctx := context.Background()
+		connStr, teardown := newTestPGPool(suiteT)
+		DeferCleanup(teardown)
+		pool, err := pgxpool.New(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(pool.Close)
+
+		provider := newTestProvider(suiteT)
+		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
+		Expect(err).NotTo(HaveOccurred())
+
+		ctxID := dek.ContextID{Type: "scene", ID: "01GENESISFOCUS03"}
+		p := dek.Participant{PlayerID: "01PLAYER0000000003", CharacterID: "01CHAR00000000003", AddedVia: "test.idempotent"}
+		Expect(mgr.EnsureParticipant(ctx, ctxID, p)).To(Succeed())
+		Expect(mgr.EnsureParticipant(ctx, ctxID, p)).To(Succeed())
+
+		key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
+		Expect(err).NotTo(HaveOccurred())
+		parts, err := mgr.Participants(ctx, key.ID, 1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parts).To(HaveLen(1), "duplicate EnsureParticipant must not double-append")
+	})
 })
 
 // dekCapturingProvider wraps a real kek.Provider and captures the

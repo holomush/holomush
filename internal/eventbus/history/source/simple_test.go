@@ -37,6 +37,10 @@ func (s *stubDEKManager) Participants(context.Context, codec.KeyID, uint32) ([]d
 
 func (s *stubDEKManager) Add(context.Context, dek.ContextID, dek.Participant) error { panic("unused") }
 
+func (s *stubDEKManager) EnsureParticipant(context.Context, dek.ContextID, dek.Participant) error {
+	panic("unused")
+}
+
 func (s *stubDEKManager) Rotate(context.Context, dek.ContextID, []dek.Participant, string) error {
 	panic("unused")
 }
