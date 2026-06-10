@@ -486,6 +486,121 @@ func TestQueryStreamHistoryNotBeforeMsForwardsToBus(t *testing.T) {
 	assert.Equal(t, eventbus.DirectionBackward, reader.gotQ.Direction)
 }
 
+// TestQueryStreamHistoryEmptyWindowShortCircuit covers the Step 6c guard
+// (holomush-tn12i): a non-zero notAfter below the scope floor yields an empty
+// page without querying the bus; a notAfter at or above the floor does not
+// short-circuit; and a client-supplied inverted range (not_before_ms >
+// not_after_ms) is NOT masked as empty — it falls through to the reader, where
+// validateQuery rejects it. Both floor sources are exercised — scene focus
+// JoinedAt and location LocationArrivedAt — since the bug manifests on either.
+func TestQueryStreamHistoryEmptyWindowShortCircuit(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	sceneStream, fm := sceneFocusMembership(t)
+	// Millisecond-truncated floor so the equal-boundary case is exact across the
+	// Postgres round-trip (timestamps persist as epoch-ns; a ms floor survives
+	// losslessly, and req.NotAfterMs is ms-precision).
+	floor := time.UnixMilli(time.Now().Add(-time.Hour).UnixMilli()).UTC()
+	fm.JoinedAt = floor
+	locID := ulid.MustParse("01HYXYZ0C0000000000000000C")
+	locStream := "location." + locID.String()
+
+	tests := []struct {
+		name         string
+		info         *session.Info
+		stream       string
+		notBeforeMs  int64
+		notAfterMs   int64
+		wantBusQuery bool // true ⇒ guard does NOT fire and the bus is queried
+	}{
+		{
+			name: "scene backfill below focus JoinedAt floor returns empty without querying bus",
+			info: &session.Info{
+				ID: "s1", CharacterID: charID, ExpiresAt: &future,
+				FocusMemberships: []session.FocusMembership{fm},
+			},
+			stream:       sceneStream,
+			notAfterMs:   floor.Add(-time.Hour).UnixMilli(),
+			wantBusQuery: false,
+		},
+		{
+			name: "location backfill below arrival floor returns empty without querying bus",
+			info: &session.Info{
+				ID: "s1", CharacterID: charID, ExpiresAt: &future,
+				LocationID: locID, LocationArrivedAt: floor,
+			},
+			stream:       locStream,
+			notAfterMs:   floor.Add(-time.Hour).UnixMilli(),
+			wantBusQuery: false,
+		},
+		{
+			name: "notAfter exactly at the floor does not short-circuit",
+			info: &session.Info{
+				ID: "s1", CharacterID: charID, ExpiresAt: &future,
+				LocationID: locID, LocationArrivedAt: floor,
+			},
+			stream:       locStream,
+			notAfterMs:   floor.UnixMilli(),
+			wantBusQuery: true,
+		},
+		{
+			// Client itself sends not_before_ms > not_after_ms. The clamp can only
+			// raise notBefore, so this inversion is the client's, not the floor's:
+			// it must reach the reader (where validateQuery rejects it), never be
+			// swallowed as an empty page.
+			name: "client-supplied inverted range is not swallowed as empty",
+			info: &session.Info{
+				ID: "s1", CharacterID: charID, ExpiresAt: &future,
+				LocationID: locID, LocationArrivedAt: floor,
+			},
+			stream:       locStream,
+			notBeforeMs:  floor.Add(time.Hour).UnixMilli(),
+			notAfterMs:   floor.UnixMilli(),
+			wantBusQuery: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			sess := newTestSessionStore(t, map[string]*session.Info{"s1": tc.info})
+			// Seed an event so an empty response can only originate from the
+			// short-circuit, never from the bus returning nothing. Use the
+			// fully-qualified subject the handler resolves the stream to
+			// (currentGameID defaults to "main"; an already-qualified scene
+			// subject passes through Qualify unchanged).
+			eventSubject, qErr := eventbus.Qualify("main", tc.stream)
+			require.NoError(t, qErr)
+			reader := &fakeHistoryReader{events: []eventbus.Event{{
+				ID:        core.NewULID(),
+				Subject:   eventSubject,
+				Type:      "scene.pose",
+				Timestamp: floor,
+				Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+				Payload:   []byte("p"),
+			}}}
+			s := newQueryStreamHistoryServer(t, reader, sess)
+			resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+				SessionId:   "s1",
+				Stream:      tc.stream,
+				NotBeforeMs: tc.notBeforeMs,
+				NotAfterMs:  tc.notAfterMs,
+				Count:       10,
+			})
+			require.NoError(t, err)
+			if tc.wantBusQuery {
+				assert.NotEmpty(t, reader.gotQ.Subject, "bus MUST be queried when the window is non-empty")
+				return
+			}
+			assert.Empty(t, resp.GetEvents())
+			assert.False(t, resp.GetHasMore())
+			assert.Empty(t, resp.GetNextCursor())
+			assert.Empty(t, reader.gotQ.Subject, "bus MUST NOT be queried for an empty authorized window")
+		})
+	}
+}
+
 // TestQueryStreamHistoryRejectsCursorWithStaleEpoch covers the epoch-mismatch
 // branch: a cursor whose Epoch != CurrentEpoch() gets FailedPrecondition.
 func TestQueryStreamHistoryRejectsCursorWithStaleEpoch(t *testing.T) {
@@ -1273,12 +1388,21 @@ func TestQueryStreamHistoryNotAfterMsPlumbing(t *testing.T) {
 			future := time.Now().Add(time.Hour)
 			locA := ulid.MustParse("01HYXLOCA0000000000000000A")
 			charID := ulid.MustParse("01HYXCHAR00000000000000001")
+			// Set LocationArrivedAt well before attachMoment so the scope floor
+			// stays below notAfter. Without this, Postgres COALESCEs a zero
+			// LocationArrivedAt to now() (holomush-9mxr), making scopeFloor > the
+			// past attachMoment and tripping the empty-window short-circuit
+			// (holomush-tn12i) — which returns empty before forwarding NotAfter,
+			// defeating this plumbing assertion. A non-empty window is the
+			// precondition under which NotAfter is forwarded at all.
+			arrivedAt := time.Now().Add(-3 * time.Hour)
 			sess := newTestSessionStore(t, map[string]*session.Info{
 				"sess-1": {
-					ID:          "sess-1",
-					CharacterID: charID,
-					LocationID:  locA,
-					ExpiresAt:   &future,
+					ID:                "sess-1",
+					CharacterID:       charID,
+					LocationID:        locA,
+					LocationArrivedAt: arrivedAt,
+					ExpiresAt:         &future,
 				},
 			})
 			reader := &fakeHistoryReader{events: nil}

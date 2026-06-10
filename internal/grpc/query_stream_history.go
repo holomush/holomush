@@ -285,6 +285,47 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		notAfter = time.UnixMilli(req.NotAfterMs).UTC()
 	}
 
+	// Step 6c: Empty-window short-circuit (holomush-tn12i). The Step 6 clamp
+	// raises notBefore to the server-side scope floor, but notAfter keeps the
+	// client value. When a non-zero notAfter falls below that floor — e.g. a
+	// scene backfill whose attach_moment precedes the focus JoinedAt floor — the
+	// requested upper bound sits under the floor, so the authorized window is
+	// empty. That is a legitimately empty result, not a malformed query:
+	// returning the empty page here avoids handing an inverted range to the tier
+	// reader's validateQuery, which would otherwise reject it as
+	// EVENTBUS_HISTORY_INVALID_TIME_RANGE (the observed connect-time browser
+	// 500). Logged at debug so a sustained flood — which can signal frontend
+	// clock skew or a stale attach_moment — stays visible without noising the
+	// normal path.
+	//
+	// Only the FLOOR-induced inversion short-circuits. If the client's own lower
+	// bound (raw NotBeforeMs, pre-clamp) already exceeds notAfter, the request
+	// itself is inverted — that is a client error, and it MUST stay on the
+	// validateQuery rejection path rather than being masked as a successful
+	// empty page. The clamp can only ever raise notBefore, so a client whose
+	// supplied bounds were valid (clientNotBefore <= notAfter, or unbounded) is
+	// the only one whose inversion is purely floor-induced.
+	if !notAfter.IsZero() && notBefore.After(notAfter) {
+		var clientNotBefore time.Time
+		if req.NotBeforeMs > 0 {
+			clientNotBefore = time.UnixMilli(req.NotBeforeMs).UTC()
+		}
+		if clientNotBefore.IsZero() || !clientNotBefore.After(notAfter) {
+			slog.DebugContext(
+				ctx, "history query window empty below scope floor",
+				"session_id", req.SessionId,
+				"stream", stream,
+				"not_before", notBefore,
+				"not_after", notAfter,
+			)
+			return &corev1.QueryStreamHistoryResponse{
+				Meta: responseMeta(requestID),
+			}, nil
+		}
+		// Client supplied not_before_ms > not_after_ms: fall through so the tier
+		// reader's validateQuery rejects the malformed range as before.
+	}
+
 	// Step 7: Fetch count+1 to detect has_more.
 	// Delegate to the JetStream/PostgreSQL tier crossover reader (F4+).
 	// Both paths produce ascending (oldest→newest) slices of count+1 events maximum.
