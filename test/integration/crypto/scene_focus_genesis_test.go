@@ -34,7 +34,7 @@ var _ = Describe("Scene DEK genesis-on-first-focus", func() {
 		// The scene DEK now exists with the reader as a participant.
 		key, err := h.dekMgr.GetOrCreate(ctx, sceneCtx, []dek.Participant{})
 		Expect(err).NotTo(HaveOccurred())
-		parts, err := h.dekMgr.Participants(ctx, key.ID, 1)
+		parts, err := h.dekMgr.Participants(ctx, key.ID, key.Version)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(parts).To(HaveLen(1))
 		Expect(parts[0].CharacterID).To(Equal(reader.CharacterID))
