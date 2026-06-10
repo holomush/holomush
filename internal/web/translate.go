@@ -6,6 +6,7 @@ package web
 import (
 	"encoding/json"
 	"log/slog"
+	"strings"
 
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -121,6 +122,16 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 		meta["target_name"] = p.TargetName
 	}
 
+	// Stamp scene_id from the event subject for scene IC events.
+	// The subject is always cleartext dot-delimited:
+	// events.<game_id>.scene.<scene_id>[.<facet>...]
+	// Extract the token immediately after the "scene" segment.
+	// Sensitive payloads may be encrypted so we MUST NOT gate on payload
+	// contents — the subject is always available and cleartext.
+	if sceneID := sceneIDFromSubject(ev.GetStream()); sceneID != "" {
+		meta["scene_id"] = sceneID
+	}
+
 	var metadata *structpb.Struct
 	if len(meta) > 0 {
 		s, err := structpb.NewStruct(meta)
@@ -163,6 +174,22 @@ func formatMovementText(eventType, actor string, p *genericPayload) string {
 	default:
 		return ""
 	}
+}
+
+// sceneIDFromSubject extracts the scene ID from a fully-qualified dot-delimited
+// NATS subject of the form events.<game_id>.scene.<scene_id>[.<facet>...].
+// The "scene" domain token is matched at its canonical position (index 2,
+// immediately after "events" and the game_id) so a game_id that is literally
+// "scene" cannot be mistaken for the domain. Returns an empty string for any
+// subject that is not a scene subject or that lacks a scene_id token. The
+// subject is always cleartext even for encrypted events, so this is safe to
+// call unconditionally.
+func sceneIDFromSubject(subject string) string {
+	parts := strings.Split(subject, ".")
+	if len(parts) < 4 || parts[0] != "events" || parts[2] != "scene" || parts[3] == "" {
+		return ""
+	}
+	return parts[3]
 }
 
 // translateStateEvent handles state-category events where the entire payload

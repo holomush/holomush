@@ -474,6 +474,136 @@ func TestTranslateEvent_PopulatesEventIdForStateEvents(t *testing.T) {
 	assert.Equal(t, expectedID, got.GetEventId())
 }
 
+// TestTranslateEvent_SceneICEventStampsSceneIdFromSubject asserts that a live
+// scene IC frame (e.g. core-scenes:scene_pose delivered on the
+// events.<game>.scene.<id>.ic subject) has metadata["scene_id"] set from the
+// subject token immediately after "scene". This is the essential field the
+// web scenes workspace routes on; no top-level fallback exists in the client.
+func TestTranslateEvent_SceneICEventStampsSceneIdFromSubject(t *testing.T) {
+	tests := []struct {
+		name           string
+		eventType      string
+		stream         string
+		wantSceneID    string
+		wantSceneIDKey bool
+	}{
+		{
+			name:           "pose with fully-qualified dot subject stamps scene_id",
+			eventType:      "core-scenes:scene_pose",
+			stream:         "events.main.scene.01KTQKNB5EQR3048BBNVJTMVG5.ic",
+			wantSceneID:    "01KTQKNB5EQR3048BBNVJTMVG5",
+			wantSceneIDKey: true,
+		},
+		{
+			name:           "say with different game id stamps scene_id",
+			eventType:      "core-scenes:scene_say",
+			stream:         "events.game42.scene.01HSCENEID00000000000000AB.ic",
+			wantSceneID:    "01HSCENEID00000000000000AB",
+			wantSceneIDKey: true,
+		},
+		{
+			name:           "ooc stamps scene_id",
+			eventType:      "core-scenes:scene_ooc",
+			stream:         "events.main.scene.01HSCENEID00000000000000CC.ic",
+			wantSceneID:    "01HSCENEID00000000000000CC",
+			wantSceneIDKey: true,
+		},
+		{
+			name:           "emit stamps scene_id",
+			eventType:      "core-scenes:scene_emit",
+			stream:         "events.main.scene.01HSCENEID00000000000000DD.ic",
+			wantSceneID:    "01HSCENEID00000000000000DD",
+			wantSceneIDKey: true,
+		},
+		{
+			name:           "non-scene say event does not get scene_id",
+			eventType:      "core-communication:say",
+			stream:         "events.main.character.01HCHARID000000000000AAAA",
+			wantSceneIDKey: false,
+		},
+		{
+			name:           "arrive movement event does not get scene_id",
+			eventType:      "arrive",
+			stream:         "events.main.location.01HLOCID0000000000000BBBB",
+			wantSceneIDKey: false,
+		},
+		{
+			name:           "malformed subject with scene as last token does not panic and no scene_id",
+			eventType:      "core-scenes:scene_pose",
+			stream:         "events.main.scene",
+			wantSceneIDKey: false,
+		},
+		{
+			name:           "empty subject does not panic and no scene_id",
+			eventType:      "core-scenes:scene_pose",
+			stream:         "",
+			wantSceneIDKey: false,
+		},
+		{
+			name:           "subject without scene segment does not get scene_id",
+			eventType:      "core-scenes:scene_pose",
+			stream:         "events.main.location.01HLOCID0000000000000XXXX.ic",
+			wantSceneIDKey: false,
+		},
+		{
+			// game_id literally "scene": the domain "scene" is matched only at
+			// its canonical position (index 2), so parts[3] is the real id.
+			name:           "game_id equal to scene resolves the real scene id from index 3",
+			eventType:      "core-scenes:scene_pose",
+			stream:         "events.scene.scene.01HSCENEID00000000000000EE.ic",
+			wantSceneID:    "01HSCENEID00000000000000EE",
+			wantSceneIDKey: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(t)
+
+			// Build a rendering for the event type (use communication category for
+			// scene events; we just need a valid non-nil Rendering).
+			rendering := &corev1.RenderingMetadata{
+				Category:      "communication",
+				Format:        "action",
+				DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+				SourcePlugin:  "core-scenes",
+			}
+			switch tt.eventType {
+			case "arrive":
+				rendering = testRenderings["arrive"]
+			case "core-communication:say":
+				rendering = testRenderings["core-communication:say"]
+			}
+
+			ev := &corev1.EventFrame{
+				Type:      tt.eventType,
+				Stream:    tt.stream,
+				Payload:   mustMarshal(t, map[string]any{"character_name": "Alice", "action": "waves.", "message": "Hello!"}),
+				Rendering: rendering,
+			}
+
+			// Must not panic.
+			got := h.translateEvent(ev)
+			require.NotNil(t, got)
+
+			if tt.wantSceneIDKey {
+				require.NotNil(t, got.GetMetadata(), "metadata must be set when scene_id expected")
+				meta := got.GetMetadata().AsMap()
+				assert.Equal(t, tt.wantSceneID, meta["scene_id"],
+					"metadata[scene_id] must equal the id token from the subject")
+			} else {
+				// Assert unconditionally: a nil metadata trivially has no
+				// scene_id, and a non-nil metadata must not carry the key.
+				var hasSceneID bool
+				if got.GetMetadata() != nil {
+					_, hasSceneID = got.GetMetadata().AsMap()["scene_id"]
+				}
+				assert.False(t, hasSceneID, "non-scene events must not have scene_id in metadata")
+			}
+		})
+	}
+}
+
 // TestEventChannelEnumsInLockstep is INV-EVENTBUS-16. corev1.EventChannel and
 // webv1.EventChannel MUST stay in lockstep — same enum values, same names,
 // same numeric assignments.
