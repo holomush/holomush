@@ -61,4 +61,3 @@ func TestTheme_Generate(t *testing.T) {
 		})
 	}
 }
-

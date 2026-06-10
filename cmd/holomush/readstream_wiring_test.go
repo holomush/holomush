@@ -19,8 +19,10 @@ import (
 )
 
 // Compile-time interface checks: production readstream adapter types must satisfy their narrow-seam interfaces.
-var _ readstream.SessionStore = (*readstreamSessionStore)(nil)
-var _ readstream.CodecResolver = codecRegistryAdapter{}
+var (
+	_ readstream.SessionStore  = (*readstreamSessionStore)(nil)
+	_ readstream.CodecResolver = codecRegistryAdapter{}
+)
 
 // Compile-time interface check: readstream.Handler must satisfy socket.ReadStreamRPCHandler.
 var _ socket.ReadStreamRPCHandler = (*readstream.Handler)(nil)

@@ -29,4 +29,3 @@ func TestSessionSubsystemStorePanicsBeforeStart(t *testing.T) {
 	sub := setup.NewSessionSubsystem(setup.SessionSubsystemConfig{})
 	assert.Panics(t, func() { sub.Store() })
 }
-

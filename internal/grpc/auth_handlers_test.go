@@ -59,7 +59,7 @@ func setupSessionRepo(t *testing.T, ps *auth.PlayerSession) *authmocks.MockPlaye
 
 // --- AuthenticatePlayer ---
 
-func TestAuthenticatePlayer_Success(t *testing.T) {
+func TestAuthenticatePlayerReturnsTokenAndCharactersOnValidCredentials(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -207,8 +207,8 @@ func TestAuthenticatePlayer_ErrorPaths(t *testing.T) {
 //	TestSelectCharacter_Reattach_PreservesLocationArrivedAt
 func TestSelectCharacter(t *testing.T) {
 	tests := []struct {
-		name    string
-		run     func(t *testing.T, ctx context.Context)
+		name string
+		run  func(t *testing.T, ctx context.Context)
 	}{
 		{
 			name: "fresh session created returns success with new session id and character name",
@@ -514,7 +514,7 @@ func TestSelectCharacterReattachesOnSecondCallWithSameToken(t *testing.T) {
 
 // --- CreatePlayer ---
 
-func TestCreatePlayer_Success(t *testing.T) {
+func TestCreatePlayerReturnsSessionTokenForNewAccount(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	sessionID := ulid.Make()
@@ -661,7 +661,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 
 // --- CreateCharacter ---
 
-func TestCreateCharacter_Success(t *testing.T) {
+func TestCreateCharacterReturnsCharacterIDAndNameOnSuccess(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -918,7 +918,7 @@ func TestListCharacters_ErrorPaths(t *testing.T) {
 	}
 }
 
-func TestListCharacters_Success(t *testing.T) {
+func TestListCharactersReturnsCharactersWithoutLocationWhenNoWorldQuerier(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -1068,7 +1068,7 @@ func TestRequestPasswordReset_NotConfigured(t *testing.T) {
 
 // --- ConfirmPasswordReset ---
 
-func TestConfirmPasswordReset_Success(t *testing.T) {
+func TestConfirmPasswordResetReturnsSuccessForValidToken(t *testing.T) {
 	ctx := context.Background()
 
 	resetSvc := newMockResetService(t)
@@ -1282,7 +1282,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 	assert.True(t, authSvc.logoutCalled, "authService.Logout was not called")
 }
 
-func TestLogout_Success(t *testing.T) {
+func TestLogoutHashesTokenAndCallsAuthServiceLogout(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	rawToken := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567"
@@ -2571,10 +2571,10 @@ func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
 //	TestSelectCharacterStillEmitsArriveForTerminalClientType
 func TestSelectCharacterArriveEventEmission(t *testing.T) {
 	tests := []struct {
-		name             string
-		clientType       string
-		wantArriveCount  int
-		wantArriveEmit   string // description for assertion message
+		name            string
+		clientType      string
+		wantArriveCount int
+		wantArriveEmit  string // description for assertion message
 	}{
 		{
 			name:            "comms_hub client type suppresses arrive event and still creates session",

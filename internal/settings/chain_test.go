@@ -166,7 +166,6 @@ func TestChainEmptyScopesReturnsFalse(t *testing.T) {
 	assert.False(t, ok)
 }
 
-
 func TestChainResolutionOrderMatchesSpecCharacterPlayerGame(t *testing.T) {
 	ctx := context.Background()
 

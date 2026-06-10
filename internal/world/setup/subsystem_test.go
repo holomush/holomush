@@ -29,4 +29,3 @@ func TestWorldSubsystemServicePanicsBeforeStart(t *testing.T) {
 	sub := setup.NewWorldSubsystem(setup.WorldSubsystemConfig{})
 	assert.Panics(t, func() { sub.Service() })
 }
-

@@ -72,4 +72,3 @@ func TestPolicyBootstrapper_Bootstrap(t *testing.T) {
 		})
 	}
 }
-

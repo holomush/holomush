@@ -26,9 +26,11 @@ type erroringChainRepo struct{}
 func (erroringChainRepo) LoadEntriesByScope(_ context.Context, _, _ string) ([]chain.Entry, error) {
 	return nil, errors.New("load entries boom")
 }
+
 func (erroringChainRepo) DiscoverScopes(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
+
 func (erroringChainRepo) ChainInitialized(_ context.Context, _, _ string) (bool, error) {
 	return false, nil
 }

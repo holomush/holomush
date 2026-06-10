@@ -128,7 +128,7 @@ func TestQueryLocation(t *testing.T) {
 		Type:        world.LocationTypePersistent,
 	}
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{location: loc})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{location: loc})
 
 	err := L.DoString(`location, err = holomush.query_location("` + locID.String() + `")`)
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func TestQueryCharacter(t *testing.T) {
 		LocationID:  &locID,
 	}
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{character: char})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{character: char})
 
 	err := L.DoString(`character, err = holomush.query_character("` + charID.String() + `")`)
 	require.NoError(t, err)
@@ -189,7 +189,7 @@ func TestQueryCharacterNilLocation(t *testing.T) {
 		LocationID: nil, // Not in world
 	}
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{character: char})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{character: char})
 
 	err := L.DoString(`character, err = holomush.query_character("` + charID.String() + `")`)
 	require.NoError(t, err)
@@ -213,7 +213,7 @@ func TestQueryLocationCharacters(t *testing.T) {
 		Name: "Bob",
 	}
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{characters: []*world.Character{char1, char2}})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{characters: []*world.Character{char1, char2}})
 
 	err := L.DoString(`characters, err = holomush.query_location_characters("` + locationID.String() + `")`)
 	require.NoError(t, err)
@@ -245,7 +245,7 @@ func TestQueryLocationCharacters(t *testing.T) {
 func TestQueryLocationCharactersEmptyLocation(t *testing.T) {
 	locationID := ulid.Make()
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{characters: []*world.Character{}})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{characters: []*world.Character{}})
 
 	err := L.DoString(`characters, err = holomush.query_location_characters("` + locationID.String() + `")`)
 	require.NoError(t, err)
@@ -269,7 +269,7 @@ func TestQueryObject(t *testing.T) {
 	obj.Description = "A glowing blade of ancient power."
 	obj.OwnerID = &ownerID
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{object: obj})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{object: obj})
 
 	err = L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestQueryObjectWithContainer(t *testing.T) {
 	obj.Description = "A pile of shiny gold coins."
 	obj.IsContainer = true
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{object: obj})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{object: obj})
 
 	err = L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.NoError(t, err)
@@ -321,7 +321,7 @@ func TestQueryObjectHeldByCharacter(t *testing.T) {
 	require.NoError(t, err)
 	obj.Description = "A glowing blade."
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{object: obj})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{object: obj})
 
 	err = L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.NoError(t, err)
@@ -353,7 +353,7 @@ func TestQueryObjectNilOptionalFields(t *testing.T) {
 		// This is NOT a valid production state - see function comment above.
 	}
 
-	L := newWorldTestLuaState(t,&mockWorldQuerier{object: obj})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{object: obj})
 
 	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.NoError(t, err)
@@ -423,7 +423,7 @@ func TestQueryFunctionErrorPaths(t *testing.T) {
 		fn := fn // capture loop var
 		t.Run(fn.name, func(t *testing.T) {
 			t.Run("returns error for invalid ID format", func(t *testing.T) {
-				L := newWorldTestLuaState(t,&mockWorldQuerier{})
+				L := newWorldTestLuaState(t, &mockWorldQuerier{})
 				require.NoError(t, L.DoString(fn.invalidSnip))
 
 				result := L.GetGlobal(fn.resultVar)
@@ -434,7 +434,7 @@ func TestQueryFunctionErrorPaths(t *testing.T) {
 			})
 
 			t.Run("returns sanitized error when resource is not found", func(t *testing.T) {
-				L := newWorldTestLuaState(t,&mockWorldQuerier{err: world.ErrNotFound})
+				L := newWorldTestLuaState(t, &mockWorldQuerier{err: world.ErrNotFound})
 				snip := substituteValidID(fn.validSnip)
 				require.NoError(t, L.DoString(snip))
 
@@ -447,7 +447,7 @@ func TestQueryFunctionErrorPaths(t *testing.T) {
 
 			t.Run("returns sanitized error with reference ID for internal errors", func(t *testing.T) {
 				// Internal errors must be sanitized — plugin should not see "database error"
-				L := newWorldTestLuaState(t,&mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")})
+				L := newWorldTestLuaState(t, &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")})
 				snip := substituteValidID(fn.validSnip)
 				require.NoError(t, L.DoString(snip))
 
@@ -458,7 +458,7 @@ func TestQueryFunctionErrorPaths(t *testing.T) {
 			})
 
 			t.Run("returns access denied for permission errors", func(t *testing.T) {
-				L := newWorldTestLuaState(t,&mockWorldQuerier{err: world.ErrPermissionDenied})
+				L := newWorldTestLuaState(t, &mockWorldQuerier{err: world.ErrPermissionDenied})
 				snip := substituteValidID(fn.validSnip)
 				require.NoError(t, L.DoString(snip))
 
@@ -470,7 +470,7 @@ func TestQueryFunctionErrorPaths(t *testing.T) {
 			})
 
 			t.Run("returns error when world service is not configured", func(t *testing.T) {
-				L := newWorldTestLuaState(t,nil) // nil = no world service
+				L := newWorldTestLuaState(t, nil) // nil = no world service
 				snip := substituteValidID(fn.validSnip)
 				require.NoError(t, L.DoString(snip))
 
@@ -506,7 +506,7 @@ func substituteValidID(snip string) string {
 func TestQueryLocationTimeout(t *testing.T) {
 	locationID := ulid.Make()
 	// Context timeout should be surfaced to plugins as "operation timed out"
-	L := newWorldTestLuaState(t,&mockWorldQuerier{err: context.DeadlineExceeded})
+	L := newWorldTestLuaState(t, &mockWorldQuerier{err: context.DeadlineExceeded})
 
 	err := L.DoString(`location, err = holomush.query_location("` + locationID.String() + `")`)
 	require.NoError(t, err)
@@ -613,7 +613,7 @@ func TestQueryLocationInheritsParentContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	L := newWorldTestLuaState(t,querier)
+	L := newWorldTestLuaState(t, querier)
 	L.SetContext(parentCtx) // Set the parent context on the Lua state
 
 	err := L.DoString(`location, err = holomush.query_location("` + ulid.Make().String() + `")`)
@@ -637,7 +637,7 @@ func TestQueryCharacterInheritsParentContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	L := newWorldTestLuaState(t,querier)
+	L := newWorldTestLuaState(t, querier)
 	L.SetContext(parentCtx)
 
 	err := L.DoString(`char, err = holomush.query_character("` + ulid.Make().String() + `")`)
@@ -659,7 +659,7 @@ func TestQueryLocationCharactersInheritsParentContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	L := newWorldTestLuaState(t,querier)
+	L := newWorldTestLuaState(t, querier)
 	L.SetContext(parentCtx)
 
 	err := L.DoString(`chars, err = holomush.query_location_characters("` + ulid.Make().String() + `")`)
@@ -681,7 +681,7 @@ func TestQueryObjectInheritsParentContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	L := newWorldTestLuaState(t,querier)
+	L := newWorldTestLuaState(t, querier)
 	L.SetContext(parentCtx)
 
 	err := L.DoString(`obj, err = holomush.query_object("` + ulid.Make().String() + `")`)
@@ -703,7 +703,7 @@ func TestQueryLocationInheritsContextDeadline(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	L := newWorldTestLuaState(t,querier)
+	L := newWorldTestLuaState(t, querier)
 	L.SetContext(ctx)
 
 	err := L.DoString(`location, err = holomush.query_location("` + ulid.Make().String() + `")`)
@@ -729,7 +729,7 @@ func TestQueryLocationFallbackToBackgroundContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	L := newWorldTestLuaState(t,querier)
+	L := newWorldTestLuaState(t, querier)
 	// Note: NOT calling L.SetContext() - context is nil
 
 	err := L.DoString(`location, err = holomush.query_location("` + ulid.Make().String() + `")`)

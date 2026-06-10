@@ -60,4 +60,3 @@ func TestAdminBootstrapper_Bootstrap(t *testing.T) {
 		})
 	}
 }
-

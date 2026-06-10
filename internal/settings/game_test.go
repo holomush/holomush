@@ -289,7 +289,6 @@ func (f *foreignNotFoundStore) SetSystemInfo(context.Context, string, string) er
 	return nil
 }
 
-
 func TestGameSettingsStringSliceNDecodesJSONArrayString(t *testing.T) {
 	ctx := context.Background()
 	store := newMockSystemInfoStore()
@@ -322,7 +321,6 @@ func TestGameSettingsStringSliceNReturnsFalseWhenNotFound(t *testing.T) {
 }
 
 // --- owner-partition (Scoped) tests ---
-
 
 func TestGameSettingsHostSetStringSliceStoresJSONArrayString(t *testing.T) {
 	ctx := context.Background()

@@ -216,7 +216,7 @@ func TestFormatVersion(t *testing.T) {
 	}
 }
 
-func TestRun_Success(t *testing.T) {
+func TestRunReturnsZeroExitCodeWhenHelpFlagPassed(t *testing.T) {
 	// Save original args and restore after test
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
@@ -228,7 +228,7 @@ func TestRun_Success(t *testing.T) {
 	assert.Equal(t, 0, exitCode)
 }
 
-func TestRun_Error(t *testing.T) {
+func TestRunReturnsNonZeroExitCodeForUnknownCommand(t *testing.T) {
 	// Save original args and restore after test
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()

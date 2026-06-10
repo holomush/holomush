@@ -121,4 +121,3 @@ func TestHealthTrackerOnTierChangeCallback(t *testing.T) {
 	ht.RecordSuccess()       // degraded → warm
 	assert.Equal(t, []lifecycle.HealthTier{lifecycle.HealthDegraded, lifecycle.HealthWarm}, transitions)
 }
-

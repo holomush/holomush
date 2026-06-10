@@ -24,7 +24,7 @@ import (
 
 // Compile-time interface checks: *setup.PluginSubsystem must satisfy both interfaces.
 var (
-	_ lifecycle.Subsystem    = (*setup.PluginSubsystem)(nil)
+	_ lifecycle.Subsystem      = (*setup.PluginSubsystem)(nil)
 	_ lifecycle.HealthReporter = (*setup.PluginSubsystem)(nil)
 )
 
@@ -67,7 +67,6 @@ func TestPluginSubsystemCommandQuerierPanicsBeforeStart(t *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
 	assert.Panics(t, func() { sub.CommandQuerier() })
 }
-
 
 func TestPluginSubsystemStopBeforeStartIsNoop(t *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})

@@ -12,8 +12,10 @@ import (
 )
 
 // Compile-time interface checks.
-var _ pluginsdk.Handler = (*testHandler)(nil)
-var _ pluginsdk.CommandHandler = (*testCommandHandler)(nil)
+var (
+	_ pluginsdk.Handler        = (*testHandler)(nil)
+	_ pluginsdk.CommandHandler = (*testCommandHandler)(nil)
+)
 
 type testHandler struct{}
 

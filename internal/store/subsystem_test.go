@@ -39,4 +39,3 @@ func TestDatabaseSubsystemGameIDPanicsBeforeStart(t *testing.T) {
 	sub := store.NewSubsystem(store.SubsystemConfig{})
 	assert.Panics(t, func() { sub.GameID() })
 }
-

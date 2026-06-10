@@ -29,4 +29,3 @@ func TestAuthSubsystemServicePanicsBeforeStart(t *testing.T) {
 	sub := setup.NewAuthSubsystem(setup.AuthSubsystemConfig{})
 	assert.Panics(t, func() { sub.AuthService() })
 }
-

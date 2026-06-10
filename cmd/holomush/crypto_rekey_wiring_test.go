@@ -14,10 +14,12 @@ import (
 )
 
 // Compile-time interface checks: production adapter types must implement the socket-layer interfaces.
-var _ socket.CheckpointStatusReader = (*productionCheckpointReader)(nil)
-var _ socket.RekeyAbortRunner = (*productionRekeyAbortRunner)(nil)
-var _ socket.OrchestratorRunner = (*productionOrchestratorRunner)(nil)
-var _ socket.RekeySessionStore = (*productionRekeySessionAdapter)(nil)
+var (
+	_ socket.CheckpointStatusReader = (*productionCheckpointReader)(nil)
+	_ socket.RekeyAbortRunner       = (*productionRekeyAbortRunner)(nil)
+	_ socket.OrchestratorRunner     = (*productionOrchestratorRunner)(nil)
+	_ socket.RekeySessionStore      = (*productionRekeySessionAdapter)(nil)
+)
 
 // TestBuildRekeyWiringReturnsZeroWhenKEKProviderMissing verifies that the
 // wiring helper degrades gracefully when KEK is unavailable. The admin

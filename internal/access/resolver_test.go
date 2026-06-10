@@ -13,8 +13,10 @@ import (
 )
 
 // Compile-time interface checks: NullResolver must satisfy LocationResolver as both value and pointer.
-var _ access.LocationResolver = access.NullResolver{}
-var _ access.LocationResolver = (*access.NullResolver)(nil)
+var (
+	_ access.LocationResolver = access.NullResolver{}
+	_ access.LocationResolver = (*access.NullResolver)(nil)
+)
 
 func TestNullResolver_CurrentLocation(t *testing.T) {
 	tests := []struct {

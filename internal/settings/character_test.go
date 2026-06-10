@@ -90,4 +90,3 @@ func TestNullCharacterSettingsSetStringReturnsError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not implemented")
 }
-
