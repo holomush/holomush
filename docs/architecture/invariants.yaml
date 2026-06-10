@@ -3307,6 +3307,8 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/plugin/config_test.go"
+      - "internal/plugin/lua/host_config_parity_test.go"
+      - "internal/plugin/goplugin/host_test.go"
     refs:
       - {file: "internal/plugin/config_test.go", token: "INV-PC-3"}
       - {file: "internal/plugin/lua/host.go", token: "INV-PC-3"}

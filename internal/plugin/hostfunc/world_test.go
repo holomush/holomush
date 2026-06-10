@@ -6,6 +6,7 @@ package hostfunc_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -486,18 +487,7 @@ func TestQueryFunctionErrorPaths(t *testing.T) {
 
 // substituteValidID replaces the VALID_ID placeholder in a Lua snippet with a fresh ULID.
 func substituteValidID(snip string) string {
-	const placeholder = "VALID_ID"
-	id := ulid.Make().String()
-	result := ""
-	for i := 0; i < len(snip); i++ {
-		if i+len(placeholder) <= len(snip) && snip[i:i+len(placeholder)] == placeholder {
-			result += id
-			i += len(placeholder) - 1
-		} else {
-			result += string(snip[i])
-		}
-	}
-	return result
+	return strings.ReplaceAll(snip, "VALID_ID", ulid.Make().String())
 }
 
 // TestQueryLocationTimeout verifies that context.DeadlineExceeded is surfaced

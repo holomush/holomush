@@ -67,12 +67,6 @@ comment notes what it bypasses and why.
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `Server.GameID() string` | Returns the embedded bus's game ID (`"main"` by default). Used to construct dot-style NATS subjects like `events.<gameID>.scene.<id>.ic`. |
 
-### Custom Gomega matchers
-
-| Matcher                                       | Purpose                                                                                  |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `MatchOopsCode(expected) types.GomegaMatcher` | Asserts `oops.AsOops(err).Code() == expected`. Top-level code only; does NOT chain-walk. |
-
 ## Whole-system plugin tier (`WithInTreePlugins`)
 
 The whole-system tier is the top Go-fidelity integration tier (see the canonical

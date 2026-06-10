@@ -81,9 +81,11 @@ func TestRekeyAuditEmitter_Emit_FailsClosedOnPrevHashError(t *testing.T) {
 // TestRekeyAuditEmitter_Emit_FailsClosedOnPublishError verifies Emit returns
 // DEK_REKEY_AUDIT_PUBLISH_FAILED when the publisher fails, AND that it returns
 // the FINALIZED payload (chain-link fields populated) so the caller's
-// audit-fallback log can persist the exact record that would have been emitted
-// (INV-CRYPTO-100). Fail-closed: the error is surfaced (no silent drop) and the
-// subject is attached for forensics, but no plaintext DEK material is exposed.
+// audit-fallback log can persist the exact record that would have been emitted.
+// This asserts the finalized-payload + fail-closed half of the INV-CRYPTO-100
+// fallback contract (the error is surfaced — no silent drop — the subject is
+// attached for forensics, and no plaintext DEK material is exposed); full
+// INV-CRYPTO-100 coverage spanning the projection ack is integration-tier.
 func TestRekeyAuditEmitter_Emit_FailsClosedOnPublishError(t *testing.T) {
 	prev := dek.GameIDForTest()
 	dek.SetGameIDForTest("g1")
@@ -99,8 +101,9 @@ func TestRekeyAuditEmitter_Emit_FailsClosedOnPublishError(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "subject", "events.g1.system.rekey.scene.01ABC")
 	assert.Equal(t, ulid.ULID{}, eventID, "no event ID returned on publish failure")
 
-	// INV-CRYPTO-100: the finalized payload carries the populated chain-link
-	// fields so the fallback log records what would have been published.
+	// Finalized-payload shape for the INV-CRYPTO-100 fallback log: the payload
+	// carries the populated chain-link fields so the fallback log records what
+	// would have been published.
 	assert.Equal(t, "scene:01ABC", finalized.RekeyChainField.Scope)
 	assert.NotEmpty(t, finalized.RekeyChainField.SelfHash,
 		"finalized payload exposes the computed self_hash for the fallback log")

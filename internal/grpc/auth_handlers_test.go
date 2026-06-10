@@ -385,8 +385,7 @@ func TestSelectCharacter(t *testing.T) {
 			},
 		},
 		{
-			// TestSelectCharacter_Reattach_PreservesLocationArrivedAt asserts the
-			// session-row-as-continuity rule (spec §5 row 2 + INV-PRIVACY-3, amended
+			// Session-row-as-continuity rule (spec §5 row 2 + INV-PRIVACY-3, amended
 			// 2026-05-18): reattach within TTL is the same session continuing — its
 			// LocationArrivedAt MUST NOT be advanced. The original floor is preserved
 			// so the player's own pre-disconnect scrollback survives page reload,

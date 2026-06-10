@@ -119,18 +119,37 @@ func TestEvictCachedDEK_NoopWhenNotConfigured(t *testing.T) {
 // required collaborators is nil-checked at construction (fail-fast), rather
 // than nil-dereferencing later at call time.
 func TestNewOrchestrator_PanicsOnNilCollaborator(t *testing.T) {
-	require.PanicsWithValue(t,
-		"dek.NewOrchestrator: store must not be nil",
-		func() { NewOrchestrator(nil, &CheckpointRepo{}, stubPolicyHash{}, stubMinter{}) })
-	require.PanicsWithValue(t,
-		"dek.NewOrchestrator: CheckpointRepo must not be nil",
-		func() { NewOrchestrator(&Store{}, nil, stubPolicyHash{}, stubMinter{}) })
-	require.PanicsWithValue(t,
-		"dek.NewOrchestrator: PolicyHashSource must not be nil",
-		func() { NewOrchestrator(&Store{}, &CheckpointRepo{}, nil, stubMinter{}) })
-	require.PanicsWithValue(t,
-		"dek.NewOrchestrator: Minter must not be nil",
-		func() { NewOrchestrator(&Store{}, &CheckpointRepo{}, stubPolicyHash{}, nil) })
+	cases := []struct {
+		name string
+		want string
+		call func()
+	}{
+		{
+			name: "nil store",
+			want: "dek.NewOrchestrator: store must not be nil",
+			call: func() { NewOrchestrator(nil, &CheckpointRepo{}, stubPolicyHash{}, stubMinter{}) },
+		},
+		{
+			name: "nil checkpoint repo",
+			want: "dek.NewOrchestrator: CheckpointRepo must not be nil",
+			call: func() { NewOrchestrator(&Store{}, nil, stubPolicyHash{}, stubMinter{}) },
+		},
+		{
+			name: "nil policy hash source",
+			want: "dek.NewOrchestrator: PolicyHashSource must not be nil",
+			call: func() { NewOrchestrator(&Store{}, &CheckpointRepo{}, nil, stubMinter{}) },
+		},
+		{
+			name: "nil minter",
+			want: "dek.NewOrchestrator: Minter must not be nil",
+			call: func() { NewOrchestrator(&Store{}, &CheckpointRepo{}, stubPolicyHash{}, nil) },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.PanicsWithValue(t, tc.want, tc.call)
+		})
+	}
 }
 
 // stubPolicyHash / stubMinter satisfy the orchestrator's interface
@@ -165,9 +184,9 @@ func TestPhase5CoordinatorFunc_RequestInvalidation(t *testing.T) {
 	assert.Equal(t, uint32(5), gotSuccessor)
 }
 
-// TestWriteFallbackLog_FailsClosedWithoutDataDir verifies the INV-CRYPTO-100
-// fallback-log path rejects an unconfigured data_dir with a typed error
-// instead of silently dropping the audit record.
+// TestWriteFallbackLog_FailsClosedWithoutDataDir verifies the fallback-log path
+// (the write side of the INV-CRYPTO-100 contract) rejects an unconfigured
+// data_dir with a typed error instead of silently dropping the audit record.
 func TestWriteFallbackLog_FailsClosedWithoutDataDir(t *testing.T) {
 	o := &Orchestrator{} // dataDir == ""
 	err := o.writeFallbackLog(RequestID{}, RekeyAuditPayload{})
@@ -186,6 +205,10 @@ func TestWriteFallbackLog_WritesPayloadWithRestrictedPerms(t *testing.T) {
 
 	rid := RequestID{}
 	require.NoError(t, o.writeFallbackLog(rid, RekeyAuditPayload{RequestID: "01HXY"}))
+
+	dirInfo, err := os.Stat(filepath.Join(dir, "audit-fallback"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
 
 	logPath := filepath.Join(dir, "audit-fallback", "rekey-"+rid.String()+".log")
 	info, err := os.Stat(logPath)
