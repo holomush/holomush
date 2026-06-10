@@ -85,6 +85,7 @@ func sanitizeTestName(s string) string {
 	return string(out)
 }
 
+// Verifies: INV-CRYPTO-17
 func TestLocalAEADProvider_WrapUnwrap_Roundtrip(t *testing.T) {
 	// INV-CRYPTO-17: Wrap then Unwrap recovers the original DEK byte-for-byte.
 	ctx := context.Background()

@@ -38,6 +38,8 @@ func newSeededTestRegistry(t *testing.T) *core.VerbRegistry {
 // TestRenderingPublisherStampsEventRendering is INV-EVENTBUS-2.
 // RenderingPublisher.Publish MUST stamp event.Rendering from the verb
 // registry before publishing.
+//
+// Verifies: INV-EVENTBUS-2
 func TestRenderingPublisherStampsEventRendering(t *testing.T) {
 	inner := &fakePublisher{}
 	rp := eventbus.NewRenderingPublisher(inner, newSeededTestRegistry(t))
@@ -66,6 +68,8 @@ func TestRenderingPublisherStampsEventRendering(t *testing.T) {
 // TestRenderingPublisherStampsAppRenderingHeader is INV-EVENTBUS-15. The
 // header value MUST encode the same RenderingMetadata as event.Rendering,
 // using protojson.MarshalOptions{UseProtoNames, UseEnumNumbers=false}.
+//
+// Verifies: INV-EVENTBUS-15
 func TestRenderingPublisherStampsAppRenderingHeader(t *testing.T) {
 	inner := &fakePublisher{}
 	rp := eventbus.NewRenderingPublisher(inner, newSeededTestRegistry(t))
@@ -105,6 +109,8 @@ func TestRenderingPublisherStampsAppRenderingHeader(t *testing.T) {
 
 // TestRenderingPublisherUnknownVerb is INV-EVENTBUS-3. Registry-miss returns
 // EMIT_UNKNOWN_VERB and does NOT publish.
+//
+// Verifies: INV-EVENTBUS-3
 func TestRenderingPublisherUnknownVerb(t *testing.T) {
 	inner := &fakePublisher{}
 	rp := eventbus.NewRenderingPublisher(inner, core.NewVerbRegistry()) // empty registry
@@ -126,6 +132,8 @@ func TestRenderingPublisherUnknownVerb(t *testing.T) {
 // TestRenderingPublisherSourcePluginVersionForBuiltin is INV-EVENTBUS-10 for builtins.
 // host-owned event types (registered via BootstrapVerbRegistry) MUST have
 // source_plugin == "builtin" and source_plugin_version == "host-<binary version>".
+//
+// Verifies: INV-EVENTBUS-10
 func TestRenderingPublisherSourcePluginVersionForBuiltin(t *testing.T) {
 	r, err := core.BootstrapVerbRegistry("0.4.2-test")
 	require.NoError(t, err)
@@ -152,6 +160,8 @@ func TestRenderingPublisherSourcePluginVersionForBuiltin(t *testing.T) {
 // TestRenderingPublisherSourcePluginVersionForPlugin is INV-EVENTBUS-10 for plugins.
 // Plugin-owned event types MUST have source_plugin = manifest name and
 // source_plugin_version = manifest version.
+//
+// Verifies: INV-EVENTBUS-10
 func TestRenderingPublisherSourcePluginVersionForPlugin(t *testing.T) {
 	r, err := core.BootstrapVerbRegistry("0.4.2-test")
 	require.NoError(t, err)

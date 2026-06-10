@@ -11,6 +11,10 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+// Verifies: INV-PLUGIN-2
+// Verifies: INV-PLUGIN-4
+// Verifies: INV-PLUGIN-5
+// Verifies: INV-PLUGIN-6
 func TestMergePluginConfig(t *testing.T) {
 	schema := map[string]ConfigParam{
 		"vote_window":    {Type: "duration", Default: "168h", Required: true},
@@ -50,6 +54,8 @@ func TestMergePluginConfig(t *testing.T) {
 // INV-PLUGIN-3: both delivery paths (binary gRPC, Lua return-value) receive the
 // same merged map from MergePluginConfig; there is no per-runtime fork of the
 // config computation.
+//
+// Verifies: INV-PLUGIN-3
 func TestMergePluginConfigProducesSingleMergedMap(t *testing.T) {
 	schema := map[string]ConfigParam{
 		"vote_window":    {Type: "duration", Default: "168h", Required: true},

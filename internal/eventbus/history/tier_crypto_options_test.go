@@ -45,6 +45,8 @@ func (*stubAuditEmitter) EmitPluginDecrypt(_ context.Context, _ eventbus.PluginD
 // TestWithHistoryAuthProducesSameColdOptsAsCryptoCold asserts INV-CRYPTO-1:
 // WithHistoryAuth(g, m, em) populates coldOpts identically to calling
 // WithCryptoCold with the matching per-tier constructors.
+//
+// Verifies: INV-CRYPTO-1
 func TestWithHistoryAuthProducesSameColdOptsAsCryptoCold(t *testing.T) {
 	g := &stubAuthGuard{}
 	m := &stubDEKManager{}
@@ -80,6 +82,8 @@ func TestWithHistoryAuthProducesSameColdOptsAsCryptoCold(t *testing.T) {
 // TestWithHistoryAuthProducesSameHotOptsAsCryptoHot asserts INV-CRYPTO-2:
 // WithHistoryAuth(g, m, em) populates hotOpts identically to calling
 // WithCryptoHot with the matching per-tier constructors.
+//
+// Verifies: INV-CRYPTO-2
 func TestWithHistoryAuthProducesSameHotOptsAsCryptoHot(t *testing.T) {
 	g := &stubAuthGuard{}
 	m := &stubDEKManager{}
@@ -116,6 +120,8 @@ func TestWithHistoryAuthProducesSameHotOptsAsCryptoHot(t *testing.T) {
 // the default hot tier, HotTierOption values accumulated via WithCryptoHot are
 // forwarded to newJetStreamHotTier. A sentinel option sets a detectable field
 // on the hot tier; after NewReader returns, the sentinel must be visible.
+//
+// Verifies: INV-CRYPTO-3
 func TestNewReaderForwardsHotOptsToHotTier(t *testing.T) {
 	embedded := eventbustest.New(t)
 
@@ -145,6 +151,8 @@ func TestNewReaderForwardsHotOptsToHotTier(t *testing.T) {
 // TestWithCryptoHotIgnoredWhenCustomHotTier asserts INV-CRYPTO-4:
 // WithCryptoHot options are not forwarded to a custom tier supplied
 // via WithHotTier. The custom tier retains its original fields.
+//
+// Verifies: INV-CRYPTO-4
 func TestWithCryptoHotIgnoredWhenCustomHotTier(t *testing.T) {
 	customTier := &jetStreamHotTier{}
 
@@ -161,6 +169,8 @@ func TestWithCryptoHotIgnoredWhenCustomHotTier(t *testing.T) {
 // NewReader without WithCryptoHot, WithCryptoCold, or WithHistoryAuth
 // must produce a Reader whose hotOpts and coldOpts are empty — the
 // zero-value nil-auth passthrough path.
+//
+// Verifies: INV-CRYPTO-5
 func TestNewReaderDefaultNoAuthOptions(t *testing.T) {
 	embedded := eventbustest.New(t)
 

@@ -21,6 +21,8 @@ import (
 // TestRenderingMetadataGoProtoParity is INV-EVENTBUS-14. The Go struct and
 // proto message MUST stay in sync — round-tripping through both
 // conversion helpers MUST produce equal values.
+//
+// Verifies: INV-EVENTBUS-14
 func TestRenderingMetadataGoProtoParity(t *testing.T) {
 	src := &eventbus.RenderingMetadata{
 		Category:            "communication",

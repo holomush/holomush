@@ -38,6 +38,8 @@ func TestNewStore_ReturnsUsableSessionStore(t *testing.T) {
 // TestNewStore_IsolatedBetweenCalls verifies INV-SESSION-2: each NewStore call
 // returns a store backed by a fresh database. State from a prior call MUST
 // NOT be visible in a subsequent call.
+//
+// Verifies: INV-SESSION-2
 func TestNewStore_IsolatedBetweenCalls(t *testing.T) {
 	ctx := context.Background()
 

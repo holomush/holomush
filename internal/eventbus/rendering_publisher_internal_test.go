@@ -23,6 +23,8 @@ type internalFakePublisher struct{}
 func (internalFakePublisher) Publish(_ context.Context, _ Event) error { return nil }
 
 // TestValidateRenderingRejectsSpeechWithoutLabel exercises INV-EVENTBUS-5.
+//
+// Verifies: INV-EVENTBUS-5
 func TestValidateRenderingRejectsSpeechWithoutLabel(t *testing.T) {
 	rp := NewRenderingPublisher(internalFakePublisher{}, core.NewVerbRegistry())
 
@@ -42,6 +44,8 @@ func TestValidateRenderingRejectsSpeechWithoutLabel(t *testing.T) {
 
 // TestValidateRenderingRejectsUnspecifiedDisplayTarget verifies the enum
 // not_in:[0] check that enforces INV-EVENTBUS-9.
+//
+// Verifies: INV-EVENTBUS-9
 func TestValidateRenderingRejectsUnspecifiedDisplayTarget(t *testing.T) {
 	rp := NewRenderingPublisher(internalFakePublisher{}, core.NewVerbRegistry())
 

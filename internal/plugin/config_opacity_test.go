@@ -20,6 +20,8 @@ import (
 //
 // INV-PLUGIN-1: host opacity — host code MUST NOT reference plugin config key
 // literals; keys are the exclusive concern of each plugin's manifest.
+//
+// Verifies: INV-PLUGIN-1
 func TestHostDoesNotReferencePluginConfigKeys(t *testing.T) {
 	bannedKeys := []string{"vote_window", "cooloff_window", "scheduler_interval"}
 	// Scan each immediate host package directory (non-recursive — subpackages

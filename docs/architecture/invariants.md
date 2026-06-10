@@ -50,11 +50,11 @@ invariants.
 
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
-| `INV-CRYPTO-1` | WithHistoryAuth(g, m, em) MUST produce the same coldOpts as WithCryptoCold with the matching per-tier cold constructors. | `INV-1` | pending |
-| `INV-CRYPTO-2` | WithHistoryAuth(g, m, em) MUST produce the same hotOpts as WithCryptoHot with the matching per-tier hot constructors. | `INV-2` | pending |
-| `INV-CRYPTO-3` | NewReader MUST forward accumulated hotOpts to newJetStreamHotTier when building the default hot tier. | `INV-3` | pending |
-| `INV-CRYPTO-4` | WithCryptoHot MUST be a no-op when WithHotTier is also supplied — crypto options are not forwarded to a custom tier. | `INV-4` | pending |
-| `INV-CRYPTO-5` | newHistoryReader(nil, nil, nil) MUST preserve the existing nil-auth passthrough behavior (no auth option appended). | `INV-6` | pending |
+| `INV-CRYPTO-1` | WithHistoryAuth(g, m, em) MUST produce the same coldOpts as WithCryptoCold with the matching per-tier cold constructors. | `INV-1` | bound |
+| `INV-CRYPTO-2` | WithHistoryAuth(g, m, em) MUST produce the same hotOpts as WithCryptoHot with the matching per-tier hot constructors. | `INV-2` | bound |
+| `INV-CRYPTO-3` | NewReader MUST forward accumulated hotOpts to newJetStreamHotTier when building the default hot tier. | `INV-3` | bound |
+| `INV-CRYPTO-4` | WithCryptoHot MUST be a no-op when WithHotTier is also supplied — crypto options are not forwarded to a custom tier. | `INV-4` | bound |
+| `INV-CRYPTO-5` | newHistoryReader(nil, nil, nil) MUST preserve the existing nil-auth passthrough behavior (no auth option appended). | `INV-6` | bound |
 | `INV-CRYPTO-6` | A subject NOT in a DEK's participant set MUST NOT receive plaintext via fan-out, even when subscribed to the matching subject. | `INV-9` | bound |
 | `INV-CRYPTO-7` | Add(participant) MUST grant immediate read access to all existing DEK history without rotating the DEK. | `INV-12` | bound |
 | `INV-CRYPTO-8` | Rotate(context) MUST preserve the old DEK ciphertext and old DEK record unchanged (holds under Phase 3c soft-delete). | `INV-13` | pending |
@@ -66,7 +66,7 @@ invariants.
 | `INV-CRYPTO-14` | An event whose cleartext metadata, codec, or dek_ref has been altered MUST fail decryption with a tag-mismatch error and MUST NOT yield plaintext. | `INV-25` | pending |
 | `INV-CRYPTO-15` | A recipient denied decryption MUST receive the event with metadata_only=true, empty payload bytes, populated cleartext metadata, and no ciphertext. | `INV-26` | pending |
 | `INV-CRYPTO-16` | dek.Material MUST NOT be passed to any io.Writer, json/gob/proto marshaler, slog/log, fmt.Sprint/Print/Errorf, or any []byte-returning function other than the codec Encode/Decode (gocritic ruleguard-enforced). | `INV-27` | pending |
-| `INV-CRYPTO-17` | Wrap followed by Unwrap with the returned keyID MUST recover the original DEK byte-for-byte. | `INV-30` | pending |
+| `INV-CRYPTO-17` | Wrap followed by Unwrap with the returned keyID MUST recover the original DEK byte-for-byte. | `INV-30` | bound |
 | `INV-CRYPTO-18` | A startup with provider.name=none MUST refuse if any crypto_keys row exists. | `INV-32` | pending |
 | `INV-CRYPTO-19` | A startup with provider X MUST refuse if any crypto_keys row's wrap_provider is not unwrappable by X. | `INV-33` | pending |
 | `INV-CRYPTO-20` | A NoneProvider MUST refuse Wrap and MUST cause emit-time failure for any event with Sensitive=true. | `INV-34` | pending |
@@ -273,12 +273,12 @@ invariants.
 
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
-| `INV-PLUGIN-1` | The host MUST NOT interpret plugin config-key meaning — only declared generic types (no plugin-config key literals in host packages). | `INV-PC-1` | pending |
-| `INV-PLUGIN-2` | Effective config = manifest defaults overlaid by server override, per key; override wins. | `INV-PC-2` | pending |
-| `INV-PLUGIN-3` | The host builds one merged value map per plugin; both binary (plugin_config) and Lua (holomush.config) delivery carry that same map — parity enforced at the host-merge layer, not re-derived per runtime. | `INV-PC-3` | pending |
-| `INV-PLUGIN-4` | A required key absent from both manifest default and override → fail-fast at plugin load (PLUGIN_CONFIG_MISSING_REQUIRED). | `INV-PC-4` | pending |
-| `INV-PLUGIN-5` | A value that does not parse to its declared type → fail-fast at load (PLUGIN_CONFIG_TYPE_INVALID). | `INV-PC-5` | pending |
-| `INV-PLUGIN-6` | An override key not declared in the manifest schema → fail-fast at load (PLUGIN_CONFIG_UNKNOWN_KEY). | `INV-PC-6` | pending |
+| `INV-PLUGIN-1` | The host MUST NOT interpret plugin config-key meaning — only declared generic types (no plugin-config key literals in host packages). | `INV-PC-1` | bound |
+| `INV-PLUGIN-2` | Effective config = manifest defaults overlaid by server override, per key; override wins. | `INV-PC-2` | bound |
+| `INV-PLUGIN-3` | The host builds one merged value map per plugin; both binary (plugin_config) and Lua (holomush.config) delivery carry that same map — parity enforced at the host-merge layer, not re-derived per runtime. | `INV-PC-3` | bound |
+| `INV-PLUGIN-4` | A required key absent from both manifest default and override → fail-fast at plugin load (PLUGIN_CONFIG_MISSING_REQUIRED). | `INV-PC-4` | bound |
+| `INV-PLUGIN-5` | A value that does not parse to its declared type → fail-fast at load (PLUGIN_CONFIG_TYPE_INVALID). | `INV-PC-5` | bound |
+| `INV-PLUGIN-6` | An override key not declared in the manifest schema → fail-fast at load (PLUGIN_CONFIG_UNKNOWN_KEY). | `INV-PC-6` | bound |
 | `INV-PLUGIN-7` | With no override (production), core-scenes resolves vote_window=168h, cooloff_window=30m, scheduler_interval=30s (cfg-zero regression lock). | `INV-PC-7` | pending |
 | `INV-PLUGIN-8` | A binary plugin declaring config: MUST receive Init (and its plugin_config) even with none of requires/provides/storage/crypto.emits — the needsInit gate MUST include len(manifest.Config) > 0. | `INV-PC-8` | pending |
 | `INV-PLUGIN-9` | Every Actor at every layer and kind carries a ULID identity; system sentinels resolve via NameByID after Manager bootstrap. | `INV-W9ML-1` | pending |
@@ -289,7 +289,7 @@ invariants.
 | `INV-PLUGIN-14` | No production-shape-discipline regressions (documentary; verified by spec review). | `INV-W9ML-6` | pending |
 | `INV-PLUGIN-15` | Clean wire format: no legacy-ID references in production code (grep gate over non-doc, non-generated files returns zero matches). | `INV-W9ML-7` | pending |
 | `INV-PLUGIN-16` | Sweep ordering: the retention GC sweep MUST NOT collect a plugin loaded this cycle. | `INV-W9ML-8` | pending |
-| `INV-PLUGIN-17` | No deletion: production code MUST NOT issue DELETE FROM plugins (grep gate returns zero matches outside explicit test fixtures). | `INV-W9ML-9` | pending |
+| `INV-PLUGIN-17` | No deletion: production code MUST NOT issue DELETE FROM plugins (grep gate returns zero matches outside explicit test fixtures). | `INV-W9ML-9` | bound |
 | `INV-PLUGIN-18` | WithInTreePlugins() MUST reuse setup.PluginSubsystem and MUST NOT construct plugins.NewManager directly in the harness. | `INV-WS-1` | pending |
 | `INV-PLUGIN-19` | The whole-system suite MUST assert >=1 cross-plugin-ABAC permit AND >=1 forbid against the real seeded engine. | `INV-WS-2` | pending |
 | `INV-PLUGIN-20` | The whole-system suite MUST NOT be silently skipped in CI: with HOLOMUSH_REQUIRE_PLUGINS set, a missing binary artifact is a hard failure. | `INV-WS-3` | pending |
@@ -319,20 +319,20 @@ invariants.
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
 | `INV-EVENTBUS-1` | The gateway process MUST NOT import internal/world, internal/access, internal/store, internal/plugin, internal/eventbus, internal/auth/service, or internal/command. | `INV-GW-1` | pending |
-| `INV-EVENTBUS-2` | RenderingPublisher.Publish MUST stamp event.Rendering from the verb registry before publishing. | `INV-GW-2` | pending |
-| `INV-EVENTBUS-3` | RenderingPublisher.Publish MUST return EMIT_UNKNOWN_VERB when the verb registry has no entry for event.Type. | `INV-GW-3` | pending |
-| `INV-EVENTBUS-4` | JetStreamPublisher.Publish MUST copy event.Rendering into the eventbusv1.Event.Rendering proto field before proto.Marshal; round-trip publish + JetStream consume MUST preserve Rendering byte-for-byte. | `INV-GW-3a` | pending |
-| `INV-EVENTBUS-5` | RenderingPublisher.Publish MUST return EMIT_VALIDATION_FAILED when protovalidate.Validate(ev) fails on the stamped frame. | `INV-GW-4` | pending |
+| `INV-EVENTBUS-2` | RenderingPublisher.Publish MUST stamp event.Rendering from the verb registry before publishing. | `INV-GW-2` | bound |
+| `INV-EVENTBUS-3` | RenderingPublisher.Publish MUST return EMIT_UNKNOWN_VERB when the verb registry has no entry for event.Type. | `INV-GW-3` | bound |
+| `INV-EVENTBUS-4` | JetStreamPublisher.Publish MUST copy event.Rendering into the eventbusv1.Event.Rendering proto field before proto.Marshal; round-trip publish + JetStream consume MUST preserve Rendering byte-for-byte. | `INV-GW-3a` | bound |
+| `INV-EVENTBUS-5` | RenderingPublisher.Publish MUST return EMIT_VALIDATION_FAILED when protovalidate.Validate(ev) fails on the stamped frame. | `INV-GW-4` | bound |
 | `INV-EVENTBUS-6` | Gateway translation (web + telnet) MUST drop events with Rendering == nil, increment holomush_gateway_dropped_nil_rendering_total, and log an error; MUST NOT render fallback. | `INV-GW-5` | pending |
 | `INV-EVENTBUS-7` | Every row in events_audit MUST have a non-nil rendering sub-message after a full E2E run. | `INV-GW-6` | pending |
 | `INV-EVENTBUS-8` | RenderingMetadata.label MUST be set when format == "speech"; enforced at the proto layer (CEL) and at VerbRegistry.Register. | `INV-GW-7` | pending |
-| `INV-EVENTBUS-9` | RenderingMetadata.display_target MUST NOT be EVENT_CHANNEL_UNSPECIFIED; enforced at the proto layer (enum.not_in: [0]). | `INV-GW-8` | pending |
-| `INV-EVENTBUS-10` | RenderingMetadata.source_plugin and source_plugin_version MUST be populated. For builtins, source_plugin == "builtin" and source_plugin_version == "host-<binary version>". | `INV-GW-9` | pending |
+| `INV-EVENTBUS-9` | RenderingMetadata.display_target MUST NOT be EVENT_CHANNEL_UNSPECIFIED; enforced at the proto layer (enum.not_in: [0]). | `INV-GW-8` | bound |
+| `INV-EVENTBUS-10` | RenderingMetadata.source_plugin and source_plugin_version MUST be populated. For builtins, source_plugin == "builtin" and source_plugin_version == "host-<binary version>". | `INV-GW-9` | bound |
 | `INV-EVENTBUS-11` | The plugin manager MUST require a non-nil VerbRegistry at construction time; a nil registry returns ErrMissingVerbRegistry. | `INV-GW-10` | pending |
 | `INV-EVENTBUS-12` | BootstrapVerbRegistry() MUST be the only public path that returns a registry seeded with host builtins; RegisterBuiltinTypes MUST be unexported. | `INV-GW-11` | pending |
 | `INV-EVENTBUS-13` | The audit projection writer MUST read the App-Rendering NATS header and write its JSON value into events_audit.rendering (NOT NULL); a missing, empty, or malformed JSON header MUST fail the insert. | `INV-GW-13` | pending |
-| `INV-EVENTBUS-14` | The Go-side eventbus.RenderingMetadata struct and proto-side corev1.RenderingMetadata MUST stay in sync — same field set, same names. | `INV-GW-14` | pending |
-| `INV-EVENTBUS-15` | For every event published through RenderingPublisher, the JSON value of the App-Rendering NATS header MUST encode the same RenderingMetadata as the Rendering field inside the proto envelope — the two transports cannot drift. | `INV-GW-15` | pending |
+| `INV-EVENTBUS-14` | The Go-side eventbus.RenderingMetadata struct and proto-side corev1.RenderingMetadata MUST stay in sync — same field set, same names. | `INV-GW-14` | bound |
+| `INV-EVENTBUS-15` | For every event published through RenderingPublisher, the JSON value of the App-Rendering NATS header MUST encode the same RenderingMetadata as the Rendering field inside the proto envelope — the two transports cannot drift. | `INV-GW-15` | bound |
 | `INV-EVENTBUS-16` | corev1.EventChannel and webv1.EventChannel MUST stay in lockstep — same enum values, same names, same numeric assignments. | `INV-GW-16` | pending |
 | `INV-EVENTBUS-17` | Colon-style subjects appear only as an ABAC policy-DSL identifier, never as a pub/sub stream name (enforced executably by INV-EVENTBUS-19 + INV-EVENTBUS-22). Spec-only — no standalone code annotation. | `INV-ROPS-1` | pending |
 | `INV-EVENTBUS-18` | Unclassifiable stream names are rejected at handler entry with INVALID_ARGUMENT, never routed to a default authorization branch. | `INV-ROPS-2` | pending |
@@ -380,7 +380,7 @@ invariants.
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
 | `INV-SESSION-1` | session.Store has exactly one production implementation: store.PostgresSessionStore. | `INV-M-1` | pending |
-| `INV-SESSION-2` | sessiontest.NewStore(t) returns a fresh, isolated store per invocation; cross-test state never leaks. | `INV-M-2` | pending |
+| `INV-SESSION-2` | sessiontest.NewStore(t) returns a fresh, isolated store per invocation; cross-test state never leaks. | `INV-M-2` | bound |
 | `INV-SESSION-3` | PostgresSessionStore.AddConnection rejects invalid client_type (accept terminal/comms_hub/telnet; reject others). | `INV-M-3` | pending |
 | `INV-SESSION-4` | Memstore-removal preserves behavioral coverage: every pre-consolidation test is named in a surviving test's // replaces: chain. | `INV-M-4` | pending |
 

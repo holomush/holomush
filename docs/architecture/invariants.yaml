@@ -734,7 +734,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
     legacy: ["INV-1@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
     summary: "WithHistoryAuth(g, m, em) MUST produce the same coldOpts as WithCryptoCold with the matching per-tier cold constructors."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/history/tier_crypto_options_test.go"
     refs:
       - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-1"}
   - id: INV-CRYPTO-2
@@ -742,7 +744,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
     legacy: ["INV-2@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
     summary: "WithHistoryAuth(g, m, em) MUST produce the same hotOpts as WithCryptoHot with the matching per-tier hot constructors."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/history/tier_crypto_options_test.go"
     refs:
       - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-2"}
   - id: INV-CRYPTO-3
@@ -750,7 +754,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
     legacy: ["INV-3@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
     summary: "NewReader MUST forward accumulated hotOpts to newJetStreamHotTier when building the default hot tier."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/history/tier_crypto_options_test.go"
     refs:
       - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-3"}
   - id: INV-CRYPTO-4
@@ -759,7 +765,9 @@ invariants:
     legacy: ["INV-4@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
     summary: "WithCryptoHot MUST be a no-op when WithHotTier is also supplied — crypto options are not forwarded to a custom
       tier."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/history/tier_crypto_options_test.go"
     refs:
       - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-4"}
   - id: INV-CRYPTO-5
@@ -767,7 +775,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"
     legacy: ["INV-6@docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md"]
     summary: "newHistoryReader(nil, nil, nil) MUST preserve the existing nil-auth passthrough behavior (no auth option appended)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/history/tier_crypto_options_test.go"
     refs:
       - {file: "internal/eventbus/history/tier_crypto_options_test.go", token: "INV-6"}
       - {file: "cmd/holomush/sub_grpc_test.go", token: "INV-6"}
@@ -933,7 +943,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
     legacy: ["INV-30@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
     summary: "Wrap followed by Unwrap with the returned keyID MUST recover the original DEK byte-for-byte."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/crypto/kek/local_aead_test.go"
     refs:
       - {file: "internal/eventbus/crypto/kek/local_aead_test.go", token: "INV-30"}
   - id: INV-CRYPTO-18
@@ -1661,7 +1673,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"
     legacy: ["INV-M-2@docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md"]
     summary: "sessiontest.NewStore(t) returns a fresh, isolated store per invocation; cross-test state never leaks."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/testsupport/sessiontest/store_test.go"
     refs:
       - {file: "internal/testsupport/sessiontest/store_test.go", token: "INV-M-2"}
   - id: INV-SESSION-3
@@ -2257,7 +2271,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"
     legacy: ["INV-GW-2@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
     summary: "RenderingPublisher.Publish MUST stamp event.Rendering from the verb registry before publishing."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/rendering_publisher_test.go"
     refs:
       - {file: "api/proto/holomush/core/v1/core.proto", token: "INV-GW-2"}
       - {file: "internal/eventbus/rendering_publisher_test.go", token: "INV-GW-2"}
@@ -2266,7 +2282,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"
     legacy: ["INV-GW-3@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
     summary: "RenderingPublisher.Publish MUST return EMIT_UNKNOWN_VERB when the verb registry has no entry for event.Type."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/rendering_publisher_test.go"
     refs:
       - {file: "internal/eventbus/rendering_publisher_test.go", token: "INV-GW-3"}
   - id: INV-EVENTBUS-4
@@ -2275,7 +2293,9 @@ invariants:
     legacy: ["INV-GW-3a@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
     summary: "JetStreamPublisher.Publish MUST copy event.Rendering into the eventbusv1.Event.Rendering proto field before
       proto.Marshal; round-trip publish + JetStream consume MUST preserve Rendering byte-for-byte."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/publisher_test.go"
     refs:
       - {file: "internal/eventbus/publisher_test.go", token: "INV-GW-3a"}
   - id: INV-EVENTBUS-5
@@ -2284,7 +2304,9 @@ invariants:
     legacy: ["INV-GW-4@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
     summary: "RenderingPublisher.Publish MUST return EMIT_VALIDATION_FAILED when protovalidate.Validate(ev) fails on the stamped
       frame."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/rendering_publisher_internal_test.go"
     refs:
       - {file: "internal/eventbus/rendering_publisher_internal_test.go", token: "INV-GW-4"}
       - {file: "internal/eventbus/rendering_publisher.go", token: "INV-GW-4"}
@@ -2330,7 +2352,9 @@ invariants:
     legacy: ["INV-GW-8@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
     summary: "RenderingMetadata.display_target MUST NOT be EVENT_CHANNEL_UNSPECIFIED; enforced at the proto layer (enum.not_in:
       [0])."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/rendering_publisher_internal_test.go"
     refs:
       - {file: "internal/eventbus/rendering_publisher_internal_test.go", token: "INV-GW-8"}
   - id: INV-EVENTBUS-10
@@ -2339,7 +2363,9 @@ invariants:
     legacy: ["INV-GW-9@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
     summary: "RenderingMetadata.source_plugin and source_plugin_version MUST be populated. For builtins, source_plugin ==
       \"builtin\" and source_plugin_version == \"host-<binary version>\"."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/rendering_publisher_test.go"
     refs:
       - {file: "internal/eventbus/rendering_publisher_test.go", token: "INV-GW-9"}
   - id: INV-EVENTBUS-11
@@ -2377,7 +2403,9 @@ invariants:
     legacy: ["INV-GW-14@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
     summary: "The Go-side eventbus.RenderingMetadata struct and proto-side corev1.RenderingMetadata MUST stay in sync — same
       field set, same names."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/types_proto_sync_test.go"
     refs:
       - {file: "internal/eventbus/publisher.go", token: "INV-GW-14"}
       - {file: "internal/eventbus/types_proto_sync_test.go", token: "INV-GW-14"}
@@ -2388,7 +2416,9 @@ invariants:
     legacy: ["INV-GW-15@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
     summary: "For every event published through RenderingPublisher, the JSON value of the App-Rendering NATS header MUST encode
       the same RenderingMetadata as the Rendering field inside the proto envelope — the two transports cannot drift."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/rendering_publisher_test.go"
     refs:
       - {file: "internal/eventbus/rendering_publisher_test.go", token: "INV-GW-15"}
       - {file: "internal/eventbus/rendering_publisher.go", token: "INV-GW-15"}
@@ -3253,7 +3283,9 @@ invariants:
     legacy: ["INV-PC-1@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
     summary: "The host MUST NOT interpret plugin config-key meaning — only declared generic types (no plugin-config key literals
       in host packages)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/config_opacity_test.go"
     refs:
       - {file: "internal/plugin/config_opacity_test.go", token: "INV-PC-1"}
   - id: INV-PLUGIN-2
@@ -3261,7 +3293,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
     legacy: ["INV-PC-2@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
     summary: "Effective config = manifest defaults overlaid by server override, per key; override wins."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/config_test.go"
     refs:
       - {file: "internal/plugin/config_test.go", token: "INV-PC-2"}
   - id: INV-PLUGIN-3
@@ -3270,7 +3304,9 @@ invariants:
     legacy: ["INV-PC-3@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
     summary: "The host builds one merged value map per plugin; both binary (plugin_config) and Lua (holomush.config) delivery
       carry that same map — parity enforced at the host-merge layer, not re-derived per runtime."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/config_test.go"
     refs:
       - {file: "internal/plugin/config_test.go", token: "INV-PC-3"}
       - {file: "internal/plugin/lua/host.go", token: "INV-PC-3"}
@@ -3280,7 +3316,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
     legacy: ["INV-PC-4@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
     summary: "A required key absent from both manifest default and override → fail-fast at plugin load (PLUGIN_CONFIG_MISSING_REQUIRED)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/config_test.go"
     refs:
       - {file: "internal/plugin/config.go", token: "INV-PC-4"}
       - {file: "internal/plugin/config_test.go", token: "INV-PC-4"}
@@ -3289,7 +3327,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
     legacy: ["INV-PC-5@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
     summary: "A value that does not parse to its declared type → fail-fast at load (PLUGIN_CONFIG_TYPE_INVALID)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/config_test.go"
     refs:
       - {file: "internal/plugin/config.go", token: "INV-PC-5"}
       - {file: "internal/plugin/config_test.go", token: "INV-PC-5"}
@@ -3298,7 +3338,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
     legacy: ["INV-PC-6@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
     summary: "An override key not declared in the manifest schema → fail-fast at load (PLUGIN_CONFIG_UNKNOWN_KEY)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/config_test.go"
     refs:
       - {file: "internal/plugin/config.go", token: "INV-PC-6"}
       - {file: "internal/plugin/config_test.go", token: "INV-PC-6"}
@@ -3392,7 +3434,9 @@ invariants:
     legacy: ["INV-W9ML-9@docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"]
     summary: "No deletion: production code MUST NOT issue DELETE FROM plugins (grep gate returns zero matches outside explicit
       test fixtures)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/store/no_delete_grep_test.go"
     refs:
       - {file: "internal/plugin/identity_registry.go", token: "INV-W9ML-9"}
       - {file: "internal/store/no_delete_grep_test.go", token: "INV-W9ML-9"}
