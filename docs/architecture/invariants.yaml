@@ -4422,3 +4422,16 @@ invariants:
     refs:
       - {file: "internal/grpc/auth_handlers_test.go", token: "INV-CRYPTO-120"}
       - {file: "internal/auth/guest_service_test.go", token: "INV-CRYPTO-120"}
+  - id: INV-CRYPTO-121
+    scope: INV-CRYPTO
+    origin_spec: "docs/superpowers/specs/2026-06-09-scene-dek-genesis-on-focus-design.md"
+    legacy: []
+    summary: "The first SetSceneFocus on a scene context with no active DEK MUST genesis the DEK, seeded with the focusing
+      reader as a participant; a participant-seeding focus MUST NOT fail solely because no DEK pre-existed. The publisher's
+      scene-context genesis remains participant-empty (the scene genesis asymmetry, publisher.go initialParticipantsForContext,
+      preserved)."
+    binding: bound
+    asserted_by:
+      - "test/integration/crypto/scene_focus_genesis_test.go"
+    refs:
+      - {file: "test/integration/crypto/scene_focus_genesis_test.go", token: "INV-CRYPTO-121"}

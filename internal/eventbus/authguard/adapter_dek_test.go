@@ -37,6 +37,10 @@ func (s *stubDEKManager) Add(_ context.Context, _ dek.ContextID, _ dek.Participa
 	return nil
 }
 
+func (s *stubDEKManager) EnsureParticipant(_ context.Context, _ dek.ContextID, _ dek.Participant) error {
+	return nil
+}
+
 func (s *stubDEKManager) Rotate(_ context.Context, _ dek.ContextID, _ []dek.Participant, _ string) error {
 	return nil
 }

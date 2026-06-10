@@ -39,7 +39,9 @@ func TestWithSceneDEKAdderSetsField(t *testing.T) {
 
 type stubSceneDEKAdder struct{}
 
-func (stubSceneDEKAdder) Add(_ context.Context, _ dek.ContextID, _ dek.Participant) error { return nil }
+func (stubSceneDEKAdder) EnsureParticipant(_ context.Context, _ dek.ContextID, _ dek.Participant) error {
+	return nil
+}
 
 const testSAToken = "test-scene-access-token"
 
@@ -605,23 +607,23 @@ func TestSetSceneFocusJoinsFocusThenSetsConnectionFocus(t *testing.T) {
 		"JoinFocus MUST be called exactly once for a valid participant")
 }
 
-// failingSceneDEKAdder is a sceneDEKAdder whose Add always fails, used to drive
-// the fatal-seed branch of SetSceneFocus.
+// failingSceneDEKAdder is a sceneDEKAdder whose EnsureParticipant always fails,
+// used to drive the fatal-seed branch of SetSceneFocus.
 type failingSceneDEKAdder struct{}
 
-func (failingSceneDEKAdder) Add(_ context.Context, _ dek.ContextID, _ dek.Participant) error {
+func (failingSceneDEKAdder) EnsureParticipant(_ context.Context, _ dek.ContextID, _ dek.Participant) error {
 	return oops.Code("DEK_ADD_FAILED").Errorf("seed failed")
 }
 
-// capturingSceneDEKAdder records the (ctxID, participant) passed to Add so tests
-// can assert the seeded values.
+// capturingSceneDEKAdder records the (ctxID, participant) passed to
+// EnsureParticipant so tests can assert the seeded values.
 type capturingSceneDEKAdder struct {
 	called   bool
 	gotCtxID dek.ContextID
 	gotPart  dek.Participant
 }
 
-func (c *capturingSceneDEKAdder) Add(_ context.Context, ctxID dek.ContextID, p dek.Participant) error {
+func (c *capturingSceneDEKAdder) EnsureParticipant(_ context.Context, ctxID dek.ContextID, p dek.Participant) error {
 	c.called = true
 	c.gotCtxID = ctxID
 	c.gotPart = p
@@ -629,7 +631,7 @@ func (c *capturingSceneDEKAdder) Add(_ context.Context, ctxID dek.ContextID, p d
 }
 
 // TestSetSceneFocusReturnsInternalWhenDEKSeedFails verifies the fatal-seed
-// contract: when a dekAdder is attached and its Add fails, SetSceneFocus returns
+// contract: when a dekAdder is attached and its EnsureParticipant fails, SetSceneFocus returns
 // codes.Internal and MUST NOT proceed to SetConnectionFocus — a focused
 // connection that cannot decrypt would receive blank (metadata-only) poses.
 func TestSetSceneFocusReturnsInternalWhenDEKSeedFails(t *testing.T) {

@@ -940,6 +940,64 @@ var _ = Describe("Manager", func() {
 		Expect(parts).To(HaveLen(2))
 		Expect(parts[1].BindingID).To(Equal("bind-explicit"))
 	})
+
+	// EnsureParticipant is the genesis-safe scene-reader seed: it must leave the
+	// active DEK seeded with exactly p as a participant regardless of the
+	// starting state (no DEK, an empty-genesis DEK, or p already present). The
+	// arrange hook drives each case's heterogeneous setup; the shared act +
+	// assert (GetOrCreate read-back, single participant = p) is identical.
+	DescribeTable(
+		"EnsureParticipant leaves the active DEK seeded with exactly p",
+		func(sceneID string, p dek.Participant, arrange func(ctx context.Context, mgr dek.Manager, ctxID dek.ContextID, p dek.Participant)) {
+			ctx := context.Background()
+			connStr, teardown := newTestPGPool(suiteT)
+			DeferCleanup(teardown)
+			pool, err := pgxpool.New(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(pool.Close)
+
+			provider := newTestProvider(suiteT)
+			cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+			partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+			mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
+			Expect(err).NotTo(HaveOccurred())
+
+			ctxID := dek.ContextID{Type: "scene", ID: sceneID}
+
+			arrange(ctx, mgr, ctxID, p)
+
+			key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
+			Expect(err).NotTo(HaveOccurred())
+			parts, err := mgr.Participants(ctx, key.ID, key.Version)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(parts).To(HaveLen(1), "EnsureParticipant must seed exactly p — no missing/duplicate participant")
+			Expect(parts[0].PlayerID).To(Equal(p.PlayerID))
+		},
+		Entry("genesises the DEK seeded with p when none exists",
+			"01GENESISFOCUS01",
+			dek.Participant{PlayerID: "01PLAYER0000000001", CharacterID: "01CHAR00000000001", AddedVia: "test.first_focus"},
+			func(ctx context.Context, mgr dek.Manager, ctxID dek.ContextID, p dek.Participant) {
+				// No DEK exists yet — bare Add would fail with ErrNoRows; EnsureParticipant must genesis.
+				Expect(mgr.EnsureParticipant(ctx, ctxID, p)).To(Succeed())
+			}),
+		Entry("appends p when an active DEK already exists without p",
+			"01GENESISFOCUS02",
+			dek.Participant{PlayerID: "01PLAYER0000000002", CharacterID: "01CHAR00000000002", AddedVia: "test.focus_after_pose"},
+			func(ctx context.Context, mgr dek.Manager, ctxID dek.ContextID, p dek.Participant) {
+				// Publisher-style empty genesis (no participants), mirroring initialParticipantsForContext nil.
+				_, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mgr.EnsureParticipant(ctx, ctxID, p)).To(Succeed())
+			}),
+		Entry("is an idempotent no-op when p already present",
+			"01GENESISFOCUS03",
+			dek.Participant{PlayerID: "01PLAYER0000000003", CharacterID: "01CHAR00000000003", AddedVia: "test.idempotent"},
+			func(ctx context.Context, mgr dek.Manager, ctxID dek.ContextID, p dek.Participant) {
+				// Two calls must not double-append.
+				Expect(mgr.EnsureParticipant(ctx, ctxID, p)).To(Succeed())
+				Expect(mgr.EnsureParticipant(ctx, ctxID, p)).To(Succeed())
+			}),
+	)
 })
 
 // dekCapturingProvider wraps a real kek.Provider and captures the
