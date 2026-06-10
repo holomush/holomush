@@ -12,6 +12,9 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
+// Compile-time interface check: *setup.ABACSubsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*setup.ABACSubsystem)(nil)
+
 func TestABACSubsystemIDReturnsABAC(t *testing.T) {
 	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
 	assert.Equal(t, lifecycle.SubsystemABAC, sub.ID())
@@ -25,11 +28,6 @@ func TestABACSubsystemDependsOnDatabase(t *testing.T) {
 func TestABACSubsystemEnginePanicsBeforeStart(t *testing.T) {
 	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
 	assert.Panics(t, func() { sub.Engine() })
-}
-
-func TestABACSubsystemImplementsSubsystem(_ *testing.T) {
-	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
-	var _ lifecycle.Subsystem = sub
 }
 
 func TestABACSubsystemAttributeResolverPanicsBeforeStart(t *testing.T) {

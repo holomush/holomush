@@ -360,6 +360,8 @@ func TestActorKindStringCoversAllVariants(t *testing.T) {
 // TestPublisherCopiesRenderingIntoEnvelope is INV-EVENTBUS-4. JetStreamPublisher
 // MUST copy event.Rendering into the proto envelope before Marshal so
 // subscribers see the same Rendering on the read side.
+//
+// Verifies: INV-EVENTBUS-4
 func TestPublisherCopiesRenderingIntoEnvelope(t *testing.T) {
 	embedded := eventbustest.New(t)
 	pub := embedded.Bus.Publisher()

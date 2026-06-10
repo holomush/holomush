@@ -18,6 +18,15 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/codec"
 )
 
+// Compile-time interface checks: production readstream adapter types must satisfy their narrow-seam interfaces.
+var (
+	_ readstream.SessionStore  = (*readstreamSessionStore)(nil)
+	_ readstream.CodecResolver = codecRegistryAdapter{}
+)
+
+// Compile-time interface check: readstream.Handler must satisfy socket.ReadStreamRPCHandler.
+var _ socket.ReadStreamRPCHandler = (*readstream.Handler)(nil)
+
 // TestBuildReadStreamWiringReturnsZeroWhenPoolMissing verifies that the
 // helper degrades gracefully when the database pool is unavailable. The
 // admin socket then falls back to Unimplemented for AdminReadStream and the
@@ -43,25 +52,6 @@ func TestBuildReadStreamWiringReturnsZeroWhenDEKManagerMissing(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, w.Handler)
-}
-
-// TestProductionReadStreamAdaptersSatisfyReadstreamInterfaces is a
-// compile-time guarantee that the production adapter types implement the
-// readstream-layer narrow seams. Surfaces interface-drift refactors before
-// runtime invocation. Mirrors TestProductionAdaptersSatisfySocketInterfaces
-// in crypto_rekey_wiring_test.go.
-func TestProductionReadStreamAdaptersSatisfyReadstreamInterfaces(_ *testing.T) {
-	var _ readstream.SessionStore = (*readstreamSessionStore)(nil)
-	var _ readstream.CodecResolver = codecRegistryAdapter{}
-}
-
-// TestProductionReadStreamHandlerSatisfiesSocketInterface guarantees at
-// compile time that readstream.Handler satisfies socket.ReadStreamRPCHandler
-// (the R.12 stub interface). Without this, AdminSocketSubsystem.Config's
-// ReadStreamHandler field could silently drift away from the handler's
-// actual surface.
-func TestProductionReadStreamHandlerSatisfiesSocketInterface(_ *testing.T) {
-	var _ socket.ReadStreamRPCHandler = (*readstream.Handler)(nil)
 }
 
 // TestCryptoConfigDefaultsPopulatesOperatorReadFields verifies that the

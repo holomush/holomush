@@ -143,8 +143,3 @@ func TestEventStoreAdapter_EventIDGeneration(t *testing.T) {
 	assert.NotEqual(t, capturedIDs[1], capturedIDs[2])
 	assert.NotEqual(t, capturedIDs[0], capturedIDs[2])
 }
-
-func TestEventStoreAdapter_ImplementsEventEmitter(_ *testing.T) {
-	// Compile-time check that EventStoreAdapter implements EventEmitter
-	var _ world.EventEmitter = (*world.EventStoreAdapter)(nil)
-}

@@ -13,6 +13,14 @@ import (
 	socket "github.com/holomush/holomush/internal/admin/socket"
 )
 
+// Compile-time interface checks: production adapter types must implement the socket-layer interfaces.
+var (
+	_ socket.CheckpointStatusReader = (*productionCheckpointReader)(nil)
+	_ socket.RekeyAbortRunner       = (*productionRekeyAbortRunner)(nil)
+	_ socket.OrchestratorRunner     = (*productionOrchestratorRunner)(nil)
+	_ socket.RekeySessionStore      = (*productionRekeySessionAdapter)(nil)
+)
+
 // TestBuildRekeyWiringReturnsZeroWhenKEKProviderMissing verifies that the
 // wiring helper degrades gracefully when KEK is unavailable. The admin
 // socket then falls back to Unimplemented for the Rekey RPCs and the rest
@@ -38,16 +46,6 @@ func TestBuildRekeyWiringReturnsZeroWhenSubjectResolverMissing(t *testing.T) {
 	w, err := buildRekeyWiring(context.Background(), deps)
 	require.NoError(t, err)
 	assert.Nil(t, w.RekeyHandler)
-}
-
-// TestProductionAdaptersSatisfySocketInterfaces is a compile-time guarantee
-// that the production adapter types implement the socket-layer interfaces.
-// Surfaces interface-drift refactors before runtime invocation.
-func TestProductionAdaptersSatisfySocketInterfaces(_ *testing.T) {
-	var _ socket.CheckpointStatusReader = (*productionCheckpointReader)(nil)
-	var _ socket.RekeyAbortRunner = (*productionRekeyAbortRunner)(nil)
-	var _ socket.OrchestratorRunner = (*productionOrchestratorRunner)(nil)
-	var _ socket.RekeySessionStore = (*productionRekeySessionAdapter)(nil)
 }
 
 // TestBuildRekeyWiringRequiresCoordHolder verifies that buildRekeyWiring

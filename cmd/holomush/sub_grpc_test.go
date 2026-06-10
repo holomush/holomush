@@ -43,11 +43,8 @@ func TestPublisherOptionsEmptyWhenRekeyNil(t *testing.T) {
 		"no KEK ⇒ plaintext-only publisher, no DEK option")
 }
 
-// TestGRPCSubsystemImplementsSubsystem is a compile-time interface check.
-func TestGRPCSubsystemImplementsSubsystem(_ *testing.T) {
-	var _ lifecycle.Subsystem = (*grpcSubsystem)(nil)
-	// If this compiles, the interface is satisfied.
-}
+// Compile-time interface check: *grpcSubsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*grpcSubsystem)(nil)
 
 // TestGRPCSubsystemIDReturnsGRPC verifies that ID() returns SubsystemGRPC.
 func TestGRPCSubsystemIDReturnsGRPC(t *testing.T) {

@@ -1620,9 +1620,8 @@ func TestPluginConnReturnsErrorWhenNoConnection(t *testing.T) {
 	assert.Contains(t, err.Error(), "no gRPC connection")
 }
 
-func TestHostImplementsServiceConnProvider(_ *testing.T) {
-	var _ plugins.ServiceConnProvider = (*Host)(nil)
-}
+// Compile-time interface check: *Host must satisfy plugins.ServiceConnProvider.
+var _ plugins.ServiceConnProvider = (*Host)(nil)
 
 // --- QuerySessionStreams tests ---
 
@@ -2136,4 +2135,59 @@ func TestNeedsInitIncludesConfig(t *testing.T) {
 
 	bare := &plugins.Manifest{Name: "bare"}
 	require.False(t, manifestNeedsInit(bare), "manifest with nothing needs no Init")
+}
+
+// TestBinaryHostDeliversCanonicalMergedConfigViaInitRequest asserts that when a
+// binary plugin is loaded with a config override, the InitRequest.Config.PluginConfig
+// field delivered to the plugin equals the canonical plugins.MergePluginConfig
+// output for the same (schema, override) inputs. This proves INV-PLUGIN-3 for the
+// binary (gRPC) delivery path: the host does not re-derive the config per runtime
+// but threads through the shared MergePluginConfig computation.
+//
+// The schema has both a default-bearing key and an overridable key so a fork that
+// ignored either defaults or overrides would produce a different map and fail the
+// assertion.
+//
+// Verifies: INV-PLUGIN-3
+func TestBinaryHostDeliversCanonicalMergedConfigViaInitRequest(t *testing.T) {
+	schema := map[string]plugins.ConfigParam{
+		"vote_window":    {Type: "duration", Default: "168h", Required: true},
+		"cooloff_window": {Type: "duration", Default: "30m"},
+	}
+	override := map[string]string{"cooloff_window": "5s"}
+
+	// Compute the canonical expected output via MergePluginConfig directly.
+	want, err := plugins.MergePluginConfig(schema, override)
+	require.NoError(t, err, "MergePluginConfig must not error on valid inputs")
+
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory, WithConfigOverrides(map[string]map[string]string{
+		"parity-plugin": override,
+	}))
+
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(filepath.Join(tmpDir, "parity-plugin")))
+
+	manifest := &plugins.Manifest{
+		Name:    "parity-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		Config:  schema,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "parity-plugin",
+		},
+	}
+
+	require.NoError(t, host.Load(context.Background(), manifest, tmpDir))
+
+	require.True(t, grpcClient.initCalled, "Init must be called for a config-bearing plugin")
+	require.NotNil(t, grpcClient.initReq, "InitRequest must be set")
+	require.NotNil(t, grpcClient.initReq.Config, "ServiceConfig must be set")
+	require.Equal(t, want, grpcClient.initReq.Config.PluginConfig,
+		"binary host's InitRequest.Config.PluginConfig must equal the canonical "+
+			"MergePluginConfig output (INV-PLUGIN-3: no per-runtime config fork)")
 }

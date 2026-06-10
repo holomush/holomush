@@ -16,6 +16,9 @@ import (
 	"github.com/holomush/holomush/internal/settings"
 )
 
+// Compile-time interface check: *RepoPlayerSettingsStore must satisfy settings.PlayerSettingsStore.
+var _ settings.PlayerSettingsStore = settings.NewPlayerSettingsStore(newMockPlayerPrefsReader())
+
 // TestRepoPlayerSettingsStoreSetStringIsUnsupported proves the store-level
 // SetString on a repo-backed player store fails with an explicit error instead
 // of panicking on a nil reader. Host-key writes are unsupported on the
@@ -341,10 +344,6 @@ func TestPlayerSettingsIntNReturnsFalseForFractionalJSONNumber(t *testing.T) {
 	s := store.For(ctx, pid)
 	_, ok := s.IntN(ctx, "scenes.focus.count")
 	assert.False(t, ok)
-}
-
-func TestPlayerSettingsStoreConcreteTypeSatisfiesInterface(_ *testing.T) {
-	var _ settings.PlayerSettingsStore = settings.NewPlayerSettingsStore(newMockPlayerPrefsReader())
 }
 
 func TestPlayerSettingsStringSliceNReturnsNativeJSONArray(t *testing.T) {

@@ -12,6 +12,9 @@ import (
 	"github.com/holomush/holomush/internal/world/setup"
 )
 
+// Compile-time interface check: *setup.WorldSubsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*setup.WorldSubsystem)(nil)
+
 func TestWorldSubsystemIDReturnsWorld(t *testing.T) {
 	sub := setup.NewWorldSubsystem(setup.WorldSubsystemConfig{})
 	assert.Equal(t, lifecycle.SubsystemWorld, sub.ID())
@@ -25,9 +28,4 @@ func TestWorldSubsystemDependsOnDatabaseAndABAC(t *testing.T) {
 func TestWorldSubsystemServicePanicsBeforeStart(t *testing.T) {
 	sub := setup.NewWorldSubsystem(setup.WorldSubsystemConfig{})
 	assert.Panics(t, func() { sub.Service() })
-}
-
-func TestWorldSubsystemImplementsSubsystem(_ *testing.T) {
-	sub := setup.NewWorldSubsystem(setup.WorldSubsystemConfig{})
-	var _ lifecycle.Subsystem = sub
 }

@@ -28,9 +28,8 @@ type stubIdentityRegistry struct{}
 func (stubIdentityRegistry) NameByID(ulid.ULID) (string, bool) { return "", false }
 func (stubIdentityRegistry) IDByName(string) (ulid.ULID, bool) { return ulid.ULID{}, false }
 
-func TestIdentityRegistryInterfaceIsSatisfiable(_ *testing.T) {
-	var _ IdentityRegistry = stubIdentityRegistry{}
-}
+// Compile-time interface check: stubIdentityRegistry must satisfy IdentityRegistry.
+var _ IdentityRegistry = stubIdentityRegistry{}
 
 // stubPluginRepo lets us drive Manager bootstrap without Postgres.
 type stubPluginRepo struct {

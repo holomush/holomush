@@ -16,6 +16,8 @@ import (
 // never DELETEd. SweepInactive sets gc_at instead. This static guard
 // catches future changes that would reintroduce DELETE.
 //
+// Verifies: INV-PLUGIN-17
+//
 // Uses filepath.WalkDir (not `git grep`) so the search is VCS-agnostic —
 // works under both git and jj-colocated worktrees, and reliably surfaces
 // rather than fail-opening if the underlying VCS query errors.

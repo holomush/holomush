@@ -9,6 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Compile-time interface checks: both theme types must satisfy Theme.
+var (
+	_ Theme = (*StarTheme)(nil)
+	_ Theme = (*GemstoneElementTheme)(nil)
+)
+
 func TestTheme_Name(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -52,22 +58,6 @@ func TestTheme_Generate(t *testing.T) {
 					assert.NotEmpty(t, second)
 				}
 			}
-		})
-	}
-}
-
-func TestTheme_ImplementsInterface(t *testing.T) {
-	tests := []struct {
-		name  string
-		theme Theme
-	}{
-		{"star theme", (*StarTheme)(nil)},
-		{"gemstone element theme", (*GemstoneElementTheme)(nil)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Implements(t, (*Theme)(nil), tt.theme)
 		})
 	}
 }

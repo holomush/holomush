@@ -59,7 +59,7 @@ func setupSessionRepo(t *testing.T, ps *auth.PlayerSession) *authmocks.MockPlaye
 
 // --- AuthenticatePlayer ---
 
-func TestAuthenticatePlayer_Success(t *testing.T) {
+func TestAuthenticatePlayerReturnsTokenAndCharactersOnValidCredentials(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -196,152 +196,265 @@ func TestAuthenticatePlayer_ErrorPaths(t *testing.T) {
 
 // --- SelectCharacter ---
 
-func TestSelectCharacter_Success(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	sessionID := core.NewULID()
+// TestSelectCharacter covers the core SelectCharacter RPC scenarios: fresh
+// session creation, error paths (invalid session/character), reattach
+// (detached session found), and the LocationArrivedAt invariants.
+//
+// replaces: TestSelectCharacter_Success, TestSelectCharacter_InvalidSession,
+//
+//	TestSelectCharacter_InvalidCharacter, TestSelectCharacter_Reattach,
+//	TestSelectCharacter_FreshSession_SetsLocationArrivedAt,
+//	TestSelectCharacter_Reattach_PreservesLocationArrivedAt
+func TestSelectCharacter(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, ctx context.Context)
+	}{
+		{
+			name: "fresh session created returns success with new session id and character name",
+			run: func(t *testing.T, ctx context.Context) {
+				playerID := ulid.Make()
+				charID := ulid.Make()
+				locID := ulid.Make()
+				sessionID := core.NewULID()
 
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				charRepo := authmocks.NewMockCharacterRepository(t)
+				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+					Return([]*world.Character{
+						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+					}, nil)
+				sessionStore, pool := sessiontest.NewStoreWithPool(t)
+				sessiontest.SeedPlayerSession(t, pool, ps)
 
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
+				server := &CoreServer{
+					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					sessionStore:      sessionStore,
+					playerSessionRepo: sessionRepo,
+					charRepo:          charRepo,
+					newSessionID:      func() ulid.ULID { return sessionID },
+				}
+				resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+					PlayerSessionToken: validToken,
+					CharacterId:        charID.String(),
+				})
+				require.NoError(t, err)
+				assert.True(t, resp.Success)
+				assert.Equal(t, sessionID.String(), resp.SessionId)
+				assert.Equal(t, "Alice", resp.CharacterName)
+				assert.False(t, resp.Reattached)
+			},
+		},
+		{
+			name: "invalid session token returns success=false with invalid or expired message",
+			run: func(t *testing.T, ctx context.Context) {
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				tokenHash := auth.HashSessionToken("bad-token")
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
+					Return(nil, auth.ErrNotFound)
 
-	sessionStore, pool := sessiontest.NewStoreWithPool(t)
-	sessiontest.SeedPlayerSession(t, pool, ps)
+				server := &CoreServer{
+					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					sessionStore:      sessiontest.NewStore(t),
+					playerSessionRepo: sessionRepo,
+				}
+				resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+					PlayerSessionToken: "bad-token",
+					CharacterId:        ulid.Make().String(),
+				})
+				require.NoError(t, err)
+				assert.False(t, resp.Success)
+				assert.Contains(t, resp.ErrorMessage, "invalid or expired")
+			},
+		},
+		{
+			name: "character not owned by player returns success=false with does not belong message",
+			run: func(t *testing.T, ctx context.Context) {
+				playerID := ulid.Make()
+				charID := ulid.Make()
 
-	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return sessionID },
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				charRepo := authmocks.NewMockCharacterRepository(t)
+				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+					Return([]*world.Character{
+						{ID: ulid.Make(), PlayerID: playerID, Name: "Other"},
+					}, nil)
+
+				server := &CoreServer{
+					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					sessionStore:      sessiontest.NewStore(t),
+					playerSessionRepo: sessionRepo,
+					charRepo:          charRepo,
+				}
+				resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+					PlayerSessionToken: validToken,
+					CharacterId:        charID.String(),
+				})
+				require.NoError(t, err)
+				assert.False(t, resp.Success)
+				assert.Contains(t, resp.ErrorMessage, "does not belong")
+			},
+		},
+		{
+			name: "detached session found returns success with existing session id and reattached=true",
+			run: func(t *testing.T, ctx context.Context) {
+				playerID := ulid.Make()
+				charID := ulid.Make()
+				locID := ulid.Make()
+				existingSessionID := core.NewULID().String()
+
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				charRepo := authmocks.NewMockCharacterRepository(t)
+				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+					Return([]*world.Character{
+						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+					}, nil)
+
+				sessionStore := sessiontest.NewStore(t)
+				require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
+					ID:            existingSessionID,
+					CharacterID:   charID,
+					CharacterName: "Alice",
+					LocationID:    locID,
+					Status:        session.StatusDetached,
+					CreatedAt:     time.Now(),
+					UpdatedAt:     time.Now(),
+				}))
+
+				server := &CoreServer{
+					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					sessionStore:      sessionStore,
+					playerSessionRepo: sessionRepo,
+					charRepo:          charRepo,
+					newSessionID:      func() ulid.ULID { return core.NewULID() },
+				}
+				resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+					PlayerSessionToken: validToken,
+					CharacterId:        charID.String(),
+				})
+				require.NoError(t, err)
+				assert.True(t, resp.Success)
+				assert.Equal(t, existingSessionID, resp.SessionId)
+				assert.True(t, resp.Reattached)
+			},
+		},
+		{
+			name: "fresh session sets location arrived at to a non-zero time not before test start",
+			run: func(t *testing.T, ctx context.Context) {
+				playerID := ulid.Make()
+				charID := ulid.Make()
+				locID := ulid.Make()
+				sessionID := core.NewULID()
+
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				charRepo := authmocks.NewMockCharacterRepository(t)
+				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+					Return([]*world.Character{
+						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+					}, nil)
+
+				sessionStore, pool := sessiontest.NewStoreWithPool(t)
+				sessiontest.SeedPlayerSession(t, pool, ps)
+
+				before := time.Now()
+				server := &CoreServer{
+					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					sessionStore:      sessionStore,
+					playerSessionRepo: sessionRepo,
+					charRepo:          charRepo,
+					newSessionID:      func() ulid.ULID { return sessionID },
+				}
+				resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+					PlayerSessionToken: validToken,
+					CharacterId:        charID.String(),
+				})
+				require.NoError(t, err)
+				require.True(t, resp.Success)
+				assert.False(t, resp.Reattached)
+
+				stored, err := sessionStore.Get(ctx, sessionID.String())
+				require.NoError(t, err)
+				assert.False(t, stored.LocationArrivedAt.IsZero(),
+					"LocationArrivedAt must be set on fresh session create")
+				assert.False(t, stored.LocationArrivedAt.Before(before),
+					"LocationArrivedAt must not be before the test started")
+			},
+		},
+		{
+			// Session-row-as-continuity rule (spec §5 row 2 + INV-PRIVACY-3, amended
+			// 2026-05-18): reattach within TTL is the same session continuing — its
+			// LocationArrivedAt MUST NOT be advanced. The original floor is preserved
+			// so the player's own pre-disconnect scrollback survives page reload,
+			// WiFi blip, and tmux-style telnet reattach.
+			name: "reattach preserves original location arrived at and flips status back to active",
+			run: func(t *testing.T, ctx context.Context) {
+				playerID := ulid.Make()
+				charID := ulid.Make()
+				locID := ulid.Make()
+				existingSessionID := core.NewULID().String()
+
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				charRepo := authmocks.NewMockCharacterRepository(t)
+				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+					Return([]*world.Character{
+						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+					}, nil)
+
+				originalArrival := time.Now().Add(-2 * time.Hour)
+				sessionStore := sessiontest.NewStore(t)
+				require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
+					ID:                existingSessionID,
+					CharacterID:       charID,
+					CharacterName:     "Alice",
+					LocationID:        locID,
+					Status:            session.StatusDetached,
+					LocationArrivedAt: originalArrival,
+					CreatedAt:         originalArrival,
+					UpdatedAt:         originalArrival,
+				}))
+
+				server := &CoreServer{
+					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					sessionStore:      sessionStore,
+					playerSessionRepo: sessionRepo,
+					charRepo:          charRepo,
+					newSessionID:      func() ulid.ULID { return core.NewULID() },
+				}
+				resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+					PlayerSessionToken: validToken,
+					CharacterId:        charID.String(),
+				})
+				require.NoError(t, err)
+				require.True(t, resp.Success)
+				assert.True(t, resp.Reattached)
+
+				stored, err := sessionStore.Get(ctx, existingSessionID)
+				require.NoError(t, err)
+				assert.True(t, stored.LocationArrivedAt.Equal(originalArrival),
+					"LocationArrivedAt MUST be unchanged on reattach (spec §5 row 2, INV-PRIVACY-3); got %v, want %v",
+					stored.LocationArrivedAt, originalArrival)
+				assert.Equal(t, session.StatusActive, stored.Status,
+					"reattach MUST flip status back to Active")
+			},
+		},
 	}
 
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-	})
-	require.NoError(t, err)
-
-	assert.True(t, resp.Success)
-	assert.Equal(t, sessionID.String(), resp.SessionId)
-	assert.Equal(t, "Alice", resp.CharacterName)
-	assert.False(t, resp.Reattached)
-}
-
-func TestSelectCharacter_InvalidSession(t *testing.T) {
-	ctx := context.Background()
-
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	tokenHash := auth.HashSessionToken("bad-token")
-	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
-		Return(nil, auth.ErrNotFound)
-
-	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
-
-		sessionStore:      sessiontest.NewStore(t),
-		playerSessionRepo: sessionRepo,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.run(t, context.Background())
+		})
 	}
-
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: "bad-token",
-		CharacterId:        ulid.Make().String(),
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "invalid or expired")
 }
 
-func TestSelectCharacter_InvalidCharacter(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			// Character with a different ID — the requested one won't match.
-			{ID: ulid.Make(), PlayerID: playerID, Name: "Other"},
-		}, nil)
-
-	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
-
-		sessionStore:      sessiontest.NewStore(t),
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-	}
-
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-	})
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success)
-	assert.Contains(t, resp.ErrorMessage, "does not belong")
-}
-
-func TestSelectCharacter_Reattach(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	existingSessionID := core.NewULID().String()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
-
-	sessionStore := sessiontest.NewStore(t)
-	// Pre-populate a detached session for this character.
-	require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
-		ID:            existingSessionID,
-		CharacterID:   charID,
-		CharacterName: "Alice",
-		LocationID:    locID,
-		Status:        session.StatusDetached,
-
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}))
-
-	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return core.NewULID() },
-	}
-
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-	})
-	require.NoError(t, err)
-
-	assert.True(t, resp.Success)
-	assert.Equal(t, existingSessionID, resp.SessionId)
-	assert.True(t, resp.Reattached)
-}
-
-func TestSelectCharacter_SameTokenTwice(t *testing.T) {
+// TestSelectCharacterReattachesOnSecondCallWithSameToken asserts that calling
+// SelectCharacter twice with the same token causes the second call to reattach
+// to the session created by the first call.
+func TestSelectCharacterReattachesOnSecondCallWithSameToken(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -398,113 +511,9 @@ func TestSelectCharacter_SameTokenTwice(t *testing.T) {
 	assert.True(t, resp2.Reattached)
 }
 
-func TestSelectCharacter_FreshSession_SetsLocationArrivedAt(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	sessionID := core.NewULID()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
-
-	sessionStore, pool := sessiontest.NewStoreWithPool(t)
-	sessiontest.SeedPlayerSession(t, pool, ps)
-
-	before := time.Now()
-	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return sessionID },
-	}
-
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
-	assert.False(t, resp.Reattached)
-
-	stored, err := sessionStore.Get(ctx, sessionID.String())
-	require.NoError(t, err)
-	assert.False(t, stored.LocationArrivedAt.IsZero(),
-		"LocationArrivedAt must be set on fresh session create")
-	assert.False(t, stored.LocationArrivedAt.Before(before),
-		"LocationArrivedAt must not be before the test started")
-}
-
-// TestSelectCharacter_Reattach_PreservesLocationArrivedAt asserts the
-// session-row-as-continuity rule (spec §5 row 2 + INV-PRIVACY-3, amended
-// 2026-05-18): reattach within TTL is the same session continuing — its
-// LocationArrivedAt MUST NOT be advanced. The original floor is preserved
-// so the player's own pre-disconnect scrollback survives page reload,
-// WiFi blip, and tmux-style telnet reattach.
-func TestSelectCharacter_Reattach_PreservesLocationArrivedAt(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	existingSessionID := core.NewULID().String()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
-
-	originalArrival := time.Now().Add(-2 * time.Hour)
-	sessionStore := sessiontest.NewStore(t)
-	require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
-		ID:                existingSessionID,
-		CharacterID:       charID,
-		CharacterName:     "Alice",
-		LocationID:        locID,
-		Status:            session.StatusDetached,
-		LocationArrivedAt: originalArrival,
-		CreatedAt:         originalArrival,
-		UpdatedAt:         originalArrival,
-	}))
-
-	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return core.NewULID() },
-	}
-
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
-	assert.True(t, resp.Reattached)
-
-	stored, err := sessionStore.Get(ctx, existingSessionID)
-	require.NoError(t, err)
-	assert.True(t, stored.LocationArrivedAt.Equal(originalArrival),
-		"LocationArrivedAt MUST be unchanged on reattach (spec §5 row 2, INV-PRIVACY-3); got %v, want %v",
-		stored.LocationArrivedAt, originalArrival)
-	assert.Equal(t, session.StatusActive, stored.Status,
-		"reattach MUST flip status back to Active")
-}
-
 // --- CreatePlayer ---
 
-func TestCreatePlayer_Success(t *testing.T) {
+func TestCreatePlayerReturnsSessionTokenForNewAccount(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	sessionID := ulid.Make()
@@ -651,7 +660,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 
 // --- CreateCharacter ---
 
-func TestCreateCharacter_Success(t *testing.T) {
+func TestCreateCharacterReturnsCharacterIDAndNameOnSuccess(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -908,7 +917,7 @@ func TestListCharacters_ErrorPaths(t *testing.T) {
 	}
 }
 
-func TestListCharacters_Success(t *testing.T) {
+func TestListCharactersReturnsCharactersWithoutLocationWhenNoWorldQuerier(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -1058,7 +1067,7 @@ func TestRequestPasswordReset_NotConfigured(t *testing.T) {
 
 // --- ConfirmPasswordReset ---
 
-func TestConfirmPasswordReset_Success(t *testing.T) {
+func TestConfirmPasswordResetReturnsSuccessForValidToken(t *testing.T) {
 	ctx := context.Background()
 
 	resetSvc := newMockResetService(t)
@@ -1272,7 +1281,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 	assert.True(t, authSvc.logoutCalled, "authService.Logout was not called")
 }
 
-func TestLogout_Success(t *testing.T) {
+func TestLogoutHashesTokenAndCallsAuthServiceLogout(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	rawToken := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567"
@@ -2551,247 +2560,157 @@ func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
 		"GuestCharacterCreatedAt must match character.CreatedAt")
 }
 
-// TestSelectCharacterSkipsArriveForCommsHubFreshSession asserts that a fresh
-// session created with ClientType "comms_hub" does not emit a grid arrive event,
-// while still creating the session and returning success.
-func TestSelectCharacterSkipsArriveForCommsHubFreshSession(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	sessionID := core.NewULID()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
-
-	sessionStore, pool := sessiontest.NewStoreWithPool(t)
-	sessiontest.SeedPlayerSession(t, pool, ps)
-
-	eventStore := coretest.NewMemoryEventStore()
-	server := &CoreServer{
-		engine:            core.NewEngine(eventStore),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return sessionID },
+// TestSelectCharacterArriveEventEmission asserts the arrive-event suppression
+// rule: only "comms_hub" suppresses the arrive event; empty ClientType (legacy)
+// and "terminal" both emit it.
+//
+// replaces: TestSelectCharacterSkipsArriveForCommsHubFreshSession,
+//
+//	TestSelectCharacterStillEmitsArriveByDefault,
+//	TestSelectCharacterStillEmitsArriveForTerminalClientType
+func TestSelectCharacterArriveEventEmission(t *testing.T) {
+	tests := []struct {
+		name            string
+		clientType      string
+		wantArriveCount int
+		wantArriveEmit  string // description for assertion message
+	}{
+		{
+			name:            "comms_hub client type suppresses arrive event and still creates session",
+			clientType:      "comms_hub",
+			wantArriveCount: 0,
+			wantArriveEmit:  "comms_hub must not emit arrive event",
+		},
+		{
+			name:            "empty client type emits arrive event (legacy behavior)",
+			clientType:      "",
+			wantArriveCount: 1,
+			wantArriveEmit:  "empty client_type must emit exactly one arrive event",
+		},
+		{
+			name:            "terminal client type emits arrive event (only comms_hub suppresses)",
+			clientType:      "terminal",
+			wantArriveCount: 1,
+			wantArriveEmit:  "terminal client_type must emit exactly one arrive event",
+		},
 	}
 
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-		ClientType:         "comms_hub",
-	})
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			playerID := ulid.Make()
+			charID := ulid.Make()
+			locID := ulid.Make()
+			sessionID := core.NewULID()
 
-	// Session is still created.
-	assert.True(t, resp.Success)
-	assert.Equal(t, sessionID.String(), resp.SessionId)
-	assert.False(t, resp.Reattached)
+			ps := makePlayerSession(playerID)
+			sessionRepo := setupSessionRepo(t, ps)
+			charRepo := authmocks.NewMockCharacterRepository(t)
+			charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+				Return([]*world.Character{
+					{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+				}, nil)
 
-	// No arrive event was emitted to the location stream.
-	events, err := eventStore.Replay(ctx, "location."+locID.String(), ulid.ULID{}, 100)
-	require.NoError(t, err)
-	for _, e := range events {
-		assert.NotEqual(t, core.EventTypeArrive, e.Type,
-			"comms_hub session must not emit arrive event")
+			sessionStore, pool := sessiontest.NewStoreWithPool(t)
+			sessiontest.SeedPlayerSession(t, pool, ps)
+
+			eventStore := coretest.NewMemoryEventStore()
+			server := &CoreServer{
+				engine:            core.NewEngine(eventStore),
+				sessionStore:      sessionStore,
+				playerSessionRepo: sessionRepo,
+				charRepo:          charRepo,
+				newSessionID:      func() ulid.ULID { return sessionID },
+			}
+
+			resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+				PlayerSessionToken: validToken,
+				CharacterId:        charID.String(),
+				ClientType:         tt.clientType,
+			})
+			require.NoError(t, err)
+			require.True(t, resp.Success)
+			assert.False(t, resp.Reattached)
+
+			events, err := eventStore.Replay(ctx, "location."+locID.String(), ulid.ULID{}, 100)
+			require.NoError(t, err)
+			var arriveCount int
+			for _, e := range events {
+				if e.Type == core.EventTypeArrive {
+					arriveCount++
+				}
+			}
+			assert.Equal(t, tt.wantArriveCount, arriveCount, tt.wantArriveEmit)
+		})
 	}
 }
 
-// TestSelectCharacterStillEmitsArriveByDefault asserts that a fresh session
-// created with an empty ClientType emits a grid arrive event (legacy behavior).
-func TestSelectCharacterStillEmitsArriveByDefault(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	sessionID := core.NewULID()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
-
-	sessionStore, pool := sessiontest.NewStoreWithPool(t)
-	sessiontest.SeedPlayerSession(t, pool, ps)
-
-	eventStore := coretest.NewMemoryEventStore()
-	server := &CoreServer{
-		engine:            core.NewEngine(eventStore),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return sessionID },
+// TestSelectCharacterGridPresent asserts the GridPresent field rule
+// (holomush-5rh.8.9): comms_hub sessions are grid-absent; terminal sessions
+// are grid-present. The EXISTS predicate in ListActiveByLocation is the
+// authoritative presence gate; GridPresent is a consistency field.
+//
+// replaces: TestSelectCharacterCommsHubFreshSessionHasGridPresentFalse,
+//
+//	TestSelectCharacterTerminalFreshSessionHasGridPresentTrue
+func TestSelectCharacterGridPresent(t *testing.T) {
+	tests := []struct {
+		name            string
+		clientType      string
+		wantGridPresent bool
+	}{
+		{
+			name:            "comms_hub fresh session has grid present false",
+			clientType:      "comms_hub",
+			wantGridPresent: false,
+		},
+		{
+			name:            "terminal fresh session has grid present true",
+			clientType:      "terminal",
+			wantGridPresent: true,
+		},
 	}
 
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-		// ClientType deliberately empty — legacy behavior.
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
-	assert.False(t, resp.Reattached)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			playerID := ulid.Make()
+			charID := ulid.Make()
+			locID := ulid.Make()
+			sessionID := core.NewULID()
 
-	// Arrive event must be present on the location stream.
-	events, err := eventStore.Replay(ctx, "location."+locID.String(), ulid.ULID{}, 100)
-	require.NoError(t, err)
-	var arriveCount int
-	for _, e := range events {
-		if e.Type == core.EventTypeArrive {
-			arriveCount++
-		}
+			ps := makePlayerSession(playerID)
+			sessionRepo := setupSessionRepo(t, ps)
+			charRepo := authmocks.NewMockCharacterRepository(t)
+			charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+				Return([]*world.Character{
+					{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+				}, nil)
+
+			sessionStore, pool := sessiontest.NewStoreWithPool(t)
+			sessiontest.SeedPlayerSession(t, pool, ps)
+
+			server := &CoreServer{
+				engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+				sessionStore:      sessionStore,
+				playerSessionRepo: sessionRepo,
+				charRepo:          charRepo,
+				newSessionID:      func() ulid.ULID { return sessionID },
+			}
+
+			resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+				PlayerSessionToken: validToken,
+				CharacterId:        charID.String(),
+				ClientType:         tt.clientType,
+			})
+			require.NoError(t, err)
+			require.True(t, resp.Success)
+
+			info, err := sessionStore.Get(ctx, sessionID.String())
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantGridPresent, info.GridPresent,
+				"%s fresh session MUST have GridPresent=%v (holomush-5rh.8.9)",
+				tt.clientType, tt.wantGridPresent)
+		})
 	}
-	assert.Equal(t, 1, arriveCount, "empty client_type must emit exactly one arrive event")
-}
-
-// TestSelectCharacterStillEmitsArriveForTerminalClientType asserts that a fresh
-// session created with ClientType "terminal" still emits a grid arrive event
-// (only "comms_hub" suppresses arrive).
-func TestSelectCharacterStillEmitsArriveForTerminalClientType(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	sessionID := core.NewULID()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
-
-	sessionStore, pool := sessiontest.NewStoreWithPool(t)
-	sessiontest.SeedPlayerSession(t, pool, ps)
-
-	eventStore := coretest.NewMemoryEventStore()
-	server := &CoreServer{
-		engine:            core.NewEngine(eventStore),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return sessionID },
-	}
-
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-		ClientType:         "terminal",
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
-	assert.False(t, resp.Reattached)
-
-	// Arrive event must be present for terminal client type.
-	events, err := eventStore.Replay(ctx, "location."+locID.String(), ulid.ULID{}, 100)
-	require.NoError(t, err)
-	var arriveCount int
-	for _, e := range events {
-		if e.Type == core.EventTypeArrive {
-			arriveCount++
-		}
-	}
-	assert.Equal(t, 1, arriveCount, "terminal client_type must emit exactly one arrive event")
-}
-
-// TestSelectCharacterCommsHubFreshSessionHasGridPresentFalse asserts that a
-// fresh session created with ClientType "comms_hub" has GridPresent=false.
-// The EXISTS predicate in ListActiveByLocation is the authoritative presence
-// gate; GridPresent=false here is consistency-only (holomush-5rh.8.9).
-func TestSelectCharacterCommsHubFreshSessionHasGridPresentFalse(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	sessionID := core.NewULID()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
-
-	sessionStore, pool := sessiontest.NewStoreWithPool(t)
-	sessiontest.SeedPlayerSession(t, pool, ps)
-
-	eventStore := coretest.NewMemoryEventStore()
-	server := &CoreServer{
-		engine:            core.NewEngine(eventStore),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return sessionID },
-	}
-
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-		ClientType:         "comms_hub",
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
-
-	info, err := sessionStore.Get(ctx, sessionID.String())
-	require.NoError(t, err)
-	assert.False(t, info.GridPresent,
-		"comms_hub fresh session MUST have GridPresent=false (holomush-5rh.8.9)")
-}
-
-// TestSelectCharacterTerminalFreshSessionHasGridPresentTrue asserts that a
-// fresh session created with ClientType "terminal" has GridPresent=true.
-func TestSelectCharacterTerminalFreshSessionHasGridPresentTrue(t *testing.T) {
-	ctx := context.Background()
-	playerID := ulid.Make()
-	charID := ulid.Make()
-	locID := ulid.Make()
-	sessionID := core.NewULID()
-
-	ps := makePlayerSession(playerID)
-	sessionRepo := setupSessionRepo(t, ps)
-
-	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
-		}, nil)
-
-	sessionStore, pool := sessiontest.NewStoreWithPool(t)
-	sessiontest.SeedPlayerSession(t, pool, ps)
-
-	eventStore := coretest.NewMemoryEventStore()
-	server := &CoreServer{
-		engine:            core.NewEngine(eventStore),
-		sessionStore:      sessionStore,
-		playerSessionRepo: sessionRepo,
-		charRepo:          charRepo,
-		newSessionID:      func() ulid.ULID { return sessionID },
-	}
-
-	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: validToken,
-		CharacterId:        charID.String(),
-		ClientType:         "terminal",
-	})
-	require.NoError(t, err)
-	require.True(t, resp.Success)
-
-	info, err := sessionStore.Get(ctx, sessionID.String())
-	require.NoError(t, err)
-	assert.True(t, info.GridPresent,
-		"terminal fresh session MUST have GridPresent=true (holomush-5rh.8.9)")
 }

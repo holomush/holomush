@@ -14,6 +14,9 @@ import (
 	"github.com/holomush/holomush/internal/settings"
 )
 
+// Compile-time interface check: NewNullCharacterSettingsStore must satisfy CharacterSettingsStore.
+var _ settings.CharacterSettingsStore = settings.NewNullCharacterSettingsStore()
+
 // errCharacterRepo is a CharacterRepository whose load always fails, used to
 // exercise the fail-closed degrade path.
 type errCharacterRepo struct{ err error }
@@ -86,8 +89,4 @@ func TestNullCharacterSettingsSetStringReturnsError(t *testing.T) {
 	err := store.SetString(ctx, cid, "scenes.focus.mode", "bounded")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not implemented")
-}
-
-func TestNullCharacterSettingsStoreImplementsInterface(_ *testing.T) {
-	var _ settings.CharacterSettingsStore = settings.NewNullCharacterSettingsStore() //nolint:staticcheck // intentional interface check
 }

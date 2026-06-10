@@ -12,6 +12,9 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
+// Compile-time interface check: *setup.AuthSubsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*setup.AuthSubsystem)(nil)
+
 func TestAuthSubsystemIDReturnsAuth(t *testing.T) {
 	sub := setup.NewAuthSubsystem(setup.AuthSubsystemConfig{})
 	assert.Equal(t, lifecycle.SubsystemAuth, sub.ID())
@@ -25,9 +28,4 @@ func TestAuthSubsystemDependsOnDatabase(t *testing.T) {
 func TestAuthSubsystemServicePanicsBeforeStart(t *testing.T) {
 	sub := setup.NewAuthSubsystem(setup.AuthSubsystemConfig{})
 	assert.Panics(t, func() { sub.AuthService() })
-}
-
-func TestAuthSubsystemImplementsSubsystem(_ *testing.T) {
-	sub := setup.NewAuthSubsystem(setup.AuthSubsystemConfig{})
-	var _ lifecycle.Subsystem = sub
 }

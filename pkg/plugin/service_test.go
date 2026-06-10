@@ -23,9 +23,7 @@ import (
 
 // --- compile-time interface checks ---
 
-func TestServiceProvider_InterfaceSatisfied(_ *testing.T) {
-	var _ ServiceProvider = (*testServiceProvider)(nil)
-}
+var _ ServiceProvider = (*testServiceProvider)(nil)
 
 // --- ServeWithServices validation ---
 

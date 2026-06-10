@@ -13,6 +13,9 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
+// Compile-time interface check: *lifecycle.HealthTracker must satisfy lifecycle.HealthReporter.
+var _ lifecycle.HealthReporter = (*lifecycle.HealthTracker)(nil)
+
 func defaultTrackerConfig() lifecycle.TrackerConfig {
 	return lifecycle.TrackerConfig{
 		SubsystemName: "test",
@@ -117,10 +120,4 @@ func TestHealthTrackerOnTierChangeCallback(t *testing.T) {
 	ht.RecordFailure("fail") // warm → degraded
 	ht.RecordSuccess()       // degraded → warm
 	assert.Equal(t, []lifecycle.HealthTier{lifecycle.HealthDegraded, lifecycle.HealthWarm}, transitions)
-}
-
-func TestHealthTrackerImplementsHealthReporter(t *testing.T) {
-	t.Helper()
-	ht := lifecycle.NewHealthTracker(defaultTrackerConfig())
-	var _ lifecycle.HealthReporter = ht
 }

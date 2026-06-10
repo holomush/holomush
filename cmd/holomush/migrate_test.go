@@ -386,7 +386,7 @@ func TestMigrateStatusLogic_Dirty(t *testing.T) {
 	assert.Contains(t, output, "migrate force VERSION")
 }
 
-func TestMigrateStatusLogic_Error(t *testing.T) {
+func TestMigrateStatusLogicReturnsWrappedErrorWhenVersionQueryFails(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{versionErr: errors.New("connection failed")}
 
@@ -399,7 +399,7 @@ func TestMigrateStatusLogic_Error(t *testing.T) {
 
 // Version command tests
 
-func TestMigrateVersionLogic_Success(t *testing.T) {
+func TestMigrateVersionLogicWritesCurrentVersionToOutput(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{version: 12}
 
@@ -410,7 +410,7 @@ func TestMigrateVersionLogic_Success(t *testing.T) {
 	assert.Equal(t, "12\n", output)
 }
 
-func TestMigrateVersionLogic_Error(t *testing.T) {
+func TestMigrateVersionLogicReturnsWrappedErrorWhenVersionQueryFails(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{versionErr: errors.New("db unreachable")}
 
@@ -423,7 +423,7 @@ func TestMigrateVersionLogic_Error(t *testing.T) {
 
 // Force command tests
 
-func TestMigrateForceLogic_Success(t *testing.T) {
+func TestMigrateForceLogicForcesVersionAndReportsSuccess(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{}
 
@@ -437,7 +437,7 @@ func TestMigrateForceLogic_Success(t *testing.T) {
 	assert.Equal(t, 5, mock.forceVersion)
 }
 
-func TestMigrateForceLogic_Error(t *testing.T) {
+func TestMigrateForceLogicReturnsWrappedErrorWhenForceFails(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{forceErr: errors.New("invalid version")}
 

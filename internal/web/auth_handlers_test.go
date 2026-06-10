@@ -64,7 +64,7 @@ func TestPlayerTokenFromHeader_Empty(t *testing.T) {
 
 // --- WebAuthenticatePlayer ---
 
-func TestWebAuthenticatePlayer_Success(t *testing.T) {
+func TestWebAuthenticatePlayerSetsSessionTokenAndReturnsCharactersOnSuccess(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:            true,
@@ -146,7 +146,7 @@ func TestWebAuthenticatePlayer_NoRememberMe(t *testing.T) {
 
 // --- WebSelectCharacter ---
 
-func TestWebSelectCharacter_Success(t *testing.T) {
+func TestWebSelectCharacterReturnsSessionIDAndCharacterNameOnSuccess(t *testing.T) {
 	client := &mockCoreClient{
 		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
@@ -214,7 +214,7 @@ func TestWebSelectCharacter_RPCError(t *testing.T) {
 
 // --- WebCreatePlayer ---
 
-func TestWebCreatePlayer_Success(t *testing.T) {
+func TestWebCreatePlayerSetsSessionTokenAndReturnsSuccessOnCreation(t *testing.T) {
 	client := &mockCoreClient{
 		createPlayerResp: &corev1.CreatePlayerResponse{
 			Success:            true,
@@ -271,7 +271,7 @@ func TestWebCreatePlayer_RPCError(t *testing.T) {
 
 // --- WebCreateCharacter ---
 
-func TestWebCreateCharacter_Success(t *testing.T) {
+func TestWebCreateCharacterReturnsCharacterIDAndNameOnSuccess(t *testing.T) {
 	client := &mockCoreClient{
 		createCharResp: &corev1.CreateCharacterResponse{
 			Success:       true,
@@ -319,7 +319,7 @@ func TestWebCreateCharacter_RPCError(t *testing.T) {
 
 // --- WebListCharacters ---
 
-func TestWebListCharacters_Success(t *testing.T) {
+func TestWebListCharactersReturnsAllCharactersForValidToken(t *testing.T) {
 	client := &mockCoreClient{
 		listCharsResp: &corev1.ListCharactersResponse{
 			Characters: []*corev1.CharacterSummary{
@@ -365,7 +365,7 @@ func TestWebListCharacters_RPCError(t *testing.T) {
 
 // --- WebLogout ---
 
-func TestWebLogout_Success(t *testing.T) {
+func TestWebLogoutSetsClearSessionHeaderAndReturnsSuccessResponse(t *testing.T) {
 	client := &mockCoreClient{
 		logoutResp: &corev1.LogoutResponse{},
 	}
@@ -401,7 +401,7 @@ func TestWebLogout_NoToken_StillClears(t *testing.T) {
 
 // --- WebCheckSession ---
 
-func TestWebCheckSession_Success(t *testing.T) {
+func TestWebCheckSessionReturnsPlayerNameForValidToken(t *testing.T) {
 	client := &mockCoreClient{
 		checkSessionResp: &corev1.CheckPlayerSessionResponse{
 			PlayerName: "alice",
@@ -440,7 +440,7 @@ func TestWebCheckSession_CoreRPCError(t *testing.T) {
 
 // --- WebRequestPasswordReset ---
 
-func TestWebRequestPasswordReset_Success(t *testing.T) {
+func TestWebRequestPasswordResetReturnsSuccessForValidEmail(t *testing.T) {
 	client := &mockCoreClient{
 		reqPwResetResp: &corev1.RequestPasswordResetResponse{
 			Success: true,
@@ -470,7 +470,7 @@ func TestWebRequestPasswordReset_RPCError_ReturnsSuccessToAvoidLeak(t *testing.T
 
 // --- WebConfirmPasswordReset ---
 
-func TestWebConfirmPasswordReset_Success(t *testing.T) {
+func TestWebConfirmPasswordResetReturnsSuccessForValidToken(t *testing.T) {
 	client := &mockCoreClient{
 		confirmPwResetResp: &corev1.ConfirmPasswordResetResponse{
 			Success: true,
