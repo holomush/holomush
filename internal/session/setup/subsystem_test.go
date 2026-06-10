@@ -12,6 +12,9 @@ import (
 	"github.com/holomush/holomush/internal/session/setup"
 )
 
+// Compile-time interface check: *setup.SessionSubsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*setup.SessionSubsystem)(nil)
+
 func TestSessionSubsystemIDReturnsSessions(t *testing.T) {
 	sub := setup.NewSessionSubsystem(setup.SessionSubsystemConfig{})
 	assert.Equal(t, lifecycle.SubsystemSessions, sub.ID())
@@ -27,7 +30,3 @@ func TestSessionSubsystemStorePanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.Store() })
 }
 
-func TestSessionSubsystemImplementsSubsystem(_ *testing.T) {
-	sub := setup.NewSessionSubsystem(setup.SessionSubsystemConfig{})
-	var _ lifecycle.Subsystem = sub
-}

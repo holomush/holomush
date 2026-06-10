@@ -73,6 +73,3 @@ func TestPolicyBootstrapper_Bootstrap(t *testing.T) {
 	}
 }
 
-func TestPolicyBootstrapper_ImplementsBootstrapPlugin(_ *testing.T) {
-	var _ plugins.BootstrapPlugin = (*PolicyBootstrapper)(nil)
-}

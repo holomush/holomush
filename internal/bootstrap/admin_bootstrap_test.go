@@ -61,6 +61,3 @@ func TestAdminBootstrapper_Bootstrap(t *testing.T) {
 	}
 }
 
-func TestAdminBootstrapper_ImplementsBootstrapPlugin(_ *testing.T) {
-	var _ plugins.BootstrapPlugin = (*AdminBootstrapper)(nil)
-}

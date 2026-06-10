@@ -12,11 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLocationResolverSatisfiesInterface(_ *testing.T) {
-	// Verify NullResolver satisfies LocationResolver interface with both value and pointer
-	var _ access.LocationResolver = access.NullResolver{}
-	var _ access.LocationResolver = (*access.NullResolver)(nil)
-}
+// Compile-time interface checks: NullResolver must satisfy LocationResolver as both value and pointer.
+var _ access.LocationResolver = access.NullResolver{}
+var _ access.LocationResolver = (*access.NullResolver)(nil)
 
 func TestNullResolver_CurrentLocation(t *testing.T) {
 	tests := []struct {

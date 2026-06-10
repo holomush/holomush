@@ -27,14 +27,13 @@ func (fakeBus) QueryHistory(_ context.Context, _ eventbus.HistoryQuery) (eventbu
 	return nil, nil
 }
 
-func TestEventBusInterfaceComposesAllThree(_ *testing.T) {
-	var (
-		_ eventbus.Publisher     = fakeBus{}
-		_ eventbus.Subscriber    = fakeBus{}
-		_ eventbus.HistoryReader = fakeBus{}
-		_ eventbus.EventBus      = fakeBus{}
-	)
-}
+// Compile-time interface checks: fakeBus must satisfy all three split interfaces and EventBus.
+var (
+	_ eventbus.Publisher     = fakeBus{}
+	_ eventbus.Subscriber    = fakeBus{}
+	_ eventbus.HistoryReader = fakeBus{}
+	_ eventbus.EventBus      = fakeBus{}
+)
 
 func TestHistoryQueryNewCursorFields(t *testing.T) {
 	t.Parallel()

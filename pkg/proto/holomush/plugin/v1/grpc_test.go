@@ -5,16 +5,12 @@ package pluginv1_test
 
 import (
 	"context"
-	"testing"
 
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-// TestPluginServiceInterface verifies the Plugin gRPC service interface exists.
-func TestPluginServiceInterface(_ *testing.T) {
-	// Verify the PluginServer interface has HandleEvent method
-	var _ pluginv1.PluginServiceServer = (*mockPluginServer)(nil)
-}
+// Compile-time interface check: *mockPluginServer must satisfy pluginv1.PluginServiceServer.
+var _ pluginv1.PluginServiceServer = (*mockPluginServer)(nil)
 
 // mockPluginServer implements PluginServer for compile-time verification.
 type mockPluginServer struct {

@@ -12,11 +12,6 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 )
 
-// TestServiceImplementsMutator is a compile-time check (also enforced in mutator.go).
-func TestServiceImplementsMutator(_ *testing.T) {
-	var _ Mutator = (*Service)(nil)
-}
-
 // TestMutator_NewServiceReturnsMutator verifies that NewService returns a value
 // that satisfies the Mutator interface and is non-nil.
 func TestMutator_NewServiceReturnsMutator(t *testing.T) {

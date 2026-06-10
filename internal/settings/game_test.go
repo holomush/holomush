@@ -15,6 +15,12 @@ import (
 	"github.com/holomush/holomush/internal/settings"
 )
 
+// Compile-time interface checks: NewGameSettings must satisfy both GameSettings and Scoped.
+var (
+	_ settings.GameSettings = settings.NewGameSettings((*mockSystemInfoStore)(nil))
+	_ settings.Scoped       = settings.NewGameSettings((*mockSystemInfoStore)(nil))
+)
+
 // mockSystemInfoStore implements settings.SystemInfoStore for testing.
 type mockSystemInfoStore struct {
 	data map[string]string
@@ -283,9 +289,6 @@ func (f *foreignNotFoundStore) SetSystemInfo(context.Context, string, string) er
 	return nil
 }
 
-func TestGameSettingsImplementsGameSettingsInterface(_ *testing.T) {
-	var _ settings.GameSettings = settings.NewGameSettings(newMockSystemInfoStore()) //nolint:staticcheck // intentional interface check
-}
 
 func TestGameSettingsStringSliceNDecodesJSONArrayString(t *testing.T) {
 	ctx := context.Background()
@@ -320,9 +323,6 @@ func TestGameSettingsStringSliceNReturnsFalseWhenNotFound(t *testing.T) {
 
 // --- owner-partition (Scoped) tests ---
 
-func TestGameSettingsImplementsScopedInterface(_ *testing.T) {
-	var _ settings.Scoped = settings.NewGameSettings(newMockSystemInfoStore())
-}
 
 func TestGameSettingsHostSetStringSliceStoresJSONArrayString(t *testing.T) {
 	ctx := context.Background()

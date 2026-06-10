@@ -11,10 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHandler_Interface(_ *testing.T) {
-	// Verify Handler interface is properly defined
-	var _ pluginsdk.Handler = (*testHandler)(nil)
-}
+// Compile-time interface checks.
+var _ pluginsdk.Handler = (*testHandler)(nil)
+var _ pluginsdk.CommandHandler = (*testCommandHandler)(nil)
 
 type testHandler struct{}
 
@@ -44,11 +43,6 @@ func TestServeConfig_ConfigRequired(t *testing.T) {
 	}()
 
 	pluginsdk.Serve(nil)
-}
-
-func TestCommandHandler_Interface(_ *testing.T) {
-	// Verify CommandHandler interface is properly defined
-	var _ pluginsdk.CommandHandler = (*testCommandHandler)(nil)
 }
 
 type testCommandHandler struct{}

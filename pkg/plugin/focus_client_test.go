@@ -22,9 +22,7 @@ import (
 
 // --- compile-time interface checks ---
 
-func TestFocusClient_InterfaceShape(_ *testing.T) {
-	var _ FocusClient = (*pluginHostFocusClient)(nil)
-}
+var _ FocusClient = (*pluginHostFocusClient)(nil)
 
 // --- error mapping ---
 

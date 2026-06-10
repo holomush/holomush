@@ -22,6 +22,12 @@ import (
 	"github.com/holomush/holomush/internal/plugin/setup"
 )
 
+// Compile-time interface checks: *setup.PluginSubsystem must satisfy both interfaces.
+var (
+	_ lifecycle.Subsystem    = (*setup.PluginSubsystem)(nil)
+	_ lifecycle.HealthReporter = (*setup.PluginSubsystem)(nil)
+)
+
 func TestPluginSubsystemIDReturnsPlugins(t *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
 	assert.Equal(t, lifecycle.SubsystemPlugins, sub.ID())
@@ -62,15 +68,6 @@ func TestPluginSubsystemCommandQuerierPanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.CommandQuerier() })
 }
 
-func TestPluginSubsystemImplementsSubsystem(_ *testing.T) {
-	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
-	var _ lifecycle.Subsystem = sub
-}
-
-func TestPluginSubsystemImplementsHealthReporter(_ *testing.T) {
-	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
-	var _ lifecycle.HealthReporter = sub
-}
 
 func TestPluginSubsystemStopBeforeStartIsNoop(t *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})

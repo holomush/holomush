@@ -12,6 +12,9 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
+// Compile-time interface check: *setup.BootstrapSubsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*setup.BootstrapSubsystem)(nil)
+
 func TestBootstrapSubsystemIDReturnsBootstrap(t *testing.T) {
 	sub := setup.NewBootstrapSubsystem(setup.BootstrapSubsystemConfig{})
 	assert.Equal(t, lifecycle.SubsystemBootstrap, sub.ID())
@@ -33,11 +36,6 @@ func TestBootstrapSubsystemDependsOnRequiredSubsystems(t *testing.T) {
 func TestBootstrapSubsystemStartLocationIDPanicsBeforeStart(t *testing.T) {
 	sub := setup.NewBootstrapSubsystem(setup.BootstrapSubsystemConfig{})
 	assert.Panics(t, func() { sub.StartLocationID() })
-}
-
-func TestBootstrapSubsystemImplementsSubsystem(_ *testing.T) {
-	sub := setup.NewBootstrapSubsystem(setup.BootstrapSubsystemConfig{})
-	var _ lifecycle.Subsystem = sub
 }
 
 func TestBootstrapSubsystemStopIsNoop(t *testing.T) {

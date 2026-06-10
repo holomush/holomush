@@ -1620,9 +1620,8 @@ func TestPluginConnReturnsErrorWhenNoConnection(t *testing.T) {
 	assert.Contains(t, err.Error(), "no gRPC connection")
 }
 
-func TestHostImplementsServiceConnProvider(_ *testing.T) {
-	var _ plugins.ServiceConnProvider = (*Host)(nil)
-}
+// Compile-time interface check: *Host must satisfy plugins.ServiceConnProvider.
+var _ plugins.ServiceConnProvider = (*Host)(nil)
 
 // --- QuerySessionStreams tests ---
 

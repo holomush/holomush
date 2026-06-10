@@ -13,6 +13,9 @@ import (
 	"github.com/holomush/holomush/internal/settings"
 )
 
+// Compile-time interface check: *settings.Chain must satisfy settings.Settings.
+var _ settings.Settings = (*settings.Chain)(nil)
+
 // stubSettings implements Settings for testing. Stores values as strings
 // keyed by setting name. Returns false for missing keys.
 type stubSettings struct {
@@ -163,10 +166,6 @@ func TestChainEmptyScopesReturnsFalse(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestChainImplementsSettingsInterface(_ *testing.T) {
-	// Compile-time check that Chain satisfies Settings.
-	var _ settings.Settings = settings.NewChain()
-}
 
 func TestChainResolutionOrderMatchesSpecCharacterPlayerGame(t *testing.T) {
 	ctx := context.Background()

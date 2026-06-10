@@ -12,6 +12,9 @@ import (
 	"github.com/holomush/holomush/internal/store"
 )
 
+// Compile-time interface check: *store.DatabaseSubsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*store.DatabaseSubsystem)(nil)
+
 func TestDatabaseSubsystemIDReturnsDatabase(t *testing.T) {
 	sub := store.NewSubsystem(store.SubsystemConfig{})
 	assert.Equal(t, lifecycle.SubsystemDatabase, sub.ID())
@@ -37,7 +40,3 @@ func TestDatabaseSubsystemGameIDPanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.GameID() })
 }
 
-func TestDatabaseSubsystemImplementsSubsystem(_ *testing.T) {
-	sub := store.NewSubsystem(store.SubsystemConfig{})
-	var _ lifecycle.Subsystem = sub
-}
