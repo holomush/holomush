@@ -57,21 +57,38 @@ func NewBindingRepository(pool *pgxpool.Pool) *BindingRepository {
 // Current returns the active binding_id for characterID. Returns
 // BINDING_NOT_FOUND if no active binding exists.
 func (s *BindingRepository) Current(ctx context.Context, characterID string) (string, error) {
-	var bindingID string
-	err := bindingDBFromCtx(ctx, s.pool).QueryRow(
+	bindingID, _, err := s.currentBinding(ctx, characterID)
+	return bindingID, err
+}
+
+// CurrentWithPlayer returns the active binding_id and the player_id it is bound
+// to for characterID, both from the same active binding row. Returns
+// BINDING_NOT_FOUND if no active binding exists. Satisfies dek.BindingResolver:
+// the player_id is recorded on genesis-seeded DEK participants so the AuthGuard
+// player-history branch matches after a later binding rotation
+// (holomush-5rh.8.29.11).
+func (s *BindingRepository) CurrentWithPlayer(ctx context.Context, characterID string) (bindingID, playerID string, err error) {
+	return s.currentBinding(ctx, characterID)
+}
+
+// currentBinding is the shared query backing Current and CurrentWithPlayer: it
+// selects the active binding row's id and player_id in one round-trip so the
+// two values are atomically consistent.
+func (s *BindingRepository) currentBinding(ctx context.Context, characterID string) (bindingID, playerID string, err error) {
+	err = bindingDBFromCtx(ctx, s.pool).QueryRow(
 		ctx,
-		`SELECT id FROM player_character_bindings WHERE character_id = $1 AND ended_at IS NULL`,
+		`SELECT id, player_id FROM player_character_bindings WHERE character_id = $1 AND ended_at IS NULL`,
 		characterID,
-	).Scan(&bindingID)
+	).Scan(&bindingID, &playerID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", oops.Code("BINDING_NOT_FOUND").
+			return "", "", oops.Code("BINDING_NOT_FOUND").
 				With("character_id", characterID).
 				Errorf("no active binding for character %s", characterID)
 		}
-		return "", oops.Code("BINDING_STORE_QUERY_FAILED").Wrap(err)
+		return "", "", oops.Code("BINDING_STORE_QUERY_FAILED").Wrap(err)
 	}
-	return bindingID, nil
+	return bindingID, playerID, nil
 }
 
 // Create inserts a new active binding for (playerID, characterID).

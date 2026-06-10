@@ -63,6 +63,37 @@ func TestBindingRepositoryCreateReturnsIDAndCurrentReadsItBack(t *testing.T) {
 	assert.Equal(t, bindingID, got)
 }
 
+// TestBindingRepositoryCurrentWithPlayerReturnsBindingAndPlayer asserts that
+// CurrentWithPlayer surfaces both the active binding_id and the player_id it is
+// bound to from the same row — the player_id is what genesis records on a comms
+// DEK participant so the AuthGuard player-history branch can match after a later
+// binding rotation (holomush-5rh.8.29.11).
+func TestBindingRepositoryCurrentWithPlayerReturnsBindingAndPlayer(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewBindingRepository(testPool)
+
+	playerID, characterID := seedBindingTestData(ctx, t)
+
+	bindingID, err := repo.Create(ctx, playerID, characterID, "initial_bind")
+	require.NoError(t, err)
+	require.NotEmpty(t, bindingID)
+
+	gotBinding, gotPlayer, err := repo.CurrentWithPlayer(ctx, characterID)
+	require.NoError(t, err)
+	assert.Equal(t, bindingID, gotBinding)
+	assert.Equal(t, playerID, gotPlayer)
+}
+
+// TestBindingRepositoryCurrentWithPlayerReturnsNotFoundForCharacterWithoutBinding
+// asserts the BINDING_NOT_FOUND path is preserved on the player-carrying variant.
+func TestBindingRepositoryCurrentWithPlayerReturnsNotFoundForCharacterWithoutBinding(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewBindingRepository(testPool)
+
+	_, _, err := repo.CurrentWithPlayer(ctx, ulid.Make().String())
+	errutil.AssertErrorCode(t, err, "BINDING_NOT_FOUND")
+}
+
 func TestBindingRepositoryCurrentReturnsNotFoundForCharacterWithoutBinding(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewBindingRepository(testPool)

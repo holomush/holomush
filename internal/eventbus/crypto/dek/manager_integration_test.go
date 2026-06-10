@@ -300,7 +300,78 @@ var _ = Describe("Manager", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(parts).To(HaveLen(1))
 		Expect(parts[0].BindingID).To(Equal(wantBinding),
-			"genesis must resolve empty BindingID via BindingResolver.Current")
+			"genesis must resolve empty BindingID via BindingResolver.CurrentWithPlayer")
+	})
+
+	// Verifies: INV-CRYPTO-122
+	// The comms-seed player-branch symmetry fix (holomush-5rh.8.29.11): the
+	// publisher seeds a character.<id> comms recipient with CharacterID only (no
+	// PlayerID). Genesis must fill PlayerID from the same active binding row, so
+	// the AuthGuard player-history branch (guard.go checkPlayer) can match after
+	// a later binding rotation — matching the scene-focus seed, which carries the
+	// session player_id.
+	It("resolves an empty PlayerID on genesis via the BindingResolver", func() {
+		ctx := context.Background()
+		connStr, teardown := newTestPGPool(suiteT)
+		DeferCleanup(teardown)
+		pool, err := pgxpool.New(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(pool.Close)
+
+		provider := newTestProvider(suiteT)
+		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		const wantBinding = "01RESOLVEDBINDING0000000"
+		const wantPlayer = "01RESOLVEDPLAYER00000000"
+		mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache,
+			noopInvalidator, &stubBindingResolver{bindingID: wantBinding, playerID: wantPlayer})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Mirrors publisher.initialParticipantsForContext: CharacterID only.
+		ctxID := dek.ContextID{Type: "character", ID: "01HRECIPIENTCHAR000000000"}
+		key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{{CharacterID: "01HRECIPIENTCHAR000000000"}})
+		Expect(err).NotTo(HaveOccurred())
+
+		parts, err := mgr.Participants(ctx, key.ID, key.Version)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parts).To(HaveLen(1))
+		Expect(parts[0].PlayerID).To(Equal(wantPlayer),
+			"genesis must fill an empty PlayerID from the binding row so checkPlayer can match")
+		Expect(parts[0].BindingID).To(Equal(wantBinding))
+	})
+
+	// Verifies: INV-CRYPTO-122 (no-clobber clause)
+	// The scene-focus seed supplies an explicit PlayerID (ps.PlayerID); genesis
+	// MUST NOT overwrite it with the binding-resolved value, even though both
+	// should agree in production (holomush-5rh.8.29.11).
+	It("preserves a caller-supplied PlayerID on genesis (does not clobber)", func() {
+		ctx := context.Background()
+		connStr, teardown := newTestPGPool(suiteT)
+		DeferCleanup(teardown)
+		pool, err := pgxpool.New(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(pool.Close)
+
+		provider := newTestProvider(suiteT)
+		cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+		const explicitPlayer = "01EXPLICITPLAYER00000000"
+		mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache,
+			noopInvalidator, &stubBindingResolver{bindingID: "01BIND", playerID: "01RESOLVEDPLAYER00000000"})
+		Expect(err).NotTo(HaveOccurred())
+
+		ctxID := dek.ContextID{Type: "scene", ID: "01HSCENE00000000000000000"}
+		key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{{
+			CharacterID: "01HCHAR0000000000000000000",
+			PlayerID:    explicitPlayer,
+		}})
+		Expect(err).NotTo(HaveOccurred())
+
+		parts, err := mgr.Participants(ctx, key.ID, key.Version)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parts).To(HaveLen(1))
+		Expect(parts[0].PlayerID).To(Equal(explicitPlayer),
+			"genesis must not clobber a caller-supplied PlayerID")
 	})
 
 	It("Participants not found returns DEK_NOT_FOUND", func() {
@@ -939,6 +1010,87 @@ var _ = Describe("Manager", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(parts).To(HaveLen(2))
 		Expect(parts[1].BindingID).To(Equal("bind-explicit"))
+	})
+
+	// Symmetric with the genesis fill (holomush-5rh.8.29.11): Add with an empty
+	// BindingID resolves the binding row and fills an empty PlayerID from it. No
+	// current production caller hits this (the scene-focus Add supplies an
+	// explicit PlayerID), but the branch mirrors GetOrCreate and is pinned here.
+	It("Add fills an empty PlayerID from the resolved binding", func() {
+		ctx := context.Background()
+		connStr, teardown := newTestPGPool(suiteT)
+		DeferCleanup(teardown)
+		pool, err := pgxpool.New(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(pool.Close)
+
+		const wantBinding = "01ADDRESOLVEDBINDING0000"
+		const wantPlayer = "01ADDRESOLVEDPLAYER00000"
+		mgr, err := dek.NewManager(
+			newTestProvider(suiteT), dek.NewStore(pool),
+			dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+			dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+			noopInvalidator, &stubBindingResolver{bindingID: wantBinding, playerID: wantPlayer},
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		ctxID := dek.ContextID{Type: "scene", ID: "01HADDFILLSCENE000000000"}
+		dekKey, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{
+			{PlayerID: "01SEEDPLAYER000000000000", CharacterID: "01SEEDCHAR0000000000000A", BindingID: "01SEEDBIND00000000000000", JoinedAt: time.Now().UTC()},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Add a participant with empty BindingID AND empty PlayerID.
+		Expect(mgr.Add(ctx, ctxID, dek.Participant{
+			CharacterID: "01ADDEDCHAR000000000000A", JoinedAt: time.Now().UTC(),
+		})).To(Succeed())
+
+		parts, err := mgr.Participants(ctx, dekKey.ID, dekKey.Version)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parts).To(HaveLen(2))
+		Expect(parts[1].BindingID).To(Equal(wantBinding))
+		Expect(parts[1].PlayerID).To(Equal(wantPlayer),
+			"Add must fill an empty PlayerID from the resolved binding row")
+	})
+
+	// Verifies: INV-CRYPTO-122 (no-clobber clause, Add path)
+	// Add with an empty BindingID resolves the binding, but a caller-supplied
+	// PlayerID MUST survive — the resolver's player_id does not overwrite it
+	// (holomush-5rh.8.29.11).
+	It("Add preserves a caller-supplied PlayerID when resolving the binding", func() {
+		ctx := context.Background()
+		connStr, teardown := newTestPGPool(suiteT)
+		DeferCleanup(teardown)
+		pool, err := pgxpool.New(ctx, connStr)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(pool.Close)
+
+		const explicitPlayer = "01ADDEXPLICITPLAYER00000"
+		mgr, err := dek.NewManager(
+			newTestProvider(suiteT), dek.NewStore(pool),
+			dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+			dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+			noopInvalidator, &stubBindingResolver{bindingID: "01ADDNOCLOBBERBIND000000", playerID: "01ADDRESOLVEDPLAYER00000"},
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		ctxID := dek.ContextID{Type: "scene", ID: "01HADDNOCLOBBERSCENE0000"}
+		dekKey, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{
+			{PlayerID: "01SEEDPLAYER000000000000", CharacterID: "01SEEDCHAR0000000000000A", BindingID: "01SEEDBIND00000000000000", JoinedAt: time.Now().UTC()},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Add a participant with explicit PlayerID but empty BindingID (resolution runs).
+		Expect(mgr.Add(ctx, ctxID, dek.Participant{
+			PlayerID: explicitPlayer, CharacterID: "01ADDEDCHAR000000000000A", JoinedAt: time.Now().UTC(),
+		})).To(Succeed())
+
+		parts, err := mgr.Participants(ctx, dekKey.ID, dekKey.Version)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parts).To(HaveLen(2))
+		Expect(parts[1].BindingID).To(Equal("01ADDNOCLOBBERBIND000000"))
+		Expect(parts[1].PlayerID).To(Equal(explicitPlayer),
+			"Add must not clobber a caller-supplied PlayerID with the resolved one")
 	})
 
 	// EnsureParticipant is the genesis-safe scene-reader seed: it must leave the

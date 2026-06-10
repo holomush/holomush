@@ -4435,3 +4435,16 @@ invariants:
       - "test/integration/crypto/scene_focus_genesis_test.go"
     refs:
       - {file: "test/integration/crypto/scene_focus_genesis_test.go", token: "INV-CRYPTO-121"}
+  - id: INV-CRYPTO-122
+    scope: INV-CRYPTO
+    origin_spec: "docs/adr/holomush-olpdd-seed-comms-recipients-host-side-at-publisher-genesis-boundar.md"
+    legacy: []
+    summary: "Comms DEK genesis for a character.<id> context MUST resolve and record the recipient's player_id (from the recipient's
+      active player↔character binding row) on the seeded participant, so the AuthGuard player-history branch (guard.go checkPlayer,
+      §7.2 Branch 2) can match after a later binding rotation — symmetric with the scene-focus seed (INV-CRYPTO-121). The
+      fill MUST NOT overwrite a caller-supplied player_id (the scene seed supplies its own)."
+    binding: bound
+    asserted_by:
+      - "internal/eventbus/crypto/dek/manager_integration_test.go"
+    refs:
+      - {file: "internal/eventbus/crypto/dek/manager_integration_test.go", token: "INV-CRYPTO-122"}

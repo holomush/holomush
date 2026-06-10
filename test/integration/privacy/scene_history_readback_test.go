@@ -85,8 +85,8 @@ func (rbPrivacyNoopBackpressure) ShouldThrottle(_ string) bool { return false }
 // rbPrivacyDEKBindingStub implements dek.BindingResolver with a fixed binding ID.
 type rbPrivacyDEKBindingStub struct{ bindingID string }
 
-func (s *rbPrivacyDEKBindingStub) Current(_ context.Context, _ string) (string, error) {
-	return s.bindingID, nil
+func (s *rbPrivacyDEKBindingStub) CurrentWithPlayer(_ context.Context, _ string) (bindingID, playerID string, err error) {
+	return s.bindingID, "", nil
 }
 
 // rbPrivacyAlwaysTrueCryptoKeysLookup always reports that a DEK exists.

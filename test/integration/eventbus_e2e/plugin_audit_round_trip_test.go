@@ -30,8 +30,8 @@ import (
 // that don't depend on a wizard binding store.
 type dekBindingStubE2E struct{ id string }
 
-func (s *dekBindingStubE2E) Current(_ context.Context, _ string) (string, error) {
-	return s.id, nil
+func (s *dekBindingStubE2E) CurrentWithPlayer(_ context.Context, _ string) (bindingID, playerID string, err error) {
+	return s.id, "", nil
 }
 
 // Scene log ciphertext and audit header round-trip specs — INV-CRYPTO-41 + INV-CRYPTO-47.

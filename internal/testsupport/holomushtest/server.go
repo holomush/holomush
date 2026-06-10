@@ -533,8 +533,8 @@ func sanitizeEnvName(s string) string {
 // exercise the binding lookup path.
 type noopBindingResolver struct{}
 
-func (*noopBindingResolver) Current(_ context.Context, _ string) (string, error) {
-	return "noop-binding", nil
+func (*noopBindingResolver) CurrentWithPlayer(_ context.Context, _ string) (bindingID, playerID string, err error) {
+	return "noop-binding", "", nil
 }
 
 // testAuditPublisher satisfies dek.AuditPublisher for the in-process harness.
