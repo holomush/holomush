@@ -32,9 +32,11 @@ type sceneAccessPluginManager interface {
 
 // sceneDEKAdder seeds a character as a DEK participant so the AuthGuard's
 // hot-tier checkCharacter branch permits this session to decrypt sensitive
-// scene events (e.g. scene_pose). Satisfied by dek.Manager (its Add method).
+// scene events (e.g. scene_pose). The genesis-safe form: it mints the scene
+// DEK (seeded with the character) when none exists yet — the first reader to
+// focus a never-posed scene (INV-CRYPTO-121). Satisfied by dek.Manager.
 type sceneDEKAdder interface {
-	Add(ctx context.Context, ctxID dek.ContextID, p dek.Participant) error
+	EnsureParticipant(ctx context.Context, ctxID dek.ContextID, p dek.Participant) error
 }
 
 // SceneAccessServer is the host-side facade that owns player authentication,
@@ -402,15 +404,17 @@ func (s *SceneAccessServer) SetSceneFocus(ctx context.Context, req *sceneaccessv
 
 		// Seed the character as a DEK participant so the AuthGuard hot-tier
 		// permits this session to decrypt sensitive scene events (scene_pose,
-		// scene_say, scene_emit, scene_ooc). FATAL: if the seed fails the
-		// connection MUST NOT be focused — a focused connection that cannot
-		// decrypt would receive blank (metadata-only) poses. Refusing focus
-		// surfaces the error so the client retries; Add is idempotent
-		// (manager.go:377) so retry is a safe no-op. (Invariant: a connection
-		// is focused on a scene only if its character can decrypt that scene.)
+		// scene_say, scene_emit, scene_ooc). Genesis-safe: mints the scene DEK
+		// seeded with this reader if none exists yet (first focus precedes
+		// first pose). FATAL: if the seed fails the connection MUST NOT be
+		// focused — a focused connection that cannot decrypt would receive
+		// blank (metadata-only) poses. Refusing focus surfaces the error so the
+		// client retries; EnsureParticipant is idempotent so retry is a safe
+		// no-op. (INV-CRYPTO-121. Invariant: a connection is focused on a scene
+		// only if its character can decrypt that scene.)
 		if s.dekAdder != nil {
 			ctxID := dek.ContextID{Type: "scene", ID: sceneIDStr}
-			addErr := s.dekAdder.Add(ctx, ctxID, dek.Participant{
+			addErr := s.dekAdder.EnsureParticipant(ctx, ctxID, dek.Participant{
 				PlayerID:    ps.PlayerID.String(),
 				CharacterID: gameSession.CharacterID.String(),
 				JoinedAt:    time.Now().UTC(),
