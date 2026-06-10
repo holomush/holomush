@@ -100,6 +100,13 @@ know they exist; neither has code yet.
 | **Forums**   | `holomush-djj` | (undesigned)                                                 | Needs brainstorm + spec                  |
 | **Discord**  | `holomush-aqq` | `aqq.5` Discord OAuth linking (`dwk.7` overlap closed today) | Blocked on Channels + OAuth substrate    |
 
+The web Scenes Portal (`5rh.8`) drove the **crypto production activation** that
+made live sensitive scene events (pose/say/ooc) actually render in the browser —
+its E2E proved the crypto substrate was never activated in prod. That milestone is
+documented under Completed themes → "Crypto production activation"; the portal is
+functionally complete (`5rh.8` has two small follow-ups left: `5rh.8.30` invariant
+binding, `5rh.8.29.11` comms-seed PlayerID asymmetry).
+
 #### Sequencing rationale
 
 1. **Scenes Phase 4-6 first** (`5rh.13/.14/.20`). Scenes is the reference
@@ -163,7 +170,7 @@ know they exist; neither has code yet.
   until later.
 - **Web portal scope creep**: each social surface wants a web view; left
   unchecked this becomes a multi-month frontend project. Sequence web
-  views _after_ the backend surface stabilizes per use.
+  views *after* the backend surface stabilizes per use.
 - **Phase 5 multi-tab routing depends on web-client cooperation**: the
   `STREAM_OPENED` ControlFrame + `SendCommandRequest.connection_id`
   protocol added in `5rh.14` only routes per-connection commands
@@ -228,11 +235,38 @@ Five major architectural replacements landed between January and May:
 2. **Plugin architecture** (PR #192): `ServiceProxy` → proto-first; `type:core` → `type:lua` + `type:binary`; Extism/WASM → hashicorp/go-plugin + gopher-lua
 3. **ABAC** (PRs #84-#88, #106-#107, #114): `StaticAccessControl` + `capability.Enforcer` → `AccessPolicyEngine`
 4. **Session model** (PRs #123, #139, #177, #225, #271, #233): in-memory → `PostgresSessionStore` + JetStream replay + two-phase login + multi-tab isolation
-5. **Crypto rollout** (Phases 1-5 + 7): KEK/DEK, AuthGuard, decrypt-on-fanout, rekey, admin UDS+TOTP, INV-50 downgrade fence
+5. **Crypto rollout** (Phases 1-5 + 7): KEK/DEK, AuthGuard, decrypt-on-fanout, rekey, admin UDS+TOTP, INV-50 downgrade fence. **Capability only** — production *activation* was a separate, later milestone (see "Crypto production activation" below): the decrypt-on-fanout machinery existed from Phase 3b but was never wired into the live Subscribe/Publish path until 2026-06-10.
 
 These pivots are no longer "active themes" — they're done. They're listed
 here as orientation context for new threads of work that need to know what
 substrate they can rely on.
+
+### Crypto production activation — completed 2026-06-10
+
+The crypto *capabilities* in "Foundational substrate pivots" item 5 shipped across
+Phases 1-5/7 but were never **activated in the production live path**. The
+decrypt-on-fanout machinery existed from Phase 3b; the production Subscribe/Publish
+flow still ran without it (`cryptoActive` never flipped true; sensitive events were
+delivered metadata-only, or were undeliverable). Epic `holomush-5rh.8.29` closed that
+gap — surfaced, not coincidentally, by strengthening the scenes-portal E2E
+(`5rh.8.27` → `5rh.8.29.10`) to assert a live PoseCard, which proved that *no*
+sensitive-event feature worked live in production.
+
+Four defects, each found only by the strengthened E2E, fixed in sequence:
+
+| PR    | Fix                                                                                       |
+| ----- | ---------------------------------------------------------------------------------------- |
+| #4411 | KEK-mandatory boot + single activation gate (`cryptoActive` derived from KEK presence)   |
+| #4413 | scene DEK genesis-on-first-focus (`dek.Manager.EnsureParticipant`; INV-CRYPTO-121)        |
+| #4415 | gateway stamps `scene_id` from the cleartext subject so live IC events reach the web log |
+| #4416 | the live-PoseCard E2E, asserted + un-quarantined (green in CI)                            |
+
+**Lesson (durable framing):** a shipped capability is not a live capability. The
+"completed substrate pivots" above track capability *landing*; production
+*activation* is its own milestone and can lag a capability by months — undetected
+until an E2E exercises the real browser → gateway → live-fan-out path. Follow-ups:
+`holomush-tn12i` (server-side backfill time-window), `holomush-8lqco` (test-suite
+audit, merged #4414).
 
 ## Future themes (sketches — not yet labels)
 
