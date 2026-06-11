@@ -84,7 +84,7 @@ func handlePluginInfo(ctx context.Context, exec *command.CommandExecution, liste
 	fmt.Fprintf(&sb, "Storage: %s", string(m.Storage))
 
 	if len(m.Requires) > 0 {
-		fmt.Fprintf(&sb, "\nRequires: %s", strings.Join(m.Requires, ", "))
+		fmt.Fprintf(&sb, "\nRequires: %s", strings.Join(m.RequiresDisplay(), ", "))
 	}
 	if len(m.Provides) > 0 {
 		fmt.Fprintf(&sb, "\nProvides: %s", strings.Join(m.Provides, ", "))

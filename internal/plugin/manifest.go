@@ -96,9 +96,9 @@ type Manifest struct {
 	Capabilities []string `yaml:"capabilities,omitempty" json:"-" jsonschema:"-"`
 
 	// Service contract declarations
-	Requires []string    `yaml:"requires,omitempty" json:"requires,omitempty"`
-	Provides []string    `yaml:"provides,omitempty" json:"provides,omitempty"`
-	Storage  StorageType `yaml:"storage,omitempty" json:"storage,omitempty"`
+	Requires []Dependency `yaml:"requires,omitempty" json:"requires,omitempty"`
+	Provides []string     `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Storage  StorageType  `yaml:"storage,omitempty" json:"storage,omitempty"`
 
 	// Crypto declares the plugin's event-type sensitivity contracts and
 	// (forward-looking) decryption opt-in subscriptions. Phase 1 of the
@@ -142,6 +142,40 @@ func (m *Manifest) EffectivePriority() LoadPriority {
 		return *m.Priority
 	}
 	return LoadPriorityDefault
+}
+
+// RequiredServiceNames returns the names of the service-kind dependencies,
+// preserving the legacy flat-string semantics for broker / InjectRequired
+// consumers.
+func (m *Manifest) RequiredServiceNames() []string {
+	out := make([]string, 0, len(m.Requires))
+	for _, d := range m.Requires {
+		if d.Kind == DependencyService {
+			out = append(out, d.Name)
+		}
+	}
+	return out
+}
+
+// RequiredCapabilities returns the names of the capability-kind dependencies.
+func (m *Manifest) RequiredCapabilities() []string {
+	out := make([]string, 0, len(m.Requires))
+	for _, d := range m.Requires {
+		if d.Kind == DependencyCapability {
+			out = append(out, d.Name)
+		}
+	}
+	return out
+}
+
+// RequiresDisplay returns human-readable "<kind>:<name>" strings for admin /
+// `plugin info` rendering.
+func (m *Manifest) RequiresDisplay() []string {
+	out := make([]string, 0, len(m.Requires))
+	for _, d := range m.Requires {
+		out = append(out, string(d.Kind)+":"+d.Name)
+	}
+	return out
 }
 
 // LuaConfig holds Lua-specific configuration.

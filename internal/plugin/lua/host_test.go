@@ -1640,7 +1640,7 @@ end
 		Version:   "1.0.0",
 		Type:      plugins.TypeLua,
 		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
-		Requires:  []string{"test-svc"},
+		Requires:  plugins.RequireServices("test-svc"),
 	}
 	require.NoError(t, host.Load(context.Background(), manifest, dir))
 

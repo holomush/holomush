@@ -1222,7 +1222,7 @@ func TestLoadCallsInitForPluginWithRequires(t *testing.T) {
 		Name:     "svc-plugin",
 		Version:  "1.0.0",
 		Type:     plugins.TypeBinary,
-		Requires: []string{"event-store"},
+		Requires: plugins.RequireServices("event-store"),
 		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "svc-plugin",
 		},
@@ -1298,7 +1298,7 @@ func TestLoadPassesRequiredServicesFromRegistryViaInit(t *testing.T) {
 		Name:     "needs-scene",
 		Version:  "1.0.0",
 		Type:     plugins.TypeBinary,
-		Requires: []string{"holomush.scene.v1.SceneService"},
+		Requires: plugins.RequireServices("holomush.scene.v1.SceneService"),
 		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "needs-scene",
 		},

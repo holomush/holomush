@@ -64,7 +64,7 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 
 	// Validate all Requires are satisfiable.
 	for _, p := range plugins {
-		for _, svc := range p.Manifest.Requires {
+		for _, svc := range p.Manifest.RequiredServiceNames() {
 			if _, ok := svcProvider[svc]; !ok {
 				return nil, oops.
 					Code("UNSATISFIED_REQUIRES").
@@ -105,7 +105,7 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 
 	for _, p := range plugins {
 		// Service edges.
-		for _, svc := range p.Manifest.Requires {
+		for _, svc := range p.Manifest.RequiredServiceNames() {
 			providerName := svcProvider[svc]
 			if providerName == "" {
 				// Server-provided; no plugin edge needed.

@@ -13,7 +13,7 @@ import (
 func TestResolveDependencyOrder(t *testing.T) {
 	t.Run("sorts plugins so providers load before consumers", func(t *testing.T) {
 		plugins := []*DiscoveredPlugin{
-			{Manifest: &Manifest{Name: "consumer", Requires: []string{"svc-a"}}},
+			{Manifest: &Manifest{Name: "consumer", Requires: RequireServices("svc-a")}},
 			{Manifest: &Manifest{Name: "provider", Provides: []string{"svc-a"}}},
 		}
 
@@ -25,7 +25,7 @@ func TestResolveDependencyOrder(t *testing.T) {
 
 	t.Run("allows requires satisfied by server services", func(t *testing.T) {
 		plugins := []*DiscoveredPlugin{
-			{Manifest: &Manifest{Name: "consumer", Requires: []string{"holomush.world.v1.WorldService"}}},
+			{Manifest: &Manifest{Name: "consumer", Requires: RequireServices("holomush.world.v1.WorldService")}},
 		}
 		serverServices := []string{"holomush.world.v1.WorldService"}
 
@@ -36,8 +36,8 @@ func TestResolveDependencyOrder(t *testing.T) {
 
 	t.Run("detects circular dependency", func(t *testing.T) {
 		plugins := []*DiscoveredPlugin{
-			{Manifest: &Manifest{Name: "a", Requires: []string{"svc-b"}, Provides: []string{"svc-a"}}},
-			{Manifest: &Manifest{Name: "b", Requires: []string{"svc-a"}, Provides: []string{"svc-b"}}},
+			{Manifest: &Manifest{Name: "a", Requires: RequireServices("svc-b"), Provides: []string{"svc-a"}}},
+			{Manifest: &Manifest{Name: "b", Requires: RequireServices("svc-a"), Provides: []string{"svc-b"}}},
 		}
 		_, err := ResolveDependencyOrder(plugins, nil)
 		assert.Error(t, err)
@@ -45,7 +45,7 @@ func TestResolveDependencyOrder(t *testing.T) {
 
 	t.Run("returns error for unsatisfied requires", func(t *testing.T) {
 		plugins := []*DiscoveredPlugin{
-			{Manifest: &Manifest{Name: "consumer", Requires: []string{"svc-missing"}}},
+			{Manifest: &Manifest{Name: "consumer", Requires: RequireServices("svc-missing")}},
 		}
 		_, err := ResolveDependencyOrder(plugins, nil)
 		assert.Error(t, err)
@@ -84,9 +84,9 @@ func TestResolveDependencyOrder(t *testing.T) {
 	t.Run("handles diamond dependency without error", func(t *testing.T) {
 		// A provides svc-a, B and C require svc-a, D requires svc-b and svc-c
 		plugins := []*DiscoveredPlugin{
-			{Manifest: &Manifest{Name: "d", Requires: []string{"svc-b", "svc-c"}}},
-			{Manifest: &Manifest{Name: "b", Requires: []string{"svc-a"}, Provides: []string{"svc-b"}}},
-			{Manifest: &Manifest{Name: "c", Requires: []string{"svc-a"}, Provides: []string{"svc-c"}}},
+			{Manifest: &Manifest{Name: "d", Requires: RequireServices("svc-b", "svc-c")}},
+			{Manifest: &Manifest{Name: "b", Requires: RequireServices("svc-a"), Provides: []string{"svc-b"}}},
+			{Manifest: &Manifest{Name: "c", Requires: RequireServices("svc-a"), Provides: []string{"svc-c"}}},
 			{Manifest: &Manifest{Name: "a", Provides: []string{"svc-a"}}},
 		}
 		order, err := ResolveDependencyOrder(plugins, nil)

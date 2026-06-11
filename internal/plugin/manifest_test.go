@@ -1612,7 +1612,7 @@ commands:
 `)
 		m, err := plugins.ParseManifest(data)
 		require.NoError(t, err)
-		assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.Requires)
+		assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.RequiredServiceNames())
 		assert.Equal(t, []string{"holomush.scene.v1.SceneService"}, m.Provides)
 	})
 
@@ -1648,8 +1648,39 @@ commands:
 `)
 		m, err := plugins.ParseManifest(data)
 		require.NoError(t, err)
-		assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.Requires)
+		assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.RequiredServiceNames())
 	})
+}
+
+func TestParseManifestTypedRequiresAccessors(t *testing.T) {
+	m, err := plugins.ParseManifest([]byte(`
+name: t
+version: 1.0.0
+type: lua
+requires:
+  - capability: world.query
+  - service: holomush.scene.v1.SceneService
+lua-plugin:
+  entry: main.lua
+`))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"world.query"}, m.RequiredCapabilities())
+	assert.Equal(t, []string{"holomush.scene.v1.SceneService"}, m.RequiredServiceNames())
+}
+
+func TestParseManifestLegacyFlatRequiresParsesAsServices(t *testing.T) {
+	m, err := plugins.ParseManifest([]byte(`
+name: t
+version: 1.0.0
+type: lua
+requires:
+  - holomush.world.v1.WorldService
+lua-plugin:
+  entry: main.lua
+`))
+	require.NoError(t, err)
+	assert.Empty(t, m.RequiredCapabilities())
+	assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.RequiredServiceNames())
 }
 
 func TestManifestStorage(t *testing.T) {
