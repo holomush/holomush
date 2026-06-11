@@ -318,6 +318,7 @@ invariants.
 | `INV-PLUGIN-43` | An unsatisfied non-optional plugin dependency or a dependency cycle MUST fail the boot; the loader MUST NOT downgrade it to a WARN + priority-sort fallback. `optional: true` entries MAY be skipped. | — | bound |
 | `INV-PLUGIN-44` | Binary and Lua plugins MUST obtain every declared dependency through the one host gRPC broker, gated by the declaration and authorized as PluginSubject; neither runtime MAY receive an undeclared capability or service. Consumption-path facet of plugin-runtime-symmetry; distinct from INV-CRYPTO-34 (emit/fence/audit path). | — | pending |
 | `INV-PLUGIN-45` | The declaration gate that enforces least privilege MUST live at the broker/registry common path shared by both runtimes; per-runtime gating that could diverge is forbidden. | — | pending |
+| `INV-PLUGIN-46` | Each proto service name MUST have exactly one provider across host and plugins; a plugin declaring Provides of a server-owned (host-registered) service MUST be rejected with DUPLICATE_SERVICE_PROVIDER at resolver time, never silently overwriting host ownership. A core service is never an implicit plugin override target. | — | bound |
 
 ### `INV-EVENTBUS`
 

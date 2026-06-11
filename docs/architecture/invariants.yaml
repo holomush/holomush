@@ -3752,6 +3752,15 @@ invariants:
     summary: "The declaration gate that enforces least privilege MUST live at the broker/registry common path shared by both
       runtimes; per-runtime gating that could diverge is forbidden."
     binding: pending
+  - id: INV-PLUGIN-46
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
+    summary: "Each proto service name MUST have exactly one provider across host and plugins; a plugin declaring Provides
+      of a server-owned (host-registered) service MUST be rejected with DUPLICATE_SERVICE_PROVIDER at resolver time, never
+      silently overwriting host ownership. A core service is never an implicit plugin override target."
+    binding: bound
+    asserted_by:
+      - "internal/plugin/dependency_test.go"
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

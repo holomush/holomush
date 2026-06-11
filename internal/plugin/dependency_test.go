@@ -6,7 +6,7 @@ package plugins
 import (
 	"testing"
 
-	"github.com/holomush/holomush/pkg/errutil"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,7 +84,8 @@ func TestResolveDependencyOrder(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("rejects a plugin that provides a server-owned service", func(t *testing.T) {
+	// Verifies: INV-PLUGIN-46
+	t.Run("returns DUPLICATE_SERVICE_PROVIDER when a plugin provides a server-owned service", func(t *testing.T) {
 		// Regression (holomush-et5lz): the duplicate-provider guard used the ""
 		// host sentinel as its skip condition (existing != ""), so a plugin
 		// declaring Provides of a host-owned service slipped past the guard and
@@ -96,7 +97,45 @@ func TestResolveDependencyOrder(t *testing.T) {
 		}
 		serverServices := []string{"holomush.world.v1.WorldService"}
 		_, err := ResolveDependencyOrder(plugins, serverServices, NewCapabilityVocabulary())
-		errutil.AssertErrorCode(t, err, "DUPLICATE_SERVICE_PROVIDER")
+		// Assert the TOP-LEVEL oops code (not chain-walking) so the guard, not a
+		// wrapper, MUST be the outermost failure for this security property.
+		oopsErr, ok := oops.AsOops(err)
+		require.True(t, ok)
+		require.Equal(t, "DUPLICATE_SERVICE_PROVIDER", oopsErr.Code())
+	})
+
+	// Verifies: INV-PLUGIN-46
+	t.Run("rejects a usurper while a legitimate consumer requires the same server service", func(t *testing.T) {
+		// The original bug's stated harm: a plugin providing a host-owned service
+		// corrupts the load-order edge for a legitimate consumer of that service.
+		// With a consumer (A requires S) and a usurper (B provides S) in the same
+		// graph, resolution MUST hard-fail rather than silently re-point A's edge
+		// at B (holomush-et5lz).
+		plugins := []*DiscoveredPlugin{
+			{Manifest: &Manifest{Name: "consumer", Requires: RequireServices("holomush.world.v1.WorldService")}},
+			{Manifest: &Manifest{Name: "usurper", Provides: []string{"holomush.world.v1.WorldService"}}},
+		}
+		serverServices := []string{"holomush.world.v1.WorldService"}
+		_, err := ResolveDependencyOrder(plugins, serverServices, NewCapabilityVocabulary())
+		oopsErr, ok := oops.AsOops(err)
+		require.True(t, ok)
+		require.Equal(t, "DUPLICATE_SERVICE_PROVIDER", oopsErr.Code())
+	})
+
+	t.Run("keeps the host as provider so a server-service consumer gets no plugin edge", func(t *testing.T) {
+		// Positive counterpart to the usurper case: with no usurper, a consumer of
+		// a host service resolves cleanly — host stays the provider (svcProvider
+		// entry "" → no plugin edge), so the consumer orders with no Unsatisfied
+		// entry. Guards the providerName=="" branch of the edge-building loop.
+		plugins := []*DiscoveredPlugin{
+			{Manifest: &Manifest{Name: "consumer", Requires: RequireServices("holomush.world.v1.WorldService")}},
+		}
+		serverServices := []string{"holomush.world.v1.WorldService"}
+		res, err := ResolveDependencyOrder(plugins, serverServices, NewCapabilityVocabulary())
+		require.NoError(t, err)
+		assert.Len(t, res.Ordered, 1)
+		assert.Empty(t, res.Unsatisfied)
+		assert.Empty(t, res.Cycles)
 	})
 
 	t.Run("handles diamond dependency without error", func(t *testing.T) {
