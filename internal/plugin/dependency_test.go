@@ -101,6 +101,7 @@ func TestResolveDependencyOrder(t *testing.T) {
 	})
 }
 
+// Verifies: INV-PLUGIN-41
 func TestResolveResultReportsUnsatisfiedCapability(t *testing.T) {
 	plugins := []*DiscoveredPlugin{
 		{Manifest: &Manifest{Name: "c", Requires: []Dependency{{Kind: DependencyCapability, Name: "world.query"}}}},
@@ -123,6 +124,7 @@ func TestResolveResultSatisfiesRegisteredCapability(t *testing.T) {
 	assert.Len(t, res.Ordered, 1)
 }
 
+// Verifies: INV-PLUGIN-42
 func TestResolveResultMisdeclaredCapabilityThatIsPluginProvided(t *testing.T) {
 	plugins := []*DiscoveredPlugin{
 		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{{Kind: DependencyCapability, Name: "holomush.scene.v1.SceneService"}}}},
@@ -144,6 +146,7 @@ func TestResolveResultOptionalUnsatisfiedIsSkipped(t *testing.T) {
 	assert.Len(t, res.Ordered, 1)
 }
 
+// Verifies: INV-PLUGIN-41
 func TestResolveResultServiceEdgeOrdersProviderFirst(t *testing.T) {
 	plugins := []*DiscoveredPlugin{
 		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{{Kind: DependencyService, Name: "svc-a"}}}},

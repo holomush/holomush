@@ -12,6 +12,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+// Verifies: INV-PLUGIN-43
 func TestResolveLoadOrderFailsFastOnUnsatisfiedRequired(t *testing.T) {
 	m := &Manager{registry: NewServiceRegistry(), capVocab: NewCapabilityVocabulary()}
 	discovered := []*DiscoveredPlugin{
