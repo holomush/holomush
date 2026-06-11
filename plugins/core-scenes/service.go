@@ -275,7 +275,12 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 	id, err := newSceneID()
 	if err != nil {
 		recordError(span, err)
-		return nil, status.Errorf(codes.Internal, "failed to generate scene id: %v", err)
+		slog.WarnContext(
+			ctx, "scene.service.create_scene id generation error",
+			"subject_id", req.GetCharacterId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 	span.SetAttributes(attribute.String("scene_id", id))
 
@@ -314,7 +319,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 			"scene_id", id,
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to prepare scene event: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 	if s.eventSink == nil {
 		err := oops.Code("SCENE_EVENT_SINK_NOT_CONFIGURED").
@@ -327,7 +332,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 			"scene_id", id,
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to prepare scene event: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	if err := s.store.CreateWithOwner(ctx, row); err != nil {
@@ -338,7 +343,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 			"scene_id", id,
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to create scene: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	if err := s.eventSink.Emit(ctx, intent); err != nil {
@@ -354,7 +359,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 			"scene_id", id,
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to emit scene event: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 	metricSceneCreated(string(visibility), false)
 	slog.InfoContext(
@@ -651,7 +656,7 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to end scene: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	metricSceneStateTransition(string(SceneStateActive)+"_or_paused", "ended", "rpc")
@@ -685,7 +690,7 @@ func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSce
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to pause scene: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	metricSceneStateTransition("active", "paused", "rpc")
@@ -720,7 +725,7 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to resume scene: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	metricSceneStateTransition("paused", "active", "rpc")
@@ -794,7 +799,7 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to update scene: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	// Auto-emit scene_pose_order_changed_ic when pose_order_mode actually
@@ -900,7 +905,7 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to join scene: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	// Auto-emit scene_join_ic notice event when this is a NEW membership
@@ -1209,7 +1214,13 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
 			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
 		}
-		return nil, status.Errorf(codes.Internal, "failed to load scene: %v", err)
+		slog.WarnContext(
+			ctx, "scene.service.leave_scene load error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 	if sceneRow.OwnerID == req.GetCharacterId() {
 		err := status.Errorf(codes.FailedPrecondition,
@@ -1238,7 +1249,7 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 			"scene_id", req.GetSceneId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to leave scene: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	// Auto-emit scene_leave_ic notice event. Non-fatal: membership is already
@@ -1278,7 +1289,7 @@ func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.Invit
 			"target_id", req.GetTargetCharacterId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to invite: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	slog.InfoContext(
@@ -1321,7 +1332,7 @@ func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickF
 			"target_id", req.GetTargetCharacterId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to kick: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	// Auto-emit scene_leave_ic notice event (reason=kicked). Non-fatal:
@@ -1375,7 +1386,7 @@ func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.T
 			"new_owner", req.GetNewOwnerCharacterId(),
 			"error", err,
 		)
-		return nil, status.Errorf(codes.Internal, "failed to transfer ownership: %v", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	slog.InfoContext(

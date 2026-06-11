@@ -6,6 +6,9 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -786,6 +789,84 @@ func TestSceneServiceCreateSceneReturnsInternalWhenStoreFails(t *testing.T) {
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())
+	// Opacity (.claude/rules/grpc-errors.md / holomush-2dsxm): the inner store
+	// error text MUST NOT reach the wire.
+	assert.Equal(t, "internal error", st.Message(),
+		"inner error text must not leak past the trust boundary")
+	assert.NotContains(t, st.Message(), "boom")
+}
+
+// TestSceneServiceJoinSceneReturnsOpaqueInternalWhenStoreFails verifies the
+// AddParticipant store-error path returns an opaque Internal (no inner text),
+// per .claude/rules/grpc-errors.md (holomush-2dsxm).
+func TestSceneServiceJoinSceneReturnsOpaqueInternalWhenStoreFails(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-join-boom", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	// Plain (non-oops-coded) error so it falls past the mapped cases to the
+	// generic Internal branch.
+	store.addParticipantErr = errors.New("pgx: relation \"scene_participants\" does not exist")
+	svc := newTestService(t, store)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		CharacterId: "char-bob", SceneId: "scene-join-boom",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Equal(t, "internal error", st.Message(),
+		"inner error text must not leak past the trust boundary")
+	assert.NotContains(t, st.Message(), "scene_participants")
+}
+
+// TestSceneServiceLeaveSceneReturnsOpaqueInternalWhenLoadFails verifies the
+// scene-load (store.Get) error path in LeaveScene returns an opaque Internal
+// for a non-NotFound store failure (holomush-2dsxm).
+func TestSceneServiceLeaveSceneReturnsOpaqueInternalWhenLoadFails(t *testing.T) {
+	store := newFakeStore()
+	// Non-SCENE_NOT_FOUND error → the Internal branch, not the NotFound branch.
+	store.getErr = errors.New("pgx: connection refused")
+	svc := newTestService(t, store)
+
+	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
+		CharacterId: "char-bob", SceneId: "scene-x",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Equal(t, "internal error", st.Message(),
+		"inner error text must not leak past the trust boundary")
+	assert.NotContains(t, st.Message(), "connection refused")
+}
+
+// TestNoInternalErrorLeaksInSceneSource guards .claude/rules/grpc-errors.md
+// (holomush-2dsxm): no codes.Internal status may interpolate an inner error into
+// its wire message. The behavioral tests above prove the contract for
+// representative handlers; this scan covers every site in the package and keeps
+// regressions out.
+func TestNoInternalErrorLeaksInSceneSource(t *testing.T) {
+	// The format string is the first literal after codes.Internal; a format verb
+	// inside it means an argument is interpolated into the wire message. \s* spans
+	// newlines so a call split across lines is still caught.
+	leak := regexp.MustCompile(`status\.Errorf\(\s*codes\.Internal\s*,\s*"[^"]*%[a-z]`)
+	srcs, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	for _, fname := range srcs {
+		if strings.HasSuffix(fname, "_test.go") {
+			continue
+		}
+		src, readErr := os.ReadFile(fname)
+		require.NoError(t, readErr)
+		for _, loc := range leak.FindAllIndex(src, -1) {
+			line := 1 + strings.Count(string(src[:loc[0]]), "\n")
+			t.Errorf("%s:%d: codes.Internal status with a format verb leaks the inner "+
+				"error to the wire — log the error and return the opaque "+
+				`status.Errorf(codes.Internal, "internal error") `+
+				"(.claude/rules/grpc-errors.md)", fname, line)
+		}
+	}
 }
 
 func TestSceneServiceCreateSceneEmitsLifecycleEventWhenEventSinkConfigured(t *testing.T) {
@@ -819,7 +900,8 @@ func TestSceneServiceCreateSceneFailsWhenEventSinkIsMissing(t *testing.T) {
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())
-	assert.Contains(t, st.Message(), "failed to prepare scene event")
+	// Opaque wire message — no inner detail (holomush-2dsxm).
+	assert.Equal(t, "internal error", st.Message())
 	assert.Empty(t, store.scenes)
 }
 
@@ -836,7 +918,9 @@ func TestSceneServiceCreateSceneReturnsInternalWhenEventEmitFailsAfterPersist(t 
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())
-	assert.Contains(t, st.Message(), "failed to emit scene event")
+	// Opaque wire message — the inner "boom" must not leak (holomush-2dsxm).
+	assert.Equal(t, "internal error", st.Message())
+	assert.NotContains(t, st.Message(), "boom")
 	require.Len(t, store.scenes, 1)
 }
 
