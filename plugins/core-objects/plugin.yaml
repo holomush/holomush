@@ -7,8 +7,8 @@ type: lua
 lua-plugin:
   entry: main.lua
 requires:
-  - holomush.property.v1.PropertyService
-  - holomush.world.v1.WorldQueryService
+  - capability: property
+  - capability: world.query
 commands:
   - name: describe
     aliases:

@@ -36,6 +36,7 @@ func GenerateSchema() ([]byte, error) {
 	schema.Title = "HoloMUSH Plugin Manifest"
 	schema.Description = "Schema for plugin.yaml manifest files"
 	tightenEmitsSchema(schema)
+	tightenRequiresSchema(schema)
 
 	data, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
@@ -73,6 +74,47 @@ func tightenEmitsSchema(schema *jsonschema.Schema) {
 	settingDisallowEmits.If.Properties = jsonschema.NewProperties()
 	settingDisallowEmits.If.Properties.Set("type", &jsonschema.Schema{Const: "setting"})
 	schema.AllOf = append(schema.AllOf, settingDisallowEmits)
+}
+
+// tightenRequiresSchema replaces the reflected schema for the requires list
+// items. The Manifest.Requires field is []Dependency, whose UnmarshalYAML
+// (dependency_type.go) accepts either a bare string (legacy flat-string service
+// path) or a typed object with exactly one of capability/service. The default
+// struct reflection produces neither shape, so we override the items schema to
+// the oneOf[string | object{...}] form that matches the YAML decoder.
+func tightenRequiresSchema(schema *jsonschema.Schema) {
+	if schema == nil || schema.Properties == nil {
+		return
+	}
+
+	requires, ok := schema.Properties.Get("requires")
+	if !ok || requires == nil {
+		return
+	}
+
+	objProps := jsonschema.NewProperties()
+	objProps.Set("capability", &jsonschema.Schema{Type: "string"})
+	objProps.Set("service", &jsonschema.Schema{Type: "string"})
+	objProps.Set("version", &jsonschema.Schema{Type: "string"})
+	objProps.Set("optional", &jsonschema.Schema{Type: "boolean"})
+	objProps.Set("scope", &jsonschema.Schema{Type: "string"})
+
+	objectForm := &jsonschema.Schema{
+		Type: "object",
+		OneOf: []*jsonschema.Schema{
+			{Required: []string{"capability"}},
+			{Required: []string{"service"}},
+		},
+		Properties:           objProps,
+		AdditionalProperties: jsonschema.FalseSchema,
+	}
+
+	requires.Items = &jsonschema.Schema{
+		OneOf: []*jsonschema.Schema{
+			{Type: "string"},
+			objectForm,
+		},
+	}
 }
 
 func ptrUint64(v uint64) *uint64 {

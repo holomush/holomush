@@ -7,8 +7,6 @@ type: lua
 load_priority: -1000
 lua-plugin:
   entry: main.lua
-requires:
-  - holomush.alias.v1.AliasService
 commands:
   - name: alias
     capabilities:
