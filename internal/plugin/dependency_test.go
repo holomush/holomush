@@ -6,6 +6,7 @@ package plugins
 import (
 	"testing"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -81,6 +82,21 @@ func TestResolveDependencyOrder(t *testing.T) {
 		}
 		_, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
 		assert.Error(t, err)
+	})
+
+	t.Run("rejects a plugin that provides a server-owned service", func(t *testing.T) {
+		// Regression (holomush-et5lz): the duplicate-provider guard used the ""
+		// host sentinel as its skip condition (existing != ""), so a plugin
+		// declaring Provides of a host-owned service slipped past the guard and
+		// silently overwrote the host's ownership in svcProvider — corrupting
+		// load-order edges and broker/service routing. A host/plugin collision
+		// MUST be a hard DUPLICATE_SERVICE_PROVIDER error, same as plugin/plugin.
+		plugins := []*DiscoveredPlugin{
+			{Manifest: &Manifest{Name: "usurper", Provides: []string{"holomush.world.v1.WorldService"}}},
+		}
+		serverServices := []string{"holomush.world.v1.WorldService"}
+		_, err := ResolveDependencyOrder(plugins, serverServices, NewCapabilityVocabulary())
+		errutil.AssertErrorCode(t, err, "DUPLICATE_SERVICE_PROVIDER")
 	})
 
 	t.Run("handles diamond dependency without error", func(t *testing.T) {

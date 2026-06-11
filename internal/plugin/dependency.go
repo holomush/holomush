@@ -71,13 +71,23 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 	}
 	for _, p := range plugins {
 		for _, svc := range p.Manifest.Provides {
-			if existing, seen := svcProvider[svc]; seen && existing != "" {
+			// Any prior provider — a peer plugin OR the host ("" sentinel) — is a
+			// hard collision. The "" host case is deliberately NOT excused: a
+			// plugin declaring Provides of a server-owned service would otherwise
+			// silently overwrite the host's ownership below, corrupting load-order
+			// edges and broker/service routing (holomush-et5lz). A core service
+			// is never a plugin override target; that would be an explicit feature.
+			if existing, seen := svcProvider[svc]; seen {
+				providerA := existing
+				if providerA == "" {
+					providerA = "(server)"
+				}
 				return nil, oops.
 					Code("DUPLICATE_SERVICE_PROVIDER").
 					With("service", svc).
-					With("provider_a", existing).
+					With("provider_a", providerA).
 					With("provider_b", p.Manifest.Name).
-					Errorf("service %q is provided by both %q and %q", svc, existing, p.Manifest.Name)
+					Errorf("service %q is provided by both %q and %q", svc, providerA, p.Manifest.Name)
 			}
 			svcProvider[svc] = p.Manifest.Name
 		}
