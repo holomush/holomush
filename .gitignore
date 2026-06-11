@@ -118,3 +118,6 @@ web/test-results/
 # Claude Code local-scope agent memory (never committed; project-scope memory
 # lives in .claude/agent-memory/ and IS committed).
 .claude/agent-memory-local/
+
+# Beads / Dolt files (added by bd init)
+.beads/proxieddb/
