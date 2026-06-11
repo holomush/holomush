@@ -3713,6 +3713,38 @@ invariants:
       - "internal/plugin/manifest_test.go"
       - "internal/plugin/lua/corecomm_sensitive_emit_test.go"
       - "test/meta/plugin_verb_qualification_test.go"
+  - id: INV-PLUGIN-41
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
+    summary: "The plugin dependency resolver MUST validate and order a single graph spanning host capabilities (satisfied
+      without an ordering edge) and plugin-provided services (provider-before-consumer edge). A declared dependency unsatisfiable
+      by either provider source MUST be reported, never silently dropped or reclassified."
+    binding: pending
+  - id: INV-PLUGIN-42
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
+    summary: "A requires `capability:` entry MUST resolve to a registered host capability and a `service:` entry to a provided
+      proto service; a kind/provider mismatch MUST be a hard MISDECLARED_DEPENDENCY error, not a silent reclassification."
+    binding: pending
+  - id: INV-PLUGIN-43
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
+    summary: "An unsatisfied non-optional plugin dependency or a dependency cycle MUST fail the boot; the loader MUST NOT
+      downgrade it to a WARN + priority-sort fallback. `optional: true` entries MAY be skipped."
+    binding: pending
+  - id: INV-PLUGIN-44
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
+    summary: "Binary and Lua plugins MUST obtain every declared dependency through the one host gRPC broker, gated by the
+      declaration and authorized as PluginSubject; neither runtime MAY receive an undeclared capability or service. Consumption-path
+      facet of plugin-runtime-symmetry; distinct from INV-CRYPTO-34 (emit/fence/audit path)."
+    binding: pending
+  - id: INV-PLUGIN-45
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
+    summary: "The declaration gate that enforces least privilege MUST live at the broker/registry common path shared by both
+      runtimes; per-runtime gating that could diverge is forbidden."
+    binding: pending
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

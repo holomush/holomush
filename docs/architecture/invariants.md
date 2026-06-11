@@ -313,6 +313,11 @@ invariants.
 | `INV-PLUGIN-38` | Lua Load-pass DoString errors MUST fail plugin load with the same wrapper shape as the syntax-check error (oops.In("lua"), operation=load); the Hint string is branch-specific ("INV-S5 capture pass execution error" for crypto plugins). | `INV-M6` | pending |
 | `INV-PLUGIN-39` | Every primitive in the INV-S5 mechanism MUST ship a Go SDK method + Lua hostfunc + parity test together (per parent substrate invariant INV-S3 / INV-PLUGIN-31). | `INV-M7` | pending |
 | `INV-PLUGIN-40` | Every emitted wire event type and every verbs[].type MUST be plugin-qualified <owning-plugin>:<verb> (one colon). The registered-emit set and crypto.emits[].event_type stay bare (INV-PLUGIN-32 set-equality + requests_decryption); the host bridges bare<->qualified only via emitEntryMatchesWireType. Manifest.Validate rejects an unqualified verbs[].type with PLUGIN_WIRE_TYPE_NOT_QUALIFIED. | — | bound |
+| `INV-PLUGIN-41` | The plugin dependency resolver MUST validate and order a single graph spanning host capabilities (satisfied without an ordering edge) and plugin-provided services (provider-before-consumer edge). A declared dependency unsatisfiable by either provider source MUST be reported, never silently dropped or reclassified. | — | pending |
+| `INV-PLUGIN-42` | A requires `capability:` entry MUST resolve to a registered host capability and a `service:` entry to a provided proto service; a kind/provider mismatch MUST be a hard MISDECLARED_DEPENDENCY error, not a silent reclassification. | — | pending |
+| `INV-PLUGIN-43` | An unsatisfied non-optional plugin dependency or a dependency cycle MUST fail the boot; the loader MUST NOT downgrade it to a WARN + priority-sort fallback. `optional: true` entries MAY be skipped. | — | pending |
+| `INV-PLUGIN-44` | Binary and Lua plugins MUST obtain every declared dependency through the one host gRPC broker, gated by the declaration and authorized as PluginSubject; neither runtime MAY receive an undeclared capability or service. Consumption-path facet of plugin-runtime-symmetry; distinct from INV-CRYPTO-34 (emit/fence/audit path). | — | pending |
+| `INV-PLUGIN-45` | The declaration gate that enforces least privilege MUST live at the broker/registry common path shared by both runtimes; per-runtime gating that could diverge is forbidden. | — | pending |
 
 ### `INV-EVENTBUS`
 
