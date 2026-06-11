@@ -4,30 +4,50 @@
 package plugins
 
 import (
-	"fmt"
-	"strings"
-
+	"github.com/Masterminds/semver/v3"
 	"github.com/samber/oops"
 )
 
-// ResolveDependencyOrder returns plugins sorted so that providers load before
-// consumers. It uses Kahn's algorithm on a DAG whose edges encode two kinds of
-// dependency:
+// UnsatisfiedDep records one declared dependency the resolver could not satisfy.
+type UnsatisfiedDep struct {
+	Plugin string
+	Entry  Dependency
+	Reason string // UNSATISFIED_CAPABILITY | UNSATISFIED_SERVICE | MISDECLARED_DEPENDENCY | VERSION_UNSATISFIED
+}
+
+// ResolveResult is the structured output of dependency resolution. A future
+// per-plugin quarantine policy reads Unsatisfied/Cycles without a resolver
+// rewrite (spec §2).
+type ResolveResult struct {
+	Ordered     []*DiscoveredPlugin
+	Unsatisfied []UnsatisfiedDep
+	Cycles      [][]string
+}
+
+// ResolveDependencyOrder validates and orders the unified dependency graph and
+// returns a structured result.
+//
+// The graph encodes two kinds of dependency edge plus a no-edge capability
+// requirement:
 //
 //  1. Service edges — plugin A requires service S, plugin B provides S →
 //     B must load before A.
 //  2. Named manifest dependencies — plugin A's Dependencies map lists plugin B →
 //     B must load before A.
+//  3. Capability requirements — a host-provided capability named in the
+//     controlled vocabulary; satisfied by presence in vocab, never an edge.
 //
-// serverServices lists services the HoloMUSH core itself exposes; these satisfy
-// Requires declarations without creating plugin-to-plugin edges.
+// serverServices lists services the HoloMUSH core itself exposes (e.g.
+// holomush.world.v1.WorldService); these satisfy service Requires declarations
+// without creating plugin-to-plugin edges. vocab lists the valid host
+// capabilities.
 //
-// Errors:
-//   - DUPLICATE_SERVICE_PROVIDER — two plugins declare the same Provides entry
-//   - UNSATISFIED_REQUIRES — required service not provided by any plugin or server
-//   - UNSATISFIED_DEPENDENCY — named plugin in Dependencies not discovered
-//   - CIRCULAR_DEPENDENCY — a cycle exists in the dependency graph
-func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string) ([]*DiscoveredPlugin, error) {
+// A bare Go error is returned ONLY for hard structural faults that make the
+// graph un-indexable: DUPLICATE_PLUGIN_NAME and DUPLICATE_SERVICE_PROVIDER.
+// Per-entry validation failures (UNSATISFIED_CAPABILITY, UNSATISFIED_SERVICE,
+// MISDECLARED_DEPENDENCY, VERSION_UNSATISFIED) are reported in res.Unsatisfied,
+// and dependency cycles in res.Cycles — not as Go errors.
+func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string, vocab *CapabilityVocabulary) (*ResolveResult, error) {
 	// Index plugins by name for fast lookup.
 	byName := make(map[string]*DiscoveredPlugin, len(plugins))
 	for _, p := range plugins {
@@ -62,28 +82,45 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 		}
 	}
 
-	// Validate all Requires are satisfiable.
-	for _, p := range plugins {
-		for _, svc := range p.Manifest.RequiredServiceNames() {
-			if _, ok := svcProvider[svc]; !ok {
-				return nil, oops.
-					Code("UNSATISFIED_REQUIRES").
-					With("plugin", p.Manifest.Name).
-					With("service", svc).
-					Errorf("plugin %q requires service %q which is not provided by any plugin or server", p.Manifest.Name, svc)
-			}
-		}
-	}
+	res := &ResolveResult{}
 
-	// Validate all named Dependencies refer to discovered plugins.
+	// Per-entry, kind-aware validation. Capability entries add no edge; service
+	// entries are checked for a provider (and optional version constraint).
 	for _, p := range plugins {
-		for dep := range p.Manifest.Dependencies {
-			if _, ok := byName[dep]; !ok {
-				return nil, oops.
-					Code("UNSATISFIED_DEPENDENCY").
-					With("plugin", p.Manifest.Name).
-					With("dependency", dep).
-					Errorf("plugin %q depends on %q which is not discovered", p.Manifest.Name, dep)
+		for _, dep := range p.Manifest.Requires {
+			switch dep.Kind {
+			case DependencyCapability:
+				if !vocab.Has(dep.Name) {
+					reason := "UNSATISFIED_CAPABILITY"
+					if _, isService := svcProvider[dep.Name]; isService {
+						reason = "MISDECLARED_DEPENDENCY"
+					}
+					if !dep.Optional {
+						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: reason})
+					}
+				}
+			case DependencyService:
+				provider, ok := svcProvider[dep.Name]
+				if !ok {
+					if vocab.Has(dep.Name) {
+						if !dep.Optional {
+							res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "MISDECLARED_DEPENDENCY"})
+						}
+						continue
+					}
+					if !dep.Optional {
+						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "UNSATISFIED_SERVICE"})
+					}
+					continue
+				}
+				// Version check: when the provider is a plugin (non-empty name)
+				// and dep.Version is set, verify the provider's Manifest.Version
+				// satisfies the constraint.
+				if provider != "" && dep.Version != "" {
+					if !versionSatisfies(byName[provider].Manifest.Version, dep.Version) {
+						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "VERSION_UNSATISFIED"})
+					}
+				}
 			}
 		}
 	}
@@ -104,18 +141,20 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 	}
 
 	for _, p := range plugins {
-		// Service edges.
+		// Service edges (capability requirements add no edge).
 		for _, svc := range p.Manifest.RequiredServiceNames() {
-			providerName := svcProvider[svc]
-			if providerName == "" {
-				// Server-provided; no plugin edge needed.
+			providerName, ok := svcProvider[svc]
+			if !ok || providerName == "" {
+				// Unsatisfied or server-provided; no plugin edge.
 				continue
 			}
 			addEdge(providerName, p.Manifest.Name)
 		}
 		// Named manifest dependency edges.
 		for dep := range p.Manifest.Dependencies {
-			addEdge(dep, p.Manifest.Name)
+			if _, ok := byName[dep]; ok {
+				addEdge(dep, p.Manifest.Name)
+			}
 		}
 	}
 
@@ -127,12 +166,12 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 		}
 	}
 
-	result := make([]*DiscoveredPlugin, 0, len(plugins))
+	ordered := make([]*DiscoveredPlugin, 0, len(plugins))
 	for len(queue) > 0 {
 		// Pop front.
 		name := queue[0]
 		queue = queue[1:]
-		result = append(result, byName[name])
+		ordered = append(ordered, byName[name])
 
 		for _, consumer := range dependents[name] {
 			inDegree[consumer]--
@@ -142,19 +181,32 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 		}
 	}
 
-	if len(result) != len(plugins) {
-		// Collect names still in the cycle for a helpful error message.
+	if len(ordered) != len(plugins) {
+		// Collect names still in the cycle.
 		var cycleNames []string
 		for name, deg := range inDegree {
 			if deg > 0 {
 				cycleNames = append(cycleNames, name)
 			}
 		}
-		return nil, oops.
-			Code("CIRCULAR_DEPENDENCY").
-			With("plugins", strings.Join(cycleNames, ", ")).
-			Errorf("circular dependency detected among plugins: %s", fmt.Sprintf("[%s]", strings.Join(cycleNames, ", ")))
+		res.Cycles = append(res.Cycles, cycleNames)
+		return res, nil
 	}
 
-	return result, nil
+	res.Ordered = ordered
+	return res, nil
+}
+
+// versionSatisfies reports whether version satisfies the semver constraint.
+// A malformed version or constraint is treated as not satisfying (fail-closed).
+func versionSatisfies(version, constraint string) bool {
+	c, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return false
+	}
+	v, err := semver.NewVersion(version)
+	if err != nil {
+		return false
+	}
+	return c.Check(v)
 }

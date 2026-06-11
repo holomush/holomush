@@ -53,3 +53,43 @@ func TestRequireServicesConstructsServiceDeps(t *testing.T) {
 	assert.Equal(t, DependencyService, deps[0].Kind)
 	assert.Equal(t, "a", deps[0].Name)
 }
+
+func TestVersionSatisfies(t *testing.T) {
+	tests := []struct {
+		name       string
+		version    string
+		constraint string
+		want       bool
+	}{
+		{
+			name:       "version satisfies constraint when version meets lower bound",
+			version:    "1.2.0",
+			constraint: ">=1.0.0",
+			want:       true,
+		},
+		{
+			name:       "version does not satisfy constraint when version is below lower bound",
+			version:    "0.9.0",
+			constraint: ">=1.0.0",
+			want:       false,
+		},
+		{
+			name:       "returns false for malformed version string",
+			version:    "not-a-version",
+			constraint: ">=1.0.0",
+			want:       false,
+		},
+		{
+			name:       "returns false for malformed constraint string",
+			version:    "1.0.0",
+			constraint: "not-a-constraint",
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, versionSatisfies(tt.version, tt.constraint))
+		})
+	}
+}

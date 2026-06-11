@@ -814,9 +814,9 @@ func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) []*Discovered
 			serverServiceNames = append(serverServiceNames, svc.Name)
 		}
 
-		ordered, err := ResolveDependencyOrder(discovered, serverServiceNames)
-		if err == nil {
-			return ordered
+		res, err := ResolveDependencyOrder(discovered, serverServiceNames, DefaultCapabilityVocabulary())
+		if err == nil && len(res.Unsatisfied) == 0 && len(res.Cycles) == 0 {
+			return res.Ordered
 		}
 		slog.Warn("DAG dependency resolution failed, falling back to priority sort",
 			"error", err)
