@@ -119,8 +119,12 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 				}
 				// Version check: when the provider is a plugin (non-empty name)
 				// and dep.Version is set, verify the provider's Manifest.Version
-				// satisfies the constraint.
-				if provider != "" && dep.Version != "" {
+				// satisfies the constraint. An optional dependency whose provider
+				// exists but fails the version constraint is graceful-degrade:
+				// skipped, not recorded — the same posture as an optional
+				// dependency with no provider at all (spec §2; only a non-optional
+				// unsatisfiable entry is recorded in Unsatisfied).
+				if provider != "" && dep.Version != "" && !dep.Optional {
 					if !versionSatisfies(byName[provider].Manifest.Version, dep.Version) {
 						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "VERSION_UNSATISFIED"})
 					}

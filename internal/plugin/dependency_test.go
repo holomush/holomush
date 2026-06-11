@@ -169,6 +169,17 @@ func TestResolveResultReportsVersionUnsatisfied(t *testing.T) {
 	assert.Equal(t, "VERSION_UNSATISFIED", res.Unsatisfied[0].Reason)
 }
 
+func TestResolveResultOptionalVersionMismatchIsSkipped(t *testing.T) {
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{{Kind: DependencyService, Name: "svc-a", Version: ">=2.0.0", Optional: true}}}},
+		{Manifest: &Manifest{Name: "provider", Version: "1.0.0", Provides: []string{"svc-a"}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	assert.Empty(t, res.Unsatisfied, "optional dependency with version mismatch should not be reported")
+	assert.Len(t, res.Ordered, 2)
+}
+
 // Verifies: INV-PLUGIN-41
 func TestResolveResultReportsUnknownDependencyKind(t *testing.T) {
 	// A Go-constructed required dependency with a zero-value Kind must be
