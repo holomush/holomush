@@ -7,7 +7,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 requires:
-  - holomush.session.v1.SessionService
+  - capability: session
 emits: [location, character]
 history_scope: grid
 actor_kinds_claimable: [plugin, character]

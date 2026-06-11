@@ -248,7 +248,44 @@
     },
     "requires": {
       "items": {
-        "type": "string"
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "oneOf": [
+              {
+                "required": [
+                  "capability"
+                ]
+              },
+              {
+                "required": [
+                  "service"
+                ]
+              }
+            ],
+            "properties": {
+              "capability": {
+                "type": "string"
+              },
+              "service": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "optional": {
+                "type": "boolean"
+              },
+              "scope": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object"
+          }
+        ]
       },
       "type": "array"
     },

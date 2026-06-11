@@ -128,7 +128,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					Expect(dp.Manifest.Type).To(Equal(plugins.TypeBinary))
 					Expect(dp.Manifest.Storage).To(Equal(plugins.StoragePostgres))
 					Expect(dp.Manifest.Provides).To(ContainElement("holomush.scene.v1.SceneService"))
-					Expect(dp.Manifest.Requires).To(ContainElement("holomush.world.v1.WorldService"))
+					Expect(dp.Manifest.RequiredServiceNames()).To(ContainElement("holomush.world.v1.WorldService"))
 				}
 			}
 			Expect(found).To(BeTrue(), "core-scenes not discovered in %s", pluginsDir)

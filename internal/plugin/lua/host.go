@@ -320,7 +320,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").New("plugin not loaded")
 	}
 	code := p.code
-	requires := p.manifest.Requires
+	requires := p.manifest.RequiredServiceNames()
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
 	// (concurrent map read/write panic). Shallow clone suffices — Load
@@ -399,7 +399,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_command").New("plugin not loaded")
 	}
 	code := p.code
-	requires := p.manifest.Requires
+	requires := p.manifest.RequiredServiceNames()
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
 	// (concurrent map read/write panic). Shallow clone suffices — Load
@@ -505,7 +505,7 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 		return nil, oops.In("lua").With("plugin", name).With("operation", "query_session_streams").New("plugin not loaded")
 	}
 	code := p.code
-	requires := p.manifest.Requires
+	requires := p.manifest.RequiredServiceNames()
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
 	// (concurrent map read/write panic). Shallow clone suffices — Load

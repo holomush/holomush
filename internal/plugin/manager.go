@@ -79,6 +79,7 @@ type Manager struct {
 	registerProvider    RegisterPluginProviderFunc   // optional, registers plugin attribute providers
 	unregisterProvider  UnregisterPluginProviderFunc // optional, unregisters plugin attribute providers on rollback
 	registry            *ServiceRegistry             // optional, enables DAG resolution
+	capVocab            *CapabilityVocabulary        // controlled host-capability vocabulary; defaulted in NewManager
 	trustAllowlist      map[string]bool              // server-side trust escalation allowlist
 	gracefulDegradation bool                         // if true, LoadAll continues despite plugin failures
 	aliasSeeder         AliasSeeder
@@ -216,6 +217,7 @@ func (m *Manager) Registry() *ServiceRegistry {
 func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 	m := &Manager{
 		pluginsDir:  pluginsDir,
+		capVocab:    DefaultCapabilityVocabulary(),
 		loaded:      make(map[string]*DiscoveredPlugin),
 		inflight:    make(map[string]*DiscoveredPlugin),
 		hosts:       make(map[Type]Host),
@@ -625,9 +627,10 @@ func (m *Manager) warnUnknownTrustAllowlistEntries(discovered []*DiscoveredPlugi
 // LoadAll discovers and loads all plugins in the plugins directory.
 //
 // When a ServiceRegistry is configured (via WithServiceRegistry), LoadAll uses
-// DAG-based dependency resolution to determine load order. If resolution fails
-// (e.g. circular dependency or unsatisfied requires), it falls back to priority
-// sort and logs a warning.
+// DAG-based dependency resolution to determine load order. Resolution failure
+// (a cycle or a non-optional unsatisfied dependency) is a fatal boot error
+// (fail-closed, INV-PLUGIN-43): LoadAll returns it before loading any plugin.
+// With no registry, load order falls back to priority sort.
 //
 // Strict by default: if any plugin fails to load, LoadAll attempts all
 // remaining plugins, then returns a joined error describing every failure.
@@ -655,7 +658,10 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	knownActions := CollectActions(discovered)
 
 	// Phase 3: Resolve load order.
-	ordered := m.resolveLoadOrder(discovered)
+	ordered, err := m.resolveLoadOrder(discovered)
+	if err != nil {
+		return err
+	}
 
 	// Phase 4: Load each plugin with full context.
 	var loadErrors []error
@@ -804,25 +810,40 @@ func CollectActions(discovered []*DiscoveredPlugin) map[string]bool {
 }
 
 // resolveLoadOrder returns plugins in the order they should be loaded.
-// When a registry is configured, it uses DAG-based dependency resolution.
-// Falls back to priority sort if DAG resolution fails or no registry is set.
-func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) []*DiscoveredPlugin {
-	if m.registry != nil {
-		serverServices := m.registry.List()
-		serverServiceNames := make([]string, 0, len(serverServices))
-		for _, svc := range serverServices {
-			serverServiceNames = append(serverServiceNames, svc.Name)
-		}
-
-		ordered, err := ResolveDependencyOrder(discovered, serverServiceNames)
-		if err == nil {
-			return ordered
-		}
-		slog.Warn("DAG dependency resolution failed, falling back to priority sort",
-			"error", err)
+// When a registry is configured, it uses DAG-based dependency resolution and
+// fails the boot (fail-closed, INV-PLUGIN-43) on any non-optional unsatisfied
+// dependency or cycle. With no registry, it falls back to priority sort.
+func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) ([]*DiscoveredPlugin, error) {
+	if m.registry == nil {
+		return prioritySort(discovered), nil // no registry: legacy priority order
 	}
 
-	// Default: sort by load priority (lower values load first).
+	serverServices := m.registry.List()
+	serverServiceNames := make([]string, 0, len(serverServices))
+	for _, svc := range serverServices {
+		serverServiceNames = append(serverServiceNames, svc.Name)
+	}
+
+	vocab := m.capVocab
+	if vocab == nil {
+		vocab = DefaultCapabilityVocabulary()
+	}
+
+	res, err := ResolveDependencyOrder(discovered, serverServiceNames, vocab)
+	if err != nil {
+		return nil, oops.Code("PLUGIN_DEPENDENCY_RESOLVE_FAILED").Wrap(err)
+	}
+	if len(res.Unsatisfied) > 0 || len(res.Cycles) > 0 {
+		return nil, oops.Code("PLUGIN_DEPENDENCY_UNSATISFIED").
+			With("unsatisfied", res.Unsatisfied).With("cycles", res.Cycles).
+			Errorf("plugin dependency resolution failed; fail-closed (INV-PLUGIN-43)")
+	}
+	return res.Ordered, nil
+}
+
+// prioritySort orders plugins by load priority (lower values load first). It is
+// the no-registry fallback path for resolveLoadOrder.
+func prioritySort(discovered []*DiscoveredPlugin) []*DiscoveredPlugin {
 	sort.Slice(discovered, func(i, j int) bool {
 		return discovered[i].Manifest.EffectivePriority() < discovered[j].Manifest.EffectivePriority()
 	})

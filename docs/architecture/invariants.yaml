@@ -3719,19 +3719,26 @@ invariants:
     summary: "The plugin dependency resolver MUST validate and order a single graph spanning host capabilities (satisfied
       without an ordering edge) and plugin-provided services (provider-before-consumer edge). A declared dependency unsatisfiable
       by either provider source MUST be reported, never silently dropped or reclassified."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/loadall_regression_test.go"
+      - "internal/plugin/dependency_test.go"
   - id: INV-PLUGIN-42
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
     summary: "A requires `capability:` entry MUST resolve to a registered host capability and a `service:` entry to a provided
       proto service; a kind/provider mismatch MUST be a hard MISDECLARED_DEPENDENCY error, not a silent reclassification."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/dependency_test.go"
   - id: INV-PLUGIN-43
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
     summary: "An unsatisfied non-optional plugin dependency or a dependency cycle MUST fail the boot; the loader MUST NOT
       downgrade it to a WARN + priority-sort fallback. `optional: true` entries MAY be skipped."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/manager_internal_test.go"
   - id: INV-PLUGIN-44
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"

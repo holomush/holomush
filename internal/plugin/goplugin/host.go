@@ -663,8 +663,8 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		go grpcPlugin.broker.AcceptAndServe(hostBrokerID, newPluginHostServiceServer(h, manifest.Name))
 		requiredServices[pluginsdk.PluginHostServiceName] = fmt.Sprintf("broker:%d", hostBrokerID)
 	}
-	if len(manifest.Requires) > 0 && grpcPlugin.broker != nil && h.registry != nil {
-		for _, svcName := range manifest.Requires {
+	if len(manifest.RequiredServiceNames()) > 0 && grpcPlugin.broker != nil && h.registry != nil {
+		for _, svcName := range manifest.RequiredServiceNames() {
 			svc, resolveErr := h.registry.Resolve(svcName)
 			if resolveErr != nil {
 				client.Kill()

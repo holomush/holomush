@@ -121,7 +121,7 @@ The returned session table contains `character_id`, `character_name`, and
 These modules are injected only when the corresponding proto service is listed
 in the manifest's `requires` field. Each module registers a global Lua table.
 
-#### session.* (requires `holomush.session.v1.SessionService`)
+#### session.* (requires `capability: session`)
 
 | Function                       | Signature                       | Description                       |
 | ------------------------------ | ------------------------------- | --------------------------------- |
@@ -134,7 +134,7 @@ in the manifest's `requires` field. Each module registers a global Lua table.
 Session table fields: `id`, `character_id`, `character_name`, `location_id`,
 `grid_present`, `last_whispered`.
 
-#### alias.* (requires `holomush.alias.v1.AliasService`)
+#### alias.* (provided to the bundled core-aliases plugin; not declarable via `requires`)
 
 | Function                | Signature                              | Description                    |
 | ----------------------- | -------------------------------------- | ------------------------------ |
@@ -149,7 +149,7 @@ Session table fields: `id`, `character_id`, `character_name`, `location_id`,
 Alias entry tables contain `alias` and `command` fields. `check_shadow` returns
 `{shadows = bool, command = string}`.
 
-#### property.* (requires `holomush.property.v1.PropertyService`)
+#### property.* (requires `capability: property`)
 
 | Function                              | Signature                                      | Description                   |
 | ------------------------------------- | ---------------------------------------------- | ----------------------------- |
@@ -160,7 +160,7 @@ Alias entry tables contain `alias` and `command` fields. `check_shadow` returns
 Property tables contain `name`, `value`, `visibility`. Extended results from
 `find_by_prefix` also include `parent_type` and `parent_id`.
 
-#### world_ext.* (requires `holomush.world.v1.WorldService`)
+#### world_ext.* (requires `capability: world.query`)
 
 Extended world queries beyond the always-available `holomush.query_*` functions:
 
@@ -198,8 +198,8 @@ version: 1.0.0
 type: lua
 
 requires:
-  - holomush.session.v1.SessionService
-  - holomush.alias.v1.AliasService
+  - capability: session
+  - capability: property
 
 events:
   - say
@@ -217,7 +217,7 @@ lua-plugin:
 ```
 
 With these `requires`, your `main.lua` gets access to both `session.*` and
-`alias.*` global tables in addition to the always-available `holomush.*` and
+`property.*` global tables in addition to the always-available `holomush.*` and
 `holo.*` functions.
 
 ## Next steps

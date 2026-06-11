@@ -97,7 +97,7 @@ func binaryPlugin() *plugins.Manifest {
 		Version:  "2.1.0",
 		Type:     plugins.TypeBinary,
 		Storage:  plugins.StoragePostgres,
-		Requires: []string{"holomush.world.v1.WorldService"},
+		Requires: plugins.RequireServices("holomush.world.v1.WorldService"),
 		Provides: []string{"holomush.scene.v1.SceneService"},
 		Commands: []plugins.CommandSpec{
 			{Name: "scene"},
@@ -154,7 +154,7 @@ func TestPluginInfoShowsDetailForLoadedPlugin(t *testing.T) {
 	assert.Contains(t, output, "Version: 2.1.0")
 	assert.Contains(t, output, "Type: binary")
 	assert.Contains(t, output, "Storage: postgres")
-	assert.Contains(t, output, "Requires: holomush.world.v1.WorldService")
+	assert.Contains(t, output, "Requires: service:holomush.world.v1.WorldService")
 	assert.Contains(t, output, "Provides: holomush.scene.v1.SceneService")
 	assert.Contains(t, output, "Commands: scene, scenes")
 }
