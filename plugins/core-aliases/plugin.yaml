@@ -7,6 +7,17 @@ type: lua
 load_priority: -1000
 lua-plugin:
   entry: main.lua
+# The alias capability module is a host-provided capability injected into the Lua
+# VM only when declared here (hostfunc CapabilityRegistry.InjectRequired, gated on
+# the service-kind requires list). It is OPTIONAL: production does not yet register
+# the AliasService capability, so the plugin gracefully degrades ("alias service
+# not yet available"); the integration test registers a mock and exercises the
+# commands. Optional => the fail-fast resolver skips it (no provider) instead of
+# failing boot (INV-PLUGIN-43). Do NOT drop this entry: removing it stops the
+# capability injection and breaks the With-Alias-Service integration suite.
+requires:
+  - service: holomush.alias.v1.AliasService
+    optional: true
 commands:
   - name: alias
     capabilities:
