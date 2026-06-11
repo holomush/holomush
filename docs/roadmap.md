@@ -178,6 +178,71 @@ binding, `5rh.8.29.11` comms-seed PlayerID asymmetry).
   terminal does this; future clients must too. Documented in
   `site/docs/extending/binary-plugins.md`.
 
+### `theme:plugin-capability-architecture` — Unified plugin capability & dependency model
+
+Epic `holomush-eykuh`. A do-it-right redesign of how plugins declare,
+discover, and consume capabilities and dependencies — triggered by a small
+bug (`holomush-oeb4d`: a phantom `requires` that silently disabled DAG
+load-order validation on every boot) that root-caused into a deeper
+architectural conflation.
+
+#### Why now
+
+There are no users or deployments yet, so the cost of getting the plugin
+trust-and-dependency substrate *right* is at its lowest it will ever be. The
+current model has accreted three problems that compound:
+
+- The manifest `requires` field is **overloaded** — it drives both DAG
+  load-order resolution *and* Lua capability injection, and the resolver is
+  blind to the capability registry, so capability-backed requires fail
+  `UNSATISFIED_REQUIRES` and the loader silently falls back to a priority
+  sort for the whole plugin set on every boot.
+- Capability delivery is **asymmetric and not least-privilege**: Lua plugins
+  get most host functions *unconditionally* (every Lua plugin can mutate the
+  world), while binary plugins consume host capabilities as gRPC services via
+  the grpcbroker. `PluginHostService` is a 25-RPC god-service, so
+  service-granularity declarations can't express least privilege.
+- There is **no `plugin → host → plugin` story for Lua**: binary plugins can
+  call another plugin's provided service through the broker, but Lua plugins
+  have no mechanism to consume a plugin-provided service at all.
+
+#### The three mandates
+
+1. **Runtime parity** — binary and Lua plugins consume host capabilities *and*
+   plugin services through one identical host-brokered mechanism (extends the
+   `plugin-runtime-symmetry` invariant).
+2. **Full dependency graph** — the model covers `plugin → host` (capabilities),
+   `host → plugin` (event/command delivery), and `plugin → host → plugin` (a
+   plugin depends on another plugin's service).
+3. **Least-privilege security** — capability-scoped contracts (decompose the
+   `PluginHostService` god-service), declaration-gated access, plugin-as-ABAC
+   subject.
+
+#### Decomposition (foundation-first)
+
+| Sub-spec | Bead | Scope |
+| --- | --- | --- |
+| 1 — Foundation | `holomush-oeb4d` | Capability/dependency model, manifest vocabulary, unified resolver, symmetry contract. Fixes the boot bug as a byproduct. |
+| 2 — Host-service decomposition | `holomush-eykuh.1` | Split `PluginHostService` into capability-scoped proto contracts. |
+| 3 — Lua parity layer | `holomush-eykuh.2` | Host-brokered consumption of capabilities + plugin services from Lua. |
+| 4 — Least-privilege + plugin-trust security | `holomush-eykuh.3` | Declaration-gated access; ABAC with plugin subject. |
+| 5 — Migration + `o262d` | `holomush-eykuh.4` | Atomic manifest cutover; fail-fast on unsatisfied deps. |
+
+Framing decision recorded in `holomush-eykuh.5`. Grounds against the existing
+`docs/superpowers/specs/2026-04-06-grpcbroker-service-injection-design.md` and
+`2026-03-28-plugin-first-command-architecture-design.md`.
+
+#### Risks / sequencing
+
+- **Atomic cutover**: moving Lua from unconditional to declared capabilities
+  breaks any plugin that uses an undeclared host function (`core-building`
+  declares zero `requires` today but mutates the world). Every manifest must
+  be audited and updated in lockstep with the enforcement flip.
+- **God-service decomposition** is a long-lived refactor touching every plugin
+  and both runtimes; partial-migration limbo is the main hazard. The foundation
+  sub-spec sequences it so each capability contract lands behind a stable
+  declaration model.
+
 ## Completed themes
 
 ### `theme:docs-platform` — Docs site migration, IA, and gRPC reference — closed 2026-05-29

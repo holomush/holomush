@@ -16,6 +16,9 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Typed-entry requires model for plugin manifests (capability/service kind tags)](holomush-mg4x6-typed-entry-requires-model-plugin-manifests-capability-servi.md) | 2026-06-11 | Accepted | `holomush-mg4x6` |
+| [Fail-fast fail-closed plugin-loader policy with structured ResolveResult](holomush-dfkca-fail-fast-fail-closed-plugin-loader-policy-structured-resolv.md) | 2026-06-11 | Accepted | `holomush-dfkca` |
+| [Lua plugin capability/service transport via in-process gRPC over the host broker](holomush-gtkzy-lua-plugin-capability-service-transport-via-process-grpc-ove.md) | 2026-06-11 | Accepted | `holomush-gtkzy` |
 | [KEK presence is the single activation gate for sensitive-event crypto](holomush-gkw77-kek-presence-is-single-activation-gate-sensitive-event-crypt.md) | 2026-06-09 | Accepted | `holomush-gkw77` |
 | [Require a provisioned KEK to boot; auto-generate keyfile, never the passphrase](holomush-kddop-require-provisioned-kek-boot-auto-generate-keyfile-never-pas.md) | 2026-06-09 | Accepted | `holomush-kddop` |
 | [DEK seed failure is FATAL and refuses scene focus](holomush-mihtk-dek-seed-failure-is-fatal-and-refuses-scene-focus.md) | 2026-06-09 | Accepted | `holomush-mihtk` |
