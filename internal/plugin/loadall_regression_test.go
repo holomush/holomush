@@ -12,7 +12,6 @@ import (
 )
 
 // Verifies: INV-PLUGIN-41
-// Verifies: INV-PLUGIN-43
 func TestDefaultPluginSetResolvesWithNoUnsatisfiedDeps(t *testing.T) {
 	root, err := filepath.Abs("../../plugins")
 	require.NoError(t, err)

@@ -3739,7 +3739,6 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/plugin/manager_internal_test.go"
-      - "internal/plugin/loadall_regression_test.go"
   - id: INV-PLUGIN-44
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"

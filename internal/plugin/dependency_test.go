@@ -157,3 +157,56 @@ func TestResolveResultServiceEdgeOrdersProviderFirst(t *testing.T) {
 	require.Empty(t, res.Unsatisfied)
 	assert.Equal(t, "provider", res.Ordered[0].Manifest.Name)
 }
+
+func TestResolveResultReportsVersionUnsatisfied(t *testing.T) {
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{{Kind: DependencyService, Name: "svc-a", Version: ">=2.0.0"}}}},
+		{Manifest: &Manifest{Name: "provider", Version: "1.0.0", Provides: []string{"svc-a"}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	require.Len(t, res.Unsatisfied, 1)
+	assert.Equal(t, "VERSION_UNSATISFIED", res.Unsatisfied[0].Reason)
+}
+
+// Verifies: INV-PLUGIN-41
+func TestResolveResultReportsUnknownDependencyKind(t *testing.T) {
+	// A Go-constructed required dependency with a zero-value Kind must be
+	// reported, never silently dropped.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "c", Requires: []Dependency{{Name: "x"}}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	require.Len(t, res.Unsatisfied, 1)
+	assert.Equal(t, "UNKNOWN_DEPENDENCY_KIND", res.Unsatisfied[0].Reason)
+	assert.Equal(t, "x", res.Unsatisfied[0].Entry.Name)
+}
+
+// Verifies: INV-PLUGIN-41
+func TestResolveResultReportsMissingNamedDependency(t *testing.T) {
+	// A named manifest dependency on an undiscovered plugin must be reported,
+	// never silently dropped by the edge-build loop.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "dependent", Dependencies: map[string]string{"absent-base": ">= 1.0.0"}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	require.Len(t, res.Unsatisfied, 1)
+	assert.Equal(t, "UNSATISFIED_DEPENDENCY", res.Unsatisfied[0].Reason)
+	assert.Equal(t, "absent-base", res.Unsatisfied[0].Entry.Name)
+}
+
+func TestResolveResultMisdeclaredCapabilityReportedEvenWhenOptional(t *testing.T) {
+	// A capability entry naming a plugin-provided service is a kind/provider
+	// mismatch (INV-PLUGIN-42) — reported regardless of optional, since optional
+	// would otherwise silence it AND skip the required ordering edge.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{{Kind: DependencyCapability, Name: "holomush.scene.v1.SceneService", Optional: true}}}},
+		{Manifest: &Manifest{Name: "provider", Provides: []string{"holomush.scene.v1.SceneService"}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	require.Len(t, res.Unsatisfied, 1)
+	assert.Equal(t, "MISDECLARED_DEPENDENCY", res.Unsatisfied[0].Reason)
+}

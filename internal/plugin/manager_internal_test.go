@@ -23,6 +23,20 @@ func TestResolveLoadOrderFailsFastOnUnsatisfiedRequired(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "PLUGIN_DEPENDENCY_UNSATISFIED")
 }
 
+// Verifies: INV-PLUGIN-43
+func TestResolveLoadOrderFailsFastOnDependencyCycle(t *testing.T) {
+	m := &Manager{registry: NewServiceRegistry(), capVocab: NewCapabilityVocabulary()}
+	// Mutual service cycle: a requires svc-b (provided by b); b requires svc-a
+	// (provided by a). Kahn's algorithm cannot order this — fail closed.
+	discovered := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "a", Requires: []Dependency{{Kind: DependencyService, Name: "svc-b"}}, Provides: []string{"svc-a"}}},
+		{Manifest: &Manifest{Name: "b", Requires: []Dependency{{Kind: DependencyService, Name: "svc-a"}}, Provides: []string{"svc-b"}}},
+	}
+	_, err := m.resolveLoadOrder(discovered)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PLUGIN_DEPENDENCY_UNSATISFIED")
+}
+
 func TestResolveLoadOrderSucceedsWhenAllSatisfied(t *testing.T) {
 	m := &Manager{registry: NewServiceRegistry(), capVocab: DefaultCapabilityVocabulary()}
 	discovered := []*DiscoveredPlugin{

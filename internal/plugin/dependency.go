@@ -12,7 +12,7 @@ import (
 type UnsatisfiedDep struct {
 	Plugin string
 	Entry  Dependency
-	Reason string // UNSATISFIED_CAPABILITY | UNSATISFIED_SERVICE | MISDECLARED_DEPENDENCY | VERSION_UNSATISFIED
+	Reason string // UNSATISFIED_CAPABILITY | UNSATISFIED_SERVICE | MISDECLARED_DEPENDENCY | VERSION_UNSATISFIED | UNSATISFIED_DEPENDENCY | UNKNOWN_DEPENDENCY_KIND
 }
 
 // ResolveResult is the structured output of dependency resolution. A future
@@ -45,8 +45,9 @@ type ResolveResult struct {
 // A bare Go error is returned ONLY for hard structural faults that make the
 // graph un-indexable: DUPLICATE_PLUGIN_NAME and DUPLICATE_SERVICE_PROVIDER.
 // Per-entry validation failures (UNSATISFIED_CAPABILITY, UNSATISFIED_SERVICE,
-// MISDECLARED_DEPENDENCY, VERSION_UNSATISFIED) are reported in res.Unsatisfied,
-// and dependency cycles in res.Cycles — not as Go errors.
+// MISDECLARED_DEPENDENCY, VERSION_UNSATISFIED, UNSATISFIED_DEPENDENCY,
+// UNKNOWN_DEPENDENCY_KIND) are reported in res.Unsatisfied, and dependency
+// cycles in res.Cycles — not as Go errors.
 func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string, vocab *CapabilityVocabulary) (*ResolveResult, error) {
 	// Index plugins by name for fast lookup.
 	byName := make(map[string]*DiscoveredPlugin, len(plugins))
@@ -91,21 +92,24 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 			switch dep.Kind {
 			case DependencyCapability:
 				if !vocab.Has(dep.Name) {
-					reason := "UNSATISFIED_CAPABILITY"
+					// A capability entry naming a plugin-provided service is a
+					// MISDECLARED kind/provider mismatch (INV-PLUGIN-42) — a hard
+					// configuration error reported REGARDLESS of dep.Optional, since
+					// optional could otherwise silence the mismatch and skip the
+					// required ordering edge (load-order inversion).
 					if _, isService := svcProvider[dep.Name]; isService {
-						reason = "MISDECLARED_DEPENDENCY"
-					}
-					if !dep.Optional {
-						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: reason})
+						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "MISDECLARED_DEPENDENCY"})
+					} else if !dep.Optional {
+						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "UNSATISFIED_CAPABILITY"})
 					}
 				}
 			case DependencyService:
 				provider, ok := svcProvider[dep.Name]
 				if !ok {
 					if vocab.Has(dep.Name) {
-						if !dep.Optional {
-							res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "MISDECLARED_DEPENDENCY"})
-						}
+						// Service entry naming a known host capability: kind/provider
+						// mismatch, reported unconditionally (INV-PLUGIN-42).
+						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "MISDECLARED_DEPENDENCY"})
 						continue
 					}
 					if !dep.Optional {
@@ -121,6 +125,28 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "VERSION_UNSATISFIED"})
 					}
 				}
+			default:
+				// Zero-value or unknown DependencyKind (e.g. a Go-constructed
+				// Dependency{Name:"x"} with empty Kind). A required dependency of
+				// an unrecognized kind MUST be reported, never silently dropped
+				// (INV-PLUGIN-41).
+				if !dep.Optional {
+					res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "UNKNOWN_DEPENDENCY_KIND"})
+				}
+			}
+		}
+
+		// Named manifest dependencies (the Dependencies map: plugin A names plugin
+		// B). A named dependency not discovered in byName MUST be reported, never
+		// silently dropped (INV-PLUGIN-41) — the edge-build loop below only adds an
+		// edge for the satisfied case.
+		for dep := range p.Manifest.Dependencies {
+			if _, ok := byName[dep]; !ok {
+				res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{
+					Plugin: p.Manifest.Name,
+					Entry:  Dependency{Kind: DependencyService, Name: dep},
+					Reason: "UNSATISFIED_DEPENDENCY",
+				})
 			}
 		}
 	}
