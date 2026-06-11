@@ -4427,7 +4427,8 @@ invariants:
     scope: INV-CRYPTO
     origin_spec: "docs/superpowers/specs/2026-06-08-sensitive-event-crypto-production-golive-design.md"
     summary: "When RekeyManager is non-nil the production gRPC subsystem MUST build the live Publisher DEK-aware and the live
-      Subscriber AuthGuard-wired; when nil, both MUST preserve plaintext/passthrough and the subsystem MUST start."
+      Subscriber AuthGuard-wired; when nil, both MUST construct plaintext/passthrough options (defense-in-depth in the subsystem's
+      option helpers). Degraded KEK-less boot is forbidden by INV-CRYPTO-119 — production always supplies a non-nil RekeyManager."
     asserted_by:
       - "cmd/holomush/sub_grpc_test.go"
     binding: bound
