@@ -28,9 +28,20 @@ These rules come from CodeRabbit findings on PR #267 (`holomush-095g`). They wer
 return nil, status.Errorf(codes.Internal, "load scene: %v", err)
 
 // RIGHT — log internally, return generic message
-slog.ErrorContext(ctx, "load scene failed", "err", err)
-return nil, status.Error(codes.Internal, "internal error")
+errutil.LogErrorContext(ctx, "load scene failed", err)
+return nil, status.Errorf(codes.Internal, "internal error")
 ```
+
+**Log with `errutil.LogErrorContext(ctx, msg, err, extraAttrs...)`** (per the
+CLAUDE.md Error Handling rule), not a bare `slog.*Context`. It forwards `ctx`
+for trace/span correlation **and** extracts the oops `code` + context map as
+structured fields — a bare `slog.ErrorContext(ctx, msg, "err", err)` flattens
+the oops error to a plain string, losing the code you would filter on in
+Loki/Sentry. It still takes extra key/value attrs for handler context
+(`"scene_id", id`).
+
+**Return `status.Errorf` with a static string (no format verb):** it is
+wrapcheck-allowlisted, so the opaque return needs no `//nolint`. `status.Error(codes.Internal, "internal error")` is behaviorally identical but is **not** allowlisted, so it requires a line-scoped `//nolint:wrapcheck` (see [Linter compliance](#linter-compliance)). Either is fine; prefer `Errorf` to keep the diff nolint-free.
 
 ## Translate gRPC errors at ONE layer only
 
