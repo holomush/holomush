@@ -1,17 +1,25 @@
-- **Invariant-registry guards: renumber + binding-backfill + provenance — CONSOLIDATED.**
+- **Invariant-registry guards: renumber + binding-backfill + provenance + WRONG-GATE — CONSOLIDATED.**
   (1) Renumber legacy→canonical: guards BLIND to files in neither owned_paths/shared_files/refs[] (green≠done) —
   whole-tree `rg -c '\bINV-<OLD>[0-9]' --glob '!docs/**'` + `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` (range corruption).
-  (2) Backfill pending→bound+asserted_by: hand-verify each asserted_by file CONTAINS `// Verifies:` (meta-test
-  doesn't cross-check); bug-close flips → READ cited test, confirm REAL per-clause assertion; `pending` MUST NOT
-  carry asserted_by. (3) TestProvenanceGuard reads each entry's refs[] from disk → a deleted/renamed refs file
-  turns it RED for ALL citing entries; a no-refs pending→bound flip neither causes nor worsens it (judge per-entry).
-
+  (2) Backfill pending→bound+asserted_by: hand-verify asserted_by file CONTAINS `// Verifies:`; `pending` MUST NOT
+  carry asserted_by. (3) TestProvenanceGuard reads each entry's refs[] from disk → deleted/renamed refs file turns
+  it RED for ALL citing entries; a no-refs pending→bound flip neither causes nor worsens it (judge per-entry).
+  (4) WRONG-GATE binding (eykuh.2.12 NOT READY, 2026-06-12): the meta-tests CANNOT detect a `// Verifies:` on a test
+  asserting a DIFFERENT gate than the invariant names — only Skip-placeholders. ALWAYS read the origin spec to settle
+  WHICH gate the invariant means, then confirm the bound test drives THAT gate. Case: INV-PLUGIN-45 "single
+  least-privilege gate at broker/registry common path, no per-runtime fork" bound to hostcap.RegisterCapabilities
+  (register.go:42) — but that registers the per-RUNTIME server SET by CapabilitySet, NOT the per-PLUGIN "declared X⇒
+  gets X" gate. Real per-plugin gate is STILL split (luabridge.RegisterHostCaps Lua-only bridge.go:30 vs broker
+  RequiredServiceNames binary manifest.go:150) = the exact spec-forbidden split, consolidation DEFERRED to sub-specs
+  3-5. "Two BINARY endpoints, identical denial" never exercises the Lua gate → proves intra-runtime determinism, not
+  cross-runtime single-source. Also "fail-closed without identity" (EMIT_TOKEN_MISSING/ACTOR_NOT_FOUND) ≠ "authorized
+  as PluginSubject" — that's the transport-identity gap, engine never reached (DenyAll wired but unhit). Fix: revert
+  to pending + coverage bug, OR re-target to a genuinely-shared per-plugin gate (none exists pre-consolidation).
 - **Wire event-type qualification (bare scene_*→<plugin>:<verb>), aneim/r0kup READY, 2026-06-07.** THREE
   vocabularies, DIFFERENT rules — judge per-SITE: (1) registered-emit set + (2) crypto.emits[].event_type stay
   BARE (INV-PLUGIN-32 set-equality); (3) wire type + verbs[].type qualified. So bare main.go/crypto.emits/main_test
   assertions are CORRECT. Checklist: raw-bus synthetic int tests publish via bus.Publisher() (bypass verb registry,
-  bare OK); ALL scene_log INSERTs incl SQL `type='...'` literals (silent zero-row risk); audit dispatch row.GetType()
-  (qualified stored) must match qualified `if`; emitEntryMatchesWireType bridges bare↔qualified for sensitivity.
+  bare OK); scene_log INSERTs incl SQL type= literals (zero-row risk); audit dispatch row.GetType() qualified vs if.
 
 - **Gate-removal (delete a runtime safety-gate, run check unconditionally) — dj95.3 READY, 2026-06-07.**
   Safe only once EVERY path the now-unconditional check could reject is compliant. (1) Completeness: whole-tree
@@ -62,12 +70,7 @@
   is wrong; fakeFocusClient returns nil on duplicates → false-green idempotency tests. ALWAYS
   read the real coordinator + check joinErr code handling. (2) Premature partial binding:
   multi-clause invariant flipped bound when only one clause has tests and the proving task
-  (.8.4 role-gates) is still open; plan scheduled flip for final Task 20 — check WHICH task owns
-  the registry flip. (3) `hostEvaluateClient.Evaluate` needs the x-holomush-emit-token, minted
-  ONLY in DeliverEvent/DeliverCommand (host.go:854,929); a plugin service-RPC handler calling
-  Evaluate is unreachable from a plain registry-conn caller (facade) — EMIT_TOKEN_MISSING.
-  Subject is token-derived dispatch actor, never bound to req.character_id. Cross-task risk to
-  flag whenever a SceneService RPC consults s.evaluator.
+  (.8.4 role-gates) still open; plan scheduled flip for final Task 20 — check WHICH task owns the registry flip.
 
 - **5rh.8.21 RESOLVES the facade EMIT_TOKEN_MISSING gap (prev entry) — READY (2026-06-07).**
   `Host.BeginServiceDispatch` (goplugin/host.go:968) mints a dispatch token for caller-supplied
