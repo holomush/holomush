@@ -55,11 +55,12 @@ type hostCapabilityBase struct {
 // stays unexported — NewBase is the only construction surface — so callers wire
 // servers through NewBase + RegisterCapabilities (or the per-server constructors)
 // rather than reaching into the struct.
-//nolint:revive // unexported-return is intentional: hostCapabilityBase stays
 // unexported by design (the public construction surface is NewBase +
 // RegisterCapabilities). Callers only ever pass the returned value straight back
 // into RegisterCapabilities / the New*Server constructors, never reaching into
 // the struct — so the opaque return type is the intended ergonomics, not a wart.
+//
+//nolint:revive // unexported-return is intentional: hostCapabilityBase stays
 func NewBase(host HostCapabilities, pluginName string) hostCapabilityBase {
 	return hostCapabilityBase{host: host, pluginName: pluginName}
 }
