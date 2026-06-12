@@ -218,17 +218,22 @@ message CreateExitResponse {
 }
 
 // CreateObjectRequest carries the name, containment placement, and optional
-// description for a new object. Exactly one of location_id / character_id /
-// container_id MUST be set, matching the Lua handler's containment validation.
+// description for a new object. The placement oneof enforces at the wire
+// boundary that exactly one of location_id / character_id / container_id is set,
+// matching the Lua handler's containment validation.
 message CreateObjectRequest {
   // Display name for the new object.
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  // ULID of the location to place the object in; set iff location-contained.
-  string location_id = 2;
-  // ULID of the character to hand the object to; set iff character-held.
-  string character_id = 3;
-  // ULID of the object to nest this object inside; set iff object-contained.
-  string container_id = 4;
+  // Containment placement — exactly one variant identifies where the new object
+  // lives. A request with no placement variant set is rejected by the handler.
+  oneof placement {
+    // ULID of the location to place the object in; set iff location-contained.
+    string location_id = 2;
+    // ULID of the character to hand the object to; set iff character-held.
+    string character_id = 3;
+    // ULID of the object to nest this object inside; set iff object-contained.
+    string container_id = 4;
+  }
   // Optional long-form description for the new object.
   string description = 5;
 }

@@ -26,13 +26,12 @@ const (
 )
 
 // GetRequest is the (currently unserved, holomush-l6std) request to read a key
-// from a plugin's KV namespace.
+// from the calling plugin's KV namespace. The namespace is bound host-side from
+// the authenticated plugin identity, never carried on the wire.
 type GetRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Owning plugin's name — the KV namespace key.
-	PluginName string `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	// Key to read within that namespace.
-	Key           string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// Key to read within the caller's namespace.
+	Key           string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -65,13 +64,6 @@ func (x *GetRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GetRequest.ProtoReflect.Descriptor instead.
 func (*GetRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_host_v1_kv_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *GetRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
 }
 
 func (x *GetRequest) GetKey() string {
@@ -137,15 +129,14 @@ func (x *GetResponse) GetFound() bool {
 }
 
 // SetRequest is the (currently unserved, holomush-l6std) request to write a key
-// in a plugin's KV namespace.
+// in the calling plugin's KV namespace. The namespace is bound host-side from
+// the authenticated plugin identity, never carried on the wire.
 type SetRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Owning plugin's name — the KV namespace key.
-	PluginName string `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	// Key to write within that namespace.
-	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// Key to write within the caller's namespace.
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	// Value to store under the key.
-	Value         string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Value         string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -178,13 +169,6 @@ func (x *SetRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SetRequest.ProtoReflect.Descriptor instead.
 func (*SetRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_host_v1_kv_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *SetRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
 }
 
 func (x *SetRequest) GetKey() string {
@@ -239,13 +223,12 @@ func (*SetResponse) Descriptor() ([]byte, []int) {
 }
 
 // DeleteRequest is the (currently unserved, holomush-l6std) request to delete a
-// key from a plugin's KV namespace.
+// key from the calling plugin's KV namespace. The namespace is bound host-side
+// from the authenticated plugin identity, never carried on the wire.
 type DeleteRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Owning plugin's name — the KV namespace key.
-	PluginName string `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	// Key to delete within that namespace.
-	Key           string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// Key to delete within the caller's namespace.
+	Key           string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -278,13 +261,6 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_host_v1_kv_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *DeleteRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
 }
 
 func (x *DeleteRequest) GetKey() string {
@@ -335,26 +311,20 @@ var File_holomush_plugin_host_v1_kv_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_host_v1_kv_proto_rawDesc = "" +
 	"\n" +
-	" holomush/plugin/host/v1/kv.proto\x12\x17holomush.plugin.host.v1\x1a\x1bbuf/validate/validate.proto\"Q\n" +
+	" holomush/plugin/host/v1/kv.proto\x12\x17holomush.plugin.host.v1\x1a\x1bbuf/validate/validate.proto\"'\n" +
 	"\n" +
-	"GetRequest\x12(\n" +
-	"\vplugin_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"pluginName\x12\x19\n" +
-	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"9\n" +
+	"GetRequest\x12\x19\n" +
+	"\x03key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"9\n" +
 	"\vGetResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
-	"\x05found\x18\x02 \x01(\bR\x05found\"g\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\"=\n" +
 	"\n" +
-	"SetRequest\x12(\n" +
-	"\vplugin_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"pluginName\x12\x19\n" +
-	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value\"\r\n" +
-	"\vSetResponse\"T\n" +
-	"\rDeleteRequest\x12(\n" +
-	"\vplugin_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"pluginName\x12\x19\n" +
-	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"\x10\n" +
+	"SetRequest\x12\x19\n" +
+	"\x03key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\r\n" +
+	"\vSetResponse\"*\n" +
+	"\rDeleteRequest\x12\x19\n" +
+	"\x03key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"\x10\n" +
 	"\x0eDeleteResponse2\x8a\x02\n" +
 	"\tKVService\x12P\n" +
 	"\x03Get\x12#.holomush.plugin.host.v1.GetRequest\x1a$.holomush.plugin.host.v1.GetResponse\x12P\n" +

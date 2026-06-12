@@ -964,18 +964,22 @@ func (x *CreateExitResponse) GetName() string {
 }
 
 // CreateObjectRequest carries the name, containment placement, and optional
-// description for a new object. Exactly one of location_id / character_id /
-// container_id MUST be set, matching the Lua handler's containment validation.
+// description for a new object. The placement oneof enforces at the wire
+// boundary that exactly one of location_id / character_id / container_id is set,
+// matching the Lua handler's containment validation.
 type CreateObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Display name for the new object.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// ULID of the location to place the object in; set iff location-contained.
-	LocationId string `protobuf:"bytes,2,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	// ULID of the character to hand the object to; set iff character-held.
-	CharacterId string `protobuf:"bytes,3,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	// ULID of the object to nest this object inside; set iff object-contained.
-	ContainerId string `protobuf:"bytes,4,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	// Containment placement — exactly one variant identifies where the new object
+	// lives. A request with no placement variant set is rejected by the handler.
+	//
+	// Types that are valid to be assigned to Placement:
+	//
+	//	*CreateObjectRequest_LocationId
+	//	*CreateObjectRequest_CharacterId
+	//	*CreateObjectRequest_ContainerId
+	Placement isCreateObjectRequest_Placement `protobuf_oneof:"placement"`
 	// Optional long-form description for the new object.
 	Description   string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1019,23 +1023,36 @@ func (x *CreateObjectRequest) GetName() string {
 	return ""
 }
 
+func (x *CreateObjectRequest) GetPlacement() isCreateObjectRequest_Placement {
+	if x != nil {
+		return x.Placement
+	}
+	return nil
+}
+
 func (x *CreateObjectRequest) GetLocationId() string {
 	if x != nil {
-		return x.LocationId
+		if x, ok := x.Placement.(*CreateObjectRequest_LocationId); ok {
+			return x.LocationId
+		}
 	}
 	return ""
 }
 
 func (x *CreateObjectRequest) GetCharacterId() string {
 	if x != nil {
-		return x.CharacterId
+		if x, ok := x.Placement.(*CreateObjectRequest_CharacterId); ok {
+			return x.CharacterId
+		}
 	}
 	return ""
 }
 
 func (x *CreateObjectRequest) GetContainerId() string {
 	if x != nil {
-		return x.ContainerId
+		if x, ok := x.Placement.(*CreateObjectRequest_ContainerId); ok {
+			return x.ContainerId
+		}
 	}
 	return ""
 }
@@ -1046,6 +1063,31 @@ func (x *CreateObjectRequest) GetDescription() string {
 	}
 	return ""
 }
+
+type isCreateObjectRequest_Placement interface {
+	isCreateObjectRequest_Placement()
+}
+
+type CreateObjectRequest_LocationId struct {
+	// ULID of the location to place the object in; set iff location-contained.
+	LocationId string `protobuf:"bytes,2,opt,name=location_id,json=locationId,proto3,oneof"`
+}
+
+type CreateObjectRequest_CharacterId struct {
+	// ULID of the character to hand the object to; set iff character-held.
+	CharacterId string `protobuf:"bytes,3,opt,name=character_id,json=characterId,proto3,oneof"`
+}
+
+type CreateObjectRequest_ContainerId struct {
+	// ULID of the object to nest this object inside; set iff object-contained.
+	ContainerId string `protobuf:"bytes,4,opt,name=container_id,json=containerId,proto3,oneof"`
+}
+
+func (*CreateObjectRequest_LocationId) isCreateObjectRequest_Placement() {}
+
+func (*CreateObjectRequest_CharacterId) isCreateObjectRequest_Placement() {}
+
+func (*CreateObjectRequest_ContainerId) isCreateObjectRequest_Placement() {}
 
 // CreateObjectResponse returns the created object's id and name.
 type CreateObjectResponse struct {
@@ -1170,14 +1212,15 @@ const file_holomush_plugin_host_v1_world_proto_rawDesc = "" +
 	"returnName\"8\n" +
 	"\x12CreateExitResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\xbb\x01\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\xce\x01\n" +
 	"\x13CreateObjectRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x1f\n" +
-	"\vlocation_id\x18\x02 \x01(\tR\n" +
-	"locationId\x12!\n" +
-	"\fcharacter_id\x18\x03 \x01(\tR\vcharacterId\x12!\n" +
-	"\fcontainer_id\x18\x04 \x01(\tR\vcontainerId\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\":\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12!\n" +
+	"\vlocation_id\x18\x02 \x01(\tH\x00R\n" +
+	"locationId\x12#\n" +
+	"\fcharacter_id\x18\x03 \x01(\tH\x00R\vcharacterId\x12#\n" +
+	"\fcontainer_id\x18\x04 \x01(\tH\x00R\vcontainerId\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescriptionB\v\n" +
+	"\tplacement\":\n" +
 	"\x14CreateObjectResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name2\xdc\x04\n" +
@@ -1256,6 +1299,11 @@ func init() { file_holomush_plugin_host_v1_world_proto_init() }
 func file_holomush_plugin_host_v1_world_proto_init() {
 	if File_holomush_plugin_host_v1_world_proto != nil {
 		return
+	}
+	file_holomush_plugin_host_v1_world_proto_msgTypes[15].OneofWrappers = []any{
+		(*CreateObjectRequest_LocationId)(nil),
+		(*CreateObjectRequest_CharacterId)(nil),
+		(*CreateObjectRequest_ContainerId)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

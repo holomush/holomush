@@ -14,26 +14,20 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/host/v1/kv.proto.
  */
 export const file_holomush_plugin_host_v1_kv: GenFile = /*@__PURE__*/
-  fileDesc("CiBob2xvbXVzaC9wbHVnaW4vaG9zdC92MS9rdi5wcm90bxIXaG9sb211c2gucGx1Z2luLmhvc3QudjEiQAoKR2V0UmVxdWVzdBIcCgtwbHVnaW5fbmFtZRgBIAEoCUIHukgEcgIQARIUCgNrZXkYAiABKAlCB7pIBHICEAEiKwoLR2V0UmVzcG9uc2USDQoFdmFsdWUYASABKAkSDQoFZm91bmQYAiABKAgiTwoKU2V0UmVxdWVzdBIcCgtwbHVnaW5fbmFtZRgBIAEoCUIHukgEcgIQARIUCgNrZXkYAiABKAlCB7pIBHICEAESDQoFdmFsdWUYAyABKAkiDQoLU2V0UmVzcG9uc2UiQwoNRGVsZXRlUmVxdWVzdBIcCgtwbHVnaW5fbmFtZRgBIAEoCUIHukgEcgIQARIUCgNrZXkYAiABKAlCB7pIBHICEAEiEAoORGVsZXRlUmVzcG9uc2UyigIKCUtWU2VydmljZRJQCgNHZXQSIy5ob2xvbXVzaC5wbHVnaW4uaG9zdC52MS5HZXRSZXF1ZXN0GiQuaG9sb211c2gucGx1Z2luLmhvc3QudjEuR2V0UmVzcG9uc2USUAoDU2V0EiMuaG9sb211c2gucGx1Z2luLmhvc3QudjEuU2V0UmVxdWVzdBokLmhvbG9tdXNoLnBsdWdpbi5ob3N0LnYxLlNldFJlc3BvbnNlElkKBkRlbGV0ZRImLmhvbG9tdXNoLnBsdWdpbi5ob3N0LnYxLkRlbGV0ZVJlcXVlc3QaJy5ob2xvbXVzaC5wbHVnaW4uaG9zdC52MS5EZWxldGVSZXNwb25zZUJHWkVnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vaG9zdC92MTtob3N0djFiBnByb3RvMw", [file_buf_validate_validate]);
+  fileDesc("CiBob2xvbXVzaC9wbHVnaW4vaG9zdC92MS9rdi5wcm90bxIXaG9sb211c2gucGx1Z2luLmhvc3QudjEiIgoKR2V0UmVxdWVzdBIUCgNrZXkYASABKAlCB7pIBHICEAEiKwoLR2V0UmVzcG9uc2USDQoFdmFsdWUYASABKAkSDQoFZm91bmQYAiABKAgiMQoKU2V0UmVxdWVzdBIUCgNrZXkYASABKAlCB7pIBHICEAESDQoFdmFsdWUYAiABKAkiDQoLU2V0UmVzcG9uc2UiJQoNRGVsZXRlUmVxdWVzdBIUCgNrZXkYASABKAlCB7pIBHICEAEiEAoORGVsZXRlUmVzcG9uc2UyigIKCUtWU2VydmljZRJQCgNHZXQSIy5ob2xvbXVzaC5wbHVnaW4uaG9zdC52MS5HZXRSZXF1ZXN0GiQuaG9sb211c2gucGx1Z2luLmhvc3QudjEuR2V0UmVzcG9uc2USUAoDU2V0EiMuaG9sb211c2gucGx1Z2luLmhvc3QudjEuU2V0UmVxdWVzdBokLmhvbG9tdXNoLnBsdWdpbi5ob3N0LnYxLlNldFJlc3BvbnNlElkKBkRlbGV0ZRImLmhvbG9tdXNoLnBsdWdpbi5ob3N0LnYxLkRlbGV0ZVJlcXVlc3QaJy5ob2xvbXVzaC5wbHVnaW4uaG9zdC52MS5EZWxldGVSZXNwb25zZUJHWkVnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vaG9zdC92MTtob3N0djFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * GetRequest is the (currently unserved, holomush-l6std) request to read a key
- * from a plugin's KV namespace.
+ * from the calling plugin's KV namespace. The namespace is bound host-side from
+ * the authenticated plugin identity, never carried on the wire.
  *
  * @generated from message holomush.plugin.host.v1.GetRequest
  */
 export type GetRequest = Message<"holomush.plugin.host.v1.GetRequest"> & {
   /**
-   * Owning plugin's name — the KV namespace key.
+   * Key to read within the caller's namespace.
    *
-   * @generated from field: string plugin_name = 1;
-   */
-  pluginName: string;
-
-  /**
-   * Key to read within that namespace.
-   *
-   * @generated from field: string key = 2;
+   * @generated from field: string key = 1;
    */
   key: string;
 };
@@ -75,29 +69,23 @@ export const GetResponseSchema: GenMessage<GetResponse> = /*@__PURE__*/
 
 /**
  * SetRequest is the (currently unserved, holomush-l6std) request to write a key
- * in a plugin's KV namespace.
+ * in the calling plugin's KV namespace. The namespace is bound host-side from
+ * the authenticated plugin identity, never carried on the wire.
  *
  * @generated from message holomush.plugin.host.v1.SetRequest
  */
 export type SetRequest = Message<"holomush.plugin.host.v1.SetRequest"> & {
   /**
-   * Owning plugin's name — the KV namespace key.
+   * Key to write within the caller's namespace.
    *
-   * @generated from field: string plugin_name = 1;
-   */
-  pluginName: string;
-
-  /**
-   * Key to write within that namespace.
-   *
-   * @generated from field: string key = 2;
+   * @generated from field: string key = 1;
    */
   key: string;
 
   /**
    * Value to store under the key.
    *
-   * @generated from field: string value = 3;
+   * @generated from field: string value = 2;
    */
   value: string;
 };
@@ -126,22 +114,16 @@ export const SetResponseSchema: GenMessage<SetResponse> = /*@__PURE__*/
 
 /**
  * DeleteRequest is the (currently unserved, holomush-l6std) request to delete a
- * key from a plugin's KV namespace.
+ * key from the calling plugin's KV namespace. The namespace is bound host-side
+ * from the authenticated plugin identity, never carried on the wire.
  *
  * @generated from message holomush.plugin.host.v1.DeleteRequest
  */
 export type DeleteRequest = Message<"holomush.plugin.host.v1.DeleteRequest"> & {
   /**
-   * Owning plugin's name — the KV namespace key.
+   * Key to delete within the caller's namespace.
    *
-   * @generated from field: string plugin_name = 1;
-   */
-  pluginName: string;
-
-  /**
-   * Key to delete within that namespace.
-   *
-   * @generated from field: string key = 2;
+   * @generated from field: string key = 1;
    */
   key: string;
 };
@@ -170,7 +152,10 @@ export const DeleteResponseSchema: GenMessage<DeleteResponse> = /*@__PURE__*/
 
 /**
  * KVService is the host-brokered `kv` capability: a plugin reads, writes, and
- * deletes keys in its own namespaced key-value store. Carved from the former
+ * deletes keys in its own namespaced key-value store. The namespace is the
+ * CALLING plugin's identity, bound host-side from the authenticated transport
+ * (mirroring the sibling host services) — it is NOT a request field, so one
+ * plugin can never target another plugin's KV partition. Carved from the former
  * PluginHostService (holomush-eykuh.1). All three RPCs are DECLARED BUT UNSERVED
  * today (holomush-l6std): no server impl, no production client; they return
  * codes.Unimplemented.

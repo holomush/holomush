@@ -423,7 +423,7 @@ invariants.
 
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
-| `INV-COMMAND-1` | There MUST be exactly one command-visibility/ABAC-filter implementation (commandquery.Querier) in core; the Lua hostfunc shim, the binary PluginHostService handler, and the CoreService RPC MUST all delegate to it — none may reimplement the filter. | `INV-1` | pending |
+| `INV-COMMAND-1` | There MUST be exactly one command-visibility/ABAC-filter implementation (commandquery.Querier) in core; the Lua hostfunc shim, the binary host.v1 CommandRegistryService handler, and the CoreService RPC MUST all delegate to it — none may reimplement the filter. | `INV-1` | pending |
 | `INV-COMMAND-2` | ListCommands and GetCommandHelp MUST be reachable by both Lua plugins (in-VM hostfunc bridge) and binary plugins (CommandRegistryService), both delegating to the same commandquery.Querier, so the ABAC-filtered command set is identical across runtimes. | `INV-2` | pending |
 | `INV-COMMAND-3` | The self-scoped enumeration RPC (WebListCommands / ListAvailableCommands) MUST return only commands the requesting character can execute, never ABAC-filtered-out ones; ownership failures collapse to SESSION_NOT_FOUND. | `INV-5` | pending |
 

@@ -3806,8 +3806,8 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"
     legacy: ["INV-1@docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"]
     summary: "There MUST be exactly one command-visibility/ABAC-filter implementation (commandquery.Querier) in core; the
-      Lua hostfunc shim, the binary PluginHostService handler, and the CoreService RPC MUST all delegate to it — none may
-      reimplement the filter."
+      Lua hostfunc shim, the binary host.v1 CommandRegistryService handler, and the CoreService RPC MUST all delegate to it
+      — none may reimplement the filter."
     binding: pending
     refs:
       - {file: "internal/command/commandquery/query.go", token: "INV-1"}

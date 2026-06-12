@@ -11,7 +11,10 @@ import { MethodKind } from "@bufbuild/protobuf";
 
 /**
  * KVService is the host-brokered `kv` capability: a plugin reads, writes, and
- * deletes keys in its own namespaced key-value store. Carved from the former
+ * deletes keys in its own namespaced key-value store. The namespace is the
+ * CALLING plugin's identity, bound host-side from the authenticated transport
+ * (mirroring the sibling host services) — it is NOT a request field, so one
+ * plugin can never target another plugin's KV partition. Carved from the former
  * PluginHostService (holomush-eykuh.1). All three RPCs are DECLARED BUT UNSERVED
  * today (holomush-l6std): no server impl, no production client; they return
  * codes.Unimplemented.
