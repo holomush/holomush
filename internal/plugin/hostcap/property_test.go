@@ -133,146 +133,130 @@ func newPropertyCaps(getValue string) *propertyHostCaps {
 	}
 }
 
-// TestPropertyServerGetPropertyReadsViaDefinition verifies that GetProperty
-// resolves through PropertyDefinition.Get and returns the configured value.
-func TestPropertyServerGetPropertyReadsViaDefinition(t *testing.T) {
-	caps := newPropertyCaps("Town Square")
-	srv := hostcap.NewPropertyServer(hostcap.NewBase(caps, "core-objects"))
-	resp, err := srv.GetProperty(context.Background(), &hostv1.GetPropertyRequest{
-		EntityType: "location",
-		EntityId:   validEntityULID,
-		Property:   "name",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "Town Square", resp.GetValue())
-}
-
-// TestPropertyServerGetPropertyReturnsInvalidArgumentForUnknownProperty verifies
-// that GetProperty returns codes.InvalidArgument when the property name is not registered.
-func TestPropertyServerGetPropertyReturnsInvalidArgumentForUnknownProperty(t *testing.T) {
-	caps := &propertyHostCaps{} // def nil → PropertyDefinition returns false
-	srv := hostcap.NewPropertyServer(hostcap.NewBase(caps, "core-objects"))
-	_, err := srv.GetProperty(context.Background(), &hostv1.GetPropertyRequest{
-		EntityType: "location",
-		EntityId:   validEntityULID,
-		Property:   "nonexistent",
-	})
+// requireInvalidArgument asserts err is a gRPC InvalidArgument status.
+func requireInvalidArgument(t *testing.T, err error) {
+	t.Helper()
 	require.Error(t, err)
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.InvalidArgument, st.Code())
 }
 
-// TestPropertyServerGetPropertyReturnsInvalidArgumentForBadEntityID verifies
-// that an unparseable entity_id returns codes.InvalidArgument.
-func TestPropertyServerGetPropertyReturnsInvalidArgumentForBadEntityID(t *testing.T) {
-	caps := newPropertyCaps("value")
-	srv := hostcap.NewPropertyServer(hostcap.NewBase(caps, "core-objects"))
-	_, err := srv.GetProperty(context.Background(), &hostv1.GetPropertyRequest{
-		EntityType: "location",
-		EntityId:   "not-a-ulid",
-		Property:   "name",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code())
-}
-
-// TestPropertyServerGetPropertyReturnsOpaqueInternalErrorOnGetFailure verifies
-// that an internal error from property.Definition.Get does not leak inner details
-// to the caller — the status message must be the static string "internal error".
-func TestPropertyServerGetPropertyReturnsOpaqueInternalErrorOnGetFailure(t *testing.T) {
-	caps := &propertyHostCaps{
-		def:     &fakePropertyDef{getErr: errors.New("secret DB connection string leaked")},
+// propertyCapsWithErr builds a property stub whose definition fails Get/Set with
+// the given errors (querier/mutator wired so the handler reaches the definition).
+func propertyCapsWithErr(getErr, setErr error) *propertyHostCaps {
+	return &propertyHostCaps{
+		def:     &fakePropertyDef{getErr: getErr, setErr: setErr},
 		querier: fakePropertyWorldQuerier{},
 		mutator: fakePropertyWorldMutator{},
 	}
-	srv := hostcap.NewPropertyServer(hostcap.NewBase(caps, "core-objects"))
-	_, err := srv.GetProperty(context.Background(), &hostv1.GetPropertyRequest{
-		EntityType: "location",
-		EntityId:   validEntityULID,
-		Property:   "name",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	// The message MUST NOT leak the inner error text (grpc-errors.md).
-	assert.Equal(t, "internal error", st.Message(),
-		"inner error detail must not leak to the caller")
-	assert.NotContains(t, st.Message(), "secret")
 }
 
-// TestPropertyServerSetPropertyDelegatesToDefinitionSet verifies that SetProperty
-// calls property.Definition.Set and returns an empty response on success.
-func TestPropertyServerSetPropertyDelegatesToDefinitionSet(t *testing.T) {
-	caps := newPropertyCaps("")
-	srv := hostcap.NewPropertyServer(hostcap.NewBase(caps, "core-objects"))
-	resp, err := srv.SetProperty(context.Background(), &hostv1.SetPropertyRequest{
-		EntityType: "location",
-		EntityId:   validEntityULID,
-		Property:   "name",
-		Value:      "New Name",
-	})
-	require.NoError(t, err)
-	assert.NotNil(t, resp)
-}
-
-// TestPropertyServerSetPropertyReturnsInvalidArgumentForUnknownProperty verifies
-// that SetProperty returns codes.InvalidArgument when the property is not registered.
-func TestPropertyServerSetPropertyReturnsInvalidArgumentForUnknownProperty(t *testing.T) {
-	caps := &propertyHostCaps{} // def nil
-	srv := hostcap.NewPropertyServer(hostcap.NewBase(caps, "core-objects"))
-	_, err := srv.SetProperty(context.Background(), &hostv1.SetPropertyRequest{
-		EntityType: "location",
-		EntityId:   validEntityULID,
-		Property:   "nonexistent",
-		Value:      "v",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code())
-}
-
-// TestPropertyServerSetPropertyReturnsInvalidArgumentForBadEntityID verifies
-// that an unparseable entity_id on SetProperty returns codes.InvalidArgument.
-func TestPropertyServerSetPropertyReturnsInvalidArgumentForBadEntityID(t *testing.T) {
-	caps := newPropertyCaps("")
-	srv := hostcap.NewPropertyServer(hostcap.NewBase(caps, "core-objects"))
-	_, err := srv.SetProperty(context.Background(), &hostv1.SetPropertyRequest{
-		EntityType: "location",
-		EntityId:   "not-a-ulid",
-		Property:   "name",
-		Value:      "v",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code())
-}
-
-// TestPropertyServerSetPropertyReturnsOpaqueInternalErrorOnSetFailure verifies
-// that an internal error from property.Definition.Set does not leak inner details.
-func TestPropertyServerSetPropertyReturnsOpaqueInternalErrorOnSetFailure(t *testing.T) {
-	caps := &propertyHostCaps{
-		def:     &fakePropertyDef{setErr: errors.New("secret connection string")},
-		querier: fakePropertyWorldQuerier{},
-		mutator: fakePropertyWorldMutator{},
+func TestPropertyServerGetProperty(t *testing.T) {
+	tests := []struct {
+		name     string
+		caps     *propertyHostCaps
+		entityID string
+		check    func(t *testing.T, resp *hostv1.GetPropertyResponse, err error)
+	}{
+		{
+			name:     "reads through the definition and returns the value",
+			caps:     newPropertyCaps("Town Square"),
+			entityID: validEntityULID,
+			check: func(t *testing.T, resp *hostv1.GetPropertyResponse, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "Town Square", resp.GetValue())
+			},
+		},
+		{
+			name:     "returns InvalidArgument for an unknown property",
+			caps:     &propertyHostCaps{}, // def nil → PropertyDefinition returns false
+			entityID: validEntityULID,
+			check: func(t *testing.T, _ *hostv1.GetPropertyResponse, err error) {
+				requireInvalidArgument(t, err)
+			},
+		},
+		{
+			name:     "returns InvalidArgument for an unparseable entity id",
+			caps:     newPropertyCaps("value"),
+			entityID: "not-a-ulid",
+			check: func(t *testing.T, _ *hostv1.GetPropertyResponse, err error) {
+				requireInvalidArgument(t, err)
+			},
+		},
+		{
+			name:     "returns opaque internal error on Get failure",
+			caps:     propertyCapsWithErr(errors.New("secret DB connection string leaked"), nil),
+			entityID: validEntityULID,
+			check: func(t *testing.T, _ *hostv1.GetPropertyResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
 	}
-	srv := hostcap.NewPropertyServer(hostcap.NewBase(caps, "core-objects"))
-	_, err := srv.SetProperty(context.Background(), &hostv1.SetPropertyRequest{
-		EntityType: "location",
-		EntityId:   validEntityULID,
-		Property:   "name",
-		Value:      "v",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message(),
-		"inner error detail must not leak to the caller")
-	assert.NotContains(t, st.Message(), "secret")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := hostcap.NewPropertyServer(hostcap.NewBase(tc.caps, "core-objects"))
+			resp, err := srv.GetProperty(context.Background(), &hostv1.GetPropertyRequest{
+				EntityType: "location",
+				EntityId:   tc.entityID,
+				Property:   "name",
+			})
+			tc.check(t, resp, err)
+		})
+	}
+}
+
+func TestPropertyServerSetProperty(t *testing.T) {
+	tests := []struct {
+		name     string
+		caps     *propertyHostCaps
+		entityID string
+		check    func(t *testing.T, resp *hostv1.SetPropertyResponse, err error)
+	}{
+		{
+			name:     "delegates to the definition Set and returns an empty response",
+			caps:     newPropertyCaps(""),
+			entityID: validEntityULID,
+			check: func(t *testing.T, resp *hostv1.SetPropertyResponse, err error) {
+				require.NoError(t, err)
+				assert.NotNil(t, resp)
+			},
+		},
+		{
+			name:     "returns InvalidArgument for an unknown property",
+			caps:     &propertyHostCaps{}, // def nil
+			entityID: validEntityULID,
+			check: func(t *testing.T, _ *hostv1.SetPropertyResponse, err error) {
+				requireInvalidArgument(t, err)
+			},
+		},
+		{
+			name:     "returns InvalidArgument for an unparseable entity id",
+			caps:     newPropertyCaps(""),
+			entityID: "not-a-ulid",
+			check: func(t *testing.T, _ *hostv1.SetPropertyResponse, err error) {
+				requireInvalidArgument(t, err)
+			},
+		},
+		{
+			name:     "returns opaque internal error on Set failure",
+			caps:     propertyCapsWithErr(nil, errors.New("secret connection string")),
+			entityID: validEntityULID,
+			check: func(t *testing.T, _ *hostv1.SetPropertyResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := hostcap.NewPropertyServer(hostcap.NewBase(tc.caps, "core-objects"))
+			resp, err := srv.SetProperty(context.Background(), &hostv1.SetPropertyRequest{
+				EntityType: "location",
+				EntityId:   tc.entityID,
+				Property:   "name",
+				Value:      "New Name",
+			})
+			tc.check(t, resp, err)
+		})
+	}
 }

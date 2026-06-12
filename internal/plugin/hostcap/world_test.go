@@ -110,316 +110,296 @@ func makeObject() *world.Object {
 	return obj
 }
 
-// ============================================================================
-// QueryLocation
-// ============================================================================
-
-// TestWorldServerQueryLocationStampsPluginSubject verifies that QueryLocation
-// calls WorldQuerier with the plugin name, confirming the server stamps the
-// plugin subject via the port.
-func TestWorldServerQueryLocationStampsPluginSubject(t *testing.T) {
-	loc := makeLocation()
-	caps := newWorldCaps(&fakeWorldQuerier{locationResult: loc})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryLocation(context.Background(), &hostv1.QueryLocationRequest{
-		LocationId: validWorldULID,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "core-scenes", caps.lastQueriedPlugin,
-		"QueryLocation must stamp the plugin name via WorldQuerier(pluginName)")
-}
-
-// TestWorldServerQueryLocationReturnsLocationFields verifies that QueryLocation
-// maps the domain Location fields to the wire response correctly.
-func TestWorldServerQueryLocationReturnsLocationFields(t *testing.T) {
-	loc := makeLocation()
-	caps := newWorldCaps(&fakeWorldQuerier{locationResult: loc})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	resp, err := srv.QueryLocation(context.Background(), &hostv1.QueryLocationRequest{
-		LocationId: validWorldULID,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, loc.ID.String(), resp.GetId())
-	assert.Equal(t, loc.Name, resp.GetName())
-	assert.Equal(t, loc.Description, resp.GetDescription())
-	assert.Equal(t, string(loc.Type), resp.GetType())
-}
-
-// TestWorldServerQueryLocationReturnsNotFoundForMissingLocation verifies that a
-// world.ErrNotFound from the querier maps to codes.NotFound on the wire.
-func TestWorldServerQueryLocationReturnsNotFoundForMissingLocation(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{locationErr: world.ErrNotFound})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryLocation(context.Background(), &hostv1.QueryLocationRequest{
-		LocationId: validWorldULID,
-	})
+// requireWorldNotFound asserts err is a gRPC NotFound status.
+func requireWorldNotFound(t *testing.T, err error) {
+	t.Helper()
 	require.Error(t, err)
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.NotFound, st.Code())
 }
 
-// TestWorldServerQueryLocationReturnsOpaqueInternalErrorOnFailure verifies that
-// an unexpected error from the querier produces a codes.Internal with a generic
-// message and does not leak inner details (grpc-errors.md).
-func TestWorldServerQueryLocationReturnsOpaqueInternalErrorOnFailure(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{locationErr: errors.New("secret db conn string")})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryLocation(context.Background(), &hostv1.QueryLocationRequest{
-		LocationId: validWorldULID,
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message(),
-		"inner error detail must not leak to the caller")
-	assert.NotContains(t, st.Message(), "secret")
-}
+// ============================================================================
+// QueryLocation
+// ============================================================================
 
-// TestWorldServerQueryLocationReturnsInvalidArgumentForBadULID verifies that an
-// unparseable location_id returns codes.InvalidArgument with a generic message.
-func TestWorldServerQueryLocationReturnsInvalidArgumentForBadULID(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryLocation(context.Background(), &hostv1.QueryLocationRequest{
-		LocationId: "not-a-ulid",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code())
+func TestWorldServerQueryLocation(t *testing.T) {
+	loc := makeLocation()
+	tests := []struct {
+		name       string
+		querier    *fakeWorldQuerier
+		locationID string
+		check      func(t *testing.T, caps *worldHostCaps, resp *hostv1.QueryLocationResponse, err error)
+	}{
+		{
+			name:       "returns location fields and stamps the plugin subject",
+			querier:    &fakeWorldQuerier{locationResult: loc},
+			locationID: validWorldULID,
+			check: func(t *testing.T, caps *worldHostCaps, resp *hostv1.QueryLocationResponse, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "core-scenes", caps.lastQueriedPlugin,
+					"QueryLocation must stamp the plugin name via WorldQuerier(pluginName)")
+				assert.Equal(t, loc.ID.String(), resp.GetId())
+				assert.Equal(t, loc.Name, resp.GetName())
+				assert.Equal(t, loc.Description, resp.GetDescription())
+				assert.Equal(t, string(loc.Type), resp.GetType())
+			},
+		},
+		{
+			name:       "maps world.ErrNotFound to NotFound",
+			querier:    &fakeWorldQuerier{locationErr: world.ErrNotFound},
+			locationID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryLocationResponse, err error) {
+				requireWorldNotFound(t, err)
+			},
+		},
+		{
+			name:       "returns opaque internal error on unexpected failure",
+			querier:    &fakeWorldQuerier{locationErr: errors.New("secret db conn string")},
+			locationID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryLocationResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			// Contract violation: a nil location with no error must fail closed
+			// (Internal), never nil-dereference loc.ID.
+			name:       "fails closed on a nil result without error",
+			querier:    &fakeWorldQuerier{}, // GetLocation returns (nil, nil)
+			locationID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryLocationResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			name:       "returns InvalidArgument for an unparseable location id",
+			querier:    &fakeWorldQuerier{},
+			locationID: "not-a-ulid",
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryLocationResponse, err error) {
+				requireInvalidArgument(t, err)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caps := newWorldCaps(tc.querier)
+			srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+			resp, err := srv.QueryLocation(context.Background(), &hostv1.QueryLocationRequest{
+				LocationId: tc.locationID,
+			})
+			tc.check(t, caps, resp, err)
+		})
+	}
 }
 
 // ============================================================================
 // QueryCharacter
 // ============================================================================
 
-// TestWorldServerQueryCharacterStampsPluginSubject verifies subject stamping.
-func TestWorldServerQueryCharacterStampsPluginSubject(t *testing.T) {
+func TestWorldServerQueryCharacter(t *testing.T) {
 	char := makeCharacter()
-	caps := newWorldCaps(&fakeWorldQuerier{characterResult: char})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryCharacter(context.Background(), &hostv1.QueryCharacterRequest{
-		CharacterId: validWorldULID,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "core-scenes", caps.lastQueriedPlugin)
-}
-
-// TestWorldServerQueryCharacterReturnsCharacterFields verifies field mapping.
-func TestWorldServerQueryCharacterReturnsCharacterFields(t *testing.T) {
-	char := makeCharacter()
-	caps := newWorldCaps(&fakeWorldQuerier{characterResult: char})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	resp, err := srv.QueryCharacter(context.Background(), &hostv1.QueryCharacterRequest{
-		CharacterId: validWorldULID,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, char.ID.String(), resp.GetId())
-	assert.Equal(t, char.PlayerID.String(), resp.GetPlayerId())
-	assert.Equal(t, char.Name, resp.GetName())
-	assert.Equal(t, char.Description, resp.GetDescription())
-	// No location set on the test character — location_id MUST be empty string.
-	assert.Empty(t, resp.GetLocationId())
-}
-
-// TestWorldServerQueryCharacterWithLocationIDPopulatesField verifies that a
-// character with a LocationID has it set in the response.
-func TestWorldServerQueryCharacterWithLocationIDPopulatesField(t *testing.T) {
-	char := makeCharacter()
+	located := makeCharacter()
 	locID := ulid.Make()
-	char.LocationID = &locID
-	caps := newWorldCaps(&fakeWorldQuerier{characterResult: char})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	resp, err := srv.QueryCharacter(context.Background(), &hostv1.QueryCharacterRequest{
-		CharacterId: validWorldULID,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, locID.String(), resp.GetLocationId())
-}
+	located.LocationID = &locID
 
-// TestWorldServerQueryCharacterReturnsNotFoundForMissingCharacter maps
-// world.ErrNotFound → codes.NotFound.
-func TestWorldServerQueryCharacterReturnsNotFoundForMissingCharacter(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{characterErr: world.ErrNotFound})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryCharacter(context.Background(), &hostv1.QueryCharacterRequest{
-		CharacterId: validWorldULID,
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.NotFound, st.Code())
-}
-
-// TestWorldServerQueryCharacterReturnsOpaqueInternalErrorOnFailure verifies
-// opacity of unexpected querier errors.
-func TestWorldServerQueryCharacterReturnsOpaqueInternalErrorOnFailure(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{characterErr: errors.New("secret")})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryCharacter(context.Background(), &hostv1.QueryCharacterRequest{
-		CharacterId: validWorldULID,
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message())
-	assert.NotContains(t, st.Message(), "secret")
-}
-
-// TestWorldServerQueryCharacterReturnsInvalidArgumentForBadULID verifies
-// InvalidArgument on unparseable character_id.
-func TestWorldServerQueryCharacterReturnsInvalidArgumentForBadULID(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryCharacter(context.Background(), &hostv1.QueryCharacterRequest{
-		CharacterId: "not-a-ulid",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code())
+	tests := []struct {
+		name        string
+		querier     *fakeWorldQuerier
+		characterID string
+		check       func(t *testing.T, caps *worldHostCaps, resp *hostv1.QueryCharacterResponse, err error)
+	}{
+		{
+			name:        "returns character fields, empty location, and stamps the plugin subject",
+			querier:     &fakeWorldQuerier{characterResult: char},
+			characterID: validWorldULID,
+			check: func(t *testing.T, caps *worldHostCaps, resp *hostv1.QueryCharacterResponse, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "core-scenes", caps.lastQueriedPlugin)
+				assert.Equal(t, char.ID.String(), resp.GetId())
+				assert.Equal(t, char.PlayerID.String(), resp.GetPlayerId())
+				assert.Equal(t, char.Name, resp.GetName())
+				assert.Equal(t, char.Description, resp.GetDescription())
+				// No location set on the test character — location_id MUST be empty.
+				assert.Empty(t, resp.GetLocationId())
+			},
+		},
+		{
+			name:        "populates location_id when the character has a location",
+			querier:     &fakeWorldQuerier{characterResult: located},
+			characterID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, resp *hostv1.QueryCharacterResponse, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, locID.String(), resp.GetLocationId())
+			},
+		},
+		{
+			name:        "maps world.ErrNotFound to NotFound",
+			querier:     &fakeWorldQuerier{characterErr: world.ErrNotFound},
+			characterID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryCharacterResponse, err error) {
+				requireWorldNotFound(t, err)
+			},
+		},
+		{
+			name:        "returns opaque internal error on unexpected failure",
+			querier:     &fakeWorldQuerier{characterErr: errors.New("secret")},
+			characterID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryCharacterResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			// Contract violation: a nil character with no error must fail closed.
+			name:        "fails closed on a nil result without error",
+			querier:     &fakeWorldQuerier{}, // GetCharacter returns (nil, nil)
+			characterID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryCharacterResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			name:        "returns InvalidArgument for an unparseable character id",
+			querier:     &fakeWorldQuerier{},
+			characterID: "not-a-ulid",
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryCharacterResponse, err error) {
+				requireInvalidArgument(t, err)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caps := newWorldCaps(tc.querier)
+			srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+			resp, err := srv.QueryCharacter(context.Background(), &hostv1.QueryCharacterRequest{
+				CharacterId: tc.characterID,
+			})
+			tc.check(t, caps, resp, err)
+		})
+	}
 }
 
 // ============================================================================
 // QueryLocationCharacters
 // ============================================================================
 
-// TestWorldServerQueryLocationCharactersStampsPluginSubject verifies subject
-// stamping for the characters-at-location query.
-func TestWorldServerQueryLocationCharactersStampsPluginSubject(t *testing.T) {
+func TestWorldServerQueryLocationCharacters(t *testing.T) {
 	char := makeCharacter()
-	caps := newWorldCaps(&fakeWorldQuerier{charactersByLocationResult: []*world.Character{char}})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryLocationCharacters(context.Background(), &hostv1.QueryLocationCharactersRequest{
-		LocationId: validWorldULID,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "core-scenes", caps.lastQueriedPlugin)
-}
-
-// TestWorldServerQueryLocationCharactersReturnsCharacterSummaries verifies that
-// QueryLocationCharacters maps domain characters to lightweight CharacterSummary
-// protos (id and name only).
-func TestWorldServerQueryLocationCharactersReturnsCharacterSummaries(t *testing.T) {
-	char := makeCharacter()
-	caps := newWorldCaps(&fakeWorldQuerier{charactersByLocationResult: []*world.Character{char}})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	resp, err := srv.QueryLocationCharacters(context.Background(), &hostv1.QueryLocationCharactersRequest{
-		LocationId: validWorldULID,
-	})
-	require.NoError(t, err)
-	require.Len(t, resp.GetCharacters(), 1)
-	assert.Equal(t, char.ID.String(), resp.GetCharacters()[0].GetId())
-	assert.Equal(t, char.Name, resp.GetCharacters()[0].GetName())
-}
-
-// TestWorldServerQueryLocationCharactersReturnsOpaqueInternalErrorOnFailure
-// verifies opacity of unexpected querier errors.
-func TestWorldServerQueryLocationCharactersReturnsOpaqueInternalErrorOnFailure(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{charactersByLocationErr: errors.New("secret")})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryLocationCharacters(context.Background(), &hostv1.QueryLocationCharactersRequest{
-		LocationId: validWorldULID,
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message())
-	assert.NotContains(t, st.Message(), "secret")
-}
-
-// TestWorldServerQueryLocationCharactersReturnsInvalidArgumentForBadULID
-// verifies InvalidArgument on unparseable location_id.
-func TestWorldServerQueryLocationCharactersReturnsInvalidArgumentForBadULID(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryLocationCharacters(context.Background(), &hostv1.QueryLocationCharactersRequest{
-		LocationId: "not-a-ulid",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code())
+	tests := []struct {
+		name       string
+		querier    *fakeWorldQuerier
+		locationID string
+		check      func(t *testing.T, caps *worldHostCaps, resp *hostv1.QueryLocationCharactersResponse, err error)
+	}{
+		{
+			name:       "maps characters to summaries and stamps the plugin subject",
+			querier:    &fakeWorldQuerier{charactersByLocationResult: []*world.Character{char}},
+			locationID: validWorldULID,
+			check: func(t *testing.T, caps *worldHostCaps, resp *hostv1.QueryLocationCharactersResponse, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "core-scenes", caps.lastQueriedPlugin)
+				require.Len(t, resp.GetCharacters(), 1)
+				assert.Equal(t, char.ID.String(), resp.GetCharacters()[0].GetId())
+				assert.Equal(t, char.Name, resp.GetCharacters()[0].GetName())
+			},
+		},
+		{
+			name:       "returns opaque internal error on unexpected failure",
+			querier:    &fakeWorldQuerier{charactersByLocationErr: errors.New("secret")},
+			locationID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryLocationCharactersResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			name:       "returns InvalidArgument for an unparseable location id",
+			querier:    &fakeWorldQuerier{},
+			locationID: "not-a-ulid",
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryLocationCharactersResponse, err error) {
+				requireInvalidArgument(t, err)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caps := newWorldCaps(tc.querier)
+			srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+			resp, err := srv.QueryLocationCharacters(context.Background(), &hostv1.QueryLocationCharactersRequest{
+				LocationId: tc.locationID,
+			})
+			tc.check(t, caps, resp, err)
+		})
+	}
 }
 
 // ============================================================================
 // QueryObject
 // ============================================================================
 
-// TestWorldServerQueryObjectStampsPluginSubject verifies subject stamping.
-func TestWorldServerQueryObjectStampsPluginSubject(t *testing.T) {
+func TestWorldServerQueryObject(t *testing.T) {
 	obj := makeObject()
-	caps := newWorldCaps(&fakeWorldQuerier{objectResult: obj})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryObject(context.Background(), &hostv1.QueryObjectRequest{
-		ObjectId: validWorldULID,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "core-scenes", caps.lastQueriedPlugin)
-}
-
-// TestWorldServerQueryObjectReturnsObjectFields verifies field mapping for the
-// domain Object → wire QueryObjectResponse conversion.
-func TestWorldServerQueryObjectReturnsObjectFields(t *testing.T) {
-	obj := makeObject()
-	caps := newWorldCaps(&fakeWorldQuerier{objectResult: obj})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	resp, err := srv.QueryObject(context.Background(), &hostv1.QueryObjectRequest{
-		ObjectId: validWorldULID,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, obj.ID.String(), resp.GetId())
-	assert.Equal(t, obj.Name, resp.GetName())
-	assert.Equal(t, obj.Description, resp.GetDescription())
-	assert.Equal(t, obj.IsContainer, resp.GetIsContainer())
-	// makeObject places the object in a location.
-	assert.NotEmpty(t, resp.GetLocationId())
-}
-
-// TestWorldServerQueryObjectReturnsNotFoundForMissingObject maps
-// world.ErrNotFound → codes.NotFound.
-func TestWorldServerQueryObjectReturnsNotFoundForMissingObject(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{objectErr: world.ErrNotFound})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryObject(context.Background(), &hostv1.QueryObjectRequest{
-		ObjectId: validWorldULID,
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.NotFound, st.Code())
-}
-
-// TestWorldServerQueryObjectReturnsOpaqueInternalErrorOnFailure verifies
-// opacity of unexpected querier errors.
-func TestWorldServerQueryObjectReturnsOpaqueInternalErrorOnFailure(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{objectErr: errors.New("secret")})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryObject(context.Background(), &hostv1.QueryObjectRequest{
-		ObjectId: validWorldULID,
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message())
-	assert.NotContains(t, st.Message(), "secret")
-}
-
-// TestWorldServerQueryObjectReturnsInvalidArgumentForBadULID verifies
-// InvalidArgument on unparseable object_id.
-func TestWorldServerQueryObjectReturnsInvalidArgumentForBadULID(t *testing.T) {
-	caps := newWorldCaps(&fakeWorldQuerier{})
-	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
-	_, err := srv.QueryObject(context.Background(), &hostv1.QueryObjectRequest{
-		ObjectId: "not-a-ulid",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code())
+	tests := []struct {
+		name     string
+		querier  *fakeWorldQuerier
+		objectID string
+		check    func(t *testing.T, caps *worldHostCaps, resp *hostv1.QueryObjectResponse, err error)
+	}{
+		{
+			name:     "returns object fields and stamps the plugin subject",
+			querier:  &fakeWorldQuerier{objectResult: obj},
+			objectID: validWorldULID,
+			check: func(t *testing.T, caps *worldHostCaps, resp *hostv1.QueryObjectResponse, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "core-scenes", caps.lastQueriedPlugin)
+				assert.Equal(t, obj.ID.String(), resp.GetId())
+				assert.Equal(t, obj.Name, resp.GetName())
+				assert.Equal(t, obj.Description, resp.GetDescription())
+				assert.Equal(t, obj.IsContainer, resp.GetIsContainer())
+				// makeObject places the object in a location.
+				assert.NotEmpty(t, resp.GetLocationId())
+			},
+		},
+		{
+			name:     "maps world.ErrNotFound to NotFound",
+			querier:  &fakeWorldQuerier{objectErr: world.ErrNotFound},
+			objectID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryObjectResponse, err error) {
+				requireWorldNotFound(t, err)
+			},
+		},
+		{
+			name:     "returns opaque internal error on unexpected failure",
+			querier:  &fakeWorldQuerier{objectErr: errors.New("secret")},
+			objectID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryObjectResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			// Contract violation: a nil object with no error must fail closed.
+			name:     "fails closed on a nil result without error",
+			querier:  &fakeWorldQuerier{}, // GetObject returns (nil, nil)
+			objectID: validWorldULID,
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryObjectResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			name:     "returns InvalidArgument for an unparseable object id",
+			querier:  &fakeWorldQuerier{},
+			objectID: "not-a-ulid",
+			check: func(t *testing.T, _ *worldHostCaps, _ *hostv1.QueryObjectResponse, err error) {
+				requireInvalidArgument(t, err)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caps := newWorldCaps(tc.querier)
+			srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+			resp, err := srv.QueryObject(context.Background(), &hostv1.QueryObjectRequest{
+				ObjectId: tc.objectID,
+			})
+			tc.check(t, caps, resp, err)
+		})
+	}
 }

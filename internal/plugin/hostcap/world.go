@@ -16,6 +16,13 @@ import (
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
+// errNilWorldResult is the sentinel logged when a WorldQuerier returns a nil
+// entity with no error. A well-behaved querier signals absence via
+// world.ErrNotFound (mapped to codes.NotFound below), never a nil-without-error,
+// so this is a contract violation: the worldServer fails closed with an opaque
+// Internal rather than nil-dereferencing the result.
+var errNilWorldResult = errors.New("world querier returned a nil result without an error")
+
 // worldServer implements holomush.plugin.host.v1.WorldQueryService. It delegates
 // all four query operations to the plugin-subject-stamped WorldQuerier obtained
 // from the HostCapabilities port, mirroring the existing Lua
@@ -45,12 +52,20 @@ func (s *worldServer) QueryLocation(ctx context.Context, req *hostv1.QueryLocati
 		return nil, status.Errorf(codes.InvalidArgument, "invalid location id")
 	}
 
-	loc, err := s.host.WorldQuerier(s.pluginName).GetLocation(ctx, id)
+	querier := s.host.WorldQuerier(s.pluginName)
+	if querier == nil {
+		return nil, status.Errorf(codes.Unimplemented, "world query not supported")
+	}
+	loc, err := querier.GetLocation(ctx, id)
 	if err != nil {
 		if errors.Is(err, world.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "not found")
 		}
 		errutil.LogErrorContext(ctx, "world.query_location failed", err, "plugin", s.pluginName)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	if loc == nil {
+		errutil.LogErrorContext(ctx, "world.query_location returned nil without error", errNilWorldResult, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
@@ -75,12 +90,20 @@ func (s *worldServer) QueryCharacter(ctx context.Context, req *hostv1.QueryChara
 		return nil, status.Errorf(codes.InvalidArgument, "invalid character id")
 	}
 
-	char, err := s.host.WorldQuerier(s.pluginName).GetCharacter(ctx, id)
+	querier := s.host.WorldQuerier(s.pluginName)
+	if querier == nil {
+		return nil, status.Errorf(codes.Unimplemented, "world query not supported")
+	}
+	char, err := querier.GetCharacter(ctx, id)
 	if err != nil {
 		if errors.Is(err, world.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "not found")
 		}
 		errutil.LogErrorContext(ctx, "world.query_character failed", err, "plugin", s.pluginName)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	if char == nil {
+		errutil.LogErrorContext(ctx, "world.query_character returned nil without error", errNilWorldResult, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
@@ -111,7 +134,11 @@ func (s *worldServer) QueryLocationCharacters(ctx context.Context, req *hostv1.Q
 		Limit:  int(req.GetLimit()),
 		Offset: int(req.GetOffset()),
 	}
-	chars, err := s.host.WorldQuerier(s.pluginName).GetCharactersByLocation(ctx, id, opts)
+	querier := s.host.WorldQuerier(s.pluginName)
+	if querier == nil {
+		return nil, status.Errorf(codes.Unimplemented, "world query not supported")
+	}
+	chars, err := querier.GetCharactersByLocation(ctx, id, opts)
 	if err != nil {
 		errutil.LogErrorContext(ctx, "world.query_location_characters failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
@@ -140,12 +167,20 @@ func (s *worldServer) QueryObject(ctx context.Context, req *hostv1.QueryObjectRe
 		return nil, status.Errorf(codes.InvalidArgument, "invalid object id")
 	}
 
-	obj, err := s.host.WorldQuerier(s.pluginName).GetObject(ctx, id)
+	querier := s.host.WorldQuerier(s.pluginName)
+	if querier == nil {
+		return nil, status.Errorf(codes.Unimplemented, "world query not supported")
+	}
+	obj, err := querier.GetObject(ctx, id)
 	if err != nil {
 		if errors.Is(err, world.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "not found")
 		}
 		errutil.LogErrorContext(ctx, "world.query_object failed", err, "plugin", s.pluginName)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	if obj == nil {
+		errutil.LogErrorContext(ctx, "world.query_object returned nil without error", errNilWorldResult, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 

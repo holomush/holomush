@@ -26,7 +26,12 @@ type pluginEndpoint struct {
 // capability servers (INV-PLUGIN-49), and wraps the server with an in-process
 // bufconn listener. The caller must call Close when the plugin is unloaded.
 func newPluginEndpoint(adapter hostcap.HostCapabilities, pluginName string) (*pluginEndpoint, error) {
-	srv := grpc.NewServer()
+	// The server is served exclusively over an in-memory bufconn listener
+	// (plugins.NewInProcessConn below), never a network socket — there is no
+	// wire to encrypt or tamper with. TLS credentials are therefore N/A; this
+	// mirrors the client half of the same transport, which carries the matching
+	// nosemgrep on insecure.NewCredentials (internal/plugin/inprocess_conn.go).
+	srv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
 	hostcap.RegisterCapabilities(srv, hostcap.NewBase(adapter, pluginName), hostcap.LuaDefaultSet)
 	conn, err := plugins.NewInProcessConn(srv)
 	if err != nil {

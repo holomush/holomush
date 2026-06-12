@@ -423,11 +423,22 @@ func (s *emitServer) RequestEmitToken(ctx context.Context, _ *hostv1.RequestEmit
 	// event_emitter.go::Emit rejects non-ULID actor IDs with
 	// ACTOR_ID_NOT_ULID, so we MUST resolve a ULID here — using the plain
 	// plugin name as ActorID would break every plugin self-token emit.
-	storedActor, stampErr := stampPluginActor(s.host.IdentityRegistrySnapshot(), s.pluginName)
-	if stampErr != nil {
-		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
-			With("plugin", s.pluginName).
-			Wrap(stampErr)
+	// Stamp the self-token actor only when an identity registry exists. A nil
+	// registry means the runtime has no emit-token forgery surface at all (the
+	// Lua adapter returns nil): synthesizing a PLUGIN_UNREGISTERED_INVOKE here
+	// would mask the adapter's intended UNSUPPORTED_OPERATION error and produce
+	// observable cross-runtime contract drift. Leave the zero actor and let
+	// IssueEmitToken give the runtime-appropriate answer. Binary always has a
+	// registry, so a genuine missing-name PLUGIN_UNREGISTERED_INVOKE is preserved.
+	var storedActor core.Actor
+	if reg := s.host.IdentityRegistrySnapshot(); reg != nil {
+		var stampErr error
+		storedActor, stampErr = stampPluginActor(reg, s.pluginName)
+		if stampErr != nil {
+			return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
+				With("plugin", s.pluginName).
+				Wrap(stampErr)
+		}
 	}
 
 	// IssueEmitToken mints the self-token via the port (binary adapter reads the

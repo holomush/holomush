@@ -125,240 +125,250 @@ func makeSessionInfo() *session.Info {
 	}
 }
 
+// requireOpaqueInternal asserts err is a gRPC Internal status whose message is
+// the static "internal error" and leaks no inner detail (grpc-errors.md). Shared
+// by every session/admin error-path case below.
+func requireOpaqueInternal(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Equal(t, "internal error", st.Message(), "inner error detail must not leak to the caller")
+	assert.NotContains(t, st.Message(), "secret")
+}
+
+// newSessionServer builds a SessionService server over the given access port.
+func newSessionServer(access *fakeSessionAccess) hostv1.SessionServiceServer {
+	return hostcap.NewSessionServer(hostcap.NewBase(newSessionCaps(access, &fakeSessionAdmin{}), "core-communication"))
+}
+
 // ============================================================================
 // SessionService (sessionServer) tests
 // ============================================================================
 
-// TestSessionServerFindByNameResolvesViaAccessReturnsSession verifies that
-// FindByName delegates to session.Access.FindByCharacterName and maps the
-// result to the wire SessionInfo.
-func TestSessionServerFindByNameResolvesViaAccessReturnsSession(t *testing.T) {
-	info := makeSessionInfo()
-	access := &fakeSessionAccess{findByCharacterNameResult: info}
-	caps := newSessionCaps(access, &fakeSessionAdmin{})
-
-	srv := hostcap.NewSessionServer(hostcap.NewBase(caps, "core-communication"))
-	resp, err := srv.FindByName(context.Background(), &hostv1.FindByNameRequest{Name: "alice"})
-	require.NoError(t, err)
-	require.NotNil(t, resp.GetSession())
-	assert.Equal(t, sessionULID, resp.GetSession().GetId())
-	assert.Equal(t, characterULID.String(), resp.GetSession().GetCharacterId())
-	assert.Equal(t, "Alice", resp.GetSession().GetCharacterName())
-	assert.Equal(t, locationULID.String(), resp.GetSession().GetLocationId())
-	assert.True(t, resp.GetSession().GetGridPresent())
-	assert.Equal(t, "Bob", resp.GetSession().GetLastWhispered())
+func TestSessionServerFindByName(t *testing.T) {
+	tests := []struct {
+		name   string
+		access *fakeSessionAccess
+		check  func(t *testing.T, resp *hostv1.FindByNameResponse, err error)
+	}{
+		{
+			name:   "resolves via access and maps to wire session",
+			access: &fakeSessionAccess{findByCharacterNameResult: makeSessionInfo()},
+			check: func(t *testing.T, resp *hostv1.FindByNameResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, resp.GetSession())
+				assert.Equal(t, sessionULID, resp.GetSession().GetId())
+				assert.Equal(t, characterULID.String(), resp.GetSession().GetCharacterId())
+				assert.Equal(t, "Alice", resp.GetSession().GetCharacterName())
+				assert.Equal(t, locationULID.String(), resp.GetSession().GetLocationId())
+				assert.True(t, resp.GetSession().GetGridPresent())
+				assert.Equal(t, "Bob", resp.GetSession().GetLastWhispered())
+			},
+		},
+		{
+			name:   "returns empty session when not found",
+			access: &fakeSessionAccess{},
+			check: func(t *testing.T, resp *hostv1.FindByNameResponse, err error) {
+				require.NoError(t, err)
+				assert.Nil(t, resp.GetSession(), "absent session must produce nil session field")
+			},
+		},
+		{
+			name:   "returns opaque internal error on access failure",
+			access: &fakeSessionAccess{findByCharacterNameErr: errors.New("secret pg connection string")},
+			check: func(t *testing.T, _ *hostv1.FindByNameResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newSessionServer(tc.access)
+			resp, err := srv.FindByName(context.Background(), &hostv1.FindByNameRequest{Name: "alice"})
+			tc.check(t, resp, err)
+		})
+	}
 }
 
-// TestSessionServerFindByNameReturnsEmptySessionWhenNotFound verifies that
-// FindByName returns an empty (nil session field) response when no session
-// matches the name, mirroring the Lua nil-return semantics.
-func TestSessionServerFindByNameReturnsEmptySessionWhenNotFound(t *testing.T) {
-	access := &fakeSessionAccess{findByCharacterNameResult: nil, findByCharacterNameErr: nil}
-	caps := newSessionCaps(access, &fakeSessionAdmin{})
-
-	srv := hostcap.NewSessionServer(hostcap.NewBase(caps, "core-communication"))
-	resp, err := srv.FindByName(context.Background(), &hostv1.FindByNameRequest{Name: "nobody"})
-	require.NoError(t, err)
-	assert.Nil(t, resp.GetSession(), "absent session must produce nil session field")
+func TestSessionServerListActive(t *testing.T) {
+	tests := []struct {
+		name   string
+		access *fakeSessionAccess
+		check  func(t *testing.T, resp *hostv1.ListActiveResponse, err error)
+	}{
+		{
+			name:   "returns all active sessions mapped to wire format",
+			access: &fakeSessionAccess{listActiveResult: []*session.Info{makeSessionInfo()}},
+			check: func(t *testing.T, resp *hostv1.ListActiveResponse, err error) {
+				require.NoError(t, err)
+				require.Len(t, resp.GetSessions(), 1)
+				assert.Equal(t, sessionULID, resp.GetSessions()[0].GetId())
+				assert.Equal(t, "Alice", resp.GetSessions()[0].GetCharacterName())
+			},
+		},
+		{
+			name:   "returns empty slice when none active",
+			access: &fakeSessionAccess{listActiveResult: nil},
+			check: func(t *testing.T, resp *hostv1.ListActiveResponse, err error) {
+				require.NoError(t, err)
+				assert.Empty(t, resp.GetSessions())
+			},
+		},
+		{
+			name:   "returns opaque internal error on access failure",
+			access: &fakeSessionAccess{listActiveErr: errors.New("secret replica lag detail")},
+			check: func(t *testing.T, _ *hostv1.ListActiveResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newSessionServer(tc.access)
+			resp, err := srv.ListActive(context.Background(), &hostv1.ListActiveRequest{})
+			tc.check(t, resp, err)
+		})
+	}
 }
 
-// TestSessionServerFindByNameReturnsOpaqueInternalErrorOnAccessFailure verifies
-// that an internal error from session.Access does not leak inner details to the
-// caller — the status message must be the static string "internal error".
-func TestSessionServerFindByNameReturnsOpaqueInternalErrorOnAccessFailure(t *testing.T) {
-	access := &fakeSessionAccess{findByCharacterNameErr: errors.New("secret pg connection string")}
-	caps := newSessionCaps(access, &fakeSessionAdmin{})
-
-	srv := hostcap.NewSessionServer(hostcap.NewBase(caps, "core-communication"))
-	_, err := srv.FindByName(context.Background(), &hostv1.FindByNameRequest{Name: "alice"})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message(), "inner error detail must not leak to the caller")
-	assert.NotContains(t, st.Message(), "secret")
-}
-
-// TestSessionServerListActiveReturnsAllSessions verifies that ListActive
-// delegates to session.Access.ListActive and maps every session to the wire
-// format.
-func TestSessionServerListActiveReturnsAllSessions(t *testing.T) {
-	info := makeSessionInfo()
-	access := &fakeSessionAccess{listActiveResult: []*session.Info{info}}
-	caps := newSessionCaps(access, &fakeSessionAdmin{})
-
-	srv := hostcap.NewSessionServer(hostcap.NewBase(caps, "core-communication"))
-	resp, err := srv.ListActive(context.Background(), &hostv1.ListActiveRequest{})
-	require.NoError(t, err)
-	require.Len(t, resp.GetSessions(), 1)
-	assert.Equal(t, sessionULID, resp.GetSessions()[0].GetId())
-	assert.Equal(t, "Alice", resp.GetSessions()[0].GetCharacterName())
-}
-
-// TestSessionServerListActiveReturnsEmptySliceWhenNoneActive verifies that
-// ListActive returns an empty sessions slice when there are no active sessions.
-func TestSessionServerListActiveReturnsEmptySliceWhenNoneActive(t *testing.T) {
-	access := &fakeSessionAccess{listActiveResult: nil}
-	caps := newSessionCaps(access, &fakeSessionAdmin{})
-
-	srv := hostcap.NewSessionServer(hostcap.NewBase(caps, "core-communication"))
-	resp, err := srv.ListActive(context.Background(), &hostv1.ListActiveRequest{})
-	require.NoError(t, err)
-	assert.Empty(t, resp.GetSessions())
-}
-
-// TestSessionServerListActiveReturnsOpaqueInternalErrorOnAccessFailure verifies
-// that an internal error from session.Access.ListActive does not leak inner
-// details to the caller.
-func TestSessionServerListActiveReturnsOpaqueInternalErrorOnAccessFailure(t *testing.T) {
-	access := &fakeSessionAccess{listActiveErr: errors.New("secret replica lag detail")}
-	caps := newSessionCaps(access, &fakeSessionAdmin{})
-
-	srv := hostcap.NewSessionServer(hostcap.NewBase(caps, "core-communication"))
-	_, err := srv.ListActive(context.Background(), &hostv1.ListActiveRequest{})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message(), "inner error detail must not leak to the caller")
-	assert.NotContains(t, st.Message(), "secret")
-}
-
-// TestSessionServerSetLastWhisperedDelegatesToAccessUpdateLastWhispered verifies
-// that SetLastWhispered calls session.Access.UpdateLastWhispered with the
-// request's session_id and name and returns an empty response on success.
-func TestSessionServerSetLastWhisperedDelegatesToAccessUpdateLastWhispered(t *testing.T) {
-	access := &fakeSessionAccess{}
-	caps := newSessionCaps(access, &fakeSessionAdmin{})
-
-	srv := hostcap.NewSessionServer(hostcap.NewBase(caps, "core-communication"))
-	resp, err := srv.SetLastWhispered(context.Background(), &hostv1.SetLastWhisperedRequest{
-		SessionId: sessionULID,
-		Name:      "Bob",
-	})
-	require.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, sessionULID, access.lastWhisperedSessionID)
-	assert.Equal(t, "Bob", access.lastWhisperedName)
-}
-
-// TestSessionServerSetLastWhisperedReturnsOpaqueInternalErrorOnUpdateFailure
-// verifies that an internal error from UpdateLastWhispered does not leak inner
-// details to the caller.
-func TestSessionServerSetLastWhisperedReturnsOpaqueInternalErrorOnUpdateFailure(t *testing.T) {
-	access := &fakeSessionAccess{updateLastWhisperedErr: errors.New("secret store error")}
-	caps := newSessionCaps(access, &fakeSessionAdmin{})
-
-	srv := hostcap.NewSessionServer(hostcap.NewBase(caps, "core-communication"))
-	_, err := srv.SetLastWhispered(context.Background(), &hostv1.SetLastWhisperedRequest{
-		SessionId: sessionULID,
-		Name:      "Bob",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message(), "inner error detail must not leak to the caller")
-	assert.NotContains(t, st.Message(), "secret")
+func TestSessionServerSetLastWhispered(t *testing.T) {
+	tests := []struct {
+		name   string
+		access *fakeSessionAccess
+		check  func(t *testing.T, access *fakeSessionAccess, resp *hostv1.SetLastWhisperedResponse, err error)
+	}{
+		{
+			name:   "delegates session_id and name to UpdateLastWhispered",
+			access: &fakeSessionAccess{},
+			check: func(t *testing.T, access *fakeSessionAccess, resp *hostv1.SetLastWhisperedResponse, err error) {
+				require.NoError(t, err)
+				assert.NotNil(t, resp)
+				assert.Equal(t, sessionULID, access.lastWhisperedSessionID)
+				assert.Equal(t, "Bob", access.lastWhisperedName)
+			},
+		},
+		{
+			name:   "returns opaque internal error on update failure",
+			access: &fakeSessionAccess{updateLastWhisperedErr: errors.New("secret store error")},
+			check: func(t *testing.T, _ *fakeSessionAccess, _ *hostv1.SetLastWhisperedResponse, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newSessionServer(tc.access)
+			resp, err := srv.SetLastWhispered(context.Background(), &hostv1.SetLastWhisperedRequest{
+				SessionId: sessionULID,
+				Name:      "Bob",
+			})
+			tc.check(t, tc.access, resp, err)
+		})
+	}
 }
 
 // ============================================================================
 // SessionAdminService (sessionAdminServer) tests
 // ============================================================================
 
-// TestSessionAdminServerBroadcastDelegatesToSessionAdminBroadcastSystemMessage
-// verifies that Broadcast calls SessionAdmin.BroadcastSystemMessage with the
-// request message and returns an empty response on success.
-func TestSessionAdminServerBroadcastDelegatesToSessionAdminBroadcastSystemMessage(t *testing.T) {
-	admin := &fakeSessionAdmin{}
-	caps := newSessionCaps(&fakeSessionAccess{}, admin)
-
-	srv := hostcap.NewSessionAdminServer(hostcap.NewBase(caps, "core-communication"))
-	resp, err := srv.Broadcast(context.Background(), &hostv1.BroadcastRequest{Message: "Server restart in 5 minutes."})
-	require.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, "Server restart in 5 minutes.", admin.lastBroadcastMsg)
+func TestSessionAdminServerBroadcast(t *testing.T) {
+	tests := []struct {
+		name  string
+		admin hostcap.SessionAdmin // nil exercises the fail-closed guard
+		check func(t *testing.T, admin *fakeSessionAdmin, err error)
+	}{
+		{
+			name:  "delegates message to BroadcastSystemMessage",
+			admin: &fakeSessionAdmin{},
+			check: func(t *testing.T, admin *fakeSessionAdmin, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "Server restart in 5 minutes.", admin.lastBroadcastMsg)
+			},
+		},
+		{
+			name:  "returns opaque internal error on admin failure",
+			admin: &fakeSessionAdmin{broadcastErr: errors.New("secret internal broadcast failure")},
+			check: func(t *testing.T, _ *fakeSessionAdmin, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			name:  "fails closed with Unimplemented when SessionAdmin is nil",
+			admin: nil,
+			check: func(t *testing.T, _ *fakeSessionAdmin, err error) {
+				require.Error(t, err)
+				st, ok := status.FromError(err)
+				require.True(t, ok)
+				assert.Equal(t, codes.Unimplemented, st.Code(), "nil SessionAdmin must fail closed with Unimplemented, not NPE")
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// A nil admin maps to the bare stub whose SessionAdmin() returns nil
+			// (the unwired case both runtimes hit); a non-nil admin is wired through.
+			var srv hostv1.SessionAdminServiceServer
+			fake, _ := tc.admin.(*fakeSessionAdmin)
+			if tc.admin == nil {
+				srv = hostcap.NewSessionAdminServer(hostcap.NewBase(stubHostCaps{}, "core-communication"))
+			} else {
+				srv = hostcap.NewSessionAdminServer(hostcap.NewBase(newSessionCaps(&fakeSessionAccess{}, fake), "core-communication"))
+			}
+			_, err := srv.Broadcast(context.Background(), &hostv1.BroadcastRequest{Message: "Server restart in 5 minutes."})
+			tc.check(t, fake, err)
+		})
+	}
 }
 
-// TestSessionAdminServerBroadcastReturnsOpaqueInternalErrorOnAdminFailure
-// verifies that an internal error from BroadcastSystemMessage does not leak
-// inner details to the caller — the status message must be "internal error".
-func TestSessionAdminServerBroadcastReturnsOpaqueInternalErrorOnAdminFailure(t *testing.T) {
-	admin := &fakeSessionAdmin{broadcastErr: errors.New("secret internal broadcast failure")}
-	caps := newSessionCaps(&fakeSessionAccess{}, admin)
-
-	srv := hostcap.NewSessionAdminServer(hostcap.NewBase(caps, "core-communication"))
-	_, err := srv.Broadcast(context.Background(), &hostv1.BroadcastRequest{Message: "hello"})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message(), "inner error detail must not leak to the caller")
-	assert.NotContains(t, st.Message(), "secret")
-}
-
-// TestSessionAdminServerDisconnectDelegatesToSessionAdminDisconnectSession
-// verifies that Disconnect calls SessionAdmin.DisconnectSession with the
-// request's session_id and reason and returns an empty response on success.
-func TestSessionAdminServerDisconnectDelegatesToSessionAdminDisconnectSession(t *testing.T) {
-	admin := &fakeSessionAdmin{}
-	caps := newSessionCaps(&fakeSessionAccess{}, admin)
-
-	srv := hostcap.NewSessionAdminServer(hostcap.NewBase(caps, "core-communication"))
-	resp, err := srv.Disconnect(context.Background(), &hostv1.DisconnectRequest{
-		SessionId: sessionULID,
-		Reason:    "idle timeout",
-	})
-	require.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, sessionULID, admin.lastDisconnectID)
-	assert.Equal(t, "idle timeout", admin.lastDisconnectRsn)
-}
-
-// TestSessionAdminServerDisconnectReturnsOpaqueInternalErrorOnAdminFailure
-// verifies that an internal error from DisconnectSession does not leak inner
-// details to the caller.
-func TestSessionAdminServerDisconnectReturnsOpaqueInternalErrorOnAdminFailure(t *testing.T) {
-	admin := &fakeSessionAdmin{disconnectErr: errors.New("secret disconnect failure")}
-	caps := newSessionCaps(&fakeSessionAccess{}, admin)
-
-	srv := hostcap.NewSessionAdminServer(hostcap.NewBase(caps, "core-communication"))
-	_, err := srv.Disconnect(context.Background(), &hostv1.DisconnectRequest{
-		SessionId: sessionULID,
-		Reason:    "reason",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal, st.Code())
-	assert.Equal(t, "internal error", st.Message(), "inner error detail must not leak to the caller")
-	assert.NotContains(t, st.Message(), "secret")
-}
-
-// TestSessionAdminServerBroadcastReturnsUnimplementedWhenAdminNil verifies the
-// fail-closed nil-guard: when HostCapabilities.SessionAdmin() returns nil (the
-// binary adapter AND the unwired Lua adapter both do today), Broadcast must
-// return codes.Unimplemented rather than NPE on a nil-interface method call.
-func TestSessionAdminServerBroadcastReturnsUnimplementedWhenAdminNil(t *testing.T) {
-	// stubHostCaps.SessionAdmin() returns nil — the unwired case both runtimes hit.
-	srv := hostcap.NewSessionAdminServer(hostcap.NewBase(stubHostCaps{}, "core-communication"))
-	_, err := srv.Broadcast(context.Background(), &hostv1.BroadcastRequest{Message: "hello"})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Unimplemented, st.Code(), "nil SessionAdmin must fail closed with Unimplemented, not NPE")
-}
-
-// TestSessionAdminServerDisconnectReturnsUnimplementedWhenAdminNil verifies the
-// same fail-closed nil-guard on the Disconnect path.
-func TestSessionAdminServerDisconnectReturnsUnimplementedWhenAdminNil(t *testing.T) {
-	srv := hostcap.NewSessionAdminServer(hostcap.NewBase(stubHostCaps{}, "core-communication"))
-	_, err := srv.Disconnect(context.Background(), &hostv1.DisconnectRequest{
-		SessionId: sessionULID,
-		Reason:    "reason",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Unimplemented, st.Code(), "nil SessionAdmin must fail closed with Unimplemented, not NPE")
+func TestSessionAdminServerDisconnect(t *testing.T) {
+	tests := []struct {
+		name  string
+		admin hostcap.SessionAdmin // nil exercises the fail-closed guard
+		check func(t *testing.T, admin *fakeSessionAdmin, err error)
+	}{
+		{
+			name:  "delegates session_id and reason to DisconnectSession",
+			admin: &fakeSessionAdmin{},
+			check: func(t *testing.T, admin *fakeSessionAdmin, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, sessionULID, admin.lastDisconnectID)
+				assert.Equal(t, "idle timeout", admin.lastDisconnectRsn)
+			},
+		},
+		{
+			name:  "returns opaque internal error on admin failure",
+			admin: &fakeSessionAdmin{disconnectErr: errors.New("secret disconnect failure")},
+			check: func(t *testing.T, _ *fakeSessionAdmin, err error) {
+				requireOpaqueInternal(t, err)
+			},
+		},
+		{
+			name:  "fails closed with Unimplemented when SessionAdmin is nil",
+			admin: nil,
+			check: func(t *testing.T, _ *fakeSessionAdmin, err error) {
+				require.Error(t, err)
+				st, ok := status.FromError(err)
+				require.True(t, ok)
+				assert.Equal(t, codes.Unimplemented, st.Code(), "nil SessionAdmin must fail closed with Unimplemented, not NPE")
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var srv hostv1.SessionAdminServiceServer
+			fake, _ := tc.admin.(*fakeSessionAdmin)
+			if tc.admin == nil {
+				srv = hostcap.NewSessionAdminServer(hostcap.NewBase(stubHostCaps{}, "core-communication"))
+			} else {
+				srv = hostcap.NewSessionAdminServer(hostcap.NewBase(newSessionCaps(&fakeSessionAccess{}, fake), "core-communication"))
+			}
+			_, err := srv.Disconnect(context.Background(), &hostv1.DisconnectRequest{
+				SessionId: sessionULID,
+				Reason:    "idle timeout",
+			})
+			tc.check(t, fake, err)
+		})
+	}
 }

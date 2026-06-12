@@ -3,20 +3,14 @@
 
 //go:build integration
 
-// Package pluginparity holds the cross-runtime parity tests that bind the
-// plugin host-capability invariants. They stand up the SAME hostcap capability
-// servers behind BOTH runtime adapters — the binary *goplugin.Host and the Lua
-// *hostfunc.Functions-backed adapter — over the SAME in-process transport, and
-// assert the two runtimes consume the single shared RPC contract identically.
 package pluginparity
 
 import (
 	"context"
-	"testing"
 
 	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -43,7 +37,14 @@ const parityPluginName = "parity-plugin"
 // routing.
 const kvServiceName = "holomush.plugin.host.v1.KVService"
 
-// runtimeEndpoint pairs a *grpc.Server (so the test can inspect its registered
+// sessionServiceName is the fully-qualified host.v1 SessionService name. It is
+// declared in LuaDefaultSet but NOT in BinaryDefaultSet (register.go:53-58), so
+// it is the canonical witness that the declaration gate (the CapabilitySet
+// passed to the SHARED hostcap.RegisterCapabilities) governs which services a
+// runtime reaches.
+const sessionServiceName = "holomush.plugin.host.v1.SessionService"
+
+// runtimeEndpoint pairs a *grpc.Server (so the spec can inspect its registered
 // services) with an in-process client conn to that server. The server body, the
 // registration source (hostcap.RegisterCapabilities), and the transport
 // (plugins.NewInProcessConn) are identical across runtimes; only the
@@ -57,26 +58,27 @@ type runtimeEndpoint struct {
 // surface: a *goplugin.Host registered via hostcap.RegisterCapabilities with the
 // BinaryDefaultSet, reached over plugins.NewInProcessConn. This is the SAME
 // construction the production binary host service uses (host_service.go).
-func newBinaryEndpoint(t *testing.T) runtimeEndpoint {
-	t.Helper()
-	return newBinaryEndpointWithOpts(t)
+func newBinaryEndpoint() runtimeEndpoint {
+	GinkgoHelper()
+	return newBinaryEndpointWithOpts()
 }
 
 // newBinaryEndpointWithOpts is newBinaryEndpoint with explicit goplugin host
-// options (e.g. goplugin.WithEngine), so a test can wire the binary runtime's
-// ABAC engine through the SAME hostcap.RegisterCapabilities source.
-func newBinaryEndpointWithOpts(t *testing.T, opts ...goplugin.HostOption) runtimeEndpoint {
-	t.Helper()
+// options (e.g. goplugin.WithEngine), so a spec can wire the binary runtime's
+// ABAC engine through the SAME hostcap.RegisterCapabilities source. Per-spec
+// resources tear down via DeferCleanup.
+func newBinaryEndpointWithOpts(opts ...goplugin.HostOption) runtimeEndpoint {
+	GinkgoHelper()
 
 	host := goplugin.NewHost(opts...)
-	t.Cleanup(func() { _ = host.Close(context.Background()) })
+	DeferCleanup(func() { _ = host.Close(context.Background()) })
 
 	srv := grpc.NewServer()
 	hostcap.RegisterCapabilities(srv, hostcap.NewBase(host, parityPluginName), hostcap.BinaryDefaultSet)
 
 	conn, err := plugins.NewInProcessConn(srv)
-	require.NoError(t, err, "binary in-process conn must stand up")
-	t.Cleanup(func() { _ = conn.Close() })
+	Expect(err).NotTo(HaveOccurred(), "binary in-process conn must stand up")
+	DeferCleanup(func() { _ = conn.Close() })
 
 	return runtimeEndpoint{srv: srv, conn: conn}
 }
@@ -87,30 +89,30 @@ func newBinaryEndpointWithOpts(t *testing.T, opts ...goplugin.HostOption) runtim
 // hostcap.RegisterCapabilities source — differing ONLY by CapabilitySet
 // (LuaDefaultSet) — and reached over the SAME plugins.NewInProcessConn
 // transport.
-func newLuaEndpoint(t *testing.T) runtimeEndpoint {
-	t.Helper()
-	return newLuaEndpointWithFunctions(t, hostfunc.New(nil))
+func newLuaEndpoint() runtimeEndpoint {
+	GinkgoHelper()
+	return newLuaEndpointWithFunctions(hostfunc.New(nil))
 }
 
 // newLuaEndpointWithFunctions is newLuaEndpoint with an explicit
-// *hostfunc.Functions, so a test can wire backings (a session.Access, an ABAC
+// *hostfunc.Functions, so a spec can wire backings (a session.Access, an ABAC
 // engine) through the SAME real luaHostCapAdapter the production LuaDefaultSet
-// endpoint consumes.
-func newLuaEndpointWithFunctions(t *testing.T, hf *hostfunc.Functions) runtimeEndpoint {
-	t.Helper()
+// endpoint consumes. Per-spec resources tear down via DeferCleanup.
+func newLuaEndpointWithFunctions(hf *hostfunc.Functions) runtimeEndpoint {
+	GinkgoHelper()
 
 	luaHost := lua.NewHostWithFunctions(hf)
-	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+	DeferCleanup(func() { _ = luaHost.Close(context.Background()) })
 
 	adapter := luaHost.HostCapabilitiesAdapter()
-	require.NotNil(t, adapter, "lua host must expose its real hostcap adapter")
+	Expect(adapter).NotTo(BeNil(), "lua host must expose its real hostcap adapter")
 
 	srv := grpc.NewServer()
 	hostcap.RegisterCapabilities(srv, hostcap.NewBase(adapter, parityPluginName), hostcap.LuaDefaultSet)
 
 	conn, err := plugins.NewInProcessConn(srv)
-	require.NoError(t, err, "lua in-process conn must stand up")
-	t.Cleanup(func() { _ = conn.Close() })
+	Expect(err).NotTo(HaveOccurred(), "lua in-process conn must stand up")
+	DeferCleanup(func() { _ = conn.Close() })
 
 	return runtimeEndpoint{srv: srv, conn: conn}
 }
@@ -141,295 +143,239 @@ func (emptySessionAccess) UpdateLastWhispered(context.Context, string, string) e
 	return nil
 }
 
-// TestKVCapabilityIsSingleSourceAcrossRuntimes binds INV-PLUGIN-49.
-//
-// It proves the host-capability RPC contract is the single source BOTH runtimes
-// consume — there is no runtime-specific capability surface. Both the binary
-// (*goplugin.Host) and Lua (*hostfunc.Functions-backed adapter) runtimes
-// register the SAME hostcap.kvServer via the SAME hostcap.RegisterCapabilities
-// source (differing ONLY by CapabilitySet — BinaryDefaultSet vs LuaDefaultSet)
-// and reach it over the SAME plugins.NewInProcessConn transport.
-//
-// KVService is the canonical single-source witness: its kvServer is the
-// Unimplemented base (no behavior of its own, no identity/token recovery), so a
-// call returns codes.Unimplemented BEFORE any per-runtime trust seam runs. That
-// is exactly why this capability binds the routing claim without scaffolding —
-// no actor-on-context, no interceptor, no settings backing is needed for either
-// runtime to reach the identical handler and get the identical result.
-//
-// Assertions:
-//  1. ROUTING / IDENTICAL RESULT — both runtimes call the SAME RPC
-//     (KVService.Get) over their respective in-process transports and receive
-//     the IDENTICAL status code (codes.Unimplemented). The codes being equal is
-//     the proof that both reach the single shared kvServer handler with no
-//     runtime-specific surface in between.
-//  2. SINGLE SOURCE (structural) — KVService is present in the GetServiceInfo()
-//     service set of BOTH the binary and the Lua *grpc.Server. There is ONE
-//     capability-server source (hostcap.RegisterCapabilities); both runtimes
-//     registered the identical service, differing only by CapabilitySet.
-//
-// Verifies: INV-PLUGIN-49
-func TestKVCapabilityIsSingleSourceAcrossRuntimes(t *testing.T) {
-	binaryEP := newBinaryEndpoint(t)
-	luaEP := newLuaEndpoint(t)
+var _ = Describe("Cross-runtime plugin host-capability parity", func() {
+	// It proves the host-capability RPC contract is the single source BOTH
+	// runtimes consume — there is no runtime-specific capability surface. Both
+	// the binary (*goplugin.Host) and Lua (*hostfunc.Functions-backed adapter)
+	// runtimes register the SAME hostcap.kvServer via the SAME
+	// hostcap.RegisterCapabilities source (differing ONLY by CapabilitySet —
+	// BinaryDefaultSet vs LuaDefaultSet) and reach it over the SAME
+	// plugins.NewInProcessConn transport.
+	//
+	// KVService is the canonical single-source witness: its kvServer is the
+	// Unimplemented base (no behavior of its own, no identity/token recovery), so
+	// a call returns codes.Unimplemented BEFORE any per-runtime trust seam runs.
+	// That is exactly why this capability binds the routing claim without
+	// scaffolding — no actor-on-context, no interceptor, no settings backing is
+	// needed for either runtime to reach the identical handler and get the
+	// identical result.
+	//
+	// Verifies: INV-PLUGIN-49
+	It("consumes the KV capability from a single source across runtimes", func() {
+		binaryEP := newBinaryEndpoint()
+		luaEP := newLuaEndpoint()
 
-	binaryKV := hostv1.NewKVServiceClient(binaryEP.conn)
-	luaKV := hostv1.NewKVServiceClient(luaEP.conn)
+		binaryKV := hostv1.NewKVServiceClient(binaryEP.conn)
+		luaKV := hostv1.NewKVServiceClient(luaEP.conn)
 
-	// (1) ROUTING / IDENTICAL RESULT: both runtimes call the SAME KVService.Get
-	// RPC over their own in-process transport. Because both reach the identical
-	// shared kvServer (the Unimplemented base) through the single
-	// RegisterCapabilities source, both return codes.Unimplemented — and the two
-	// codes are EQUAL. No runtime-specific surface intervenes; if one runtime had
-	// its own KV handler the codes could diverge.
-	_, binErr := binaryKV.Get(context.Background(), &hostv1.GetRequest{Key: "parity"})
-	_, luaErr := luaKV.Get(context.Background(), &hostv1.GetRequest{Key: "parity"})
+		// (1) ROUTING / IDENTICAL RESULT: both runtimes call the SAME
+		// KVService.Get RPC over their own in-process transport. Because both
+		// reach the identical shared kvServer (the Unimplemented base) through the
+		// single RegisterCapabilities source, both return codes.Unimplemented —
+		// and the two codes are EQUAL. No runtime-specific surface intervenes; if
+		// one runtime had its own KV handler the codes could diverge.
+		_, binErr := binaryKV.Get(context.Background(), &hostv1.GetRequest{Key: "parity"})
+		_, luaErr := luaKV.Get(context.Background(), &hostv1.GetRequest{Key: "parity"})
 
-	require.Error(t, binErr, "binary KVService.Get must return an error (Unimplemented base)")
-	require.Error(t, luaErr, "lua KVService.Get must return an error (Unimplemented base)")
+		Expect(binErr).To(HaveOccurred(), "binary KVService.Get must return an error (Unimplemented base)")
+		Expect(luaErr).To(HaveOccurred(), "lua KVService.Get must return an error (Unimplemented base)")
 
-	binCode := status.Code(binErr)
-	luaCode := status.Code(luaErr)
-	assert.Equal(t, codes.Unimplemented, binCode,
-		"binary runtime must reach the shared Unimplemented kvServer")
-	assert.Equal(t, codes.Unimplemented, luaCode,
-		"lua runtime must reach the shared Unimplemented kvServer")
-	assert.Equal(t, binCode, luaCode,
-		"both runtimes consume the IDENTICAL KVService contract — single-source routing, no runtime-specific surface")
+		binCode := status.Code(binErr)
+		luaCode := status.Code(luaErr)
+		Expect(binCode).To(Equal(codes.Unimplemented),
+			"binary runtime must reach the shared Unimplemented kvServer")
+		Expect(luaCode).To(Equal(codes.Unimplemented),
+			"lua runtime must reach the shared Unimplemented kvServer")
+		Expect(binCode).To(Equal(luaCode),
+			"both runtimes consume the IDENTICAL KVService contract — single-source routing, no runtime-specific surface")
 
-	// (2) SINGLE SOURCE (structural): the SAME KVService is registered on BOTH
-	// runtimes' *grpc.Server. There is one capability-server source
-	// (hostcap.RegisterCapabilities); both endpoints registered the identical
-	// service via it, differing only by CapabilitySet. GetServiceInfo is the
-	// wire-level proof that the service set is shared, not duplicated per runtime.
-	binInfo := binaryEP.srv.GetServiceInfo()
-	luaInfo := luaEP.srv.GetServiceInfo()
-	require.Contains(t, binInfo, kvServiceName,
-		"binary runtime must register KVService via the single RegisterCapabilities source")
-	require.Contains(t, luaInfo, kvServiceName,
-		"lua runtime must register KVService via the single RegisterCapabilities source")
-}
+		// (2) SINGLE SOURCE (structural): the SAME KVService is registered on BOTH
+		// runtimes' *grpc.Server. There is one capability-server source
+		// (hostcap.RegisterCapabilities); both endpoints registered the identical
+		// service via it, differing only by CapabilitySet. GetServiceInfo is the
+		// wire-level proof that the service set is shared, not duplicated per runtime.
+		Expect(binaryEP.srv.GetServiceInfo()).To(HaveKey(kvServiceName),
+			"binary runtime must register KVService via the single RegisterCapabilities source")
+		Expect(luaEP.srv.GetServiceInfo()).To(HaveKey(kvServiceName),
+			"lua runtime must register KVService via the single RegisterCapabilities source")
+	})
 
-// sessionServiceName is the fully-qualified host.v1 SessionService name. It is
-// declared in LuaDefaultSet but NOT in BinaryDefaultSet (register.go:53-58), so
-// it is the canonical witness that the declaration gate (the CapabilitySet
-// passed to the SHARED hostcap.RegisterCapabilities) governs which services a
-// runtime reaches.
-const sessionServiceName = "holomush.plugin.host.v1.SessionService"
+	// The witness is the per-runtime CapabilitySet argument to
+	// hostcap.RegisterCapabilities (register.go:42): SessionService is declared in
+	// LuaDefaultSet but NOT in BinaryDefaultSet, so it shows the declaration
+	// controls which services a runtime reaches:
+	//
+	//   - DECLARED ⇒ REACHABLE (INV-PLUGIN-44 positive): the Lua endpoint, whose
+	//     LuaDefaultSet declares SessionService, serves a real
+	//     SessionService.ListActive round-trip (the wired emptySessionAccess backs
+	//     it). The call SUCCEEDS — the declared dependency is obtained through the
+	//     host broker.
+	//   - UNDECLARED ⇒ NOT REACHABLE (INV-PLUGIN-44 negative + the least-privilege
+	//     gate): the binary endpoint, whose BinaryDefaultSet does NOT declare
+	//     SessionService, has no handler registered for it. The identical
+	//     ListActive call returns codes.Unimplemented — the binary runtime CANNOT
+	//     obtain a service it did not declare.
+	//
+	// Non-vacuous: if the gate were bypassed (RegisterCapabilities ignored the set
+	// and always registered every service), the binary call would SUCCEED and the
+	// Unimplemented assertion would fail. If the declared service were not actually
+	// wired, the Lua call would error and the success assertion would fail.
+	//
+	// NOTE: this does NOT bind INV-PLUGIN-45 ("the declaration gate that enforces
+	// least privilege MUST live at the broker/registry common path shared by both
+	// runtimes"). Today the per-plugin least-privilege declaration gate is still
+	// SPLIT per-runtime; its consolidation onto a single brokered path is deferred
+	// to sub-spec 5, so INV-PLUGIN-45 remains binding: pending until then.
+	//
+	// Verifies: INV-PLUGIN-44
+	It("governs service reachability by the declaration gate across runtimes", func() {
+		// Lua endpoint declares SessionService (LuaDefaultSet) and has it backed.
+		luaEP := newLuaEndpointWithFunctions(
+			hostfunc.New(nil, hostfunc.WithSessionAccess(emptySessionAccess{})),
+		)
+		// Binary endpoint does NOT declare SessionService (BinaryDefaultSet).
+		binaryEP := newBinaryEndpoint()
 
-// TestDeclarationGateGovernsServiceReachabilityAcrossRuntimes binds
-// INV-PLUGIN-44.
-//
-// The witness is the per-runtime CapabilitySet argument to
-// hostcap.RegisterCapabilities (register.go:42): SessionService is declared in
-// LuaDefaultSet but NOT in BinaryDefaultSet, so it shows the declaration
-// controls which services a runtime reaches:
-//
-//   - DECLARED ⇒ REACHABLE (INV-PLUGIN-44 positive): the Lua endpoint, whose
-//     LuaDefaultSet declares SessionService, serves a real SessionService.ListActive
-//     round-trip (the wired emptySessionAccess backs it). The call SUCCEEDS — the
-//     declared dependency is obtained through the host broker.
-//   - UNDECLARED ⇒ NOT REACHABLE (INV-PLUGIN-44 negative + the least-privilege
-//     gate): the binary endpoint, whose BinaryDefaultSet does NOT declare
-//     SessionService, has no handler registered for it. The identical ListActive
-//     call returns codes.Unimplemented — the binary runtime CANNOT obtain a
-//     service it did not declare. "Neither runtime MAY receive an undeclared
-//     capability or service."
-//
-// Non-vacuous: if the gate were bypassed (e.g. RegisterCapabilities ignored the
-// set and always registered every service), the binary call would SUCCEED and
-// the Unimplemented assertion would fail. If the declared service were not
-// actually wired, the Lua call would error and the success assertion would fail.
-//
-// NOTE: this does NOT bind INV-PLUGIN-45 ("the declaration gate that enforces
-// least privilege MUST live at the broker/registry common path shared by both
-// runtimes"). Today the per-plugin least-privilege declaration gate is still
-// SPLIT per-runtime (Lua: luabridge.RegisterHostCaps VM injection; binary:
-// manifest.RequiredServiceNames + dependency.go broker resolution). Its
-// consolidation onto a single brokered path is deferred to sub-spec 5 of
-// docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md,
-// so INV-PLUGIN-45 remains binding: pending until then.
-//
-// Verifies: INV-PLUGIN-44
-func TestDeclarationGateGovernsServiceReachabilityAcrossRuntimes(t *testing.T) {
-	// Lua endpoint declares SessionService (LuaDefaultSet) and has it backed.
-	luaEP := newLuaEndpointWithFunctions(t,
-		hostfunc.New(nil, hostfunc.WithSessionAccess(emptySessionAccess{})))
-	// Binary endpoint does NOT declare SessionService (BinaryDefaultSet).
-	binaryEP := newBinaryEndpoint(t)
+		// Structural witness of the declaration gate: the SAME RegisterCapabilities
+		// source registered SessionService on the Lua server but not the binary one
+		// — the only difference is the declared CapabilitySet.
+		Expect(luaEP.srv.GetServiceInfo()).To(HaveKey(sessionServiceName),
+			"LuaDefaultSet declares SessionService — it MUST be registered")
+		Expect(binaryEP.srv.GetServiceInfo()).NotTo(HaveKey(sessionServiceName),
+			"BinaryDefaultSet does NOT declare SessionService — it MUST NOT be registered (least privilege)")
 
-	// Structural witness of the declaration gate: the SAME RegisterCapabilities
-	// source registered SessionService on the Lua server but not the binary one —
-	// the only difference is the declared CapabilitySet.
-	require.Contains(t, luaEP.srv.GetServiceInfo(), sessionServiceName,
-		"LuaDefaultSet declares SessionService — it MUST be registered")
-	require.NotContains(t, binaryEP.srv.GetServiceInfo(), sessionServiceName,
-		"BinaryDefaultSet does NOT declare SessionService — it MUST NOT be registered (least privilege)")
+		// DECLARED ⇒ REACHABLE: the Lua runtime obtains the declared SessionService
+		// through the host broker and the round-trip succeeds.
+		luaSession := hostv1.NewSessionServiceClient(luaEP.conn)
+		resp, err := luaSession.ListActive(context.Background(), &hostv1.ListActiveRequest{})
+		Expect(err).NotTo(HaveOccurred(),
+			"a DECLARED service (LuaDefaultSet) MUST be reachable through the host broker")
+		Expect(resp).NotTo(BeNil())
+		Expect(resp.GetSessions()).To(BeEmpty(), "emptySessionAccess backs ListActive with no sessions")
 
-	// DECLARED ⇒ REACHABLE: the Lua runtime obtains the declared SessionService
-	// through the host broker and the round-trip succeeds.
-	luaSession := hostv1.NewSessionServiceClient(luaEP.conn)
-	resp, err := luaSession.ListActive(context.Background(), &hostv1.ListActiveRequest{})
-	require.NoError(t, err,
-		"a DECLARED service (LuaDefaultSet) MUST be reachable through the host broker")
-	require.NotNil(t, resp)
-	assert.Empty(t, resp.GetSessions(), "emptySessionAccess backs ListActive with no sessions")
+		// UNDECLARED ⇒ NOT REACHABLE: the binary runtime did NOT declare
+		// SessionService, so the SAME call has no handler and is denied by the gate.
+		binarySession := hostv1.NewSessionServiceClient(binaryEP.conn)
+		_, binErr := binarySession.ListActive(context.Background(), &hostv1.ListActiveRequest{})
+		Expect(binErr).To(HaveOccurred(),
+			"an UNDECLARED service MUST NOT be reachable from the runtime that did not declare it")
+		Expect(status.Code(binErr)).To(Equal(codes.Unimplemented),
+			"the declaration gate denies an undeclared service with Unimplemented (no handler registered)")
+	})
 
-	// UNDECLARED ⇒ NOT REACHABLE: the binary runtime did NOT declare
-	// SessionService, so the SAME call has no handler and is denied by the gate.
-	binarySession := hostv1.NewSessionServiceClient(binaryEP.conn)
-	_, binErr := binarySession.ListActive(context.Background(), &hostv1.ListActiveRequest{})
-	require.Error(t, binErr,
-		"an UNDECLARED service MUST NOT be reachable from the runtime that did not declare it")
-	assert.Equal(t, codes.Unimplemented, status.Code(binErr),
-		"the declaration gate denies an undeclared service with Unimplemented (no handler registered)")
-}
+	// INV-PLUGIN-44 requires every declared dependency be "authorized as
+	// PluginSubject" — and that neither runtime receive an unauthorized result.
+	// The EvalService.Evaluate handler is the consumption-path ABAC authorization
+	// seam: it is declared in BOTH sets (reachable on both runtimes) and runs the
+	// host ABAC engine for the calling plugin's subject. Its security contract is
+	// fail-closed: it recovers the acting PluginSubject from host-established
+	// identity (binary: a host-issued dispatch token in metadata; Lua:
+	// core.ActorFromContext) BEFORE consulting the engine, and denies when no
+	// host-vouched identity is present.
+	//
+	// Over the in-process transport neither runtime carries a host-established
+	// identity (no dispatch token is minted; the client context's actor does not
+	// cross the gRPC boundary onto the server handler context), so the shared
+	// authorization seam MUST fail closed on BOTH — proving the plugin cannot
+	// obtain an allow it was not authorized for. Both endpoints additionally wire
+	// a DenyAllEngine, so even past the identity seam the engine would deny.
+	//
+	// SCOPE / COVERAGE GAP: this asserts only fail-closed-when-identity-absent.
+	// Full PluginSubject-authorization coverage is a tracked coverage gap pending
+	// the Lua identity-transport wiring; this spec supports the fail-closed half.
+	//
+	// Verifies: INV-PLUGIN-44
+	It("fails the evaluate authorization seam closed across runtimes", func() {
+		// Both runtimes wire a DenyAllEngine through the SAME RegisterCapabilities
+		// source, so the engine itself never yields an allow either.
+		binaryEP := newBinaryEndpointWithOpts(goplugin.WithEngine(policytest.DenyAllEngine()))
+		luaEP := newLuaEndpointWithFunctions(
+			hostfunc.New(nil, hostfunc.WithEngine(policytest.DenyAllEngine())),
+		)
 
-// TestEvaluateAuthorizationSeamFailsClosedAcrossRuntimes binds INV-PLUGIN-44.
-//
-// INV-PLUGIN-44 requires every declared dependency be "authorized as
-// PluginSubject" — and that neither runtime receive an unauthorized result. The
-// EvalService.Evaluate handler is the consumption-path ABAC authorization seam:
-// it is declared in BOTH sets (reachable on both runtimes) and runs the host
-// ABAC engine for the calling plugin's subject. Its security contract is
-// fail-closed: it recovers the acting PluginSubject from host-established
-// identity (binary: a host-issued dispatch token in metadata; Lua:
-// core.ActorFromContext) BEFORE consulting the engine, and denies when no
-// host-vouched identity is present.
-//
-// Over the in-process transport neither runtime carries a host-established
-// identity (no dispatch token is minted; the client context's actor does not
-// cross the gRPC boundary onto the server handler context), so the shared
-// authorization seam MUST fail closed on BOTH — proving the plugin cannot obtain
-// an allow it was not authorized for. Both endpoints additionally wire a
-// DenyAllEngine, so even past the identity seam the engine would deny: there is
-// no code path on either runtime that yields an allow.
-//
-// This is the consumption-path facet of plugin-runtime-symmetry: the SAME
-// hostcap.evalServer body authorizes both runtimes; neither gets an
-// unauthorized capability result. Non-vacuous: if either runtime returned an
-// allow (e.g. trusting a plugin-supplied subject, or skipping the seam), the
-// require.Error would fail.
-//
-// SCOPE / COVERAGE GAP: this asserts only fail-closed-when-identity-absent (the
-// transport-identity gap). It does NOT prove the engine authorizes a PRESENT
-// PluginSubject — INV-PLUGIN-44's "authorized as PluginSubject" clause is bound
-// by the declared-reachable / undeclared-not-reachable contrast in
-// TestDeclarationGateGovernsServiceReachabilityAcrossRuntimes, not by this
-// assertion. Full PluginSubject-authorization coverage (the engine authorizes a
-// present, host-vouched subject) is a tracked coverage gap pending the Lua
-// identity-transport wiring; this test supports the fail-closed half only.
-//
-// Verifies: INV-PLUGIN-44
-func TestEvaluateAuthorizationSeamFailsClosedAcrossRuntimes(t *testing.T) {
-	// Both runtimes wire a DenyAllEngine through the SAME RegisterCapabilities
-	// source, so the engine itself never yields an allow either.
-	binaryEP := newBinaryEndpointWithOpts(t, goplugin.WithEngine(policytest.DenyAllEngine()))
-	luaEP := newLuaEndpointWithFunctions(t,
-		hostfunc.New(nil, hostfunc.WithEngine(policytest.DenyAllEngine())))
+		// EvalService is declared in BOTH sets — reachable on both runtimes (the
+		// "declared dependency obtained through the broker" precondition).
+		Expect(binaryEP.srv.GetServiceInfo()).To(HaveKey("holomush.plugin.host.v1.EvalService"),
+			"EvalService is declared in BinaryDefaultSet")
+		Expect(luaEP.srv.GetServiceInfo()).To(HaveKey("holomush.plugin.host.v1.EvalService"),
+			"EvalService is declared in LuaDefaultSet")
 
-	// EvalService is declared in BOTH sets — reachable on both runtimes (this is
-	// the "declared dependency obtained through the broker" precondition).
-	require.Contains(t, binaryEP.srv.GetServiceInfo(), "holomush.plugin.host.v1.EvalService",
-		"EvalService is declared in BinaryDefaultSet")
-	require.Contains(t, luaEP.srv.GetServiceInfo(), "holomush.plugin.host.v1.EvalService",
-		"EvalService is declared in LuaDefaultSet")
+		req := &hostv1.EvaluateRequest{Action: "spectate", Resource: "scene:" + ulid.Make().String()}
 
-	req := &hostv1.EvaluateRequest{Action: "spectate", Resource: "scene:" + ulid.Make().String()}
+		// Binary: no host-issued dispatch token on the call ⇒ the authorization
+		// seam fails closed before any allow can be produced.
+		binResp, binErr := hostv1.NewEvalServiceClient(binaryEP.conn).Evaluate(context.Background(), req)
+		Expect(binErr).To(HaveOccurred(),
+			"binary Evaluate MUST fail closed without a host-issued PluginSubject identity")
+		Expect(binResp).To(BeNil(), "no allow is produced for an unauthorized binary caller")
 
-	// Binary: no host-issued dispatch token on the call ⇒ the authorization seam
-	// fails closed before any allow can be produced.
-	binResp, binErr := hostv1.NewEvalServiceClient(binaryEP.conn).Evaluate(context.Background(), req)
-	require.Error(t, binErr,
-		"binary Evaluate MUST fail closed without a host-issued PluginSubject identity")
-	assert.Nil(t, binResp, "no allow is produced for an unauthorized binary caller")
+		// Lua: no actor on the server-side context ⇒ the SAME seam fails closed.
+		luaResp, luaErr := hostv1.NewEvalServiceClient(luaEP.conn).Evaluate(context.Background(), req)
+		Expect(luaErr).To(HaveOccurred(),
+			"lua Evaluate MUST fail closed without a host-established PluginSubject identity")
+		Expect(luaResp).To(BeNil(), "no allow is produced for an unauthorized lua caller")
+	})
 
-	// Lua: no actor on the server-side context ⇒ the SAME seam fails closed.
-	luaResp, luaErr := hostv1.NewEvalServiceClient(luaEP.conn).Evaluate(context.Background(), req)
-	require.Error(t, luaErr,
-		"lua Evaluate MUST fail closed without a host-established PluginSubject identity")
-	assert.Nil(t, luaResp, "no allow is produced for an unauthorized lua caller")
-}
+	// INV-PLUGIN-22: "PluginHostService.Evaluate's subject is host-derived from
+	// the authenticated actor; there is no subject field on the wire (never
+	// sourced from plugin/Lua-supplied data)." Two clauses, both proven with NO
+	// scaffolding that models non-existent production behavior:
+	//
+	//  1. NO SUBJECT FIELD ON THE WIRE (structural, both runtimes). The host.v1
+	//     EvaluateRequest message — the SINGLE wire contract both runtimes consume
+	//     through the shared hostcap.RegisterCapabilities source — carries exactly
+	//     {action, resource} and NO subject/actor field. Forgery is impossible BY
+	//     CONSTRUCTION; reflecting over the generated descriptor locks this so an
+	//     accidental subject-field addition breaks the build.
+	//
+	//  2. SUBJECT IS HOST-DERIVED (Lua adapter, observed through the REAL
+	//     production luaHostCapAdapter). luaHostCapAdapter.LookupActor builds the
+	//     ABAC subject as access.PluginSubject(pluginName) from the
+	//     HOST-ESTABLISHED pluginName — not from the context actor's ID and not
+	//     from any wire field. We prove this is forgery-proof by stamping a FORGED
+	//     actor ID on the context and asserting the recovered subject is still
+	//     plugin:<host-established-name>, never plugin:<forged-id>.
+	//
+	// Verifies: INV-PLUGIN-22
+	It("derives the evaluate subject from the host, not plugin-supplied data", func() {
+		// (1) NO SUBJECT FIELD ON THE WIRE — structural lock on the single shared
+		// EvaluateRequest contract. Both runtimes consume this exact message; if it
+		// grew a subject field, a plugin could forge the authorization subject.
+		md := (&hostv1.EvaluateRequest{}).ProtoReflect().Descriptor()
+		fields := md.Fields()
+		names := make([]string, 0, fields.Len())
+		for i := range fields.Len() {
+			names = append(names, string(fields.Get(i).Name()))
+		}
+		Expect(names).NotTo(ContainElement("subject"),
+			"EvaluateRequest MUST NOT carry a subject field (INV-PLUGIN-22): the subject is host-derived, never plugin-supplied")
+		Expect(names).NotTo(ContainElement("actor"),
+			"EvaluateRequest MUST NOT carry an actor field (INV-PLUGIN-22): identity is host-established, never plugin-supplied")
+		Expect(fields.Len()).To(Equal(2),
+			"EvaluateRequest MUST have exactly {action, resource}; any additional field is a candidate forgery surface (INV-PLUGIN-22)")
 
-// TestEvaluateSubjectIsHostDerivedNotPluginSupplied binds INV-PLUGIN-22.
-//
-// INV-PLUGIN-22: "PluginHostService.Evaluate's subject is host-derived from the
-// authenticated actor; there is no subject field on the wire (never sourced from
-// plugin/Lua-supplied data)." The invariant has two clauses, and this test
-// proves both with NO scaffolding that models non-existent production behavior:
-//
-//  1. NO SUBJECT FIELD ON THE WIRE (structural, both runtimes — the
-//     spec-canonical binding mechanism, "meta-test: proto descriptor has no
-//     subject field", design §INV-1). The host.v1 EvaluateRequest message — the
-//     SINGLE wire contract both the binary (*goplugin.Host) and Lua
-//     (luaHostCapAdapter) runtimes consume through the shared
-//     hostcap.RegisterCapabilities source — carries exactly {action, resource}
-//     and NO subject/actor field. Forgery is therefore impossible BY
-//     CONSTRUCTION: a plugin cannot place a subject on a wire that has no slot
-//     for one. Reflecting over the generated proto descriptor locks this so an
-//     accidental subject-field addition breaks the build.
-//
-//  2. SUBJECT IS HOST-DERIVED FROM THE HOST-ESTABLISHED IDENTITY (Lua adapter,
-//     observed directly through the REAL production luaHostCapAdapter). The
-//     Lua identity seam is luaHostCapAdapter.LookupActor, the per-runtime adapter
-//     that recovers the acting identity. It builds the ABAC subject as
-//     access.PluginSubject(pluginName) from the HOST-ESTABLISHED pluginName —
-//     the value the host baked into the capability base — NOT from the context
-//     actor's ID and NOT from any wire field. We prove this is forgery-proof by
-//     stamping a FORGED actor ID on the context and asserting the recovered
-//     subject is still plugin:<host-established-name>, never plugin:<forged-id>.
-//     (The binary seam is goplugin.Host.LookupActor, which recovers the actor
-//     from a host-issued dispatch token in metadata, never a plugin field; the
-//     end-to-end binary observation is the token-recovery path exercised in
-//     goplugin's host_service tests. The transport-identity gap — the Lua bufconn
-//     does not propagate core.ActorFromContext across the gRPC boundary — means
-//     the Lua seam is asserted at the adapter, the honest scaffolding-free seam,
-//     rather than via a test-local interceptor that would model a non-existent
-//     production propagation.)
-//
-// Verifies: INV-PLUGIN-22
-func TestEvaluateSubjectIsHostDerivedNotPluginSupplied(t *testing.T) {
-	// (1) NO SUBJECT FIELD ON THE WIRE — structural lock on the single shared
-	// EvaluateRequest contract. Both runtimes consume this exact message; if it
-	// grew a subject field, a plugin could forge the authorization subject.
-	md := (&hostv1.EvaluateRequest{}).ProtoReflect().Descriptor()
-	fields := md.Fields()
-	for i := range fields.Len() {
-		name := string(fields.Get(i).Name())
-		assert.NotEqualf(t, "subject", name,
-			"EvaluateRequest MUST NOT carry a subject field (INV-PLUGIN-22): the "+
-				"subject is host-derived, never plugin-supplied; field %q present", name)
-		assert.NotEqualf(t, "actor", name,
-			"EvaluateRequest MUST NOT carry an actor field (INV-PLUGIN-22): identity "+
-				"is host-established, never plugin-supplied; field %q present", name)
-	}
-	require.Equal(t, 2, fields.Len(),
-		"EvaluateRequest MUST have exactly {action, resource}; any additional field "+
-			"is a candidate forgery surface (INV-PLUGIN-22)")
+		// (2) SUBJECT IS HOST-DERIVED — observed through the REAL production
+		// luaHostCapAdapter the LuaDefaultSet endpoint uses (reached via the host's
+		// HostCapabilitiesAdapter() accessor, exactly as newLuaEndpoint wires it).
+		luaHost := lua.NewHostWithFunctions(hostfunc.New(nil))
+		DeferCleanup(func() { _ = luaHost.Close(context.Background()) })
+		adapter := luaHost.HostCapabilitiesAdapter()
+		Expect(adapter).NotTo(BeNil(), "lua host must expose its real hostcap adapter")
 
-	// (2) SUBJECT IS HOST-DERIVED — observed through the REAL production
-	// luaHostCapAdapter the LuaDefaultSet endpoint uses (reached via the host's
-	// HostCapabilitiesAdapter() accessor, exactly as newLuaEndpoint wires it).
-	luaHost := lua.NewHostWithFunctions(hostfunc.New(nil))
-	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
-	adapter := luaHost.HostCapabilitiesAdapter()
-	require.NotNil(t, adapter, "lua host must expose its real hostcap adapter")
+		// A malicious plugin attempts to forge identity by stamping an arbitrary
+		// actor ID on the dispatch context. The adapter MUST ignore that ID for the
+		// ABAC subject and derive it solely from the HOST-ESTABLISHED plugin name.
+		const forgedActorID = "forged-evil-character-id"
+		ctx := core.WithActor(context.Background(),
+			core.Actor{Kind: core.ActorCharacter, ID: forgedActorID})
 
-	// A malicious plugin attempts to forge identity by stamping an arbitrary
-	// actor ID on the dispatch context. The adapter MUST ignore that ID for the
-	// ABAC subject and derive it solely from the HOST-ESTABLISHED plugin name.
-	const forgedActorID = "forged-evil-character-id"
-	ctx := core.WithActor(context.Background(),
-		core.Actor{Kind: core.ActorCharacter, ID: forgedActorID})
+		_, subject, err := adapter.LookupActor(ctx, parityPluginName)
+		Expect(err).NotTo(HaveOccurred(), "LookupActor must recover identity when an actor is on the context")
 
-	_, subject, err := adapter.LookupActor(ctx, parityPluginName)
-	require.NoError(t, err, "LookupActor must recover identity when an actor is on the context")
-
-	wantSubject := access.PluginSubject(parityPluginName)
-	assert.Equal(t, wantSubject, subject,
-		"the ABAC subject MUST be host-derived from the host-established plugin name "+
-			"(plugin:parity-plugin), proving it is NOT sourced from the context/wire actor")
-	assert.NotContains(t, subject, forgedActorID,
-		"the recovered subject MUST NOT contain the plugin-supplied (forged) actor ID; "+
-			"if it did, a plugin could forge its authorization subject (INV-PLUGIN-22)")
-}
+		wantSubject := access.PluginSubject(parityPluginName)
+		Expect(subject).To(Equal(wantSubject),
+			"the ABAC subject MUST be host-derived from the host-established plugin name (plugin:parity-plugin), proving it is NOT sourced from the context/wire actor")
+		Expect(subject).NotTo(ContainSubstring(forgedActorID),
+			"the recovered subject MUST NOT contain the plugin-supplied (forged) actor ID; if it did, a plugin could forge its authorization subject (INV-PLUGIN-22)")
+	})
+})

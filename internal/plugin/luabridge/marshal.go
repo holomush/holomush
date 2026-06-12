@@ -17,6 +17,7 @@ package luabridge
 
 import (
 	"context"
+	"math"
 
 	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
@@ -167,31 +168,49 @@ func luaListElement(list protoreflect.List, fd protoreflect.FieldDescriptor, val
 func luaToProtoValue(fd protoreflect.FieldDescriptor, val lua.LValue, newMessage func() protoreflect.Message) (protoreflect.Value, error) {
 	switch fd.Kind() {
 	case protoreflect.BoolKind:
-		return protoreflect.ValueOfBool(lua.LVAsBool(val)), nil
+		b, ok := val.(lua.LBool)
+		if !ok {
+			return protoreflect.Value{}, oops.Code("LUABRIDGE_FIELD_TYPE").
+				With("field", string(fd.Name())).
+				Errorf("bool field %s expects a boolean, got %s", fd.Name(), val.Type())
+		}
+		return protoreflect.ValueOfBool(bool(b)), nil
 	case protoreflect.StringKind:
-		return protoreflect.ValueOfString(lua.LVAsString(val)), nil
+		s, ok := val.(lua.LString)
+		if !ok {
+			return protoreflect.Value{}, oops.Code("LUABRIDGE_FIELD_TYPE").
+				With("field", string(fd.Name())).
+				Errorf("string field %s expects a string, got %s", fd.Name(), val.Type())
+		}
+		return protoreflect.ValueOfString(string(s)), nil
 	case protoreflect.BytesKind:
-		return protoreflect.ValueOfBytes([]byte(lua.LVAsString(val))), nil
+		s, ok := val.(lua.LString)
+		if !ok {
+			return protoreflect.Value{}, oops.Code("LUABRIDGE_FIELD_TYPE").
+				With("field", string(fd.Name())).
+				Errorf("bytes field %s expects a string, got %s", fd.Name(), val.Type())
+		}
+		return protoreflect.ValueOfBytes([]byte(string(s))), nil
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-		n, err := luaNumber(fd, val)
+		n, err := luaIntInRange(fd, val, math.MinInt32, math.MaxInt32)
 		if err != nil {
 			return protoreflect.Value{}, err
 		}
 		return protoreflect.ValueOfInt32(int32(n)), nil
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-		n, err := luaNumber(fd, val)
+		n, err := luaIntInRange(fd, val, math.MinInt64, math.MaxInt64)
 		if err != nil {
 			return protoreflect.Value{}, err
 		}
 		return protoreflect.ValueOfInt64(int64(n)), nil
 	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-		n, err := luaNumber(fd, val)
+		n, err := luaIntInRange(fd, val, 0, math.MaxUint32)
 		if err != nil {
 			return protoreflect.Value{}, err
 		}
 		return protoreflect.ValueOfUint32(uint32(n)), nil
 	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-		n, err := luaNumber(fd, val)
+		n, err := luaIntInRange(fd, val, 0, math.MaxUint64)
 		if err != nil {
 			return protoreflect.Value{}, err
 		}
@@ -209,7 +228,7 @@ func luaToProtoValue(fd protoreflect.FieldDescriptor, val lua.LValue, newMessage
 		}
 		return protoreflect.ValueOfFloat64(n), nil
 	case protoreflect.EnumKind:
-		n, err := luaNumber(fd, val)
+		n, err := luaIntInRange(fd, val, math.MinInt32, math.MaxInt32)
 		if err != nil {
 			return protoreflect.Value{}, err
 		}
@@ -244,6 +263,42 @@ func luaNumber(fd protoreflect.FieldDescriptor, val lua.LValue) (float64, error)
 			Errorf("numeric field %s expects a number, got %s", fd.Name(), val.Type())
 	}
 	return float64(n), nil
+}
+
+// luaIntegral extracts an integral float64 for an integer-kind field, rejecting
+// non-numbers (via luaNumber) and non-integral values. Silently truncating a
+// fractional Lua number into a proto integer would corrupt caller input, so a
+// fractional value is a typed LUABRIDGE_FIELD_RANGE error instead.
+func luaIntegral(fd protoreflect.FieldDescriptor, val lua.LValue) (float64, error) {
+	n, err := luaNumber(fd, val)
+	if err != nil {
+		return 0, err
+	}
+	if math.Trunc(n) != n {
+		return 0, oops.Code("LUABRIDGE_FIELD_RANGE").
+			With("field", string(fd.Name())).
+			Errorf("integer field %s expects an integral number, got %v", fd.Name(), n)
+	}
+	return n, nil
+}
+
+// luaIntInRange validates that an integral Lua number lies within [lo, hi]
+// before it is narrowed to the proto field's integer type. Go's float64→intN
+// conversions are defined to wrap/truncate silently (e.g. -1 → a huge uint), so
+// out-of-range values become a typed LUABRIDGE_FIELD_RANGE error. The bounds are
+// float64 so the 64-bit limits are not exactly representable — the guard catches
+// gross overflow, which is the actual footgun, not the last ULP.
+func luaIntInRange(fd protoreflect.FieldDescriptor, val lua.LValue, lo, hi float64) (float64, error) {
+	n, err := luaIntegral(fd, val)
+	if err != nil {
+		return 0, err
+	}
+	if n < lo || n > hi {
+		return 0, oops.Code("LUABRIDGE_FIELD_RANGE").
+			With("field", string(fd.Name())).
+			Errorf("integer field %s out of range: %v", fd.Name(), n)
+	}
+	return n, nil
 }
 
 // luaContext returns the context carried on the Lua state, falling back to

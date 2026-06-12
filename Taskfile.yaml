@@ -386,6 +386,11 @@ tasks:
     sources:
       - internal/plugin/luabridge/gen/main.go
       - internal/plugin/capability_vocab.go
+      # The generator introspects the registered host.v1 FileDescriptors, so the
+      # generated bindings depend on the proto/service shapes — track them as
+      # sources or a descriptor change silently leaves bindings_gen.go stale.
+      - api/proto/holomush/plugin/host/v1/*.proto
+      - pkg/proto/holomush/plugin/host/v1/*.pb.go
     generates:
       - internal/plugin/luabridge/bindings_gen.go
 

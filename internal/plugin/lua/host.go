@@ -494,11 +494,18 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	}
 	code := p.code
 	requires := p.manifest.RequiredServiceNames()
+	// Snapshot the bridge inputs alongside the other per-delivery snapshots so
+	// on_command handlers receive the same host-cap bridge globals as on_event
+	// (intra-Lua entrypoint parity). Both p.endpoint and the manifest slice are
+	// written only under h.mu.Lock in Load/Unload.
+	declaredCaps := p.manifest.RequiredCapabilities()
+	endpoint := p.endpoint // nil when hostFuncs is nil (NewHost path)
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
 	// (concurrent map read/write panic). Shallow clone suffices — Load
 	// replaces inner maps wholesale, never mutating one in place.
 	cfgSnapshot := maps.Clone(h.mergedConfigs)
+	bridgeEnabled := h.bridgeEnabledPlugins[name] // false when map is nil or plugin not in set
 	h.mu.RUnlock()
 
 	L, err := h.factory.NewState(ctx)
@@ -512,6 +519,12 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	if h.hostFuncs != nil {
 		h.hostFuncs.SetPluginConfigs(cfgSnapshot)
 		h.hostFuncs.Register(L, name, requires...)
+	}
+
+	// Inject the host-cap bridge for opted-in plugins, mirroring DeliverEvent so
+	// on_command sees the same bridge-only globals as on_event (spec §5).
+	if bridgeEnabled && endpoint != nil {
+		luabridge.RegisterHostCaps(L, endpoint.Conn(), name, declaredCaps)
 	}
 
 	if err := L.DoString(code); err != nil {
@@ -600,11 +613,18 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 	}
 	code := p.code
 	requires := p.manifest.RequiredServiceNames()
+	// Snapshot the bridge inputs alongside the other per-delivery snapshots so
+	// on_session_subscribe handlers receive the same host-cap bridge globals as
+	// on_event (intra-Lua entrypoint parity). Both p.endpoint and the manifest
+	// slice are written only under h.mu.Lock in Load/Unload.
+	declaredCaps := p.manifest.RequiredCapabilities()
+	endpoint := p.endpoint // nil when hostFuncs is nil (NewHost path)
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
 	// (concurrent map read/write panic). Shallow clone suffices — Load
 	// replaces inner maps wholesale, never mutating one in place.
 	cfgSnapshot := maps.Clone(h.mergedConfigs)
+	bridgeEnabled := h.bridgeEnabledPlugins[name] // false when map is nil or plugin not in set
 	h.mu.RUnlock()
 
 	L, err := h.factory.NewState(ctx)
@@ -617,6 +637,12 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 	if h.hostFuncs != nil {
 		h.hostFuncs.SetPluginConfigs(cfgSnapshot)
 		h.hostFuncs.Register(L, name, requires...)
+	}
+
+	// Inject the host-cap bridge for opted-in plugins, mirroring DeliverEvent so
+	// on_session_subscribe sees the same bridge-only globals as on_event (spec §5).
+	if bridgeEnabled && endpoint != nil {
+		luabridge.RegisterHostCaps(L, endpoint.Conn(), name, declaredCaps)
 	}
 
 	if err := L.DoString(code); err != nil {

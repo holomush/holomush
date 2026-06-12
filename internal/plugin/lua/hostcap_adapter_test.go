@@ -22,7 +22,11 @@ import (
 // Compile-time assertion: luaHostCapAdapter satisfies hostcap.HostCapabilities.
 var _ hostcap.HostCapabilities = (*luaHostCapAdapter)(nil)
 
-// TestLuaAdapterSatisfiesHostCapabilities pins the compile-time contract (INV-PLUGIN-49).
+// Verifies: INV-PLUGIN-49
+// TestLuaAdapterSatisfiesHostCapabilities pins the compile-time contract (INV-PLUGIN-49):
+// the Lua adapter implements the SAME hostcap.HostCapabilities port the binary host does,
+// so there is no runtime-specific capability surface (structural half of the invariant; the
+// behavioral half is bound by test/integration/pluginparity/parity_test.go).
 func TestLuaAdapterSatisfiesHostCapabilities(_ *testing.T) {
 	var _ hostcap.HostCapabilities = (*luaHostCapAdapter)(nil)
 }

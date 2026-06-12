@@ -36,7 +36,11 @@ func NewSessionServer(base hostCapabilityBase) hostv1.SessionServiceServer {
 // response when no active session matches the name. Inner errors never leak to
 // the caller (grpc-errors.md).
 func (s *sessionServer) FindByName(ctx context.Context, req *hostv1.FindByNameRequest) (*hostv1.FindByNameResponse, error) {
-	info, err := s.host.SessionAccess().FindByCharacterName(ctx, req.GetName())
+	access := s.host.SessionAccess()
+	if access == nil {
+		return nil, status.Errorf(codes.Unimplemented, "session service not supported")
+	}
+	info, err := access.FindByCharacterName(ctx, req.GetName())
 	if err != nil {
 		errutil.LogErrorContext(ctx, "session.find_by_name failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
@@ -52,7 +56,11 @@ func (s *sessionServer) FindByName(ctx context.Context, req *hostv1.FindByNameRe
 // ListActive returns every currently active session, mirroring the Lua
 // session.list_active host function. Inner errors never leak to the caller.
 func (s *sessionServer) ListActive(ctx context.Context, _ *hostv1.ListActiveRequest) (*hostv1.ListActiveResponse, error) {
-	infos, err := s.host.SessionAccess().ListActive(ctx)
+	access := s.host.SessionAccess()
+	if access == nil {
+		return nil, status.Errorf(codes.Unimplemented, "session service not supported")
+	}
+	infos, err := access.ListActive(ctx)
 	if err != nil {
 		errutil.LogErrorContext(ctx, "session.list_active failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
@@ -68,7 +76,11 @@ func (s *sessionServer) ListActive(ctx context.Context, _ *hostv1.ListActiveRequ
 // Lua session.set_last_whispered host function. Inner errors never leak to the
 // caller.
 func (s *sessionServer) SetLastWhispered(ctx context.Context, req *hostv1.SetLastWhisperedRequest) (*hostv1.SetLastWhisperedResponse, error) {
-	if err := s.host.SessionAccess().UpdateLastWhispered(ctx, req.GetSessionId(), req.GetName()); err != nil {
+	access := s.host.SessionAccess()
+	if access == nil {
+		return nil, status.Errorf(codes.Unimplemented, "session service not supported")
+	}
+	if err := access.UpdateLastWhispered(ctx, req.GetSessionId(), req.GetName()); err != nil {
 		errutil.LogErrorContext(ctx, "session.set_last_whispered failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}

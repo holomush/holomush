@@ -106,6 +106,9 @@ func TestRegisterCapabilitiesRegistersBinaryDefaultSet(t *testing.T) {
 	if _, ok := info["holomush.plugin.host.v1.WorldQueryService"]; ok {
 		t.Fatal("binary default set must not register WorldQueryService")
 	}
+	if _, ok := info["holomush.plugin.host.v1.SessionAdminService"]; ok {
+		t.Fatal("binary default set must not register SessionAdminService")
+	}
 	if _, ok := info["holomush.plugin.host.v1.EvalService"]; !ok {
 		t.Fatal("binary default set must register EvalService")
 	}

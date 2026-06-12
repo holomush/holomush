@@ -12,50 +12,62 @@ import (
 	"github.com/holomush/holomush/internal/plugin/luabridge"
 )
 
-// TestBridgeRegistersDeclaredHostCapsOnly asserts that RegisterHostCaps injects
-// only the globals for tokens the plugin declared in its manifest capability
-// requirements. A plugin declaring only "kv" gets the kv global, NOT session.
-// This is the declaration gate (INV-PLUGIN-44/45): undeclared caps are never
-// injected regardless of what the host supports.
-func TestBridgeRegistersDeclaredHostCapsOnly(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
+// TestBridgeRegisterHostCaps asserts the declaration gate (INV-PLUGIN-44/45):
+// RegisterHostCaps injects a Lua global only for each token the plugin declared
+// in its manifest capability requirements, and never for undeclared, unknown, or
+// (in the empty case) any token — regardless of what the host supports. A nil
+// conn is fine: registration dials no RPC.
+func TestBridgeRegisterHostCaps(t *testing.T) {
+	tests := []struct {
+		name       string
+		pluginName string
+		declared   []string
+		wantTable  []string // tokens that must be injected as a Lua table
+		wantNil    []string // tokens that must remain absent (nil)
+	}{
+		{
+			name:       "injects only the declared cap",
+			pluginName: "echo-bot",
+			declared:   []string{"kv"},
+			wantTable:  []string{"kv"},
+			wantNil:    []string{"session", "audit"},
+		},
+		{
+			name:       "unknown token creates no global",
+			pluginName: "echo-bot",
+			declared:   []string{"nonexistent-token"},
+			wantNil:    []string{"nonexistent-token"},
+		},
+		{
+			name:       "empty declared caps injects nothing",
+			pluginName: "echo-bot",
+			declared:   []string{},
+			wantNil:    []string{"kv", "session", "audit", "eval", "emit", "focus"},
+		},
+		{
+			name:       "injects every declared bound token",
+			pluginName: "core-scenes",
+			declared:   []string{"kv", "eval", "focus"},
+			wantTable:  []string{"kv", "eval", "focus"},
+			wantNil:    []string{"session", "property"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
 
-	// nil conn is fine for registration — no RPC is actually dialed here.
-	luabridge.RegisterHostCaps(L, nil, "echo-bot", []string{"kv"})
+			luabridge.RegisterHostCaps(L, nil, tc.pluginName, tc.declared)
 
-	assert.Equal(t, lua.LTTable, L.GetGlobal("kv").Type(), "declared 'kv' cap must be injected as a table")
-	assert.Equal(t, lua.LTNil, L.GetGlobal("session").Type(), "undeclared 'session' must not be injected")
-	assert.Equal(t, lua.LTNil, L.GetGlobal("audit").Type(), "undeclared 'audit' must not be injected")
-}
-
-// TestBridgeSkipsOptedOutPlugin asserts that calling RegisterHostCaps with an
-// empty declared-capabilities slice injects no bridge globals. This covers the
-// "opted-out plugin gets nothing" case (production plugins with no capability:
-// declarations are unaffected by the bridge).
-func TestBridgeSkipsTokensWithNoBinding(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	// Declare an unknown token (no entry in registeredHostCapBindings).
-	luabridge.RegisterHostCaps(L, nil, "echo-bot", []string{"nonexistent-token"})
-
-	// The unknown token must not panic and must not create any stray globals.
-	assert.Equal(t, lua.LTNil, L.GetGlobal("nonexistent-token").Type(), "unknown token must not create a global")
-}
-
-// TestBridgeEmptyDeclaredCapsInjectsNothing asserts that a plugin declaring no
-// capabilities (empty slice) receives no bridge globals — the opted-out case.
-func TestBridgeEmptyDeclaredCapsInjectsNothing(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	luabridge.RegisterHostCaps(L, nil, "echo-bot", []string{})
-
-	// None of the known tokens should appear.
-	for _, token := range []string{"kv", "session", "audit", "eval", "emit", "focus"} {
-		assert.Equal(t, lua.LTNil, L.GetGlobal(token).Type(),
-			"opted-out plugin must not have global %q", token)
+			for _, tok := range tc.wantTable {
+				assert.Equal(t, lua.LTTable, L.GetGlobal(tok).Type(),
+					"declared %q must be injected as a table", tok)
+			}
+			for _, tok := range tc.wantNil {
+				assert.Equal(t, lua.LTNil, L.GetGlobal(tok).Type(),
+					"%q must not be injected", tok)
+			}
+		})
 	}
 }
 
@@ -89,21 +101,4 @@ func TestBridgeNoDoubleInjectPreExistingGlobal(t *testing.T) {
 		"legacy_marker field must be preserved; bridge must not have overwritten the global")
 	assert.Equal(t, "from_legacy", L.GetField(tbl, "legacy_marker").String(),
 		"legacy table value must be unchanged")
-}
-
-// TestBridgeMultipleTokensInjectedCorrectly asserts that when a plugin declares
-// multiple capability tokens, all of them (that have bindings) are injected.
-func TestBridgeMultipleTokensInjectedCorrectly(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	luabridge.RegisterHostCaps(L, nil, "core-scenes", []string{"kv", "eval", "focus"})
-
-	assert.Equal(t, lua.LTTable, L.GetGlobal("kv").Type(), "kv must be injected")
-	assert.Equal(t, lua.LTTable, L.GetGlobal("eval").Type(), "eval must be injected")
-	assert.Equal(t, lua.LTTable, L.GetGlobal("focus").Type(), "focus must be injected")
-
-	// Undeclared tokens stay nil.
-	assert.Equal(t, lua.LTNil, L.GetGlobal("session").Type(), "undeclared session must not be injected")
-	assert.Equal(t, lua.LTNil, L.GetGlobal("property").Type(), "undeclared property must not be injected")
 }

@@ -47,6 +47,9 @@ func (s *propertyServer) GetProperty(ctx context.Context, req *hostv1.GetPropert
 	}
 
 	querier := s.host.WorldQuerier(s.pluginName)
+	if querier == nil {
+		return nil, status.Errorf(codes.Unimplemented, "property service not supported")
+	}
 	val, err := def.Get(ctx, querier, req.GetEntityType(), entityID)
 	if err != nil {
 		errutil.LogErrorContext(ctx, "property.get failed", err, "plugin", s.pluginName, "property", req.GetProperty())
@@ -74,6 +77,9 @@ func (s *propertyServer) SetProperty(ctx context.Context, req *hostv1.SetPropert
 	}
 
 	querier := s.host.WorldQuerier(s.pluginName)
+	if querier == nil {
+		return nil, status.Errorf(codes.Unimplemented, "property service not supported")
+	}
 	subjectID := access.PluginSubject(s.pluginName)
 	if err := def.Set(ctx, querier, s.host.WorldMutator(), subjectID, req.GetEntityType(), entityID, req.GetValue()); err != nil {
 		errutil.LogErrorContext(ctx, "property.set failed", err, "plugin", s.pluginName, "property", req.GetProperty())

@@ -74,6 +74,17 @@ func RegisterPluginService(L *lua.LState, conn grpc.ClientConnInterface, desc pr
 	}
 
 	namespace := strings.ToLower(string(desc.Name()))
+	// No-clobber guard: refuse to overwrite an existing global. A second provider
+	// service whose short-name lowercases to the same namespace — or a collision
+	// with a host-cap / legacy hostfunc global — would otherwise silently redirect
+	// every call under that name to an unintended implementation. Fail loud at
+	// registration (load-time) rather than at first call.
+	if existing := L.GetGlobal(namespace); existing != lua.LNil {
+		return oops.Code("LUABRIDGE_PLUGIN_SVC_NAMESPACE_CONFLICT").
+			With("plugin", pluginName).
+			With("namespace", namespace).
+			Errorf("lua namespace %q already exists", namespace)
+	}
 	tbl := L.NewTable()
 	for _, bm := range bound {
 		L.SetField(tbl, bm.name, bm.fn)
