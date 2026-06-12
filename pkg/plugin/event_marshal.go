@@ -3,7 +3,10 @@
 
 package pluginsdk
 
-import pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+import (
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+)
 
 // EventToProto converts the canonical Event into its proto wire form for
 // host→plugin delivery. It is the single host-side site mapping Event fields
@@ -78,17 +81,17 @@ func EmitEventFromProto(p *pluginv1.EmitEvent) EmitEvent {
 
 // EmitIntentToEmitRequest converts a host-facing EmitIntent into the binary
 // active-emit RPC request. It is the single send-side site mapping EmitIntent
-// onto pluginv1.PluginHostServiceEmitEventRequest (used by the binary EventSink
-// when a service handler calls sink.Emit); pair every edit with
-// EmitIntentFromEmitRequest so a field added to EmitIntent crosses the active-
-// emit boundary in both directions. TestEmitIntentEmitRequestRoundTripCarriesEveryField
-// fails if the two drift — Sensitive MUST cross or a binary service handler's
-// sensitive emit silently downgrades at the fence (holomush-av954).
+// onto hostv1.EmitEventRequest (used by the binary EventSink when a service
+// handler calls sink.Emit); pair every edit with EmitIntentFromEmitRequest so
+// a field added to EmitIntent crosses the active-emit boundary in both
+// directions. TestEmitIntentEmitRequestRoundTripCarriesEveryField fails if the
+// two drift — Sensitive MUST cross or a binary service handler's sensitive emit
+// silently downgrades at the fence (holomush-av954).
 //
 // TODO(F5): proto request field Stream renames to Subject; keep Stream on the
 // wire until the proto regeneration task runs.
-func EmitIntentToEmitRequest(intent EmitIntent) *pluginv1.PluginHostServiceEmitEventRequest {
-	return &pluginv1.PluginHostServiceEmitEventRequest{
+func EmitIntentToEmitRequest(intent EmitIntent) *hostv1.EmitEventRequest {
+	return &hostv1.EmitEventRequest{
 		Stream:    intent.Subject,
 		EventType: string(intent.Type),
 		Payload:   []byte(intent.Payload),
@@ -99,7 +102,7 @@ func EmitIntentToEmitRequest(intent EmitIntent) *pluginv1.PluginHostServiceEmitE
 // EmitIntentFromEmitRequest converts the binary active-emit RPC request back
 // into the host-facing EmitIntent (used by the plugin host service on receive).
 // See EmitIntentToEmitRequest for the parity contract.
-func EmitIntentFromEmitRequest(req *pluginv1.PluginHostServiceEmitEventRequest) EmitIntent {
+func EmitIntentFromEmitRequest(req *hostv1.EmitEventRequest) EmitIntent {
 	return EmitIntent{
 		Subject:   req.GetStream(),
 		Type:      EventType(req.GetEventType()),

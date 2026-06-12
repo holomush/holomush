@@ -6,7 +6,7 @@ package pluginsdk
 import (
 	"context"
 
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -39,7 +39,7 @@ type brokerDialer interface {
 }
 
 type pluginHostEventSink struct {
-	client pluginv1.PluginHostServiceClient
+	client hostv1.EmitServiceClient
 }
 
 func (s *pluginHostEventSink) Emit(ctx context.Context, intent EmitIntent) error {
@@ -84,7 +84,7 @@ func (s *pluginHostEventSink) Emit(ctx context.Context, intent EmitIntent) error
 		// name) so the EmitEvent token check passes. The host's
 		// hardcoded actor binding means we cannot escalate to character
 		// or system actors via this path.
-		resp, tokErr := s.client.RequestEmitToken(callCtx, &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+		resp, tokErr := s.client.RequestEmitToken(callCtx, &hostv1.RequestEmitTokenRequest{})
 		if tokErr != nil {
 			return oops.Code("EMIT_TOKEN_REQUEST_FAILED").
 				With("subject", intent.Subject).
@@ -111,7 +111,13 @@ func newEventSinkFromBroker(broker brokerDialer, services map[string]string) (Ev
 	if err != nil {
 		return nil, err
 	}
+	return newPluginHostEventSink(conn), nil
+}
+
+// newPluginHostEventSink constructs an EventSink from a broker gRPC connection.
+// Exposed for wiring in sdk.go; test code may construct a pluginHostEventSink directly.
+func newPluginHostEventSink(conn grpc.ClientConnInterface) EventSink {
 	return &pluginHostEventSink{
-		client: pluginv1.NewPluginHostServiceClient(conn),
-	}, nil
+		client: hostv1.NewEmitServiceClient(conn),
+	}
 }

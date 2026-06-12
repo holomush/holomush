@@ -112,7 +112,13 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 	}
 
 	emitCtx := core.WithActor(ctx, storedActor)
-	if err := emitter.Emit(emitCtx, s.pluginName, pluginsdk.EmitIntentFromEmitRequest(req)); err != nil {
+	intent := pluginsdk.EmitIntent{
+		Subject:   req.GetStream(),
+		Type:      pluginsdk.EventType(req.GetEventType()),
+		Payload:   string(req.GetPayload()),
+		Sensitive: req.GetSensitive(),
+	}
+	if err := emitter.Emit(emitCtx, s.pluginName, intent); err != nil {
 		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
 

@@ -185,7 +185,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	}
 
 	if sinkAware, ok := a.serviceProvider.(EventSinkAware); ok {
-		sinkAware.SetEventSink(&pluginHostEventSink{client: hostClient})
+		sinkAware.SetEventSink(newPluginHostEventSink(hostConn))
 	}
 	if focusAware, ok := a.serviceProvider.(FocusClientAware); ok {
 		focusAware.SetFocusClient(newPluginHostFocusClient(hostConn))
