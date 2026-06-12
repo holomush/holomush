@@ -94,8 +94,18 @@ func NewSessionAdminServer(base hostCapabilityBase) hostv1.SessionAdminServiceSe
 
 // Broadcast sends a system message to all active sessions, mirroring the Lua
 // session.broadcast host function. Inner errors never leak to the caller.
+//
+// SessionAdmin() may be nil: the binary adapter has no consumer and returns nil,
+// and the Lua adapter returns nil until a broadcast/disconnect backing is wired
+// (holomush-eykuh.2.7). A nil port fails closed with Unimplemented rather than
+// nil-dereferencing — protecting BOTH runtimes (mirrors settingsServer's
+// fail-closed-on-nil pattern in servers.go).
 func (s *sessionAdminServer) Broadcast(ctx context.Context, req *hostv1.BroadcastRequest) (*hostv1.BroadcastResponse, error) {
-	if err := s.host.SessionAdmin().BroadcastSystemMessage(ctx, req.GetMessage()); err != nil {
+	admin := s.host.SessionAdmin()
+	if admin == nil {
+		return nil, status.Errorf(codes.Unimplemented, "session admin not supported")
+	}
+	if err := admin.BroadcastSystemMessage(ctx, req.GetMessage()); err != nil {
 		errutil.LogErrorContext(ctx, "session.broadcast failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}
@@ -104,8 +114,15 @@ func (s *sessionAdminServer) Broadcast(ctx context.Context, req *hostv1.Broadcas
 
 // Disconnect forcibly disconnects a session with a reason, mirroring the Lua
 // session.disconnect host function. Inner errors never leak to the caller.
+//
+// As with Broadcast, a nil SessionAdmin() port fails closed with Unimplemented
+// (protects both runtimes; see Broadcast for the nil-port rationale).
 func (s *sessionAdminServer) Disconnect(ctx context.Context, req *hostv1.DisconnectRequest) (*hostv1.DisconnectResponse, error) {
-	if err := s.host.SessionAdmin().DisconnectSession(ctx, req.GetSessionId(), req.GetReason()); err != nil {
+	admin := s.host.SessionAdmin()
+	if admin == nil {
+		return nil, status.Errorf(codes.Unimplemented, "session admin not supported")
+	}
+	if err := admin.DisconnectSession(ctx, req.GetSessionId(), req.GetReason()); err != nil {
 		errutil.LogErrorContext(ctx, "session.disconnect failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}

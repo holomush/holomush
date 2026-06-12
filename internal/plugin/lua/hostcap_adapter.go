@@ -11,7 +11,10 @@
 //   - IssueEmitToken: Lua returns an unsupported error (no forgery surface).
 //   - IdentityRegistrySnapshot: Lua returns nil (no token forgery surface).
 //   - EventEmitter: Lua returns nil (emissions flow through Lua hostfuncs, not gRPC).
-//   - SessionAdmin: Lua returns nil (session.Access does not expose admin ops).
+//   - SessionAdmin: Lua returns nil until a broadcast/disconnect backing is wired
+//     alongside the T7 bufconn endpoint (holomush-eykuh.2.7). The server-side
+//     nil-guard in sessionAdminServer keeps this fail-closed (Unimplemented),
+//     so a nil here is safe for both runtimes.
 package lua
 
 import (
@@ -40,21 +43,21 @@ var _ hostcap.HostCapabilities = (*luaHostCapAdapter)(nil)
 // luaHostCapAdapter adapts *hostfunc.Functions to the hostcap.HostCapabilities
 // port, making the Lua runtime a peer to the binary runtime for the host.v1
 // capability servers (INV-PLUGIN-49). Every method delegates to the corresponding
-// Functions field via exported accessors added in this change.
+// Functions field via exported accessors.
 //
-// Additional dependencies (settings stores) are injected via the
-// withSettings option after construction when the relevant deps become
-// available (SetSettingsStores on lua.Host propagates here).
+// The adapter holds no settings stores of its own: the settings methods recover
+// the typed stores from the Functions' settingsOps seam (which lua.Host wires via
+// SetSettingsStores) so the host.v1 SettingsService server reaches the SAME stores
+// the Lua get_setting/set_setting hostfuncs use (plugin-runtime-symmetry,
+// INV-PLUGIN-27). This keeps a single wiring point: SetSettingsStores.
 type luaHostCapAdapter struct {
-	f         *hostfunc.Functions
-	gameSet   settings.GameSettings
-	playerSet settings.PlayerSettingsStore
-	charSet   settings.CharacterSettingsStore
+	f *hostfunc.Functions
 }
 
 // newLuaHostCapAdapter creates a Lua HostCapabilities adapter wrapping f.
-// Settings stores default to nil (unconfigured); use withSettings to populate
-// them once they are available (e.g. when lua.Host.SetSettingsStores is called).
+// Settings stores and the focus coordinator are recovered on demand from f's
+// settingsOps / focusOps seams, so callers wire them once via
+// lua.Host.SetSettingsStores / SetFocusCoordinator.
 func newLuaHostCapAdapter(f *hostfunc.Functions) *luaHostCapAdapter {
 	return &luaHostCapAdapter{f: f}
 }
@@ -113,26 +116,61 @@ func (a *luaHostCapAdapter) IdentityRegistrySnapshot() plugins.IdentityRegistry 
 	return nil
 }
 
-// OwnedResourceTypes returns nil: the Lua adapter has no manifest-lookup backing.
-// Plugin-owned resource types are resolved at Manager level from the manifest;
-// the capability servers' nil-guard covers the unconfigured case.
+// OwnedResourceTypes returns an empty, non-nil map: Lua plugins own no resource
+// types by design — parity with the holomush.evaluate host function, which
+// hardcodes OwnedTypes: map[string]bool{} ("Lua plugins own no resource types")
+// at hostfunc/evaluate.go:57. Returning a non-nil empty map (not nil) lets the
+// host-brokered EvalService owned-type gate behave identically to the binary host
+// rather than treating the Lua path as a special unconfigured case.
 func (a *luaHostCapAdapter) OwnedResourceTypes(_ string) map[string]bool {
-	return nil
+	return map[string]bool{}
 }
 
-// GameSettings returns the game settings store injected via withSettings (nil when unset).
+// settingsStores recovers the typed settings stores from the Functions'
+// settingsOps seam. lua.Host.SetSettingsStores wires a *settingsStoresOpsAdapter
+// (holding the three typed stores) when, and only when, all three are non-nil; a
+// type assertion recovers them. Returns nil stores when settings are unwired so
+// the host.v1 SettingsService server fails closed (Unimplemented).
+func (a *luaHostCapAdapter) settingsStores() *settingsStoresOpsAdapter {
+	so := a.f.GetSettingsOps()
+	if so == nil {
+		return nil
+	}
+	adapter, ok := so.(*settingsStoresOpsAdapter)
+	if !ok {
+		return nil
+	}
+	return adapter
+}
+
+// GameSettings returns the game settings store recovered from the settingsOps
+// seam (nil when settings are unwired).
 func (a *luaHostCapAdapter) GameSettings() settings.GameSettings {
-	return a.gameSet
+	s := a.settingsStores()
+	if s == nil {
+		return nil
+	}
+	return s.gameStore()
 }
 
-// PlayerSettings returns the player settings store injected via withSettings (nil when unset).
+// PlayerSettings returns the player settings store recovered from the settingsOps
+// seam (nil when settings are unwired).
 func (a *luaHostCapAdapter) PlayerSettings() settings.PlayerSettingsStore {
-	return a.playerSet
+	s := a.settingsStores()
+	if s == nil {
+		return nil
+	}
+	return s.playerStore()
 }
 
-// CharacterSettings returns the character settings store injected via withSettings (nil when unset).
+// CharacterSettings returns the character settings store recovered from the
+// settingsOps seam (nil when settings are unwired).
 func (a *luaHostCapAdapter) CharacterSettings() settings.CharacterSettingsStore {
-	return a.charSet
+	s := a.settingsStores()
+	if s == nil {
+		return nil
+	}
+	return s.characterStore()
 }
 
 // FocusCoordinator returns a focus.Coordinator backed by the Functions' FocusOps shim,
@@ -192,22 +230,30 @@ func (a *luaHostCapAdapter) SessionAccess() session.Access {
 	return a.f.GetSessionAccess()
 }
 
-// SessionAdmin returns nil: the session.Access backing stored in Functions does not
-// expose broadcast/disconnect (those are on the wider hostfunc.SessionAccess interface
-// used by the session capability module, not by Functions.sessionAccess which is the
-// narrow session.Access). A future task can wire admin ops if a consumer emerges.
+// SessionAdmin returns nil: the broadcast/disconnect admin surface is the WIDE
+// hostfunc.SessionAccess shim, which is NOT held by Functions (Functions stores
+// only the narrow session.Access via WithSessionAccess). Wiring the wide surface
+// would require threading a new dependency through lua.Host construction, which is
+// deferred to the T7 bufconn endpoint (holomush-eykuh.2.7). Returning nil is safe:
+// sessionAdminServer.Broadcast/Disconnect nil-guard this port and fail closed with
+// Unimplemented (session.go), protecting both runtimes.
 func (a *luaHostCapAdapter) SessionAdmin() hostcap.SessionAdmin {
 	return nil
 }
 
 // --- focusOpsCoordinatorAdapter -------------------------------------------
 //
-// Adapts hostfunc.FocusOps → focus.Coordinator so the FocusService host.v1
-// server (which takes focus.Coordinator) can drive focus operations through
-// the Lua-wired FocusOps shim. The extra methods on focus.Coordinator that
-// FocusOps lacks (RestoreFocus, RestoreConnectionFocus) are not called by
-// the host.v1 servers — they are used only by the session manager — so
-// returning an "unimplemented" error there is safe.
+// Adapts hostfunc.FocusOps → focus.Coordinator so the host.v1 FocusService
+// server (which takes focus.Coordinator) drives focus operations through the
+// Lua-wired FocusOps shim. The four methods the focusServer actually calls —
+// SetConnectionFocus, AutoFocusOnJoin, IsAnyConnFocused, GetConnectionFocus —
+// delegate to FocusOps with faithful return-shape translation (see each method).
+//
+// Three Coordinator methods are NOT on FocusOps and are NOT reached by the
+// host.v1 servers (only by the in-process session manager): RestoreFocus,
+// RestoreConnectionFocus, and LeaveFocusByTarget/JoinFocus/LeaveFocus/PresentFocus
+// pass through directly. RestoreFocus / RestoreConnectionFocus stay fail-closed
+// "unsupported" stubs because FocusOps has no equivalent source.
 
 type focusOpsCoordinatorAdapter struct {
 	fo hostfunc.FocusOps
@@ -241,24 +287,61 @@ func (a *focusOpsCoordinatorAdapter) RestoreConnectionFocus(_ context.Context, _
 	return oops.In("lua").Code("UNSUPPORTED_OPERATION").New("RestoreConnectionFocus not supported via Lua FocusOps adapter")
 }
 
-func (a *focusOpsCoordinatorAdapter) IsAnyConnFocused(_ context.Context, _, _ ulid.ULID) (bool, error) {
-	// Not called by host.v1 capability servers; only used by the session manager.
-	return false, oops.In("lua").Code("UNSUPPORTED_OPERATION").New("IsAnyConnFocused not supported via Lua FocusOps adapter")
+// IsAnyConnFocused delegates directly: the FocusOps and Coordinator signatures
+// are identical (characterID, sceneID) → (bool, error).
+func (a *focusOpsCoordinatorAdapter) IsAnyConnFocused(ctx context.Context, characterID, sceneID ulid.ULID) (bool, error) {
+	return a.fo.IsAnyConnFocused(ctx, characterID, sceneID) //nolint:wrapcheck // FocusOps errors already oops-coded
 }
 
-func (a *focusOpsCoordinatorAdapter) SetConnectionFocus(_ context.Context, _ ulid.ULID, _ *session.FocusKey, _ bool) (focus.SetConnectionFocusResult, error) {
-	// Not called by host.v1 capability servers; only used by the session manager.
-	return focus.SetConnectionFocusResult{}, oops.In("lua").Code("UNSUPPORTED_OPERATION").New("SetConnectionFocus not supported via Lua FocusOps adapter")
+// SetConnectionFocus delegates to FocusOps and returns a zero-valued
+// focus.SetConnectionFocusResult. FocusOps.SetConnectionFocus is error-only, so
+// the result's three fields (OldFocusKey, SessionID, CharLocationID) have no
+// FocusOps source — they are intentionally lossy here. This is safe: those
+// fields exist so the production *defaultCoordinator can drive per-connection
+// subscription deltas in-process (INV-SCENE-38), and the host.v1 focusServer
+// (servers.go SetConnectionFocus) discards the result entirely, reading only the
+// error. A faithful zero result is therefore correct for every reachable caller.
+func (a *focusOpsCoordinatorAdapter) SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) (focus.SetConnectionFocusResult, error) {
+	if err := a.fo.SetConnectionFocus(ctx, connectionID, focusKey, isSceneGrid); err != nil {
+		return focus.SetConnectionFocusResult{}, err //nolint:wrapcheck // FocusOps errors already oops-coded
+	}
+	return focus.SetConnectionFocusResult{}, nil
 }
 
-func (a *focusOpsCoordinatorAdapter) AutoFocusOnJoin(_ context.Context, _, _ ulid.ULID) (focus.AutoFocusOnJoinResponse, error) {
-	// Not called by host.v1 capability servers; only used by the session manager.
-	return focus.AutoFocusOnJoinResponse{}, oops.In("lua").Code("UNSUPPORTED_OPERATION").New("AutoFocusOnJoin not supported via Lua FocusOps adapter")
+// AutoFocusOnJoin delegates to FocusOps and maps the multi-return tuple into a
+// focus.AutoFocusOnJoinResponse. The slices and total count map faithfully;
+// hostfunc.FocusFailure → focus.AutoFocusFailure (identical ConnectionID/Reason
+// fields). SessionID and CharLocationID are intentionally lossy (FocusOps does
+// not surface them) — like the SetConnectionFocus result fields, they exist for
+// the production coordinator's in-process delta driving and are NOT read by the
+// host.v1 focusServer (servers.go AutoFocusOnJoin reads only the slices + total).
+func (a *focusOpsCoordinatorAdapter) AutoFocusOnJoin(ctx context.Context, characterID, sceneID ulid.ULID) (focus.AutoFocusOnJoinResponse, error) {
+	focused, skipped, failed, total, err := a.fo.AutoFocusOnJoin(ctx, characterID, sceneID)
+	if err != nil {
+		return focus.AutoFocusOnJoinResponse{}, err //nolint:wrapcheck // FocusOps errors already oops-coded
+	}
+	var respFailed []focus.AutoFocusFailure
+	if len(failed) > 0 {
+		respFailed = make([]focus.AutoFocusFailure, len(failed))
+		for i, f := range failed {
+			respFailed[i] = focus.AutoFocusFailure{
+				ConnectionID: f.ConnectionID,
+				Reason:       f.Reason,
+			}
+		}
+	}
+	return focus.AutoFocusOnJoinResponse{
+		FocusedConnectionIDs: focused,
+		SkippedConnectionIDs: skipped,
+		FailedConnectionIDs:  respFailed,
+		TotalConnectionCount: total,
+	}, nil
 }
 
-func (a *focusOpsCoordinatorAdapter) GetConnectionFocus(_ context.Context, _ ulid.ULID) (*session.FocusKey, error) {
-	// Not called by host.v1 capability servers; only used by the session manager.
-	return nil, oops.In("lua").Code("UNSUPPORTED_OPERATION").New("GetConnectionFocus not supported via Lua FocusOps adapter")
+// GetConnectionFocus delegates directly: the FocusOps and Coordinator signatures
+// are identical (connectionID) → (*session.FocusKey, error).
+func (a *focusOpsCoordinatorAdapter) GetConnectionFocus(ctx context.Context, connectionID ulid.ULID) (*session.FocusKey, error) {
+	return a.fo.GetConnectionFocus(ctx, connectionID) //nolint:wrapcheck // FocusOps errors already oops-coded
 }
 
 // --- auditDecryptorToReadbackAdapter ---------------------------------------

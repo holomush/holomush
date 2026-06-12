@@ -181,6 +181,13 @@ func (f *Functions) GetPropertyRegistry() *property.Registry { return f.property
 // Used by the hostcap_adapter to wrap hostfunc.FocusOps into a focus.Coordinator.
 func (f *Functions) GetFocusOps() FocusOps { return f.focusOps }
 
+// GetSettingsOps returns the plugin-partitioned settings store seam, or nil when
+// unconfigured. Used by the hostcap_adapter to recover the underlying typed
+// settings stores (the lua.settingsStoresOpsAdapter holds them) so the host.v1
+// SettingsService server reaches the SAME stores the Lua get_setting/set_setting
+// hostfuncs use (plugin-runtime-symmetry, INV-PLUGIN-27).
+func (f *Functions) GetSettingsOps() SettingsOps { return f.settingsOps }
+
 // GetHistoryReader returns the event history reader, or nil when unconfigured.
 // Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.HistoryReader.
 func (f *Functions) GetHistoryReader() HistoryReader { return f.historyReader }

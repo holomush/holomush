@@ -334,3 +334,31 @@ func TestSessionAdminServerDisconnectReturnsOpaqueInternalErrorOnAdminFailure(t 
 	assert.Equal(t, "internal error", st.Message(), "inner error detail must not leak to the caller")
 	assert.NotContains(t, st.Message(), "secret")
 }
+
+// TestSessionAdminServerBroadcastReturnsUnimplementedWhenAdminNil verifies the
+// fail-closed nil-guard: when HostCapabilities.SessionAdmin() returns nil (the
+// binary adapter AND the unwired Lua adapter both do today), Broadcast must
+// return codes.Unimplemented rather than NPE on a nil-interface method call.
+func TestSessionAdminServerBroadcastReturnsUnimplementedWhenAdminNil(t *testing.T) {
+	// stubHostCaps.SessionAdmin() returns nil — the unwired case both runtimes hit.
+	srv := hostcap.NewSessionAdminServer(hostcap.NewBase(stubHostCaps{}, "core-communication"))
+	_, err := srv.Broadcast(context.Background(), &hostv1.BroadcastRequest{Message: "hello"})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unimplemented, st.Code(), "nil SessionAdmin must fail closed with Unimplemented, not NPE")
+}
+
+// TestSessionAdminServerDisconnectReturnsUnimplementedWhenAdminNil verifies the
+// same fail-closed nil-guard on the Disconnect path.
+func TestSessionAdminServerDisconnectReturnsUnimplementedWhenAdminNil(t *testing.T) {
+	srv := hostcap.NewSessionAdminServer(hostcap.NewBase(stubHostCaps{}, "core-communication"))
+	_, err := srv.Disconnect(context.Background(), &hostv1.DisconnectRequest{
+		SessionId: sessionULID,
+		Reason:    "reason",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unimplemented, st.Code(), "nil SessionAdmin must fail closed with Unimplemented, not NPE")
+}
