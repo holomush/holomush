@@ -3783,13 +3783,17 @@ invariants:
     summary: "Every host-brokered capability function MUST map to exactly one capability-scoped service in holomush.plugin.host.v1;
       no host.v1 service MUST span two capability domains, and the PluginHostService god-service MUST NOT exist after the
       decomposition."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/meta/plugin_host_capability_decomp_test.go"
   - id: INV-PLUGIN-48
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-host-capability-decomposition-design.md"
     summary: "Ambient runtime substrate (log, new_request_id, stdlib, config) MUST NOT be modeled as a capability: it MUST
       NOT appear in holomush.plugin.host.v1 and MUST NOT be a valid requires capability token."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/capability_vocab_test.go"
   - id: INV-PLUGIN-49
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-host-capability-decomposition-design.md"
@@ -3819,7 +3823,7 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"
     legacy: ["INV-2@docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"]
     summary: "ListCommands and GetCommandHelp MUST be reachable by both Lua plugins (in-VM hostfunc bridge) and binary plugins
-      (PluginHostService), both delegating to the same commandquery.Querier, so the ABAC-filtered command set is identical
+      (CommandRegistryService), both delegating to the same commandquery.Querier, so the ABAC-filtered command set is identical
       across runtimes."
     binding: pending
     refs:
