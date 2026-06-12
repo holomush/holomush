@@ -379,6 +379,16 @@ tasks:
     generates:
       - schemas/plugin.schema.json
 
+  generate:luabridge:
+    desc: Generate typed Lua host-capability bindings (bindings_gen.go)
+    cmds:
+      - go generate ./internal/plugin/luabridge/
+    sources:
+      - internal/plugin/luabridge/gen/main.go
+      - internal/plugin/capability_vocab.go
+    generates:
+      - internal/plugin/luabridge/bindings_gen.go
+
   generate:ebnf:
     desc: Generate EBNF grammar and railroad diagram from DSL parser
     cmds:
@@ -819,6 +829,16 @@ tasks:
             echo "ERROR: Schema out of sync with Go types. Run 'task generate:schema' and commit."
             exit 1
           fi
+      - echo "▸ Verifying Lua host-cap bindings are current..."
+      - cmd: |
+          BINDINGS=internal/plugin/luabridge/bindings_gen.go
+          BEFORE=$(sha256sum "$BINDINGS" | cut -d' ' -f1)
+          go generate ./internal/plugin/luabridge/
+          AFTER=$(sha256sum "$BINDINGS" | cut -d' ' -f1)
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo "ERROR: Lua bindings out of sync. Run 'task generate:luabridge' and commit."
+            exit 1
+          fi
       - echo "▸ Checking license headers..."
       - task: license:check
       - echo "▸ Building binary plugins..."
@@ -938,6 +958,16 @@ tasks:
           AFTER=$(sha256sum "$SCHEMA" | cut -d' ' -f1)
           if [ "$BEFORE" != "$AFTER" ]; then
             echo "ERROR: Schema out of sync with Go types. Run 'task generate:schema' and commit."
+            exit 1
+          fi
+      - echo "▸ Verifying Lua host-cap bindings are current..."
+      - cmd: |
+          BINDINGS=internal/plugin/luabridge/bindings_gen.go
+          BEFORE=$(sha256sum "$BINDINGS" | cut -d' ' -f1)
+          go generate ./internal/plugin/luabridge/
+          AFTER=$(sha256sum "$BINDINGS" | cut -d' ' -f1)
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo "ERROR: Lua bindings out of sync. Run 'task generate:luabridge' and commit."
             exit 1
           fi
       - echo "▸ Verifying EBNF + railroad are current..."
