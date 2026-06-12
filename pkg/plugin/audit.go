@@ -28,6 +28,7 @@ import (
 	// MUST NOT follow this precedent — internal/ is host-only.
 	"github.com/holomush/holomush/internal/eventbus/audit/auditheader"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -294,7 +295,7 @@ func LoadForQuery(row AuditRow) (*pluginv1.AuditRow, error) {
 }
 
 // DecryptOwnAuditRows sends a batch of AuditRows to the host's
-// PluginHostService.DecryptOwnAuditRows RPC and returns the per-row
+// AuditService.DecryptOwnAuditRows RPC and returns the per-row
 // RowResult slice (one result per input row, echoing row.Id for
 // positional correlation per INV-CRYPTO-37).
 //
@@ -305,8 +306,8 @@ func LoadForQuery(row AuditRow) (*pluginv1.AuditRow, error) {
 // gRPC status errors pass through as-is; the host stamps reject codes
 // as gRPC status messages. Callers that branch on specific codes use
 // google.golang.org/grpc/status.FromError to extract them.
-func DecryptOwnAuditRows(ctx context.Context, client pluginv1.PluginHostServiceClient, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
-	resp, err := client.DecryptOwnAuditRows(ctx, &pluginv1.DecryptOwnAuditRowsRequest{Rows: rows})
+func DecryptOwnAuditRows(ctx context.Context, client hostv1.AuditServiceClient, rows []*pluginv1.AuditRow) ([]*pluginv1.RowResult, error) {
+	resp, err := client.DecryptOwnAuditRows(ctx, &hostv1.DecryptOwnAuditRowsRequest{Rows: rows})
 	if err != nil {
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is (host stamps codes; callers use status.FromError)
 	}

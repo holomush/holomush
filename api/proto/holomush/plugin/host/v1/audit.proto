@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.host.v1;
+
+// AuditRow and RowResult belong to the AuditRow domain defined in the plugin
+// schema's audit.proto; the host capability reuses them so the read-back wire
+// shape stays coupled to the storage shape.
+import "holomush/plugin/v1/audit.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1;hostv1";
+
+// AuditService is the host-brokered `audit` capability: a plugin asks the host
+// to decrypt a batch of its OWN encrypted audit rows host-side; the plugin
+// never holds a DEK. Carved from the former PluginHostService
+// (holomush-eykuh.1). Served by auditServer in
+// internal/plugin/goplugin/host_capability_servers.go.
+service AuditService {
+  // DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN encrypted
+  // audit rows host-side; the plugin never holds a DEK, via ReadbackDecryptor.
+  // DecryptOwnRows. Authorization is two-gate (INV-CRYPTO-27): OwnerMap subject
+  // ownership (g1) plus the crypto.emits[].readback manifest flag (g2). Each
+  // input row gets an independent RowResult (INV-CRYPTO-37) carrying either
+  // plaintext or a stable snake_case no_plaintext_reason ("not_owner",
+  // "auth_guard_deny", "dek_missing", "downgrade_refused", "stale_dek",
+  // "audit_queue_full", "internal"; readback.go reasonToWire).
+  rpc DecryptOwnAuditRows(DecryptOwnAuditRowsRequest) returns (DecryptOwnAuditRowsResponse);
+}
+
+// DecryptOwnAuditRowsRequest carries the calling plugin's OWN audit rows for
+// host-side read-back decryption. The host enforces OwnerMap subject ownership
+// (g1) per row; rows whose subject is owned by a different plugin are refused
+// with not_owner and never decrypted. The batch is REJECTED (not clamped) when
+// it exceeds the server-side cap of 500.
+message DecryptOwnAuditRowsRequest {
+  // rows is the batch of audit rows to decrypt. Each row MUST have been
+  // previously stored by this plugin (subject ownership enforced by the
+  // host's OwnerMap g1 gate). A batch exceeding 500 rows is rejected
+  // outright rather than partially processed.
+  repeated holomush.plugin.v1.AuditRow rows = 1;
+}
+
+// DecryptOwnAuditRowsResponse returns one RowResult per request row, in the
+// same order (1:1 positional correspondence, INV-CRYPTO-37).
+message DecryptOwnAuditRowsResponse {
+  // results contains one outcome per request row, in the same order as
+  // DecryptOwnAuditRowsRequest.rows. Positional correspondence is
+  // guaranteed (INV-CRYPTO-37); callers correlate by index or by RowResult.id.
+  repeated holomush.plugin.v1.RowResult results = 1;
+}

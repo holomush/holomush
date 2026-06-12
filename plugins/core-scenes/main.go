@@ -113,7 +113,7 @@ func (p *scenePlugin) RegisterAttributeResolver(registrar grpc.ServiceRegistrar)
 
 // SetFocusClient is called by the SDK adapter during Init when the plugin
 // declares FocusClientAware. The client is used by command handlers to
-// drive session focus state via PluginHostService.{JoinFocus,LeaveFocus,
+// drive session focus state via FocusService.{JoinFocus,LeaveFocus,
 // PresentFocus}, and is forwarded to the scene service for WatchScene's
 // observer focus registration.
 func (p *scenePlugin) SetFocusClient(client pluginsdk.FocusClient) {

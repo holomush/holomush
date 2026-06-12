@@ -19,7 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/pkg/errutil"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 // --- in-memory settings doubles for the GetSetting/SetSetting host RPC tests
@@ -118,8 +118,8 @@ func TestGetSettingUnspecifiedScopeRejected(t *testing.T) {
 	actor := settingsActor(t)
 	srv, ctx := newSettingsServer(t, nil, actor)
 
-	_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope: pluginv1.SettingScope_SETTING_SCOPE_UNSPECIFIED,
+	_, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+		Scope: hostv1.SettingScope_SETTING_SCOPE_UNSPECIFIED,
 		Key:   "content.cw_block",
 	})
 	require.Error(t, err)
@@ -132,8 +132,8 @@ func TestSetSettingUnspecifiedScopeRejected(t *testing.T) {
 	actor := settingsActor(t)
 	srv, ctx := newSettingsServer(t, nil, actor)
 
-	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:      pluginv1.SettingScope_SETTING_SCOPE_UNSPECIFIED,
+	_, err := srv.SetSetting(ctx, &hostv1.SetSettingRequest{
+		Scope:      hostv1.SettingScope_SETTING_SCOPE_UNSPECIFIED,
 		Key:        "content.cw_block",
 		StringList: []string{"violence"},
 	})
@@ -148,8 +148,8 @@ func TestGetSettingMissingTokenFailsClosed(t *testing.T) {
 	actor := settingsActor(t)
 	srv, _ := newSettingsServer(t, nil, actor)
 
-	_, err := srv.GetSetting(context.Background(), &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+	_, err := srv.GetSetting(context.Background(), &hostv1.GetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 		PrincipalId: actor.ID,
 		Key:         "content.cw_block",
 	})
@@ -165,8 +165,8 @@ func TestGetSettingPlayerForeignPrincipalDenied(t *testing.T) {
 	srv, ctx := newSettingsServer(t, nil, actor)
 
 	foreign := core.NewULID().String()
-	_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+	_, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 		PrincipalId: foreign,
 		Key:         "content.cw_block",
 	})
@@ -182,8 +182,8 @@ func TestGetSettingCharacterForeignPrincipalDenied(t *testing.T) {
 	srv, ctx := newSettingsServer(t, nil, actor)
 
 	foreign := core.NewULID().String()
-	_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_CHARACTER,
+	_, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_CHARACTER,
 		PrincipalId: foreign,
 		Key:         "content.cw_block",
 	})
@@ -198,8 +198,8 @@ func TestSetSettingPlayerForeignPrincipalDenied(t *testing.T) {
 	srv, ctx := newSettingsServer(t, nil, actor)
 
 	foreign := core.NewULID().String()
-	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+	_, err := srv.SetSetting(ctx, &hostv1.SetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 		PrincipalId: foreign,
 		Key:         "content.cw_block",
 		StringList:  []string{"violence"},
@@ -224,8 +224,8 @@ func TestGetSettingNilStoreReturnsUnimplemented(t *testing.T) {
 	ctx, _ := contextWithValidToken(t, srv, actor)
 
 	assert.NotPanics(t, func() {
-		_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-			Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+		_, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+			Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 			PrincipalId: actor.ID,
 			Key:         "content.cw_block",
 		})
@@ -245,8 +245,8 @@ func TestSetSettingGameNilEngineReturnsUnimplemented(t *testing.T) {
 	ctx, _ := contextWithValidToken(t, srv, actor)
 
 	assert.NotPanics(t, func() {
-		_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-			Scope:      pluginv1.SettingScope_SETTING_SCOPE_GAME,
+		_, err := srv.SetSetting(ctx, &hostv1.SetSettingRequest{
+			Scope:      hostv1.SettingScope_SETTING_SCOPE_GAME,
 			Key:        "content.cw_taxonomy",
 			StringList: []string{"violence"},
 		})
@@ -265,8 +265,8 @@ func TestSetSettingGameOperatorAllowed(t *testing.T) {
 	eng.Grant("character:"+actor.ID, "write", pluginauthz.SettingsGameWriteResource("plug-A"))
 	srv, ctx := newSettingsServer(t, eng, actor)
 
-	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:      pluginv1.SettingScope_SETTING_SCOPE_GAME,
+	_, err := srv.SetSetting(ctx, &hostv1.SetSettingRequest{
+		Scope:      hostv1.SettingScope_SETTING_SCOPE_GAME,
 		Key:        "content.cw_taxonomy",
 		StringList: []string{"violence", "gore"},
 	})
@@ -280,8 +280,8 @@ func TestSetSettingGameNonOperatorDenied(t *testing.T) {
 	eng := policytest.NewGrantEngine() // grants nothing → deny
 	srv, ctx := newSettingsServer(t, eng, actor)
 
-	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:      pluginv1.SettingScope_SETTING_SCOPE_GAME,
+	_, err := srv.SetSetting(ctx, &hostv1.SetSettingRequest{
+		Scope:      hostv1.SettingScope_SETTING_SCOPE_GAME,
 		Key:        "content.cw_taxonomy",
 		StringList: []string{"violence"},
 	})
@@ -297,8 +297,8 @@ func TestGetSettingGameReadableByAnyPlugin(t *testing.T) {
 	eng := policytest.NewGrantEngine() // would deny everything if consulted
 	srv, ctx := newSettingsServer(t, eng, actor)
 
-	resp, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope: pluginv1.SettingScope_SETTING_SCOPE_GAME,
+	resp, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+		Scope: hostv1.SettingScope_SETTING_SCOPE_GAME,
 		Key:   "content.cw_taxonomy",
 	})
 	require.NoError(t, err, "GAME reads are server-wide readable; no engine check")
@@ -313,8 +313,8 @@ func TestSetSettingMissingTokenFailsClosed(t *testing.T) {
 	actor := settingsActor(t)
 	srv, _ := newSettingsServer(t, nil, actor)
 
-	_, err := srv.SetSetting(context.Background(), &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+	_, err := srv.SetSetting(context.Background(), &hostv1.SetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 		PrincipalId: actor.ID,
 		Key:         "content.cw_block",
 		StringList:  []string{"violence"},
@@ -332,16 +332,16 @@ func TestCharacterSettingRoundTripsForOwnPrincipal(t *testing.T) {
 	actor := settingsActor(t)
 	srv, ctx := newSettingsServer(t, nil, actor)
 
-	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_CHARACTER,
+	_, err := srv.SetSetting(ctx, &hostv1.SetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_CHARACTER,
 		PrincipalId: actor.ID,
 		Key:         "content.cw_block",
 		StringList:  []string{"violence", "gore"},
 	})
 	require.NoError(t, err)
 
-	resp, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_CHARACTER,
+	resp, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_CHARACTER,
 		PrincipalId: actor.ID,
 		Key:         "content.cw_block",
 	})
@@ -369,8 +369,8 @@ func TestSettingInvalidPrincipalIDReturnsInvalidArgument(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-				Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+			_, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+				Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 				PrincipalId: tc.principalID,
 				Key:         "content.cw_block",
 			})
@@ -396,8 +396,8 @@ func TestPlayerScopeDeniedWhenNoOwningPlayerVouched(t *testing.T) {
 	// A valid player ULID, but the token carries no owning player.
 	playerULID := core.NewULID().String()
 
-	_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+	_, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 		PrincipalId: playerULID,
 		Key:         "content.cw_block",
 	})
@@ -421,16 +421,16 @@ func TestPlayerSettingRoundTripsForOwningPlayer(t *testing.T) {
 	srv, _ := newSettingsServer(t, nil, actor)
 	ctx, _ := contextWithValidTokenOwning(t, srv, actor, owningPlayer)
 
-	_, err := srv.SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+	_, err := srv.SetSetting(ctx, &hostv1.SetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 		PrincipalId: owningPlayer,
 		Key:         "content.cw_block",
 		StringList:  []string{"violence", "gore"},
 	})
 	require.NoError(t, err)
 
-	resp, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+	resp, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 		PrincipalId: owningPlayer,
 		Key:         "content.cw_block",
 	})
@@ -451,8 +451,8 @@ func TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
 	srv, _ := newSettingsServer(t, nil, actor)
 	ctx, _ := contextWithValidTokenOwning(t, srv, actor, owningPlayer)
 
-	_, err := srv.GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       pluginv1.SettingScope_SETTING_SCOPE_PLAYER,
+	_, err := srv.GetSetting(ctx, &hostv1.GetSettingRequest{
+		Scope:       hostv1.SettingScope_SETTING_SCOPE_PLAYER,
 		PrincipalId: otherPlayer,
 		Key:         "content.cw_block",
 	})
@@ -474,16 +474,16 @@ func TestGameSettingOwnerPartitionIsolatedAcrossPlugins(t *testing.T) {
 	engA.Grant("character:"+actor.ID, "write", pluginauthz.SettingsGameWriteResource("plug-A"))
 	srvA, ctxA := newSettingsServerWith(t, "plug-A", shared, engA, actor)
 
-	_, err := srvA.SetSetting(ctxA, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:      pluginv1.SettingScope_SETTING_SCOPE_GAME,
+	_, err := srvA.SetSetting(ctxA, &hostv1.SetSettingRequest{
+		Scope:      hostv1.SettingScope_SETTING_SCOPE_GAME,
 		Key:        "content.cw_taxonomy",
 		StringList: []string{"violence"},
 	})
 	require.NoError(t, err)
 
 	// plug-A reads its own value back.
-	respA, err := srvA.GetSetting(ctxA, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope: pluginv1.SettingScope_SETTING_SCOPE_GAME,
+	respA, err := srvA.GetSetting(ctxA, &hostv1.GetSettingRequest{
+		Scope: hostv1.SettingScope_SETTING_SCOPE_GAME,
 		Key:   "content.cw_taxonomy",
 	})
 	require.NoError(t, err)
@@ -492,8 +492,8 @@ func TestGameSettingOwnerPartitionIsolatedAcrossPlugins(t *testing.T) {
 
 	// plug-B, sharing the SAME game store, cannot see plug-A's owner partition.
 	srvB, ctxB := newSettingsServerWith(t, "plug-B", shared, nil, actor)
-	respB, err := srvB.GetSetting(ctxB, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope: pluginv1.SettingScope_SETTING_SCOPE_GAME,
+	respB, err := srvB.GetSetting(ctxB, &hostv1.GetSettingRequest{
+		Scope: hostv1.SettingScope_SETTING_SCOPE_GAME,
 		Key:   "content.cw_taxonomy",
 	})
 	require.NoError(t, err)

@@ -1,19 +1,11 @@
-- **Invariant-registry family-renumber series (.14.12–.14.27, epic hz0v4) — CONSOLIDATED.** Each leg
-  renames a legacy family (GW/ROPS/P7/P4-6/FS/SCENE/PLUGIN/ACCESS/CRYPTO/S*/M*/COMMAND) → canonical
-  `INV-<SCOPE>-N`. Recurring HOLDS: (1) residual walk `bareInvRE=\bINV-\d+\b` matches ONLY bare NUMERIC
-  `INV-9` — NOT `INV-P7-1`/`INV-PLUGIN-22` (the `-XX-` breaks `\d+`); `continue`s on shared files →
-  foreign/deferred tokens survive ONLY in shared_files, descriptive `INV-P7-1..16` prose is inert.
-  (2) checkProvenance greps CANONICAL `e.ID` at each ref site, NOT `r.Token`; legacy `token:"INV-15"`
-  refs are the standing FROM-anchor convention (canonical id must ALSO be physically present).
-  (3) PER-SITE not per-number: same bare number → different outcome per file. (4) Generated artifacts
-  (.pb.go/_pb.ts/grpc-api.md) must regen when a proto INV-comment is renamed.
-- **CRITICAL family-migration lesson (.14.23 NOT READY): registry guards are BLIND to UNREGISTERED
-  files.** A fully-green run (lint:invariants, provenance, partition, binding, units, int-compile) does
-  NOT prove a migration is complete: residual bare `INV-F*` tokens in files neither owned_paths nor
-  shared_files nor any `refs[]` → never scanned. Also range-rewrite corruption (`INV-P7-1..16` →
-  `INV-CRYPTO-38..16`, substring keeps provenance green). ALWAYS `rg -c '\bINV-<OLD>[0-9]' --glob
-  '!docs/**'` over the WHOLE tree; `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range corruption;
-  `rg 'TestINV_<OLD>[0-9]'` for dangling renamed-func cites.
+- **Invariant-registry family-renumber series (.14.12–.14.27, hz0v4) + UNREGISTERED-FILE blindness — CONSOLIDATED.**
+  Legacy family→canonical `INV-<SCOPE>-N`. HOLDS: (1) residual walk `bareInvRE=\bINV-\d+\b` matches ONLY
+  bare NUMERIC `INV-9`, NOT `INV-P7-1`/`INV-PLUGIN-22`; `continue`s on shared files. (2) checkProvenance greps
+  CANONICAL `e.ID` not `r.Token`. (3) PER-SITE not per-number. (4) regen generated artifacts (.pb.go/_pb.ts/
+  grpc-api.md) on proto INV-comment rename. CRITICAL (.14.23 NOT READY): registry guards are BLIND to files in
+  neither owned_paths/shared_files/refs[] — a fully-green run does NOT prove migration complete. ALWAYS whole-tree
+  `rg -c '\bINV-<OLD>[0-9]' --glob '!docs/**'`; `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range-rewrite
+  corruption (`INV-P7-1..16`→`INV-CRYPTO-38..16` keeps provenance green); `rg 'TestINV_<OLD>[0-9]'` dangling cites.
 - **Verification-BINDING backfill (pending→bound flip) — hz0v4 READY.** Flips registry entries
   pending→bound + adds asserted_by ONLY where `// Verifies: INV-<id>` ALREADY exists. Meta-test does
   NOT cross-check asserted_by against annotation sites → typo'd/fabricated path passes. MUST hand-verify
@@ -163,51 +155,60 @@
   OMIT player_session_token (header-injected). All clean. Whenever reviewing a web/gateway PR,
   re-check this status→connect code gap; it is gateway-wide accepted behavior, not per-PR.
 
-- **alt-session stream-loop port (5rh.8.15): R1 NOT READY → R2 (mmwsokrtpwpl) READY.** Recurring
-  ports-drop-the-hard-parts bugs to grep for when a .svelte.ts "mirrors terminal hydrateAndStream":
-  backoff declared inside recursive fn (hoist to session+while-loop); connectionId gate resolved
-  ONLY in STREAM_OPENED (must reject on close/error/10s-timeout + reinstall fresh gate);
-  streamGeneration declared-but-never-incremented = inert guard (grep the increment site);
-  Map keyed by characterId but delete(sessionId) = dead session cached. R2 fixed all in code +
-  altSessions.test.ts 7 fake-iterator tests. "241 pass" is whole-suite, proves nothing about new
-  async surface — `grep -c 'it('` the NEW test file. (2026-06-08)
-- **Frontend UI consuming a runes store (5rh.8.16 scenes workspace, 2026-06-08) — NOT READY.**
-  6 Svelte components + page wiring. Runes reactivity ($derived reading store getters), drafts (two
-  $effects, no cross-scene clobber since draftKey is $derived), localStorage SSR guards, a11y, send-
-  path error handling — all CORRECT. BUT the load-bearing BLOCKER was in the CONSUMED store, not the
-  diff's own .svelte files: `workspaceStore.refresh()` hardcodes `asCharacterId:'' / asCharacterName:''`
-  for every scene (workspaceStore.svelte.ts:72-73). This UI is the FIRST consumer to make those fields
-  load-bearing → composer `ensureSession(scene.asCharacterId)` = `ensureSession('')`, select() opens an
-  empty-character alt, roster/strip/"posing as" render blank. pnpm-check-0-errors + 241-pass prove
-  TYPE-correctness only (`''` is a valid string) — ZERO tests render these components with real store
-  state. LESSON: for UI-consumes-store PRs, trace each consumed field back to its PRODUCER and check it
-  is actually populated, not just typed; a green type-check + whole-suite-pass is blind to empty-but-
-  valid data. Also: `data.playerId` passed as the `sessionId` arg (refresh/select/queryStreamHistory) —
-  type confusion, inert today (header-token auth INV-SCENE-63) but breaks if session_id ever binds;
-  Medium non-blocking.
-- **Scene board UI (5rh.8.17, 2026-06-08) — NOT READY. STATE vs VISIBILITY string confusion.**
-  `SceneInfo.state` ∈ {active,paused,ended,archived} (core-scenes/types.go:23-26); `"open"` is a
-  VISIBILITY value ({open,private}), NOT a state. SceneBoardRow gated Watch/Join on
-  `scene.state === 'open'` → NEVER true → primary board actions never render, only "View"; stateColor
-  green-dot likewise dead. pnpm-check 0-errors is BLIND (both are valid strings). LESSON: whenever a
-  .svelte compares a proto string field to a literal, grep the proto/Go const set for that field — UI
-  authors routinely cross state↔visibility↔role vocabularies. Also recurring: nav params (?watch/?join
-  via goto) are DEAD unless the target +page.svelte reads $page.url.searchParams — workspace page
-  doesn't; board passes characterId="" hardcoded so even the watchScene RPC never fires. JSONL export
-  has no timestamp → timestampMs:0 → PoseCard renders 1970/12:00AM (Low). jsonlToLogEntries try-guarded,
-  blank/trailing-line safe, matches backend `{"speaker","kind","content"}\n` render; downloadBlob
-  SSR-safe (document only in click handler) + revokes — all sound.
-- **E2E scenes-workspace suite (5rh.8.19, 2026-06-08) — READY.** 8 Playwright tests reusing
-  existing helpers. KEY: the two prior NOT-READY app blockers WERE FIXED upstream — .8.16
-  hardcoded `asCharacterId:''` (now refresh() fans out alts tagging real charId) and .8.17 dead
-  `?watch`/`?join` nav (now +page.svelte:143-160 reads param + selects). Always re-check whether a
-  prior blocker still holds in CURRENT source before failing a dependent test PR. Honest-degradation
-  pattern that is ACCEPTABLE (not a hide-the-bug like the weakened S3 original): a test scoped by its
-  OWN title+comment to a narrower assertion than the plan scenario, referencing a real tracked bead
-  (.8.26 P1). S2 owner-sees-composer ≠ plan's watcher→Join-CTA (observer branch SceneComposer.svelte:99
-  never exercised) — Medium non-blocking, recommend a follow-up bead so the observer E2E gap isn't lost.
-  S3 asserts draft-clears only; passes because .8.26's broken path resolves {success:false} silently
-  (no throw → success branch clears draft); catch does NOT clear draft, so a real throw WOULD fail it.
-  Flakiness checklist that held: no sleeps; expect.poll/waitForEvent/toPass; conn-pill data-status
-  =connected gate before commands; unique per-test titles. App-fix listScenes(...characterId) correct;
-  char-less player → primaryCharId='' → facade NotFound caught into fetchError (Low, not in test scope).
+- **alt-session stream-loop port (5rh.8.15): R1 NOT READY → R2 READY (2026-06-08).** ports-drop-the-hard-parts
+  bugs when a .svelte.ts "mirrors terminal hydrateAndStream": backoff declared inside recursive fn (hoist to
+  while-loop); connectionId gate resolved ONLY in STREAM_OPENED (reject on close/error/timeout + reinstall);
+  streamGeneration declared-but-never-incremented = inert (grep increment site); Map keyed by characterId but
+  delete(sessionId) = dead cache. "241 pass" whole-suite proves nothing — `grep -c 'it('` the NEW test file.
+- **Frontend UI-consumes-store + STATE/VISIBILITY string confusion (5rh.8.16/.8.17, 2026-06-08) — both NOT READY,**
+  CONSOLIDATED. (.8.16) Load-bearing blocker was in the CONSUMED store not the diff's .svelte: refresh() hardcoded
+  `asCharacterId:''` (workspaceStore.svelte.ts:72-73); this UI was FIRST to make it load-bearing → ensureSession('')
+  → blank roster. LESSON: trace each consumed field to its PRODUCER, verify POPULATED not just typed — pnpm-check +
+  whole-suite-pass are blind to empty-but-valid data. (.8.17) `SceneInfo.state`∈{active,paused,ended,archived};
+  `"open"` is a VISIBILITY value not a state — `scene.state==='open'` NEVER true → board actions never render.
+  LESSON: when a .svelte compares a proto string field to a literal, grep the proto/Go const set — UI authors cross
+  state↔visibility↔role vocabularies. Recurring: `?watch/?join` nav params DEAD unless target +page reads
+  $page.url.searchParams; characterId="" hardcoded → RPC never fires. `data.playerId` as sessionId arg = inert type
+  confusion today (header-token INV-SCENE-63), breaks if session_id binds.
+- **E2E scenes-workspace suite (5rh.8.19, 2026-06-08) — READY.** Playwright reusing helpers. KEY: re-check whether
+  a prior NOT-READY blocker (.8.16 asCharacterId, .8.17 dead nav) STILL holds in CURRENT source before failing a
+  dependent test PR — both were fixed upstream. ACCEPTABLE honest-degradation: a test scoped by its OWN title+comment
+  to a narrower assertion than the plan, citing a real tracked bead (≠ silently weakening). Watch: a test passing
+  because a broken path resolves {success:false} silently (no throw) rather than asserting the real behavior.
+  Flakiness checklist: no sleeps; expect.poll/waitForEvent/toPass; conn-pill data-status gate before commands;
+  unique per-test titles.
+- **Proto package decomposition / carve god-service into capability services (eykuh.1.2 READY, 2026-06-11).**
+  Proto-only, additive, 14 services across 11 host/v1 files + generated pb.go/grpc/connect/_pb.ts. CHECKLIST
+  that held: (1) RPC membership per-service vs plan table — count each service's rpcs. (2) Carved-message
+  fidelity: source `PluginHostServiceX{...}` → `X{...}` MUST keep SAME field#+type+validate-constraint+doc
+  (prefix drop only); compare against the ORIGINAL plugin.proto bodies, not just the plan. (3) Lua-derived
+  msgs (world/property/session) ground in Go hostfunc: SessionInfo↔cap_session.go SetField keys, QueryObject
+  9-field projection↔world.go queryObjectFn, CreateObject one-of↔world_write.go containmentCount==1. (4) THE
+  DEVIATION: copying package-local shared types (FocusKey/FocusKind/FocusFailure*, Event/StreamReplayMode,
+  SettingScope) into the new package while IMPORTING cross-file AuditRow/RowResult is CONSISTENT not arbitrary
+  — discriminator is type LOCALITY: copy types defined INSIDE plugin.proto (no standalone file to import w/o
+  the god-service), import types in their OWN domain file (audit.proto, which plugin.proto itself imports).
+  proto packages are FLAT: each shared type defined exactly ONCE across the package's files = no codegen
+  collision (verify w/ `rg '^(message|enum) <T> ' host/v1/`). Copies spawn distinct Go types (hostv1.X vs
+  pluginv1.X) → Task 3 server move OWES explicit pluginv1↔hostv1 translation + round-trip equality test (Low
+  follow-up; nothing pins copies equal). (5) generated .pb.go SPDX header is REPO CONVENTION (flows from proto
+  leading comment; plugin/v1+eventbus/v1 pb.go carry it; .licenserc.yaml excludes **/*.pb.go from ENFORCEMENT
+  only) — not a 'skip generated files' violation. (6) additivity: `jj show --stat | rg plugin/v1` must be EMPTY;
+  buf.validate import carried verbatim from source = fidelity not deviation.
+- **Capability-service CLIENT rewire (eykuh.1.9 READY, 2026-06-11) — pure transport swap, crypto-adjacent.**
+  Swaps SDK decrypt client pluginv1.PluginHostServiceClient→hostv1.AuditServiceClient + envelope
+  pluginv1.DecryptOwnAuditRowsRequest/Response→hostv1.* . CRYPTO-SAFETY GATE held because the SDK
+  wrapper (audit.go DecryptOwnAuditRows) is transport-only: NO DEK/AAD/eligibility/content logic in
+  pkg/plugin — all host-side. Verify the ENVELOPE still carries pluginv1 ROWS (host audit.pb.go:
+  Rows []*v1.AuditRow / Results []*v1.RowResult; wire descriptor refs holomush.plugin.v1.AuditRow =
+  imported not redefined) → no row-drop/mis-assign. Host endpoint crypto-equivalence: auditServer
+  (host_capability_servers.go:321) DELEGATES to s.legacy().DecryptOwnAuditRows = same
+  pluginHostServiceServer handler (host_service.go:953) → same ReadbackDecryptor.DecryptOwnRows
+  (OwnerMap g1 gate, not_owner, DECRYPT_BATCH_TOO_LARGE) — that delegate is Task 3's work, confirms
+  endpoint equivalence not this diff's. NIL-GATING preserved: decAware block runs only if provider is
+  SnapshotDecryptorAware → wantsDecryptor=true → hostConn dialed before NewAuditServiceClient(hostConn).
+  hostClient var removal (sdk.go) FORCED by last-consumer migration = overlaps Task 10 (pre-done); flag
+  for bookkeeping not defect. pluginv1 STILL imported in sdk.go for PluginService (Init/HandleEvent/
+  HandleCommand) = not dangling. Tests register hostv1.RegisterAuditServiceServer via bufconn, 3 cases
+  non-vacuous (plaintext echo, typed refusal+nil-plaintext, status err). God-service still registered =
+  independence holds.

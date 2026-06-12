@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/pkg/errutil"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -500,9 +501,9 @@ func (d *testBrokerDialer) DialWithOptions(id uint32, _ ...grpc.DialOption) (*gr
 }
 
 type testPluginHostServiceServer struct {
-	pluginv1.UnimplementedPluginHostServiceServer
+	hostv1.UnimplementedEmitServiceServer
 	mu                   sync.Mutex
-	requests             []*pluginv1.PluginHostServiceEmitEventRequest
+	requests             []*hostv1.EmitEventRequest
 	emitTokens           []string // x-holomush-emit-token observed on each EmitEvent
 	sawActor             bool
 	actorKind            ActorKind
@@ -512,7 +513,7 @@ type testPluginHostServiceServer struct {
 	requestEmitTokenErr  error
 }
 
-func (s *testPluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.PluginHostServiceEmitEventRequest) (*pluginv1.PluginHostServiceEmitEventResponse, error) {
+func (s *testPluginHostServiceServer) EmitEvent(ctx context.Context, req *hostv1.EmitEventRequest) (*hostv1.EmitEventResponse, error) {
 	var tok string
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		if vs := md.Get("x-holomush-emit-token"); len(vs) > 0 {
@@ -520,7 +521,7 @@ func (s *testPluginHostServiceServer) EmitEvent(ctx context.Context, req *plugin
 		}
 	}
 	s.mu.Lock()
-	s.requests = append(s.requests, &pluginv1.PluginHostServiceEmitEventRequest{
+	s.requests = append(s.requests, &hostv1.EmitEventRequest{
 		Stream:    req.GetStream(),
 		EventType: req.GetEventType(),
 		Payload:   append([]byte(nil), req.GetPayload()...),
@@ -528,10 +529,10 @@ func (s *testPluginHostServiceServer) EmitEvent(ctx context.Context, req *plugin
 	s.emitTokens = append(s.emitTokens, tok)
 	s.actorKind, s.actorID, s.sawActor = ActorMetadataFromIncomingContext(ctx)
 	s.mu.Unlock()
-	return &pluginv1.PluginHostServiceEmitEventResponse{}, nil
+	return &hostv1.EmitEventResponse{}, nil
 }
 
-func (s *testPluginHostServiceServer) RequestEmitToken(_ context.Context, _ *pluginv1.PluginHostServiceRequestEmitTokenRequest) (*pluginv1.PluginHostServiceRequestEmitTokenResponse, error) {
+func (s *testPluginHostServiceServer) RequestEmitToken(_ context.Context, _ *hostv1.RequestEmitTokenRequest) (*hostv1.RequestEmitTokenResponse, error) {
 	s.mu.Lock()
 	s.requestEmitTokenHits++
 	tok := s.requestEmitTokenResp
@@ -543,14 +544,14 @@ func (s *testPluginHostServiceServer) RequestEmitToken(_ context.Context, _ *plu
 	if tok == "" {
 		tok = "self-tok"
 	}
-	return &pluginv1.PluginHostServiceRequestEmitTokenResponse{Token: tok}, nil
+	return &hostv1.RequestEmitTokenResponse{Token: tok}, nil
 }
 
 type emittingPluginHostServiceServer struct {
-	pluginv1.UnimplementedPluginHostServiceServer
+	hostv1.UnimplementedEmitServiceServer
 	pluginName string
 	mu         sync.Mutex
-	requests   []*pluginv1.PluginHostServiceEmitEventRequest
+	requests   []*hostv1.EmitEventRequest
 	actorKind  ActorKind
 	actorID    string
 }
@@ -559,11 +560,11 @@ type emittingPluginHostServiceServer struct {
 // token so SDK fallback callers can complete the EmitEvent round-trip in
 // tests. The host hardcodes the actor on the real implementation; this
 // mock just satisfies the wire contract.
-func (s *emittingPluginHostServiceServer) RequestEmitToken(_ context.Context, _ *pluginv1.PluginHostServiceRequestEmitTokenRequest) (*pluginv1.PluginHostServiceRequestEmitTokenResponse, error) {
-	return &pluginv1.PluginHostServiceRequestEmitTokenResponse{Token: "mock-self-tok"}, nil
+func (s *emittingPluginHostServiceServer) RequestEmitToken(_ context.Context, _ *hostv1.RequestEmitTokenRequest) (*hostv1.RequestEmitTokenResponse, error) {
+	return &hostv1.RequestEmitTokenResponse{Token: "mock-self-tok"}, nil
 }
 
-func (s *emittingPluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.PluginHostServiceEmitEventRequest) (*pluginv1.PluginHostServiceEmitEventResponse, error) {
+func (s *emittingPluginHostServiceServer) EmitEvent(ctx context.Context, req *hostv1.EmitEventRequest) (*hostv1.EmitEventResponse, error) {
 	kind, id, ok := ActorMetadataFromIncomingContext(ctx)
 	if !ok {
 		kind = ActorPlugin
@@ -572,21 +573,21 @@ func (s *emittingPluginHostServiceServer) EmitEvent(ctx context.Context, req *pl
 	s.mu.Lock()
 	s.actorKind = kind
 	s.actorID = id
-	s.requests = append(s.requests, &pluginv1.PluginHostServiceEmitEventRequest{
+	s.requests = append(s.requests, &hostv1.EmitEventRequest{
 		Stream:    req.GetStream(),
 		EventType: req.GetEventType(),
 		Payload:   append([]byte(nil), req.GetPayload()...),
 	})
 	s.mu.Unlock()
-	return &pluginv1.PluginHostServiceEmitEventResponse{}, nil
+	return &hostv1.EmitEventResponse{}, nil
 }
 
-func startPluginHostServiceTestServer(t *testing.T, srv pluginv1.PluginHostServiceServer) *grpc.ClientConn {
+func startPluginHostServiceTestServer(t *testing.T, srv hostv1.EmitServiceServer) *grpc.ClientConn {
 	t.Helper()
 
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- bufconn test server
-	pluginv1.RegisterPluginHostServiceServer(server, srv)
+	hostv1.RegisterEmitServiceServer(server, srv)
 
 	go func() {
 		_ = server.Serve(listener)
@@ -598,7 +599,7 @@ func startPluginHostServiceTestServer(t *testing.T, srv pluginv1.PluginHostServi
 	})
 
 	conn, err := grpc.NewClient(
-		"passthrough:///plugin-host-test",
+		"passthrough:///emit-service-test",
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 			return listener.Dial()
 		}),
@@ -642,7 +643,7 @@ func (p *focusClientInitProvider) SetFocusClient(client FocusClient) {
 
 func TestPluginServerAdapterInitInjectsFocusClientIntoServiceProvider(t *testing.T) {
 	srv := &focusTestServer{}
-	hostConn := startPluginHostServiceTestServer(t, srv)
+	hostConn := startFocusServiceTestServer(t, srv)
 
 	provider := &focusClientInitProvider{}
 	adapter := &pluginServerAdapter{
@@ -680,7 +681,7 @@ func (p *dualAwareProvider) SetEventSink(s EventSink)                           
 func (p *dualAwareProvider) SetFocusClient(c FocusClient)                            { p.focusClient = c }
 
 func TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient(t *testing.T) {
-	hostConn := startPluginHostServiceTestServer(t, &focusTestServer{})
+	hostConn := startFocusServiceTestServer(t, &focusTestServer{})
 
 	provider := &dualAwareProvider{}
 	adapter := &pluginServerAdapter{

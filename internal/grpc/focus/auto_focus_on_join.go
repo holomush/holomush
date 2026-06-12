@@ -15,7 +15,7 @@ import (
 
 // AutoFocusOnJoinResponse carries the fan-out result from AutoFocusOnJoin.
 // The binary plugin host translates this to the wire format
-// (PluginHostServiceAutoFocusOnJoinResponse).
+// (host.v1 AutoFocusOnJoinResponse).
 type AutoFocusOnJoinResponse struct {
 	// SessionID is the session that owns the auto-focused connections. Consumed
 	// by focus.Coordinator.driveFocusDeltas to route SendToConnection calls

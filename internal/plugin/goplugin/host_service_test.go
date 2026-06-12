@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -141,10 +142,10 @@ func TestJoinFocusDelegatesToCoordinatorWithParsedFocusKey(t *testing.T) {
 	srv := newTestServer(fc, nil)
 
 	targetID := ulid.Make()
-	resp, err := srv.JoinFocus(context.Background(), &pluginv1.PluginHostServiceJoinFocusRequest{
+	resp, err := srv.JoinFocus(context.Background(), &hostv1.JoinFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: targetID.String(),
 		},
 	})
@@ -161,10 +162,10 @@ func TestJoinFocusReturnsErrorWhenCoordinatorFails(t *testing.T) {
 	fc := &stubCoordinator{joinErr: oops.Code("FOCUS_ALREADY_MEMBER").Errorf("already member")}
 	srv := newTestServer(fc, nil)
 
-	_, err := srv.JoinFocus(context.Background(), &pluginv1.PluginHostServiceJoinFocusRequest{
+	_, err := srv.JoinFocus(context.Background(), &hostv1.JoinFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -174,10 +175,10 @@ func TestJoinFocusReturnsErrorWhenCoordinatorFails(t *testing.T) {
 func TestJoinFocusReturnsErrorWhenCoordinatorIsNil(t *testing.T) {
 	srv := newTestServer(nil, nil)
 
-	_, err := srv.JoinFocus(context.Background(), &pluginv1.PluginHostServiceJoinFocusRequest{
+	_, err := srv.JoinFocus(context.Background(), &hostv1.JoinFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -189,10 +190,10 @@ func TestLeaveFocusDelegatesToCoordinatorWithParsedFocusKey(t *testing.T) {
 	srv := newTestServer(fc, nil)
 
 	targetID := ulid.Make()
-	resp, err := srv.LeaveFocus(context.Background(), &pluginv1.PluginHostServiceLeaveFocusRequest{
+	resp, err := srv.LeaveFocus(context.Background(), &hostv1.LeaveFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: targetID.String(),
 		},
 	})
@@ -208,10 +209,10 @@ func TestLeaveFocusDelegatesToCoordinatorWithParsedFocusKey(t *testing.T) {
 func TestLeaveFocusReturnsErrorWhenCoordinatorIsNil(t *testing.T) {
 	srv := newTestServer(nil, nil)
 
-	_, err := srv.LeaveFocus(context.Background(), &pluginv1.PluginHostServiceLeaveFocusRequest{
+	_, err := srv.LeaveFocus(context.Background(), &hostv1.LeaveFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -229,9 +230,9 @@ func TestLeaveFocusByTargetDelegatesToCoordinatorAndMapsResult(t *testing.T) {
 	srv := newTestServer(fc, nil)
 
 	targetID := ulid.Make()
-	resp, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+	resp, err := srv.LeaveFocusByTarget(context.Background(), &hostv1.LeaveFocusByTargetRequest{
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: targetID.String(),
 		},
 	})
@@ -249,9 +250,9 @@ func TestLeaveFocusByTargetDelegatesToCoordinatorAndMapsResult(t *testing.T) {
 func TestLeaveFocusByTargetReturnsErrorWhenCoordinatorIsNil(t *testing.T) {
 	srv := newTestServer(nil, nil)
 
-	_, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+	_, err := srv.LeaveFocusByTarget(context.Background(), &hostv1.LeaveFocusByTargetRequest{
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -262,9 +263,9 @@ func TestLeaveFocusByTargetReturnsErrorForInvalidTarget(t *testing.T) {
 	fc := &stubCoordinator{}
 	srv := newTestServer(fc, nil)
 
-	_, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+	_, err := srv.LeaveFocusByTarget(context.Background(), &hostv1.LeaveFocusByTargetRequest{
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: "not-a-ulid",
 		},
 	})
@@ -275,9 +276,9 @@ func TestLeaveFocusByTargetReturnsErrorForInvalidTarget(t *testing.T) {
 func TestLeaveFocusByTargetReturnsErrorWhenHostIsNil(t *testing.T) {
 	srv := &pluginHostServiceServer{host: nil, pluginName: "test-plugin"}
 
-	_, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+	_, err := srv.LeaveFocusByTarget(context.Background(), &hostv1.LeaveFocusByTargetRequest{
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -310,9 +311,9 @@ func TestLeaveFocusByTargetReturnsRpcErrorOnEnumerationFailure(t *testing.T) {
 	}
 	srv := newTestServer(fc, nil)
 
-	resp, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+	resp, err := srv.LeaveFocusByTarget(context.Background(), &hostv1.LeaveFocusByTargetRequest{
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -325,10 +326,10 @@ func TestPresentFocusDelegatesToCoordinatorWithParsedFocusKey(t *testing.T) {
 	srv := newTestServer(fc, nil)
 
 	targetID := ulid.Make()
-	resp, err := srv.PresentFocus(context.Background(), &pluginv1.PluginHostServicePresentFocusRequest{
+	resp, err := srv.PresentFocus(context.Background(), &hostv1.PresentFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: targetID.String(),
 		},
 	})
@@ -344,10 +345,10 @@ func TestPresentFocusDelegatesToCoordinatorWithParsedFocusKey(t *testing.T) {
 func TestPresentFocusReturnsErrorWhenCoordinatorIsNil(t *testing.T) {
 	srv := newTestServer(nil, nil)
 
-	_, err := srv.PresentFocus(context.Background(), &pluginv1.PluginHostServicePresentFocusRequest{
+	_, err := srv.PresentFocus(context.Background(), &hostv1.PresentFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -358,10 +359,10 @@ func TestPresentFocusReturnsErrorWhenCoordinatorFails(t *testing.T) {
 	fc := &stubCoordinator{presentErr: oops.Code("FOCUS_NOT_MEMBER").Errorf("not member")}
 	srv := newTestServer(fc, nil)
 
-	_, err := srv.PresentFocus(context.Background(), &pluginv1.PluginHostServicePresentFocusRequest{
+	_, err := srv.PresentFocus(context.Background(), &hostv1.PresentFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -376,7 +377,7 @@ func TestQueryStreamHistoryDelegatesToEventStore(t *testing.T) {
 	}
 	srv := newTestServer(nil, es)
 
-	resp, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	resp, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  10,
 	})
@@ -393,7 +394,7 @@ func TestQueryStreamHistoryCapsCountAt500(t *testing.T) {
 	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
 
-	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  1000,
 	})
@@ -407,7 +408,7 @@ func TestQueryStreamHistoryConvertsNotBeforeMs(t *testing.T) {
 	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
 
-	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream:      "channel:abc",
 		Count:       10,
 		NotBeforeMs: 1700000000000,
@@ -421,7 +422,7 @@ func TestQueryStreamHistoryConvertsNotBeforeMs(t *testing.T) {
 func TestQueryStreamHistoryReturnsErrorWhenEventStoreIsNil(t *testing.T) {
 	srv := newTestServer(nil, nil)
 
-	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  10,
 	})
@@ -430,10 +431,10 @@ func TestQueryStreamHistoryReturnsErrorWhenEventStoreIsNil(t *testing.T) {
 
 func TestJoinFocusReturnsErrorWhenHostIsNil(t *testing.T) {
 	srv := &pluginHostServiceServer{pluginName: "test-plugin"}
-	_, err := srv.JoinFocus(context.Background(), &pluginv1.PluginHostServiceJoinFocusRequest{
+	_, err := srv.JoinFocus(context.Background(), &hostv1.JoinFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -443,10 +444,10 @@ func TestJoinFocusReturnsErrorWhenHostIsNil(t *testing.T) {
 
 func TestLeaveFocusReturnsErrorWhenHostIsNil(t *testing.T) {
 	srv := &pluginHostServiceServer{pluginName: "test-plugin"}
-	_, err := srv.LeaveFocus(context.Background(), &pluginv1.PluginHostServiceLeaveFocusRequest{
+	_, err := srv.LeaveFocus(context.Background(), &hostv1.LeaveFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -456,10 +457,10 @@ func TestLeaveFocusReturnsErrorWhenHostIsNil(t *testing.T) {
 
 func TestPresentFocusReturnsErrorWhenHostIsNil(t *testing.T) {
 	srv := &pluginHostServiceServer{pluginName: "test-plugin"}
-	_, err := srv.PresentFocus(context.Background(), &pluginv1.PluginHostServicePresentFocusRequest{
+	_, err := srv.PresentFocus(context.Background(), &hostv1.PresentFocusRequest{
 		SessionId: "sess-1",
-		Target: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		Target: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: ulid.Make().String(),
 		},
 	})
@@ -469,7 +470,7 @@ func TestPresentFocusReturnsErrorWhenHostIsNil(t *testing.T) {
 
 func TestQueryStreamHistoryReturnsErrorWhenHostIsNil(t *testing.T) {
 	srv := &pluginHostServiceServer{pluginName: "test-plugin"}
-	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  10,
 	})
@@ -481,7 +482,7 @@ func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
 	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
 
-	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  -5,
 	})
@@ -496,15 +497,15 @@ func TestProtoToFocusKeyReturnsErrorForNilKey(t *testing.T) {
 }
 
 func TestProtoToFocusKeyReturnsErrorForInvalidULID(t *testing.T) {
-	_, err := protoToFocusKey(&pluginv1.FocusKey{
-		Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+	_, err := protoToFocusKey(&hostv1.FocusKey{
+		Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 		TargetId: "not-a-ulid",
 	})
 	require.Error(t, err)
 }
 
 func TestProtoToFocusKindReturnsErrorForUnspecified(t *testing.T) {
-	_, err := protoToFocusKind(pluginv1.FocusKind_FOCUS_KIND_UNSPECIFIED)
+	_, err := protoToFocusKind(hostv1.FocusKind_FOCUS_KIND_UNSPECIFIED)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported focus kind")
 }
@@ -518,7 +519,7 @@ func TestQueryStreamHistoryPopulatesPerEventCursors(t *testing.T) {
 	}
 	srv := newTestServer(nil, es)
 
-	resp, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	resp, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  10,
 	})
@@ -538,7 +539,7 @@ func TestQueryStreamHistoryDecodesOpaqueBeforeIDCursor(t *testing.T) {
 	cursorBytes := encodeHostEventCursor(anchorID)
 	require.NotEmpty(t, cursorBytes)
 
-	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  5,
 		Cursor: cursorBytes,
@@ -553,7 +554,7 @@ func TestQueryStreamHistoryRejectsInvalidCursorBytes(t *testing.T) {
 	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
 
-	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  5,
 		Cursor: []byte("not-a-valid-cursor"),
@@ -575,7 +576,7 @@ func TestQueryStreamHistorySetsNextCursorWhenPageFull(t *testing.T) {
 	es := &stubHistoryReader{replayTailResult: evts}
 	srv := newTestServer(nil, es)
 
-	resp, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	resp, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  3, // exactly count events returned → next_cursor populated
 	})
@@ -590,7 +591,7 @@ func TestQueryStreamHistoryNextCursorEmptyWhenFewerEventsThanCount(t *testing.T)
 	es := &stubHistoryReader{replayTailResult: evts}
 	srv := newTestServer(nil, es)
 
-	resp, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	resp, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
 		Stream: "channel:abc",
 		Count:  10, // more than returned → no more pages
 	})
@@ -695,7 +696,7 @@ func TestEmitEventUsesStoredActorIgnoringPluginClaim(t *testing.T) {
 	})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
-	_, err = s.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err = s.EmitEvent(ctx, &hostv1.EmitEventRequest{
 		Stream:    "location.01HLOC0000000000000000000",
 		EventType: "say",
 		Payload:   []byte(`{"message":"hi"}`),
@@ -727,7 +728,7 @@ func TestEmitEventMissingTokenFails(t *testing.T) {
 
 	md := metadata.New(map[string]string{}) // no token
 	ctx := metadata.NewIncomingContext(context.Background(), md)
-	_, err := s.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err := s.EmitEvent(ctx, &hostv1.EmitEventRequest{
 		Stream:    "location:01HLOC0000000000000000000",
 		EventType: "say",
 		Payload:   []byte(`{}`),
@@ -758,7 +759,7 @@ func TestEmitEventUnknownTokenFails(t *testing.T) {
 		"x-holomush-emit-token": "not-a-real-token",
 	})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
-	_, err := s.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err := s.EmitEvent(ctx, &hostv1.EmitEventRequest{
 		Stream:    "location:01HLOC0000000000000000000",
 		EventType: "test",
 		Payload:   []byte(`{}`),
@@ -797,7 +798,7 @@ func TestEmitEventCrossPluginTokenLeakFails(t *testing.T) {
 	sB := &pluginHostServiceServer{host: h, pluginName: "plug-B"}
 	md := metadata.New(map[string]string{"x-holomush-emit-token": tok})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
-	_, err = sB.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err = sB.EmitEvent(ctx, &hostv1.EmitEventRequest{
 		Stream:    "location:01HLOC0000000000000000000",
 		EventType: "test",
 		Payload:   []byte(`{}`),
@@ -822,7 +823,7 @@ func TestRequestEmitTokenIssuesSelfTokenBoundToPluginActor(t *testing.T) {
 	defer func() { _ = h.Close(context.Background()) }()
 	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
 
-	resp, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	resp, err := s.RequestEmitToken(context.Background(), &hostv1.RequestEmitTokenRequest{})
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.GetToken(), "self-token must be non-empty")
 
@@ -855,7 +856,7 @@ func TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginULID(t *testing.T) {
 	defer func() { _ = h.Close(context.Background()) }()
 	s := &pluginHostServiceServer{host: h, pluginName: "plug-B"}
 
-	resp, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	resp, err := s.RequestEmitToken(context.Background(), &hostv1.RequestEmitTokenRequest{})
 	require.NoError(t, err)
 
 	storedActor, _, ok := h.tokenStore.Lookup("plug-B", resp.GetToken())
@@ -877,7 +878,7 @@ func TestRequestEmitTokenReturnsErrorWhenHostIsNil(t *testing.T) {
 	t.Parallel()
 	s := &pluginHostServiceServer{host: nil, pluginName: "plug-A"}
 
-	_, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	_, err := s.RequestEmitToken(context.Background(), &hostv1.RequestEmitTokenRequest{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "plugin host service is not configured")
 }
@@ -897,7 +898,7 @@ func TestRequestEmitTokenWrapsIssueFailure(t *testing.T) {
 	h.tokenStore.rand = failingReader{}
 	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
 
-	_, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	_, err := s.RequestEmitToken(context.Background(), &hostv1.RequestEmitTokenRequest{})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_ISSUE_FAILED")
 }
@@ -914,7 +915,7 @@ func TestRequestEmitTokenFailsWhenPluginNotInIdentityRegistry(t *testing.T) {
 	defer func() { _ = h.Close(context.Background()) }()
 	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
 
-	_, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	_, err := s.RequestEmitToken(context.Background(), &hostv1.RequestEmitTokenRequest{})
 	require.Error(t, err)
 	// The wrapped cause is PLUGIN_UNREGISTERED_INVOKE from stampPluginActor;
 	// oops surfaces the innermost code via Code(). The outer
@@ -984,7 +985,7 @@ func TestEmitEventCopiesSensitiveTrue(t *testing.T) {
 	ctx, token := contextWithValidToken(t, srv, actor)
 	defer srv.host.tokenStore.Revoke(token)
 
-	_, err := srv.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err := srv.EmitEvent(ctx, &hostv1.EmitEventRequest{
 		Stream:    "location:01HLOC0000000000000000000",
 		EventType: "say",
 		Payload:   []byte(`{"message":"hi"}`),
@@ -1008,7 +1009,7 @@ func TestEmitEventCopiesSensitiveFalseDefaultsExplicit(t *testing.T) {
 	ctx, token := contextWithValidToken(t, srv, actor)
 	defer srv.host.tokenStore.Revoke(token)
 
-	_, err := srv.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err := srv.EmitEvent(ctx, &hostv1.EmitEventRequest{
 		Stream:    "location:01HLOC0000000000000000000",
 		EventType: "say",
 		Payload:   []byte(`{"message":"hi"}`),
@@ -1050,10 +1051,10 @@ func TestSetConnectionFocus_DelegatesToCoordinator(t *testing.T) {
 	srv := newTestServer(fc, nil)
 
 	connIDBuf := connID.Bytes()
-	resp, err := srv.SetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceSetConnectionFocusRequest{
+	resp, err := srv.SetConnectionFocus(context.Background(), &hostv1.SetConnectionFocusRequest{
 		ConnectionId: connIDBuf[:],
-		FocusKey: &pluginv1.FocusKey{
-			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+		FocusKey: &hostv1.FocusKey{
+			Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
 			TargetId: sceneID.String(),
 		},
 		IsSceneGrid: false,
@@ -1062,7 +1063,7 @@ func TestSetConnectionFocus_DelegatesToCoordinator(t *testing.T) {
 	require.NotNil(t, resp)
 	// The response echoes the new focus key back.
 	require.NotNil(t, resp.GetFocusKey())
-	assert.Equal(t, pluginv1.FocusKind_FOCUS_KIND_SCENE, resp.GetFocusKey().GetKind())
+	assert.Equal(t, hostv1.FocusKind_FOCUS_KIND_SCENE, resp.GetFocusKey().GetKind())
 	assert.Equal(t, sceneID.String(), resp.GetFocusKey().GetTargetId())
 }
 
@@ -1085,7 +1086,7 @@ func TestAutoFocusOnJoin_DelegatesToCoordinator(t *testing.T) {
 
 	charID := ulid.Make()
 	charIDBuf := charID.Bytes()
-	resp, err := srv.AutoFocusOnJoin(context.Background(), &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
+	resp, err := srv.AutoFocusOnJoin(context.Background(), &hostv1.AutoFocusOnJoinRequest{
 		CharacterId: charIDBuf[:],
 		SceneId:     ulid.Make().Bytes(),
 	})
@@ -1117,7 +1118,7 @@ func TestIsAnyConnFocused_PassthroughBool(t *testing.T) {
 
 			charIDBuf := charID.Bytes()
 			sceneIDBuf := sceneID.Bytes()
-			resp, err := srv.IsAnyConnFocused(context.Background(), &pluginv1.PluginHostServiceIsAnyConnFocusedRequest{
+			resp, err := srv.IsAnyConnFocused(context.Background(), &hostv1.IsAnyConnFocusedRequest{
 				CharacterId: charIDBuf[:],
 				SceneId:     sceneIDBuf[:],
 			})
@@ -1133,7 +1134,7 @@ func TestSetConnectionFocus_InvalidULID(t *testing.T) {
 	fc := &stubCoordinator{}
 	srv := newTestServer(fc, nil)
 
-	_, err := srv.SetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceSetConnectionFocusRequest{
+	_, err := srv.SetConnectionFocus(context.Background(), &hostv1.SetConnectionFocusRequest{
 		ConnectionId: []byte("not-16-bytes"),
 	})
 	require.Error(t, err)
@@ -1146,7 +1147,7 @@ func TestAutoFocusOnJoin_InvalidULID(t *testing.T) {
 	fc := &stubCoordinator{}
 	srv := newTestServer(fc, nil)
 
-	_, err := srv.AutoFocusOnJoin(context.Background(), &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
+	_, err := srv.AutoFocusOnJoin(context.Background(), &hostv1.AutoFocusOnJoinRequest{
 		CharacterId: []byte("bad"),
 	})
 	require.Error(t, err)
@@ -1159,7 +1160,7 @@ func TestIsAnyConnFocused_InvalidULID(t *testing.T) {
 	fc := &stubCoordinator{}
 	srv := newTestServer(fc, nil)
 
-	_, err := srv.IsAnyConnFocused(context.Background(), &pluginv1.PluginHostServiceIsAnyConnFocusedRequest{
+	_, err := srv.IsAnyConnFocused(context.Background(), &hostv1.IsAnyConnFocusedRequest{
 		CharacterId: []byte("bad"),
 	})
 	require.Error(t, err)
@@ -1192,7 +1193,7 @@ func TestAutoFocusOnJoin_ReturnsResponseShape(t *testing.T) {
 
 	charIDBuf := charID.Bytes()
 	sceneIDBuf := sceneID.Bytes()
-	resp, err := srv.AutoFocusOnJoin(context.Background(), &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
+	resp, err := srv.AutoFocusOnJoin(context.Background(), &hostv1.AutoFocusOnJoinRequest{
 		CharacterId: charIDBuf[:],
 		SceneId:     sceneIDBuf[:],
 	})
@@ -1201,7 +1202,7 @@ func TestAutoFocusOnJoin_ReturnsResponseShape(t *testing.T) {
 	require.Len(t, resp.GetFocusedConnectionIds(), 1)
 	require.Len(t, resp.GetSkippedConnectionIds(), 1)
 	require.Len(t, resp.GetFailedConnectionIds(), 1)
-	assert.Equal(t, pluginv1.FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT,
+	assert.Equal(t, hostv1.FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT,
 		resp.GetFailedConnectionIds()[0].GetReason())
 }
 
@@ -1256,7 +1257,7 @@ func TestEvaluateDerivesSubjectFromToken(t *testing.T) {
 	ctx, token := contextWithValidToken(t, srv, core.Actor{Kind: core.ActorCharacter, ID: charID.String()})
 	defer h.tokenStore.Revoke(token)
 
-	resp, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+	resp, err := srv.Evaluate(ctx, &hostv1.EvaluateRequest{
 		Action:   "extend_publish_attempts",
 		Resource: "scene:01SCENE0000000000000000000",
 	})
@@ -1281,7 +1282,7 @@ func TestEvaluateMissingTokenFailsClosed(t *testing.T) {
 	defer func() { _ = h.Close(context.Background()) }()
 	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
 
-	_, err := srv.Evaluate(context.Background(), &pluginv1.PluginHostServiceEvaluateRequest{
+	_, err := srv.Evaluate(context.Background(), &hostv1.EvaluateRequest{
 		Action:   "read",
 		Resource: "scene:01SCENE0000000000000000000",
 	})
@@ -1304,7 +1305,7 @@ func TestEvaluateForeignResourceTypeRejected(t *testing.T) {
 	ctx, token := contextWithValidToken(t, srv, core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()})
 	defer h.tokenStore.Revoke(token)
 
-	_, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+	_, err := srv.Evaluate(ctx, &hostv1.EvaluateRequest{
 		Action:   "read",
 		Resource: "server:global",
 	})
@@ -1328,7 +1329,7 @@ func TestEvaluateEngineUnconfiguredFailsClosed(t *testing.T) {
 
 	ctx, _ := contextWithValidToken(t, srv, core.Actor{Kind: core.ActorCharacter, ID: core.NewULID().String()})
 
-	_, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+	_, err := srv.Evaluate(ctx, &hostv1.EvaluateRequest{
 		Action:   "read",
 		Resource: "scene:01SCENE0000000000000000000",
 	})
@@ -1343,7 +1344,7 @@ func TestEvaluateNilHostFailsClosed(t *testing.T) {
 	t.Parallel()
 	srv := &pluginHostServiceServer{host: nil, pluginName: "core-scenes"}
 
-	_, err := srv.Evaluate(context.Background(), &pluginv1.PluginHostServiceEvaluateRequest{
+	_, err := srv.Evaluate(context.Background(), &hostv1.EvaluateRequest{
 		Action:   "read",
 		Resource: "scene:01SCENE0000000000000000000",
 	})
@@ -1376,7 +1377,7 @@ func TestEvaluateNilTokenStoreFailsClosed(t *testing.T) {
 	h.mu.Unlock()
 
 	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
-	_, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+	_, err := srv.Evaluate(ctx, &hostv1.EvaluateRequest{
 		Action:   "read",
 		Resource: "scene:01SCENE0000000000000000000",
 	})
@@ -1406,7 +1407,7 @@ func TestEvaluateRejectedTokenFailsClosed(t *testing.T) {
 	md := metadata.New(map[string]string{"x-holomush-emit-token": tok})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
-	_, err = srvB.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+	_, err = srvB.Evaluate(ctx, &hostv1.EvaluateRequest{
 		Action:   "read",
 		Resource: "scene:01SCENE0000000000000000000",
 	})
@@ -1481,7 +1482,7 @@ func TestDecryptOwnAuditRowsRejectsForeignSubject(t *testing.T) {
 	}
 	srv := newDecryptTestServer("core-scenes", dec)
 
-	resp, err := srv.DecryptOwnAuditRows(context.Background(), &pluginv1.DecryptOwnAuditRowsRequest{
+	resp, err := srv.DecryptOwnAuditRows(context.Background(), &hostv1.DecryptOwnAuditRowsRequest{
 		Rows: []*pluginv1.AuditRow{
 			{Id: []byte("row-1"), Subject: "events.main.channel.01ABC.msg"},
 		},
@@ -1510,7 +1511,7 @@ func TestDecryptOwnAuditRowsCapsBatchAt500(t *testing.T) {
 		rows[i] = &pluginv1.AuditRow{Id: []byte(strconv.Itoa(i)), Subject: "events.main.scene.01ABC.ic"}
 	}
 
-	resp, err := srv.DecryptOwnAuditRows(context.Background(), &pluginv1.DecryptOwnAuditRowsRequest{Rows: rows})
+	resp, err := srv.DecryptOwnAuditRows(context.Background(), &hostv1.DecryptOwnAuditRowsRequest{Rows: rows})
 	require.Error(t, err)
 	assert.Nil(t, resp, "over-cap batch must be rejected, not partially served")
 	errutil.AssertErrorCode(t, err, "DECRYPT_BATCH_TOO_LARGE")
@@ -1523,7 +1524,7 @@ func TestDecryptOwnAuditRowsReturnsErrorWhenDecryptorNil(t *testing.T) {
 	t.Parallel()
 	srv := newDecryptTestServer("core-scenes", nil)
 
-	_, err := srv.DecryptOwnAuditRows(context.Background(), &pluginv1.DecryptOwnAuditRowsRequest{
+	_, err := srv.DecryptOwnAuditRows(context.Background(), &hostv1.DecryptOwnAuditRowsRequest{
 		Rows: []*pluginv1.AuditRow{{Id: []byte("row-1"), Subject: "events.main.scene.01ABC.ic"}},
 	})
 	require.Error(t, err)
@@ -1547,12 +1548,12 @@ func TestGetConnectionFocus_MapsAFocusedConnectionToFocusKey(t *testing.T) {
 	}
 	srv := newTestServer(fc, nil)
 
-	resp, err := srv.GetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceGetConnectionFocusRequest{
+	resp, err := srv.GetConnectionFocus(context.Background(), &hostv1.GetConnectionFocusRequest{
 		ConnectionId: connIDBuf[:],
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.GetFocusKey(), "focused connection MUST return a focus key")
-	assert.Equal(t, pluginv1.FocusKind_FOCUS_KIND_SCENE, resp.GetFocusKey().GetKind())
+	assert.Equal(t, hostv1.FocusKind_FOCUS_KIND_SCENE, resp.GetFocusKey().GetKind())
 	assert.Equal(t, sceneID.String(), resp.GetFocusKey().GetTargetId())
 }
 
@@ -1568,7 +1569,7 @@ func TestGetConnectionFocus_ReturnsAbsentFocusKeyForGridFocusedConnection(t *tes
 	fc := &stubCoordinator{getConnFocusResult: nil}
 	srv := newTestServer(fc, nil)
 
-	resp, err := srv.GetConnectionFocus(context.Background(), &pluginv1.PluginHostServiceGetConnectionFocusRequest{
+	resp, err := srv.GetConnectionFocus(context.Background(), &hostv1.GetConnectionFocusRequest{
 		ConnectionId: connIDBuf[:],
 	})
 	require.NoError(t, err)

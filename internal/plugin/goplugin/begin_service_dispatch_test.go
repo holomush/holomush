@@ -16,7 +16,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 // ferryToIncoming simulates the plugin-side metadata ferry: the dispatch
@@ -67,7 +67,7 @@ func TestBeginServiceDispatchTokenAuthorizesEvaluateAsDispatchedActor(t *testing
 	// Full loop: Evaluate with the ferried token is allowed only because the
 	// subject derived from the token is character:<charID>.
 	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
-	resp, err := srv.Evaluate(ferryToIncoming(dispatchCtx, t), &pluginv1.PluginHostServiceEvaluateRequest{
+	resp, err := srv.Evaluate(ferryToIncoming(dispatchCtx, t), &hostv1.EvaluateRequest{
 		Action:   "spectate",
 		Resource: "scene:" + sceneID,
 	})
@@ -94,7 +94,7 @@ func TestBeginServiceDispatchReleaseRevokesToken(t *testing.T) {
 
 	srv := &pluginHostServiceServer{host: h, pluginName: "core-scenes"}
 	incoming := ferryToIncoming(dispatchCtx, t)
-	_, err = srv.Evaluate(incoming, &pluginv1.PluginHostServiceEvaluateRequest{
+	_, err = srv.Evaluate(incoming, &hostv1.EvaluateRequest{
 		Action:   "spectate",
 		Resource: "scene:" + core.NewULID().String(),
 	})
@@ -102,7 +102,7 @@ func TestBeginServiceDispatchReleaseRevokesToken(t *testing.T) {
 
 	release()
 
-	_, err = srv.Evaluate(incoming, &pluginv1.PluginHostServiceEvaluateRequest{
+	_, err = srv.Evaluate(incoming, &hostv1.EvaluateRequest{
 		Action:   "spectate",
 		Resource: "scene:" + core.NewULID().String(),
 	})

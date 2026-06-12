@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -411,14 +412,14 @@ func TestStoreFromMessage_NilTimestampTolerated(t *testing.T) {
 // DecryptOwnAuditRows SDK tests
 // -------------------------------------------------------------------------
 
-// decryptTestServer is a minimal PluginHostServiceServer that records
+// decryptTestServer is a minimal AuditServiceServer that records
 // DecryptOwnAuditRows calls and returns a configurable per-row result.
 type decryptTestServer struct {
-	pluginv1.UnimplementedPluginHostServiceServer
-	fn func(req *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error)
+	hostv1.UnimplementedAuditServiceServer
+	fn func(req *hostv1.DecryptOwnAuditRowsRequest) (*hostv1.DecryptOwnAuditRowsResponse, error)
 }
 
-func (s *decryptTestServer) DecryptOwnAuditRows(_ context.Context, req *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
+func (s *decryptTestServer) DecryptOwnAuditRows(_ context.Context, req *hostv1.DecryptOwnAuditRowsRequest) (*hostv1.DecryptOwnAuditRowsResponse, error) {
 	if s.fn != nil {
 		return s.fn(req)
 	}
@@ -427,16 +428,16 @@ func (s *decryptTestServer) DecryptOwnAuditRows(_ context.Context, req *pluginv1
 	for _, r := range req.GetRows() {
 		results = append(results, &pluginv1.RowResult{Id: r.GetId()})
 	}
-	return &pluginv1.DecryptOwnAuditRowsResponse{Results: results}, nil
+	return &hostv1.DecryptOwnAuditRowsResponse{Results: results}, nil
 }
 
 // startDecryptTestServer spins up a bufconn gRPC server and returns a client conn.
-func startDecryptTestServer(t *testing.T, srv pluginv1.PluginHostServiceServer) *grpc.ClientConn {
+func startDecryptTestServer(t *testing.T, srv hostv1.AuditServiceServer) *grpc.ClientConn {
 	t.Helper()
 	const bufSize = 1 << 20 // 1 MiB
 	listener := bufconn.Listen(bufSize)
 	server := grpc.NewServer() //nolint:noctx // bufconn test server — no production traffic
-	pluginv1.RegisterPluginHostServiceServer(server, srv)
+	hostv1.RegisterAuditServiceServer(server, srv)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { server.Stop(); _ = listener.Close() })
 	conn, err := grpc.NewClient(
@@ -455,8 +456,8 @@ func TestDecryptOwnAuditRowsSDKReturnsPerRowPlaintext(t *testing.T) {
 	t.Parallel()
 	rowID := ulid.Make().Bytes()
 	srv := &decryptTestServer{
-		fn: func(req *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
-			return &pluginv1.DecryptOwnAuditRowsResponse{
+		fn: func(req *hostv1.DecryptOwnAuditRowsRequest) (*hostv1.DecryptOwnAuditRowsResponse, error) {
+			return &hostv1.DecryptOwnAuditRowsResponse{
 				Results: []*pluginv1.RowResult{
 					{Id: req.GetRows()[0].GetId(), Outcome: &pluginv1.RowResult_Plaintext{Plaintext: []byte("hello")}},
 				},
@@ -464,7 +465,7 @@ func TestDecryptOwnAuditRowsSDKReturnsPerRowPlaintext(t *testing.T) {
 		},
 	}
 	conn := startDecryptTestServer(t, srv)
-	client := pluginv1.NewPluginHostServiceClient(conn)
+	client := hostv1.NewAuditServiceClient(conn)
 
 	rows := []*pluginv1.AuditRow{{Id: rowID, Subject: "events.main.scene.01ABC.ic"}}
 	got, err := pluginsdk.DecryptOwnAuditRows(context.Background(), client, rows)
@@ -478,8 +479,8 @@ func TestDecryptOwnAuditRowsSDKReturnsRefusalReason(t *testing.T) {
 	t.Parallel()
 	rowID := ulid.Make().Bytes()
 	srv := &decryptTestServer{
-		fn: func(req *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
-			return &pluginv1.DecryptOwnAuditRowsResponse{
+		fn: func(req *hostv1.DecryptOwnAuditRowsRequest) (*hostv1.DecryptOwnAuditRowsResponse, error) {
+			return &hostv1.DecryptOwnAuditRowsResponse{
 				Results: []*pluginv1.RowResult{
 					{Id: req.GetRows()[0].GetId(), Outcome: &pluginv1.RowResult_NoPlaintextReason{NoPlaintextReason: "not_owner"}},
 				},
@@ -487,7 +488,7 @@ func TestDecryptOwnAuditRowsSDKReturnsRefusalReason(t *testing.T) {
 		},
 	}
 	conn := startDecryptTestServer(t, srv)
-	client := pluginv1.NewPluginHostServiceClient(conn)
+	client := hostv1.NewAuditServiceClient(conn)
 
 	rows := []*pluginv1.AuditRow{{Id: rowID, Subject: "events.main.channel.01ABC.msg"}}
 	got, err := pluginsdk.DecryptOwnAuditRows(context.Background(), client, rows)
@@ -500,12 +501,12 @@ func TestDecryptOwnAuditRowsSDKReturnsRefusalReason(t *testing.T) {
 func TestDecryptOwnAuditRowsSDKPropagatesHostError(t *testing.T) {
 	t.Parallel()
 	srv := &decryptTestServer{
-		fn: func(_ *pluginv1.DecryptOwnAuditRowsRequest) (*pluginv1.DecryptOwnAuditRowsResponse, error) {
+		fn: func(_ *hostv1.DecryptOwnAuditRowsRequest) (*hostv1.DecryptOwnAuditRowsResponse, error) {
 			return nil, status.Error(codes.ResourceExhausted, "DECRYPT_BATCH_TOO_LARGE: cap 500")
 		},
 	}
 	conn := startDecryptTestServer(t, srv)
-	client := pluginv1.NewPluginHostServiceClient(conn)
+	client := hostv1.NewAuditServiceClient(conn)
 
 	rows := []*pluginv1.AuditRow{{Id: ulid.Make().Bytes()}}
 	_, err := pluginsdk.DecryptOwnAuditRows(context.Background(), client, rows)

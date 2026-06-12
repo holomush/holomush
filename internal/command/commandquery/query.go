@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 // Package commandquery owns the single ABAC-filtered enumeration of registered
-// commands for a subject. The Lua hostfunc bridge, the binary PluginHostService
+// commands for a subject. The Lua hostfunc bridge, the binary host.v1 CommandRegistryService
 // handler, and the CoreService RPC are intended to delegate here so there is
 // exactly one command-visibility filter (design spec INV-COMMAND-1); the delegating
 // adapters land in later tasks of the recognized-command-chip plan.

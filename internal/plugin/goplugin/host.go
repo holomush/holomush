@@ -166,7 +166,7 @@ func WithIdentityRegistry(reg plugins.IdentityRegistry) HostOption {
 }
 
 // WithEngine configures the host with an ABAC policy engine for
-// PluginHostService.Evaluate calls. Without this option Evaluate fails closed
+// host.v1 EvalService.Evaluate calls. Without this option Evaluate fails closed
 // with EVALUATE_ENGINE_UNCONFIGURED.
 func WithEngine(eng types.AccessPolicyEngine) HostOption {
 	return func(h *Host) { h.engine = eng }
@@ -194,7 +194,7 @@ func WithGameSettings(s settings.GameSettings) HostOption {
 }
 
 // WithAuditLogger configures the host with an audit logger for
-// PluginHostService.Evaluate calls. Optional — omitting it skips audit
+// host.v1 EvalService.Evaluate calls. Optional — omitting it skips audit
 // logging without affecting authorization decisions.
 func WithAuditLogger(a pluginauthz.Auditor) HostOption {
 	return func(h *Host) { h.auditor = a }
@@ -215,7 +215,7 @@ func WithConfigOverrides(overrides map[string]map[string]string) HostOption {
 }
 
 // WithCommandQuerier wires the shared command querier so
-// PluginHostService.ListCommands / GetCommandHelp resolve for binary plugins
+// host.v1 CommandRegistryService.ListCommands / GetCommandHelp resolve for binary plugins
 // (parity with the Lua list_commands host function; plugin-runtime-symmetry).
 // The querier is constructed after the Host in subsystem.go, so use
 // SetCommandQuerier for the late-bind path instead of this option when the
@@ -952,7 +952,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 //
 // Without this, a plain client on the registry conn attaches no token, so any
 // plugin-side evaluator.Evaluate call — which ferries the incoming token back
-// to PluginHostService.Evaluate — fails EMIT_TOKEN_MISSING.
+// to host.v1 EvalService.Evaluate — fails EMIT_TOKEN_MISSING.
 //
 // Contract:
 //   - The caller MUST pass the server-side-verified acting character (or other

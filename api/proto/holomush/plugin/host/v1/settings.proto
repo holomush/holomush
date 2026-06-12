@@ -1,0 +1,83 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.host.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1;hostv1";
+
+// SettingsService is the host-brokered `settings` capability: a plugin reads
+// and writes owner-partitioned settings in the GAME/PLAYER/CHARACTER scopes.
+// Carved from the former PluginHostService (holomush-eykuh.1). Served by
+// settingsServer in internal/plugin/goplugin/host_capability_servers.go.
+service SettingsService {
+  // GetSetting reads a single-scope setting in the calling plugin's owner
+  // partition (owner bound host-side from the authenticated plugin name, never
+  // from the request). The handler resolves SettingScope to its backing store;
+  // a missing key returns a successful response with found=false, never a
+  // codes.NotFound status error.
+  rpc GetSetting(GetSettingRequest) returns (GetSettingResponse);
+  // SetSetting writes a single-scope setting in the calling plugin's partition;
+  // GAME scope requires an operator authorization decision (host-enforced, not
+  // trusted from the wire). The owner partition is bound host-side from the
+  // authenticated plugin name.
+  rpc SetSetting(SetSettingRequest) returns (SetSettingResponse);
+}
+
+// SettingScope selects which settings scope a Get/Set targets. There is no
+// chained mode — callers compose scopes themselves (e.g. a CW-block union read
+// across game+player+character). The iokti.7 handler maps each value to its
+// backing store and rejects the unspecified value (fail closed).
+enum SettingScope {
+  // Unspecified scope — rejected by the handler (fail closed).
+  SETTING_SCOPE_UNSPECIFIED = 0;
+  // Server-wide scope, backed by holomush_system_info.
+  SETTING_SCOPE_GAME = 1;
+  // Per-player scope, backed by players.preferences.
+  SETTING_SCOPE_PLAYER = 2;
+  // Per-character scope, backed by characters.preferences.
+  SETTING_SCOPE_CHARACTER = 3;
+}
+
+// GetSettingRequest reads one owner-partitioned key. The owner is NOT on the
+// wire — the host binds it from the authenticated plugin name (structural
+// cross-plugin isolation).
+message GetSettingRequest {
+  // Scope to read from.
+  SettingScope scope = 1;
+  // Principal ULID: player ID for PLAYER, character ID for CHARACTER, empty for GAME.
+  string principal_id = 2;
+  // Plugin-owned dot-key to read (e.g. "content.cw_block").
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetSettingResponse returns a typed list-or-scalar value read from the
+// resolved scope/partition.
+message GetSettingResponse {
+  // Whether the key resolved in the requested scope/partition.
+  bool found = 1;
+  // String-list value (Phase 8 settings are list-valued).
+  repeated string string_list = 2;
+  // Scalar string value (for non-list keys).
+  string string_value = 3;
+}
+
+// SetSettingRequest writes one key in the caller's owner partition. Owner is
+// bound host-side, not supplied here.
+message SetSettingRequest {
+  // Target scope to write.
+  SettingScope scope = 1;
+  // Principal ULID (empty for GAME).
+  string principal_id = 2;
+  // Plugin-owned dot-key to write.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+  // String-list value to store.
+  repeated string string_list = 4;
+}
+
+// SetSettingResponse is the empty acknowledgement returned on a successful
+// write.
+message SetSettingResponse {}

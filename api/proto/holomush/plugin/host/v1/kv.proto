@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.host.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1;hostv1";
+
+// KVService is the host-brokered `kv` capability: a plugin reads, writes, and
+// deletes keys in its own namespaced key-value store. The namespace is the
+// CALLING plugin's identity, bound host-side from the authenticated transport
+// (mirroring the sibling host services) — it is NOT a request field, so one
+// plugin can never target another plugin's KV partition. Carved from the former
+// PluginHostService (holomush-eykuh.1). All three RPCs are DECLARED BUT UNSERVED
+// today (holomush-l6std): no server impl, no production client; they return
+// codes.Unimplemented.
+service KVService {
+  // Get reads a value from the plugin's namespaced key-value store.
+  // DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+  // codes.Unimplemented today.
+  rpc Get(GetRequest) returns (GetResponse);
+  // Set writes a value into the plugin's namespaced key-value store.
+  // DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+  // codes.Unimplemented today.
+  rpc Set(SetRequest) returns (SetResponse);
+  // Delete removes a key from the plugin's namespaced key-value store.
+  // DECLARED BUT UNSERVED (holomush-l6std): no server impl, no client; returns
+  // codes.Unimplemented today.
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+}
+
+// GetRequest is the (currently unserved, holomush-l6std) request to read a key
+// from the calling plugin's KV namespace. The namespace is bound host-side from
+// the authenticated plugin identity, never carried on the wire.
+message GetRequest {
+  // Key to read within the caller's namespace.
+  string key = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetResponse returns a KV lookup result (unserved, holomush-l6std).
+message GetResponse {
+  // The stored value, or empty when not found.
+  string value = 1;
+  // Whether the key existed; distinguishes a stored empty value from a miss.
+  bool found = 2;
+}
+
+// SetRequest is the (currently unserved, holomush-l6std) request to write a key
+// in the calling plugin's KV namespace. The namespace is bound host-side from
+// the authenticated plugin identity, never carried on the wire.
+message SetRequest {
+  // Key to write within the caller's namespace.
+  string key = 1 [(buf.validate.field).string.min_len = 1];
+  // Value to store under the key.
+  string value = 2;
+}
+
+// SetResponse is the empty ack for Set (unserved, holomush-l6std).
+message SetResponse {}
+
+// DeleteRequest is the (currently unserved, holomush-l6std) request to delete a
+// key from the calling plugin's KV namespace. The namespace is bound host-side
+// from the authenticated plugin identity, never carried on the wire.
+message DeleteRequest {
+  // Key to delete within the caller's namespace.
+  string key = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// DeleteResponse is the empty ack for Delete (unserved, holomush-l6std).
+message DeleteResponse {}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/samber/oops"
 
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -42,13 +43,13 @@ type SnapshotDecryptorAware interface {
 }
 
 // snapshotDecryptClient is the concrete SnapshotDecryptor used by binary
-// plugins. It wraps the generated PluginHostServiceClient and forwards
+// plugins. It wraps the generated AuditServiceClient and forwards
 // DecryptOwnAuditRows calls. The host resolves the calling plugin's identity
 // from the connection, so no per-dispatch token is ferried here (unlike
 // hostEvaluateClient): read-back decrypt is system-initiated from the plugin's
 // own lifecycle, not command-gated.
 type snapshotDecryptClient struct {
-	client pluginv1.PluginHostServiceClient
+	client hostv1.AuditServiceClient
 }
 
 // DecryptOwnAuditRows implements SnapshotDecryptor. A nil client fails closed.

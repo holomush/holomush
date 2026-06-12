@@ -7,8 +7,9 @@ import (
 	"context"
 
 	"github.com/samber/oops"
+	"google.golang.org/grpc"
 
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 // CommandSummary is one command's metadata as seen by a binary plugin.
@@ -35,7 +36,14 @@ type CommandListerAware interface {
 }
 
 type hostCommandClient struct {
-	client pluginv1.PluginHostServiceClient
+	client hostv1.CommandRegistryServiceClient
+}
+
+// newHostCommandClient constructs a CommandLister from a broker gRPC
+// connection. Exposed to the adapter for wiring; test code constructs a
+// hostCommandClient directly.
+func newHostCommandClient(conn grpc.ClientConnInterface) CommandLister {
+	return &hostCommandClient{client: hostv1.NewCommandRegistryServiceClient(conn)}
 }
 
 // ListCommands implements CommandLister. A nil client fails closed.
@@ -43,7 +51,7 @@ func (c *hostCommandClient) ListCommands(ctx context.Context, characterID string
 	if c.client == nil {
 		return CommandList{}, oops.New("host command lister client is not configured")
 	}
-	resp, err := c.client.ListCommands(ctx, &pluginv1.PluginHostServiceListCommandsRequest{CharacterId: characterID})
+	resp, err := c.client.ListCommands(ctx, &hostv1.ListCommandsRequest{CharacterId: characterID})
 	if err != nil {
 		return CommandList{}, oops.With("character_id", characterID).Wrap(err)
 	}

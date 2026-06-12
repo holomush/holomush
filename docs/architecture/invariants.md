@@ -319,8 +319,8 @@ invariants.
 | `INV-PLUGIN-44` | Binary and Lua plugins MUST obtain every declared dependency through the one host gRPC broker, gated by the declaration and authorized as PluginSubject; neither runtime MAY receive an undeclared capability or service. Consumption-path facet of plugin-runtime-symmetry; distinct from INV-CRYPTO-34 (emit/fence/audit path). | — | pending |
 | `INV-PLUGIN-45` | The declaration gate that enforces least privilege MUST live at the broker/registry common path shared by both runtimes; per-runtime gating that could diverge is forbidden. | — | pending |
 | `INV-PLUGIN-46` | Each proto service name MUST have exactly one provider across host and plugins; a plugin declaring Provides of a server-owned (host-registered) service MUST be rejected with DUPLICATE_SERVICE_PROVIDER at resolver time, never silently overwriting host ownership. A core service is never an implicit plugin override target. | — | bound |
-| `INV-PLUGIN-47` | Every host-brokered capability function MUST map to exactly one capability-scoped service in holomush.plugin.host.v1; no host.v1 service MUST span two capability domains, and the PluginHostService god-service MUST NOT exist after the decomposition. | — | pending |
-| `INV-PLUGIN-48` | Ambient runtime substrate (log, new_request_id, stdlib, config) MUST NOT be modeled as a capability: it MUST NOT appear in holomush.plugin.host.v1 and MUST NOT be a valid requires capability token. | — | pending |
+| `INV-PLUGIN-47` | Every host-brokered capability function MUST map to exactly one capability-scoped service in holomush.plugin.host.v1; no host.v1 service MUST span two capability domains, and the PluginHostService god-service MUST NOT exist after the decomposition. | — | bound |
+| `INV-PLUGIN-48` | Ambient runtime substrate (log, new_request_id, stdlib, config) MUST NOT be modeled as a capability: it MUST NOT appear in holomush.plugin.host.v1 and MUST NOT be a valid requires capability token. | — | bound |
 | `INV-PLUGIN-49` | A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability surface. | — | pending |
 
 ### `INV-EVENTBUS`
@@ -423,8 +423,8 @@ invariants.
 
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
-| `INV-COMMAND-1` | There MUST be exactly one command-visibility/ABAC-filter implementation (commandquery.Querier) in core; the Lua hostfunc shim, the binary PluginHostService handler, and the CoreService RPC MUST all delegate to it — none may reimplement the filter. | `INV-1` | pending |
-| `INV-COMMAND-2` | ListCommands and GetCommandHelp MUST be reachable by both Lua plugins (in-VM hostfunc bridge) and binary plugins (PluginHostService), both delegating to the same commandquery.Querier, so the ABAC-filtered command set is identical across runtimes. | `INV-2` | pending |
+| `INV-COMMAND-1` | There MUST be exactly one command-visibility/ABAC-filter implementation (commandquery.Querier) in core; the Lua hostfunc shim, the binary host.v1 CommandRegistryService handler, and the CoreService RPC MUST all delegate to it — none may reimplement the filter. | `INV-1` | pending |
+| `INV-COMMAND-2` | ListCommands and GetCommandHelp MUST be reachable by both Lua plugins (in-VM hostfunc bridge) and binary plugins (CommandRegistryService), both delegating to the same commandquery.Querier, so the ABAC-filtered command set is identical across runtimes. | `INV-2` | pending |
 | `INV-COMMAND-3` | The self-scoped enumeration RPC (WebListCommands / ListAvailableCommands) MUST return only commands the requesting character can execute, never ABAC-filtered-out ones; ownership failures collapse to SESSION_NOT_FOUND. | `INV-5` | pending |
 
 <!-- END GENERATED: invariant-tables -->

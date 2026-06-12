@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.host.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1;hostv1";
+
+// PropertyService is the host-brokered `property` capability: a plugin reads
+// and writes registry-validated properties on world entities (locations,
+// objects, and any registered type). Promotes the Lua holomush.get_property /
+// set_property host functions (internal/plugin/hostfunc/world_write.go) to the
+// binary surface. Served by propertyServer in
+// internal/plugin/goplugin/host_capability_servers.go.
+service PropertyService {
+  // GetProperty reads one registry-defined property from an entity, mirroring
+  // the Lua holomush.get_property(entity_type, entity_id, property) host
+  // function (getEntityProperty via property.Definition.Get). The host
+  // validates the entity type, entity ULID, and property name before reading.
+  rpc GetProperty(GetPropertyRequest) returns (GetPropertyResponse);
+  // SetProperty writes one registry-defined property on an entity, mirroring
+  // the Lua holomush.set_property(entity_type, entity_id, property, value) host
+  // function (setEntityProperty via property.Definition.Set). The host
+  // validates the entity type, entity ULID, and property name before writing.
+  rpc SetProperty(SetPropertyRequest) returns (SetPropertyResponse);
+}
+
+// GetPropertyRequest names the entity and property to read.
+message GetPropertyRequest {
+  // Registered entity type (e.g. "location", "object").
+  string entity_type = 1 [(buf.validate.field).string.min_len = 1];
+  // ULID of the entity to read the property from.
+  string entity_id = 2 [(buf.validate.field).string.min_len = 1];
+  // Registry-defined property name to read (e.g. "name", "description").
+  string property = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetPropertyResponse returns the property's current value as a string.
+message GetPropertyResponse {
+  // String value of the requested property.
+  string value = 1;
+}
+
+// SetPropertyRequest names the entity, property, and value to write.
+message SetPropertyRequest {
+  // Registered entity type (e.g. "location", "object").
+  string entity_type = 1 [(buf.validate.field).string.min_len = 1];
+  // ULID of the entity to write the property on.
+  string entity_id = 2 [(buf.validate.field).string.min_len = 1];
+  // Registry-defined property name to write (e.g. "name", "description").
+  string property = 3 [(buf.validate.field).string.min_len = 1];
+  // New string value to store for the property.
+  string value = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+// SetPropertyResponse is the empty acknowledgement returned on a successful
+// property write.
+message SetPropertyResponse {}

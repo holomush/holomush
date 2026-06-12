@@ -10,15 +10,17 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 // FocusClient is the SDK-facing facade binary-plugin code uses to drive the
 // server-owned focus substrate on behalf of a session. All calls cross the
-// plugin broker (mTLS) to the host's PluginHostService.
+// plugin broker (mTLS) to the host's FocusService (8 focus RPCs) and
+// StreamHistoryService (QueryStreamHistory).
 //
 // See docs/superpowers/specs/2026-04-11-focus-substrate-design.md §3.4 for
 // the host-side interface this wraps, and §4.3/4.4/4.5 for transition
@@ -215,37 +217,45 @@ type FocusClientAware interface {
 }
 
 // pluginHostFocusClient is the broker-backed FocusClient implementation.
+// It holds two per-service clients over the same broker connection:
+// - client: for the 8 focus RPCs (FocusService)
+// - streamHistoryClient: for QueryStreamHistory (StreamHistoryService)
 type pluginHostFocusClient struct {
-	client pluginv1.PluginHostServiceClient
+	client              hostv1.FocusServiceClient
+	streamHistoryClient hostv1.StreamHistoryServiceClient
 }
 
-// newPluginHostFocusClient constructs a FocusClient wrapping the given
-// PluginHostServiceClient. Exposed to the adapter for wiring; test code
-// constructs a pluginHostFocusClient directly.
-func newPluginHostFocusClient(client pluginv1.PluginHostServiceClient) FocusClient {
-	return &pluginHostFocusClient{client: client}
+// newPluginHostFocusClient constructs a FocusClient from a broker gRPC
+// connection. Both the FocusService and StreamHistoryService clients are
+// dialed over the same conn; callers pass the raw conn rather than a
+// pre-constructed client so the constructor can build both.
+func newPluginHostFocusClient(conn grpc.ClientConnInterface) FocusClient {
+	return &pluginHostFocusClient{
+		client:              hostv1.NewFocusServiceClient(conn),
+		streamHistoryClient: hostv1.NewStreamHistoryServiceClient(conn),
+	}
 }
 
-func fromProtoFocusKind(k pluginv1.FocusKind) FocusKind {
+func fromProtoFocusKind(k hostv1.FocusKind) FocusKind {
 	switch k {
-	case pluginv1.FocusKind_FOCUS_KIND_SCENE:
+	case hostv1.FocusKind_FOCUS_KIND_SCENE:
 		return FocusKindScene
 	default:
 		return FocusKind("")
 	}
 }
 
-func toProtoFocusKind(k FocusKind) pluginv1.FocusKind {
+func toProtoFocusKind(k FocusKind) hostv1.FocusKind {
 	switch k {
 	case FocusKindScene:
-		return pluginv1.FocusKind_FOCUS_KIND_SCENE
+		return hostv1.FocusKind_FOCUS_KIND_SCENE
 	default:
-		return pluginv1.FocusKind_FOCUS_KIND_UNSPECIFIED
+		return hostv1.FocusKind_FOCUS_KIND_UNSPECIFIED
 	}
 }
 
-func toProtoFocusKey(key FocusKey) *pluginv1.FocusKey {
-	return &pluginv1.FocusKey{
+func toProtoFocusKey(key FocusKey) *hostv1.FocusKey {
+	return &hostv1.FocusKey{
 		Kind:     toProtoFocusKind(key.Kind),
 		TargetId: key.TargetID,
 	}
@@ -255,7 +265,7 @@ func (c *pluginHostFocusClient) JoinFocus(ctx context.Context, sessionID string,
 	if c.client == nil {
 		return oops.New("plugin host focus client is not configured")
 	}
-	_, err := c.client.JoinFocus(ctx, &pluginv1.PluginHostServiceJoinFocusRequest{
+	_, err := c.client.JoinFocus(ctx, &hostv1.JoinFocusRequest{
 		SessionId: sessionID,
 		Target:    toProtoFocusKey(target),
 	})
@@ -266,7 +276,7 @@ func (c *pluginHostFocusClient) LeaveFocus(ctx context.Context, sessionID string
 	if c.client == nil {
 		return oops.New("plugin host focus client is not configured")
 	}
-	_, err := c.client.LeaveFocus(ctx, &pluginv1.PluginHostServiceLeaveFocusRequest{
+	_, err := c.client.LeaveFocus(ctx, &hostv1.LeaveFocusRequest{
 		SessionId: sessionID,
 		Target:    toProtoFocusKey(target),
 	})
@@ -277,7 +287,7 @@ func (c *pluginHostFocusClient) LeaveFocusByTarget(ctx context.Context, target F
 	if c.client == nil {
 		return LeaveByTargetResult{}, oops.New("plugin host focus client is not configured")
 	}
-	resp, err := c.client.LeaveFocusByTarget(ctx, &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
+	resp, err := c.client.LeaveFocusByTarget(ctx, &hostv1.LeaveFocusByTargetRequest{
 		Target: toProtoFocusKey(target),
 	})
 	if err != nil {
@@ -302,7 +312,7 @@ func (c *pluginHostFocusClient) PresentFocus(ctx context.Context, sessionID stri
 	if c.client == nil {
 		return oops.New("plugin host focus client is not configured")
 	}
-	_, err := c.client.PresentFocus(ctx, &pluginv1.PluginHostServicePresentFocusRequest{
+	_, err := c.client.PresentFocus(ctx, &hostv1.PresentFocusRequest{
 		SessionId: sessionID,
 		Target:    toProtoFocusKey(target),
 	})
@@ -317,7 +327,7 @@ func (c *pluginHostFocusClient) SetConnectionFocus(ctx context.Context, connecti
 	if err != nil {
 		return oops.Code("INVALID_ULID").With("connection_id", connectionID).Wrap(err)
 	}
-	req := &pluginv1.PluginHostServiceSetConnectionFocusRequest{
+	req := &hostv1.SetConnectionFocusRequest{
 		ConnectionId: connID.Bytes(),
 		IsSceneGrid:  isSceneGrid,
 	}
@@ -359,7 +369,7 @@ func (c *pluginHostFocusClient) GetConnectionFocus(ctx context.Context, connecti
 	if err != nil {
 		return nil, oops.Code("INVALID_ULID").With("connection_id", connectionID).Wrap(err)
 	}
-	resp, err := c.client.GetConnectionFocus(ctx, &pluginv1.PluginHostServiceGetConnectionFocusRequest{
+	resp, err := c.client.GetConnectionFocus(ctx, &hostv1.GetConnectionFocusRequest{
 		ConnectionId: connULID.Bytes(),
 	})
 	if err != nil {
@@ -400,7 +410,7 @@ func (c *pluginHostFocusClient) IsAnyConnFocused(ctx context.Context, characterI
 	if err != nil {
 		return false, oops.Code("INVALID_ULID").With("scene_id", sceneID).Wrap(err)
 	}
-	resp, err := c.client.IsAnyConnFocused(ctx, &pluginv1.PluginHostServiceIsAnyConnFocusedRequest{
+	resp, err := c.client.IsAnyConnFocused(ctx, &hostv1.IsAnyConnFocusedRequest{
 		CharacterId: charULID.Bytes(),
 		SceneId:     sceneULID.Bytes(),
 	})
@@ -426,7 +436,7 @@ func (c *pluginHostFocusClient) AutoFocusOnJoin(ctx context.Context, characterID
 	if err != nil {
 		return AutoFocusOnJoinResult{}, oops.Code("INVALID_ULID").With("scene_id", sceneID).Wrap(err)
 	}
-	resp, err := c.client.AutoFocusOnJoin(ctx, &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
+	resp, err := c.client.AutoFocusOnJoin(ctx, &hostv1.AutoFocusOnJoinRequest{
 		CharacterId: charULID.Bytes(),
 		SceneId:     sceneULID.Bytes(),
 	})
@@ -504,7 +514,7 @@ func bytesToULID(raw []byte) (ulid.ULID, bool) {
 const queryStreamHistoryCountConversionMax int32 = 1 << 30
 
 func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req QueryStreamHistoryRequest) (QueryStreamHistoryResponse, error) {
-	if c.client == nil {
+	if c.streamHistoryClient == nil {
 		return QueryStreamHistoryResponse{}, oops.New("plugin host focus client is not configured")
 	}
 	var notBeforeMs int64
@@ -520,7 +530,7 @@ func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req Quer
 	default:
 		count = int32(req.Count) // bounds-checked above
 	}
-	resp, err := c.client.QueryStreamHistory(ctx, &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+	resp, err := c.streamHistoryClient.QueryStreamHistory(ctx, &hostv1.QueryStreamHistoryRequest{
 		Stream:      req.Stream,
 		Count:       count,
 		NotBeforeMs: notBeforeMs,
@@ -635,8 +645,9 @@ func codeFromStatus(st *status.Status) string {
 	return ""
 }
 
-// newFocusClientFromBroker dials the plugin host service via the broker
-// and returns a FocusClient. See broker.go for the shared dial helper.
+// newFocusClientFromBroker dials the plugin host via the broker and returns
+// a FocusClient backed by FocusService + StreamHistoryService over the same
+// conn. See broker.go for the shared dial helper.
 func newFocusClientFromBroker(broker brokerDialer, services map[string]string) (FocusClient, error) {
 	if broker == nil {
 		return nil, oops.New("plugin host broker is not configured")
@@ -645,5 +656,5 @@ func newFocusClientFromBroker(broker brokerDialer, services map[string]string) (
 	if err != nil {
 		return nil, err
 	}
-	return newPluginHostFocusClient(pluginv1.NewPluginHostServiceClient(conn)), nil
+	return newPluginHostFocusClient(conn), nil
 }

@@ -19,7 +19,7 @@ import (
 // delegate to. It is a PURE store partition seam: trust checks (actor recovery,
 // principal ownership, GAME-write operator authorization) happen in the hostfunc
 // layer above (getSettingFn / setSettingFn), exactly as the binary
-// PluginHostService performs them before touching the store. The adapter that
+// host.v1 SettingsService performs them before touching the store. The adapter that
 // satisfies this interface (internal/plugin/lua.settingsStoresOpsAdapter)
 // selects the store by scope, binds .Plugin(pluginName), and performs
 // StringSliceN / SetStringSlice — mirroring the binary GetSetting / SetSetting
