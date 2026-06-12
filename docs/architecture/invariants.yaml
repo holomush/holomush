@@ -3761,7 +3761,9 @@ invariants:
     summary: "Binary and Lua plugins MUST obtain every declared dependency through the one host gRPC broker, gated by the
       declaration and authorized as PluginSubject; neither runtime MAY receive an undeclared capability or service. Consumption-path
       facet of plugin-runtime-symmetry; distinct from INV-CRYPTO-34 (emit/fence/audit path)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/integration/pluginparity/parity_test.go"
   - id: INV-PLUGIN-45
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
