@@ -16,6 +16,9 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Extract HostCapabilities port; relocate host.v1 servers to runtime-neutral package](holomush-l5bqb-extract-hostcapabilities-port-relocate-host-v1-servers-runti.md) | 2026-06-12 | Accepted | `holomush-l5bqb` |
+| [Split Lua bridge by proto ownership: codegen host caps, descriptor-driven plugin services](holomush-ws2mi-split-lua-bridge-by-proto-ownership-codegen-host-caps-descri.md) | 2026-06-12 | Accepted | `holomush-ws2mi` |
+| [Per-plugin bufconn server for host-established Lua plugin identity](holomush-elqw4-per-plugin-bufconn-server-host-established-lua-plugin-identi.md) | 2026-06-12 | Accepted | `holomush-elqw4` |
 | [Domain-primary carving axis for host capability services](holomush-nbscl-domain-primary-carving-axis-host-capability-services.md) | 2026-06-12 | Accepted | `holomush-nbscl` |
 | [Dedicated holomush.plugin.host.v1 namespace; WorldService kept as coexisting domain service](holomush-e9go5-dedicated-holomush-plugin-host-v1-namespace-worldservice-kep.md) | 2026-06-12 | Accepted | `holomush-e9go5` |
 | [Ambient runtime substrate below the capability model; retire the Log RPC](holomush-cryy2-ambient-runtime-substrate-below-capability-model-retire-log.md) | 2026-06-12 | Accepted | `holomush-cryy2` |
