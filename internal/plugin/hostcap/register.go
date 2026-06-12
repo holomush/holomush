@@ -36,8 +36,8 @@ const (
 // BinaryDefaultSet; the Lua per-plugin server (§1, Task 5) will call it with
 // LuaDefaultSet.
 //
-// TODO(holomush-eykuh.2.4): once sessionServer lands (Task 4), add it to the
-// LuaDefaultSet branch. TODO(holomush-eykuh.2.5): once worldServer lands (Task 5),
+// SessionService and SessionAdminService are registered in the LuaDefaultSet
+// branch (Task 4). TODO(holomush-eykuh.2.5): once worldServer lands (Task 5),
 // add it to the LuaDefaultSet branch. PropertyService is now registered there.
 func RegisterCapabilities(srv *grpc.Server, base hostCapabilityBase, set CapabilitySet) {
 	hostv1.RegisterFocusServiceServer(srv, &focusServer{hostCapabilityBase: base})
@@ -52,7 +52,8 @@ func RegisterCapabilities(srv *grpc.Server, base hostCapabilityBase, set Capabil
 
 	if set == LuaDefaultSet {
 		hostv1.RegisterPropertyServiceServer(srv, &propertyServer{hostCapabilityBase: base})
-		// TODO(holomush-eykuh.2.4): register sessionServer/sessionAdminServer once session.go lands (Task 4).
+		hostv1.RegisterSessionServiceServer(srv, &sessionServer{hostCapabilityBase: base})
+		hostv1.RegisterSessionAdminServiceServer(srv, &sessionAdminServer{hostCapabilityBase: base})
 		// TODO(holomush-eykuh.2.5): register worldServer once world.go lands (Task 5).
 	}
 }
