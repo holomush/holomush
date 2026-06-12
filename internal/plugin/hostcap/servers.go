@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package goplugin
+package hostcap
 
 import (
 	"context"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
@@ -29,15 +30,39 @@ import (
 // services. After the holomush-eykuh.1 decomposition (Task 12) these are the
 // SINGLE source of the authenticated host-callback logic: the former monolithic
 // pluginHostServiceServer is gone and each authoritative handler body lives on
-// the per-capability server for its domain (one capability per service). The
-// host internals (*Host, session.FocusKey, settings stores) are reached
-// directly; there is no longer a pluginv1<->hostv1 translation hop.
+// the per-capability server for its domain (one capability per service). After
+// the holomush-eykuh.2 relocation these bodies live in the runtime-neutral
+// hostcap package so both the binary (goplugin) and Lua runtimes consume the
+// SAME server implementations through the HostCapabilities port (INV-PLUGIN-49).
 //
 // hostCapabilityBase carries the host handle and the mTLS-bound plugin name; every
-// per-capability server embeds it so the shared *Host wiring is declared once.
+// per-capability server embeds it so the shared host wiring is declared once.
+//
+// host is the runtime-neutral hostcap.HostCapabilities port (holomush-eykuh.2),
+// not a concrete *Host: the same server bodies serve both the binary runtime
+// (where *Host satisfies the port, reading its fields under h.mu) and the Lua
+// runtime (where a hostfunc-backed adapter satisfies it). The port never exposes
+// the host mutex — every mutable-state read is a port method that locks
+// internally.
 type hostCapabilityBase struct {
-	host       *Host
+	host       HostCapabilities
 	pluginName string
+}
+
+// NewBase builds a hostCapabilityBase binding the given HostCapabilities port
+// adapter and the mTLS-bound (binary) or wiring-time-established (Lua) plugin
+// name. The base is embedded into every per-capability server. hostCapabilityBase
+// stays unexported — NewBase is the only construction surface — so callers wire
+// servers through NewBase + RegisterCapabilities (or the per-server constructors)
+// rather than reaching into the struct.
+// unexported by design (the public construction surface is NewBase +
+// RegisterCapabilities). Callers only ever pass the returned value straight back
+// into RegisterCapabilities / the New*Server constructors, never reaching into
+// the struct — so the opaque return type is the intended ergonomics, not a wart.
+//
+//nolint:revive // unexported-return is intentional: hostCapabilityBase stays
+func NewBase(host HostCapabilities, pluginName string) hostCapabilityBase {
+	return hostCapabilityBase{host: host, pluginName: pluginName}
 }
 
 // --- focusServer (FocusService: 8 RPCs) -------------------------------------
@@ -328,9 +353,7 @@ func (s *emitServer) EmitEvent(ctx context.Context, req *hostv1.EmitEventRequest
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
 
-	s.host.mu.RLock()
-	emitter := s.host.eventEmitter
-	s.host.mu.RUnlock()
+	emitter := s.host.EventEmitter()
 	if emitter == nil {
 		return nil, oops.With("plugin", s.pluginName).New("plugin event emitter is not configured")
 	}
@@ -343,35 +366,12 @@ func (s *emitServer) EmitEvent(ctx context.Context, req *hostv1.EmitEventRequest
 	// values are NOT trusted as identity claims at this boundary — the
 	// host uses the actor it stored at issue time. This closes the
 	// forgery surface (G1): a malicious plugin that substitutes the
-	// actor headers cannot escape the token's stored actor.
-	md, _ := metadata.FromIncomingContext(ctx)
-	tokens := md.Get("x-holomush-emit-token")
-	if len(tokens) == 0 || tokens[0] == "" {
-		return nil, oops.Code("EMIT_TOKEN_MISSING").
-			With("plugin", s.pluginName).
-			Errorf("plugin emitted without a host-issued dispatch token")
-	}
-
-	s.host.mu.RLock()
-	tokenStore := s.host.tokenStore
-	s.host.mu.RUnlock()
-	if tokenStore == nil {
-		return nil, oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
-			With("plugin", s.pluginName).
-			Errorf("plugin token store is not configured")
-	}
-
+	// actor headers cannot escape the token's stored actor. The port's
+	// LookupActor performs the token read + store lookup (binary adapter);
 	// EmitEvent does not need the owning player — actor identity is sufficient.
-	storedActor, _, ok := tokenStore.Lookup(s.pluginName, tokens[0])
-	if !ok {
-		slog.WarnContext(
-			ctx, "emitEvent rejected: token not valid for this plugin",
-			"plugin", s.pluginName,
-			"code", "EMIT_TOKEN_REJECTED",
-		)
-		return nil, oops.Code("EMIT_TOKEN_REJECTED").
-			With("plugin", s.pluginName).
-			Errorf("dispatch token is not valid for this plugin")
+	storedActor, _, err := s.host.LookupActor(ctx, s.pluginName)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
 
 	emitCtx := core.WithActor(ctx, storedActor)
@@ -411,16 +411,9 @@ func (s *emitServer) EmitEvent(ctx context.Context, req *hostv1.EmitEventRequest
 //     dispatch token; this self-token cannot grant that elevation.
 //
 // (Spec §3.3.5 / §5.4 — two-token pattern.)
-func (s *emitServer) RequestEmitToken(_ context.Context, _ *hostv1.RequestEmitTokenRequest) (*hostv1.RequestEmitTokenResponse, error) {
+func (s *emitServer) RequestEmitToken(ctx context.Context, _ *hostv1.RequestEmitTokenRequest) (*hostv1.RequestEmitTokenResponse, error) {
 	if s.host == nil {
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
-	}
-
-	s.host.mu.RLock()
-	tokenStore := s.host.tokenStore
-	s.host.mu.RUnlock()
-	if tokenStore == nil {
-		return nil, oops.With("plugin", s.pluginName).New("plugin token store is not configured")
 	}
 
 	// HARDCODED actor: ActorPlugin + the mTLS-bound plugin name resolved
@@ -430,21 +423,31 @@ func (s *emitServer) RequestEmitToken(_ context.Context, _ *hostv1.RequestEmitTo
 	// event_emitter.go::Emit rejects non-ULID actor IDs with
 	// ACTOR_ID_NOT_ULID, so we MUST resolve a ULID here — using the plain
 	// plugin name as ActorID would break every plugin self-token emit.
-	storedActor, stampErr := stampPluginActor(s.host.identityRegistrySnapshot(), s.pluginName)
-	if stampErr != nil {
-		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
-			With("plugin", s.pluginName).
-			Wrap(stampErr)
+	// Stamp the self-token actor only when an identity registry exists. A nil
+	// registry means the runtime has no emit-token forgery surface at all (the
+	// Lua adapter returns nil): synthesizing a PLUGIN_UNREGISTERED_INVOKE here
+	// would mask the adapter's intended UNSUPPORTED_OPERATION error and produce
+	// observable cross-runtime contract drift. Leave the zero actor and let
+	// IssueEmitToken give the runtime-appropriate answer. Binary always has a
+	// registry, so a genuine missing-name PLUGIN_UNREGISTERED_INVOKE is preserved.
+	var storedActor core.Actor
+	if reg := s.host.IdentityRegistrySnapshot(); reg != nil {
+		var stampErr error
+		storedActor, stampErr = stampPluginActor(reg, s.pluginName)
+		if stampErr != nil {
+			return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
+				With("plugin", s.pluginName).
+				Wrap(stampErr)
+		}
 	}
 
-	// Self-tokens carry no player context (no DeliverCommand dispatch), so the
-	// owning player is "" — PLAYER-scope settings from a self-token path fail
-	// closed, consistent with DeliverEvent.
-	token, err := tokenStore.Issue(s.pluginName, storedActor, "")
+	// IssueEmitToken mints the self-token via the port (binary adapter reads the
+	// token store). Self-tokens carry no player context (no DeliverCommand
+	// dispatch), so the owning player is "" — PLAYER-scope settings from a
+	// self-token path fail closed, consistent with DeliverEvent.
+	token, err := s.host.IssueEmitToken(ctx, s.pluginName, storedActor)
 	if err != nil {
-		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
-			With("plugin", s.pluginName).
-			Wrap(err)
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
 
 	return &hostv1.RequestEmitTokenResponse{Token: token}, nil
@@ -494,13 +497,9 @@ func (s *evalServer) Evaluate(ctx context.Context, req *hostv1.EvaluateRequest) 
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
 
-	// Snapshot engine, auditor, and tokenStore under a single RLock, then release
-	// before delegating — avoids holding the lock across the engine call.
-	s.host.mu.RLock()
-	eng := s.host.engine
-	auditor := s.host.auditor
-	tokenStore := s.host.tokenStore
-	s.host.mu.RUnlock()
+	// Snapshot engine and auditor via the port (each accessor locks internally).
+	eng := s.host.AccessEngine()
+	auditor := s.host.Auditor()
 
 	if eng == nil {
 		return nil, oops.Code("EVALUATE_ENGINE_UNCONFIGURED").
@@ -511,35 +510,15 @@ func (s *evalServer) Evaluate(ctx context.Context, req *hostv1.EvaluateRequest) 
 	// Token-based authentication — mirrors EmitEvent §3.3.5 exactly:
 	// read the host-issued dispatch token from the incoming metadata header;
 	// look up the stored actor; never trust plugin-supplied identity claims.
-	md, _ := metadata.FromIncomingContext(ctx)
-	tokens := md.Get("x-holomush-emit-token")
-	if len(tokens) == 0 || tokens[0] == "" {
-		return nil, oops.Code("EMIT_TOKEN_MISSING").
-			With("plugin", s.pluginName).
-			Errorf("plugin evaluated without a host-issued dispatch token")
-	}
-
-	if tokenStore == nil {
-		return nil, oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
-			With("plugin", s.pluginName).
-			Errorf("plugin token store is not configured")
-	}
-
-	// Evaluate does not need the owning player — actor identity is sufficient.
-	storedActor, _, ok := tokenStore.Lookup(s.pluginName, tokens[0])
-	if !ok {
-		slog.WarnContext(
-			ctx, "evaluate rejected: token not valid for this plugin",
-			"plugin", s.pluginName,
-			"code", "EMIT_TOKEN_REJECTED",
-		)
-		return nil, oops.Code("EMIT_TOKEN_REJECTED").
-			With("plugin", s.pluginName).
-			Errorf("dispatch token is not valid for this plugin")
+	// The port's LookupActor performs the read + lookup; Evaluate does not need
+	// the owning player — actor identity is sufficient.
+	storedActor, _, err := s.host.LookupActor(ctx, s.pluginName)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
 
 	subject := pluginauthz.ActorSubject(storedActor)
-	ownedTypes := s.host.ownedResourceTypes(s.pluginName)
+	ownedTypes := s.host.OwnedResourceTypes(s.pluginName)
 
 	dec, err := pluginauthz.Evaluate(ctx, pluginauthz.Input{
 		Engine:     eng,
@@ -789,9 +768,7 @@ func (b *hostCapabilityBase) requirePrincipalOwnership(principalID, expectedOwne
 // A deny → PermissionDenied; an engine/build failure is logged and surfaced as
 // a generic Internal (no inner-error leak).
 func (b *hostCapabilityBase) authorizeGameWrite(ctx context.Context, subject string) error {
-	b.host.mu.RLock()
-	eng := b.host.engine
-	b.host.mu.RUnlock()
+	eng := b.host.AccessEngine()
 	// Fail closed on a nil engine: a GAME write cannot be authorized without
 	// the ABAC engine, so deny rather than nil-deref on eng.Evaluate below.
 	// Unimplemented mirrors the nil-store guard in resolveSettingScope.
@@ -828,32 +805,16 @@ func (b *hostCapabilityBase) authorizeGameWrite(ctx context.Context, subject str
 // Fails closed on missing token, unconfigured store, or a token not valid for
 // this plugin.
 func (b *hostCapabilityBase) actorFromToken(ctx context.Context) (core.Actor, string, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-	tokens := md.Get("x-holomush-emit-token")
-	if len(tokens) == 0 || tokens[0] == "" {
-		return core.Actor{}, "", oops.Code("EMIT_TOKEN_MISSING").
-			With("plugin", b.pluginName).
-			Errorf("plugin called settings without a host-issued dispatch token")
+	// Delegate to the runtime-neutral port: the binary adapter reads the
+	// host-issued token from ctx metadata and looks up the stored actor; the
+	// Lua adapter recovers the connection-scoped actor from the context. The
+	// fail-closed codes (EMIT_TOKEN_MISSING / _STORE_UNCONFIGURED / _REJECTED)
+	// originate inside LookupActor.
+	actor, ownerPlayer, err := b.host.LookupActor(ctx, b.pluginName)
+	if err != nil {
+		return core.Actor{}, "", oops.With("plugin", b.pluginName).Wrap(err)
 	}
-
-	b.host.mu.RLock()
-	tokenStore := b.host.tokenStore
-	b.host.mu.RUnlock()
-	if tokenStore == nil {
-		return core.Actor{}, "", oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
-			With("plugin", b.pluginName).
-			Errorf("plugin token store is not configured")
-	}
-
-	storedActor, ownerPlayer, ok := tokenStore.Lookup(b.pluginName, tokens[0])
-	if !ok {
-		slog.WarnContext(ctx, "setting rejected: token not valid for this plugin",
-			"plugin", b.pluginName, "code", "EMIT_TOKEN_REJECTED")
-		return core.Actor{}, "", oops.Code("EMIT_TOKEN_REJECTED").
-			With("plugin", b.pluginName).
-			Errorf("dispatch token is not valid for this plugin")
-	}
-	return storedActor, ownerPlayer, nil
+	return actor, ownerPlayer, nil
 }
 
 // --- streamHistoryServer (StreamHistoryService: QueryStreamHistory) ---------
@@ -999,9 +960,7 @@ func (s *commandRegistryServer) ListCommands(ctx context.Context, req *hostv1.Li
 	if s.host == nil {
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	s.host.mu.RLock()
-	q := s.host.commandQuerier
-	s.host.mu.RUnlock()
+	q := s.host.CommandQuerier()
 	if q == nil {
 		return nil, oops.Code("COMMAND_QUERIER_UNCONFIGURED").With("plugin", s.pluginName).Errorf("command querier is not configured")
 	}
@@ -1032,9 +991,7 @@ func (s *commandRegistryServer) GetCommandHelp(ctx context.Context, req *hostv1.
 	if s.host == nil {
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	s.host.mu.RLock()
-	q := s.host.commandQuerier
-	s.host.mu.RUnlock()
+	q := s.host.CommandQuerier()
 	if q == nil {
 		return nil, oops.Code("COMMAND_QUERIER_UNCONFIGURED").With("plugin", s.pluginName).Errorf("command querier is not configured")
 	}
@@ -1064,4 +1021,181 @@ func (s *commandRegistryServer) GetCommandHelp(ctx context.Context, req *hostv1.
 type kvServer struct {
 	hostv1.UnimplementedKVServiceServer
 	hostCapabilityBase
+}
+
+// --- converters & helpers ---------------------------------------------------
+//
+// These conversion helpers moved with the server bodies (holomush-eykuh.2): they
+// are the proto↔domain glue the relocated servers call and have no consumer
+// outside this package.
+
+// leaveByTargetResultToProto converts the host-side sweep result to the
+// wire format. Callers reconstruct partial-success state from
+// succeeded + len(failed_session_ids) == total_scanned.
+func leaveByTargetResultToProto(r session.LeaveByTargetResult) *hostv1.LeaveFocusByTargetResponse {
+	resp := &hostv1.LeaveFocusByTargetResponse{
+		Succeeded:    clampCountToInt32(r.Succeeded),
+		TotalScanned: clampCountToInt32(r.TotalScanned),
+	}
+	if len(r.Failed) > 0 {
+		resp.FailedSessionIds = make([]string, 0, len(r.Failed))
+		for _, f := range r.Failed {
+			resp.FailedSessionIds = append(resp.FailedSessionIds, f.SessionID)
+		}
+	}
+	return resp
+}
+
+// clampCountToInt32 narrows a Go int to proto int32 safely. The session count
+// is bounded by live-session capacity (far below math.MaxInt32 in any realistic
+// deployment), but explicit bounds keep gosec quiet and guard against future
+// 64-bit-only callers.
+func clampCountToInt32(n int) int32 {
+	switch {
+	case n < 0:
+		return 0
+	case n > math.MaxInt32:
+		return math.MaxInt32
+	default:
+		return int32(n)
+	}
+}
+
+// focusKeyToProto converts a session.FocusKey to the host.v1 FocusKey type.
+func focusKeyToProto(fk session.FocusKey) *hostv1.FocusKey {
+	return &hostv1.FocusKey{
+		Kind:     focusKindToProto(fk.Kind),
+		TargetId: fk.TargetID.String(),
+	}
+}
+
+// focusKindToProto maps session.FocusKind to host.v1 FocusKind.
+func focusKindToProto(k session.FocusKind) hostv1.FocusKind {
+	switch k {
+	case session.FocusKindScene:
+		return hostv1.FocusKind_FOCUS_KIND_SCENE
+	default:
+		return hostv1.FocusKind_FOCUS_KIND_UNSPECIFIED
+	}
+}
+
+// bytesToULID converts a 16-byte proto bytes field to ulid.ULID.
+// Returns INVALID_ULID error on wrong length (proto3 bytes ULID fields
+// carry the 16-byte binary form, not the 26-char string encoding).
+func bytesToULID(b []byte) (ulid.ULID, error) {
+	if len(b) != 16 {
+		return ulid.ULID{}, oops.Code("INVALID_ULID").
+			Errorf("expected 16-byte ULID, got %d bytes", len(b))
+	}
+	var id ulid.ULID
+	copy(id[:], b)
+	return id, nil
+}
+
+// autoFocusFailureReasonToProto maps the string reason from AutoFocusOnJoin
+// to the host.v1 FocusFailureReason enum.
+func autoFocusFailureReasonToProto(reason string) hostv1.FocusFailureReason {
+	switch reason {
+	case "membership_absent":
+		return hostv1.FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT
+	case "connection_not_found":
+		return hostv1.FocusFailureReason_FOCUS_FAILURE_REASON_CONNECTION_NOT_FOUND
+	default:
+		return hostv1.FocusFailureReason_FOCUS_FAILURE_REASON_UNSPECIFIED
+	}
+}
+
+// protoToFocusKey converts a host.v1 FocusKey to the session.FocusKey domain type.
+func protoToFocusKey(pk *hostv1.FocusKey) (session.FocusKey, error) {
+	if pk == nil {
+		return session.FocusKey{}, oops.Code("INVALID_ARGUMENT").
+			Errorf("focus key is required")
+	}
+
+	targetID, err := ulid.Parse(pk.GetTargetId())
+	if err != nil {
+		return session.FocusKey{}, oops.Code("INVALID_ARGUMENT").
+			With("target_id", pk.GetTargetId()).
+			Wrap(err)
+	}
+
+	kind, err := protoToFocusKind(pk.GetKind())
+	if err != nil {
+		return session.FocusKey{}, err
+	}
+
+	return session.FocusKey{Kind: kind, TargetID: targetID}, nil
+}
+
+// protoToFocusKind maps host.v1 FocusKind to session.FocusKind.
+func protoToFocusKind(pk hostv1.FocusKind) (session.FocusKind, error) {
+	switch pk {
+	case hostv1.FocusKind_FOCUS_KIND_SCENE:
+		return session.FocusKindScene, nil
+	default:
+		return "", oops.Code("FOCUS_KIND_UNREGISTERED").
+			With("kind", pk.String()).
+			Errorf("unsupported focus kind: %s", pk.String())
+	}
+}
+
+const maxQueryStreamHistoryCount = 500
+
+// encodeHostEventCursor encodes an event ULID into an opaque host cursor
+// token for the plugin → host boundary. Seq is not available here (the
+// plugins.HistoryReader.ReplayTail interface returns core.Event without Seq),
+// so Seq=0 is used. The cold tier handles Seq=0 as "ID-only" fallback.
+// Returns nil on encoding failure (non-fatal; client cannot paginate from
+// this event but the page result is still valid).
+func encodeHostEventCursor(id ulid.ULID) []byte {
+	b, err := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
+		Host:    &cursor.HostCursor{Seq: 0, ID: id},
+	})
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// coreEventToProto converts a core.Event to the host.v1 Event.
+func coreEventToProto(e core.Event) *hostv1.Event {
+	return &hostv1.Event{
+		Id:        e.ID.String(),
+		Stream:    e.Stream,
+		Type:      string(e.Type),
+		Timestamp: e.Timestamp.UnixMilli(),
+		ActorKind: e.Actor.Kind.String(),
+		ActorId:   e.Actor.ID,
+		Payload:   string(e.Payload),
+	}
+}
+
+// stampPluginActor resolves a plugin name to a core.Actor with a ULID-string
+// ID via the IdentityRegistry. Returns PLUGIN_UNREGISTERED_INVOKE if the
+// plugin is not active in the registry, or if the registry is nil (which is
+// operationally equivalent: "no registry" and "registry doesn't have plugin"
+// both mean the ULID cannot be resolved). This defensive nil-check keeps
+// existing test fixtures that construct a host directly without registering it
+// safe — they'll receive a clean error rather than a nil-pointer panic.
+//
+// A goplugin-private twin (goplugin.stampPluginActor) backs the binary host's
+// own self-token paths; this copy is the runtime-neutral one the relocated
+// emitServer.RequestEmitToken calls through the port snapshot. Both operate
+// purely on the plugins.IdentityRegistry port, so they cannot drift in policy.
+func stampPluginActor(reg plugins.IdentityRegistry, name string) (core.Actor, error) {
+	if reg == nil {
+		return core.Actor{}, oops.Code("PLUGIN_UNREGISTERED_INVOKE").
+			With("plugin", name).
+			Errorf("IdentityRegistry not configured on Host")
+	}
+	id, ok := reg.IDByName(name)
+	if !ok {
+		return core.Actor{}, oops.Code("PLUGIN_UNREGISTERED_INVOKE").
+			With("plugin", name).
+			Errorf("plugin not registered in IdentityRegistry")
+	}
+	return core.Actor{Kind: core.ActorPlugin, ID: id.String()}, nil
 }

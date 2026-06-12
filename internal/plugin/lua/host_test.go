@@ -2134,3 +2134,71 @@ error("intentional capture-pass failure")
 		"hint must surface that the capture pass failed")
 	assert.Equal(t, "load", oopsErr.Context()["operation"])
 }
+
+// TestLegacyHostFuncInjectionUnchangedWhenBridgeEnabledForOtherPlugin asserts
+// the coexistence guarantee (spec §5): a plugin NOT in the WithHostCapBridge
+// allowlist receives the full legacy hostfunc-shim global injection exactly as
+// before — the new host-capability bridge's existence does not regress it.
+//
+// The existing TestHostCapBridgeOptedOutPluginUnaffected proves the NEGATIVE
+// half (an opted-out plugin gets no NEW bridge global, e.g. kv). This test
+// proves the POSITIVE complement that §5 actually promises: the LEGACY globals
+// the opted-out plugin depends on (the holomush module and its functions —
+// holomush.new_request_id, holomush.log) are still present and functional. A
+// regression that gated legacy injection behind the bridge opt-in would break
+// this even though the negative test stayed green.
+//
+// Construction: the bridge is enabled for a DIFFERENT plugin ("bridge-plugin")
+// via WithHostCapBridge, so the new bridge path EXISTS on the host; the
+// plugin under test ("legacy-plugin") is deliberately absent from the allowlist
+// and must therefore travel the unchanged legacy hostfunc.Register path.
+func TestLegacyHostFuncInjectionUnchangedWhenBridgeEnabledForOtherPlugin(t *testing.T) {
+	dir := t.TempDir()
+
+	// The plugin exercises the legacy holomush.* globals. If any were missing,
+	// the Lua call would raise (attempt to call a nil value) and DeliverEvent
+	// would return an error. It echoes the request_id into the emit payload so
+	// the test can confirm the legacy hostfunc actually ran, not merely existed.
+	writeMainLua(t, dir, `
+function on_event(event)
+    assert(type(holomush) == "table", "legacy holomush module must be injected")
+    assert(type(holomush.new_request_id) == "function", "legacy holomush.new_request_id must be injected")
+    assert(type(holomush.log) == "function", "legacy holomush.log must be injected")
+    local id = holomush.new_request_id()
+    holomush.log("info", "legacy path ran for: " .. event.type)
+    return {{
+        subject = event.stream,
+        type = "say",
+        payload = '{"request_id":"' .. id .. '"}'
+    }}
+end
+`)
+
+	// Bridge is enabled for a DIFFERENT plugin, so the bridge path exists on the
+	// host while "legacy-plugin" stays on the unchanged legacy injection path.
+	host := pluginlua.NewHostWithFunctions(
+		hostfunc.New(nil),
+		pluginlua.WithHostCapBridge("bridge-plugin"),
+	)
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "legacy-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+	require.NoError(t, host.Load(context.Background(), manifest, dir))
+
+	emits, err := host.DeliverEvent(context.Background(), "legacy-plugin", pluginsdk.Event{
+		ID:     "01LEGACY",
+		Stream: "location:1",
+		Type:   "say",
+	})
+	require.NoError(t, err,
+		"legacy hostfunc globals MUST remain injected unchanged for a non-bridge plugin (spec §5)")
+	require.Len(t, emits, 1, "the legacy plugin's on_event must produce its emit")
+	assert.Contains(t, emits[0].Payload, "request_id",
+		"the emit payload must carry the request_id produced by the legacy holomush.new_request_id hostfunc, "+
+			"proving the legacy injection both EXISTS and RAN")
+}

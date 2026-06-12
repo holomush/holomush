@@ -5,7 +5,7 @@
 // importing or referencing symbols from
 // github.com/holomush/holomush/internal/eventbus/cursor outside the
 // host's natural homes (eventbus, grpc, web, plugin/goplugin,
-// plugin/hostfunc).
+// plugin/hostfunc, plugin/hostcap).
 //
 // Implementation note: walks all *ast.Ident nodes that resolve via
 // pass.TypesInfo.Uses to an object whose package is the cursor
@@ -40,6 +40,10 @@ var allowlist = []string{
 	"github.com/holomush/holomush/internal/web",
 	"github.com/holomush/holomush/internal/plugin/goplugin",
 	"github.com/holomush/holomush/internal/plugin/hostfunc",
+	// hostcap holds the runtime-neutral host.v1 capability servers relocated
+	// from goplugin (holomush-eykuh.2); QueryStreamHistory brokers cursors at
+	// the plugin host-callback boundary, exactly as goplugin did.
+	"github.com/holomush/holomush/internal/plugin/hostcap",
 }
 
 var Analyzer = &analysis.Analyzer{

@@ -117,7 +117,7 @@ scopes:
       - "internal/plugin/goplugin/host_service.go"
       # holomush-eykuh.1 Task 12: the RB/P7 host-callback handler bodies were
       # relocated off the deleted god-service onto the per-capability servers.
-      - "internal/plugin/goplugin/host_capability_servers.go"
+      - "internal/plugin/hostcap/servers.go"
       # CRYPTO+EVENTBUS+STORE: publisher carries GW + P7 + TS.
       - "internal/eventbus/publisher.go"
       - "internal/eventbus/types.go"
@@ -320,7 +320,7 @@ scopes:
       - "internal/plugin/goplugin/host_service.go"
       # holomush-eykuh.1 Task 12: the focus ULID-encoding-boundary body (INV-SCENE-22)
       # relocated off the deleted god-service onto the per-capability focus server.
-      - "internal/plugin/goplugin/host_capability_servers.go"
+      - "internal/plugin/hostcap/servers.go"
       # Shared integration harness (see CRYPTO.shared_files).
       - "internal/testsupport/integrationtest/harness.go"
 
@@ -409,7 +409,7 @@ scopes:
       # holomush-eykuh.1 Task 12: the evaluate + settings host-callback bodies
       # (INV-PLUGIN-22/27/28) relocated off the deleted god-service onto the
       # per-capability servers.
-      - "internal/plugin/goplugin/host_capability_servers.go"
+      - "internal/plugin/hostcap/servers.go"
       # PLUGIN+(S substrate): goplugin host (PC-8 + foreign INV-S5).
       - "internal/plugin/goplugin/host.go"
       - "internal/plugin/goplugin/host_test.go"
@@ -1086,7 +1086,7 @@ invariants:
       - {file: "internal/eventbus/authguard/guard.go", token: "INV-RB-2"}
       - {file: "internal/eventbus/history/readback.go", token: "INV-RB-2"}
       - {file: "internal/plugin/crypto_manifest.go", token: "INV-RB-2"}
-      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-RB-2"}
+      - {file: "internal/plugin/hostcap/servers.go", token: "INV-RB-2"}
       - {file: "internal/plugin/manager_test.go", token: "INV-RB-2"}
       - {file: "plugins/core-scenes/main_test.go", token: "INV-RB-2"}
       - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-2"}
@@ -1208,7 +1208,7 @@ invariants:
       - {file: "api/proto/holomush/plugin/v1/audit.proto", token: "INV-RB-12"}
       - {file: "api/proto/holomush/plugin/host/v1/audit.proto", token: "INV-RB-12"}
       - {file: "internal/eventbus/history/readback.go", token: "INV-RB-12"}
-      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-RB-12"}
+      - {file: "internal/plugin/hostcap/servers.go", token: "INV-RB-12"}
       - {file: "internal/plugin/host.go", token: "INV-RB-12"}
       - {file: "internal/plugin/hostfunc/stdlib_audit.go", token: "INV-RB-12"}
       - {file: "internal/plugin/hostfunc/stdlib_audit_test.go", token: "INV-RB-12"}
@@ -2835,7 +2835,7 @@ invariants:
       → INVALID_ULID; Go SDK + Lua round-trip a known ULID identically."
     binding: pending
     refs:
-      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-P5-9"}
+      - {file: "internal/plugin/hostcap/servers.go", token: "INV-P5-9"}
       - {file: "internal/plugin/hostfunc/stdlib_focus_test.go", token: "INV-P5-9"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-9"}
   - id: INV-SCENE-23
@@ -3501,12 +3501,14 @@ invariants:
     legacy: ["INV-1@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
     summary: "PluginHostService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field
       on the wire (never sourced from plugin/Lua-supplied data)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/goplugin/evaluate_invariants_test.go"
+      - "test/integration/pluginparity/parity_test.go"
     refs:
       - {file: "internal/plugin/pluginauthz/evaluate.go", token: "INV-1"}
       - {file: "internal/plugin/hostfunc/evaluate.go", token: "INV-1"}
       - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-1"}
-      - {file: "internal/plugin/goplugin/evaluate_invariants_test.go", token: "INV-1"}
       - {file: "api/proto/holomush/plugin/host/v1/eval.proto", token: "INV-1"}
   - id: INV-PLUGIN-23
     scope: INV-PLUGIN
@@ -3558,7 +3560,7 @@ invariants:
       access gate is the single shared path for both runtimes."
     binding: pending
     refs:
-      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-8"}
+      - {file: "internal/plugin/hostcap/servers.go", token: "INV-8"}
       - {file: "internal/plugin/hostfunc/functions.go", token: "INV-8"}
       - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-8"}
       - {file: "internal/plugin/hostfunc/stdlib_settings_test.go", token: "INV-8"}
@@ -3574,7 +3576,7 @@ invariants:
       plugin's owner partition."
     binding: pending
     refs:
-      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-11"}
+      - {file: "internal/plugin/hostcap/servers.go", token: "INV-11"}
       - {file: "internal/plugin/goplugin/host_settings_test.go", token: "INV-11"}
       - {file: "internal/plugin/lua/settings_ops_adapter_test.go", token: "INV-11"}
       - {file: "internal/plugin/pluginauthz/principal.go", token: "INV-11"}
@@ -3761,7 +3763,9 @@ invariants:
     summary: "Binary and Lua plugins MUST obtain every declared dependency through the one host gRPC broker, gated by the
       declaration and authorized as PluginSubject; neither runtime MAY receive an undeclared capability or service. Consumption-path
       facet of plugin-runtime-symmetry; distinct from INV-CRYPTO-34 (emit/fence/audit path)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/integration/pluginparity/parity_test.go"
   - id: INV-PLUGIN-45
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
@@ -3800,7 +3804,9 @@ invariants:
     summary: "A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific
       capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability
       surface."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/integration/pluginparity/parity_test.go"
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

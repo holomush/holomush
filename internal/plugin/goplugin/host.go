@@ -31,9 +31,13 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
+	"github.com/holomush/holomush/internal/property"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/internal/world"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -466,21 +470,23 @@ func (h *Host) SetIdentityRegistry(reg plugins.IdentityRegistry) {
 	h.identityRegistry = reg
 }
 
-// identityRegistrySnapshot returns the currently-configured registry under
+// IdentityRegistrySnapshot returns the currently-configured registry under
 // RLock. Stamp sites in DeliverEvent / DeliverCommand release h.mu before
 // invoking the registry, so a concurrent SetIdentityRegistry would race
 // against an unlocked read of the two-word interface value. Callers MUST
-// use this accessor rather than reading h.identityRegistry directly.
-func (h *Host) identityRegistrySnapshot() plugins.IdentityRegistry {
+// use this accessor rather than reading h.identityRegistry directly. Exported
+// to satisfy the hostcap.HostCapabilities port.
+func (h *Host) IdentityRegistrySnapshot() plugins.IdentityRegistry {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.identityRegistry
 }
 
-// ownedResourceTypes returns a map of resource type names owned by the named
+// OwnedResourceTypes returns a map of resource type names owned by the named
 // plugin (from its manifest's ResourceTypes field), guarded by RLock. Returns
 // nil when the plugin is not loaded. Used by Evaluate's entitlement check.
-func (h *Host) ownedResourceTypes(pluginName string) map[string]bool {
+// Exported to satisfy the hostcap.HostCapabilities port.
+func (h *Host) OwnedResourceTypes(pluginName string) map[string]bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	lp, ok := h.plugins[pluginName]
@@ -492,6 +498,136 @@ func (h *Host) ownedResourceTypes(pluginName string) map[string]bool {
 		m[rt] = true
 	}
 	return m
+}
+
+// --- hostcap.HostCapabilities port accessors --------------------------------
+//
+// These promote the previously direct h.<field> reads in the host.v1 capability
+// servers to internally-locking accessor methods, so the servers can depend on
+// the runtime-neutral hostcap.HostCapabilities port instead of *Host
+// (holomush-eykuh.2). Each mutable-state read takes h.mu so the port never
+// exposes the mutex. The Session/Property/World methods have no binary backing
+// — the binary capability set does not register those servers — so they return
+// the zero value; the Lua adapter wires them from *hostfunc.Functions.
+
+// AccessEngine returns the ABAC policy engine, or nil if not configured.
+func (h *Host) AccessEngine() types.AccessPolicyEngine {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.engine
+}
+
+// Auditor returns the plugin-authz auditor, or nil if not configured.
+func (h *Host) Auditor() pluginauthz.Auditor {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.auditor
+}
+
+// EventEmitter returns the plugin intent emitter, or nil if not configured.
+func (h *Host) EventEmitter() plugins.PluginIntentEmitter {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.eventEmitter
+}
+
+// CommandQuerier returns the command-visibility querier, or nil if not configured.
+func (h *Host) CommandQuerier() *commandquery.Querier {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.commandQuerier
+}
+
+// LookupActor recovers the host-issued dispatch-token actor AND the host-vouched
+// owning player ULID from the incoming metadata, mirroring the binary token
+// recovery. Plugin-supplied identity claims are never trusted. The owning player
+// is "" when the dispatch had no player context. Fails closed on a missing
+// token, an unconfigured store, or a token not valid for this plugin. Satisfies
+// hostcap.HostCapabilities (the binary half of the runtime-neutral
+// LookupActor — the Lua adapter reads core.ActorFromContext instead).
+func (h *Host) LookupActor(ctx context.Context, pluginName string) (core.Actor, string, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	tokens := md.Get("x-holomush-emit-token")
+	if len(tokens) == 0 || tokens[0] == "" {
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_MISSING").
+			With("plugin", pluginName).
+			Errorf("plugin called host capability without a host-issued dispatch token")
+	}
+
+	h.mu.RLock()
+	tokenStore := h.tokenStore
+	h.mu.RUnlock()
+	if tokenStore == nil {
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
+			With("plugin", pluginName).
+			Errorf("plugin token store is not configured")
+	}
+
+	storedActor, ownerPlayer, ok := tokenStore.Lookup(pluginName, tokens[0])
+	if !ok {
+		slog.WarnContext(ctx, "host capability rejected: token not valid for this plugin",
+			"plugin", pluginName, "code", "EMIT_TOKEN_REJECTED")
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_REJECTED").
+			With("plugin", pluginName).
+			Errorf("dispatch token is not valid for this plugin")
+	}
+	return storedActor, ownerPlayer, nil
+}
+
+// IssueEmitToken mints a self-token bound to {actor, pluginName} via the token
+// store (the binary RequestEmitToken path). Self-tokens carry no player context
+// (no DeliverCommand dispatch), so the owning player is "". Satisfies
+// hostcap.HostCapabilities (the Lua adapter returns an unsupported error — no
+// Lua forgery surface).
+func (h *Host) IssueEmitToken(_ context.Context, pluginName string, actor core.Actor) (string, error) {
+	h.mu.RLock()
+	tokenStore := h.tokenStore
+	h.mu.RUnlock()
+	if tokenStore == nil {
+		return "", oops.With("plugin", pluginName).New("plugin token store is not configured")
+	}
+	token, err := tokenStore.Issue(pluginName, actor, "")
+	if err != nil {
+		return "", oops.Code("EMIT_TOKEN_ISSUE_FAILED").
+			With("plugin", pluginName).
+			Wrap(err)
+	}
+	return token, nil
+}
+
+// PropertyDefinition resolves a registry property by name. The binary host has
+// no property registry — the PropertyService is registered only in the Lua
+// capability set — so this returns (nil, false). Satisfies
+// hostcap.HostCapabilities.
+func (h *Host) PropertyDefinition(string) (property.Definition, bool) {
+	return nil, false
+}
+
+// WorldQuerier returns the plugin-subject-stamped world read surface. The binary
+// host has no world surface (the WorldQueryService is Lua-only), so it returns
+// nil. Satisfies hostcap.HostCapabilities.
+func (h *Host) WorldQuerier(string) hostcap.WorldQuerier {
+	return nil
+}
+
+// WorldMutator returns the world write surface. The binary host has no world
+// surface, so it returns nil. Satisfies hostcap.HostCapabilities.
+func (h *Host) WorldMutator() world.Mutator {
+	return nil
+}
+
+// SessionAccess returns the session read/update surface. The binary host has no
+// session surface (the SessionService is Lua-only), so it returns nil. Satisfies
+// hostcap.HostCapabilities.
+func (h *Host) SessionAccess() session.Access {
+	return nil
+}
+
+// SessionAdmin returns the admin session surface (broadcast/disconnect). The
+// binary host has no consumer (the SessionAdminService is Lua-only), so it
+// returns nil. Satisfies hostcap.HostCapabilities.
+func (h *Host) SessionAdmin() hostcap.SessionAdmin {
+	return nil
 }
 
 // Load initializes a plugin from its manifest.
@@ -833,7 +969,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	// Per spec §3.3.4: compute the stored actor with re-anchor for ActorSystem.
 	// Plugins never speak as the host's system identity — when the upstream
 	// ctx carries ActorSystem the host re-anchors to ActorPlugin:<ULID>.
-	storedActor, err := stampPluginActor(h.identityRegistrySnapshot(), name)
+	storedActor, err := stampPluginActor(h.IdentityRegistrySnapshot(), name)
 	if err != nil {
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "stamp_actor").Wrap(err)
 	}
@@ -904,7 +1040,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	defer cancel()
 
 	// Per spec §3.3.4: same actor re-anchor + token issuance as DeliverEvent.
-	storedActor, err := stampPluginActor(h.identityRegistrySnapshot(), name)
+	storedActor, err := stampPluginActor(h.IdentityRegistrySnapshot(), name)
 	if err != nil {
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "stamp_actor").Wrap(err)
 	}

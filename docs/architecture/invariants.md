@@ -294,7 +294,7 @@ invariants.
 | `INV-PLUGIN-19` | The whole-system suite MUST assert >=1 cross-plugin-ABAC permit AND >=1 forbid against the real seeded engine. | `INV-WS-2` | pending |
 | `INV-PLUGIN-20` | The whole-system suite MUST NOT be silently skipped in CI: with HOLOMUSH_REQUIRE_PLUGINS set, a missing binary artifact is a hard failure. | `INV-WS-3` | pending |
 | `INV-PLUGIN-21` | WithInTreePlugins() MUST be opt-in: omitting it leaves the harness plugin-free and behaviorally unchanged. | `INV-WS-4` | pending |
-| `INV-PLUGIN-22` | PluginHostService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field on the wire (never sourced from plugin/Lua-supplied data). | `INV-1` | pending |
+| `INV-PLUGIN-22` | PluginHostService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field on the wire (never sourced from plugin/Lua-supplied data). | `INV-1` | bound |
 | `INV-PLUGIN-23` | No authenticated actor bound to the call → Evaluate returns deny + error (fail-closed). | `INV-2` | pending |
 | `INV-PLUGIN-24` | A resource type the plugin does not own (outside its entitlement, no command carve-out) → rejected. | `INV-3` | pending |
 | `INV-PLUGIN-25` | Each Evaluate emits exactly one host-stamped audit event; the audit logger MUST be wired on both the binary (gRPC) and Lua (hostfunc) surfaces. | `INV-4` | pending |
@@ -316,12 +316,12 @@ invariants.
 | `INV-PLUGIN-41` | The plugin dependency resolver MUST validate and order a single graph spanning host capabilities (satisfied without an ordering edge) and plugin-provided services (provider-before-consumer edge). A declared dependency unsatisfiable by either provider source MUST be reported, never silently dropped or reclassified. | — | bound |
 | `INV-PLUGIN-42` | A requires `capability:` entry MUST resolve to a registered host capability and a `service:` entry to a provided proto service; a kind/provider mismatch MUST be a hard MISDECLARED_DEPENDENCY error, not a silent reclassification. | — | bound |
 | `INV-PLUGIN-43` | An unsatisfied non-optional plugin dependency or a dependency cycle MUST fail the boot; the loader MUST NOT downgrade it to a WARN + priority-sort fallback. `optional: true` entries MAY be skipped. | — | bound |
-| `INV-PLUGIN-44` | Binary and Lua plugins MUST obtain every declared dependency through the one host gRPC broker, gated by the declaration and authorized as PluginSubject; neither runtime MAY receive an undeclared capability or service. Consumption-path facet of plugin-runtime-symmetry; distinct from INV-CRYPTO-34 (emit/fence/audit path). | — | pending |
+| `INV-PLUGIN-44` | Binary and Lua plugins MUST obtain every declared dependency through the one host gRPC broker, gated by the declaration and authorized as PluginSubject; neither runtime MAY receive an undeclared capability or service. Consumption-path facet of plugin-runtime-symmetry; distinct from INV-CRYPTO-34 (emit/fence/audit path). | — | bound |
 | `INV-PLUGIN-45` | The declaration gate that enforces least privilege MUST live at the broker/registry common path shared by both runtimes; per-runtime gating that could diverge is forbidden. | — | pending |
 | `INV-PLUGIN-46` | Each proto service name MUST have exactly one provider across host and plugins; a plugin declaring Provides of a server-owned (host-registered) service MUST be rejected with DUPLICATE_SERVICE_PROVIDER at resolver time, never silently overwriting host ownership. A core service is never an implicit plugin override target. | — | bound |
 | `INV-PLUGIN-47` | Every host-brokered capability function MUST map to exactly one capability-scoped service in holomush.plugin.host.v1; no host.v1 service MUST span two capability domains, and the PluginHostService god-service MUST NOT exist after the decomposition. | — | bound |
 | `INV-PLUGIN-48` | Ambient runtime substrate (log, new_request_id, stdlib, config) MUST NOT be modeled as a capability: it MUST NOT appear in holomush.plugin.host.v1 and MUST NOT be a valid requires capability token. | — | bound |
-| `INV-PLUGIN-49` | A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability surface. | — | pending |
+| `INV-PLUGIN-49` | A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability surface. | — | bound |
 
 ### `INV-EVENTBUS`
 

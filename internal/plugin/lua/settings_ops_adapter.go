@@ -33,6 +33,16 @@ type settingsStoresOpsAdapter struct {
 
 var _ hostfunc.SettingsOps = (*settingsStoresOpsAdapter)(nil)
 
+// gameStore / playerStore / characterStore expose the wrapped typed stores so
+// the luaHostCapAdapter can hand the SAME stores to the host.v1 SettingsService
+// server. SetSettingsStores only wires the adapter when all three are non-nil,
+// so callers that recover the adapter get a fully-wired store triple.
+func (a *settingsStoresOpsAdapter) gameStore() settings.GameSettings          { return a.game }
+func (a *settingsStoresOpsAdapter) playerStore() settings.PlayerSettingsStore { return a.player }
+func (a *settingsStoresOpsAdapter) characterStore() settings.CharacterSettingsStore {
+	return a.character
+}
+
 // scopedFor selects the scope's base Scoped handle. principalID is parsed as a
 // ULID for PLAYER / CHARACTER (already validated upstream by
 // pluginauthz.CheckPrincipalOwnership); GAME ignores it. Returns a nil Scoped
