@@ -3800,7 +3800,9 @@ invariants:
     summary: "A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific
       capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability
       surface."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/integration/pluginparity/parity_test.go"
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

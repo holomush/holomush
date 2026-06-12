@@ -141,6 +141,19 @@ func NewHostWithFunctions(hf *hostfunc.Functions, opts ...HostOption) *Host {
 	return h
 }
 
+// HostCapabilitiesAdapter exposes the Lua runtime's hostcap.HostCapabilities
+// adapter (the *hostfunc.Functions-backed identity/settings/world surface the
+// per-plugin bufconn endpoint serves). It is the SAME adapter the production
+// LuaDefaultSet endpoint consumes; returning it lets the cross-runtime parity
+// test (test/integration/pluginparity, INV-PLUGIN-49) drive the real Lua
+// runtime adapter against the same hostcap servers the binary runtime uses,
+// rather than a stand-in. Returns nil when the host was built without host
+// functions (NewHost rather than NewHostWithFunctions). Intended for tests and
+// in-process wiring; production paths reach the adapter via the endpoint.
+func (h *Host) HostCapabilitiesAdapter() hostcap.HostCapabilities {
+	return h.hostCapAdapter
+}
+
 // SetFocusCoordinator injects the focus coordinator into the underlying
 // hostfunc bridge via a coordinatorFocusOpsAdapter that satisfies hostfunc.FocusOps.
 // Phase 5 methods (SetConnectionFocus, AutoFocusOnJoin, IsAnyConnFocused) are

@@ -321,7 +321,7 @@ invariants.
 | `INV-PLUGIN-46` | Each proto service name MUST have exactly one provider across host and plugins; a plugin declaring Provides of a server-owned (host-registered) service MUST be rejected with DUPLICATE_SERVICE_PROVIDER at resolver time, never silently overwriting host ownership. A core service is never an implicit plugin override target. | — | bound |
 | `INV-PLUGIN-47` | Every host-brokered capability function MUST map to exactly one capability-scoped service in holomush.plugin.host.v1; no host.v1 service MUST span two capability domains, and the PluginHostService god-service MUST NOT exist after the decomposition. | — | bound |
 | `INV-PLUGIN-48` | Ambient runtime substrate (log, new_request_id, stdlib, config) MUST NOT be modeled as a capability: it MUST NOT appear in holomush.plugin.host.v1 and MUST NOT be a valid requires capability token. | — | bound |
-| `INV-PLUGIN-49` | A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability surface. | — | pending |
+| `INV-PLUGIN-49` | A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability surface. | — | bound |
 
 ### `INV-EVENTBUS`
 
