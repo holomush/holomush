@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	hashiplug "github.com/hashicorp/go-plugin"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
@@ -169,7 +170,6 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	// Lazily dial a single plugin-host gRPC connection shared by every
 	// host-facing SDK facade the provider opts into. If the provider opts
 	// into none, we never dial.
-	var hostClient pluginv1.PluginHostServiceClient
 	var hostConn *grpc.ClientConn
 	if wantsSink || wantsFocus || wantsEvaluator || wantsSettings || wantsDecryptor || wantsCommandLister {
 		requiredServices := map[string]string(nil)
@@ -181,7 +181,6 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 			return nil, oops.With("phase", "init").With("service", PluginHostServiceName).Wrap(err)
 		}
 		hostConn = conn
-		hostClient = pluginv1.NewPluginHostServiceClient(conn)
 	}
 
 	if sinkAware, ok := a.serviceProvider.(EventSinkAware); ok {
@@ -197,7 +196,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 		settingsAware.SetSettingsClient(newPluginHostSettingsClient(hostConn))
 	}
 	if decAware, ok := a.serviceProvider.(SnapshotDecryptorAware); ok {
-		decAware.SetSnapshotDecryptor(&snapshotDecryptClient{client: hostClient})
+		decAware.SetSnapshotDecryptor(&snapshotDecryptClient{client: hostv1.NewAuditServiceClient(hostConn)})
 	}
 	if clAware, ok := a.serviceProvider.(CommandListerAware); ok {
 		clAware.SetCommandLister(newHostCommandClient(hostConn))
