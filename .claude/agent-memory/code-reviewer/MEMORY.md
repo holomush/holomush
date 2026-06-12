@@ -116,28 +116,9 @@
   not just the touched suites. Fake-level "exclusion pins" (fakeStore.GetWithMembership
   re-implements role filter in Go) pin the fake, not the SQL — demand a DB-level twin.
 
-- **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** 9 `Web*` RPCs proxying
-  SceneAccessService facade. KEY recurring trap: `*grpc.Client` wrappers wrap with
-  `oops.Code("RPC_FAILED").Wrap(err)` — and the web handler returns that to connect-go with
-  `//nolint:wrapcheck // gRPC status errors pass through as-is`. That comment is FALSE: core is
-  reached via plain grpc-go (status.Status err), browser side is connect-go with NO error
-  interceptor (server.go:69 NewWebServiceHandler, no WithInterceptors). connect-go wrapIfUncoded/
-  CodeOf only recognize `*connect.Error` via errors.As → an oops-wrapped status err becomes
-  CodeUnknown/HTTP 500. So facade PERMISSION_DENIED/NOT_FOUND/UNAUTHENTICATED all collapse to
-  Unknown at the browser. BUT this is the IDENTICAL pre-existing pattern of WebListFocusPresence
-  (handler.go:792) / WebListContent / WebListSessionStreams — NOT a new defect → non-blocking,
-  track separately. Unit `...PassesStatusErrorThroughAsIs` tests use the MOCK (no wrap) so they
-  prove handler transparency but CANNOT catch this (mock substitutes for the wrapper). Boundary/
-  seam side: interface-based SceneAccessClient option-wired in handler.go; nil-client guard returns
-  CodeUnimplemented; token from headerInjectSessionToken (never body, never logged); proto requests
-  OMIT player_session_token (header-injected). All clean. Whenever reviewing a web/gateway PR,
-  re-check this status→connect code gap; it is gateway-wide accepted behavior, not per-PR.
+- **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** RECURRING gateway-wide trap (NOT per-PR, non-blocking): `*grpc.Client` wrappers `oops.Code("RPC_FAILED").Wrap` a grpc-go status.Status err; web handler returns it to connect-go (server.go:69 NewWebServiceHandler, NO error interceptor) under a FALSE `//nolint:wrapcheck // pass through as-is`. connect-go CodeOf only sees `*connect.Error` via errors.As → oops-wrapped status collapses to CodeUnknown/HTTP500; facade PERMISSION_DENIED/NOT_FOUND all become Unknown at browser. IDENTICAL to WebListFocusPresence (handler.go:792) etc → track separately. `...PassesStatusErrorThroughAsIs` unit tests use the MOCK (no wrap) so CANNOT catch it. Token header-injected (headerInjectSessionToken), never body/logged.
 
-- **alt-session stream-loop port (5rh.8.15): R1 NOT READY → R2 READY (2026-06-08).** ports-drop-the-hard-parts
-  bugs when a .svelte.ts "mirrors terminal hydrateAndStream": backoff declared inside recursive fn (hoist to
-  while-loop); connectionId gate resolved ONLY in STREAM_OPENED (reject on close/error/timeout + reinstall);
-  streamGeneration declared-but-never-incremented = inert (grep increment site); Map keyed by characterId but
-  delete(sessionId) = dead cache. "241 pass" whole-suite proves nothing — `grep -c 'it('` the NEW test file.
+- **alt-session stream-loop port (5rh.8.15): R1 NOT READY → R2 READY (2026-06-08).** ports-drop-the-hard-parts when a .svelte.ts mirrors terminal hydrateAndStream: backoff declared inside recursive fn (hoist to while-loop); connectionId gate resolved ONLY in STREAM_OPENED; streamGeneration declared-but-never-incremented = inert; Map keyed by characterId but delete(sessionId) = dead cache. "241 pass" proves nothing — `grep -c 'it('` the NEW test file.
 - **Frontend UI-consumes-store + STATE/VISIBILITY string confusion (5rh.8.16/.8.17, 2026-06-08) — both NOT READY,**
   CONSOLIDATED. (.8.16) Load-bearing blocker was in the CONSUMED store not the diff's .svelte: refresh() hardcoded
   `asCharacterId:''` (workspaceStore.svelte.ts:72-73); this UI was FIRST to make it load-bearing → ensureSession('')
@@ -196,3 +177,24 @@
   Disconnect do NO ABAC check — but Lua cap_session.go shim ALSO delegates straight to
   port w/o ABAC → parity holds, not a finding. Error opacity clean (LogErrorContext +
   static "internal error", neg tests assert NotContains "secret").
+
+- **hostcap WorldQueryService capstone (eykuh.2.5 READY w/ tracked gap, 2026-06-12).** Task 5 maps 4
+  Query RPCs→WorldQuerier(pluginName); 5th proto RPC FindLocation left inheriting Unimplemented*Server.
+  KEY: proto WorldQueryService declares 5 RPCs (world.proto:18-44) — FindLocation is backed by
+  WorldMutator.FindLocationByName (NOT WorldQuerier; adapter.go has no FindLocationByName). Whole
+  WorldMutationService (create_location/exit/object) is ALSO unimplemented/unregistered — neither
+  FindLocation nor WorldMutationService is scheduled in ANY plan task (rg the plan: zero hits for
+  WorldMutation/find_location). LIVE consumers exist: core-building/main.lua:61 holomush.find_location,
+  core-objects/main.lua:361,369 create_object/create_location; core-objects declares
+  `requires: - capability: world.query`. capability_vocab.go:35 defines world.query AND world.mutation
+  as SEPARATE tokens. NOT a Phase-0 regression because the Lua bufconn CONSUMPTION path isn't wired
+  until Phase 1 Task 7 (register.go registers LuaDefaultSet but no Lua consumer reaches it; hostfunc
+  host-fns stay live). So acceptable-and-track, NOT blocking — but MUST file a bead before ANY plugin
+  opts into host-brokered world consumption or find_location/create_* fail closed. WorldQuerier widening
+  2→4 methods is SAFE: hostcap.WorldQuerier(4) is a SUPERSET of property.WorldQuerier(2), so the
+  interface-to-interface assignment at property.go:50→def.Get(querier property.WorldQuerier) compiles;
+  *WorldQuerierAdapter (adapter.go:74-164) has all 4 + SubjectID() so satisfies it. Subject-stamp test
+  asserts bare "core-scenes" not "plugin:core-scenes" — correct: server passes bare name, real adapter
+  SubjectID()=access.PluginSubject prefixes plugin: downstream (fake doesn't). Containment.Type() is
+  POINTER receiver (object.go:72) called on addressable local var (world.go:321) — fine. 281 tests
+  green, lint 0 issues.
