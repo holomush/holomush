@@ -15,6 +15,12 @@
   cross-runtime single-source. Also "fail-closed without identity" (EMIT_TOKEN_MISSING/ACTOR_NOT_FOUND) ≠ "authorized
   as PluginSubject" — that's the transport-identity gap, engine never reached (DenyAll wired but unhit). Fix: revert
   to pending + coverage bug, OR re-target to a genuinely-shared per-plugin gate (none exists pre-consolidation).
+  R2 READY (2026-06-12): chose REVERT — INV-45→pending (no asserted_by); INV-44 kept bound on a GENUINE
+  cross-runtime reachability contrast (Lua SessionService.ListActive SUCCEEDS w/ WithSessionAccess backing vs binary
+  Unimplemented; SessionService LuaDefaultSet-only register.go:53-55). The EvalService fail-closed test kept as
+  SUPPORTING INV-44 with an explicit overclaim-guard comment scoping it to identity-absent only + tracked gap. LESSON:
+  the clean revert pattern = pending+no-asserted_by + an INLINE NOTE in the binding test documenting why the sibling
+  inv stays pending (deferral target). inv-render drift-check (empty post-render diff) + meta-tests are the proof.
 - **Wire event-type qualification (bare scene_*→<plugin>:<verb>), aneim/r0kup READY, 2026-06-07.** THREE
   vocabularies, DIFFERENT rules — judge per-SITE: (1) registered-emit set + (2) crypto.emits[].event_type stay
   BARE (INV-PLUGIN-32 set-equality); (3) wire type + verbs[].type qualified. So bare main.go/crypto.emits/main_test
