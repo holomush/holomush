@@ -183,7 +183,7 @@ func reasonToWire(r eventbus.NoPlaintextReason) string {
 
 // ReadbackDecryptor is the host-side RPC entry to the read-back decrypt
 // primitive (decryptPluginRow), gated by OwnerMap subject ownership (g1). It is
-// the single seam between the snapshot's PluginHostService.DecryptOwnAuditRows
+// the single seam between the snapshot's host.v1 AuditService.DecryptOwnAuditRows
 // handler (package goplugin) and the unexported primitive in this package — the
 // host never touches decryptPluginRow directly, and the primitive stays
 // unexported (INV-CRYPTO-26).

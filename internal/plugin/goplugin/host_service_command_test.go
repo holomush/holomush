@@ -13,7 +13,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 func TestPluginHostServiceListCommandsFiltersByCharacter(t *testing.T) {
@@ -26,7 +26,7 @@ func TestPluginHostServiceListCommandsFiltersByCharacter(t *testing.T) {
 		host:       &Host{commandQuerier: q},
 		pluginName: "test-plugin",
 	}
-	resp, err := srv.ListCommands(context.Background(), &pluginv1.PluginHostServiceListCommandsRequest{
+	resp, err := srv.ListCommands(context.Background(), &hostv1.ListCommandsRequest{
 		CharacterId: "01HCHAR0000000000000000ZZZ",
 	})
 	require.NoError(t, err)
@@ -36,7 +36,7 @@ func TestPluginHostServiceListCommandsFiltersByCharacter(t *testing.T) {
 
 func TestPluginHostServiceListCommandsFailsClosedWithoutQuerier(t *testing.T) {
 	srv := &pluginHostServiceServer{host: &Host{}, pluginName: "test-plugin"}
-	_, err := srv.ListCommands(context.Background(), &pluginv1.PluginHostServiceListCommandsRequest{
+	_, err := srv.ListCommands(context.Background(), &hostv1.ListCommandsRequest{
 		CharacterId: "01HCHAR0000000000000000ZZZ",
 	})
 	require.Error(t, err)
@@ -49,7 +49,7 @@ func TestPluginHostServiceGetCommandHelpReturnsDetailForGranted(t *testing.T) {
 	q := commandquery.New(reg, policytest.AllowAllEngine(), command.NewAliasCache())
 
 	srv := &pluginHostServiceServer{host: &Host{commandQuerier: q}, pluginName: "test-plugin"}
-	resp, err := srv.GetCommandHelp(context.Background(), &pluginv1.PluginHostServiceGetCommandHelpRequest{
+	resp, err := srv.GetCommandHelp(context.Background(), &hostv1.GetCommandHelpRequest{
 		Name:        "look",
 		CharacterId: "01HCHAR0000000000000000ZZZ",
 	})
@@ -68,7 +68,7 @@ func TestPluginHostServiceGetCommandHelpDeniesUngranted(t *testing.T) {
 	q := commandquery.New(reg, policytest.DenyAllEngine(), command.NewAliasCache())
 
 	srv := &pluginHostServiceServer{host: &Host{commandQuerier: q}, pluginName: "test-plugin"}
-	_, err := srv.GetCommandHelp(context.Background(), &pluginv1.PluginHostServiceGetCommandHelpRequest{
+	_, err := srv.GetCommandHelp(context.Background(), &hostv1.GetCommandHelpRequest{
 		Name:        "scene",
 		CharacterId: "01HCHAR0000000000000000ZZZ",
 	})
@@ -77,7 +77,7 @@ func TestPluginHostServiceGetCommandHelpDeniesUngranted(t *testing.T) {
 
 func TestPluginHostServiceGetCommandHelpFailsClosedWithoutQuerier(t *testing.T) {
 	srv := &pluginHostServiceServer{host: &Host{}, pluginName: "test-plugin"}
-	_, err := srv.GetCommandHelp(context.Background(), &pluginv1.PluginHostServiceGetCommandHelpRequest{
+	_, err := srv.GetCommandHelp(context.Background(), &hostv1.GetCommandHelpRequest{
 		Name:        "look",
 		CharacterId: "01HCHAR0000000000000000ZZZ",
 	})

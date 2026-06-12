@@ -16,7 +16,7 @@ import (
 // settingsStoresOpsAdapter adapts the three plugin-partitioned settings stores
 // to the hostfunc.SettingsOps store seam. It is the permanent Lua delegation
 // seam: it lets the gopher-lua hostfunc layer reach the SAME settings stores the
-// binary PluginHostService uses, so both runtimes drive plugin-partitioned
+// binary host.v1 SettingsService uses, so both runtimes drive plugin-partitioned
 // settings through one common store path (plugin-runtime-symmetry, INV-PLUGIN-27).
 //
 // All trust checks (actor recovery, principal ownership, GAME-write operator

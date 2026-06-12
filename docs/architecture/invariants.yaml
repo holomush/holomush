@@ -115,6 +115,9 @@ scopes:
       - "plugins/core-scenes/publish_snapshot_integration_test.go"
       - "plugins/core-scenes/publish_store.go"
       - "internal/plugin/goplugin/host_service.go"
+      # holomush-eykuh.1 Task 12: the RB/P7 host-callback handler bodies were
+      # relocated off the deleted god-service onto the per-capability servers.
+      - "internal/plugin/goplugin/host_capability_servers.go"
       # CRYPTO+EVENTBUS+STORE: publisher carries GW + P7 + TS.
       - "internal/eventbus/publisher.go"
       - "internal/eventbus/types.go"
@@ -145,6 +148,9 @@ scopes:
       - "api/proto/holomush/core/v1/core.proto"
       - "api/proto/holomush/plugin/v1/plugin.proto"
       - "api/proto/holomush/plugin/v1/audit.proto"
+      # holomush-eykuh.1 Task 12: the RB/P7 DecryptOwnAuditRows RPC doc-comment
+      # tokens now live on the host.v1 AuditService source.
+      - "api/proto/holomush/plugin/host/v1/audit.proto"
       # INV-F sub-epic-F AdminReadStream (.14.23). admin/readstream/** is already owned above;
       # these are the non-readstream sites: dual-control approval repo (→67), operator-read
       # window config (→56/61/64), builtins operator-read golden test (→63), NoPlaintextReason
@@ -312,6 +318,9 @@ scopes:
       # SCENE+EVENTBUS+PLUGIN: plugin subsystem carries FS + GW + PC.
       - "internal/plugin/setup/subsystem.go"
       - "internal/plugin/goplugin/host_service.go"
+      # holomush-eykuh.1 Task 12: the focus ULID-encoding-boundary body (INV-SCENE-22)
+      # relocated off the deleted god-service onto the per-capability focus server.
+      - "internal/plugin/goplugin/host_capability_servers.go"
       # Shared integration harness (see CRYPTO.shared_files).
       - "internal/testsupport/integrationtest/harness.go"
 
@@ -397,6 +406,10 @@ scopes:
       - "internal/plugin/pluginauthz/evaluate.go"
       - "internal/plugin/hostfunc/functions.go"
       - "internal/plugin/goplugin/host_service.go"
+      # holomush-eykuh.1 Task 12: the evaluate + settings host-callback bodies
+      # (INV-PLUGIN-22/27/28) relocated off the deleted god-service onto the
+      # per-capability servers.
+      - "internal/plugin/goplugin/host_capability_servers.go"
       # PLUGIN+(S substrate): goplugin host (PC-8 + foreign INV-S5).
       - "internal/plugin/goplugin/host.go"
       - "internal/plugin/goplugin/host_test.go"
@@ -426,6 +439,9 @@ scopes:
       - "internal/test/invariants/inv_p4_coverage_meta_test.go"
       - "internal/test/invariants/inv_p5_coverage_meta_test.go"
       - "api/proto/holomush/plugin/v1/plugin.proto"
+      # holomush-eykuh.1 Task 12: PluginHostService.Evaluate's no-subject-on-wire
+      # token (INV-PLUGIN-22) now lives on the host.v1 EvalService source.
+      - "api/proto/holomush/plugin/host/v1/eval.proto"
       - "plugins/core-scenes/main.go"
       - "plugins/core-communication/main.lua"
       - "plugins/core-objects/main.lua"
@@ -1066,11 +1082,11 @@ invariants:
       at primitive entry; (g2) manifest crypto.emits[].readback:true via PluginCanReadBack."
     binding: pending
     refs:
-      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-RB-2"}
+      - {file: "api/proto/holomush/plugin/host/v1/audit.proto", token: "INV-RB-2"}
       - {file: "internal/eventbus/authguard/guard.go", token: "INV-RB-2"}
       - {file: "internal/eventbus/history/readback.go", token: "INV-RB-2"}
       - {file: "internal/plugin/crypto_manifest.go", token: "INV-RB-2"}
-      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-RB-2"}
+      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-RB-2"}
       - {file: "internal/plugin/manager_test.go", token: "INV-RB-2"}
       - {file: "plugins/core-scenes/main_test.go", token: "INV-RB-2"}
       - {file: "test/integration/crypto/readback_test.go", token: "INV-RB-2"}
@@ -1190,9 +1206,9 @@ invariants:
     binding: pending
     refs:
       - {file: "api/proto/holomush/plugin/v1/audit.proto", token: "INV-RB-12"}
-      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-RB-12"}
+      - {file: "api/proto/holomush/plugin/host/v1/audit.proto", token: "INV-RB-12"}
       - {file: "internal/eventbus/history/readback.go", token: "INV-RB-12"}
-      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-RB-12"}
+      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-RB-12"}
       - {file: "internal/plugin/host.go", token: "INV-RB-12"}
       - {file: "internal/plugin/hostfunc/stdlib_audit.go", token: "INV-RB-12"}
       - {file: "internal/plugin/hostfunc/stdlib_audit_test.go", token: "INV-RB-12"}
@@ -2819,7 +2835,7 @@ invariants:
       → INVALID_ULID; Go SDK + Lua round-trip a known ULID identically."
     binding: pending
     refs:
-      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-P5-9"}
+      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-P5-9"}
       - {file: "internal/plugin/hostfunc/stdlib_focus_test.go", token: "INV-P5-9"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-9"}
   - id: INV-SCENE-23
@@ -3491,7 +3507,7 @@ invariants:
       - {file: "internal/plugin/hostfunc/evaluate.go", token: "INV-1"}
       - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-1"}
       - {file: "internal/plugin/goplugin/evaluate_invariants_test.go", token: "INV-1"}
-      - {file: "api/proto/holomush/plugin/v1/plugin.proto", token: "INV-1"}
+      - {file: "api/proto/holomush/plugin/host/v1/eval.proto", token: "INV-1"}
   - id: INV-PLUGIN-23
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
@@ -3542,7 +3558,7 @@ invariants:
       access gate is the single shared path for both runtimes."
     binding: pending
     refs:
-      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-8"}
+      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-8"}
       - {file: "internal/plugin/hostfunc/functions.go", token: "INV-8"}
       - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-8"}
       - {file: "internal/plugin/hostfunc/stdlib_settings_test.go", token: "INV-8"}
@@ -3558,7 +3574,7 @@ invariants:
       plugin's owner partition."
     binding: pending
     refs:
-      - {file: "internal/plugin/goplugin/host_service.go", token: "INV-11"}
+      - {file: "internal/plugin/goplugin/host_capability_servers.go", token: "INV-11"}
       - {file: "internal/plugin/goplugin/host_settings_test.go", token: "INV-11"}
       - {file: "internal/plugin/lua/settings_ops_adapter_test.go", token: "INV-11"}
       - {file: "internal/plugin/pluginauthz/principal.go", token: "INV-11"}

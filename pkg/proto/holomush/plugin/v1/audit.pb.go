@@ -458,7 +458,7 @@ func (x *QueryHistoryResponse) GetRow() *AuditRow {
 }
 
 // DecryptOwnAuditRowsRequest carries the calling plugin's OWN audit rows for
-// host-side read-back decryption (PluginHostService.DecryptOwnAuditRows).
+// host-side read-back decryption (host.v1 AuditService.DecryptOwnAuditRows).
 // The host enforces OwnerMap subject ownership (g1) per row; rows whose
 // subject is owned by a different plugin are refused with not_owner and never
 // decrypted. The batch is REJECTED (not clamped) when it exceeds the

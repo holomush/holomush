@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 // Package pluginauthz holds the runtime-neutral per-action authorization
-// core shared by the binary (PluginHostService.Evaluate) and Lua
+// core shared by the binary (host.v1 EvalService.Evaluate) and Lua
 // (holomush.evaluate) surfaces. Both delegate here so policy/trust
 // behavior cannot diverge between runtimes (INV-PLUGIN-26).
 package pluginauthz

@@ -5,45 +5,39 @@ package goplugin
 
 import (
 	"context"
+	"log/slog"
+	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus/cursor"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
+	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/settings"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-// This file implements the capability-scoped host.v1 gRPC services as thin
-// translation shims over the legacy pluginHostServiceServer (host_service.go).
+// This file implements the capability-scoped holomush.plugin.host.v1 gRPC
+// services. After the holomush-eykuh.1 decomposition (Task 12) these are the
+// SINGLE source of the authenticated host-callback logic: the former monolithic
+// pluginHostServiceServer is gone and each authoritative handler body lives on
+// the per-capability server for its domain (one capability per service). The
+// host internals (*Host, session.FocusKey, settings stores) are reached
+// directly; there is no longer a pluginv1<->hostv1 translation hop.
 //
-// Decomposition rationale (holomush-eykuh.1, Task 3): the broker serves ALL of
-// these services on the one *grpc.Server alongside the still-present
-// PluginHostService. Each per-capability server shares *Host + pluginName.
-//
-// host.v1 is a SELF-CONTAINED package (Task 2): it carries its OWN copies of
-// the shared wire types — FocusKey / FocusKind / FocusFailureReason (focus),
-// SettingScope (settings) — as hostv1.* Go types DISTINCT from the pluginv1.*
-// types the *Host internals actually speak. So these shims are NOT byte-verbatim
-// moves of the legacy bodies: each translates hostv1.<T> <-> pluginv1.<T> at the
-// request/response boundary, then delegates the authenticated business logic to
-// the legacy handler (single source of truth until Task 12 deletes it). The
-// pluginv1<->hostv1 enum correspondence is pinned by
-// TestPluginV1HostV1SharedTypeRoundTrip so a one-sided proto edit fails loudly.
-
-// hostCapabilityBase carries the host handle, the mTLS-bound plugin name, and a
-// legacy delegate. Every per-capability server embeds it so the shared *Host
-// wiring and the delegation target are declared once (DRY). The delegate is the
-// legacy server holding the verified, token-authenticated logic; the new servers
-// only translate proto shapes around it.
+// hostCapabilityBase carries the host handle and the mTLS-bound plugin name; every
+// per-capability server embeds it so the shared *Host wiring is declared once.
 type hostCapabilityBase struct {
 	host       *Host
 	pluginName string
-}
-
-// legacy returns a legacy server bound to the same host + plugin name. The
-// legacy handler is the single implementation of the authenticated business
-// logic; the capability servers delegate to it after translating proto shapes.
-func (b hostCapabilityBase) legacy() *pluginHostServiceServer {
-	return &pluginHostServiceServer{host: b.host, pluginName: b.pluginName}
 }
 
 // --- focusServer (FocusService: 8 RPCs) -------------------------------------
@@ -54,109 +48,272 @@ type focusServer struct {
 }
 
 func (s *focusServer) JoinFocus(ctx context.Context, req *hostv1.JoinFocusRequest) (*hostv1.JoinFocusResponse, error) {
-	if _, err := s.legacy().JoinFocus(ctx, &pluginv1.PluginHostServiceJoinFocusRequest{
-		SessionId: req.GetSessionId(),
-		Target:    focusKeyToPluginV1(req.GetTarget()),
-	}); err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	key, err := protoToFocusKey(req.GetTarget())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	if err := fc.JoinFocus(ctx, req.GetSessionId(), key); err != nil {
+		return nil, oops.With("plugin", s.pluginName).With("session_id", req.GetSessionId()).Wrap(err)
 	}
 	return &hostv1.JoinFocusResponse{}, nil
 }
 
 func (s *focusServer) LeaveFocus(ctx context.Context, req *hostv1.LeaveFocusRequest) (*hostv1.LeaveFocusResponse, error) {
-	if _, err := s.legacy().LeaveFocus(ctx, &pluginv1.PluginHostServiceLeaveFocusRequest{
-		SessionId: req.GetSessionId(),
-		Target:    focusKeyToPluginV1(req.GetTarget()),
-	}); err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	key, err := protoToFocusKey(req.GetTarget())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	if err := fc.LeaveFocus(ctx, req.GetSessionId(), key); err != nil {
+		return nil, oops.With("plugin", s.pluginName).With("session_id", req.GetSessionId()).Wrap(err)
 	}
 	return &hostv1.LeaveFocusResponse{}, nil
 }
 
 func (s *focusServer) LeaveFocusByTarget(ctx context.Context, req *hostv1.LeaveFocusByTargetRequest) (*hostv1.LeaveFocusByTargetResponse, error) {
-	resp, err := s.legacy().LeaveFocusByTarget(ctx, &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
-		Target: focusKeyToPluginV1(req.GetTarget()),
-	})
-	if err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	return &hostv1.LeaveFocusByTargetResponse{
-		Succeeded:        resp.GetSucceeded(),
-		FailedSessionIds: resp.GetFailedSessionIds(),
-		TotalScanned:     resp.GetTotalScanned(),
-	}, nil
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	key, err := protoToFocusKey(req.GetTarget())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	// Enumeration failure is the only path that returns an RPC-level error.
+	// Partial per-session failures are carried on the response via
+	// failed_session_ids; callers inspect the result to distinguish
+	// full / partial / empty outcomes without parsing error strings.
+	result, err := fc.LeaveFocusByTarget(ctx, key)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).
+			With("focus_kind", string(key.Kind)).
+			With("target_id", key.TargetID.String()).Wrap(err)
+	}
+	return leaveByTargetResultToProto(result), nil
 }
 
 func (s *focusServer) PresentFocus(ctx context.Context, req *hostv1.PresentFocusRequest) (*hostv1.PresentFocusResponse, error) {
-	if _, err := s.legacy().PresentFocus(ctx, &pluginv1.PluginHostServicePresentFocusRequest{
-		SessionId: req.GetSessionId(),
-		Target:    focusKeyToPluginV1(req.GetTarget()),
-	}); err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	key, err := protoToFocusKey(req.GetTarget())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	if err := fc.PresentFocus(ctx, req.GetSessionId(), key); err != nil {
+		return nil, oops.With("plugin", s.pluginName).With("session_id", req.GetSessionId()).Wrap(err)
 	}
 	return &hostv1.PresentFocusResponse{}, nil
 }
 
 func (s *focusServer) SetConnectionFocus(ctx context.Context, req *hostv1.SetConnectionFocusRequest) (*hostv1.SetConnectionFocusResponse, error) {
-	resp, err := s.legacy().SetConnectionFocus(ctx, &pluginv1.PluginHostServiceSetConnectionFocusRequest{
-		ConnectionId: req.GetConnectionId(),
-		FocusKey:     focusKeyToPluginV1(req.GetFocusKey()),
-		IsSceneGrid:  req.GetIsSceneGrid(),
-	})
-	if err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	return &hostv1.SetConnectionFocusResponse{
-		FocusKey: focusKeyToHostV1(resp.GetFocusKey()),
-	}, nil
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	// Decode connection_id bytes → ULID (16-byte wire format, INV-SCENE-22).
+	connID, err := bytesToULID(req.GetConnectionId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "connection_id").
+			Wrap(err)
+	}
+
+	// Decode optional focus_key (nil = grid pivot).
+	var focusKey *session.FocusKey
+	if pk := req.GetFocusKey(); pk != nil {
+		fk, parseErr := protoToFocusKey(pk)
+		if parseErr != nil {
+			return nil, oops.With("plugin", s.pluginName).Wrap(parseErr)
+		}
+		focusKey = &fk
+	}
+
+	// Reject contradictory input: is_scene_grid=true means "pivot to grid"
+	// which requires focus_key to be nil. Without this gate the substrate
+	// could persist focus_key while the live connection's stream-delta
+	// computation below also routes scene streams — divergent state.
+	// (CodeRabbit PR #4191)
+	if focusKey != nil && req.GetIsSceneGrid() {
+		return nil, oops.Code("INVALID_ARGUMENT").
+			With("plugin", s.pluginName).
+			Errorf("is_scene_grid=true is incompatible with a non-nil focus_key; supply one or the other")
+	}
+
+	_, err = fc.SetConnectionFocus(ctx, connID, focusKey, req.GetIsSceneGrid())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).
+			With("connection_id", connID.String()).
+			Wrap(err)
+	}
+
+	// Echo back the new FocusKey (nil = grid).
+	resp := &hostv1.SetConnectionFocusResponse{}
+	if focusKey != nil {
+		resp.FocusKey = focusKeyToProto(*focusKey)
+	}
+	return resp, nil
 }
 
 func (s *focusServer) GetConnectionFocus(ctx context.Context, req *hostv1.GetConnectionFocusRequest) (*hostv1.GetConnectionFocusResponse, error) {
-	resp, err := s.legacy().GetConnectionFocus(ctx, &pluginv1.PluginHostServiceGetConnectionFocusRequest{
-		ConnectionId: req.GetConnectionId(),
-	})
-	if err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	return &hostv1.GetConnectionFocusResponse{
-		FocusKey: focusKeyToHostV1(resp.GetFocusKey()),
-	}, nil
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	connID, err := bytesToULID(req.GetConnectionId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "connection_id").
+			Wrap(err)
+	}
+
+	fk, err := fc.GetConnectionFocus(ctx, connID)
+	if err != nil {
+		slog.ErrorContext(
+			ctx, "plugin host service GetConnectionFocus failed",
+			"plugin", s.pluginName,
+			"connection_id", connID.String(),
+			"error", err,
+		)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	resp := &hostv1.GetConnectionFocusResponse{}
+	if fk != nil {
+		resp.FocusKey = focusKeyToProto(*fk)
+	}
+	return resp, nil
 }
 
 func (s *focusServer) AutoFocusOnJoin(ctx context.Context, req *hostv1.AutoFocusOnJoinRequest) (*hostv1.AutoFocusOnJoinResponse, error) {
-	resp, err := s.legacy().AutoFocusOnJoin(ctx, &pluginv1.PluginHostServiceAutoFocusOnJoinRequest{
-		CharacterId: req.GetCharacterId(),
-		SceneId:     req.GetSceneId(),
-	})
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	charID, err := bytesToULID(req.GetCharacterId())
 	if err != nil {
-		return nil, err
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "character_id").
+			Wrap(err)
 	}
-	out := &hostv1.AutoFocusOnJoinResponse{
-		FocusedConnectionIds: resp.GetFocusedConnectionIds(),
-		SkippedConnectionIds: resp.GetSkippedConnectionIds(),
-		TotalConnectionCount: resp.GetTotalConnectionCount(),
+	sceneID, err := bytesToULID(req.GetSceneId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "scene_id").
+			Wrap(err)
 	}
-	if failed := resp.GetFailedConnectionIds(); len(failed) > 0 {
-		out.FailedConnectionIds = make([]*hostv1.FocusFailure, len(failed))
-		for i, f := range failed {
-			out.FailedConnectionIds[i] = &hostv1.FocusFailure{
-				ConnectionId: f.GetConnectionId(),
-				Reason:       focusFailureReasonToHostV1(f.GetReason()),
+
+	r, err := fc.AutoFocusOnJoin(ctx, charID, sceneID)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).
+			With("character_id", charID.String()).
+			With("scene_id", sceneID.String()).
+			Wrap(err)
+	}
+
+	resp := &hostv1.AutoFocusOnJoinResponse{
+		TotalConnectionCount: r.TotalConnectionCount,
+	}
+	if len(r.FocusedConnectionIDs) > 0 {
+		resp.FocusedConnectionIds = make([][]byte, len(r.FocusedConnectionIDs))
+		for i, id := range r.FocusedConnectionIDs {
+			resp.FocusedConnectionIds[i] = id.Bytes()
+		}
+	}
+	if len(r.SkippedConnectionIDs) > 0 {
+		resp.SkippedConnectionIds = make([][]byte, len(r.SkippedConnectionIDs))
+		for i, id := range r.SkippedConnectionIDs {
+			resp.SkippedConnectionIds[i] = id.Bytes()
+		}
+	}
+	if len(r.FailedConnectionIDs) > 0 {
+		resp.FailedConnectionIds = make([]*hostv1.FocusFailure, len(r.FailedConnectionIDs))
+		for i, f := range r.FailedConnectionIDs {
+			resp.FailedConnectionIds[i] = &hostv1.FocusFailure{
+				ConnectionId: f.ConnectionID.Bytes(),
+				Reason:       autoFocusFailureReasonToProto(f.Reason),
 			}
 		}
 	}
-	return out, nil
+	return resp, nil
 }
 
 func (s *focusServer) IsAnyConnFocused(ctx context.Context, req *hostv1.IsAnyConnFocusedRequest) (*hostv1.IsAnyConnFocusedResponse, error) {
-	resp, err := s.legacy().IsAnyConnFocused(ctx, &pluginv1.PluginHostServiceIsAnyConnFocusedRequest{
-		CharacterId: req.GetCharacterId(),
-		SceneId:     req.GetSceneId(),
-	})
-	if err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	return &hostv1.IsAnyConnFocusedResponse{Focused: resp.GetFocused()}, nil
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	charID, err := bytesToULID(req.GetCharacterId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "character_id").
+			Wrap(err)
+	}
+	sceneID, err := bytesToULID(req.GetSceneId())
+	if err != nil {
+		return nil, oops.Code("INVALID_ULID").
+			With("plugin", s.pluginName).
+			With("field", "scene_id").
+			Wrap(err)
+	}
+
+	focused, err := fc.IsAnyConnFocused(ctx, charID, sceneID)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).
+			With("character_id", charID.String()).
+			With("scene_id", sceneID.String()).
+			Wrap(err)
+	}
+	return &hostv1.IsAnyConnFocusedResponse{Focused: focused}, nil
 }
 
 // --- emitServer (EmitService: EmitEvent, RequestEmitToken, RegisterEmitType) -
@@ -167,23 +324,130 @@ type emitServer struct {
 }
 
 func (s *emitServer) EmitEvent(ctx context.Context, req *hostv1.EmitEventRequest) (*hostv1.EmitEventResponse, error) {
-	if _, err := s.legacy().EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
-		Stream:    req.GetStream(),
-		EventType: req.GetEventType(),
-		Payload:   req.GetPayload(),
-		Sensitive: req.GetSensitive(),
-	}); err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
+
+	s.host.mu.RLock()
+	emitter := s.host.eventEmitter
+	s.host.mu.RUnlock()
+	if emitter == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin event emitter is not configured")
+	}
+
+	// Token-based authentication (spec §3.3.5, §5.4): the host issues a
+	// per-dispatch token in DeliverEvent / DeliverCommand and stores the
+	// vouched-for actor (Kind + ID) keyed by (pluginName, token). The
+	// plugin presents the token in the x-holomush-emit-token header on
+	// EmitEvent. The plugin's x-holomush-actor-kind / -actor-id metadata
+	// values are NOT trusted as identity claims at this boundary — the
+	// host uses the actor it stored at issue time. This closes the
+	// forgery surface (G1): a malicious plugin that substitutes the
+	// actor headers cannot escape the token's stored actor.
+	md, _ := metadata.FromIncomingContext(ctx)
+	tokens := md.Get("x-holomush-emit-token")
+	if len(tokens) == 0 || tokens[0] == "" {
+		return nil, oops.Code("EMIT_TOKEN_MISSING").
+			With("plugin", s.pluginName).
+			Errorf("plugin emitted without a host-issued dispatch token")
+	}
+
+	s.host.mu.RLock()
+	tokenStore := s.host.tokenStore
+	s.host.mu.RUnlock()
+	if tokenStore == nil {
+		return nil, oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
+			With("plugin", s.pluginName).
+			Errorf("plugin token store is not configured")
+	}
+
+	// EmitEvent does not need the owning player — actor identity is sufficient.
+	storedActor, _, ok := tokenStore.Lookup(s.pluginName, tokens[0])
+	if !ok {
+		slog.WarnContext(
+			ctx, "emitEvent rejected: token not valid for this plugin",
+			"plugin", s.pluginName,
+			"code", "EMIT_TOKEN_REJECTED",
+		)
+		return nil, oops.Code("EMIT_TOKEN_REJECTED").
+			With("plugin", s.pluginName).
+			Errorf("dispatch token is not valid for this plugin")
+	}
+
+	emitCtx := core.WithActor(ctx, storedActor)
+	intent := pluginsdk.EmitIntent{
+		Subject:   req.GetStream(),
+		Type:      pluginsdk.EventType(req.GetEventType()),
+		Payload:   string(req.GetPayload()),
+		Sensitive: req.GetSensitive(),
+	}
+	if err := emitter.Emit(emitCtx, s.pluginName, intent); err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
 	return &hostv1.EmitEventResponse{}, nil
 }
 
-func (s *emitServer) RequestEmitToken(ctx context.Context, _ *hostv1.RequestEmitTokenRequest) (*hostv1.RequestEmitTokenResponse, error) {
-	resp, err := s.legacy().RequestEmitToken(ctx, &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
-	if err != nil {
-		return nil, err
+// RequestEmitToken issues a self-token bound to {ActorPlugin, pluginName}.
+//
+// Self-tokens cover the gap left by dispatch-token authentication when a
+// plugin emits from a path that DID NOT originate at DeliverEvent or
+// DeliverCommand — typically a plugin-served gRPC handler such as
+// SceneService.CreateScene. Without a self-token, every such emit would
+// fail with EMIT_TOKEN_MISSING after Task 9 landed.
+//
+// G1 (forgery resistance) preservation:
+//   - The request carries no identity fields.
+//   - The actor is hardcoded to {ActorPlugin, s.pluginName}; s.pluginName
+//     is set at server construction (mTLS-bound) and the plugin cannot
+//     forge it.
+//   - The plugin's outgoing actor-claim metadata is still discarded at
+//     EmitEvent — the host uses the tokenStore-bound actor.
+//   - Manifest gate (actor_kinds_claimable must include "plugin") still
+//     fires inside EmitEvent's emit path.
+//   - Cross-plugin defense unchanged: tokenStore keys on (pluginName, token).
+//   - Character-actor cascading still requires a real DeliverEvent /
+//     DeliverCommand dispatch, where the host issues a character-bound
+//     dispatch token; this self-token cannot grant that elevation.
+//
+// (Spec §3.3.5 / §5.4 — two-token pattern.)
+func (s *emitServer) RequestEmitToken(_ context.Context, _ *hostv1.RequestEmitTokenRequest) (*hostv1.RequestEmitTokenResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	return &hostv1.RequestEmitTokenResponse{Token: resp.GetToken()}, nil
+
+	s.host.mu.RLock()
+	tokenStore := s.host.tokenStore
+	s.host.mu.RUnlock()
+	if tokenStore == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin token store is not configured")
+	}
+
+	// HARDCODED actor: ActorPlugin + the mTLS-bound plugin name resolved
+	// to a ULID via the IdentityRegistry. We deliberately ignore any
+	// caller-supplied identity (the request has none) so this RPC cannot
+	// be used as an actor-escalation vector. Post-w9ml the strict gate at
+	// event_emitter.go::Emit rejects non-ULID actor IDs with
+	// ACTOR_ID_NOT_ULID, so we MUST resolve a ULID here — using the plain
+	// plugin name as ActorID would break every plugin self-token emit.
+	storedActor, stampErr := stampPluginActor(s.host.identityRegistrySnapshot(), s.pluginName)
+	if stampErr != nil {
+		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
+			With("plugin", s.pluginName).
+			Wrap(stampErr)
+	}
+
+	// Self-tokens carry no player context (no DeliverCommand dispatch), so the
+	// owning player is "" — PLAYER-scope settings from a self-token path fail
+	// closed, consistent with DeliverEvent.
+	token, err := tokenStore.Issue(s.pluginName, storedActor, "")
+	if err != nil {
+		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
+			With("plugin", s.pluginName).
+			Wrap(err)
+	}
+
+	return &hostv1.RequestEmitTokenResponse{Token: token}, nil
 }
 
 // RegisterEmitType promotes the Lua holomush.register_emit_type(type) host
@@ -216,18 +480,84 @@ type evalServer struct {
 	hostCapabilityBase
 }
 
+// Evaluate runs the host ABAC engine for one action against one resource
+// instance owned by the calling plugin.
+//
+// Security invariant: the acting subject is ALWAYS derived from the
+// host-issued dispatch token, never from plugin-supplied fields. This
+// mirrors EmitEvent's token→actor recovery exactly (spec §3.3.5 / §5.4).
+//
+// Fail-closed on: nil host, nil engine, nil tokenStore, missing token,
+// rejected token, empty actor subject, and foreign resource types.
 func (s *evalServer) Evaluate(ctx context.Context, req *hostv1.EvaluateRequest) (*hostv1.EvaluateResponse, error) {
-	resp, err := s.legacy().Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
-		Action:   req.GetAction(),
-		Resource: req.GetResource(),
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+
+	// Snapshot engine, auditor, and tokenStore under a single RLock, then release
+	// before delegating — avoids holding the lock across the engine call.
+	s.host.mu.RLock()
+	eng := s.host.engine
+	auditor := s.host.auditor
+	tokenStore := s.host.tokenStore
+	s.host.mu.RUnlock()
+
+	if eng == nil {
+		return nil, oops.Code("EVALUATE_ENGINE_UNCONFIGURED").
+			With("plugin", s.pluginName).
+			Errorf("access policy engine is not configured")
+	}
+
+	// Token-based authentication — mirrors EmitEvent §3.3.5 exactly:
+	// read the host-issued dispatch token from the incoming metadata header;
+	// look up the stored actor; never trust plugin-supplied identity claims.
+	md, _ := metadata.FromIncomingContext(ctx)
+	tokens := md.Get("x-holomush-emit-token")
+	if len(tokens) == 0 || tokens[0] == "" {
+		return nil, oops.Code("EMIT_TOKEN_MISSING").
+			With("plugin", s.pluginName).
+			Errorf("plugin evaluated without a host-issued dispatch token")
+	}
+
+	if tokenStore == nil {
+		return nil, oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
+			With("plugin", s.pluginName).
+			Errorf("plugin token store is not configured")
+	}
+
+	// Evaluate does not need the owning player — actor identity is sufficient.
+	storedActor, _, ok := tokenStore.Lookup(s.pluginName, tokens[0])
+	if !ok {
+		slog.WarnContext(
+			ctx, "evaluate rejected: token not valid for this plugin",
+			"plugin", s.pluginName,
+			"code", "EMIT_TOKEN_REJECTED",
+		)
+		return nil, oops.Code("EMIT_TOKEN_REJECTED").
+			With("plugin", s.pluginName).
+			Errorf("dispatch token is not valid for this plugin")
+	}
+
+	subject := pluginauthz.ActorSubject(storedActor)
+	ownedTypes := s.host.ownedResourceTypes(s.pluginName)
+
+	dec, err := pluginauthz.Evaluate(ctx, pluginauthz.Input{
+		Engine:     eng,
+		Auditor:    auditor,
+		PluginName: s.pluginName,
+		OwnedTypes: ownedTypes,
+		Subject:    subject,
+		Action:     req.GetAction(),
+		Resource:   req.GetResource(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
+
 	return &hostv1.EvaluateResponse{
-		Allowed:       resp.GetAllowed(),
-		Reason:        resp.GetReason(),
-		MatchedPolicy: resp.GetMatchedPolicy(),
+		Allowed:       dec.Allowed,
+		Reason:        dec.Reason,
+		MatchedPolicy: dec.MatchedPolicy,
 	}, nil
 }
 
@@ -238,32 +568,292 @@ type settingsServer struct {
 	hostCapabilityBase
 }
 
+// GetSetting reads one plugin-partitioned setting for the calling plugin.
+//
+// Security invariants (holomush-iokti.7):
+//   - The plugin partition is bound host-side from s.pluginName (stamped at
+//     construction, never from the request) via base.Plugin(s.pluginName). Two
+//     plugins with different names address disjoint partitions (INV-PLUGIN-28).
+//   - Scope must be specified; SETTING_SCOPE_UNSPECIFIED fails closed
+//     (InvalidArgument).
+//   - CHARACTER: req.principal_id must equal the acting character's ID (correct
+//     and functional; the dispatch-token actor is always an ActorCharacter).
+//   - PLAYER: req.principal_id must equal the host-vouched owning player of the
+//     acting character (spec §3.3, INV-6 — settings shared across a player's
+//     characters). FUNCTIONAL as of holomush-iokti.19: the owning player is
+//     carried on the dispatch token (stamped by the command dispatcher via
+//     core.WithOwningPlayer), recovered by actorFromToken, and compared by
+//     requirePrincipalOwnership. A PLAYER request whose dispatch had no player
+//     context (e.g. from a pure event handler) fails closed (PermissionDenied).
+//   - GAME reads are server-wide readable by any plugin (no engine call): game
+//     settings are not principal-scoped, and the owner prefix already isolates
+//     the plugin's keyspace.
+//
+// Phase 8 settings are list-valued: the response sets found + string_list from
+// StringSliceN. string_value (scalar reads) is deferred — left empty in Phase 8.
+//
+// Inner errors are never leaked past the gRPC boundary (grpc-errors.md): the
+// settings stores follow the reads-never-error contract, so the only error paths
+// here are argument validation and authorization.
 func (s *settingsServer) GetSetting(ctx context.Context, req *hostv1.GetSettingRequest) (*hostv1.GetSettingResponse, error) {
-	resp, err := s.legacy().GetSetting(ctx, &pluginv1.PluginHostServiceGetSettingRequest{
-		Scope:       settingScopeToPluginV1(req.GetScope()),
-		PrincipalId: req.GetPrincipalId(),
-		Key:         req.GetKey(),
-	})
+	// resolveSettingScope is the shared authorization gate (see its doc and the
+	// method-level invariants above): it fails closed on a bad token/subject and
+	// enforces principal ownership for PLAYER / CHARACTER. GAME reads are open to
+	// any plugin (no engine check); base.Plugin(s.pluginName) below confines the
+	// read to the caller's own keyspace (INV-PLUGIN-28).
+	base, _, err := s.resolveSettingScope(ctx, req.GetScope(), req.GetPrincipalId())
 	if err != nil {
 		return nil, err
 	}
+
+	// Plugin partition is bound from s.pluginName host-side — NEVER from the request.
+	part := base.Plugin(s.pluginName)
+
+	values, found := part.StringSliceN(ctx, req.GetKey())
 	return &hostv1.GetSettingResponse{
-		Found:       resp.GetFound(),
-		StringValue: resp.GetStringValue(),
-		StringList:  resp.GetStringList(),
+		Found:      found,
+		StringList: values,
+		// StringValue intentionally empty: Phase 8 settings are list-valued and
+		// returned via StringList. Scalar reads are deferred (holomush-iokti.7).
 	}, nil
 }
 
+// SetSetting writes one plugin-partitioned setting for the calling plugin.
+//
+// Security invariants (holomush-iokti.7):
+//   - Plugin partition bound host-side from s.pluginName (same as GetSetting).
+//   - SETTING_SCOPE_UNSPECIFIED → InvalidArgument (fail closed).
+//   - CHARACTER: req.principal_id must equal the acting character's ID (correct
+//     and functional).
+//   - PLAYER: req.principal_id must equal the host-vouched owning player of the
+//     acting character — FUNCTIONAL as of holomush-iokti.19. See GetSetting
+//     invariants for the full rationale; fails closed when no player context.
+//   - GAME writes require an operator authorization decision: the recovered
+//     subject must be permitted to "write" the per-plugin resource
+//     pluginauthz.SettingsGameWriteResource(s.pluginName) via the ABAC engine. A
+//     non-operator subject is denied (PermissionDenied). This is host-enforced,
+//     never trusted from the wire.
+//
+// Inner errors from the engine or the store are logged and replaced with a
+// generic Internal status (grpc-errors.md).
 func (s *settingsServer) SetSetting(ctx context.Context, req *hostv1.SetSettingRequest) (*hostv1.SetSettingResponse, error) {
-	if _, err := s.legacy().SetSetting(ctx, &pluginv1.PluginHostServiceSetSettingRequest{
-		Scope:       settingScopeToPluginV1(req.GetScope()),
-		PrincipalId: req.GetPrincipalId(),
-		Key:         req.GetKey(),
-		StringList:  req.GetStringList(),
-	}); err != nil {
+	base, subject, err := s.resolveSettingScope(ctx, req.GetScope(), req.GetPrincipalId())
+	if err != nil {
 		return nil, err
 	}
+
+	// GAME-scope writes require an operator authorization decision via the engine.
+	if req.GetScope() == hostv1.SettingScope_SETTING_SCOPE_GAME {
+		if authErr := s.authorizeGameWrite(ctx, subject); authErr != nil {
+			return nil, authErr
+		}
+	}
+
+	// Plugin partition is bound from s.pluginName host-side — NEVER from the request.
+	part := base.Plugin(s.pluginName)
+
+	if setErr := part.SetStringSlice(ctx, req.GetKey(), req.GetStringList()); setErr != nil {
+		slog.ErrorContext(ctx, "set setting failed",
+			"plugin", s.pluginName, "scope", req.GetScope().String(), "err", setErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
 	return &hostv1.SetSettingResponse{}, nil
+}
+
+// resolveSettingScope validates the scope, recovers the acting subject from the
+// dispatch token (exactly as Evaluate does — never from plugin-supplied data),
+// enforces principal ownership for PLAYER / CHARACTER scopes, and returns the
+// base Scoped handle plus the recovered ABAC subject string.
+//
+// The returned Scoped is NEVER nil on a nil error.
+func (b *hostCapabilityBase) resolveSettingScope(
+	ctx context.Context, scope hostv1.SettingScope, principalID string,
+) (settings.Scoped, string, error) {
+	if b.host == nil {
+		return nil, "", oops.With("plugin", b.pluginName).New("plugin host service is not configured")
+	}
+
+	// Fail closed on an unspecified scope.
+	if scope == hostv1.SettingScope_SETTING_SCOPE_UNSPECIFIED {
+		return nil, "", status.Error(codes.InvalidArgument, "scope required") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+
+	// Recover the acting actor AND the host-vouched owning player from the
+	// dispatch token — mirrors Evaluate / EmitEvent token recovery. Plugin-supplied
+	// identity is never trusted.
+	actor, ownerPlayer, err := b.actorFromToken(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	subject := pluginauthz.ActorSubject(actor)
+	if subject == "" {
+		return nil, "", status.Error(codes.PermissionDenied, "permission denied") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+
+	switch scope {
+	case hostv1.SettingScope_SETTING_SCOPE_GAME:
+		game := b.host.GameSettings()
+		// Fail closed on an unwired deployment: a nil store would nil-deref
+		// in Owner/StringSliceN below. Unimplemented signals "settings not
+		// configured" to the plugin without leaking host internals.
+		if game == nil {
+			return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+		}
+		return game, subject, nil
+
+	case hostv1.SettingScope_SETTING_SCOPE_PLAYER:
+		// PLAYER ownership compares principal_id against the host-vouched owning
+		// player of the acting character (token-carried). The resulting pid IS the
+		// player ULID, so store.For keys the player partition correctly.
+		return b.principalScopedStore(ctx, b.host.PlayerSettings(), principalID, ownerPlayer, subject)
+
+	case hostv1.SettingScope_SETTING_SCOPE_CHARACTER:
+		// CHARACTER ownership compares principal_id against the acting character's
+		// ID (the dispatch-token actor is always an ActorCharacter).
+		return b.principalScopedStore(ctx, b.host.CharacterSettings(), principalID, actor.ID, subject)
+
+	default:
+		return nil, "", status.Error(codes.InvalidArgument, "unsupported scope") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+}
+
+// principalScopedFor is the narrow For-factory shape shared by the player and
+// character settings stores. Both PlayerSettingsStore and CharacterSettingsStore
+// satisfy it, letting principalScopedStore handle the structurally-identical
+// nil-store guard, ownership check, and For() call once for both scopes.
+type principalScopedFor interface {
+	For(ctx context.Context, principalID ulid.ULID) settings.Scoped
+}
+
+// principalScopedStore is the shared PLAYER / CHARACTER resolution path: it fails
+// closed when the store is unwired, enforces requirePrincipalOwnership against
+// the caller-supplied expectedOwnerID, and returns the principal's Scoped handle.
+//
+// The per-scope security distinction is preserved at the call site: PLAYER passes
+// the host-vouched owning player, CHARACTER passes the acting character's ID. This
+// helper never chooses the expected owner — it only deduplicates the surrounding
+// guard/lookup boilerplate. A nil store interface value (an unset store) fails
+// closed with Unimplemented.
+func (b *hostCapabilityBase) principalScopedStore(
+	ctx context.Context, store principalScopedFor, principalID, expectedOwnerID, subject string,
+) (settings.Scoped, string, error) {
+	// An unset store is a true nil interface: Host().PlayerSettings() /
+	// CharacterSettings() return the interface-typed field unchanged, and a nil
+	// PlayerSettingsStore / CharacterSettingsStore converts to a nil
+	// principalScopedFor — so this guard catches the unwired case as before.
+	if store == nil {
+		return nil, "", status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	pid, ownErr := b.requirePrincipalOwnership(principalID, expectedOwnerID)
+	if ownErr != nil {
+		return nil, "", ownErr
+	}
+	return store.For(ctx, pid), subject, nil
+}
+
+// requirePrincipalOwnership enforces that the request's principal_id equals the
+// host-vouched expectedOwnerID by delegating to the runtime-neutral shared gate
+// pluginauthz.CheckPrincipalOwnership — the SAME helper the Lua
+// get_setting/set_setting hostfuncs use, so the binary and Lua ownership trust
+// checks cannot diverge (plugin-runtime-symmetry, INV-PLUGIN-27). The oops codes the
+// helper returns are mapped to the gRPC statuses this RPC has always returned:
+// INVALID_PRINCIPAL_ID → InvalidArgument ("invalid principal_id"),
+// PRINCIPAL_NOT_OWNED → PermissionDenied ("permission denied").
+//
+// expectedOwnerID is supplied by resolveSettingScope per scope:
+//   - CHARACTER: the acting character's ID (dispatch-token actor is always an
+//     ActorCharacter).
+//   - PLAYER: the host-vouched owning player ULID of the acting character,
+//     recovered from the dispatch token (holomush-iokti.19). PLAYER scope is now
+//     FUNCTIONAL — a principal_id matching the owning player succeeds. When the
+//     dispatch carried no player context the owning player is "" and the shared
+//     gate fails closed (PRINCIPAL_NOT_OWNED → PermissionDenied).
+func (b *hostCapabilityBase) requirePrincipalOwnership(principalID, expectedOwnerID string) (ulid.ULID, error) {
+	pid, err := pluginauthz.CheckPrincipalOwnership(principalID, expectedOwnerID)
+	if err == nil {
+		return pid, nil
+	}
+	oopsErr, _ := oops.AsOops(err)
+	if oopsErr.Code() == "PRINCIPAL_NOT_OWNED" {
+		return ulid.ULID{}, status.Error(codes.PermissionDenied, "permission denied") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	// INVALID_PRINCIPAL_ID and any unexpected code fail closed as InvalidArgument.
+	return ulid.ULID{}, status.Error(codes.InvalidArgument, "invalid principal_id") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+}
+
+// authorizeGameWrite evaluates the operator authorization decision required for
+// a GAME-scope write. The subject (token-recovered) must be permitted to "write"
+// the per-plugin resource pluginauthz.SettingsGameWriteResource(s.pluginName).
+// Using the per-plugin resource lets operator policies scope GAME-write per
+// plugin (plugin-runtime-symmetry, INV-PLUGIN-27; holomush-iokti.15 Item 2).
+// A deny → PermissionDenied; an engine/build failure is logged and surfaced as
+// a generic Internal (no inner-error leak).
+func (b *hostCapabilityBase) authorizeGameWrite(ctx context.Context, subject string) error {
+	b.host.mu.RLock()
+	eng := b.host.engine
+	b.host.mu.RUnlock()
+	// Fail closed on a nil engine: a GAME write cannot be authorized without
+	// the ABAC engine, so deny rather than nil-deref on eng.Evaluate below.
+	// Unimplemented mirrors the nil-store guard in resolveSettingScope.
+	if eng == nil {
+		return status.Error(codes.Unimplemented, "settings not configured") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+
+	areq, err := types.NewAccessRequest(subject, types.ActionWrite, pluginauthz.SettingsGameWriteResource(b.pluginName), nil)
+	if err != nil {
+		slog.ErrorContext(ctx, "build game-write access request failed",
+			"plugin", b.pluginName, "err", err)
+		return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+
+	dec, err := eng.Evaluate(ctx, areq)
+	if err != nil {
+		slog.ErrorContext(ctx, "game-write authorization failed",
+			"plugin", b.pluginName, "err", err)
+		return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	if !dec.IsAllowed() {
+		return status.Error(codes.PermissionDenied, "permission denied") //nolint:wrapcheck // status errors are gRPC-native, not wrapped per grpc-errors.md
+	}
+	return nil
+}
+
+// actorFromToken recovers the host-issued dispatch-token actor AND the
+// host-vouched owning player ULID from the incoming metadata, mirroring
+// Evaluate / EmitEvent token recovery. Plugin-supplied identity claims are never
+// trusted. The owning player is the binary runtime's recovery of the value the
+// dispatcher stamped via core.WithOwningPlayer (Lua recovers the same value
+// in-process from the ctx); PLAYER-scope settings ownership compares it against
+// the request's principal_id. It is "" when the dispatch had no player context.
+// Fails closed on missing token, unconfigured store, or a token not valid for
+// this plugin.
+func (b *hostCapabilityBase) actorFromToken(ctx context.Context) (core.Actor, string, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	tokens := md.Get("x-holomush-emit-token")
+	if len(tokens) == 0 || tokens[0] == "" {
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_MISSING").
+			With("plugin", b.pluginName).
+			Errorf("plugin called settings without a host-issued dispatch token")
+	}
+
+	b.host.mu.RLock()
+	tokenStore := b.host.tokenStore
+	b.host.mu.RUnlock()
+	if tokenStore == nil {
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
+			With("plugin", b.pluginName).
+			Errorf("plugin token store is not configured")
+	}
+
+	storedActor, ownerPlayer, ok := tokenStore.Lookup(b.pluginName, tokens[0])
+	if !ok {
+		slog.WarnContext(ctx, "setting rejected: token not valid for this plugin",
+			"plugin", b.pluginName, "code", "EMIT_TOKEN_REJECTED")
+		return core.Actor{}, "", oops.Code("EMIT_TOKEN_REJECTED").
+			With("plugin", b.pluginName).
+			Errorf("dispatch token is not valid for this plugin")
+	}
+	return storedActor, ownerPlayer, nil
 }
 
 // --- streamHistoryServer (StreamHistoryService: QueryStreamHistory) ---------
@@ -274,25 +864,70 @@ type streamHistoryServer struct {
 }
 
 func (s *streamHistoryServer) QueryStreamHistory(ctx context.Context, req *hostv1.QueryStreamHistoryRequest) (*hostv1.QueryStreamHistoryResponse, error) {
-	resp, err := s.legacy().QueryStreamHistory(ctx, &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
-		Stream:      req.GetStream(),
-		Count:       req.GetCount(),
-		NotBeforeMs: req.GetNotBeforeMs(),
-		Cursor:      req.GetCursor(),
-	})
-	if err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	out := &hostv1.QueryStreamHistoryResponse{
-		NextCursor: resp.GetNextCursor(),
+	hr := s.host.HistoryReader()
+	if hr == nil {
+		return nil, oops.With("plugin", s.pluginName).New("history reader not configured")
 	}
-	if events := resp.GetEvents(); len(events) > 0 {
-		out.Events = make([]*hostv1.Event, len(events))
-		for i, e := range events {
-			out.Events[i] = eventToHostV1(e)
+
+	count := int(req.GetCount())
+	if count < 0 {
+		return nil, oops.Code("INVALID_ARGUMENT").
+			With("count", req.GetCount()).
+			Errorf("count must be non-negative")
+	}
+	if count > maxQueryStreamHistoryCount {
+		count = maxQueryStreamHistoryCount
+	}
+
+	var notBefore time.Time
+	if req.GetNotBeforeMs() > 0 {
+		notBefore = time.UnixMilli(req.GetNotBeforeMs()).UTC()
+	}
+
+	// Decode the opaque cursor (if any) to extract the beforeID for
+	// ReplayTail. The cursor bytes are a host-format OwnerHost token
+	// (Seq + ULID) produced by encodeHostEventCursor below. On first
+	// page the cursor is empty and we pass the zero ULID.
+	var beforeID ulid.ULID
+	if len(req.GetCursor()) > 0 {
+		c, decodeErr := cursor.Decode(req.GetCursor())
+		if decodeErr != nil {
+			return nil, oops.Code("INVALID_ARGUMENT").
+				With("plugin", s.pluginName).
+				Wrap(decodeErr)
+		}
+		if c.Host != nil {
+			beforeID = c.Host.ID
 		}
 	}
-	return out, nil
+
+	events, err := hr.ReplayTail(ctx, req.GetStream(), count, notBefore, beforeID)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).With("stream", req.GetStream()).Wrap(err)
+	}
+
+	protoEvents := make([]*hostv1.Event, 0, len(events))
+	for _, e := range events {
+		pe := coreEventToProto(e)
+		pe.Cursor = encodeHostEventCursor(e.ID)
+		protoEvents = append(protoEvents, pe)
+	}
+
+	// Populate next_cursor from the oldest (first) event in the page, which
+	// is the pagination anchor for the next backward read. ReplayTail returns
+	// events in ascending order (oldest→newest), so index 0 is the boundary.
+	var nextCursor []byte
+	if len(protoEvents) == count && len(protoEvents) > 0 {
+		nextCursor = protoEvents[0].GetCursor()
+	}
+
+	return &hostv1.QueryStreamHistoryResponse{
+		Events:     protoEvents,
+		NextCursor: nextCursor,
+	}, nil
 }
 
 // --- streamSubscriptionServer (StreamSubscriptionService: Unimplemented) ----
@@ -308,24 +943,44 @@ type streamSubscriptionServer struct {
 }
 
 // --- auditServer (AuditService: DecryptOwnAuditRows) ------------------------
-//
-// DecryptOwnAuditRows reuses the pluginv1 crypto row types (hostv1's audit
-// messages embed pluginv1.AuditRow / pluginv1.RowResult directly), so no
-// per-row translation is needed — only the request/response envelope changes.
 
 type auditServer struct {
 	hostv1.UnimplementedAuditServiceServer
 	hostCapabilityBase
 }
 
+// DecryptOwnAuditRows decrypts a batch of the calling plugin's OWN audit rows
+// host-side (the plugin never holds a DEK). Each row is gated by the OwnerMap
+// g1 ownership check inside the ReadbackDecryptor; rows owned by a different
+// plugin are refused with no_plaintext_reason="not_owner" before any decrypt
+// (INV-CRYPTO-27). Results are returned 1:1 in request order (INV-CRYPTO-37). The
+// per-call batch cap (DECRYPT_BATCH_TOO_LARGE on an over-cap batch) is enforced
+// inside the common ReadbackDecryptor.DecryptOwnRows path — the SAME bound the
+// Lua hostfunc adapter inherits, so neither runtime gets an unbounded batch the
+// other is denied (plugin-runtime-symmetry invariant). Request / response
+// envelopes reuse the pluginv1 crypto row types (hostv1's audit messages embed
+// holomush.plugin.v1.AuditRow / RowResult directly), so no per-row translation
+// is needed.
 func (s *auditServer) DecryptOwnAuditRows(ctx context.Context, req *hostv1.DecryptOwnAuditRowsRequest) (*hostv1.DecryptOwnAuditRowsResponse, error) {
-	resp, err := s.legacy().DecryptOwnAuditRows(ctx, &pluginv1.DecryptOwnAuditRowsRequest{
-		Rows: req.GetRows(),
-	})
-	if err != nil {
-		return nil, err
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	return &hostv1.DecryptOwnAuditRowsResponse{Results: resp.GetResults()}, nil
+	dec := s.host.ReadbackDecryptor()
+	if dec == nil {
+		return nil, oops.With("plugin", s.pluginName).New("read-back decryptor not configured")
+	}
+
+	// The instance ID is not bound to the host-service struct; the plugin
+	// name is the identity that matters for g1 ownership and the ReadBack
+	// AuthGuard branch. Empty instance is informational only on the audit
+	// record.
+	const instanceID = ""
+
+	results, err := dec.DecryptOwnRows(ctx, s.pluginName, instanceID, req.GetRows())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+	return &hostv1.DecryptOwnAuditRowsResponse{Results: results}, nil
 }
 
 // --- commandRegistryServer (CommandRegistryService: ListCommands, GetCommandHelp)
@@ -335,42 +990,68 @@ type commandRegistryServer struct {
 	hostCapabilityBase
 }
 
+// ListCommands enumerates the commands the named character may execute,
+// ABAC-filtered by the host. Unlike Evaluate/EmitEvent, this is read-only
+// metadata keyed by the request's character_id (parity with the Lua
+// list_commands host function), so it does NOT require a dispatch token.
+// Fail-closed on nil host / nil querier.
 func (s *commandRegistryServer) ListCommands(ctx context.Context, req *hostv1.ListCommandsRequest) (*hostv1.ListCommandsResponse, error) {
-	resp, err := s.legacy().ListCommands(ctx, &pluginv1.PluginHostServiceListCommandsRequest{
-		CharacterId: req.GetCharacterId(),
-	})
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	s.host.mu.RLock()
+	q := s.host.commandQuerier
+	s.host.mu.RUnlock()
+	if q == nil {
+		return nil, oops.Code("COMMAND_QUERIER_UNCONFIGURED").With("plugin", s.pluginName).Errorf("command querier is not configured")
+	}
+	charID, err := ulid.Parse(req.GetCharacterId())
 	if err != nil {
-		return nil, err
+		return nil, oops.Code("INVALID_ARGUMENT").With("plugin", s.pluginName).Errorf("invalid character_id")
 	}
-	out := &hostv1.ListCommandsResponse{Incomplete: resp.GetIncomplete()}
-	if cmds := resp.GetCommands(); len(cmds) > 0 {
-		out.Commands = make([]*hostv1.CommandInfo, len(cmds))
-		for i, c := range cmds {
-			out.Commands[i] = &hostv1.CommandInfo{
-				Name:   c.GetName(),
-				Help:   c.GetHelp(),
-				Usage:  c.GetUsage(),
-				Source: c.GetSource(),
-			}
-		}
+	res, err := q.Available(ctx, access.CharacterSubject(charID.String()))
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
-	return out, nil
+	out := make([]*hostv1.CommandInfo, 0, len(res.Commands))
+	for i := range res.Commands {
+		out = append(out, &hostv1.CommandInfo{
+			Name:   res.Commands[i].Name,
+			Help:   res.Commands[i].Help,
+			Usage:  res.Commands[i].Usage,
+			Source: res.Commands[i].Source,
+		})
+	}
+	return &hostv1.ListCommandsResponse{Commands: out, Incomplete: res.Incomplete}, nil
 }
 
+// GetCommandHelp returns full help detail for one command after an access check
+// for character_id. Read-only; no dispatch token required (parity with Lua
+// get_command_help host function).
 func (s *commandRegistryServer) GetCommandHelp(ctx context.Context, req *hostv1.GetCommandHelpRequest) (*hostv1.GetCommandHelpResponse, error) {
-	resp, err := s.legacy().GetCommandHelp(ctx, &pluginv1.PluginHostServiceGetCommandHelpRequest{
-		Name:        req.GetName(),
-		CharacterId: req.GetCharacterId(),
-	})
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	s.host.mu.RLock()
+	q := s.host.commandQuerier
+	s.host.mu.RUnlock()
+	if q == nil {
+		return nil, oops.Code("COMMAND_QUERIER_UNCONFIGURED").With("plugin", s.pluginName).Errorf("command querier is not configured")
+	}
+	charID, err := ulid.Parse(req.GetCharacterId())
 	if err != nil {
-		return nil, err
+		return nil, oops.Code("INVALID_ARGUMENT").With("plugin", s.pluginName).Errorf("invalid character_id")
+	}
+	d, err := q.Help(ctx, access.CharacterSubject(charID.String()), req.GetName())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
 	return &hostv1.GetCommandHelpResponse{
-		Name:     resp.GetName(),
-		Help:     resp.GetHelp(),
-		Usage:    resp.GetUsage(),
-		HelpText: resp.GetHelpText(),
-		Source:   resp.GetSource(),
+		Name:     d.Name,
+		Help:     d.Help,
+		Usage:    d.Usage,
+		HelpText: d.HelpText,
+		Source:   d.Source,
 	}, nil
 }
 
@@ -383,114 +1064,4 @@ func (s *commandRegistryServer) GetCommandHelp(ctx context.Context, req *hostv1.
 type kvServer struct {
 	hostv1.UnimplementedKVServiceServer
 	hostCapabilityBase
-}
-
-// --- shared-type translation (pluginv1 <-> hostv1) --------------------------
-//
-// host.v1 carries its own copies of these shared wire types (Task 2). The *Host
-// internals speak pluginv1; the capability servers above translate at the
-// boundary. TestPluginV1HostV1SharedTypeRoundTrip pins the enum correspondence.
-
-// focusKeyToPluginV1 converts a hostv1.FocusKey to its pluginv1 counterpart.
-// A nil input yields nil (preserving the "grid pivot" / absent-key semantics).
-func focusKeyToPluginV1(fk *hostv1.FocusKey) *pluginv1.FocusKey {
-	if fk == nil {
-		return nil
-	}
-	return &pluginv1.FocusKey{
-		Kind:     focusKindToPluginV1(fk.GetKind()),
-		TargetId: fk.GetTargetId(),
-	}
-}
-
-// focusKeyToHostV1 converts a pluginv1.FocusKey to its hostv1 counterpart.
-// A nil input yields nil.
-func focusKeyToHostV1(fk *pluginv1.FocusKey) *hostv1.FocusKey {
-	if fk == nil {
-		return nil
-	}
-	return &hostv1.FocusKey{
-		Kind:     focusKindToHostV1(fk.GetKind()),
-		TargetId: fk.GetTargetId(),
-	}
-}
-
-// focusKindToPluginV1 maps a hostv1.FocusKind to the pluginv1 enum. Unknown
-// values collapse to UNSPECIFIED (fail-closed: an unrecognized kind is rejected
-// downstream by protoToFocusKind in the legacy handler).
-func focusKindToPluginV1(k hostv1.FocusKind) pluginv1.FocusKind {
-	switch k {
-	case hostv1.FocusKind_FOCUS_KIND_SCENE:
-		return pluginv1.FocusKind_FOCUS_KIND_SCENE
-	default:
-		return pluginv1.FocusKind_FOCUS_KIND_UNSPECIFIED
-	}
-}
-
-// focusKindToHostV1 maps a pluginv1.FocusKind to the hostv1 enum.
-func focusKindToHostV1(k pluginv1.FocusKind) hostv1.FocusKind {
-	switch k {
-	case pluginv1.FocusKind_FOCUS_KIND_SCENE:
-		return hostv1.FocusKind_FOCUS_KIND_SCENE
-	default:
-		return hostv1.FocusKind_FOCUS_KIND_UNSPECIFIED
-	}
-}
-
-// focusKindFromHostV1 is the round-trip inverse used by the parity test.
-func focusKindFromHostV1(k hostv1.FocusKind) pluginv1.FocusKind {
-	return focusKindToPluginV1(k)
-}
-
-// focusFailureReasonToHostV1 maps a pluginv1.FocusFailureReason to the hostv1
-// enum (response path of AutoFocusOnJoin).
-func focusFailureReasonToHostV1(r pluginv1.FocusFailureReason) hostv1.FocusFailureReason {
-	switch r {
-	case pluginv1.FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT:
-		return hostv1.FocusFailureReason_FOCUS_FAILURE_REASON_MEMBERSHIP_ABSENT
-	case pluginv1.FocusFailureReason_FOCUS_FAILURE_REASON_CONNECTION_NOT_FOUND:
-		return hostv1.FocusFailureReason_FOCUS_FAILURE_REASON_CONNECTION_NOT_FOUND
-	default:
-		return hostv1.FocusFailureReason_FOCUS_FAILURE_REASON_UNSPECIFIED
-	}
-}
-
-// autoFocusFailureReasonToHostV1ByReason is the test-facing alias used to pin
-// the FocusFailureReason correspondence in TestPluginV1HostV1SharedTypeRoundTrip.
-func autoFocusFailureReasonToHostV1ByReason(r pluginv1.FocusFailureReason) hostv1.FocusFailureReason {
-	return focusFailureReasonToHostV1(r)
-}
-
-// settingScopeToPluginV1 maps a hostv1.SettingScope to the pluginv1 enum. The
-// legacy resolveSettingScope fails closed on UNSPECIFIED, so an unknown value
-// collapsing to UNSPECIFIED is the correct fail-closed behavior.
-func settingScopeToPluginV1(scope hostv1.SettingScope) pluginv1.SettingScope {
-	switch scope {
-	case hostv1.SettingScope_SETTING_SCOPE_GAME:
-		return pluginv1.SettingScope_SETTING_SCOPE_GAME
-	case hostv1.SettingScope_SETTING_SCOPE_PLAYER:
-		return pluginv1.SettingScope_SETTING_SCOPE_PLAYER
-	case hostv1.SettingScope_SETTING_SCOPE_CHARACTER:
-		return pluginv1.SettingScope_SETTING_SCOPE_CHARACTER
-	default:
-		return pluginv1.SettingScope_SETTING_SCOPE_UNSPECIFIED
-	}
-}
-
-// eventToHostV1 converts a pluginv1.Event (QueryStreamHistory result) to the
-// hostv1.Event copy. Field shapes are identical; only the Go type differs.
-func eventToHostV1(e *pluginv1.Event) *hostv1.Event {
-	if e == nil {
-		return nil
-	}
-	return &hostv1.Event{
-		Id:        e.GetId(),
-		Stream:    e.GetStream(),
-		Type:      e.GetType(),
-		Timestamp: e.GetTimestamp(),
-		ActorKind: e.GetActorKind(),
-		ActorId:   e.GetActorId(),
-		Payload:   e.GetPayload(),
-		Cursor:    e.GetCursor(),
-	}
 }

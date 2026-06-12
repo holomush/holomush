@@ -28,15 +28,15 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/pkg/errutil"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 // TestINV1EvaluateRequestHasNoSubjectField reflects over the proto descriptor of
-// PluginHostServiceEvaluateRequest and asserts no field named "subject" exists.
+// host.v1 EvaluateRequest and asserts no field named "subject" exists.
 // The subject is always host-derived from the dispatch token; placing it on
 // the wire would allow plugins to forge authorization subjects (INV-PLUGIN-22).
 func TestINV1EvaluateRequestHasNoSubjectField(t *testing.T) {
-	md := (&pluginv1.PluginHostServiceEvaluateRequest{}).ProtoReflect().Descriptor()
+	md := (&hostv1.EvaluateRequest{}).ProtoReflect().Descriptor()
 	fields := md.Fields()
 	for i := range fields.Len() {
 		name := string(fields.Get(i).Name())
@@ -87,7 +87,7 @@ func TestINV5BothSurfacesRejectForeignResourceTypeViaSharedEntitlementGate(t *te
 		})
 		defer h.tokenStore.Revoke(token)
 
-		_, err := srv.Evaluate(ctx, &pluginv1.PluginHostServiceEvaluateRequest{
+		_, err := srv.Evaluate(ctx, &hostv1.EvaluateRequest{
 			Action:   "read",
 			Resource: "scene:01SCENE0000000000000000000",
 		})

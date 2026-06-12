@@ -28,6 +28,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc"
@@ -1383,7 +1384,7 @@ func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
 func TestPluginHostServiceEmitEventReturnsErrorWhenHostIsMissing(t *testing.T) {
 	server := &pluginHostServiceServer{pluginName: "core-scenes"}
 
-	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err := server.EmitEvent(context.Background(), &hostv1.EmitEventRequest{
 		Stream:    "scene:01SCENE",
 		EventType: "system",
 		Payload:   []byte(`{"kind":"created"}`),
@@ -1398,7 +1399,7 @@ func TestPluginHostServiceEmitEventReturnsErrorWhenEmitterIsMissing(t *testing.T
 		pluginName: "core-scenes",
 	}
 
-	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err := server.EmitEvent(context.Background(), &hostv1.EmitEventRequest{
 		Stream:    "scene:01SCENE",
 		EventType: "system",
 		Payload:   []byte(`{"kind":"created"}`),
@@ -1415,13 +1416,17 @@ func TestSDKActorKindToCoreDefaultsToPluginKind(t *testing.T) {
 	assert.Equal(t, core.ActorPlugin, sdkActorKindToCore(pluginsdk.ActorKind(99)))
 }
 
-func TestNewPluginHostServiceServerRegistersPluginHostService(t *testing.T) {
+func TestNewPluginHostServiceServerRegistersCapabilityServices(t *testing.T) {
 	factory := newPluginHostServiceServer(NewHost(), "core-scenes")
 
 	server := factory(nil)
 	t.Cleanup(server.Stop)
 
-	assert.Contains(t, server.GetServiceInfo(), "holomush.plugin.v1.PluginHostService")
+	info := server.GetServiceInfo()
+	// The monolithic god-service is gone (holomush-eykuh.1, Task 12); the broker
+	// now serves the capability-scoped host.v1 services instead.
+	assert.NotContains(t, info, "holomush.plugin.v1.PluginHostService")
+	assert.Contains(t, info, "holomush.plugin.host.v1.EmitService")
 }
 
 func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
@@ -1463,7 +1468,7 @@ func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
 	ctx := metadata.NewIncomingContext(context.Background(),
 		metadata.Pairs("x-holomush-emit-token", tok))
 
-	_, err = server.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+	_, err = server.EmitEvent(ctx, &hostv1.EmitEventRequest{
 		Stream:    "scene:01SCENE",
 		EventType: "system",
 		Payload:   []byte(`{"kind":`),

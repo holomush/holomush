@@ -397,7 +397,7 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 	// TestEmitEventCrossPluginTokenLeakFails. We do not duplicate it here
 	// because it requires loading two binary plugins side-by-side and the
 	// invariant is fully exercised by the unit test against the real
-	// pluginHostServiceServer.
+	// host.v1 EmitService server.
 
 	// Lua plugin manifest-gate scenarios (spec §5.7 — Lua + binary
 	// symmetry). The manifest gate lives in plugins.PluginEventEmitter.Emit

@@ -10,7 +10,7 @@ import (
 
 // SettingsGameWriteResource returns the ABAC resource a GAME-scope SetSetting
 // writes to for the given plugin. It is the single source of truth shared by
-// the binary (PluginHostService.SetSetting) and Lua (holomush.set_setting)
+// the binary (host.v1 SettingsService.SetSetting) and Lua (holomush.set_setting)
 // surfaces so the two runtimes cannot drift onto different operator-permission
 // resources (plugin-runtime-symmetry, INV-PLUGIN-27). The resource is per-plugin so
 // operator policies can scope GAME-write permission per plugin: a grant on
@@ -26,7 +26,7 @@ func SettingsGameWriteResource(pluginName string) string {
 // CheckPrincipalOwnership parses principalID as a ULID and enforces that it
 // equals expectedOwnerID — the host-vouched owner the caller is permitted to
 // act on behalf of. It is the single runtime-neutral ownership gate shared by
-// the binary (PluginHostService.GetSetting/SetSetting) and Lua
+// the binary (host.v1 SettingsService.GetSetting/SetSetting) and Lua
 // (holomush.get_setting/set_setting) settings surfaces, so the trust check
 // cannot diverge between runtimes (plugin-runtime-symmetry, INV-PLUGIN-27).
 //

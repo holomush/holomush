@@ -272,13 +272,13 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		hostOpts,
 		goplugin.WithSchemaProvisioner(schemaProvisioner),
 		goplugin.WithServiceRegistry(s.registry),
-		// Wire the ABAC engine so PluginHostService.Evaluate resolves (holomush-8kkv5.18).
+		// Wire the ABAC engine so host.v1 EvalService.Evaluate resolves (holomush-8kkv5.18).
 		// This MUST use the same engine instance as s.cfg.ABAC.Engine() above — the Lua
 		// hostfunc bridge (hostfunc.WithEngine) is wired from the same call, and the
 		// attribute resolver registered on it is the same one returned by
 		// s.cfg.ABAC.AttributeResolver() below. One engine+resolver pair for both surfaces.
 		goplugin.WithEngine(s.cfg.ABAC.Engine()),
-		// Wire the audit logger so PluginHostService.Evaluate emits INV-PLUGIN-25 host-stamped
+		// Wire the audit logger so host.v1 EvalService.Evaluate emits INV-PLUGIN-25 host-stamped
 		// audit events for binary plugins. Same logger instance as the Lua surface above
 		// (both call s.cfg.ABAC.AuditLogger()), satisfying spec §5 / INV-PLUGIN-25.
 		goplugin.WithAuditLogger(s.cfg.ABAC.AuditLogger()),
@@ -461,7 +461,7 @@ func (s *PluginSubsystem) CommandRegistry() *command.Registry {
 
 // CommandQuerier returns the shared command querier. Panics if called before Start().
 // Consumed by the gRPC subsystem (holoGRPC.WithCommandQuerier) and the binary
-// PluginHostService (bead .8) to ensure a single command-visibility filter (INV-COMMAND-1).
+// the host.v1 CommandRegistryService (bead .8) to ensure a single command-visibility filter (host.v1 CommandRegistryService) (INV-COMMAND-1).
 func (s *PluginSubsystem) CommandQuerier() *commandquery.Querier {
 	if s.commandQuerier == nil {
 		panic("plugin/setup: CommandQuerier() called before Start()")
