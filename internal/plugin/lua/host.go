@@ -19,6 +19,7 @@ import (
 
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/settings"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -35,14 +36,16 @@ var (
 // luaPlugin holds compiled Lua code for a plugins.
 type luaPlugin struct {
 	manifest     *plugins.Manifest
-	code         string   // Lua source (compiled at load time in future)
-	emitRegistry []string // INV-PLUGIN-32: populated during Load capture pass; nil when crypto.emits empty
+	code         string          // Lua source (compiled at load time in future)
+	emitRegistry []string        // INV-PLUGIN-32: populated during Load capture pass; nil when crypto.emits empty
+	endpoint     *pluginEndpoint // per-plugin bufconn endpoint serving host.v1 LuaDefaultSet; nil when hostFuncs is nil
 }
 
 // Host manages Lua plugins.
 type Host struct {
 	factory         *StateFactory
 	hostFuncs       *hostfunc.Functions
+	hostCapAdapter  hostcap.HostCapabilities // adapter wrapping hostFuncs; non-nil iff hostFuncs is non-nil
 	plugins         map[string]*luaPlugin
 	mu              sync.RWMutex
 	closed          bool
@@ -97,15 +100,19 @@ func NewHost(opts ...HostOption) *Host {
 
 // NewHostWithFunctions creates a Lua plugin host with host functions.
 // The host functions enable plugins to call holomush.* APIs like log(), new_request_id(), and kv_*.
+// Also constructs a hostcap.HostCapabilities adapter over hf so per-plugin bufconn
+// endpoints (created at Load time) serve the host.v1 LuaDefaultSet capability servers
+// through the same Functions backing (INV-PLUGIN-49).
 // Panics if hf is nil (consistent with hostfunc.New).
 func NewHostWithFunctions(hf *hostfunc.Functions, opts ...HostOption) *Host {
 	if hf == nil {
 		panic("lua.NewHostWithFunctions: hostFuncs cannot be nil")
 	}
 	h := &Host{
-		factory:   NewStateFactory(),
-		hostFuncs: hf,
-		plugins:   make(map[string]*luaPlugin),
+		factory:        NewStateFactory(),
+		hostFuncs:      hf,
+		hostCapAdapter: newLuaHostCapAdapter(hf),
+		plugins:        make(map[string]*luaPlugin),
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -247,7 +254,8 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		mod := L.NewTable()
 		hostfunc.RegisterEmitTypeFuncs(L, mod, reg)
 		L.SetGlobal("holomush", mod)
-		if err := L.DoString(string(code)); err != nil {
+		err = L.DoString(string(code))
+		if err != nil {
 			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
 				With("entry", manifest.LuaPlugin.Entry).
 				Hint("INV-PLUGIN-32 capture pass execution error").Wrap(err)
@@ -255,7 +263,8 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		emitRegistry = reg.Types()
 	} else {
 		// Existing syntax-check pass — no hostfuncs registered.
-		if err := L.DoString(string(code)); err != nil {
+		err = L.DoString(string(code))
+		if err != nil {
 			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
 				With("entry", manifest.LuaPlugin.Entry).
 				Hint("syntax error").Wrap(err)
@@ -282,10 +291,35 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		delete(h.mergedConfigs, manifest.Name)
 	}
 
+	// Create the per-plugin bufconn endpoint once per plugin (not per VM delivery).
+	// The endpoint serves the host.v1 LuaDefaultSet capability servers over an
+	// in-process connection that the bridge will capture for gRPC stub calls.
+	// When hostFuncs is nil (NewHost path — no capabilities configured) the
+	// adapter is also nil, so we skip endpoint creation; the plugin runs without
+	// the host-brokered capability path (safe: no bridge will wire the nil conn).
+	var ep *pluginEndpoint
+	if h.hostCapAdapter != nil {
+		ep, err = newPluginEndpoint(h.hostCapAdapter, manifest.Name)
+		if err != nil {
+			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
+				Hint("failed to create bufconn endpoint").Wrap(err)
+		}
+	}
+
+	// Close any existing endpoint for this plugin name before overwriting the map
+	// entry. This handles reloads: a prior Load may have created a running
+	// *grpc.Server + bufconn listener (goroutine + fd) that must be stopped before
+	// the new endpoint takes over. We close here — after the new endpoint is
+	// successfully created — so a Load that fails partway does NOT tear down a
+	// still-good endpoint from the previous load.
+	if existing, ok := h.plugins[manifest.Name]; ok && existing.endpoint != nil {
+		_ = existing.endpoint.Close() //nolint:errcheck // superseded on reload; best-effort cleanup
+	}
 	h.plugins[manifest.Name] = &luaPlugin{
 		manifest:     manifest,
 		code:         string(code),
 		emitRegistry: emitRegistry,
+		endpoint:     ep,
 	}
 
 	return nil
@@ -296,8 +330,15 @@ func (h *Host) Unload(_ context.Context, name string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if _, ok := h.plugins[name]; !ok {
+	p, ok := h.plugins[name]
+	if !ok {
 		return oops.In("lua").With("plugin", name).With("operation", "unload").New("plugin not loaded")
+	}
+	if p.endpoint != nil {
+		// Close the endpoint before deleting the map entry. The entry is deleted
+		// in the same locked section, so this is the only Close call for this
+		// endpoint — no risk of double-close.
+		_ = p.endpoint.Close() //nolint:errcheck // best-effort cleanup; plugin is being removed regardless
 	}
 	delete(h.plugins, name)
 	return nil
@@ -571,6 +612,16 @@ func (h *Host) Close(_ context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.closed = true
+	// Close all per-plugin bufconn endpoints before discarding the map.
+	// Each endpoint is closed exactly once: the map is nilled in the same
+	// locked section, so no concurrent Load or Unload can race this iteration.
+	// Best-effort: individual close errors are not collected (the host is
+	// shutting down and all plugin work has stopped by convention).
+	for _, p := range h.plugins {
+		if p.endpoint != nil {
+			_ = p.endpoint.Close() //nolint:errcheck // best-effort shutdown; errors not actionable at host close
+		}
+	}
 	h.plugins = nil
 	return nil
 }
