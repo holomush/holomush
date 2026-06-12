@@ -197,3 +197,16 @@
   OwnedResourceTypes: non-nil empty map at parity w/ evaluate.go:57 literal+comment. RECURRING: when adapter
   is dead-code-until-next-task, verdict hinges on live-caller; for ANY server-reachable method read the
   CONSUMER server body to classify each return field read-vs-unread before trusting a "lossy but unread" claim.
+
+- **luabridge plugin-service bridge T10 (eykuh.2.10 READY, 2026-06-12).** RegisterPluginService:
+  descriptor→Lua table, dynamicpb marshal, conn.Invoke. DECISIVE for "real BrokerProxy" check:
+  test brokerProxyLoopback does `factory:=goplugin.NewBrokerProxy(providerConn,name); srv:=factory(nil);
+  srv.Serve(lis)` = EXACT binary path (host.go:819-820 NewBrokerProxy→AcceptAndServe calls factory then
+  Serve). ProxyStreams (grpc_proxy.go:93) raw-byte RawMessage forward = genuine, not stub. Round-trip
+  genuine BECAUSE reply field≠request field (message→reply): hardcoded passthrough would fail assertion.
+  Path `/<FullName>/<Method>` = `/test.echo.v1.Echo/Echo` canonical. Fail-early order CORRECT: bound slice
+  built+len-checked (pluginsvc.go:60-74) BEFORE tbl/SetGlobal (76-82) → no partial global leak. Namespace=
+  strings.ToLower(short name) → collision risk if 2 providers' short names lowercase-collide (Low, flag for
+  sub-spec5 migration). UNWIRED mechanism (only test+plan call it) = per-task-deferral pattern (spec §5
+  fixture-only, sub-spec5 migrates) — consistent w/ 2.5/2.6. Streaming silently `continue`-skipped, doc'd in
+  source not logged (Low). pushBridgeError opacity preserved (status.Convert msg only). 396 tests, lint 0.
