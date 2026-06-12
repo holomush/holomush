@@ -3501,12 +3501,14 @@ invariants:
     legacy: ["INV-1@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
     summary: "PluginHostService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field
       on the wire (never sourced from plugin/Lua-supplied data)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/goplugin/evaluate_invariants_test.go"
+      - "test/integration/pluginparity/parity_test.go"
     refs:
       - {file: "internal/plugin/pluginauthz/evaluate.go", token: "INV-1"}
       - {file: "internal/plugin/hostfunc/evaluate.go", token: "INV-1"}
       - {file: "internal/plugin/hostfunc/stdlib_settings.go", token: "INV-1"}
-      - {file: "internal/plugin/goplugin/evaluate_invariants_test.go", token: "INV-1"}
       - {file: "api/proto/holomush/plugin/host/v1/eval.proto", token: "INV-1"}
   - id: INV-PLUGIN-23
     scope: INV-PLUGIN

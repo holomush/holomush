@@ -35,6 +35,11 @@ import (
 // host.v1 EvaluateRequest and asserts no field named "subject" exists.
 // The subject is always host-derived from the dispatch token; placing it on
 // the wire would allow plugins to forge authorization subjects (INV-PLUGIN-22).
+//
+// This is the spec-canonical binding mechanism for INV-PLUGIN-22 (the design's
+// stated meta-test: "proto descriptor has no subject field").
+//
+// Verifies: INV-PLUGIN-22
 func TestINV1EvaluateRequestHasNoSubjectField(t *testing.T) {
 	md := (&hostv1.EvaluateRequest{}).ProtoReflect().Descriptor()
 	fields := md.Fields()

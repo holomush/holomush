@@ -21,7 +21,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
@@ -347,4 +349,87 @@ func TestEvaluateAuthorizationSeamFailsClosedAcrossRuntimes(t *testing.T) {
 	require.Error(t, luaErr,
 		"lua Evaluate MUST fail closed without a host-established PluginSubject identity")
 	assert.Nil(t, luaResp, "no allow is produced for an unauthorized lua caller")
+}
+
+// TestEvaluateSubjectIsHostDerivedNotPluginSupplied binds INV-PLUGIN-22.
+//
+// INV-PLUGIN-22: "PluginHostService.Evaluate's subject is host-derived from the
+// authenticated actor; there is no subject field on the wire (never sourced from
+// plugin/Lua-supplied data)." The invariant has two clauses, and this test
+// proves both with NO scaffolding that models non-existent production behavior:
+//
+//  1. NO SUBJECT FIELD ON THE WIRE (structural, both runtimes — the
+//     spec-canonical binding mechanism, "meta-test: proto descriptor has no
+//     subject field", design §INV-1). The host.v1 EvaluateRequest message — the
+//     SINGLE wire contract both the binary (*goplugin.Host) and Lua
+//     (luaHostCapAdapter) runtimes consume through the shared
+//     hostcap.RegisterCapabilities source — carries exactly {action, resource}
+//     and NO subject/actor field. Forgery is therefore impossible BY
+//     CONSTRUCTION: a plugin cannot place a subject on a wire that has no slot
+//     for one. Reflecting over the generated proto descriptor locks this so an
+//     accidental subject-field addition breaks the build.
+//
+//  2. SUBJECT IS HOST-DERIVED FROM THE HOST-ESTABLISHED IDENTITY (Lua adapter,
+//     observed directly through the REAL production luaHostCapAdapter). The
+//     Lua identity seam is luaHostCapAdapter.LookupActor, the per-runtime adapter
+//     that recovers the acting identity. It builds the ABAC subject as
+//     access.PluginSubject(pluginName) from the HOST-ESTABLISHED pluginName —
+//     the value the host baked into the capability base — NOT from the context
+//     actor's ID and NOT from any wire field. We prove this is forgery-proof by
+//     stamping a FORGED actor ID on the context and asserting the recovered
+//     subject is still plugin:<host-established-name>, never plugin:<forged-id>.
+//     (The binary seam is goplugin.Host.LookupActor, which recovers the actor
+//     from a host-issued dispatch token in metadata, never a plugin field; the
+//     end-to-end binary observation is the token-recovery path exercised in
+//     goplugin's host_service tests. The transport-identity gap — the Lua bufconn
+//     does not propagate core.ActorFromContext across the gRPC boundary — means
+//     the Lua seam is asserted at the adapter, the honest scaffolding-free seam,
+//     rather than via a test-local interceptor that would model a non-existent
+//     production propagation.)
+//
+// Verifies: INV-PLUGIN-22
+func TestEvaluateSubjectIsHostDerivedNotPluginSupplied(t *testing.T) {
+	// (1) NO SUBJECT FIELD ON THE WIRE — structural lock on the single shared
+	// EvaluateRequest contract. Both runtimes consume this exact message; if it
+	// grew a subject field, a plugin could forge the authorization subject.
+	md := (&hostv1.EvaluateRequest{}).ProtoReflect().Descriptor()
+	fields := md.Fields()
+	for i := range fields.Len() {
+		name := string(fields.Get(i).Name())
+		assert.NotEqualf(t, "subject", name,
+			"EvaluateRequest MUST NOT carry a subject field (INV-PLUGIN-22): the "+
+				"subject is host-derived, never plugin-supplied; field %q present", name)
+		assert.NotEqualf(t, "actor", name,
+			"EvaluateRequest MUST NOT carry an actor field (INV-PLUGIN-22): identity "+
+				"is host-established, never plugin-supplied; field %q present", name)
+	}
+	require.Equal(t, 2, fields.Len(),
+		"EvaluateRequest MUST have exactly {action, resource}; any additional field "+
+			"is a candidate forgery surface (INV-PLUGIN-22)")
+
+	// (2) SUBJECT IS HOST-DERIVED — observed through the REAL production
+	// luaHostCapAdapter the LuaDefaultSet endpoint uses (reached via the host's
+	// HostCapabilitiesAdapter() accessor, exactly as newLuaEndpoint wires it).
+	luaHost := lua.NewHostWithFunctions(hostfunc.New(nil))
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+	adapter := luaHost.HostCapabilitiesAdapter()
+	require.NotNil(t, adapter, "lua host must expose its real hostcap adapter")
+
+	// A malicious plugin attempts to forge identity by stamping an arbitrary
+	// actor ID on the dispatch context. The adapter MUST ignore that ID for the
+	// ABAC subject and derive it solely from the HOST-ESTABLISHED plugin name.
+	const forgedActorID = "forged-evil-character-id"
+	ctx := core.WithActor(context.Background(),
+		core.Actor{Kind: core.ActorCharacter, ID: forgedActorID})
+
+	_, subject, err := adapter.LookupActor(ctx, parityPluginName)
+	require.NoError(t, err, "LookupActor must recover identity when an actor is on the context")
+
+	wantSubject := access.PluginSubject(parityPluginName)
+	assert.Equal(t, wantSubject, subject,
+		"the ABAC subject MUST be host-derived from the host-established plugin name "+
+			"(plugin:parity-plugin), proving it is NOT sourced from the context/wire actor")
+	assert.NotContains(t, subject, forgedActorID,
+		"the recovered subject MUST NOT contain the plugin-supplied (forged) actor ID; "+
+			"if it did, a plugin could forge its authorization subject (INV-PLUGIN-22)")
 }
