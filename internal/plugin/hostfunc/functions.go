@@ -153,6 +153,42 @@ func (f *Functions) SetAuditDecryptor(d AuditDecryptor) {
 	f.auditDecryptor = d
 }
 
+// Engine returns the ABAC access policy engine, or nil when unconfigured.
+// Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.AccessEngine.
+func (f *Functions) Engine() types.AccessPolicyEngine { return f.engine }
+
+// Auditor returns the plugin-authz auditor, or nil when unconfigured.
+// Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.Auditor.
+func (f *Functions) Auditor() pluginauthz.Auditor { return f.auditor }
+
+// GetCommandQuerier returns the command-visibility querier, or nil when unconfigured.
+// Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.CommandQuerier.
+func (f *Functions) GetCommandQuerier() *commandquery.Querier { return f.commandQuerier }
+
+// GetSessionAccess returns the narrow session read/update surface, or nil when unconfigured.
+// Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.SessionAccess.
+func (f *Functions) GetSessionAccess() session.Access { return f.sessionAccess }
+
+// GetWorldMutator returns the world write surface, or nil when unconfigured.
+// Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.WorldMutator.
+func (f *Functions) GetWorldMutator() WorldMutator { return f.worldMutator }
+
+// GetPropertyRegistry returns the property registry, or the shared registry when unset.
+// Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.PropertyDefinition.
+func (f *Functions) GetPropertyRegistry() *property.Registry { return f.propertyRegistry }
+
+// GetFocusOps returns the focus coordinator ops shim, or nil when unconfigured.
+// Used by the hostcap_adapter to wrap hostfunc.FocusOps into a focus.Coordinator.
+func (f *Functions) GetFocusOps() FocusOps { return f.focusOps }
+
+// GetHistoryReader returns the event history reader, or nil when unconfigured.
+// Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.HistoryReader.
+func (f *Functions) GetHistoryReader() HistoryReader { return f.historyReader }
+
+// GetAuditDecryptor returns the audit read-back decryptor, or nil when unconfigured.
+// Used by the hostcap_adapter to wrap hostfunc.AuditDecryptor into plugins.ReadbackDecryptor.
+func (f *Functions) GetAuditDecryptor() AuditDecryptor { return f.auditDecryptor }
+
 // SetFocusOps sets the focus coordinator for join/leave/present focus host
 // functions. Supports late-binding: the coordinator is created during gRPC
 // subsystem Start, which runs after plugin loading. Lua VMs are created
