@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.host.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1;hostv1";
+
+// StreamHistoryService is the host-brokered `stream_history` capability: a
+// plugin reads the tail of a stream for plugin-side display, backward-paginated
+// by opaque cursor. Carved from the former PluginHostService (holomush-eykuh.1).
+// Served by streamHistoryServer in
+// internal/plugin/goplugin/host_capability_servers.go.
+service StreamHistoryService {
+  // QueryStreamHistory reads the tail of a stream for plugin-side display,
+  // backward-paginated by opaque cursor, via HistoryReader.ReplayTail.
+  // Read-only: it does not advance session cursors or mutate session state.
+  // A negative count is rejected (INVALID_ARGUMENT); count is CLAMPED to
+  // maxQueryStreamHistoryCount (500), not rejected, when too large.
+  rpc QueryStreamHistory(QueryStreamHistoryRequest) returns (QueryStreamHistoryResponse);
+}
+
+// StreamSubscriptionService is the host-brokered `stream_subscription`
+// capability: a plugin subscribes or unsubscribes an active session to a stream
+// mid-session. Carved from the former PluginHostService (holomush-eykuh.1).
+// Both RPCs are DECLARED BUT UNSERVED today (holomush-l6std): no server impl,
+// no production client; they return codes.Unimplemented.
+service StreamSubscriptionService {
+  // AddSessionStream subscribes an active session to an additional stream
+  // mid-session. DECLARED BUT UNSERVED (holomush-l6std): no server impl, no
+  // production client; returns codes.Unimplemented today. (The wire comment
+  // about SESSION_NOT_FOUND describes the intended-but-unimplemented contract.)
+  rpc AddSessionStream(AddSessionStreamRequest) returns (AddSessionStreamResponse);
+  // RemoveSessionStream unsubscribes an active session from a stream.
+  // DECLARED BUT UNSERVED (holomush-l6std): no server impl, no production
+  // client; returns codes.Unimplemented today.
+  rpc RemoveSessionStream(RemoveSessionStreamRequest) returns (RemoveSessionStreamResponse);
+}
+
+// Event is the host→plugin delivery shape for one game event (the proto mirror
+// of pkg/plugin.Event), returned in a QueryStreamHistory page.
+message Event {
+  // ULID string uniquely identifying the event; also its bus dedup key.
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+  // Source stream this event belongs to, in legacy "prefix:id" form
+  // (e.g. "location:loc_abc123"). Translated to the dot-delimited NATS subject
+  // at the emit boundary.
+  string stream = 2 [(buf.validate.field).string.min_len = 1];
+  // Event-type discriminator (e.g. "say", "pose", "arrive", "leave",
+  // "system") that the plugin handler switches on.
+  string type = 3 [(buf.validate.field).string.min_len = 1];
+  // Event occurrence time in Unix milliseconds (host clock).
+  int64 timestamp = 4;
+  // Actor kind as a string (e.g. "character", "system", "plugin"). Carried as
+  // a string rather than an enum for forward-compat; the SDK maps it to its
+  // ActorKind type. Distinct from the bus-internal ActorKind enum.
+  string actor_kind = 5 [(buf.validate.field).string.min_len = 1];
+  // ULID of the actor that caused the event (the character/system/plugin id).
+  string actor_id = 6 [(buf.validate.field).string.min_len = 1];
+  // JSON-encoded event payload (max 64 KiB); the plugin decodes it per the
+  // event type's schema.
+  string payload = 7 [(buf.validate.field).string.max_len = 65536];
+  // cursor is the opaque pagination token for this event. Pass as
+  // QueryStreamHistoryRequest.cursor on the next call to page backward from
+  // this position. Empty on events received via delivery (not history). Treat
+  // as an opaque blob.
+  bytes cursor = 8;
+}
+
+// StreamReplayMode controls how a stream subscription's initial replay
+// behaves when added via AddSessionStream.
+enum StreamReplayMode {
+  // Zero value; treated as FROM_CURSOR for backward compatibility.
+  STREAM_REPLAY_MODE_UNSPECIFIED = 0;
+  // Replay from the session's saved cursor for the stream (catch-up).
+  STREAM_REPLAY_MODE_FROM_CURSOR = 1;
+  // Skip historical replay and deliver only newly-arriving events.
+  STREAM_REPLAY_MODE_LIVE_ONLY = 2;
+}
+
+// QueryStreamHistoryRequest selects a backward-paginated tail of a stream for
+// plugin-side display.
+message QueryStreamHistoryRequest {
+  // Stream to read history from (legacy "prefix:id" form).
+  string stream = 1 [(buf.validate.field).string.min_len = 1];
+  // Page size; negative is rejected, values above 500 are clamped to 500.
+  int32 count = 2;
+  // Epoch milliseconds. Events before this time are excluded. 0 means no lower bound.
+  int64 not_before_ms = 3;
+  // cursor is the opaque pagination cursor from a previous response.
+  // Events older than the cursor position are returned. Empty = start from latest.
+  bytes cursor = 4;
+}
+
+// QueryStreamHistoryResponse returns one history page plus the cursor for the
+// next (older) page.
+message QueryStreamHistoryResponse {
+  // The page of events in ascending (oldest→newest) order; each carries its own
+  // backward-paging cursor.
+  repeated Event events = 1;
+  // next_cursor is the opaque cursor for the next page. Empty if no more pages.
+  bytes next_cursor = 2;
+}
+
+// AddSessionStreamRequest is the (currently unserved, holomush-l6std) request to
+// subscribe an active session to one more stream.
+message AddSessionStreamRequest {
+  // Active session identifier.
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Stream name to subscribe to (format: "prefix:id").
+  string stream = 2 [(buf.validate.field).string.min_len = 1];
+  // replay_mode controls initial replay. Optional; defaults to
+  // FROM_CURSOR if unspecified for backwards compatibility.
+  StreamReplayMode replay_mode = 3;
+}
+
+// AddSessionStreamResponse is the empty ack for AddSessionStream (unserved,
+// holomush-l6std).
+message AddSessionStreamResponse {}
+
+// RemoveSessionStreamRequest is the (currently unserved, holomush-l6std) request
+// to unsubscribe an active session from a stream.
+message RemoveSessionStreamRequest {
+  // Active session identifier.
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Stream name to unsubscribe from (format: "prefix:id").
+  string stream = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// RemoveSessionStreamResponse is the empty ack for RemoveSessionStream
+// (unserved, holomush-l6std).
+message RemoveSessionStreamResponse {}

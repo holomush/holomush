@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.host.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1;hostv1";
+
+// CommandRegistryService is the host-brokered `command_registry` capability: a
+// plugin enumerates the ABAC-filtered command set a character may execute and
+// fetches per-command help. Carved from the former PluginHostService
+// (holomush-eykuh.1). Served by commandRegistryServer in
+// internal/plugin/goplugin/host_capability_servers.go.
+service CommandRegistryService {
+  // ListCommands enumerates the commands the named character may execute,
+  // ABAC-filtered by the host, delegating to commandquery.Querier.Available.
+  // The subject is the request's character_id (parity with the Lua
+  // holomush.list_commands(character_id) host function — not the dispatch-token
+  // actor, since this is read-only metadata, not an actor-gated mutation).
+  // incomplete is true when engine errors hid some commands.
+  rpc ListCommands(ListCommandsRequest) returns (ListCommandsResponse);
+  // GetCommandHelp returns full help detail for one command after an access
+  // check for character_id, delegating to commandquery.Querier.Help. Mirrors
+  // the Lua holomush.get_command_help(name, character_id) host function.
+  rpc GetCommandHelp(GetCommandHelpRequest) returns (GetCommandHelpResponse);
+}
+
+// CommandInfo is per-command metadata returned by ListCommands.
+message CommandInfo {
+  // name is the canonical command name (e.g. "scene").
+  string name = 1;
+  // help is the one-line description from the command registry.
+  string help = 2;
+  // usage is the usage pattern (e.g. "scene <subcommand>").
+  string usage = 3;
+  // source is "core" or the owning plugin name.
+  string source = 4;
+}
+
+// ListCommandsRequest names the character whose executable command set to
+// enumerate.
+message ListCommandsRequest {
+  // character_id is the ULID of the character whose capabilities filter the list.
+  string character_id = 1 [(buf.validate.field).string.min_len = 26];
+}
+
+// ListCommandsResponse returns the filtered command set.
+message ListCommandsResponse {
+  // commands is the ABAC-filtered set the character may execute.
+  repeated CommandInfo commands = 1;
+  // incomplete is true when engine errors hid some commands from the result.
+  bool incomplete = 2;
+}
+
+// GetCommandHelpRequest names a command and the character whose access is
+// checked before returning detail.
+message GetCommandHelpRequest {
+  // name is the canonical command name to describe.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // character_id is the ULID of the character whose access is checked.
+  string character_id = 2 [(buf.validate.field).string.min_len = 26];
+}
+
+// GetCommandHelpResponse returns full help detail.
+message GetCommandHelpResponse {
+  // name is the canonical command name.
+  string name = 1;
+  // help is the one-line description.
+  string help = 2;
+  // usage is the usage pattern.
+  string usage = 3;
+  // help_text is the detailed markdown help body.
+  string help_text = 4;
+  // source is "core" or the owning plugin name.
+  string source = 5;
+}

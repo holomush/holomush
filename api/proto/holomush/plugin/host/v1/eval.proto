@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.host.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1;hostv1";
+
+// EvalService is the host-brokered `eval` capability: a plugin asks the host
+// ABAC engine to authorize one action against one resource instance it owns.
+// Carved from the former PluginHostService (holomush-eykuh.1). Served by
+// evalServer in internal/plugin/goplugin/host_capability_servers.go.
+service EvalService {
+  // Evaluate runs the host ABAC engine for one action against one resource
+  // instance owned by the calling plugin. The subject is derived host-side from
+  // the dispatch token exactly as EmitEvent does (token→actor recovery) — there
+  // is no subject field on the wire (spec §2, INV-PLUGIN-22). Fails closed on
+  // nil engine, missing/rejected token, empty actor subject, or a resource type
+  // the plugin does not own.
+  rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+}
+
+// EvaluateRequest names the action and resource to evaluate. The subject is NOT
+// here — it is recovered host-side from the dispatch token (spec §2,
+// INV-PLUGIN-22).
+message EvaluateRequest {
+  // ABAC action verb to authorize (e.g. "read", "write").
+  string action = 1 [(buf.validate.field).string.min_len = 1];
+  // resource is a typed instance ref: "scene:01ABC...".
+  string resource = 2 [(buf.validate.field).string.min_len = 3];
+}
+
+// EvaluateResponse returns the ABAC engine's decision.
+message EvaluateResponse {
+  // Whether the action is permitted on the resource for the recovered subject.
+  bool allowed = 1;
+  // Human-readable rationale for the decision (e.g. the deny reason).
+  string reason = 2;
+  // Identifier of the policy that produced the decision, when one matched.
+  string matched_policy = 3;
+}

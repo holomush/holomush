@@ -1,0 +1,242 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.host.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1;hostv1";
+
+// WorldQueryService is the host-brokered read half of the `world` capability:
+// a plugin queries locations, characters, objects, and finds locations by name
+// through the host world querier. Promotes the Lua holomush.query_* /
+// find_location host functions (internal/plugin/hostfunc/world.go,
+// world_write.go) to the binary surface. Served by worldQueryServer in
+// internal/plugin/goplugin/host_capability_servers.go.
+service WorldQueryService {
+  // QueryLocation returns a location's identity, name, description, and type by
+  // ULID, mirroring the Lua holomush.query_location(location_id) host function
+  // (WorldQuerierAdapter.GetLocation). A missing location is reported as a
+  // sanitized not-found error.
+  rpc QueryLocation(QueryLocationRequest) returns (QueryLocationResponse);
+  // QueryCharacter returns a character's identity, player, name, description,
+  // and optional current location by ULID, mirroring the Lua
+  // holomush.query_character(character_id) host function
+  // (WorldQuerierAdapter.GetCharacter).
+  rpc QueryCharacter(QueryCharacterRequest) returns (QueryCharacterResponse);
+  // QueryLocationCharacters returns the lightweight (id, name) set of characters
+  // at a location, with optional limit/offset pagination, mirroring the Lua
+  // holomush.query_location_characters(location_id, opts) host function
+  // (WorldQuerierAdapter.GetCharactersByLocation).
+  rpc QueryLocationCharacters(QueryLocationCharactersRequest) returns (QueryLocationCharactersResponse);
+  // QueryObject returns an object's identity, description, container flag,
+  // containment placement, and owner by ULID, mirroring the Lua
+  // holomush.query_object(object_id) host function
+  // (WorldQuerierAdapter.GetObject).
+  rpc QueryObject(QueryObjectRequest) returns (QueryObjectResponse);
+  // FindLocation resolves a location by name within the calling plugin's
+  // subject scope, mirroring the Lua holomush.find_location(name) host function
+  // (worldMutator.FindLocationByName). Returns the matched location's id and
+  // name, or a sanitized not-found error.
+  rpc FindLocation(FindLocationRequest) returns (FindLocationResponse);
+}
+
+// WorldMutationService is the host-brokered write half of the `world`
+// capability: a plugin creates locations, exits, and objects through the host
+// world mutator under its plugin subject. Promotes the Lua
+// holomush.create_location / create_exit / create_object host functions
+// (internal/plugin/hostfunc/world_write.go) to the binary surface. Served by
+// worldMutationServer in
+// internal/plugin/goplugin/host_capability_servers.go.
+service WorldMutationService {
+  // CreateLocation creates a location with the given name, description, and
+  // validated location type, mirroring the Lua
+  // holomush.create_location(name, description, type) host function
+  // (mutator.CreateLocation). Returns the new location's id and name.
+  rpc CreateLocation(CreateLocationRequest) returns (CreateLocationResponse);
+  // CreateExit creates an exit from one location to another, optionally
+  // bidirectional with a return name, mirroring the Lua
+  // holomush.create_exit(from_id, to_id, name, opts) host function
+  // (mutator.CreateExit). Returns the new exit's id and name.
+  rpc CreateExit(CreateExitRequest) returns (CreateExitResponse);
+  // CreateObject creates an object with exactly one containment placement
+  // (location, holding character, or containing object) and optional
+  // description, mirroring the Lua holomush.create_object(name, opts) host
+  // function (mutator.CreateObject). Returns the new object's id and name.
+  rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
+}
+
+// QueryLocationRequest names the location to query by ULID.
+message QueryLocationRequest {
+  // ULID of the location to fetch.
+  string location_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// QueryLocationResponse returns the queried location's fields.
+message QueryLocationResponse {
+  // ULID of the location.
+  string id = 1;
+  // Display name of the location.
+  string name = 2;
+  // Long-form description of the location.
+  string description = 3;
+  // Location type string (e.g. the world.LocationType value).
+  string type = 4;
+}
+
+// QueryCharacterRequest names the character to query by ULID.
+message QueryCharacterRequest {
+  // ULID of the character to fetch.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// QueryCharacterResponse returns the queried character's fields.
+message QueryCharacterResponse {
+  // ULID of the character.
+  string id = 1;
+  // ULID of the player account behind the character.
+  string player_id = 2;
+  // Display name of the character.
+  string name = 3;
+  // Long-form description of the character.
+  string description = 4;
+  // ULID of the character's current location; empty when the character has no
+  // location set (the Lua handler omits the field in that case).
+  string location_id = 5;
+}
+
+// QueryLocationCharactersRequest names the location and optional pagination
+// bounds for listing the characters present there.
+message QueryLocationCharactersRequest {
+  // ULID of the location whose characters are listed.
+  string location_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Maximum number of characters to return; 0 applies the host default (100).
+  int32 limit = 2;
+  // Number of leading results to skip for pagination; 0 starts at the first.
+  int32 offset = 3;
+}
+
+// CharacterSummary is the lightweight (id, name) projection returned for each
+// character at a location. Full detail requires QueryCharacter per id.
+message CharacterSummary {
+  // ULID of the character.
+  string id = 1;
+  // Display name of the character.
+  string name = 2;
+}
+
+// QueryLocationCharactersResponse returns the lightweight character list.
+message QueryLocationCharactersResponse {
+  // The characters present at the location, in store order.
+  repeated CharacterSummary characters = 1;
+}
+
+// QueryObjectRequest names the object to query by ULID.
+message QueryObjectRequest {
+  // ULID of the object to fetch.
+  string object_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// QueryObjectResponse returns the queried object's fields, including its
+// optional containment placement and owner.
+message QueryObjectResponse {
+  // ULID of the object.
+  string id = 1;
+  // Display name of the object.
+  string name = 2;
+  // Long-form description of the object.
+  string description = 3;
+  // Whether the object can contain other objects.
+  bool is_container = 4;
+  // ULID of the location holding the object; empty unless location-contained.
+  string location_id = 5;
+  // ULID of the character holding the object; empty unless character-held.
+  string held_by_character_id = 6;
+  // ULID of the object containing this object; empty unless object-contained.
+  string contained_in_object_id = 7;
+  // ULID of the object's owner; empty when no owner is set.
+  string owner_id = 8;
+  // Containment discriminator string (the Containment.Type() value).
+  string containment_type = 9;
+}
+
+// FindLocationRequest names the location to resolve by display name.
+message FindLocationRequest {
+  // Name to match a location against, within the plugin subject's scope.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// FindLocationResponse returns the matched location's id and name.
+message FindLocationResponse {
+  // ULID of the matched location.
+  string id = 1;
+  // Display name of the matched location.
+  string name = 2;
+}
+
+// CreateLocationRequest carries the fields for a new location.
+message CreateLocationRequest {
+  // Display name for the new location.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // Long-form description for the new location.
+  string description = 2;
+  // Location type string; the host validates it against world.LocationType.
+  string type = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// CreateLocationResponse returns the created location's id and name.
+message CreateLocationResponse {
+  // ULID assigned to the new location.
+  string id = 1;
+  // Display name of the new location.
+  string name = 2;
+}
+
+// CreateExitRequest carries the endpoints, name, and optional bidirectional
+// settings for a new exit.
+message CreateExitRequest {
+  // ULID of the source location the exit leaves from.
+  string from_id = 1 [(buf.validate.field).string.min_len = 1];
+  // ULID of the destination location the exit leads to.
+  string to_id = 2 [(buf.validate.field).string.min_len = 1];
+  // Display name of the exit (e.g. "north").
+  string name = 3 [(buf.validate.field).string.min_len = 1];
+  // When true, the host also creates the reverse exit.
+  bool bidirectional = 4;
+  // Display name of the reverse exit when bidirectional; empty otherwise.
+  string return_name = 5;
+}
+
+// CreateExitResponse returns the created exit's id and name.
+message CreateExitResponse {
+  // ULID assigned to the new exit.
+  string id = 1;
+  // Display name of the new exit.
+  string name = 2;
+}
+
+// CreateObjectRequest carries the name, containment placement, and optional
+// description for a new object. Exactly one of location_id / character_id /
+// container_id MUST be set, matching the Lua handler's containment validation.
+message CreateObjectRequest {
+  // Display name for the new object.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // ULID of the location to place the object in; set iff location-contained.
+  string location_id = 2;
+  // ULID of the character to hand the object to; set iff character-held.
+  string character_id = 3;
+  // ULID of the object to nest this object inside; set iff object-contained.
+  string container_id = 4;
+  // Optional long-form description for the new object.
+  string description = 5;
+}
+
+// CreateObjectResponse returns the created object's id and name.
+message CreateObjectResponse {
+  // ULID assigned to the new object.
+  string id = 1;
+  // Display name of the new object.
+  string name = 2;
+}
