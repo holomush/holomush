@@ -21,6 +21,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/holomush/holomush/internal/plugin/luabridge"
 	"github.com/holomush/holomush/internal/settings"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -43,15 +44,16 @@ type luaPlugin struct {
 
 // Host manages Lua plugins.
 type Host struct {
-	factory         *StateFactory
-	hostFuncs       *hostfunc.Functions
-	hostCapAdapter  hostcap.HostCapabilities // adapter wrapping hostFuncs; non-nil iff hostFuncs is non-nil
-	plugins         map[string]*luaPlugin
-	mu              sync.RWMutex
-	closed          bool
-	cpuTimeout      time.Duration // per-invocation deadline applied via context.WithTimeout
-	configOverrides map[string]map[string]string
-	mergedConfigs   map[string]map[string]string
+	factory              *StateFactory
+	hostFuncs            *hostfunc.Functions
+	hostCapAdapter       hostcap.HostCapabilities // adapter wrapping hostFuncs; non-nil iff hostFuncs is non-nil
+	plugins              map[string]*luaPlugin
+	mu                   sync.RWMutex
+	closed               bool
+	cpuTimeout           time.Duration // per-invocation deadline applied via context.WithTimeout
+	configOverrides      map[string]map[string]string
+	mergedConfigs        map[string]map[string]string
+	bridgeEnabledPlugins map[string]bool // opt-in allowlist for host-cap bridge injection; empty = production (no bridge)
 }
 
 // HostOption customizes Host construction.
@@ -69,6 +71,25 @@ func WithCPUTimeout(d time.Duration) HostOption {
 // that need a factory with non-default options (e.g. RegistryMaxSize).
 func WithStateFactory(f *StateFactory) HostOption {
 	return func(h *Host) { h.factory = f }
+}
+
+// WithHostCapBridge opts the named plugins into the host-capability bridge path.
+// Only plugins in this allowlist receive luabridge.RegisterHostCaps injection in
+// DeliverEvent; all other plugins continue using the legacy hostfunc shim path
+// unchanged. The default (empty allowlist) means NO plugin uses the bridge,
+// keeping production behaviour identical.
+//
+// This is intentionally test-fixture-only for this sub-spec (Phase 2 T9). Full
+// production migration is tracked in sub-spec 5 / holomush-eykuh.4.
+func WithHostCapBridge(pluginNames ...string) HostOption {
+	return func(h *Host) {
+		if h.bridgeEnabledPlugins == nil {
+			h.bridgeEnabledPlugins = make(map[string]bool, len(pluginNames))
+		}
+		for _, name := range pluginNames {
+			h.bridgeEnabledPlugins[name] = true
+		}
+	}
 }
 
 // WithPluginConfigOverrides threads the server-provided per-plugin config
@@ -362,11 +383,19 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	}
 	code := p.code
 	requires := p.manifest.RequiredServiceNames()
+	// Snapshot capability tokens and the endpoint under the read lock alongside
+	// the other snapshots. Both p.endpoint and the manifest slice are
+	// written only under h.mu.Lock in Load/Unload, so reading them here under
+	// RLock is safe. We snapshot rather than keep p alive to avoid holding
+	// the lock during the (potentially slow) hostFuncs.Register call.
+	declaredCaps := p.manifest.RequiredCapabilities()
+	endpoint := p.endpoint // nil when hostFuncs is nil (NewHost path)
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
 	// (concurrent map read/write panic). Shallow clone suffices — Load
 	// replaces inner maps wholesale, never mutating one in place.
 	cfgSnapshot := maps.Clone(h.mergedConfigs)
+	bridgeEnabled := h.bridgeEnabledPlugins[name] // false when map is nil or plugin not in set
 	h.mu.RUnlock()
 
 	// Create fresh state for this event
@@ -383,6 +412,17 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	if h.hostFuncs != nil {
 		h.hostFuncs.SetPluginConfigs(cfgSnapshot)
 		h.hostFuncs.Register(L, name, requires...)
+	}
+
+	// For plugins that have opted into the host-cap bridge path, inject the
+	// generated capability tables after the legacy hostfunc shim has run.
+	// The bridge's no-clobber logic (RegisterHostCaps) prevents double-injection
+	// for any global the legacy shim already set (spec §5).
+	//
+	// Guard: endpoint is nil when hostFuncs is nil (NewHost path — no capability
+	// infrastructure configured); the bridge requires a real conn.
+	if bridgeEnabled && endpoint != nil {
+		luabridge.RegisterHostCaps(L, endpoint.Conn(), name, declaredCaps)
 	}
 
 	// Load plugin code

@@ -16,6 +16,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/session"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
@@ -142,4 +143,91 @@ func TestLuaHostReloadClosesSupersededEndpoint(t *testing.T) {
 	client := hostv1.NewSessionServiceClient(oldConn)
 	_, err := client.ListActive(context.Background(), &hostv1.ListActiveRequest{})
 	assert.Error(t, err, "RPC on superseded (closed) endpoint conn must fail after reload")
+}
+
+// TestHostCapBridgeOptInInjectsKVGlobal verifies that a plugin opted into the
+// bridge path via WithHostCapBridge receives the kv Lua global in DeliverEvent,
+// confirming the end-to-end wiring from host option → DeliverEvent → RegisterHostCaps.
+//
+// kv is chosen because it has no ABAC-engine or dispatch-token requirement,
+// so the RPC can be exercised without a full production stack.
+func TestHostCapBridgeOptInInjectsKVGlobal(t *testing.T) {
+	dir := t.TempDir()
+	// The plugin asserts that the kv global exists and is a table; it stores the
+	// result in a Lua global so the test can inspect it via DeliverEvent's
+	// on_event return path. If kv is nil the plugin returns "missing_kv".
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.lua"), []byte(`
+function on_event(event)
+    if type(kv) == "table" then
+        return nil
+    end
+    error("expected kv table, got " .. type(kv))
+end
+`), 0o600))
+
+	manifest := &plugins.Manifest{
+		Name:      "bridge-kv-test",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+		Requires: []plugins.Dependency{
+			{Kind: plugins.DependencyCapability, Name: "kv"},
+		},
+	}
+
+	host := NewHostWithFunctions(
+		hostfunc.New(nil),
+		WithHostCapBridge("bridge-kv-test"),
+	)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	require.NoError(t, host.Load(context.Background(), manifest, dir))
+
+	_, err := host.DeliverEvent(context.Background(), "bridge-kv-test", pluginsdk.Event{
+		ID: "01ABC", Stream: "location.1", Type: "test",
+	})
+	require.NoError(t, err, "DeliverEvent must not fail when kv global is present")
+}
+
+// TestHostCapBridgeOptedOutPluginUnaffected asserts that a plugin NOT in the
+// WithHostCapBridge allowlist does not receive bridge globals. This is the
+// coexistence guarantee: production plugins using the legacy hostfunc shim are
+// never touched by bridge injection (spec §5 — production unaffected).
+func TestHostCapBridgeOptedOutPluginUnaffected(t *testing.T) {
+	dir := t.TempDir()
+	// The plugin asserts that kv is NOT injected (it should be nil for an
+	// opted-out plugin that has not declared it as a legacy service dep).
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.lua"), []byte(`
+function on_event(event)
+    if kv ~= nil then
+        error("kv must not be injected for opted-out plugin, got " .. type(kv))
+    end
+    return nil
+end
+`), 0o600))
+
+	manifest := &plugins.Manifest{
+		Name:      "legacy-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+		Requires: []plugins.Dependency{
+			{Kind: plugins.DependencyCapability, Name: "kv"},
+		},
+	}
+
+	// WithHostCapBridge is NOT called for "legacy-plugin" — it opts in a
+	// different plugin. The legacy-plugin must see no bridge injection.
+	host := NewHostWithFunctions(
+		hostfunc.New(nil),
+		WithHostCapBridge("some-other-plugin"),
+	)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	require.NoError(t, host.Load(context.Background(), manifest, dir))
+
+	_, err := host.DeliverEvent(context.Background(), "legacy-plugin", pluginsdk.Event{
+		ID: "01ABC", Stream: "location.1", Type: "test",
+	})
+	require.NoError(t, err, "DeliverEvent must succeed for opted-out plugin without kv injection")
 }
