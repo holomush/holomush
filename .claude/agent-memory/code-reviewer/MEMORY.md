@@ -162,63 +162,38 @@
   Unimplemented*Server on each struct = future proto RPCs fail closed. (2) NOT-FOUND
   parity: session.Access.FindByCharacterName returns (nil,nil) on miss → server nil→
   empty resp (session.go:39-43) = faithful to Lua nil-return (cap_session.go:88,
-  stdlib_session.go:75). (3) ZERO-ULID DIVERGENCE (Low): locationIDString returns ""
-  for zero ULID but the ACTUALLY-WIRED Lua path stdlib_session.go:83 emits
-  info.LocationID.String() UNCONDITIONALLY (zero→26 zeros). The cited cap_session.go
-  "empty-string convention" baseline has NO production adapter yet (only test mock
-  impls FindSessionByName) — comment cites aspirational not wired baseline. Edge case
-  only: scanSession ulid.Parse errors on empty location_id so persisted sessions carry
-  real ULID. (4) REGISTRATION TEST GAP (Low, recurring): register_test only tests
-  BinaryDefaultSet (asserts Session ABSENT); NO test asserts LuaDefaultSet REGISTERS
-  the new services — positive wiring path untested. Always `rg LuaDefaultSet|rg test`.
-  (5) buf.validate min_len=1 is DECORATIVE on broker — grpc.NewServer has NO
-  protovalidate interceptor (host_service.go:30, broker_proxy.go:57); matches
-  pre-existing convention, property.go validates explicitly instead. (6) Broadcast/
-  Disconnect do NO ABAC check — but Lua cap_session.go shim ALSO delegates straight to
-  port w/o ABAC → parity holds, not a finding. Error opacity clean (LogErrorContext +
-  static "internal error", neg tests assert NotContains "secret").
+  stdlib_session.go:75). (3) buf.validate min_len=1 is DECORATIVE on broker —
+  grpc.NewServer has NO protovalidate interceptor; property.go validates explicitly.
+  Error opacity clean (LogErrorContext + static "internal error", neg tests assert
+  NotContains "secret").
 
 - **hostcap WorldQueryService capstone (eykuh.2.5 READY w/ tracked gap, 2026-06-12).** Task 5 maps 4
   Query RPCs→WorldQuerier(pluginName); 5th proto RPC FindLocation left inheriting Unimplemented*Server.
-  KEY: proto WorldQueryService declares 5 RPCs (world.proto:18-44) — FindLocation is backed by
-  WorldMutator.FindLocationByName (NOT WorldQuerier; adapter.go has no FindLocationByName). Whole
-  WorldMutationService (create_location/exit/object) is ALSO unimplemented/unregistered — neither
-  FindLocation nor WorldMutationService is scheduled in ANY plan task (rg the plan: zero hits for
-  WorldMutation/find_location). LIVE consumers exist: core-building/main.lua:61 holomush.find_location,
-  core-objects/main.lua:361,369 create_object/create_location; core-objects declares
-  `requires: - capability: world.query`. capability_vocab.go:35 defines world.query AND world.mutation
-  as SEPARATE tokens. NOT a Phase-0 regression because the Lua bufconn CONSUMPTION path isn't wired
-  until Phase 1 Task 7 (register.go registers LuaDefaultSet but no Lua consumer reaches it; hostfunc
-  host-fns stay live). So acceptable-and-track, NOT blocking — but MUST file a bead before ANY plugin
-  opts into host-brokered world consumption or find_location/create_* fail closed. WorldQuerier widening
-  2→4 methods is SAFE: hostcap.WorldQuerier(4) is a SUPERSET of property.WorldQuerier(2), so the
-  interface-to-interface assignment at property.go:50→def.Get(querier property.WorldQuerier) compiles;
-  *WorldQuerierAdapter (adapter.go:74-164) has all 4 + SubjectID() so satisfies it. Subject-stamp test
-  asserts bare "core-scenes" not "plugin:core-scenes" — correct: server passes bare name, real adapter
-  SubjectID()=access.PluginSubject prefixes plugin: downstream (fake doesn't). Containment.Type() is
-  POINTER receiver (object.go:72) called on addressable local var (world.go:321) — fine. 281 tests
-  green, lint 0 issues.
+  KEY: FindLocation backed by WorldMutator.FindLocationByName (NOT WorldQuerier; adapter has none). Whole
+  WorldMutationService ALSO unimplemented/unregistered — neither scheduled in ANY plan task. LIVE consumers
+  exist (core-building/main.lua:61 find_location, core-objects create_object/location) but Lua bufconn
+  CONSUMPTION isn't wired until Phase 1 T7 → acceptable-and-track, MUST file bead before any plugin opts
+  into host-brokered world consumption. WorldQuerier widen 2→4 SAFE (superset). Subject-stamp test asserts
+  bare "core-scenes" (server passes bare; real adapter SubjectID() prefixes plugin: downstream).
 
-- **hostcap Lua adapter (eykuh.2.6 READY w/ tracked gaps, 2026-06-12).** luaHostCapAdapter
-  wraps *hostfunc.Functions for the port; symmetric to binary *goplugin.Host. DECISIVE FACT:
-  `newLuaHostCapAdapter` is TEST-ONLY (no production caller) — the bufconn endpoint that makes
-  any method reachable is T7 (bufconn_endpoint.go, doesn't exist yet). So EVERY nil/stub return
-  is "no live caller → non-blocking-but-track", per eykuh.2.5 precedent. Classify each: (1)
-  EventEmitter nil = LEGIT (emitServer servers.go:357 nil-guards; Lua emits via hostfunc not
-  gRPC). (2) OwnedResourceTypes nil-map = FAIL-CLOSED not gradient: pluginauthz/evaluate.go:196
-  `!in.OwnedTypes[resType]` — nil map read = false in Go (safe), so Lua can only eval `command`
-  carve-out; binary host.go:489 returns REAL manifest ResourceTypes → Lua under-permissive, NOT
-  over. (3) SessionAdmin nil = NPE RISK in T7: sessionAdminServer.Broadcast/Disconnect
-  (session.go:97-108) have NO nil-guard (unlike emit/focus servers) AND are LuaDefaultSet-only;
-  Functions holds NARROW session.Access (no broadcast/disconnect) while existing Lua
-  session.broadcast works via WIDE hostfunc.SessionAccess (cap_session.go) — so host-brokered
-  path LOSES an existing Lua capability. (4) Settings nil = settingsServer fails-closed
-  Unimplemented (servers.go:667,712). (5) focus stubs: 4 of 6 (SetConnectionFocus/
-  GetConnectionFocus/AutoFocusOnJoin/IsAnyConnFocused) ARE server-reachable (servers.go:162-342)
-  — comment "only session manager" is WRONG for those 4; but UNSUPPORTED-err = fail-closed not
-  NPE. LookupActor: core.ActorPlugin correct (event.go:149); !ok→ACTOR_NOT_FOUND fail-closed
-  (no fail-open zero-subject). GetPropertyRegistry never nil (New defaults SharedRegistry,
-  functions.go:253). withSettings referenced in 5 doc-comments but NOT declared = dangling doc
-  (Low). 862 tests green, lint 0. ALWAYS: when adapter is dead-code-until-next-task, the verdict
-  hinges on "is there a live caller" — and check the CONSUMER server for nil-guard symmetry
-  (emit/focus guard, session does NOT).
+- **hostcap Lua adapter (eykuh.2.6) + parity fixes (eykuh.2.14 READY, 2026-06-12) — CONSOLIDATED.**
+  luaHostCapAdapter wraps *hostfunc.Functions; symmetric to binary *goplugin.Host. DECISIVE FACT for 2.6:
+  newLuaHostCapAdapter is TEST-ONLY; bufconn endpoint (T7) makes methods reachable → "no live caller →
+  track" per eykuh.2.5. 2.14 FIXED the 2.6 tracked gaps; verified all:
+  (A) FocusOps→Coordinator lossy-field DISCIPLINE: server-reachable methods (servers.go) must populate
+  EVERY field the SERVER reads, lossy-OK only for fields confirmed-unread. VERIFY by reading the focusServer
+  method: SetConnectionFocus discards result (`_, err = fc.SetConn`, servers.go:201)→zero-result safe;
+  AutoFocusOnJoin reads ONLY total+3 slices+FocusFailure{ConnID,Reason} (servers.go:283-307)→adapter must
+  map exactly those (SessionID/CharLocationID unread=lossy-OK). Confirm signatures identical for direct
+  delegations (IsAnyConnFocused/GetConnectionFocus). RestoreFocus/RestoreConnectionFocus called ONLY from
+  internal/grpc/ (list_session_streams.go:81, server.go:943) NOT hostcap → genuinely unreachable, UNSUPPORTED-stub OK.
+  (B) Settings store-recovery via type-assertion = TRUE PARITY iff: lua.Host.SetSettingsStores (host.go:144-161)
+  installs *settingsStoresOpsAdapter ONLY when all3 non-nil else SetSettingsOps(nil); type-assert comma-ok
+  (no panic); the recovered seam is the SAME one Lua get/set_setting hostfuncs consume; settingsServer
+  fails-closed Unimplemented on nil store (servers.go:667,712). No partial-wiring path.
+  (C) sessionAdminServer nil-guard: single-capture local then nil-check (session.go:104-108) — no double-call;
+  returns codes.Unimplemented (not Internal), no leak. SessionAdminService is LuaDefaultSet-ONLY (register.go:53-58,
+  register_test asserts binary EXCLUDES it) → binary nil SessionAdmin never reached, no regression.
+  OwnedResourceTypes: non-nil empty map at parity w/ evaluate.go:57 literal+comment. RECURRING: when adapter
+  is dead-code-until-next-task, verdict hinges on live-caller; for ANY server-reachable method read the
+  CONSUMER server body to classify each return field read-vs-unread before trusting a "lossy but unread" claim.
