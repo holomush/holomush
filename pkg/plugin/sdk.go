@@ -200,7 +200,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 		decAware.SetSnapshotDecryptor(&snapshotDecryptClient{client: hostClient})
 	}
 	if clAware, ok := a.serviceProvider.(CommandListerAware); ok {
-		clAware.SetCommandLister(&hostCommandClient{client: hostClient})
+		clAware.SetCommandLister(newHostCommandClient(hostConn))
 	}
 
 	if a.serviceProvider == nil {
