@@ -642,7 +642,7 @@ func (p *focusClientInitProvider) SetFocusClient(client FocusClient) {
 
 func TestPluginServerAdapterInitInjectsFocusClientIntoServiceProvider(t *testing.T) {
 	srv := &focusTestServer{}
-	hostConn := startPluginHostServiceTestServer(t, srv)
+	hostConn := startFocusServiceTestServer(t, srv)
 
 	provider := &focusClientInitProvider{}
 	adapter := &pluginServerAdapter{
@@ -680,7 +680,7 @@ func (p *dualAwareProvider) SetEventSink(s EventSink)                           
 func (p *dualAwareProvider) SetFocusClient(c FocusClient)                            { p.focusClient = c }
 
 func TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient(t *testing.T) {
-	hostConn := startPluginHostServiceTestServer(t, &focusTestServer{})
+	hostConn := startFocusServiceTestServer(t, &focusTestServer{})
 
 	provider := &dualAwareProvider{}
 	adapter := &pluginServerAdapter{

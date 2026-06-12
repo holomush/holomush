@@ -170,6 +170,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	// host-facing SDK facade the provider opts into. If the provider opts
 	// into none, we never dial.
 	var hostClient pluginv1.PluginHostServiceClient
+	var hostConn *grpc.ClientConn
 	if wantsSink || wantsFocus || wantsEvaluator || wantsSettings || wantsDecryptor || wantsCommandLister {
 		requiredServices := map[string]string(nil)
 		if config != nil {
@@ -179,6 +180,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 		if err != nil {
 			return nil, oops.With("phase", "init").With("service", PluginHostServiceName).Wrap(err)
 		}
+		hostConn = conn
 		hostClient = pluginv1.NewPluginHostServiceClient(conn)
 	}
 
@@ -186,7 +188,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 		sinkAware.SetEventSink(&pluginHostEventSink{client: hostClient})
 	}
 	if focusAware, ok := a.serviceProvider.(FocusClientAware); ok {
-		focusAware.SetFocusClient(newPluginHostFocusClient(hostClient))
+		focusAware.SetFocusClient(newPluginHostFocusClient(hostConn))
 	}
 	if evalAware, ok := a.serviceProvider.(HostEvaluatorAware); ok {
 		evalAware.SetHostEvaluator(&hostEvaluateClient{client: hostClient})
