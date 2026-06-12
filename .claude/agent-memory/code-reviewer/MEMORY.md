@@ -92,36 +92,11 @@
   re-check on .8.11 facade: caller MUST pass server-side-verified actor; token outlives plugin
   unload until release/TTL (Low, accepted).
 
-- **Harness event-path parity (5rh.8.4, 2026-06-07): production busEventAppender publishes via
-  wrapPublisher's RenderingPublisher (sub_grpc.go:207,219) — any harness mirror using raw
-  `bus.Bus.Publisher()` ships nil-Rendering frames (INV-EVENTBUS-6: gateway drops those).
-  Check publisher wrapping, not just Append-translation fidelity. Also: harness.go is a SHARED
-  int helper — a change there that un-drops events (eventStore was nil → command_response/
-  command_error now publish) affects EVERY harness suite (privacy's empty-registry SendCommand
-  → unknown-command command_error now hits bus + events_audit); require full `task test:int`,
-  not just the touched suites. Fake-level "exclusion pins" (fakeStore.GetWithMembership
-  re-implements role filter in Go) pin the fake, not the SQL — demand a DB-level twin.
+- **Harness event-path parity (5rh.8.4, 2026-06-07).** Production busEventAppender publishes via wrapPublisher's RenderingPublisher (sub_grpc.go:207) — a harness mirror using raw `bus.Bus.Publisher()` ships nil-Rendering frames (INV-EVENTBUS-6: gateway drops them); check publisher WRAPPING not just Append fidelity. harness.go is SHARED — a change un-dropping events affects EVERY suite → require full `task test:int`. Fake-level exclusion pins (re-implement role filter in Go) pin the fake not the SQL — demand a DB-level twin.
 
 - **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** RECURRING gateway-wide trap (NOT per-PR, non-blocking): `*grpc.Client` wrappers `oops.Code("RPC_FAILED").Wrap` a grpc-go status.Status err; web handler returns it to connect-go (server.go:69 NewWebServiceHandler, NO error interceptor) under a FALSE `//nolint:wrapcheck // pass through as-is`. connect-go CodeOf only sees `*connect.Error` via errors.As → oops-wrapped status collapses to CodeUnknown/HTTP500; facade PERMISSION_DENIED/NOT_FOUND all become Unknown at browser. IDENTICAL to WebListFocusPresence (handler.go:792) etc → track separately. `...PassesStatusErrorThroughAsIs` unit tests use the MOCK (no wrap) so CANNOT catch it. Token header-injected (headerInjectSessionToken), never body/logged.
 
-- **alt-session stream-loop port (5rh.8.15): R1 NOT READY → R2 READY (2026-06-08).** ports-drop-the-hard-parts when a .svelte.ts mirrors terminal hydrateAndStream: backoff declared inside recursive fn (hoist to while-loop); connectionId gate resolved ONLY in STREAM_OPENED; streamGeneration declared-but-never-incremented = inert; Map keyed by characterId but delete(sessionId) = dead cache. "241 pass" proves nothing — `grep -c 'it('` the NEW test file.
-- **Frontend UI-consumes-store + STATE/VISIBILITY string confusion (5rh.8.16/.8.17, 2026-06-08) — both NOT READY,**
-  CONSOLIDATED. (.8.16) Load-bearing blocker was in the CONSUMED store not the diff's .svelte: refresh() hardcoded
-  `asCharacterId:''` (workspaceStore.svelte.ts:72-73); this UI was FIRST to make it load-bearing → ensureSession('')
-  → blank roster. LESSON: trace each consumed field to its PRODUCER, verify POPULATED not just typed — pnpm-check +
-  whole-suite-pass are blind to empty-but-valid data. (.8.17) `SceneInfo.state`∈{active,paused,ended,archived};
-  `"open"` is a VISIBILITY value not a state — `scene.state==='open'` NEVER true → board actions never render.
-  LESSON: when a .svelte compares a proto string field to a literal, grep the proto/Go const set — UI authors cross
-  state↔visibility↔role vocabularies. Recurring: `?watch/?join` nav params DEAD unless target +page reads
-  $page.url.searchParams; characterId="" hardcoded → RPC never fires. `data.playerId` as sessionId arg = inert type
-  confusion today (header-token INV-SCENE-63), breaks if session_id binds.
-- **E2E scenes-workspace suite (5rh.8.19, 2026-06-08) — READY.** Playwright reusing helpers. KEY: re-check whether
-  a prior NOT-READY blocker (.8.16 asCharacterId, .8.17 dead nav) STILL holds in CURRENT source before failing a
-  dependent test PR — both were fixed upstream. ACCEPTABLE honest-degradation: a test scoped by its OWN title+comment
-  to a narrower assertion than the plan, citing a real tracked bead (≠ silently weakening). Watch: a test passing
-  because a broken path resolves {success:false} silently (no throw) rather than asserting the real behavior.
-  Flakiness checklist: no sleeps; expect.poll/waitForEvent/toPass; conn-pill data-status gate before commands;
-  unique per-test titles.
+- **Frontend/E2E ports + proto-vocab traps (5rh.8.15/.16/.17/.19, 2026-06-08) — CONSOLIDATED.** (a) .svelte.ts ports DROP hard parts: backoff inside recursive fn (hoist to while-loop), gate resolved only in STREAM_OPENED, counter declared-never-incremented=inert, Map keyed charId but delete(sessionId)=dead cache; "N pass" proves nothing — `grep -c 'it('` the NEW file. (b) Load-bearing blocker often in the CONSUMED store not the diff (refresh() hardcoded asCharacterId:'' → blank roster): trace each consumed field to its PRODUCER, verify POPULATED not just typed; pnpm-check blind to empty-but-valid. (c) proto STRING field vs literal: grep the proto/Go const set — UI authors cross state↔visibility↔role vocab (SceneInfo.state∈{active,paused,ended,archived}, 'open' is VISIBILITY → state==='open' never true). nav params DEAD unless +page reads searchParams; charId='' → RPC never fires. (d) re-check a prior NOT-READY blocker STILL holds in CURRENT source before failing a dependent PR (upstream may have fixed). Honest-degradation OK iff test title+comment scope it + cite a tracked bead. Flakiness: no sleeps; expect.poll/toPass; conn-pill gate; unique titles.
 - **Proto god-service→capability-service decomposition (eykuh.1.2 READY, 2026-06-11).** Proto-only/additive,
   14 svcs across 11 host/v1 files. CHECKLIST: (1) count each svc's RPCs vs plan table. (2) carved-msg fidelity:
   `PluginHostServiceX{}`→`X{}` keep SAME field#+type+validate-constraint+doc (prefix-drop only) vs ORIGINAL
@@ -207,3 +182,18 @@
   in BOTH servers distinguishes Unimplemented-from-registered (genuine) vs from-UNREGISTERED (false pass);
   equal-codes assert = single-source routing. Prod fidelity: test == newPluginEndpoint(bufconn_endpoint.go:30)
   / host_service.go:31 byte-for-byte. Doc-comment "no interceptor needed" is FINE, not scaffolding.
+- **INV-PLUGIN-22 spec-sanctioned structural binding (eykuh.2.13 READY, 2026-06-12) — CLEAN case.**
+  Pattern: annotating a PRE-EXISTING structural meta-test is a LEGITIMATE binding when (a) the test genuinely
+  proves the invariant clause AND (b) the ORIGIN SPEC names that mechanism. Verified: spec
+  2026-05-25-plugin-host-evaluate-design.md:275 "(meta-test: proto descriptor has no subject field)" +:350-351
+  — so `TestINV1EvaluateRequestHasNoSubjectField` (descriptor field-name scan + `fields.Len()==2` lock) is
+  non-vacuous (breaks build if subject/actor field added). REGISTRY MOVE refs→asserted_by: the proving test
+  moves OUT of refs INTO asserted_by; other provenance (proto/impl files) stays in refs — correct shape, meta-test
+  green. CLAUSE-2 STRUCTURAL-BUT-GENUINE nuance: luaHostCapAdapter.LookupActor returns (actor_from_ctx,
+  PluginSubject(pluginName)) — subject built from host-established PARAM, ctx actor lands in the IGNORED first
+  return. Forged-actor-on-ctx assertion `subject==plugin:<name>` CANNOT fail given code shape → pins correct
+  property but regress-blind; ACCEPTABLE as SUPPORTING clause alongside spec-canonical clause 1, NOT load-bearing
+  alone. Hardening (optional): assert the discarded actor return DOES carry the forged ID to make the
+  subject-ignores-forgeable-input contrast observable. NOT a T11 trap (forged-actor-on-ctx is the plugin's OWN
+  attack, not scaffolding; comment honestly scopes Lua seam to adapter due to bufconn ActorFromContext
+  non-propagation, no fabricated interceptor). NOT a T12 wrong-gate (bound test drives the gate the inv names).
