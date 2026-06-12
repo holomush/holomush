@@ -24,6 +24,7 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -36,10 +37,25 @@ type pluginHostServiceServer struct {
 func newPluginHostServiceServer(host *Host, pluginName string) func([]grpc.ServerOption) *grpc.Server {
 	return func(opts []grpc.ServerOption) *grpc.Server {
 		server := grpc.NewServer(opts...)
+		// Legacy god-service — removed in Task 12 once clients are rewired.
 		pluginv1.RegisterPluginHostServiceServer(server, &pluginHostServiceServer{
 			host:       host,
 			pluginName: pluginName,
 		})
+		// Capability-scoped host.v1 services share the one broker *grpc.Server
+		// (holomush-eykuh.1) so the single broker handshake still reaches every
+		// service. World/Property/Session have no binary consumer in this
+		// sub-spec and are deliberately NOT registered here.
+		base := hostCapabilityBase{host: host, pluginName: pluginName}
+		hostv1.RegisterFocusServiceServer(server, &focusServer{hostCapabilityBase: base})
+		hostv1.RegisterEmitServiceServer(server, &emitServer{hostCapabilityBase: base})
+		hostv1.RegisterEvalServiceServer(server, &evalServer{hostCapabilityBase: base})
+		hostv1.RegisterSettingsServiceServer(server, &settingsServer{hostCapabilityBase: base})
+		hostv1.RegisterStreamHistoryServiceServer(server, &streamHistoryServer{hostCapabilityBase: base})
+		hostv1.RegisterStreamSubscriptionServiceServer(server, &streamSubscriptionServer{hostCapabilityBase: base})
+		hostv1.RegisterAuditServiceServer(server, &auditServer{hostCapabilityBase: base})
+		hostv1.RegisterCommandRegistryServiceServer(server, &commandRegistryServer{hostCapabilityBase: base})
+		hostv1.RegisterKVServiceServer(server, &kvServer{hostCapabilityBase: base})
 		return server
 	}
 }
