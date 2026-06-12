@@ -5,7 +5,6 @@ package goplugin
 
 import (
 	"context"
-	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -286,25 +286,6 @@ func TestLeaveFocusByTargetReturnsErrorWhenHostIsNil(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin host service is not configured")
 }
 
-func TestClampCountToInt32HandlesBounds(t *testing.T) {
-	tests := []struct {
-		name string
-		in   int
-		want int32
-	}{
-		{"negative clamps to zero", -5, 0},
-		{"zero passes through", 0, 0},
-		{"small positive passes through", 42, 42},
-		{"max int32 passes through", math.MaxInt32, math.MaxInt32},
-		{"overflow clamps to MaxInt32", math.MaxInt32 + 1, math.MaxInt32},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, clampCountToInt32(tt.in))
-		})
-	}
-}
-
 func TestLeaveFocusByTargetReturnsRpcErrorOnEnumerationFailure(t *testing.T) {
 	fc := &stubCoordinator{
 		leaveByTargetErr: oops.Code("FOCUS_SWEEP_LIST_FAILED").Errorf("store down"),
@@ -490,26 +471,6 @@ func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
 	assert.Contains(t, err.Error(), "count must be non-negative")
 }
 
-func TestProtoToFocusKeyReturnsErrorForNilKey(t *testing.T) {
-	_, err := protoToFocusKey(nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "focus key is required")
-}
-
-func TestProtoToFocusKeyReturnsErrorForInvalidULID(t *testing.T) {
-	_, err := protoToFocusKey(&hostv1.FocusKey{
-		Kind:     hostv1.FocusKind_FOCUS_KIND_SCENE,
-		TargetId: "not-a-ulid",
-	})
-	require.Error(t, err)
-}
-
-func TestProtoToFocusKindReturnsErrorForUnspecified(t *testing.T) {
-	_, err := protoToFocusKind(hostv1.FocusKind_FOCUS_KIND_UNSPECIFIED)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported focus kind")
-}
-
 func TestQueryStreamHistoryPopulatesPerEventCursors(t *testing.T) {
 	evID := ulid.Make()
 	es := &stubHistoryReader{
@@ -535,8 +496,16 @@ func TestQueryStreamHistoryDecodesOpaqueBeforeIDCursor(t *testing.T) {
 	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
 
-	// Encode the cursor the same way encodeHostEventCursor does.
-	cursorBytes := encodeHostEventCursor(anchorID)
+	// Encode the cursor the same way the host's encodeHostEventCursor helper
+	// does (now in internal/plugin/hostcap). Building the fixture via the public
+	// cursor.Encode keeps this test in goplugin without re-exporting the helper.
+	cursorBytes, encErr := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
+		Host:    &cursor.HostCursor{Seq: 0, ID: anchorID},
+	})
+	require.NoError(t, encErr)
 	require.NotEmpty(t, cursorBytes)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
@@ -597,28 +566,6 @@ func TestQueryStreamHistoryNextCursorEmptyWhenFewerEventsThanCount(t *testing.T)
 	})
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetNextCursor(), "next_cursor must be empty when page is not full")
-}
-
-func TestCoreEventToProtoConvertsAllFields(t *testing.T) {
-	eventID := ulid.Make()
-	ts := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
-	e := core.Event{
-		ID:        eventID,
-		Stream:    "scene:abc:ic",
-		Type:      "say",
-		Timestamp: ts,
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
-		Payload:   []byte(`{"text":"hello"}`),
-	}
-
-	pe := coreEventToProto(e)
-	assert.Equal(t, eventID.String(), pe.GetId())
-	assert.Equal(t, "scene:abc:ic", pe.GetStream())
-	assert.Equal(t, "say", pe.GetType())
-	assert.Equal(t, ts.UnixMilli(), pe.GetTimestamp())
-	assert.Equal(t, "character", pe.GetActorKind())
-	assert.Equal(t, "char-1", pe.GetActorId())
-	assert.Equal(t, `{"text":"hello"}`, pe.GetPayload())
 }
 
 // newTestHostWithEmitter constructs a Host with a real PluginEventEmitter

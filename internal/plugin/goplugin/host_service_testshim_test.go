@@ -6,61 +6,68 @@ package goplugin
 import (
 	"context"
 
+	"github.com/holomush/holomush/internal/plugin/hostcap"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 // pluginHostServiceServer is a TEST-ONLY aggregate over the per-capability
 // host.v1 servers. The production monolithic god-service was deleted in
 // holomush-eykuh.1 (Task 12) and its authoritative handler bodies now live on
-// the per-capability servers (host_capability_servers.go). This shim lets the
-// existing behavior tests — which were written against the single server — keep
-// driving every RPC through one struct without re-deriving the wiring per test.
-// It carries NO logic of its own: each method delegates to the real capability
-// server, so the tests exercise the production code paths unchanged.
+// the per-capability servers — relocated in holomush-eykuh.2 into the
+// runtime-neutral hostcap package (hostcap/servers.go) behind the
+// HostCapabilities port. This shim lets the existing behavior tests — which were
+// written against the single server — keep driving every RPC through one struct
+// without re-deriving the wiring per test. It carries NO logic of its own: each
+// method delegates to the real hostcap capability server (constructed via the
+// exported hostcap.New*Server constructors), so the tests exercise the
+// production code paths unchanged.
+//
+// *Host satisfies hostcap.HostCapabilities (the binary adapter), so the shim
+// wires each server with the concrete host through hostcap.NewBase.
 type pluginHostServiceServer struct {
 	host       *Host
 	pluginName string
 }
 
-func (s *pluginHostServiceServer) base() hostCapabilityBase {
-	// hostCapabilityBase.host is the hostcap.HostCapabilities interface. Wrapping a
+func (s *pluginHostServiceServer) base() hostcap.HostCapabilities {
+	// hostcap.NewBase takes the hostcap.HostCapabilities interface. Wrapping a
 	// nil *Host in an interface yields a NON-nil interface holding a nil pointer,
 	// which would defeat the servers' `if s.host == nil` fail-closed guards. Keep
 	// the interface a true nil when the test passes a nil host so those guards
 	// fire exactly as they did when host was a concrete *Host (behavior preserved
 	// for the nil-host tests).
 	if s.host == nil {
-		return hostCapabilityBase{host: nil, pluginName: s.pluginName}
+		return nil
 	}
-	return hostCapabilityBase{host: s.host, pluginName: s.pluginName}
+	return s.host
 }
 
-func (s *pluginHostServiceServer) focus() *focusServer {
-	return &focusServer{hostCapabilityBase: s.base()}
+func (s *pluginHostServiceServer) focus() hostv1.FocusServiceServer {
+	return hostcap.NewFocusServer(hostcap.NewBase(s.base(), s.pluginName))
 }
 
-func (s *pluginHostServiceServer) emit() *emitServer {
-	return &emitServer{hostCapabilityBase: s.base()}
+func (s *pluginHostServiceServer) emit() hostv1.EmitServiceServer {
+	return hostcap.NewEmitServer(hostcap.NewBase(s.base(), s.pluginName))
 }
 
-func (s *pluginHostServiceServer) eval() *evalServer {
-	return &evalServer{hostCapabilityBase: s.base()}
+func (s *pluginHostServiceServer) eval() hostv1.EvalServiceServer {
+	return hostcap.NewEvalServer(hostcap.NewBase(s.base(), s.pluginName))
 }
 
-func (s *pluginHostServiceServer) settings() *settingsServer {
-	return &settingsServer{hostCapabilityBase: s.base()}
+func (s *pluginHostServiceServer) settings() hostv1.SettingsServiceServer {
+	return hostcap.NewSettingsServer(hostcap.NewBase(s.base(), s.pluginName))
 }
 
-func (s *pluginHostServiceServer) streamHistory() *streamHistoryServer {
-	return &streamHistoryServer{hostCapabilityBase: s.base()}
+func (s *pluginHostServiceServer) streamHistory() hostv1.StreamHistoryServiceServer {
+	return hostcap.NewStreamHistoryServer(hostcap.NewBase(s.base(), s.pluginName))
 }
 
-func (s *pluginHostServiceServer) audit() *auditServer {
-	return &auditServer{hostCapabilityBase: s.base()}
+func (s *pluginHostServiceServer) audit() hostv1.AuditServiceServer {
+	return hostcap.NewAuditServer(hostcap.NewBase(s.base(), s.pluginName))
 }
 
-func (s *pluginHostServiceServer) commands() *commandRegistryServer {
-	return &commandRegistryServer{hostCapabilityBase: s.base()}
+func (s *pluginHostServiceServer) commands() hostv1.CommandRegistryServiceServer {
+	return hostcap.NewCommandRegistryServer(hostcap.NewBase(s.base(), s.pluginName))
 }
 
 // --- FocusService delegations ---
