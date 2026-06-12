@@ -7,13 +7,14 @@ import (
 	"context"
 
 	"github.com/samber/oops"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 // SettingScope selects which settings partition a Get/Set targets. Ordinals
-// mirror pluginv1.SettingScope so the mapping in toProtoSettingScope stays a
+// mirror hostv1.SettingScope so the mapping in toProtoSettingScope stays a
 // one-to-one translation.
 type SettingScope int
 
@@ -34,21 +35,21 @@ const (
 
 // toProtoSettingScope maps an SDK SettingScope to its proto enum value.
 // Unknown values fall back to UNSPECIFIED, which the host rejects.
-func toProtoSettingScope(s SettingScope) pluginv1.SettingScope {
+func toProtoSettingScope(s SettingScope) hostv1.SettingScope {
 	switch s {
 	case SettingScopeGame:
-		return pluginv1.SettingScope_SETTING_SCOPE_GAME
+		return hostv1.SettingScope_SETTING_SCOPE_GAME
 	case SettingScopePlayer:
-		return pluginv1.SettingScope_SETTING_SCOPE_PLAYER
+		return hostv1.SettingScope_SETTING_SCOPE_PLAYER
 	case SettingScopeCharacter:
-		return pluginv1.SettingScope_SETTING_SCOPE_CHARACTER
+		return hostv1.SettingScope_SETTING_SCOPE_CHARACTER
 	default:
-		return pluginv1.SettingScope_SETTING_SCOPE_UNSPECIFIED
+		return hostv1.SettingScope_SETTING_SCOPE_UNSPECIFIED
 	}
 }
 
 // SettingsClient is the SDK-facing facade binary plugins use to read and write
-// host-managed settings via PluginHostService.GetSetting/SetSetting. The host
+// host-managed settings via SettingsService.GetSetting/SetSetting. The host
 // binds the plugin partition from the authenticated plugin name, so there is no
 // plugin parameter. Phase 8 settings are list-valued.
 //
@@ -78,16 +79,17 @@ type SettingsClientAware interface {
 }
 
 // pluginHostSettingsClient is the concrete SettingsClient used by binary
-// plugins. It wraps the generated PluginHostServiceClient.
+// plugins. It wraps the generated SettingsServiceClient dialed over the
+// plugin broker connection.
 type pluginHostSettingsClient struct {
-	client pluginv1.PluginHostServiceClient
+	client hostv1.SettingsServiceClient
 }
 
-// newPluginHostSettingsClient constructs a SettingsClient wrapping the given
-// PluginHostServiceClient. Exposed to the adapter for wiring; test code
-// constructs a pluginHostSettingsClient directly.
-func newPluginHostSettingsClient(client pluginv1.PluginHostServiceClient) SettingsClient {
-	return &pluginHostSettingsClient{client: client}
+// newPluginHostSettingsClient constructs a SettingsClient from a broker gRPC
+// connection. Exposed to the adapter for wiring; test code constructs a
+// pluginHostSettingsClient directly.
+func newPluginHostSettingsClient(conn grpc.ClientConnInterface) SettingsClient {
+	return &pluginHostSettingsClient{client: hostv1.NewSettingsServiceClient(conn)}
 }
 
 // withDispatchToken ferries the host-issued per-dispatch token from the
@@ -112,7 +114,7 @@ func (c *pluginHostSettingsClient) GetSetting(ctx context.Context, scope Setting
 	if c.client == nil {
 		return nil, false, oops.New("plugin host settings client is not configured")
 	}
-	resp, err := c.client.GetSetting(withDispatchToken(ctx), &pluginv1.PluginHostServiceGetSettingRequest{
+	resp, err := c.client.GetSetting(withDispatchToken(ctx), &hostv1.GetSettingRequest{
 		Scope:       toProtoSettingScope(scope),
 		PrincipalId: principalID,
 		Key:         key,
@@ -127,7 +129,7 @@ func (c *pluginHostSettingsClient) SetSetting(ctx context.Context, scope Setting
 	if c.client == nil {
 		return oops.New("plugin host settings client is not configured")
 	}
-	_, err := c.client.SetSetting(withDispatchToken(ctx), &pluginv1.PluginHostServiceSetSettingRequest{
+	_, err := c.client.SetSetting(withDispatchToken(ctx), &hostv1.SetSettingRequest{
 		Scope:       toProtoSettingScope(scope),
 		PrincipalId: principalID,
 		Key:         key,

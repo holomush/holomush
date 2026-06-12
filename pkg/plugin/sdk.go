@@ -194,7 +194,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 		evalAware.SetHostEvaluator(&hostEvaluateClient{client: hostClient})
 	}
 	if settingsAware, ok := a.serviceProvider.(SettingsClientAware); ok {
-		settingsAware.SetSettingsClient(newPluginHostSettingsClient(hostClient))
+		settingsAware.SetSettingsClient(newPluginHostSettingsClient(hostConn))
 	}
 	if decAware, ok := a.serviceProvider.(SnapshotDecryptorAware); ok {
 		decAware.SetSnapshotDecryptor(&snapshotDecryptClient{client: hostClient})
