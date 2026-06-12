@@ -7,8 +7,9 @@ import (
 	"context"
 
 	"github.com/samber/oops"
+	"google.golang.org/grpc"
 
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 // EvaluateDecision holds the result of an access-control evaluation
@@ -41,9 +42,16 @@ type HostEvaluatorAware interface {
 }
 
 // hostEvaluateClient is the concrete HostEvaluator used by binary plugins.
-// It wraps the generated PluginHostServiceClient and forwards Evaluate calls.
+// It wraps the generated EvalServiceClient and forwards Evaluate calls.
 type hostEvaluateClient struct {
-	client pluginv1.PluginHostServiceClient
+	client hostv1.EvalServiceClient
+}
+
+// newHostEvaluateClient constructs a HostEvaluator from a broker gRPC
+// connection. Exposed to the adapter for wiring; test code constructs a
+// hostEvaluateClient directly.
+func newHostEvaluateClient(conn grpc.ClientConnInterface) HostEvaluator {
+	return &hostEvaluateClient{client: hostv1.NewEvalServiceClient(conn)}
 }
 
 // Evaluate implements HostEvaluator. A nil client fails closed.
@@ -61,7 +69,7 @@ func (c *hostEvaluateClient) Evaluate(ctx context.Context, action, resource stri
 	// incoming context; the self-token fallback used by plugin-initiated
 	// EmitEvent is not needed here. Uses the shared withDispatchToken helper
 	// (settings_client.go) so the ferry logic lives in one place (sl0ir.16).
-	resp, err := c.client.Evaluate(withDispatchToken(ctx), &pluginv1.PluginHostServiceEvaluateRequest{
+	resp, err := c.client.Evaluate(withDispatchToken(ctx), &hostv1.EvaluateRequest{
 		Action:   action,
 		Resource: resource,
 	})

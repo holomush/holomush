@@ -191,7 +191,7 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 		focusAware.SetFocusClient(newPluginHostFocusClient(hostConn))
 	}
 	if evalAware, ok := a.serviceProvider.(HostEvaluatorAware); ok {
-		evalAware.SetHostEvaluator(&hostEvaluateClient{client: hostClient})
+		evalAware.SetHostEvaluator(newHostEvaluateClient(hostConn))
 	}
 	if settingsAware, ok := a.serviceProvider.(SettingsClientAware); ok {
 		settingsAware.SetSettingsClient(newPluginHostSettingsClient(hostConn))

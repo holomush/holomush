@@ -5,23 +5,27 @@ package pluginsdk
 
 import (
 	"context"
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/test/bufconn"
 
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
 type evalTestServer struct {
-	pluginv1.UnimplementedPluginHostServiceServer
+	hostv1.UnimplementedEvalServiceServer
 	gotAction, gotResource string
 	gotToken               string
 	allow                  bool
 }
 
-func (s *evalTestServer) Evaluate(ctx context.Context, req *pluginv1.PluginHostServiceEvaluateRequest) (*pluginv1.PluginHostServiceEvaluateResponse, error) {
+func (s *evalTestServer) Evaluate(ctx context.Context, req *hostv1.EvaluateRequest) (*hostv1.EvaluateResponse, error) {
 	s.gotAction = req.GetAction()
 	s.gotResource = req.GetResource()
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
@@ -29,7 +33,34 @@ func (s *evalTestServer) Evaluate(ctx context.Context, req *pluginv1.PluginHostS
 			s.gotToken = tokens[0]
 		}
 	}
-	return &pluginv1.PluginHostServiceEvaluateResponse{Allowed: s.allow, Reason: "ok", MatchedPolicy: "p1"}, nil
+	return &hostv1.EvaluateResponse{Allowed: s.allow, Reason: "ok", MatchedPolicy: "p1"}, nil
+}
+
+// startEvalServiceTestServer starts an in-process gRPC server that registers
+// EvalService from the given test double. The returned *grpc.ClientConn is
+// ready to use and cleaned up via t.Cleanup.
+func startEvalServiceTestServer(t *testing.T, srv *evalTestServer) *grpc.ClientConn {
+	t.Helper()
+	listener := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- bufconn test server
+	hostv1.RegisterEvalServiceServer(server, srv)
+	go func() {
+		_ = server.Serve(listener)
+	}()
+	t.Cleanup(func() {
+		server.Stop()
+		_ = listener.Close()
+	})
+	conn, err := grpc.NewClient(
+		"passthrough:///eval-service-test",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return listener.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection -- bufconn test client
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn
 }
 
 func TestHostEvaluateClient(t *testing.T) {
@@ -97,8 +128,8 @@ func TestHostEvaluateClient(t *testing.T) {
 			if tt.nilClient {
 				client = &hostEvaluateClient{}
 			} else {
-				conn := startPluginHostServiceTestServer(t, srv)
-				client = &hostEvaluateClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+				conn := startEvalServiceTestServer(t, srv)
+				client = &hostEvaluateClient{client: hostv1.NewEvalServiceClient(conn)}
 			}
 
 			ctx := context.Background()
