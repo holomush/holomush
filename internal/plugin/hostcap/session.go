@@ -97,7 +97,7 @@ func NewSessionAdminServer(base hostCapabilityBase) hostv1.SessionAdminServiceSe
 //
 // SessionAdmin() may be nil: the binary adapter has no consumer and returns nil,
 // and the Lua adapter returns nil until a broadcast/disconnect backing is wired
-// (holomush-eykuh.2.7). A nil port fails closed with Unimplemented rather than
+// (holomush-eykuh.4.2). A nil port fails closed with Unimplemented rather than
 // nil-dereferencing — protecting BOTH runtimes (mirrors settingsServer's
 // fail-closed-on-nil pattern in servers.go).
 func (s *sessionAdminServer) Broadcast(ctx context.Context, req *hostv1.BroadcastRequest) (*hostv1.BroadcastResponse, error) {

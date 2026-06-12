@@ -12,7 +12,7 @@
 //   - IdentityRegistrySnapshot: Lua returns nil (no token forgery surface).
 //   - EventEmitter: Lua returns nil (emissions flow through Lua hostfuncs, not gRPC).
 //   - SessionAdmin: Lua returns nil until a broadcast/disconnect backing is wired
-//     alongside the T7 bufconn endpoint (holomush-eykuh.2.7). The server-side
+//     for the bufconn endpoint (holomush-eykuh.4.2). The server-side
 //     nil-guard in sessionAdminServer keeps this fail-closed (Unimplemented),
 //     so a nil here is safe for both runtimes.
 package lua
@@ -234,7 +234,7 @@ func (a *luaHostCapAdapter) SessionAccess() session.Access {
 // hostfunc.SessionAccess shim, which is NOT held by Functions (Functions stores
 // only the narrow session.Access via WithSessionAccess). Wiring the wide surface
 // would require threading a new dependency through lua.Host construction, which is
-// deferred to the T7 bufconn endpoint (holomush-eykuh.2.7). Returning nil is safe:
+// deferred to a future migration task (holomush-eykuh.4.2). Returning nil is safe:
 // sessionAdminServer.Broadcast/Disconnect nil-guard this port and fail closed with
 // Unimplemented (session.go), protecting both runtimes.
 func (a *luaHostCapAdapter) SessionAdmin() hostcap.SessionAdmin {
