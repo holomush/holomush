@@ -1,49 +1,27 @@
-- **Invariant-registry family-renumber series (.14.12–.14.27, hz0v4) + UNREGISTERED-FILE blindness — CONSOLIDATED.**
-  Legacy family→canonical `INV-<SCOPE>-N`. HOLDS: (1) residual walk `bareInvRE=\bINV-\d+\b` matches ONLY
-  bare NUMERIC `INV-9`, NOT `INV-P7-1`/`INV-PLUGIN-22`; `continue`s on shared files. (2) checkProvenance greps
-  CANONICAL `e.ID` not `r.Token`. (3) PER-SITE not per-number. (4) regen generated artifacts (.pb.go/_pb.ts/
-  grpc-api.md) on proto INV-comment rename. CRITICAL (.14.23 NOT READY): registry guards are BLIND to files in
-  neither owned_paths/shared_files/refs[] — a fully-green run does NOT prove migration complete. ALWAYS whole-tree
-  `rg -c '\bINV-<OLD>[0-9]' --glob '!docs/**'`; `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range-rewrite
-  corruption (`INV-P7-1..16`→`INV-CRYPTO-38..16` keeps provenance green); `rg 'TestINV_<OLD>[0-9]'` dangling cites.
-- **Verification-BINDING backfill (pending→bound flip) — hz0v4 READY.** Flips registry entries
-  pending→bound + adds asserted_by ONLY where `// Verifies: INV-<id>` ALREADY exists. Meta-test does
-  NOT cross-check asserted_by against annotation sites → typo'd/fabricated path passes. MUST hand-verify
-  each asserted_by file genuinely contains the annotation. For bug-closing flips (false-green fixes),
-  READ the cited test + confirm a REAL runtime assertion of EACH invariant clause. `pending` MUST NOT
-  carry asserted_by.
+- **Invariant-registry family-renumber (.14.x hz0v4) + UNREGISTERED-FILE blindness — CONSOLIDATED.**
+  Legacy family→canonical INV-<SCOPE>-N. HOLDS: residual walk `bareInvRE=\bINV-\d+\b` matches ONLY bare
+  numeric INV-9 (not INV-P7-1); checkProvenance greps canonical e.ID not r.Token; PER-SITE not per-number;
+  regen generated artifacts on proto INV-comment rename. CRITICAL: registry guards BLIND to files in neither
+  owned_paths/shared_files/refs[] — green run≠migration complete. ALWAYS whole-tree `rg -c '\bINV-<OLD>[0-9]'
+  --glob '!docs/**'`; `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range-rewrite corruption; `rg 'TestINV_<OLD>'`.
+- **Verification-BINDING backfill (pending→bound) hz0v4 READY.** Flips pending→bound + asserted_by ONLY where
+  `// Verifies: INV-<id>` ALREADY exists. Meta-test does NOT cross-check asserted_by vs annotation sites →
+  typo'd path passes. Hand-verify each asserted_by file contains the annotation; for bug-closing flips READ
+  the cited test + confirm REAL assertion of EACH clause. `pending` MUST NOT carry asserted_by.
 
-- **NEW shape — wire event-type qualification migration (bare scene_* → core-scenes:<verb>),
-  aneim Phase 1 / holomush-r0kup READY.** Distinct from the .14.x renumbers. Three vocabularies,
-  DIFFERENT rules: (1) registered-emit set (main.go phase4/phase6EmitTypes) + (2)
-  crypto.emits[].event_type MUST stay BARE (INV-PLUGIN-32 set-equality + splitQualifiedRef);
-  (3) wire type + verbs[].type MUST be qualified `<plugin>:<verb>`. So per-SITE judgement, not
-  per-token: bare main.go/crypto.emits/main_test.go assertions are CORRECT, not misses. Checklist
-  that held: (a) whole-tree `rg scene_pose|scene_say|...` ex-core-scenes/docs — only proto
-  doc-comments, generated *.pb.go/_pb.ts, crypto-bridge unit tests, and raw-bus `mintEvent`/
-  `eventbus.Type` synthetic integration tests (published via `bus.Bus.Publisher()` NOT
-  RenderingPublisher → bypass verb registry, self-consistent bare). (b) ALL scene_log INSERTs incl
-  SQL single-quote literals (seedScenePoseLog, poseorder `type='...'`, publish_store.go `WHERE
-  type IN (...)`) — silent zero-row risk; both late-found literals qualified. (c) audit dispatch
-  `eventType := row.GetType()` (qualified stored) vs `if eventType == "core-scenes:scene_pose"` —
-  match. (d) handleEmit `strings.TrimPrefix(eventType,"core-scenes:scene_")` clean for
-  pose/say/emit/ooc; `verb` only feeds user output, wire `Type` stays qualified. (e) DOWNGRADE
-  FENCE NON-DEFEAT: `cryptowiring.AlwaysSensitiveSet` already PREFIXES bare crypto.emits with
-  `<plugin>:`, so fence `alwaysSensitive` was always qualified — qualifying scene_log.type CLOSES
-  a pre-existing keying gap (row.GetType() now matches), does not open fail-open; fenceCheckRow
-  only consults alwaysSensitive on identity-codec rows (encrypted use DEK-exists). (f)
-  `emitEntryMatchesWireType` (crypto_manifest.go:89) bridges bare entry ↔ qualified wire for
-  LookupEmitSensitivity + PluginCanReadBack — emit/readback unaffected. (g) harness regression
-  validity: SAME verbRegistry instance wrapped into crypto RenderingPublisher AND populated by
-  plugin loader from manifest (harness.go:333→347 & →376→plugins.go:311); EmitSceneICContent's
-  internal require.NoError surfaces EMIT_UNKNOWN_VERB so the spec genuinely fails w/o the verbs
-  block. (h) harness emit helper qualifies bare→qualified IDEMPOTENTLY (`if !strings.Contains
-  (wireType,":")`), so untouched tests passing bare verbs still work; readback/privacy tests
-  already used `pluginName+":scene_pose"`. (i) manifest enums closed (manifest.go:176-187):
-  category{communication,movement,state,system,command}, format{speech,action,narrative,
-  notification,error,snapshot,delta}, speech needs label. Design: IC content (pose/say/emit/ooc)→
-  communication; lifecycle/publish notices→system+notification. No false-green (no `// Verifies:
-  INV-PLUGIN-40`; loader-gate aneim.10 + meta-test aneim.11 deferred). 2026-06-07 — READY.
+- **Wire event-type qualification migration (bare scene_*→core-scenes:<verb>), aneim P1/r0kup READY.**
+  Three vocabularies, DIFFERENT rules — judge per-SITE not per-token: (1) registered-emit set
+  (main.go phaseN EmitTypes) + (2) crypto.emits[].event_type stay BARE (INV-PLUGIN-32 set-equality +
+  splitQualifiedRef); (3) wire type + verbs[].type qualified `<plugin>:<verb>`. So bare main.go/
+  crypto.emits/main_test assertions are CORRECT. Checklist: (a) whole-tree `rg scene_pose|...` ex
+  core-scenes/docs — proto doc-comments, generated pb, and raw-bus mintEvent/eventbus.Type synthetic
+  int tests (publish via bus.Publisher() NOT RenderingPublisher→bypass verb registry, bare OK) are
+  expected. (b) ALL scene_log INSERTs incl SQL `type='...'` literals — silent zero-row risk. (c) audit
+  dispatch row.GetType() (qualified stored) must match `if eventType=="core-scenes:scene_pose"`. (d)
+  emitEntryMatchesWireType (crypto_manifest.go) bridges bare↔qualified for sensitivity/readback. (e)
+  fence non-defeat: AlwaysSensitiveSet already prefixes bare crypto.emits → qualifying scene_log.type
+  CLOSES a keying gap, no fail-open. (f) harness emit helper qualifies bare→qualified IDEMPOTENTLY.
+  No false-green (INV-PLUGIN-40 loader-gate/meta-test deferred). 2026-06-07.
 
 - **Gate-removal (delete WithCryptoEnabled emit fence gate, run fence unconditionally) —
   holomush-dj95.3 READY.** Deleting a runtime safety-gate is only safe once EVERY emit path
@@ -177,38 +155,44 @@
   because a broken path resolves {success:false} silently (no throw) rather than asserting the real behavior.
   Flakiness checklist: no sleeps; expect.poll/waitForEvent/toPass; conn-pill data-status gate before commands;
   unique per-test titles.
-- **Proto package decomposition / carve god-service into capability services (eykuh.1.2 READY, 2026-06-11).**
-  Proto-only, additive, 14 services across 11 host/v1 files + generated pb.go/grpc/connect/_pb.ts. CHECKLIST
-  that held: (1) RPC membership per-service vs plan table — count each service's rpcs. (2) Carved-message
-  fidelity: source `PluginHostServiceX{...}` → `X{...}` MUST keep SAME field#+type+validate-constraint+doc
-  (prefix drop only); compare against the ORIGINAL plugin.proto bodies, not just the plan. (3) Lua-derived
-  msgs (world/property/session) ground in Go hostfunc: SessionInfo↔cap_session.go SetField keys, QueryObject
-  9-field projection↔world.go queryObjectFn, CreateObject one-of↔world_write.go containmentCount==1. (4) THE
-  DEVIATION: copying package-local shared types (FocusKey/FocusKind/FocusFailure*, Event/StreamReplayMode,
-  SettingScope) into the new package while IMPORTING cross-file AuditRow/RowResult is CONSISTENT not arbitrary
-  — discriminator is type LOCALITY: copy types defined INSIDE plugin.proto (no standalone file to import w/o
-  the god-service), import types in their OWN domain file (audit.proto, which plugin.proto itself imports).
-  proto packages are FLAT: each shared type defined exactly ONCE across the package's files = no codegen
-  collision (verify w/ `rg '^(message|enum) <T> ' host/v1/`). Copies spawn distinct Go types (hostv1.X vs
-  pluginv1.X) → Task 3 server move OWES explicit pluginv1↔hostv1 translation + round-trip equality test (Low
-  follow-up; nothing pins copies equal). (5) generated .pb.go SPDX header is REPO CONVENTION (flows from proto
-  leading comment; plugin/v1+eventbus/v1 pb.go carry it; .licenserc.yaml excludes **/*.pb.go from ENFORCEMENT
-  only) — not a 'skip generated files' violation. (6) additivity: `jj show --stat | rg plugin/v1` must be EMPTY;
-  buf.validate import carried verbatim from source = fidelity not deviation.
-- **Capability-service CLIENT rewire (eykuh.1.9 READY, 2026-06-11) — pure transport swap, crypto-adjacent.**
-  Swaps SDK decrypt client pluginv1.PluginHostServiceClient→hostv1.AuditServiceClient + envelope
-  pluginv1.DecryptOwnAuditRowsRequest/Response→hostv1.* . CRYPTO-SAFETY GATE held because the SDK
-  wrapper (audit.go DecryptOwnAuditRows) is transport-only: NO DEK/AAD/eligibility/content logic in
-  pkg/plugin — all host-side. Verify the ENVELOPE still carries pluginv1 ROWS (host audit.pb.go:
-  Rows []*v1.AuditRow / Results []*v1.RowResult; wire descriptor refs holomush.plugin.v1.AuditRow =
-  imported not redefined) → no row-drop/mis-assign. Host endpoint crypto-equivalence: auditServer
-  (host_capability_servers.go:321) DELEGATES to s.legacy().DecryptOwnAuditRows = same
-  pluginHostServiceServer handler (host_service.go:953) → same ReadbackDecryptor.DecryptOwnRows
-  (OwnerMap g1 gate, not_owner, DECRYPT_BATCH_TOO_LARGE) — that delegate is Task 3's work, confirms
-  endpoint equivalence not this diff's. NIL-GATING preserved: decAware block runs only if provider is
-  SnapshotDecryptorAware → wantsDecryptor=true → hostConn dialed before NewAuditServiceClient(hostConn).
-  hostClient var removal (sdk.go) FORCED by last-consumer migration = overlaps Task 10 (pre-done); flag
-  for bookkeeping not defect. pluginv1 STILL imported in sdk.go for PluginService (Init/HandleEvent/
-  HandleCommand) = not dangling. Tests register hostv1.RegisterAuditServiceServer via bufconn, 3 cases
-  non-vacuous (plaintext echo, typed refusal+nil-plaintext, status err). God-service still registered =
-  independence holds.
+- **Proto god-service→capability-service decomposition (eykuh.1.2 READY, 2026-06-11).** Proto-only/additive,
+  14 svcs across 11 host/v1 files. CHECKLIST: (1) count each svc's RPCs vs plan table. (2) carved-msg fidelity:
+  `PluginHostServiceX{}`→`X{}` keep SAME field#+type+validate-constraint+doc (prefix-drop only) vs ORIGINAL
+  plugin.proto bodies. (3) Lua-derived msgs ground in Go hostfunc (SessionInfo↔cap_session keys, QueryObject
+  9-field↔world.go, CreateObject one-of↔world_write containmentCount==1). (4) DEVIATION OK: copy types defined
+  INSIDE plugin.proto (no standalone file), IMPORT types w/ own domain file (audit.proto) — discriminator=type
+  LOCALITY. Proto pkgs FLAT: each type defined ONCE (verify `rg '^(message|enum) <T> ' host/v1/`). Copies spawn
+  distinct Go types (hostv1.X vs pluginv1.X)→server-move OWES pluginv1↔hostv1 translation+round-trip test. (5)
+  generated .pb.go SPDX header IS repo convention (not 'skip generated' violation). (6) additivity: `jj show
+  --stat | rg plugin/v1` must be EMPTY.
+- **Capability-service CLIENT rewire (eykuh.1.9 READY, 2026-06-11) — transport swap, crypto-adjacent.** SDK
+  decrypt client pluginv1.PluginHostServiceClient→hostv1.AuditServiceClient + envelope→hostv1.*. CRYPTO GATE
+  held: SDK wrapper is transport-only (NO DEK/AAD/eligibility in pkg/plugin — all host-side). Verify envelope
+  STILL carries pluginv1 ROWS (Rows []*v1.AuditRow imported not redefined)→no row-drop. Host endpoint equiv:
+  auditServer DELEGATES to legacy().DecryptOwnAuditRows→same ReadbackDecryptor.DecryptOwnRows (OwnerMap gate,
+  not_owner, BATCH_TOO_LARGE). NIL-GATING preserved (decAware only if SnapshotDecryptorAware→hostConn dialed
+  before client). pluginv1 still imported for PluginService = not dangling. Tests via bufconn, 3 non-vacuous.
+- **hostcap capability-server impl (eykuh.2.x: Session Task 4 READY, 2026-06-12).** New
+  per-capability gRPC server in internal/plugin/hostcap, registered LuaDefaultSet-only.
+  CHECKLIST: (1) RPC→service completeness = read BOTH session.proto AND generated
+  *_grpc.pb.go ServerServer interface — they're the truth, plan prose was WRONG
+  (claimed SetLastWhispered+Disconnect→DeleteByCharacter on admin svc; proto puts
+  SetLastWhispered on SessionService, Disconnect→DisconnectSession). Embedded
+  Unimplemented*Server on each struct = future proto RPCs fail closed. (2) NOT-FOUND
+  parity: session.Access.FindByCharacterName returns (nil,nil) on miss → server nil→
+  empty resp (session.go:39-43) = faithful to Lua nil-return (cap_session.go:88,
+  stdlib_session.go:75). (3) ZERO-ULID DIVERGENCE (Low): locationIDString returns ""
+  for zero ULID but the ACTUALLY-WIRED Lua path stdlib_session.go:83 emits
+  info.LocationID.String() UNCONDITIONALLY (zero→26 zeros). The cited cap_session.go
+  "empty-string convention" baseline has NO production adapter yet (only test mock
+  impls FindSessionByName) — comment cites aspirational not wired baseline. Edge case
+  only: scanSession ulid.Parse errors on empty location_id so persisted sessions carry
+  real ULID. (4) REGISTRATION TEST GAP (Low, recurring): register_test only tests
+  BinaryDefaultSet (asserts Session ABSENT); NO test asserts LuaDefaultSet REGISTERS
+  the new services — positive wiring path untested. Always `rg LuaDefaultSet|rg test`.
+  (5) buf.validate min_len=1 is DECORATIVE on broker — grpc.NewServer has NO
+  protovalidate interceptor (host_service.go:30, broker_proxy.go:57); matches
+  pre-existing convention, property.go validates explicitly instead. (6) Broadcast/
+  Disconnect do NO ABAC check — but Lua cap_session.go shim ALSO delegates straight to
+  port w/o ABAC → parity holds, not a finding. Error opacity clean (LogErrorContext +
+  static "internal error", neg tests assert NotContains "secret").
