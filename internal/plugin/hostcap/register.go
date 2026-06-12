@@ -21,11 +21,10 @@ const (
 	// (spec §1) and are registered only in the Lua set once their server bodies
 	// land (Tasks 3–5).
 	BinaryDefaultSet CapabilitySet = iota
-	// LuaDefaultSet is the capability set the Lua runtime registers. It will add
-	// Session/Property/World once those servers exist (Tasks 3–5). Until then it
-	// registers exactly the same 9 services as BinaryDefaultSet — registering a
-	// service with no consumer is harmless, and the Lua bufconn endpoint (§1) is
-	// not wired until Task 5, so no Lua consumer reaches it yet.
+	// LuaDefaultSet is the capability set the Lua runtime registers. It extends
+	// BinaryDefaultSet with four Lua-only services: PropertyService,
+	// SessionService, SessionAdminService, and WorldQueryService. All four are
+	// fully enabled as of Task 5 (Phase 0 capstone).
 	LuaDefaultSet
 )
 
@@ -33,12 +32,13 @@ const (
 // set onto srv. It is the single registration source for both runtimes
 // (INV-PLUGIN-49); the only per-runtime difference is the set + the adapter baked
 // into base. goplugin's newPluginHostServiceServer calls this with
-// BinaryDefaultSet; the Lua per-plugin server (§1, Task 5) will call it with
+// BinaryDefaultSet; the Lua per-plugin server (§1, Task 7) calls it with
 // LuaDefaultSet.
 //
-// SessionService and SessionAdminService are registered in the LuaDefaultSet
-// branch (Task 4). TODO(holomush-eykuh.2.5): once worldServer lands (Task 5),
-// add it to the LuaDefaultSet branch. PropertyService is now registered there.
+// The LuaDefaultSet branch registers the four Lua-only services:
+// PropertyService (Task 3), SessionService + SessionAdminService (Task 4), and
+// WorldQueryService (Task 5). All four servers now exist; LuaDefaultSet is
+// fully enabled.
 func RegisterCapabilities(srv *grpc.Server, base hostCapabilityBase, set CapabilitySet) {
 	hostv1.RegisterFocusServiceServer(srv, &focusServer{hostCapabilityBase: base})
 	hostv1.RegisterEmitServiceServer(srv, &emitServer{hostCapabilityBase: base})
@@ -54,7 +54,7 @@ func RegisterCapabilities(srv *grpc.Server, base hostCapabilityBase, set Capabil
 		hostv1.RegisterPropertyServiceServer(srv, &propertyServer{hostCapabilityBase: base})
 		hostv1.RegisterSessionServiceServer(srv, &sessionServer{hostCapabilityBase: base})
 		hostv1.RegisterSessionAdminServiceServer(srv, &sessionAdminServer{hostCapabilityBase: base})
-		// TODO(holomush-eykuh.2.5): register worldServer once world.go lands (Task 5).
+		hostv1.RegisterWorldQueryServiceServer(srv, &worldServer{hostCapabilityBase: base})
 	}
 }
 

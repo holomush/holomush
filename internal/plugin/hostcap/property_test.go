@@ -41,10 +41,20 @@ func (f *fakePropertyDef) Set(_ context.Context, _ property.WorldQuerier, _ prop
 	return f.setErr
 }
 
-// fakePropertyWorldQuerier satisfies property.WorldQuerier with no-op stubs.
+// fakePropertyWorldQuerier satisfies hostcap.WorldQuerier with no-op stubs.
+// GetLocation and GetObject are used by property.Definition.Get/Set; GetCharacter
+// and GetCharactersByLocation are required by the wider WorldQuerier interface.
 type fakePropertyWorldQuerier struct{}
 
 func (fakePropertyWorldQuerier) GetLocation(_ context.Context, _ ulid.ULID) (*world.Location, error) {
+	return nil, nil
+}
+
+func (fakePropertyWorldQuerier) GetCharacter(_ context.Context, _ ulid.ULID) (*world.Character, error) {
+	return nil, nil
+}
+
+func (fakePropertyWorldQuerier) GetCharactersByLocation(_ context.Context, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	return nil, nil
 }
 

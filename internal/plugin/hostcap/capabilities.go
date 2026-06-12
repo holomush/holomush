@@ -14,6 +14,8 @@ package hostcap
 import (
 	"context"
 
+	"github.com/oklog/ulid/v2"
+
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
@@ -32,10 +34,18 @@ import (
 type PropertyDefinition = property.Definition
 
 // WorldQuerier is the plugin-subject-stamped world read surface the
-// PropertyService / WorldQueryService servers consume. Aliased to the narrow
-// property.WorldQuerier (the exact set property.Definition.Get requires);
-// *hostfunc.WorldQuerierAdapter satisfies it.
-type WorldQuerier = property.WorldQuerier
+// PropertyService / WorldQueryService servers consume. It extends
+// property.WorldQuerier with GetCharacter and GetCharactersByLocation, covering
+// all four query host functions (query_location, query_character,
+// query_location_characters, query_object). *hostfunc.WorldQuerierAdapter
+// satisfies the full set; property.WorldQuerier satisfies the subset used by
+// property.Definition.Get.
+type WorldQuerier interface {
+	GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error)
+	GetCharacter(ctx context.Context, id ulid.ULID) (*world.Character, error)
+	GetCharactersByLocation(ctx context.Context, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
+	GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error)
+}
 
 // WorldMutator is the world write surface backing property mutation. Aliased to
 // world.Mutator (the full authorized world operation set).

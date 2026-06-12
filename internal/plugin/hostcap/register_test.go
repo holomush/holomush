@@ -60,6 +60,33 @@ func (stubHostCaps) SessionAdmin() hostcap.SessionAdmin       { return nil }
 
 var _ hostcap.HostCapabilities = stubHostCaps{}
 
+// TestRegisterCapabilitiesRegistersLuaDefaultSet asserts that the LuaDefaultSet
+// branch registers all four Lua-only capability services in addition to the 9
+// binary services. Prevents a dropped registration line from passing CI silently.
+func TestRegisterCapabilitiesRegistersLuaDefaultSet(t *testing.T) {
+	srv := grpc.NewServer()
+	base := hostcap.NewBase(stubHostCaps{}, "test-plugin")
+	hostcap.RegisterCapabilities(srv, base, hostcap.LuaDefaultSet)
+
+	info := srv.GetServiceInfo()
+
+	required := []string{
+		"holomush.plugin.host.v1.PropertyService",
+		"holomush.plugin.host.v1.SessionService",
+		"holomush.plugin.host.v1.SessionAdminService",
+		"holomush.plugin.host.v1.WorldQueryService",
+	}
+	for _, svc := range required {
+		if _, ok := info[svc]; !ok {
+			t.Errorf("LuaDefaultSet must register %s", svc)
+		}
+	}
+	// Sanity-check that the 9 binary services are still present.
+	if _, ok := info["holomush.plugin.host.v1.EvalService"]; !ok {
+		t.Fatal("LuaDefaultSet must include EvalService (inherited from binary set)")
+	}
+}
+
 // TestRegisterCapabilitiesRegistersBinaryDefaultSet asserts the helper wires the
 // binary default capability set onto a server without panicking and that the set
 // excludes Session/Property/World (no binary consumer; spec §1) while including

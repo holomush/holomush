@@ -606,7 +606,7 @@ func (h *Host) PropertyDefinition(string) (property.Definition, bool) {
 // WorldQuerier returns the plugin-subject-stamped world read surface. The binary
 // host has no world surface (the WorldQueryService is Lua-only), so it returns
 // nil. Satisfies hostcap.HostCapabilities.
-func (h *Host) WorldQuerier(string) property.WorldQuerier {
+func (h *Host) WorldQuerier(string) hostcap.WorldQuerier {
 	return nil
 }
 
