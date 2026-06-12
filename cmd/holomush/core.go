@@ -406,7 +406,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	})
 
 	// Create stream registry early so it can be shared between the plugin
-	// subsystem (hostfunc) and the gRPC subsystem (CoreServer + PluginHostService).
+	// subsystem (hostfunc) and the gRPC subsystem (CoreServer + the
+	// capability-scoped host services).
 	streamRegistry := holoGRPC.NewSessionStreamRegistry()
 
 	pluginSub := pluginsetup.NewPluginSubsystem(pluginsetup.PluginSubsystemConfig{
