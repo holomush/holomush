@@ -198,3 +198,27 @@
   SubjectID()=access.PluginSubject prefixes plugin: downstream (fake doesn't). Containment.Type() is
   POINTER receiver (object.go:72) called on addressable local var (world.go:321) — fine. 281 tests
   green, lint 0 issues.
+
+- **hostcap Lua adapter (eykuh.2.6 READY w/ tracked gaps, 2026-06-12).** luaHostCapAdapter
+  wraps *hostfunc.Functions for the port; symmetric to binary *goplugin.Host. DECISIVE FACT:
+  `newLuaHostCapAdapter` is TEST-ONLY (no production caller) — the bufconn endpoint that makes
+  any method reachable is T7 (bufconn_endpoint.go, doesn't exist yet). So EVERY nil/stub return
+  is "no live caller → non-blocking-but-track", per eykuh.2.5 precedent. Classify each: (1)
+  EventEmitter nil = LEGIT (emitServer servers.go:357 nil-guards; Lua emits via hostfunc not
+  gRPC). (2) OwnedResourceTypes nil-map = FAIL-CLOSED not gradient: pluginauthz/evaluate.go:196
+  `!in.OwnedTypes[resType]` — nil map read = false in Go (safe), so Lua can only eval `command`
+  carve-out; binary host.go:489 returns REAL manifest ResourceTypes → Lua under-permissive, NOT
+  over. (3) SessionAdmin nil = NPE RISK in T7: sessionAdminServer.Broadcast/Disconnect
+  (session.go:97-108) have NO nil-guard (unlike emit/focus servers) AND are LuaDefaultSet-only;
+  Functions holds NARROW session.Access (no broadcast/disconnect) while existing Lua
+  session.broadcast works via WIDE hostfunc.SessionAccess (cap_session.go) — so host-brokered
+  path LOSES an existing Lua capability. (4) Settings nil = settingsServer fails-closed
+  Unimplemented (servers.go:667,712). (5) focus stubs: 4 of 6 (SetConnectionFocus/
+  GetConnectionFocus/AutoFocusOnJoin/IsAnyConnFocused) ARE server-reachable (servers.go:162-342)
+  — comment "only session manager" is WRONG for those 4; but UNSUPPORTED-err = fail-closed not
+  NPE. LookupActor: core.ActorPlugin correct (event.go:149); !ok→ACTOR_NOT_FOUND fail-closed
+  (no fail-open zero-subject). GetPropertyRegistry never nil (New defaults SharedRegistry,
+  functions.go:253). withSettings referenced in 5 doc-comments but NOT declared = dangling doc
+  (Low). 862 tests green, lint 0. ALWAYS: when adapter is dead-code-until-next-task, the verdict
+  hinges on "is there a live caller" — and check the CONSUMER server for nil-guard symmetry
+  (emit/focus guard, session does NOT).
