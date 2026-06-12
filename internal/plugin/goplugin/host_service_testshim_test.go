@@ -23,6 +23,15 @@ type pluginHostServiceServer struct {
 }
 
 func (s *pluginHostServiceServer) base() hostCapabilityBase {
+	// hostCapabilityBase.host is the hostcap.HostCapabilities interface. Wrapping a
+	// nil *Host in an interface yields a NON-nil interface holding a nil pointer,
+	// which would defeat the servers' `if s.host == nil` fail-closed guards. Keep
+	// the interface a true nil when the test passes a nil host so those guards
+	// fire exactly as they did when host was a concrete *Host (behavior preserved
+	// for the nil-host tests).
+	if s.host == nil {
+		return hostCapabilityBase{host: nil, pluginName: s.pluginName}
+	}
 	return hostCapabilityBase{host: s.host, pluginName: s.pluginName}
 }
 
