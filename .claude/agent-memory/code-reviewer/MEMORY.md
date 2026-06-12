@@ -195,3 +195,20 @@
   leading comment; plugin/v1+eventbus/v1 pb.go carry it; .licenserc.yaml excludes **/*.pb.go from ENFORCEMENT
   only) — not a 'skip generated files' violation. (6) additivity: `jj show --stat | rg plugin/v1` must be EMPTY;
   buf.validate import carried verbatim from source = fidelity not deviation.
+- **Capability-service CLIENT rewire (eykuh.1.9 READY, 2026-06-11) — pure transport swap, crypto-adjacent.**
+  Swaps SDK decrypt client pluginv1.PluginHostServiceClient→hostv1.AuditServiceClient + envelope
+  pluginv1.DecryptOwnAuditRowsRequest/Response→hostv1.* . CRYPTO-SAFETY GATE held because the SDK
+  wrapper (audit.go DecryptOwnAuditRows) is transport-only: NO DEK/AAD/eligibility/content logic in
+  pkg/plugin — all host-side. Verify the ENVELOPE still carries pluginv1 ROWS (host audit.pb.go:
+  Rows []*v1.AuditRow / Results []*v1.RowResult; wire descriptor refs holomush.plugin.v1.AuditRow =
+  imported not redefined) → no row-drop/mis-assign. Host endpoint crypto-equivalence: auditServer
+  (host_capability_servers.go:321) DELEGATES to s.legacy().DecryptOwnAuditRows = same
+  pluginHostServiceServer handler (host_service.go:953) → same ReadbackDecryptor.DecryptOwnRows
+  (OwnerMap g1 gate, not_owner, DECRYPT_BATCH_TOO_LARGE) — that delegate is Task 3's work, confirms
+  endpoint equivalence not this diff's. NIL-GATING preserved: decAware block runs only if provider is
+  SnapshotDecryptorAware → wantsDecryptor=true → hostConn dialed before NewAuditServiceClient(hostConn).
+  hostClient var removal (sdk.go) FORCED by last-consumer migration = overlaps Task 10 (pre-done); flag
+  for bookkeeping not defect. pluginv1 STILL imported in sdk.go for PluginService (Init/HandleEvent/
+  HandleCommand) = not dangling. Tests register hostv1.RegisterAuditServiceServer via bufconn, 3 cases
+  non-vacuous (plaintext echo, typed refusal+nil-plaintext, status err). God-service still registered =
+  independence holds.
