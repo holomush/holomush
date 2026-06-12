@@ -3761,6 +3761,26 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/plugin/dependency_test.go"
+  - id: INV-PLUGIN-47
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-host-capability-decomposition-design.md"
+    summary: "Every host-brokered capability function MUST map to exactly one capability-scoped service in holomush.plugin.host.v1;
+      no host.v1 service MUST span two capability domains, and the PluginHostService god-service MUST NOT exist after the
+      decomposition."
+    binding: pending
+  - id: INV-PLUGIN-48
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-host-capability-decomposition-design.md"
+    summary: "Ambient runtime substrate (log, new_request_id, stdlib, config) MUST NOT be modeled as a capability: it MUST
+      NOT appear in holomush.plugin.host.v1 and MUST NOT be a valid requires capability token."
+    binding: pending
+  - id: INV-PLUGIN-49
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-11-plugin-host-capability-decomposition-design.md"
+    summary: "A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific
+      capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability
+      surface."
+    binding: pending
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

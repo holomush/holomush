@@ -16,6 +16,10 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Domain-primary carving axis for host capability services](holomush-nbscl-domain-primary-carving-axis-host-capability-services.md) | 2026-06-12 | Accepted | `holomush-nbscl` |
+| [Dedicated holomush.plugin.host.v1 namespace; WorldService kept as coexisting domain service](holomush-e9go5-dedicated-holomush-plugin-host-v1-namespace-worldservice-kep.md) | 2026-06-12 | Accepted | `holomush-e9go5` |
+| [Ambient runtime substrate below the capability model; retire the Log RPC](holomush-cryy2-ambient-runtime-substrate-below-capability-model-retire-log.md) | 2026-06-12 | Accepted | `holomush-cryy2` |
+| [Clean cutover: delete PluginHostService and rewire the binary SDK in sub-spec 2](holomush-2fb90-clean-cutover-delete-pluginhostservice-and-rewire-binary-sdk.md) | 2026-06-12 | Accepted | `holomush-2fb90` |
 | [Typed-entry requires model for plugin manifests (capability/service kind tags)](holomush-mg4x6-typed-entry-requires-model-plugin-manifests-capability-servi.md) | 2026-06-11 | Accepted | `holomush-mg4x6` |
 | [Fail-fast fail-closed plugin-loader policy with structured ResolveResult](holomush-dfkca-fail-fast-fail-closed-plugin-loader-policy-structured-resolv.md) | 2026-06-11 | Accepted | `holomush-dfkca` |
 | [Lua plugin capability/service transport via in-process gRPC over the host broker](holomush-gtkzy-lua-plugin-capability-service-transport-via-process-grpc-ove.md) | 2026-06-11 | Accepted | `holomush-gtkzy` |

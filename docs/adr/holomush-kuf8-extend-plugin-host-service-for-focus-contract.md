@@ -4,7 +4,7 @@
 # Extend PluginHostService with Focus RPCs (Substrate-Hosted Bridge)
 
 **Date:** 2026-05-21
-**Status:** Accepted
+**Status:** Superseded by holomush-2fb90
 **Decision:** holomush-kuf8
 **Deciders:** HoloMUSH Contributors
 
