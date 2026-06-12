@@ -1,48 +1,25 @@
-- **Invariant-registry family-renumber (.14.x hz0v4) + UNREGISTERED-FILE blindness — CONSOLIDATED.**
-  Legacy family→canonical INV-<SCOPE>-N. HOLDS: residual walk `bareInvRE=\bINV-\d+\b` matches ONLY bare
-  numeric INV-9 (not INV-P7-1); checkProvenance greps canonical e.ID not r.Token; PER-SITE not per-number;
-  regen generated artifacts on proto INV-comment rename. CRITICAL: registry guards BLIND to files in neither
-  owned_paths/shared_files/refs[] — green run≠migration complete. ALWAYS whole-tree `rg -c '\bINV-<OLD>[0-9]'
-  --glob '!docs/**'`; `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` for range-rewrite corruption; `rg 'TestINV_<OLD>'`.
-- **Verification-BINDING backfill (pending→bound) hz0v4 READY.** Flips pending→bound + asserted_by ONLY where
-  `// Verifies: INV-<id>` ALREADY exists. Meta-test does NOT cross-check asserted_by vs annotation sites →
-  typo'd path passes. Hand-verify each asserted_by file contains the annotation; for bug-closing flips READ
-  the cited test + confirm REAL assertion of EACH clause. `pending` MUST NOT carry asserted_by.
+- **Invariant-registry guards: renumber + binding-backfill + provenance — CONSOLIDATED.**
+  (1) Renumber legacy→canonical: guards BLIND to files in neither owned_paths/shared_files/refs[] (green≠done) —
+  whole-tree `rg -c '\bINV-<OLD>[0-9]' --glob '!docs/**'` + `rg 'INV-<SCOPE>-[0-9]+\.\.[0-9]+'` (range corruption).
+  (2) Backfill pending→bound+asserted_by: hand-verify each asserted_by file CONTAINS `// Verifies:` (meta-test
+  doesn't cross-check); bug-close flips → READ cited test, confirm REAL per-clause assertion; `pending` MUST NOT
+  carry asserted_by. (3) TestProvenanceGuard reads each entry's refs[] from disk → a deleted/renamed refs file
+  turns it RED for ALL citing entries; a no-refs pending→bound flip neither causes nor worsens it (judge per-entry).
 
-- **Wire event-type qualification migration (bare scene_*→core-scenes:<verb>), aneim P1/r0kup READY.**
-  Three vocabularies, DIFFERENT rules — judge per-SITE not per-token: (1) registered-emit set
-  (main.go phaseN EmitTypes) + (2) crypto.emits[].event_type stay BARE (INV-PLUGIN-32 set-equality +
-  splitQualifiedRef); (3) wire type + verbs[].type qualified `<plugin>:<verb>`. So bare main.go/
-  crypto.emits/main_test assertions are CORRECT. Checklist: (a) whole-tree `rg scene_pose|...` ex
-  core-scenes/docs — proto doc-comments, generated pb, and raw-bus mintEvent/eventbus.Type synthetic
-  int tests (publish via bus.Publisher() NOT RenderingPublisher→bypass verb registry, bare OK) are
-  expected. (b) ALL scene_log INSERTs incl SQL `type='...'` literals — silent zero-row risk. (c) audit
-  dispatch row.GetType() (qualified stored) must match `if eventType=="core-scenes:scene_pose"`. (d)
-  emitEntryMatchesWireType (crypto_manifest.go) bridges bare↔qualified for sensitivity/readback. (e)
-  fence non-defeat: AlwaysSensitiveSet already prefixes bare crypto.emits → qualifying scene_log.type
-  CLOSES a keying gap, no fail-open. (f) harness emit helper qualifies bare→qualified IDEMPOTENTLY.
-  No false-green (INV-PLUGIN-40 loader-gate/meta-test deferred). 2026-06-07.
+- **Wire event-type qualification (bare scene_*→<plugin>:<verb>), aneim/r0kup READY, 2026-06-07.** THREE
+  vocabularies, DIFFERENT rules — judge per-SITE: (1) registered-emit set + (2) crypto.emits[].event_type stay
+  BARE (INV-PLUGIN-32 set-equality); (3) wire type + verbs[].type qualified. So bare main.go/crypto.emits/main_test
+  assertions are CORRECT. Checklist: raw-bus synthetic int tests publish via bus.Publisher() (bypass verb registry,
+  bare OK); ALL scene_log INSERTs incl SQL `type='...'` literals (silent zero-row risk); audit dispatch row.GetType()
+  (qualified stored) must match qualified `if`; emitEntryMatchesWireType bridges bare↔qualified for sensitivity.
 
-- **Gate-removal (delete WithCryptoEnabled emit fence gate, run fence unconditionally) —
-  holomush-dj95.3 READY.** Deleting a runtime safety-gate is only safe once EVERY emit path
-  that the now-unconditional check could reject is already compliant. Review pattern that held:
-  (1) Completeness: `rg WithCryptoEnabled|cryptoEnabled` whole-tree — plugins-package gate fully
-  gone; SEPARATE `internal/grpc/` read-side gate (server.go:178, auth_handlers.go:156) is a
-  DISTINCT Phase-3b binding-lookup gate that MUST remain (don't flag). (2) Production-safety is
-  the crux, NOT completeness: enumerate ALL `sensitivity: always` manifest entries
-  (`rg always plugins/*/plugin.yaml`) and verify each emit SITE claims Sensitive=true — core-scenes
-  IC content commands.go:1325 (Sensitive:true), core-communication Lua page/whisper/pemit main.lua
-  carry `sensitive = true` (guarded by lua/corecomm_sensitive_emit_test.go, the 50zqs regression).
-  (3) Undeclared-event safety: LookupEmitSensitivity (crypto_manifest.go:66) defaults
-  SensitivityNever for nil-manifest AND unmatched type → EnforceSensitivity(never,false)=never,nil →
-  Sensitive=false, IDENTICAL to pre-gate behavior; only NEW rejection is over-claim (claim=true on
-  never/undeclared) which no production path does. (4) Precursor dep (50zqs, SDK Sensitive plumbing)
-  CLOSED; proto sensitive=4 + bidirectional event_marshal.go + Lua flush `sensitive` key all landed.
-  (5) Bead acceptance criterion `rg ... internal/ → zero hits` is STALE (grpc gate legitimately
-  remains) — note for close, not a code defect. (6) Minor: package-doc wire_crypto.go:6-10 retains
-  cfg.Crypto-gated framing predating the change (DEK-wiring clause still accurate); function-doc
-  37-43 is the authoritative+correct one. `_ eventbus.Config` unused param: no lint risk (unparam
-  skips exported funcs; `_` signals intent). 746 unit tests green. 2026-06-07 — READY.
+- **Gate-removal (delete a runtime safety-gate, run check unconditionally) — dj95.3 READY, 2026-06-07.**
+  Safe only once EVERY path the now-unconditional check could reject is compliant. (1) Completeness: whole-tree
+  `rg <gateFlag>` — watch for a SEPARATE distinct gate that MUST remain (internal/grpc/ read-side ≠ plugins-pkg).
+  (2) Crux is PRODUCTION-SAFETY not completeness: enumerate every `sensitivity: always` manifest entry and verify
+  each emit SITE claims Sensitive=true. (3) Undeclared-event default must equal pre-gate behavior (LookupEmitSensitivity
+  → Never → Sensitive=false); only NEW rejection is over-claim, which no prod path does. (4) Stale bead acceptance
+  (`rg internal/ → zero hits`) when a legit gate remains = note-for-close, not a defect.
 
 - **Docs-only ADR-capture branch: ALWAYS check `@` is empty before verdict (holomush-5rh.8
   NOT READY, 2026-06-07).** Two recurring traps: (1) `task pr-prep`/fmt runs AFTER the commits
@@ -210,3 +187,14 @@
   sub-spec5 migration). UNWIRED mechanism (only test+plan call it) = per-task-deferral pattern (spec §5
   fixture-only, sub-spec5 migrates) — consistent w/ 2.5/2.6. Streaming silently `continue`-skipped, doc'd in
   source not logged (Low). pushBridgeError opacity preserved (status.Convert msg only). 396 tests, lint 0.
+
+- **INV-PLUGIN-49 cross-runtime parity binding (eykuh.2.11 R2 READY, 2026-06-12).** R1 flagged
+  settings+interceptor scaffolding (modeled non-existent prod path); R2 reworked to `kv`. PATTERN for
+  cross-runtime single-source binding: SAME hostcap.RegisterCapabilities behind BOTH newBinaryEndpoint
+  (BinaryDefaultSet, real goplugin.NewHost) + newLuaEndpoint (LuaDefaultSet, REAL
+  luaHost.HostCapabilitiesAdapter()), differ ONLY by CapabilitySet. KVService registered UNCONDITIONALLY
+  (register.go:51, outside LuaDefaultSet block); kvServer = bare UnimplementedKVServiceServer (servers.go:1004)
+  → genuine Unimplemented from REGISTERED svc. NON-VACUOUS GUARD: GetServiceInfo `require.Contains` KVService
+  in BOTH servers distinguishes Unimplemented-from-registered (genuine) vs from-UNREGISTERED (false pass);
+  equal-codes assert = single-source routing. Prod fidelity: test == newPluginEndpoint(bufconn_endpoint.go:30)
+  / host_service.go:31 byte-for-byte. Doc-comment "no interceptor needed" is FINE, not scaffolding.
