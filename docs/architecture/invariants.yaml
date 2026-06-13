@@ -3813,26 +3813,40 @@ invariants:
     summary: "A plugin's consumption of a host capability or plugin service MUST be authorized by a default-deny ABAC decision
       keyed on the host-stamped plugin:<name> subject. Manifest declaration is necessary but not sufficient; an operator policy
       MAY deny a declared capability."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/pluginauthz/capability_test.go"
+      - "internal/plugin/hostcap/interceptor_test.go"
+      - "internal/access/policy/seed_smoke_test.go"
   - id: INV-PLUGIN-51
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md"
     summary: "Any character subject or dispatch attribute used in a plugin-mediated authorization decision MUST be host-vouched
       (derived from the host delivery context) and MUST NOT originate from plugin- or wire-supplied data. Covers the command-registry
       RPCs and scope: anchoring."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/goplugin/dispatch_test.go"
+      - "internal/plugin/lua/dispatch_test.go"
+      - "internal/plugin/goplugin/host_service_command_test.go"
+      - "internal/plugin/hostfunc/commands_test.go"
   - id: INV-PLUGIN-52
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md"
     summary: "Every scope-eligible capability method MUST resolve its scoped resource through a wired extractor; a method
       missing its extractor MUST fail closed (deny), never forward unscoped. No silent fail-open."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/hostcap/descriptor_completeness_test.go"
+      - "internal/plugin/hostcap/interceptor_test.go"
   - id: INV-PLUGIN-53
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md"
     summary: "The per-entry least-privilege parameters (access:, scope:) are valid only on a capability: requires entry; either
       on a service: entry MUST be a hard manifest error at load."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/plugin/manifest_test.go"
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

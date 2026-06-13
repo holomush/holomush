@@ -1417,7 +1417,7 @@ func TestSDKActorKindToCoreDefaultsToPluginKind(t *testing.T) {
 }
 
 func TestNewPluginHostServiceServerRegistersCapabilityServices(t *testing.T) {
-	factory := newPluginHostServiceServer(NewHost(), "core-scenes")
+	factory := newPluginHostServiceServer(NewHost(), &plugins.Manifest{Name: "core-scenes"})
 
 	server := factory(nil)
 	t.Cleanup(server.Stop)

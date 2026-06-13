@@ -39,6 +39,31 @@ Each plugin in `plugins/<n>/` has a `plugin.yaml` that the loader consumes.
 - `commands: [...]` — telnet/web commands the plugin registers, each with required `capabilities: [{action, resource, scope}]` per the command-capability spec.
 - `policies:` — ABAC policy files this plugin ships.
 
+## Least-privilege parameters on `capability:` requires entries
+
+Two optional fields narrow the host's enforcement of a capability requirement.
+They are valid **only** on `capability:` entries — placing either on a `service:`
+entry is a hard manifest load error (INV-PLUGIN-53):
+
+| Field | Values | Purpose |
+|-------|--------|---------|
+| `access:` | `read` \| `write` | Declares the maximum operation class the plugin needs. The interceptor enforces it: a plugin declaring `access: read` cannot issue write-class host calls. |
+| `scope:` | e.g., `own-location` | Declares the instance-level fence. The interceptor extracts the method's scoped resource and evaluates it against the scope policy; calls whose resource cannot be resolved from the request fail closed (`SCOPE_NO_RESOURCE`, INV-PLUGIN-52). |
+
+**Example — a builder plugin that writes only within its own location:**
+
+```yaml
+requires:
+  - capability: world.mutation
+    access: write
+    scope: own-location
+```
+
+`access:` and `scope:` are enforced by the host interceptor against the
+host-owned `WorldMutationService`. They have no meaning on a `service:` entry
+because the host does not own provider-plugin servers and cannot honor the
+promise at the enforcement layer.
+
 ## DAG validation
 
 The loader resolves dependencies as a DAG: every name in `requires` must appear in some other plugin's `provides`. Cycles error at startup. `holomush.plugin.v1.AttributeResolverService` is auto-registered by the host (do NOT declare in `provides` — causes `SERVICE_ALREADY_REGISTERED`).

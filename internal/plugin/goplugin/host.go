@@ -204,6 +204,15 @@ func WithAuditLogger(a pluginauthz.Auditor) HostOption {
 	return func(h *Host) { h.auditor = a }
 }
 
+// WithDispatchAttributeResolver configures the host with the resolver used to
+// populate DispatchContext.Attributes (notably "location") at command/event
+// delivery (holomush-eykuh.3). Without it, dispatch Attributes stay nil —
+// fail-closed at scope-enforcement time. The Lua host has the same option
+// (plugin-runtime-symmetry). Satisfied by access/policy/attribute.Resolver.
+func WithDispatchAttributeResolver(r pluginauthz.AttributeResolver) HostOption {
+	return func(h *Host) { h.dispatchAttrResolver = r }
+}
+
 // WithConfigOverrides threads the per-plugin server-provided config override
 // map (plugin name → key → value) into the host so it can be consulted at
 // plugin init time. Populated from PluginSubsystemConfig.PluginConfigOverrides.
@@ -245,6 +254,13 @@ type Host struct {
 	engine            types.AccessPolicyEngine
 	auditor           pluginauthz.Auditor
 	commandQuerier    *commandquery.Querier
+	// dispatchAttrResolver resolves the acting character's host-vouched dispatch
+	// attributes (notably "location") at delivery time, populating
+	// DispatchContext.Attributes (holomush-eykuh.3). Nil leaves Attributes nil,
+	// fail-closed at scope-enforcement time. Wired at construction via
+	// WithDispatchAttributeResolver — the production attribute resolver is built
+	// before the plugin host in setup/subsystem.go.
+	dispatchAttrResolver pluginauthz.AttributeResolver
 	// playerSettings / characterSettings / gameSettings back the plugin-
 	// partitioned GetSetting / SetSetting host RPCs (holomush-iokti.7). They are
 	// late-bound (SetSettingsStores) because the settings stores are assembled in
@@ -796,7 +812,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	if grpcPlugin.broker != nil {
 		hostBrokerID := nextBrokerID
 		nextBrokerID++
-		go grpcPlugin.broker.AcceptAndServe(hostBrokerID, newPluginHostServiceServer(h, manifest.Name))
+		go grpcPlugin.broker.AcceptAndServe(hostBrokerID, newPluginHostServiceServer(h, manifest))
 		requiredServices[pluginsdk.PluginHostServiceName] = fmt.Sprintf("broker:%d", hostBrokerID)
 	}
 	if len(manifest.RequiredServiceNames()) > 0 && grpcPlugin.broker != nil && h.registry != nil {
@@ -981,6 +997,10 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 			// re-anchor: ActorSystem may not emit as system identity; use plugin ULID
 			// storedActor already holds the plugin ULID from stampPluginActor above
 		}
+		// Stamp the host-vouched dispatch subject onto the delivery ctx before any
+		// plugin code runs, so in-process plugin invocations inherit it
+		// (INV-PLUGIN-51). Only character actors are vouched; see stampDispatch.
+		callCtx = h.stampDispatch(callCtx, upstream)
 	}
 
 	// DeliverEvent has no player context — events are not dispatched on behalf of
@@ -1052,6 +1072,10 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 			// re-anchor: ActorSystem may not emit as system identity; use plugin ULID
 			// storedActor already holds the plugin ULID from stampPluginActor above
 		}
+		// Stamp the host-vouched dispatch subject onto the delivery ctx before any
+		// plugin code runs, so in-process plugin invocations inherit it
+		// (INV-PLUGIN-51). Only character actors are vouched; see stampDispatch.
+		callCtx = h.stampDispatch(callCtx, upstream)
 	}
 
 	// Carry the host-vouched owning player of the acting character onto the

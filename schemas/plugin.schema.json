@@ -280,6 +280,9 @@
               },
               "scope": {
                 "type": "string"
+              },
+              "access": {
+                "type": "string"
               }
             },
             "additionalProperties": false,

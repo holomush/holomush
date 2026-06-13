@@ -62,3 +62,29 @@ func DefaultCapabilityVocabulary() *CapabilityVocabulary {
 	}
 	return v
 }
+
+// capabilityScopeTokenRegistry maps a capability token to the set of scope
+// tokens it supports. It is populated at init by the hostcap package (which
+// owns the CapabilityDescriptor table) via RegisterCapabilityScopeTokens —
+// the plugins package MUST NOT import hostcap (cycle), so hostcap registers
+// inward.
+var capabilityScopeTokenRegistry = map[string]map[string]bool{}
+
+// RegisterCapabilityScopeTokens records the scope tokens a capability supports.
+// Called from hostcap's init(). Idempotent-merge: repeated tokens are unioned.
+func RegisterCapabilityScopeTokens(token string, scopes ...string) {
+	set := capabilityScopeTokenRegistry[token]
+	if set == nil {
+		set = map[string]bool{}
+		capabilityScopeTokenRegistry[token] = set
+	}
+	for _, s := range scopes {
+		set[s] = true
+	}
+}
+
+// capabilityScopeTokens returns the supported scope-token set for a capability
+// (nil if the capability declares no scopes / is unknown).
+func capabilityScopeTokens(token string) map[string]bool {
+	return capabilityScopeTokenRegistry[token]
+}

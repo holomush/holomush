@@ -28,6 +28,17 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
+// helpActorCtx stamps the host-vouched ActorCharacter on ctx exactly as the
+// production command dispatcher does (internal/command/dispatcher.go), so the
+// command-registry shims (list_commands/get_command_help) see the host-vouched
+// dispatch subject (INV-PLUGIN-51, holomush-eykuh.3). These tests call
+// LuaHost.DeliverCommand directly, bypassing the dispatcher, so they must stamp
+// the acting character themselves — the shims no longer trust the
+// CommandRequest.CharacterID arg.
+func helpActorCtx(ctx context.Context, charID string) context.Context {
+	return core.WithActor(ctx, core.Actor{Kind: core.ActorCharacter, ID: charID})
+}
+
 // mockHelpCommandRegistry provides test commands for the help plugins.
 type mockHelpCommandRegistry struct{}
 
@@ -107,7 +118,7 @@ var _ = Describe("Help Plugin Integration", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -126,7 +137,7 @@ var _ = Describe("Help Plugin Integration", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "say",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -145,7 +156,7 @@ var _ = Describe("Help Plugin Integration", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "nonexistent",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -165,7 +176,7 @@ var _ = Describe("Help Plugin Integration", func() {
 			// and "dig" ("Create a new room or exit"), but not "look". The help
 			// plugin searches the name and help fields (not usage), so this exercises
 			// help-field matching with selectivity.
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "search room",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -258,7 +269,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -281,7 +292,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "search room",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -313,7 +324,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -339,7 +350,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -364,7 +375,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, "01HTEST000000000000000CHAR"), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "search look",
 				CharacterID: "01HTEST000000000000000CHAR",
@@ -414,7 +425,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-help", pluginsdk.CommandRequest{
+			resp, err := fixture.LuaHost.DeliverCommand(helpActorCtx(ctx, charID), "core-help", pluginsdk.CommandRequest{
 				Command:     "help",
 				Args:        "",
 				CharacterID: charID,

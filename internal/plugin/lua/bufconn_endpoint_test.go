@@ -84,7 +84,12 @@ func TestPluginEndpoint(t *testing.T) {
 			name: "serves host caps over the in-process bufconn",
 			run: func(t *testing.T) {
 				adapter := newLuaHostCapAdapter(newTestFunctions(t))
-				ep, err := newPluginEndpoint(adapter, "echo-bot")
+				// Declare the session capability so the interceptor permits the
+				// ListActive round-trip below.
+				ep, err := newPluginEndpoint(adapter, &plugins.Manifest{
+					Name:     "echo-bot",
+					Requires: []plugins.Dependency{{Kind: plugins.DependencyCapability, Name: "session"}},
+				})
 				require.NoError(t, err)
 				defer ep.Close()
 
@@ -101,7 +106,7 @@ func TestPluginEndpoint(t *testing.T) {
 			name: "exposes a non-nil conn and closes cleanly",
 			run: func(t *testing.T) {
 				adapter := newLuaHostCapAdapter(newTestFunctions(t))
-				ep, err := newPluginEndpoint(adapter, "test-plugin")
+				ep, err := newPluginEndpoint(adapter, &plugins.Manifest{Name: "test-plugin"})
 				require.NoError(t, err)
 				assert.NotNil(t, ep.Conn())
 				require.NoError(t, ep.Close())
@@ -156,6 +161,30 @@ func TestPluginEndpoint(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, tc.run)
 	}
+}
+
+// TestLuaHostServerDeniesUndeclaredCapability proves the capability interceptor
+// is installed on the Lua per-plugin bufconn server identically to the binary
+// broker server: a plugin whose manifest declares NO capabilities is denied
+// (fail-closed) when it calls a gated host.v1 method (KVService.Get) over the
+// in-process conn. The binary mirror is
+// goplugin.TestBinaryHostServerDeniesUndeclaredCapability; both stand up the
+// REAL per-plugin server and dial the ACTUALLY-INSTALLED interceptor built from
+// the SAME hostcap.DeclaredAccessFromManifest helper, so together they prove the
+// trust gate is identical across runtimes (plugin-runtime-symmetry).
+//
+// Verifies: INV-PLUGIN-45
+func TestLuaHostServerDeniesUndeclaredCapability(t *testing.T) {
+	adapter := newLuaHostCapAdapter(newTestFunctions(t))
+	// Manifest declares no capability requires — kv is therefore undeclared.
+	ep, err := newPluginEndpoint(adapter, &plugins.Manifest{Name: "no-caps-plugin"})
+	require.NoError(t, err)
+	defer ep.Close()
+
+	client := hostv1.NewKVServiceClient(ep.Conn())
+	_, err = client.Get(context.Background(), &hostv1.GetRequest{Key: "k"})
+	require.Error(t, err, "undeclared capability call must be denied by the interceptor")
+	assert.Contains(t, err.Error(), "plugin did not declare capability")
 }
 
 // TestHostCapBridgeInjection verifies the bridge opt-in/opt-out coexistence

@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/plugin/luabridge"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/settings"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -54,6 +55,13 @@ type Host struct {
 	configOverrides      map[string]map[string]string
 	mergedConfigs        map[string]map[string]string
 	bridgeEnabledPlugins map[string]bool // opt-in allowlist for host-cap bridge injection; empty = production (no bridge)
+	// dispatchAttrResolver resolves the acting character's host-vouched dispatch
+	// attributes (notably "location") at delivery time, populating
+	// DispatchContext.Attributes (holomush-eykuh.3). Nil leaves Attributes nil,
+	// fail-closed at scope-enforcement time. Mirrors goplugin.Host's field
+	// (plugin-runtime-symmetry). Wired at construction via
+	// WithDispatchAttributeResolver.
+	dispatchAttrResolver pluginauthz.AttributeResolver
 }
 
 // HostOption customizes Host construction.
@@ -105,6 +113,15 @@ func WithPluginConfigOverrides(o map[string]map[string]string) HostOption {
 		cloned[name] = maps.Clone(cfg)
 	}
 	return func(h *Host) { h.configOverrides = cloned }
+}
+
+// WithDispatchAttributeResolver configures the host with the resolver used to
+// populate DispatchContext.Attributes (notably "location") at command/event
+// delivery (holomush-eykuh.3). Without it, dispatch Attributes stay nil —
+// fail-closed at scope-enforcement time. The binary host has the same option
+// (plugin-runtime-symmetry). Satisfied by access/policy/attribute.Resolver.
+func WithDispatchAttributeResolver(r pluginauthz.AttributeResolver) HostOption {
+	return func(h *Host) { h.dispatchAttrResolver = r }
 }
 
 // NewHost creates a new Lua plugin host without host functions.
@@ -333,7 +350,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	// the host-brokered capability path (safe: no bridge will wire the nil conn).
 	var ep *pluginEndpoint
 	if h.hostCapAdapter != nil {
-		ep, err = newPluginEndpoint(h.hostCapAdapter, manifest.Name)
+		ep, err = newPluginEndpoint(h.hostCapAdapter, manifest)
 		if err != nil {
 			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
 				Hint("failed to create bufconn endpoint").Wrap(err)
@@ -417,6 +434,11 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").Hint("failed to create state").Wrap(err)
 	}
 	defer L.Close()
+
+	// Stamp the host-vouched dispatch subject before the Lua state's context is
+	// set, so in-VM hostfuncs inherit it (INV-PLUGIN-51). Only character actors
+	// are vouched; see stampDispatch.
+	ctx = h.stampDispatch(ctx)
 
 	// Set context on the Lua state so host functions can inherit it
 	L.SetContext(ctx)
@@ -513,6 +535,11 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_command").Hint("failed to create state").Wrap(err)
 	}
 	defer L.Close()
+
+	// Stamp the host-vouched dispatch subject before the Lua state's context is
+	// set, so in-VM hostfuncs inherit it (INV-PLUGIN-51). Only character actors
+	// are vouched; see stampDispatch.
+	ctx = h.stampDispatch(ctx)
 
 	L.SetContext(ctx)
 

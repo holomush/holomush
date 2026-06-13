@@ -7,12 +7,11 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command/commandquery"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 )
 
 // WithCommandQuerier injects the shared command-query service. The
@@ -27,7 +26,8 @@ func WithCommandQuerier(q *commandquery.Querier) Option {
 }
 
 // listCommandsFn returns the list_commands host function.
-// Args: character_id (string) - the character whose capabilities determine visible commands
+// Args: character_id (string) — IGNORED for authorization (see below); kept for
+// Lua-call-signature compatibility only.
 // Returns: (result table, error string or nil)
 //
 // Result table structure:
@@ -41,22 +41,22 @@ func WithCommandQuerier(q *commandquery.Querier) Option {
 //     may be incomplete (e.g., show the error string from the second return value).
 //   - The error string (second return) is non-nil only when incomplete is true.
 //
-// This function is a thin shim: it parses/validates the character_id, then
+// Subject derivation (INV-PLUGIN-51): the ABAC subject is the HOST-VOUCHED
+// dispatch subject stamped on ls.Context() by the Lua host's stampDispatch
+// (eykuh.3.6), NOT the Lua-supplied character_id. A plugin therefore cannot
+// enumerate another character's command visibility by passing a foreign id.
+// The character_id arg is read for call-signature compatibility and discarded;
+// removing it from the Lua surface is a follow-up. When no host-vouched
+// dispatch subject is present we fail closed (no command visibility).
+//
+// This function is a thin shim: it resolves the host-vouched subject, then
 // delegates to commandquery.Querier (INV-COMMAND-1). All ABAC filtering, capability
 // AND-logic, and the engine-error circuit breaker live in commandquery.
 func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 	return func(ls *lua.LState) int {
-		charIDStr := ls.CheckString(1)
-		if charIDStr == "" {
-			ls.RaiseError("character ID cannot be empty")
-			return 0
-		}
-
-		charID, err := ulid.Parse(charIDStr)
-		if err != nil {
-			ls.RaiseError("invalid character ID: %s", charIDStr)
-			return 0
-		}
+		// Read (and discard for authz) the character_id arg for call-signature
+		// compatibility. It MUST NOT influence the ABAC subject.
+		_ = ls.CheckString(1)
 
 		ctx := ls.Context()
 		if ctx == nil {
@@ -73,8 +73,15 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 			return 2
 		}
 
-		subject := access.CharacterSubject(charID.String())
-		return listCommandsViaQuerier(ctx, ls, f.commandQuerier, subject)
+		dc, ok := pluginauthz.DispatchForHost(ctx)
+		if !ok || dc.Subject == "" {
+			// Fail closed: no host-vouched acting character ⇒ no command visibility.
+			ls.Push(lua.LNil)
+			ls.Push(lua.LString("no host-vouched dispatch subject"))
+			return 2
+		}
+
+		return listCommandsViaQuerier(ctx, ls, f.commandQuerier, dc.Subject)
 	}
 }
 
@@ -112,7 +119,8 @@ func listCommandsViaQuerier(ctx context.Context, ls *lua.LState, q *commandquery
 }
 
 // getCommandHelpFn returns the get_command_help host function.
-// Args: command_name (string), character_id (string)
+// Args: command_name (string), character_id (string) — character_id is IGNORED
+// for authorization (see below); kept for Lua-call-signature compatibility only.
 // Returns: (command info table, error string)
 //
 // This function is a thin shim over commandquery.Querier.Help (INV-COMMAND-1). It maps
@@ -122,15 +130,24 @@ func listCommandsViaQuerier(ctx context.Context, ls *lua.LState, q *commandquery
 //   - PERMISSION_DENIED  → "access denied"
 //   - UNAVAILABLE / other → "access check failed"
 //
-// Precedence note: command lookup (NOT_FOUND) happens inside Querier.Help BEFORE
-// any capability/character evaluation, so a non-existent command yields
-// "command not found" regardless of the character_id value — matching the
-// pre-refactor contract. We therefore only parse/validate character_id AFTER a
-// successful Help (i.e. for the subject string), not before the lookup.
+// Subject derivation (INV-PLUGIN-51): the capability check uses the HOST-VOUCHED
+// dispatch subject stamped on ls.Context() (eykuh.3.6), NOT the Lua-supplied
+// character_id. A plugin cannot probe another character's gated-command help by
+// passing a foreign id. When no host-vouched dispatch subject is present we
+// fail closed before consulting the querier — a missing dispatch is abnormal
+// for an in-VM hostfunc call.
+//
+// Precedence note: for the with-dispatch case, command lookup (NOT_FOUND) still
+// happens inside Querier.Help BEFORE any capability/character evaluation, so a
+// non-existent command yields "command not found" regardless of caller. We
+// preserve that by calling Help with the host-vouched subject (no pre-empting
+// of the lookup).
 func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 	return func(ls *lua.LState) int {
 		name := ls.CheckString(1)
-		characterID := ls.CheckString(2)
+		// Read (and discard for authz) the character_id arg for call-signature
+		// compatibility. It MUST NOT influence the ABAC subject.
+		_ = ls.CheckString(2)
 		if name == "" {
 			ls.RaiseError("command name cannot be empty")
 			return 0
@@ -148,17 +165,15 @@ func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 			return 2
 		}
 
-		// Validate character_id but do NOT let a bad id pre-empt the command
-		// lookup: a non-existent command must report "command not found" even
-		// when the character_id is malformed. We pass a best-effort subject to
-		// the querier; for an empty/invalid id the subject is harmless because
-		// Querier.Help resolves NOT_FOUND before consulting the engine. Only
-		// when the command exists AND requires capabilities does the subject
-		// matter — and in that case an invalid id surfaces as a denied/failed
-		// access check, which is the correct fail-closed behavior.
-		subject := characterSubjectOrRaw(characterID)
+		dc, ok := pluginauthz.DispatchForHost(ctx)
+		if !ok || dc.Subject == "" {
+			// Fail closed: no host-vouched acting character ⇒ no command help.
+			ls.Push(lua.LNil)
+			ls.Push(lua.LString("no host-vouched dispatch subject"))
+			return 2
+		}
 
-		detail, helpErr := f.commandQuerier.Help(ctx, subject, name)
+		detail, helpErr := f.commandQuerier.Help(ctx, dc.Subject, name)
 		if helpErr != nil {
 			if oopsErr, ok := oops.AsOops(helpErr); ok {
 				switch oopsErr.Code() {
@@ -178,19 +193,6 @@ func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 		}
 		return buildHelpTable(ls, detail)
 	}
-}
-
-// characterSubjectOrRaw formats characterID as a character subject when it is a
-// valid ULID, otherwise returns the raw string. A raw (non-ULID) subject can
-// never match a granting policy, so capability-gated commands fail closed —
-// while a non-existent command still resolves to NOT_FOUND before the subject is
-// ever consulted (Querier.Help order). This preserves the pre-refactor
-// "command not found wins over invalid character_id" precedence.
-func characterSubjectOrRaw(characterID string) string {
-	if charID, err := ulid.Parse(characterID); err == nil {
-		return access.CharacterSubject(charID.String())
-	}
-	return characterID
 }
 
 // buildHelpTable pushes a command help result table onto the Lua stack.

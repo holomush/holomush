@@ -47,11 +47,18 @@ func newHostCommandClient(conn grpc.ClientConnInterface) CommandLister {
 }
 
 // ListCommands implements CommandLister. A nil client fails closed.
+//
+// The host command-registry handler derives the ABAC subject from the
+// host-vouched dispatch-token actor via LookupActor (holomush-eykuh.3), so the
+// per-dispatch token MUST be ferried from the incoming command/event context to
+// this outgoing RPC — identical to the Evaluate / Settings clients. Without it
+// the handler fails closed with EMIT_TOKEN_MISSING. The wire character_id is
+// retained for diagnostics only; the handler ignores it for authorization.
 func (c *hostCommandClient) ListCommands(ctx context.Context, characterID string) (CommandList, error) {
 	if c.client == nil {
 		return CommandList{}, oops.New("host command lister client is not configured")
 	}
-	resp, err := c.client.ListCommands(ctx, &hostv1.ListCommandsRequest{CharacterId: characterID})
+	resp, err := c.client.ListCommands(withDispatchToken(ctx), &hostv1.ListCommandsRequest{CharacterId: characterID})
 	if err != nil {
 		return CommandList{}, oops.With("character_id", characterID).Wrap(err)
 	}

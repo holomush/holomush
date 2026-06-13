@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
@@ -951,12 +950,17 @@ type commandRegistryServer struct {
 	hostCapabilityBase
 }
 
-// ListCommands enumerates the commands the named character may execute,
-// ABAC-filtered by the host. Unlike Evaluate/EmitEvent, this is read-only
-// metadata keyed by the request's character_id (parity with the Lua
-// list_commands host function), so it does NOT require a dispatch token.
-// Fail-closed on nil host / nil querier.
-func (s *commandRegistryServer) ListCommands(ctx context.Context, req *hostv1.ListCommandsRequest) (*hostv1.ListCommandsResponse, error) {
+// ListCommands enumerates the commands the acting character may execute,
+// ABAC-filtered by the host. The ABAC subject is the HOST-VOUCHED actor recovered
+// via the port's LookupActor (INV-PLUGIN-51) — runtime-neutral and uniform with
+// evalServer.Evaluate: the binary adapter reads the host-issued dispatch token
+// from the incoming gRPC metadata; the Lua adapter reads the connection-scoped
+// actor from core.ActorFromContext. The wire-supplied character_id is NOT trusted
+// for authorization (it would let any plugin enumerate command visibility for an
+// arbitrary character) — the proto field is structurally ignored. Fails closed
+// (NO_DISPATCH_SUBJECT) when no host-vouched actor is present; also on nil host /
+// nil querier.
+func (s *commandRegistryServer) ListCommands(ctx context.Context, _ *hostv1.ListCommandsRequest) (*hostv1.ListCommandsResponse, error) {
 	if s.host == nil {
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
@@ -964,11 +968,16 @@ func (s *commandRegistryServer) ListCommands(ctx context.Context, req *hostv1.Li
 	if q == nil {
 		return nil, oops.Code("COMMAND_QUERIER_UNCONFIGURED").With("plugin", s.pluginName).Errorf("command querier is not configured")
 	}
-	charID, err := ulid.Parse(req.GetCharacterId())
+	storedActor, _, err := s.host.LookupActor(ctx, s.pluginName)
 	if err != nil {
-		return nil, oops.Code("INVALID_ARGUMENT").With("plugin", s.pluginName).Errorf("invalid character_id")
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
-	res, err := q.Available(ctx, access.CharacterSubject(charID.String()))
+	subject := pluginauthz.ActorSubject(storedActor)
+	if subject == "" {
+		return nil, oops.Code("NO_DISPATCH_SUBJECT").With("plugin", s.pluginName).
+			Errorf("command-registry call without a host-vouched actor")
+	}
+	res, err := q.Available(ctx, subject)
 	if err != nil {
 		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
@@ -985,8 +994,14 @@ func (s *commandRegistryServer) ListCommands(ctx context.Context, req *hostv1.Li
 }
 
 // GetCommandHelp returns full help detail for one command after an access check
-// for character_id. Read-only; no dispatch token required (parity with Lua
-// get_command_help host function).
+// for the acting character. The ABAC subject is the HOST-VOUCHED actor recovered
+// via the port's LookupActor (INV-PLUGIN-51) — runtime-neutral and uniform with
+// evalServer.Evaluate: the binary adapter reads the host-issued dispatch token
+// from the incoming gRPC metadata; the Lua adapter reads the connection-scoped
+// actor from core.ActorFromContext. The wire-supplied character_id is NOT trusted
+// for authorization — the proto field is structurally ignored. Fails closed
+// (NO_DISPATCH_SUBJECT) when no host-vouched actor is present; also on nil host /
+// nil querier.
 func (s *commandRegistryServer) GetCommandHelp(ctx context.Context, req *hostv1.GetCommandHelpRequest) (*hostv1.GetCommandHelpResponse, error) {
 	if s.host == nil {
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
@@ -995,11 +1010,16 @@ func (s *commandRegistryServer) GetCommandHelp(ctx context.Context, req *hostv1.
 	if q == nil {
 		return nil, oops.Code("COMMAND_QUERIER_UNCONFIGURED").With("plugin", s.pluginName).Errorf("command querier is not configured")
 	}
-	charID, err := ulid.Parse(req.GetCharacterId())
+	storedActor, _, err := s.host.LookupActor(ctx, s.pluginName)
 	if err != nil {
-		return nil, oops.Code("INVALID_ARGUMENT").With("plugin", s.pluginName).Errorf("invalid character_id")
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}
-	d, err := q.Help(ctx, access.CharacterSubject(charID.String()), req.GetName())
+	subject := pluginauthz.ActorSubject(storedActor)
+	if subject == "" {
+		return nil, oops.Code("NO_DISPATCH_SUBJECT").With("plugin", s.pluginName).
+			Errorf("command-registry call without a host-vouched actor")
+	}
+	d, err := q.Help(ctx, subject, req.GetName())
 	if err != nil {
 		return nil, oops.With("plugin", s.pluginName).Wrap(err)
 	}

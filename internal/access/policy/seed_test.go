@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 27 permit + 9 forbid = 36 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location)
-	assert.Len(t, seeds, 36, "expected 36 seed policies (27 permit, 9 forbid)")
+	// 28 permit + 9 forbid = 37 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location + 1 eykuh.3 plugin world.mutation own-location)
+	assert.Len(t, seeds, 37, "expected 37 seed policies (28 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 27, permitCount, "expected 27 permit policies")
+	assert.Equal(t, 28, permitCount, "expected 28 permit policies")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -122,6 +122,8 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:deny-events-system-read-plugin",
 		// Phase-5 iwzt history-scope-privacy staff override policy (INV-PRIVACY-6)
 		"seed:staff-read-unrestricted-history",
+		// Plugin host-capability scope policy (eykuh.3; INV-PLUGIN-50)
+		"seed:plugin-world-mutation-own-location",
 	}
 
 	seeds := SeedPolicies()

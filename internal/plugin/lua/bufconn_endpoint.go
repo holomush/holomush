@@ -22,16 +22,33 @@ type pluginEndpoint struct {
 }
 
 // newPluginEndpoint creates a per-plugin bufconn endpoint serving the Lua
-// capability set. It builds a *grpc.Server, registers the LuaDefaultSet
-// capability servers (INV-PLUGIN-49), and wraps the server with an in-process
-// bufconn listener. The caller must call Close when the plugin is unloaded.
-func newPluginEndpoint(adapter hostcap.HostCapabilities, pluginName string) (*pluginEndpoint, error) {
+// capability set. It builds a *grpc.Server, chains the host-capability
+// interceptor, registers the LuaDefaultSet capability servers (INV-PLUGIN-49),
+// and wraps the server with an in-process bufconn listener. The caller must call
+// Close when the plugin is unloaded.
+//
+// The interceptor (holomush-eykuh.3) is built from the SAME
+// hostcap.DeclaredAccessFromManifest helper the binary broker server uses
+// (internal/plugin/goplugin/host_service.go), so the declaration + access-class
+// trust gate is identical across runtimes (plugin-runtime-symmetry,
+// INV-PLUGIN-45/49). Engine/Auditor are sourced identically on both runtimes
+// through the hostcap.HostCapabilities port (adapter.AccessEngine()/Auditor());
+// the static half (this task) does not read them — Task 10 wires the
+// policy/scope half.
+func newPluginEndpoint(adapter hostcap.HostCapabilities, manifest *plugins.Manifest) (*pluginEndpoint, error) {
+	pluginName := manifest.Name
+	ic := hostcap.NewCapabilityInterceptor(hostcap.InterceptorDeps{
+		Engine:         adapter.AccessEngine(),
+		Auditor:        adapter.Auditor(),
+		PluginName:     pluginName,
+		DeclaredAccess: hostcap.DeclaredAccessFromManifest(manifest),
+	})
 	// The server is served exclusively over an in-memory bufconn listener
 	// (plugins.NewInProcessConn below), never a network socket — there is no
 	// wire to encrypt or tamper with. TLS credentials are therefore N/A; this
 	// mirrors the client half of the same transport, which carries the matching
 	// nosemgrep on insecure.NewCredentials (internal/plugin/inprocess_conn.go).
-	srv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
+	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(ic)) // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
 	hostcap.RegisterCapabilities(srv, hostcap.NewBase(adapter, pluginName), hostcap.LuaDefaultSet)
 	conn, err := plugins.NewInProcessConn(srv)
 	if err != nil {
