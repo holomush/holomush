@@ -78,20 +78,11 @@
   multi-clause invariant flipped bound when only one clause has tests and the proving task
   (.8.4 role-gates) still open; plan scheduled flip for final Task 20 — check WHICH task owns the registry flip.
 
-- **5rh.8.21 RESOLVES the facade EMIT_TOKEN_MISSING gap (prev entry) — READY (2026-06-07).**
-  `Host.BeginServiceDispatch` (goplugin/host.go:968) mints a dispatch token for caller-supplied
-  actor+ownerPlayerID, returns ctx w/ token + advisory actor md (same coreActorKindToSDK as
-  DeliverCommand:936) + release func (`Revoke` = map delete, idempotent; 5min TTL sweeper backstops
-  forgotten release; store terminal-on-close + Close clears items). Manager routes via
-  `findOptional[ServiceDispatcher]` (Unwrap-chain capability, matches PluginAuditClientProvider
-  shape) → typed SERVICE_DISPATCH_UNSUPPORTED for Lua host. Binary-only is transport-specific,
-  NOT a symmetry violation (Lua serves no gRPC). WatchScene advisory check (service.go:878) is
-  restriction-only: rejects PermissionDenied iff incoming md kind==character && id!=req.character_id;
-  absent/non-character md proceeds (token-derived subject stays authoritative) — correct
-  defense-in-depth polarity; spoofed md can only restore baseline, never grant. Pattern to
-  re-check on .8.11 facade: caller MUST pass server-side-verified actor; token outlives plugin
-  unload until release/TTL (Low, accepted).
-
+- **5rh.8.21 service-dispatch token (READY, 2026-06-07).** Host.BeginServiceDispatch (host.go:968) mints a
+  dispatch token for server-side-verified actor+ownerPlayerID; Revoke idempotent + 5min TTL sweeper. Binary-only
+  via findOptional[ServiceDispatcher] (SERVICE_DISPATCH_UNSUPPORTED for Lua) = transport-specific, NOT a symmetry
+  violation. WatchScene advisory-md check (service.go:878) is restriction-only: spoofed md can only restore baseline,
+  never grant — correct defense-in-depth polarity. Caller MUST pass server-verified actor; token outlives unload (Low).
 - **Harness event-path parity (5rh.8.4, 2026-06-07).** Production busEventAppender publishes via wrapPublisher's RenderingPublisher (sub_grpc.go:207) — a harness mirror using raw `bus.Bus.Publisher()` ships nil-Rendering frames (INV-EVENTBUS-6: gateway drops them); check publisher WRAPPING not just Append fidelity. harness.go is SHARED — a change un-dropping events affects EVERY suite → require full `task test:int`. Fake-level exclusion pins (re-implement role filter in Go) pin the fake not the SQL — demand a DB-level twin.
 
 - **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** RECURRING gateway-wide trap (NOT per-PR, non-blocking): `*grpc.Client` wrappers `oops.Code("RPC_FAILED").Wrap` a grpc-go status.Status err; web handler returns it to connect-go (server.go:69 NewWebServiceHandler, NO error interceptor) under a FALSE `//nolint:wrapcheck // pass through as-is`. connect-go CodeOf only sees `*connect.Error` via errors.As → oops-wrapped status collapses to CodeUnknown/HTTP500; facade PERMISSION_DENIED/NOT_FOUND all become Unknown at browser. IDENTICAL to WebListFocusPresence (handler.go:792) etc → track separately. `...PassesStatusErrorThroughAsIs` unit tests use the MOCK (no wrap) so CANNOT catch it. Token header-injected (headerInjectSessionToken), never body/logged.
@@ -193,7 +184,13 @@
   PluginSubject(pluginName)) — subject built from host-established PARAM, ctx actor lands in the IGNORED first
   return. Forged-actor-on-ctx assertion `subject==plugin:<name>` CANNOT fail given code shape → pins correct
   property but regress-blind; ACCEPTABLE as SUPPORTING clause alongside spec-canonical clause 1, NOT load-bearing
-  alone. Hardening (optional): assert the discarded actor return DOES carry the forged ID to make the
-  subject-ignores-forgeable-input contrast observable. NOT a T11 trap (forged-actor-on-ctx is the plugin's OWN
-  attack, not scaffolding; comment honestly scopes Lua seam to adapter due to bufconn ActorFromContext
-  non-propagation, no fabricated interceptor). NOT a T12 wrong-gate (bound test drives the gate the inv names).
+  alone (regress-blind but supporting). NOT a T11 scaffolding-trap (own-attack, honestly-scoped Lua seam) nor a T12 wrong-gate.
+- **SDK capability-declaration registry, Aware->token map (si3zs.2 READY, 2026-06-13) -- CLEAN.** pkg/plugin
+  hostCapabilityRequirements maps each *Aware iface->tokens; validateDeclaredCapabilities fail-closes
+  CAPABILITY_NOT_DECLARED. KEY FAIL-OPEN CHECK: rg '^type \w*Aware\b' pkg/plugin/ MUST cover every Aware iface
+  (6 today) -- unmapped iface=silent fail-open. Cross-check each token 3 ways: facade injected (sdk.go;
+  SnapshotDecryptor->NewAuditServiceClient=audit), vocab capability_vocab.go CapabilityServiceNames, exempt set=
+  descriptor.go declarationExemptCapabilities {emit,command-registry}=nil tokens. FocusClientAware grants BOTH
+  focus+stream.history (2 clients, focus_client.go:223). Fixtures embed ServiceProvider (RegisterServices+Init
+  only, no Set*)->no spurious Aware match; verify embedded iface method set. Pending-entry + in-code // Verifies:
+  FINE pre-flip: meta-tests bind from registry asserted_by not code-scan (ran 4 green); registry flip=later task.
