@@ -176,10 +176,10 @@ func TestListCommandsShimEmptyOrInvalidArgIsIgnored(t *testing.T) {
 		hf.Register(L, "test-plugin")
 
 		err := L.DoString(`result, err = holomush.list_commands(` + arg + `)`)
-		L.Close()
 		require.NoError(t, err, "arg %s must be ignored, not raise", arg)
 		_, ok := L.GetGlobal("result").(*lua.LTable)
 		assert.True(t, ok, "result table returned for arg %s (dispatch subject used)", arg)
+		L.Close()
 	}
 }
 

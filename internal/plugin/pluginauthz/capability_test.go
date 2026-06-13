@@ -29,11 +29,12 @@ func TestEvaluateCapabilityAccessAllowsDeclaredPermitted(t *testing.T) {
 
 // Verifies: INV-PLUGIN-50
 func TestEvaluateCapabilityAccessDeniedByPolicyDespiteDeclaration(t *testing.T) {
-	dec, _ := pluginauthz.EvaluateCapabilityAccess(context.Background(), pluginauthz.CapabilityInput{
+	dec, err := pluginauthz.EvaluateCapabilityAccess(context.Background(), pluginauthz.CapabilityInput{
 		Engine: policytest.DenyAllEngine(), PluginName: "core-objects",
 		Subject: access.PluginSubject("core-objects"),
 		Action:  "read", Resource: "kv:foo", Declared: true,
 	})
+	require.NoError(t, err)
 	assert.False(t, dec.Allowed) // INV-PLUGIN-50: declaration necessary, not sufficient
 }
 

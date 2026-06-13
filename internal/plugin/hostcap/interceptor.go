@@ -118,10 +118,34 @@ func classifyHostMethod(fullMethod string) (capToken, method string, ok bool) {
 // undifferentiated capability call. The broader M1 operator-policy surface for
 // non-scoped capabilities is layered on by a later task.
 func NewCapabilityInterceptor(d InterceptorDeps) grpc.UnaryServerInterceptor {
+	if d.DeclaredAccess == nil {
+		// Misconfigured interceptor: without a declaration lookup every gated
+		// call would dereference a nil func and panic. Fail closed — deny all
+		// host.v1 capability calls (non-host.v1 methods still pass through, as
+		// in the normal path). Both production install sites build this via
+		// DeclaredAccessFromManifest, so this guards a misconfiguration only.
+		return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
+			if strings.HasPrefix(info.FullMethod, "/holomush.plugin.host.v1.") {
+				return nil, oops.Code("CAPABILITY_DECLARATION_LOOKUP_MISSING").
+					With("method", info.FullMethod).
+					Errorf("capability interceptor misconfigured: DeclaredAccess is nil")
+			}
+			return h(ctx, req)
+		}
+	}
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
 		capToken, method, ok := classifyHostMethod(info.FullMethod)
 		if !ok {
-			return h(ctx, req) // not a gated host.v1 method
+			if strings.HasPrefix(info.FullMethod, "/holomush.plugin.host.v1.") {
+				// A host.v1 method whose service is not in the capability map is
+				// unclassifiable. Fail closed rather than forward ungated — an
+				// unmapped host.v1 service must not bypass capability enforcement
+				// (default-deny, INV-PLUGIN-50).
+				return nil, oops.Code("UNCLASSIFIED_CAPABILITY_METHOD").
+					With("method", info.FullMethod).
+					Errorf("host.v1 method not mapped to a capability token")
+			}
+			return h(ctx, req) // not a host.v1 method — pass through untouched
 		}
 		md, ok := Descriptors[capToken].Methods[method]
 		if !ok {

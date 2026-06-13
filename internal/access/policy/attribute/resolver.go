@@ -235,6 +235,14 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 // error; callers MUST fail closed on non-nil error and MUST NOT use partial
 // bags for policy evaluation.
 func (r *Resolver) ResolveSubjectAttributes(ctx context.Context, subject, action string) (*types.AttributeBags, error) {
+	return r.resolveSubjectAttributes(ctx, subject, action, false)
+}
+
+// resolveSubjectAttributes is the shared core for ResolveSubjectAttributes and
+// ResolveSubject. When skipEnv is true the environment providers are not called,
+// so a subject-only caller (host dispatch stamping via ResolveSubject) does not
+// fail closed on an unrelated environment-provider error (holomush-eykuh.3).
+func (r *Resolver) resolveSubjectAttributes(ctx context.Context, subject, action string, skipEnv bool) (*types.AttributeBags, error) {
 	// Input validation runs BEFORE entering the resolution scope. Empty
 	// subject is rejected with nil bags — no work has started, so there
 	// is nothing partial to return. Resolve tolerates empty subjects, but
@@ -282,9 +290,14 @@ func (r *Resolver) ResolveSubjectAttributes(ctx context.Context, subject, action
 		}
 	}
 
-	// Resolve environment attributes.
-	if err := r.resolveEnvironment(ctx, bags.Environment); err != nil {
-		errs = append(errs, err)
+	// Resolve environment attributes. Skipped for the subject-only path
+	// (ResolveSubject): that caller consumes only the Subject bag, so coupling
+	// it to environment-provider health would fail dispatch stamping closed on
+	// an unrelated env-provider error (holomush-eykuh.3).
+	if !skipEnv {
+		if err := r.resolveEnvironment(ctx, bags.Environment); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	// Resource providers are intentionally NOT called. The optimistic-permit
@@ -300,14 +313,17 @@ func (r *Resolver) ResolveSubjectAttributes(ctx context.Context, subject, action
 // point for populating DispatchContext.Attributes (notably "location"); see
 // holomush-eykuh.3. It delegates to ResolveSubjectAttributes with an empty
 // action — only the subject bag is consumed — and returns just that bag so the
-// caller never sees the action/environment/resource sub-bags.
+// caller never sees the action/environment/resource sub-bags. Environment
+// providers are NOT consulted on this path (skipEnv): the subject bag is all the
+// caller needs, so an unrelated environment-provider failure must not fail
+// dispatch stamping closed (holomush-eykuh.3).
 //
-// An error (invalid ref, provider failure) is returned to the caller, which
-// MUST treat it as fail-closed (leave Attributes nil). A subject with no
+// A subject-provider failure (or an invalid ref) IS returned to the caller,
+// which MUST treat it as fail-closed (leave Attributes nil). A subject with no
 // registered provider resolves to a bag carrying only the raw "id" — harmless,
 // since the host projects only string-valued keys it cares about.
 func (r *Resolver) ResolveSubject(ctx context.Context, subject string) (map[string]any, error) {
-	bags, err := r.ResolveSubjectAttributes(ctx, subject, "")
+	bags, err := r.resolveSubjectAttributes(ctx, subject, "", true)
 	if err != nil {
 		return nil, err
 	}
