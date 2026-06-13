@@ -8,6 +8,21 @@ resource_types: [scene]
 
 requires:
   - holomush.world.v1.WorldService
+  # Host capabilities core-scenes invokes through its SDK clients (eykuh.3
+  # least-privilege). The host capability interceptor default-denies any
+  # host.v1 capability a manifest does not declare, so each client call below
+  # must have a matching declaration. `emit` is self-gated by the emit fence
+  # (declarationExemptCapabilities) and is intentionally NOT declared here.
+  - capability: focus # FocusService: JoinFocus/AutoFocusOnJoin/... (commands.go)
+    access: write
+  - capability: eval # EvalService.Evaluate — admin-gated scene commands
+    access: read
+  - capability: settings # SettingsService.GetSetting — content-warning taxonomy
+    access: read
+  - capability: stream.history # StreamHistoryService.QueryStreamHistory
+    access: read
+  - capability: audit # AuditService.DecryptOwnAuditRows — publish/export snapshot read-back
+    access: read
 
 provides:
   - holomush.scene.v1.SceneService
