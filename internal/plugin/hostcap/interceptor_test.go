@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/pkg/errutil"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
@@ -80,4 +81,49 @@ func TestClassifyHostMethodResolvesKnownService(t *testing.T) {
 func TestClassifyHostMethodRejectsNonHostMethod(t *testing.T) {
 	_, _, ok := classifyHostMethod("/some.other.Service/Method")
 	require.False(t, ok)
+}
+
+func TestDeclaredAccessFromManifestReportsDeclaredCapabilityAccess(t *testing.T) {
+	m := &plugins.Manifest{
+		Name: "p",
+		Requires: []plugins.Dependency{
+			{Kind: plugins.DependencyCapability, Name: "kv", Access: "read"},
+			{Kind: plugins.DependencyCapability, Name: "world.query"}, // undifferentiated
+			{Kind: plugins.DependencyService, Name: "holomush.scene.v1.SceneService"},
+		},
+	}
+	lookup := DeclaredAccessFromManifest(m)
+
+	access, declared := lookup("p", "kv")
+	require.True(t, declared)
+	require.Equal(t, "read", access)
+
+	access, declared = lookup("p", "world.query")
+	require.True(t, declared)
+	require.Equal(t, "", access)
+}
+
+func TestDeclaredAccessFromManifestDeniesUndeclaredCapability(t *testing.T) {
+	m := &plugins.Manifest{
+		Name:     "p",
+		Requires: []plugins.Dependency{{Kind: plugins.DependencyCapability, Name: "kv", Access: "write"}},
+	}
+	access, declared := DeclaredAccessFromManifest(m)("p", "session")
+	require.False(t, declared)
+	require.Equal(t, "", access)
+}
+
+func TestDeclaredAccessFromManifestIgnoresServiceKindEntries(t *testing.T) {
+	m := &plugins.Manifest{
+		Name:     "p",
+		Requires: []plugins.Dependency{{Kind: plugins.DependencyService, Name: "kv"}},
+	}
+	// A service-kind entry named "kv" must NOT be treated as a declared capability.
+	_, declared := DeclaredAccessFromManifest(m)("p", "kv")
+	require.False(t, declared)
+}
+
+func TestDeclaredAccessFromManifestNilManifestDeniesAll(t *testing.T) {
+	_, declared := DeclaredAccessFromManifest(nil)("p", "kv")
+	require.False(t, declared)
 }

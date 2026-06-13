@@ -32,6 +32,28 @@ type InterceptorDeps struct {
 	DeclaredAccess func(plugin, capToken string) (string, bool)
 }
 
+// DeclaredAccessFromManifest builds the InterceptorDeps.DeclaredAccess lookup
+// from a plugin manifest's capability requires. Presence of a capability-kind
+// entry => declared; the value is the declared access narrowing ("" when
+// undifferentiated). Service-kind entries are ignored. A nil manifest declares
+// nothing (fail-closed). This single constructor is used by BOTH the binary and
+// Lua install sites so the trust gate is built identically across runtimes
+// (plugin-runtime-symmetry, INV-PLUGIN-45/49).
+func DeclaredAccessFromManifest(m *plugins.Manifest) func(plugin, capToken string) (string, bool) {
+	declared := make(map[string]string)
+	if m != nil {
+		for _, d := range m.Requires {
+			if d.Kind == plugins.DependencyCapability {
+				declared[d.Name] = d.Access
+			}
+		}
+	}
+	return func(_, capToken string) (string, bool) {
+		a, ok := declared[capToken]
+		return a, ok
+	}
+}
+
 // bareServiceToToken reverses plugins.CapabilityServiceNames (token->bare
 // service) into bare-service->token. Built once; the source map is fixed at
 // program start.

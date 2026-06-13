@@ -796,7 +796,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	if grpcPlugin.broker != nil {
 		hostBrokerID := nextBrokerID
 		nextBrokerID++
-		go grpcPlugin.broker.AcceptAndServe(hostBrokerID, newPluginHostServiceServer(h, manifest.Name))
+		go grpcPlugin.broker.AcceptAndServe(hostBrokerID, newPluginHostServiceServer(h, manifest))
 		requiredServices[pluginsdk.PluginHostServiceName] = fmt.Sprintf("broker:%d", hostBrokerID)
 	}
 	if len(manifest.RequiredServiceNames()) > 0 && grpcPlugin.broker != nil && h.registry != nil {

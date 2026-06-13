@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/core"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -25,10 +26,26 @@ import (
 // registration is hostcap.RegisterCapabilities with the BinaryDefaultSet. That
 // set omits World/Property/Session — they have no binary consumer in this
 // sub-spec — so they are deliberately NOT registered here.
-func newPluginHostServiceServer(host *Host, pluginName string) func([]grpc.ServerOption) *grpc.Server {
+//
+// The server chains the host-capability interceptor (holomush-eykuh.3): one
+// interceptor per plugin, closing over that plugin's declared capability set via
+// hostcap.DeclaredAccessFromManifest. The SAME helper + interceptor are installed
+// on the Lua per-plugin server (internal/plugin/lua/bufconn_endpoint.go), so the
+// declaration + access-class trust gate is identical across runtimes
+// (plugin-runtime-symmetry, INV-PLUGIN-45/49). Engine/Auditor are sourced
+// identically on both runtimes through the hostcap.HostCapabilities port
+// (host.AccessEngine()/Auditor()); the static half (this task) does not read
+// them — Task 10 wires the policy/scope half.
+func newPluginHostServiceServer(host *Host, manifest *plugins.Manifest) func([]grpc.ServerOption) *grpc.Server {
 	return func(opts []grpc.ServerOption) *grpc.Server {
-		server := grpc.NewServer(opts...)
-		hostcap.RegisterCapabilities(server, hostcap.NewBase(host, pluginName), hostcap.BinaryDefaultSet)
+		ic := hostcap.NewCapabilityInterceptor(hostcap.InterceptorDeps{
+			Engine:         host.AccessEngine(),
+			Auditor:        host.Auditor(),
+			PluginName:     manifest.Name,
+			DeclaredAccess: hostcap.DeclaredAccessFromManifest(manifest),
+		})
+		server := grpc.NewServer(append(opts, grpc.ChainUnaryInterceptor(ic))...)
+		hostcap.RegisterCapabilities(server, hostcap.NewBase(host, manifest.Name), hostcap.BinaryDefaultSet)
 		return server
 	}
 }

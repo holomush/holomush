@@ -333,7 +333,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	// the host-brokered capability path (safe: no bridge will wire the nil conn).
 	var ep *pluginEndpoint
 	if h.hostCapAdapter != nil {
-		ep, err = newPluginEndpoint(h.hostCapAdapter, manifest.Name)
+		ep, err = newPluginEndpoint(h.hostCapAdapter, manifest)
 		if err != nil {
 			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").
 				Hint("failed to create bufconn endpoint").Wrap(err)
