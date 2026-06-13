@@ -35,18 +35,12 @@
   → Never → Sensitive=false); only NEW rejection is over-claim, which no prod path does. (4) Stale bead acceptance
   (`rg internal/ → zero hits`) when a legit gate remains = note-for-close, not a defect.
 
-- **Docs-only ADR-capture branch: ALWAYS check `@` is empty before verdict (holomush-5rh.8
-  NOT READY, 2026-06-07).** Two recurring traps: (1) `task pr-prep`/fmt runs AFTER the commits
-  leave license-eye SPDX headers + yamlfmt normalization (docs/** IS in .licenserc.yaml paths;
-  .yamlfmt has no docs/ exclude, Taskfile.yaml:528 `yamlfmt -lint .`) sitting UNCOMMITTED in `@`
-  — pr-prep validates the jj SNAPSHOT (includes @), the push unit (@-) fails CI. `jj st` +
-  `jj diff -r @` is mandatory; reading files with cat/Read shows the @-fixed state, NOT what
-  ships — compare `jj file show -r @-` vs main sibling for header checks. (2) Spec revised
-  during plan grounding (V-resolutions) leaves STALE pre-revision instructions in §4/§5.2
-  tables contradicting the freshly captured ADR (spec:62,97 "Implement ReadSceneLog" vs ADR
-  pc3bg "No plugin-side ReadSceneLog exists" vs spec's own D8/V6) — grep the spec for every
-  mechanism an ADR says was REJECTED. Also: probe index missed `ReadSceneLogForSnapshot`
-  (publish_store.go:632); confirm probe zero-results with rg before claiming absence.
+- **Docs-only ADR-capture branch (holomush-5rh.8, 2026-06-07).** (1) ALWAYS `jj st`+`jj diff -r @` before
+  verdict: task pr-prep/fmt leave SPDX+yamlfmt normalization UNCOMMITTED in @ (docs/** IS in .licenserc; yamlfmt
+  no docs/ exclude) -- pr-prep validates the @ SNAPSHOT, push unit @- fails CI. cat/Read shows @-fixed state NOT
+  what ships; compare `jj file show -r @-` vs main. (2) Spec revised in plan-grounding leaves STALE instructions
+  contradicting the captured ADR -- grep spec for every mechanism the ADR REJECTED. probe missed
+  ReadSceneLogForSnapshot; confirm probe zero-results with rg before claiming absence.
 
 - **Plugin migrations: `.down.sql` is NEVER executed** — `RunMigrationsFS` filters `.up.sql` only
   (pkg/plugin/storage/storage.go:68) and embed is `migrations/*.up.sql` (core-scenes store.go:50).
@@ -194,3 +188,12 @@
   focus+stream.history (2 clients, focus_client.go:223). Fixtures embed ServiceProvider (RegisterServices+Init
   only, no Set*)->no spurious Aware match; verify embedded iface method set. Pending-entry + in-code // Verifies:
   FINE pre-flip: meta-tests bind from registry asserted_by not code-scan (ran 4 green); registry flip=later task.
+- **Token re-anchor after gate deletion (si3zs.6 READY, 2026-06-13) -- HONEST repair.** When an earlier task
+  DELETES the code/test carrying an invariant's canonical token (si3zs.5 deleted manifestNeedsInit +
+  TestNeedsInitIncludesConfig carrying INV-PLUGIN-8), TestProvenanceGuard goes RED: checkProvenance
+  (invariant_registry_test.go:546) matches the CANONICAL id INV-PLUGIN-8 against each refs[]/shared_files file
+  CONTENT, NOT the yaml token: field (INV-PC-8=metadata only). Repair = move canonical-token comment onto
+  SURVIVING genuinely-relevant code + rewrite summary to drop deleted mechanism. HONESTY: token on code that
+  ACTUALLY provides the guarantee (not sprinkle), summary matches code (verify needsInit:=true unconditional), a
+  pending invariant gets PLAIN token comment NOT // Verifies:. SHARED_FILES (yaml:414) skip residual-legacy
+  check (checkFile:566) but refs canonical-token check still applies. Proof: inv-render -> zero drift.
