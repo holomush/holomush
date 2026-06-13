@@ -51,9 +51,9 @@ var Descriptors = map[string]CapabilityDescriptor{
 		"SetSetting": {Action: "write", Resource: "setting", Class: ClassWrite},
 	}},
 	"kv": {Token: "kv", Methods: map[string]MethodDescriptor{
-		"KVGet":    {Action: "read", Resource: "kv", Class: ClassRead},
-		"KVSet":    {Action: "write", Resource: "kv", Class: ClassWrite},
-		"KVDelete": {Action: "write", Resource: "kv", Class: ClassWrite},
+		"Get":    {Action: "read", Resource: "kv", Class: ClassRead},
+		"Set":    {Action: "write", Resource: "kv", Class: ClassWrite},
+		"Delete": {Action: "write", Resource: "kv", Class: ClassWrite},
 	}},
 	"command-registry": {Token: "command-registry", Methods: map[string]MethodDescriptor{
 		"ListCommands":   {Action: "list", Resource: "command", Class: ClassRead},
