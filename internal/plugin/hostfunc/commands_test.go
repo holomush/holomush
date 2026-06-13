@@ -4,6 +4,7 @@
 package hostfunc
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -16,7 +17,21 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 )
+
+// withDispatchState builds a Lua state whose context carries a host-vouched
+// dispatch subject for the given character — mirroring what the lua host's
+// stampDispatch sets on ls.Context() before plugin code runs (eykuh.3.6).
+func withDispatchState(t *testing.T, subjectChar ulid.ULID) *lua.LState {
+	t.Helper()
+	L := lua.NewState()
+	ctx := pluginauthz.WithDispatch(context.Background(), pluginauthz.DispatchContext{
+		Subject: access.CharacterSubject(subjectChar.String()),
+	})
+	L.SetContext(ctx)
+	return L
+}
 
 // These tests cover ONLY the list_commands / get_command_help host-function
 // SHIMS — the thin Go↔Lua bridge over commandquery.Querier (design spec INV-COMMAND-1).
@@ -67,7 +82,7 @@ func TestListCommandsShimBuildsLuaTableFromQuerierResult(t *testing.T) {
 	charID := ulid.Make()
 
 	hf := New(nil, WithCommandQuerier(q))
-	L := lua.NewState()
+	L := withDispatchState(t, charID)
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
@@ -117,7 +132,7 @@ func TestListCommandsShimMapsIncompleteToWarningString(t *testing.T) {
 	charID := ulid.Make()
 
 	hf := New(nil, WithCommandQuerier(q))
-	L := lua.NewState()
+	L := withDispatchState(t, charID)
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
@@ -150,26 +165,22 @@ func TestListCommandsShimNilQuerierReturnsRegistryUnavailable(t *testing.T) {
 	assert.Contains(t, errVal.String(), "command registry not available")
 }
 
-func TestListCommandsShimEmptyCharacterIDRaises(t *testing.T) {
-	hf := New(nil, WithCommandQuerier(newAllowQuerier(nil)))
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
+func TestListCommandsShimEmptyOrInvalidArgIsIgnored(t *testing.T) {
+	// The character_id arg no longer drives authorization (INV-PLUGIN-51), so an
+	// empty or non-ULID arg no longer raises — it is simply discarded and the
+	// host-vouched dispatch subject is used instead.
+	charID := ulid.Make()
+	for _, arg := range []string{`""`, `"not-a-ulid"`} {
+		hf := New(nil, WithCommandQuerier(newAllowQuerier(nil)))
+		L := withDispatchState(t, charID)
+		hf.Register(L, "test-plugin")
 
-	err := L.DoString(`commands, err = holomush.list_commands("")`)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "character ID cannot be empty")
-}
-
-func TestListCommandsShimInvalidCharacterIDRaises(t *testing.T) {
-	hf := New(nil, WithCommandQuerier(newAllowQuerier(nil)))
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	err := L.DoString(`commands, err = holomush.list_commands("not-a-ulid")`)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid character ID")
+		err := L.DoString(`result, err = holomush.list_commands(` + arg + `)`)
+		L.Close()
+		require.NoError(t, err, "arg %s must be ignored, not raise", arg)
+		_, ok := L.GetGlobal("result").(*lua.LTable)
+		assert.True(t, ok, "result table returned for arg %s (dispatch subject used)", arg)
+	}
 }
 
 func TestGetCommandHelpShimMapsDetailToLuaTable(t *testing.T) {
@@ -191,7 +202,7 @@ func TestGetCommandHelpShimMapsDetailToLuaTable(t *testing.T) {
 	q := commandquery.New(registry, ac, nil)
 
 	hf := New(nil, WithCommandQuerier(q))
-	L := lua.NewState()
+	L := withDispatchState(t, charID)
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
@@ -224,7 +235,7 @@ func TestGetCommandHelpShimTranslatesNotFound(t *testing.T) {
 	charID := ulid.Make()
 
 	hf := New(nil, WithCommandQuerier(q))
-	L := lua.NewState()
+	L := withDispatchState(t, charID)
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
@@ -249,7 +260,7 @@ func TestGetCommandHelpShimTranslatesPermissionDenied(t *testing.T) {
 	charID := ulid.Make()
 
 	hf := New(nil, WithCommandQuerier(q))
-	L := lua.NewState()
+	L := withDispatchState(t, charID)
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
@@ -274,7 +285,7 @@ func TestGetCommandHelpShimTranslatesUnavailableToCheckFailed(t *testing.T) {
 	charID := ulid.Make()
 
 	hf := New(nil, WithCommandQuerier(q))
-	L := lua.NewState()
+	L := withDispatchState(t, charID)
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
@@ -312,18 +323,20 @@ func TestGetCommandHelpShimEmptyCommandNameRaises(t *testing.T) {
 	assert.Contains(t, err.Error(), "command name cannot be empty")
 }
 
-func TestGetCommandHelpShimNotFoundWinsOverInvalidCharacterID(t *testing.T) {
+func TestGetCommandHelpShimNotFoundWinsOverDenial(t *testing.T) {
 	// (e) Precedence: a non-existent command must resolve to "command not found"
-	// even when the character_id is malformed — the lookup (NOT_FOUND) happens
-	// inside Querier.Help before the subject is consulted, so the shim must NOT
-	// pre-parse/validate character_id ahead of the lookup.
+	// before the engine is consulted — even under a deny-all engine. The lookup
+	// (NOT_FOUND) happens inside Querier.Help before the dispatch subject is
+	// evaluated, so the shim preserves "command not found wins". The Lua arg is
+	// ignored entirely now (INV-PLUGIN-51); a malformed arg must NOT change this.
 	registry := &mockCommandRegistry{commands: []command.CommandEntry{
 		{Name: "look", Help: "Look around", Source: "core"},
 	}}
-	q := commandquery.New(registry, policytest.AllowAllEngine(), nil)
+	q := commandquery.New(registry, policytest.DenyAllEngine(), nil)
+	charID := ulid.Make()
 
 	hf := New(nil, WithCommandQuerier(q))
-	L := lua.NewState()
+	L := withDispatchState(t, charID)
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
@@ -332,7 +345,133 @@ func TestGetCommandHelpShimNotFoundWinsOverInvalidCharacterID(t *testing.T) {
 
 	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
 	assert.Contains(t, L.GetGlobal("err").String(), "command not found",
-		"non-existent command must win over invalid character_id")
+		"non-existent command must resolve to NOT_FOUND before the engine is consulted")
+}
+
+// Verifies: INV-PLUGIN-51
+func TestLuaListCommandsIgnoresArgUsesDispatch(t *testing.T) {
+	// The Lua-supplied character_id arg MUST NOT determine ABAC visibility:
+	// the host-vouched dispatch subject does. Grant a command ONLY for the
+	// dispatch char X, then call list_commands with a DIFFERENT char Y's id —
+	// the returned set must reflect X's grants, proving Y is ignored.
+	dispatchChar := ulid.Make()
+	otherChar := ulid.Make()
+
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		command.NewTestEntry(command.CommandEntryConfig{
+			Name:         "boot",
+			Help:         "Boot a player",
+			Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
+			Source:       "admin",
+		}),
+		{Name: "look", Help: "Look around", Source: "core"},
+	}}
+	ac := policytest.NewGrantEngine()
+	ac.GrantCommandExecution(access.CharacterSubject(dispatchChar.String()), "boot", "look")
+	ac.Grant(access.CharacterSubject(dispatchChar.String()), "admin", "server")
+	q := commandquery.New(registry, ac, nil)
+
+	hf := New(nil, WithCommandQuerier(q))
+	L := withDispatchState(t, dispatchChar)
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// Pass otherChar (NOT granted) as the arg; dispatch subject is dispatchChar.
+	err := L.DoString(`result, err = holomush.list_commands("` + otherChar.String() + `")`)
+	require.NoError(t, err)
+
+	resultTbl, ok := L.GetGlobal("result").(*lua.LTable)
+	require.True(t, ok, "expected result table, got %T", L.GetGlobal("result"))
+	assert.Equal(t, lua.LNil, L.GetGlobal("err"))
+
+	commands, ok := L.GetField(resultTbl, "commands").(*lua.LTable)
+	require.True(t, ok)
+
+	var bootFound bool
+	commands.ForEach(func(_, v lua.LValue) {
+		if cmdTbl, ok := v.(*lua.LTable); ok && L.GetField(cmdTbl, "name").String() == "boot" {
+			bootFound = true
+		}
+	})
+	assert.True(t, bootFound,
+		"capability-gated 'boot' visible ⇒ dispatch subject X used, not arg Y (else it would be filtered out)")
+}
+
+func TestLuaListCommandsFailsClosedWithoutDispatch(t *testing.T) {
+	// No host-vouched dispatch subject on the ls context ⇒ fail closed:
+	// list_commands returns (nil, errmsg) and never enumerates anything.
+	q := newAllowQuerier([]command.CommandEntry{
+		{Name: "look", Help: "Look around", Source: "core"},
+	})
+	charID := ulid.Make()
+
+	hf := New(nil, WithCommandQuerier(q))
+	L := lua.NewState() // no dispatch context set
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`result, err = holomush.list_commands("` + charID.String() + `")`)
+	require.NoError(t, err)
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("result"))
+	assert.Contains(t, L.GetGlobal("err").String(), "host-vouched dispatch")
+}
+
+// Verifies: INV-PLUGIN-51
+func TestLuaGetCommandHelpIgnoresArgUsesDispatch(t *testing.T) {
+	// The character_id arg MUST NOT determine authorization for capability-gated
+	// help: the dispatch subject does. Grant the gated command ONLY for dispatch
+	// char X, then request help passing a DIFFERENT char Y — help must succeed
+	// (proving X's grants applied, not Y's).
+	dispatchChar := ulid.Make()
+	otherChar := ulid.Make()
+
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		command.NewTestEntry(command.CommandEntryConfig{
+			Name:         "secret-cmd",
+			Help:         "Secret command",
+			Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}},
+			Source:       "admin",
+		}),
+	}}
+	ac := policytest.NewGrantEngine()
+	ac.GrantCommandExecution(access.CharacterSubject(dispatchChar.String()), "secret-cmd")
+	ac.Grant(access.CharacterSubject(dispatchChar.String()), "admin", "server")
+	q := commandquery.New(registry, ac, nil)
+
+	hf := New(nil, WithCommandQuerier(q))
+	L := withDispatchState(t, dispatchChar)
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`info, err = holomush.get_command_help("secret-cmd", "` + otherChar.String() + `")`)
+	require.NoError(t, err)
+
+	tbl, ok := L.GetGlobal("info").(*lua.LTable)
+	require.True(t, ok, "help must succeed for dispatch char X despite arg Y; got err=%v", L.GetGlobal("err"))
+	assert.Equal(t, "secret-cmd", L.GetField(tbl, "name").String())
+	assert.Equal(t, lua.LNil, L.GetGlobal("err"))
+}
+
+func TestLuaGetCommandHelpFailsClosedWithoutDispatch(t *testing.T) {
+	// No host-vouched dispatch subject ⇒ fail closed before consulting the
+	// querier (a missing dispatch is abnormal for an in-VM hostfunc call).
+	registry := &mockCommandRegistry{commands: []command.CommandEntry{
+		{Name: "look", Help: "Look around", Source: "core"},
+	}}
+	q := commandquery.New(registry, policytest.AllowAllEngine(), nil)
+	charID := ulid.Make()
+
+	hf := New(nil, WithCommandQuerier(q))
+	L := lua.NewState() // no dispatch context set
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`info, err = holomush.get_command_help("look", "` + charID.String() + `")`)
+	require.NoError(t, err)
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
+	assert.Contains(t, L.GetGlobal("err").String(), "host-vouched dispatch")
 }
 
 func TestGetCommandHelpShimNoCapabilitiesSkipsAccessCheck(t *testing.T) {
@@ -345,7 +484,7 @@ func TestGetCommandHelpShimNoCapabilitiesSkipsAccessCheck(t *testing.T) {
 	charID := ulid.Make()
 
 	hf := New(nil, WithCommandQuerier(q))
-	L := lua.NewState()
+	L := withDispatchState(t, charID)
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 

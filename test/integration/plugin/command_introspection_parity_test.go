@@ -57,6 +57,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/plugin/plugintest"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -143,7 +144,15 @@ func luaNamesForQuerier(ctx context.Context, q *commandquery.Querier, charID str
 	hf := hostfunc.New(nil, hostfunc.WithCommandQuerier(q))
 	L := lua.NewState()
 	defer L.Close()
-	L.SetContext(ctx)
+	// Stamp the host-vouched dispatch subject for charID, mirroring what the
+	// Lua host's stampDispatch sets on ls.Context() before plugin code runs
+	// (INV-PLUGIN-51 / eykuh.3.6). The hostfunc derives the ABAC subject from
+	// this dispatch context, NOT from the Lua-supplied arg — the binary side
+	// derives it the same way (host-side) inside host.DeliverEvent, so this
+	// keeps the parity comparison honest.
+	L.SetContext(pluginauthz.WithDispatch(ctx, pluginauthz.DispatchContext{
+		Subject: access.CharacterSubject(charID),
+	}))
 	hf.Register(L, "test-parity-plugin")
 
 	err := L.DoString(`result, listErr = holomush.list_commands("` + charID + `")`)
