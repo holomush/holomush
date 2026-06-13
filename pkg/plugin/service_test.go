@@ -712,7 +712,8 @@ func TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient(t *testing.T)
 // declare no capabilities — Init must fail closed (INV-PLUGIN-54).
 type focusUndeclaredProvider struct{ focusClient FocusClient }
 
-func (p *focusUndeclaredProvider) SetFocusClient(c FocusClient)                        { p.focusClient = c }
+func (p *focusUndeclaredProvider) SetFocusClient(c FocusClient) { p.focusClient = c }
+
 func (p *focusUndeclaredProvider) Init(context.Context, *pluginv1.ServiceConfig) error { return nil }
 
 // RegisterServices satisfies ServiceProvider (service.go:46) — the registrar is
