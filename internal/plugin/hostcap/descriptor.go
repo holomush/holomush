@@ -39,9 +39,11 @@ type CapabilityDescriptor struct {
 
 // Descriptors is the single host-owned source for M1/M2/M3 per-method metadata,
 // keyed by capability token. It is the per-method companion to the sub-spec-2
-// token->service registry. Scope-eligible rows and the remaining capability
-// tokens (focus, emit, audit, stream-history, stream-subscription, session,
-// property, world, log) are added in Task 4.
+// token->service registry, covering every served host.v1 capability token (the
+// fail-closed interceptor denies UNCLASSIFIED_CAPABILITY_METHOD for any
+// classified method with no entry here). Scope-eligibility and the per-method
+// extractors for the read/write rows beyond world.mutation are layered on by
+// later tasks (.10/.11).
 var Descriptors = map[string]CapabilityDescriptor{
 	"eval": {Token: "eval", Methods: map[string]MethodDescriptor{
 		"Evaluate": {Action: "evaluate", Resource: "policy", Class: ClassRead},
@@ -88,6 +90,51 @@ var Descriptors = map[string]CapabilityDescriptor{
 				return r.GetLocationId(), r.GetLocationId() != ""
 			},
 		},
+	}},
+	"world.query": {Token: "world.query", Methods: map[string]MethodDescriptor{
+		"QueryLocation":           {Action: "read", Resource: "location", Class: ClassRead},
+		"QueryCharacter":          {Action: "read", Resource: "character", Class: ClassRead},
+		"QueryLocationCharacters": {Action: "read", Resource: "location", Class: ClassRead},
+		"QueryObject":             {Action: "read", Resource: "object", Class: ClassRead},
+		"FindLocation":            {Action: "read", Resource: "location", Class: ClassRead},
+	}},
+	"property": {Token: "property", Methods: map[string]MethodDescriptor{
+		"GetProperty": {Action: "read", Resource: "property", Class: ClassRead},
+		"SetProperty": {Action: "write", Resource: "property", Class: ClassWrite},
+	}},
+	"session": {Token: "session", Methods: map[string]MethodDescriptor{
+		"FindByName":       {Action: "read", Resource: "session", Class: ClassRead},
+		"ListActive":       {Action: "list", Resource: "session", Class: ClassRead},
+		"SetLastWhispered": {Action: "write", Resource: "session", Class: ClassWrite},
+	}},
+	"session.admin": {Token: "session.admin", Methods: map[string]MethodDescriptor{
+		"Broadcast":  {Action: "write", Resource: "session", Class: ClassWrite},
+		"Disconnect": {Action: "write", Resource: "session", Class: ClassWrite},
+	}},
+	"focus": {Token: "focus", Methods: map[string]MethodDescriptor{
+		"JoinFocus":          {Action: "write", Resource: "focus", Class: ClassWrite},
+		"LeaveFocus":         {Action: "write", Resource: "focus", Class: ClassWrite},
+		"LeaveFocusByTarget": {Action: "write", Resource: "focus", Class: ClassWrite},
+		"PresentFocus":       {Action: "write", Resource: "focus", Class: ClassWrite},
+		"SetConnectionFocus": {Action: "write", Resource: "focus", Class: ClassWrite},
+		"GetConnectionFocus": {Action: "read", Resource: "focus", Class: ClassRead},
+		"AutoFocusOnJoin":    {Action: "write", Resource: "focus", Class: ClassWrite},
+		"IsAnyConnFocused":   {Action: "read", Resource: "focus", Class: ClassRead},
+	}},
+	"emit": {Token: "emit", Methods: map[string]MethodDescriptor{
+		"EmitEvent":        {Action: "write", Resource: "event", Class: ClassWrite},
+		"RequestEmitToken": {Action: "write", Resource: "event", Class: ClassWrite},
+		"RegisterEmitType": {Action: "write", Resource: "event", Class: ClassWrite},
+	}},
+	"stream.history": {Token: "stream.history", Methods: map[string]MethodDescriptor{
+		"QueryStreamHistory": {Action: "read", Resource: "stream", Class: ClassRead},
+	}},
+	"stream.subscription": {Token: "stream.subscription", Methods: map[string]MethodDescriptor{
+		"AddSessionStream":    {Action: "write", Resource: "stream", Class: ClassWrite},
+		"RemoveSessionStream": {Action: "write", Resource: "stream", Class: ClassWrite},
+	}},
+	"audit": {Token: "audit", Methods: map[string]MethodDescriptor{
+		"DecryptOwnAuditRows": {Action: "read", Resource: "audit", Class: ClassRead},
 	}},
 }
 
