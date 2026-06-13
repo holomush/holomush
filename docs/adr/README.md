@@ -16,6 +16,11 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Gate binary plugin capability injection on manifest declaration](holomush-m4ac3-gate-binary-plugin-capability-injection-manifest-declaration.md) | 2026-06-13 | Accepted | `holomush-m4ac3` |
+| [Make binary plugin Init unconditional to close the degenerate-manifest escape](holomush-toh7a-make-binary-plugin-init-unconditional-close-degenerate-manif.md) | 2026-06-13 | Accepted | `holomush-toh7a` |
+| [Two single-clause capability-enforcement invariants (INV-PLUGIN-54 / 55)](holomush-1psri-two-single-clause-capability-enforcement-invariants-inv-plug.md) | 2026-06-13 | Accepted | `holomush-1psri` |
+| [Wholesystem census as the capability-declaration integration guard](holomush-wlyzs-wholesystem-census-as-capability-declaration-integration-gua.md) | 2026-06-13 | Accepted | `holomush-wlyzs` |
+| [Defer Lua capability-declaration enforcement to eykuh.4 (binary-only now)](holomush-nk46j-defer-lua-capability-declaration-enforcement-eykuh-4-binary.md) | 2026-06-13 | Accepted | `holomush-nk46j` |
 | [Stamp dispatch context host-side; never accept a wire subject](holomush-wvrtc-stamp-dispatch-context-host-side-never-accept-wire-subject.md) | 2026-06-12 | Accepted | `holomush-wvrtc` |
 | [Capability access is a default-deny ABAC decision, not a set check](holomush-syhc2-capability-access-is-default-deny-abac-decision-not-set-chec.md) | 2026-06-12 | Accepted | `holomush-syhc2` |
 | [access: and scope: are valid only on capability entries, not service entries](holomush-u1sdq-access-and-scope-are-valid-only-capability-entries-not-servi.md) | 2026-06-12 | Accepted | `holomush-u1sdq` |

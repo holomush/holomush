@@ -326,6 +326,8 @@ invariants.
 | `INV-PLUGIN-51` | Any character subject or dispatch attribute used in a plugin-mediated authorization decision MUST be host-vouched (derived from the host delivery context) and MUST NOT originate from plugin- or wire-supplied data. Covers the command-registry RPCs and scope: anchoring. | — | bound |
 | `INV-PLUGIN-52` | Every scope-eligible capability method MUST resolve its scoped resource through a wired extractor; a method missing its extractor MUST fail closed (deny), never forward unscoped. No silent fail-open. | — | bound |
 | `INV-PLUGIN-53` | The per-entry least-privilege parameters (access:, scope:) are valid only on a capability: requires entry; either on a service: entry MUST be a hard manifest error at load. | — | bound |
+| `INV-PLUGIN-54` | A binary plugin's Init MUST fail closed when its provider implements a host-capability *Aware interface for a non-exempt capability absent from the manifest; capability clients are injected only for declared capabilities. emit and command-registry are self-gated and exempt. | — | pending |
+| `INV-PLUGIN-55` | A Lua plugin MUST be wired only the capabilities its manifest declares (declaration-gated host-cap bridge); bound by holomush-eykuh.4's production Lua migration off the legacy hostfunc shim. | — | pending |
 
 ### `INV-EVENTBUS`
 
