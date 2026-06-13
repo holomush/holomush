@@ -113,6 +113,11 @@ func NewCapabilityInterceptor(d InterceptorDeps) grpc.UnaryServerInterceptor {
 				With("method", info.FullMethod).
 				Errorf("no descriptor entry for host method")
 		}
+		if declarationExemptCapabilities[capToken] {
+			// Self-gated capability: skip the declaration + access-class checks;
+			// its own mechanism (emit fence / dispatch subject) is the authority.
+			return h(ctx, req)
+		}
 		declAccess, declared := d.DeclaredAccess(d.PluginName, capToken)
 		if !declared {
 			return nil, oops.Code("CAPABILITY_NOT_DECLARED").

@@ -59,6 +59,24 @@ func TestInterceptorUndeclaredCapabilityDenied(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "CAPABILITY_NOT_DECLARED")
 }
 
+func TestInterceptorPassesThroughSelfGatedCapabilityWhenUndeclared(t *testing.T) {
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         policytest.AllowAllEngine(),
+		DeclaredAccess: func(_, _ string) (string, bool) { return "", false }, // NOT declared
+	})
+	// emit is self-gated: an undeclared emit call must pass through (not CAPABILITY_NOT_DECLARED).
+	resp, err := ic(context.Background(), &hostv1.EmitEventRequest{}, &grpc.UnaryServerInfo{
+		FullMethod: "/holomush.plugin.host.v1.EmitService/EmitEvent",
+	}, okHandler)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	// command-registry likewise (ListCommands is ClassRead, undeclared).
+	_, err = ic(context.Background(), &hostv1.ListCommandsRequest{}, &grpc.UnaryServerInfo{
+		FullMethod: "/holomush.plugin.host.v1.CommandRegistryService/ListCommands",
+	}, okHandler)
+	require.NoError(t, err)
+}
+
 func TestInterceptorNonHostMethodPassesThrough(t *testing.T) {
 	ic := NewCapabilityInterceptor(InterceptorDeps{
 		Engine:         policytest.AllowAllEngine(),

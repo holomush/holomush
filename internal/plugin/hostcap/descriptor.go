@@ -37,6 +37,19 @@ type CapabilityDescriptor struct {
 	Methods map[string]MethodDescriptor
 }
 
+// declarationExemptCapabilities are SELF-GATED capabilities: their access is
+// authorized by a dedicated mechanism, not by manifest `requires:` declaration,
+// so the capability interceptor MUST NOT declaration-gate them (doing so
+// fail-closes legitimate calls — holomush-eykuh.3.17). They still carry
+// descriptor entries (classification/Class) so the interceptor recognizes them.
+//   - "emit": gated by the emit fence (event_emitter.go::Emit) + `emits:` field
+//   - actor_kinds_claimable; plugins declare via `emits:`, not requires:.
+//   - "command-registry": gated by the host-vouched dispatch subject (eykuh.3.12).
+var declarationExemptCapabilities = map[string]bool{
+	"emit":             true,
+	"command-registry": true,
+}
+
 // Descriptors is the single host-owned source for M1/M2/M3 per-method metadata,
 // keyed by capability token. It is the per-method companion to the sub-spec-2
 // token->service registry, covering every served host.v1 capability token (the
