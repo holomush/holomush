@@ -111,6 +111,22 @@ func TestInterceptorScopeOwnLocationDeniesMismatch(t *testing.T) {
 }
 
 // Verifies: INV-PLUGIN-52
+func TestInterceptorScopedCallFailsClosedWithEmptyResource(t *testing.T) {
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         ownLocationEngine{},
+		PluginName:     "builder-bot",
+		DeclaredAccess: func(_, _ string) (string, bool) { return "write", true },
+	})
+	// CreateObject with a character placement: GetLocationId() returns "" => ok=false.
+	// The interceptor must fail closed rather than forwarding without a scoped resource.
+	_, err := ic(scopedDispatchCtx(testLocID),
+		&hostv1.CreateObjectRequest{Placement: &hostv1.CreateObjectRequest_CharacterId{CharacterId: "01CHAR0000000000000000000A"}},
+		&grpc.UnaryServerInfo{FullMethod: "/holomush.plugin.host.v1.WorldMutationService/CreateObject"},
+		okHandler)
+	errutil.AssertErrorCode(t, err, "SCOPE_NO_RESOURCE")
+}
+
+// Verifies: INV-PLUGIN-52
 func TestInterceptorScopedCallFailsClosedWithoutDispatch(t *testing.T) {
 	ic := NewCapabilityInterceptor(InterceptorDeps{
 		Engine:         ownLocationEngine{},
