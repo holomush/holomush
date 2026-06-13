@@ -34,7 +34,8 @@ var hostCapabilityRequirements = []capabilityRequirement{
 // validateDeclaredCapabilities returns a CAPABILITY_NOT_DECLARED error when the
 // provider implements a host-capability *Aware interface for a non-exempt
 // capability token absent from declared. Fail-closed: any undeclared token fails
-// plugin Init (and thus load), the host-side load-time half of INV-PLUGIN-54.
+// plugin Init (and thus load) — this is the SDK-side (plugin-process) load-time
+// half of INV-PLUGIN-54; the host populates declared from the plugin manifest.
 func validateDeclaredCapabilities(provider any, declared []string) error {
 	declaredSet := make(map[string]bool, len(declared))
 	for _, c := range declared {
