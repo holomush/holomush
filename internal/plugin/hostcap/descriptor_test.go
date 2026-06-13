@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package hostcap_test
+
+import (
+	"testing"
+
+	"github.com/holomush/holomush/internal/plugin/hostcap"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestDescriptorClassifiesEvalMethods(t *testing.T) {
+	d, ok := hostcap.Descriptors["eval"]
+	require.True(t, ok, "eval capability has a descriptor")
+	m, ok := d.Methods["Evaluate"]
+	require.True(t, ok)
+	assert.Equal(t, hostcap.ClassRead, m.Class)
+	assert.Empty(t, m.Scopes, "eval is not scope-eligible")
+}
