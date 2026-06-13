@@ -3847,6 +3847,19 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/plugin/manifest_test.go"
+  - id: INV-PLUGIN-54
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-13-plugin-capability-declaration-enforcement-design.md"
+    summary: "A binary plugin's Init MUST fail closed when its provider implements a host-capability *Aware interface for
+      a non-exempt capability absent from the manifest; capability clients are injected only for declared capabilities. emit
+      and command-registry are self-gated and exempt."
+    binding: pending
+  - id: INV-PLUGIN-55
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-13-plugin-capability-declaration-enforcement-design.md"
+    summary: "A Lua plugin MUST be wired only the capabilities its manifest declares (declaration-gated host-cap bridge);
+      bound by holomush-eykuh.4's production Lua migration off the legacy hostfunc shim."
+    binding: pending
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"
