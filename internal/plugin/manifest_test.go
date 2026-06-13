@@ -11,6 +11,7 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
@@ -2665,4 +2666,37 @@ history_scope: unknown
 			}
 		})
 	}
+}
+
+// validBaseManifest builds a minimal Lua manifest (bypassing ParseManifest so
+// negative-case tests can call Validate() and assert specific error codes rather
+// than having ParseManifest swallow the error and return nil).
+func validBaseManifest(t *testing.T, frag string) *plugins.Manifest {
+	t.Helper()
+	base := "name: test-plugin\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua\n"
+	var m plugins.Manifest
+	require.NoError(t, yaml.Unmarshal([]byte(base+frag), &m))
+	return &m
+}
+
+func TestManifestRejectsLeastPrivilegeParamsOnServiceEntry(t *testing.T) {
+	for _, tc := range []struct{ name, yamlFrag, code string }{
+		{"scope on service", "requires:\n  - service: holomush.scene.v1.SceneService\n    scope: own-location\n", "LEAST_PRIVILEGE_PARAM_ON_SERVICE"},
+		{"access on service", "requires:\n  - service: holomush.scene.v1.SceneService\n    access: read\n", "LEAST_PRIVILEGE_PARAM_ON_SERVICE"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := validBaseManifest(t, tc.yamlFrag)
+			errutil.AssertErrorCode(t, m.Validate(), tc.code)
+		})
+	}
+}
+
+func TestManifestRejectsUnknownAccessValue(t *testing.T) {
+	m := validBaseManifest(t, "requires:\n  - capability: kv\n    access: delete\n")
+	errutil.AssertErrorCode(t, m.Validate(), "INVALID_ACCESS_VALUE")
+}
+
+func TestManifestAcceptsAccessReadOnCapability(t *testing.T) {
+	m := validBaseManifest(t, "requires:\n  - capability: kv\n    access: read\n")
+	require.NoError(t, m.Validate())
 }

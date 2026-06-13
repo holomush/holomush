@@ -368,6 +368,10 @@ var validHistoryScopes = map[string]bool{
 	"custom": true,
 }
 
+// validAccess is the closed enum of accepted access: values on capability
+// dependency entries (INV-PLUGIN-53). The empty string means "unspecified".
+var validAccess = map[string]bool{"": true, "read": true, "write": true}
+
 // ParseManifest parses and validates a plugin.yaml file.
 func ParseManifest(data []byte) (*Manifest, error) {
 	if len(data) == 0 {
@@ -492,6 +496,20 @@ func (m *Manifest) Validate() error {
 		}
 	default:
 		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'lua', 'binary', or 'setting'")
+	}
+
+	// Validate requires entries: access:/scope: are capability-only (INV-PLUGIN-53).
+	for _, d := range m.Requires {
+		if d.Kind == DependencyService && (d.Scope != "" || d.Access != "") {
+			return oops.Code("LEAST_PRIVILEGE_PARAM_ON_SERVICE").
+				With("plugin", m.Name).With("service", d.Name).
+				Errorf("access:/scope: are valid only on capability entries (INV-PLUGIN-53)")
+		}
+		if !validAccess[d.Access] {
+			return oops.Code("INVALID_ACCESS_VALUE").
+				With("plugin", m.Name).With("access", d.Access).
+				Errorf("access must be one of: read, write")
+		}
 	}
 
 	// Validate session_streams: only lua and binary plugins can contribute session streams.
