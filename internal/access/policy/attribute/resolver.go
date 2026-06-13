@@ -294,6 +294,26 @@ func (r *Resolver) ResolveSubjectAttributes(ctx context.Context, subject, action
 	return bags, errors.Join(errs...)
 }
 
+// ResolveSubject resolves the subject attribute bag for a host-vouched ABAC
+// subject (e.g. "character:01ABC"), satisfying
+// pluginauthz.AttributeResolver. It is the plugin hosts' delivery-time entry
+// point for populating DispatchContext.Attributes (notably "location"); see
+// holomush-eykuh.3. It delegates to ResolveSubjectAttributes with an empty
+// action — only the subject bag is consumed — and returns just that bag so the
+// caller never sees the action/environment/resource sub-bags.
+//
+// An error (invalid ref, provider failure) is returned to the caller, which
+// MUST treat it as fail-closed (leave Attributes nil). A subject with no
+// registered provider resolves to a bag carrying only the raw "id" — harmless,
+// since the host projects only string-valued keys it cares about.
+func (r *Resolver) ResolveSubject(ctx context.Context, subject string) (map[string]any, error) {
+	bags, err := r.ResolveSubjectAttributes(ctx, subject, "")
+	if err != nil {
+		return nil, err
+	}
+	return bags.Subject, nil
+}
+
 // validateEntityRef checks that an entity reference is in "type:id" format
 // with both parts non-empty. This ensures all providers receive validated refs
 // and the ABAC fail-closed guarantee is preserved.

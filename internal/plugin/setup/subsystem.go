@@ -205,6 +205,11 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		// merged map at Load time (INV-PLUGIN-3: identical merged map for both
 		// binary and Lua runtimes via plugins.MergePluginConfig).
 		pluginlua.WithPluginConfigOverrides(s.cfg.PluginConfigOverrides),
+		// Wire the attribute resolver so stampDispatch populates
+		// DispatchContext.Attributes (notably "location") at delivery time
+		// (holomush-eykuh.3). Same instance as the binary host below
+		// (plugin-runtime-symmetry); it is the resolver the ABAC engine reads.
+		pluginlua.WithDispatchAttributeResolver(s.cfg.ABAC.AttributeResolver()),
 	)
 
 	// 4. Create service registry for proto service resolution.
@@ -285,6 +290,11 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		// Thread per-plugin config overrides from PluginSubsystemConfig into the
 		// binary host so overrideFor() can look them up at plugin init time.
 		goplugin.WithConfigOverrides(s.cfg.PluginConfigOverrides),
+		// Wire the attribute resolver so stampDispatch populates
+		// DispatchContext.Attributes (notably "location") at delivery time for
+		// binary plugins (holomush-eykuh.3). Same resolver instance as the Lua
+		// host above (plugin-runtime-symmetry).
+		goplugin.WithDispatchAttributeResolver(s.cfg.ABAC.AttributeResolver()),
 	)
 
 	if s.cfg.CertsDir != "" {
