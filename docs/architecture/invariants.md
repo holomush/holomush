@@ -280,7 +280,7 @@ invariants.
 | `INV-PLUGIN-5` | A value that does not parse to its declared type → fail-fast at load (PLUGIN_CONFIG_TYPE_INVALID). | `INV-PC-5` | bound |
 | `INV-PLUGIN-6` | An override key not declared in the manifest schema → fail-fast at load (PLUGIN_CONFIG_UNKNOWN_KEY). | `INV-PC-6` | bound |
 | `INV-PLUGIN-7` | With no override (production), core-scenes resolves vote_window=168h, cooloff_window=30m, scheduler_interval=30s (cfg-zero regression lock). | `INV-PC-7` | pending |
-| `INV-PLUGIN-8` | A binary plugin declaring config: MUST receive Init (and its plugin_config) even with none of requires/provides/storage/crypto.emits — the needsInit gate MUST include len(manifest.Config) > 0. | `INV-PC-8` | pending |
+| `INV-PLUGIN-8` | A binary plugin declaring config: MUST receive Init and its merged plugin_config. Binary Init is unconditional (INV-PLUGIN-54), so a config-bearing plugin is always Init'd; the host delivers plugin_config when len(manifest.Config) > 0. | `INV-PC-8` | pending |
 | `INV-PLUGIN-9` | Every Actor at every layer and kind carries a ULID identity; system sentinels resolve via NameByID after Manager bootstrap. | `INV-W9ML-1` | pending |
 | `INV-PLUGIN-10` | IdentityRegistry is the sole resolution path for actor identity (IDByName at stamp sites, NameByID at render sites). | `INV-W9ML-2` | pending |
 | `INV-PLUGIN-11` | Plugin name uniqueness: two active plugins with the same name — the second load fails with a constraint violation. | `INV-W9ML-3` | pending |
@@ -326,7 +326,7 @@ invariants.
 | `INV-PLUGIN-51` | Any character subject or dispatch attribute used in a plugin-mediated authorization decision MUST be host-vouched (derived from the host delivery context) and MUST NOT originate from plugin- or wire-supplied data. Covers the command-registry RPCs and scope: anchoring. | — | bound |
 | `INV-PLUGIN-52` | Every scope-eligible capability method MUST resolve its scoped resource through a wired extractor; a method missing its extractor MUST fail closed (deny), never forward unscoped. No silent fail-open. | — | bound |
 | `INV-PLUGIN-53` | The per-entry least-privilege parameters (access:, scope:) are valid only on a capability: requires entry; either on a service: entry MUST be a hard manifest error at load. | — | bound |
-| `INV-PLUGIN-54` | A binary plugin's Init MUST fail closed when its provider implements a host-capability *Aware interface for a non-exempt capability absent from the manifest; capability clients are injected only for declared capabilities. emit and command-registry are self-gated and exempt. | — | pending |
+| `INV-PLUGIN-54` | A binary plugin's Init MUST fail closed when its provider implements a host-capability *Aware interface for a non-exempt capability absent from the manifest; capability clients are injected only for declared capabilities. emit and command-registry are self-gated and exempt. | — | bound |
 | `INV-PLUGIN-55` | A Lua plugin MUST be wired only the capabilities its manifest declares (declaration-gated host-cap bridge); bound by holomush-eykuh.4's production Lua migration off the legacy hostfunc shim. | — | pending |
 
 ### `INV-EVENTBUS`

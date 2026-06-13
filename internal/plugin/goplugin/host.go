@@ -860,6 +860,9 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			initReq.Config.ConnectionString = connStr
 		}
 
+		// INV-PLUGIN-8: a binary plugin declaring config: receives its merged
+		// plugin_config in Init. Binary Init is now unconditional (INV-PLUGIN-54);
+		// this block delivers plugin_config whenever the manifest declares any.
 		if len(manifest.Config) > 0 {
 			merged, mergeErr := plugins.MergePluginConfig(manifest.Config, h.overrideFor(manifest.Name))
 			if mergeErr != nil {

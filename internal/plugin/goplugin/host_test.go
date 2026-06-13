@@ -2101,6 +2101,9 @@ func TestHostConfigOverrideForPlugin(t *testing.T) {
 	require.Nil(t, h.overrideFor("absent")) // no override → nil (defaults apply)
 }
 
+// Verifies the INV-PLUGIN-8 guarantee: a config-bearing binary plugin receives
+// its merged plugin_config via InitRequest.
+//
 // TestBinaryHostDeliversCanonicalMergedConfigViaInitRequest asserts that when a
 // binary plugin is loaded with a config override, the InitRequest.Config.PluginConfig
 // field delivered to the plugin equals the canonical plugins.MergePluginConfig
