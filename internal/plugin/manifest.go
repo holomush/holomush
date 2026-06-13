@@ -510,6 +510,13 @@ func (m *Manifest) Validate() error {
 				With("plugin", m.Name).With("access", d.Access).
 				Errorf("access must be one of: read, write")
 		}
+		if d.Kind == DependencyCapability && d.Scope != "" {
+			if !capabilityScopeTokens(d.Name)[d.Scope] {
+				return oops.Code("UNKNOWN_SCOPE_TOKEN").
+					With("plugin", m.Name).With("capability", d.Name).With("scope", d.Scope).
+					Errorf("capability %q does not support scope %q", d.Name, d.Scope)
+			}
+		}
 	}
 
 	// Validate session_streams: only lua and binary plugins can contribute session streams.

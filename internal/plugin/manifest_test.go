@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	_ "github.com/holomush/holomush/internal/plugin/hostcap" // registers scope tokens via init()
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -2698,5 +2699,15 @@ func TestManifestRejectsUnknownAccessValue(t *testing.T) {
 
 func TestManifestAcceptsAccessReadOnCapability(t *testing.T) {
 	m := validBaseManifest(t, "requires:\n  - capability: kv\n    access: read\n")
+	require.NoError(t, m.Validate())
+}
+
+func TestManifestRejectsUnknownScopeToken(t *testing.T) {
+	m := validBaseManifest(t, "requires:\n  - capability: world.mutation\n    scope: own-galaxy\n")
+	errutil.AssertErrorCode(t, m.Validate(), "UNKNOWN_SCOPE_TOKEN")
+}
+
+func TestManifestAcceptsKnownScopeTokenOnCapability(t *testing.T) {
+	m := validBaseManifest(t, "requires:\n  - capability: world.mutation\n    scope: own-location\n")
 	require.NoError(t, m.Validate())
 }

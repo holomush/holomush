@@ -19,3 +19,16 @@ func TestDescriptorClassifiesEvalMethods(t *testing.T) {
 	assert.Equal(t, hostcap.ClassRead, m.Class)
 	assert.Empty(t, m.Scopes, "eval is not scope-eligible")
 }
+
+func TestWorldMutationIsScopeEligibleWithExtractor(t *testing.T) {
+	m := hostcap.Descriptors["world.mutation"].Methods["CreateExit"]
+	assert.Equal(t, hostcap.ClassWrite, m.Class)
+	assert.Contains(t, m.Scopes, "own-location")
+	require.NotNil(t, m.Extract, "scope-eligible method must carry an extractor")
+}
+
+func TestCreateLocationIsNotScopeEligible(t *testing.T) {
+	m := hostcap.Descriptors["world.mutation"].Methods["CreateLocation"]
+	assert.Empty(t, m.Scopes, "CreateLocation has no pre-existing location operand")
+	assert.Nil(t, m.Extract)
+}
