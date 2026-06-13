@@ -11,9 +11,10 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 36 seed policies (27 permit, 9 forbid).
+// SeedPolicies returns the complete set of 37 seed policies (28 permit, 9 forbid).
 // The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G5),
-// 1 phase-2 command policy, and 2 system bootstrap policies.
+// 1 phase-2 command policy, 2 system bootstrap policies, and 1 plugin host-capability
+// scope policy (eykuh.3; world.mutation own-location).
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
 //
@@ -306,6 +307,27 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:staff-read-unrestricted-history",
 			Description: "Staff and admins may bypass the per-session temporal floor for history reads (INV-PRIVACY-6); location hard-gate still applies (ADR wxty)",
 			DSLText:     `permit(principal is character, action in ["read_unrestricted_history"], resource) when { "staff" in principal.character.roles || "admin" in principal.character.roles };`,
+			SeedVersion: 1,
+		},
+
+		// --- Plugin host-capability scope policies (eykuh.3; INV-PLUGIN-50) ---
+		//
+		// world.mutation own-location: a plugin (subject plugin:<name>) may write
+		// to a location only when that location is the acting character's dispatch
+		// location. The host-capability interceptor (internal/plugin/hostcap) calls
+		// pluginauthz.EvaluateCapabilityAccess for the scope-eligible CreateExit /
+		// CreateObject methods, passing the extracted location as the resource
+		// (location:<id>) and the host-vouched acting-character location as the
+		// caller action attribute dispatch_location. The `action` namespace is not
+		// schema-registered (no AttributeProvider owns it), so dispatch_location is
+		// a free caller-overlay attribute the engine injects into bags.Action
+		// (engine.go: caller attributes overlay bags.Action). Manifest declaration
+		// is necessary but not sufficient — this default-deny seed is the operator
+		// policy that authorizes the declared capability (INV-PLUGIN-50).
+		{
+			Name:        "seed:plugin-world-mutation-own-location",
+			Description: "Plugins may write to a location only when it is the acting character's dispatch location (world.mutation own-location scope; INV-PLUGIN-50)",
+			DSLText:     `permit(principal is plugin, action in ["write"], resource is location) when { resource.location.id == action.dispatch_location };`,
 			SeedVersion: 1,
 		},
 	}

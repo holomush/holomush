@@ -910,6 +910,67 @@ func TestSeedSmokeAdminRemoteListPresence(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "admin should list presence at remote location via super-rule; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
+// pluginProvider builds a "plugin"-namespace mock provider with the given
+// subject attributes (e.g. {"name": "builder-bot"}).
+func pluginProvider(subjectAttrs map[string]any) *mockAttributeProvider {
+	return &mockAttributeProvider{
+		namespace:  "plugin",
+		subjectMap: subjectAttrs,
+		schema: &types.NamespaceSchema{
+			Attributes: map[string]types.AttrType{
+				"name": types.AttrTypeString,
+			},
+		},
+	}
+}
+
+// Verifies: INV-PLUGIN-50
+func TestSeedSmokePluginWorldMutationOwnLocationPermitsMatch(t *testing.T) {
+	locID := "01LOC000WWWWWWWWWWWWWWWWWW"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		pluginProvider(map[string]any{"name": "builder-bot"}),
+		locationProvider(map[string]any{"id": locID, "name": "Workshop"}),
+	})
+
+	// A plugin writing to a location that IS the acting character's dispatch
+	// location → permit (seed:plugin-world-mutation-own-location). The
+	// dispatch_location action attribute is the host-vouched acting-character
+	// location, overlaid onto bags.Action by the engine (as the interceptor
+	// supplies it via CapabilityInput.Context).
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:    access.PluginSubject("builder-bot"),
+		Action:     "write",
+		Resource:   "location:" + locID,
+		Attributes: map[string]any{"dispatch_location": locID},
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(),
+		"plugin should write its own dispatch location; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
+// Verifies: INV-PLUGIN-50
+func TestSeedSmokePluginWorldMutationOwnLocationDeniesMismatch(t *testing.T) {
+	dispatchLoc := "01LOC000XXXXXXXXXXXXXXXXXX"
+	otherLoc := "01LOC000YYYYYYYYYYYYYYYYYY"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		pluginProvider(map[string]any{"name": "builder-bot"}),
+		locationProvider(map[string]any{"id": otherLoc, "name": "Elsewhere"}),
+	})
+
+	// Plugin writing to a location that is NOT the dispatch location → default deny.
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:    access.PluginSubject("builder-bot"),
+		Action:     "write",
+		Resource:   "location:" + otherLoc,
+		Attributes: map[string]any{"dispatch_location": dispatchLoc},
+	})
+	require.NoError(t, err)
+	assert.False(t, decision.IsAllowed(),
+		"plugin must NOT write a location other than its dispatch location; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
 func TestSeedSmokePluginDeniedEventsSystemRekeyStream(t *testing.T) {
 	// A plugin principal must NOT read the rekey audit stream.
 	// The broad seed:deny-events-system-read-plugin forbid must fire.

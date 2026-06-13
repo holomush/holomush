@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -20,10 +21,106 @@ import (
 func okHandler(_ context.Context, _ any) (any, error) { return struct{}{}, nil }
 
 // ctxWithDispatch returns a ctx carrying a host-vouched dispatch context. The
-// static half does not read it; it is here so Task 10's scope tests can reuse it.
+// static half does not read it; the dynamic (M3) scope half reads dc.Subject
+// and dc.Attributes["location"] to build the scope attributes.
 func ctxWithDispatch(t *testing.T) context.Context {
 	t.Helper()
 	return pluginauthz.WithDispatch(context.Background(), pluginauthz.DispatchContext{Subject: "character:01TEST"})
+}
+
+// ownLocationEngine is a test AccessPolicyEngine that models the own-location
+// scope condition the way the seed policy does: it permits a plugin write to
+// "location:<id>" only when the caller-overlaid action attribute
+// "dispatch_location" equals <id>. It lets the interceptor unit tests assert the
+// dynamic half end-to-end (extract resource → build scope attrs from dispatch →
+// EvaluateCapabilityAccess → deny on mismatch) without standing up a full
+// DSL-backed engine; the seed DSL itself is verified by the seed smoke tests in
+// the policy package (TestSeedSmokePluginWorldMutationOwnLocation*).
+type ownLocationEngine struct{}
+
+func (ownLocationEngine) Evaluate(_ context.Context, req types.AccessRequest) (types.Decision, error) {
+	resType, resID, ok := splitTypeID(req.Resource)
+	if !ok || resType != "location" || req.Action != "write" {
+		return types.NewDecision(types.EffectDefaultDeny, "no policy", ""), nil
+	}
+	dispatchLoc, _ := req.Attributes["dispatch_location"].(string)
+	if dispatchLoc != "" && dispatchLoc == resID {
+		return types.NewDecision(types.EffectAllow, "own-location", "test:own-location"), nil
+	}
+	return types.NewDecision(types.EffectDefaultDeny, "not own-location", ""), nil
+}
+
+func (ownLocationEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return true, nil
+}
+
+func splitTypeID(ref string) (typ, id string, ok bool) {
+	for i := 0; i < len(ref); i++ {
+		if ref[i] == ':' {
+			if i == 0 || i == len(ref)-1 {
+				return "", "", false
+			}
+			return ref[:i], ref[i+1:], true
+		}
+	}
+	return "", "", false
+}
+
+const testLocID = "01LOCAAAAAAAAAAAAAAAAAAAAAA"
+
+// scopedDispatchCtx carries a dispatch context whose acting-character location
+// is loc, mirroring what eykuh.3.15 populates at delivery time.
+func scopedDispatchCtx(loc string) context.Context {
+	return pluginauthz.WithDispatch(context.Background(), pluginauthz.DispatchContext{
+		Subject:    "character:01TEST",
+		Attributes: map[string]string{"location": loc},
+	})
+}
+
+// createExitInLocation builds a CreateExit gRPC call whose source location is
+// fromID; the descriptor's Extract pulls from_id as the scoped resource.
+func createExitInfo() *grpc.UnaryServerInfo {
+	return &grpc.UnaryServerInfo{FullMethod: "/holomush.plugin.host.v1.WorldMutationService/CreateExit"}
+}
+
+// Verifies: INV-PLUGIN-50
+func TestInterceptorScopeOwnLocationPermitsMatch(t *testing.T) {
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         ownLocationEngine{},
+		PluginName:     "builder-bot",
+		DeclaredAccess: func(_, _ string) (string, bool) { return "write", true },
+	})
+	resp, err := ic(scopedDispatchCtx(testLocID), &hostv1.CreateExitRequest{FromId: testLocID},
+		createExitInfo(), okHandler)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+}
+
+// Verifies: INV-PLUGIN-50
+func TestInterceptorScopeOwnLocationDeniesMismatch(t *testing.T) {
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         ownLocationEngine{},
+		PluginName:     "builder-bot",
+		DeclaredAccess: func(_, _ string) (string, bool) { return "write", true },
+	})
+	// Dispatch location differs from the exit's source location => own-location fails.
+	otherLoc := "01LOCBBBBBBBBBBBBBBBBBBBBBB"
+	_, err := ic(scopedDispatchCtx(otherLoc), &hostv1.CreateExitRequest{FromId: testLocID},
+		createExitInfo(), okHandler)
+	errutil.AssertErrorCode(t, err, "SCOPE_DENIED")
+}
+
+// Verifies: INV-PLUGIN-52
+func TestInterceptorScopedCallFailsClosedWithoutDispatch(t *testing.T) {
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         ownLocationEngine{},
+		PluginName:     "builder-bot",
+		DeclaredAccess: func(_, _ string) (string, bool) { return "write", true },
+	})
+	// No dispatch context on the ctx => a scoped capability call must fail closed.
+	_, err := ic(context.Background(), &hostv1.CreateExitRequest{FromId: testLocID},
+		createExitInfo(), okHandler)
+	errutil.AssertErrorCode(t, err, "SCOPE_NO_DISPATCH")
 }
 
 func TestInterceptorAccessReadDeniesWriteMethod(t *testing.T) {

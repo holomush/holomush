@@ -11,18 +11,20 @@ import (
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 )
 
-// InterceptorDeps wires the host-capability interceptor. Engine and Auditor are
-// reserved for the policy + scope half (Task 10); the static half (M2) consumes
-// only PluginName and DeclaredAccess.
+// InterceptorDeps wires the host-capability interceptor. The static half (M2)
+// consumes PluginName and DeclaredAccess; the dynamic half (M1 policy + M3
+// scope) additionally consumes Engine and Auditor.
 type InterceptorDeps struct {
-	// Engine evaluates ABAC policy in the dynamic half (Task 10); unused here.
+	// Engine evaluates the ABAC policy decision in the dynamic half (M1/M3)
+	// via pluginauthz.EvaluateCapabilityAccess.
 	Engine types.AccessPolicyEngine
-	// Auditor records capability decisions in the dynamic half (Task 10); unused here.
+	// Auditor records the single capability-access decision per scoped call.
 	Auditor pluginauthz.Auditor
 	// PluginName identifies the calling plugin for DeclaredAccess lookups.
 	PluginName string
@@ -95,11 +97,26 @@ func classifyHostMethod(fullMethod string) (capToken, method string, ok bool) {
 	return capToken, method, true
 }
 
-// NewCapabilityInterceptor builds the host-capability unary interceptor. This is
-// the static half (M2): it classifies the method, fails closed on an
-// unclassified or undeclared capability, and denies when the plugin's declared
-// access class does not cover the method's operation class. Policy and scope
-// enforcement (Task 10) plug in at the marked passthrough.
+// NewCapabilityInterceptor builds the host-capability unary interceptor.
+//
+// Static half (M2): it classifies the method, fails closed on an unclassified or
+// undeclared capability, and denies when the plugin's declared access class does
+// not cover the method's operation class.
+//
+// Dynamic half (M1 policy + M3 scope): for a scope-eligible method (a descriptor
+// entry with non-empty Scopes), it requires a host-vouched dispatch context,
+// fails closed when the scope-eligible method has no wired extractor
+// (INV-PLUGIN-52), extracts the concrete scoped resource, builds the scope
+// context from the host-vouched dispatch attributes (the acting character's
+// resolved "location" is surfaced to the policy DSL as the action attribute
+// "dispatch_location"), and runs the default-deny ABAC decision via
+// pluginauthz.EvaluateCapabilityAccess keyed on the plugin:<name> subject
+// (INV-PLUGIN-50). Non-scoped capability methods pass through after the static
+// half: this task's policy evaluation is intentionally limited to scoped methods,
+// because no default-permit operator seed exists for the read-only host
+// capabilities and running default-deny ABAC on them would deny every
+// undifferentiated capability call. The broader M1 operator-policy surface for
+// non-scoped capabilities is layered on by a later task.
 func NewCapabilityInterceptor(d InterceptorDeps) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
 		capToken, method, ok := classifyHostMethod(info.FullMethod)
@@ -130,7 +147,65 @@ func NewCapabilityInterceptor(d InterceptorDeps) grpc.UnaryServerInterceptor {
 				With("method", method).
 				Errorf("declared access: read does not cover write method")
 		}
-		// Policy + scope enforcement (Task 10) plugs in here; static half passes through.
+
+		// Dynamic half (M1 policy + M3 scope). Only scope-eligible methods are
+		// policy-evaluated in this task (see the doc comment for why).
+		if len(md.Scopes) == 0 {
+			return h(ctx, req)
+		}
+
+		dc, haveDispatch := pluginauthz.DispatchForHost(ctx)
+		if !haveDispatch || dc.Subject == "" {
+			// A scoped capability call with no host-vouched dispatch context has
+			// no acting-character location to scope against: fail closed.
+			return nil, oops.Code("SCOPE_NO_DISPATCH").
+				With("capability", capToken).
+				With("method", method).
+				Errorf("scoped capability call without dispatch context")
+		}
+		if md.Extract == nil {
+			// A scope-eligible method MUST resolve its resource through a wired
+			// extractor; a missing extractor fails closed (INV-PLUGIN-52).
+			return nil, oops.Code("SCOPE_NO_EXTRACTOR").
+				With("capability", capToken).
+				With("method", method).
+				Errorf("scope-eligible method missing extractor")
+		}
+		resourceID, ok := md.Extract(req)
+		if !ok || resourceID == "" {
+			// No concrete scoped resource present on a scope-eligible call:
+			// fail closed rather than forward unscoped (INV-PLUGIN-52).
+			return nil, oops.Code("SCOPE_NO_RESOURCE").
+				With("capability", capToken).
+				With("method", method).
+				Errorf("scope-eligible method has no scoped resource to evaluate")
+		}
+		resource := md.Resource + ":" + resourceID
+		scopeAttrs := map[string]any{"dispatch_location": dc.Attributes["location"]}
+
+		dec, err := pluginauthz.EvaluateCapabilityAccess(ctx, pluginauthz.CapabilityInput{
+			Engine:     d.Engine,
+			Auditor:    d.Auditor,
+			PluginName: d.PluginName,
+			Subject:    access.PluginSubject(d.PluginName),
+			Action:     md.Action,
+			Resource:   resource,
+			Declared:   true, // the declaration gate above already passed
+			Context:    scopeAttrs,
+		})
+		if err != nil {
+			// Fail closed. EvaluateCapabilityAccess already returns a
+			// context-wrapped oops error (engine/subject/resource); re-wrapping
+			// would double-wrap and obscure its fail-closed code.
+			return nil, err //nolint:wrapcheck // pluginauthz already wraps with oops context
+		}
+		if !dec.Allowed {
+			return nil, oops.Code("SCOPE_DENIED").
+				With("capability", capToken).
+				With("method", method).
+				With("resource", resource).
+				Errorf("denied by policy/scope")
+		}
 		return h(ctx, req)
 	}
 }
