@@ -322,10 +322,10 @@ invariants.
 | `INV-PLUGIN-47` | Every host-brokered capability function MUST map to exactly one capability-scoped service in holomush.plugin.host.v1; no host.v1 service MUST span two capability domains, and the PluginHostService god-service MUST NOT exist after the decomposition. | — | bound |
 | `INV-PLUGIN-48` | Ambient runtime substrate (log, new_request_id, stdlib, config) MUST NOT be modeled as a capability: it MUST NOT appear in holomush.plugin.host.v1 and MUST NOT be a valid requires capability token. | — | bound |
 | `INV-PLUGIN-49` | A capability's RPC contract MUST be the single source both runtimes consume; there MUST NOT be a runtime-specific capability surface (the union resolves today's Lua/binary asymmetry). Generalizes INV-COMMAND-2 to the whole host-capability surface. | — | bound |
-| `INV-PLUGIN-50` | A plugin's consumption of a host capability or plugin service MUST be authorized by a default-deny ABAC decision keyed on the host-stamped plugin:<name> subject. Manifest declaration is necessary but not sufficient; an operator policy MAY deny a declared capability. | — | pending |
-| `INV-PLUGIN-51` | Any character subject or dispatch attribute used in a plugin-mediated authorization decision MUST be host-vouched (derived from the host delivery context) and MUST NOT originate from plugin- or wire-supplied data. Covers the command-registry RPCs and scope: anchoring. | — | pending |
-| `INV-PLUGIN-52` | Every scope-eligible capability method MUST resolve its scoped resource through a wired extractor; a method missing its extractor MUST fail closed (deny), never forward unscoped. No silent fail-open. | — | pending |
-| `INV-PLUGIN-53` | The per-entry least-privilege parameters (access:, scope:) are valid only on a capability: requires entry; either on a service: entry MUST be a hard manifest error at load. | — | pending |
+| `INV-PLUGIN-50` | A plugin's consumption of a host capability or plugin service MUST be authorized by a default-deny ABAC decision keyed on the host-stamped plugin:<name> subject. Manifest declaration is necessary but not sufficient; an operator policy MAY deny a declared capability. | — | bound |
+| `INV-PLUGIN-51` | Any character subject or dispatch attribute used in a plugin-mediated authorization decision MUST be host-vouched (derived from the host delivery context) and MUST NOT originate from plugin- or wire-supplied data. Covers the command-registry RPCs and scope: anchoring. | — | bound |
+| `INV-PLUGIN-52` | Every scope-eligible capability method MUST resolve its scoped resource through a wired extractor; a method missing its extractor MUST fail closed (deny), never forward unscoped. No silent fail-open. | — | bound |
+| `INV-PLUGIN-53` | The per-entry least-privilege parameters (access:, scope:) are valid only on a capability: requires entry; either on a service: entry MUST be a hard manifest error at load. | — | bound |
 
 ### `INV-EVENTBUS`
 

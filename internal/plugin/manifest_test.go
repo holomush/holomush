@@ -2680,6 +2680,7 @@ func validBaseManifest(t *testing.T, frag string) *plugins.Manifest {
 	return &m
 }
 
+// Verifies: INV-PLUGIN-53
 func TestManifestRejectsLeastPrivilegeParamsOnServiceEntry(t *testing.T) {
 	for _, tc := range []struct{ name, yamlFrag, code string }{
 		{"scope on service", "requires:\n  - service: holomush.scene.v1.SceneService\n    scope: own-location\n", "LEAST_PRIVILEGE_PARAM_ON_SERVICE"},
