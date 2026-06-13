@@ -470,3 +470,4 @@ at implementation against the tests written).
 - Runtime symmetry: `.claude/rules/plugin-runtime-symmetry.md`.
 - ABAC providers / fail-safe semantics: `.claude/rules/abac-providers.md`,
   ADR `holomush-iv43`.
+<!-- adr-capture: sha256=6ed15cd9ff5f6bf3; session=cli; ts=2026-06-13T01:33:03Z; adrs=holomush-wvrtc,holomush-syhc2,holomush-u1sdq,holomush-afyzh -->

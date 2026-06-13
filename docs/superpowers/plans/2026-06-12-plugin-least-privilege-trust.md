@@ -843,51 +843,25 @@ Expected: PASS.
 - Regenerate: `docs/architecture/invariants.md` via `go run ./cmd/inv-render`
 - Test: `test/meta/invariant_registry_test.go` (drift + binding gates)
 
-- [ ] **Step 1: Add four entries** to `invariants.yaml` (scope `PLUGIN`, `origin_spec` = this spec). 50/51/52 ship `binding: bound` with `asserted_by` pointing at the tests written above (Task 7 → 50, Tasks 12/13 → 51, Task 11 → 52). 53 binds to the manifest-validation test (Task 2/4).
+> NOTE: INV-PLUGIN-50…53 are **already registered as `binding: pending`** in
+> `invariants.yaml` (added at spec finalization, in the docs PR, because the
+> spec under `docs/superpowers/specs/` references them and the orphan meta-test
+> requires registry presence). This task only **flips them to `bound`** and adds
+> `asserted_by` once the asserting tests exist. The registry entry shape is
+> `scope: INV-PLUGIN` + `origin_spec` + `summary` + `binding` (no `boundary`
+> field — match the existing INV-PLUGIN-49 entry).
+
+- [ ] **Step 1: Flip each entry to `bound`** in `invariants.yaml` and add its `asserted_by`. Map: INV-PLUGIN-50 → `internal/plugin/pluginauthz/capability_test.go` (Task 7); INV-PLUGIN-51 → `internal/plugin/goplugin/host_service_command_test.go` + `internal/plugin/hostfunc/commands_test.go` (Tasks 12/13); INV-PLUGIN-52 → `internal/plugin/hostcap/descriptor_completeness_test.go` (Task 11); INV-PLUGIN-53 → `internal/plugin/manifest_test.go` (Tasks 2/4).
 
 ```yaml
+  # change `binding: pending` -> `binding: bound` and append asserted_by, e.g.:
   - id: INV-PLUGIN-50
-    scope: PLUGIN
-    boundary: PLUGIN
-    origin_spec: docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md
-    summary: >
-      Plugin consumption of a host capability is authorized by a default-deny ABAC
-      decision keyed on the host-stamped plugin:<name> subject; manifest declaration
-      is necessary but not sufficient.
+    scope: INV-PLUGIN
+    origin_spec: "docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md"
+    summary: "A plugin's consumption of a host capability ... necessary but not sufficient ..."
     binding: bound
     asserted_by:
-      - internal/plugin/pluginauthz/capability_test.go
-  - id: INV-PLUGIN-51
-    scope: PLUGIN
-    boundary: PLUGIN
-    origin_spec: docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md
-    summary: >
-      Any character subject or dispatch attribute used in a plugin-mediated
-      authorization decision is host-vouched and never derived from plugin/wire data.
-    binding: bound
-    asserted_by:
-      - internal/plugin/goplugin/host_service_command_test.go
-      - internal/plugin/hostfunc/commands_test.go
-  - id: INV-PLUGIN-52
-    scope: PLUGIN
-    boundary: PLUGIN
-    origin_spec: docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md
-    summary: >
-      Every scope-eligible capability method resolves its scoped resource through a
-      wired extractor; a missing extractor fails closed. No silent fail-open.
-    binding: bound
-    asserted_by:
-      - internal/plugin/hostcap/descriptor_completeness_test.go
-  - id: INV-PLUGIN-53
-    scope: PLUGIN
-    boundary: PLUGIN
-    origin_spec: docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md
-    summary: >
-      The per-entry least-privilege parameters (access:, scope:) are valid only on a
-      capability requires entry; either on a service entry is a hard manifest error.
-    binding: bound
-    asserted_by:
-      - internal/plugin/manifest_test.go
+      - "internal/plugin/pluginauthz/capability_test.go"
 ```
 
 - [ ] **Step 2: Regenerate + verify**

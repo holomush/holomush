@@ -16,6 +16,10 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Stamp dispatch context host-side; never accept a wire subject](holomush-wvrtc-stamp-dispatch-context-host-side-never-accept-wire-subject.md) | 2026-06-12 | Accepted | `holomush-wvrtc` |
+| [Capability access is a default-deny ABAC decision, not a set check](holomush-syhc2-capability-access-is-default-deny-abac-decision-not-set-chec.md) | 2026-06-12 | Accepted | `holomush-syhc2` |
+| [access: and scope: are valid only on capability entries, not service entries](holomush-u1sdq-access-and-scope-are-valid-only-capability-entries-not-servi.md) | 2026-06-12 | Accepted | `holomush-u1sdq` |
+| [Scope enforcement uses typed co-located extractors, not reflective broker introspection](holomush-afyzh-scope-enforcement-uses-typed-co-located-extractors-not-refle.md) | 2026-06-12 | Accepted | `holomush-afyzh` |
 | [Extract HostCapabilities port; relocate host.v1 servers to runtime-neutral package](holomush-l5bqb-extract-hostcapabilities-port-relocate-host-v1-servers-runti.md) | 2026-06-12 | Accepted | `holomush-l5bqb` |
 | [Split Lua bridge by proto ownership: codegen host caps, descriptor-driven plugin services](holomush-ws2mi-split-lua-bridge-by-proto-ownership-codegen-host-caps-descri.md) | 2026-06-12 | Accepted | `holomush-ws2mi` |
 | [Per-plugin bufconn server for host-established Lua plugin identity](holomush-elqw4-per-plugin-bufconn-server-host-established-lua-plugin-identi.md) | 2026-06-12 | Accepted | `holomush-elqw4` |
