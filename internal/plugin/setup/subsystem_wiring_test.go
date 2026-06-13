@@ -14,10 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 )
 
 // TestPluginSubsystemWiresCommandQuerierIntoLuaHost documents the late-binding
@@ -72,7 +74,13 @@ func TestPluginSubsystemWiresCommandQuerierIntoLuaHost(t *testing.T) {
 
 	L2 := lua.NewState()
 	defer L2.Close()
-	L2.SetContext(context.Background())
+	// list_commands reads the host-vouched dispatch subject (INV-PLUGIN-51,
+	// holomush-eykuh.3); in production stampDispatch sets it from the dispatcher's
+	// ActorCharacter. This test invokes list_commands directly (no DeliverCommand),
+	// so stamp the dispatch context on the Lua VM ctx itself.
+	L2.SetContext(pluginauthz.WithDispatch(context.Background(), pluginauthz.DispatchContext{
+		Subject: access.CharacterSubject(charID.String()),
+	}))
 	hfWired.Register(L2, "test-plugin")
 
 	err = L2.DoString(`result, errMsg = holomush.list_commands("` + charID.String() + `")`)
