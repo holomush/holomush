@@ -98,6 +98,7 @@ func tightenRequiresSchema(schema *jsonschema.Schema) {
 	objProps.Set("version", &jsonschema.Schema{Type: "string"})
 	objProps.Set("optional", &jsonschema.Schema{Type: "boolean"})
 	objProps.Set("scope", &jsonschema.Schema{Type: "string"})
+	objProps.Set("access", &jsonschema.Schema{Type: "string"})
 
 	objectForm := &jsonschema.Schema{
 		Type: "object",

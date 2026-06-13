@@ -26,9 +26,10 @@ type Dependency struct {
 	Name     string
 	Version  string // semver constraint; services only
 	Optional bool
-	// Scope carries least-privilege parameters; semantics are sub-spec 4. The
-	// foundation parses and round-trips it but does not interpret it.
-	Scope string
+	// Scope and Access carry least-privilege parameters; semantics are sub-spec 4.
+	// Valid only on capability entries (INV-PLUGIN-53).
+	Scope  string
+	Access string // "" | "read" | "write"
 }
 
 // dependencyYAML is the object form accepted by UnmarshalYAML.
@@ -37,7 +38,8 @@ type dependencyYAML struct {
 	Service    string `yaml:"service"`
 	Version    string `yaml:"version"`
 	Optional   bool   `yaml:"optional"`
-	Scope      string `yaml:"scope"`
+	Scope      string `yaml:"scope,omitempty"`
+	Access     string `yaml:"access,omitempty"`
 }
 
 // UnmarshalYAML accepts either a bare string (treated as a service path, for
@@ -58,7 +60,7 @@ func (d *Dependency) UnmarshalYAML(value *yaml.Node) error {
 		return oops.Code("DEPENDENCY_KIND_AMBIGUOUS").
 			Errorf("a requires entry MUST have exactly one of capability/service")
 	}
-	d.Version, d.Optional, d.Scope = raw.Version, raw.Optional, raw.Scope
+	d.Version, d.Optional, d.Scope, d.Access = raw.Version, raw.Optional, raw.Scope, raw.Access
 	if hasCap {
 		d.Kind, d.Name = DependencyCapability, raw.Capability
 	} else {

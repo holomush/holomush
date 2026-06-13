@@ -54,6 +54,15 @@ func TestRequireServicesConstructsServiceDeps(t *testing.T) {
 	assert.Equal(t, "a", deps[0].Name)
 }
 
+func TestDependencyAccessRoundTrips(t *testing.T) {
+	var d Dependency
+	err := yaml.Unmarshal([]byte("capability: kv\naccess: read\n"), &d)
+	require.NoError(t, err)
+	assert.Equal(t, DependencyCapability, d.Kind)
+	assert.Equal(t, "kv", d.Name)
+	assert.Equal(t, "read", d.Access)
+}
+
 func TestVersionSatisfies(t *testing.T) {
 	tests := []struct {
 		name       string
