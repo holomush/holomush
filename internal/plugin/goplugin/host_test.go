@@ -1477,34 +1477,6 @@ func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
 	assert.Contains(t, err.Error(), "valid JSON")
 }
 
-func TestLoadSkipsInitForPluginWithoutStorageOrRequires(t *testing.T) {
-	grpcClient := &mockGRPCPluginClient{}
-	mockClient := &mockPluginClient{
-		protocol: &mockClientProtocol{pluginClient: grpcClient},
-	}
-	factory := &mockClientFactory{client: mockClient}
-	host := NewHostWithFactory(factory)
-
-	ctx := context.Background()
-	tmpDir := t.TempDir()
-	err := createTempExecutable(tmpDir + "/simple-plugin")
-	require.NoError(t, err)
-
-	manifest := &plugins.Manifest{
-		Name:    "simple-plugin",
-		Version: "1.0.0",
-		Type:    plugins.TypeBinary,
-		BinaryPlugin: &plugins.BinaryConfig{
-			Executable: "simple-plugin",
-		},
-	}
-
-	err = host.Load(ctx, manifest, tmpDir)
-	require.NoError(t, err)
-
-	assert.False(t, grpcClient.initCalled, "expected Init NOT to be called for simple plugin")
-}
-
 func TestLoadFailsWhenInitReturnsError(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		initErr: errors.New("init failed: migration error"),
@@ -2129,19 +2101,6 @@ func TestHostConfigOverrideForPlugin(t *testing.T) {
 	require.Nil(t, h.overrideFor("absent")) // no override → nil (defaults apply)
 }
 
-func TestNeedsInitIncludesConfig(t *testing.T) {
-	// INV-PLUGIN-8: a config-only plugin (no requires/provides/storage/crypto)
-	// MUST still be initialised so its plugin_config is delivered.
-	m := &plugins.Manifest{
-		Name:   "demo",
-		Config: map[string]plugins.ConfigParam{"w": {Type: "duration", Default: "5s"}},
-	}
-	require.True(t, manifestNeedsInit(m), "config-only manifest must need Init")
-
-	bare := &plugins.Manifest{Name: "bare"}
-	require.False(t, manifestNeedsInit(bare), "manifest with nothing needs no Init")
-}
-
 // TestBinaryHostDeliversCanonicalMergedConfigViaInitRequest asserts that when a
 // binary plugin is loaded with a config override, the InitRequest.Config.PluginConfig
 // field delivered to the plugin equals the canonical plugins.MergePluginConfig
@@ -2195,4 +2154,51 @@ func TestBinaryHostDeliversCanonicalMergedConfigViaInitRequest(t *testing.T) {
 	require.Equal(t, want, grpcClient.initReq.Config.PluginConfig,
 		"binary host's InitRequest.Config.PluginConfig must equal the canonical "+
 			"MergePluginConfig output (INV-PLUGIN-3: no per-runtime config fork)")
+}
+
+// Verifies: INV-PLUGIN-54
+func TestLoadPassesDeclaredCapabilitiesToInit(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	host := NewHostWithFactory(&mockClientFactory{client: mockClient})
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(tmpDir+"/test-plugin"))
+
+	manifest := &plugins.Manifest{
+		Name: "test-plugin", Version: "1.0.0", Type: plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{Executable: "test-plugin"},
+		Requires: []plugins.Dependency{
+			{Kind: plugins.DependencyCapability, Name: "focus"},
+			{Kind: plugins.DependencyCapability, Name: "stream.history"},
+		},
+	}
+
+	require.NoError(t, host.Load(ctx, manifest, tmpDir))
+	require.NotNil(t, grpcClient.initReq, "Init must be called")
+	require.NotNil(t, grpcClient.initReq.Config, "ServiceConfig must be set")
+	assert.ElementsMatch(t, []string{"focus", "stream.history"},
+		grpcClient.initReq.Config.GetDeclaredCapabilities())
+}
+
+// Verifies: INV-PLUGIN-54 — unconditional Init: a binary plugin with no
+// requires/storage/config still gets Init, so the SDK capability validation
+// always runs (closes the degenerate "declares nothing" escape).
+func TestLoadCallsInitForBinaryPluginWithNoRequires(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	host := NewHostWithFactory(&mockClientFactory{client: mockClient})
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(tmpDir+"/bare-plugin"))
+
+	manifest := &plugins.Manifest{
+		Name: "bare-plugin", Version: "1.0.0", Type: plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{Executable: "bare-plugin"},
+	}
+
+	require.NoError(t, host.Load(ctx, manifest, tmpDir))
+	assert.True(t, grpcClient.initCalled, "Init must be called even with no requires (INV-PLUGIN-54)")
 }
