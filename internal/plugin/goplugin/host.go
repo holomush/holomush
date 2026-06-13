@@ -981,6 +981,10 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 			// re-anchor: ActorSystem may not emit as system identity; use plugin ULID
 			// storedActor already holds the plugin ULID from stampPluginActor above
 		}
+		// Stamp the host-vouched dispatch subject onto the delivery ctx before any
+		// plugin code runs, so in-process plugin invocations inherit it
+		// (INV-PLUGIN-51). Only character actors are vouched; see stampDispatch.
+		callCtx = stampDispatch(callCtx, upstream)
 	}
 
 	// DeliverEvent has no player context — events are not dispatched on behalf of
@@ -1052,6 +1056,10 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 			// re-anchor: ActorSystem may not emit as system identity; use plugin ULID
 			// storedActor already holds the plugin ULID from stampPluginActor above
 		}
+		// Stamp the host-vouched dispatch subject onto the delivery ctx before any
+		// plugin code runs, so in-process plugin invocations inherit it
+		// (INV-PLUGIN-51). Only character actors are vouched; see stampDispatch.
+		callCtx = stampDispatch(callCtx, upstream)
 	}
 
 	// Carry the host-vouched owning player of the acting character onto the

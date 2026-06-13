@@ -418,6 +418,11 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	}
 	defer L.Close()
 
+	// Stamp the host-vouched dispatch subject before the Lua state's context is
+	// set, so in-VM hostfuncs inherit it (INV-PLUGIN-51). Only character actors
+	// are vouched; see stampDispatch.
+	ctx = stampDispatch(ctx)
+
 	// Set context on the Lua state so host functions can inherit it
 	L.SetContext(ctx)
 
@@ -513,6 +518,11 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_command").Hint("failed to create state").Wrap(err)
 	}
 	defer L.Close()
+
+	// Stamp the host-vouched dispatch subject before the Lua state's context is
+	// set, so in-VM hostfuncs inherit it (INV-PLUGIN-51). Only character actors
+	// are vouched; see stampDispatch.
+	ctx = stampDispatch(ctx)
 
 	L.SetContext(ctx)
 
