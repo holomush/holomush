@@ -63,6 +63,11 @@ message ServiceConfig {
   // server-override) map the host delivers at init. The host does NOT
   // interpret keys/values; the plugin decodes them per its own schema.
   map<string, string> plugin_config = 3;
+  // Capability tokens the plugin declared in its manifest `requires:`
+  // (manifest.RequiredCapabilities()). The plugin SDK validates, at Init, that
+  // every non-exempt host capability its code can consume (via an implemented
+  // *Aware interface) appears here, failing load otherwise (INV-PLUGIN-54).
+  repeated string declared_capabilities = 4;
 }
 
 // InitRequest is the host's first call to a freshly connected plugin process.

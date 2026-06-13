@@ -221,9 +221,14 @@ type ServiceConfig struct {
 	// Opaque plugin-owned runtime config: the effective (manifest-default <
 	// server-override) map the host delivers at init. The host does NOT
 	// interpret keys/values; the plugin decodes them per its own schema.
-	PluginConfig  map[string]string `protobuf:"bytes,3,rep,name=plugin_config,json=pluginConfig,proto3" json:"plugin_config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PluginConfig map[string]string `protobuf:"bytes,3,rep,name=plugin_config,json=pluginConfig,proto3" json:"plugin_config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Capability tokens the plugin declared in its manifest `requires:`
+	// (manifest.RequiredCapabilities()). The plugin SDK validates, at Init, that
+	// every non-exempt host capability its code can consume (via an implemented
+	// *Aware interface) appears here, failing load otherwise (INV-PLUGIN-54).
+	DeclaredCapabilities []string `protobuf:"bytes,4,rep,name=declared_capabilities,json=declaredCapabilities,proto3" json:"declared_capabilities,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ServiceConfig) Reset() {
@@ -273,6 +278,13 @@ func (x *ServiceConfig) GetRequiredServices() map[string]string {
 func (x *ServiceConfig) GetPluginConfig() map[string]string {
 	if x != nil {
 		return x.PluginConfig
+	}
+	return nil
+}
+
+func (x *ServiceConfig) GetDeclaredCapabilities() []string {
+	if x != nil {
+		return x.DeclaredCapabilities
 	}
 	return nil
 }
@@ -1212,11 +1224,12 @@ var File_holomush_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x1fholomush/plugin/v1/plugin.proto\x12\x12holomush.plugin.v1\x1a\x1bbuf/validate/validate.proto\"\x82\x03\n" +
+	"\x1fholomush/plugin/v1/plugin.proto\x12\x12holomush.plugin.v1\x1a\x1bbuf/validate/validate.proto\"\xb7\x03\n" +
 	"\rServiceConfig\x12+\n" +
 	"\x11connection_string\x18\x01 \x01(\tR\x10connectionString\x12d\n" +
 	"\x11required_services\x18\x02 \x03(\v27.holomush.plugin.v1.ServiceConfig.RequiredServicesEntryR\x10requiredServices\x12X\n" +
-	"\rplugin_config\x18\x03 \x03(\v23.holomush.plugin.v1.ServiceConfig.PluginConfigEntryR\fpluginConfig\x1aC\n" +
+	"\rplugin_config\x18\x03 \x03(\v23.holomush.plugin.v1.ServiceConfig.PluginConfigEntryR\fpluginConfig\x123\n" +
+	"\x15declared_capabilities\x18\x04 \x03(\tR\x14declaredCapabilities\x1aC\n" +
 	"\x15RequiredServicesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a?\n" +
