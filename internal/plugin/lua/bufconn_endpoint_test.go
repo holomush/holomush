@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/session"
@@ -265,4 +266,64 @@ end
 			require.NoError(t, err)
 		})
 	}
+}
+
+// TestActorStampReachesServerSideThroughRealEndpoint proves that the
+// newActorStampInterceptor (holomush-eykuh.4.5) stamps {ActorPlugin, pluginName}
+// onto the server-side handler context through the REAL newPluginEndpoint wiring
+// — not just the isolated interceptor unit. This closes the gap identified in
+// eykuh.2.11: without the interceptor, luaHostCapAdapter.LookupActor returned
+// ACTOR_NOT_FOUND because plugins.NewInProcessConn drops context values and the
+// server-side ctx was bare.
+//
+// Proof shape: EvalService.Evaluate calls LookupActor internally. With the
+// actor stamp interceptor installed (the production path), LookupActor succeeds
+// because {ActorPlugin, pluginName} is stamped on ctx by the interceptor before
+// the handler runs. The call then proceeds past the identity seam and reaches the
+// ABAC engine (AllowAllEngine → Allowed: true). Without the interceptor the call
+// would fail at LookupActor with ACTOR_NOT_FOUND, never reaching the engine.
+//
+// This test exercises the real newPluginEndpoint path (actor interceptor + capability
+// interceptor + LuaDefaultSet servers), proving actor transport through the
+// production wiring — not via a fake interceptor or stub.
+func TestActorStampReachesServerSideThroughRealEndpoint(t *testing.T) {
+	const pluginName = "actor-proof-plugin"
+
+	// Wire an AllowAllEngine so EvalService.Evaluate proceeds past the engine-nil
+	// guard and actually calls LookupActor. Without the actor stamp, LookupActor
+	// returns ACTOR_NOT_FOUND; with it, LookupActor succeeds and the engine allows.
+	adapter := newLuaHostCapAdapter(hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine())))
+
+	// Declare the "eval" capability so the capability interceptor permits the call.
+	ep, err := newPluginEndpoint(adapter, &plugins.Manifest{
+		Name: pluginName,
+		Requires: []plugins.Dependency{
+			{Kind: plugins.DependencyCapability, Name: "eval"},
+		},
+	})
+	require.NoError(t, err)
+	defer ep.Close()
+
+	client := hostv1.NewEvalServiceClient(ep.Conn())
+	// Use "command:foo" as the resource: the "command" type has a carve-out in
+	// pluginauthz.Evaluate (commandResourceType) that bypasses the owned-types
+	// entitlement check. Lua plugins own no resource types, so any plugin-typed
+	// resource (e.g. "scene:…") would fail EVALUATE_UNENTITLED_TYPE before the
+	// engine is consulted. The command carve-out lets us reach the engine and
+	// confirm the actor identity seam is passed.
+	resp, err := client.Evaluate(context.Background(), &hostv1.EvaluateRequest{
+		Action:   "execute",
+		Resource: "command:foo",
+	})
+
+	// The call must succeed: the actor stamp interceptor stamped {ActorPlugin,
+	// pluginName} → LookupActor found the actor → entitlement carve-out for
+	// "command" → AllowAllEngine allowed → response returned. Any error here means
+	// the actor did NOT reach the server side (e.g. ACTOR_NOT_FOUND from LookupActor).
+	require.NoError(t, err,
+		"EvalService.Evaluate must succeed when the actor stamp interceptor provides the identity: "+
+			"an error means the actor did not reach the server-side handler context")
+	require.NotNil(t, resp)
+	assert.True(t, resp.GetAllowed(),
+		"AllowAllEngine must produce an allow once the identity seam is passed")
 }

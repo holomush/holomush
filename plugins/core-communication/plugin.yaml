@@ -8,6 +8,7 @@ lua-plugin:
   entry: main.lua
 requires:
   - capability: session
+  - capability: session.admin
 emits: [location, character]
 history_scope: grid
 actor_kinds_claimable: [plugin, character]

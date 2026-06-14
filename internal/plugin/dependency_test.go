@@ -276,3 +276,120 @@ func TestResolveResultMisdeclaredCapabilityReportedEvenWhenOptional(t *testing.T
 	require.Len(t, res.Unsatisfied, 1)
 	assert.Equal(t, "MISDECLARED_DEPENDENCY", res.Unsatisfied[0].Reason)
 }
+
+// --- Grants tests ---
+
+func TestResolveDependencyOrderEmitsGrantsForDeclaredCaps(t *testing.T) {
+	// A plugin declaring two known capabilities should have both tokens granted.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "core-objects", Requires: []Dependency{
+			{Kind: DependencyCapability, Name: "property"},
+			{Kind: DependencyCapability, Name: "world.query"},
+		}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, DefaultCapabilityVocabulary())
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"property", "world.query"}, res.Grants["core-objects"])
+}
+
+func TestResolveDependencyOrderGrantsExcludeUndeclared(t *testing.T) {
+	// A plugin with no requires should have an empty (not nil) grants slice.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "core-help"}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, DefaultCapabilityVocabulary())
+	require.NoError(t, err)
+	assert.Empty(t, res.Grants["core-help"])
+}
+
+func TestResolveDependencyOrderGrantsServiceDepByName(t *testing.T) {
+	// A plugin declaring a service dep that resolves should be granted the service name.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{
+			{Kind: DependencyService, Name: "svc-a"},
+		}}},
+		{Manifest: &Manifest{Name: "provider", Provides: []string{"svc-a"}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	assert.Contains(t, res.Grants["consumer"], "svc-a")
+}
+
+func TestResolveDependencyOrderGrantsExcludeOptionalServiceWithNoProvider(t *testing.T) {
+	// An optional service dep with no provider should not be granted.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "plugin-x", Requires: []Dependency{
+			{Kind: DependencyService, Name: "holomush.absent.v1.X", Optional: true},
+		}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	assert.Empty(t, res.Unsatisfied)
+	assert.NotContains(t, res.Grants["plugin-x"], "holomush.absent.v1.X")
+}
+
+func TestResolveDependencyOrderGrantsExcludeMisdeclaredCapability(t *testing.T) {
+	// A capability dep naming a plugin-provided service (MISDECLARED) should not be granted.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{
+			{Kind: DependencyCapability, Name: "holomush.scene.v1.SceneService"},
+		}}},
+		{Manifest: &Manifest{Name: "provider", Provides: []string{"holomush.scene.v1.SceneService"}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	require.Len(t, res.Unsatisfied, 1)
+	assert.Equal(t, "MISDECLARED_DEPENDENCY", res.Unsatisfied[0].Reason)
+	assert.NotContains(t, res.Grants["consumer"], "holomush.scene.v1.SceneService")
+}
+
+func TestResolveDependencyOrderGrantsExcludeVersionUnsatisfiedService(t *testing.T) {
+	// A non-optional service dep with a version mismatch should not be granted.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{
+			{Kind: DependencyService, Name: "svc-a", Version: ">=2.0.0"},
+		}}},
+		{Manifest: &Manifest{Name: "provider", Version: "1.0.0", Provides: []string{"svc-a"}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	require.Len(t, res.Unsatisfied, 1)
+	assert.Equal(t, "VERSION_UNSATISFIED", res.Unsatisfied[0].Reason)
+	assert.NotContains(t, res.Grants["consumer"], "svc-a")
+}
+
+func TestResolveDependencyOrderGrantsExcludeOptionalVersionMismatch(t *testing.T) {
+	// An OPTIONAL service dep whose provider exists but fails the version
+	// constraint must NOT be granted. It is graceful-degrade: not recorded in
+	// Unsatisfied, but the consumer still resolves successfully in Ordered.
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{
+			{Kind: DependencyService, Name: "svc-b", Version: ">=3.0.0", Optional: true},
+		}}},
+		{Manifest: &Manifest{Name: "provider", Version: "2.5.0", Provides: []string{"svc-b"}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, nil, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	assert.Empty(t, res.Unsatisfied, "graceful-degrade: optional version mismatch must not record Unsatisfied")
+	assert.NotContains(t, res.Grants["consumer"], "svc-b", "version-incompatible provider must not be granted even when optional")
+	orderedNames := make([]string, 0, len(res.Ordered))
+	for _, dp := range res.Ordered {
+		orderedNames = append(orderedNames, dp.Manifest.Name)
+	}
+	assert.Contains(t, orderedNames, "consumer", "consumer must still appear in Ordered")
+}
+
+func TestResolveDependencyOrderGrantsServerProvidedService(t *testing.T) {
+	// A service dep satisfied by a server-provided service (no plugin provider)
+	// must be granted without a version check — the host carries no Manifest.Version.
+	serverSvcs := []string{"holomush.world.v1.WorldService"}
+	plugins := []*DiscoveredPlugin{
+		{Manifest: &Manifest{Name: "consumer", Requires: []Dependency{
+			{Kind: DependencyService, Name: "holomush.world.v1.WorldService"},
+		}}},
+	}
+	res, err := ResolveDependencyOrder(plugins, serverSvcs, NewCapabilityVocabulary())
+	require.NoError(t, err)
+	assert.Empty(t, res.Unsatisfied)
+	assert.Contains(t, res.Grants["consumer"], "holomush.world.v1.WorldService")
+}

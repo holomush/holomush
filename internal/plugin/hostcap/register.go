@@ -22,9 +22,10 @@ const (
 	// land (Tasks 3–5).
 	BinaryDefaultSet CapabilitySet = iota
 	// LuaDefaultSet is the capability set the Lua runtime registers. It extends
-	// BinaryDefaultSet with four Lua-only services: PropertyService,
-	// SessionService, SessionAdminService, and WorldQueryService. All four are
-	// fully enabled as of Task 5 (Phase 0 capstone).
+	// BinaryDefaultSet with five Lua-only services: PropertyService,
+	// SessionService, SessionAdminService, WorldQueryService, and
+	// WorldMutationService. All five are fully enabled as of Task 1
+	// (holomush-eykuh.4.1).
 	LuaDefaultSet
 )
 
@@ -35,10 +36,11 @@ const (
 // BinaryDefaultSet; the Lua per-plugin server (§1, Task 7) calls it with
 // LuaDefaultSet.
 //
-// The LuaDefaultSet branch registers the four Lua-only services:
-// PropertyService (Task 3), SessionService + SessionAdminService (Task 4), and
-// WorldQueryService (Task 5). All four servers now exist; LuaDefaultSet is
-// fully enabled.
+// The LuaDefaultSet branch registers the five Lua-only services:
+// PropertyService (Task 3), SessionService + SessionAdminService (Task 4),
+// WorldQueryService (Task 5), and WorldMutationService (Task 1,
+// holomush-eykuh.4.1). All five servers now exist; LuaDefaultSet is fully
+// enabled.
 func RegisterCapabilities(srv *grpc.Server, base hostCapabilityBase, set CapabilitySet) {
 	hostv1.RegisterFocusServiceServer(srv, &focusServer{hostCapabilityBase: base})
 	hostv1.RegisterEmitServiceServer(srv, &emitServer{hostCapabilityBase: base})
@@ -55,6 +57,7 @@ func RegisterCapabilities(srv *grpc.Server, base hostCapabilityBase, set Capabil
 		hostv1.RegisterSessionServiceServer(srv, &sessionServer{hostCapabilityBase: base})
 		hostv1.RegisterSessionAdminServiceServer(srv, &sessionAdminServer{hostCapabilityBase: base})
 		hostv1.RegisterWorldQueryServiceServer(srv, &worldServer{hostCapabilityBase: base})
+		hostv1.RegisterWorldMutationServiceServer(srv, &worldMutationServer{hostCapabilityBase: base})
 	}
 }
 

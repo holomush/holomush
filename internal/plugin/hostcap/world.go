@@ -11,6 +11,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
@@ -205,4 +207,187 @@ func (s *worldServer) QueryObject(ctx context.Context, req *hostv1.QueryObjectRe
 		resp.OwnerId = obj.OwnerID.String()
 	}
 	return resp, nil
+}
+
+// FindLocation resolves a location by display name within the calling plugin's
+// subject scope, mirroring the Lua holomush.find_location(name) host function
+// (worldMutator.FindLocationByName). Returns the matched location's id and
+// name. Maps world.ErrNotFound to codes.NotFound; other inner errors are logged
+// and replaced with a generic Internal (no leak per grpc-errors.md).
+//
+// Note: FindLocation requires WorldMutator() to be non-nil (unlike the
+// WorldQuerier-backed query RPCs). When WorldMutator() is nil this RPC returns
+// codes.Unimplemented.
+func (s *worldServer) FindLocation(ctx context.Context, req *hostv1.FindLocationRequest) (*hostv1.FindLocationResponse, error) {
+	mutator := s.host.WorldMutator()
+	if mutator == nil {
+		return nil, status.Errorf(codes.Unimplemented, "world lookup not supported")
+	}
+	subject := access.PluginSubject(s.pluginName)
+	loc, err := mutator.FindLocationByName(ctx, subject, req.GetName())
+	if err != nil {
+		if errors.Is(err, world.ErrNotFound) {
+			return nil, status.Errorf(codes.NotFound, "not found")
+		}
+		errutil.LogErrorContext(ctx, "world.find_location failed", err, "plugin", s.pluginName)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	if loc == nil {
+		errutil.LogErrorContext(ctx, "world.find_location returned nil without error", errNilWorldResult, "plugin", s.pluginName)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	return &hostv1.FindLocationResponse{
+		Id:   loc.ID.String(),
+		Name: loc.Name,
+	}, nil
+}
+
+// worldMutationServer implements holomush.plugin.host.v1.WorldMutationService.
+// It delegates CreateLocation, CreateExit, and CreateObject to the plugin-
+// subject-stamped WorldMutator obtained from the HostCapabilities port,
+// mirroring the existing Lua holomush.create_location / create_exit /
+// create_object host functions so both runtimes share identical semantics
+// (INV-PLUGIN-49).
+type worldMutationServer struct {
+	hostv1.UnimplementedWorldMutationServiceServer
+	hostCapabilityBase
+}
+
+// NewWorldMutationServer builds the WorldMutationService capability server
+// bound to base. Returned as the narrow service interface so callers cannot
+// reach into the struct.
+func NewWorldMutationServer(base hostCapabilityBase) hostv1.WorldMutationServiceServer {
+	return &worldMutationServer{hostCapabilityBase: base}
+}
+
+// CreateLocation creates a new location with the given name, description, and
+// validated location type, mirroring the Lua holomush.create_location(name,
+// description, type) host function (mutator.CreateLocation). Returns the new
+// location's id and name. Returns Unimplemented when the world mutator is not
+// configured; returns InvalidArgument for an invalid location type; other inner
+// errors are logged and replaced with a generic Internal (no leak per
+// grpc-errors.md).
+func (s *worldMutationServer) CreateLocation(ctx context.Context, req *hostv1.CreateLocationRequest) (*hostv1.CreateLocationResponse, error) {
+	mutator := s.host.WorldMutator()
+	if mutator == nil {
+		return nil, status.Errorf(codes.Unimplemented, "world mutation not supported")
+	}
+
+	locType := world.LocationType(req.GetType())
+	if err := locType.Validate(); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid location type")
+	}
+
+	loc := &world.Location{
+		ID:          idgen.New(),
+		Name:        req.GetName(),
+		Description: req.GetDescription(),
+		Type:        locType,
+	}
+	subject := access.PluginSubject(s.pluginName)
+	if err := mutator.CreateLocation(ctx, subject, loc); err != nil {
+		errutil.LogErrorContext(ctx, "world.create_location failed", err, "plugin", s.pluginName)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	return &hostv1.CreateLocationResponse{
+		Id:   loc.ID.String(),
+		Name: loc.Name,
+	}, nil
+}
+
+// CreateExit creates a new exit from one location to another, optionally
+// bidirectional with a return name, mirroring the Lua
+// holomush.create_exit(from_id, to_id, name, opts) host function
+// (mutator.CreateExit). Returns the new exit's id and name. Returns
+// Unimplemented when the world mutator is not configured; returns
+// InvalidArgument for unparseable ULIDs; other inner errors are logged and
+// replaced with a generic Internal (no leak per grpc-errors.md).
+func (s *worldMutationServer) CreateExit(ctx context.Context, req *hostv1.CreateExitRequest) (*hostv1.CreateExitResponse, error) {
+	mutator := s.host.WorldMutator()
+	if mutator == nil {
+		return nil, status.Errorf(codes.Unimplemented, "world mutation not supported")
+	}
+
+	fromID, err := ulid.Parse(req.GetFromId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid from_id")
+	}
+	toID, err := ulid.Parse(req.GetToId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid to_id")
+	}
+
+	exit := &world.Exit{
+		ID:             idgen.New(),
+		FromLocationID: fromID,
+		ToLocationID:   toID,
+		Name:           req.GetName(),
+		Visibility:     world.VisibilityAll,
+		Bidirectional:  req.GetBidirectional(),
+		ReturnName:     req.GetReturnName(),
+	}
+	subject := access.PluginSubject(s.pluginName)
+	if err := mutator.CreateExit(ctx, subject, exit); err != nil {
+		errutil.LogErrorContext(ctx, "world.create_exit failed", err, "plugin", s.pluginName)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	return &hostv1.CreateExitResponse{
+		Id:   exit.ID.String(),
+		Name: exit.Name,
+	}, nil
+}
+
+// CreateObject creates a new object with exactly one containment placement
+// (location, holding character, or containing object) and optional description,
+// mirroring the Lua holomush.create_object(name, opts) host function
+// (mutator.CreateObject). Returns the new object's id and name. Returns
+// Unimplemented when the world mutator is not configured; returns
+// InvalidArgument for unparseable placement ULIDs or a missing placement;
+// other inner errors are logged and replaced with a generic Internal (no leak
+// per grpc-errors.md).
+func (s *worldMutationServer) CreateObject(ctx context.Context, req *hostv1.CreateObjectRequest) (*hostv1.CreateObjectResponse, error) {
+	mutator := s.host.WorldMutator()
+	if mutator == nil {
+		return nil, status.Errorf(codes.Unimplemented, "world mutation not supported")
+	}
+
+	var containment world.Containment
+	switch p := req.GetPlacement().(type) {
+	case *hostv1.CreateObjectRequest_LocationId:
+		id, err := ulid.Parse(p.LocationId)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid location_id")
+		}
+		containment = world.InLocation(id)
+	case *hostv1.CreateObjectRequest_CharacterId:
+		id, err := ulid.Parse(p.CharacterId)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid character_id")
+		}
+		containment = world.HeldByCharacter(id)
+	case *hostv1.CreateObjectRequest_ContainerId:
+		id, err := ulid.Parse(p.ContainerId)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid container_id")
+		}
+		containment = world.ContainedInObject(id)
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "placement is required")
+	}
+
+	obj, err := world.NewObjectWithID(idgen.New(), req.GetName(), containment)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid object")
+	}
+	obj.Description = req.GetDescription()
+
+	subject := access.PluginSubject(s.pluginName)
+	if err := mutator.CreateObject(ctx, subject, obj); err != nil {
+		errutil.LogErrorContext(ctx, "world.create_object failed", err, "plugin", s.pluginName)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	return &hostv1.CreateObjectResponse{
+		Id:   obj.ID.String(),
+		Name: obj.Name,
+	}, nil
 }

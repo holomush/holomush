@@ -75,6 +75,7 @@ func TestRegisterCapabilitiesRegistersLuaDefaultSet(t *testing.T) {
 		"holomush.plugin.host.v1.SessionService",
 		"holomush.plugin.host.v1.SessionAdminService",
 		"holomush.plugin.host.v1.WorldQueryService",
+		"holomush.plugin.host.v1.WorldMutationService",
 	}
 	for _, svc := range required {
 		if _, ok := info[svc]; !ok {
@@ -105,6 +106,9 @@ func TestRegisterCapabilitiesRegistersBinaryDefaultSet(t *testing.T) {
 	}
 	if _, ok := info["holomush.plugin.host.v1.WorldQueryService"]; ok {
 		t.Fatal("binary default set must not register WorldQueryService")
+	}
+	if _, ok := info["holomush.plugin.host.v1.WorldMutationService"]; ok {
+		t.Fatal("binary default set must not register WorldMutationService")
 	}
 	if _, ok := info["holomush.plugin.host.v1.SessionAdminService"]; ok {
 		t.Fatal("binary default set must not register SessionAdminService")

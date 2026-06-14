@@ -33,6 +33,7 @@ var (
 	_ plugins.FocusDepsConfigurer    = (*Host)(nil)
 	_ plugins.ReadbackDepsConfigurer = (*Host)(nil)
 	_ plugins.SettingsDepsConfigurer = (*Host)(nil)
+	_ plugins.PluginGrantsConfigurer = (*Host)(nil)
 )
 
 // luaPlugin holds compiled Lua code for a plugins.
@@ -62,6 +63,12 @@ type Host struct {
 	// (plugin-runtime-symmetry). Wired at construction via
 	// WithDispatchAttributeResolver.
 	dispatchAttrResolver pluginauthz.AttributeResolver
+	// pluginGrants is the per-plugin least-privilege grant set from the
+	// resolver (holomush-eykuh.4.7). A nil map means "not set" → fall back
+	// to manifest.RequiredCapabilities() at delivery time (no-registry path,
+	// existing tests). A non-nil map is authoritative: only tokens present
+	// in pluginGrants[name] are passed to RegisterHostCaps.
+	pluginGrants map[string][]string
 }
 
 // HostOption customizes Host construction.
@@ -122,6 +129,51 @@ func WithPluginConfigOverrides(o map[string]map[string]string) HostOption {
 // (plugin-runtime-symmetry). Satisfied by access/policy/attribute.Resolver.
 func WithDispatchAttributeResolver(r pluginauthz.AttributeResolver) HostOption {
 	return func(h *Host) { h.dispatchAttrResolver = r }
+}
+
+// WithPluginGrants threads the resolver's per-plugin grant set into the host.
+// When set (non-nil), it is the single least-privilege authority for what
+// capability tokens are injected into Lua at delivery time via RegisterHostCaps
+// — only tokens present in grants[pluginName] are passed to RegisterHostCaps.
+//
+// A nil map (the default) means the host falls back to
+// manifest.RequiredCapabilities() at delivery time, preserving backward
+// compatibility for the no-registry path and existing tests.
+//
+// The binary host has a symmetric option (plugin-runtime-symmetry).
+func WithPluginGrants(grants map[string][]string) HostOption {
+	return func(h *Host) { h.pluginGrants = grants }
+}
+
+// SetPluginGrants implements plugins.PluginGrantsConfigurer. The Manager calls
+// this before starting plugin loads when a resolver is configured, so that
+// every subsequent delivery uses the grant set rather than the manifest.
+// A nil grants map restores the nil state (manifest fallback).
+func (h *Host) SetPluginGrants(grants map[string][]string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pluginGrants = grants
+}
+
+// grantedSubset returns the elements of requested that appear in the granted
+// set. When granted is nil or empty the result is nil (no caps injected on
+// an explicitly empty grant). This helper is used by both delivery paths that
+// call RegisterHostCaps so the grant filter is applied in one place.
+func grantedSubset(requested, granted []string) []string {
+	if len(granted) == 0 {
+		return nil
+	}
+	grantSet := make(map[string]bool, len(granted))
+	for _, g := range granted {
+		grantSet[g] = true
+	}
+	out := make([]string, 0, len(requested))
+	for _, r := range requested {
+		if grantSet[r] {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // NewHost creates a new Lua plugin host without host functions.
@@ -419,6 +471,10 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	// RLock is safe. We snapshot rather than keep p alive to avoid holding
 	// the lock during the (potentially slow) hostFuncs.Register call.
 	declaredCaps := p.manifest.RequiredCapabilities()
+	if h.pluginGrants != nil {
+		// pluginGrants is set (resolver path) — filter to the granted subset.
+		declaredCaps = grantedSubset(declaredCaps, h.pluginGrants[name])
+	}
 	endpoint := p.endpoint // nil when hostFuncs is nil (NewHost path)
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
@@ -521,6 +577,10 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	// (intra-Lua entrypoint parity). Both p.endpoint and the manifest slice are
 	// written only under h.mu.Lock in Load/Unload.
 	declaredCaps := p.manifest.RequiredCapabilities()
+	if h.pluginGrants != nil {
+		// pluginGrants is set (resolver path) — filter to the granted subset.
+		declaredCaps = grantedSubset(declaredCaps, h.pluginGrants[name])
+	}
 	endpoint := p.endpoint // nil when hostFuncs is nil (NewHost path)
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
@@ -645,6 +705,10 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 	// on_event (intra-Lua entrypoint parity). Both p.endpoint and the manifest
 	// slice are written only under h.mu.Lock in Load/Unload.
 	declaredCaps := p.manifest.RequiredCapabilities()
+	if h.pluginGrants != nil {
+		// pluginGrants is set (resolver path) — filter to the granted subset.
+		declaredCaps = grantedSubset(declaredCaps, h.pluginGrants[name])
+	}
 	endpoint := p.endpoint // nil when hostFuncs is nil (NewHost path)
 	// Snapshot the merged config under the read lock: Load mutates
 	// h.mergedConfigs under h.mu, so reading it unlocked below races
