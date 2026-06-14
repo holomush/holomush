@@ -9,7 +9,13 @@ const grepInvert = process.env.HOLOMUSH_RUN_QUARANTINED === "1"
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 30000,
+  // Per-test budget. CI runners (Namespace + Testcontainers Cloud) deliver
+  // events markedly slower than a local box under two-BrowserContext specs
+  // (e.g. scenes.spec.ts multi-tab tests: a say → location → JetStream → WS →
+  // DOM round-trip racing a second tab's workspace load). Doubling the budget
+  // in CI tolerates that latency without masking a real failure — a genuine
+  // bug still fails, just later (holomush-mwmzt). Local runs stay at 30s.
+  timeout: process.env.CI ? 60000 : 30000,
   grepInvert,
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:8080",
