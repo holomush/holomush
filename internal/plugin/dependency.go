@@ -30,6 +30,22 @@ type ResolveResult struct {
 	Grants map[string][]string
 }
 
+// CloneGrants returns a deep copy of a per-plugin grant set (map keys plus each
+// token slice). Both runtime hosts snapshot the resolver's grants on store so a
+// later mutation of the caller-owned map cannot silently broaden or narrow the
+// least-privilege set without another resolver pass (INV-PLUGIN-45). A nil input
+// returns nil so the hosts' "nil ⇒ manifest fallback" sentinel is preserved.
+func CloneGrants(grants map[string][]string) map[string][]string {
+	if grants == nil {
+		return nil
+	}
+	out := make(map[string][]string, len(grants))
+	for name, tokens := range grants {
+		out[name] = append([]string(nil), tokens...)
+	}
+	return out
+}
+
 // ResolveDependencyOrder validates and orders the unified dependency graph and
 // returns a structured result.
 //

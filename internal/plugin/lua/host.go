@@ -142,7 +142,7 @@ func WithDispatchAttributeResolver(r pluginauthz.AttributeResolver) HostOption {
 //
 // The binary host has a symmetric option (plugin-runtime-symmetry).
 func WithPluginGrants(grants map[string][]string) HostOption {
-	return func(h *Host) { h.pluginGrants = grants }
+	return func(h *Host) { h.pluginGrants = plugins.CloneGrants(grants) }
 }
 
 // SetPluginGrants implements plugins.PluginGrantsConfigurer. The Manager calls
@@ -152,7 +152,7 @@ func WithPluginGrants(grants map[string][]string) HostOption {
 func (h *Host) SetPluginGrants(grants map[string][]string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.pluginGrants = grants
+	h.pluginGrants = plugins.CloneGrants(grants)
 }
 
 // grantedSubset returns the elements of requested that appear in the granted

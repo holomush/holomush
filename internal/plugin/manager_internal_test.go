@@ -30,7 +30,8 @@ func TestResolveLoadOrderPolicyFatalPerErrorClass(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			err := applyResolvePolicy(c.res, defaultResolvePolicy)
 			require.Error(t, err)
-			oopsErr, _ := oops.AsOops(err)
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok, "error must be an oops error to assert its code")
 			assert.Equal(t, "PLUGIN_DEPENDENCY_UNSATISFIED", oopsErr.Code())
 		})
 	}

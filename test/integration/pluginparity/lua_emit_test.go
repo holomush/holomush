@@ -146,7 +146,7 @@ var _ = Describe("Lua emit through the production bridge", func() {
 		})
 
 		emitEvents, err := host.DeliverEvent(dispatchCtx, pluginName, pluginsdk.Event{
-			ID:     "01HEVT0000000000000000LUA1",
+			ID:     core.NewULID().String(),
 			Stream: "location.01HLOC0000000000000000000",
 			Type:   "test:ping",
 		})
@@ -192,7 +192,7 @@ var _ = Describe("Lua emit through the production bridge", func() {
 		})
 
 		emitEvents, err := host.DeliverEvent(dispatchCtx, pluginName, pluginsdk.Event{
-			ID:     "01HEVT0000000000000000LUA2",
+			ID:     core.NewULID().String(),
 			Stream: "location.01HLOC0000000000000000000",
 			Type:   "test:ping",
 		})
