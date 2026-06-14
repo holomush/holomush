@@ -4,6 +4,28 @@
 import { test, expect, db, getClientSessionId, getClientCharacterName } from './helpers/fixtures';
 import type { Page } from '@playwright/test';
 
+// WebSocket reconnect, JetStream replay, and the async command-history RPC are
+// markedly slower and more variable on CI runners than locally. The four
+// reconnect/session tests below were quarantined for flaking the required E2E
+// gate on those operations (holomush-0jzs); they need headroom on TWO separate
+// budgets, because neither rescues the other:
+//   - RECONNECT_TIMEOUT / RECONNECT_POLL_TIMEOUT are per-assertion ceilings for
+//     the individual reconnect-sensitive waits. A single WS round-trip that
+//     exceeds its own ceiling fails that assertion no matter how large the
+//     per-test budget is.
+//   - RECONNECT_TEST_TIMEOUT is the per-test budget. With the wider per-assertion
+//     ceilings, a test's sequential waits can sum past the 60s CI suite default
+//     (playwright.config.ts), so each reconnect test calls test.setTimeout() to
+//     avoid being killed mid-test. A per-test budget cannot, in turn, widen an
+//     individual assertion's ceiling — hence both knobs.
+// Local keeps the tighter values so a genuine local hang still fails reasonably
+// fast. The CI per-test budget targets realistic slow-CI (a few waits running
+// long at once), not the pathological all-ceilings-max sum; re-quarantine is the
+// backstop if any test still flakes in CI.
+const RECONNECT_TIMEOUT = process.env.CI ? 30000 : 10000;
+const RECONNECT_POLL_TIMEOUT = process.env.CI ? 15000 : 5000;
+const RECONNECT_TEST_TIMEOUT = process.env.CI ? 150000 : 60000;
+
 /**
  * Connect as guest via the landing page and wait for the terminal to load.
  * All terminal tests must go through the auth flow since /terminal is
@@ -82,7 +104,7 @@ test.describe('Terminal UI', () => {
     // regression of fujt (gate resolves at REPLAY_COMPLETE only)
     // would put this event in the dimmed scrollback under load.
     const dimmedCount = await page
-      .locator('.dimmed [data-testid="event"]')
+      .locator('.line.replay [data-testid="event"]')
       .filter({ hasText: `live-${token}` })
       .count();
     expect(dimmedCount).toBe(0);
@@ -168,7 +190,7 @@ test.describe('Terminal UI', () => {
     // propagated client-side, or the server-side notAfterMs filter
     // isn't applied).
     const dimmedCount = await page
-      .locator('.dimmed [data-testid="event"]')
+      .locator('.line.replay [data-testid="event"]')
       .filter({ hasText: `live-${token}` })
       .count();
     expect(dimmedCount).toBe(0);
@@ -357,21 +379,24 @@ test.describe('Terminal UI', () => {
     await expect(input).toHaveValue('look');
   });
 
-  test('reconnect receives live events after replay', { tag: ['@quarantine', '@holomush-0jzs'] }, async ({ page }) => {
+  test('reconnect receives live events after replay', async ({ page }) => {
+    test.setTimeout(RECONNECT_TEST_TIMEOUT);
     await connectAsGuest(page);
 
-    // Reload — session persists, stream reconnects
+    // Reload — session persists, stream reconnects (CI WS-reconnect latency).
     await page.reload();
-    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: RECONNECT_TIMEOUT });
 
-    // Send a command with a unique token so we can distinguish it from replayed events
+    // Send a command with a unique token so we can distinguish it from replayed events.
+    // The live-event round-trip (say → JetStream → re-established Subscribe → DOM)
+    // is the reconnect-sensitive wait here.
     const token = `live-${Date.now()}`;
     const input = page.locator('textarea');
     await input.fill(`say ${token}`);
     await input.press('Enter');
     await expect(
       page.locator('[data-testid="event"]').filter({ hasText: token })
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: RECONNECT_TIMEOUT });
   });
 
   // B9: WebQueryStreamHistory is reachable through the web gateway and proxies
@@ -430,7 +455,12 @@ test.describe('Terminal UI', () => {
     expect(matched, `expected event with "${token}" in history response`).toBe(true);
   });
 
-  test('page reload replays prior events from multiple guests', { tag: ['@quarantine', '@holomush-0jzs'] }, async ({ browser }) => {
+  test('page reload replays prior events from multiple guests', async ({ browser }) => {
+    // The heaviest reconnect spec (two contexts, four says, reload + replay of
+    // three events): its sequential reconnect ceilings sum the highest, so the
+    // shared per-test budget matters most here. See RECONNECT_TEST_TIMEOUT above.
+    test.setTimeout(RECONNECT_TEST_TIMEOUT);
+
     // Two independent browser contexts (separate sessions, same starting location)
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
@@ -472,20 +502,20 @@ test.describe('Terminal UI', () => {
       .allTextContents();
     expect(eventsBefore).toHaveLength(3);
 
-    // --- Page reload ---
+    // --- Page reload --- (reconnect + replay; CI-sensitive)
     await page1.reload();
-    await expect(page1.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+    await expect(page1.locator('.terminal-layout')).toBeVisible({ timeout: RECONNECT_TIMEOUT });
 
     // All three events should reappear after replay
     await expect(
       page1.locator('[data-testid="event"]').filter({ hasText: `alpha-${token}` }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: RECONNECT_TIMEOUT });
     await expect(
       page1.locator('[data-testid="event"]').filter({ hasText: `bravo-${token}` }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: RECONNECT_TIMEOUT });
     await expect(
       page1.locator('[data-testid="event"]').filter({ hasText: `charlie-${token}` }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: RECONNECT_TIMEOUT });
 
     // Verify replay order matches original order
     const eventsAfter = await page1
@@ -495,14 +525,17 @@ test.describe('Terminal UI', () => {
     expect(eventsAfter).toHaveLength(3);
     expect(eventsAfter).toEqual(eventsBefore);
 
-    // Replayed events should be dimmed (opacity 0.5 via .dimmed class)
+    // Replayed events render in the replay chunk (.line.replay, dimmed color
+    // via --color-scrollback-replayed); the LIVE separator divides them from
+    // live events. (The pre-refactor `.dimmed` class no longer exists; replayed
+    // lines are marked structurally by .line.replay instead.)
     await expect(async () => {
       const dimmedCount = await page1
-        .locator('.dimmed [data-testid="event"]')
+        .locator('.line.replay [data-testid="event"]')
         .filter({ hasText: new RegExp(`(alpha|bravo|charlie)-${token}`) })
         .count();
       expect(dimmedCount).toBe(3);
-    }).toPass({ timeout: 5000 });
+    }).toPass({ timeout: RECONNECT_POLL_TIMEOUT });
 
     // Live event after replay should NOT be dimmed
     const reloadedInput = page1.locator('textarea');
@@ -510,9 +543,9 @@ test.describe('Terminal UI', () => {
     await reloadedInput.press('Enter');
     await expect(
       page1.locator('[data-testid="event"]').filter({ hasText: `delta-${token}` }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: RECONNECT_TIMEOUT });
     const deltaDimmed = await page1
-      .locator('.dimmed [data-testid="event"]')
+      .locator('.line.replay [data-testid="event"]')
       .filter({ hasText: `delta-${token}` })
       .count();
     expect(deltaDimmed).toBe(0);
@@ -520,7 +553,7 @@ test.describe('Terminal UI', () => {
     // Separator between replayed and live events.
     await expect(
       page1.locator('.sep-live').filter({ hasText: 'LIVE' }),
-    ).toBeVisible({ timeout: 5000 });
+    ).toBeVisible({ timeout: RECONNECT_POLL_TIMEOUT });
 
     // NOTE(F4): Post-F1, say events are emitted via the plugin event emitter
     // directly to JetStream (not to the PostgreSQL `events` table). The UI
@@ -606,7 +639,8 @@ test.describe('Terminal UI', () => {
     await ctx2.close();
   });
 
-  test('command history persists across reconnect', { tag: ['@quarantine', '@holomush-0jzs'] }, async ({ page }) => {
+  test('command history persists across reconnect', async ({ page }) => {
+    test.setTimeout(RECONNECT_TEST_TIMEOUT);
     await connectAsGuest(page);
 
     // Send commands with unique tokens to avoid collision with other tests
@@ -625,9 +659,10 @@ test.describe('Terminal UI', () => {
 
     // Reload — session persists, history loaded from server via GetCommandHistory RPC
     await page.reload();
-    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: RECONNECT_TIMEOUT });
 
-    // Wait for command history to load from server (async RPC in CommandInput $effect)
+    // Wait for command history to load from server (async RPC in CommandInput $effect).
+    // The GetCommandHistory RPC is the reconnect-sensitive link here.
     const inputAfter = page.locator('textarea');
     await expect(inputAfter).toBeVisible();
     // Poll: ArrowUp should eventually produce the last command once history loads
@@ -636,7 +671,7 @@ test.describe('Terminal UI', () => {
       await inputAfter.press('ArrowUp');
       const val = await inputAfter.inputValue();
       expect(val).toBe(`say second-${token}`);
-    }).toPass({ timeout: 5000 });
+    }).toPass({ timeout: RECONNECT_POLL_TIMEOUT });
     await inputAfter.press('ArrowUp');
     await expect(inputAfter).toHaveValue(`say first-${token}`);
   });
@@ -659,7 +694,8 @@ test.describe('Terminal UI', () => {
     await expect(inputAfter).toHaveValue('say this is a long pose that I do not want to lose');
   });
 
-  test('draft does not leak across sessions', { tag: ['@quarantine', '@holomush-0jzs'] }, async ({ page }) => {
+  test('draft does not leak across sessions', async ({ page }) => {
+    test.setTimeout(RECONNECT_TEST_TIMEOUT);
     await connectAsGuest(page);
 
     // Type a draft and wait for debounced save
@@ -667,10 +703,11 @@ test.describe('Terminal UI', () => {
     await input.fill('leaked draft from old session');
     await page.waitForTimeout(700);
 
-    // Quit — navigates to character picker; auth guard may redirect to /login
+    // Quit — navigates to character picker; auth guard may redirect to /login.
+    // The quit→navigation round-trip is the CI-sensitive wait here.
     await input.fill('quit');
     await input.press('Enter');
-    await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/characters/, { timeout: RECONNECT_TIMEOUT });
 
     // Clear cookies so the new landing-page §4.4.4 pre-gate (added by
     // multi-tab-session-isolation) doesn't render the authenticated branch
