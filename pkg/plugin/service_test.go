@@ -659,6 +659,7 @@ func TestPluginServerAdapterInitInjectsFocusClientIntoServiceProvider(t *testing
 			RequiredServices: map[string]string{
 				PluginHostServiceName: "broker:7",
 			},
+			DeclaredCapabilities: []string{"focus", "stream.history"},
 		},
 	})
 	require.NoError(t, err)
@@ -697,9 +698,34 @@ func TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient(t *testing.T)
 			RequiredServices: map[string]string{
 				PluginHostServiceName: "broker:7",
 			},
+			DeclaredCapabilities: []string{"focus", "stream.history"},
 		},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, provider.sink, "expected EventSink injection")
 	assert.NotNil(t, provider.focusClient, "expected FocusClient injection")
+}
+
+// --- Capability declaration enforcement ---
+
+// focusUndeclaredProvider implements FocusClientAware but the InitRequest will
+// declare no capabilities — Init must fail closed (INV-PLUGIN-54).
+type focusUndeclaredProvider struct{ focusClient FocusClient }
+
+func (p *focusUndeclaredProvider) SetFocusClient(c FocusClient) { p.focusClient = c }
+
+func (p *focusUndeclaredProvider) Init(context.Context, *pluginv1.ServiceConfig) error { return nil }
+
+// RegisterServices satisfies ServiceProvider (service.go:46) — the registrar is
+// grpc.ServiceRegistrar, NOT *grpc.Server. Mirrors the existing dualAwareProvider.
+func (p *focusUndeclaredProvider) RegisterServices(grpc.ServiceRegistrar) {}
+
+// Verifies: INV-PLUGIN-54
+func TestPluginServerAdapterInitFailsClosedOnUndeclaredCapability(t *testing.T) {
+	adapter := &pluginServerAdapter{serviceProvider: &focusUndeclaredProvider{}}
+	_, err := adapter.Init(context.Background(), &pluginv1.InitRequest{
+		Config: &pluginv1.ServiceConfig{DeclaredCapabilities: nil}, // declares nothing
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CAPABILITY_NOT_DECLARED")
 }

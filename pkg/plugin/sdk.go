@@ -160,6 +160,16 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 		config = req.GetConfig()
 	}
 
+	// Fail closed at load: a provider that implements a host-capability *Aware
+	// interface for a non-exempt capability it did not declare must not load
+	// (INV-PLUGIN-54). Validation precedes injection, so a client is only ever
+	// wired for a validated declaration — the spec's gate+validate in one pass.
+	if a.serviceProvider != nil {
+		if err := validateDeclaredCapabilities(a.serviceProvider, config.GetDeclaredCapabilities()); err != nil {
+			return nil, oops.With("phase", "init").Wrap(err)
+		}
+	}
+
 	_, wantsSink := a.serviceProvider.(EventSinkAware)
 	_, wantsFocus := a.serviceProvider.(FocusClientAware)
 	_, wantsEvaluator := a.serviceProvider.(HostEvaluatorAware)

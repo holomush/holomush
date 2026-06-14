@@ -356,18 +356,6 @@ func (h *Host) overrideFor(pluginName string) map[string]string {
 	return h.configOverrides[pluginName]
 }
 
-// manifestNeedsInit reports whether the host must call Init on a plugin.
-// Init injects services (requires/provides), provisions storage, captures
-// crypto.emits (INV-PLUGIN-32), AND — INV-PLUGIN-8 — delivers plugin_config for any
-// plugin declaring a config schema.
-func manifestNeedsInit(m *plugins.Manifest) bool {
-	return len(m.Requires) > 0 ||
-		len(m.Provides) > 0 ||
-		m.Storage == plugins.StoragePostgres ||
-		(m.Crypto != nil && len(m.Crypto.Emits) > 0) ||
-		len(m.Config) > 0
-}
-
 // SetEventEmitter injects the shared plugin intent emitter used by the host
 // callback service for binary plugins.
 func (h *Host) SetEventEmitter(emitter plugins.PluginIntentEmitter) {
@@ -846,15 +834,17 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		}
 	}
 
-	// Call Init on plugins that need service injection (storage or requires),
-	// declare crypto.emits (INV-PLUGIN-32 needs InitResponse), or declare a config
-	// schema (INV-PLUGIN-8: plugin_config must be delivered).
-	needsInit := manifestNeedsInit(manifest)
+	// All binary plugins are Init'd so the SDK validates declared capabilities
+	// even when the manifest has no requires/storage/config/emits — without this
+	// a plugin implementing a capability *Aware interface but declaring nothing
+	// would skip Init and escape the INV-PLUGIN-54 load-time check.
+	needsInit := true
 	var registeredEmitTypes []string
 	if needsInit {
 		initReq := &pluginv1.InitRequest{
 			Config: &pluginv1.ServiceConfig{
-				RequiredServices: requiredServices,
+				RequiredServices:     requiredServices,
+				DeclaredCapabilities: manifest.RequiredCapabilities(),
 			},
 		}
 
@@ -870,6 +860,9 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			initReq.Config.ConnectionString = connStr
 		}
 
+		// INV-PLUGIN-8: a binary plugin declaring config: receives its merged
+		// plugin_config in Init. Binary Init is now unconditional (INV-PLUGIN-54);
+		// this block delivers plugin_config whenever the manifest declares any.
 		if len(manifest.Config) > 0 {
 			merged, mergeErr := plugins.MergePluginConfig(manifest.Config, h.overrideFor(manifest.Name))
 			if mergeErr != nil {

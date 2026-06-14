@@ -47,6 +47,16 @@ var _ = Describe("whole-system plugin load (INV-5)", Ordered, func() {
 		}
 	})
 
+	// INV-PLUGIN-54: loading every in-tree plugin through the real path now also
+	// validates that each binary plugin declared the host capabilities its code
+	// consumes — a misdeclared plugin fails Init → fails load → fails this census,
+	// so the census is the integration guard for the capability-declaration invariant.
+	It("loads core-scenes with its declared host capabilities (INV-PLUGIN-54 guard)", func() {
+		loaded := srv.PluginManager().ListPlugins()
+		Expect(loaded).To(ContainElement("core-scenes"),
+			"core-scenes (heaviest capability consumer) must load with its declared capabilities")
+	})
+
 	It("registers plugin commands in the dispatcher registry", func() {
 		reg := srv.CommandRegistry()
 		_, ok := reg.Get("help")

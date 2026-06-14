@@ -3378,8 +3378,9 @@ invariants:
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"
     legacy: ["INV-PC-8@docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md"]
-    summary: "A binary plugin declaring config: MUST receive Init (and its plugin_config) even with none of requires/provides/storage/crypto.emits
-      — the needsInit gate MUST include len(manifest.Config) > 0."
+    summary: "A binary plugin declaring config: MUST receive Init and its merged plugin_config. Binary Init is unconditional
+      (INV-PLUGIN-54), so a config-bearing plugin is always Init'd; the host delivers plugin_config when len(manifest.Config)
+      > 0."
     binding: pending
     refs:
       - {file: "internal/plugin/goplugin/host.go", token: "INV-PC-8"}
@@ -3853,7 +3854,11 @@ invariants:
     summary: "A binary plugin's Init MUST fail closed when its provider implements a host-capability *Aware interface for
       a non-exempt capability absent from the manifest; capability clients are injected only for declared capabilities. emit
       and command-registry are self-gated and exempt."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "pkg/plugin/capability_declaration_test.go"
+      - "pkg/plugin/service_test.go"
+      - "internal/plugin/goplugin/host_test.go"
   - id: INV-PLUGIN-55
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-13-plugin-capability-declaration-enforcement-design.md"
