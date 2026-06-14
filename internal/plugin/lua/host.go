@@ -69,6 +69,12 @@ type Host struct {
 	// existing tests). A non-nil map is authoritative: only tokens present
 	// in pluginGrants[name] are passed to RegisterHostCaps.
 	pluginGrants map[string][]string
+	// sessionAdmin is the broadcast/disconnect backing threaded into the
+	// hostCapAdapter so the brokered SessionAdminService serves real broadcasts.
+	// Wired at construction (WithSessionAdmin) or late (SetSessionAdmin);
+	// production wires it late, after the event appender exists
+	// (holomush-eykuh.4.2). nil ⇒ the sessionAdminServer fails closed.
+	sessionAdmin hostcap.SessionAdmin
 }
 
 // HostOption customizes Host construction.
@@ -176,6 +182,15 @@ func grantedSubset(requested, granted []string) []string {
 	return out
 }
 
+// WithSessionAdmin configures the host with the broadcast/disconnect backing for
+// the brokered SessionAdminService (holomush-eykuh.4.2). Production wires the
+// backing late via SetSessionAdmin (the event appender does not exist at host
+// construction); this option is the construction-time equivalent for tests and
+// in-process wiring. nil leaves the sessionAdminServer fail-closed.
+func WithSessionAdmin(sa hostcap.SessionAdmin) HostOption {
+	return func(h *Host) { h.sessionAdmin = sa }
+}
+
 // NewHost creates a new Lua plugin host without host functions.
 func NewHost(opts ...HostOption) *Host {
 	h := &Host{
@@ -199,14 +214,16 @@ func NewHostWithFunctions(hf *hostfunc.Functions, opts ...HostOption) *Host {
 		panic("lua.NewHostWithFunctions: hostFuncs cannot be nil")
 	}
 	h := &Host{
-		factory:        NewStateFactory(),
-		hostFuncs:      hf,
-		hostCapAdapter: newLuaHostCapAdapter(hf),
-		plugins:        make(map[string]*luaPlugin),
+		factory:   NewStateFactory(),
+		hostFuncs: hf,
+		plugins:   make(map[string]*luaPlugin),
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
+	// Build the adapter AFTER options apply so WithSessionAdmin (and any future
+	// adapter-affecting option) is reflected in the per-plugin capability servers.
+	h.hostCapAdapter = newLuaHostCapAdapterWithSessionAdmin(hf, h.sessionAdmin)
 	return h
 }
 
@@ -274,6 +291,21 @@ func (h *Host) SetSettingsStores(
 func (h *Host) SetHistoryReader(hr plugins.HistoryReader) {
 	if h.hostFuncs != nil {
 		h.hostFuncs.SetHistoryReader(hr)
+	}
+}
+
+// SetSessionAdmin injects the broadcast/disconnect backing into the host-cap
+// adapter so the brokered SessionAdminService serves real broadcasts
+// (holomush-eykuh.4.2). Called once during startup wiring, before any plugin
+// dispatch — the event appender the backing wraps is not available until the
+// EventBus subsystem starts (after the plugin subsystem builds this host), so a
+// construction-time option cannot reach it. Same startup-ordered late-binding
+// contract as SetHistoryReader / SetEventEmitter. No-op when the host was built
+// without host functions (NewHost path — no capability adapter).
+func (h *Host) SetSessionAdmin(sa hostcap.SessionAdmin) {
+	h.sessionAdmin = sa
+	if a, ok := h.hostCapAdapter.(*luaHostCapAdapter); ok {
+		a.setSessionAdmin(sa)
 	}
 }
 

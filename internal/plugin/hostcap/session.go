@@ -5,6 +5,7 @@ package hostcap
 
 import (
 	"context"
+	"errors"
 
 	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc/codes"
@@ -135,6 +136,13 @@ func (s *sessionAdminServer) Disconnect(ctx context.Context, req *hostv1.Disconn
 		return nil, status.Errorf(codes.Unimplemented, "session admin not supported")
 	}
 	if err := admin.DisconnectSession(ctx, req.GetSessionId(), req.GetReason()); err != nil {
+		// A backing with no forcible-disconnect mechanism (the production
+		// systemBroadcaster) reports ErrDisconnectUnsupported; surface that as
+		// Unimplemented — semantically the same fail-closed signal as the nil
+		// (unwired) case above (decision holomush-t019a; follow-up holomush-obo44).
+		if errors.Is(err, ErrDisconnectUnsupported) {
+			return nil, status.Errorf(codes.Unimplemented, "session disconnect not supported")
+		}
 		errutil.LogErrorContext(ctx, "session.disconnect failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}

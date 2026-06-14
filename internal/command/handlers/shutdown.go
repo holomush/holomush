@@ -13,6 +13,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 )
 
 // ShutdownHandler initiates a graceful server shutdown.
@@ -39,7 +40,7 @@ func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error 
 
 	// Broadcast warning to all players
 	message := formatShutdownMessage(delaySeconds)
-	exec.Services().BroadcastSystemMessage(ctx, "system", message)
+	exec.Services().BroadcastSystemMessage(ctx, core.SystemBroadcastSubject, message)
 
 	// Log admin action
 	slog.InfoContext(
