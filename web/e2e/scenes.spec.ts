@@ -44,11 +44,17 @@ async function currentEventCount(page: Page): Promise<number> {
  * Callers MUST capture `sinceIndex` via currentEventCount BEFORE sending
  * the command whose output they want to match. This isolates the wait
  * from any preceding events that may coincidentally match the pattern.
+ *
+ * `timeoutMs` (default 10s) is the poll deadline. Raise it only for waits
+ * that run under known event-delivery contention (e.g. a concurrent
+ * second-tab workspace load); since expect.poll resolves the instant the
+ * match appears, a larger ceiling has no happy-path cost.
  */
 async function waitForOutputMatching(
   page: Page,
   pattern: RegExp,
   sinceIndex: number,
+  timeoutMs = 10000,
 ): Promise<string> {
   const events = page.locator('[data-testid="event"]');
 
@@ -70,7 +76,7 @@ async function waitForOutputMatching(
         }
         return false;
       },
-      { timeout: 10000 },
+      { timeout: timeoutMs },
     )
     .toBe(true);
 
@@ -453,6 +459,16 @@ test.describe('Scenes workspace (E9.5)', () => {
   test('workspace open in a second tab does not disturb the terminal stream', async ({
     browser,
   }) => {
+    // This multi-tab spec chains many sequential waits — registerAndEnterTerminal
+    // (~40s of ceilings), scene create (~10s), token1 (~10s), tab-2 workspace
+    // toBeVisible (20s), then the 30s token2 poll below. Their worst-case
+    // ceilings sum past even the CI-scaled suite per-test budget (60s), so give
+    // this test its own headroom — otherwise a slow CI runner kills it mid-poll
+    // with a generic timeout instead of letting the token2 wait actually run.
+    // Happy path finishes in seconds; this only bounds the pathological-slow
+    // case (holomush-mwmzt).
+    test.setTimeout(150000);
+
     const ctx: BrowserContext = await browser.newContext();
     try {
       // ── Tab 1: register and enter terminal ──
@@ -482,7 +498,20 @@ test.describe('Scenes workspace (E9.5)', () => {
       const token2 = `iso-after-${Date.now()}`;
       const sayAfter = await currentEventCount(terminalPage);
       await sendCommand(terminalPage, `say ${token2}`);
-      await waitForOutputMatching(terminalPage, new RegExp(token2), sayAfter);
+      // token2's delivery races tab 2's just-completed workspace load
+      // (JoinFocus + DEK seed + scene-stream JetStream replay/decrypt), so under
+      // two-context CI load it occasionally needs >10s — the flake this spec
+      // exhibited (holomush-mwmzt). The 30s poll ceiling (covered by this test's
+      // raised per-test budget above) absorbs that latency WITHOUT masking a
+      // routing race: per-connection stream isolation — the terminal connection
+      // KEEPS its location subscription while the comms_hub connection focuses a
+      // scene — is pinned deterministically by two separate tests: the
+      // integration spec INV-SCENE-23
+      // (test/integration/scenes/multi_connection_visibility_test.go) and the
+      // unit test TestSendToConnection_TargetsOneConnectionOnly
+      // (internal/grpc/stream_registry_test.go). So a slow token2 here is pure
+      // delivery latency, not a dropped stream.
+      await waitForOutputMatching(terminalPage, new RegExp(token2), sayAfter, 30000);
 
       // Terminal page shows no scenes-workspace UI.
       await expect(
