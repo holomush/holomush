@@ -29,8 +29,3 @@ entries:
     bead: holomush-7b9n
     since: 2026-05-25
     reason: operator_read_completed audit row times out under load; only the F-E12 step is gated
-  - id: terminal.spec.ts reconnect/session (4 tests)
-    kind: playwright
-    bead: holomush-0jzs
-    since: 2026-05-25
-    reason: WebSocket reconnect timing flakes in CI (reconnect/replay/history/draft)
