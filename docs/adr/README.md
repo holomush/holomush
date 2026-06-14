@@ -16,6 +16,10 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Atomic (big-bang) plugin-capability cutover over phased allowlist rollout](holomush-40ssh-atomic-big-bang-plugin-capability-cutover-over-phased-allowl.md) | 2026-06-14 | Accepted | `holomush-40ssh` |
+| [Resolver Grants set as the single least-privilege gate authority](holomush-vpg8l-resolver-grants-set-as-single-least-privilege-gate-authority.md) | 2026-06-14 | Accepted | `holomush-vpg8l` |
+| [o262d DAG-resolution failures stay always-fatal behind a named policy-function seam](holomush-ptf7b-o262d-dag-resolution-failures-stay-always-fatal-behind-named.md) | 2026-06-14 | Accepted | `holomush-ptf7b` |
+| [Retire plugin capability injection only; keep ambient stdlib ungated](holomush-05f3v-retire-plugin-capability-injection-only-keep-ambient-stdlib.md) | 2026-06-14 | Accepted | `holomush-05f3v` |
 | [Gate binary plugin capability injection on manifest declaration](holomush-m4ac3-gate-binary-plugin-capability-injection-manifest-declaration.md) | 2026-06-13 | Accepted | `holomush-m4ac3` |
 | [Make binary plugin Init unconditional to close the degenerate-manifest escape](holomush-toh7a-make-binary-plugin-init-unconditional-close-degenerate-manif.md) | 2026-06-13 | Accepted | `holomush-toh7a` |
 | [Two single-clause capability-enforcement invariants (INV-PLUGIN-54 / 55)](holomush-1psri-two-single-clause-capability-enforcement-invariants-inv-plug.md) | 2026-06-13 | Accepted | `holomush-1psri` |
