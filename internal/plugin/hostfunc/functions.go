@@ -263,22 +263,29 @@ func New(kv KVStore, opts ...Option) *Functions {
 	return f
 }
 
-// Register installs the plugin **language stdlib** onto a Lua state — and only
-// the stdlib. As of the atomic capability cutover (holomush-eykuh.4, spec R1 /
-// ADR holomush-05f3v) the ten capability host functions (kv, world.query,
-// world.mutation, property, session, session.admin, focus, eval, settings, emit)
-// are NO LONGER injected here: they flow exclusively through the host-brokered
-// path (luabridge.RegisterHostCaps), gated by the resolver's per-plugin grant
-// set. What remains is the ambient, ungated runtime: logging, request-id, the
-// holo.* stdlib (fmt/emit namespaces), the INV-PLUGIN-32 register_emit_type
-// stub, the merged plugin config, and the command-registry / stream / audit
-// read-back surfaces (not part of the ten retired capabilities).
+// Register installs the plugin **language stdlib** onto a Lua state — the stdlib
+// plus any service-kind capability modules the plugin declared in its requires.
+// As of the atomic capability cutover (holomush-eykuh.4, spec R1 / ADR
+// holomush-05f3v) the ten host *capabilities* (kv, world.query, world.mutation,
+// property, session, session.admin, focus, eval, settings, emit) are NO LONGER
+// injected here: they flow exclusively through the host-brokered path
+// (luabridge.RegisterHostCaps), gated by the resolver's per-plugin grant set.
+// What remains ambient is: logging, request-id, the holo.* stdlib (fmt/emit
+// namespaces), the INV-PLUGIN-32 register_emit_type stub, the merged plugin
+// config, and the command-registry / stream / audit read-back surfaces (not part
+// of the ten retired capabilities).
 //
-// The requires parameter is retained for signature compatibility but is now a
-// no-op: capability injection no longer keys off it. Callers MAY pass nothing.
+// The cutover retired the ten host capabilities but NOT the service-kind
+// CapabilityRegistry, which carries Go-native modules for service-kind requires
+// that have no host.v1 proto and therefore cannot ride the brokered
+// RegisterHostCaps path — e.g. the optional `holomush.alias.v1.AliasService`
+// → `alias` global consumed by core-aliases. Those modules are keyed off the
+// requires list here: a plugin's service-kind requires arrive in `requires`, and
+// InjectRequired wires each registered module's global. Unregistered services are
+// silently skipped, preserving the production graceful-degradation contract
+// ("alias service not yet available") — production registers no AliasService
+// capability, so the global stays absent and core-aliases degrades gracefully.
 func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...string) {
-	_ = requires // capability injection is now host-brokered; see RegisterHostCaps.
-
 	// Register the holo.* stdlib (fmt, emit namespaces)
 	RegisterStdlib(ls)
 
@@ -327,6 +334,18 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	registerConfigTable(ls, mod, f.pluginConfigFor(pluginName))
 
 	ls.SetGlobal("holomush", mod)
+
+	// Inject service-kind capability modules for the plugin's declared requires.
+	// These are NOT the ten retired host capabilities (those ride
+	// luabridge.RegisterHostCaps); they are Go-native CapabilityRegistry modules
+	// keyed by proto service name (e.g. holomush.alias.v1.AliasService → `alias`).
+	// InjectRequired silently skips unregistered services, so production — which
+	// registers no AliasService — leaves the `alias` global absent and core-aliases
+	// degrades gracefully ("alias service not yet available"). Set after the
+	// holomush global so a capability module may reference it if needed.
+	if f.capabilities != nil && len(requires) > 0 {
+		f.capabilities.InjectRequired(ls, requires, pluginName)
+	}
 }
 
 // RegisterWithEmitCapture is the variant of Register used during the

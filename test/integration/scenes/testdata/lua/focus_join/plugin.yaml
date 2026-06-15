@@ -5,7 +5,13 @@ name: test-focus-join
 version: 1.0.0
 type: lua
 resource_types: []
-requires: []
+# The brokered `focus` host capability injects the `focus` Lua global
+# (luabridge.RegisterHostCaps -> registerFocusService) so on_command can call
+# focus.AutoFocusOnJoin. Declaring it grants the token (dependency.go resolver)
+# which gates injection after the atomic capability cutover (holomush-eykuh.4) —
+# without this entry the `focus` global is absent and the fixture degrades.
+requires:
+  - capability: focus
 provides: []
 
 lua-plugin:
