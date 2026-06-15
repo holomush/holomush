@@ -37,6 +37,10 @@ func (stubHostCaps) LookupActor(context.Context, string) (core.Actor, string, er
 	return core.Actor{}, "", nil
 }
 
+func (stubHostCaps) LookupDispatch(context.Context, string) (pluginauthz.DispatchContext, bool) {
+	return pluginauthz.DispatchContext{}, false
+}
+
 func (stubHostCaps) IssueEmitToken(context.Context, string, core.Actor) (string, error) {
 	return "", nil
 }

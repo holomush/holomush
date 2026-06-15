@@ -85,6 +85,14 @@ type HostCapabilities interface {
 	// adapter reads core.ActorFromContext(ctx) (connection-scoped, no token
 	// store). pluginName is the host-established calling-plugin identity.
 	LookupActor(ctx context.Context, pluginName string) (core.Actor, string, error)
+	// LookupDispatch recovers the host-vouched DispatchContext bound to the
+	// host-issued emit token in ctx metadata. It is the binary scope path's
+	// unforgeable dispatch source: the dispatch is keyed by the host-minted token,
+	// so an untrusted out-of-process plugin cannot forge the acting-character scope
+	// via gRPC metadata (INV-PLUGIN-51). ok=false fails closed. The Lua adapter
+	// returns (zero, false) — the Lua path recovers dispatch in-process from
+	// host-stamped bufconn metadata, never via a token.
+	LookupDispatch(ctx context.Context, pluginName string) (pluginauthz.DispatchContext, bool)
 	// IssueEmitToken mints a host dispatch token (the binary RequestEmitToken
 	// path). The Lua adapter returns an unsupported error (no Lua forgery
 	// surface). The minted token vouches for actor on behalf of pluginName.

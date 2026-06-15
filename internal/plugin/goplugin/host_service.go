@@ -4,12 +4,14 @@
 package goplugin
 
 import (
+	"context"
+
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/dispatchwire"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -54,19 +56,18 @@ func newPluginHostServiceServer(host *Host, manifest *plugins.Manifest) func([]g
 }
 
 // newHostCapabilityServer builds the host-capability gRPC server with the
-// runtime-neutral interceptor chain: the dispatch-stamp interceptor
-// (dispatchwire.StampInterceptor — reconstructs the host-vouched DispatchContext
-// from incoming metadata) chained BEFORE the capability/scope interceptor, then
-// `set` registered against `base`.
+// runtime-neutral interceptor chain: the token-dispatch interceptor (recovers the
+// host-vouched DispatchContext from the caller's host-issued emit token) chained
+// BEFORE the capability/scope interceptor, then `set` registered against `base`.
 //
-// The dispatch-stamp half mirrors the Lua per-plugin bufconn
-// (internal/plugin/lua/bufconn_endpoint.go), so a binary plugin's plugin→host
-// scoped capability call resolves its own-location fence identically to a Lua
-// plugin's (plugin-runtime-symmetry, INV-PLUGIN-51). Without it, a scoped call
-// over the subprocess gRPC boundary arrives with bare dispatch and the scope
-// interceptor denies (SCOPE_NO_DISPATCH) — the gap this fills. The dispatch must
-// reach the server as incoming metadata; the host delivery side marshals it
-// (host.go) and the SDK ferries it (pkg/plugin) onto plugin→host calls.
+// Unlike the Lua per-plugin bufconn (internal/plugin/lua/bufconn_endpoint.go),
+// which marshals dispatch as host-controlled in-process metadata, a binary plugin
+// is out-of-process and controls its own outgoing gRPC metadata. Recovering
+// dispatch from plugin-supplied metadata would let it forge the acting-character
+// scope; instead the dispatch is bound to the unforgeable host-issued emit token
+// at delivery (host.go) and recovered here from the validated token via
+// base.LookupDispatch (plugin-runtime-symmetry, INV-PLUGIN-51). Without dispatch,
+// a scoped call denies (SCOPE_NO_DISPATCH).
 //
 // Extracted from newPluginHostServiceServer so tests can register a
 // scope-eligible capability set against a custom base — BinaryDefaultSet omits
@@ -79,9 +80,26 @@ func newHostCapabilityServer(
 	opts []grpc.ServerOption,
 ) *grpc.Server {
 	ic := hostcap.NewCapabilityInterceptor(deps)
-	server := grpc.NewServer(append(opts, grpc.ChainUnaryInterceptor(dispatchwire.StampInterceptor(), ic))...)
+	server := grpc.NewServer(append(opts, grpc.ChainUnaryInterceptor(tokenDispatchInterceptor(base, deps.PluginName), ic))...)
 	hostcap.RegisterCapabilities(server, hostcap.NewBase(base, deps.PluginName), set)
 	return server
+}
+
+// tokenDispatchInterceptor recovers the host-vouched DispatchContext bound to the
+// caller's host-issued emit token (base.LookupDispatch) and stamps it onto the
+// handler context BEFORE the capability/scope interceptor runs. The dispatch is
+// keyed by the host-minted, host-stored token — never read from plugin-controlled
+// gRPC metadata — so an untrusted out-of-process plugin cannot forge the
+// acting-character subject or scope attributes (INV-PLUGIN-51). A missing or
+// invalid token, or a token carrying no character dispatch, leaves the context
+// without dispatch, so the scope interceptor denies (SCOPE_NO_DISPATCH).
+func tokenDispatchInterceptor(base hostcap.HostCapabilities, pluginName string) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if dc, ok := base.LookupDispatch(ctx, pluginName); ok && dc.Subject != "" {
+			ctx = pluginauthz.WithDispatch(ctx, dc)
+		}
+		return handler(ctx, req)
+	}
 }
 
 // sdkActorKindToCore maps a plugin-SDK ActorKind to the core ActorKind. It is

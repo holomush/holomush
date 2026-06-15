@@ -31,7 +31,6 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/dispatchwire"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/property"
@@ -670,6 +669,8 @@ func (h *Host) IssueEmitToken(_ context.Context, pluginName string, actor core.A
 	if tokenStore == nil {
 		return "", oops.With("plugin", pluginName).New("plugin token store is not configured")
 	}
+	// Self-tokens carry no character dispatch (no DeliverCommand context); plain
+	// Issue binds a zero DispatchContext, which fails closed at scope-enforcement.
 	token, err := tokenStore.Issue(pluginName, actor, "")
 	if err != nil {
 		return "", oops.Code("EMIT_TOKEN_ISSUE_FAILED").
@@ -1102,14 +1103,19 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	// an authenticated player. The owning player is "" so PLAYER-scope settings
 	// ownership from a pure event handler stays fail-closed (holomush-iokti.19),
 	// symmetric with the Lua event path where core.OwningPlayerFromContext is absent.
-	emitToken, err := h.tokenStore.Issue(name, storedActor, "")
+	// Bind the host-vouched dispatch context to the emit token so the binary
+	// plugin→host scope path recovers it from the host-issued (unforgeable) token,
+	// never from plugin-controlled metadata (INV-PLUGIN-51). DeliverEvent dispatch
+	// is present only for character actors (stampDispatch above); absent ⇒ zero ⇒
+	// fail-closed at scope-enforcement time.
+	dispatch, _ := pluginauthz.DispatchForHost(callCtx)
+	emitToken, err := h.tokenStore.IssueWithDispatch(name, storedActor, "", dispatch)
 	if err != nil {
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "issue_emit_token").Wrap(err)
 	}
 	defer h.tokenStore.Revoke(emitToken)
 
 	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
-	callCtx = marshalDeliveryDispatch(callCtx)
 	// Existing actor-kind / -id metadata still attached for plugin-side advisory
 	// consumption (pkg/plugin/sdk.go ActorMetadataFromIncomingContext).
 	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
@@ -1182,14 +1188,17 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	// gate (holomush-iokti.19). Absent ⇒ "" ⇒ PLAYER-scope fails closed.
 	ownerPlayer, _ := core.OwningPlayerFromContext(ctx)
 
-	emitToken, err := h.tokenStore.Issue(name, storedActor, ownerPlayer)
+	// Bind the host-vouched dispatch context to the emit token (see DeliverEvent):
+	// the binary plugin→host scope path recovers it from the host-issued token, not
+	// from forgeable plugin metadata (INV-PLUGIN-51).
+	dispatch, _ := pluginauthz.DispatchForHost(callCtx)
+	emitToken, err := h.tokenStore.IssueWithDispatch(name, storedActor, ownerPlayer, dispatch)
 	if err != nil {
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "issue_emit_token").Wrap(err)
 	}
 	defer h.tokenStore.Revoke(emitToken)
 
 	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
-	callCtx = marshalDeliveryDispatch(callCtx)
 	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
 
 	resp, err := p.plugin.HandleCommand(callCtx, protoReq)
@@ -1200,19 +1209,29 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	return protoCommandResponseToSDK(resp.GetResponse()), nil
 }
 
-// marshalDeliveryDispatch projects the host-vouched dispatch context (stamped by
-// stampDispatch) onto the OUTGOING delivery metadata so an out-of-process binary
-// plugin can ferry it back on plugin→host scoped capability calls — the
-// subprocess never holds the in-process DispatchContext VALUE that the Lua
-// bufconn marshals from. The SDK ferries this metadata onto plugin→host calls and
-// the host server reconstructs it before the scope interceptor
-// (plugin-runtime-symmetry, INV-PLUGIN-51). When no host-vouched dispatch is
-// present the ctx is returned unchanged (fail-closed downstream).
-func marshalDeliveryDispatch(callCtx context.Context) context.Context {
-	if dc, ok := pluginauthz.DispatchForHost(callCtx); ok {
-		return dispatchwire.AttachOutgoing(callCtx, dc)
+// LookupDispatch recovers the host-vouched DispatchContext bound to the
+// host-issued emit token carried in the incoming metadata. It is the binary half
+// of the runtime-neutral dispatch recovery (mirrors LookupActor): the dispatch is
+// keyed by the host-minted, host-stored token, so an untrusted out-of-process
+// plugin cannot forge the acting-character subject or scope attributes by setting
+// gRPC metadata (INV-PLUGIN-51). Returns ok=false on a missing token, an
+// unconfigured store, or a token not valid for this plugin — fail-closed. The Lua
+// adapter returns (zero, false): the Lua path is in-process and recovers dispatch
+// from host-stamped bufconn metadata, not from a token. Satisfies
+// hostcap.HostCapabilities.
+func (h *Host) LookupDispatch(ctx context.Context, pluginName string) (pluginauthz.DispatchContext, bool) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	tokens := md.Get("x-holomush-emit-token")
+	if len(tokens) == 0 || tokens[0] == "" {
+		return pluginauthz.DispatchContext{}, false
 	}
-	return callCtx
+	h.mu.RLock()
+	tokenStore := h.tokenStore
+	h.mu.RUnlock()
+	if tokenStore == nil {
+		return pluginauthz.DispatchContext{}, false
+	}
+	return tokenStore.LookupDispatch(pluginName, tokens[0])
 }
 
 // BeginServiceDispatch mints a dispatch token for a host-initiated call INTO
@@ -1251,7 +1270,11 @@ func (h *Host) BeginServiceDispatch(ctx context.Context, pluginName string, acto
 		return nil, nil, oops.In("goplugin").With("plugin", pluginName).With("operation", "begin_service_dispatch").Wrap(ErrPluginNotLoaded)
 	}
 
-	token, err := h.tokenStore.Issue(pluginName, actor, ownerPlayerID)
+	// Bind any host-vouched dispatch on ctx to the token so a host→plugin service
+	// dispatch that re-enters a scoped capability recovers it from the token, not
+	// from forgeable metadata (INV-PLUGIN-51). Zero when absent ⇒ fail-closed.
+	dispatch, _ := pluginauthz.DispatchForHost(ctx)
+	token, err := h.tokenStore.IssueWithDispatch(pluginName, actor, ownerPlayerID, dispatch)
 	if err != nil {
 		return nil, nil, oops.In("goplugin").With("plugin", pluginName).With("operation", "issue_emit_token").Wrap(err)
 	}

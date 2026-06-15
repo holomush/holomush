@@ -65,14 +65,7 @@ func dialPluginHost(broker brokerDialer, services map[string]string) (*grpc.Clie
 	if err != nil {
 		return nil, oops.With("service", PluginHostServiceName).Wrap(err)
 	}
-	conn, err := broker.DialWithOptions(
-		brokerID,
-		grpc.WithAuthority("holomush-plugin-host"),
-		// Ferry the host-vouched dispatch envelope from each incoming delivery
-		// onto plugin→host calls so scoped capabilities resolve their fence
-		// host-side (plugin-runtime-symmetry with the Lua bufconn, INV-PLUGIN-51).
-		grpc.WithChainUnaryInterceptor(dispatchFerryInterceptor()),
-	)
+	conn, err := broker.DialWithOptions(brokerID, grpc.WithAuthority("holomush-plugin-host"))
 	if err != nil {
 		return nil, oops.With("service", PluginHostServiceName).Wrap(err)
 	}
