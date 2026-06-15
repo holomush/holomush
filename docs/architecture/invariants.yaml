@@ -3772,7 +3772,9 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
     summary: "The declaration gate that enforces least privilege MUST live at the broker/registry common path shared by both
       runtimes; per-runtime gating that could diverge is forbidden."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/integration/pluginparity/least_privilege_gate_test.go"
   - id: INV-PLUGIN-46
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
