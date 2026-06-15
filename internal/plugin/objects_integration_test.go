@@ -7,10 +7,13 @@ package plugins_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
@@ -20,8 +23,82 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	"github.com/holomush/holomush/internal/property"
+	"github.com/holomush/holomush/internal/world"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
+
+// characterID is the acting character these objects specs stamp on the dispatch
+// context for scoped writes (matching the literal used by the older specs).
+const characterID = "01HTEST000000000000000CHAR"
+
+// recordingCharacterMutator is a property.EntityMutator test double for the
+// "character" entity type. It exists ONLY so the brokered describe-me path can
+// reach the property layer and we can capture the SetProperty request the
+// core-objects plugin emits.
+//
+// FLAG (real bug surfaced by linmh.1): production registers NO "character"
+// entity mutator — property.DefaultEntityMutatorRegistry wires only "location"
+// and "object". The plugin's `describe me` handler sends a correct brokered
+// SetProperty{entity_type="character"}, but the host's PropertyService cannot
+// resolve the character mutator and fails closed, so `describe me` is broken for
+// real users (a pre-existing latent gap: the legacy holomush.set_property
+// fallback hit the same missing mutator). This test registers a recording
+// mutator into the shared registry so the request shape can be asserted; it does
+// NOT make production describe-me work. Tracked separately for a host-side fix.
+type recordingCharacterMutator struct {
+	mu            sync.Mutex
+	lastEntityID  ulid.ULID
+	lastValue     string
+	lastSubjectID string
+	called        bool
+}
+
+func (m *recordingCharacterMutator) EntityType() string { return "character" }
+
+func (m *recordingCharacterMutator) GetName(context.Context, property.WorldQuerier, ulid.ULID) (string, error) {
+	return "", nil
+}
+
+func (m *recordingCharacterMutator) SetName(context.Context, property.WorldQuerier, property.WorldMutator, string, ulid.ULID, string) error {
+	return nil
+}
+
+func (m *recordingCharacterMutator) GetDescription(context.Context, property.WorldQuerier, ulid.ULID) (string, error) {
+	return "", nil
+}
+
+func (m *recordingCharacterMutator) SetDescription(_ context.Context, _ property.WorldQuerier, _ property.WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.called = true
+	m.lastEntityID = entityID
+	m.lastValue = value
+	m.lastSubjectID = subjectID
+	return nil
+}
+
+// characterMutator is the singleton recording mutator registered into the shared
+// entity-mutator registry. The registry has no per-test injection seam (property
+// definitions resolve property.SharedEntityMutatorRegistry directly), so the
+// registration is process-global; it is inert for every other spec because no
+// other spec sets a character description.
+var (
+	characterMutator       = &recordingCharacterMutator{}
+	registerCharacterMutOk sync.Once
+)
+
+// ensureCharacterMutator registers the recording "character" entity mutator once.
+// Idempotent: a duplicate registration (e.g. from another package-level test
+// run) is tolerated.
+func ensureCharacterMutator() {
+	registerCharacterMutOk.Do(func() {
+		if err := property.SharedEntityMutatorRegistry().Register(characterMutator); err != nil &&
+			!errors.Is(err, property.ErrDuplicateEntityMutator) {
+			panic(err)
+		}
+	})
+}
 
 // objectsFixture contains all components needed for objects plugin integration tests.
 type objectsFixture struct {
@@ -216,6 +293,55 @@ var _ = Describe("Objects Plugin Integration", func() {
 				Expect(resp.Output).To(ContainSubstring("Usage:"))
 			})
 		})
+
+		Context("when describe me has text and a character property backing", func() {
+			It("sets the character description via the brokered SetProperty", func() {
+				// Register the recording "character" entity mutator so the brokered
+				// property path can complete. See recordingCharacterMutator for the
+				// production-gap flag (linmh.1): without this, describe-me fails closed
+				// because the host registers no character entity mutator.
+				ensureCharacterMutator()
+				characterMutator.mu.Lock()
+				characterMutator.called = false
+				characterMutator.mu.Unlock()
+
+				mutator := &mockWorldMutator{}
+				fixture, err := setupObjectsTest(mutator)
+				Expect(err).NotTo(HaveOccurred())
+				defer fixture.Cleanup()
+
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				ctx = scopedActorContext(ctx, characterID)
+
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-objects", pluginsdk.CommandRequest{
+					Command:       "describe",
+					Args:          "me A tall figure in a dark cloak.",
+					CharacterID:   characterID,
+					CharacterName: "TestPlayer",
+					LocationID:    buildingTestLocationID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				Expect(resp.Output).To(ContainSubstring("Description set."))
+
+				// The plugin must have emitted a brokered SetProperty carrying
+				// entity_type=character, entity_id=characterID, property=description,
+				// value=<text>. The recording mutator is registered only under the
+				// "character" entity type and only handles the description property, so
+				// its invocation witnesses entity_type and property; it captures the
+				// entity_id and value directly.
+				characterMutator.mu.Lock()
+				called := characterMutator.called
+				gotEntityID := characterMutator.lastEntityID.String()
+				gotValue := characterMutator.lastValue
+				characterMutator.mu.Unlock()
+
+				Expect(called).To(BeTrue(), "brokered SetProperty(character/description) was not invoked")
+				Expect(gotEntityID).To(Equal(characterID))
+				Expect(gotValue).To(Equal("A tall figure in a dark cloak."))
+			})
+		})
 	})
 
 	Describe("Create Command", func() {
@@ -300,13 +426,19 @@ var _ = Describe("Objects Plugin Integration", func() {
 
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
+				// create carries scope:local (own-location), so the host runs the scope
+				// fence for both `create object` and `create location`. Stamp the acting
+				// character (as the create-object spec does) so the dispatch context is
+				// vouched; without it this would be a false-green leaning on the
+				// AllowAllEngine instead of exercising the scoped path (linmh.4).
+				ctx = scopedActorContext(ctx, characterID)
 
 				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-objects", pluginsdk.CommandRequest{
 					Command:       "create",
 					Args:          `location "The Library"`,
-					CharacterID:   "01HTEST000000000000000CHAR",
+					CharacterID:   characterID,
 					CharacterName: "TestPlayer",
-					LocationID:    "01HTEST000000000000000ROOM",
+					LocationID:    buildingTestLocationID,
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
@@ -337,6 +469,40 @@ var _ = Describe("Objects Plugin Integration", func() {
 				// Without world service, examine falls back to querying base functions
 				// which return nil/error, resulting in a not-found or error response
 				Expect(resp.Status).NotTo(Equal(pluginsdk.CommandOK))
+			})
+		})
+
+		Context("when examining the current location with world service", func() {
+			It("renders the location name from the brokered QueryLocation", func() {
+				mutator := &mockWorldMutator{
+					getLocationRet: &world.Location{
+						ID:          ulid.MustParse(buildingTestLocationID),
+						Name:        "The Grand Atrium",
+						Description: "A vaulted hall of pale marble.",
+						Type:        world.LocationTypePersistent,
+					},
+				}
+				fixture, err := setupObjectsTest(mutator)
+				Expect(err).NotTo(HaveOccurred())
+				defer fixture.Cleanup()
+
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				ctx = scopedActorContext(ctx, characterID)
+
+				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-objects", pluginsdk.CommandRequest{
+					Command:       "examine",
+					Args:          "here",
+					CharacterID:   characterID,
+					CharacterName: "TestPlayer",
+					LocationID:    buildingTestLocationID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
+				// The output is built from the QueryLocation response — the location
+				// name must appear (in both the header and the Name: line).
+				Expect(resp.Output).To(ContainSubstring("The Grand Atrium"))
+				Expect(resp.Output).To(ContainSubstring("A vaulted hall of pale marble."))
 			})
 		})
 	})

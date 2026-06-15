@@ -154,32 +154,6 @@ end
 --   examine <name> -- examine named target in current location
 -- ---------------------------------------------------------------------------
 
-local function write_properties(parts, props)
-    if not props or #props == 0 then
-        return
-    end
-
-    -- Filter to public visibility only.
-    local visible = {}
-    for _, p in ipairs(props) do
-        if p.visibility == "public" then
-            visible[#visible + 1] = p
-        end
-    end
-
-    if #visible == 0 then
-        return
-    end
-
-    -- Sort by name.
-    table.sort(visible, function(a, b) return a.name < b.name end)
-
-    parts[#parts + 1] = "\nProperties:\n"
-    for _, p in ipairs(visible) do
-        parts[#parts + 1] = "  " .. p.name .. ": " .. p.value .. "\n"
-    end
-end
-
 local function examine_location(ctx)
     local loc, err = world_query.QueryLocation({location_id = ctx.location_id})
     if err then
@@ -188,7 +162,6 @@ local function examine_location(ctx)
     end
 
     -- Property listing (legacy property.list_by_parent) had no production backing.
-    local props
 
     local parts = {}
     parts[#parts + 1] = "=== " .. loc.name .. " ===\n"
@@ -196,14 +169,12 @@ local function examine_location(ctx)
     if loc.description and loc.description ~= "" then
         parts[#parts + 1] = "Description:\n  " .. loc.description .. "\n"
     end
-    write_properties(parts, props)
 
     return table.concat(parts)
 end
 
 local function examine_character_by_result(ctx, c)
     -- Property listing (legacy property.list_by_parent) had no production backing.
-    local props
 
     local parts = {}
     parts[#parts + 1] = "=== " .. c.name .. " ===\n"
@@ -211,14 +182,12 @@ local function examine_character_by_result(ctx, c)
     if c.description and c.description ~= "" then
         parts[#parts + 1] = "Description:\n  " .. c.description .. "\n"
     end
-    write_properties(parts, props)
 
     return table.concat(parts)
 end
 
 local function examine_object_by_result(ctx, o)
     -- Property listing (legacy property.list_by_parent) had no production backing.
-    local props
 
     local parts = {}
     parts[#parts + 1] = "=== " .. o.name .. " ===\n"
@@ -226,7 +195,6 @@ local function examine_object_by_result(ctx, o)
     if o.description and o.description ~= "" then
         parts[#parts + 1] = "Description:\n  " .. o.description .. "\n"
     end
-    write_properties(parts, props)
 
     return table.concat(parts)
 end
@@ -382,7 +350,10 @@ local function handle_set(ctx)
         return {status = 1, output = SET_USAGE}
     end
 
-    local prop_prefix, target, value = parse_set_args(args)
+    -- Only the property prefix is needed to form the reply; parse_set_args still
+    -- validates the full "<prop> of <target> to <value>" shape, so a malformed
+    -- command falls through to SET_USAGE above.
+    local prop_prefix = parse_set_args(args)
     if not prop_prefix then
         return {status = 1, output = SET_USAGE}
     end
@@ -391,9 +362,7 @@ local function handle_set(ctx)
     -- production backing, so set has always reported "Unknown property" for any
     -- prefix. Behavior preserved across the cutover: there is no property
     -- registry to resolve a prefix against on the brokered surface yet, so the
-    -- target/value are parsed for usage validation but the command reports the
-    -- property as unknown rather than guessing.
-    local _ = {target, value}
+    -- command reports the property as unknown rather than guessing.
     return {status = 1, output = "Unknown property: " .. prop_prefix}
 end
 
