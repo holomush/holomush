@@ -14,8 +14,12 @@
 // GOWORK=off is required because go.work enables workspace mode, which is
 // incompatible with -modfile.
 //
-// Renovate tracks this via the `gomod` manager fileMatch in
-// .github/renovate.json.
+// Renovate does NOT manage this modfile. Its `gomod` manager is scoped to the
+// root go.mod only (.github/renovate.json), because Renovate's artifact step
+// runs `go get -modfile=go.tool.mod -t ./...` from the repo root and the `./...`
+// sweep re-namespaces every main-module package under this module's identity,
+// failing to resolve their internal/ + pkg/ imports (holomush-nr63n). Tool deps
+// here are bumped manually.
 module github.com/holomush/holomush/tools
 
 go 1.26
