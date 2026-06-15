@@ -702,7 +702,7 @@ scopes:
 
   - name: INV-COMMAND
     description: "Command surfacing: the single command-visibility/ABAC filter, runtime parity across the Lua hostfunc + binary
-      PluginHostService + CoreService RPC surfaces, and self-scoped enumeration."
+      host.v1 CommandRegistryService + CoreService RPC surfaces, and self-scoped enumeration."
     boundary: "Backend command-surfacing contract (origin 2026-05-29-recognized-command-chip-design.md, §INV-1/2/5). Does
       NOT include: web-composer chip presentation — INV-3 gateway boundary (→ .claude/rules/gateway-boundary.md), INV-4 server-sourced
       recognition, INV-6 graceful incompleteness, INV-7 speech-mode chips — those are web-frontend per-feature local numbering,
@@ -2800,7 +2800,7 @@ invariants:
     scope: INV-SCENE
     origin_spec: "docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md"
     legacy: ["INV-P5-6@docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md"]
-    summary: "The 3 new PluginHostService focus RPCs ship with Go SDK + Lua hostfunc bindings together (substrate-contract
+    summary: "The 3 new host.v1 FocusService focus RPCs ship with Go SDK + Lua hostfunc bindings together (substrate-contract
       parity)."
     binding: pending
     refs:
@@ -3500,7 +3500,7 @@ invariants:
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"
     legacy: ["INV-1@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
-    summary: "PluginHostService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field
+    summary: "host.v1 EvalService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field
       on the wire (never sourced from plugin/Lua-supplied data)."
     binding: bound
     asserted_by:
