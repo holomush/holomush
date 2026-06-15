@@ -182,6 +182,16 @@ var WorldServiceActorULID = ulid.ULID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 // changes (string → ULID-string).
 var ActorSystemID = SystemActorULID.String()
 
+// SystemBroadcastSubject is the reserved stream (the `stream` argument to
+// NewEvent) for grid-wide system broadcasts — server announcements and the
+// admin `wall` command. The event appender qualifies it to
+// events.<game_id>.system at the emit boundary. Both the command-layer
+// broadcast path (command.Services.BroadcastSystemMessage / the shutdown
+// command) and the plugin-host SessionAdmin broadcast backing
+// (hostcap.NewSystemBroadcaster, decision holomush-t019a) MUST agree on this
+// value so a plugin `wall` and a host announcement land on the same subject.
+const SystemBroadcastSubject = "system"
+
 // IsSentinelULID returns true iff id is a system actor sentinel ULID:
 // first 15 bytes zero, last byte in [0x01, 0xFF]. Used by IdentityRegistry
 // bootstrap (sentinel-collision detection on plugin row load) and by

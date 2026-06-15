@@ -345,6 +345,23 @@ func TestSessionAdminServerDisconnect(t *testing.T) {
 			},
 		},
 		{
+			// The production systemBroadcaster backs broadcast but not disconnect
+			// (no forcible-disconnect mechanism exists — decision holomush-t019a,
+			// follow-up holomush-obo44). Its DisconnectSession returns the
+			// ErrDisconnectUnsupported sentinel, which the server maps to
+			// Unimplemented rather than the generic Internal — so a wired-but-
+			// unsupported backing is indistinguishable to the caller from the
+			// unwired nil case.
+			name:  "returns Unimplemented when backing reports disconnect unsupported",
+			admin: &fakeSessionAdmin{disconnectErr: hostcap.ErrDisconnectUnsupported},
+			check: func(t *testing.T, _ *fakeSessionAdmin, err error) {
+				require.Error(t, err)
+				st, ok := status.FromError(err)
+				require.True(t, ok)
+				assert.Equal(t, codes.Unimplemented, st.Code(), "an unsupported-disconnect backing must surface Unimplemented, not Internal")
+			},
+		},
+		{
 			name:  "fails closed with Unimplemented when SessionAdmin is nil",
 			admin: nil,
 			check: func(t *testing.T, _ *fakeSessionAdmin, err error) {

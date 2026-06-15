@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
+	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -128,6 +129,7 @@ type PluginSubsystemConfig struct {
 type PluginSubsystem struct {
 	cfg               PluginSubsystemConfig
 	manager           *plugins.Manager
+	luaHost           *pluginlua.Host // built in Start; SessionAdmin backing wired late via ConfigureSystemBroadcaster
 	cmdRegistry       *command.Registry
 	commandQuerier    *commandquery.Querier
 	registry          *plugins.ServiceRegistry
@@ -211,6 +213,10 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		// (plugin-runtime-symmetry); it is the resolver the ABAC engine reads.
 		pluginlua.WithDispatchAttributeResolver(s.cfg.ABAC.AttributeResolver()),
 	)
+	// Retain the Lua host so the gRPC subsystem can wire the SessionAdmin
+	// broadcast backing late, once the event appender exists
+	// (ConfigureSystemBroadcaster, holomush-eykuh.4.2).
+	s.luaHost = luaHost
 
 	// 4. Create service registry for proto service resolution.
 	s.registry = plugins.NewServiceRegistry()
@@ -459,6 +465,24 @@ func (s *PluginSubsystem) Manager() *plugins.Manager {
 		panic("plugin/setup: Manager() called before Start()")
 	}
 	return s.manager
+}
+
+// ConfigureSystemBroadcaster wires the SessionAdmin broadcast backing — a
+// system-event emit over appender — into the Lua host so the brokered
+// SessionAdminService serves real broadcasts (holomush-eykuh.4.2, decision
+// holomush-t019a). It MUST be called from the gRPC subsystem's Start once the
+// event appender exists: the appender is built after the plugin subsystem starts,
+// so a construction-time option cannot reach it (same late-binding rationale as
+// Manager.ConfigureEventEmitter / ConfigureFocusDeps). No-op when the Lua host is
+// not yet built or the appender is nil (leaves the server fail-closed). The
+// binary host needs no equivalent: SessionAdminService is Lua-only (not in
+// hostcap.BinaryDefaultSet). Disconnect stays Unimplemented — no production
+// forcible-disconnect mechanism (follow-up holomush-obo44).
+func (s *PluginSubsystem) ConfigureSystemBroadcaster(appender core.EventAppender) {
+	if s.luaHost == nil || appender == nil {
+		return
+	}
+	s.luaHost.SetSessionAdmin(hostcap.NewSystemBroadcaster(appender))
 }
 
 // CommandRegistry returns the command Registry. Panics if called before Start().

@@ -269,6 +269,13 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		bus:       s.cfg.EventBus,
 	}
 
+	// Wire the plugin SessionAdmin broadcast backing now that the event appender
+	// exists — the brokered SessionAdminService.Broadcast emits a system event to
+	// the reserved subject over this appender (holomush-eykuh.4.2, decision
+	// holomush-t019a). Late binding: the appender is built here, after the plugin
+	// subsystem started, so this cannot be a host construction-time option.
+	s.cfg.Plugins.ConfigureSystemBroadcaster(eventStore)
+
 	// 1. Create core engine from event store.
 	engine := core.NewEngine(eventStore)
 
