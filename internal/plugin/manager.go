@@ -861,8 +861,12 @@ func applyResolvePolicy(res *ResolveResult, p resolvePolicy) error { return p(re
 // to manifest-derived caps).
 func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) (*ResolveResult, error) {
 	if m.registry == nil {
-		// No registry: priority sort only; Grants is nil so hosts fall back
-		// to manifest.RequiredCapabilities() (backward-compat, INV-PLUGIN-45).
+		// No registry: priority sort only; Grants is nil. On the nil-Grants
+		// path BOTH runtime shims fall back to the SAME source —
+		// manifest.RequiredCapabilities() — with no per-runtime divergence
+		// (ADR holomush-vpg8l). This is the backward-compat fallback, not an
+		// endorsement of any per-runtime gating: INV-PLUGIN-45 forbids
+		// divergence, and the shared fallback satisfies that by construction.
 		return &ResolveResult{Ordered: prioritySort(discovered)}, nil
 	}
 

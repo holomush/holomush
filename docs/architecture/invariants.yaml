@@ -3550,6 +3550,14 @@ invariants:
     summary: "The binary (gRPC) and Lua (hostfunc) surfaces reach identical host evaluation logic via a single shared mapping
       (runtime parity)."
     binding: bound
+    # PAIRED BINDING — BOTH asserted_by entries are REQUIRED for this binding to
+    # hold. This is a cross-runtime parity invariant: the binary half
+    # (goplugin/evaluate_invariants_test.go) proves the gRPC surface reaches the
+    # shared mapping; the Lua half (lua/eval_entitlement_brokered_test.go) proves
+    # the hostfunc surface reaches it. Neither alone proves runtime parity.
+    # The meta-test validates asserted_by per-file, not per-pair, so deleting
+    # either half would leave INV-PLUGIN-26 falsely "bound" — do NOT remove one
+    # without re-evaluating the binding.
     asserted_by:
       - "internal/plugin/goplugin/evaluate_invariants_test.go"
       - "internal/plugin/lua/eval_entitlement_brokered_test.go"
@@ -3773,8 +3781,17 @@ invariants:
     summary: "The declaration gate that enforces least privilege MUST live at the broker/registry common path shared by both
       runtimes; per-runtime gating that could diverge is forbidden."
     binding: bound
+    # TWO complementary halves prove this invariant (ADR holomush-vpg8l / spec R3):
+    #   - least_privilege_gate_test.go: both runtimes share the SAME interceptor
+    #     CONSTRUCTOR (hostcap.DeclaredAccessFromManifest) — no per-runtime gate.
+    #   - resolver_grant_authority_test.go: both runtime shims consume the
+    #     resolver's per-plugin Grants[name] as the SINGLE grant authority (via
+    #     SetPluginGrants), instead of independently re-deriving from the manifest.
+    # The interceptor test alone leaves the resolver-as-single-authority half
+    # unproven; the resolver test alone leaves the shared-gate half unproven.
     asserted_by:
       - "test/integration/pluginparity/least_privilege_gate_test.go"
+      - "internal/plugin/goplugin/resolver_grant_authority_test.go"
   - id: INV-PLUGIN-46
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md"
