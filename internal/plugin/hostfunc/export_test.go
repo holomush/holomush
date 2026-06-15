@@ -18,9 +18,11 @@ func (f *Functions) AuditorForTest() pluginauthz.Auditor {
 	return f.auditor
 }
 
-// RegisterCapabilityFuncsForTest installs the ten retired capability host
-// functions onto the existing holomush module table on ls, for the purpose of
-// unit-testing the underlying *Fn implementations in isolation.
+// RegisterCapabilityFuncsForTest installs the per-domain functions for the ten
+// retired capability domains (kv, world.query, world.mutation, property,
+// session, session.admin, focus, eval, settings, emit) onto the existing
+// holomush module table on ls, for the purpose of unit-testing the underlying
+// *Fn implementations in isolation.
 //
 // The atomic capability cutover (holomush-eykuh.4, spec R1 / ADR holomush-05f3v)
 // removed these from the production hostfunc.Register surface — they now flow
