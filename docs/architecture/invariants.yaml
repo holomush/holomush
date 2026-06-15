@@ -3848,10 +3848,12 @@ invariants:
     asserted_by:
       - "internal/plugin/goplugin/dispatch_test.go"
       - "internal/plugin/goplugin/dispatch_propagation_test.go"
+      - "internal/plugin/dispatchwire/dispatchwire_test.go"
       - "internal/plugin/lua/dispatch_test.go"
       - "internal/plugin/lua/dispatch_propagation_test.go"
       - "internal/plugin/goplugin/host_service_command_test.go"
       - "internal/plugin/hostfunc/commands_test.go"
+      - "pkg/plugin/dispatch_ferry_test.go"
   - id: INV-PLUGIN-52
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md"

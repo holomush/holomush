@@ -1109,15 +1109,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	defer h.tokenStore.Revoke(emitToken)
 
 	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
-	// Marshal the host-vouched dispatch context onto the delivery metadata so a
-	// binary (out-of-process) plugin can ferry it back on plugin→host scoped
-	// capability calls — the subprocess never holds the in-process DispatchContext
-	// VALUE that the Lua bufconn marshals from. The SDK ferries this metadata onto
-	// plugin→host calls and the host server reconstructs it before the scope
-	// interceptor (plugin-runtime-symmetry, INV-PLUGIN-51).
-	if dc, ok := pluginauthz.DispatchForHost(callCtx); ok {
-		callCtx = dispatchwire.AttachOutgoing(callCtx, dc)
-	}
+	callCtx = marshalDeliveryDispatch(callCtx)
 	// Existing actor-kind / -id metadata still attached for plugin-side advisory
 	// consumption (pkg/plugin/sdk.go ActorMetadataFromIncomingContext).
 	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
@@ -1197,15 +1189,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	defer h.tokenStore.Revoke(emitToken)
 
 	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
-	// Marshal the host-vouched dispatch context onto the delivery metadata so a
-	// binary (out-of-process) plugin can ferry it back on plugin→host scoped
-	// capability calls — the subprocess never holds the in-process DispatchContext
-	// VALUE that the Lua bufconn marshals from. The SDK ferries this metadata onto
-	// plugin→host calls and the host server reconstructs it before the scope
-	// interceptor (plugin-runtime-symmetry, INV-PLUGIN-51).
-	if dc, ok := pluginauthz.DispatchForHost(callCtx); ok {
-		callCtx = dispatchwire.AttachOutgoing(callCtx, dc)
-	}
+	callCtx = marshalDeliveryDispatch(callCtx)
 	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
 
 	resp, err := p.plugin.HandleCommand(callCtx, protoReq)
@@ -1214,6 +1198,21 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	}
 
 	return protoCommandResponseToSDK(resp.GetResponse()), nil
+}
+
+// marshalDeliveryDispatch projects the host-vouched dispatch context (stamped by
+// stampDispatch) onto the OUTGOING delivery metadata so an out-of-process binary
+// plugin can ferry it back on plugin→host scoped capability calls — the
+// subprocess never holds the in-process DispatchContext VALUE that the Lua
+// bufconn marshals from. The SDK ferries this metadata onto plugin→host calls and
+// the host server reconstructs it before the scope interceptor
+// (plugin-runtime-symmetry, INV-PLUGIN-51). When no host-vouched dispatch is
+// present the ctx is returned unchanged (fail-closed downstream).
+func marshalDeliveryDispatch(callCtx context.Context) context.Context {
+	if dc, ok := pluginauthz.DispatchForHost(callCtx); ok {
+		return dispatchwire.AttachOutgoing(callCtx, dc)
+	}
+	return callCtx
 }
 
 // BeginServiceDispatch mints a dispatch token for a host-initiated call INTO

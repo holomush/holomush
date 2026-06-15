@@ -12,10 +12,6 @@ import (
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 )
 
-// dispatchMetadataKey aliases the single shared wire key (dispatchwire.MetadataKey)
-// so in-package references keep one canonical value across runtimes.
-const dispatchMetadataKey = dispatchwire.MetadataKey
-
 // newDispatchOutgoingInterceptor returns a client-side unary interceptor that
 // marshals the host-vouched dispatch context from the CALL ctx into outgoing
 // gRPC metadata, so it survives the Lua per-plugin bufconn boundary.

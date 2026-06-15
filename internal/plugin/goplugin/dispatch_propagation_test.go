@@ -125,7 +125,7 @@ func splitDispatchTypeID(ref string) (typ, id string, ok bool) {
 }
 
 // worldMutatorBase is a hostcap.HostCapabilities that embeds the real binary Host
-// (for its 17 other surface methods, all nil) but overrides WorldMutator so the
+// (for its other surface methods, all nil) but overrides WorldMutator so the
 // scope-eligible WorldMutationService has a no-op backing handler — the binary
 // Host hardcodes WorldMutator() == nil. This is the only seam the latent scoped
 // path needs to be exercisable.
@@ -252,7 +252,9 @@ func TestDeliveryMarshalsHostVouchedDispatchOntoOutgoingMetadata(t *testing.T) {
 			grpcClient := &mockGRPCPluginClient{}
 			mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
 			reg, _ := stubRegistryFor("plug-A")
-			h := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
+			h := NewHostWithFactory(&mockClientFactory{client: mockClient},
+				WithIdentityRegistry(reg),
+				WithDispatchAttributeResolver(fakeAttrResolver{attrs: map[string]any{"location": dispatchTestLocID}}))
 			defer func() { _ = h.Close(context.Background()) }()
 			h.plugins["plug-A"] = &loadedPlugin{manifest: &plugins.Manifest{Name: "plug-A"}, plugin: grpcClient}
 
@@ -266,6 +268,8 @@ func TestDeliveryMarshalsHostVouchedDispatchOntoOutgoingMetadata(t *testing.T) {
 			require.True(t, ok,
 				"delivery must marshal the host-vouched dispatch envelope so a binary plugin can ferry it back")
 			assert.Equal(t, "character:"+charID, dc.Subject)
+			assert.Equal(t, dispatchTestLocID, dc.Attributes["location"],
+				"the scope-bearing location attribute (what the own-location fence evaluates) must cross with the envelope")
 		})
 	}
 }

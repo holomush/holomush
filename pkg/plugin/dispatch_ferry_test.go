@@ -36,6 +36,7 @@ func TestFerryDispatchForwardsHostDeliveredEnvelope(t *testing.T) {
 	assert.Equal(t, env, got[0])
 }
 
+// Verifies: INV-PLUGIN-51
 func TestFerryDispatchDropsPluginForgedOutgoingWhenNoDelivery(t *testing.T) {
 	// Plugin forges the reserved key on its outgoing call with no host-delivered
 	// dispatch on the incoming side: nothing host-vouched exists, so the forged

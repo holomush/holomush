@@ -51,6 +51,7 @@ func TestAttachOutgoingWithEmptySubjectStripsAndAttachesNothing(t *testing.T) {
 	assert.False(t, ok, "empty subject must not write an envelope (fail closed)")
 }
 
+// Verifies: INV-PLUGIN-51
 func TestAttachOutgoingOverwritesPluginForgedKey(t *testing.T) {
 	// A plugin pre-seeds the reserved key on the outgoing context with forged
 	// scope attributes; AttachOutgoing must replace it with the host-vouched one.
