@@ -14,6 +14,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 )
 
 // emitTokenStore authenticates the actor input on the binary-plugin gRPC
@@ -50,7 +51,15 @@ type emitTokenEntry struct {
 	// dispatch had no player context (e.g. DeliverEvent), in which case PLAYER-scope
 	// ownership fails closed.
 	ownerPlayerID string
-	expiresAt     time.Time
+	// dispatch is the host-vouched DispatchContext (acting-character subject +
+	// resolved scope attributes) bound to this token at issuance. The binary
+	// plugin→host scope interceptor recovers it from the validated token via
+	// LookupDispatch — NEVER from plugin-controlled gRPC metadata, which an
+	// untrusted out-of-process plugin can forge (INV-PLUGIN-51). Zero-value when
+	// the dispatch had no character context (DeliverEvent without a character
+	// actor, self-tokens), which fails closed at scope-enforcement time.
+	dispatch  pluginauthz.DispatchContext
+	expiresAt time.Time
 }
 
 func newEmitTokenStore() *emitTokenStore {
@@ -76,6 +85,15 @@ func newEmitTokenStore() *emitTokenStore {
 // terminal-on-close so a host shutting down cannot keep minting tokens
 // that survive into a successor's lifetime.
 func (s *emitTokenStore) Issue(pluginName string, actor core.Actor, ownerPlayerID string) (string, error) {
+	return s.IssueWithDispatch(pluginName, actor, ownerPlayerID, pluginauthz.DispatchContext{})
+}
+
+// IssueWithDispatch is Issue plus a host-vouched DispatchContext bound to the
+// token, recovered by LookupDispatch. The binary delivery path uses it so the
+// acting-character scope crosses to the plugin→host capability call via the
+// unforgeable token rather than plugin-controlled metadata (INV-PLUGIN-51). Pass
+// a zero DispatchContext when there is no character dispatch — fail-closed.
+func (s *emitTokenStore) IssueWithDispatch(pluginName string, actor core.Actor, ownerPlayerID string, dispatch pluginauthz.DispatchContext) (string, error) {
 	var buf [16]byte
 	if _, err := io.ReadFull(s.rand, buf[:]); err != nil {
 		return "", oops.Code("EMIT_TOKEN_ISSUE_FAILED").
@@ -94,6 +112,7 @@ func (s *emitTokenStore) Issue(pluginName string, actor core.Actor, ownerPlayerI
 		pluginName:    pluginName,
 		actor:         actor,
 		ownerPlayerID: ownerPlayerID,
+		dispatch:      dispatch,
 		expiresAt:     s.now().Add(s.ttl),
 	}
 	s.mu.Unlock()
@@ -129,6 +148,24 @@ func (s *emitTokenStore) Lookup(pluginName, token string) (core.Actor, string, b
 		return core.Actor{}, "", false
 	}
 	return entry.actor, entry.ownerPlayerID, true
+}
+
+// LookupDispatch retrieves the host-vouched DispatchContext bound to a token at
+// issuance. Same fail-closed semantics as Lookup (missing/expired/plugin
+// mismatch all return ok=false). This is the unforgeable recovery path for the
+// binary plugin→host scope interceptor: the dispatch comes from the host's own
+// token store keyed by the host-minted token, so an untrusted plugin cannot forge
+// the acting-character subject or scope attributes by setting gRPC metadata
+// (INV-PLUGIN-51). ok=true with a zero-value DispatchContext.Subject means the
+// token carries no character dispatch — fail-closed downstream.
+func (s *emitTokenStore) LookupDispatch(pluginName, token string) (pluginauthz.DispatchContext, bool) {
+	s.mu.RLock()
+	entry, ok := s.items[token]
+	s.mu.RUnlock()
+	if !ok || entry.pluginName != pluginName || !s.now().Before(entry.expiresAt) {
+		return pluginauthz.DispatchContext{}, false
+	}
+	return entry.dispatch, true
 }
 
 // Revoke removes a token entry. Idempotent.

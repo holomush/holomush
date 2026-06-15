@@ -192,3 +192,21 @@
   bufconn → catches wrong field name. Harness wires AllowAllEngine + fixed AttributeResolver = supply scope-fence
   INPUTS not stub the check. Entitlement test: AllowAll+foreign scene:+OwnedResourceTypes empty+gate-before-engine
   (evaluate.go:196<212)+errmsg has "scene"; deleted Lua subtest MOVED not dropped.
+- **Binary dispatch-context propagation (ndtq1 READY, 2026-06-15) -- CLEAN extract+ferry.** Shared
+  dispatchwire codec extracted from lua/dispatch_interceptor.go; binary path adds StampInterceptor
+  before capability ic in newHostCapabilityServer, host.go DeliverEvent/Command marshal
+  DispatchForHost->AttachOutgoing, SDK dispatch_ferry.go interceptor on the SINGLE shared
+  dialPluginHost conn (sdk.go:189) ferries incoming->outgoing. FAIL-CLOSED verified every leg:
+  DecodeFromIncoming denies len!=1/badJSON/empty-subject; ferryDispatch strips plugin-forged
+  OUTGOING then forwards only host-delivered INCOMING (host-vouched wins, ambiguous dropped).
+  LUA REFACTOR behavior-preservation crux: orig=unconditional strip + append-if(ok&&subj!=""),
+  new=if-ok->AttachOutgoing(strip+append-if-subj!="") else->StripOutgoing. DispatchForHost
+  (dispatch.go:42) returns ok regardless of subject, so empty-subject must be handled INSIDE
+  AttachOutgoing -- it is. Regression guard = lua TestPluginForgedDispatchMetadataIsIgnored (real
+  bufconn, forged+!ok->SCOPE_NO_DISPATCH). KEY-SYNC by twin literal-pinning tests (no shared symbol;
+  internal/SDK module boundary forces it, mirrors x-holomush-emit-token). withDispatchToken keys on
+  x-holomush-emit-token = disjoint from x-holomush-dispatch, no collision. Binary production path
+  STILL latent (BinaryDefaultSet omits WorldMutationService) so StampInterceptor stamps a ctx value
+  nothing reads = harmless. Test mock engines model real interceptor: scope half surfaces
+  dc.Attributes["location"] as action attr "dispatch_location" (interceptor.go:208). Non-blocking:
+  no single host->ferry->server e2e test (legs proven separately; cross-process needs subprocess).

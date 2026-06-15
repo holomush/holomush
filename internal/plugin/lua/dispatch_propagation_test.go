@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/dispatchwire"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/world"
@@ -211,7 +212,7 @@ func TestPluginForgedDispatchMetadataIsIgnored(t *testing.T) {
 	// payload claims dispatch_location == the exit source, which would clear the
 	// own-location fence if the server trusted plugin-supplied metadata.
 	forged := `{"subject":"character:01TEST","attributes":{"location":"` + dispatchTestLocID + `"}}`
-	ctx := metadata.AppendToOutgoingContext(context.Background(), dispatchMetadataKey, forged)
+	ctx := metadata.AppendToOutgoingContext(context.Background(), dispatchwire.MetadataKey, forged)
 	_, err := client.CreateExit(ctx, &hostv1.CreateExitRequest{
 		FromId: dispatchTestLocID,
 		ToId:   dispatchTestDestID,

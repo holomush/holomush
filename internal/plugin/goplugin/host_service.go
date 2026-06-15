@@ -4,11 +4,14 @@
 package goplugin
 
 import (
+	"context"
+
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -38,15 +41,64 @@ import (
 // them — Task 10 wires the policy/scope half.
 func newPluginHostServiceServer(host *Host, manifest *plugins.Manifest) func([]grpc.ServerOption) *grpc.Server {
 	return func(opts []grpc.ServerOption) *grpc.Server {
-		ic := hostcap.NewCapabilityInterceptor(hostcap.InterceptorDeps{
-			Engine:         host.AccessEngine(),
-			Auditor:        host.Auditor(),
-			PluginName:     manifest.Name,
-			DeclaredAccess: hostcap.DeclaredAccessFromManifest(manifest),
-		})
-		server := grpc.NewServer(append(opts, grpc.ChainUnaryInterceptor(ic))...)
-		hostcap.RegisterCapabilities(server, hostcap.NewBase(host, manifest.Name), hostcap.BinaryDefaultSet)
-		return server
+		return newHostCapabilityServer(
+			host,
+			hostcap.InterceptorDeps{
+				Engine:         host.AccessEngine(),
+				Auditor:        host.Auditor(),
+				PluginName:     manifest.Name,
+				DeclaredAccess: hostcap.DeclaredAccessFromManifest(manifest),
+			},
+			hostcap.BinaryDefaultSet,
+			opts,
+		)
+	}
+}
+
+// newHostCapabilityServer builds the host-capability gRPC server with the
+// runtime-neutral interceptor chain: the token-dispatch interceptor (recovers the
+// host-vouched DispatchContext from the caller's host-issued emit token) chained
+// BEFORE the capability/scope interceptor, then `set` registered against `base`.
+//
+// Unlike the Lua per-plugin bufconn (internal/plugin/lua/bufconn_endpoint.go),
+// which marshals dispatch as host-controlled in-process metadata, a binary plugin
+// is out-of-process and controls its own outgoing gRPC metadata. Recovering
+// dispatch from plugin-supplied metadata would let it forge the acting-character
+// scope; instead the dispatch is bound to the unforgeable host-issued emit token
+// at delivery (host.go) and recovered here from the validated token via
+// base.LookupDispatch (plugin-runtime-symmetry, INV-PLUGIN-51). Without dispatch,
+// a scoped call denies (SCOPE_NO_DISPATCH).
+//
+// Extracted from newPluginHostServiceServer so tests can register a
+// scope-eligible capability set against a custom base — BinaryDefaultSet omits
+// WorldMutationService (the binary Host has no world surface), so the scoped path
+// is not reachable through the production set today (holomush-ndtq1).
+func newHostCapabilityServer(
+	base hostcap.HostCapabilities,
+	deps hostcap.InterceptorDeps,
+	set hostcap.CapabilitySet,
+	opts []grpc.ServerOption,
+) *grpc.Server {
+	ic := hostcap.NewCapabilityInterceptor(deps)
+	server := grpc.NewServer(append(opts, grpc.ChainUnaryInterceptor(tokenDispatchInterceptor(base, deps.PluginName), ic))...)
+	hostcap.RegisterCapabilities(server, hostcap.NewBase(base, deps.PluginName), set)
+	return server
+}
+
+// tokenDispatchInterceptor recovers the host-vouched DispatchContext bound to the
+// caller's host-issued emit token (base.LookupDispatch) and stamps it onto the
+// handler context BEFORE the capability/scope interceptor runs. The dispatch is
+// keyed by the host-minted, host-stored token — never read from plugin-controlled
+// gRPC metadata — so an untrusted out-of-process plugin cannot forge the
+// acting-character subject or scope attributes (INV-PLUGIN-51). A missing or
+// invalid token, or a token carrying no character dispatch, leaves the context
+// without dispatch, so the scope interceptor denies (SCOPE_NO_DISPATCH).
+func tokenDispatchInterceptor(base hostcap.HostCapabilities, pluginName string) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if dc, ok := base.LookupDispatch(ctx, pluginName); ok && dc.Subject != "" {
+			ctx = pluginauthz.WithDispatch(ctx, dc)
+		}
+		return handler(ctx, req)
 	}
 }
 

@@ -3847,6 +3847,8 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/plugin/goplugin/dispatch_test.go"
+      - "internal/plugin/goplugin/dispatch_propagation_test.go"
+      - "internal/plugin/dispatchwire/dispatchwire_test.go"
       - "internal/plugin/lua/dispatch_test.go"
       - "internal/plugin/lua/dispatch_propagation_test.go"
       - "internal/plugin/goplugin/host_service_command_test.go"

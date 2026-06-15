@@ -123,6 +123,15 @@ func (a *luaHostCapAdapter) LookupActor(ctx context.Context, pluginName string) 
 	return actor, access.PluginSubject(pluginName), nil
 }
 
+// LookupDispatch always returns (zero, false): the Lua runtime is in-process and
+// has no emit-token store, so it recovers dispatch from the host-stamped bufconn
+// metadata (dispatchwire.StampInterceptor in bufconn_endpoint.go), never from a
+// token. The token-bound recovery is the binary boundary's concern. Satisfies
+// hostcap.HostCapabilities (INV-PLUGIN-51).
+func (a *luaHostCapAdapter) LookupDispatch(_ context.Context, _ string) (pluginauthz.DispatchContext, bool) {
+	return pluginauthz.DispatchContext{}, false
+}
+
 // IssueEmitToken returns an unsupported error: the Lua runtime has no emit-token
 // forgery surface (no binary gRPC boundary to defend). The binary adapter mints
 // tokens for RequestEmitToken; this adapter explicitly rejects the request.
