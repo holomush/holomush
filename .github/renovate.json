@@ -9,8 +9,7 @@
   "platformAutomerge": true,
   "gomod": {
     "managerFilePatterns": [
-      "/(^|/)go\\.mod$/",
-      "/(^|/)go\\.tool(-lint)?\\.mod$/"
+      "/(^|/)go\\.mod$/"
     ]
   },
   "packageRules": [

@@ -6,8 +6,9 @@
 // tools resolve self-consistently together.
 //
 // Run via `GOWORK=off go tool -modfile=go.tool-lint.mod <name>` (see
-// Taskfile.yaml GO_TOOL_LINT). Renovate tracks this via the `gomod` manager
-// fileMatch in .github/renovate.json.
+// Taskfile.yaml GO_TOOL_LINT). Renovate does NOT manage this modfile — its
+// `gomod` manager is scoped to the root go.mod only; see go.tool.mod for why
+// (holomush-nr63n). Lint tool deps here are bumped manually.
 module github.com/holomush/holomush/tools-lint
 
 go 1.26
