@@ -8,6 +8,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/dispatchwire"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -38,16 +39,49 @@ import (
 // them — Task 10 wires the policy/scope half.
 func newPluginHostServiceServer(host *Host, manifest *plugins.Manifest) func([]grpc.ServerOption) *grpc.Server {
 	return func(opts []grpc.ServerOption) *grpc.Server {
-		ic := hostcap.NewCapabilityInterceptor(hostcap.InterceptorDeps{
-			Engine:         host.AccessEngine(),
-			Auditor:        host.Auditor(),
-			PluginName:     manifest.Name,
-			DeclaredAccess: hostcap.DeclaredAccessFromManifest(manifest),
-		})
-		server := grpc.NewServer(append(opts, grpc.ChainUnaryInterceptor(ic))...)
-		hostcap.RegisterCapabilities(server, hostcap.NewBase(host, manifest.Name), hostcap.BinaryDefaultSet)
-		return server
+		return newHostCapabilityServer(
+			host,
+			hostcap.InterceptorDeps{
+				Engine:         host.AccessEngine(),
+				Auditor:        host.Auditor(),
+				PluginName:     manifest.Name,
+				DeclaredAccess: hostcap.DeclaredAccessFromManifest(manifest),
+			},
+			hostcap.BinaryDefaultSet,
+			opts,
+		)
 	}
+}
+
+// newHostCapabilityServer builds the host-capability gRPC server with the
+// runtime-neutral interceptor chain: the dispatch-stamp interceptor
+// (dispatchwire.StampInterceptor — reconstructs the host-vouched DispatchContext
+// from incoming metadata) chained BEFORE the capability/scope interceptor, then
+// `set` registered against `base`.
+//
+// The dispatch-stamp half mirrors the Lua per-plugin bufconn
+// (internal/plugin/lua/bufconn_endpoint.go), so a binary plugin's plugin→host
+// scoped capability call resolves its own-location fence identically to a Lua
+// plugin's (plugin-runtime-symmetry, INV-PLUGIN-51). Without it, a scoped call
+// over the subprocess gRPC boundary arrives with bare dispatch and the scope
+// interceptor denies (SCOPE_NO_DISPATCH) — the gap this fills. The dispatch must
+// reach the server as incoming metadata; the host delivery side marshals it
+// (host.go) and the SDK ferries it (pkg/plugin) onto plugin→host calls.
+//
+// Extracted from newPluginHostServiceServer so tests can register a
+// scope-eligible capability set against a custom base — BinaryDefaultSet omits
+// WorldMutationService (the binary Host has no world surface), so the scoped path
+// is not reachable through the production set today (holomush-ndtq1).
+func newHostCapabilityServer(
+	base hostcap.HostCapabilities,
+	deps hostcap.InterceptorDeps,
+	set hostcap.CapabilitySet,
+	opts []grpc.ServerOption,
+) *grpc.Server {
+	ic := hostcap.NewCapabilityInterceptor(deps)
+	server := grpc.NewServer(append(opts, grpc.ChainUnaryInterceptor(dispatchwire.StampInterceptor(), ic))...)
+	hostcap.RegisterCapabilities(server, hostcap.NewBase(base, deps.PluginName), set)
+	return server
 }
 
 // sdkActorKindToCore maps a plugin-SDK ActorKind to the core ActorKind. It is

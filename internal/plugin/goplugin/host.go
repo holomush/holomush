@@ -31,6 +31,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/dispatchwire"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/property"
@@ -1108,6 +1109,15 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	defer h.tokenStore.Revoke(emitToken)
 
 	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
+	// Marshal the host-vouched dispatch context onto the delivery metadata so a
+	// binary (out-of-process) plugin can ferry it back on plugin→host scoped
+	// capability calls — the subprocess never holds the in-process DispatchContext
+	// VALUE that the Lua bufconn marshals from. The SDK ferries this metadata onto
+	// plugin→host calls and the host server reconstructs it before the scope
+	// interceptor (plugin-runtime-symmetry, INV-PLUGIN-51).
+	if dc, ok := pluginauthz.DispatchForHost(callCtx); ok {
+		callCtx = dispatchwire.AttachOutgoing(callCtx, dc)
+	}
 	// Existing actor-kind / -id metadata still attached for plugin-side advisory
 	// consumption (pkg/plugin/sdk.go ActorMetadataFromIncomingContext).
 	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
@@ -1187,6 +1197,15 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	defer h.tokenStore.Revoke(emitToken)
 
 	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
+	// Marshal the host-vouched dispatch context onto the delivery metadata so a
+	// binary (out-of-process) plugin can ferry it back on plugin→host scoped
+	// capability calls — the subprocess never holds the in-process DispatchContext
+	// VALUE that the Lua bufconn marshals from. The SDK ferries this metadata onto
+	// plugin→host calls and the host server reconstructs it before the scope
+	// interceptor (plugin-runtime-symmetry, INV-PLUGIN-51).
+	if dc, ok := pluginauthz.DispatchForHost(callCtx); ok {
+		callCtx = dispatchwire.AttachOutgoing(callCtx, dc)
+	}
 	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
 
 	resp, err := p.plugin.HandleCommand(callCtx, protoReq)
