@@ -282,7 +282,10 @@ local function handle_page(ctx)
 
     -- Update last-paged on the sender's session.
     if ctx.session_id and ctx.session_id ~= "" then
-        session_caps.SetLastWhispered({session_id = ctx.session_id, name = target_session.character_name})
+        local _, set_err = session_caps.SetLastWhispered({session_id = ctx.session_id, name = target_session.character_name})
+        if set_err then
+            holomush.log("warn", "page: failed to update last-whispered: " .. set_err)
+        end
     end
 
     return ok_events(
@@ -404,7 +407,10 @@ local function handle_whisper(ctx)
 
     -- Record last whispered target.
     if ctx.session_id and ctx.session_id ~= "" then
-        session_caps.SetLastWhispered({session_id = ctx.session_id, name = target.character_name})
+        local _, set_err = session_caps.SetLastWhispered({session_id = ctx.session_id, name = target.character_name})
+        if set_err then
+            holomush.log("warn", "whisper: failed to update last-whispered: " .. set_err)
+        end
     end
 
     return ok_events(
