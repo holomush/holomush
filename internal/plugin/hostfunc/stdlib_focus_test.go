@@ -116,6 +116,7 @@ func newFocusTestState(t *testing.T, fo hostfunc.FocusOps, hr hostfunc.HistoryRe
 		hostfunc.WithHistoryReader(hr),
 	)
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 	return L
 }
 
@@ -410,6 +411,7 @@ func TestQueryStreamHistoryWithNilReaderIsNoOp(t *testing.T) {
 	defer L.Close()
 	hf := hostfunc.New(nil)
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=10})`)
 	require.NoError(t, err)
@@ -420,6 +422,7 @@ func TestFocusFuncsWithNilOpsAreNoOps(t *testing.T) {
 	defer L.Close()
 	hf := hostfunc.New(nil)
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	require.NoError(t, L.DoString(`holomush.join_focus("s", "scene", "`+ulid.Make().String()+`")`))
 	require.NoError(t, L.DoString(`holomush.leave_focus("s", "scene", "`+ulid.Make().String()+`")`))

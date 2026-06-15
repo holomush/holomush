@@ -3,6 +3,13 @@
 
 -- core-building: provides the dig and link commands for world building.
 
+-- Host-brokered capability tables (holomush-eykuh.4). Dotted globals are
+-- accessed via _G[...] (the name "world.query" is NOT a field of a "world"
+-- global). Methods take a single proto-request table (snake_case proto field
+-- keys) and return (proto_response_table, err_or_nil).
+local world_query = _G["world.query"]
+local world_mutation = _G["world.mutation"]
+
 local DIG_USAGE = 'Usage: dig <exit> to "<location>" [return <exit>]'
 local LINK_USAGE = "Usage: link <exit> to <target>"
 
@@ -50,7 +57,7 @@ local function resolve_location(target)
     end
     if target:sub(1, 1) == "#" then
         local id = target:sub(2)
-        local loc, err = holomush.query_location(id)
+        local loc, err = world_query.QueryLocation({location_id = id})
         if err then
             holomush.log("error", "link: failed to query location " .. id .. ": " .. err)
             return nil, 'unable to find location "' .. id .. '"'
@@ -58,7 +65,7 @@ local function resolve_location(target)
         return loc, nil
     end
 
-    local loc, err = holomush.find_location(target)
+    local loc, err = world_query.FindLocation({name = target})
     if err then
         holomush.log("error", "link: failed to find location " .. target .. ": " .. err)
         return nil, 'unable to find location "' .. target .. '"'
@@ -78,19 +85,19 @@ local function handle_dig(ctx)
         return {status = 1, output = parse_err}
     end
 
-    local loc, err = holomush.create_location(loc_name, "", "persistent")
+    local loc, err = world_mutation.CreateLocation({name = loc_name, description = "", type = "persistent"})
     if err then
         holomush.log("error", 'dig: failed to create location "' .. loc_name .. '": ' .. err)
         return {status = 2, output = "Unable to create location right now. Please try again."}
     end
 
-    local exit_opts = {}
+    local exit_req = {from_id = ctx.location_id, to_id = loc.id, name = exit_name}
     if return_exit then
-        exit_opts.bidirectional = true
-        exit_opts.return_name = return_exit
+        exit_req.bidirectional = true
+        exit_req.return_name = return_exit
     end
 
-    local _, exit_err = holomush.create_exit(ctx.location_id, loc.id, exit_name, exit_opts)
+    local _, exit_err = world_mutation.CreateExit(exit_req)
     if exit_err then
         holomush.log("error", 'dig: location created but exit "' .. exit_name .. '" failed: ' .. exit_err)
         return {status = 2, output = "Location created but exit failed. Please try again."}
@@ -122,7 +129,7 @@ local function handle_link(ctx)
         return {status = 1, output = resolve_err}
     end
 
-    local _, exit_err = holomush.create_exit(ctx.location_id, target_loc.id, exit_name, {})
+    local _, exit_err = world_mutation.CreateExit({from_id = ctx.location_id, to_id = target_loc.id, name = exit_name})
     if exit_err then
         holomush.log("error", 'link: failed to create exit "' .. exit_name .. '": ' .. exit_err)
         return {status = 2, output = "Unable to create exit right now. Please try again."}

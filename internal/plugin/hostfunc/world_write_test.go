@@ -119,6 +119,7 @@ func TestCreateLocationFnSuccess(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.create_location("Test Room", "A test room", "persistent")`)
 	require.NoError(t, err)
@@ -143,6 +144,7 @@ func TestCreateLocationFnInvalidLocationType(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.create_location("Test", "desc", "invalid-type")`)
 	require.NoError(t, err)
@@ -159,6 +161,7 @@ func TestCreateLocationFnNoWorldService(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.create_location("Test", "", "persistent")`)
 	require.NoError(t, err)
@@ -178,6 +181,7 @@ func TestCreateLocationFnServiceError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.create_location("Test", "desc", "persistent")`)
 	require.NoError(t, err)
@@ -207,6 +211,7 @@ func TestCreateExitFnSuccess(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.create_exit("%s", "%s", "north", {})`, fromID, toID)
 	err := L.DoString(code)
@@ -233,6 +238,7 @@ func TestCreateExitFnWithBidirectionalOptions(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.create_exit("%s", "%s", "north", {bidirectional = true, return_name = "south"})`, fromID, toID)
 	err := L.DoString(code)
@@ -252,6 +258,7 @@ func TestCreateExitFnInvalidFromID(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	toID := ulid.Make()
 	code := fmt.Sprintf(`result, err = holomush.create_exit("invalid-id", "%s", "north", {})`, toID)
@@ -271,6 +278,7 @@ func TestCreateExitFnInvalidToID(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	fromID := ulid.Make()
 	code := fmt.Sprintf(`result, err = holomush.create_exit("%s", "invalid-id", "north", {})`, fromID)
@@ -288,6 +296,7 @@ func TestCreateExitFnNoWorldService(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	fromID := ulid.Make()
 	toID := ulid.Make()
@@ -313,6 +322,7 @@ func TestCreateExitFnServiceError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.create_exit("%s", "%s", "north", {})`, fromID, toID)
 	err := L.DoString(code)
@@ -342,6 +352,7 @@ func TestCreateObjectFnSuccess(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.create_object("Magic Sword", {location_id = "%s"})`, locID)
 	err := L.DoString(code)
@@ -365,6 +376,7 @@ func TestCreateObjectFnNoContainment(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.create_object("Sword", {})`)
 	require.NoError(t, err)
@@ -382,6 +394,7 @@ func TestCreateObjectFnMissingOptsTable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	// Call create_object with only name argument, no opts table
 	err := L.DoString(`result, err = holomush.create_object("Sword")`)
@@ -401,6 +414,7 @@ func TestCreateObjectFnOptsNotATable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	// Call create_object with a string instead of a table for opts
 	err := L.DoString(`result, err = holomush.create_object("Sword", "not-a-table")`)
@@ -424,6 +438,7 @@ func TestCreateObjectFnServiceError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.create_object("Magic Sword", {location_id = "%s"})`, locID)
 	err := L.DoString(code)
@@ -465,6 +480,7 @@ func TestFindLocationFnSuccess(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.find_location("Town Square")`)
 	require.NoError(t, err)
@@ -491,6 +507,7 @@ func TestFindLocationFnNotFound(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.find_location("Nonexistent")`)
 	require.NoError(t, err)
@@ -512,6 +529,7 @@ func TestFindLocationFnServiceError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.find_location("Test Room")`)
 	require.NoError(t, err)
@@ -548,6 +566,7 @@ func TestSetPropertyFnLocationDescription(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.set_property("location", "%s", "description", "New description")`, locID)
 	err := L.DoString(code)
@@ -574,6 +593,7 @@ func TestSetPropertyFnObjectDescription(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.set_property("object", "%s", "description", "A gleaming blade")`, objID)
 	luaErr := L.DoString(code)
@@ -590,6 +610,7 @@ func TestSetPropertyFnInvalidEntityType(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	objID := ulid.Make()
 	code := fmt.Sprintf(`result, err = holomush.set_property("invalid", "%s", "description", "test")`, objID)
@@ -609,6 +630,7 @@ func TestSetPropertyFnInvalidEntityID(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.set_property("location", "invalid-id", "description", "test")`)
 	require.NoError(t, err)
@@ -634,6 +656,7 @@ func TestSetPropertyFnInvalidProperty(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.set_property("location", "%s", "invalid_property", "test")`, locID)
 	err := L.DoString(code)
@@ -663,6 +686,7 @@ func TestSetPropertyFnServiceError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.set_property("location", "%s", "description", "New description")`, locID)
 	err := L.DoString(code)
@@ -699,6 +723,7 @@ func TestGetPropertyFnLocationDescription(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.get_property("location", "%s", "description")`, locID)
 	err := L.DoString(code)
@@ -727,6 +752,7 @@ func TestGetPropertyFnObjectName(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	code := fmt.Sprintf(`result, err = holomush.get_property("object", "%s", "name")`, objID)
 	luaErr := L.DoString(code)
@@ -746,6 +772,7 @@ func TestGetPropertyFnInvalidEntityType(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	entityID := ulid.Make()
 	code := fmt.Sprintf(`result, err = holomush.get_property("invalid", "%s", "description")`, entityID)
@@ -767,6 +794,7 @@ func TestGetPropertyFnEntityNotFound(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	locID := ulid.Make()
 	code := fmt.Sprintf(`result, err = holomush.get_property("location", "%s", "description")`, locID)
@@ -788,6 +816,7 @@ func TestGetPropertyFnServiceError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	locID := ulid.Make()
 	code := fmt.Sprintf(`result, err = holomush.get_property("location", "%s", "description")`, locID)
@@ -823,6 +852,7 @@ func TestWorldWriteFunctionsSubjectIDFormat(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "my-building-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "my-building-plugin")
 
 	_ = L.DoString(`result, err = holomush.find_location("Test")`)
 

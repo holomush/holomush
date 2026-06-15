@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -23,6 +24,33 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
+
+// buildingTestLocationID is the acting location these specs scope their scoped
+// (own-location) capability writes against. The dispatch attribute resolver
+// returns it so DispatchContext.Attributes["location"] is populated and the
+// scope fence resolves; the scoped dig/link exit writes carry it as from_id.
+const buildingTestLocationID = "01HTEST000000000000000ROOM"
+
+// scopedActorContext stamps a character actor on ctx so the Lua host's
+// stampDispatch vouches the per-call dispatch context (subject + resolved
+// location attribute). Scoped capability writes (dig/link exit creation) fail
+// closed with SCOPE_NO_DISPATCH without it — this mirrors production, where the
+// dispatch layer stamps the acting character before delivering the command.
+func scopedActorContext(ctx context.Context, characterID string) context.Context {
+	return core.WithActor(ctx, core.Actor{Kind: core.ActorCharacter, ID: characterID})
+}
+
+// fixedBuildingAttrResolver is a pluginauthz.AttributeResolver test double that
+// returns a fixed dispatch-attribute bag (notably "location") for any subject,
+// so stampDispatch populates DispatchContext.Attributes for scoped capability
+// fences during building/objects integration tests.
+type fixedBuildingAttrResolver struct {
+	location string
+}
+
+func (r fixedBuildingAttrResolver) ResolveSubject(context.Context, string) (map[string]any, error) {
+	return map[string]any{"location": r.location, "has_location": true}, nil
+}
 
 // mockWorldMutator implements hostfunc.WorldMutator for building integration tests.
 type mockWorldMutator struct {
@@ -102,12 +130,23 @@ func setupBuildingTest(mutator hostfunc.WorldMutator) (*buildingFixture, error) 
 		return nil, statErr
 	}
 
-	var opts []hostfunc.Option
+	opts := []hostfunc.Option{
+		// Scoped capability writes (dig/link exit creation) run the ABAC engine to
+		// evaluate the own-location scope fence; production wires the access engine
+		// here (interceptor sources it via adapter.AccessEngine() → Functions.Engine()).
+		// AllowAllEngine lets the scope evaluation proceed so the create RPCs reach
+		// the mutator. Without an engine the scope check fails closed EVALUATE_NO_ENGINE.
+		hostfunc.WithEngine(policytest.AllowAllEngine()),
+	}
 	if mutator != nil {
 		opts = append(opts, hostfunc.WithWorldService(mutator))
 	}
 	hostFuncs := hostfunc.New(nil, opts...)
-	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
+	// The dispatch attribute resolver populates DispatchContext.Attributes["location"]
+	// so scoped capability calls have an acting-character location to fence against —
+	// the production AttributeResolver equivalent.
+	luaHost := pluginlua.NewHostWithFunctions(hostFuncs,
+		pluginlua.WithDispatchAttributeResolver(fixedBuildingAttrResolver{location: buildingTestLocationID}))
 
 	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
 	if mgrErr != nil {
@@ -256,13 +295,14 @@ var _ = Describe("Building Plugin Integration", func() {
 
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
+				ctx = scopedActorContext(ctx, "01HTEST000000000000000CHAR")
 
 				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-building", pluginsdk.CommandRequest{
 					Command:       "dig",
 					Args:          `north to "Town Square"`,
 					CharacterID:   "01HTEST000000000000000CHAR",
 					CharacterName: "Builder",
-					LocationID:    "01HTEST000000000000000ROOM",
+					LocationID:    buildingTestLocationID,
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
@@ -278,13 +318,14 @@ var _ = Describe("Building Plugin Integration", func() {
 
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
+				ctx = scopedActorContext(ctx, "01HTEST000000000000000CHAR")
 
 				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-building", pluginsdk.CommandRequest{
 					Command:       "dig",
 					Args:          `north to "Market" return south`,
 					CharacterID:   "01HTEST000000000000000CHAR",
 					CharacterName: "Builder",
-					LocationID:    "01HTEST000000000000000ROOM",
+					LocationID:    buildingTestLocationID,
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
@@ -334,13 +375,14 @@ var _ = Describe("Building Plugin Integration", func() {
 
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
+				ctx = scopedActorContext(ctx, "01HTEST000000000000000CHAR")
 
 				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-building", pluginsdk.CommandRequest{
 					Command:       "link",
 					Args:          `east to Garden`,
 					CharacterID:   "01HTEST000000000000000CHAR",
 					CharacterName: "Builder",
-					LocationID:    "01HTEST000000000000000ROOM",
+					LocationID:    buildingTestLocationID,
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))

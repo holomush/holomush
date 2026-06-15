@@ -2135,37 +2135,28 @@ error("intentional capture-pass failure")
 	assert.Equal(t, "load", oopsErr.Context()["operation"])
 }
 
-// TestLegacyHostFuncInjectionUnchangedWhenBridgeEnabledForOtherPlugin asserts
-// the coexistence guarantee (spec §5): a plugin NOT in the WithHostCapBridge
-// allowlist receives the full legacy hostfunc-shim global injection exactly as
-// before — the new host-capability bridge's existence does not regress it.
-//
-// The existing TestHostCapBridgeOptedOutPluginUnaffected proves the NEGATIVE
-// half (an opted-out plugin gets no NEW bridge global, e.g. kv). This test
-// proves the POSITIVE complement that §5 actually promises: the LEGACY globals
-// the opted-out plugin depends on (the holomush module and its functions —
-// holomush.new_request_id, holomush.log) are still present and functional. A
-// regression that gated legacy injection behind the bridge opt-in would break
-// this even though the negative test stayed green.
-//
-// Construction: the bridge is enabled for a DIFFERENT plugin ("bridge-plugin")
-// via WithHostCapBridge, so the new bridge path EXISTS on the host; the
-// plugin under test ("legacy-plugin") is deliberately absent from the allowlist
-// and must therefore travel the unchanged legacy hostfunc.Register path.
-func TestLegacyHostFuncInjectionUnchangedWhenBridgeEnabledForOtherPlugin(t *testing.T) {
+// TestAmbientStdlibRemainsAfterCutover asserts the ADR holomush-05f3v boundary:
+// after the atomic capability cutover retires the ten capability host functions
+// to the host-brokered path, the AMBIENT language stdlib (holomush.log,
+// holomush.new_request_id) MUST remain unconditionally injected for every plugin
+// — including one that declares no capabilities. A regression that gated the
+// stdlib behind a capability declaration would break this.
+func TestAmbientStdlibRemainsAfterCutover(t *testing.T) {
 	dir := t.TempDir()
 
-	// The plugin exercises the legacy holomush.* globals. If any were missing,
-	// the Lua call would raise (attempt to call a nil value) and DeliverEvent
-	// would return an error. It echoes the request_id into the emit payload so
-	// the test can confirm the legacy hostfunc actually ran, not merely existed.
+	// The plugin exercises the ambient stdlib holomush.* globals that survive the
+	// atomic capability cutover (holomush-eykuh.4 / ADR holomush-05f3v): log and
+	// new_request_id. If either were missing the Lua call would raise (attempt to
+	// call a nil value) and DeliverEvent would return an error. It echoes the
+	// request_id into the emit payload so the test confirms the stdlib hostfunc
+	// actually ran, not merely existed.
 	writeMainLua(t, dir, `
 function on_event(event)
-    assert(type(holomush) == "table", "legacy holomush module must be injected")
-    assert(type(holomush.new_request_id) == "function", "legacy holomush.new_request_id must be injected")
-    assert(type(holomush.log) == "function", "legacy holomush.log must be injected")
+    assert(type(holomush) == "table", "ambient holomush module must be injected")
+    assert(type(holomush.new_request_id) == "function", "ambient holomush.new_request_id must be injected")
+    assert(type(holomush.log) == "function", "ambient holomush.log must be injected")
     local id = holomush.new_request_id()
-    holomush.log("info", "legacy path ran for: " .. event.type)
+    holomush.log("info", "stdlib path ran for: " .. event.type)
     return {{
         subject = event.stream,
         type = "say",
@@ -2174,11 +2165,11 @@ function on_event(event)
 end
 `)
 
-	// Bridge is enabled for a DIFFERENT plugin, so the bridge path exists on the
-	// host while "legacy-plugin" stays on the unchanged legacy injection path.
+	// After the cutover the brokered path is unconditional; the ambient stdlib is
+	// always injected regardless. A plugin declaring no capabilities still gets
+	// log/new_request_id.
 	host := pluginlua.NewHostWithFunctions(
 		hostfunc.New(nil),
-		pluginlua.WithHostCapBridge("bridge-plugin"),
 	)
 	defer closeHost(t, host)
 
@@ -2242,7 +2233,6 @@ end
 	host := pluginlua.NewHostWithFunctions(
 		hostfunc.New(nil),
 		pluginlua.WithPluginGrants(map[string][]string{"p": {"world.query"}}),
-		pluginlua.WithHostCapBridge("p"),
 	)
 	defer closeHost(t, host)
 
@@ -2282,7 +2272,6 @@ end
 	// No WithPluginGrants — nil pluginGrants → manifest fallback.
 	host := pluginlua.NewHostWithFunctions(
 		hostfunc.New(nil),
-		pluginlua.WithHostCapBridge("p"),
 	)
 	defer closeHost(t, host)
 

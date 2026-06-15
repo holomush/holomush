@@ -64,13 +64,9 @@
   observers; new store method had zero production callers) — implementer claims of "deferred by
   design" need a recorded deferral in bead/plan, not just assertion.
 
-- **WatchScene RPC (5rh.8.3 NOT READY, 2026-06-07).** (1) `focus.Coordinator.JoinFocus` is NOT
-  idempotent — duplicate membership errors `FOCUS_ALREADY_MEMBER` (focus/join.go:38-42); repo
-  precedent commands.go:832-845 special-cases it. Any handler claiming "JoinFocus is idempotent"
-  is wrong; fakeFocusClient returns nil on duplicates → false-green idempotency tests. ALWAYS
-  read the real coordinator + check joinErr code handling. (2) Premature partial binding:
-  multi-clause invariant flipped bound when only one clause has tests and the proving task
-  (.8.4 role-gates) still open; plan scheduled flip for final Task 20 — check WHICH task owns the registry flip.
+- **WatchScene RPC (5rh.8.3 NOT READY, 2026-06-07).** `focus.Coordinator.JoinFocus` is NOT idempotent
+  — dup membership errors `FOCUS_ALREADY_MEMBER` (focus/join.go:38-42); fakeFocusClient nil-on-dup =
+  false-green; read the REAL coordinator. Premature partial binding: multi-clause inv flipped bound when only one clause tested — check WHICH task owns the registry flip.
 
 - **5rh.8.21 service-dispatch token (READY, 2026-06-07).** Host.BeginServiceDispatch (host.go:968) mints a
   dispatch token for server-side-verified actor+ownerPlayerID; Revoke idempotent + 5min TTL sweeper. Binary-only
@@ -122,28 +118,14 @@
   into host-brokered world consumption. WorldQuerier widen 2→4 SAFE (superset). Subject-stamp test asserts
   bare "core-scenes" (server passes bare; real adapter SubjectID() prefixes plugin: downstream).
 
-- **hostcap Lua adapter (eykuh.2.6) + parity fixes (eykuh.2.14 READY, 2026-06-12) — CONSOLIDATED.**
-  luaHostCapAdapter wraps *hostfunc.Functions; symmetric to binary *goplugin.Host. DECISIVE FACT for 2.6:
-  newLuaHostCapAdapter is TEST-ONLY; bufconn endpoint (T7) makes methods reachable → "no live caller →
-  track" per eykuh.2.5. 2.14 FIXED the 2.6 tracked gaps; verified all:
-  (A) FocusOps→Coordinator lossy-field DISCIPLINE: server-reachable methods (servers.go) must populate
-  EVERY field the SERVER reads, lossy-OK only for fields confirmed-unread. VERIFY by reading the focusServer
-  method: SetConnectionFocus discards result (`_, err = fc.SetConn`, servers.go:201)→zero-result safe;
-  AutoFocusOnJoin reads ONLY total+3 slices+FocusFailure{ConnID,Reason} (servers.go:283-307)→adapter must
-  map exactly those (SessionID/CharLocationID unread=lossy-OK). Confirm signatures identical for direct
-  delegations (IsAnyConnFocused/GetConnectionFocus). RestoreFocus/RestoreConnectionFocus called ONLY from
-  internal/grpc/ (list_session_streams.go:81, server.go:943) NOT hostcap → genuinely unreachable, UNSUPPORTED-stub OK.
-  (B) Settings store-recovery via type-assertion = TRUE PARITY iff: lua.Host.SetSettingsStores (host.go:144-161)
-  installs *settingsStoresOpsAdapter ONLY when all3 non-nil else SetSettingsOps(nil); type-assert comma-ok
-  (no panic); the recovered seam is the SAME one Lua get/set_setting hostfuncs consume; settingsServer
-  fails-closed Unimplemented on nil store (servers.go:667,712). No partial-wiring path.
-  (C) sessionAdminServer nil-guard: single-capture local then nil-check (session.go:104-108) — no double-call;
-  returns codes.Unimplemented (not Internal), no leak. SessionAdminService is LuaDefaultSet-ONLY (register.go:53-58,
-  register_test asserts binary EXCLUDES it) → binary nil SessionAdmin never reached, no regression.
-  OwnedResourceTypes: non-nil empty map at parity w/ evaluate.go:57 literal+comment. RECURRING: when adapter
-  is dead-code-until-next-task, verdict hinges on live-caller; for ANY server-reachable method read the
-  CONSUMER server body to classify each return field read-vs-unread before trusting a "lossy but unread" claim.
-
+- **hostcap Lua adapter (eykuh.2.6 + parity fixes 2.14 READY, 2026-06-12) — CONSOLIDATED.** luaHostCapAdapter
+  wraps *hostfunc.Functions, symmetric to binary *goplugin.Host. RECURRING RULE: when adapter is dead-code-until-
+  next-task, verdict hinges on live-caller; for ANY server-reachable method READ the CONSUMER server body
+  (servers.go) and classify each return field read-vs-unread before trusting a "lossy but unread" claim — adapter
+  must populate EVERY field the server READS (e.g. AutoFocusOnJoin reads total+3 slices+FocusFailure{ConnID,Reason}
+  servers.go:283-307; SetConnectionFocus discards result→zero-result safe). Settings store-recovery via comma-ok
+  type-assert = parity iff same seam Lua hostfuncs consume + fails-closed Unimplemented on nil. SessionAdminService
+  LuaDefaultSet-ONLY (binary excludes → binary-nil never reached). OwnedResourceTypes non-nil empty = evaluate.go:57 parity.
 - **luabridge plugin-service bridge T10 (eykuh.2.10 READY, 2026-06-12).** RegisterPluginService:
   descriptor→Lua table, dynamicpb marshal, conn.Invoke. DECISIVE for "real BrokerProxy" check:
   test brokerProxyLoopback does `factory:=goplugin.NewBrokerProxy(providerConn,name); srv:=factory(nil);
@@ -197,3 +179,16 @@
   ACTUALLY provides the guarantee (not sprinkle), summary matches code (verify needsInit:=true unconditional), a
   pending invariant gets PLAIN token comment NOT // Verifies:. SHARED_FILES (yaml:414) skip residual-legacy
   check (checkFile:566) but refs canonical-token check still applies. Proof: inv-render -> zero drift.
+- **Atomic plugin-capability cutover (eykuh.4.9 READY, 2026-06-14) — CLEAN flip.** Strip cap host-fn reg from
+  hostfunc.Register (keep ambient: log/req-id/command-registry/stream.subscription/stream.history/audit); delete
+  WithHostCapBridge+bridgeEnabled → RegisterHostCaps UNCONDITIONAL. NO FAIL-OPEN: declaredCaps=grantedSubset
+  (host.go:148 len(granted)==0→nil) OR manifest-fallback when grants nil (host.go:720); empty→inject nothing.
+  Migrated Lua checked FIELD-BY-FIELD vs bindings_gen.go + host/v1 protos: req keys snake_case; resp via
+  ProtoToLuaTable where m.Range SKIPS unset (proto3 presence)→absent msg/empty repeated=nil → `resp and resp.session`
+  /`or {}` handles it. Dotted globals via _G["world.query"]; single-word direct. "no prod backing" VERIFIABLE:
+  subsystem.go:180 registers ONLY AuditService → legacy property/world_ext globals ALWAYS nil in prod → those
+  branches dead → set "Unknown property"/describe fallbacks FAITHFUL not regressions. WEAK-GATE done right: census
+  proves LOAD only; new corebuilding_brokered_command_test DELIVERS dig + asserts CreateExit fields thru real
+  bufconn → catches wrong field name. Harness wires AllowAllEngine + fixed AttributeResolver = supply scope-fence
+  INPUTS not stub the check. Entitlement test: AllowAll+foreign scene:+OwnedResourceTypes empty+gate-before-engine
+  (evaluate.go:196<212)+errmsg has "scene"; deleted Lua subtest MOVED not dropped.

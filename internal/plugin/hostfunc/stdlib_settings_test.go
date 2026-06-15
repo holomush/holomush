@@ -81,6 +81,7 @@ func TestGetSettingReturnsStoredListForOwnedCharacterPrincipal(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		vals, found = holomush.get_setting("character", "`+charID+`", "content.cw_block")
@@ -104,6 +105,7 @@ func TestSetSettingRoundTripsForOwnedCharacterPrincipal(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		ok, err = holomush.set_setting("character", "`+charID+`", "content.cw_block", {"gore", "nsfw"})
@@ -129,6 +131,7 @@ func TestGetSettingDeniesForeignPrincipal(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	foreign := core.NewULID().String()
 	require.NoError(t, L.DoString(`
@@ -150,6 +153,7 @@ func TestSetSettingDeniesForeignPrincipal(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	foreign := core.NewULID().String()
 	require.NoError(t, L.DoString(`
@@ -178,6 +182,7 @@ func TestGetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	playerID := core.NewULID().String()
 	require.NoError(t, L.DoString(`
@@ -204,6 +209,7 @@ func TestPlayerSettingRoundTripsForOwningPlayer(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		ok, err = holomush.set_setting("player", "`+owningPlayer+`", "content.cw_block", {"gore", "nsfw"})
@@ -244,6 +250,7 @@ func TestPlayerSettingDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		vals, err = holomush.get_setting("player", "`+otherPlayer+`", "content.cw_block")
@@ -271,6 +278,7 @@ func TestSetSettingPlayerScopeDeniedWhenNoOwningPlayerOnContext(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	playerID := core.NewULID().String()
 	require.NoError(t, L.DoString(`
@@ -304,6 +312,7 @@ func TestSetSettingPlayerScopeDeniedWhenPrincipalNotOwningPlayer(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		ok, err = holomush.set_setting("player", "`+otherPlayer+`", "content.cw_block", {"gore"})
@@ -333,6 +342,7 @@ func TestGetSettingGameScopeNeedsNoPrincipalOwnership(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	// principal_id is ignored for GAME scope; pass empty.
 	require.NoError(t, L.DoString(`
@@ -357,6 +367,7 @@ func TestSetSettingGameScopeDeniedWithoutOperatorAuthz(t *testing.T) {
 		hostfunc.WithEngine(policytest.DenyAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		ok, err = holomush.set_setting("game", "", "content.global_cw", {"x"})
@@ -376,6 +387,7 @@ func TestSetSettingGameScopeAllowedWithOperatorAuthz(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		ok, err = holomush.set_setting("game", "", "content.global_cw", {"flashing"})
@@ -394,6 +406,7 @@ func TestGetSettingNoActorFailsClosed(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	charID := core.NewULID().String()
 	require.NoError(t, L.DoString(`
@@ -413,6 +426,7 @@ func TestGetSettingNilOpsFailsClosed(t *testing.T) {
 	// No WithSettingsOps — ops is nil.
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		vals, err = holomush.get_setting("character", "`+charID+`", "content.cw_block")
@@ -433,6 +447,7 @@ func TestGetSettingUnknownScopeFailsClosed(t *testing.T) {
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 		hostfunc.WithSettingsOps(ops))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`
 		vals, err = holomush.get_setting("bogus", "x", "content.cw_block")

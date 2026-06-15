@@ -3,6 +3,20 @@
 
 -- core-objects: provides describe, examine, create, and set commands.
 
+-- Host-brokered capability tables (holomush-eykuh.4). Dotted globals are
+-- accessed via _G[...]. Methods take a single proto-request table (snake_case
+-- proto field keys) and return (proto_response_table, err_or_nil).
+--
+-- Note: the former legacy `property` (find_by_prefix/list_by_parent/
+-- update_character_description) and `world_ext` (get_objects_by_location/
+-- get_characters_by_location) capability modules never had a production backing
+-- (only `audit` was registered) — their branches were dead in production. The
+-- cutover removes those branches; the brokered `property` (GetProperty/
+-- SetProperty) and `world.query` surfaces carry the live behavior.
+local prop_caps = _G["property"]
+local world_query = _G["world.query"]
+local world_mutation = _G["world.mutation"]
+
 -- INV-PLUGIN-32: register the 5 event types this plugin can emit.
 -- These MUST match plugin.yaml's crypto.emits block exactly.
 holomush.register_emit_type("object_create")
@@ -96,48 +110,34 @@ local function handle_describe(ctx)
     end
 
     if target == "me" then
-        -- Use property capability if available, otherwise base hostfunc.
-        if property then
-            local _, err = property.update_character_description(ctx.character_id, ctx.character_id, text)
-            if err then
-                holomush.log("error", "describe: failed to update character description: " .. err)
-                return {status = 2, output = "Unable to set description right now. Please try again."}
-            end
-        else
-            -- Fallback: set description property via base hostfunc.
-            local _, err = holomush.set_property("character", ctx.character_id, "description", text)
-            if err then
-                holomush.log("error", "describe: failed to set character description: " .. err)
-                return {status = 2, output = "Unable to set description right now. Please try again."}
-            end
+        local _, err = prop_caps.SetProperty({
+            entity_type = "character",
+            entity_id = ctx.character_id,
+            property = "description",
+            value = text,
+        })
+        if err then
+            holomush.log("error", "describe: failed to set character description: " .. err)
+            return {status = 2, output = "Unable to set description right now. Please try again."}
         end
         return "Description set.\n"
     end
 
-    -- For here or #id targets, look up the description property and set it.
-    local props, find_err
-    if property then
-        props, find_err = property.find_by_prefix("description")
-    end
-
+    -- For here or #id targets, set the description property directly. (The legacy
+    -- property.find_by_prefix prefix-resolution path had no production backing.)
     local prop_name = "description"
-    if find_err then
-        holomush.log("error", "describe: failed to find property: " .. find_err)
-        return {status = 2, output = "Unable to set description right now. Please try again."}
-    end
-    if props then
-        if #props == 0 then
-            return {status = 1, output = "Unknown property: description"}
-        end
-        prop_name = props[1].name
-    end
 
     local entity_type, entity_id = resolve_target(ctx, target)
     if not entity_type then
         return {status = 1, output = "Could not find target: " .. target}
     end
 
-    local _, set_err = holomush.set_property(entity_type, entity_id, prop_name, text)
+    local _, set_err = prop_caps.SetProperty({
+        entity_type = entity_type,
+        entity_id = entity_id,
+        property = prop_name,
+        value = text,
+    })
     if set_err then
         holomush.log("error", "describe: failed to set property: " .. set_err)
         return {status = 2, output = "Unable to set description right now. Please try again."}
@@ -154,43 +154,14 @@ end
 --   examine <name> -- examine named target in current location
 -- ---------------------------------------------------------------------------
 
-local function write_properties(parts, props)
-    if not props or #props == 0 then
-        return
-    end
-
-    -- Filter to public visibility only.
-    local visible = {}
-    for _, p in ipairs(props) do
-        if p.visibility == "public" then
-            visible[#visible + 1] = p
-        end
-    end
-
-    if #visible == 0 then
-        return
-    end
-
-    -- Sort by name.
-    table.sort(visible, function(a, b) return a.name < b.name end)
-
-    parts[#parts + 1] = "\nProperties:\n"
-    for _, p in ipairs(visible) do
-        parts[#parts + 1] = "  " .. p.name .. ": " .. p.value .. "\n"
-    end
-end
-
 local function examine_location(ctx)
-    local loc, err = holomush.query_location(ctx.location_id)
+    local loc, err = world_query.QueryLocation({location_id = ctx.location_id})
     if err then
         holomush.log("error", "examine: failed to query location " .. ctx.location_id .. ": " .. err)
         return {status = 2, output = "Unable to examine this location right now. Please try again."}
     end
 
-    local props
-    if property then
-        props = property.list_by_parent(ctx.character_id, "location", ctx.location_id)
-    end
+    -- Property listing (legacy property.list_by_parent) had no production backing.
 
     local parts = {}
     parts[#parts + 1] = "=== " .. loc.name .. " ===\n"
@@ -198,16 +169,12 @@ local function examine_location(ctx)
     if loc.description and loc.description ~= "" then
         parts[#parts + 1] = "Description:\n  " .. loc.description .. "\n"
     end
-    write_properties(parts, props)
 
     return table.concat(parts)
 end
 
 local function examine_character_by_result(ctx, c)
-    local props
-    if property then
-        props = property.list_by_parent(ctx.character_id, "character", c.id)
-    end
+    -- Property listing (legacy property.list_by_parent) had no production backing.
 
     local parts = {}
     parts[#parts + 1] = "=== " .. c.name .. " ===\n"
@@ -215,16 +182,12 @@ local function examine_character_by_result(ctx, c)
     if c.description and c.description ~= "" then
         parts[#parts + 1] = "Description:\n  " .. c.description .. "\n"
     end
-    write_properties(parts, props)
 
     return table.concat(parts)
 end
 
 local function examine_object_by_result(ctx, o)
-    local props
-    if property then
-        props = property.list_by_parent(ctx.character_id, "object", o.id)
-    end
+    -- Property listing (legacy property.list_by_parent) had no production backing.
 
     local parts = {}
     parts[#parts + 1] = "=== " .. o.name .. " ===\n"
@@ -232,7 +195,6 @@ local function examine_object_by_result(ctx, o)
     if o.description and o.description ~= "" then
         parts[#parts + 1] = "Description:\n  " .. o.description .. "\n"
     end
-    write_properties(parts, props)
 
     return table.concat(parts)
 end
@@ -246,29 +208,18 @@ local function disambiguate(matches)
 end
 
 local function examine_target(ctx, name)
-    local chars, chars_err
-    local objs, objs_err
-
-    if world_ext then
-        chars, chars_err = world_ext.get_characters_by_location(ctx.character_id, ctx.location_id)
-        objs, objs_err = world_ext.get_objects_by_location(ctx.character_id, ctx.location_id)
-    else
-        -- Fallback: use base query_location_characters and empty objects.
-        chars = holomush.query_location_characters(ctx.location_id)
-        objs = {}
-    end
-
+    -- The legacy world_ext.get_*_by_location capabilities had no production
+    -- backing; the live path queries characters via the brokered world.query
+    -- surface and treats objects-by-location as empty (unchanged production
+    -- behavior). QueryLocationCharacters returns {characters = {{id, name}, …}}.
+    local resp, chars_err = world_query.QueryLocationCharacters({location_id = ctx.location_id})
     if chars_err then
         holomush.log("error", "examine: failed to query characters at " .. ctx.location_id .. ": " .. chars_err)
         return {status = 2, output = "Unable to look around right now. Please try again."}
     end
-    if objs_err then
-        holomush.log("error", "examine: failed to query objects at " .. ctx.location_id .. ": " .. objs_err)
-        return {status = 2, output = "Unable to look around right now. Please try again."}
-    end
 
-    chars = chars or {}
-    objs = objs or {}
+    local chars = (resp and resp.characters) or {}
+    local objs = {}
 
     local lower_name = lower(name)
 
@@ -358,7 +309,7 @@ local function handle_create(ctx)
     end
 
     if entity_type == "object" then
-        local result, err = holomush.create_object(name, {location_id = ctx.location_id})
+        local result, err = world_mutation.CreateObject({name = name, location_id = ctx.location_id})
         if err then
             holomush.log("error", 'create: failed to create object "' .. name .. '": ' .. err)
             return {status = 2, output = "Unable to create object right now. Please try again."}
@@ -366,7 +317,7 @@ local function handle_create(ctx)
         return 'Created object "' .. name .. '" (#' .. result.id .. ')\n'
 
     elseif entity_type == "location" then
-        local result, err = holomush.create_location(name, "", "persistent")
+        local result, err = world_mutation.CreateLocation({name = name, description = "", type = "persistent"})
         if err then
             holomush.log("error", 'create: failed to create location "' .. name .. '": ' .. err)
             return {status = 2, output = "Unable to create location right now. Please try again."}
@@ -399,48 +350,20 @@ local function handle_set(ctx)
         return {status = 1, output = SET_USAGE}
     end
 
-    local prop_prefix, target, value = parse_set_args(args)
+    -- Only the property prefix is needed to form the reply; parse_set_args still
+    -- validates the full "<prop> of <target> to <value>" shape, so a malformed
+    -- command falls through to SET_USAGE above.
+    local prop_prefix = parse_set_args(args)
     if not prop_prefix then
         return {status = 1, output = SET_USAGE}
     end
 
-    -- Find property by prefix.
-    local props, find_err
-    if property then
-        props, find_err = property.find_by_prefix(prop_prefix)
-    end
-
-    if find_err then
-        holomush.log("error", 'set: failed to find property "' .. prop_prefix .. '": ' .. find_err)
-        return {status = 2, output = "Unable to set property right now. Please try again."}
-    end
-
-    if not props or #props == 0 then
-        return {status = 1, output = "Unknown property: " .. prop_prefix}
-    end
-
-    if #props > 1 then
-        local names = {}
-        for _, p in ipairs(props) do
-            names[#names + 1] = p.name
-        end
-        return {status = 1, output = 'Ambiguous property "' .. prop_prefix .. '"; matches: ' .. table.concat(names, ", ")}
-    end
-
-    local prop_name = props[1].name
-
-    local entity_type, entity_id = resolve_target(ctx, target)
-    if not entity_type then
-        return {status = 1, output = "Could not find target: " .. target}
-    end
-
-    local _, set_err = holomush.set_property(entity_type, entity_id, prop_name, value)
-    if set_err then
-        holomush.log("error", 'set: failed to set ' .. prop_name .. ' on ' .. target .. ': ' .. set_err)
-        return {status = 2, output = "Unable to set " .. prop_name .. " right now. Please try again."}
-    end
-
-    return "Set " .. prop_name .. " of " .. target .. ".\n"
+    -- Prefix-based property resolution (legacy property.find_by_prefix) had no
+    -- production backing, so set has always reported "Unknown property" for any
+    -- prefix. Behavior preserved across the cutover: there is no property
+    -- registry to resolve a prefix against on the brokered surface yet, so the
+    -- command reports the property as unknown rather than guessing.
+    return {status = 1, output = "Unknown property: " .. prop_prefix}
 end
 
 -- ---------------------------------------------------------------------------

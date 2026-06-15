@@ -3,6 +3,17 @@
 
 -- core-communication: provides say, pose, ooc, emit, page, whisper, pemit, wall.
 
+-- Host-brokered capability tables (holomush-eykuh.4). The session lookups live
+-- on the brokered `session` global (PascalCase proto-RPC methods); broadcast is
+-- on the separate `session.admin` global. Both are accessed via _G[...]; methods
+-- take a single proto-request table and return (proto_response_table, err).
+--
+-- session_caps.FindByName{name=...} returns {session = {…}} (the entity nested
+-- under `session`, absent when no active session matches), unlike the legacy
+-- session.find_by_name which returned the entity directly.
+local session_caps = _G["session"]
+local session_admin = _G["session.admin"]
+
 -- INV-PLUGIN-32: register the 8 event types this plugin can emit.
 -- These MUST match plugin.yaml's crypto.emits block exactly.
 holomush.register_emit_type("say")
@@ -189,7 +200,7 @@ local function handle_page(ctx)
         return error_response("Usage: page <name>=<message>")
     end
 
-    if not session then
+    if not session_caps then
         return error_response("This command requires session access which is not yet available.")
     end
 
@@ -213,11 +224,12 @@ local function handle_page(ctx)
 
     -- Resolve target name from last-paged if needed.
     if use_last_paged then
-        local sender_session, err = session.find_by_name(ctx.character_name)
+        local sender_resp, err = session_caps.FindByName({name = ctx.character_name})
         if err then
             holomush.log("error", "page: failed to find sender session: " .. err)
             return failure_response("Unable to page right now. Please try again.")
         end
+        local sender_session = sender_resp and sender_resp.session
         if not sender_session or sender_session.last_whispered == "" then
             return error_response("You have no last-paged character. Use: page <name>=<message>")
         end
@@ -225,11 +237,12 @@ local function handle_page(ctx)
     end
 
     -- Look up target session.
-    local target_session, target_err = session.find_by_name(target_name)
+    local target_resp, target_err = session_caps.FindByName({name = target_name})
     if target_err then
         holomush.log("error", "page: failed to find session for " .. target_name .. ": " .. target_err)
         return failure_response('Unable to reach "' .. target_name .. '" right now. Please try again.')
     end
+    local target_session = target_resp and target_resp.session
     if not target_session then
         return error_response('No one named "' .. target_name .. '" is connected.')
     end
@@ -269,7 +282,10 @@ local function handle_page(ctx)
 
     -- Update last-paged on the sender's session.
     if ctx.session_id and ctx.session_id ~= "" then
-        session.set_last_whispered(ctx.session_id, target_session.character_name)
+        local _, set_err = session_caps.SetLastWhispered({session_id = ctx.session_id, name = target_session.character_name})
+        if set_err then
+            holomush.log("warn", "page: failed to update last-whispered: " .. set_err)
+        end
     end
 
     return ok_events(
@@ -288,7 +304,7 @@ local function handle_whisper(ctx)
         return error_response("Usage: whisper <name>=<message>")
     end
 
-    if not session then
+    if not session_caps then
         return error_response("This command requires session access which is not yet available.")
     end
 
@@ -300,11 +316,12 @@ local function handle_whisper(ctx)
         message = args:sub(eq + 1)
     elseif ctx.invoked_as == "w" then
         -- Short form: use last whispered target.
-        local sender_session, err = session.find_by_name(ctx.character_name)
+        local sender_resp, err = session_caps.FindByName({name = ctx.character_name})
         if err then
             holomush.log("error", "whisper: failed to find sender session: " .. err)
             return failure_response("Unable to whisper right now. Please try again.")
         end
+        local sender_session = sender_resp and sender_resp.session
         if not sender_session or sender_session.last_whispered == "" then
             return error_response("Whisper to whom? Use: whisper <name>=<message>")
         end
@@ -322,11 +339,12 @@ local function handle_whisper(ctx)
     end
 
     -- Find target session.
-    local target, target_err = session.find_by_name(target_name)
+    local target_resp, target_err = session_caps.FindByName({name = target_name})
     if target_err then
         holomush.log("error", "whisper: failed to find session for " .. target_name .. ": " .. target_err)
         return failure_response('Unable to reach "' .. target_name .. '" right now. Please try again.')
     end
+    local target = target_resp and target_resp.session
     if not target then
         return error_response('No one named "' .. target_name .. '" is connected.')
     end
@@ -389,7 +407,10 @@ local function handle_whisper(ctx)
 
     -- Record last whispered target.
     if ctx.session_id and ctx.session_id ~= "" then
-        session.set_last_whispered(ctx.session_id, target.character_name)
+        local _, set_err = session_caps.SetLastWhispered({session_id = ctx.session_id, name = target.character_name})
+        if set_err then
+            holomush.log("warn", "whisper: failed to update last-whispered: " .. set_err)
+        end
     end
 
     return ok_events(
@@ -408,7 +429,7 @@ end
 local function handle_pemit(ctx)
     local args = trim(ctx.args or "")
 
-    if not session then
+    if not session_caps then
         return error_response("This command requires session access which is not yet available.")
     end
 
@@ -425,11 +446,12 @@ local function handle_pemit(ctx)
     end
 
     -- Resolve target session by character name.
-    local target_session, err = session.find_by_name(target_name)
+    local target_resp, err = session_caps.FindByName({name = target_name})
     if err then
         holomush.log("error", "pemit: failed to find session for " .. target_name .. ": " .. err)
         return failure_response('Unable to reach "' .. target_name .. '" right now. Please try again.')
     end
+    local target_session = target_resp and target_resp.session
     if not target_session then
         return error_response('No character found named "' .. target_name .. '".')
     end
@@ -487,7 +509,7 @@ local function handle_wall(ctx)
         return error_response("Usage: wall [info|warning|critical] <message>")
     end
 
-    if not session then
+    if not session_admin then
         return error_response("This command requires session access which is not yet available.")
     end
 
@@ -496,9 +518,15 @@ local function handle_wall(ctx)
         return error_response("Usage: wall [info|warning|critical] <message>")
     end
 
-    local sessions, list_err = session.list_active()
-    if list_err then
-        holomush.log("warn", "wall: failed to list sessions: " .. list_err)
+    -- ListActive returns {sessions = {…}}; extract the array for the count below.
+    local sessions
+    if session_caps then
+        local list_resp, list_err = session_caps.ListActive({})
+        if list_err then
+            holomush.log("warn", "wall: failed to list sessions: " .. list_err)
+        else
+            sessions = list_resp and list_resp.sessions
+        end
     end
 
     local prefix = urgency_prefixes[urgency]
@@ -509,14 +537,14 @@ local function handle_wall(ctx)
                           " sessions=" .. (sessions and #sessions or 0) ..
                           " message=" .. message)
 
-    local _, bc_err = session.broadcast(announcement)
+    local _, bc_err = session_admin.Broadcast({message = announcement})
     if bc_err then
         holomush.log("error", "wall: failed to broadcast: " .. bc_err)
         return failure_response("Unable to broadcast announcement right now. Please try again.")
     end
 
     local output
-    if list_err or not sessions then
+    if not sessions then
         output = "Announcement broadcast."
     else
         local count = #sessions

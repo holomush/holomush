@@ -188,18 +188,19 @@ func TestLuaHostServerDeniesUndeclaredCapability(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin did not declare capability")
 }
 
-// TestHostCapBridgeInjection verifies the bridge opt-in/opt-out coexistence
-// guarantee (spec §5): a plugin in the WithHostCapBridge allowlist receives the
-// kv Lua global in DeliverEvent (end-to-end host option → DeliverEvent →
-// RegisterHostCaps), while a plugin NOT in the allowlist sees no bridge global,
-// so production plugins on the legacy hostfunc shim are never touched.
+// TestHostCapBridgeInjection verifies the DECLARATION gate of the now-unconditional
+// host-brokered capability path (holomush-eykuh.4): a plugin that DECLARES the kv
+// capability receives the kv Lua global in DeliverEvent (end-to-end Load →
+// DeliverEvent → RegisterHostCaps), while a plugin that declares NO capability
+// sees no host-cap global. After the atomic cutover there is no allowlist opt-in —
+// the manifest declaration (filtered through the resolver grant set) IS the gate.
 //
 // kv is chosen because it has no ABAC-engine or dispatch-token requirement, so
 // the RPC can be exercised without a full production stack. Each plugin's Lua
 // body asserts the expected presence/absence of the kv global and raises a Lua
 // error on mismatch, so a wrong injection surfaces as a DeliverEvent error.
 func TestHostCapBridgeInjection(t *testing.T) {
-	const optInBody = `
+	const declaredBody = `
 function on_event(event)
     if type(kv) == "table" then
         return nil
@@ -207,34 +208,33 @@ function on_event(event)
     error("expected kv table, got " .. type(kv))
 end
 `
-	const optOutBody = `
+	const undeclaredBody = `
 function on_event(event)
     if kv ~= nil then
-        error("kv must not be injected for opted-out plugin, got " .. type(kv))
+        error("kv must not be injected for a plugin that did not declare it, got " .. type(kv))
     end
     return nil
 end
 `
 	tests := []struct {
 		name string
-		// pluginName is the plugin under test; bridgeAllowlist is the single
-		// plugin opted into the bridge (equal to pluginName for the opt-in case,
-		// a different name for the opt-out case).
-		pluginName      string
-		bridgeAllowlist string
-		luaBody         string
+		// pluginName is the plugin under test; declares controls whether the
+		// manifest declares the kv capability (the declaration gate).
+		pluginName string
+		declares   bool
+		luaBody    string
 	}{
 		{
-			name:            "opted-in plugin receives the kv bridge global",
-			pluginName:      "bridge-kv-test",
-			bridgeAllowlist: "bridge-kv-test",
-			luaBody:         optInBody,
+			name:       "plugin declaring kv receives the kv host-cap global",
+			pluginName: "kv-declaring-test",
+			declares:   true,
+			luaBody:    declaredBody,
 		},
 		{
-			name:            "opted-out plugin receives no bridge global",
-			pluginName:      "legacy-plugin",
-			bridgeAllowlist: "some-other-plugin",
-			luaBody:         optOutBody,
+			name:       "plugin declaring no capability receives no host-cap global",
+			pluginName: "no-caps-plugin",
+			declares:   false,
+			luaBody:    undeclaredBody,
 		},
 	}
 	for _, tc := range tests {
@@ -247,14 +247,15 @@ end
 				Version:   "1.0.0",
 				Type:      plugins.TypeLua,
 				LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
-				Requires: []plugins.Dependency{
+			}
+			if tc.declares {
+				manifest.Requires = []plugins.Dependency{
 					{Kind: plugins.DependencyCapability, Name: "kv"},
-				},
+				}
 			}
 
 			host := NewHostWithFunctions(
 				hostfunc.New(nil),
-				WithHostCapBridge(tc.bridgeAllowlist),
 			)
 			defer func() { _ = host.Close(context.Background()) }()
 
