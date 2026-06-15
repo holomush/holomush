@@ -19,6 +19,99 @@ import (
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
+// --- fake WorldMutator -------------------------------------------------------
+
+// fakeMutator is a configurable stub satisfying hostcap.WorldMutator
+// (= world.Mutator). It records calls and returns pre-configured results.
+type fakeMutator struct {
+	// findLocationByName results
+	findLocationResult *world.Location
+	findLocationErr    error
+	lastFindSubject    string // subject passed to FindLocationByName
+
+	// createLocation results
+	createLocationErr    error
+	lastCreateLocSubject string // subject passed to CreateLocation
+
+	// createExit results
+	createExitErr         error
+	lastCreateExitSubject string // subject passed to CreateExit
+
+	// createObject results
+	createObjectErr      error
+	lastCreateObjSubject string // subject passed to CreateObject
+}
+
+func (f *fakeMutator) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+	return nil, nil
+}
+
+func (f *fakeMutator) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+	return nil, nil
+}
+
+func (f *fakeMutator) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+	return nil, nil
+}
+
+func (f *fakeMutator) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+	return nil, nil
+}
+
+func (f *fakeMutator) CreateLocation(_ context.Context, subjectID string, _ *world.Location) error {
+	f.lastCreateLocSubject = subjectID
+	return f.createLocationErr
+}
+
+func (f *fakeMutator) CreateExit(_ context.Context, subjectID string, _ *world.Exit) error {
+	f.lastCreateExitSubject = subjectID
+	return f.createExitErr
+}
+
+func (f *fakeMutator) CreateObject(_ context.Context, subjectID string, _ *world.Object) error {
+	f.lastCreateObjSubject = subjectID
+	return f.createObjectErr
+}
+
+func (f *fakeMutator) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+	return nil
+}
+
+func (f *fakeMutator) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+	return nil
+}
+
+func (f *fakeMutator) FindLocationByName(_ context.Context, subjectID, _ string) (*world.Location, error) {
+	f.lastFindSubject = subjectID
+	return f.findLocationResult, f.findLocationErr
+}
+
+// --- worldMutationHostCaps ---------------------------------------------------
+
+// worldMutationHostCaps is a focused HostCapabilities stub for
+// worldMutationServer tests. It extends stubHostCaps with a configurable
+// WorldMutator; WorldQuerier always returns nil (not exercised by mutation
+// tests).
+type worldMutationHostCaps struct {
+	stubHostCaps
+	mutator hostcap.WorldMutator
+}
+
+func (c *worldMutationHostCaps) WorldMutator() hostcap.WorldMutator { return c.mutator }
+
+// newFakeBaseWithMutator builds a hostCapabilityBase bound to the given mutator.
+// It embeds stubHostCaps whose WorldQuerier() returns nil; mutation tests do not
+// exercise the WorldQuerier path.
+func newFakeBaseWithMutator(m hostcap.WorldMutator) hostcap.HostCapabilities {
+	return &worldMutationHostCaps{mutator: m}
+}
+
+// newFakeBaseNoMutator builds a HostCapabilities whose WorldMutator() returns nil,
+// for testing the nil-guard / Unimplemented path.
+func newFakeBaseNoMutator() hostcap.HostCapabilities {
+	return &worldMutationHostCaps{mutator: nil}
+}
+
 // --- fake WorldQuerier -------------------------------------------------------
 
 // fakeWorldQuerier is a configurable stub satisfying hostcap.WorldQuerier.
@@ -402,4 +495,217 @@ func TestWorldServerQueryObject(t *testing.T) {
 			tc.check(t, caps, resp, err)
 		})
 	}
+}
+
+// ============================================================================
+// FindLocation
+// ============================================================================
+
+func TestWorldServerFindLocationReturnsMatchedLocationAndStampsSubject(t *testing.T) {
+	loc := makeLocation()
+	m := &fakeMutator{findLocationResult: loc}
+	caps := &worldMutationHostCaps{mutator: m}
+	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+	resp, err := srv.FindLocation(context.Background(), &hostv1.FindLocationRequest{Name: "plaza"})
+	require.NoError(t, err)
+	assert.Equal(t, loc.ID.String(), resp.GetId())
+	assert.Equal(t, loc.Name, resp.GetName())
+	assert.Equal(t, "plugin:core-scenes", m.lastFindSubject,
+		"FindLocation must stamp the plugin subject via access.PluginSubject")
+}
+
+func TestWorldServerFindLocationNotFoundIsCodesNotFound(t *testing.T) {
+	m := &fakeMutator{findLocationErr: world.ErrNotFound}
+	caps := &worldMutationHostCaps{mutator: m}
+	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.FindLocation(context.Background(), &hostv1.FindLocationRequest{Name: "void"})
+	requireWorldNotFound(t, err)
+}
+
+func TestWorldServerFindLocationInternalErrorIsOpaque(t *testing.T) {
+	m := &fakeMutator{findLocationErr: errors.New("secret db detail")}
+	caps := &worldMutationHostCaps{mutator: m}
+	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.FindLocation(context.Background(), &hostv1.FindLocationRequest{Name: "plaza"})
+	requireOpaqueInternal(t, err)
+}
+
+// TestWorldServerFindLocationNilResultFailsClosed verifies FindLocation fails
+// closed (Internal) when FindLocationByName returns (nil, nil) — a contract
+// violation that must never nil-dereference loc.
+func TestWorldServerFindLocationNilResultFailsClosed(t *testing.T) {
+	m := &fakeMutator{} // FindLocationByName returns (nil, nil)
+	caps := &worldMutationHostCaps{mutator: m}
+	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.FindLocation(context.Background(), &hostv1.FindLocationRequest{Name: "plaza"})
+	requireOpaqueInternal(t, err)
+}
+
+// TestWorldServerFindLocationWithoutMutatorIsUnimplemented verifies that
+// FindLocation returns codes.Unimplemented when the standard query harness
+// (whose WorldMutator() is nil) is used — confirming FindLocation depends on
+// WorldMutator(), unlike the WorldQuerier-backed query RPCs.
+func TestWorldServerFindLocationWithoutMutatorIsUnimplemented(t *testing.T) {
+	// newWorldCaps returns a worldHostCaps with WorldMutator()==nil (stubHostCaps default).
+	caps := newWorldCaps(&fakeWorldQuerier{})
+	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.FindLocation(context.Background(), &hostv1.FindLocationRequest{Name: "plaza"})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unimplemented, st.Code())
+}
+
+func TestWorldServerFindLocationNilMutatorIsUnimplemented(t *testing.T) {
+	caps := newFakeBaseNoMutator()
+	srv := hostcap.NewWorldQueryServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.FindLocation(context.Background(), &hostv1.FindLocationRequest{Name: "plaza"})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unimplemented, st.Code())
+}
+
+// ============================================================================
+// WorldMutationService
+// ============================================================================
+
+func TestWorldMutationServerCreateLocationWritesLocationAndStampsSubject(t *testing.T) {
+	loc := makeLocation()
+	m := &fakeMutator{}
+	caps := newFakeBaseWithMutator(m)
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	resp, err := srv.CreateLocation(context.Background(), &hostv1.CreateLocationRequest{
+		Name:        loc.Name,
+		Description: loc.Description,
+		Type:        string(loc.Type),
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, resp.GetId())
+	assert.Equal(t, loc.Name, resp.GetName())
+	assert.Equal(t, "plugin:core-scenes", m.lastCreateLocSubject,
+		"CreateLocation must stamp the plugin subject via access.PluginSubject")
+}
+
+func TestWorldMutationServerCreateLocationNilMutatorIsUnimplemented(t *testing.T) {
+	caps := newFakeBaseNoMutator()
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.CreateLocation(context.Background(), &hostv1.CreateLocationRequest{
+		Name: "Town Square",
+		Type: "persistent",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unimplemented, st.Code())
+}
+
+func TestWorldMutationServerCreateLocationInternalErrorIsOpaque(t *testing.T) {
+	m := &fakeMutator{createLocationErr: errors.New("secret db detail")}
+	caps := newFakeBaseWithMutator(m)
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.CreateLocation(context.Background(), &hostv1.CreateLocationRequest{
+		Name: "Town Square",
+		Type: "persistent",
+	})
+	requireOpaqueInternal(t, err)
+}
+
+func TestWorldMutationServerCreateExitWritesExitAndStampsSubject(t *testing.T) {
+	m := &fakeMutator{}
+	caps := newFakeBaseWithMutator(m)
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	fromID := ulid.Make().String()
+	toID := ulid.Make().String()
+	resp, err := srv.CreateExit(context.Background(), &hostv1.CreateExitRequest{
+		FromId: fromID,
+		ToId:   toID,
+		Name:   "north",
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, resp.GetId())
+	assert.Equal(t, "north", resp.GetName())
+	assert.Equal(t, "plugin:core-scenes", m.lastCreateExitSubject,
+		"CreateExit must stamp the plugin subject via access.PluginSubject")
+}
+
+func TestWorldMutationServerCreateExitNilMutatorIsUnimplemented(t *testing.T) {
+	caps := newFakeBaseNoMutator()
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.CreateExit(context.Background(), &hostv1.CreateExitRequest{
+		FromId: ulid.Make().String(),
+		ToId:   ulid.Make().String(),
+		Name:   "north",
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unimplemented, st.Code())
+}
+
+func TestWorldMutationServerCreateObjectWritesObjectAndStampsSubject(t *testing.T) {
+	m := &fakeMutator{}
+	caps := newFakeBaseWithMutator(m)
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	locID := ulid.Make().String()
+	resp, err := srv.CreateObject(context.Background(), &hostv1.CreateObjectRequest{
+		Name:      "Sword",
+		Placement: &hostv1.CreateObjectRequest_LocationId{LocationId: locID},
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, resp.GetId())
+	assert.Equal(t, "Sword", resp.GetName())
+	assert.Equal(t, "plugin:core-scenes", m.lastCreateObjSubject,
+		"CreateObject must stamp the plugin subject via access.PluginSubject")
+}
+
+func TestWorldMutationServerCreateObjectNilMutatorIsUnimplemented(t *testing.T) {
+	caps := newFakeBaseNoMutator()
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	locID := ulid.Make().String()
+	_, err := srv.CreateObject(context.Background(), &hostv1.CreateObjectRequest{
+		Name:      "Sword",
+		Placement: &hostv1.CreateObjectRequest_LocationId{LocationId: locID},
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unimplemented, st.Code())
+}
+
+func TestWorldMutationServerCreateExitInternalErrorIsOpaque(t *testing.T) {
+	m := &fakeMutator{createExitErr: errors.New("secret db detail")}
+	caps := newFakeBaseWithMutator(m)
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.CreateExit(context.Background(), &hostv1.CreateExitRequest{
+		FromId: ulid.Make().String(),
+		ToId:   ulid.Make().String(),
+		Name:   "north",
+	})
+	requireOpaqueInternal(t, err)
+}
+
+func TestWorldMutationServerCreateObjectInternalErrorIsOpaque(t *testing.T) {
+	m := &fakeMutator{createObjectErr: errors.New("secret db detail")}
+	caps := newFakeBaseWithMutator(m)
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.CreateObject(context.Background(), &hostv1.CreateObjectRequest{
+		Name:      "Sword",
+		Placement: &hostv1.CreateObjectRequest_LocationId{LocationId: ulid.Make().String()},
+	})
+	requireOpaqueInternal(t, err)
+}
+
+// TestWorldMutationServerCreateObjectWithoutPlacementIsInvalidArgument verifies
+// CreateObject returns InvalidArgument when the placement oneof is nil/unset —
+// exercising the default branch of the placement switch.
+func TestWorldMutationServerCreateObjectWithoutPlacementIsInvalidArgument(t *testing.T) {
+	m := &fakeMutator{}
+	caps := newFakeBaseWithMutator(m)
+	srv := hostcap.NewWorldMutationServer(hostcap.NewBase(caps, "core-scenes"))
+	_, err := srv.CreateObject(context.Background(), &hostv1.CreateObjectRequest{
+		Name: "Sword",
+		// Placement intentionally omitted — triggers default branch.
+	})
+	requireInvalidArgument(t, err)
 }

@@ -22,6 +22,28 @@ type ResolveResult struct {
 	Ordered     []*DiscoveredPlugin
 	Unsatisfied []UnsatisfiedDep
 	Cycles      [][]string
+	// Grants maps plugin name → the set of dependency tokens (capability tokens
+	// like "world.query" and service names) it successfully declared and that
+	// resolved. This is the single least-privilege grant authority consumed by
+	// both runtimes' delivery shims (INV-PLUGIN-45). A token NOT in a plugin's
+	// grant set MUST NOT be wired for that plugin.
+	Grants map[string][]string
+}
+
+// CloneGrants returns a deep copy of a per-plugin grant set (map keys plus each
+// token slice). Both runtime hosts snapshot the resolver's grants on store so a
+// later mutation of the caller-owned map cannot silently broaden or narrow the
+// least-privilege set without another resolver pass (INV-PLUGIN-45). A nil input
+// returns nil so the hosts' "nil ⇒ manifest fallback" sentinel is preserved.
+func CloneGrants(grants map[string][]string) map[string][]string {
+	if grants == nil {
+		return nil
+	}
+	out := make(map[string][]string, len(grants))
+	for name, tokens := range grants {
+		out[name] = append([]string(nil), tokens...)
+	}
+	return out
 }
 
 // ResolveDependencyOrder validates and orders the unified dependency graph and
@@ -93,7 +115,9 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 		}
 	}
 
-	res := &ResolveResult{}
+	res := &ResolveResult{
+		Grants: make(map[string][]string),
+	}
 
 	// Per-entry, kind-aware validation. Capability entries add no edge; service
 	// entries are checked for a provider (and optional version constraint).
@@ -112,6 +136,10 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 					} else if !dep.Optional {
 						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "UNSATISFIED_CAPABILITY"})
 					}
+					// Not granted: vocab miss (whether misdeclared or unsatisfied).
+				} else {
+					// Capability present in vocab: grant the token.
+					res.Grants[p.Manifest.Name] = append(res.Grants[p.Manifest.Name], dep.Name)
 				}
 			case DependencyService:
 				provider, ok := svcProvider[dep.Name]
@@ -125,20 +153,29 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 					if !dep.Optional {
 						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "UNSATISFIED_SERVICE"})
 					}
+					// No provider: not granted (optional or required).
 					continue
 				}
-				// Version check: when the provider is a plugin (non-empty name)
-				// and dep.Version is set, verify the provider's Manifest.Version
-				// satisfies the constraint. An optional dependency whose provider
-				// exists but fails the version constraint is graceful-degrade:
-				// skipped, not recorded — the same posture as an optional
-				// dependency with no provider at all (spec §2; only a non-optional
-				// unsatisfiable entry is recorded in Unsatisfied).
-				if provider != "" && dep.Version != "" && !dep.Optional {
+				// Version check: when the provider is a plugin (non-empty name) and
+				// the dep carries a constraint, verify it. A version mismatch is
+				// graceful-degrade for an optional dep (not recorded in Unsatisfied)
+				// and a hard fault for a required dep (recorded); NEITHER is granted —
+				// the grant set authorizes only valid, version-satisfied resolutions.
+				// Server-provided services (provider == "") are exempt: the host
+				// does not carry a plugin Manifest.Version, so the constraint cannot
+				// be evaluated and the dep is always considered satisfied.
+				if provider != "" && dep.Version != "" {
 					if !versionSatisfies(byName[provider].Manifest.Version, dep.Version) {
-						res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "VERSION_UNSATISFIED"})
+						if !dep.Optional {
+							res.Unsatisfied = append(res.Unsatisfied, UnsatisfiedDep{Plugin: p.Manifest.Name, Entry: dep, Reason: "VERSION_UNSATISFIED"})
+						}
+						// Version constraint failed: not granted (optional or required).
+						continue
 					}
 				}
+				// Provider found and version satisfied (or no constraint, or
+				// server-provided): grant the service name.
+				res.Grants[p.Manifest.Name] = append(res.Grants[p.Manifest.Name], dep.Name)
 			default:
 				// Zero-value or unknown DependencyKind (e.g. a Go-constructed
 				// Dependency{Name:"x"} with empty Kind). A required dependency of

@@ -9,6 +9,7 @@ lua-plugin:
 requires:
   - capability: property
   - capability: world.query
+  - capability: world.mutation
 commands:
   - name: describe
     aliases:

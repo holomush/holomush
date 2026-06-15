@@ -63,6 +63,7 @@ var (
 	_ plugins.EventEmitterConfigurer     = (*Host)(nil)
 	_ plugins.FocusDepsConfigurer        = (*Host)(nil)
 	_ plugins.IdentityRegistryConfigurer = (*Host)(nil)
+	_ plugins.PluginGrantsConfigurer     = (*Host)(nil)
 )
 
 // PluginClient wraps go-plugin client for testability.
@@ -237,6 +238,21 @@ func WithCommandQuerier(q *commandquery.Querier) HostOption {
 	return func(h *Host) { h.commandQuerier = q }
 }
 
+// WithPluginGrants threads the resolver's per-plugin grant set into the host.
+// When set (non-nil), it is the single least-privilege authority for what
+// services are broker-wired and what capability tokens are declared to Init
+// at Load time. The broker loop gates RequiredServiceNames on grant membership;
+// DeclaredCapabilities is the intersection of RequiredCapabilities with the
+// grant set.
+//
+// A nil map (the default) means the host falls back to manifest-derived values,
+// preserving backward compatibility for the no-registry path and existing tests.
+//
+// The Lua host has a symmetric option (plugin-runtime-symmetry).
+func WithPluginGrants(grants map[string][]string) HostOption {
+	return func(h *Host) { h.pluginGrants = plugins.CloneGrants(grants) }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	clientFactory     ClientFactory
@@ -275,6 +291,14 @@ type Host struct {
 	plugins         map[string]*loadedPlugin
 	mu              sync.RWMutex
 	closed          bool
+
+	// pluginGrants is the per-plugin least-privilege grant set from the
+	// resolver (holomush-eykuh.4.7). A nil map means "not set" → fall back
+	// to manifest-derived caps/services at Load time (no-registry path,
+	// existing tests). A non-nil map is authoritative: the broker loop gates
+	// RequiredServiceNames on its grant membership, and DeclaredCapabilities
+	// is set to the intersection of RequiredCapabilities with the grant set.
+	pluginGrants map[string][]string
 
 	// tokenStore authenticates per-dispatch actor claims on the binary-plugin
 	// EmitEvent boundary. The sweeper goroutine is host-owned: tokenStoreCtx
@@ -348,6 +372,61 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 		)
 	}
 	return h
+}
+
+// SetPluginGrants implements plugins.PluginGrantsConfigurer. The Manager calls
+// this before starting plugin loads when a resolver is configured, so that
+// every subsequent Load uses the grant set rather than the full manifest.
+// A nil grants map restores the nil state (manifest fallback).
+func (h *Host) SetPluginGrants(grants map[string][]string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pluginGrants = plugins.CloneGrants(grants)
+}
+
+// grantedSubset returns the elements of requested that appear in the granted
+// set. When granted is nil or empty the result is nil (nothing wired on an
+// explicitly empty grant). Used at Load time to compute the cap subset for
+// InitRequest.DeclaredCapabilities (symmetric with the Lua host helper).
+func grantedSubset(requested, granted []string) []string {
+	if len(granted) == 0 {
+		return nil
+	}
+	grantSet := make(map[string]bool, len(granted))
+	for _, g := range granted {
+		grantSet[g] = true
+	}
+	out := make([]string, 0, len(requested))
+	for _, r := range requested {
+		if grantSet[r] {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// serviceWiringAllowed reports whether the broker loop may wire svcName for
+// the named plugin.
+//
+// When pluginGrants is nil (no-registry path) all services are allowed — this
+// is the legacy fallback for hosts that don't carry a resolver grant set.
+// When pluginGrants is non-nil (resolver path) only services present in the
+// plugin's grant set are allowed; plugins with no grant entry at all are
+// wired nothing (fail-closed). This is the least-privilege gate that
+// underpins INV-PLUGIN-45: capability tokens and service names live in the
+// same flat grant list, so the broker loop MUST check membership here rather
+// than calling registry.Resolve on every entry (tokens would produce
+// PLUGIN_SERVICE_NOT_FOUND errors).
+func (h *Host) serviceWiringAllowed(pluginName, svcName string) bool {
+	if h.pluginGrants == nil {
+		return true
+	}
+	for _, g := range h.pluginGrants[pluginName] {
+		if g == svcName {
+			return true
+		}
+	}
+	return false
 }
 
 // overrideFor returns the server-provided config override for a plugin, or nil
@@ -805,6 +884,19 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	}
 	if len(manifest.RequiredServiceNames()) > 0 && grpcPlugin.broker != nil && h.registry != nil {
 		for _, svcName := range manifest.RequiredServiceNames() {
+			// Least-privilege gate (INV-PLUGIN-45): when pluginGrants is set,
+			// only services present in the plugin's grant set are wired. This
+			// prevents capability-token entries in the grant list from being
+			// passed to registry.Resolve (they are not service names and would
+			// cause PLUGIN_SERVICE_NOT_FOUND). See serviceWiringAllowed.
+			if !h.serviceWiringAllowed(manifest.Name, svcName) {
+				slog.InfoContext(
+					ctx, "skipping service not in resolver grant set",
+					"plugin", manifest.Name,
+					"service", svcName,
+				)
+				continue
+			}
 			svc, resolveErr := h.registry.Resolve(svcName)
 			if resolveErr != nil {
 				client.Kill()
@@ -841,10 +933,19 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	needsInit := true
 	var registeredEmitTypes []string
 	if needsInit {
+		// When pluginGrants is set (resolver path), DeclaredCapabilities is
+		// the intersection of manifest RequiredCapabilities with the grant set.
+		// This ensures only granted capability tokens are declared to the SDK,
+		// keeping the grant set as the single authority (INV-PLUGIN-45).
+		// When nil (no-registry path), fall back to the full manifest list.
+		declaredCaps := manifest.RequiredCapabilities()
+		if h.pluginGrants != nil {
+			declaredCaps = grantedSubset(declaredCaps, h.pluginGrants[manifest.Name])
+		}
 		initReq := &pluginv1.InitRequest{
 			Config: &pluginv1.ServiceConfig{
 				RequiredServices:     requiredServices,
-				DeclaredCapabilities: manifest.RequiredCapabilities(),
+				DeclaredCapabilities: declaredCaps,
 			},
 		}
 

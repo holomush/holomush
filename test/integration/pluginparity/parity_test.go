@@ -280,9 +280,18 @@ var _ = Describe("Cross-runtime plugin host-capability parity", func() {
 	// obtain an allow it was not authorized for. Both endpoints additionally wire
 	// a DenyAllEngine, so even past the identity seam the engine would deny.
 	//
-	// SCOPE / COVERAGE GAP: this asserts only fail-closed-when-identity-absent.
-	// Full PluginSubject-authorization coverage is a tracked coverage gap pending
-	// the Lua identity-transport wiring; this spec supports the fail-closed half.
+	// SCOPE: this asserts only fail-closed-when-identity-absent (bare endpoints,
+	// no actor-stamp interceptor). The bare endpoint construction here is
+	// deliberate — it proves the seam fails closed when no host-established
+	// identity is present, independent of the interceptor.
+	//
+	// Positive identity-present coverage is provided by the production endpoint
+	// unit test TestActorStampReachesServerSideThroughRealEndpoint
+	// (internal/plugin/lua/bufconn_endpoint_test.go), which drives EvalService
+	// through newPluginEndpoint with the actor-stamp interceptor (holomush-eykuh.4.5).
+	// End-to-end Lua emit coverage (holo.emit.* → PluginEventEmitter.Emit →
+	// actor_kinds_claimable gate) is in lua_emit_test.go in this package
+	// (holomush-eykuh.4.10).
 	//
 	// Verifies: INV-PLUGIN-44
 	It("fails the evaluate authorization seam closed across runtimes", func() {

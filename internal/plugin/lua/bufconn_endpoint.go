@@ -48,7 +48,14 @@ func newPluginEndpoint(adapter hostcap.HostCapabilities, manifest *plugins.Manif
 	// wire to encrypt or tamper with. TLS credentials are therefore N/A; this
 	// mirrors the client half of the same transport, which carries the matching
 	// nosemgrep on insecure.NewCredentials (internal/plugin/inprocess_conn.go).
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(ic)) // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
+	//
+	// actorIC stamps {ActorPlugin, pluginName} from the connection-scoped
+	// host-established identity BEFORE the capability interceptor (ic) runs.
+	// plugins.NewInProcessConn drops context values, so the server-side request
+	// context is always bare; the actor must be derived from pluginName here
+	// (holomush-eykuh.4.5).
+	actorIC := newActorStampInterceptor(pluginName)
+	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(actorIC, ic)) // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
 	hostcap.RegisterCapabilities(srv, hostcap.NewBase(adapter, pluginName), hostcap.LuaDefaultSet)
 	conn, err := plugins.NewInProcessConn(srv)
 	if err != nil {

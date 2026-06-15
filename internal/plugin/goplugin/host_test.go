@@ -2207,3 +2207,72 @@ func TestLoadCallsInitForBinaryPluginWithNoRequires(t *testing.T) {
 	require.NoError(t, host.Load(ctx, manifest, tmpDir))
 	assert.True(t, grpcClient.initCalled, "Init must be called even with no requires (INV-PLUGIN-54)")
 }
+
+// TestBinaryHostWiresOnlyGrantedServices asserts that when WithPluginGrants is
+// set, the broker loop skips any RequiredServiceName NOT in the grant set, and
+// DeclaredCapabilities only includes granted capability tokens — not all
+// manifest-declared caps (holomush-eykuh.4.7).
+func TestBinaryHostWiresOnlyGrantedServices(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	// Host with a plugin grant that includes only "focus" (capability) but
+	// NOT "stream.history" — even though the manifest declares both.
+	host := NewHostWithFactory(
+		&mockClientFactory{client: mockClient},
+		WithPluginGrants(map[string][]string{
+			"test-plugin": {"focus"},
+		}),
+	)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(tmpDir+"/test-plugin"))
+
+	manifest := &plugins.Manifest{
+		Name: "test-plugin", Version: "1.0.0", Type: plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{Executable: "test-plugin"},
+		Requires: []plugins.Dependency{
+			{Kind: plugins.DependencyCapability, Name: "focus"},
+			{Kind: plugins.DependencyCapability, Name: "stream.history"},
+		},
+	}
+
+	require.NoError(t, host.Load(ctx, manifest, tmpDir))
+	require.NotNil(t, grpcClient.initReq, "Init must be called")
+	require.NotNil(t, grpcClient.initReq.Config, "ServiceConfig must be set")
+	// Only "focus" must appear — "stream.history" is excluded by the grant set.
+	assert.ElementsMatch(t, []string{"focus"},
+		grpcClient.initReq.Config.GetDeclaredCapabilities(),
+		"DeclaredCapabilities must reflect the grant set, not the full manifest")
+	assert.NotContains(t, grpcClient.initReq.Config.GetDeclaredCapabilities(), "stream.history",
+		"stream.history must not be wired: it is absent from the grant set")
+}
+
+// TestBinaryHostGrantsNilFallsBackToManifest asserts that when WithPluginGrants
+// is NOT set (nil), DeclaredCapabilities contains all manifest-declared caps —
+// preserving backward-compat for the no-registry path (holomush-eykuh.4.7).
+func TestBinaryHostGrantsNilFallsBackToManifest(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	host := NewHostWithFactory(&mockClientFactory{client: mockClient})
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(tmpDir+"/test-plugin"))
+
+	manifest := &plugins.Manifest{
+		Name: "test-plugin", Version: "1.0.0", Type: plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{Executable: "test-plugin"},
+		Requires: []plugins.Dependency{
+			{Kind: plugins.DependencyCapability, Name: "focus"},
+			{Kind: plugins.DependencyCapability, Name: "stream.history"},
+		},
+	}
+
+	require.NoError(t, host.Load(ctx, manifest, tmpDir))
+	require.NotNil(t, grpcClient.initReq, "Init must be called")
+	// No grants set → falls back to manifest (all caps).
+	assert.ElementsMatch(t, []string{"focus", "stream.history"},
+		grpcClient.initReq.Config.GetDeclaredCapabilities(),
+		"nil grants must fall back to manifest RequiredCapabilities")
+}

@@ -658,9 +658,27 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	knownActions := CollectActions(discovered)
 
 	// Phase 3: Resolve load order.
-	ordered, err := m.resolveLoadOrder(discovered)
+	res, err := m.resolveLoadOrder(discovered)
 	if err != nil {
 		return err
+	}
+	ordered := res.Ordered
+
+	// Thread the resolver grant set into all registered hosts so each host's
+	// delivery shim can use grants as the single least-privilege authority.
+	// res.Grants is nil on the no-registry path — hosts treat nil as "fall back
+	// to manifest.RequiredCapabilities()" preserving existing behavior.
+	if res.Grants != nil {
+		for _, h := range m.hosts {
+			if gc := findOptional[PluginGrantsConfigurer](h); gc != nil {
+				gc.SetPluginGrants(res.Grants)
+			}
+		}
+		if m.luaHost != nil {
+			if gc := findOptional[PluginGrantsConfigurer](m.luaHost); gc != nil {
+				gc.SetPluginGrants(res.Grants)
+			}
+		}
 	}
 
 	// Phase 4: Load each plugin with full context.
@@ -677,6 +695,10 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	}
 
 	if len(loadErrors) > 0 {
+		// gracefulDegradation governs per-plugin LOAD failures only. DAG
+		// resolution (resolveLoadOrder → defaultResolvePolicy) is always
+		// fail-closed and is NOT subject to this flag; that domain is
+		// defaultResolvePolicy's responsibility.
 		if m.gracefulDegradation {
 			slog.WarnContext(ctx, "plugin loading completed with errors (graceful degradation enabled)",
 				"failed_count", len(loadErrors))
@@ -809,13 +831,39 @@ func CollectActions(discovered []*DiscoveredPlugin) map[string]bool {
 	return known
 }
 
-// resolveLoadOrder returns plugins in the order they should be loaded.
+// resolvePolicy decides loader behavior from a structured resolve result.
+// The concrete function is swappable so a future gracefulDegradation quarantine
+// strategy can replace defaultResolvePolicy at this single call site without
+// touching the resolver. Today there is only one policy: fail-closed.
+type resolvePolicy func(*ResolveResult) error
+
+// defaultResolvePolicy is fail-closed (INV-PLUGIN-43): any non-optional
+// unsatisfied dependency or cycle is fatal. DUPLICATE_* errors are bare Go
+// errors returned by ResolveDependencyOrder before the result is built, so they
+// are NOT visible here and are not a policy case.
+func defaultResolvePolicy(res *ResolveResult) error {
+	if len(res.Unsatisfied) > 0 || len(res.Cycles) > 0 {
+		return oops.Code("PLUGIN_DEPENDENCY_UNSATISFIED").
+			With("unsatisfied", res.Unsatisfied).With("cycles", res.Cycles).
+			Errorf("plugin dependency resolution failed; fail-closed (INV-PLUGIN-43)")
+	}
+	return nil
+}
+
+// applyResolvePolicy applies p to res and returns the resulting error (nil on success).
+func applyResolvePolicy(res *ResolveResult, p resolvePolicy) error { return p(res) }
+
+// resolveLoadOrder resolves plugins into load order with their grant sets.
 // When a registry is configured, it uses DAG-based dependency resolution and
 // fails the boot (fail-closed, INV-PLUGIN-43) on any non-optional unsatisfied
-// dependency or cycle. With no registry, it falls back to priority sort.
-func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) ([]*DiscoveredPlugin, error) {
+// dependency or cycle. With no registry, it falls back to priority sort and
+// returns a result with a nil Grants map (no-registry path: hosts fall back
+// to manifest-derived caps).
+func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) (*ResolveResult, error) {
 	if m.registry == nil {
-		return prioritySort(discovered), nil // no registry: legacy priority order
+		// No registry: priority sort only; Grants is nil so hosts fall back
+		// to manifest.RequiredCapabilities() (backward-compat, INV-PLUGIN-45).
+		return &ResolveResult{Ordered: prioritySort(discovered)}, nil
 	}
 
 	serverServices := m.registry.List()
@@ -833,12 +881,10 @@ func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) ([]*Discovere
 	if err != nil {
 		return nil, oops.Code("PLUGIN_DEPENDENCY_RESOLVE_FAILED").Wrap(err)
 	}
-	if len(res.Unsatisfied) > 0 || len(res.Cycles) > 0 {
-		return nil, oops.Code("PLUGIN_DEPENDENCY_UNSATISFIED").
-			With("unsatisfied", res.Unsatisfied).With("cycles", res.Cycles).
-			Errorf("plugin dependency resolution failed; fail-closed (INV-PLUGIN-43)")
+	if err := applyResolvePolicy(res, defaultResolvePolicy); err != nil {
+		return nil, err
 	}
-	return res.Ordered, nil
+	return res, nil
 }
 
 // prioritySort orders plugins by load priority (lower values load first). It is

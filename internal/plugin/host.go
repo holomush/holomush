@@ -189,3 +189,15 @@ type SettingsDepsConfigurer interface {
 type IdentityRegistryConfigurer interface {
 	SetIdentityRegistry(reg IdentityRegistry)
 }
+
+// PluginGrantsConfigurer is implemented by hosts that consume the resolver's
+// per-plugin grant set. The Manager calls SetPluginGrants on all registered
+// hosts immediately after resolveLoadOrder returns the ResolveResult (before
+// any plugin Load calls), so the grants are in place for every load.
+//
+// A nil grant map means "not set" — hosts fall back to manifest-derived
+// capability lists (no-registry path, backward compat). Both Lua and binary
+// hosts implement this interface (plugin-runtime-symmetry).
+type PluginGrantsConfigurer interface {
+	SetPluginGrants(grants map[string][]string)
+}
