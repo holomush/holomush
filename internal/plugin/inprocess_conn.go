@@ -27,7 +27,14 @@ type InProcessConn struct {
 
 // NewInProcessConn starts srv on an in-memory bufconn listener and returns a
 // client connection to it. The caller must call Close when done.
-func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
+//
+// Extra dialOpts are appended after the fixed context-dialer and insecure
+// transport credentials, letting callers attach client-side interceptors (e.g.
+// the Lua dispatch-propagation outgoing interceptor, which marshals the
+// host-vouched dispatch context into outgoing metadata across this bufconn —
+// holomush-eykuh.4.13). The bufconn carries no wire to encrypt, so the insecure
+// transport credentials are always correct here regardless of dialOpts.
+func NewInProcessConn(srv *grpc.Server, dialOpts ...grpc.DialOption) (*InProcessConn, error) {
 	if srv == nil {
 		return nil, oops.Errorf("grpc server must not be nil")
 	}
@@ -45,11 +52,11 @@ func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
 		return lis.DialContext(ctx)
 	}
 
-	conn, err := grpc.NewClient(
-		"passthrough:///bufconn",
+	opts := append([]grpc.DialOption{
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
-	)
+	}, dialOpts...)
+	conn, err := grpc.NewClient("passthrough:///bufconn", opts...)
 	if err != nil {
 		_ = lis.Close() //nolint:errcheck // best-effort cleanup on dial failure
 		return nil, oops.Wrap(err)

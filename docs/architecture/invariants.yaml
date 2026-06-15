@@ -3829,6 +3829,7 @@ invariants:
     asserted_by:
       - "internal/plugin/goplugin/dispatch_test.go"
       - "internal/plugin/lua/dispatch_test.go"
+      - "internal/plugin/lua/dispatch_propagation_test.go"
       - "internal/plugin/goplugin/host_service_command_test.go"
       - "internal/plugin/hostfunc/commands_test.go"
   - id: INV-PLUGIN-52

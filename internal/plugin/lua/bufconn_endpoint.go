@@ -55,9 +55,21 @@ func newPluginEndpoint(adapter hostcap.HostCapabilities, manifest *plugins.Manif
 	// context is always bare; the actor must be derived from pluginName here
 	// (holomush-eykuh.4.5).
 	actorIC := newActorStampInterceptor(pluginName)
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(actorIC, ic)) // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
+	// dispatchIC reconstructs the host-vouched per-call dispatch context (subject
+	// + the acting character's resolved scope attributes, notably "location") from
+	// the outgoing metadata the client-side dispatch interceptor marshals across
+	// the bufconn. Unlike the connection-static actor, dispatch is per-call
+	// dynamic, so it MUST cross the wire. It is chained BEFORE the capability
+	// interceptor (ic) so the scope half reads the stamped dispatch
+	// (holomush-eykuh.4.13, INV-PLUGIN-51/52).
+	dispatchIC := newDispatchStampInterceptor()
+	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(actorIC, dispatchIC, ic)) // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
 	hostcap.RegisterCapabilities(srv, hostcap.NewBase(adapter, pluginName), hostcap.LuaDefaultSet)
-	conn, err := plugins.NewInProcessConn(srv)
+	// The client-side outgoing interceptor marshals the host-vouched dispatch
+	// context (from the call ctx) into outgoing metadata so dispatchIC can rebuild
+	// it server-side. Host-owned both ends: only Host.stampDispatch sets the
+	// dispatch value the outgoing interceptor reads.
+	conn, err := plugins.NewInProcessConn(srv, grpc.WithChainUnaryInterceptor(newDispatchOutgoingInterceptor()))
 	if err != nil {
 		return nil, oops.In("lua").With("plugin", pluginName).Wrap(err)
 	}
