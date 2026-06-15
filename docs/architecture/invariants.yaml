@@ -3549,10 +3549,10 @@ invariants:
     legacy: ["INV-5@docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md"]
     summary: "The binary (gRPC) and Lua (hostfunc) surfaces reach identical host evaluation logic via a single shared mapping
       (runtime parity)."
-    binding: pending
-    refs:
-      - {file: "internal/plugin/pluginauthz/evaluate.go", token: "INV-5"}
-      - {file: "internal/plugin/goplugin/evaluate_invariants_test.go", token: "INV-5"}
+    binding: bound
+    asserted_by:
+      - "internal/plugin/goplugin/evaluate_invariants_test.go"
+      - "internal/plugin/lua/eval_entitlement_brokered_test.go"
   - id: INV-PLUGIN-27
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md"

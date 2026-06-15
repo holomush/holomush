@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -41,12 +42,22 @@ func setupObjectsTest(mutator hostfunc.WorldMutator) (*objectsFixture, error) {
 		return nil, statErr
 	}
 
-	var opts []hostfunc.Option
+	opts := []hostfunc.Option{
+		// create object is a scoped (own-location) capability write, so the host
+		// runs the ABAC engine for the scope fence; production wires the access
+		// engine here. AllowAllEngine lets the scope evaluation proceed so the
+		// brokered CreateObject reaches the mutator. Without an engine the scoped
+		// call fails closed.
+		hostfunc.WithEngine(policytest.AllowAllEngine()),
+	}
 	if mutator != nil {
 		opts = append(opts, hostfunc.WithWorldService(mutator))
 	}
 	hostFuncs := hostfunc.New(nil, opts...)
-	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
+	// Populate DispatchContext.Attributes["location"] for the scoped create object
+	// fence — the production AttributeResolver equivalent.
+	luaHost := pluginlua.NewHostWithFunctions(hostFuncs,
+		pluginlua.WithDispatchAttributeResolver(fixedBuildingAttrResolver{location: buildingTestLocationID}))
 
 	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
 	if mgrErr != nil {
@@ -262,13 +273,16 @@ var _ = Describe("Objects Plugin Integration", func() {
 
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
+				// create object is a scoped (own-location) write; stamp the acting
+				// character so stampDispatch vouches the dispatch context.
+				ctx = scopedActorContext(ctx, "01HTEST000000000000000CHAR")
 
 				resp, err := fixture.LuaHost.DeliverCommand(ctx, "core-objects", pluginsdk.CommandRequest{
 					Command:       "create",
 					Args:          `object "Enchanted Sword"`,
 					CharacterID:   "01HTEST000000000000000CHAR",
 					CharacterName: "TestPlayer",
-					LocationID:    "01HTEST000000000000000ROOM",
+					LocationID:    buildingTestLocationID,
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))

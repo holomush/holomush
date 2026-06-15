@@ -263,22 +263,24 @@ func New(kv KVStore, opts ...Option) *Functions {
 	return f
 }
 
-// Register adds host functions to a Lua state.
-// The optional requires parameter lists proto service names from the plugin manifest;
-// matching capability modules are injected into the Lua state. Plugins without
-// requires declarations call Register with no requires argument — this is a no-op
-// for capability injection and is always safe.
+// Register installs the plugin **language stdlib** onto a Lua state — and only
+// the stdlib. As of the atomic capability cutover (holomush-eykuh.4, spec R1 /
+// ADR holomush-05f3v) the ten capability host functions (kv, world.query,
+// world.mutation, property, session, session.admin, focus, eval, settings, emit)
+// are NO LONGER injected here: they flow exclusively through the host-brokered
+// path (luabridge.RegisterHostCaps), gated by the resolver's per-plugin grant
+// set. What remains is the ambient, ungated runtime: logging, request-id, the
+// holo.* stdlib (fmt/emit namespaces), the INV-PLUGIN-32 register_emit_type
+// stub, the merged plugin config, and the command-registry / stream / audit
+// read-back surfaces (not part of the ten retired capabilities).
+//
+// The requires parameter is retained for signature compatibility but is now a
+// no-op: capability injection no longer keys off it. Callers MAY pass nothing.
 func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...string) {
+	_ = requires // capability injection is now host-brokered; see RegisterHostCaps.
+
 	// Register the holo.* stdlib (fmt, emit namespaces)
 	RegisterStdlib(ls)
-
-	// Register holo.session namespace if session access is configured.
-	if f.sessionAccess != nil {
-		holoTable, ok := ls.GetGlobal("holo").(*lua.LTable)
-		if ok {
-			RegisterSessionFuncs(ls, holoTable, f.sessionAccess)
-		}
-	}
 
 	mod := ls.NewTable()
 
@@ -288,41 +290,21 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	// Request ID
 	ls.SetField(mod, "new_request_id", ls.NewFunction(f.newRequestIDFn()))
 
-	// KV operations
-	ls.SetField(mod, "kv_get", ls.NewFunction(f.kvGetFn(pluginName)))
-	ls.SetField(mod, "kv_set", ls.NewFunction(f.kvSetFn(pluginName)))
-	ls.SetField(mod, "kv_delete", ls.NewFunction(f.kvDeleteFn(pluginName)))
-
-	// World queries
-	ls.SetField(mod, "query_location", ls.NewFunction(f.queryLocationFn(pluginName)))
-	ls.SetField(mod, "query_character", ls.NewFunction(f.queryCharacterFn(pluginName)))
-	ls.SetField(mod, "query_location_characters", ls.NewFunction(f.queryLocationCharactersFn(pluginName)))
-	ls.SetField(mod, "query_object", ls.NewFunction(f.queryObjectFn(pluginName)))
-
-	// World mutations
-	ls.SetField(mod, "create_location", ls.NewFunction(f.createLocationFn(pluginName)))
-	ls.SetField(mod, "create_exit", ls.NewFunction(f.createExitFn(pluginName)))
-	ls.SetField(mod, "create_object", ls.NewFunction(f.createObjectFn(pluginName)))
-	ls.SetField(mod, "find_location", ls.NewFunction(f.findLocationFn(pluginName)))
-	ls.SetField(mod, "set_property", ls.NewFunction(f.setPropertyFn(pluginName)))
-	ls.SetField(mod, "get_property", ls.NewFunction(f.getPropertyFn(pluginName)))
-
-	// Command registry functions
+	// Command registry functions (command-registry is NOT one of the ten retired
+	// capabilities; it stays on the ambient surface — see ADR holomush-05f3v).
 	ls.SetField(mod, "list_commands", ls.NewFunction(f.listCommandsFn(pluginName)))
 	ls.SetField(mod, "get_command_help", ls.NewFunction(f.getCommandHelpFn(pluginName)))
 
-	// Authorization query
-	ls.SetField(mod, "evaluate", ls.NewFunction(f.evaluateFn(pluginName)))
-
-	// Plugin-partitioned settings (parity with the binary GetSetting/SetSetting RPCs).
-	ls.SetField(mod, "get_setting", ls.NewFunction(f.getSettingFn(pluginName)))
-	ls.SetField(mod, "set_setting", ls.NewFunction(f.setSettingFn(pluginName)))
-
 	// Register stream management functions (always; guard against nil registry inside).
+	// stream.subscription is NOT one of the ten retired capabilities (ADR
+	// holomush-05f3v); it stays ambient.
 	RegisterStreamFuncs(ls, mod, f.streamRegistry)
 
-	// Register focus management functions.
-	RegisterFocusFuncs(ls, mod, f.focusOps, f.historyReader)
+	// Register the stream.history read-back (query_stream_history). The `focus`
+	// capability functions that used to ship alongside it (RegisterFocusFuncs)
+	// are retired to the host-brokered path (spec R1); stream.history is not one
+	// of the ten retired capabilities and stays ambient.
+	RegisterStreamHistoryFunc(ls, mod, f.historyReader)
 
 	// Register audit read-back decrypt functions.
 	RegisterAuditFuncs(ls, mod, pluginName, f.auditDecryptor)
@@ -345,11 +327,6 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	registerConfigTable(ls, mod, f.pluginConfigFor(pluginName))
 
 	ls.SetGlobal("holomush", mod)
-
-	// Inject capability modules for declared requires.
-	if f.capabilities != nil && len(requires) > 0 {
-		f.capabilities.InjectRequired(ls, requires, pluginName)
-	}
 }
 
 // RegisterWithEmitCapture is the variant of Register used during the
@@ -392,34 +369,20 @@ type AuditEntry struct {
 // block under adversarial input MUST be added here so the meta-test
 // exercises them.
 func (f *Functions) RegisteredFunctionsForAudit() []AuditEntry {
+	// After the atomic capability cutover (holomush-eykuh.4, spec R1 / ADR
+	// holomush-05f3v) the ten capability host functions are no longer installed
+	// by Register — they flow through the host-brokered RegisterHostCaps path —
+	// so they are NOT in this audit list. Only the ambient stdlib + the retained
+	// command-registry / stream / audit read-back surfaces remain.
 	return []AuditEntry{
 		{Name: "holomush.log"},
 		{Name: "holomush.new_request_id"},
-		{Name: "holomush.kv_get"},
-		{Name: "holomush.kv_set"},
-		{Name: "holomush.kv_delete"},
-		{Name: "holomush.query_location"},
-		{Name: "holomush.query_character"},
-		{Name: "holomush.query_location_characters"},
-		{Name: "holomush.query_object"},
-		{Name: "holomush.create_location"},
-		{Name: "holomush.create_exit"},
-		{Name: "holomush.create_object"},
-		{Name: "holomush.find_location"},
-		{Name: "holomush.set_property"},
-		{Name: "holomush.get_property"},
 		{Name: "holomush.list_commands"},
 		{Name: "holomush.get_command_help"},
-		{Name: "holomush.evaluate"},
-		{Name: "holomush.get_setting"},
-		{Name: "holomush.set_setting"},
 		// Unconditionally registered by RegisterStreamFuncs.
 		{Name: "holomush.add_session_stream"},
 		{Name: "holomush.remove_session_stream"},
-		// Unconditionally registered by RegisterFocusFuncs.
-		{Name: "holomush.join_focus"},
-		{Name: "holomush.leave_focus"},
-		{Name: "holomush.present_focus"},
+		// Unconditionally registered by RegisterStreamHistoryFunc (stream.history).
 		{Name: "holomush.query_stream_history"},
 		// Unconditionally registered by RegisterAuditFuncs.
 		{Name: "holomush.decrypt_own_audit_rows"},

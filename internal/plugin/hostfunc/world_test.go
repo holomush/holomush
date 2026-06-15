@@ -100,6 +100,7 @@ func newWorldTestLuaState(t *testing.T, querier hostfunc.WorldMutator) *lua.LSta
 	L := lua.NewState()
 	t.Cleanup(L.Close)
 	funcs.Register(L, "test-plugin")
+	funcs.RegisterCapabilityFuncsForTest(L, "test-plugin")
 	return L
 }
 

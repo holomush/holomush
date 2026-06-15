@@ -25,6 +25,7 @@ func TestEvaluateAllowedByEngine(t *testing.T) {
 
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`allowed, reason = holomush.evaluate("execute", "command:greet")`))
 	assert.True(t, bool(L.GetGlobal("allowed").(lua.LBool)))
@@ -42,6 +43,7 @@ func TestEvaluateDeniedByEngine(t *testing.T) {
 
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.DenyAllEngine()))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`allowed, reason = holomush.evaluate("execute", "command:greet")`))
 	assert.False(t, bool(L.GetGlobal("allowed").(lua.LBool)))
@@ -53,6 +55,7 @@ func TestEvaluateNoActorFailsClosed(t *testing.T) {
 	L.SetContext(context.Background())
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`allowed, err = holomush.evaluate("execute", "command:greet")`))
 	assert.False(t, bool(L.GetGlobal("allowed").(lua.LBool)))
@@ -69,6 +72,7 @@ func TestEvaluateNilEngineFailsClosed(t *testing.T) {
 	// No engine configured — WithEngine is intentionally omitted.
 	hf := hostfunc.New(nil)
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`allowed, err = holomush.evaluate("execute", "command:greet")`))
 	assert.False(t, bool(L.GetGlobal("allowed").(lua.LBool)),
@@ -84,6 +88,7 @@ func TestEvaluateNilLStateContextFailsClosed(t *testing.T) {
 	// → no actor in context → pluginauthz.Evaluate fails closed with EVALUATE_NO_SUBJECT.
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`allowed, err = holomush.evaluate("execute", "command:greet")`))
 	assert.False(t, bool(L.GetGlobal("allowed").(lua.LBool)))
@@ -103,6 +108,7 @@ func TestEvaluateContextDeadlineExceededFailsClosed(t *testing.T) {
 
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.NewErrorEngine(context.DeadlineExceeded)))
 	hf.Register(L, "lua-plug")
+	hf.RegisterCapabilityFuncsForTest(L, "lua-plug")
 
 	require.NoError(t, L.DoString(`allowed, err = holomush.evaluate("execute", "command:greet")`))
 	assert.False(t, bool(L.GetGlobal("allowed").(lua.LBool)),

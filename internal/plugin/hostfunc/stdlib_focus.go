@@ -50,8 +50,29 @@ type HistoryReader interface {
 	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error)
 }
 
+// RegisterStreamHistoryFunc adds ONLY holomush.query_stream_history (the
+// stream.history read-back) to an existing holomush module table, wiring the
+// history reader global it reads. It is the narrow slice of the former
+// RegisterFocusFuncs that survives the atomic capability cutover
+// (holomush-eykuh.4): the `focus` capability functions are retired to the
+// host-brokered path (spec R1 / ADR holomush-05f3v), but `stream.history` is
+// NOT one of the ten retired capabilities and stays ambient.
+func RegisterStreamHistoryFunc(ls *lua.LState, mod *lua.LTable, hr HistoryReader) {
+	if hr != nil {
+		ud := ls.NewUserData()
+		ud.Value = hr
+		ls.SetGlobal(historyReaderKey, ud)
+	}
+	ls.SetField(mod, "query_stream_history", ls.NewFunction(queryStreamHistoryFn))
+}
+
 // RegisterFocusFuncs adds holomush.join_focus, leave_focus, present_focus,
 // and query_stream_history to an existing holomush module table.
+//
+// Deprecated for the per-delivery Register path after the atomic capability
+// cutover (holomush-eykuh.4): the `focus` capability functions are now host-
+// brokered (spec R1). Retained for direct unit-test coverage of the focus
+// hostfuncs; production Register installs only RegisterStreamHistoryFunc.
 func RegisterFocusFuncs(ls *lua.LState, mod *lua.LTable, fo FocusOps, hr HistoryReader) {
 	if fo != nil {
 		ud := ls.NewUserData()

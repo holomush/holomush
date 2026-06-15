@@ -298,7 +298,7 @@ invariants.
 | `INV-PLUGIN-23` | No authenticated actor bound to the call → Evaluate returns deny + error (fail-closed). | `INV-2` | pending |
 | `INV-PLUGIN-24` | A resource type the plugin does not own (outside its entitlement, no command carve-out) → rejected. | `INV-3` | pending |
 | `INV-PLUGIN-25` | Each Evaluate emits exactly one host-stamped audit event; the audit logger MUST be wired on both the binary (gRPC) and Lua (hostfunc) surfaces. | `INV-4` | pending |
-| `INV-PLUGIN-26` | The binary (gRPC) and Lua (hostfunc) surfaces reach identical host evaluation logic via a single shared mapping (runtime parity). | `INV-5` | pending |
+| `INV-PLUGIN-26` | The binary (gRPC) and Lua (hostfunc) surfaces reach identical host evaluation logic via a single shared mapping (runtime parity). | `INV-5` | bound |
 | `INV-PLUGIN-27` | Each settings host RPC MUST ship a Go SDK method AND a Lua hostfunc together (runtime parity); the settings access gate is the single shared path for both runtimes. | `INV-8` | pending |
 | `INV-PLUGIN-28` | Cross-plugin settings isolation MUST be structural: the host binds the plugin partition from the authenticated caller identity (stamped at server construction), never from caller-supplied input; a plugin MUST NOT address another plugin's owner partition. | `INV-11` | pending |
 | `INV-PLUGIN-29` | Emitting an event with Sensitive=true whose type is not declared in the plugin's crypto.emits as 'may' or 'always' MUST fail at the emit-time fence with EVENT_SENSITIVITY_NOT_DECLARED (over-claim reject). | `INV-6` | bound |

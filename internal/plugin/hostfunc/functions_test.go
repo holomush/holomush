@@ -87,9 +87,49 @@ func TestHostFunctionsLog(t *testing.T) {
 
 	hf := hostfunc.New(nil)
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`holomush.log("info", "test message")`)
 	assert.NoError(t, err, "log() failed")
+}
+
+// TestHostfuncRegisterOmitsCapabilityFunctions asserts the atomic-cutover
+// contract (holomush-eykuh.4, spec R1 / ADR holomush-05f3v): after the flip,
+// hostfunc.Register installs the language stdlib ONLY. The ten capability host
+// functions (kv, world.query, world.mutation, property, session, session.admin,
+// focus, eval, settings, emit) MUST NOT be present on the holomush module — they
+// flow exclusively through the host-brokered RegisterHostCaps path, gated by the
+// resolver grant set. The retained stdlib (log, new_request_id, register_emit_type)
+// MUST still be present.
+func TestHostfuncRegisterOmitsCapabilityFunctions(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	hostfunc.New(nil).Register(L, "core-help")
+
+	mod, ok := L.GetGlobal("holomush").(*lua.LTable)
+	require.True(t, ok, "holomush module must be a table")
+
+	// The ten capability host functions MUST be gone from the legacy surface.
+	stripped := []string{
+		"kv_get", "kv_set", "kv_delete",
+		"query_location", "query_character", "query_location_characters", "query_object",
+		"create_location", "create_exit", "create_object", "find_location",
+		"set_property", "get_property",
+		"evaluate",
+		"get_setting", "set_setting",
+		"join_focus", "leave_focus", "present_focus",
+	}
+	for _, name := range stripped {
+		assert.Equal(t, lua.LNil, mod.RawGetString(name),
+			"capability fn %q must NOT be on the legacy hostfunc surface after the cutover", name)
+	}
+
+	// The language stdlib MUST remain.
+	for _, name := range []string{"log", "new_request_id", "register_emit_type"} {
+		assert.NotEqual(t, lua.LNil, mod.RawGetString(name),
+			"stdlib fn %q must remain on the legacy hostfunc surface", name)
+	}
 }
 
 func TestHostFunctions_Log_Levels(t *testing.T) {
@@ -110,6 +150,7 @@ func TestHostFunctions_Log_Levels(t *testing.T) {
 
 			hf := hostfunc.New(nil)
 			hf.Register(L, "test-plugin")
+			hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 			err := L.DoString(`holomush.log("` + tt.level + `", "test message")`)
 			assert.NoError(t, err, "log(%q) failed", tt.level)
@@ -123,6 +164,7 @@ func TestHostFunctionsLogInvalidLevel(t *testing.T) {
 
 	hf := hostfunc.New(nil)
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	// Invalid log level should raise an error so plugin developers know their code is wrong
 	err := L.DoString(`holomush.log("invalid_level", "test message")`)
@@ -145,6 +187,7 @@ func TestHostFunctions_Log_MissingArguments(t *testing.T) {
 
 			hf := hostfunc.New(nil)
 			hf.Register(L, "test-plugin")
+			hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 			err := L.DoString(tt.code)
 			assert.Error(t, err, "expected error for %s", tt.name)
@@ -170,6 +213,7 @@ func TestHostFunctions_Log_InvalidLevel_ErrorMessage(t *testing.T) {
 
 			hf := hostfunc.New(nil)
 			hf.Register(L, "test-plugin")
+			hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 			err := L.DoString(`holomush.log("` + tt.level + `", "test message")`)
 			assert.Error(t, err, "expected error for invalid log level %q", tt.level)
@@ -183,6 +227,7 @@ func TestHostFunctionsNewRequestID(t *testing.T) {
 
 	hf := hostfunc.New(nil)
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`id = holomush.new_request_id()`)
 	require.NoError(t, err, "new_request_id() failed")
@@ -201,6 +246,7 @@ func TestHostFunctionsNewRequestIDUnique(t *testing.T) {
 
 	hf := hostfunc.New(nil)
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`
 		id1 = holomush.new_request_id()
@@ -220,6 +266,7 @@ func TestHostFunctionsKVWithKVStore(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	// Set returns (nil, nil) on success
 	err := L.DoString(`result, err = holomush.kv_set("mykey", "myvalue")`)
@@ -245,6 +292,7 @@ func TestHostFunctionsKVGetReturnsNilForMissingKey(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`
 		val, err = holomush.kv_get("nonexistent")
@@ -265,6 +313,7 @@ func TestHostFunctionsKVGetNoStoreAvailable(t *testing.T) {
 	// nil kv store, engine allows so we reach the nil-store guard
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`
 		val, err = holomush.kv_get("key")
@@ -282,6 +331,7 @@ func TestHostFunctionsKVSetNoStoreAvailable(t *testing.T) {
 	// nil kv store, engine allows so we reach the nil-store guard
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
 	require.NoError(t, err, "kv_set failed")
@@ -299,6 +349,7 @@ func TestHostFunctionsKVDelete(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	// Set a key
 	err := L.DoString(`holomush.kv_set("deletekey", "somevalue")`)
@@ -323,6 +374,7 @@ func TestHostFunctionsKVDeleteNoStoreAvailable(t *testing.T) {
 	// nil kv store, engine allows so we reach the nil-store guard
 	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_delete("key")`)
 	require.NoError(t, err, "kv_delete failed")
@@ -343,6 +395,7 @@ func TestHostFunctionsKVGetStoreError(t *testing.T) {
 	}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`val, err = holomush.kv_get("key")`)
 	require.NoError(t, err, "kv_get failed")
@@ -367,6 +420,7 @@ func TestHostFunctionsKVSetStoreError(t *testing.T) {
 	}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
 	require.NoError(t, err, "kv_set failed")
@@ -393,6 +447,7 @@ func TestHostFunctionsKVDeleteStoreError(t *testing.T) {
 	}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_delete("key")`)
 	require.NoError(t, err, "kv_delete failed")
@@ -428,6 +483,7 @@ func TestHostFunctions_KV_MissingArguments(t *testing.T) {
 			kvStore := &mockKVStore{data: make(map[string][]byte)}
 			hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 			hf.Register(L, "test-plugin")
+			hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 			err := L.DoString(tt.code)
 			assert.Error(t, err, "expected error for %s", tt.name)
@@ -442,6 +498,7 @@ func TestHostFunctionsKVGetEmptyKeyRejected(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_get("")`)
 	assert.Error(t, err, "expected error for empty key")
@@ -454,6 +511,7 @@ func TestHostFunctionsKVSetEmptyKeyRejected(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_set("", "value")`)
 	assert.Error(t, err, "expected error for empty key")
@@ -466,6 +524,7 @@ func TestHostFunctionsKVDeleteEmptyKeyRejected(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_delete("")`)
 	assert.Error(t, err, "expected error for empty key")
@@ -478,6 +537,7 @@ func TestHostFunctionsKVSetEmptyValueAllowed(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	// Empty values should be allowed (useful for clearing/resetting)
 	err := L.DoString(`result, err = holomush.kv_set("mykey", "")`)
@@ -503,6 +563,7 @@ func TestHostFunctionsKVGetTimeout(t *testing.T) {
 	kvStore := &slowKVStore{delay: 10 * time.Second}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`val, err = holomush.kv_get("key")`)
 	require.NoError(t, err, "kv_get raised error instead of returning error tuple")
@@ -521,6 +582,7 @@ func TestHostFunctionsKVSetTimeout(t *testing.T) {
 	kvStore := &slowKVStore{delay: 10 * time.Second}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
 	require.NoError(t, err, "kv_set raised error instead of returning error tuple")
@@ -539,6 +601,7 @@ func TestHostFunctionsKVDeleteTimeout(t *testing.T) {
 	kvStore := &slowKVStore{delay: 10 * time.Second}
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_delete("key")`)
 	require.NoError(t, err, "kv_delete raised error instead of returning error tuple")
@@ -559,6 +622,7 @@ func TestHostFunctionsKVNamespaceIsolation(t *testing.T) {
 
 	hfA := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hfA.Register(L1, "plugin-a")
+	hfA.RegisterCapabilityFuncsForTest(L1, "plugin-a")
 
 	err := L1.DoString(`holomush.kv_set("secret", "plugin-a-data")`)
 	require.NoError(t, err, "plugin-a kv_set failed")
@@ -568,6 +632,7 @@ func TestHostFunctionsKVNamespaceIsolation(t *testing.T) {
 	defer L2.Close()
 	hfB := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hfB.Register(L2, "plugin-b")
+	hfB.RegisterCapabilityFuncsForTest(L2, "plugin-b")
 
 	err = L2.DoString(`val, err = holomush.kv_get("secret")`)
 	require.NoError(t, err, "plugin-b kv_get failed")
@@ -584,6 +649,7 @@ func TestKVGetDeniedByEngine(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`
 		local val, err = holomush.kv_get("mykey")
@@ -606,6 +672,7 @@ func TestKVGetAllowedByEngine(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`
 		local val, err = holomush.kv_get("mykey")
@@ -625,6 +692,7 @@ func TestKVGetNilEngineDenied(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`
 		local val, err = holomush.kv_get("mykey")
@@ -646,6 +714,7 @@ func TestKVSetDeniedByEngine(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`
 		local result, err = holomush.kv_set("mykey", "myvalue")
@@ -671,6 +740,7 @@ func TestKVDeleteDeniedByEngine(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 
 	err := L.DoString(`
 		local result, err = holomush.kv_delete("mykey")
@@ -763,6 +833,7 @@ func TestSetFocusOpsLateBindingMakesCallsAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 	targetID := ulid.Make()
 	require.NoError(t, L.DoString(`holomush.join_focus("s", "scene", "`+targetID.String()+`")`))
 
@@ -773,6 +844,7 @@ func TestSetFocusOpsLateBindingMakesCallsAvailable(t *testing.T) {
 	L2 := lua.NewState()
 	defer L2.Close()
 	hf.Register(L2, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L2, "test-plugin")
 	targetID2 := ulid.Make()
 	require.NoError(t, L2.DoString(`holomush.join_focus("sess-1", "scene", "`+targetID2.String()+`")`))
 	require.Len(t, fo.joinCalls, 1)
@@ -786,6 +858,7 @@ func TestSetHistoryReaderLateBindingMakesCallsAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L, "test-plugin")
 	require.NoError(t, L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=10})`))
 
 	// After SetHistoryReader, calls route to the new reader.
@@ -795,6 +868,7 @@ func TestSetHistoryReaderLateBindingMakesCallsAvailable(t *testing.T) {
 	L2 := lua.NewState()
 	defer L2.Close()
 	hf.Register(L2, "test-plugin")
+	hf.RegisterCapabilityFuncsForTest(L2, "test-plugin")
 	require.NoError(t, L2.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=10})`))
 	require.Len(t, hr.calls, 1)
 	assert.Equal(t, "scene:abc:ic", hr.calls[0].stream)

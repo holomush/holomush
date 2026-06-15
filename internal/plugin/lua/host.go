@@ -46,16 +46,15 @@ type luaPlugin struct {
 
 // Host manages Lua plugins.
 type Host struct {
-	factory              *StateFactory
-	hostFuncs            *hostfunc.Functions
-	hostCapAdapter       hostcap.HostCapabilities // adapter wrapping hostFuncs; non-nil iff hostFuncs is non-nil
-	plugins              map[string]*luaPlugin
-	mu                   sync.RWMutex
-	closed               bool
-	cpuTimeout           time.Duration // per-invocation deadline applied via context.WithTimeout
-	configOverrides      map[string]map[string]string
-	mergedConfigs        map[string]map[string]string
-	bridgeEnabledPlugins map[string]bool // opt-in allowlist for host-cap bridge injection; empty = production (no bridge)
+	factory         *StateFactory
+	hostFuncs       *hostfunc.Functions
+	hostCapAdapter  hostcap.HostCapabilities // adapter wrapping hostFuncs; non-nil iff hostFuncs is non-nil
+	plugins         map[string]*luaPlugin
+	mu              sync.RWMutex
+	closed          bool
+	cpuTimeout      time.Duration // per-invocation deadline applied via context.WithTimeout
+	configOverrides map[string]map[string]string
+	mergedConfigs   map[string]map[string]string
 	// dispatchAttrResolver resolves the acting character's host-vouched dispatch
 	// attributes (notably "location") at delivery time, populating
 	// DispatchContext.Attributes (holomush-eykuh.3). Nil leaves Attributes nil,
@@ -92,25 +91,6 @@ func WithCPUTimeout(d time.Duration) HostOption {
 // that need a factory with non-default options (e.g. RegistryMaxSize).
 func WithStateFactory(f *StateFactory) HostOption {
 	return func(h *Host) { h.factory = f }
-}
-
-// WithHostCapBridge opts the named plugins into the host-capability bridge path.
-// Only plugins in this allowlist receive luabridge.RegisterHostCaps injection in
-// DeliverEvent; all other plugins continue using the legacy hostfunc shim path
-// unchanged. The default (empty allowlist) means NO plugin uses the bridge,
-// keeping production behaviour identical.
-//
-// This is intentionally test-fixture-only for this sub-spec (Phase 2 T9). Full
-// production migration is tracked in sub-spec 5 / holomush-eykuh.4.
-func WithHostCapBridge(pluginNames ...string) HostOption {
-	return func(h *Host) {
-		if h.bridgeEnabledPlugins == nil {
-			h.bridgeEnabledPlugins = make(map[string]bool, len(pluginNames))
-		}
-		for _, name := range pluginNames {
-			h.bridgeEnabledPlugins[name] = true
-		}
-	}
 }
 
 // WithPluginConfigOverrides threads the server-provided per-plugin config
@@ -513,7 +493,6 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	// (concurrent map read/write panic). Shallow clone suffices — Load
 	// replaces inner maps wholesale, never mutating one in place.
 	cfgSnapshot := maps.Clone(h.mergedConfigs)
-	bridgeEnabled := h.bridgeEnabledPlugins[name] // false when map is nil or plugin not in set
 	h.mu.RUnlock()
 
 	// Create fresh state for this event
@@ -537,14 +516,16 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 		h.hostFuncs.Register(L, name, requires...)
 	}
 
-	// For plugins that have opted into the host-cap bridge path, inject the
-	// generated capability tables after the legacy hostfunc shim has run.
-	// The bridge's no-clobber logic (RegisterHostCaps) prevents double-injection
-	// for any global the legacy shim already set (spec §5).
+	// Inject the host-brokered capability tables. After the atomic cutover
+	// (holomush-eykuh.4) this is UNCONDITIONAL — the brokered path is the only
+	// capability surface. It remains gated internally by declaredCaps (the
+	// resolver grant subset computed above): an empty/nil cap set injects
+	// nothing, so a plugin that declares (and is granted) no capabilities gets
+	// no host-cap globals.
 	//
 	// Guard: endpoint is nil when hostFuncs is nil (NewHost path — no capability
 	// infrastructure configured); the bridge requires a real conn.
-	if bridgeEnabled && endpoint != nil {
+	if endpoint != nil {
 		luabridge.RegisterHostCaps(L, endpoint.Conn(), name, declaredCaps)
 	}
 
@@ -619,7 +600,6 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	// (concurrent map read/write panic). Shallow clone suffices — Load
 	// replaces inner maps wholesale, never mutating one in place.
 	cfgSnapshot := maps.Clone(h.mergedConfigs)
-	bridgeEnabled := h.bridgeEnabledPlugins[name] // false when map is nil or plugin not in set
 	h.mu.RUnlock()
 
 	L, err := h.factory.NewState(ctx)
@@ -640,9 +620,10 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 		h.hostFuncs.Register(L, name, requires...)
 	}
 
-	// Inject the host-cap bridge for opted-in plugins, mirroring DeliverEvent so
-	// on_command sees the same bridge-only globals as on_event (spec §5).
-	if bridgeEnabled && endpoint != nil {
+	// Inject the host-brokered capability tables unconditionally (grant-gated by
+	// declaredCaps), mirroring DeliverEvent so on_command sees the same host-cap
+	// globals as on_event (holomush-eykuh.4).
+	if endpoint != nil {
 		luabridge.RegisterHostCaps(L, endpoint.Conn(), name, declaredCaps)
 	}
 
@@ -747,7 +728,6 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 	// (concurrent map read/write panic). Shallow clone suffices — Load
 	// replaces inner maps wholesale, never mutating one in place.
 	cfgSnapshot := maps.Clone(h.mergedConfigs)
-	bridgeEnabled := h.bridgeEnabledPlugins[name] // false when map is nil or plugin not in set
 	h.mu.RUnlock()
 
 	L, err := h.factory.NewState(ctx)
@@ -762,9 +742,10 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 		h.hostFuncs.Register(L, name, requires...)
 	}
 
-	// Inject the host-cap bridge for opted-in plugins, mirroring DeliverEvent so
-	// on_session_subscribe sees the same bridge-only globals as on_event (spec §5).
-	if bridgeEnabled && endpoint != nil {
+	// Inject the host-brokered capability tables unconditionally (grant-gated by
+	// declaredCaps), mirroring DeliverEvent so on_session_subscribe sees the same
+	// host-cap globals as on_event (holomush-eykuh.4).
+	if endpoint != nil {
 		luabridge.RegisterHostCaps(L, endpoint.Conn(), name, declaredCaps)
 	}
 
