@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Scope Lua stub generator to static build-time surfaces only](holomush-vhz3h-scope-lua-stub-generator-static-build-time-surfaces-only.md) | 2026-06-16 | Accepted | `holomush-vhz3h` |
+| [Source ambient stdlib annotations from a parity-tested Go decl table](holomush-nc5v1-source-ambient-stdlib-annotations-from-parity-tested-go-decl.md) | 2026-06-16 | Accepted | `holomush-nc5v1` |
 | [Atomic (big-bang) plugin-capability cutover over phased allowlist rollout](holomush-40ssh-atomic-big-bang-plugin-capability-cutover-over-phased-allowl.md) | 2026-06-14 | Accepted | `holomush-40ssh` |
 | [Resolver Grants set as the single least-privilege gate authority](holomush-vpg8l-resolver-grants-set-as-single-least-privilege-gate-authority.md) | 2026-06-14 | Accepted | `holomush-vpg8l` |
 | [o262d DAG-resolution failures stay always-fatal behind a named policy-function seam](holomush-ptf7b-o262d-dag-resolution-failures-stay-always-fatal-behind-named.md) | 2026-06-14 | Accepted | `holomush-ptf7b` |
