@@ -682,7 +682,8 @@ func (p *dualAwareProvider) SetEventSink(s EventSink)                           
 func (p *dualAwareProvider) SetFocusClient(c FocusClient)                            { p.focusClient = c }
 
 func TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient(t *testing.T) {
-	hostConn := startFocusServiceTestServer(t, &focusTestServer{})
+	srv := &focusTestServer{}
+	hostConn := startFocusServiceTestServer(t, srv)
 
 	provider := &dualAwareProvider{}
 	adapter := &pluginServerAdapter{
@@ -702,8 +703,25 @@ func TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient(t *testing.T)
 		},
 	})
 	require.NoError(t, err)
-	assert.NotNil(t, provider.sink, "expected EventSink injection")
-	assert.NotNil(t, provider.focusClient, "expected FocusClient injection")
+	require.NotNil(t, provider.sink, "expected EventSink injection")
+	require.NotNil(t, provider.focusClient, "expected FocusClient injection")
+
+	// Exercise the injected sink end-to-end (not just non-nil): a real Emit MUST
+	// reach the host's EmitService over the same broker conn. The plain ctx has no
+	// incoming dispatch token, so the SDK takes the RequestEmitToken self-token
+	// fallback before EmitEvent — proving the full wired path, not just injection.
+	err = provider.sink.Emit(context.Background(), EmitIntent{
+		Subject: "scene:01SCENE",
+		Type:    EventType("system"),
+		Payload: `{"kind":"created"}`,
+	})
+	require.NoError(t, err)
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	require.Len(t, srv.emitReqs, 1, "expected the injected sink's Emit to reach the host")
+	assert.Equal(t, "scene:01SCENE", srv.emitReqs[0].GetStream())
+	assert.Equal(t, []byte(`{"kind":"created"}`), srv.emitReqs[0].GetPayload())
 }
 
 // --- Capability declaration enforcement ---

@@ -452,27 +452,19 @@ func (s *emitServer) RequestEmitToken(ctx context.Context, _ *hostv1.RequestEmit
 	return &hostv1.RequestEmitTokenResponse{Token: token}, nil
 }
 
-// RegisterEmitType promotes the Lua holomush.register_emit_type(type) host
-// function to the binary surface (INV-PLUGIN-32): the caller declares one bare
-// plugin-owned event type it intends to emit. Binary plugins currently declare
-// their emit-type set through InitResponse.RegisteredEmitTypes at Load time
-// (captured on the plugin record; see host.go RegisteredEmitTypes), which the
-// substrate validator checks against the manifest's crypto.emits. This RPC
-// exposes the same single-string registration channel both runtimes share. The
-// fail-closed nil-host guard mirrors every other host RPC. No host-side mutation
-// is performed here in this sub-spec — the binary SDK client wiring lands in a
-// later phase; serving the endpoint keeps both runtimes addressable through one
-// channel without a behavior change to the existing Load-time path.
-func (s *emitServer) RegisterEmitType(_ context.Context, req *hostv1.RegisterEmitTypeRequest) (*hostv1.RegisterEmitTypeResponse, error) {
-	if s.host == nil {
-		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
-	}
-	if req.GetEventType() == "" {
-		return nil, oops.Code("INVALID_ARGUMENT").
-			With("plugin", s.pluginName).
-			Errorf("event_type is required")
-	}
-	return &hostv1.RegisterEmitTypeResponse{}, nil
+// RegisterEmitType is the binary-surface counterpart of the Lua
+// holomush.register_emit_type(type) host function (INV-PLUGIN-32). No host-side
+// mutation is wired to this RPC: binary plugins declare their emit-type set at
+// Load time through InitResponse.RegisteredEmitTypes (captured on the plugin
+// record; see host.go RegisteredEmitTypes), and the Lua runtime registers through
+// the in-process holomush.register_emit_type hostfunc. The dedicated binary SDK
+// client wiring lands in a later phase. Until then the endpoint returns
+// codes.Unimplemented rather than a misleading silent-success, giving either
+// runtime's generated bridge a clear "not wired yet" contract. The handler is
+// runtime-neutral, so the contract is identical across binary and Lua
+// (plugin-runtime-symmetry).
+func (s *emitServer) RegisterEmitType(_ context.Context, _ *hostv1.RegisterEmitTypeRequest) (*hostv1.RegisterEmitTypeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "RegisterEmitType is not implemented") //nolint:wrapcheck // gRPC status errors pass through as-is
 }
 
 // --- evalServer (EvalService: Evaluate) -------------------------------------
