@@ -34,7 +34,7 @@ The prose outside the regions is hand-authored. CI runs `inv-render -check`
 | `INV-TELEMETRY` | Logging discipline, trace context, metric naming, sloglint policy | Observability contracts. |
 | `INV-BRANDING` | Asset integrity, palette tokens, logo generation | Visual identity invariants. Does NOT include: docs quality (separate concern). |
 | `INV-DOCS` | Proto doc comments, doc IA, contributor onboarding surface | Documentation quality invariants. |
-| `INV-COMMAND` | Command surfacing: the single command-visibility/ABAC filter, runtime parity across the Lua hostfunc + binary PluginHostService + CoreService RPC surfaces, and self-scoped enumeration. | Backend command-surfacing contract (origin 2026-05-29-recognized-command-chip-design.md, §INV-1/2/5). Does NOT include: web-composer chip presentation — INV-3 gateway boundary (→ .claude/rules/gateway-boundary.md), INV-4 server-sourced recognition, INV-6 graceful incompleteness, INV-7 speech-mode chips — those are web-frontend per-feature local numbering, exempt (.14.27), living in web/src TS (composerChip.ts/CommandInput.svelte/commandListStore.ts). Also does NOT include whole-system plugin load/census (wholesystem INV-5, distinct local numbering — co-located foreign in census_test.go, residual-skipped via shared_files). |
+| `INV-COMMAND` | Command surfacing: the single command-visibility/ABAC filter, runtime parity across the Lua hostfunc + binary host.v1 CommandRegistryService + CoreService RPC surfaces, and self-scoped enumeration. | Backend command-surfacing contract (origin 2026-05-29-recognized-command-chip-design.md, §INV-1/2/5). Does NOT include: web-composer chip presentation — INV-3 gateway boundary (→ .claude/rules/gateway-boundary.md), INV-4 server-sourced recognition, INV-6 graceful incompleteness, INV-7 speech-mode chips — those are web-frontend per-feature local numbering, exempt (.14.27), living in web/src TS (composerChip.ts/CommandInput.svelte/commandListStore.ts). Also does NOT include whole-system plugin load/census (wholesystem INV-5, distinct local numbering — co-located foreign in census_test.go, residual-skipped via shared_files). |
 
 <!-- END GENERATED: scope-index -->
 
@@ -222,7 +222,7 @@ invariants.
 | `INV-SCENE-16` | The focus-managed subset of Connection.Streams is a deterministic function of (FocusKey, character-level always-on streams); plugin-added streams co-exist additively. | `INV-P5-3` | pending |
 | `INV-SCENE-17` | AutoFocusOnJoin terminal-only filter: ClientType in {terminal, telnet}; comms_hub connections are NEVER auto-focused. | `INV-P5-4` | pending |
 | `INV-SCENE-18` | On reconnect, focus restoration validates info.PresentingFocus against info.FocusMemberships inside the SessionConnectionMutator callback under one Store-lock; falls back to grid on failure with no read-then-mutate race. | `INV-P5-5` | pending |
-| `INV-SCENE-19` | The 3 new PluginHostService focus RPCs ship with Go SDK + Lua hostfunc bindings together (substrate-contract parity). | `INV-P5-6` | pending |
+| `INV-SCENE-19` | The 3 new host.v1 FocusService focus RPCs ship with Go SDK + Lua hostfunc bindings together (substrate-contract parity). | `INV-P5-6` | pending |
 | `INV-SCENE-20` | Phase-5 multi-field focus mutations (Connection.FocusKey + Info.PresentingFocus) MUST be applied via a single SessionConnectionMutator invocation under one Store-lock — both fields atomic; no observer sees torn state. | `INV-P5-7` | pending |
 | `INV-SCENE-21` | Meta: every numbered INV-P5-N declaration MUST cite at least one existing test path. | `INV-P5-8` | pending |
 | `INV-SCENE-22` | ULID encoding boundary (D6): proto wire = 16-byte bytes; Lua hostfunc accepts 26-char base32; malformed input → INVALID_ULID; Go SDK + Lua round-trip a known ULID identically. | `INV-P5-9` | pending |
@@ -294,7 +294,7 @@ invariants.
 | `INV-PLUGIN-19` | The whole-system suite MUST assert >=1 cross-plugin-ABAC permit AND >=1 forbid against the real seeded engine. | `INV-WS-2` | pending |
 | `INV-PLUGIN-20` | The whole-system suite MUST NOT be silently skipped in CI: with HOLOMUSH_REQUIRE_PLUGINS set, a missing binary artifact is a hard failure. | `INV-WS-3` | pending |
 | `INV-PLUGIN-21` | WithInTreePlugins() MUST be opt-in: omitting it leaves the harness plugin-free and behaviorally unchanged. | `INV-WS-4` | pending |
-| `INV-PLUGIN-22` | PluginHostService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field on the wire (never sourced from plugin/Lua-supplied data). | `INV-1` | bound |
+| `INV-PLUGIN-22` | host.v1 EvalService.Evaluate's subject is host-derived from the authenticated actor; there is no subject field on the wire (never sourced from plugin/Lua-supplied data). | `INV-1` | bound |
 | `INV-PLUGIN-23` | No authenticated actor bound to the call → Evaluate returns deny + error (fail-closed). | `INV-2` | pending |
 | `INV-PLUGIN-24` | A resource type the plugin does not own (outside its entitlement, no command carve-out) → rejected. | `INV-3` | pending |
 | `INV-PLUGIN-25` | Each Evaluate emits exactly one host-stamped audit event; the audit logger MUST be wired on both the binary (gRPC) and Lua (hostfunc) surfaces. | `INV-4` | pending |
