@@ -102,8 +102,9 @@ type serviceData struct {
 
 // methodData is the template input for one unary RPC.
 type methodData struct {
-	GoName        string // e.g. Get
-	RequestGoType string // e.g. GetRequest
+	GoName         string // e.g. Get
+	RequestGoType  string // e.g. GetRequest
+	ResponseGoType string // e.g. GetResponse
 }
 
 func main() {
@@ -182,8 +183,9 @@ func collectMethods(token string, sd protoreflect.ServiceDescriptor) ([]methodDa
 		}
 		reqGoType := goTypeName(md.Input().Name())
 		out = append(out, methodData{
-			GoName:        string(md.Name()),
-			RequestGoType: reqGoType,
+			GoName:         string(md.Name()),
+			RequestGoType:  reqGoType,
+			ResponseGoType: goTypeName(md.Output().Name()),
 		})
 	}
 	if len(out) == 0 {
