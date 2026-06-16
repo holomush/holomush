@@ -977,8 +977,6 @@ tasks:
           fi
       - echo "▸ Verifying EBNF + railroad are current..."
       - task: generate:ebnf:check
-      - echo "▸ Verifying jxo8.5 bead description (sub-epic B)..."
-      - bash scripts/check-bead-jxo8-5.sh
       - echo "▸ Checking license headers..."
       - task: license:check
       - echo "▸ Building binary plugins..."
