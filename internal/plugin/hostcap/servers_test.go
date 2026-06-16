@@ -4,6 +4,7 @@
 package hostcap
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -11,10 +12,31 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
+
+// TestEmitServerRegisterEmitTypeReturnsUnimplemented pins the staged-endpoint
+// contract (holomush-eykuh.8 item 3): the EmitService.RegisterEmitType RPC has no
+// host-side mutation wired to it — binary plugins declare their emit-type set at
+// Load via InitResponse.RegisteredEmitTypes, and the Lua runtime registers through
+// the in-process holomush.register_emit_type hostfunc. Rather than a misleading
+// silent-success, the RPC MUST return codes.Unimplemented so either runtime's
+// generated bridge surfaces a clear "not wired yet" contract.
+func TestEmitServerRegisterEmitTypeReturnsUnimplemented(t *testing.T) {
+	srv := NewEmitServer(NewBase(nil, "test-plugin"))
+
+	resp, err := srv.RegisterEmitType(context.Background(), &hostv1.RegisterEmitTypeRequest{
+		EventType: "alpha",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Equal(t, codes.Unimplemented, status.Code(err))
+}
 
 // These tests exercise the proto↔domain conversion helpers that moved here with
 // the server bodies (holomush-eykuh.2). They were previously in

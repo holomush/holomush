@@ -154,11 +154,12 @@ Use `pluginsdk.DecryptOwnAuditRows` from `pkg/plugin`:
 ```go
 import (
     pluginsdk "github.com/holomush/holomush/pkg/plugin"
+    hostv1    "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
     pluginv1  "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // rows is []*pluginv1.AuditRow loaded from your audit table.
-// hostClient is the pluginv1.PluginHostServiceClient the SDK provides at Init.
+// hostClient is the hostv1.AuditServiceClient the SDK provides at Init.
 results, err := pluginsdk.DecryptOwnAuditRows(ctx, hostClient, rows)
 if err != nil {
     return fmt.Errorf("read-back decrypt: %w", err)

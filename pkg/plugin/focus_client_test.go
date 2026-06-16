@@ -29,7 +29,9 @@ import (
 var _ FocusClient = (*pluginHostFocusClient)(nil)
 
 // startFocusServiceTestServer starts an in-process gRPC server that registers
-// both FocusService and StreamHistoryService from the given test double.
+// FocusService, StreamHistoryService, and EmitService from the given test double.
+// EmitService is registered so callers can exercise an EventSink end-to-end over
+// the same broker conn (the focus tests simply never call it).
 // The returned *grpc.ClientConn is ready to use and cleaned up via t.Cleanup.
 func startFocusServiceTestServer(t *testing.T, srv *focusTestServer) *grpc.ClientConn {
 	t.Helper()
@@ -37,6 +39,7 @@ func startFocusServiceTestServer(t *testing.T, srv *focusTestServer) *grpc.Clien
 	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- bufconn test server
 	hostv1.RegisterFocusServiceServer(server, srv)
 	hostv1.RegisterStreamHistoryServiceServer(server, srv)
+	hostv1.RegisterEmitServiceServer(server, srv)
 	go func() {
 		_ = server.Serve(listener)
 	}()
@@ -459,7 +462,9 @@ func TestQueryStreamHistoryRequestNotBeforeIsPassedThrough(t *testing.T) {
 type focusTestServer struct {
 	hostv1.UnimplementedFocusServiceServer
 	hostv1.UnimplementedStreamHistoryServiceServer
+	hostv1.UnimplementedEmitServiceServer
 	mu                sync.Mutex
+	emitReqs          []*hostv1.EmitEventRequest
 	joinReqs          []*hostv1.JoinFocusRequest
 	leaveReqs         []*hostv1.LeaveFocusRequest
 	leaveByTargetReqs []*hostv1.LeaveFocusByTargetRequest
@@ -485,6 +490,25 @@ func (s *focusTestServer) JoinFocus(_ context.Context, req *hostv1.JoinFocusRequ
 		return nil, s.joinErr
 	}
 	return &hostv1.JoinFocusResponse{}, nil
+}
+
+// EmitEvent records the request so an injected EventSink can be exercised
+// end-to-end (not just asserted non-nil).
+func (s *focusTestServer) EmitEvent(_ context.Context, req *hostv1.EmitEventRequest) (*hostv1.EmitEventResponse, error) {
+	s.mu.Lock()
+	s.emitReqs = append(s.emitReqs, &hostv1.EmitEventRequest{
+		Stream:    req.GetStream(),
+		EventType: req.GetEventType(),
+		Payload:   append([]byte(nil), req.GetPayload()...),
+	})
+	s.mu.Unlock()
+	return &hostv1.EmitEventResponse{}, nil
+}
+
+// RequestEmitToken returns a deterministic self-token so the SDK's
+// no-incoming-token fallback path can complete the EmitEvent round-trip.
+func (s *focusTestServer) RequestEmitToken(_ context.Context, _ *hostv1.RequestEmitTokenRequest) (*hostv1.RequestEmitTokenResponse, error) {
+	return &hostv1.RequestEmitTokenResponse{Token: "focus-test-self-tok"}, nil
 }
 
 func (s *focusTestServer) LeaveFocus(_ context.Context, req *hostv1.LeaveFocusRequest) (*hostv1.LeaveFocusResponse, error) {

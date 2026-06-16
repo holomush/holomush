@@ -39,6 +39,17 @@ func TestHostBrokerServerServesFocusService(t *testing.T) {
 	// (holomush-eykuh.1, Task 12): only the capability-scoped host.v1 services
 	// are registered on the broker now.
 	require.NotContains(t, info, "holomush.plugin.v1.PluginHostService")
+
+	// The 5 Lua-only host.v1 services are declared in the host/v1 protos but
+	// INTENTIONALLY NOT registered on the binary broker — they have no binary
+	// consumer, so BinaryDefaultSet omits them and LuaDefaultSet adds them
+	// (hostcap.register.go). Pin the omission so a future accidental addition to
+	// the binary set is caught here.
+	require.NotContains(t, info, "holomush.plugin.host.v1.PropertyService")
+	require.NotContains(t, info, "holomush.plugin.host.v1.SessionService")
+	require.NotContains(t, info, "holomush.plugin.host.v1.SessionAdminService")
+	require.NotContains(t, info, "holomush.plugin.host.v1.WorldQueryService")
+	require.NotContains(t, info, "holomush.plugin.host.v1.WorldMutationService")
 }
 
 // TestBinaryHostServerDeniesUndeclaredCapability proves the capability
