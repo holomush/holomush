@@ -393,6 +393,7 @@ tasks:
       - pkg/proto/holomush/plugin/host/v1/*.pb.go
     generates:
       - internal/plugin/luabridge/bindings_gen.go
+      - pkg/plugin/luastubs/holomush.lua
 
   generate:ebnf:
     desc: Generate EBNF grammar and railroad diagram from DSL parser
@@ -837,11 +838,12 @@ tasks:
       - echo "▸ Verifying Lua host-cap bindings are current..."
       - cmd: |
           BINDINGS=internal/plugin/luabridge/bindings_gen.go
-          BEFORE=$(sha256sum "$BINDINGS" | cut -d' ' -f1)
+          STUB=pkg/plugin/luastubs/holomush.lua
+          BEFORE=$(sha256sum "$BINDINGS" "$STUB")
           go generate ./internal/plugin/luabridge/
-          AFTER=$(sha256sum "$BINDINGS" | cut -d' ' -f1)
+          AFTER=$(sha256sum "$BINDINGS" "$STUB")
           if [ "$BEFORE" != "$AFTER" ]; then
-            echo "ERROR: Lua bindings out of sync. Run 'task generate:luabridge' and commit."
+            echo "ERROR: Lua bindings or editor stub out of sync. Run 'task generate:luabridge' and commit."
             exit 1
           fi
       - echo "▸ Checking license headers..."
@@ -968,11 +970,12 @@ tasks:
       - echo "▸ Verifying Lua host-cap bindings are current..."
       - cmd: |
           BINDINGS=internal/plugin/luabridge/bindings_gen.go
-          BEFORE=$(sha256sum "$BINDINGS" | cut -d' ' -f1)
+          STUB=pkg/plugin/luastubs/holomush.lua
+          BEFORE=$(sha256sum "$BINDINGS" "$STUB")
           go generate ./internal/plugin/luabridge/
-          AFTER=$(sha256sum "$BINDINGS" | cut -d' ' -f1)
+          AFTER=$(sha256sum "$BINDINGS" "$STUB")
           if [ "$BEFORE" != "$AFTER" ]; then
-            echo "ERROR: Lua bindings out of sync. Run 'task generate:luabridge' and commit."
+            echo "ERROR: Lua bindings or editor stub out of sync. Run 'task generate:luabridge' and commit."
             exit 1
           fi
       - echo "▸ Verifying EBNF + railroad are current..."
