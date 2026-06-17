@@ -126,10 +126,29 @@ func main() {
 
 	root := findModuleRoot()
 	outPath := filepath.Join(root, "internal", "plugin", "luabridge", "bindings_gen.go")
-	if err := os.WriteFile(outPath, formatted, 0o600); err != nil {
-		log.Fatalf("writing %s: %v", outPath, err)
+	if wErr := os.WriteFile(outPath, formatted, 0o600); wErr != nil {
+		log.Fatalf("writing %s: %v", outPath, wErr)
 	}
 	fmt.Printf("wrote %s (%d services)\n", outPath, len(services))
+
+	// Second output: the LuaLS editor stub (holomush-eykuh.9). Off the runtime
+	// path — purely for editor autocomplete/hover.
+	messages, err := collectStubMessages(services)
+	if err != nil {
+		log.Fatalf("collecting stub messages: %v", err)
+	}
+	stub, err := renderLuaStub(services, messages, ambientDecls)
+	if err != nil {
+		log.Fatalf("rendering lua stub: %v", err)
+	}
+	stubPath := filepath.Join(root, "pkg", "plugin", "luastubs", "holomush.lua")
+	if mkErr := os.MkdirAll(filepath.Dir(stubPath), 0o750); mkErr != nil {
+		log.Fatalf("creating luastubs dir: %v", mkErr)
+	}
+	if wErr := os.WriteFile(stubPath, []byte(stub), 0o600); wErr != nil {
+		log.Fatalf("writing %s: %v", stubPath, wErr)
+	}
+	fmt.Printf("wrote %s\n", stubPath)
 }
 
 // collectServices resolves every token in plugins.CapabilityServiceNames to its

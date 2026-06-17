@@ -26,6 +26,9 @@ header:
     - "*.md"
   paths-ignore:
     - "**/*.pb.go"
+    # Generated LuaLS editor stub: `---@meta` MUST stay on line 1 (LuaLS + the
+    # bead acceptance require it), so no SPDX header can be prepended.
+    - "pkg/plugin/luastubs/**"
     - "vendor/**"
     - "internal/web/dist/**"
     - "plugins/**/content/**"
