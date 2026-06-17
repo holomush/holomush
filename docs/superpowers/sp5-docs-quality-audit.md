@@ -13,10 +13,10 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 | -------------- | ----- | -- | -- | -- |
 | guide          | 5     | 1  | 1  | 3  |
 | operating      | 23    | 1  | 6  | 16 |
-| extending      | 24    | 1  | 5  | 18 |
+| extending      | 25    | 1  | 5  | 19 |
 | contributing   | 22    | 1  | 3  | 18 |
 | reference      | 5     | 1  | 2  | 2  |
-| **Total**      | **79**| **5**  | **17** | **57** |
+| **Total**      | **80**| **5**  | **17** | **58** |
 
 ---
 
@@ -62,7 +62,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 ---
 
-## extending (24 pages)
+## extending (25 pages)
 
 | Page (slug/path)                                     | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ---------------------------------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
@@ -74,6 +74,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 | `extending/how-to/audit-events.md`                   | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
 | `extending/how-to/event-sensitivity.md`              | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
 | `extending/how-to/handle-plugin-errors.md`           | 2      | 2   | 2    | 2       | 2  | 2    | 1     | 2       | 15    | OK       | Missing link to the full Plugin API reference from within the procedure |
+| `extending/how-to/lua-editor-setup.md`               | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
 | `extending/how-to/lua-plugin-capabilities.md`        | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
 | `extending/how-to/plugin-config.md`                  | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
 | `extending/how-to/plugin-crypto-readback.md`         | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
