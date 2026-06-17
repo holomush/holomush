@@ -4,6 +4,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -53,4 +54,32 @@ func TestRenderLuaStubProducesMetaAndNamespaces(t *testing.T) {
 	// The invalid bare forms (parse errors / wrong surface) MUST be gone.
 	assert.NotContains(t, out, "\nworld.query = {}")
 	assert.NotContains(t, out, "command-registry = {}")
+}
+
+func TestRenderedStubIsStructurallyValid(t *testing.T) {
+	services, err := collectServices()
+	require.NoError(t, err)
+	msgs, err := collectStubMessages(services)
+	require.NoError(t, err)
+	out, err := renderLuaStub(services, msgs, ambientDecls)
+	require.NoError(t, err)
+
+	require.True(t, strings.HasPrefix(out, "---@meta"))
+
+	// Collect declared classes.
+	declRe := regexp.MustCompile(`(?m)^---@class (\S+)`)
+	declared := map[string]bool{}
+	for _, m := range declRe.FindAllStringSubmatch(out, -1) {
+		declared[m[1]] = true
+	}
+
+	// Every referenced holomush.msg.* class MUST be declared.
+	refRe := regexp.MustCompile(`holomush\.msg\.\w+`)
+	for _, ref := range refRe.FindAllString(out, -1) {
+		assert.Truef(t, declared[ref], "referenced class %q is not declared", ref)
+	}
+
+	// No @field / @param with an empty type (would be "---@field name" with no type token).
+	assert.NotRegexp(t, regexp.MustCompile(`(?m)^---@(field|param)\s+\S+\s*$`), out,
+		"every @field/@param MUST carry a type")
 }
