@@ -33,17 +33,17 @@ func fieldByPath(t *testing.T, msgFullName, field string) protoreflect.FieldDesc
 func TestLuaTypeMapsScalarStringField(t *testing.T) {
 	// EmitEventRequest.stream is a proto string.
 	fd := fieldByPath(t, "holomush.plugin.host.v1.EmitEventRequest", "stream")
-	assert.Equal(t, "string", luaType(fd))
+	assert.Equal(t, "string", luaType(fd, luaClassName))
 }
 
 func TestLuaTypeMapsRepeatedMessageAndScalarFields(t *testing.T) {
 	// QueryStreamHistoryResponse.events is repeated Event (message) → Event class[].
 	events := fieldByPath(t, "holomush.plugin.host.v1.QueryStreamHistoryResponse", "events")
-	assert.Equal(t, "holomush.msg.Event[]", luaType(events))
+	assert.Equal(t, "holomush.msg.Event[]", luaType(events, luaClassName))
 
 	// EmitEventRequest.event_type is string.
 	et := fieldByPath(t, "holomush.plugin.host.v1.EmitEventRequest", "event_type")
-	assert.Equal(t, "string", luaType(et))
+	assert.Equal(t, "string", luaType(et, luaClassName))
 }
 
 // Map-branch (table<K,V>) coverage is deferred: host.v1 exposes no map field.
@@ -65,7 +65,7 @@ func TestLuaTypeMapsScalarKindsEnumAndOptional(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fd := fieldByPath(t, tt.msg, tt.field)
-			assert.Equal(t, tt.expected, luaType(fd))
+			assert.Equal(t, tt.expected, luaType(fd, luaClassName))
 		})
 	}
 }
