@@ -57,11 +57,19 @@ func (f *fakeSessionAccessForEndpoint) UpdateLastWhispered(_ context.Context, _,
 }
 
 // newTestFunctions builds a *hostfunc.Functions with a session.Access wired in
-// so the SessionService server has a real backing for round-trip tests. All
-// other optional dependencies are left nil (fail-closed per the adapter).
+// so the SessionService server has a real backing for round-trip tests, plus an
+// AllowAll ABAC engine. The engine is required because the capability
+// interceptor now runs the default-deny ABAC decision for EVERY declared
+// non-exempt capability (holomush-kplrr, INV-PLUGIN-50), not just scope-eligible
+// ones — without it a non-scoped capability round-trip fails closed with
+// EVALUATE_NO_ENGINE. Production wires the real engine via
+// hostfunc.WithEngine(cfg.ABAC.Engine()) (setup/subsystem.go). Other optional
+// dependencies are left nil (fail-closed per the adapter).
 func newTestFunctions(t *testing.T) *hostfunc.Functions {
 	t.Helper()
-	return hostfunc.New(nil, hostfunc.WithSessionAccess(&fakeSessionAccessForEndpoint{}))
+	return hostfunc.New(nil,
+		hostfunc.WithSessionAccess(&fakeSessionAccessForEndpoint{}),
+		hostfunc.WithEngine(policytest.AllowAllEngine()))
 }
 
 // TestPluginEndpoint groups the per-plugin bufconn endpoint behaviors as
@@ -81,7 +89,9 @@ func TestPluginEndpoint(t *testing.T) {
 			// bufconn, asserting the endpoint serves the Lua capability set
 			// (INV-PLUGIN-49). ListActive is chosen because it has a real server
 			// impl (session.go:ListActive), fakeSessionAccessForEndpoint backs it,
-			// and it needs no dispatch token or ABAC engine.
+			// and it is non-scoped (no dispatch token needed). It IS subject to the
+			// default-deny ABAC decision (INV-PLUGIN-50); newTestFunctions wires an
+			// AllowAll engine so the declared session capability is permitted.
 			name: "serves host caps over the in-process bufconn",
 			run: func(t *testing.T) {
 				adapter := newLuaHostCapAdapter(newTestFunctions(t))
