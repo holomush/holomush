@@ -34,40 +34,19 @@ type stubMessage struct {
 // stubMessage per distinct message. Oneof variants are flattened to optional
 // fields (spec §3).
 func collectStubMessages(services []serviceData) ([]stubMessage, error) {
-	seen := map[string]bool{}
-	var out []stubMessage
-
-	var visit func(md protoreflect.MessageDescriptor)
-	visit = func(md protoreflect.MessageDescriptor) {
-		cn := luaClassName(md)
-		if seen[cn] {
-			return
-		}
-		seen[cn] = true
-
-		var fields []stubField
-		fs := md.Fields()
-		for i := 0; i < fs.Len(); i++ {
-			fd := fs.Get(i)
-			optional := fd.HasOptionalKeyword() || fd.ContainingOneof() != nil
-			fields = append(fields, stubField{
-				Name:     string(fd.Name()),
-				Type:     luaType(fd),
-				Optional: optional,
-			})
-			if (fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind) && !fd.IsMap() {
-				visit(fd.Message())
-			}
-			if fd.IsMap() {
-				mv := fd.MapValue()
-				if mv.Kind() == protoreflect.MessageKind {
-					visit(mv.Message())
-				}
-			}
-		}
-		out = append(out, stubMessage{ClassName: cn, Fields: fields})
+	descs, err := reachableMessages(services)
+	if err != nil {
+		return nil, err
 	}
+	return buildStubMessages(descs), nil
+}
 
+// reachableMessages returns every message reachable as a request, response, or
+// transitively-nested message field of the collected services' unary methods,
+// deduplicated by proto full name (see walkMessages). It gathers each unary
+// method's request/response message as a walk root.
+func reachableMessages(services []serviceData) ([]protoreflect.MessageDescriptor, error) {
+	var roots []protoreflect.MessageDescriptor
 	for _, sd := range services {
 		desc, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(sd.ServiceName))
 		if err != nil {
@@ -83,13 +62,119 @@ func collectStubMessages(services []serviceData) ([]stubMessage, error) {
 			if m.IsStreamingClient() || m.IsStreamingServer() {
 				continue
 			}
-			visit(m.Input())
-			visit(m.Output())
+			roots = append(roots, m.Input(), m.Output())
+		}
+	}
+	return walkMessages(roots), nil
+}
+
+// walkMessages returns roots plus every transitively message-typed field,
+// deduplicated by proto full name. Keying dedup on the full name (not the short
+// @class name) is the core of holomush-t4tye: two distinct messages that share a
+// short name are both retained rather than the second being silently dropped.
+func walkMessages(roots []protoreflect.MessageDescriptor) []protoreflect.MessageDescriptor {
+	seen := map[protoreflect.FullName]bool{}
+	var out []protoreflect.MessageDescriptor
+
+	var visit func(md protoreflect.MessageDescriptor)
+	visit = func(md protoreflect.MessageDescriptor) {
+		if seen[md.FullName()] {
+			return
+		}
+		seen[md.FullName()] = true
+		out = append(out, md)
+
+		fs := md.Fields()
+		for i := 0; i < fs.Len(); i++ {
+			fd := fs.Get(i)
+			if (fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind) && !fd.IsMap() {
+				visit(fd.Message())
+			}
+			if fd.IsMap() {
+				mv := fd.MapValue()
+				if mv.Kind() == protoreflect.MessageKind {
+					visit(mv.Message())
+				}
+			}
 		}
 	}
 
+	for _, r := range roots {
+		visit(r)
+	}
+	return out
+}
+
+// buildStubMessages renders one stubMessage per reachable descriptor, naming
+// classes via a collision-aware classNamer so message-field references and
+// @class declarations agree even across same-short-name messages. Output is
+// sorted by class name for deterministic generation.
+//
+// Scope: only message-field references (rendered via luaType) are namer-aware.
+// Service-method @param/@return references are rendered separately by the
+// template from the hardcoded "holomush.msg." ClassPrefix + the short Go type
+// name, so a disambiguated collider reachable as an RPC request/response would
+// produce a dangling reference there. That path is latent today (no collider is
+// RPC-reachable) and guarded by TestRenderedStubIsStructurallyValid; the fuller
+// fix (threading the namer into the service-method render path) is tracked in
+// holomush-lfy04.
+func buildStubMessages(descs []protoreflect.MessageDescriptor) []stubMessage {
+	namer := newClassNamer(descs)
+	out := make([]stubMessage, 0, len(descs))
+	for _, md := range descs {
+		var fields []stubField
+		fs := md.Fields()
+		for i := 0; i < fs.Len(); i++ {
+			fd := fs.Get(i)
+			optional := fd.HasOptionalKeyword() || fd.ContainingOneof() != nil
+			fields = append(fields, stubField{
+				Name:     string(fd.Name()),
+				Type:     luaType(fd, namer.className),
+				Optional: optional,
+			})
+		}
+		out = append(out, stubMessage{ClassName: namer.className(md), Fields: fields})
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ClassName < out[j].ClassName })
-	return out, nil
+	return out
+}
+
+// classNamer assigns each reachable message a LuaLS @class name keyed on its
+// proto full name. A message whose short name is unique across the reachable
+// set keeps the canonical holomush.msg.<ShortName> convention; only messages
+// whose short name collides with another reachable message are disambiguated by
+// full name (holomush-t4tye). Resolving by full name guarantees a reference to
+// either collider names that specific class, never the wrong one.
+type classNamer struct {
+	byFull map[protoreflect.FullName]string
+}
+
+// newClassNamer computes the class-name assignment for the reachable set,
+// detecting short-name collisions in a first pass before naming.
+func newClassNamer(descs []protoreflect.MessageDescriptor) *classNamer {
+	shortCount := map[string]int{}
+	for _, md := range descs {
+		shortCount[string(md.Name())]++
+	}
+	byFull := make(map[protoreflect.FullName]string, len(descs))
+	for _, md := range descs {
+		if shortCount[string(md.Name())] > 1 {
+			byFull[md.FullName()] = disambiguatedClassName(md)
+		} else {
+			byFull[md.FullName()] = luaClassName(md)
+		}
+	}
+	return &classNamer{byFull: byFull}
+}
+
+// className returns the assigned class name for md, falling back to the
+// canonical short form for any descriptor not in the precomputed set (defensive;
+// every field-referenced message is reachable and thus precomputed).
+func (c *classNamer) className(md protoreflect.MessageDescriptor) string {
+	if n, ok := c.byFull[md.FullName()]; ok {
+		return n
+	}
+	return luaClassName(md)
 }
 
 // luaStubTmpl renders the full ---@meta definition file. Capability namespaces whose
