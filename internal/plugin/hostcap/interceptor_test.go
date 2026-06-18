@@ -139,6 +139,72 @@ func TestInterceptorScopedCallFailsClosedWithoutDispatch(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "SCOPE_NO_DISPATCH")
 }
 
+// Verifies: INV-PLUGIN-50
+func TestInterceptorNonScopedCapabilityDeniedByPolicy(t *testing.T) {
+	// A declared, access-class-permitted, NON-scoped capability (kv read) must
+	// still be subject to the default-deny ABAC decision: an operator policy that
+	// denies it makes the call unreachable despite declaration. Before option A
+	// this call passed through ungated (the len(Scopes)==0 short-circuit).
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         policytest.DenyAllEngine(),
+		PluginName:     "core-objects",
+		DeclaredAccess: func(_, _ string) (string, bool) { return "read", true },
+	})
+	_, err := ic(ctxWithDispatch(t), &hostv1.GetRequest{}, &grpc.UnaryServerInfo{
+		FullMethod: "/holomush.plugin.host.v1.KVService/Get",
+	}, okHandler)
+	errutil.AssertErrorCode(t, err, "CAPABILITY_ACCESS_DENIED")
+}
+
+// Verifies: INV-PLUGIN-50
+func TestInterceptorNonScopedCapabilityPermittedByPolicy(t *testing.T) {
+	// The complement: a declared non-scoped capability permitted by policy is
+	// reachable. AllowAllEngine stands in for the default-permit seed.
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         policytest.AllowAllEngine(),
+		PluginName:     "core-objects",
+		DeclaredAccess: func(_, _ string) (string, bool) { return "read", true },
+	})
+	resp, err := ic(ctxWithDispatch(t), &hostv1.GetRequest{}, &grpc.UnaryServerInfo{
+		FullMethod: "/holomush.plugin.host.v1.KVService/Get",
+	}, okHandler)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+}
+
+func TestInterceptorEmptyPluginNameFailsClosed(t *testing.T) {
+	// Defense-in-depth: an empty PluginName (a misconfiguration — production
+	// sources it from the schema-required manifest Name) must fail closed at the
+	// ABAC gate rather than panic in access.PluginSubject. A declared, non-exempt
+	// capability call reaches the guard.
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         policytest.AllowAllEngine(),
+		PluginName:     "", // misconfigured
+		DeclaredAccess: func(_, _ string) (string, bool) { return "read", true },
+	})
+	_, err := ic(ctxWithDispatch(t), &hostv1.GetRequest{}, &grpc.UnaryServerInfo{
+		FullMethod: "/holomush.plugin.host.v1.KVService/Get",
+	}, okHandler)
+	errutil.AssertErrorCode(t, err, "CAPABILITY_PLUGIN_NAME_MISSING")
+}
+
+func TestInterceptorNilEngineFailsClosedForNonScopedMethod(t *testing.T) {
+	// Removing the non-scoped short-circuit means a non-scoped declared capability
+	// now reaches EvaluateCapabilityAccess. With a nil Engine it must fail closed
+	// (EVALUATE_NO_ENGINE), never forward to the handler. Production always wires a
+	// real engine (cfg.ABAC.Engine()), so this guards a misconfiguration — symmetric
+	// with the nil-DeclaredAccess and empty-PluginName guard tests.
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         nil, // misconfigured
+		PluginName:     "core-objects",
+		DeclaredAccess: func(_, _ string) (string, bool) { return "read", true },
+	})
+	_, err := ic(ctxWithDispatch(t), &hostv1.GetRequest{}, &grpc.UnaryServerInfo{
+		FullMethod: "/holomush.plugin.host.v1.KVService/Get",
+	}, okHandler)
+	errutil.AssertErrorCode(t, err, "EVALUATE_NO_ENGINE")
+}
+
 func TestInterceptorAccessReadDeniesWriteMethod(t *testing.T) {
 	ic := NewCapabilityInterceptor(InterceptorDeps{
 		Engine:         policytest.AllowAllEngine(),
@@ -153,6 +219,7 @@ func TestInterceptorAccessReadDeniesWriteMethod(t *testing.T) {
 func TestInterceptorAbsentDeclaredAccessPermitsWrite(t *testing.T) {
 	ic := NewCapabilityInterceptor(InterceptorDeps{
 		Engine:         policytest.AllowAllEngine(),
+		PluginName:     "core-objects",
 		DeclaredAccess: func(_, _ string) (string, bool) { return "", true }, // declared, no access narrowing
 	})
 	_, err := ic(ctxWithDispatch(t), &hostv1.SetRequest{}, &grpc.UnaryServerInfo{
@@ -188,6 +255,23 @@ func TestInterceptorPassesThroughSelfGatedCapabilityWhenUndeclared(t *testing.T)
 		FullMethod: "/holomush.plugin.host.v1.CommandRegistryService/ListCommands",
 	}, okHandler)
 	require.NoError(t, err)
+}
+
+func TestInterceptorUnmappedHostMethodFailsClosed(t *testing.T) {
+	// A host.v1 method whose service is not in the capability token map is
+	// unclassifiable and MUST fail closed rather than forward ungated (gum03.5).
+	// TestEveryServedCapabilityHasADescriptor structurally prevents the
+	// descriptor-missing case for *served* services; this exercises the
+	// interceptor denial itself for an unmapped host.v1 service.
+	ic := NewCapabilityInterceptor(InterceptorDeps{
+		Engine:         policytest.AllowAllEngine(),
+		PluginName:     "core-objects",
+		DeclaredAccess: func(_, _ string) (string, bool) { return "", true },
+	})
+	_, err := ic(context.Background(), struct{}{}, &grpc.UnaryServerInfo{
+		FullMethod: "/holomush.plugin.host.v1.UnmappedService/DoThing",
+	}, okHandler)
+	errutil.AssertErrorCode(t, err, "UNCLASSIFIED_CAPABILITY_METHOD")
 }
 
 func TestInterceptorNonHostMethodPassesThrough(t *testing.T) {

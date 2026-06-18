@@ -50,6 +50,15 @@ var declarationExemptCapabilities = map[string]bool{
 	"command-registry": true,
 }
 
+// IsDeclarationExempt reports whether a capability token is self-gated (its
+// access is authorized by a dedicated mechanism, not by manifest declaration +
+// the default-deny ABAC decision). Exempt capabilities short-circuit before the
+// ABAC gate, so they require no default-permit seed. Exposed for the
+// seed-completeness drift guard (INV-PLUGIN-50).
+func IsDeclarationExempt(capToken string) bool {
+	return declarationExemptCapabilities[capToken]
+}
+
 // Descriptors is the single host-owned source for M1/M2/M3 per-method metadata,
 // keyed by capability token. It is the per-method companion to the sub-spec-2
 // token->service registry, covering every served host.v1 capability token (the

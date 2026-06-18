@@ -330,5 +330,103 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is plugin, action in ["write"], resource is location) when { resource.location.id == action.dispatch_location };`,
 			SeedVersion: 1,
 		},
+
+		// --- Plugin host-capability default-permit seeds (holomush-kplrr; INV-PLUGIN-50) ---
+		//
+		// Every declared non-exempt capability is now authorized by a default-deny
+		// ABAC decision in the host-capability interceptor (internal/plugin/hostcap):
+		// declaration is necessary but NOT sufficient. NON-scope-eligible methods
+		// (kv, settings, world.query, property, session, focus, stream, audit, eval,
+		// and the non-scoped world.mutation CreateLocation) are evaluated at the
+		// capability TYPE level — the interceptor passes the wildcard sentinel
+		// resource "<type>:*". These seeds default-permit those type-level calls so a
+		// declared, undifferentiated capability succeeds; an operator MAY layer a
+		// `forbid(principal is plugin, ... resource is <type>)` on top to deny a
+		// declared capability (the operator-override lever INV-PLUGIN-50 promises).
+		//
+		// They match the wildcard sentinel EXACTLY (`resource == "<type>:*"`), never
+		// by type (`resource is <type>`): a type-match permit on `location` would
+		// also match the SCOPED CreateExit/CreateObject calls (resource
+		// "location:<id>") and silently defeat the own-location seed above. Exact
+		// wildcard match authorizes only the non-scoped type-level calls; scoped
+		// instance writes remain gated by their own-location seed. Every served
+		// non-exempt capability resource type MUST carry one of these — absence
+		// fails the call closed (guarded by TestEverySeededCapabilityResourceHasDefaultPermit).
+		{
+			Name:        "seed:plugin-cap-eval",
+			Description: "Default-permit a declared plugin's policy-evaluation capability at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["evaluate"], resource == "policy:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-settings",
+			Description: "Default-permit a declared plugin's settings capability at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read", "write"], resource == "setting:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-kv",
+			Description: "Default-permit a declared plugin's kv capability at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read", "write"], resource == "kv:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-world-location",
+			Description: "Default-permit a declared plugin's type-level location capability: world.query location reads AND the non-scoped CreateLocation write (creating a NEW location, no pre-existing operand). Scoped writes to EXISTING locations (CreateExit/CreateObject) stay gated by seed:plugin-world-mutation-own-location — this exact-wildcard permit cannot match their location:<id> resource (INV-PLUGIN-50)",
+			DSLText:     `permit(principal is plugin, action in ["read", "write"], resource == "location:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-world-query-character",
+			Description: "Default-permit a declared plugin's world.query reads of characters at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read"], resource == "character:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-world-query-object",
+			Description: "Default-permit a declared plugin's world.query reads of objects at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read"], resource == "object:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-property",
+			Description: "Default-permit a declared plugin's property capability at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read", "write"], resource == "property:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-session",
+			Description: "Default-permit a declared plugin's session capability (read/list/write, incl. session.admin) at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read", "list", "write"], resource == "session:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-focus",
+			Description: "Default-permit a declared plugin's focus capability at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read", "write"], resource == "focus:*");`,
+			SeedVersion: 1,
+		},
+		// seed:plugin-cap-stream interaction with the system-namespace forbid
+		// (seed:deny-events-system-read-plugin, action read, when resource.stream.name
+		// like "events.*.system.*"): the forbid's TARGET (resource is stream) does match
+		// the stream:* sentinel, but its WHEN clause evaluates resource.stream.name to the
+		// literal "*" (StreamProvider on a wildcard id), and "*" like "events.*.system.*"
+		// is false — so the forbid does not fire at this type-level gate. Instance-level
+		// system-stream protection therefore lives on paths that re-check a concrete
+		// stream name (the CoreServer player QueryStreamHistory path); the plugin
+		// stream.history handler does not currently do so (pre-existing; tracked in
+		// holomush-xakba).
+		{
+			Name:        "seed:plugin-cap-stream",
+			Description: "Default-permit a declared plugin's stream capability at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read", "write"], resource == "stream:*");`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:plugin-cap-audit",
+			Description: "Default-permit a declared plugin's audit capability (DecryptOwnAuditRows) at the type level (INV-PLUGIN-50; operator MAY forbid)",
+			DSLText:     `permit(principal is plugin, action in ["read"], resource == "audit:*");`,
+			SeedVersion: 1,
+		},
 	}
 }

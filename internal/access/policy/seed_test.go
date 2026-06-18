@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 28 permit + 9 forbid = 37 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location + 1 eykuh.3 plugin world.mutation own-location)
-	assert.Len(t, seeds, 37, "expected 37 seed policies (28 permit, 9 forbid)")
+	// 39 permit + 9 forbid = 48 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location + 1 eykuh.3 plugin world.mutation own-location + 11 holomush-kplrr plugin host-capability default-permit seeds)
+	assert.Len(t, seeds, 48, "expected 48 seed policies (39 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 28, permitCount, "expected 28 permit policies")
+	assert.Equal(t, 39, permitCount, "expected 39 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds)")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -124,6 +124,18 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:staff-read-unrestricted-history",
 		// Plugin host-capability scope policy (eykuh.3; INV-PLUGIN-50)
 		"seed:plugin-world-mutation-own-location",
+		// Plugin host-capability default-permit seeds (holomush-kplrr; INV-PLUGIN-50)
+		"seed:plugin-cap-eval",
+		"seed:plugin-cap-settings",
+		"seed:plugin-cap-kv",
+		"seed:plugin-cap-world-location",
+		"seed:plugin-cap-world-query-character",
+		"seed:plugin-cap-world-query-object",
+		"seed:plugin-cap-property",
+		"seed:plugin-cap-session",
+		"seed:plugin-cap-focus",
+		"seed:plugin-cap-stream",
+		"seed:plugin-cap-audit",
 	}
 
 	seeds := SeedPolicies()

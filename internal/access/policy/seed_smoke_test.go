@@ -10,6 +10,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -997,4 +998,91 @@ func TestSeedSmokePluginDeniedEventsSystemRekeyStream(t *testing.T) {
 	assert.False(t, decision.IsAllowed(),
 		"plugin must NOT read events.*.system.rekey.* stream (ABAC seed gate A16/INV-ACCESS-7); got: %s — %s",
 		decision.Effect(), decision.Reason())
+}
+
+// Verifies: INV-PLUGIN-50
+func TestSeedSmokePluginNonScopedCapabilityPermittedByDefaultSeed(t *testing.T) {
+	// A non-scoped host capability (kv read) is evaluated at the capability type
+	// level (resource "kv:*", as the interceptor supplies it). The per-capability
+	// default-permit seed (seed:plugin-cap-kv) MUST permit it so a declared,
+	// undifferentiated capability call succeeds absent an operator forbid.
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		pluginProvider(map[string]any{"name": "core-objects"}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  access.PluginSubject("core-objects"),
+		Action:   "read",
+		Resource: "kv:*",
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(),
+		"default-permit seed should authorize a declared non-scoped capability; got: %s — %s",
+		decision.Effect(), decision.Reason())
+}
+
+// Verifies: INV-PLUGIN-50
+func TestSeedSmokePluginNonScopedCapabilityDeniedByOperatorForbid(t *testing.T) {
+	// Declaration is necessary but NOT sufficient: an operator forbid policy on a
+	// capability resource type overrides the default-permit seed, making a
+	// declared non-scoped capability unreachable (INV-PLUGIN-50).
+	seeds := SeedPolicies()
+	dslTexts := make([]string, 0, len(seeds)+1)
+	for _, s := range seeds {
+		dslTexts = append(dslTexts, s.DSLText)
+	}
+	dslTexts = append(dslTexts,
+		`forbid(principal is plugin, action in ["read", "write"], resource is kv);`)
+
+	engine := createTestEngineWithPolicies(t, dslTexts, []attribute.AttributeProvider{
+		pluginProvider(map[string]any{"name": "core-objects"}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  access.PluginSubject("core-objects"),
+		Action:   "read",
+		Resource: "kv:*",
+	})
+	require.NoError(t, err)
+	assert.False(t, decision.IsAllowed(),
+		"operator forbid must override the default-permit seed for a declared capability; got: %s — %s",
+		decision.Effect(), decision.Reason())
+}
+
+// Verifies: INV-PLUGIN-50
+func TestEverySeededCapabilityResourceHasDefaultPermit(t *testing.T) {
+	// Drift guard: every served, non-exempt, NON-scope-eligible capability method
+	// in hostcap.Descriptors MUST be authorized by a default-permit seed at the
+	// type level (resource "<type>:*", exactly how the interceptor evaluates a
+	// non-scoped call). A capability added later without its seed would fail
+	// closed at runtime; this test catches that at build time — the seed-side
+	// analogue of the INV-PLUGIN-52 extractor-completeness meta-test.
+	//
+	// Scope-eligible methods are intentionally skipped: they are gated by the
+	// own-location seed and proven by the scoped smoke tests, which require a
+	// concrete resource + dispatch_location this type-level probe does not supply.
+	// Exempt (self-gated) capabilities short-circuit before the ABAC gate.
+	engine := createSeedEngine(t, nil) // unconditional permits resolve without providers
+
+	for token, desc := range hostcap.Descriptors {
+		if hostcap.IsDeclarationExempt(token) {
+			continue
+		}
+		for method, md := range desc.Methods {
+			if len(md.Scopes) > 0 {
+				continue
+			}
+			t.Run(token+"/"+method, func(t *testing.T) {
+				decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+					Subject:  access.PluginSubject("drift-probe"),
+					Action:   md.Action,
+					Resource: md.Resource + ":*",
+				})
+				require.NoError(t, err)
+				assert.True(t, decision.IsAllowed(),
+					"non-exempt non-scoped capability %s/%s (action=%q resource=%q) has no default-permit seed — it would fail closed at the interceptor; add a seed:plugin-cap-* permit for resource %q",
+					token, method, md.Action, md.Resource, md.Resource)
+			})
+		}
+	}
 }

@@ -444,3 +444,34 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   a host facade seeds a crypto-participant set, the AuthGuard char-branch gates on set-membership
   alone — confirm the seed is preceded by an authz gate that ALREADY licenses decrypt, else the
   seed over-grants.
+- **Exact-wildcard cap permit vs type-match own-location (kplrr, 2026-06-18) — READY**:
+  hostcap interceptor now runs default-deny ABAC for EVERY non-exempt capability;
+  non-scoped methods eval at type level `resource=md.Resource+":*"`
+  (`interceptor.go:186`), scope-eligible keep dispatch/extract/own-location.
+  11 new `seed:plugin-cap-*` permits match the sentinel EXACTLY via
+  `resource == "<type>:*"` (ResourceExact) NOT `resource is <type>`. KEY engine
+  fact: `findApplicablePolicies` ResourceExact requires `req.Resource ==
+  *target.ResourceExact` string-equal (`engine.go:374-377`) — so `location:*`
+  permit canNOT match scoped `location:<realid>` from CreateExit/CreateObject;
+  those match ONLY `seed:plugin-world-mutation-own-location` (`resource is
+  location` + `when{resource.location.id==action.dispatch_location}`). own-location
+  also doesn't spuriously fire at `location:*` (LocationProvider returns nil for
+  wildcard → missing attr → when=false). No path writes an arbitrary existing
+  location (CreateLocation = new-only; the only existing-location mutations are
+  scope-eligible). Exempt={emit,command-registry} (`descriptor.go:48`). Subject=
+  `access.PluginSubject(d.PluginName)` host-derived; non-scoped scopeAttrs=nil +
+  unconditional permits → no attr-influence escalation. Audit flows for both
+  paths (Auditor passed to EvaluateCapabilityAccess). Completeness guard
+  `TestEverySeededCapabilityResourceHasDefaultPermit` is total for non-scoped
+  non-exempt only (skips scope-eligible — fail-closed if a scoped seed missing).
+  ONE Medium (doc-only): seed.go:411 + interceptor.go:117 claim the system forbid
+  `seed:deny-events-system-read-plugin` "still overrides" stream reads, but the
+  plugin `stream.history` handler `QueryStreamHistory` (`servers.go:818-883`) runs
+  NO instance-level ABAC on req.GetStream() — only gate is cap interceptor at
+  `stream:*`, where the `events.*.system.*` glob can't match `*`. NOT a regression
+  (pre-change the non-scoped short-circuit forwarded ungated entirely); the forbid
+  only bites paths with a concrete-name check (CoreServer query_stream_history.go).
+  Pattern: when a non-scoped capability handler lacks its own instance-level ABAC
+  check, the type-level `<type>:*` cap permit is the ONLY gate — a `when`-clause
+  forbid on concrete attrs is dead weight there. Always trace whether the served
+  handler re-checks the concrete resource before trusting a forbid to protect it.

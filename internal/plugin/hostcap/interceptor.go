@@ -103,20 +103,22 @@ func classifyHostMethod(fullMethod string) (capToken, method string, ok bool) {
 // undeclared capability, and denies when the plugin's declared access class does
 // not cover the method's operation class.
 //
-// Dynamic half (M1 policy + M3 scope): for a scope-eligible method (a descriptor
-// entry with non-empty Scopes), it requires a host-vouched dispatch context,
-// fails closed when the scope-eligible method has no wired extractor
-// (INV-PLUGIN-52), extracts the concrete scoped resource, builds the scope
+// Dynamic half (M1 policy + M3 scope): EVERY declared non-exempt capability is
+// authorized by the default-deny ABAC decision via
+// pluginauthz.EvaluateCapabilityAccess keyed on the plugin:<name> subject
+// (INV-PLUGIN-50) — declaration is necessary but not sufficient, so an operator
+// policy MAY forbid a declared capability. For a scope-eligible method (a
+// descriptor entry with non-empty Scopes), it requires a host-vouched dispatch
+// context, fails closed when the scope-eligible method has no wired extractor
+// (INV-PLUGIN-52), extracts the concrete scoped resource, and builds the scope
 // context from the host-vouched dispatch attributes (the acting character's
 // resolved "location" is surfaced to the policy DSL as the action attribute
-// "dispatch_location"), and runs the default-deny ABAC decision via
-// pluginauthz.EvaluateCapabilityAccess keyed on the plugin:<name> subject
-// (INV-PLUGIN-50). Non-scoped capability methods pass through after the static
-// half: this task's policy evaluation is intentionally limited to scoped methods,
-// because no default-permit operator seed exists for the read-only host
-// capabilities and running default-deny ABAC on them would deny every
-// undifferentiated capability call. The broader M1 operator-policy surface for
-// non-scoped capabilities is layered on by a later task.
+// "dispatch_location"). A non-scoped method is evaluated at the capability type
+// level (resource "<type>:*"): the per-capability default-permit seeds
+// (seed.go) match it unconditionally so undifferentiated calls succeed, while an
+// operator forbid policy overrides to deny. Every served capability resource
+// type therefore MUST carry a default-permit seed — absence fails the call
+// closed (guarded by the seed-completeness meta-test).
 func NewCapabilityInterceptor(d InterceptorDeps) grpc.UnaryServerInterceptor {
 	if d.DeclaredAccess == nil {
 		// Misconfigured interceptor: without a declaration lookup every gated
@@ -171,41 +173,62 @@ func NewCapabilityInterceptor(d InterceptorDeps) grpc.UnaryServerInterceptor {
 				With("method", method).
 				Errorf("declared access: read does not cover write method")
 		}
+		if d.PluginName == "" {
+			// Defense-in-depth, grouped with the peer static guards: access.PluginSubject
+			// (called below for both the scoped and non-scoped paths) panics on an empty
+			// name — an empty subject would bypass access control. Both production install
+			// sites source PluginName from the manifest (schema-required, non-empty), so
+			// this guards a misconfiguration only. Checked here, BEFORE the scope-eligible
+			// block, so an empty name fails closed with this specific code rather than
+			// masquerading as SCOPE_NO_DISPATCH on a scope-eligible call.
+			return nil, oops.Code("CAPABILITY_PLUGIN_NAME_MISSING").
+				With("capability", capToken).
+				With("method", method).
+				Errorf("capability interceptor misconfigured: empty plugin name")
+		}
 
-		// Dynamic half (M1 policy + M3 scope). Only scope-eligible methods are
-		// policy-evaluated in this task (see the doc comment for why).
-		if len(md.Scopes) == 0 {
-			return h(ctx, req)
-		}
+		// Dynamic half (M1 policy + M3 scope). Every declared non-exempt
+		// capability is subject to the default-deny ABAC decision (INV-PLUGIN-50):
+		// declaration is necessary but not sufficient, so an operator policy MAY
+		// forbid a declared capability. Scope-eligible methods additionally
+		// resolve a concrete scoped resource and surface the dispatch location for
+		// own-location conditions (M3); non-scoped methods evaluate at the
+		// capability type level (resource "<type>:*"), which the default-permit
+		// seeds match unconditionally and operator forbids may override.
+		scopeEligible := len(md.Scopes) > 0
+		resource := md.Resource + ":*" // type-level capability check (no instance)
+		var scopeAttrs map[string]any
 
-		dc, haveDispatch := pluginauthz.DispatchForHost(ctx)
-		if !haveDispatch || dc.Subject == "" {
-			// A scoped capability call with no host-vouched dispatch context has
-			// no acting-character location to scope against: fail closed.
-			return nil, oops.Code("SCOPE_NO_DISPATCH").
-				With("capability", capToken).
-				With("method", method).
-				Errorf("scoped capability call without dispatch context")
+		if scopeEligible {
+			dc, haveDispatch := pluginauthz.DispatchForHost(ctx)
+			if !haveDispatch || dc.Subject == "" {
+				// A scoped capability call with no host-vouched dispatch context has
+				// no acting-character location to scope against: fail closed.
+				return nil, oops.Code("SCOPE_NO_DISPATCH").
+					With("capability", capToken).
+					With("method", method).
+					Errorf("scoped capability call without dispatch context")
+			}
+			if md.Extract == nil {
+				// A scope-eligible method MUST resolve its resource through a wired
+				// extractor; a missing extractor fails closed (INV-PLUGIN-52).
+				return nil, oops.Code("SCOPE_NO_EXTRACTOR").
+					With("capability", capToken).
+					With("method", method).
+					Errorf("scope-eligible method missing extractor")
+			}
+			resourceID, ok := md.Extract(req)
+			if !ok || resourceID == "" {
+				// No concrete scoped resource present on a scope-eligible call:
+				// fail closed rather than forward unscoped (INV-PLUGIN-52).
+				return nil, oops.Code("SCOPE_NO_RESOURCE").
+					With("capability", capToken).
+					With("method", method).
+					Errorf("scope-eligible method has no scoped resource to evaluate")
+			}
+			resource = md.Resource + ":" + resourceID
+			scopeAttrs = map[string]any{"dispatch_location": dc.Attributes["location"]}
 		}
-		if md.Extract == nil {
-			// A scope-eligible method MUST resolve its resource through a wired
-			// extractor; a missing extractor fails closed (INV-PLUGIN-52).
-			return nil, oops.Code("SCOPE_NO_EXTRACTOR").
-				With("capability", capToken).
-				With("method", method).
-				Errorf("scope-eligible method missing extractor")
-		}
-		resourceID, ok := md.Extract(req)
-		if !ok || resourceID == "" {
-			// No concrete scoped resource present on a scope-eligible call:
-			// fail closed rather than forward unscoped (INV-PLUGIN-52).
-			return nil, oops.Code("SCOPE_NO_RESOURCE").
-				With("capability", capToken).
-				With("method", method).
-				Errorf("scope-eligible method has no scoped resource to evaluate")
-		}
-		resource := md.Resource + ":" + resourceID
-		scopeAttrs := map[string]any{"dispatch_location": dc.Attributes["location"]}
 
 		dec, err := pluginauthz.EvaluateCapabilityAccess(ctx, pluginauthz.CapabilityInput{
 			Engine:     d.Engine,
@@ -224,11 +247,18 @@ func NewCapabilityInterceptor(d InterceptorDeps) grpc.UnaryServerInterceptor {
 			return nil, err //nolint:wrapcheck // pluginauthz already wraps with oops context
 		}
 		if !dec.Allowed {
-			return nil, oops.Code("SCOPE_DENIED").
+			// Scope-eligible denials carry SCOPE_DENIED (instance/own-location
+			// failure); non-scoped denials carry CAPABILITY_ACCESS_DENIED (operator
+			// policy forbade a declared capability at the type level).
+			code := "CAPABILITY_ACCESS_DENIED"
+			if scopeEligible {
+				code = "SCOPE_DENIED"
+			}
+			return nil, oops.Code(code).
 				With("capability", capToken).
 				With("method", method).
 				With("resource", resource).
-				Errorf("denied by policy/scope")
+				Errorf("denied by policy")
 		}
 		return h(ctx, req)
 	}
