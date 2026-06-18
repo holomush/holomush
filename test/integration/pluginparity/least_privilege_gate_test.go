@@ -29,12 +29,11 @@ import (
 const kvCapabilityToken = "kv"
 
 // declaredDenialMessage is the interceptor's fail-closed denial text for an
-// undeclared capability (hostcap/interceptor.go: oops.Code("CAPABILITY_NOT_DECLARED")
-// ... Errorf("plugin did not declare capability")). A bare oops error carries no
-// GRPCStatus method, so grpc-go surfaces it on the wire as codes.Unknown with
-// this message preserved (internal/grpc/server.go:742 documents the Unknown
-// mapping for bare oops). Both runtimes therefore deny IDENTICALLY: same code,
-// same message — the structural witness that one shared gate denied both.
+// undeclared capability (hostcap/interceptor.go: capDeny("CAPABILITY_NOT_DECLARED",
+// "plugin did not declare capability", …)). capDeny wraps a gRPC status, so
+// grpc-go surfaces the denial on the wire as codes.PermissionDenied with this
+// message preserved (holomush-yc05l). Both runtimes therefore deny IDENTICALLY:
+// same code, same message — the structural witness that one shared gate denied both.
 const declaredDenialMessage = "plugin did not declare capability"
 
 // undeclaredManifest is a plugin manifest with NO capability requires, so
@@ -77,8 +76,8 @@ var _ = Describe("Cross-runtime least-privilege declaration gate", func() {
 	// This spec drives the SAME undeclared capability ("kv", whose KVService is
 	// registered in BOTH sets so it ROUTES to a handler on both runtimes) through
 	// each runtime's gated endpoint and asserts BOTH are denied IDENTICALLY:
-	//   - same wire code (codes.Unknown — a bare oops error has no GRPCStatus, so
-	//     grpc-go surfaces CAPABILITY_NOT_DECLARED as Unknown),
+	//   - same wire code (codes.PermissionDenied — capDeny wraps a gRPC status, so
+	//     grpc-go surfaces CAPABILITY_NOT_DECLARED as PermissionDenied, holomush-yc05l),
 	//   - same denial message ("plugin did not declare capability"),
 	//   - and that code is NOT codes.Unimplemented.
 	//
@@ -112,8 +111,8 @@ var _ = Describe("Cross-runtime least-privilege declaration gate", func() {
 		// IDENTICAL denial: same code on both runtimes, and the codes are EQUAL.
 		Expect(binCode).To(Equal(luaCode),
 			"both runtimes MUST deny the undeclared capability with the IDENTICAL wire code — one shared gate, no per-runtime divergence (INV-PLUGIN-45)")
-		Expect(binCode).To(Equal(codes.Unknown),
-			"the shared declaration gate's bare-oops CAPABILITY_NOT_DECLARED denial surfaces as codes.Unknown on the wire")
+		Expect(binCode).To(Equal(codes.PermissionDenied),
+			"the shared declaration gate's CAPABILITY_NOT_DECLARED denial surfaces as codes.PermissionDenied on the wire (holomush-yc05l)")
 
 		// IDENTICAL denial reason: the shared gate's CAPABILITY_NOT_DECLARED text.
 		Expect(binErr.Error()).To(ContainSubstring(declaredDenialMessage),
@@ -136,7 +135,7 @@ var _ = Describe("Cross-runtime least-privilege declaration gate", func() {
 	// codes.Unimplemented, identically.
 	//
 	// This is what makes the undeclared assertion above non-vacuous: it proves the
-	// undeclared denial (Unknown / "plugin did not declare capability") was the
+	// undeclared denial (PermissionDenied / "plugin did not declare capability") was the
 	// GATE firing, because the only thing that changed is the manifest's
 	// declaration — flip it on, and the gate steps aside and the base answers.
 	//

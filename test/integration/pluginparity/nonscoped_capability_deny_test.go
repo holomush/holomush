@@ -25,12 +25,12 @@ import (
 const forbiddenKVResource = "kv:*"
 
 // policyDenialMessage is the interceptor's denial text when the dynamic ABAC gate
-// forbids a DECLARED non-scoped capability (interceptor.go: oops.Code(
-// "CAPABILITY_ACCESS_DENIED") ... Errorf("denied by policy")). A bare oops error
-// carries no GRPCStatus method, so grpc-go surfaces it as codes.Unknown with this
-// message preserved — the same wire shape the declaration gate uses, which is why
-// the denial reason (not just the code) is the discriminator that proves the ABAC
-// gate fired rather than the declaration gate.
+// forbids a DECLARED non-scoped capability (interceptor.go: capDeny(
+// "CAPABILITY_ACCESS_DENIED", "denied by policy", …)). capDeny wraps a gRPC
+// status, so grpc-go surfaces it as codes.PermissionDenied with this message
+// preserved (holomush-yc05l) — the same wire shape the declaration gate uses,
+// which is why the denial reason (not just the code) is the discriminator that
+// proves the ABAC gate fired rather than the declaration gate.
 const policyDenialMessage = "denied by policy"
 
 // operatorForbidEngine models an operator policy that FORBIDS one specific
@@ -107,8 +107,8 @@ var _ = Describe("Cross-runtime least-privilege ABAC denial (non-scoped capabili
 		// IDENTICAL denial: same wire code on both runtimes.
 		Expect(binCode).To(Equal(luaCode),
 			"both runtimes MUST deny the forbidden capability with the IDENTICAL wire code — one shared ABAC gate, no per-runtime divergence (INV-PLUGIN-50)")
-		Expect(binCode).To(Equal(codes.Unknown),
-			"the shared ABAC gate's bare-oops CAPABILITY_ACCESS_DENIED denial surfaces as codes.Unknown on the wire")
+		Expect(binCode).To(Equal(codes.PermissionDenied),
+			"the shared ABAC gate's CAPABILITY_ACCESS_DENIED denial surfaces as codes.PermissionDenied on the wire (holomush-yc05l)")
 
 		// IDENTICAL denial reason: the dynamic gate's "denied by policy" text.
 		Expect(binErr.Error()).To(ContainSubstring(policyDenialMessage),

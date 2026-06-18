@@ -5,10 +5,14 @@ package hostcap
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -19,6 +23,76 @@ import (
 )
 
 func okHandler(_ context.Context, _ any) (any, error) { return struct{}{}, nil }
+
+// TestCapabilityDenialsCarryGRPCStatus verifies holomush-yc05l: every
+// host-capability interceptor denial code carries an explicit gRPC status on the
+// wire — PermissionDenied for policy/permission denials, Internal for host-side
+// misconfiguration — instead of serializing as codes.Unknown. The structured
+// oops code is preserved alongside it for errutil.AssertErrorCode + logging.
+// SCOPE_NO_EXTRACTOR maps to Internal (a host wiring defect, INV-PLUGIN-52, not
+// a plugin permission failure).
+func TestCapabilityDenialsCarryGRPCStatus(t *testing.T) {
+	tests := []struct {
+		code     string
+		wireCode codes.Code
+	}{
+		{"CAPABILITY_NOT_DECLARED", codes.PermissionDenied},
+		{"ACCESS_CLASS_DENIED", codes.PermissionDenied},
+		{"SCOPE_NO_DISPATCH", codes.PermissionDenied},
+		{"SCOPE_NO_RESOURCE", codes.PermissionDenied},
+		{"SCOPE_DENIED", codes.PermissionDenied},
+		{"CAPABILITY_ACCESS_DENIED", codes.PermissionDenied},
+		{"UNCLASSIFIED_CAPABILITY_METHOD", codes.Internal},
+		{"CAPABILITY_PLUGIN_NAME_MISSING", codes.Internal},
+		{"CAPABILITY_DECLARATION_LOOKUP_MISSING", codes.Internal},
+		{"SCOPE_NO_EXTRACTOR", codes.Internal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.code+" serializes as "+tt.wireCode.String(), func(t *testing.T) {
+			err := capDeny(tt.code, "denied")
+			// Structured oops code preserved for logging — asserted top-level
+			// (grpc-errors.md: opacity contracts assert the top code, not a
+			// chain-walked one).
+			oe, ok := oops.AsOops(err)
+			require.True(t, ok, "denial must be an oops error")
+			require.Equal(t, tt.code, oe.Code())
+			// Wire status carries the mapped code, never codes.Unknown.
+			require.Equal(t, tt.wireCode, status.Code(err))
+			require.NotEqual(t, codes.Unknown, status.Code(err))
+		})
+	}
+}
+
+// TestCapDenyUnmappedCodeFailsSafeToInternal pins capDeny's fail-safe: a code
+// absent from denialGRPCCode must serialize as codes.Internal, never codes.OK
+// (which grpc would treat as success) or codes.Unknown.
+func TestCapDenyUnmappedCodeFailsSafeToInternal(t *testing.T) {
+	err := capDeny("DEFINITELY_NOT_A_MAPPED_CODE", "denied")
+	oe, ok := oops.AsOops(err)
+	require.True(t, ok)
+	require.Equal(t, "DEFINITELY_NOT_A_MAPPED_CODE", oe.Code())
+	require.Equal(t, codes.Internal, status.Code(err))
+}
+
+// TestEvalFailureToStatusStampsInternalAndPreservesCode covers evalFailureToStatus
+// on both inputs: an oops error keeps its code, and a non-oops error falls back to
+// CAPABILITY_EVALUATION_FAILED — both stamped codes.Internal on the wire.
+func TestEvalFailureToStatusStampsInternalAndPreservesCode(t *testing.T) {
+	t.Run("oops error keeps its code", func(t *testing.T) {
+		err := evalFailureToStatus(oops.Code("EVALUATE_NO_ENGINE").Errorf("nil engine"))
+		oe, ok := oops.AsOops(err)
+		require.True(t, ok)
+		require.Equal(t, "EVALUATE_NO_ENGINE", oe.Code())
+		require.Equal(t, codes.Internal, status.Code(err))
+	})
+	t.Run("non-oops error falls back to a stable code", func(t *testing.T) {
+		err := evalFailureToStatus(errors.New("raw engine failure"))
+		oe, ok := oops.AsOops(err)
+		require.True(t, ok)
+		require.Equal(t, "CAPABILITY_EVALUATION_FAILED", oe.Code())
+		require.Equal(t, codes.Internal, status.Code(err))
+	})
+}
 
 // ctxWithDispatch returns a ctx carrying a host-vouched dispatch context. The
 // static half does not read it; the dynamic (M3) scope half reads dc.Subject
@@ -108,6 +182,9 @@ func TestInterceptorScopeOwnLocationDeniesMismatch(t *testing.T) {
 	_, err := ic(scopedDispatchCtx(otherLoc), &hostv1.CreateExitRequest{FromId: testLocID},
 		createExitInfo(), okHandler)
 	errutil.AssertErrorCode(t, err, "SCOPE_DENIED")
+	// End-to-end: the interceptor's returned error carries PermissionDenied on
+	// the wire, not codes.Unknown (holomush-yc05l).
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 // Verifies: INV-PLUGIN-52
@@ -203,6 +280,10 @@ func TestInterceptorNilEngineFailsClosedForNonScopedMethod(t *testing.T) {
 		FullMethod: "/holomush.plugin.host.v1.KVService/Get",
 	}, okHandler)
 	errutil.AssertErrorCode(t, err, "EVALUATE_NO_ENGINE")
+	// End-to-end: a capability-evaluation failure (host-side misconfig) is
+	// stamped Internal at the interceptor — the outermost gRPC boundary — not
+	// left as codes.Unknown (holomush-yc05l).
+	require.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestInterceptorAccessReadDeniesWriteMethod(t *testing.T) {
@@ -272,6 +353,10 @@ func TestInterceptorUnmappedHostMethodFailsClosed(t *testing.T) {
 		FullMethod: "/holomush.plugin.host.v1.UnmappedService/DoThing",
 	}, okHandler)
 	errutil.AssertErrorCode(t, err, "UNCLASSIFIED_CAPABILITY_METHOD")
+	// End-to-end: a host-side misconfiguration surfaces as Internal on the wire,
+	// not codes.Unknown — so a plugin can tell it apart from a policy denial
+	// (holomush-yc05l).
+	require.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestInterceptorNonHostMethodPassesThrough(t *testing.T) {
