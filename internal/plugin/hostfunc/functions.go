@@ -54,6 +54,7 @@ type Functions struct {
 	settingsOps      SettingsOps
 	historyReader    HistoryReader
 	auditDecryptor   AuditDecryptor
+	gameID           string
 	// pluginConfigs holds the merged (opaque) config per plugin, set by the
 	// Lua host before Register. nil/absent → empty holomush.config. Guarded by
 	// pluginConfigsMu because SetPluginConfigs/pluginConfigFor run per delivery
@@ -74,6 +75,15 @@ type Option func(*Functions)
 func WithEngine(engine types.AccessPolicyEngine) Option {
 	return func(f *Functions) {
 		f.engine = engine
+	}
+}
+
+// WithGameID sets the game ID used to qualify domain-relative stream references
+// before the stream.history ABAC check (holomush.query_stream_history). Without
+// it the gate cannot qualify and fails closed (holomush-xakba).
+func WithGameID(gameID string) Option {
+	return func(f *Functions) {
+		f.gameID = gameID
 	}
 }
 
@@ -156,6 +166,10 @@ func (f *Functions) SetAuditDecryptor(d AuditDecryptor) {
 // Engine returns the ABAC access policy engine, or nil when unconfigured.
 // Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.AccessEngine.
 func (f *Functions) Engine() types.AccessPolicyEngine { return f.engine }
+
+// GameID returns the game ID used to qualify stream references (may be "" in
+// tests / before wiring; the stream.history gate fails closed if so).
+func (f *Functions) GameID() string { return f.gameID }
 
 // Auditor returns the plugin-authz auditor, or nil when unconfigured.
 // Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.Auditor.
@@ -310,8 +324,12 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	// Register the stream.history read-back (query_stream_history). The `focus`
 	// capability functions that used to ship alongside it (RegisterFocusFuncs)
 	// are retired to the host-brokered path (spec R1); stream.history is not one
-	// of the ten retired capabilities and stays ambient.
-	RegisterStreamHistoryFunc(ls, mod, f.historyReader)
+	// of the ten retired capabilities and stays ambient. The reader is wrapped
+	// with the instance-level stream-read ABAC gate so the ambient path enforces
+	// identically to the host.v1 StreamHistoryService handler (holomush-xakba,
+	// plugin-runtime-symmetry).
+	RegisterStreamHistoryFunc(ls, mod,
+		newAuthorizingHistoryReader(f.historyReader, f.engine, f.auditor, f.gameID, pluginName))
 
 	// Register audit read-back decrypt functions.
 	RegisterAuditFuncs(ls, mod, pluginName, f.auditDecryptor)

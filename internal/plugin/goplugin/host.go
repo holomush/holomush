@@ -137,6 +137,16 @@ func WithCA(ca *tlscerts.CA, gameID string) HostOption {
 	}
 }
 
+// WithGameID sets the host's game ID independently of WithCA (mTLS). The game ID
+// is needed to qualify domain-relative stream references for the QueryStreamHistory
+// instance-level ABAC check (holomush-xakba); wiring it only through WithCA would
+// fail-close stream.history for binary plugins running without mTLS.
+func WithGameID(gameID string) HostOption {
+	return func(h *Host) {
+		h.gameID = gameID
+	}
+}
+
 // WithServiceRegistry configures the host to register plugin-provided services.
 func WithServiceRegistry(r *plugins.ServiceRegistry) HostOption {
 	return func(h *Host) { h.registry = r }
@@ -540,6 +550,15 @@ func (h *Host) GameSettings() settings.GameSettings {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.gameSettings
+}
+
+// GameID returns the host's game ID, used to qualify a domain-relative stream
+// reference before the QueryStreamHistory instance-level ABAC check
+// (holomush-xakba). Satisfies hostcap.HostCapabilities.
+func (h *Host) GameID() string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.gameID
 }
 
 // SetIdentityRegistry implements plugins.IdentityRegistryConfigurer.

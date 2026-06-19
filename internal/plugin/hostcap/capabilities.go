@@ -112,6 +112,10 @@ type HostCapabilities interface {
 
 	// FocusCoordinator backs the FocusService RPCs (nil ⇒ not configured).
 	FocusCoordinator() focus.Coordinator
+	// GameID returns the game ID used to qualify a domain-relative stream
+	// reference before the QueryStreamHistory instance-level ABAC check
+	// ("" ⇒ unqualifiable ⇒ the gate fails closed; holomush-xakba).
+	GameID() string
 	// HistoryReader backs QueryStreamHistory (nil ⇒ not configured).
 	HistoryReader() plugins.HistoryReader
 	// ReadbackDecryptor backs DecryptOwnAuditRows (nil ⇒ not configured).

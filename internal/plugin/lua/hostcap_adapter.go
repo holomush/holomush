@@ -97,6 +97,13 @@ func (a *luaHostCapAdapter) Auditor() pluginauthz.Auditor {
 	return a.f.Auditor()
 }
 
+// GameID returns the game ID from the Functions backing, used to qualify a
+// domain-relative stream reference before the QueryStreamHistory ABAC check
+// (holomush-xakba). Satisfies hostcap.HostCapabilities.
+func (a *luaHostCapAdapter) GameID() string {
+	return a.f.GameID()
+}
+
 // EventEmitter returns nil: Lua event emissions flow through hostfuncs (holomush.emit),
 // not through the gRPC EmitEvent RPC. The emitServer's nil-guard covers this.
 func (a *luaHostCapAdapter) EventEmitter() plugins.PluginIntentEmitter {

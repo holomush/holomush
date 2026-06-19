@@ -475,3 +475,33 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   check, the type-level `<type>:*` cap permit is the ONLY gate — a `when`-clause
   forbid on concrete attrs is dead weight there. Always trace whether the served
   handler re-checks the concrete resource before trusting a forbid to protect it.
+- **Two ReplayTail paths gated — RESOLVED READY (xakba, turn 2, 2026-06-19)**:
+  xakba closed both the kplrr Medium AND the turn-1 ambient-Lua gap. Single shared
+  gate `pluginauthz.AuthorizeStreamRead` (`pluginauthz/streamread.go`) QUALIFIES the
+  domain-relative stream (`eventbus.Qualify(GameID, Stream)`) BEFORE
+  `EvaluateCapabilityAccess(resource="stream:"+qualified, Declared:true)`. Reached by
+  BOTH production paths to plugin `HistoryReader.ReplayTail`: (1) host.v1
+  `hostcap/servers.go::QueryStreamHistory` (837-854, gate runs before ReplayTail:888);
+  (2) ambient Lua `query_stream_history` — reader WRAPPED in `authorizingHistoryReader`
+  (`hostfunc/streamauth.go`) at the SINGLE Register site (`functions.go:331-332`);
+  `getHistoryReader(ls)` returns the wrapped reader so `stdlib_focus.go:417` ReplayTail
+  is gated. Census confirmed only those two prod callers (`RegisterFocusFuncs` raw-reader
+  path is test-only: stdlib_focus_test.go:600, export_test.go:75; `RegisterStreamFuncs`
+  exposes only add/remove_session_stream, no read primitive). Engine math verified: glob
+  `like` compiles COLON-separated (evaluator.go:285) so `events.*.system.*` `*` crosses
+  DOTS and matches the qualified dotted subject; StreamProvider registered unconditionally
+  (setup.go:245) so `resource.stream.name` resolves (no g776 silent-deny); deny-overrides
+  (engine.go:591-598) returns the matching `principal is plugin` forbid before the new
+  `seed:plugin-stream-read` permit. Fail-closed total (qualify-err / nil-engine
+  capability.go:36 / deny — all stop before ReplayTail at both paths). Subject host-vouched
+  both paths (servers: manifest s.pluginName; Lua: r.pluginName closed over from host-routed
+  delivery name host.go:516 — plugin can't forge). GameID single-source s.cfg.GameID → host
+  WithCA:314 + hostfunc WithGameID:192. 3 Lows: (1) `Declared:true` comment inaccurate for
+  ambient Lua path (no interceptor proves declaration — but ambient hostfuncs are
+  universally available per ADR 05f3v and Declared:true is the LESS restrictive choice,
+  engine forbids are the real gate); (2) no wrapper test for nil-engine path (covered
+  transitively by capability.go guard); (3) plugin may read private scene `.ic` history
+  METADATA (ciphertext stays AuthGuard-gated; pre-existing, not introduced — host.v1 had
+  same exposure pre-xakba). DURABLE LESSON CONFIRMED: gate the SHARED read primitive (here:
+  wrap the HistoryReader once), not one handler — the capability service is never the only
+  path to a primitive when ambient hostfuncs exist.

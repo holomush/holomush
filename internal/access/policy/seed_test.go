@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 39 permit + 9 forbid = 48 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location + 1 eykuh.3 plugin world.mutation own-location + 11 holomush-kplrr plugin host-capability default-permit seeds)
-	assert.Len(t, seeds, 48, "expected 48 seed policies (39 permit, 9 forbid)")
+	// 40 permit + 9 forbid = 49 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location + 1 eykuh.3 plugin world.mutation own-location + 11 holomush-kplrr plugin host-capability default-permit seeds + 1 holomush-xakba plugin instance-level stream read)
+	assert.Len(t, seeds, 49, "expected 49 seed policies (40 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 39, permitCount, "expected 39 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds)")
+	assert.Equal(t, 40, permitCount, "expected 40 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read)")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -136,6 +136,7 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:plugin-cap-focus",
 		"seed:plugin-cap-stream",
 		"seed:plugin-cap-audit",
+		"seed:plugin-stream-read",
 	}
 
 	seeds := SeedPolicies()

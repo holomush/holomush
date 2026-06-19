@@ -3842,6 +3842,13 @@ invariants:
       # by operator policy is denied IDENTICALLY through the shared interceptor on
       # both the binary and Lua runtimes (the parity dimension of the M1 strategy).
       - "test/integration/pluginparity/nonscoped_capability_deny_test.go"
+      # Instance-level stream.history gate (holomush-xakba): the shared
+      # AuthorizeStreamRead qualifies + runs the default-deny decision on the
+      # concrete stream, enforced identically on the host.v1 handler and the
+      # ambient Lua hostfunc decorator.
+      - "internal/plugin/pluginauthz/streamread_test.go"
+      - "internal/plugin/hostcap/streamhistory_test.go"
+      - "internal/plugin/hostfunc/streamauth_test.go"
   - id: INV-PLUGIN-51
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md"

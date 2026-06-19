@@ -1001,6 +1001,36 @@ func TestSeedSmokePluginDeniedEventsSystemRekeyStream(t *testing.T) {
 }
 
 // Verifies: INV-PLUGIN-50
+func TestSeedSmokePluginDeniedForbiddenStreamNamespaces(t *testing.T) {
+	// End-to-end (real seed engine) proof that the instance-level plugin stream
+	// read (seed:plugin-stream-read, holomush-xakba) is overridden by each
+	// forbidden-namespace forbid at a CONCRETE stream name — not just the rekey
+	// case. Every entry below must be DENIED (deny-overrides beats the permit).
+	for _, streamName := range []string{
+		"events.01GAME01.system.crypto_totp.01CT000.01CID00",
+		"events.01GAME01.system.crypto_policy.01CT000.01CID00",
+		"events.01GAME01.system.somethingelse.01X",
+		"audit.access.01X",
+	} {
+		t.Run(streamName, func(t *testing.T) {
+			engine := createSeedEngine(t, []attribute.AttributeProvider{
+				pluginProvider(map[string]any{"name": "echo-bot"}),
+				streamProvider(map[string]any{"name": streamName}),
+			})
+			decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+				Subject:  access.PluginSubject("echo-bot"),
+				Action:   "read",
+				Resource: "stream:" + streamName,
+			})
+			require.NoError(t, err)
+			assert.False(t, decision.IsAllowed(),
+				"plugin must NOT read forbidden-namespace stream %q; got: %s — %s",
+				streamName, decision.Effect(), decision.Reason())
+		})
+	}
+}
+
+// Verifies: INV-PLUGIN-50
 func TestSeedSmokePluginNonScopedCapabilityPermittedByDefaultSeed(t *testing.T) {
 	// A non-scoped host capability (kv read) is evaluated at the capability type
 	// level (resource "kv:*", as the interceptor supplies it). The per-capability
@@ -1046,6 +1076,31 @@ func TestSeedSmokePluginNonScopedCapabilityDeniedByOperatorForbid(t *testing.T) 
 	require.NoError(t, err)
 	assert.False(t, decision.IsAllowed(),
 		"operator forbid must override the default-permit seed for a declared capability; got: %s — %s",
+		decision.Effect(), decision.Reason())
+}
+
+// Verifies: INV-PLUGIN-50
+func TestSeedSmokePluginStreamReadConcreteNonSystemPermitted(t *testing.T) {
+	// The plugin stream.history handler evaluates the CONCRETE stream name
+	// (stream:<name>, holomush-xakba), not the type-level stream:* sentinel the
+	// interceptor uses. A non-system stream must be permitted by the instance-level
+	// seed (seed:plugin-stream-read) so the handler does not over-deny legitimate
+	// reads; the system/audit/crypto forbids override only the forbidden namespaces
+	// (proven by TestSeedSmokePluginDeniedEventsSystemRekeyStream et al.).
+	const streamName = "events.main.location.01LOCAAAAAAAAAAAAAAAAAA"
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		pluginProvider(map[string]any{"name": "stream-reader"}),
+		streamProvider(map[string]any{"name": streamName}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  access.PluginSubject("stream-reader"),
+		Action:   "read",
+		Resource: "stream:" + streamName,
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(),
+		"plugin should read a concrete non-system stream (seed:plugin-stream-read); got: %s — %s",
 		decision.Effect(), decision.Reason())
 }
 

@@ -406,16 +406,18 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is plugin, action in ["read", "write"], resource == "focus:*");`,
 			SeedVersion: 1,
 		},
-		// seed:plugin-cap-stream interaction with the system-namespace forbid
-		// (seed:deny-events-system-read-plugin, action read, when resource.stream.name
-		// like "events.*.system.*"): the forbid's TARGET (resource is stream) does match
-		// the stream:* sentinel, but its WHEN clause evaluates resource.stream.name to the
-		// literal "*" (StreamProvider on a wildcard id), and "*" like "events.*.system.*"
-		// is false — so the forbid does not fire at this type-level gate. Instance-level
-		// system-stream protection therefore lives on paths that re-check a concrete
-		// stream name (the CoreServer player QueryStreamHistory path); the plugin
-		// stream.history handler does not currently do so (pre-existing; tracked in
-		// holomush-xakba).
+		// Stream authorization is two-layer (holomush-kplrr + holomush-xakba):
+		//   1. seed:plugin-cap-stream below is the TYPE-level capability gate the
+		//      interceptor evaluates (resource "stream:*"). The system-namespace
+		//      forbid (seed:deny-events-system-read-plugin, when resource.stream.name
+		//      like "events.*.system.*") cannot fire here: its WHEN clause evaluates
+		//      resource.stream.name to the literal "*" (StreamProvider on a wildcard
+		//      id), and "*" like "events.*.system.*" is false.
+		//   2. seed:plugin-stream-read (further below) is the INSTANCE-level read
+		//      permit the plugin stream.history handler evaluates against the CONCRETE
+		//      stream name (resource "stream:<name>"); there the audit/crypto/system
+		//      forbids match real names and override, so a plugin can read non-system
+		//      streams but not forbidden namespaces.
 		{
 			Name:        "seed:plugin-cap-stream",
 			Description: "Default-permit a declared plugin's stream capability at the type level (INV-PLUGIN-50; operator MAY forbid)",
@@ -426,6 +428,22 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:plugin-cap-audit",
 			Description: "Default-permit a declared plugin's audit capability (DecryptOwnAuditRows) at the type level (INV-PLUGIN-50; operator MAY forbid)",
 			DSLText:     `permit(principal is plugin, action in ["read"], resource == "audit:*");`,
+			SeedVersion: 1,
+		},
+
+		// Instance-level plugin stream read (holomush-xakba). Type-match (resource
+		// is stream) so it matches a CONCRETE stream:<name>, unlike the exact-wildcard
+		// capability gate above. The plugin stream.history handler
+		// (internal/plugin/hostcap/servers.go::QueryStreamHistory) evaluates the
+		// concrete stream against this permit; the audit/crypto_totp/crypto_policy/
+		// system forbids (deny-overrides) carve out the forbidden namespaces. This is
+		// the plugin analogue of seed:player-location-stream-read, minus the
+		// co-location condition (plugins have no location). Read-only: stream writes
+		// (stream.subscription) remain gated solely by the type-level capability.
+		{
+			Name:        "seed:plugin-stream-read",
+			Description: "Permit a declared plugin to read a concrete stream's history; audit/crypto/system forbids override forbidden namespaces (INV-PLUGIN-50; holomush-xakba)",
+			DSLText:     `permit(principal is plugin, action in ["read"], resource is stream);`,
 			SeedVersion: 1,
 		},
 	}
