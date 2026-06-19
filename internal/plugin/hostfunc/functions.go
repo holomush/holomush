@@ -449,7 +449,7 @@ func (f *Functions) logFn(pluginName string) lua.LGFunction {
 			//nolint:sloglint // plugin-supplied log message, dynamic by design
 			logger.Error(message)
 		default:
-			slog.Warn("invalid log level from plugin",
+			slog.WarnContext(luaContext(L), "invalid log level from plugin",
 				"plugin", pluginName,
 				"requested_level", level)
 			L.RaiseError("invalid log level %q: must be debug, info, warn, or error", level)
@@ -472,7 +472,7 @@ func (f *Functions) newRequestIDFn() lua.LGFunction {
 // for Lua if denied, or empty string if allowed.
 func (f *Functions) checkKVAccess(L *lua.LState, pluginName, action, key string) string { //nolint:gocritic // L is standard gopher-lua convention
 	if f.engine == nil {
-		slog.Warn("KV access denied: no ABAC engine configured",
+		slog.WarnContext(luaContext(L), "KV access denied: no ABAC engine configured",
 			"plugin", pluginName, "action", action, "key", key)
 		return "access engine not available"
 	}
@@ -522,7 +522,7 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 		}
 
 		if f.kvStore == nil {
-			slog.Error("kv_get called but store unavailable",
+			slog.ErrorContext(luaContext(L), "kv_get called but store unavailable",
 				"plugin", pluginName,
 				"key", key)
 			L.Push(lua.LNil)
@@ -572,7 +572,7 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 		}
 
 		if f.kvStore == nil {
-			slog.Error("kv_set called but store unavailable",
+			slog.ErrorContext(luaContext(L), "kv_set called but store unavailable",
 				"plugin", pluginName,
 				"key", key)
 			L.Push(lua.LNil)
@@ -614,7 +614,7 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 		}
 
 		if f.kvStore == nil {
-			slog.Error("kv_delete called but store unavailable",
+			slog.ErrorContext(luaContext(L), "kv_delete called but store unavailable",
 				"plugin", pluginName,
 				"key", key)
 			L.Push(lua.LNil)
