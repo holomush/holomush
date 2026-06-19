@@ -243,6 +243,69 @@ Framing decision recorded in `holomush-eykuh.5`. Grounds against the existing
   sub-spec sequences it so each capability contract lands behind a stable
   declaration model.
 
+### `theme:web-portals` — The web as a complete gaming surface
+
+The web client is a **superset of telnet**, not a thin terminal. Governing
+principle (decision `holomush-sz0h3`):
+
+> A player MUST be able to play completely through the web; telnet — or a raw
+> command line — is never *required*. On-grid real-time play (movement, room
+> say/pose/look, exits, presence) is served first-class by the **web terminal**
+> (`/terminal`) and/or telnet. Beyond that, a defined set of **subsystems** each
+> get a dedicated rich web GUI ("control expression") above and beyond the
+> terminal.
+
+This is the **web-GUI lens**; `theme:social-spaces` is the **substrate lens** on
+the same systems. A single web view — e.g. the scenes portal — carries both
+labels.
+
+**Why it exists.** The principle was implicit and got silently violated: web
+create-scene was an explicit Phase-9 acceptance criterion (`5rh.18`) that the
+E9.5 portal redesign (`5rh.8`) dropped with no recorded decision, shipping a
+design that even contradicts itself (a "scenes-only player with no terminal" is
+first-class, yet cannot originate a scene). Writing the principle down makes it a
+checkable artifact, so future surface designs stop re-narrowing scope by
+omission.
+
+**Why a label, not an epic.** Web surfaces are split across two organizing
+schemes — Epic 8 (`qve`) owns the non-subsystem portals (wiki, characters, admin,
+char-CRUD, offline); each subsystem epic owns its own web view (scenes `5rh`,
+channels `0sc`, forums `djj`). No single epic owns "the web as a complete
+surface," so the unifying instrument is a cross-cutting label.
+
+#### Surface map
+
+| Surface                                           | Web GUI state                   | Home (epic / beads)     |
+| ------------------------------------------------- | ------------------------------- | ----------------------- |
+| On-grid play (move, look, room say/pose, exits)   | shipped (web terminal)          | Epic 8 `qve`            |
+| Scenes — browse/read/participate/watch/export     | shipped                         | E9.5 `5rh.8`            |
+| Scenes — create                                   | gap                             | `5rh.22`                |
+| Scenes — lifecycle/management (end/invite/vote/…) | gap                             | `5rh.24`                |
+| Scenes — guest gating                             | gap                             | `5rh.23`                |
+| DMs — 1:1 (page/whisper)                           | gap                             | `qve.17`                |
+| DMs — 1:N (channels)                               | not started (backend in flight) | Epic 10 `0sc`           |
+| Forums                                            | not started                     | Epic 11 `djj` + `5rh.9` |
+| Wiki / help / lore / setting docs                 | not started                     | `qve.8`                 |
+| Character profiles / sheets / directory           | not started                     | `qve.9`                 |
+| Character create / edit / per-char settings       | picker shipped, CRUD not        | `qve.15`                |
+| Character roster / claim / transfer (web)         | not started                     | `gloh` (mechanic)       |
+| Player settings / preferences                     | partial (theme only)            | `w7t5`                  |
+| Administration                                    | not started                     | `qve.10`                |
+| Offline / replay                                  | strategic question pending      | `qve.7`                 |
+
+Not a registry invariant (decision 2026-06-19): "web ⊇ telnet" is a directional
+principle, not a test-pinnable guarantee (most surfaces are unbuilt — missing
+features, not regressions). The testable unit is per-subsystem ("a *shipped* web
+surface is self-sufficient — core ops never require telnet"); a narrow invariant
+MAY be minted later, bound by a per-surface E2E, once the first surface is
+genuinely telnet-free.
+
+Query:
+
+```bash
+bd list -l theme:web-portals --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.title)"'
+```
+
 ## Completed themes
 
 ### `theme:docs-platform` — Docs site migration, IA, and gRPC reference — closed 2026-05-29
@@ -348,32 +411,13 @@ opportunistic backfill.
 
 Query: `bd list -l audit-finding --limit 0 --json | jq -r '.[] | select(.status != "closed")'`
 
-### Web portals (post-2026-05-16 audit reframe)
+### Web portals → now `theme:web-portals` (active, 2026-06-19)
 
-Original framing was "web client polish" — the 2026-05-16 `qve` audit
-disproved that. Substrate is substantially complete (SvelteKit scaffold,
-ConnectRPC transport, terminal UI, auth flows, theme system, JetStream
-backfill, Playwright E2E). The actual remaining work is **unbuilt
-portal features**, not polish:
-
-- `qve.7` Offline support — **strategic question pending**: original
-  IndexedDB-centric design may be superseded by JetStream server-side
-  replay (`web/src/lib/backfill/streamBackfill.ts`). See bead note for
-  decision tree (close as superseded / build IndexedDB / hybrid).
-- `qve.8` Wiki portal — not started
-- `qve.9` Character public profiles — not started
-- `qve.10` Admin web portal — not started
-- `qve.15` Character creation + management UI — picker shipped, CRUD not
-- `holomush-jxwr` `replay_complete` marker UI — shares strategic
-  question with qve.7
-- `holomush-19uc` Playwright TTL expiration test (audit-finding from
-  jogb split)
-
-A `theme:web-portals` could emerge when 2+ of these surfaces start
-landing concurrently OR when social-spaces web views (`5rh.8` scenes
-portal, `5rh.18` chat view, future channels/forums web) need to land in
-sequence with general portal infrastructure. Today: opportunistic
-single-bead pickups.
+This sketch graduated to an active theme — see **`theme:web-portals`** under
+"Active themes" above, where the governing principle (web ⊇ telnet, decision
+`holomush-sz0h3`), the surface map, and the per-surface beads live. `qve.7`'s
+offline strategic question (IndexedDB cache vs JetStream server-side replay) and
+the minor `holomush-jxwr` / `holomush-19uc` items remain tracked on their beads.
 
 ### Operator experience
 
