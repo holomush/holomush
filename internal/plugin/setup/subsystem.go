@@ -190,6 +190,9 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		hostfunc.WithWorldService(s.cfg.World.Service()),
 		hostfunc.WithSessionAccess(sessionStore),
 		hostfunc.WithCapabilities(capRegistry),
+		// Qualifies domain-relative stream refs before the ambient
+		// query_stream_history ABAC gate (holomush-xakba).
+		hostfunc.WithGameID(s.cfg.GameID),
 	}
 	if s.cfg.StreamRegistry != nil {
 		hostFuncOpts = append(hostFuncOpts, hostfunc.WithStreamRegistry(s.cfg.StreamRegistry))
@@ -283,6 +286,9 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		hostOpts,
 		goplugin.WithSchemaProvisioner(schemaProvisioner),
 		goplugin.WithServiceRegistry(s.registry),
+		// Game ID for stream qualification, wired unconditionally (independent of
+		// WithCA/mTLS) so stream.history works for no-mTLS binary plugins (holomush-xakba).
+		goplugin.WithGameID(s.cfg.GameID),
 		// Wire the ABAC engine so host.v1 EvalService.Evaluate resolves (holomush-8kkv5.18).
 		// This MUST use the same engine instance as s.cfg.ABAC.Engine() above — the Lua
 		// hostfunc bridge (hostfunc.WithEngine) is wired from the same call, and the

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
@@ -21,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
@@ -822,6 +824,33 @@ func (s *streamHistoryServer) QueryStreamHistory(ctx context.Context, req *hostv
 	hr := s.host.HistoryReader()
 	if hr == nil {
 		return nil, oops.With("plugin", s.pluginName).New("history reader not configured")
+	}
+
+	// Instance-level ABAC on the concrete stream. The capability interceptor
+	// authorizes stream.history only at the type level (resource "stream:*"), where
+	// the system-namespace / audit / crypto forbids (keyed on the QUALIFIED
+	// resource.stream.name) cannot match. AuthorizeStreamRead qualifies the
+	// domain-relative stream and runs the default-deny capability decision on the
+	// qualified resource — the single shared gate also used by the ambient Lua
+	// holomush.query_stream_history hostfunc, so both runtimes enforce identically
+	// (plugin-runtime-symmetry; holomush-xakba, INV-PLUGIN-50).
+	dec, decErr := pluginauthz.AuthorizeStreamRead(ctx, pluginauthz.StreamReadInput{
+		Engine:     s.host.AccessEngine(),
+		Auditor:    s.host.Auditor(),
+		PluginName: s.pluginName,
+		Subject:    access.PluginSubject(s.pluginName),
+		GameID:     s.host.GameID(),
+		Stream:     req.GetStream(),
+	})
+	if decErr != nil {
+		// Fail closed: log internally, return a generic error (do not leak inner
+		// detail past the gRPC trust boundary — grpc-errors rule).
+		errutil.LogErrorContext(ctx, "plugin stream.history capability check failed", decErr,
+			"plugin", s.pluginName, "stream", req.GetStream())
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	if !dec.Allowed {
+		return nil, status.Errorf(codes.PermissionDenied, "not authorized to read stream")
 	}
 
 	count := int(req.GetCount())

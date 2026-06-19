@@ -50,6 +50,7 @@ func (stubHostCaps) GameSettings() settings.GameSettings                { return
 func (stubHostCaps) PlayerSettings() settings.PlayerSettingsStore       { return nil }
 func (stubHostCaps) CharacterSettings() settings.CharacterSettingsStore { return nil }
 func (stubHostCaps) FocusCoordinator() focus.Coordinator                { return nil }
+func (stubHostCaps) GameID() string                                     { return "" }
 func (stubHostCaps) HistoryReader() plugins.HistoryReader               { return nil }
 func (stubHostCaps) ReadbackDecryptor() plugins.ReadbackDecryptor       { return nil }
 

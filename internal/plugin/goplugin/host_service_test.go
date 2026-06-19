@@ -130,6 +130,14 @@ func newTestServer(fc focus.Coordinator, hr plugins.HistoryReader) *pluginHostSe
 		plugins:          make(map[string]*loadedPlugin),
 		focusCoordinator: fc,
 		historyReader:    hr,
+		// QueryStreamHistory now runs an instance-level ABAC check on the concrete
+		// stream (holomush-xakba) which first QUALIFIES the relative ref — so the
+		// test Host needs both an engine and a gameID, or the gate fails closed.
+		// Production always wires both; AllowAll + "main" let the cursor / count /
+		// delegation assertions exercise the happy path. ABAC behavior is covered by
+		// hostcap's streamHistory tests + the seed smoke tests.
+		engine: policytest.AllowAllEngine(),
+		gameID: "main",
 	}
 	return &pluginHostServiceServer{
 		host:       h,
@@ -353,21 +361,21 @@ func TestPresentFocusReturnsErrorWhenCoordinatorFails(t *testing.T) {
 func TestQueryStreamHistoryDelegatesToEventStore(t *testing.T) {
 	es := &stubHistoryReader{
 		replayTailResult: []core.Event{
-			{Stream: "channel:abc", Type: "say", Payload: []byte(`{"text":"hi"}`)},
+			{Stream: "channel.abc", Type: "say", Payload: []byte(`{"text":"hi"}`)},
 		},
 	}
 	srv := newTestServer(nil, es)
 
 	resp, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  10,
 	})
 	require.NoError(t, err)
 	require.Len(t, resp.GetEvents(), 1)
-	assert.Equal(t, "channel:abc", resp.GetEvents()[0].GetStream())
+	assert.Equal(t, "channel.abc", resp.GetEvents()[0].GetStream())
 
 	require.Len(t, es.replayTailCalls, 1)
-	assert.Equal(t, "channel:abc", es.replayTailCalls[0].stream)
+	assert.Equal(t, "channel.abc", es.replayTailCalls[0].stream)
 	assert.Equal(t, 10, es.replayTailCalls[0].count)
 }
 
@@ -376,7 +384,7 @@ func TestQueryStreamHistoryCapsCountAt500(t *testing.T) {
 	srv := newTestServer(nil, es)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  1000,
 	})
 	require.NoError(t, err)
@@ -390,7 +398,7 @@ func TestQueryStreamHistoryConvertsNotBeforeMs(t *testing.T) {
 	srv := newTestServer(nil, es)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream:      "channel:abc",
+		Stream:      "channel.abc",
 		Count:       10,
 		NotBeforeMs: 1700000000000,
 	})
@@ -404,7 +412,7 @@ func TestQueryStreamHistoryReturnsErrorWhenEventStoreIsNil(t *testing.T) {
 	srv := newTestServer(nil, nil)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  10,
 	})
 	require.Error(t, err)
@@ -452,7 +460,7 @@ func TestPresentFocusReturnsErrorWhenHostIsNil(t *testing.T) {
 func TestQueryStreamHistoryReturnsErrorWhenHostIsNil(t *testing.T) {
 	srv := &pluginHostServiceServer{pluginName: "test-plugin"}
 	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  10,
 	})
 	require.Error(t, err)
@@ -464,7 +472,7 @@ func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
 	srv := newTestServer(nil, es)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  -5,
 	})
 	require.Error(t, err)
@@ -475,13 +483,13 @@ func TestQueryStreamHistoryPopulatesPerEventCursors(t *testing.T) {
 	evID := ulid.Make()
 	es := &stubHistoryReader{
 		replayTailResult: []core.Event{
-			{ID: evID, Stream: "channel:abc", Type: "say", Payload: []byte(`{}`)},
+			{ID: evID, Stream: "channel.abc", Type: "say", Payload: []byte(`{}`)},
 		},
 	}
 	srv := newTestServer(nil, es)
 
 	resp, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  10,
 	})
 	require.NoError(t, err)
@@ -509,7 +517,7 @@ func TestQueryStreamHistoryDecodesOpaqueBeforeIDCursor(t *testing.T) {
 	require.NotEmpty(t, cursorBytes)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  5,
 		Cursor: cursorBytes,
 	})
@@ -524,7 +532,7 @@ func TestQueryStreamHistoryRejectsInvalidCursorBytes(t *testing.T) {
 	srv := newTestServer(nil, es)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  5,
 		Cursor: []byte("not-a-valid-cursor"),
 	})
@@ -540,13 +548,13 @@ func TestQueryStreamHistorySetsNextCursorWhenPageFull(t *testing.T) {
 	// When len(events) == count, next_cursor should be populated.
 	evts := make([]core.Event, 0, 3)
 	for range 3 {
-		evts = append(evts, core.Event{ID: ulid.Make(), Stream: "channel:abc", Type: "say", Payload: []byte(`{}`)})
+		evts = append(evts, core.Event{ID: ulid.Make(), Stream: "channel.abc", Type: "say", Payload: []byte(`{}`)})
 	}
 	es := &stubHistoryReader{replayTailResult: evts}
 	srv := newTestServer(nil, es)
 
 	resp, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  3, // exactly count events returned → next_cursor populated
 	})
 	require.NoError(t, err)
@@ -555,13 +563,13 @@ func TestQueryStreamHistorySetsNextCursorWhenPageFull(t *testing.T) {
 
 func TestQueryStreamHistoryNextCursorEmptyWhenFewerEventsThanCount(t *testing.T) {
 	evts := []core.Event{
-		{ID: ulid.Make(), Stream: "channel:abc", Type: "say", Payload: []byte(`{}`)},
+		{ID: ulid.Make(), Stream: "channel.abc", Type: "say", Payload: []byte(`{}`)},
 	}
 	es := &stubHistoryReader{replayTailResult: evts}
 	srv := newTestServer(nil, es)
 
 	resp, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
-		Stream: "channel:abc",
+		Stream: "channel.abc",
 		Count:  10, // more than returned → no more pages
 	})
 	require.NoError(t, err)
