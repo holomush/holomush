@@ -284,3 +284,5 @@ implements R1.
    proposed — acceptable, or should it follow a "primary"/most-recent signal?
 3. Toolbar consolidation: removing the footer `+ browse · ⌕ archive` link in favor
    of the toolbar — confirmed (mockup-approved), flagged here for completeness.
+
+<!-- adr-capture: sha256=42a5599e370649cc; session=535177b8; ts=2026-06-20T00:18:51Z; adrs=holomush-v4qmu,holomush-x8swp -->

@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Typed RPCs for structural scene writes; command path for human/CLI verbs](holomush-v4qmu-typed-rpcs-structural-scene-writes-command-path-human-cli-ve.md) | 2026-06-20 | Accepted | `holomush-v4qmu` |
+| [Resolve window-per-scene as single-pane workspace; defer multi-window](holomush-x8swp-resolve-window-per-scene-as-single-pane-workspace-defer-mult.md) | 2026-06-20 | Accepted | `holomush-x8swp` |
 | [Scope Lua stub generator to static build-time surfaces only](holomush-vhz3h-scope-lua-stub-generator-static-build-time-surfaces-only.md) | 2026-06-16 | Accepted | `holomush-vhz3h` |
 | [Source ambient stdlib annotations from a parity-tested Go decl table](holomush-nc5v1-source-ambient-stdlib-annotations-from-parity-tested-go-decl.md) | 2026-06-16 | Accepted | `holomush-nc5v1` |
 | [Atomic (big-bang) plugin-capability cutover over phased allowlist rollout](holomush-40ssh-atomic-big-bang-plugin-capability-cutover-over-phased-allowl.md) | 2026-06-14 | Accepted | `holomush-40ssh` |
