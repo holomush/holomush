@@ -27,6 +27,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
 	grpcclient "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/telemetry"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -934,14 +935,18 @@ func (h *GatewayHandler) refreshOnce(ctx context.Context) {
 	if !h.authed || h.sessionID == "" {
 		return
 	}
-	rCtx, rCancel := context.WithTimeout(ctx, rpcTimeout)
+	// Detach into its own trace root so the periodic refresh does not orphan
+	// the long-lived connection trace (holomush-m7djf).
+	rCtx, rSpan := telemetry.DetachTrace(ctx, tracer, "gateway.lease_refresh")
+	defer rSpan.End()
+	rCtx, rCancel := context.WithTimeout(rCtx, rpcTimeout)
 	defer rCancel()
 	if _, err := h.client.RefreshConnection(rCtx, &corev1.RefreshConnectionRequest{
 		SessionId:          h.sessionID,
 		ConnectionId:       h.connectionID,
 		PlayerSessionToken: h.playerSessionToken,
 	}); err != nil {
-		slog.DebugContext(ctx, "gateway: lease refresh failed (transient)", "session_id", h.sessionID, "error", err)
+		slog.DebugContext(rCtx, "gateway: lease refresh failed (transient)", "session_id", h.sessionID, "error", err)
 	}
 }
 

@@ -14,11 +14,13 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/telemetry"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -35,6 +37,9 @@ const (
 	// configured an explicit ceiling. Well under the 30m session reattach TTL.
 	defaultReconnectCeiling = 2 * time.Minute
 )
+
+// tracer emits gateway web-side spans (e.g. the detached lease-refresh trace).
+var tracer = otel.Tracer("holomush.web")
 
 // errStreamClosed is a sentinel to signal that the stream was closed by the server.
 var errStreamClosed = errors.New("stream closed")
@@ -458,16 +463,20 @@ func (h *Handler) runSubscribeOnce(
 				return breakClientGone, opened
 			}
 			// Refresh the server-side liveness lease for this connection (I-LIVE-1).
-			// Failure is transient — log at Debug and keep the stream open.
-			refreshCtx, refreshCancel := context.WithTimeout(ctx, rpcTimeout)
+			// Detach into its own trace root so the periodic refresh does not orphan
+			// the long-lived StreamEvents trace (holomush-m7djf). Failure is
+			// transient — log at Debug and keep the stream open.
+			refreshCtx, refreshSpan := telemetry.DetachTrace(ctx, tracer, "gateway.lease_refresh")
+			refreshCtx, refreshCancel := context.WithTimeout(refreshCtx, rpcTimeout)
 			if _, refreshErr := h.client.RefreshConnection(refreshCtx, &corev1.RefreshConnectionRequest{
 				SessionId:          sessionID,
 				ConnectionId:       connID,
 				PlayerSessionToken: token,
 			}); refreshErr != nil {
-				slog.DebugContext(ctx, "web: lease refresh failed (transient)", "session_id", sessionID, "error", refreshErr)
+				slog.DebugContext(refreshCtx, "web: lease refresh failed (transient)", "session_id", sessionID, "error", refreshErr)
 			}
 			refreshCancel()
+			refreshSpan.End()
 
 		case result, ok := <-recvCh:
 			if !ok {
