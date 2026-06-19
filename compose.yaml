@@ -70,7 +70,8 @@ services:
       # default: the dev observability flow (`task dev` + `task dev:obs`) points
       # PUBLIC_OTEL_ENDPOINT straight at localhost:4318, so the relay isn't on
       # the dev path. Set to http://otel-collector:4318 to exercise the relay
-      # in compose (the gateway would also need the `backend` network).
+      # in compose — the collector is on both networks, so otel-collector:4318
+      # resolves from the gateway's frontend network.
       OTLP_RELAY_ENDPOINT: ${OTLP_RELAY_ENDPOINT-}
       SENTRY_DSN: ${SENTRY_DSN-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT-dev-local}
@@ -94,6 +95,10 @@ services:
       - ./docker/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml
     networks:
       - backend
+      # Gateway is frontend-only but exports OTLP to otel-collector:4317, so the
+      # collector must also be on frontend or the gateway's gRPC exporter fails
+      # DNS resolution ("produced zero addresses"). Mirrors compose.prod.yaml.
+      - frontend
     ports:
       - "4317:4317"
       - "4318:4318"
