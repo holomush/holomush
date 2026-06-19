@@ -10,16 +10,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/holomush/holomush/internal/access/policy/policytest"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/goplugin"
-	"github.com/holomush/holomush/internal/plugin/hostcap"
-	"github.com/holomush/holomush/internal/plugin/hostfunc"
-	"github.com/holomush/holomush/internal/plugin/lua"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
@@ -65,63 +59,8 @@ func declaredKVManifest() *plugins.Manifest {
 	}
 }
 
-// gatedBinaryEndpoint stands up the binary runtime's KV-capability surface WITH
-// the production capability interceptor layered on, built from manifest via the
-// SAME hostcap.DeclaredAccessFromManifest constructor the binary install site
-// uses (internal/plugin/goplugin/host_service.go:45). Mirrors
-// newBinaryEndpointWithOpts but chains NewCapabilityInterceptor so the
-// declaration gate runs — the existing parity endpoints register servers WITHOUT
-// the interceptor and prove ROUTING only, not GATING.
-func gatedBinaryEndpoint(manifest *plugins.Manifest) runtimeEndpoint {
-	GinkgoHelper()
-
-	host := goplugin.NewHost(goplugin.WithEngine(policytest.AllowAllEngine()))
-	DeferCleanup(func() { _ = host.Close(context.Background()) })
-
-	ic := hostcap.NewCapabilityInterceptor(hostcap.InterceptorDeps{
-		Engine:         policytest.AllowAllEngine(),
-		PluginName:     manifest.Name,
-		DeclaredAccess: hostcap.DeclaredAccessFromManifest(manifest),
-	})
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(ic))
-	hostcap.RegisterCapabilities(srv, hostcap.NewBase(host, manifest.Name), hostcap.BinaryDefaultSet)
-
-	conn, err := plugins.NewInProcessConn(srv)
-	Expect(err).NotTo(HaveOccurred(), "binary gated in-process conn must stand up")
-	DeferCleanup(func() { _ = conn.Close() })
-
-	return runtimeEndpoint{srv: srv, conn: conn}
-}
-
-// gatedLuaEndpoint stands up the Lua runtime's KV-capability surface WITH the
-// production capability interceptor layered on, built from manifest via the SAME
-// hostcap.DeclaredAccessFromManifest constructor the Lua install site uses
-// (internal/plugin/lua/bufconn_endpoint.go:44). Mirrors
-// newLuaEndpointWithFunctions but chains NewCapabilityInterceptor so the
-// declaration gate runs.
-func gatedLuaEndpoint(manifest *plugins.Manifest) runtimeEndpoint {
-	GinkgoHelper()
-
-	luaHost := lua.NewHostWithFunctions(hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine())))
-	DeferCleanup(func() { _ = luaHost.Close(context.Background()) })
-
-	adapter := luaHost.HostCapabilitiesAdapter()
-	Expect(adapter).NotTo(BeNil(), "lua host must expose its real hostcap adapter")
-
-	ic := hostcap.NewCapabilityInterceptor(hostcap.InterceptorDeps{
-		Engine:         policytest.AllowAllEngine(),
-		PluginName:     manifest.Name,
-		DeclaredAccess: hostcap.DeclaredAccessFromManifest(manifest),
-	})
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(ic))
-	hostcap.RegisterCapabilities(srv, hostcap.NewBase(adapter, manifest.Name), hostcap.LuaDefaultSet)
-
-	conn, err := plugins.NewInProcessConn(srv)
-	Expect(err).NotTo(HaveOccurred(), "lua gated in-process conn must stand up")
-	DeferCleanup(func() { _ = conn.Close() })
-
-	return runtimeEndpoint{srv: srv, conn: conn}
-}
+// The gatedBinaryEndpoint / gatedLuaEndpoint builders these specs use live in
+// gated_endpoints_test.go (shared with the non-scoped ABAC-denial parity spec).
 
 var _ = Describe("Cross-runtime least-privilege declaration gate", func() {
 	// INV-PLUGIN-45: "The declaration gate that enforces least privilege MUST

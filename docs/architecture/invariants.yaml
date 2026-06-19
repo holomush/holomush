@@ -3838,6 +3838,10 @@ invariants:
       - "internal/plugin/pluginauthz/capability_test.go"
       - "internal/plugin/hostcap/interceptor_test.go"
       - "internal/access/policy/seed_smoke_test.go"
+      # Cross-runtime wire-tier witness: a DECLARED non-scoped capability forbidden
+      # by operator policy is denied IDENTICALLY through the shared interceptor on
+      # both the binary and Lua runtimes (the parity dimension of the M1 strategy).
+      - "test/integration/pluginparity/nonscoped_capability_deny_test.go"
   - id: INV-PLUGIN-51
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md"
