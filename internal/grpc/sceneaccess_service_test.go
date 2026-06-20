@@ -293,6 +293,15 @@ func TestSceneAccessDeniesGuestPlayersEverywhere(t *testing.T) {
 			},
 		},
 		{
+			"CreateScene",
+			func() error {
+				_, err := srv.CreateScene(ctx, &sceneaccessv1.CreateSceneRequest{
+					PlayerSessionToken: testSAToken, CharacterId: charID.String(), Title: "X",
+				})
+				return err
+			},
+		},
+		{
 			"SetSceneFocus",
 			func() error {
 				_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
@@ -344,6 +353,7 @@ func TestSceneAccessDeniesGuestPlayersEverywhere(t *testing.T) {
 	sceneMock.AssertNotCalled(t, "GetScene")
 	sceneMock.AssertNotCalled(t, "ListCharacterScenes")
 	sceneMock.AssertNotCalled(t, "WatchScene")
+	sceneMock.AssertNotCalled(t, "CreateScene")
 	sceneMock.AssertNotCalled(t, "ExportSceneLog")
 	sceneMock.AssertNotCalled(t, "ListPublishedScenes")
 	sceneMock.AssertNotCalled(t, "GetPublicSceneArchive")
@@ -830,5 +840,26 @@ func TestSceneAccessCreateScene(t *testing.T) {
 		})
 		st, _ := status.FromError(err)
 		assert.Equal(t, codes.NotFound, st.Code())
+	})
+
+	// Spec §6: opaque error on downstream failure — the facade passes the plugin's
+	// status error through unchanged (no double-wrap / opacity break).
+	t.Run("downstream failure passes the plugin status error through unchanged", func(t *testing.T) {
+		playerRepo := authmocks.NewMockPlayerRepository(t)
+		playerRepo.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		charRepo := authmocks.NewMockCharacterRepository(t)
+		charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		sceneMock := scenemocks.NewMockSceneServiceClient(t)
+		sceneMock.EXPECT().CreateScene(mock.Anything, mock.Anything).
+			Return(nil, status.Error(codes.FailedPrecondition, "scene quota exceeded")).Once()
+		srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), playerRepo, charRepo,
+			sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+
+		_, err := srv.CreateScene(ctx, &sceneaccessv1.CreateSceneRequest{
+			PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), Title: "X",
+		})
+		require.Error(t, err)
+		st, _ := status.FromError(err)
+		assert.Equal(t, codes.FailedPrecondition, st.Code())
 	})
 }

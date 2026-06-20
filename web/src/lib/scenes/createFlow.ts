@@ -24,9 +24,17 @@ export async function submitCreateScene(opts: {
 		description: opts.description,
 	});
 	const sceneId = scene?.id ?? '';
-	await workspaceStore.refresh(opts.characters);
-	if (sceneId) {
-		await workspaceStore.select(sceneId, '', opts.characterId);
+	// refresh/select are best-effort UI updates: the scene is already created and
+	// authoritative, so a post-create failure here MUST NOT propagate as a create
+	// failure — that would show "Create failed" to the user and risk a duplicate
+	// scene on retry. Swallow and warn; the workspace reconciles on next interaction.
+	try {
+		await workspaceStore.refresh(opts.characters);
+		if (sceneId) {
+			await workspaceStore.select(sceneId, '', opts.characterId);
+		}
+	} catch (e) {
+		console.warn('[submitCreateScene] post-create refresh/select failed', e);
 	}
 	return sceneId;
 }
