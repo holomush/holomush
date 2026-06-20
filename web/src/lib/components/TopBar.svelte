@@ -17,7 +17,6 @@
   import { connectionStatus } from '$lib/stores/connectionStore';
   import { toggleSidebar } from '$lib/stores/uiPrefsStore';
   import { toggleMobileNav } from '$lib/stores/mobileNavStore';
-  let isAuthed = $derived($authState.isPlayerAuthenticated || !!$authState.sessionId);
   import { createClient } from '@connectrpc/connect';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
@@ -38,6 +37,7 @@
 
   const client = createClient(WebService, transport);
   const availableThemes = getAvailableThemes();
+  let isAuthed = $derived($authState.isPlayerAuthenticated || !!$authState.sessionId);
 
   let themeId = $derived($themePreferences.themeId);
   let onTerminal = $derived($page.route.id?.includes('/terminal') ?? false);
