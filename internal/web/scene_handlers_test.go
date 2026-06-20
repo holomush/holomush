@@ -45,6 +45,9 @@ type mockSceneAccessClient struct {
 	watchSceneResp *sceneaccessv1.WatchSceneResponse
 	watchSceneErr  error
 
+	createSceneReq *sceneaccessv1.CreateSceneRequest
+	createSceneErr error
+
 	exportSceneReq  *sceneaccessv1.ExportSceneRequest
 	exportSceneResp *sceneaccessv1.ExportSceneResponse
 	exportSceneErr  error
@@ -84,6 +87,14 @@ func (m *mockSceneAccessClient) ListMyScenes(_ context.Context, req *sceneaccess
 func (m *mockSceneAccessClient) WatchScene(_ context.Context, req *sceneaccessv1.WatchSceneRequest) (*sceneaccessv1.WatchSceneResponse, error) {
 	m.watchSceneReq = req
 	return m.watchSceneResp, m.watchSceneErr
+}
+
+func (m *mockSceneAccessClient) CreateScene(_ context.Context, req *sceneaccessv1.CreateSceneRequest) (*sceneaccessv1.CreateSceneResponse, error) {
+	m.createSceneReq = req
+	if m.createSceneErr != nil {
+		return nil, m.createSceneErr
+	}
+	return &sceneaccessv1.CreateSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123"}}, nil
 }
 
 func (m *mockSceneAccessClient) ExportScene(_ context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
@@ -284,6 +295,40 @@ func TestWebWatchScenePassesStatusErrorThroughAsIs(t *testing.T) {
 		connect.NewRequest(&webv1.WebWatchSceneRequest{SessionId: "s"}))
 	require.Error(t, err)
 	assert.Equal(t, facadeErr, err)
+}
+
+// --- WebCreateScene ---
+
+func TestWebCreateSceneForwardsTokenAndOpFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebCreateSceneRequest{
+		SessionId: "sess-1", CharacterId: "char-1", Title: "The Manor", Description: "dusk",
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	resp, err := h.WebCreateScene(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "scene-123", resp.Msg.GetScene().GetId())
+	require.NotNil(t, sc.createSceneReq)
+	assert.Equal(t, "tok-abc", sc.createSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.createSceneReq.GetCharacterId())
+	assert.Equal(t, "The Manor", sc.createSceneReq.GetTitle())
+	assert.Equal(t, "dusk", sc.createSceneReq.GetDescription())
+}
+
+func TestWebCreateScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	wantErr := status.Error(codes.PermissionDenied, "guests cannot access scenes")
+	sc := &mockSceneAccessClient{createSceneErr: wantErr}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebCreateSceneRequest{SessionId: "s", CharacterId: "c", Title: "X"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebCreateScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 // --- WebExportScene ---
