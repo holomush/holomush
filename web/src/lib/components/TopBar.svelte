@@ -3,7 +3,7 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { LogOut, ArrowLeftRight, Palette, PanelRightOpen, Command as CommandIcon, Clapperboard } from '@lucide/svelte';
+  import { LogOut, ArrowLeftRight, Palette, PanelRightOpen, Command as CommandIcon, Menu } from '@lucide/svelte';
   import { page } from '$app/stores';
   import { authState, clearAuth } from '$lib/stores/authStore';
   import {
@@ -16,6 +16,7 @@
   import { location } from '$lib/stores/sidebarStore';
   import { connectionStatus } from '$lib/stores/connectionStore';
   import { toggleSidebar } from '$lib/stores/uiPrefsStore';
+  import { toggleMobileNav } from '$lib/stores/mobileNavStore';
   import { createClient } from '@connectrpc/connect';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
@@ -36,6 +37,7 @@
 
   const client = createClient(WebService, transport);
   const availableThemes = getAvailableThemes();
+  let isAuthed = $derived($authState.isPlayerAuthenticated || !!$authState.sessionId);
 
   let themeId = $derived($themePreferences.themeId);
   let onTerminal = $derived($page.route.id?.includes('/terminal') ?? false);
@@ -54,6 +56,11 @@
 
 <header>
   <div class="left">
+    {#if isAuthed}
+      <button class="icon-btn mobile-only" onclick={toggleMobileNav} title="Menu" aria-label="Open navigation">
+        <Menu size={18} />
+      </button>
+    {/if}
     <a href="/" class="logo brand-chip">
       <span class="logo-icon">H</span>
       <span class="logo-text">HoloMUSH</span>
@@ -137,9 +144,6 @@
       <a href="/register" class="nav-link accent">Register</a>
     {:else if $authState.sessionId && $authState.characterName}
       <span class="char-name" data-testid="topbar-char-name">{$authState.characterName}</span>
-      <a href="/scenes" class="icon-btn" title="Scenes" aria-label="Scenes">
-        <Clapperboard size={16} />
-      </a>
       <button class="icon-btn" onclick={handleSwitchCharacter} title="Switch character" aria-label="Switch character">
         <ArrowLeftRight size={16} />
       </button>
@@ -232,4 +236,8 @@
   .theme-option { display: flex; align-items: center; gap: 8px; }
   .theme-swatches { display: flex; gap: 2px; }
   .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--color-border); }
+  .mobile-only { display: inline-flex; }
+  @media (min-width: 768px) {
+    .mobile-only { display: none; }
+  }
 </style>

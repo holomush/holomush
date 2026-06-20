@@ -4,8 +4,6 @@
 import { writable } from 'svelte/store';
 
 export type Density = 'cozy' | 'compact';
-export type RailView = 'room';  // future: 'dm' | 'map' | 'notes'
-
 export interface UiPrefs {
   railHidden: boolean;
   sidebarHidden: boolean;
@@ -15,7 +13,6 @@ export interface UiPrefs {
   composerPos: { x: number; y: number };
   composerSize: { w: number; h: number };
   paletteOpen: boolean;
-  railView: RailView;
 }
 
 const STORAGE_KEY = 'holomush-ui-prefs';
@@ -33,7 +30,6 @@ const DEFAULTS: UiPrefs = {
   composerPos: { x: -1, y: -1 },  // -1 = not placed; consumer centers on first open
   composerSize: { w: 640, h: 340 },
   paletteOpen: false,
-  railView: 'room',
 };
 
 // SSR safety: initial state is the plain defaults. Do not read localStorage

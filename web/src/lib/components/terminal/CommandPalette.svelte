@@ -24,6 +24,7 @@
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
   import { goto } from '$app/navigation';
+  import { sectionNavEntries } from '$lib/nav/sections';
 
   const client = createClient(WebService, transport);
 
@@ -40,7 +41,14 @@
     goto('/');
   }
 
+  const navItems: PaletteItem[] = sectionNavEntries().map((e) => ({
+    id: e.id,
+    label: e.label,
+    run: () => goto(e.href),
+  }));
+
   const items: PaletteItem[] = [
+    ...navItems,
     { id: 'theme.default-dark',   label: 'Switch theme: Default Dark',   run: () => setTheme('default-dark') },
     { id: 'theme.default-light',  label: 'Switch theme: Default Light',  run: () => setTheme('default-light') },
     { id: 'theme.warm-dark',      label: 'Switch theme: Warm Dark',      run: () => setTheme('warm-dark') },
