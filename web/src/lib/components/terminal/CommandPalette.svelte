@@ -10,6 +10,8 @@
     closePalette,
     toggleRail,
     toggleSidebar,
+    toggleScenesList,
+    toggleScenesRail,
     toggleComposer,
     toggleDensity,
   } from '$lib/stores/uiPrefsStore';
@@ -62,6 +64,8 @@
     { id: 'theme.warm-light',     label: 'Switch theme: Warm Light',     run: () => setTheme('warm-light') },
     { id: 'ui.rail',              label: 'Toggle rail',                  hint: '⌘B',  run: toggleRail },
     { id: 'ui.sidebar',           label: 'Toggle sidebar',               hint: '⌘.',  run: toggleSidebar },
+    { id: 'ui.scenes-list',       label: 'Toggle scene list',            hint: '⌘⇧,', run: toggleScenesList },
+    { id: 'ui.scenes-rail',       label: 'Toggle scene context',         hint: '⌘⇧.', run: toggleScenesRail },
     { id: 'ui.composer',          label: 'Toggle composer',              hint: '⌘⇧E', run: toggleComposer },
     { id: 'ui.density',           label: 'Toggle density (cozy/compact)',               run: toggleDensity },
     { id: 'ui.term-black',        label: 'Toggle black terminal background',            run: () => setTerminalBlackBackground(!$themePreferences.terminalBlackBackground) },

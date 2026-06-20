@@ -7,6 +7,10 @@ import {
   uiPrefs,
   toggleRail,
   toggleSidebar,
+  toggleScenesList,
+  toggleScenesRail,
+  setScenesListHidden,
+  setScenesRailHidden,
   toggleComposer,
   togglePalette,
   toggleDensity,
@@ -35,6 +39,8 @@ describe('uiPrefsStore', () => {
     expect(p.density).toBe('cozy');
     expect(p.composerOpen).toBe(false);
     expect(p.paletteOpen).toBe(false);
+    expect(p.scenesListHidden).toBe(false);
+    expect(p.scenesRailHidden).toBe(false);
   });
 
   it('toggles boolean flags', () => {
@@ -46,6 +52,51 @@ describe('uiPrefsStore', () => {
     expect(get(uiPrefs).composerOpen).toBe(true);
     togglePalette();
     expect(get(uiPrefs).paletteOpen).toBe(true);
+  });
+
+  it('toggles the scenes left-list and right-rail collapse flags independently', () => {
+    toggleScenesList();
+    expect(get(uiPrefs).scenesListHidden).toBe(true);
+    expect(get(uiPrefs).scenesRailHidden).toBe(false);
+    toggleScenesRail();
+    expect(get(uiPrefs).scenesRailHidden).toBe(true);
+    toggleScenesList();
+    expect(get(uiPrefs).scenesListHidden).toBe(false);
+    expect(get(uiPrefs).scenesRailHidden).toBe(true);
+  });
+
+  it('setScenesListHidden / setScenesRailHidden set explicit collapse state', () => {
+    setScenesListHidden(true);
+    expect(get(uiPrefs).scenesListHidden).toBe(true);
+    setScenesRailHidden(true);
+    expect(get(uiPrefs).scenesRailHidden).toBe(true);
+    setScenesListHidden(false);
+    expect(get(uiPrefs).scenesListHidden).toBe(false);
+  });
+
+  it('scene-panel setters do NOT emit when the value is unchanged (no feedback loop)', () => {
+    // The page drives the panes off these flags and reconciles paneforge's
+    // onCollapse/onExpand back through these setters; a redundant emit would
+    // re-fire the driving effect. Guard: unchanged value ⇒ no subscriber call.
+    let emissions = 0;
+    const unsub = uiPrefs.subscribe(() => (emissions += 1));
+    emissions = 0; // ignore the initial synchronous emission
+    setScenesListHidden(false); // already false ⇒ must be a no-op
+    setScenesRailHidden(false); // already false ⇒ must be a no-op
+    expect(emissions).toBe(0);
+    setScenesListHidden(true); // real change ⇒ exactly one emission
+    expect(emissions).toBe(1);
+    unsub();
+  });
+
+  it('persists and rehydrates scene-panel collapse flags', () => {
+    localStorage.setItem(
+      'holomush-ui-prefs',
+      JSON.stringify({ scenesListHidden: true, scenesRailHidden: true }),
+    );
+    hydrateUiPrefs();
+    expect(get(uiPrefs).scenesListHidden).toBe(true);
+    expect(get(uiPrefs).scenesRailHidden).toBe(true);
   });
 
   it('open/close convenience helpers set explicit state', () => {

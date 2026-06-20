@@ -23,6 +23,18 @@
   import SceneComposer from '$lib/components/scenes/SceneComposer.svelte';
   import SceneContextRail from '$lib/components/scenes/SceneContextRail.svelte';
   import CreateSceneSheet from '$lib/components/scenes/CreateSceneSheet.svelte';
+  import * as Resizable from '$lib/components/ui/resizable';
+  import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from '@lucide/svelte';
+  import {
+    uiPrefs,
+    toggleScenesList,
+    toggleScenesRail,
+    setScenesListHidden,
+    setScenesRailHidden,
+  } from '$lib/stores/uiPrefsStore';
+  import { isDesktop } from '$lib/hooks/mediaQuery.svelte';
+  import { cn } from '$lib/utils';
+  import type { PaneAPI } from 'paneforge';
 
   let { data }: { data: PageData } = $props();
 
@@ -54,6 +66,55 @@
   let sceneListSheetOpen = $state(false);
   let contextRailSheetOpen = $state(false);
   let createSheetOpen = $state(false);
+
+  // Desktop ⇄ mobile: the three-pane Resizable layout is desktop-only. Below the
+  // md breakpoint the mobile header + Sheets (shipped in q41kr) take over, so the
+  // panes never mount there.
+  const desktop = isDesktop();
+
+  // paneforge imperative handles for the collapsible left/right panes.
+  let leftPane = $state<PaneAPI>();
+  let rightPane = $state<PaneAPI>();
+
+  // Enable the slide transition only AFTER the first paint, so a pane that was
+  // left collapsed (persisted) appears collapsed instantly instead of animating
+  // shut on load. Only subsequent user toggles animate.
+  let panesAnimated = $state(false);
+  onMount(() => {
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => (panesAnimated = true));
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  });
+
+  // Per-flag deriveds: reading `$uiPrefs.x` directly inside an $effect would
+  // re-run it on EVERY uiPrefs mutation (mutate() returns a fresh object each
+  // call), spamming collapse()/expand(). A $derived dedupes by value so each
+  // effect only re-runs when its own flag actually flips.
+  const scenesListHidden = $derived($uiPrefs.scenesListHidden);
+  const scenesRailHidden = $derived($uiPrefs.scenesRailHidden);
+
+  // Drive paneforge collapse from the persisted flags. This reuses the shell's
+  // collapse idiom (railHidden / sidebarHidden) so the slide and the localStorage
+  // persistence match the nav rail and room sidebar. onCollapse / onExpand write
+  // back idempotently so dragging a handle past the collapse threshold persists
+  // too, without ping-ponging against this effect.
+  $effect(() => {
+    const pane = leftPane;
+    if (!pane) return;
+    if (scenesListHidden) pane.collapse();
+    else pane.expand();
+  });
+  $effect(() => {
+    const pane = rightPane;
+    if (!pane) return;
+    if (scenesRailHidden) pane.collapse();
+    else pane.expand();
+  });
 
   // Roving tabindex state: index of the item that holds tabindex=0.
   let rovingIndex = $state(0);
@@ -285,15 +346,10 @@
 
   <CreateSceneSheet bind:open={createSheetOpen} {characters} />
 
-  <!-- Three-pane row: fills remaining height below the mobile header -->
-  <div class="flex flex-1 min-h-0 overflow-hidden">
-
-  <!-- Left pane: scene lists (desktop 260px; hidden on mobile) -->
-  <nav
-    bind:this={listContainerDesktop}
-    class="hidden md:flex w-[260px] shrink-0 flex-col border-r border-border bg-card overflow-y-auto"
-    aria-label="Scene list"
-  >
+  <!-- Scene-list body for the desktop left pane. The mobile Sheet (above) keeps a
+       separate copy with its own bind:this ref and SheetTitle/header wrapper, so
+       this snippet is desktop-only rather than shared between the two. -->
+  {#snippet sceneList()}
     <div class="flex items-center gap-1.5 p-2 border-b border-border/50">
       <button
         type="button"
@@ -363,88 +419,193 @@
         {/each}
       </div>
     {/if}
+  {/snippet}
 
-  </nav>
-
-  <!-- Center pane: log + composer -->
-  <main class="flex-1 min-w-0 flex flex-col overflow-hidden">
-    {#if selectedScene}
-      <!-- Scene title bar -->
-      <header class="flex items-center gap-3 px-4 py-2 border-b border-border bg-card/50 shrink-0">
-        <span class="font-semibold text-sm truncate">{selectedScene.title}</span>
-        <span class="text-[11px] text-muted-foreground shrink-0">● {selectedScene.state}</span>
-      </header>
-
-      <!-- Log: ARIA live region (spec §5.4 + Task 16 a11y requirement) -->
-      <div class="flex-1 min-h-0 overflow-hidden">
-        <ScrollArea
-          class="h-full"
-          bind:viewportRef={logViewport}
+  <!-- Center column (log + composer). Shared by the desktop center pane and the
+       mobile full-width layout, so it renders exactly once — the single bind:this
+       on the log viewport / region stays correct in both. -->
+  {#snippet centerPane()}
+    <main class="flex h-full w-full min-w-0 flex-col overflow-hidden">
+      <!-- Desktop pane toggles: collapse/expand the left list and right rail. -->
+      <div class="hidden md:flex items-center justify-between px-2 py-1 border-b border-border/50 shrink-0">
+        <button
+          type="button"
+          aria-label={scenesListHidden ? 'Show scene list' : 'Hide scene list'}
+          aria-expanded={!scenesListHidden}
+          title={scenesListHidden ? 'Show scene list' : 'Hide scene list'}
+          onclick={toggleScenesList}
+          class="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
         >
-          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-          <!-- tabindex=-1 is intentional: allows programmatic focus on scene switch -->
-          <div
-            bind:this={logRegion}
-            role="log"
-            aria-live="polite"
-            aria-label="scene log"
-            aria-atomic="false"
-            tabindex={-1}
-            class="py-2 outline-none"
-          >
-            {#if logs.length === 0}
-              <p class="px-4 py-8 text-center text-sm text-muted-foreground italic">
-                No events yet. Start posing!
-              </p>
-            {:else}
-              {#each logs as entry (entry.id)}
-                <PoseCard {entry} />
-              {/each}
-            {/if}
-          </div>
-        </ScrollArea>
+          {#if scenesListHidden}
+            <PanelLeftOpen size={16} aria-hidden="true" />
+          {:else}
+            <PanelLeftClose size={16} aria-hidden="true" />
+          {/if}
+        </button>
+        <button
+          type="button"
+          aria-label={scenesRailHidden ? 'Show scene context' : 'Hide scene context'}
+          aria-expanded={!scenesRailHidden}
+          title={scenesRailHidden ? 'Show scene context' : 'Hide scene context'}
+          onclick={toggleScenesRail}
+          class="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        >
+          {#if scenesRailHidden}
+            <PanelRightOpen size={16} aria-hidden="true" />
+          {:else}
+            <PanelRightClose size={16} aria-hidden="true" />
+          {/if}
+        </button>
       </div>
 
-      <!-- Pose order strip -->
-      <PoseOrderStrip
-        scene={selectedScene}
-        actingCharacterId={selectedScene.asCharacterId}
-      />
+      {#if selectedScene}
+        <!-- Scene title bar -->
+        <header class="flex items-center gap-3 px-4 py-2 border-b border-border bg-card/50 shrink-0">
+          <span class="font-semibold text-sm truncate">{selectedScene.title}</span>
+          <span class="text-[11px] text-muted-foreground shrink-0">● {selectedScene.state}</span>
+        </header>
 
-      <!-- Composer -->
-      <SceneComposer
-        scene={selectedScene}
-        {playerSessionId}
-        {characters}
-      />
-    {:else}
-      <!-- Empty state -->
-      <div class="flex-1 flex items-center justify-center">
-        <div class="text-center space-y-3">
-          <p class="text-muted-foreground">Select a scene from the list to begin</p>
-          <button
-            type="button"
-            aria-label="New scene"
-            onclick={() => (createSheetOpen = true)}
-            class="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+        <!-- Log: ARIA live region (spec §5.4 + Task 16 a11y requirement) -->
+        <div class="flex-1 min-h-0 overflow-hidden">
+          <ScrollArea
+            class="h-full"
+            bind:viewportRef={logViewport}
           >
-            + New scene
-          </button>
-          <p>
-            <a href="/scenes/browse" class="text-sm text-primary hover:underline">
-              Browse open scenes →
-            </a>
-          </p>
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+            <!-- tabindex=-1 is intentional: allows programmatic focus on scene switch -->
+            <div
+              bind:this={logRegion}
+              role="log"
+              aria-live="polite"
+              aria-label="scene log"
+              aria-atomic="false"
+              tabindex={-1}
+              class="py-2 outline-none"
+            >
+              {#if logs.length === 0}
+                <p class="px-4 py-8 text-center text-sm text-muted-foreground italic">
+                  No events yet. Start posing!
+                </p>
+              {:else}
+                {#each logs as entry (entry.id)}
+                  <PoseCard {entry} />
+                {/each}
+              {/if}
+            </div>
+          </ScrollArea>
         </div>
-      </div>
-    {/if}
-  </main>
 
-  <!-- Right pane: context rail (desktop 300px; hidden on mobile)
-       SceneContextRail renders its own <aside aria-label="Scene context"> -->
-  <div class="hidden md:block w-[300px] shrink-0">
-    <SceneContextRail scene={selectedScene} />
-  </div>
+        <!-- Pose order strip -->
+        <PoseOrderStrip
+          scene={selectedScene}
+          actingCharacterId={selectedScene.asCharacterId}
+        />
 
-  </div><!-- end three-pane row -->
+        <!-- Composer -->
+        <SceneComposer
+          scene={selectedScene}
+          {playerSessionId}
+          {characters}
+        />
+      {:else}
+        <!-- Empty state -->
+        <div class="flex-1 flex items-center justify-center">
+          <div class="text-center space-y-3">
+            <p class="text-muted-foreground">Select a scene from the list to begin</p>
+            <button
+              type="button"
+              aria-label="New scene"
+              onclick={() => (createSheetOpen = true)}
+              class="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            >
+              + New scene
+            </button>
+            <p>
+              <a href="/scenes/browse" class="text-sm text-primary hover:underline">
+                Browse open scenes →
+              </a>
+            </p>
+          </div>
+        </div>
+      {/if}
+    </main>
+  {/snippet}
+
+  <!-- Desktop: resizable three-pane row whose left (scene list) and right (context
+       rail) panes collapse with a slide. Below md the mobile header + Sheets above
+       own the panel UX, so the panes never mount there. -->
+  {#if desktop.current}
+    <div class="flex-1 min-h-0">
+      <Resizable.PaneGroup
+        direction="horizontal"
+        autoSaveId="holomush-scenes-panes"
+        class={cn('scenes-panes', panesAnimated && 'panes-animated')}
+      >
+        <Resizable.Pane
+          id="scenes-list"
+          bind:this={leftPane}
+          collapsible
+          collapsedSize={0}
+          defaultSize={20}
+          minSize={12}
+          maxSize={32}
+          onCollapse={() => setScenesListHidden(true)}
+          onExpand={() => setScenesListHidden(false)}
+          class="overflow-hidden"
+        >
+          <nav
+            bind:this={listContainerDesktop}
+            class="flex h-full flex-col bg-card overflow-y-auto"
+            aria-label="Scene list"
+          >
+            {@render sceneList()}
+          </nav>
+        </Resizable.Pane>
+
+        <Resizable.Handle withHandle />
+
+        <Resizable.Pane id="scenes-center" defaultSize={56} class="overflow-hidden">
+          {@render centerPane()}
+        </Resizable.Pane>
+
+        <Resizable.Handle withHandle />
+
+        <!-- SceneContextRail renders its own <aside aria-label="Scene context"> -->
+        <Resizable.Pane
+          id="scenes-rail"
+          bind:this={rightPane}
+          collapsible
+          collapsedSize={0}
+          defaultSize={24}
+          minSize={14}
+          maxSize={40}
+          onCollapse={() => setScenesRailHidden(true)}
+          onExpand={() => setScenesRailHidden(false)}
+          class="overflow-hidden"
+        >
+          <SceneContextRail scene={selectedScene} />
+        </Resizable.Pane>
+      </Resizable.PaneGroup>
+    </div>
+  {:else}
+    <div class="flex-1 min-h-0 overflow-hidden">
+      {@render centerPane()}
+    </div>
+  {/if}
 </div>
+
+<style>
+  /* Slide the collapsible scene panes instead of popping: paneforge sets each
+     pane's flex-grow, and it cooperatively waits on the flex-grow transitionend,
+     so transitioning flex-grow animates collapse/expand. Gated on .panes-animated
+     (added after first paint) so a persisted-collapsed pane appears collapsed
+     instantly on load instead of sliding shut. Disabled while a handle is actively
+     dragged so resizing tracks the pointer 1:1. Selectors are :global because
+     paneforge owns the [data-pane] / [data-pane-resizer] DOM. */
+  :global(.scenes-panes.panes-animated [data-pane]) {
+    transition: flex-grow 180ms ease;
+  }
+  :global(.scenes-panes:has([data-pane-resizer][data-active]) [data-pane]) {
+    transition: none;
+  }
+</style>
