@@ -48,6 +48,9 @@ const (
 	// SceneAccessServiceWatchSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// WatchScene RPC.
 	SceneAccessServiceWatchSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/WatchScene"
+	// SceneAccessServiceCreateSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// CreateScene RPC.
+	SceneAccessServiceCreateSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/CreateScene"
 	// SceneAccessServiceExportSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// ExportScene RPC.
 	SceneAccessServiceExportSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/ExportScene"
@@ -95,6 +98,13 @@ type SceneAccessServiceClient interface {
 	// character_id and session_id. Returns FailedPrecondition when no game
 	// session exists for the character (select the character first).
 	WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error)
+	// CreateScene creates a new scene owned by the verified player's owned
+	// character and returns its full metadata. The facade resolves the acting
+	// character from the player session (INV-SCENE-63) and rejects guests
+	// (INV-SCENE-64), then forwards a CreateScene call to the plugin SceneService
+	// with the server-verified character_id. Unlike WatchScene it requires no
+	// existing game session — creation does not touch focus.
+	CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -161,6 +171,12 @@ func NewSceneAccessServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(sceneAccessServiceMethods.ByName("WatchScene")),
 			connect.WithClientOptions(opts...),
 		),
+		createScene: connect.NewClient[v1.CreateSceneRequest, v1.CreateSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceCreateSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("CreateScene")),
+			connect.WithClientOptions(opts...),
+		),
 		exportScene: connect.NewClient[v1.ExportSceneRequest, v1.ExportSceneResponse](
 			httpClient,
 			baseURL+SceneAccessServiceExportSceneProcedure,
@@ -200,6 +216,7 @@ type sceneAccessServiceClient struct {
 	getSceneForViewer          *connect.Client[v1.GetSceneForViewerRequest, v1.GetSceneForViewerResponse]
 	listMyScenes               *connect.Client[v1.ListMyScenesRequest, v1.ListMyScenesResponse]
 	watchScene                 *connect.Client[v1.WatchSceneRequest, v1.WatchSceneResponse]
+	createScene                *connect.Client[v1.CreateSceneRequest, v1.CreateSceneResponse]
 	exportScene                *connect.Client[v1.ExportSceneRequest, v1.ExportSceneResponse]
 	setSceneFocus              *connect.Client[v1.SetSceneFocusRequest, v1.SetSceneFocusResponse]
 	listPublishedScenes        *connect.Client[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse]
@@ -225,6 +242,11 @@ func (c *sceneAccessServiceClient) ListMyScenes(ctx context.Context, req *connec
 // WatchScene calls holomush.sceneaccess.v1.SceneAccessService.WatchScene.
 func (c *sceneAccessServiceClient) WatchScene(ctx context.Context, req *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error) {
 	return c.watchScene.CallUnary(ctx, req)
+}
+
+// CreateScene calls holomush.sceneaccess.v1.SceneAccessService.CreateScene.
+func (c *sceneAccessServiceClient) CreateScene(ctx context.Context, req *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error) {
+	return c.createScene.CallUnary(ctx, req)
 }
 
 // ExportScene calls holomush.sceneaccess.v1.SceneAccessService.ExportScene.
@@ -284,6 +306,13 @@ type SceneAccessServiceHandler interface {
 	// character_id and session_id. Returns FailedPrecondition when no game
 	// session exists for the character (select the character first).
 	WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error)
+	// CreateScene creates a new scene owned by the verified player's owned
+	// character and returns its full metadata. The facade resolves the acting
+	// character from the player session (INV-SCENE-63) and rejects guests
+	// (INV-SCENE-64), then forwards a CreateScene call to the plugin SceneService
+	// with the server-verified character_id. Unlike WatchScene it requires no
+	// existing game session — creation does not touch focus.
+	CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -346,6 +375,12 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 		connect.WithSchema(sceneAccessServiceMethods.ByName("WatchScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneAccessServiceCreateSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceCreateSceneProcedure,
+		svc.CreateScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("CreateScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sceneAccessServiceExportSceneHandler := connect.NewUnaryHandler(
 		SceneAccessServiceExportSceneProcedure,
 		svc.ExportScene,
@@ -386,6 +421,8 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 			sceneAccessServiceListMyScenesHandler.ServeHTTP(w, r)
 		case SceneAccessServiceWatchSceneProcedure:
 			sceneAccessServiceWatchSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceCreateSceneProcedure:
+			sceneAccessServiceCreateSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceExportSceneProcedure:
 			sceneAccessServiceExportSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceSetSceneFocusProcedure:
@@ -419,6 +456,10 @@ func (UnimplementedSceneAccessServiceHandler) ListMyScenes(context.Context, *con
 
 func (UnimplementedSceneAccessServiceHandler) WatchScene(context.Context, *connect.Request[v1.WatchSceneRequest]) (*connect.Response[v1.WatchSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.WatchScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.CreateScene is not implemented"))
 }
 
 func (UnimplementedSceneAccessServiceHandler) ExportScene(context.Context, *connect.Request[v1.ExportSceneRequest]) (*connect.Response[v1.ExportSceneResponse], error) {

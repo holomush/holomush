@@ -49,6 +49,7 @@ const (
 	WebService_WebGetScene_FullMethodName                   = "/holomush.web.v1.WebService/WebGetScene"
 	WebService_WebListMyScenes_FullMethodName               = "/holomush.web.v1.WebService/WebListMyScenes"
 	WebService_WebWatchScene_FullMethodName                 = "/holomush.web.v1.WebService/WebWatchScene"
+	WebService_WebCreateScene_FullMethodName                = "/holomush.web.v1.WebService/WebCreateScene"
 	WebService_WebExportScene_FullMethodName                = "/holomush.web.v1.WebService/WebExportScene"
 	WebService_WebSetSceneFocus_FullMethodName              = "/holomush.web.v1.WebService/WebSetSceneFocus"
 	WebService_WebListPublishedScenes_FullMethodName        = "/holomush.web.v1.WebService/WebListPublishedScenes"
@@ -196,6 +197,11 @@ type WebServiceClient interface {
 	// SceneAccessService.WatchScene; player_session_token is read from the
 	// HTTP cookie by gateway middleware.
 	WebWatchScene(ctx context.Context, in *WebWatchSceneRequest, opts ...grpc.CallOption) (*WebWatchSceneResponse, error)
+	// WebCreateScene creates a new scene owned by the verified player's owned
+	// character and returns its metadata. Proxies to
+	// SceneAccessService.CreateScene; player_session_token is read from the HTTP
+	// cookie by gateway middleware.
+	WebCreateScene(ctx context.Context, in *WebCreateSceneRequest, opts ...grpc.CallOption) (*WebCreateSceneResponse, error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -507,6 +513,16 @@ func (c *webServiceClient) WebWatchScene(ctx context.Context, in *WebWatchSceneR
 	return out, nil
 }
 
+func (c *webServiceClient) WebCreateScene(ctx context.Context, in *WebCreateSceneRequest, opts ...grpc.CallOption) (*WebCreateSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebCreateSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebCreateScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *webServiceClient) WebExportScene(ctx context.Context, in *WebExportSceneRequest, opts ...grpc.CallOption) (*WebExportSceneResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebExportSceneResponse)
@@ -697,6 +713,11 @@ type WebServiceServer interface {
 	// SceneAccessService.WatchScene; player_session_token is read from the
 	// HTTP cookie by gateway middleware.
 	WebWatchScene(context.Context, *WebWatchSceneRequest) (*WebWatchSceneResponse, error)
+	// WebCreateScene creates a new scene owned by the verified player's owned
+	// character and returns its metadata. Proxies to
+	// SceneAccessService.CreateScene; player_session_token is read from the HTTP
+	// cookie by gateway middleware.
+	WebCreateScene(context.Context, *WebCreateSceneRequest) (*WebCreateSceneResponse, error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -809,6 +830,9 @@ func (UnimplementedWebServiceServer) WebListMyScenes(context.Context, *WebListMy
 }
 func (UnimplementedWebServiceServer) WebWatchScene(context.Context, *WebWatchSceneRequest) (*WebWatchSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebWatchScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebCreateScene(context.Context, *WebCreateSceneRequest) (*WebCreateSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebCreateScene not implemented")
 }
 func (UnimplementedWebServiceServer) WebExportScene(context.Context, *WebExportSceneRequest) (*WebExportSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebExportScene not implemented")
@@ -1325,6 +1349,24 @@ func _WebService_WebWatchScene_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebCreateScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebCreateSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebCreateScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebCreateScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebCreateScene(ctx, req.(*WebCreateSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WebService_WebExportScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WebExportSceneRequest)
 	if err := dec(in); err != nil {
@@ -1525,6 +1567,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebWatchScene",
 			Handler:    _WebService_WebWatchScene_Handler,
+		},
+		{
+			MethodName: "WebCreateScene",
+			Handler:    _WebService_WebCreateScene_Handler,
 		},
 		{
 			MethodName: "WebExportScene",

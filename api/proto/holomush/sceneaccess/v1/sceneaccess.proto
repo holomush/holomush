@@ -52,6 +52,14 @@ service SceneAccessService {
   // session exists for the character (select the character first).
   rpc WatchScene(WatchSceneRequest) returns (WatchSceneResponse);
 
+  // CreateScene creates a new scene owned by the verified player's owned
+  // character and returns its full metadata. The facade resolves the acting
+  // character from the player session (INV-SCENE-63) and rejects guests
+  // (INV-SCENE-64), then forwards a CreateScene call to the plugin SceneService
+  // with the server-verified character_id. Unlike WatchScene it requires no
+  // existing game session — creation does not touch focus.
+  rpc CreateScene(CreateSceneRequest) returns (CreateSceneResponse);
+
   // ExportScene renders the verified player's owned character's scene IC
   // log to a downloadable document. The facade resolves the acting character
   // from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -229,6 +237,37 @@ message WatchSceneResponse {
   // participant is the resulting participant entry (role=observer), or the
   // pre-existing row when the character was already a participant.
   holomush.scene.v1.ParticipantInfo participant = 1;
+}
+
+// CreateSceneRequest is the facade request to create a scene. player_session_token
+// authenticates the calling player (session_id is a reserved client hint, not
+// consulted); the facade resolves the acting character SERVER-SIDE from the
+// player's owned-character set (INV-SCENE-63) and overrides any client identity.
+message CreateSceneRequest {
+  // session_id is the client-declared player-session ULID, retained as a
+  // forward-looking hint; authentication is performed SOLELY against
+  // player_session_token (holomush-5rh.8.23 decision).
+  string session_id = 1;
+  // player_session_token is the raw bearer token; the facade looks up the
+  // session by token hash and rejects unauthenticated callers
+  // (codes.Unauthenticated) and guests (codes.PermissionDenied, INV-SCENE-64).
+  string player_session_token = 2;
+  // character_id selects which owned alt becomes the scene owner; the facade
+  // verifies ownership before passing the server-verified ID downstream
+  // (codes.NotFound when not owned, INV-SCENE-63).
+  string character_id = 3;
+  // title is the scene title; required. The plugin handler rejects empty or
+  // whitespace-only titles after trim.
+  string title = 4;
+  // description is an optional scene synopsis; empty omits it.
+  string description = 5;
+}
+
+// CreateSceneResponse wraps the created scene's full metadata projection.
+message CreateSceneResponse {
+  // scene is the newly created scene; the verified character is its owner and
+  // first participant.
+  holomush.scene.v1.SceneInfo scene = 1;
 }
 
 // ExportSceneRequest is the facade request for scene IC log export.

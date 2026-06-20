@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/sceneaccess/v1/sceneaccess.proto.
  */
 export const file_holomush_sceneaccess_v1_sceneaccess: GenFile = /*@__PURE__*/
-  fileDesc("Cilob2xvbXVzaC9zY2VuZWFjY2Vzcy92MS9zY2VuZWFjY2Vzcy5wcm90bxIXaG9sb211c2guc2NlbmVhY2Nlc3MudjEiswEKGkxpc3RTY2VuZXNGb3JWaWV3ZXJSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEg0KBWxpbWl0GAQgASgFEg4KBm9mZnNldBgFIAEoBRIMCgR0YWdzGAYgAygJEiAKGGV4Y2x1ZGVfY29udGVudF93YXJuaW5ncxgHIAMoCSJLChtMaXN0U2NlbmVzRm9yVmlld2VyUmVzcG9uc2USLAoGc2NlbmVzGAEgAygLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvInQKGEdldFNjZW5lRm9yVmlld2VyUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhQKDGNoYXJhY3Rlcl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSJIChlHZXRTY2VuZUZvclZpZXdlclJlc3BvbnNlEisKBXNjZW5lGAEgASgLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvIl0KE0xpc3RNeVNjZW5lc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAyABKAkiTQoUTGlzdE15U2NlbmVzUmVzcG9uc2USNQoGc2NlbmVzGAEgAygLMiUuaG9sb211c2guc2NlbmUudjEuQ2hhcmFjdGVyU2NlbmVJbmZvIm0KEVdhdGNoU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJIk0KEldhdGNoU2NlbmVSZXNwb25zZRI3CgtwYXJ0aWNpcGFudBgBIAEoCzIiLmhvbG9tdXNoLnNjZW5lLnYxLlBhcnRpY2lwYW50SW5mbyJ+ChJFeHBvcnRTY2VuZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAyABKAkSEAoIc2NlbmVfaWQYBCABKAkSDgoGZm9ybWF0GAUgASgJIksKE0V4cG9ydFNjZW5lUmVzcG9uc2USDwoHY29udGVudBgBIAEoDBIRCgltaW1lX3R5cGUYAiABKAkSEAoIZmlsZW5hbWUYAyABKAkicQoUU2V0U2NlbmVGb2N1c1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIVCg1jb25uZWN0aW9uX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJIhcKFVNldFNjZW5lRm9jdXNSZXNwb25zZSJ7ChpMaXN0UHVibGlzaGVkU2NlbmVzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEg0KBWxpbWl0GAMgASgFEg4KBm9mZnNldBgEIAEoBRIMCgR0YWdzGAUgAygJIlYKG0xpc3RQdWJsaXNoZWRTY2VuZXNSZXNwb25zZRI3CghhcmNoaXZlcxgBIAMoCzIlLmhvbG9tdXNoLnNjZW5lLnYxLlB1YmxpY1NjZW5lQXJjaGl2ZSJsChxHZXRQdWJsaWNTY2VuZUFyY2hpdmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSGgoScHVibGlzaGVkX3NjZW5lX2lkGAMgASgJIsEBCh1HZXRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZRIKCgJpZBgBIAEoCRIWCg50aXRsZV9zbmFwc2hvdBgCIAEoCRIdChVwYXJ0aWNpcGFudHNfc25hcHNob3QYAyADKAkSPwoPY29udGVudF9lbnRyaWVzGAQgAygLMiYuaG9sb211c2guc2NlbmUudjEuUHVibGlzaGVkU2NlbmVFbnRyeRIcChRwdWJsaXNoZWRfYXRfdW5peF9ucxgFIAEoAyKBAQohRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSGgoScHVibGlzaGVkX3NjZW5lX2lkGAMgASgJEg4KBmZvcm1hdBgEIAEoCSJICiJEb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSEQoJbWltZV90eXBlGAIgASgJMuUIChJTY2VuZUFjY2Vzc1NlcnZpY2USgAEKE0xpc3RTY2VuZXNGb3JWaWV3ZXISMy5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MaXN0U2NlbmVzRm9yVmlld2VyUmVxdWVzdBo0LmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkxpc3RTY2VuZXNGb3JWaWV3ZXJSZXNwb25zZRJ6ChFHZXRTY2VuZUZvclZpZXdlchIxLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkdldFNjZW5lRm9yVmlld2VyUmVxdWVzdBoyLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkdldFNjZW5lRm9yVmlld2VyUmVzcG9uc2USawoMTGlzdE15U2NlbmVzEiwuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdE15U2NlbmVzUmVxdWVzdBotLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkxpc3RNeVNjZW5lc1Jlc3BvbnNlEmUKCldhdGNoU2NlbmUSKi5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5XYXRjaFNjZW5lUmVxdWVzdBorLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLldhdGNoU2NlbmVSZXNwb25zZRJoCgtFeHBvcnRTY2VuZRIrLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkV4cG9ydFNjZW5lUmVxdWVzdBosLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkV4cG9ydFNjZW5lUmVzcG9uc2USbgoNU2V0U2NlbmVGb2N1cxItLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLlNldFNjZW5lRm9jdXNSZXF1ZXN0Gi4uaG9sb211c2guc2NlbmVhY2Nlc3MudjEuU2V0U2NlbmVGb2N1c1Jlc3BvbnNlEoABChNMaXN0UHVibGlzaGVkU2NlbmVzEjMuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdFB1Ymxpc2hlZFNjZW5lc1JlcXVlc3QaNC5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MaXN0UHVibGlzaGVkU2NlbmVzUmVzcG9uc2UShgEKFUdldFB1YmxpY1NjZW5lQXJjaGl2ZRI1LmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkdldFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QaNi5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5HZXRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZRKVAQoaRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmUSOi5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5Eb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QaOy5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5Eb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlc3BvbnNlQk5aTGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3NjZW5lYWNjZXNzL3YxO3NjZW5lYWNjZXNzdjFiBnByb3RvMw", [file_holomush_scene_v1_scene]);
+  fileDesc("Cilob2xvbXVzaC9zY2VuZWFjY2Vzcy92MS9zY2VuZWFjY2Vzcy5wcm90bxIXaG9sb211c2guc2NlbmVhY2Nlc3MudjEiswEKGkxpc3RTY2VuZXNGb3JWaWV3ZXJSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEg0KBWxpbWl0GAQgASgFEg4KBm9mZnNldBgFIAEoBRIMCgR0YWdzGAYgAygJEiAKGGV4Y2x1ZGVfY29udGVudF93YXJuaW5ncxgHIAMoCSJLChtMaXN0U2NlbmVzRm9yVmlld2VyUmVzcG9uc2USLAoGc2NlbmVzGAEgAygLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvInQKGEdldFNjZW5lRm9yVmlld2VyUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhQKDGNoYXJhY3Rlcl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSJIChlHZXRTY2VuZUZvclZpZXdlclJlc3BvbnNlEisKBXNjZW5lGAEgASgLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvIl0KE0xpc3RNeVNjZW5lc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAyABKAkiTQoUTGlzdE15U2NlbmVzUmVzcG9uc2USNQoGc2NlbmVzGAEgAygLMiUuaG9sb211c2guc2NlbmUudjEuQ2hhcmFjdGVyU2NlbmVJbmZvIm0KEVdhdGNoU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJIk0KEldhdGNoU2NlbmVSZXNwb25zZRI3CgtwYXJ0aWNpcGFudBgBIAEoCzIiLmhvbG9tdXNoLnNjZW5lLnYxLlBhcnRpY2lwYW50SW5mbyKAAQoSQ3JlYXRlU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEg0KBXRpdGxlGAQgASgJEhMKC2Rlc2NyaXB0aW9uGAUgASgJIkIKE0NyZWF0ZVNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8ifgoSRXhwb3J0U2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJEg4KBmZvcm1hdBgFIAEoCSJLChNFeHBvcnRTY2VuZVJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSEQoJbWltZV90eXBlGAIgASgJEhAKCGZpbGVuYW1lGAMgASgJInEKFFNldFNjZW5lRm9jdXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSIXChVTZXRTY2VuZUZvY3VzUmVzcG9uc2UiewoaTGlzdFB1Ymxpc2hlZFNjZW5lc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRINCgVsaW1pdBgDIAEoBRIOCgZvZmZzZXQYBCABKAUSDAoEdGFncxgFIAMoCSJWChtMaXN0UHVibGlzaGVkU2NlbmVzUmVzcG9uc2USNwoIYXJjaGl2ZXMYASADKAsyJS5ob2xvbXVzaC5zY2VuZS52MS5QdWJsaWNTY2VuZUFyY2hpdmUibAocR2V0UHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhoKEnB1Ymxpc2hlZF9zY2VuZV9pZBgDIAEoCSLBAQodR2V0UHVibGljU2NlbmVBcmNoaXZlUmVzcG9uc2USCgoCaWQYASABKAkSFgoOdGl0bGVfc25hcHNob3QYAiABKAkSHQoVcGFydGljaXBhbnRzX3NuYXBzaG90GAMgAygJEj8KD2NvbnRlbnRfZW50cmllcxgEIAMoCzImLmhvbG9tdXNoLnNjZW5lLnYxLlB1Ymxpc2hlZFNjZW5lRW50cnkSHAoUcHVibGlzaGVkX2F0X3VuaXhfbnMYBSABKAMigQEKIURvd25sb2FkUHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhoKEnB1Ymxpc2hlZF9zY2VuZV9pZBgDIAEoCRIOCgZmb3JtYXQYBCABKAkiSAoiRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZRIPCgdjb250ZW50GAEgASgMEhEKCW1pbWVfdHlwZRgCIAEoCTLPCQoSU2NlbmVBY2Nlc3NTZXJ2aWNlEoABChNMaXN0U2NlbmVzRm9yVmlld2VyEjMuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdFNjZW5lc0ZvclZpZXdlclJlcXVlc3QaNC5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MaXN0U2NlbmVzRm9yVmlld2VyUmVzcG9uc2USegoRR2V0U2NlbmVGb3JWaWV3ZXISMS5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5HZXRTY2VuZUZvclZpZXdlclJlcXVlc3QaMi5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5HZXRTY2VuZUZvclZpZXdlclJlc3BvbnNlEmsKDExpc3RNeVNjZW5lcxIsLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkxpc3RNeVNjZW5lc1JlcXVlc3QaLS5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MaXN0TXlTY2VuZXNSZXNwb25zZRJlCgpXYXRjaFNjZW5lEiouaG9sb211c2guc2NlbmVhY2Nlc3MudjEuV2F0Y2hTY2VuZVJlcXVlc3QaKy5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5XYXRjaFNjZW5lUmVzcG9uc2USaAoLQ3JlYXRlU2NlbmUSKy5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5DcmVhdGVTY2VuZVJlcXVlc3QaLC5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5DcmVhdGVTY2VuZVJlc3BvbnNlEmgKC0V4cG9ydFNjZW5lEisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuRXhwb3J0U2NlbmVSZXF1ZXN0GiwuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuRXhwb3J0U2NlbmVSZXNwb25zZRJuCg1TZXRTY2VuZUZvY3VzEi0uaG9sb211c2guc2NlbmVhY2Nlc3MudjEuU2V0U2NlbmVGb2N1c1JlcXVlc3QaLi5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5TZXRTY2VuZUZvY3VzUmVzcG9uc2USgAEKE0xpc3RQdWJsaXNoZWRTY2VuZXMSMy5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MaXN0UHVibGlzaGVkU2NlbmVzUmVxdWVzdBo0LmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkxpc3RQdWJsaXNoZWRTY2VuZXNSZXNwb25zZRKGAQoVR2V0UHVibGljU2NlbmVBcmNoaXZlEjUuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuR2V0UHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBo2LmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkdldFB1YmxpY1NjZW5lQXJjaGl2ZVJlc3BvbnNlEpUBChpEb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZRI6LmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkRvd25sb2FkUHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBo7LmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkRvd25sb2FkUHVibGljU2NlbmVBcmNoaXZlUmVzcG9uc2VCTlpMZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvc2NlbmVhY2Nlc3MvdjE7c2NlbmVhY2Nlc3N2MWIGcHJvdG8z", [file_holomush_scene_v1_scene]);
 
 /**
  * ListScenesForViewerRequest is the facade request for the public scene board.
@@ -352,6 +352,87 @@ export const WatchSceneResponseSchema: GenMessage<WatchSceneResponse> = /*@__PUR
   messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 7);
 
 /**
+ * CreateSceneRequest is the facade request to create a scene. player_session_token
+ * authenticates the calling player (session_id is a reserved client hint, not
+ * consulted); the facade resolves the acting character SERVER-SIDE from the
+ * player's owned-character set (INV-SCENE-63) and overrides any client identity.
+ *
+ * @generated from message holomush.sceneaccess.v1.CreateSceneRequest
+ */
+export type CreateSceneRequest = Message<"holomush.sceneaccess.v1.CreateSceneRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID, retained as a
+   * forward-looking hint; authentication is performed SOLELY against
+   * player_session_token (holomush-5rh.8.23 decision).
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * player_session_token is the raw bearer token; the facade looks up the
+   * session by token hash and rejects unauthenticated callers
+   * (codes.Unauthenticated) and guests (codes.PermissionDenied, INV-SCENE-64).
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id selects which owned alt becomes the scene owner; the facade
+   * verifies ownership before passing the server-verified ID downstream
+   * (codes.NotFound when not owned, INV-SCENE-63).
+   *
+   * @generated from field: string character_id = 3;
+   */
+  characterId: string;
+
+  /**
+   * title is the scene title; required. The plugin handler rejects empty or
+   * whitespace-only titles after trim.
+   *
+   * @generated from field: string title = 4;
+   */
+  title: string;
+
+  /**
+   * description is an optional scene synopsis; empty omits it.
+   *
+   * @generated from field: string description = 5;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.CreateSceneRequest.
+ * Use `create(CreateSceneRequestSchema)` to create a new message.
+ */
+export const CreateSceneRequestSchema: GenMessage<CreateSceneRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 8);
+
+/**
+ * CreateSceneResponse wraps the created scene's full metadata projection.
+ *
+ * @generated from message holomush.sceneaccess.v1.CreateSceneResponse
+ */
+export type CreateSceneResponse = Message<"holomush.sceneaccess.v1.CreateSceneResponse"> & {
+  /**
+   * scene is the newly created scene; the verified character is its owner and
+   * first participant.
+   *
+   * @generated from field: holomush.scene.v1.SceneInfo scene = 1;
+   */
+  scene?: SceneInfo | undefined;
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.CreateSceneResponse.
+ * Use `create(CreateSceneResponseSchema)` to create a new message.
+ */
+export const CreateSceneResponseSchema: GenMessage<CreateSceneResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 9);
+
+/**
  * ExportSceneRequest is the facade request for scene IC log export.
  * player_session_token authenticates the calling player (session_id is a
  * reserved client hint, not yet consulted); the facade resolves the acting
@@ -414,7 +495,7 @@ export type ExportSceneRequest = Message<"holomush.sceneaccess.v1.ExportSceneReq
  * Use `create(ExportSceneRequestSchema)` to create a new message.
  */
 export const ExportSceneRequestSchema: GenMessage<ExportSceneRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 8);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 10);
 
 /**
  * ExportSceneResponse wraps the plugin's rendered scene-log document.
@@ -449,7 +530,7 @@ export type ExportSceneResponse = Message<"holomush.sceneaccess.v1.ExportSceneRe
  * Use `create(ExportSceneResponseSchema)` to create a new message.
  */
 export const ExportSceneResponseSchema: GenMessage<ExportSceneResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 9);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 11);
 
 /**
  * SetSceneFocusRequest is the facade request to set per-connection scene focus
@@ -506,7 +587,7 @@ export type SetSceneFocusRequest = Message<"holomush.sceneaccess.v1.SetSceneFocu
  * Use `create(SetSceneFocusRequestSchema)` to create a new message.
  */
 export const SetSceneFocusRequestSchema: GenMessage<SetSceneFocusRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 10);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 12);
 
 /**
  * SetSceneFocusResponse is intentionally empty — a successful focus set
@@ -522,7 +603,7 @@ export type SetSceneFocusResponse = Message<"holomush.sceneaccess.v1.SetSceneFoc
  * Use `create(SetSceneFocusResponseSchema)` to create a new message.
  */
 export const SetSceneFocusResponseSchema: GenMessage<SetSceneFocusResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 11);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 13);
 
 /**
  * ListPublishedScenesRequest is the facade request to page through publicly
@@ -583,7 +664,7 @@ export type ListPublishedScenesRequest = Message<"holomush.sceneaccess.v1.ListPu
  * Use `create(ListPublishedScenesRequestSchema)` to create a new message.
  */
 export const ListPublishedScenesRequestSchema: GenMessage<ListPublishedScenesRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 12);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 14);
 
 /**
  * ListPublishedScenesResponse wraps the plugin's public archive list.
@@ -604,7 +685,7 @@ export type ListPublishedScenesResponse = Message<"holomush.sceneaccess.v1.ListP
  * Use `create(ListPublishedScenesResponseSchema)` to create a new message.
  */
 export const ListPublishedScenesResponseSchema: GenMessage<ListPublishedScenesResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 13);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 15);
 
 /**
  * GetPublicSceneArchiveRequest is the facade request for reading a single
@@ -654,7 +735,7 @@ export type GetPublicSceneArchiveRequest = Message<"holomush.sceneaccess.v1.GetP
  * Use `create(GetPublicSceneArchiveRequestSchema)` to create a new message.
  */
 export const GetPublicSceneArchiveRequestSchema: GenMessage<GetPublicSceneArchiveRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 14);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 16);
 
 /**
  * GetPublicSceneArchiveResponse wraps the plugin's public archive view.
@@ -704,7 +785,7 @@ export type GetPublicSceneArchiveResponse = Message<"holomush.sceneaccess.v1.Get
  * Use `create(GetPublicSceneArchiveResponseSchema)` to create a new message.
  */
 export const GetPublicSceneArchiveResponseSchema: GenMessage<GetPublicSceneArchiveResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 15);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 17);
 
 /**
  * DownloadPublicSceneArchiveRequest is the facade request for downloading a
@@ -761,7 +842,7 @@ export type DownloadPublicSceneArchiveRequest = Message<"holomush.sceneaccess.v1
  * Use `create(DownloadPublicSceneArchiveRequestSchema)` to create a new message.
  */
 export const DownloadPublicSceneArchiveRequestSchema: GenMessage<DownloadPublicSceneArchiveRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 16);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 18);
 
 /**
  * DownloadPublicSceneArchiveResponse wraps the plugin's rendered public-archive
@@ -791,7 +872,7 @@ export type DownloadPublicSceneArchiveResponse = Message<"holomush.sceneaccess.v
  * Use `create(DownloadPublicSceneArchiveResponseSchema)` to create a new message.
  */
 export const DownloadPublicSceneArchiveResponseSchema: GenMessage<DownloadPublicSceneArchiveResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 17);
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 19);
 
 /**
  * SceneAccessService is the host-side facade that owns player authentication,
@@ -867,6 +948,21 @@ export const SceneAccessService: GenService<{
     methodKind: "unary";
     input: typeof WatchSceneRequestSchema;
     output: typeof WatchSceneResponseSchema;
+  },
+  /**
+   * CreateScene creates a new scene owned by the verified player's owned
+   * character and returns its full metadata. The facade resolves the acting
+   * character from the player session (INV-SCENE-63) and rejects guests
+   * (INV-SCENE-64), then forwards a CreateScene call to the plugin SceneService
+   * with the server-verified character_id. Unlike WatchScene it requires no
+   * existing game session — creation does not touch focus.
+   *
+   * @generated from rpc holomush.sceneaccess.v1.SceneAccessService.CreateScene
+   */
+  createScene: {
+    methodKind: "unary";
+    input: typeof CreateSceneRequestSchema;
+    output: typeof CreateSceneResponseSchema;
   },
   /**
    * ExportScene renders the verified player's owned character's scene IC

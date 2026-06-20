@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DownloadPublicSceneArchiveRequest, DownloadPublicSceneArchiveResponse, ExportSceneRequest, ExportSceneResponse, GetPublicSceneArchiveRequest, GetPublicSceneArchiveResponse, GetSceneForViewerRequest, GetSceneForViewerResponse, ListMyScenesRequest, ListMyScenesResponse, ListPublishedScenesRequest, ListPublishedScenesResponse, ListScenesForViewerRequest, ListScenesForViewerResponse, SetSceneFocusRequest, SetSceneFocusResponse, WatchSceneRequest, WatchSceneResponse } from "./sceneaccess_pb.js";
+import { CreateSceneRequest, CreateSceneResponse, DownloadPublicSceneArchiveRequest, DownloadPublicSceneArchiveResponse, ExportSceneRequest, ExportSceneResponse, GetPublicSceneArchiveRequest, GetPublicSceneArchiveResponse, GetSceneForViewerRequest, GetSceneForViewerResponse, ListMyScenesRequest, ListMyScenesResponse, ListPublishedScenesRequest, ListPublishedScenesResponse, ListScenesForViewerRequest, ListScenesForViewerResponse, SetSceneFocusRequest, SetSceneFocusResponse, WatchSceneRequest, WatchSceneResponse } from "./sceneaccess_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -88,6 +88,22 @@ export const SceneAccessService = {
       name: "WatchScene",
       I: WatchSceneRequest,
       O: WatchSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * CreateScene creates a new scene owned by the verified player's owned
+     * character and returns its full metadata. The facade resolves the acting
+     * character from the player session (INV-SCENE-63) and rejects guests
+     * (INV-SCENE-64), then forwards a CreateScene call to the plugin SceneService
+     * with the server-verified character_id. Unlike WatchScene it requires no
+     * existing game session — creation does not touch focus.
+     *
+     * @generated from rpc holomush.sceneaccess.v1.SceneAccessService.CreateScene
+     */
+    createScene: {
+      name: "CreateScene",
+      I: CreateSceneRequest,
+      O: CreateSceneResponse,
       kind: MethodKind.Unary,
     },
     /**

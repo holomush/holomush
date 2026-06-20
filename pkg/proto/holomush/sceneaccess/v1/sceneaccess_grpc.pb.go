@@ -26,6 +26,7 @@ const (
 	SceneAccessService_GetSceneForViewer_FullMethodName          = "/holomush.sceneaccess.v1.SceneAccessService/GetSceneForViewer"
 	SceneAccessService_ListMyScenes_FullMethodName               = "/holomush.sceneaccess.v1.SceneAccessService/ListMyScenes"
 	SceneAccessService_WatchScene_FullMethodName                 = "/holomush.sceneaccess.v1.SceneAccessService/WatchScene"
+	SceneAccessService_CreateScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/CreateScene"
 	SceneAccessService_ExportScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/ExportScene"
 	SceneAccessService_SetSceneFocus_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/SetSceneFocus"
 	SceneAccessService_ListPublishedScenes_FullMethodName        = "/holomush.sceneaccess.v1.SceneAccessService/ListPublishedScenes"
@@ -76,6 +77,13 @@ type SceneAccessServiceClient interface {
 	// character_id and session_id. Returns FailedPrecondition when no game
 	// session exists for the character (select the character first).
 	WatchScene(ctx context.Context, in *WatchSceneRequest, opts ...grpc.CallOption) (*WatchSceneResponse, error)
+	// CreateScene creates a new scene owned by the verified player's owned
+	// character and returns its full metadata. The facade resolves the acting
+	// character from the player session (INV-SCENE-63) and rejects guests
+	// (INV-SCENE-64), then forwards a CreateScene call to the plugin SceneService
+	// with the server-verified character_id. Unlike WatchScene it requires no
+	// existing game session — creation does not touch focus.
+	CreateScene(ctx context.Context, in *CreateSceneRequest, opts ...grpc.CallOption) (*CreateSceneResponse, error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -149,6 +157,16 @@ func (c *sceneAccessServiceClient) WatchScene(ctx context.Context, in *WatchScen
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WatchSceneResponse)
 	err := c.cc.Invoke(ctx, SceneAccessService_WatchScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) CreateScene(ctx context.Context, in *CreateSceneRequest, opts ...grpc.CallOption) (*CreateSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_CreateScene_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -248,6 +266,13 @@ type SceneAccessServiceServer interface {
 	// character_id and session_id. Returns FailedPrecondition when no game
 	// session exists for the character (select the character first).
 	WatchScene(context.Context, *WatchSceneRequest) (*WatchSceneResponse, error)
+	// CreateScene creates a new scene owned by the verified player's owned
+	// character and returns its full metadata. The facade resolves the acting
+	// character from the player session (INV-SCENE-63) and rejects guests
+	// (INV-SCENE-64), then forwards a CreateScene call to the plugin SceneService
+	// with the server-verified character_id. Unlike WatchScene it requires no
+	// existing game session — creation does not touch focus.
+	CreateScene(context.Context, *CreateSceneRequest) (*CreateSceneResponse, error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -298,6 +323,9 @@ func (UnimplementedSceneAccessServiceServer) ListMyScenes(context.Context, *List
 }
 func (UnimplementedSceneAccessServiceServer) WatchScene(context.Context, *WatchSceneRequest) (*WatchSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WatchScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) CreateScene(context.Context, *CreateSceneRequest) (*CreateSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateScene not implemented")
 }
 func (UnimplementedSceneAccessServiceServer) ExportScene(context.Context, *ExportSceneRequest) (*ExportSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExportScene not implemented")
@@ -403,6 +431,24 @@ func _SceneAccessService_WatchScene_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SceneAccessServiceServer).WatchScene(ctx, req.(*WatchSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_CreateScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).CreateScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_CreateScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).CreateScene(ctx, req.(*CreateSceneRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -519,6 +565,10 @@ var SceneAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WatchScene",
 			Handler:    _SceneAccessService_WatchScene_Handler,
+		},
+		{
+			MethodName: "CreateScene",
+			Handler:    _SceneAccessService_CreateScene_Handler,
 		},
 		{
 			MethodName: "ExportScene",
