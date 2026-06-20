@@ -22,6 +22,7 @@
   import PoseOrderStrip from '$lib/components/scenes/PoseOrderStrip.svelte';
   import SceneComposer from '$lib/components/scenes/SceneComposer.svelte';
   import SceneContextRail from '$lib/components/scenes/SceneContextRail.svelte';
+  import CreateSceneSheet from '$lib/components/scenes/CreateSceneSheet.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -52,6 +53,7 @@
   // Mobile sheet state.
   let sceneListSheetOpen = $state(false);
   let contextRailSheetOpen = $state(false);
+  let createSheetOpen = $state(false);
 
   // Roving tabindex state: index of the item that holds tabindex=0.
   let rovingIndex = $state(0);
@@ -281,6 +283,8 @@
     </SheetContent>
   </Sheet>
 
+  <CreateSceneSheet bind:open={createSheetOpen} {characters} />
+
   <!-- Three-pane row: fills remaining height below the mobile header -->
   <div class="flex flex-1 min-h-0 overflow-hidden">
 
@@ -290,6 +294,22 @@
     class="hidden md:flex w-[260px] shrink-0 flex-col border-r border-border bg-card overflow-y-auto"
     aria-label="Scene list"
   >
+    <div class="flex items-center gap-1.5 p-2 border-b border-border/50">
+      <button
+        type="button"
+        aria-label="New scene"
+        onclick={() => (createSheetOpen = true)}
+        class="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90"
+      >
+        + New scene
+      </button>
+      <a href="/scenes/browse" class="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-primary">
+        Browse
+      </a>
+      <a href="/scenes/browse#archive" class="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-primary">
+        Archive
+      </a>
+    </div>
     <div class="p-3 pb-1">
       <h1 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         My Scenes
@@ -344,12 +364,6 @@
       </div>
     {/if}
 
-    <!-- Footer actions -->
-    <div class="mt-auto border-t border-border/50 p-3">
-      <a href="/scenes/browse" class="text-xs text-muted-foreground hover:text-foreground transition-colors">
-        + browse · ⌕ archive
-      </a>
-    </div>
   </nav>
 
   <!-- Center pane: log + composer -->
@@ -406,11 +420,21 @@
     {:else}
       <!-- Empty state -->
       <div class="flex-1 flex items-center justify-center">
-        <div class="text-center space-y-2">
+        <div class="text-center space-y-3">
           <p class="text-muted-foreground">Select a scene from the list to begin</p>
-          <a href="/scenes/browse" class="text-sm text-primary hover:underline">
-            Browse open scenes →
-          </a>
+          <button
+            type="button"
+            aria-label="New scene"
+            onclick={() => (createSheetOpen = true)}
+            class="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+          >
+            + New scene
+          </button>
+          <p>
+            <a href="/scenes/browse" class="text-sm text-primary hover:underline">
+              Browse open scenes →
+            </a>
+          </p>
         </div>
       </div>
     {/if}
