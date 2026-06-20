@@ -45,7 +45,7 @@ func addSessionStreamFn(ls *lua.LState) int {
 
 	r := getStreamRegistry(ls)
 	if r == nil {
-		slog.Warn("holomush.add_session_stream: stream registry not initialized")
+		slog.WarnContext(luaContext(ls), "holomush.add_session_stream: stream registry not initialized")
 		return 0
 	}
 
@@ -73,7 +73,7 @@ func removeSessionStreamFn(ls *lua.LState) int {
 
 	r := getStreamRegistry(ls)
 	if r == nil {
-		slog.Warn("holomush.remove_session_stream: stream registry not initialized")
+		slog.WarnContext(luaContext(ls), "holomush.remove_session_stream: stream registry not initialized")
 		return 0
 	}
 
