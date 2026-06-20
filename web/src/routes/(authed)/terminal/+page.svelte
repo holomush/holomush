@@ -27,7 +27,6 @@
   import { get } from 'svelte/store';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
   import CommandInput from '$lib/components/terminal/CommandInput.svelte';
-  import Rail from '$lib/components/terminal/Rail.svelte';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { goto } from '$app/navigation';
   import { trace, type Span } from '@opentelemetry/api';
@@ -698,7 +697,6 @@
   </div>
 {:else}
   <div class="terminal-layout" style={$themePreferences.terminalBlackBackground ? terminalBlackOverrideVars() : ''}>
-    <Rail />
     <div class="main-area" bind:this={paneGroupEl}>
       <Resizable.PaneGroup direction="horizontal">
         <Resizable.Pane defaultSize={100 - sidebarDefaultPct} class="terminal-column">
@@ -728,7 +726,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: calc(100vh - var(--topbar-h));
+    height: 100%;
     gap: 16px;
     font-family: 'JetBrains Mono', monospace;
     background: var(--color-background, #0d0d1a);
@@ -753,7 +751,7 @@
   .terminal-layout {
     display: flex;
     flex-direction: row;
-    height: calc(100vh - var(--topbar-h));
+    height: 100%;
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
     font-size: 15px;
     background: var(--color-background);
