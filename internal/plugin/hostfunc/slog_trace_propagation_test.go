@@ -111,6 +111,48 @@ func TestJoinFocusGuardLogUsesBackgroundWhenLuaStateHasNoTraceContext(t *testing
 		"with no ctx on the Lua state, the guard log must carry no trace context (Background fallback)")
 }
 
+func TestAddSessionStreamNotInitializedGuardLogCarriesTraceContext(t *testing.T) {
+	h := installCapturingDefaultLogger(t)
+
+	// No stream registry → getStreamRegistry returns nil → the "stream registry
+	// not initialized" guard fires before the function derives its own ctx.
+	L := lua.NewState()
+	t.Cleanup(L.Close)
+	hf := hostfunc.New(nil)
+	hf.Register(L, "test-plugin")
+
+	ctx, wantTraceID := tracedTestContext()
+	L.SetContext(ctx)
+
+	require.NoError(t, L.DoString(`holomush.add_session_stream("sess-1", "channel:abc")`))
+
+	sc := h.capturedSpanContext()
+	require.True(t, sc.IsValid(),
+		"guard log must carry the Lua state's trace context (use slog.WarnContext with a derived ctx)")
+	assert.Equal(t, wantTraceID, sc.TraceID(), "log ctx must carry the same trace as the Lua state")
+}
+
+func TestRemoveSessionStreamNotInitializedGuardLogCarriesTraceContext(t *testing.T) {
+	h := installCapturingDefaultLogger(t)
+
+	// No stream registry → getStreamRegistry returns nil → the "stream registry
+	// not initialized" guard fires before the function derives its own ctx.
+	L := lua.NewState()
+	t.Cleanup(L.Close)
+	hf := hostfunc.New(nil)
+	hf.Register(L, "test-plugin")
+
+	ctx, wantTraceID := tracedTestContext()
+	L.SetContext(ctx)
+
+	require.NoError(t, L.DoString(`holomush.remove_session_stream("sess-1", "channel:abc")`))
+
+	sc := h.capturedSpanContext()
+	require.True(t, sc.IsValid(),
+		"guard log must carry the Lua state's trace context (use slog.WarnContext with a derived ctx)")
+	assert.Equal(t, wantTraceID, sc.TraceID(), "log ctx must carry the same trace as the Lua state")
+}
+
 func TestKVGetStoreUnavailableGuardLogCarriesTraceContext(t *testing.T) {
 	h := installCapturingDefaultLogger(t)
 
