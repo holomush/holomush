@@ -141,7 +141,7 @@ func joinFocusFn(ls *lua.LState) int {
 
 	fo := getFocusOps(ls)
 	if fo == nil {
-		slog.Warn("holomush.join_focus: focus ops not initialized")
+		slog.WarnContext(luaContext(ls), "holomush.join_focus: focus ops not initialized")
 		return 0
 	}
 
@@ -179,7 +179,7 @@ func leaveFocusFn(ls *lua.LState) int {
 
 	fo := getFocusOps(ls)
 	if fo == nil {
-		slog.Warn("holomush.leave_focus: focus ops not initialized")
+		slog.WarnContext(luaContext(ls), "holomush.leave_focus: focus ops not initialized")
 		return 0
 	}
 
@@ -228,7 +228,7 @@ func leaveFocusByTargetFn(ls *lua.LState) int {
 
 	fo := getFocusOps(ls)
 	if fo == nil {
-		slog.Warn("holomush.leave_focus_by_target: focus ops not initialized")
+		slog.WarnContext(luaContext(ls), "holomush.leave_focus_by_target: focus ops not initialized")
 		ls.Push(lua.LNil)
 		ls.Push(lua.LString("focus ops not initialized"))
 		return 2
@@ -288,7 +288,7 @@ func presentFocusFn(ls *lua.LState) int {
 
 	fo := getFocusOps(ls)
 	if fo == nil {
-		slog.Warn("holomush.present_focus: focus ops not initialized")
+		slog.WarnContext(luaContext(ls), "holomush.present_focus: focus ops not initialized")
 		return 0
 	}
 
@@ -398,7 +398,7 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 
 	hr := getHistoryReader(ls)
 	if hr == nil {
-		slog.Warn("holomush.query_stream_history: history reader not initialized")
+		slog.WarnContext(luaContext(ls), "holomush.query_stream_history: history reader not initialized")
 		return 0
 	}
 
