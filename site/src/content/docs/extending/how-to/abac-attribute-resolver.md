@@ -161,6 +161,14 @@ to add `creator` to your `GetSchema` response and wire it up in
 The minimal correct reference is
 [`plugins/test-abac-widget/main.go`](https://github.com/holomush/holomush/blob/main/plugins/test-abac-widget/main.go).
 
+This fixture is deliberately retained as the project's lightweight,
+deterministic reference resolver: it has no upstream dependencies and hardcodes
+its resolution, so the plugin ABAC integration tests can assert exact
+permit/forbid outcomes against a real binary over gRPC. The production resolver
+in `core-scenes` also implements this contract, but it depends on
+`WorldService`, Postgres, and seeded scene data, so it is not a substitute when
+you want a deterministic, dependency-free example to copy.
+
 It demonstrates three properties every resolver SHOULD have:
 
 1. **Schema/runtime consistency** — `GetSchema` declares exactly the two
