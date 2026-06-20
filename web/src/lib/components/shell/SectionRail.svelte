@@ -5,7 +5,7 @@
 <script lang="ts">
   import { Home, Clapperboard, Settings } from '@lucide/svelte';
   import type { Component } from 'svelte';
-  import { SECTIONS } from '$lib/nav/sections';
+  import { SECTIONS, type SectionId } from '$lib/nav/sections';
   import { uiPrefs, toggleDensity } from '$lib/stores/uiPrefsStore';
   import { themePreferences, setTerminalBlackBackground } from '$lib/stores/themeStore';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -21,7 +21,8 @@
   let { pathname, variant = 'rail', onnavigate }: Props = $props();
 
   // id → icon: kept here so nav/sections.ts stays Svelte-free / node-testable.
-  const icons: Record<string, Component> = { room: Home, scenes: Clapperboard };
+  // Keyed by SectionId so a new section without an icon is a compile error.
+  const icons: Record<SectionId, Component> = { room: Home, scenes: Clapperboard };
 </script>
 
 <aside
