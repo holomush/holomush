@@ -8,6 +8,7 @@
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
   import { uiPrefs } from '$lib/stores/uiPrefsStore';
+  import { setFooter, clearFooter } from '$lib/stores/footerBridge';
   import {
     pushCommand,
     navigatePrev,
@@ -110,6 +111,12 @@
 
   onDestroy(() => clearTimeout(draftTimer));
 
+  // Publish the terminal hotkey bar into the shell footer while mounted.
+  $effect(() => {
+    setFooter(cmdHints);
+    return () => clearFooter();
+  });
+
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -184,19 +191,21 @@
   {/if}
 </div>
 
-<div class="cmd-hints">
-  <span><kbd>↑↓</kbd> history</span>
-  <span><kbd>⇧⏎</kbd> newline</span>
-  <span><kbd>Esc</kbd> clear</span>
-  <span><kbd>⌘K</kbd> palette</span>
-  <span><kbd>⌘B</kbd> rail</span>
-  <span><kbd>⌘.</kbd> sidebar</span>
-  <span><kbd>⌘⇧E</kbd> composer</span>
-  <span class="line-count">{lineCount} line{lineCount === 1 ? '' : 's'}</span>
-  {#if nearMax && !$uiPrefs.composerOpen}
-    <span class="composer-nudge">Press ⌘⇧E for a bigger editor</span>
-  {/if}
-</div>
+{#snippet cmdHints()}
+  <div class="cmd-hints">
+    <span><kbd>↑↓</kbd> history</span>
+    <span><kbd>⇧⏎</kbd> newline</span>
+    <span><kbd>Esc</kbd> clear</span>
+    <span><kbd>⌘K</kbd> palette</span>
+    <span><kbd>⌘B</kbd> rail</span>
+    <span><kbd>⌘.</kbd> sidebar</span>
+    <span><kbd>⌘⇧E</kbd> composer</span>
+    <span class="line-count">{lineCount} line{lineCount === 1 ? '' : 's'}</span>
+    {#if nearMax && !$uiPrefs.composerOpen}
+      <span class="composer-nudge">Press ⌘⇧E for a bigger editor</span>
+    {/if}
+  </div>
+{/snippet}
 
 <style>
   .cmd-wrap {
