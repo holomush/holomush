@@ -9,6 +9,7 @@
   import { uiPrefs, toggleDensity } from '$lib/stores/uiPrefsStore';
   import { themePreferences, setTerminalBlackBackground } from '$lib/stores/themeStore';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+  import { cn } from '$lib/utils';
 
   interface Props {
     /** Current route path; drives active state. Passed from the layout. */
@@ -26,9 +27,10 @@
 </script>
 
 <aside
-  class="rail"
-  class:is-drawer={variant === 'drawer'}
-  class:is-hidden={variant === 'rail' && $uiPrefs.railHidden}
+  class={cn('rail', {
+    'is-drawer': variant === 'drawer',
+    'is-hidden': variant === 'rail' && $uiPrefs.railHidden,
+  })}
   data-testid="rail"
   aria-label="Navigation rail"
 >
@@ -38,8 +40,7 @@
       {@const active = section.match(pathname)}
       <a
         href={section.href}
-        class="rail-btn"
-        class:is-active={active}
+        class={cn('rail-btn', { 'is-active': active })}
         title={section.label}
         aria-label={section.label}
         aria-current={active ? 'page' : undefined}
@@ -146,7 +147,7 @@
   }
   .rail-label {
     font-family: var(--font-sans, system-ui);
-    font-size: 13px;
+    font-size: 12px;
   }
   .rail-btn:hover {
     background: color-mix(in srgb, var(--color-primary) 10%, transparent);

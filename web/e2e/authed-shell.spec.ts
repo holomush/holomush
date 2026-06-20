@@ -24,7 +24,7 @@ test.describe('unified authed shell', () => {
 
   test('command palette navigates between sections', async ({ page }) => {
     await registerAndEnterTerminal(page, 'pal');
-    await page.keyboard.press('Meta+k');
+    await page.keyboard.press('ControlOrMeta+k');
     await page.getByPlaceholder('Type a command…').fill('Go to Scenes');
     await page.getByRole('option', { name: 'Go to Scenes' }).click();
     await expect(page).toHaveURL(/\/scenes/);
