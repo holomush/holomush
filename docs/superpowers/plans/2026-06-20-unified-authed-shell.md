@@ -1128,3 +1128,4 @@ Expected: all green (no terminal/scenes regression).
 - Mobile drawer reuses the Rail (Task 6, 8, 11).
 - No terminal regression; `pnpm check` + unit + E2E green (Task 11 Step 5).
 - Chrome dedup: theme only in TopBar; redundant Scenes icon removed; `RailView` retired (Task 4, 8, 10).
+<!-- adr-capture: sha256=82666128a5ccca9c; session=3b5de5d0; ts=2026-06-20T13:53:43Z; adrs=holomush-stds8,holomush-828tt,holomush-xhz3s,holomush-8p5rx -->
