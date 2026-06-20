@@ -16,6 +16,10 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Section registry is the single source of nav truth (Rail + palette)](holomush-stds8-section-registry-is-single-source-nav-truth-rail-palette.md) | 2026-06-20 | Accepted | `holomush-stds8` |
+| [Persistent authed chrome lives in a shared (authed)/+layout.svelte shell](holomush-828tt-persistent-authed-chrome-lives-shared-authed-layout-svelte-s.md) | 2026-06-20 | Accepted | `holomush-828tt` |
+| [Footer content uses a footerBridge store mirroring composerBridge](holomush-xhz3s-footer-content-uses-footerbridge-store-mirroring-composerbri.md) | 2026-06-20 | Accepted | `holomush-xhz3s` |
+| [Mobile navigation uses a Sheet drawer hosting the same Rail](holomush-8p5rx-mobile-navigation-uses-sheet-drawer-hosting-same-rail.md) | 2026-06-20 | Accepted | `holomush-8p5rx` |
 | [Typed RPCs for structural scene writes; command path for human/CLI verbs](holomush-v4qmu-typed-rpcs-structural-scene-writes-command-path-human-cli-ve.md) | 2026-06-20 | Accepted | `holomush-v4qmu` |
 | [Resolve window-per-scene as single-pane workspace; defer multi-window](holomush-x8swp-resolve-window-per-scene-as-single-pane-workspace-defer-mult.md) | 2026-06-20 | Accepted | `holomush-x8swp` |
 | [Scope Lua stub generator to static build-time surfaces only](holomush-vhz3h-scope-lua-stub-generator-static-build-time-surfaces-only.md) | 2026-06-16 | Accepted | `holomush-vhz3h` |
