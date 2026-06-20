@@ -66,7 +66,19 @@ func TestCoordinatorRequestInvalidationReturnsRateLimitedWhenProbeAndPillRefuses
 	// event-driven (holomush-1r0v.15) — its deadline is a fast-fail
 	// diagnostic, not a propagation timer. 5s is generous; healthy
 	// runs return in <50ms.
-	h := clustertest.New(t, "test-game", 2, clustertest.WithPillRateLimit(10*time.Second))
+	//
+	// EvictAfterMissed is bumped to 100 (10s eviction window, default
+	// 3×100ms = 300ms) so the synthetic member 1 — which heartbeats only
+	// once per PublishSyntheticHeartbeat — stays in member 0's snapshot
+	// across the whole test. Under parallel -race the gap between the
+	// synthetic heartbeat and RequestInvalidation's LiveMembers snapshot
+	// could exceed 300ms while the sweeper fired on schedule, reaping
+	// member 1; RequestInvalidation then saw a single-member snapshot,
+	// self-acked, and returned nil instead of the rate-limited error
+	// (holomush-kz7tb).
+	h := clustertest.New(t, "test-game", 2,
+		clustertest.WithPillRateLimit(10*time.Second),
+		clustertest.WithEvictAfterMissed(100))
 	h.AwaitConverged(t, 2*time.Second)
 
 	// Stop member 1 to make it unresponsive.

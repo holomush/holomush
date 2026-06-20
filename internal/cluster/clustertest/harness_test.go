@@ -71,6 +71,40 @@ func TestAwaitMemberPresentFatalsOnDeadlineWhenHeartbeatNeverArrives(t *testing.
 		"AwaitMemberPresent MUST Fatalf when deadline expires without a join")
 }
 
+// TestWithEvictAfterMissedKeepsSyntheticMemberPastDefaultWindow is the
+// regression guard for holomush-kz7tb. A one-shot synthetic heartbeat
+// keeps a member present only for EvictAfterMissed × HeartbeatInterval
+// before the sweeper reaps it (default 3×100ms = 300ms). Tests that
+// inject a synthetic peer and then exercise it across an unbounded
+// scheduling gap (the coordinator rate-limit assertion under parallel
+// -race) raced that 300ms window: when the gap stretched past 300ms the
+// member was swept, RequestInvalidation saw a single-member snapshot,
+// self-acked, and returned nil instead of the expected rate-limited
+// error. WithEvictAfterMissed widens the window so the member survives
+// well past any plausible inter-step latency.
+func TestWithEvictAfterMissedKeepsSyntheticMemberPastDefaultWindow(t *testing.T) {
+	t.Parallel()
+
+	// 100 × 100ms = 10s eviction window — far beyond the 400ms sleep
+	// below, which itself exceeds the DEFAULT 300ms window.
+	h := clustertest.New(t, "test-game", 1, clustertest.WithEvictAfterMissed(100))
+	target := cluster.MemberID("01HSYNTHETIC0EVICTWINDOW001")
+
+	h.PublishSyntheticHeartbeat(t, "test-game", target, "test")
+	h.AwaitMemberPresent(t, 0, target, 5*time.Second)
+
+	// Sleep well past the default ~300ms nominal window but far under the
+	// configured window (10s). Determinism here comes from the 10s window,
+	// not the sleep length: with the default EvictAfterMissed=3 the member
+	// would be a sweep candidate by now, whereas at 100 it cannot be reaped
+	// for ~10s, so the member MUST still be present.
+	time.Sleep(400 * time.Millisecond)
+
+	_, ok := h.Members[0].Registry.Member(target)
+	require.True(t, ok,
+		"synthetic member evicted within 400ms; WithEvictAfterMissed(100) must extend the window to 10s")
+}
+
 // mockTB satisfies clustertest.TB while recording Fatalf so a test can
 // assert the deadline path without aborting the outer test.
 type mockTB struct {
