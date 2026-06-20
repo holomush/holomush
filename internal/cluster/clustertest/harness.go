@@ -60,6 +60,24 @@ func WithPillRateLimit(d time.Duration) Option {
 	return func(cfg *cluster.Config) { cfg.PillRateLimit = d }
 }
 
+// WithEvictAfterMissed overrides the harness's default EvictAfterMissed (3).
+// The eviction sweeper reaps a member whose last heartbeat is older than
+// EvictAfterMissed × HeartbeatInterval (default 3 × 100ms = 300ms).
+//
+// A synthetic peer injected via PublishSyntheticHeartbeat heartbeats only
+// once, so with the default window it becomes a sweep candidate after only
+// ~300ms. Tests that inject a synthetic peer and then exercise it across
+// an unbounded scheduling gap (e.g. a coordinator rate-limit assertion run
+// under parallel -race, where the test goroutine can be descheduled past
+// 300ms while the sweeper fires on schedule) race that window. Bumping it
+// beyond plausible inter-step latency keeps the synthetic peer present for
+// the whole test, eliminating the wall-clock race.
+//
+// Resolves holomush-kz7tb (P2 flake).
+func WithEvictAfterMissed(n int) Option {
+	return func(cfg *cluster.Config) { cfg.EvictAfterMissed = n }
+}
+
 // New constructs a Harness with n Registry members on a shared NATS
 // connection. All members use cluster_id=clusterID. Optional [Option] values
 // override the harness defaults (e.g. [WithPillRateLimit]).
