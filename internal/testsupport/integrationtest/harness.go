@@ -1349,7 +1349,10 @@ func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream strin
 }
 
 // busEventToCoreEvent translates an eventbus.Event to a core.Event for plugin
-// consumption. Mirrors cmd/holomush/sub_grpc.go:739.
+// consumption. Like its production twin in cmd/holomush/sub_grpc.go, this is a
+// history read-back reconstruction: it copies the stored ID and Timestamp
+// verbatim (core.NewEvent() would overwrite both with a fresh ULID + time.Now()).
+// See that function's comment for the full rationale.
 func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
 	actorID := ""
 	if e.Actor.ID != (ulid.ULID{}) {

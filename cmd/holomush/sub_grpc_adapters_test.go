@@ -225,6 +225,7 @@ func TestBusEventToCoreEventPropagatesULIDActorID(t *testing.T) {
 	assert.Equal(t, id.String(), got.Actor.ID, "ULID actor id propagates through busEventToCoreEvent")
 	assert.Equal(t, core.ActorCharacter, got.Actor.Kind)
 	assert.Equal(t, e.ID, got.ID)
+	assert.Equal(t, e.Timestamp, got.Timestamp, "read-back reconstruction preserves the persisted timestamp; core.NewEvent() would overwrite it with time.Now()")
 	assert.Equal(t, "events.main.scene.01ABC", got.Stream)
 }
 
