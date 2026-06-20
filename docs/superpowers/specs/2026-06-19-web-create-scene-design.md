@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Web Create-Scene — Design
 
 - **Bead:** `holomush-5rh.22` (Scenes web: create-scene affordance) — Epic 9 (`holomush-5rh`)
@@ -31,6 +36,7 @@ line.
 disposition.
 
 **Out of scope:**
+
 - `SceneService.CreateScene` backend — **already exists**
   (`plugins/core-scenes`, called today by telnet `scene create`).
 - Scene lifecycle / management verbs (end/pause/resume/invite/kick/transfer/
@@ -64,6 +70,7 @@ proxy to `SceneAccessServer` facade mutations
 (`internal/grpc/sceneaccess_service.go:232` `WatchScene`).
 
 Rationale:
+
 - **Create returns a result the caller consumes** — the new scene. The command
   path surfaces that only as human-readable prose (`"Scene created: <id>"`,
   `plugins/core-scenes/commands.go` `handleCreate`) that the web would have to
@@ -157,6 +164,7 @@ routing).
 
 **`CreateSceneSheet.svelte`** (new) — a slide-over `Sheet` (existing
 `web/src/lib/components/ui/sheet` primitive) containing:
+
 - **Title** (`input`, required; Create disabled until non-empty).
 - **Description** (raw HTML `<textarea>`, styled as in `SceneComposer.svelte` —
   there is no `ui/textarea` shadcn primitive; optional).

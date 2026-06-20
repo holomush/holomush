@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 <!-- markdownlint-disable MD013 -->
 <!-- adr-render: source=bd:holomush-x8swp; do not edit manually; use `/adr update holomush-x8swp` -->
 
