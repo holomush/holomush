@@ -29,17 +29,11 @@ if [[ -n "$GIT_STATUS" ]]; then
   REMINDERS+=("$CHANGED_COUNT uncommitted file(s) in working tree")
 fi
 
-# bd dolt status surfaces uncommitted DB changes in the local working set.
-# `bd sync` was removed in favor of `bd dolt push/pull` — check those instead.
+# `bd dolt status` is intentionally NOT checked here: uncommitted Dolt
+# working-set state is a session-close concern (handled by the landing
+# checklist), not a per-turn one, and its server round-trip dominated this
+# Stop hook's latency. Only the in-progress-claim check below remains.
 if command -v bd >/dev/null 2>&1; then
-  DOLT_STATUS=$(bd dolt status 2>/dev/null) || DOLT_STATUS=""
-  # When the working set has uncommitted edits, dolt status prints "Changes
-  # to be committed" or "Changes not staged". When clean, it prints "nothing
-  # to commit, working tree clean".
-  if [[ -n "$DOLT_STATUS" ]] && ! echo "$DOLT_STATUS" | command grep -q "nothing to commit"; then
-    REMINDERS+=("beads DB has uncommitted changes — run 'bd dolt commit -am \"<message>\"' then 'bd dolt push'")
-  fi
-
   # Stranded in-progress claims: beads still open and in_progress for the
   # current actor. Catches "claimed but never closed" patterns when a
   # session ends mid-task without a handoff. Best-effort — silent on errors.
