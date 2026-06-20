@@ -54,6 +54,7 @@
       <Label for="create-scene-as">Create as</Label>
       <select
         id="create-scene-as"
+        name="actingCharacterId"
         aria-label="Create scene as"
         bind:value={actingCharacterId}
         class="rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -67,13 +68,14 @@
 
   <div class="flex flex-col gap-1">
     <Label for="create-scene-title">Title</Label>
-    <Input id="create-scene-title" bind:value={title} placeholder="Scene title…" disabled={submitting} />
+    <Input id="create-scene-title" name="title" bind:value={title} placeholder="Scene title…" disabled={submitting} />
   </div>
 
   <div class="flex flex-col gap-1">
     <Label for="create-scene-desc">Description <span class="text-muted-foreground">(optional)</span></Label>
     <textarea
       id="create-scene-desc"
+      name="description"
       bind:value={description}
       disabled={submitting}
       rows={3}
