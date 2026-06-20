@@ -707,15 +707,25 @@ func (h *Host) PropertyDefinition(string) (property.Definition, bool) {
 	return nil, false
 }
 
-// WorldQuerier returns the plugin-subject-stamped world read surface. The binary
-// host has no world surface (the WorldQueryService is Lua-only), so it returns
-// nil. Satisfies hostcap.HostCapabilities.
+// WorldQuerier returns the plugin-subject-stamped world read surface for the
+// host.v1 WorldQueryService capability. The binary host returns nil: it does not
+// expose world reads as a host CAPABILITY (that surface is Lua-only). This is NOT
+// "binary plugins cannot query the world" — they reach world reads via the
+// holomush.world.v1.WorldService SERVICE instead (broker-dialed from their
+// manifest `requires:`, ABAC-gated through the same world.Service chokepoint as
+// the Lua host functions). nil here means "no world host-capability surface", not
+// "no world access". See retired epic holomush-q42fh: binary world-query parity
+// is provided by the service transport, not this capability — do NOT re-add it as
+// a parity gap. Satisfies hostcap.HostCapabilities.
 func (h *Host) WorldQuerier(string) hostcap.WorldQuerier {
 	return nil
 }
 
-// WorldMutator returns the world write surface. The binary host has no world
-// surface, so it returns nil. Satisfies hostcap.HostCapabilities.
+// WorldMutator returns the world write surface for property mutation. The binary
+// host returns nil: world writes are exposed only as the Lua host-capability
+// surface, and (unlike world reads) there is no host-provided world-mutation
+// service for binary plugins to dial. The missing host-side character entity
+// mutator is tracked by holomush-ksf12. Satisfies hostcap.HostCapabilities.
 func (h *Host) WorldMutator() world.Mutator {
 	return nil
 }

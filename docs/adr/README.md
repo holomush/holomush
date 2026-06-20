@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Resolve scene roster names host-side via facade, not plugin](holomush-sv1ei-resolve-scene-roster-names-host-side-via-facade-not-plugin.md) | 2026-06-20 | Accepted | `holomush-sv1ei` |
 | [Section registry is the single source of nav truth (Rail + palette)](holomush-stds8-section-registry-is-single-source-nav-truth-rail-palette.md) | 2026-06-20 | Accepted | `holomush-stds8` |
 | [Persistent authed chrome lives in a shared (authed)/+layout.svelte shell](holomush-828tt-persistent-authed-chrome-lives-shared-authed-layout-svelte-s.md) | 2026-06-20 | Accepted | `holomush-828tt` |
 | [Footer content uses a footerBridge store mirroring composerBridge](holomush-xhz3s-footer-content-uses-footerbridge-store-mirroring-composerbri.md) | 2026-06-20 | Accepted | `holomush-xhz3s` |
