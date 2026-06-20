@@ -7,6 +7,7 @@ import {
 	type WebListScenesRequest,
 	type WebListPublishedScenesRequest,
 	type WebWatchSceneRequest,
+	type WebCreateSceneRequest,
 	type WebExportSceneRequest,
 } from '$lib/connect/holomush/web/v1/web_pb';
 import { transport } from '$lib/transport';
@@ -63,6 +64,20 @@ export async function watchScene(
 ) {
 	const res = await client.webWatchScene({ sessionId, ...opts });
 	return res.participant;
+}
+
+/**
+ * Creates a new scene owned by the given character and returns its SceneInfo.
+ * The player_session_token rides the X-Session-Token cookie (set by the
+ * gateway); only session_id/character_id/title/description are sent. Used by
+ * the create-scene form — NOT the command path (structural write = typed RPC).
+ */
+export async function createScene(
+	sessionId: string,
+	opts: Pick<WebCreateSceneRequest, 'characterId' | 'title' | 'description'>,
+) {
+	const res = await client.webCreateScene({ sessionId, ...opts });
+	return res.scene;
 }
 
 /**
