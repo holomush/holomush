@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebDownloadPublicSceneArchiveRequest, WebDownloadPublicSceneArchiveResponse, WebExportSceneRequest, WebExportSceneResponse, WebGetContentRequest, WebGetContentResponse, WebGetPublicSceneArchiveRequest, WebGetPublicSceneArchiveResponse, WebGetSceneRequest, WebGetSceneResponse, WebListCharactersRequest, WebListCharactersResponse, WebListCommandsRequest, WebListCommandsResponse, WebListContentRequest, WebListContentResponse, WebListFocusPresenceRequest, WebListFocusPresenceResponse, WebListMyScenesRequest, WebListMyScenesResponse, WebListPlayerSessionsRequest, WebListPlayerSessionsResponse, WebListPublishedScenesRequest, WebListPublishedScenesResponse, WebListScenesRequest, WebListScenesResponse, WebListSessionStreamsRequest, WebListSessionStreamsResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebRevokeOtherPlayerSessionsRequest, WebRevokeOtherPlayerSessionsResponse, WebRevokePlayerSessionRequest, WebRevokePlayerSessionResponse, WebSelectCharacterRequest, WebSelectCharacterResponse, WebSetSceneFocusRequest, WebSetSceneFocusResponse, WebWatchSceneRequest, WebWatchSceneResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebCreateSceneRequest, WebCreateSceneResponse, WebDownloadPublicSceneArchiveRequest, WebDownloadPublicSceneArchiveResponse, WebExportSceneRequest, WebExportSceneResponse, WebGetContentRequest, WebGetContentResponse, WebGetPublicSceneArchiveRequest, WebGetPublicSceneArchiveResponse, WebGetSceneRequest, WebGetSceneResponse, WebListCharactersRequest, WebListCharactersResponse, WebListCommandsRequest, WebListCommandsResponse, WebListContentRequest, WebListContentResponse, WebListFocusPresenceRequest, WebListFocusPresenceResponse, WebListMyScenesRequest, WebListMyScenesResponse, WebListPlayerSessionsRequest, WebListPlayerSessionsResponse, WebListPublishedScenesRequest, WebListPublishedScenesResponse, WebListScenesRequest, WebListScenesResponse, WebListSessionStreamsRequest, WebListSessionStreamsResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebRevokeOtherPlayerSessionsRequest, WebRevokeOtherPlayerSessionsResponse, WebRevokePlayerSessionRequest, WebRevokePlayerSessionResponse, WebSelectCharacterRequest, WebSelectCharacterResponse, WebSetSceneFocusRequest, WebSetSceneFocusResponse, WebWatchSceneRequest, WebWatchSceneResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -392,6 +392,20 @@ export const WebService = {
       name: "WebWatchScene",
       I: WebWatchSceneRequest,
       O: WebWatchSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebCreateScene creates a new scene owned by the verified player's owned
+     * character and returns its metadata. Proxies to
+     * SceneAccessService.CreateScene; player_session_token is read from the HTTP
+     * cookie by gateway middleware.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebCreateScene
+     */
+    webCreateScene: {
+      name: "WebCreateScene",
+      I: WebCreateSceneRequest,
+      O: WebCreateSceneResponse,
       kind: MethodKind.Unary,
     },
     /**

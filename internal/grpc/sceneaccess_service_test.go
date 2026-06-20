@@ -293,6 +293,15 @@ func TestSceneAccessDeniesGuestPlayersEverywhere(t *testing.T) {
 			},
 		},
 		{
+			"CreateScene",
+			func() error {
+				_, err := srv.CreateScene(ctx, &sceneaccessv1.CreateSceneRequest{
+					PlayerSessionToken: testSAToken, CharacterId: charID.String(), Title: "X",
+				})
+				return err
+			},
+		},
+		{
 			"SetSceneFocus",
 			func() error {
 				_, err := srv.SetSceneFocus(ctx, &sceneaccessv1.SetSceneFocusRequest{
@@ -344,6 +353,7 @@ func TestSceneAccessDeniesGuestPlayersEverywhere(t *testing.T) {
 	sceneMock.AssertNotCalled(t, "GetScene")
 	sceneMock.AssertNotCalled(t, "ListCharacterScenes")
 	sceneMock.AssertNotCalled(t, "WatchScene")
+	sceneMock.AssertNotCalled(t, "CreateScene")
 	sceneMock.AssertNotCalled(t, "ExportSceneLog")
 	sceneMock.AssertNotCalled(t, "ListPublishedScenes")
 	sceneMock.AssertNotCalled(t, "GetPublicSceneArchive")
@@ -768,4 +778,131 @@ func TestSetSceneFocusClearToGridSkipsJoinFocus(t *testing.T) {
 		"JoinFocus MUST NOT be called when clearing focus to grid")
 	sceneMock.AssertNotCalled(t, "ListCharacterScenes",
 		"participant check MUST NOT run on clear-to-grid")
+}
+
+func TestSceneAccessCreateScene(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	ps := buildSATestPS(t, playerID)
+	wantID := idgen.New().String()
+
+	// nonGuest / guest resolve the session player as a registered account or a
+	// guest, respectively; ownsAlice / noChars configure the owned-character set.
+	nonGuest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		return pr
+	}
+	guest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: true}, nil).Maybe()
+		return pr
+	}
+	ownsAlice := func(t *testing.T) *authmocks.MockCharacterRepository {
+		cr := authmocks.NewMockCharacterRepository(t)
+		cr.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		return cr
+	}
+	noChars := func(t *testing.T) *authmocks.MockCharacterRepository {
+		return authmocks.NewMockCharacterRepository(t)
+	}
+	noSceneCalls := func(t *testing.T) *scenemocks.MockSceneServiceClient {
+		return scenemocks.NewMockSceneServiceClient(t)
+	}
+
+	tests := []struct {
+		name       string
+		playerRepo func(*testing.T) *authmocks.MockPlayerRepository
+		charRepo   func(*testing.T) *authmocks.MockCharacterRepository
+		sceneMock  func(*testing.T) *scenemocks.MockSceneServiceClient
+		req        *sceneaccessv1.CreateSceneRequest
+		check      func(t *testing.T, resp *sceneaccessv1.CreateSceneResponse, err error, sceneMock *scenemocks.MockSceneServiceClient)
+	}{
+		{
+			// Verifies: INV-SCENE-63 — the facade forwards the SERVER-verified
+			// character id (never the client's) to the plugin SceneService.
+			name:       "owned character creates scene with verified id, title, description",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().CreateScene(mock.Anything, mock.MatchedBy(func(req *scenev1.CreateSceneRequest) bool {
+					return req.GetCharacterId() == char.ID.String() &&
+						req.GetTitle() == "The Manor" && req.GetDescription() == "dusk"
+				})).Return(&scenev1.CreateSceneResponse{Scene: &scenev1.SceneInfo{Id: wantID, Title: "The Manor"}}, nil).Once()
+				return sm
+			},
+			req: &sceneaccessv1.CreateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: char.ID.String(),
+				Title: "The Manor", Description: "dusk",
+			},
+			check: func(t *testing.T, resp *sceneaccessv1.CreateSceneResponse, err error, _ *scenemocks.MockSceneServiceClient) {
+				require.NoError(t, err)
+				assert.Equal(t, wantID, resp.GetScene().GetId())
+			},
+		},
+		{
+			// Verifies: INV-SCENE-64 — guests are denied at the facade and the
+			// downstream plugin is never reached.
+			name:       "guest is denied and downstream is never called",
+			playerRepo: guest,
+			charRepo:   noChars,
+			sceneMock:  noSceneCalls,
+			req: &sceneaccessv1.CreateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), Title: "X",
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.CreateSceneResponse, err error, sceneMock *scenemocks.MockSceneServiceClient) {
+				st, _ := status.FromError(err)
+				assert.Equal(t, codes.PermissionDenied, st.Code())
+				sceneMock.AssertNotCalled(t, "CreateScene")
+			},
+		},
+		{
+			// Verifies: INV-SCENE-63 — a character the player does not own is
+			// rejected (NotFound) before any downstream call.
+			name:       "character not owned returns NotFound",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  noSceneCalls,
+			req: &sceneaccessv1.CreateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: idgen.New().String(), Title: "X",
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.CreateSceneResponse, err error, _ *scenemocks.MockSceneServiceClient) {
+				st, _ := status.FromError(err)
+				assert.Equal(t, codes.NotFound, st.Code())
+			},
+		},
+		{
+			// Spec §6: opaque error on downstream failure — the facade passes the
+			// plugin's status error through unchanged (no double-wrap / opacity break).
+			name:       "downstream failure passes the plugin status error through unchanged",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().CreateScene(mock.Anything, mock.Anything).
+					Return(nil, status.Error(codes.FailedPrecondition, "scene quota exceeded")).Once()
+				return sm
+			},
+			req: &sceneaccessv1.CreateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), Title: "X",
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.CreateSceneResponse, err error, _ *scenemocks.MockSceneServiceClient) {
+				require.Error(t, err)
+				st, _ := status.FromError(err)
+				assert.Equal(t, codes.FailedPrecondition, st.Code())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sceneMock := tt.sceneMock(t)
+			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
+				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+			resp, err := srv.CreateScene(ctx, tt.req)
+			tt.check(t, resp, err, sceneMock)
+		})
+	}
 }

@@ -112,6 +112,9 @@ const (
 	// WebServiceWebWatchSceneProcedure is the fully-qualified name of the WebService's WebWatchScene
 	// RPC.
 	WebServiceWebWatchSceneProcedure = "/holomush.web.v1.WebService/WebWatchScene"
+	// WebServiceWebCreateSceneProcedure is the fully-qualified name of the WebService's WebCreateScene
+	// RPC.
+	WebServiceWebCreateSceneProcedure = "/holomush.web.v1.WebService/WebCreateScene"
 	// WebServiceWebExportSceneProcedure is the fully-qualified name of the WebService's WebExportScene
 	// RPC.
 	WebServiceWebExportSceneProcedure = "/holomush.web.v1.WebService/WebExportScene"
@@ -257,6 +260,11 @@ type WebServiceClient interface {
 	// SceneAccessService.WatchScene; player_session_token is read from the
 	// HTTP cookie by gateway middleware.
 	WebWatchScene(context.Context, *connect.Request[v1.WebWatchSceneRequest]) (*connect.Response[v1.WebWatchSceneResponse], error)
+	// WebCreateScene creates a new scene owned by the verified player's owned
+	// character and returns its metadata. Proxies to
+	// SceneAccessService.CreateScene; player_session_token is read from the HTTP
+	// cookie by gateway middleware.
+	WebCreateScene(context.Context, *connect.Request[v1.WebCreateSceneRequest]) (*connect.Response[v1.WebCreateSceneResponse], error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -454,6 +462,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebWatchScene")),
 			connect.WithClientOptions(opts...),
 		),
+		webCreateScene: connect.NewClient[v1.WebCreateSceneRequest, v1.WebCreateSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebCreateSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebCreateScene")),
+			connect.WithClientOptions(opts...),
+		),
 		webExportScene: connect.NewClient[v1.WebExportSceneRequest, v1.WebExportSceneResponse](
 			httpClient,
 			baseURL+WebServiceWebExportSceneProcedure,
@@ -516,6 +530,7 @@ type webServiceClient struct {
 	webGetScene                   *connect.Client[v1.WebGetSceneRequest, v1.WebGetSceneResponse]
 	webListMyScenes               *connect.Client[v1.WebListMyScenesRequest, v1.WebListMyScenesResponse]
 	webWatchScene                 *connect.Client[v1.WebWatchSceneRequest, v1.WebWatchSceneResponse]
+	webCreateScene                *connect.Client[v1.WebCreateSceneRequest, v1.WebCreateSceneResponse]
 	webExportScene                *connect.Client[v1.WebExportSceneRequest, v1.WebExportSceneResponse]
 	webSetSceneFocus              *connect.Client[v1.WebSetSceneFocusRequest, v1.WebSetSceneFocusResponse]
 	webListPublishedScenes        *connect.Client[v1.WebListPublishedScenesRequest, v1.WebListPublishedScenesResponse]
@@ -656,6 +671,11 @@ func (c *webServiceClient) WebListMyScenes(ctx context.Context, req *connect.Req
 // WebWatchScene calls holomush.web.v1.WebService.WebWatchScene.
 func (c *webServiceClient) WebWatchScene(ctx context.Context, req *connect.Request[v1.WebWatchSceneRequest]) (*connect.Response[v1.WebWatchSceneResponse], error) {
 	return c.webWatchScene.CallUnary(ctx, req)
+}
+
+// WebCreateScene calls holomush.web.v1.WebService.WebCreateScene.
+func (c *webServiceClient) WebCreateScene(ctx context.Context, req *connect.Request[v1.WebCreateSceneRequest]) (*connect.Response[v1.WebCreateSceneResponse], error) {
+	return c.webCreateScene.CallUnary(ctx, req)
 }
 
 // WebExportScene calls holomush.web.v1.WebService.WebExportScene.
@@ -811,6 +831,11 @@ type WebServiceHandler interface {
 	// SceneAccessService.WatchScene; player_session_token is read from the
 	// HTTP cookie by gateway middleware.
 	WebWatchScene(context.Context, *connect.Request[v1.WebWatchSceneRequest]) (*connect.Response[v1.WebWatchSceneResponse], error)
+	// WebCreateScene creates a new scene owned by the verified player's owned
+	// character and returns its metadata. Proxies to
+	// SceneAccessService.CreateScene; player_session_token is read from the HTTP
+	// cookie by gateway middleware.
+	WebCreateScene(context.Context, *connect.Request[v1.WebCreateSceneRequest]) (*connect.Response[v1.WebCreateSceneResponse], error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -1004,6 +1029,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebWatchScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebCreateSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebCreateSceneProcedure,
+		svc.WebCreateScene,
+		connect.WithSchema(webServiceMethods.ByName("WebCreateScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	webServiceWebExportSceneHandler := connect.NewUnaryHandler(
 		WebServiceWebExportSceneProcedure,
 		svc.WebExportScene,
@@ -1090,6 +1121,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebListMyScenesHandler.ServeHTTP(w, r)
 		case WebServiceWebWatchSceneProcedure:
 			webServiceWebWatchSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebCreateSceneProcedure:
+			webServiceWebCreateSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebExportSceneProcedure:
 			webServiceWebExportSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebSetSceneFocusProcedure:
@@ -1215,6 +1248,10 @@ func (UnimplementedWebServiceHandler) WebListMyScenes(context.Context, *connect.
 
 func (UnimplementedWebServiceHandler) WebWatchScene(context.Context, *connect.Request[v1.WebWatchSceneRequest]) (*connect.Response[v1.WebWatchSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebWatchScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebCreateScene(context.Context, *connect.Request[v1.WebCreateSceneRequest]) (*connect.Response[v1.WebCreateSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebCreateScene is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebExportScene(context.Context, *connect.Request[v1.WebExportSceneRequest]) (*connect.Response[v1.WebExportSceneResponse], error) {

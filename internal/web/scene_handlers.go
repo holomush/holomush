@@ -145,6 +145,37 @@ func (h *Handler) WebWatchScene(ctx context.Context, req *connect.Request[webv1.
 	}), nil
 }
 
+// WebCreateScene proxies to SceneAccessService.CreateScene. The gateway reads
+// the player_session_token from the X-Session-Token cookie header and forwards
+// it with character_id, title, and description. Authorization and identity
+// resolution are owned entirely by the facade.
+func (h *Handler) WebCreateScene(ctx context.Context, req *connect.Request[webv1.WebCreateSceneRequest]) (*connect.Response[webv1.WebCreateSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebCreateScene", "session_id", req.Msg.GetSessionId(), "character_id", req.Msg.GetCharacterId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.sceneAccess.CreateScene(rpcCtx, &sceneaccessv1.CreateSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		Title:              req.Msg.GetTitle(),
+		Description:        req.Msg.GetDescription(),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "web: create scene RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebCreateSceneResponse{Scene: resp.GetScene()}), nil
+}
+
 // WebExportScene proxies to SceneAccessService.ExportScene. The gateway reads
 // the player_session_token from the X-Session-Token cookie header and forwards
 // it with scene_id, character_id, and format. Authorization and identity

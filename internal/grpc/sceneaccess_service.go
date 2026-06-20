@@ -268,6 +268,36 @@ func (s *SceneAccessServer) WatchScene(ctx context.Context, req *sceneaccessv1.W
 	return &sceneaccessv1.WatchSceneResponse{Participant: resp.GetParticipant()}, nil
 }
 
+// CreateScene creates a new scene owned by the verified player's owned character
+// and returns its metadata. Unlike WatchScene it requires no existing game
+// session — creation does not touch focus or sessions. resolveAndGate enforces
+// the guest gate (INV-SCENE-64); ownedCharacter enforces ownership (INV-SCENE-63).
+func (s *SceneAccessServer) CreateScene(ctx context.Context, req *sceneaccessv1.CreateSceneRequest) (*sceneaccessv1.CreateSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	resp, err := s.sceneClient.CreateScene(dctx, &scenev1.CreateSceneRequest{
+		CharacterId: char.ID.String(),
+		Title:       req.GetTitle(),
+		Description: req.GetDescription(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.CreateSceneResponse{Scene: resp.GetScene()}, nil
+}
+
 // ExportScene renders the verified character's scene IC log.
 func (s *SceneAccessServer) ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
 	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())

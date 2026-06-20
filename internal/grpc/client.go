@@ -407,6 +407,16 @@ func (c *Client) WatchScene(ctx context.Context, req *sceneaccessv1.WatchSceneRe
 	return resp, nil
 }
 
+// CreateScene creates a new scene owned by the verified player's character, delegating
+// to SceneAccessService which validates identity and forwards to the plugin SceneService.
+func (c *Client) CreateScene(ctx context.Context, req *sceneaccessv1.CreateSceneRequest) (*sceneaccessv1.CreateSceneResponse, error) {
+	resp, err := c.sceneAccessClient.CreateScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "CreateScene").Wrap(err)
+	}
+	return resp, nil
+}
+
 // ExportScene renders the verified player's owned character's scene IC log to a downloadable document.
 func (c *Client) ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
 	resp, err := c.sceneAccessClient.ExportScene(ctx, req)
