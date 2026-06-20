@@ -4,6 +4,21 @@
 // Package main implements the test-abac-widget binary plugin used by the
 // host's plugin integration tests to exercise the ABAC attribute resolver
 // and command dispatcher contracts. Not deployed in production.
+//
+// Why this fixture is kept (decision holomush-6g45d): it is the only
+// dependency-free, deterministic binary AttributeResolver in the tree.
+// core-scenes is the only other plugin that resolves ABAC attributes, but it
+// requires WorldService + Postgres + scene seeding and resolves
+// non-deterministic, data-dependent values — so it cannot substitute for the
+// deterministic permit/forbid and zero-RPC-preflight assertions in
+// test/integration/plugin/abac_widget_test.go. Replacing the binary with a Lua
+// fixture would exercise the Lua resolver path instead of the host↔binary gRPC
+// AttributeResolverService contract those tests target. Hence: keep.
+//
+// (Unrelated to the keep decision: this manifest's provides: entry for
+// AttributeResolverService is a known anomaly tracked in holomush-vr6yo —
+// AttributeResolverService is host-auto-registered and MUST NOT be declared in
+// provides:. Do not copy that line into a new plugin.)
 package main
 
 import (
