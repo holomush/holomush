@@ -693,4 +693,26 @@ test.describe('Scenes workspace (E9.5)', () => {
     const options = page.getByRole('option');
     await expect(options.first()).toBeAttached();
   });
+
+  test('registered player creates a scene from the web GUI with no telnet', async ({ page }) => {
+    // Register a fresh (non-guest) player via the existing onboarding helper
+    // (web/e2e/scenes.spec.ts:217). "No telnet" means the SCENE is created via the
+    // GUI below — never a typed `scene create` command; normal registration is fine.
+    await registerAndEnterTerminal(page, 'cweb');
+
+    await page.goto('/scenes');
+
+    // Empty workspace → create affordance is present.
+    const newSceneBtn = page.getByRole('button', { name: 'New scene' }).first();
+    await expect(newSceneBtn).toBeVisible({ timeout: 10000 });
+    await newSceneBtn.click();
+
+    const title = `Web Made ${Date.now()}`;
+    await page.getByLabel('Title').fill(title);
+    await page.getByRole('button', { name: 'Create scene' }).click();
+
+    // The new scene appears in My Scenes and becomes the focused scene.
+    await expect(page.getByRole('listbox', { name: 'My scenes' }).getByText(title)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('log', { name: 'scene log' })).toBeVisible({ timeout: 10000 });
+  });
 });
