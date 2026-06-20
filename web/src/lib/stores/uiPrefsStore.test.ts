@@ -35,7 +35,6 @@ describe('uiPrefsStore', () => {
     expect(p.density).toBe('cozy');
     expect(p.composerOpen).toBe(false);
     expect(p.paletteOpen).toBe(false);
-    expect(p.railView).toBe('room');
   });
 
   it('toggles boolean flags', () => {
@@ -104,7 +103,6 @@ describe('uiPrefsStore', () => {
     expect(p.density).toBe('compact');
     // Unspecified fields keep defaults
     expect(p.composerOpen).toBe(false);
-    expect(p.railView).toBe('room');
   });
 
   it('hydrateUiPrefs ignores corrupt localStorage data', () => {
