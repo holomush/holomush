@@ -853,8 +853,13 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 	return result, nil
 }
 
-// busEventToCoreEvent translates an eventbus.Event to a core.Event for plugin
-// consumption. The Actor ID is a ULID string when present.
+// busEventToCoreEvent reconstructs a core.Event from a persisted
+// eventbus.Event on the history read-back path (ReplayTail / QueryHistory).
+// It MUST copy the stored ID and Timestamp verbatim — core.NewEvent() would
+// stamp a fresh ULID + time.Now(), corrupting historical identity and breaking
+// beforeID cursor pagination. This is the read path, not the I-16 append path,
+// so the raw core.Event{} literal is correct here. The Actor ID is a ULID
+// string when present.
 func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
 	actorID := ""
 	if e.Actor.ID != (ulid.ULID{}) {
