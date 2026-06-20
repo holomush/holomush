@@ -8,13 +8,18 @@
   import ShellFooter from '$lib/components/shell/ShellFooter.svelte';
   import { Sheet, SheetContent, SheetTitle, SheetDescription } from '$lib/components/ui/sheet';
   import { mobileNavOpen, openMobileNav, closeMobileNav } from '$lib/stores/mobileNavStore';
+  import { authState } from '$lib/stores/authStore';
 
   let { children } = $props();
   let pathname = $derived($page.url.pathname);
+  // Guests don't see registered-player-only sections (e.g. Scenes); the Rail
+  // and palette share the same registry gate (ADR holomush-stds8). The /scenes
+  // route + scene-access facade (INV-SCENE-64) remain the server-side guard.
+  let isGuest = $derived($authState.isGuest);
 </script>
 
 <div class="shell">
-  <SectionRail {pathname} variant="rail" />
+  <SectionRail {pathname} {isGuest} variant="rail" />
   <div class="section-col">
     <div class="section-slot">{@render children()}</div>
     <ShellFooter {pathname} />
@@ -27,7 +32,7 @@
   <SheetContent side="left" class="p-0 w-[260px]">
     <SheetTitle class="sr-only">Navigation</SheetTitle>
     <SheetDescription class="sr-only">Switch workspace section</SheetDescription>
-    <SectionRail {pathname} variant="drawer" onnavigate={closeMobileNav} />
+    <SectionRail {pathname} {isGuest} variant="drawer" onnavigate={closeMobileNav} />
   </SheetContent>
 </Sheet>
 

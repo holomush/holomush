@@ -5,6 +5,7 @@ package attribute
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -30,15 +31,40 @@ type RoleResolver interface {
 type CharacterProvider struct {
 	repo         world.CharacterRepository
 	roleResolver RoleResolver
+	// kindLookup optionally resolves whether a character's owning player is an
+	// ephemeral guest. When nil the provider omits the is_guest key
+	// (has_is_guest=false) per the omit-don't-sentinel rule (ADR holomush-ti1b).
+	// Shares the PlayerKindLookup type with PlayerAttributeProvider; it is keyed
+	// on the character's PlayerID, so the guest gate is reachable from a
+	// character: principal (the subject command dispatch evaluates against —
+	// player: subjects never reach Layer-1 command auth). Per holomush-5rh.23.
+	kindLookup PlayerKindLookup
+}
+
+// CharacterProviderOption configures optional behaviour on CharacterProvider at
+// construction time.
+type CharacterProviderOption func(*CharacterProvider)
+
+// WithCharacterKindLookup supplies an optional guest-lookup keyed on the
+// character's owning-player ID. Without it the provider omits is_guest
+// (has_is_guest=false) per the omit-don't-sentinel rule (ADR holomush-ti1b).
+func WithCharacterKindLookup(fn PlayerKindLookup) CharacterProviderOption {
+	return func(p *CharacterProvider) { p.kindLookup = fn }
 }
 
 // NewCharacterProvider creates a new character attribute provider.
 // roleResolver may be nil, in which case all characters default to "player" role.
-func NewCharacterProvider(repo world.CharacterRepository, roleResolver RoleResolver) *CharacterProvider {
-	return &CharacterProvider{
+// Optional CharacterProviderOption values configure additional behaviour such as
+// the guest-kind lookup (WithCharacterKindLookup).
+func NewCharacterProvider(repo world.CharacterRepository, roleResolver RoleResolver, opts ...CharacterProviderOption) *CharacterProvider {
+	p := &CharacterProvider{
 		repo:         repo,
 		roleResolver: roleResolver,
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 // Namespace returns "character".
@@ -121,6 +147,35 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 		attrs["has_location"] = false
 	}
 
+	// Resolve is_guest for the owning player per ADR holomush-ti1b
+	// (omit-don't-sentinel): when has_is_guest=false the is_guest key MUST be
+	// OMITTED (not emitted as a false sentinel). The DSL evaluator's
+	// missing-attr-→-false comparison semantics then keep the fail-closed
+	// scene-command gate (plugins/core-scenes execute-scene-commands:
+	// `principal.character.is_guest == false`) denying when guest-ness cannot
+	// be determined. Emitting a false sentinel would satisfy `false == false`
+	// and let a guest whose lookup failed slip through. Per holomush-5rh.23.
+	if p.kindLookup != nil {
+		isGuest, lookupErr := p.kindLookup(ctx, char.PlayerID.String())
+		if lookupErr != nil {
+			// Lookup failure → omit is_guest, emit witness false (fail-safe).
+			slog.WarnContext(
+				ctx,
+				"character kind lookup failed — omitting is_guest attribute (fail-safe)",
+				"character_id", id.String(),
+				"player_id", char.PlayerID.String(),
+				"err", lookupErr,
+			)
+			attrs["has_is_guest"] = false
+		} else {
+			attrs["is_guest"] = isGuest
+			attrs["has_is_guest"] = true
+		}
+	} else {
+		// No lookup configured → omit is_guest key entirely (ADR holomush-ti1b).
+		attrs["has_is_guest"] = false
+	}
+
 	return attrs, nil
 }
 
@@ -136,6 +191,8 @@ func (p *CharacterProvider) Schema() *types.NamespaceSchema {
 			"location_id":  types.AttrTypeString,
 			"location":     types.AttrTypeString,
 			"has_location": types.AttrTypeBool,
+			"is_guest":     types.AttrTypeBool,
+			"has_is_guest": types.AttrTypeBool,
 		},
 	}
 }

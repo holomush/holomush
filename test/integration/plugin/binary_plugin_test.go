@@ -429,6 +429,16 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			cmdProvider := attribute.NewCommandProvider()
 			Expect(resolver.RegisterProvider(cmdProvider)).To(Succeed())
 
+			// 2b. Register a character-namespace provider so the fail-closed
+			// execute-scene-commands gate (principal.character.is_guest == false)
+			// resolves the acting character's guest status. char-alice is a
+			// registered player; char-guest is an ephemeral guest. Per holomush-5rh.23.
+			charProvider := &guestCharProvider{isGuestBySubject: map[string]bool{
+				"character:char-alice": false,
+				"character:char-guest": true,
+			}}
+			Expect(resolver.RegisterProvider(charProvider)).To(Succeed())
+
 			// 3. Discover scene schema from the plugin and register proxy provider.
 			arClient := abacHost.AttributeResolverClient("core-scenes")
 			Expect(arClient).NotTo(BeNil())
@@ -488,15 +498,25 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 		})
 
-		It("permits scene command execution via Layer 1 execute policy", func() {
+		It("permits a registered player's scene command execution via Layer 1 execute policy", func() {
 			req, err := policytypes.NewAccessRequest("character:char-alice", "execute", "command:scene", nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			decision, err := abacEngine.Evaluate(abacCtx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(decision.IsAllowed()).To(BeTrue(),
-				"execute-scene-commands policy should permit Layer 1 command execution")
+				"execute-scene-commands policy should permit a non-guest character (is_guest == false)")
 			Expect(decision.Effect()).To(Equal(policytypes.EffectAllow))
+		})
+
+		It("denies a guest's scene command execution via the fail-closed Layer 1 gate", func() {
+			req, err := policytypes.NewAccessRequest("character:char-guest", "execute", "command:scene", nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			decision, err := abacEngine.Evaluate(abacCtx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(decision.IsAllowed()).To(BeFalse(),
+				"execute-scene-commands must deny a guest character (is_guest == true) per holomush-5rh.23")
 		})
 
 		It("permits the owner to read their own scene via per-resource policy", func() {
@@ -1134,3 +1154,41 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		})
 	})
 })
+
+// guestCharProvider is a minimal character-namespace attribute provider for the
+// Layer-1 scene-command tests. It maps a character: subject ID to its
+// owning-player guest status so the fail-closed execute-scene-commands gate
+// (principal.character.is_guest == false) can be exercised without a real
+// character repository — these tests use synthetic non-ULID IDs that the real
+// CharacterProvider would skip. Per holomush-5rh.23.
+type guestCharProvider struct {
+	isGuestBySubject map[string]bool
+}
+
+func (p *guestCharProvider) Namespace() string { return "character" }
+
+func (p *guestCharProvider) ResolveSubject(_ context.Context, subjectID string) (map[string]any, error) {
+	isGuest, ok := p.isGuestBySubject[subjectID]
+	if !ok {
+		return nil, nil
+	}
+	return map[string]any{
+		"is_guest":     isGuest,
+		"has_is_guest": true,
+		"roles":        []string{"player"},
+	}, nil
+}
+
+func (p *guestCharProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+
+func (p *guestCharProvider) Schema() *policytypes.NamespaceSchema {
+	return &policytypes.NamespaceSchema{
+		Attributes: map[string]policytypes.AttrType{
+			"is_guest":     policytypes.AttrTypeBool,
+			"has_is_guest": policytypes.AttrTypeBool,
+			"roles":        policytypes.AttrTypeStringList,
+		},
+	}
+}

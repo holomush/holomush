@@ -229,11 +229,20 @@ commands:
     usage: "scenes [tag:<t>] [hide:<cw>]"
 
 policies:
-  # ─── Layer 1: command execution gate (unchanged from Phase 1) ─────────
+  # ─── Layer 1: command execution gate ─────────────────────────────────
+  # Scenes are registered-player-only (a guest is ephemeral, not a scene
+  # participant), so this permit excludes guests: `is_guest == false` is
+  # fail-CLOSED — a missing is_guest attribute (guest-lookup unconfigured or
+  # erroring) makes the comparison false, so the permit does not fire and the
+  # command default-denies. The character namespace carries is_guest because
+  # command dispatch evaluates a character: principal, which never resolves the
+  # player: namespace (the guest bit is keyed off the character's owning player
+  # via the host's PlayerKindLookup). Per holomush-5rh.23 (INV-SCENE-64 enforces
+  # the same guest exclusion on the web scene-access facade).
   - name: execute-scene-commands
     dsl: >-
       permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["scene",
-      "scenes"] };
+      "scenes"] && principal.character.is_guest == false };
 
   # ─── Per-action authorization gates ───────────────────────────────────
   # These policies gate WHO (ownership / participation). Scene STATE validity

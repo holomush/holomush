@@ -5,17 +5,6 @@ import { test, expect, db, getClientSessionId, registerAndEnterTerminal } from '
 import type { Page, BrowserContext } from '@playwright/test';
 
 /**
- * Connect as guest via the landing page and wait for the terminal to load.
- * Same pattern as web/e2e/terminal.spec.ts.
- */
-async function connectAsGuest(page: Page) {
-  await page.goto('/');
-  await page.getByRole('main').getByRole('button', { name: 'Try as Guest' }).click();
-  await expect(page).toHaveURL(/\/terminal/, { timeout: 10000 });
-  await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
-}
-
-/**
  * Send a command via the terminal textarea. The caller is responsible for
  * waiting for any specific output.
  */
@@ -98,7 +87,9 @@ async function extractSceneIdFromOutput(page: Page, sinceIndex: number): Promise
 
 test.describe('Scene lifecycle (Phase 2)', () => {
   test('create -> pause -> resume -> end with DB verification', async ({ page }) => {
-    await connectAsGuest(page);
+    // Scene commands are registered-player-only (guests are denied at Layer-1
+    // per holomush-5rh.23), so drive the lifecycle as a registered player.
+    await registerAndEnterTerminal(page, 'sla');
     const sessionId = await getClientSessionId(page);
     expect(sessionId).toBeTruthy();
     const session = await db.getSessionById(sessionId!);
@@ -143,7 +134,7 @@ test.describe('Scene lifecycle (Phase 2)', () => {
   });
 
   test('scene set updates the title', async ({ page }) => {
-    await connectAsGuest(page);
+    await registerAndEnterTerminal(page, 'slb');
 
     let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Original Title');
@@ -161,7 +152,7 @@ test.describe('Scene lifecycle (Phase 2)', () => {
   });
 
   test('cannot end an already-ended scene', async ({ page }) => {
-    await connectAsGuest(page);
+    await registerAndEnterTerminal(page, 'slc');
 
     let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Will End Twice');
@@ -178,7 +169,7 @@ test.describe('Scene lifecycle (Phase 2)', () => {
   });
 
   test('scene info shows scene metadata', async ({ page }) => {
-    await connectAsGuest(page);
+    await registerAndEnterTerminal(page, 'sld');
 
     let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Info Test Scene');
@@ -208,14 +199,14 @@ test.describe('Scene focus routing (Phase 5, holomush-dble7)', () => {
   // the web client captures from the STREAM_OPENED ControlFrame and echoes on
   // SendCommand). If the live stream is up but the command carries an empty
   // connection_id, the plugin rejects with "requires a live connection"
-  // (plugins/core-scenes/commands.go:1146 for focus, :1092 for grid). A guest
-  // is auto-joined as the owner of the scene it creates, so membership is
-  // satisfied and the ONLY thing that can produce that message is an empty
-  // connection_id reaching the handler.
+  // (plugins/core-scenes/commands.go:1146 for focus, :1092 for grid). The
+  // scene creator is auto-joined as the owner of the scene it creates, so
+  // membership is satisfied and the ONLY thing that can produce that message is
+  // an empty connection_id reaching the handler.
   test('scene focus on a joined scene succeeds (does not report no live connection)', async ({
     page,
   }) => {
-    await connectAsGuest(page);
+    await registerAndEnterTerminal(page, 'sfa');
 
     let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Focus Routing Test');
@@ -244,7 +235,7 @@ test.describe('Scene focus routing (Phase 5, holomush-dble7)', () => {
   });
 
   test('scene grid succeeds (does not report no live connection)', async ({ page }) => {
-    await connectAsGuest(page);
+    await registerAndEnterTerminal(page, 'sfb');
 
     // No scene needed — `scene grid` only requires a live per-connection id.
     const before = await currentEventCount(page);
@@ -533,7 +524,7 @@ test.describe('Scenes workspace (E9.5)', () => {
   // '/terminal') when session.isGuest is true. This is the client-side
   // convenience guard for INV-SCENE-64.
   test('guest player navigating to /scenes is redirected to /terminal', async ({ page }) => {
-    // Enter as guest using the same connectAsGuest flow defined above.
+    // Enter as a guest via the landing page (this guard test must stay a guest).
     await page.goto('/');
     await page.getByRole('main').getByRole('button', { name: 'Try as Guest' }).click();
     await expect(page).toHaveURL(/\/terminal/, { timeout: 10000 });

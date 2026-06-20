@@ -19,7 +19,7 @@
     setTheme,
     setTerminalBlackBackground,
   } from '$lib/stores/themeStore';
-  import { clearAuth } from '$lib/stores/authStore';
+  import { clearAuth, authState } from '$lib/stores/authStore';
   import { createClient } from '@connectrpc/connect';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
@@ -41,13 +41,20 @@
     goto('/');
   }
 
-  const navItems: PaletteItem[] = sectionNavEntries().map((e) => ({
-    id: e.id,
-    label: e.label,
-    run: () => goto(e.href),
-  }));
+  // Guest sessions don't get registered-player-only go-to entries (e.g. Scenes),
+  // mirroring the Rail (same registry gate, ADR holomush-stds8). This MUST be
+  // reactive: the palette mounts in the persistent root layout before route
+  // loads resolve the session, so a one-shot snapshot would freeze the pre-auth
+  // isGuest=false and leave "Go to Scenes" in a guest's palette (holomush-5rh.23).
+  const navItems: PaletteItem[] = $derived(
+    sectionNavEntries({ isGuest: $authState.isGuest }).map((e) => ({
+      id: e.id,
+      label: e.label,
+      run: () => goto(e.href),
+    })),
+  );
 
-  const items: PaletteItem[] = [
+  const items: PaletteItem[] = $derived([
     ...navItems,
     { id: 'theme.default-dark',   label: 'Switch theme: Default Dark',   run: () => setTheme('default-dark') },
     { id: 'theme.default-light',  label: 'Switch theme: Default Light',  run: () => setTheme('default-light') },
@@ -60,7 +67,7 @@
     { id: 'ui.term-black',        label: 'Toggle black terminal background',            run: () => setTerminalBlackBackground(!$themePreferences.terminalBlackBackground) },
     { id: 'term.clear',           label: 'Clear terminal',               hint: '⌘L',  run: clearLines },
     { id: 'auth.sign-out',        label: 'Sign out',                                   run: signOut },
-  ];
+  ]);
 
   function runAndClose(item: PaletteItem) {
     item.run();

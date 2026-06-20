@@ -30,7 +30,7 @@ vi.hoisted(() => {
   })) as typeof globalThis.matchMedia;
 });
 
-function render(props: { pathname: string; variant?: 'rail' | 'drawer' }) {
+function render(props: { pathname: string; variant?: 'rail' | 'drawer'; isGuest?: boolean }) {
   const target = document.createElement('div');
   document.body.appendChild(target);
   const component = mount(SectionRail, { target, props });
@@ -59,6 +59,13 @@ describe('SectionRail', () => {
     const { target, component } = render({ pathname: '/terminal', variant: 'drawer' });
     expect(target.textContent).toContain('Room');
     expect(target.textContent).toContain('Scenes');
+    unmount(component);
+  });
+
+  it('hides the Scenes link for a guest session', () => {
+    const { target, component } = render({ pathname: '/terminal', isGuest: true });
+    const hrefs = [...target.querySelectorAll('a.rail-btn')].map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(['/terminal']);
     unmount(component);
   });
 });

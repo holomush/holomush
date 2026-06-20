@@ -222,12 +222,13 @@ test.describe('Terminal — Negative Journeys', () => {
     await expect(input).toBeEditable();
   });
 
-  // A malformed/missing scene ID produces a client-visible error event.
-  // The `scene end` command requires a valid ULID; a garbage argument reaches
-  // the plugin which returns "Usage: scene end #<scene id>" or the store
-  // returns a not-found error surfaced as "Failed to end scene: ...".
+  // A non-existent (but well-formed ULID) scene ID produces a client-visible
+  // error event. Scene commands are registered-player-only (guests are denied
+  // at Layer-1 per holomush-5rh.23), so this runs as a registered player; the
+  // command reaches the store, which returns a not-found error surfaced as
+  // "Failed to end scene: ...".
   test('scene end with bogus id shows error event in terminal', async ({ page }) => {
-    await connectAsGuest(page);
+    await registerAndEnterTerminal(page, 'nse');
     const input = page.locator('textarea');
 
     const before = await currentEventCount(page);

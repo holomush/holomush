@@ -78,6 +78,20 @@
 - **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** RECURRING gateway-wide trap (NOT per-PR, non-blocking): `*grpc.Client` wrappers `oops.Code("RPC_FAILED").Wrap` a grpc-go status.Status err; web handler returns it to connect-go (server.go:69 NewWebServiceHandler, NO error interceptor) under a FALSE `//nolint:wrapcheck // pass through as-is`. connect-go CodeOf only sees `*connect.Error` via errors.As → oops-wrapped status collapses to CodeUnknown/HTTP500; facade PERMISSION_DENIED/NOT_FOUND all become Unknown at browser. IDENTICAL to WebListFocusPresence (handler.go:792) etc → track separately. `...PassesStatusErrorThroughAsIs` unit tests use the MOCK (no wrap) so CANNOT catch it. Token header-injected (headerInjectSessionToken), never body/logged.
 
 - **Frontend/E2E ports + proto-vocab traps (5rh.8.15/.16/.17/.19, 2026-06-08) — CONSOLIDATED.** (a) .svelte.ts ports DROP hard parts: backoff inside recursive fn (hoist to while-loop), gate resolved only in STREAM_OPENED, counter declared-never-incremented=inert, Map keyed charId but delete(sessionId)=dead cache; "N pass" proves nothing — `grep -c 'it('` the NEW file. (b) Load-bearing blocker often in the CONSUMED store not the diff (refresh() hardcoded asCharacterId:'' → blank roster): trace each consumed field to its PRODUCER, verify POPULATED not just typed; pnpm-check blind to empty-but-valid. (c) proto STRING field vs literal: grep the proto/Go const set — UI authors cross state↔visibility↔role vocab (SceneInfo.state∈{active,paused,ended,archived}, 'open' is VISIBILITY → state==='open' never true). nav params DEAD unless +page reads searchParams; charId='' → RPC never fires. (d) re-check a prior NOT-READY blocker STILL holds in CURRENT source before failing a dependent PR (upstream may have fixed). Honest-degradation OK iff test title+comment scope it + cite a tracked bead. Flakiness: no sleeps; expect.poll/toPass; conn-pill gate; unique titles.
+- **Guest/auth-flag gate via one-shot get(store) in PERSISTENT component (5rh.23 NOT READY, 2026-06-20).**
+  Svelte 5: a gate reading `get(authState).isGuest` ONCE at `const`-init is stale if the component lives in the
+  ROOT +layout.svelte (unauthed shell, mounts once, no {#if}/{#key}) — isGuest defaults false and is set LATER by
+  route load fns ((authed)/+layout.ts, +page.ts, login). restoreSession restores sessionId/characterName but NOT
+  isGuest. So palette froze isGuest:false → guest sees "Go to Scenes" dead-end (the exact thing the bead removed).
+  Sibling Rail was CORRECT: $derived(visibleSections({isGuest})) inside (authed) layout. LESSON: for any
+  auth/session-derived gate, trace the CONSUMER's mount point + lifetime vs WHEN the flag is set; `get()` one-shot
+  is only safe if the instance is created AFTER the flag resolves AND never outlives a transition. Pure-fn unit test
+  (sections.test.ts) passes — it CANNOT catch consumer staleness; demand a mount-then-flip-store test. Backend GAP
+  was CLEAN: CharacterProvider WithCharacterKindLookup emits character.is_guest (omit-don't-sentinel ti1b), manifest
+  `&& principal.character.is_guest == false` fail-closed (evalComparison !leftOK→false, evaluator.go:134), resolver
+  merges to bags.Subject["character.is_guest"] + Schema() registers keys (else merge rejects). Prod wiring
+  subsystem.go always supplies PlayerKindLookup. character: principal is what command dispatch evaluates (player:
+  never reached) → gate MUST live on character bag not player bag.
 - **Proto god-service→capability-service decomposition (eykuh.1.2 READY, 2026-06-11).** Proto-only/additive,
   14 svcs across 11 host/v1 files. CHECKLIST: (1) count each svc's RPCs vs plan table. (2) carved-msg fidelity:
   `PluginHostServiceX{}`→`X{}` keep SAME field#+type+validate-constraint+doc (prefix-drop only) vs ORIGINAL
@@ -211,23 +225,11 @@
   dc.Attributes["location"] as action attr "dispatch_location" (interceptor.go:208). Non-blocking:
   no single host->ferry->server e2e test (legs proven separately; cross-process needs subprocess).
 - **Two-path stream-read gate, qualify-before-ABAC (xakba R2 READY, 2026-06-19) -- CLEAN dual-gate.**
-  R1 NOT READY: ABAC built resource from UN-qualified req.GetStream() so system forbid never fired;
-  tests used DenyAll+pre-qualified inputs (couldn't catch). R2 FIX: new pluginauthz.AuthorizeStreamRead
-  (streamread.go) eventbus.Qualify(GameID,Stream) BEFORE EvaluateCapabilityAccess on qualified
-  "stream:<qual>"; fail-closed on qualify err (Qualify "" gameID + relative ref -> error). SHARED gate
-  called by BOTH hostcap/servers.go QueryStreamHistory (brokered, both runtimes) AND hostfunc
-  authorizingHistoryReader decorator wrapping f.historyReader at functions.go:331 (ambient Lua path the
-  abac-reviewer flagged in R1) -> runtime-symmetry closed. ReplayTail DIVERGENCE harmless: handler passes
-  RELATIVE req.GetStream() to ReplayTail (servers.go:888) but busHistoryReaderAdapter.ReplayTail
-  (sub_grpc.go:811) re-Qualifies idempotently (Qualify returns events.* unchanged). Declared:true SOUND:
-  stream.history NOT in declarationExemptCapabilities, interceptor proves declaration before handler.
-  Tests have TEETH: recordingEngine asserts EXACT qualified resource "stream:events.main.system.rekey..."
-  (removing qualify flips it -> assert fails) + reader.called==false on deny + fail-closed-on-qualify-err
-  asserts engine NEVER consulted. Fixture channel:abc->channel.abc CORRECT (subjectTokenRe=^[A-Za-z0-9_-]+$
-  rejects colon; channel.abc splits to 2 valid tokens). NON-BLOCKING latent: binary Host.gameID set ONLY
-  via WithCA(ca,gameID) (host.go:136) gated on cfg.CertsDir!=""+CA-load-ok (subsystem.go:309-316); no-mTLS
-  binary plugins DO run (host.go:361 fallback) -> Host.gameID="" -> every binary stream.history fails
-  closed Internal. Lua path UNAFFECTED (WithGameID(cfg.GameID) direct, subsystem.go:195). Fail-closed safe
-  + no-mTLS flagged non-prod, but binary gameID should be independent of CA option. LESSON: gating a
-  capability handler -> rg the underlying read primitive (ReplayTail) across internal/plugin; ambient
-  hostfuncs bypass the interceptor (decorator-wrap the reader, don't just gate the broker handler).
+  R1 NOT READY: ABAC built resource from UN-qualified req.GetStream() (system forbid never fired); DenyAll+pre-
+  qualified test inputs couldn't catch. R2: pluginauthz.AuthorizeStreamRead Qualify(GameID,Stream) BEFORE
+  EvaluateCapabilityAccess on "stream:<qual>", fail-closed on qualify err. SHARED by hostcap QueryStreamHistory
+  (both runtimes) AND hostfunc authorizingHistoryReader decorator (functions.go:331, ambient Lua path) → symmetry
+  closed. LESSON: gating a capability handler → rg the underlying read primitive (ReplayTail) across
+  internal/plugin; ambient hostfuncs bypass the interceptor (decorator-wrap the reader, not just the broker handler).
+  Tests have TEETH only if recordingEngine asserts the EXACT qualified resource + reader.called==false on deny.
+  Latent non-blocking: binary Host.gameID set only via WithCA → no-mTLS binary plugins get gameID="" → fail closed.

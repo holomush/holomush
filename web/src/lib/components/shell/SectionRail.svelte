@@ -5,7 +5,7 @@
 <script lang="ts">
   import { Home, Clapperboard, Settings } from '@lucide/svelte';
   import type { Component } from 'svelte';
-  import { SECTIONS, type SectionId } from '$lib/nav/sections';
+  import { visibleSections, type SectionId } from '$lib/nav/sections';
   import { uiPrefs, toggleDensity } from '$lib/stores/uiPrefsStore';
   import { themePreferences, setTerminalBlackBackground } from '$lib/stores/themeStore';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -16,14 +16,20 @@
     pathname: string;
     /** 'rail' = persistent desktop column; 'drawer' = mobile Sheet (shows labels). */
     variant?: 'rail' | 'drawer';
+    /** True for an ephemeral guest session — hides registered-player-only sections. */
+    isGuest?: boolean;
     /** Called when a section link is clicked (drawer closes itself via this). */
     onnavigate?: () => void;
   }
-  let { pathname, variant = 'rail', onnavigate }: Props = $props();
+  let { pathname, variant = 'rail', isGuest = false, onnavigate }: Props = $props();
 
   // id → icon: kept here so nav/sections.ts stays Svelte-free / node-testable.
   // Keyed by SectionId so a new section without an icon is a compile error.
   const icons: Record<SectionId, Component> = { room: Home, scenes: Clapperboard };
+
+  // Guest sessions never see registered-player-only sections (e.g. Scenes);
+  // the registry's visibleSections is the single gate the palette shares.
+  let sections = $derived(visibleSections({ isGuest }));
 </script>
 
 <aside
@@ -35,7 +41,7 @@
   aria-label="Navigation rail"
 >
   <div class="rail-inner">
-    {#each SECTIONS as section (section.id)}
+    {#each sections as section (section.id)}
       {@const Icon = icons[section.id]}
       {@const active = section.match(pathname)}
       <a
