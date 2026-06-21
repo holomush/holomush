@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 import { describe, expect, it } from 'vitest';
-import { SECTIONS, activeSectionId, activeSectionLabel, sectionNavEntries } from './sections';
+import {
+  SECTIONS,
+  activeSectionId,
+  activeSectionLabel,
+  sectionNavEntries,
+  visibleSections,
+} from './sections';
 
 describe('section registry', () => {
   it('lists Room then Scenes with their routes', () => {
@@ -36,10 +42,27 @@ describe('activeSectionLabel', () => {
 });
 
 describe('sectionNavEntries', () => {
-  it('derives palette go-to entries from the same registry', () => {
-    expect(sectionNavEntries()).toEqual([
+  it('derives palette go-to entries from the same registry for a registered player', () => {
+    expect(sectionNavEntries({ isGuest: false })).toEqual([
       { id: 'nav.room', label: 'Go to Room', href: '/terminal' },
       { id: 'nav.scenes', label: 'Go to Scenes', href: '/scenes' },
+    ]);
+  });
+});
+
+describe('visibleSections gates registered-player-only sections', () => {
+  it('hides Scenes for a guest session (requiresPlayer)', () => {
+    expect(visibleSections({ isGuest: true }).map((s) => s.id)).toEqual(['room']);
+  });
+  it('shows every section for a registered player', () => {
+    expect(visibleSections({ isGuest: false }).map((s) => s.id)).toEqual(['room', 'scenes']);
+  });
+});
+
+describe('sectionNavEntries respects guest visibility', () => {
+  it('omits the Scenes go-to entry for a guest', () => {
+    expect(sectionNavEntries({ isGuest: true })).toEqual([
+      { id: 'nav.room', label: 'Go to Room', href: '/terminal' },
     ]);
   });
 });

@@ -90,6 +90,8 @@ func TestCharacterProviderSchema(t *testing.T) {
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["location_id"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["location"])
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["has_location"])
+	assert.Equal(t, types.AttrTypeBool, schema.Attributes["is_guest"])
+	assert.Equal(t, types.AttrTypeBool, schema.Attributes["has_is_guest"])
 }
 
 func TestCharacterProvider_ResolveSubject(t *testing.T) {
@@ -132,6 +134,8 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 				"location_id":  locationID.String(),
 				"location":     locationID.String(),
 				"has_location": true,
+				// nil kindLookup → is_guest omitted, witness false (ADR holomush-ti1b).
+				"has_is_guest": false,
 			},
 		},
 		{
@@ -160,6 +164,8 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 				"description":  "",
 				"roles":        []string{"player"},
 				"has_location": false,
+				// nil kindLookup → is_guest omitted, witness false (ADR holomush-ti1b).
+				"has_is_guest": false,
 			},
 		},
 		{
@@ -246,6 +252,94 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 			assert.Equal(t, tt.expectAttrs, attrs)
 		})
 	}
+}
+
+// --- is_guest attribute (omit-don't-sentinel, ADR holomush-ti1b) -------------
+//
+// The character namespace carries is_guest so a Layer-1 command-execution
+// policy can gate on the acting character's owning-player kind (guests have a
+// character: principal at command dispatch, never a player: one — so the gate
+// must live on the character bag, not the player bag). Per holomush-5rh.23.
+
+// TestCharacterProviderEmitsIsGuestWitnessWhenLookupConfigured verifies that
+// when a PlayerKindLookup is configured, ResolveSubject emits both is_guest and
+// has_is_guest on every code path: true/true when the owning player is a guest,
+// false/true when registered. The lookup is keyed on the character's PlayerID.
+func TestCharacterProviderEmitsIsGuestWitnessWhenLookupConfigured(t *testing.T) {
+	charID := ulid.Make()
+	guestPlayerID := ulid.Make()
+	registeredPlayerID := ulid.Make()
+
+	// Typed as PlayerKindLookup so its always-nil error result is dictated by the
+	// named signature (keeps unparam from flagging the happy-path stub).
+	var lookup PlayerKindLookup = func(_ context.Context, playerID string) (bool, error) {
+		return playerID == guestPlayerID.String(), nil
+	}
+
+	newProvider := func(playerID ulid.ULID) *CharacterProvider {
+		repo := &mockCharacterRepository{
+			getFunc: func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
+				return &world.Character{ID: charID, PlayerID: playerID, Name: "C"}, nil
+			},
+		}
+		return NewCharacterProvider(repo, nil, WithCharacterKindLookup(lookup))
+	}
+
+	t.Run("guest player's character emits is_guest true and has_is_guest true", func(t *testing.T) {
+		attrs, err := newProvider(guestPlayerID).ResolveSubject(context.Background(), access.CharacterSubject(charID.String()))
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+		assert.Equal(t, true, attrs["is_guest"], "is_guest must be true when the owning player is a guest")
+		assert.Equal(t, true, attrs["has_is_guest"], "has_is_guest must always be present when lookup configured")
+	})
+
+	t.Run("registered player's character emits is_guest false and has_is_guest true", func(t *testing.T) {
+		attrs, err := newProvider(registeredPlayerID).ResolveSubject(context.Background(), access.CharacterSubject(charID.String()))
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+		assert.Equal(t, false, attrs["is_guest"], "is_guest must be false for a registered player's character")
+		assert.Equal(t, true, attrs["has_is_guest"], "has_is_guest must always be present when lookup configured")
+	})
+}
+
+// TestCharacterProviderOmitsIsGuestWhenLookupAbsentOrFails verifies the
+// omit-don't-sentinel invariant (ADR holomush-ti1b): when no lookup is
+// configured or it returns an error, the is_guest key MUST be absent (never a
+// false sentinel) and the witness has_is_guest MUST be false. This keeps the
+// fail-closed scene-command gate denying when guest-ness cannot be determined.
+func TestCharacterProviderOmitsIsGuestWhenLookupAbsentOrFails(t *testing.T) {
+	charID := ulid.Make()
+	playerID := ulid.Make()
+	repoFor := func() *mockCharacterRepository {
+		return &mockCharacterRepository{
+			getFunc: func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
+				return &world.Character{ID: charID, PlayerID: playerID, Name: "C"}, nil
+			},
+		}
+	}
+
+	t.Run("no lookup configured: is_guest key absent and has_is_guest false", func(t *testing.T) {
+		p := NewCharacterProvider(repoFor(), nil)
+		attrs, err := p.ResolveSubject(context.Background(), access.CharacterSubject(charID.String()))
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+		_, ok := attrs["is_guest"]
+		assert.False(t, ok, "is_guest key MUST be absent when no lookup configured (omit-don't-sentinel, ADR holomush-ti1b)")
+		assert.Equal(t, false, attrs["has_is_guest"], "has_is_guest must be false when lookup not configured")
+	})
+
+	t.Run("lookup returns error: is_guest key absent and has_is_guest false", func(t *testing.T) {
+		lookup := func(_ context.Context, _ string) (bool, error) {
+			return false, errors.New("player not found")
+		}
+		p := NewCharacterProvider(repoFor(), nil, WithCharacterKindLookup(lookup))
+		attrs, err := p.ResolveSubject(context.Background(), access.CharacterSubject(charID.String()))
+		require.NoError(t, err, "lookup errors must not bubble out of ResolveSubject")
+		require.NotNil(t, attrs)
+		_, ok := attrs["is_guest"]
+		assert.False(t, ok, "is_guest key MUST be absent when lookup errors (omit-don't-sentinel, ADR holomush-ti1b)")
+		assert.Equal(t, false, attrs["has_is_guest"], "has_is_guest must be false when lookup fails")
+	})
 }
 
 func TestCharacterProvider_RoleResolution(t *testing.T) {
@@ -374,6 +468,8 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 				"location_id":  locationID.String(),
 				"location":     locationID.String(),
 				"has_location": true,
+				// nil kindLookup → is_guest omitted, witness false (ADR holomush-ti1b).
+				"has_is_guest": false,
 			},
 		},
 		{

@@ -136,7 +136,17 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		if cfg.RoleStore != nil {
 			roleResolver = store.NewPostgresRoleResolver(cfg.RoleStore)
 		}
-		charProvider := attribute.NewCharacterProvider(cfg.CharacterRepo, roleResolver)
+		// The guest-kind lookup is wired onto the character namespace so the
+		// Layer-1 scene-command gate (plugins/core-scenes execute-scene-commands)
+		// can read principal.character.is_guest — command dispatch evaluates a
+		// character: subject, which never carries the player: namespace. Omitted
+		// when nil (tests / alternate entrypoints); production wiring at
+		// internal/access/setup/subsystem.go always supplies it. Per holomush-5rh.23.
+		charOpts := []attribute.CharacterProviderOption{}
+		if cfg.PlayerKindLookup != nil {
+			charOpts = append(charOpts, attribute.WithCharacterKindLookup(cfg.PlayerKindLookup))
+		}
+		charProvider := attribute.NewCharacterProvider(cfg.CharacterRepo, roleResolver, charOpts...)
 		if err := resolver.RegisterProvider(charProvider); err != nil {
 			return nil, eb.Wrapf(err, "register character provider")
 		}

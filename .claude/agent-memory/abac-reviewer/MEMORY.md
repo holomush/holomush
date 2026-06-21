@@ -505,3 +505,23 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   same exposure pre-xakba). DURABLE LESSON CONFIRMED: gate the SHARED read primitive (here:
   wrap the HistoryReader once), not one handler — the capability service is never the only
   path to a primitive when ambient hostfuncs exist.
+- **Guest scene-command gate (5rh.23, 2026-06-20) — READY**: `character.is_guest`
+  bit added to CharacterProvider via optional `PlayerKindLookup` (same func type +
+  exact shape as player.go), gated at core-scenes `execute-scene-commands` permit
+  `&& principal.character.is_guest == false`. KEY rationale: command dispatch
+  evaluates a `character:<ulid>` subject; `resolveEntity` (resolver.go:350) calls
+  every provider with the SAME ref, so the `player:` namespace NEVER merges onto a
+  character principal → gating on `principal.player.is_guest` would silently
+  never-match = fail-OPEN. Hence the guest bit MUST live on the character bag.
+  Fail-closed verified: missing is_guest → evalComparison false (evaluator.go:134)
+  → permit doesn't fire → default-deny. Sole grant for scene/scenes execute confirmed
+  (siblings grant only own command names; admin wildcard role-gated, guest≠admin).
+  Dual-emit on ResolveResource is harmless surplus (no policy reads
+  resource.character.is_guest). Lookup-error → fail-closed deny for registered
+  players (availability-only regression, intended). Single cfg.PlayerKindLookup
+  feeds both providers (setup.go:146,239) — no drift. ONE Low: terminal-path gate
+  is a durable fail-closed guarantee parallel to INV-SCENE-64 (web facade) but is
+  NOT yet registered in invariants.yaml — SHOULD add an INV entry (pending is fine).
+  PATTERN: when gating on a subject attr, verify the attr's namespace actually
+  merges onto THAT subject type's principal via resolveEntity — cross-namespace
+  gates (player attr on character principal) fail-open silently.
