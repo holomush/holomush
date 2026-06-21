@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -129,7 +130,7 @@ func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Reques
 		RememberMe: req.Msg.GetRememberMe(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: authenticate player RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: authenticate player RPC failed", err)
 		return connect.NewResponse(&webv1.WebAuthenticatePlayerResponse{
 			Success: false, ErrorMessage: "authentication error",
 		}), nil
@@ -167,7 +168,7 @@ func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[w
 		ClientType:         req.Msg.GetClientType(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: select character RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: select character RPC failed", err)
 		return connect.NewResponse(&webv1.WebSelectCharacterResponse{
 			Success: false, ErrorMessage: "character selection error",
 		}), nil
@@ -210,7 +211,7 @@ func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv
 		Email:    req.Msg.GetEmail(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: create player RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: create player RPC failed", err)
 		return connect.NewResponse(&webv1.WebCreatePlayerResponse{
 			Success: false, ErrorMessage: "registration error",
 		}), nil
@@ -246,7 +247,7 @@ func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[w
 		CharacterName:      req.Msg.GetCharacterName(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: create character RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: create character RPC failed", err)
 		return connect.NewResponse(&webv1.WebCreateCharacterResponse{
 			Success: false, ErrorMessage: "character creation error",
 		}), nil
@@ -280,7 +281,7 @@ func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[we
 		PlayerSessionToken: token,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: list characters RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: list characters RPC failed", err)
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("session expired or invalid"))
 	}
 
@@ -302,7 +303,7 @@ func (h *Handler) WebLogout(ctx context.Context, req *connect.Request[webv1.WebL
 		if _, err := h.client.Logout(rpcCtx, &corev1.LogoutRequest{
 			PlayerSessionToken: token,
 		}); err != nil {
-			slog.ErrorContext(ctx, "web: logout RPC failed", "error", err)
+			errutil.LogErrorContext(ctx, "web: logout RPC failed", err)
 		}
 	}
 
@@ -349,7 +350,7 @@ func (h *Handler) WebRequestPasswordReset(ctx context.Context, req *connect.Requ
 		Email: req.Msg.GetEmail(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: request password reset RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: request password reset RPC failed", err)
 		// Return success to avoid leaking whether the email exists.
 		return connect.NewResponse(&webv1.WebRequestPasswordResetResponse{
 			Success: true,
@@ -373,7 +374,7 @@ func (h *Handler) WebConfirmPasswordReset(ctx context.Context, req *connect.Requ
 		NewPassword: req.Msg.GetNewPassword(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: confirm password reset RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: confirm password reset RPC failed", err)
 		return connect.NewResponse(&webv1.WebConfirmPasswordResetResponse{
 			Success: false, ErrorMessage: "password reset error",
 		}), nil
@@ -409,7 +410,7 @@ func (h *Handler) WebCreateGuest(ctx context.Context, req *connect.Request[webv1
 
 	coreResp, err := h.client.CreateGuest(rpcCtx, &corev1.CreateGuestRequest{})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: create guest RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: create guest RPC failed", err)
 		return connect.NewResponse(&webv1.WebCreateGuestResponse{
 			Success: false, ErrorMessage: "guest creation error",
 		}), nil
@@ -447,7 +448,7 @@ func (h *Handler) WebListPlayerSessions(ctx context.Context, req *connect.Reques
 		PlayerSessionToken: token,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: list player sessions RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: list player sessions RPC failed", err)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -483,7 +484,7 @@ func (h *Handler) WebRevokePlayerSession(ctx context.Context, req *connect.Reque
 		TargetSessionId:    req.Msg.GetTargetSessionId(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: revoke player session RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: revoke player session RPC failed", err)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -511,7 +512,7 @@ func (h *Handler) WebRevokeOtherPlayerSessions(ctx context.Context, req *connect
 		PlayerSessionToken: token,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: revoke other player sessions RPC failed", "error", err)
+		errutil.LogErrorContext(ctx, "web: revoke other player sessions RPC failed", err)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 

@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/telemetry"
+	"github.com/holomush/holomush/pkg/errutil"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -192,7 +193,7 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 		ConnectionId:       connIDStr,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: handle command RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: handle command RPC failed", err, "session_id", req.Msg.GetSessionId())
 		return connect.NewResponse(&webv1.SendCommandResponse{
 			Success:      false,
 			ErrorMessage: "command error",
@@ -636,7 +637,7 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 		SessionId:          req.Msg.GetSessionId(),
 		PlayerSessionToken: token,
 	}); err != nil {
-		slog.ErrorContext(ctx, "web: disconnect RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: disconnect RPC failed", err, "session_id", req.Msg.GetSessionId())
 	}
 
 	return connect.NewResponse(&webv1.DisconnectResponse{}), nil
@@ -663,7 +664,7 @@ func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[we
 		PlayerSessionToken: token,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: get command history RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: get command history RPC failed", err, "session_id", req.Msg.GetSessionId())
 		return connect.NewResponse(&webv1.GetCommandHistoryResponse{}), nil
 	}
 
@@ -727,8 +728,8 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 		NotAfterMs:  req.Msg.GetNotAfterMs(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: query stream history RPC failed",
-			"session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: query stream history RPC failed", err,
+			"session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is so clients can distinguish STREAM_ACCESS_DENIED / INVALID_ARGUMENT. (Per INV-PRIVACY-5 wire-opacity, expired-session + missing-session denials now collapse into STREAM_ACCESS_DENIED upstream.)
 	}
 
@@ -770,8 +771,8 @@ func (h *Handler) WebListSessionStreams(ctx context.Context, req *connect.Reques
 		PlayerSessionToken: token,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: list session streams RPC failed",
-			"session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: list session streams RPC failed", err,
+			"session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through so clients can distinguish SESSION_EXPIRED / SESSION_NOT_FOUND / INVALID_ARGUMENT. ListSessionStreams is NOT governed by INV-PRIVACY-5 wire-opacity (that invariant applies only to QueryStreamHistory denial paths); distinct codes here are intentional.
 	}
 
@@ -797,8 +798,8 @@ func (h *Handler) WebListFocusPresence(ctx context.Context, req *connect.Request
 		PlayerSessionToken: token,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: list focus presence RPC failed",
-			"session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: list focus presence RPC failed", err,
+			"session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through so clients can distinguish PERMISSION_DENIED / UNIMPLEMENTED / SESSION_NOT_FOUND.
 	}
 
@@ -825,8 +826,8 @@ func (h *Handler) WebListCommands(ctx context.Context, req *connect.Request[webv
 		PlayerSessionToken: token,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: list available commands RPC failed",
-			"session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: list available commands RPC failed", err,
+			"session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through so clients can distinguish SESSION_NOT_FOUND / PERMISSION_DENIED.
 	}
 
