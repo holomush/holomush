@@ -119,40 +119,50 @@ func TestSceneSubcommand_OOC_EmitsSceneEventOnOOCFacet(t *testing.T) {
 	assert.Contains(t, found.Payload, `"text":"brb getting coffee"`)
 }
 
-func TestSceneSubcommand_Pose_IncludesAuthorCharacterName(t *testing.T) {
+func TestSceneSubcommand_Pose_AuthorCharacterNameInPayload(t *testing.T) {
 	t.Parallel()
-	p, sink := newTestPluginWithMember(t, "scene-author-test")
+	tests := []struct {
+		name          string
+		scene         string
+		characterName string
+		assertPayload func(t *testing.T, payload string)
+	}{
+		{
+			name:          "includes character_name when the dispatcher provides one",
+			scene:         "scene-author-test",
+			characterName: "Alice",
+			assertPayload: func(t *testing.T, payload string) {
+				assert.Contains(t, payload, `"character_name":"Alice"`)
+			},
+		},
+		{
+			name:          "omits character_name when the dispatcher provides none",
+			scene:         "scene-noauthor-test",
+			characterName: "",
+			assertPayload: func(t *testing.T, payload string) {
+				assert.NotContains(t, payload, "character_name")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p, sink := newTestPluginWithMember(t, tt.scene)
 
-	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
-		Command:       "scene",
-		Args:          "pose smiles",
-		CharacterID:   "char-alice",
-		CharacterName: "Alice",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+			resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+				Command:       "scene",
+				Args:          "pose smiles",
+				CharacterID:   "char-alice",
+				CharacterName: tt.characterName,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 
-	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
-	require.NotNil(t, found)
-	assert.Contains(t, found.Payload, `"character_name":"Alice"`)
-}
-
-func TestSceneSubcommand_Pose_OmitsCharacterNameWhenEmpty(t *testing.T) {
-	t.Parallel()
-	p, sink := newTestPluginWithMember(t, "scene-noauthor-test")
-
-	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
-		Command:     "scene",
-		Args:        "pose smiles",
-		CharacterID: "char-alice",
-		// CharacterName intentionally empty
-	})
-	require.NoError(t, err)
-	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
-
-	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
-	require.NotNil(t, found)
-	assert.NotContains(t, found.Payload, "character_name")
+			found := findIntentByType(sink.intents, "core-scenes:scene_pose")
+			require.NotNil(t, found)
+			tt.assertPayload(t, found.Payload)
+		})
+	}
 }
 
 func TestSceneSubcommand_NonParticipant_PermissionDenied(t *testing.T) {
