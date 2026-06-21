@@ -16,8 +16,7 @@ var _ = Describe("Migration 000018", func() {
 	Describe("plugins table", func() {
 		It("creates plugins table with exactly 9 expected columns and partial unique index", func() {
 			ctx := context.Background()
-			pool, cleanup := newTestPool(suiteT)
-			defer cleanup()
+			pool := rawPool(suiteT)
 
 			Expect(runMigrations(ctx, pool, 18)).To(Succeed())
 
@@ -56,8 +55,7 @@ var _ = Describe("Migration 000018", func() {
 	Describe("events_audit truncation", func() {
 		It("truncates events_audit when applying migration 000018", func() {
 			ctx := context.Background()
-			pool, cleanup := newTestPool(suiteT)
-			defer cleanup()
+			pool := rawPool(suiteT)
 
 			Expect(runMigrations(ctx, pool, 17)).To(Succeed())
 			_, err := pool.Exec(ctx, `

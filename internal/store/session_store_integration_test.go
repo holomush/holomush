@@ -20,13 +20,10 @@ import (
 
 func TestSessionConnectionsHasFocusKeyColumn(t *testing.T) {
 	t.Parallel()
+	pool := freshMigratedPool(t)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
-
-	require.NoError(t, runMigrations(ctx, pool, 46))
 
 	var dataType string
 	err := pool.QueryRow(ctx, `
@@ -40,13 +37,10 @@ func TestSessionConnectionsHasFocusKeyColumn(t *testing.T) {
 
 func TestPostgresListConnectionsBySession(t *testing.T) {
 	t.Parallel()
+	pool := freshMigratedPool(t)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
-
-	require.NoError(t, runMigrations(ctx, pool, 46))
 
 	s := store.NewPostgresSessionStore(pool)
 
@@ -70,13 +64,10 @@ func TestPostgresListConnectionsBySession(t *testing.T) {
 // transaction; both writes commit and read back atomically.
 func TestPostgresUpdateSessionConnection_HappyPath(t *testing.T) {
 	t.Parallel()
+	pool := freshMigratedPool(t)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
-
-	require.NoError(t, runMigrations(ctx, pool, 46))
 
 	s := store.NewPostgresSessionStore(pool)
 
@@ -121,13 +112,10 @@ func TestPostgresUpdateSessionConnection_HappyPath(t *testing.T) {
 // errors out, but observable behavior is intermittent timeouts).
 func TestPostgresUpdateSessionConnection_LockAcquisitionOrder_NoDeadlock(t *testing.T) {
 	t.Parallel()
+	pool := freshMigratedPool(t)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
-
-	require.NoError(t, runMigrations(ctx, pool, 46))
 
 	s := store.NewPostgresSessionStore(pool)
 
