@@ -20,8 +20,7 @@ var _ = Describe("RoleStore", func() {
 	Describe("PlayerHasRole", func() {
 		It("returns true for player with admin character", func() {
 			ctx := context.Background()
-			pool, cleanup := newTestPool(suiteT)
-			defer cleanup()
+			pool := rawPool(suiteT)
 			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
 			playerID := idgen.New().String()
@@ -43,8 +42,7 @@ var _ = Describe("RoleStore", func() {
 
 		It("returns false for player without any admin character", func() {
 			ctx := context.Background()
-			pool, cleanup := newTestPool(suiteT)
-			defer cleanup()
+			pool := rawPool(suiteT)
 			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
 			playerID := idgen.New().String()
@@ -68,8 +66,7 @@ var _ = Describe("RoleStore", func() {
 
 		It("returns false for unknown player", func() {
 			ctx := context.Background()
-			pool, cleanup := newTestPool(suiteT)
-			defer cleanup()
+			pool := rawPool(suiteT)
 			Expect(runMigrations(ctx, pool, 20)).To(Succeed())
 
 			rs := store.NewPostgresRoleStore(pool)
