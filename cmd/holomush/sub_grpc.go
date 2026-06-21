@@ -594,6 +594,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		if s.cfg.RekeyManager != nil {
 			saSrv.WithSceneDEKAdder(s.cfg.RekeyManager)
 		}
+		saSrv.WithCharacterNameResolver(holoGRPC.NewRepoCharacterNameResolver(charRepo))
 		sceneAccessSrv = saSrv
 		slog.InfoContext(ctx, "sceneAccessService facade registered")
 	} else {

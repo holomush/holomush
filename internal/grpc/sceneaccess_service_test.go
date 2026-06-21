@@ -31,6 +31,34 @@ import (
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
 
+// fakeNameResolver is a hand-rolled double for the unexported
+// characterNameResolver interface (mockery does not generate mocks for
+// unexported interfaces).
+type fakeNameResolver struct {
+	names map[ulid.ULID]string
+	err   error
+}
+
+func (f *fakeNameResolver) Names(_ context.Context, ids []ulid.ULID) (map[ulid.ULID]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make(map[ulid.ULID]string, len(ids))
+	for _, id := range ids {
+		if n, ok := f.names[id]; ok {
+			out[id] = n
+		}
+	}
+	return out, nil
+}
+
+func TestWithCharacterNameResolverSetsTheField(t *testing.T) {
+	srv := &SceneAccessServer{}
+	r := &fakeNameResolver{}
+	srv.WithCharacterNameResolver(r)
+	assert.Same(t, r, srv.characterNameResolver)
+}
+
 func TestWithSceneDEKAdderSetsField(t *testing.T) {
 	s := &SceneAccessServer{}
 	s.WithSceneDEKAdder(stubSceneDEKAdder{})
@@ -615,6 +643,116 @@ func TestSetSceneFocusJoinsFocusThenSetsConnectionFocus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, coord.joinFocusCalls,
 		"JoinFocus MUST be called exactly once for a valid participant")
+}
+
+// TestGetSceneForViewerResolvesRosterNames verifies that GetSceneForViewer
+// overwrites participant and observer CharacterName fields with display names
+// from the resolver, falling back to the raw ULID for unresolved IDs.
+func TestGetSceneForViewerResolvesRosterNames(t *testing.T) {
+	ctx := context.Background()
+
+	playerID := idgen.New()
+	viewer := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Viewer"}
+	ps := buildSATestPS(t, playerID)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+	psRepo := buildSASessionRepo(t, ps)
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{viewer}, nil).Maybe()
+	sessStore := sessionmocks.NewMockStore(t)
+	mgr := &stubPluginManager{}
+
+	ownerID := idgen.New()
+	missingID := idgen.New() // NOT in the resolver map → ULID fallback
+	observerID := idgen.New()
+
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+	sceneMock.EXPECT().GetScene(mock.Anything, mock.Anything).Return(&scenev1.GetSceneResponse{
+		Scene: &scenev1.SceneInfo{
+			Id: "sc-1",
+			Participants: []*scenev1.ParticipantInfo{
+				{CharacterId: ownerID.String(), CharacterName: ownerID.String(), Role: "owner"},
+				{CharacterId: missingID.String(), CharacterName: missingID.String(), Role: "member"},
+			},
+			Observers: []*scenev1.ParticipantInfo{
+				{CharacterId: observerID.String(), CharacterName: observerID.String(), Role: "observer"},
+			},
+		},
+	}, nil).Maybe()
+
+	srv := newTestSceneAccessServer(t, psRepo, playerRepo, charRepo, sessStore, &stubFocusCoordinator{}, sceneMock, mgr)
+	srv.WithCharacterNameResolver(&fakeNameResolver{names: map[ulid.ULID]string{
+		ownerID:    "Owner One",
+		observerID: "Observer One",
+		// missingID intentionally absent
+	}})
+
+	resp, err := srv.GetSceneForViewer(ctx, &sceneaccessv1.GetSceneForViewerRequest{
+		SessionId:          "ignored",
+		PlayerSessionToken: testSAToken,
+		CharacterId:        viewer.ID.String(),
+		SceneId:            "sc-1",
+	})
+	require.NoError(t, err)
+
+	parts := resp.GetScene().GetParticipants()
+	require.Len(t, parts, 2)
+	assert.Equal(t, "Owner One", parts[0].GetCharacterName())
+	assert.Equal(t, missingID.String(), parts[1].GetCharacterName(), "unresolved id keeps the ULID")
+	obs := resp.GetScene().GetObservers()
+	require.Len(t, obs, 1)
+	assert.Equal(t, "Observer One", obs[0].GetCharacterName())
+}
+
+// TestGetSceneForViewerKeepsULIDsWhenResolverErrors pins the deliberate
+// best-effort degradation (spec G3, and the DELIBERATE divergence from
+// ListFocusPresence which hard-fails): a resolver error MUST NOT fail
+// GetSceneForViewer — the roster is returned with the raw ULIDs intact.
+func TestGetSceneForViewerKeepsULIDsWhenResolverErrors(t *testing.T) {
+	ctx := context.Background()
+
+	playerID := idgen.New()
+	viewer := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Viewer"}
+	ps := buildSATestPS(t, playerID)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+	psRepo := buildSASessionRepo(t, ps)
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{viewer}, nil).Maybe()
+	sessStore := sessionmocks.NewMockStore(t)
+	mgr := &stubPluginManager{}
+
+	memberID := idgen.New()
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+	sceneMock.EXPECT().GetScene(mock.Anything, mock.Anything).Return(&scenev1.GetSceneResponse{
+		Scene: &scenev1.SceneInfo{
+			Id: "sc-1",
+			Participants: []*scenev1.ParticipantInfo{
+				{CharacterId: memberID.String(), CharacterName: memberID.String(), Role: "member"},
+			},
+		},
+	}, nil).Maybe()
+
+	srv := newTestSceneAccessServer(t, psRepo, playerRepo, charRepo, sessStore, &stubFocusCoordinator{}, sceneMock, mgr)
+	srv.WithCharacterNameResolver(&fakeNameResolver{err: errors.New("resolver boom")})
+
+	resp, err := srv.GetSceneForViewer(ctx, &sceneaccessv1.GetSceneForViewerRequest{
+		SessionId:          "ignored",
+		PlayerSessionToken: testSAToken,
+		CharacterId:        viewer.ID.String(),
+		SceneId:            "sc-1",
+	})
+	require.NoError(t, err, "resolver error must NOT fail the RPC (best-effort degradation)")
+	parts := resp.GetScene().GetParticipants()
+	require.Len(t, parts, 1)
+	assert.Equal(t, memberID.String(), parts[0].GetCharacterName(),
+		"resolver error leaves the raw ULID")
 }
 
 // failingSceneDEKAdder is a sceneDEKAdder whose EnsureParticipant always fails,

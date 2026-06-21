@@ -233,3 +233,19 @@
   internal/plugin; ambient hostfuncs bypass the interceptor (decorator-wrap the reader, not just the broker handler).
   Tests have TEETH only if recordingEngine asserts the EXACT qualified resource + reader.called==false on deny.
   Latent non-blocking: binary Host.gameID set only via WithCA → no-mTLS binary plugins get gameID="" → fail closed.
+- **Scene roster name-resolution (5rh.25/vdy2z READY, 2026-06-20) — CLEAN host-side fix.** GetSceneForViewer
+  resolveRosterNames overwrites ParticipantInfo.CharacterName in-place via characterNameResolver (mirrors
+  ListFocusPresence). VERIFIED NON-ALIASING: plugin GetScene builds Participants (service.go:484) + Observers
+  (494) as SEPARATE &ParticipantInfo{} appends → combined-roster slice shares distinct pointers, in-place
+  mutate safe. Best-effort: nil-resolver/nil-scene/parse-err/resolver-err/missing-id all keep ULID; resolver
+  err LOGGED+return (DEGRADES, NOT INTERNAL — divergence from presence which hard-fails, doc'd in source).
+  slog.ErrorContext (not errutil.LogErrorContext) is FINE here: matches sibling list_focus_presence.go:161, ctx
+  carried (logging.md satisfied), err NOT returned to client (no opacity leak). Shared handleEmit (commands.go:1310)
+  stamps character_name for IC+OOC both (ooc only swaps subject 1306-08) → R3 parity free. actor_id ULID stays
+  (GameEvent.ActorId separate from Actor=character_name); translateEvent reads p.CharacterName→actor (translate.go:81).
+  Harness: worldCharRepo raw *worldpg.CharacterRepository (==prod sub_grpc.go:312 type) added; NewSceneAccessServer
+  helper == prod wiring; both files //go:build integration; NO prod import of integrationtest. Tests TEETH: facade
+  unit asserts resolved+ULID-fallback(missingID); plugin include/omit; gateway actor; int uses REAL `scene join`
+  cmd for plugin-DB roster row (JoinScene store-shortcut only touches focus_memberships, doc'd) + cross-loc
+  not-ULID regex + ContainElement seeded names + decrypted pose author. int roster checks participants only (not
+  observers) but unit covers observers — OK. All 5 unit tests pass; go vet -tags integration green.

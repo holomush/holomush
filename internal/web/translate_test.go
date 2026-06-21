@@ -401,6 +401,24 @@ func TestTranslateEventTranslatesEventWithUnknownTypeButPresentRendering(t *test
 	assert.Equal(t, "You teleport away.", got.GetText())
 }
 
+func TestTranslateEvent_ScenePoseUsesCharacterNameAsActor(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type:    "core-scenes:scene_pose",
+		ActorId: "01HYXCHARALICE0000000000AA",
+		Payload: mustMarshal(t, map[string]string{"character_name": "Alice", "text": "smiles"}),
+		Rendering: &corev1.RenderingMetadata{
+			Category:      "communication",
+			Format:        "action",
+			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			SourcePlugin:  "core-scenes",
+		},
+	}
+	got := h.translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "Alice", got.GetActor())
+}
+
 func TestTranslateEvent_CorruptPayload(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{

@@ -831,3 +831,25 @@ func (p *AuthedPlayer) OpenTelnetSession(_ context.Context) *Session {
 	p.server.t.Fatalf("integrationtest.AuthedPlayer.OpenTelnetSession: TODO iwzt-16 — telnet transport differentiation requires Subscribe goroutine wiring")
 	return nil
 }
+
+// GetSceneForViewer calls the REAL SceneAccessServer.GetSceneForViewer for
+// this session's character via the production facade path (player-session auth
+// → character ownership verification → plugin GetScene → roster name
+// resolution). Requires WithInTreePlugins and WithFocusDelivery (delegates to
+// Server.NewSceneAccessServer which requires both; panics via t.Fatalf if
+// either is absent).
+//
+// The returned SceneInfo has ParticipantInfo.CharacterName populated with
+// resolved display names when the harness is wired with a
+// RepoCharacterNameResolver (which NewSceneAccessServer always attaches). On a
+// name-resolution miss the raw ULID is left in place (best-effort, per
+// sceneaccess_service.go resolveRosterNames).
+func (s *Session) GetSceneForViewer(ctx context.Context, sceneID ulid.ULID) (*sceneaccessv1.GetSceneForViewerResponse, error) {
+	s.server.t.Helper()
+	facade := s.server.NewSceneAccessServer()
+	return facade.GetSceneForViewer(ctx, &sceneaccessv1.GetSceneForViewerRequest{
+		PlayerSessionToken: s.playerSessionToken,
+		CharacterId:        s.CharacterID.String(),
+		SceneId:            sceneID.String(),
+	})
+}

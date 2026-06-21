@@ -60,6 +60,11 @@ type SceneAccessServer struct {
 	// the AuthGuard permits decryption of sensitive scene events. nil disables
 	// seeding (KEK-less deployments / tests).
 	dekAdder sceneDEKAdder
+
+	// characterNameResolver resolves participant/observer display names by ID
+	// for GetSceneForViewer roster enrichment. Optional: nil leaves rosters
+	// with raw ULIDs (best-effort). Mirrors CoreServer's resolver (5b2j).
+	characterNameResolver characterNameResolver
 }
 
 // NewSceneAccessServer constructs a SceneAccessServer. All fields are required;
@@ -89,6 +94,13 @@ func NewSceneAccessServer(
 // (fatal on failure).
 func (s *SceneAccessServer) WithSceneDEKAdder(a sceneDEKAdder) {
 	s.dekAdder = a
+}
+
+// WithCharacterNameResolver attaches the roster name resolver. Call after
+// construction; when set, GetSceneForViewer overwrites ParticipantInfo
+// CharacterName with the resolved display name (ULID fallback on a miss).
+func (s *SceneAccessServer) WithCharacterNameResolver(r characterNameResolver) {
+	s.characterNameResolver = r
 }
 
 // ownedCharacter verifies that charIDStr is a valid ULID and is owned by
@@ -199,7 +211,49 @@ func (s *SceneAccessServer) GetSceneForViewer(ctx context.Context, req *sceneacc
 	if err != nil {
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
-	return &sceneaccessv1.GetSceneForViewerResponse{Scene: resp.GetScene()}, nil
+	scene := resp.GetScene()
+	s.resolveRosterNames(ctx, scene)
+	return &sceneaccessv1.GetSceneForViewerResponse{Scene: scene}, nil
+}
+
+// resolveRosterNames overwrites participant + observer CharacterName fields with
+// resolved display names, in place. Best-effort: nil resolver, parse failure, a
+// resolver error, or a missing id all leave the raw ULID. The scene gate already
+// authorized this roster (plugin GetScene privacy gate), so name resolution is
+// downstream display — no per-character ABAC (mirrors ListFocusPresence).
+func (s *SceneAccessServer) resolveRosterNames(ctx context.Context, scene *scenev1.SceneInfo) {
+	if s.characterNameResolver == nil || scene == nil {
+		return
+	}
+	roster := append(append([]*scenev1.ParticipantInfo{}, scene.GetParticipants()...), scene.GetObservers()...)
+	if len(roster) == 0 {
+		return
+	}
+	ids := make([]ulid.ULID, 0, len(roster))
+	for _, p := range roster {
+		id, err := ulid.Parse(p.GetCharacterId())
+		if err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	names, err := s.characterNameResolver.Names(ctx, ids)
+	if err != nil {
+		// Log via slog.ErrorContext like ListFocusPresence (list_focus_presence.go:161-162).
+		// DELIBERATE divergence: presence HARD-FAILS (INTERNAL) on resolver error;
+		// the scene roster DEGRADES — keep the ULIDs, never fail GetSceneForViewer.
+		slog.ErrorContext(ctx, "scene roster name resolution failed", "error", err, "scene_id", scene.GetId())
+		return
+	}
+	for _, p := range roster {
+		id, err := ulid.Parse(p.GetCharacterId())
+		if err != nil {
+			continue
+		}
+		if n, ok := names[id]; ok && n != "" {
+			p.CharacterName = n
+		}
+	}
 }
 
 // ListMyScenes returns the verified character's scene participations.
