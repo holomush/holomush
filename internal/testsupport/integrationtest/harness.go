@@ -121,8 +121,12 @@ type Server struct {
 	playerSessionStore *store.PostgresPlayerSessionStore
 	playerRepo         *authpg.PlayerRepository
 	charRepo           auth.CharacterRepository
-	sessionStore       session.Store
-	locRepo            *worldpg.LocationRepository
+	// worldCharRepo is the raw world.CharacterRepository (not the auth adapter)
+	// retained so tests can build a SceneAccessServer with a real
+	// RepoCharacterNameResolver (mirrors production sub_grpc.go:597).
+	worldCharRepo *worldpg.CharacterRepository
+	sessionStore  session.Store
+	locRepo       *worldpg.LocationRepository
 
 	// services
 	authService *auth.Service
@@ -603,6 +607,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		playerSessionStore:   playerSessionStore,
 		playerRepo:           playerRepo,
 		charRepo:             charRepo,
+		worldCharRepo:        worldCharRepo,
 		sessionStore:         sessionStoreInst,
 		locRepo:              locRepo,
 		authService:          authService,
@@ -696,6 +701,34 @@ func (s *Server) SceneServiceClient() scenev1.SceneServiceClient {
 	require.NoError(s.t, err, "integrationtest.Server.SceneServiceClient: resolve SceneService")
 	require.NotNil(s.t, svc.Conn, "integrationtest.Server.SceneServiceClient: nil conn")
 	return scenev1.NewSceneServiceClient(svc.Conn)
+}
+
+// NewSceneAccessServer constructs a SceneAccessServer wired with the harness's
+// real repos, coordinator, and a RepoCharacterNameResolver backed by the
+// harness's worldCharRepo. This is the production-equivalent wiring (mirroring
+// cmd/holomush/sub_grpc.go:597) and is the correct server to use for any test
+// that calls GetSceneForViewer and expects display names (not ULIDs) on the
+// roster.
+//
+// Requires WithInTreePlugins (for the plugin manager + scene client) and
+// WithFocusDelivery (for the coordinator). Panics with a descriptive message
+// if either is missing.
+func (s *Server) NewSceneAccessServer() *holoGRPC.SceneAccessServer {
+	s.requirePlugins("NewSceneAccessServer")
+	if s.focusCoord == nil {
+		s.t.Fatalf("integrationtest.Server.NewSceneAccessServer: requires WithFocusDelivery (focusCoord is nil)")
+	}
+	facade := holoGRPC.NewSceneAccessServer(
+		s.playerSessionStore,
+		s.playerRepo,
+		s.charRepo,
+		s.sessionStore,
+		s.focusCoord,
+		s.SceneServiceClient(),
+		s.pluginSub.Manager(),
+	)
+	facade.WithCharacterNameResolver(holoGRPC.NewRepoCharacterNameResolver(s.worldCharRepo))
+	return facade
 }
 
 // AccessEngine returns the ABAC policy engine the stack evaluates against.
