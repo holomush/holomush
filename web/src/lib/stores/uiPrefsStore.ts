@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 
 export type Density = 'cozy' | 'compact';
 export interface UiPrefs {
   railHidden: boolean;
   sidebarHidden: boolean;
+  /** Scenes workspace: left scene-list pane collapsed (desktop). */
+  scenesListHidden: boolean;
+  /** Scenes workspace: right context-rail pane collapsed (desktop). */
+  scenesRailHidden: boolean;
   sidebarWidthPx: number;
   density: Density;
   composerOpen: boolean;
@@ -24,6 +28,8 @@ const DEFAULT_WIDTH = 280;
 const DEFAULTS: UiPrefs = {
   railHidden: false,
   sidebarHidden: false,
+  scenesListHidden: false,
+  scenesRailHidden: false,
   sidebarWidthPx: DEFAULT_WIDTH,
   density: 'cozy',
   composerOpen: false,
@@ -85,6 +91,22 @@ function mutate(fn: (prefs: UiPrefs) => UiPrefs) {
 
 export const toggleRail = () => mutate((p) => ({ ...p, railHidden: !p.railHidden }));
 export const toggleSidebar = () => mutate((p) => ({ ...p, sidebarHidden: !p.sidebarHidden }));
+export const toggleScenesList = () =>
+  mutate((p) => ({ ...p, scenesListHidden: !p.scenesListHidden }));
+export const toggleScenesRail = () =>
+  mutate((p) => ({ ...p, scenesRailHidden: !p.scenesRailHidden }));
+// Idempotent setters used to reconcile paneforge's onCollapse/onExpand back into
+// the store (drag-to-collapse persistence). They skip the update entirely when
+// the value is unchanged so they can't re-emit into the effect that drives the
+// panes — no collapse/expand feedback loop, no redundant localStorage writes.
+export const setScenesListHidden = (hidden: boolean) => {
+  if (get(uiPrefs).scenesListHidden === hidden) return;
+  mutate((p) => ({ ...p, scenesListHidden: hidden }));
+};
+export const setScenesRailHidden = (hidden: boolean) => {
+  if (get(uiPrefs).scenesRailHidden === hidden) return;
+  mutate((p) => ({ ...p, scenesRailHidden: hidden }));
+};
 export const toggleComposer = () => mutate((p) => ({ ...p, composerOpen: !p.composerOpen }));
 export const togglePalette = () => mutate((p) => ({ ...p, paletteOpen: !p.paletteOpen }));
 export const openPalette = () => mutate((p) => ({ ...p, paletteOpen: true }));

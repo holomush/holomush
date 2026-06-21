@@ -14,6 +14,8 @@
     hydrateUiPrefs,
     toggleRail,
     toggleSidebar,
+    toggleScenesList,
+    toggleScenesRail,
     toggleComposer,
     togglePalette,
   } from '$lib/stores/uiPrefsStore';
@@ -58,6 +60,20 @@
       e.preventDefault();
       e.stopPropagation();
       toggleSidebar();
+      return;
+    }
+    // Scenes left list (⌘⇧, → "<"). e.code is layout-/shift-char-independent.
+    if (mod && e.shiftKey && e.code === 'Comma') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleScenesList();
+      return;
+    }
+    // Scenes right context rail (⌘⇧. → ">").
+    if (mod && e.shiftKey && e.code === 'Period') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleScenesRail();
       return;
     }
     // Composer
