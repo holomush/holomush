@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -41,7 +42,7 @@ func (h *Handler) WebListScenes(ctx context.Context, req *connect.Request[webv1.
 		ExcludeContentWarnings: req.Msg.GetExcludeContentWarnings(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: list scenes RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: list scenes RPC failed", err, "session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -73,7 +74,7 @@ func (h *Handler) WebGetScene(ctx context.Context, req *connect.Request[webv1.We
 		SceneId:            req.Msg.GetSceneId(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: get scene RPC failed", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: get scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -104,7 +105,7 @@ func (h *Handler) WebListMyScenes(ctx context.Context, req *connect.Request[webv
 		CharacterId:        req.Msg.GetCharacterId(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: list my scenes RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: list my scenes RPC failed", err, "session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -136,7 +137,7 @@ func (h *Handler) WebWatchScene(ctx context.Context, req *connect.Request[webv1.
 		SceneId:            req.Msg.GetSceneId(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: watch scene RPC failed", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: watch scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -169,7 +170,7 @@ func (h *Handler) WebCreateScene(ctx context.Context, req *connect.Request[webv1
 		Description:        req.Msg.GetDescription(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: create scene RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: create scene RPC failed", err, "session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -200,7 +201,7 @@ func (h *Handler) WebExportScene(ctx context.Context, req *connect.Request[webv1
 		Format:             req.Msg.GetFormat(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: export scene RPC failed", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: export scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -234,7 +235,7 @@ func (h *Handler) WebSetSceneFocus(ctx context.Context, req *connect.Request[web
 		SceneId:            req.Msg.GetSceneId(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: set scene focus RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: set scene focus RPC failed", err, "session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -265,7 +266,7 @@ func (h *Handler) WebListPublishedScenes(ctx context.Context, req *connect.Reque
 		Tags:               req.Msg.GetTags(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: list published scenes RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: list published scenes RPC failed", err, "session_id", req.Msg.GetSessionId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -296,7 +297,7 @@ func (h *Handler) WebGetPublicSceneArchive(ctx context.Context, req *connect.Req
 		PublishedSceneId:   req.Msg.GetPublishedSceneId(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: get public scene archive RPC failed", "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: get public scene archive RPC failed", err, "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
@@ -333,7 +334,7 @@ func (h *Handler) WebDownloadPublicSceneArchive(ctx context.Context, req *connec
 		Format:             req.Msg.GetFormat(),
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "web: download public scene archive RPC failed", "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId(), "error", err)
+		errutil.LogErrorContext(ctx, "web: download public scene archive RPC failed", err, "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId())
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 
