@@ -33,10 +33,7 @@ import (
 // rather than leaving the field empty (no ULID was ever used there — the
 // field was simply absent pre-fix).
 var _ = Describe("holomush-5rh.25: scene name resolution", func() {
-
-	// ────────────────────────────────────────────────────────────────────────
-	// Spec 1: GetSceneForViewer roster — cross-location display names
-	// ────────────────────────────────────────────────────────────────────────
+	// Spec 1: GetSceneForViewer roster — cross-location display names.
 	Describe("GetSceneForViewer cross-location roster name resolution", func() {
 		var (
 			ts     *integrationtest.Server
@@ -69,7 +66,7 @@ var _ = Describe("holomush-5rh.25: scene name resolution", func() {
 			ts.Stop()
 		})
 
-		It("returns display names (not ULIDs) for participants in different locations (INV-SCENE-roster-name)", func() {
+		It("returns display names (not ULIDs) for participants in different locations", func() {
 			// Place owner and member in DIFFERENT locations — this is the exact
 			// cross-location case the pre-fix code could not resolve.
 			ownerLoc := ts.NewLocation(ctx)
@@ -132,9 +129,7 @@ var _ = Describe("holomush-5rh.25: scene name resolution", func() {
 		})
 	})
 
-	// ────────────────────────────────────────────────────────────────────────
-	// Spec 2: pose author display name in the IC event payload
-	// ────────────────────────────────────────────────────────────────────────
+	// Spec 2: pose author display name in the IC event payload.
 	Describe("scene pose command stamps author display name in IC payload", func() {
 		var (
 			ts    *integrationtest.Server

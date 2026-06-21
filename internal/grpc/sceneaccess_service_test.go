@@ -707,6 +707,54 @@ func TestGetSceneForViewerResolvesRosterNames(t *testing.T) {
 	assert.Equal(t, "Observer One", obs[0].GetCharacterName())
 }
 
+// TestGetSceneForViewerKeepsULIDsWhenResolverErrors pins the deliberate
+// best-effort degradation (spec G3, and the DELIBERATE divergence from
+// ListFocusPresence which hard-fails): a resolver error MUST NOT fail
+// GetSceneForViewer — the roster is returned with the raw ULIDs intact.
+func TestGetSceneForViewerKeepsULIDsWhenResolverErrors(t *testing.T) {
+	ctx := context.Background()
+
+	playerID := idgen.New()
+	viewer := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Viewer"}
+	ps := buildSATestPS(t, playerID)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+	psRepo := buildSASessionRepo(t, ps)
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{viewer}, nil).Maybe()
+	sessStore := sessionmocks.NewMockStore(t)
+	mgr := &stubPluginManager{}
+
+	memberID := idgen.New()
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+	sceneMock.EXPECT().GetScene(mock.Anything, mock.Anything).Return(&scenev1.GetSceneResponse{
+		Scene: &scenev1.SceneInfo{
+			Id: "sc-1",
+			Participants: []*scenev1.ParticipantInfo{
+				{CharacterId: memberID.String(), CharacterName: memberID.String(), Role: "member"},
+			},
+		},
+	}, nil).Maybe()
+
+	srv := newTestSceneAccessServer(t, psRepo, playerRepo, charRepo, sessStore, &stubFocusCoordinator{}, sceneMock, mgr)
+	srv.WithCharacterNameResolver(&fakeNameResolver{err: errors.New("resolver boom")})
+
+	resp, err := srv.GetSceneForViewer(ctx, &sceneaccessv1.GetSceneForViewerRequest{
+		SessionId:          "ignored",
+		PlayerSessionToken: testSAToken,
+		CharacterId:        viewer.ID.String(),
+		SceneId:            "sc-1",
+	})
+	require.NoError(t, err, "resolver error must NOT fail the RPC (best-effort degradation)")
+	parts := resp.GetScene().GetParticipants()
+	require.Len(t, parts, 1)
+	assert.Equal(t, memberID.String(), parts[0].GetCharacterName(),
+		"resolver error leaves the raw ULID")
+}
+
 // failingSceneDEKAdder is a sceneDEKAdder whose EnsureParticipant always fails,
 // used to drive the fatal-seed branch of SetSceneFocus.
 type failingSceneDEKAdder struct{}

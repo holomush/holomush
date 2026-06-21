@@ -1313,9 +1313,10 @@ func (p *scenePlugin) handleEmit(
 		"text":     text,
 	}
 	// Stamp the author display name when the dispatcher provided one
-	// (internal/command/dispatcher.go:310). Empty → omit; the gateway falls
-	// back to actor_id exactly as before. Rides the encrypted IC payload
-	// (crypto.emits) — no more sensitive than the pose text it labels.
+	// (internal/command/dispatcher.go:310). Empty → omit; GameEvent.actor then
+	// comes out empty and the web client falls back to actor_id, exactly as
+	// before. Rides the encrypted IC payload (crypto.emits) — no more sensitive
+	// than the pose text it labels.
 	if req.CharacterName != "" {
 		payloadMap["character_name"] = req.CharacterName
 	}
