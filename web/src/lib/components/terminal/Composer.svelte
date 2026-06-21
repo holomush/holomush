@@ -3,6 +3,7 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { X } from '@lucide/svelte';
   import {
     uiPrefs,
@@ -22,8 +23,18 @@
   let panelEl: HTMLElement | undefined = $state(undefined);
 
   let localText = $state('');
+  // Sync external draft changes (the parent seeds the draft when the composer
+  // opens) into localText WITHOUT re-firing on the user's own keystrokes. The
+  // textarea two-way-binds localText via bind:value; if this effect also tracked
+  // localText, every keystroke would re-run it, observe the not-yet-propagated
+  // draft, and clobber localText back to the stale draft BEFORE onTextInput
+  // could push the new text upward — so the composer would never accept input
+  // (holomush-6k7d). untrack() makes draft the sole dependency.
   $effect(() => {
-    if (draft !== localText) localText = draft;
+    const next = draft;
+    untrack(() => {
+      if (next !== localText) localText = next;
+    });
   });
 
   let pos = $state({ x: 0, y: 0 });

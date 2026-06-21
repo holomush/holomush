@@ -767,6 +767,39 @@ test.describe('Terminal UI', () => {
     await expect(composer).toBeHidden();
   });
 
+  // holomush-6k7d: the popped-open composer textarea must accept real keystrokes.
+  // The mirror test above only proves the composer SEEDS from a pre-existing
+  // inline draft (set via fill()); it never types INTO the composer. This test
+  // closes that gap: open the composer with an empty inline input, click into
+  // its textarea, type character-by-character, and assert (a) the composer
+  // reflects the typed text and (b) keys do NOT leak to the suspended inline
+  // CommandInput.
+  test('typing into the open composer updates its textarea, not the inline input (holomush-6k7d)', async ({
+    page,
+  }) => {
+    await connectAsGuest(page);
+
+    // Open the composer with no pre-existing draft so the only text in either
+    // textarea is what we type here.
+    await page.keyboard.press('ControlOrMeta+Shift+KeyE');
+    const composer = page.locator('[role="region"][aria-label="Command composer"]');
+    await expect(composer).toBeVisible();
+    const composerTA = composer.locator('textarea');
+    await expect(composerTA).toHaveValue('');
+
+    // Faithful to the bug report: click into the textarea, then type real
+    // per-character keystrokes (pressSequentially dispatches keydown/input/keyup
+    // per char, unlike fill() which sets value in one shot).
+    await composerTA.click();
+    await composerTA.pressSequentially('hello world');
+
+    // The composer textarea must reflect every typed character.
+    await expect(composerTA).toHaveValue('hello world');
+
+    // And the suspended inline CommandInput must NOT have received the keys.
+    await expect(page.locator('.cmd-wrap textarea')).toHaveValue('');
+  });
+
   test('mode chip appears for say/pose/ooc prefixes', async ({ page }) => {
     await connectAsGuest(page);
     const input = page.locator('textarea').first();
