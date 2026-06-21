@@ -60,6 +60,11 @@ type SceneAccessServer struct {
 	// the AuthGuard permits decryption of sensitive scene events. nil disables
 	// seeding (KEK-less deployments / tests).
 	dekAdder sceneDEKAdder
+
+	// characterNameResolver resolves participant/observer display names by ID
+	// for GetSceneForViewer roster enrichment. Optional: nil leaves rosters
+	// with raw ULIDs (best-effort). Mirrors CoreServer's resolver (5b2j).
+	characterNameResolver characterNameResolver
 }
 
 // NewSceneAccessServer constructs a SceneAccessServer. All fields are required;
@@ -89,6 +94,13 @@ func NewSceneAccessServer(
 // (fatal on failure).
 func (s *SceneAccessServer) WithSceneDEKAdder(a sceneDEKAdder) {
 	s.dekAdder = a
+}
+
+// WithCharacterNameResolver attaches the roster name resolver. Call after
+// construction; when set, GetSceneForViewer overwrites ParticipantInfo
+// CharacterName with the resolved display name (ULID fallback on a miss).
+func (s *SceneAccessServer) WithCharacterNameResolver(r characterNameResolver) {
+	s.characterNameResolver = r
 }
 
 // ownedCharacter verifies that charIDStr is a valid ULID and is owned by

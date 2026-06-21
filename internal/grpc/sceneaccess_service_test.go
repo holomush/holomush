@@ -31,6 +31,34 @@ import (
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
 
+// fakeNameResolver is a hand-rolled double for the unexported
+// characterNameResolver interface (mockery does not generate mocks for
+// unexported interfaces).
+type fakeNameResolver struct {
+	names map[ulid.ULID]string
+	err   error
+}
+
+func (f *fakeNameResolver) Names(_ context.Context, ids []ulid.ULID) (map[ulid.ULID]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make(map[ulid.ULID]string, len(ids))
+	for _, id := range ids {
+		if n, ok := f.names[id]; ok {
+			out[id] = n
+		}
+	}
+	return out, nil
+}
+
+func TestWithCharacterNameResolverSetsTheField(t *testing.T) {
+	srv := &SceneAccessServer{}
+	r := &fakeNameResolver{}
+	srv.WithCharacterNameResolver(r)
+	assert.Same(t, r, srv.characterNameResolver)
+}
+
 func TestWithSceneDEKAdderSetsField(t *testing.T) {
 	s := &SceneAccessServer{}
 	s.WithSceneDEKAdder(stubSceneDEKAdder{})
