@@ -256,6 +256,53 @@ func (h *Harness) AwaitMemberPresent(t TB, i int, target cluster.MemberID, deadl
 	}
 }
 
+// AwaitMemberAbsent blocks until member i no longer sees `target` in
+// its registry view, or fails the test on deadline. The mirror of
+// AwaitMemberPresent.
+//
+// Why it exists (holomush-o7k0p): the harness injects a peer's graceful
+// bye (Registry.Stop) and a one-shot synthetic heartbeat for the SAME
+// MemberID on the shared NATS connection, but member i delivers them on
+// two INDEPENDENT subscriptions (handleAlive / handleBye) whose callback
+// goroutines have no cross-subject ordering guarantee. If handleAlive
+// runs first while the real (converged) entry is still present, the
+// synthetic's differing StartedAt trips the INV-CLUSTER-3 duplicate-
+// MemberID guard (heartbeat dropped, no join); handleBye then deletes the
+// member, leaving it permanently absent and timing out AwaitMemberPresent.
+// Awaiting absence before injecting the synthetic guarantees the bye has
+// been applied, so the synthetic lands as a fresh add → a real
+// OnMemberJoined that sticks.
+//
+// The wait is event-driven and subscribe-then-check ordered, identical to
+// AwaitMemberPresent: a memberLeaveSignaler is registered before the
+// presence check, so a departure that lands between Subscribe and the
+// check is still caught (handleBye deletes under r.mu before notifyLeft,
+// and Member() reads under the same r.mu). The deadline is a fast-fail
+// diagnostic, not a propagation timer.
+func (h *Harness) AwaitMemberAbsent(t TB, i int, target cluster.MemberID, deadline time.Duration) {
+	t.Helper()
+	if i < 0 || i >= len(h.Members) {
+		t.Fatalf("AwaitMemberAbsent: member index %d out of range [0,%d)", i, len(h.Members))
+		return
+	}
+	reg := h.Members[i].Registry
+
+	left := make(chan struct{}, 1)
+	cancel := reg.Subscribe(memberLeaveSignaler{target: target, fire: left})
+	defer cancel()
+
+	if _, ok := reg.Member(target); !ok {
+		return
+	}
+
+	select {
+	case <-left:
+		return
+	case <-time.After(deadline):
+		t.Fatalf("AwaitMemberAbsent: member %d still observed %q after %v", i, target, deadline)
+	}
+}
+
 // memberJoinSignaler is a MemberObserver that fires a non-blocking
 // send on `fire` exactly once per OnMemberJoined for the configured
 // target. The channel is buffered (1) so the signal is preserved if
@@ -277,6 +324,29 @@ func (s memberJoinSignaler) OnMemberJoined(m cluster.Member) {
 
 func (s memberJoinSignaler) OnMemberLeft(cluster.MemberID, cluster.LeaveReason)           {}
 func (s memberJoinSignaler) OnMemberStatusChanged(cluster.MemberID, cluster.MemberStatus) {}
+
+// memberLeaveSignaler is the mirror of memberJoinSignaler: it fires a
+// non-blocking send on `fire` exactly once per OnMemberLeft for the
+// configured target. The channel is buffered (1) so the signal is
+// preserved if the receiver hasn't yet entered its select.
+type memberLeaveSignaler struct {
+	target cluster.MemberID
+	fire   chan<- struct{}
+}
+
+func (s memberLeaveSignaler) OnMemberJoined(cluster.Member) {}
+
+func (s memberLeaveSignaler) OnMemberLeft(id cluster.MemberID, _ cluster.LeaveReason) {
+	if id != s.target {
+		return
+	}
+	select {
+	case s.fire <- struct{}{}:
+	default:
+	}
+}
+
+func (s memberLeaveSignaler) OnMemberStatusChanged(cluster.MemberID, cluster.MemberStatus) {}
 
 func (h *Harness) snapshot() string {
 	out := ""

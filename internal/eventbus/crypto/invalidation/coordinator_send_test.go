@@ -81,9 +81,17 @@ func TestCoordinatorRequestInvalidationReturnsRateLimitedWhenProbeAndPillRefuses
 		clustertest.WithEvictAfterMissed(100))
 	h.AwaitConverged(t, 2*time.Second)
 
-	// Stop member 1 to make it unresponsive.
+	// Stop member 1 to make it unresponsive. Stop publishes member 1's
+	// graceful bye on the shared NATS connection.
 	_ = h.Members[1].Registry.Stop(context.Background())
-	// Re-inject synthetic heartbeat so member 0 still sees it.
+	// Serialize the bye before re-injecting the synthetic heartbeat: the bye
+	// and the synthetic alive race member 0's two subscriptions, and a
+	// synthetic processed before the bye is dropped (duplicate-MemberID),
+	// leaving member 1 absent. Awaiting absence first makes the re-inject a
+	// clean add. See AwaitMemberAbsent's doc for the full mechanism
+	// (holomush-o7k0p).
+	h.AwaitMemberAbsent(t, 0, h.Members[1].MemberID, 5*time.Second)
+	// Re-inject synthetic heartbeat so member 0 sees member 1 again.
 	h.PublishSyntheticHeartbeat(t, "test-game", h.Members[1].MemberID, "")
 	h.AwaitMemberPresent(t, 0, h.Members[1].MemberID, 5*time.Second)
 
