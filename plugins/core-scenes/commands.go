@@ -1307,11 +1307,19 @@ func (p *scenePlugin) handleEmit(
 		subject = dotStyleSceneSubjectOOC(p.service.gameID, sceneID)
 	}
 
-	payload, err := json.Marshal(map[string]string{
+	payloadMap := map[string]string{
 		"actor_id": req.CharacterID,
 		"scene_id": sceneID,
 		"text":     text,
-	})
+	}
+	// Stamp the author display name when the dispatcher provided one
+	// (internal/command/dispatcher.go:310). Empty → omit; the gateway falls
+	// back to actor_id exactly as before. Rides the encrypted IC payload
+	// (crypto.emits) — no more sensitive than the pose text it labels.
+	if req.CharacterName != "" {
+		payloadMap["character_name"] = req.CharacterName
+	}
+	payload, err := json.Marshal(payloadMap)
 	if err != nil {
 		err = oops.Code("SCENE_EMIT_PAYLOAD_MARSHAL_FAILED").
 			With("event_type", eventType).

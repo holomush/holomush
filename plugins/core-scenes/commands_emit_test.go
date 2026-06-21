@@ -119,6 +119,42 @@ func TestSceneSubcommand_OOC_EmitsSceneEventOnOOCFacet(t *testing.T) {
 	assert.Contains(t, found.Payload, `"text":"brb getting coffee"`)
 }
 
+func TestSceneSubcommand_Pose_IncludesAuthorCharacterName(t *testing.T) {
+	t.Parallel()
+	p, sink := newTestPluginWithMember(t, "scene-author-test")
+
+	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:       "scene",
+		Args:          "pose smiles",
+		CharacterID:   "char-alice",
+		CharacterName: "Alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+
+	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
+	require.NotNil(t, found)
+	assert.Contains(t, found.Payload, `"character_name":"Alice"`)
+}
+
+func TestSceneSubcommand_Pose_OmitsCharacterNameWhenEmpty(t *testing.T) {
+	t.Parallel()
+	p, sink := newTestPluginWithMember(t, "scene-noauthor-test")
+
+	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "pose smiles",
+		CharacterID: "char-alice",
+		// CharacterName intentionally empty
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+
+	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
+	require.NotNil(t, found)
+	assert.NotContains(t, found.Payload, "character_name")
+}
+
 func TestSceneSubcommand_NonParticipant_PermissionDenied(t *testing.T) {
 	t.Parallel()
 	// scene-perm-test has char-owner + char-alice as members. char-bob is
