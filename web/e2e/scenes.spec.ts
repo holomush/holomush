@@ -33,17 +33,11 @@ async function currentEventCount(page: Page): Promise<number> {
  * Callers MUST capture `sinceIndex` via currentEventCount BEFORE sending
  * the command whose output they want to match. This isolates the wait
  * from any preceding events that may coincidentally match the pattern.
- *
- * `timeoutMs` (default 10s) is the poll deadline. Raise it only for waits
- * that run under known event-delivery contention (e.g. a concurrent
- * second-tab workspace load); since expect.poll resolves the instant the
- * match appears, a larger ceiling has no happy-path cost.
  */
 async function waitForOutputMatching(
   page: Page,
   pattern: RegExp,
   sinceIndex: number,
-  timeoutMs = 10000,
 ): Promise<string> {
   const events = page.locator('[data-testid="event"]');
 
@@ -65,7 +59,7 @@ async function waitForOutputMatching(
         }
         return false;
       },
-      { timeout: timeoutMs },
+      { timeout: 10000 },
     )
     .toBe(true);
 
@@ -403,12 +397,11 @@ test.describe('Scenes workspace (E9.5)', () => {
   }) => {
     // This multi-tab spec chains many sequential waits — registerAndEnterTerminal
     // (~40s of ceilings), scene create (~10s), token1 (~10s), tab-2 workspace
-    // toBeVisible (20s), then the 30s token2 poll below. Their worst-case
-    // ceilings sum past even the CI-scaled suite per-test budget (60s), so give
-    // this test its own headroom — otherwise a slow CI runner kills it mid-poll
-    // with a generic timeout instead of letting the token2 wait actually run.
-    // Happy path finishes in seconds; this only bounds the pathological-slow
-    // case (holomush-mwmzt).
+    // toBeVisible (20s) and the 30s WebGetScene focus-drain wait, then the token2
+    // poll. Their worst-case ceilings sum past even the CI-scaled suite per-test
+    // budget (60s), so give this test its own headroom — otherwise a slow CI
+    // runner kills it mid-chain with a generic timeout. Happy path finishes in
+    // seconds; this only bounds the pathological-slow case (holomush-mwmzt).
     test.setTimeout(150000);
 
     const ctx: BrowserContext = await browser.newContext();
@@ -428,32 +421,47 @@ test.describe('Scenes workspace (E9.5)', () => {
       await waitForOutputMatching(terminalPage, new RegExp(token1), sayBefore);
 
       // ── Tab 2: workspace tab (same auth context → shared player cookie) ──
+      //
+      // The terminal's token2 (below) MUST be measured AFTER tab 2's scene-focus
+      // setup has fully drained, not during it. The page's onMount fires
+      // workspaceStore.select() un-awaited, which drives WebSetSceneFocus
+      // (→ JoinFocus + DEK EnsureParticipant) and then WebGetScene last; while
+      // that burst runs it contends with the terminal's
+      // say→location→JetStream→WS delivery path, and under peak two-context CI
+      // load that contention pushed the old time-boxed token2 poll past even a
+      // 150s budget (holomush-mwmzt). `scenes-workspace` is the page's root div
+      // (present at first paint), so toBeVisible is NOT a load signal — gate on
+      // the RPC chain instead. Awaiting the trailing WebGetScene response (the
+      // last call in select(), so it transitively proves WebSetSceneFocus
+      // returned) closes the contention window deterministically rather than
+      // racing it on a timer.
       const workspacePage = await ctx.newPage();
+      const focusBurstDone = workspacePage.waitForResponse(
+        (r) => r.url().includes('/WebGetScene') && r.request().method() === 'POST',
+        { timeout: 30000 },
+      );
       await workspacePage.goto(`/scenes?watch=${sceneId}`);
       await expect(
         workspacePage.locator('[data-testid="scenes-workspace"]'),
       ).toBeVisible({ timeout: 20000 });
-      // Workspace is loaded — the alt-session stream is now running in tab 2.
+      await focusBurstDone; // tab 2's alt-session scene-focus setup has drained
 
       // ── Assert terminal tab still receives events after workspace is live ──
       await terminalPage.bringToFront();
       const token2 = `iso-after-${Date.now()}`;
       const sayAfter = await currentEventCount(terminalPage);
       await sendCommand(terminalPage, `say ${token2}`);
-      // token2's delivery races tab 2's just-completed workspace load
-      // (JoinFocus + DEK seed + scene-stream JetStream replay/decrypt), so under
-      // two-context CI load it occasionally needs >10s — the flake this spec
-      // exhibited (holomush-mwmzt). The 30s poll ceiling (covered by this test's
-      // raised per-test budget above) absorbs that latency WITHOUT masking a
-      // routing race: per-connection stream isolation — the terminal connection
-      // KEEPS its location subscription while the comms_hub connection focuses a
-      // scene — is pinned deterministically by two separate tests: the
-      // integration spec INV-SCENE-23
-      // (test/integration/scenes/multi_connection_visibility_test.go) and the
-      // unit test TestSendToConnection_TargetsOneConnectionOnly
-      // (internal/grpc/stream_registry_test.go). So a slow token2 here is pure
-      // delivery latency, not a dropped stream.
-      await waitForOutputMatching(terminalPage, new RegExp(token2), sayAfter, 30000);
+      // With tab 2's focus burst drained above, token2 arrives on the terminal's
+      // already-live, uncontended stream — the same situation as the token1 wait,
+      // so the default 10s poll suffices (no fat timeout needed). This asserts
+      // the real invariant: the terminal (grid focus) KEEPS its location
+      // subscription after the comms_hub connection focuses a scene. That
+      // per-connection isolation is pinned deterministically by INV-SCENE-23
+      // (test/integration/scenes/multi_connection_visibility_test.go) and
+      // TestSendToConnection_TargetsOneConnectionOnly
+      // (internal/grpc/stream_registry_test.go), so a token2 miss here is a real
+      // delivery regression, not flake.
+      await waitForOutputMatching(terminalPage, new RegExp(token2), sayAfter);
 
       // Terminal page shows no scenes-workspace UI.
       await expect(
