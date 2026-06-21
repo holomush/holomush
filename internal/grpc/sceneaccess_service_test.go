@@ -645,6 +645,68 @@ func TestSetSceneFocusJoinsFocusThenSetsConnectionFocus(t *testing.T) {
 		"JoinFocus MUST be called exactly once for a valid participant")
 }
 
+// TestGetSceneForViewerResolvesRosterNames verifies that GetSceneForViewer
+// overwrites participant and observer CharacterName fields with display names
+// from the resolver, falling back to the raw ULID for unresolved IDs.
+func TestGetSceneForViewerResolvesRosterNames(t *testing.T) {
+	ctx := context.Background()
+
+	playerID := idgen.New()
+	viewer := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Viewer"}
+	ps := buildSATestPS(t, playerID)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+	psRepo := buildSASessionRepo(t, ps)
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{viewer}, nil).Maybe()
+	sessStore := sessionmocks.NewMockStore(t)
+	mgr := &stubPluginManager{}
+
+	ownerID := idgen.New()
+	missingID := idgen.New() // NOT in the resolver map → ULID fallback
+	observerID := idgen.New()
+
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+	sceneMock.EXPECT().GetScene(mock.Anything, mock.Anything).Return(&scenev1.GetSceneResponse{
+		Scene: &scenev1.SceneInfo{
+			Id: "sc-1",
+			Participants: []*scenev1.ParticipantInfo{
+				{CharacterId: ownerID.String(), CharacterName: ownerID.String(), Role: "owner"},
+				{CharacterId: missingID.String(), CharacterName: missingID.String(), Role: "member"},
+			},
+			Observers: []*scenev1.ParticipantInfo{
+				{CharacterId: observerID.String(), CharacterName: observerID.String(), Role: "observer"},
+			},
+		},
+	}, nil).Maybe()
+
+	srv := newTestSceneAccessServer(t, psRepo, playerRepo, charRepo, sessStore, &stubFocusCoordinator{}, sceneMock, mgr)
+	srv.WithCharacterNameResolver(&fakeNameResolver{names: map[ulid.ULID]string{
+		ownerID:    "Owner One",
+		observerID: "Observer One",
+		// missingID intentionally absent
+	}})
+
+	resp, err := srv.GetSceneForViewer(ctx, &sceneaccessv1.GetSceneForViewerRequest{
+		SessionId:          "ignored",
+		PlayerSessionToken: testSAToken,
+		CharacterId:        viewer.ID.String(),
+		SceneId:            "sc-1",
+	})
+	require.NoError(t, err)
+
+	parts := resp.GetScene().GetParticipants()
+	require.Len(t, parts, 2)
+	assert.Equal(t, "Owner One", parts[0].GetCharacterName())
+	assert.Equal(t, missingID.String(), parts[1].GetCharacterName(), "unresolved id keeps the ULID")
+	obs := resp.GetScene().GetObservers()
+	require.Len(t, obs, 1)
+	assert.Equal(t, "Observer One", obs[0].GetCharacterName())
+}
+
 // failingSceneDEKAdder is a sceneDEKAdder whose EnsureParticipant always fails,
 // used to drive the fatal-seed branch of SetSceneFocus.
 type failingSceneDEKAdder struct{}
