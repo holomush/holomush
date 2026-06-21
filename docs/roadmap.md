@@ -21,6 +21,13 @@ sequencing.
 - **The narrative lives here.** Strategic framing, sequencing rationale,
   and substrate-vs-use distinctions belong in this file; status / dates /
   dependencies are looked up from `bd`.
+- **Altitude discipline.** *Active* theme sections carry only durable
+  content — framing, sequencing logic, risks, and pointers (theme label,
+  epic / spec IDs) — plus a `bd` query for live status. Do NOT hand-record PR
+  numbers, per-bead status, counts, or shipment dates in active sections;
+  that is exactly the detail that goes stale and forces grooming passes.
+  *Completed* theme retrospectives MAY keep frozen specifics (PR numbers,
+  dates) — they no longer change, and the specifics are the record.
 - **Themes are added** when a multi-epic sequence becomes clear (≥2 epics
   involved). Don't pre-design themes for hypothetical work.
 
@@ -28,220 +35,121 @@ sequencing.
 
 ### `theme:social-spaces` — Scenes, Channels, Forums, Discord
 
-The largest in-flight thread. Four product surfaces sharing one substrate:
-persistent groups with membership, history replay, presence routing, and
-subscribed clients.
+The largest thread: four product surfaces (scenes, channels, forums, discord)
+sharing one substrate — persistent groups with membership, history replay,
+presence routing, and subscribed clients.
 
-#### Substrate (shipped)
+#### Substrate it builds on
 
-| Layer                        | Where                                                      | Why it matters                                                  |
-| ---------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------- |
-| JetStream event bus          | `internal/eventbus/` (PR #252, 2026-04-21)                 | Durable per-stream delivery; replay; backpressure               |
-| Focus coordinator            | `internal/grpc/focus/` (epic `oy6e`, drained 2026-05-16)   | Session subscription routing; multi-conn visibility             |
-| AccessPolicyEngine (ABAC)    | `internal/access/policy/` (epic `ql5`, drained 2026-05-16) | Policy-driven visibility / membership / write gates             |
-| Plugin focus client          | `pkg/plugin/focus_client.go`                               | SDK for plugins to call `JoinFocus`/`LeaveFocus`/`PresentFocus` |
-| core-scenes reference plugin | `plugins/core-scenes/` (PRs #200, #202, #230, #267)        | First substrate consumer; reference implementation              |
+The substrate landed first: scenes work triggered the JetStream cutover, then
+resumed on the substrate it had pulled into existence. What a new use can rely
+on:
 
-Scenes work triggered the JetStream cutover. Now that the diversion has
-shipped, scenes Phase 4+ can resume on the substrate it pulled into
-existence.
+| Layer                        | Where                         | What it provides                                    |
+| ---------------------------- | ----------------------------- | --------------------------------------------------- |
+| JetStream event bus          | `internal/eventbus/`          | Durable per-stream delivery; replay; backpressure   |
+| Focus coordinator            | `internal/grpc/focus/`        | Session subscription routing; multi-conn visibility |
+| AccessPolicyEngine (ABAC)    | `internal/access/policy/`     | Policy-driven visibility / membership / write gates |
+| Plugin focus client          | `pkg/plugin/focus_client.go`  | SDK to call `JoinFocus`/`LeaveFocus`/`PresentFocus` |
+| core-scenes reference plugin | `plugins/core-scenes/`        | First substrate consumer; reference implementation  |
 
-#### Substrate-contract (shipped — `holomush-jg9b`)
+The **substrate contract** (epic `jg9b`) codifies the boundary invariants
+INV-S1 – INV-S10 — chiefly: substrate stays domain-free (INV-S2), Go+Lua
+runtime parity for every host RPC (INV-S3), per-plugin Postgres schema isolation
+(INV-S6), ABAC stays out of the scene-log read path (INV-S9), and emit-type
+set-equality enforcement (INV-S5). Two SDK bundles are **named but deliberately
+unbuilt** — `eventkit` (`pkg/plugin/eventkit/`) and `groupkit`
+(`pkg/plugin/groupkit/`); INV-S7 mandates N=2 consumer validation (the channels
+rework is the required second consumer) before either is extracted as substrate
+code. Both are named so future brainstorms know they exist.
 
-The substrate pivots listed above were all in place by mid-May 2026, but the
-formal contract binding uses to substrate had not been written. Epic `jg9b`
-filled that gap.
-
-**What shipped:**
-
-- **INV-S5 (emit-type set-equality)** — startup-time validator that enforces
-  plugin `crypto.emits` manifest declarations match code-registered emit types
-  in both directions (declared-but-unregistered AND registered-but-undeclared
-  both fail load). Shipped as a single coherent change in PR #4049 (`jg9b.3`):
-  substrate cap, binary proto extension, Lua Load-pass, and adoption by
-  `core-scenes`. Orientation page shipped via PR #4137 (`jg9b.4`).
-- **Boundary invariants** (INV-S1 through INV-S10) — codified in the substrate-
-  contract spec below. Key ones: substrate stays domain-free (INV-S2), Go+Lua
-  runtime parity for every new host RPC (INV-S3), per-plugin Postgres schema
-  isolation enforced by Postgres roles (INV-S6), ABAC engine stays out of the
-  scene-log read path (INV-S9).
-
-**Future primitives named but not yet built (INV-S7):**
-
-`eventkit` (`pkg/plugin/eventkit/`) and `groupkit` (`pkg/plugin/groupkit/`) are
-co-designed in the substrate-contract spec as SDK bundles for joint patterns
-across uses. INV-S7 mandates N=2 consumer validation before either primitive
-lands as substrate code — the second consumer (`0sc.12` channels rework) must
-adopt cleanly before any extraction. Both are named here so future brainstorms
-know they exist; neither has code yet.
-
-**Unblocked by `jg9b.3`:**
-
-- **Scenes Phase 4** (`5rh.13`) — IC/OOC event emission + pose order. Was
-  blocked on INV-S5 enforcement landing (Phase 4 will add `crypto.emits:
-  [scene_ic, scene_ooc]` to core-scenes, which is only safe with the
-  fail-closed validator in place).
-- **Channels rework** (`0sc.12`) — channel plugin rebuild on plugin ABAC
-  substrate. Depends on the substrate contract being written so the channels
-  design brainstorm binds to the correct invariants (esp. INV-S7 for groupkit
-  adoption).
-
-**Specs:**
+Specs:
 
 - [Substrate-contract design](superpowers/specs/2026-05-16-social-spaces-substrate-contract.md) — boundary invariants, substrate inventory, INV-S1 – INV-S10
 - [INV-S5 mechanism design](superpowers/specs/2026-05-17-inv-s5-mechanism-design.md) — runtime validator (Load-pass + proto extension)
 
-#### Uses (in development, in priority order)
+#### Uses
 
-| Use          | Epic           | Frontier bead                                                | State                                    |
-| ------------ | -------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| **Scenes**   | `holomush-5rh` | Phases 4-6 + 8 shipped — web Scenes Portal (`5rh.8`) + Phase 9 chat (`5rh.18`) next (`holomush-ztiqj`) | Phases 4-6 (#4279/#4302/#4308) + Phase 8 (`iokti`, #4353) shipped |
-| **Channels** | `holomush-0sc` | `0sc.12` Channel plugin rework on plugin ABAC                | In progress                              |
-| **Forums**   | `holomush-djj` | (undesigned)                                                 | Needs brainstorm + spec                  |
-| **Discord**  | `holomush-aqq` | `aqq.5` Discord OAuth linking (`dwk.7` overlap closed today) | Blocked on Channels + OAuth substrate    |
+| Use          | Epic           | Role                                                              |
+| ------------ | -------------- | ---------------------------------------------------------------- |
+| **Scenes**   | `holomush-5rh` | Reference implementation — exercises every substrate layer       |
+| **Channels** | `holomush-0sc` | Plugin rework on the plugin-ABAC substrate (`0sc.12`)            |
+| **Forums**   | `holomush-djj` | Needs brainstorm + spec                                          |
+| **Discord**  | `holomush-aqq` | In-game messaging bridge; OAuth account linking is `aqq.5`        |
 
-The web Scenes Portal (`5rh.8`) drove the **crypto production activation** that
-made live sensitive scene events (pose/say/ooc) actually render in the browser —
-its E2E proved the crypto substrate was never activated in prod. That milestone is
-documented under Completed themes → "Crypto production activation"; the portal is
-functionally complete (`5rh.8` has two small follow-ups left: `5rh.8.30` invariant
-binding, `5rh.8.29.11` comms-seed PlayerID asymmetry).
+Live status:
+
+```bash
+bd list -l theme:social-spaces --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.status) \(.title)"'
+```
 
 #### Sequencing rationale
 
-1. **Scenes Phase 4-6 first** (`5rh.13/.14/.20`). Scenes is the reference
-   implementation; getting IC emission + pose order + vote machine right
-   exercises every substrate layer end-to-end. Channels and Forums will
-   re-use the patterns. Doing scenes first reduces redesign risk later.
-   **Phase 4 shipped** (`5rh.13`, PR #4153, 2026-05-21) — IC/OOC event
-   emission + pose order + crypto.emits adoption. **Phase 5 shipped**
-   (`5rh.14`, PR #4191, 2026-05-23) — per-connection focus model + multi-
-   connection visibility + PluginHostService extension (3 new RPCs:
-   `SetConnectionFocus`, `AutoFocusOnJoin`, `IsAnyConnFocused`). **Phase 6
-   shipped** (`5rh.20`, 2026-05-29) — scene logs + publish vote + hard
-   privacy boundary: feature PR #4279, bare-ULID scene identity fix #4302
-   (`holomush-y5inx`, surfaced by the Phase 6 E2E work), E2E tier PR #4308.
-   Scenes (Phases 4-6) is the shipped reference implementation. **Phase 8
-   shipped** (epic `holomush-iokti`, PR #4353, 2026-05-31) — the scene board
-   (browsable directory of open scenes + content-warning filtering) plus the
-   owner-partitioned settings substrate it required; 21/21 children landed.
-   (Phase 8 materialized as `iokti`; the original v2-plan placeholder `5rh.17`
-   was closed-as-superseded on ship, the same pattern as `5rh.15`→`5rh.20` for
-   Phase 6.) With the discoverability backend in place, the next slice of the
-   **Phase 8 → Web Portal arc** (decision `holomush-ztiqj`) is the web Scenes
-   Portal (`5rh.8`, folding/scoping the `5rh.18` Phase 9 chat view), which
-   surfaces the board over ConnectRPC — its "browse active scenes" view needs
-   the board as its data source, which is why the board shipped first. Phase 7
-   templates (`5rh.16`) is orthogonal authoring work, deprioritized relative
-   to discoverability.
-2. **Channels in parallel where unblocked** (`0sc.12`). The channel plugin
-   rework is already in-flight on the plugin ABAC substrate — keep that
-   going. Channel-specific features that depend on scenes patterns (e.g.,
-   history replay UX) can land after scenes Phase 5.
-3. **Forums brainstorm in parallel** (`djj`). No code dependency on scenes
-   for the design phase. Spec + plan can be written while scenes ships.
-4. **Discord last** (`aqq`). Depends on channels substrate AND OAuth
-   substrate (`aqq.5` is the OAuth subtask). Will likely consume the
-   channel substrate as the in-game messaging bridge.
-
-#### Cross-cutting work tracked under this theme
-
-- Web client views per surface (`5rh.8` Scenes Portal, `5rh.18` Scenes
-  Chat view, future channels-web and forums-web)
-- Forum integration with Scenes (`5rh.9` scene requests / scheduling)
-- Audit-finding re-files tagged here:
-  - `holomush-ac50` (non-participant scene isolation E2E test — Phase 4
-    test gap)
-  - `holomush-cb4x` (scene log + export commands + renderers — Phase 6)
-  - `holomush-72sj` (core-channels plugin creation)
-  - `holomush-mjy3` (`object_examine` sensitivity — affects scene-room
-    overlap rendering when emit code lands)
+1. **Scenes first.** Scenes is the reference implementation; getting IC/OOC
+   emission, pose order, the focus model, and the publish-vote machine right
+   exercises every substrate layer end-to-end. Channels and Forums reuse those
+   patterns, so doing scenes first reduces redesign risk. (The scenes web
+   portal also forced **crypto production activation** — see Completed themes.)
+2. **Channels in parallel where unblocked** (`0sc.12`). The rework rides the
+   plugin-ABAC substrate; channel features that depend on scenes patterns
+   (e.g., history-replay UX) can follow the scenes focus model.
+3. **Forums brainstorm in parallel** (`djj`). No code dependency on scenes for
+   the design phase — spec + plan can be written while scenes ships.
+4. **Discord last** (`aqq`). Depends on the channels substrate AND an OAuth
+   substrate (`aqq.5`); it will likely consume channels as the messaging bridge.
 
 #### Risks
 
-- **Phase 4 emission is the riskiest piece.** ~~`crypto.emits: []` becomes
-  `[scene_ic, scene_ooc]` — must go through `crypto-reviewer` gate.~~
-  **Resolved**: Phase 4 shipped (`5rh.13`, PR #4153) with crypto-reviewer
-  READY; sensitivity classification correct. The `mjy3` follow-up remains
-  open for `object_examine` overlap rendering.
-- **Forums has no design yet.** If we let Channels ship before Forums is
-  designed, the channel API may not anticipate forum needs. Mitigation:
-  start the Forums brainstorm in parallel even if we don't execute it
-  until later.
-- **Web portal scope creep**: each social surface wants a web view; left
-  unchecked this becomes a multi-month frontend project. Sequence web
-  views *after* the backend surface stabilizes per use.
-- **Phase 5 multi-tab routing depends on web-client cooperation**: the
-  `STREAM_OPENED` ControlFrame + `SendCommandRequest.connection_id`
-  protocol added in `5rh.14` only routes per-connection commands
-  correctly when the client passes the connection_id back. The SvelteKit
-  terminal does this; future clients must too. Documented in
-  `site/docs/extending/binary-plugins.md`.
+- **Forums has no design yet.** If Channels ships before Forums is designed, the
+  channel API may not anticipate forum needs. Mitigation: run the Forums
+  brainstorm in parallel even if execution waits.
+- **Web-portal scope creep.** Every social surface wants a web view; unchecked
+  this becomes a multi-month frontend project. Sequence web views *after* the
+  backend surface stabilizes per use.
+- **Per-connection routing needs client cooperation.** The `STREAM_OPENED`
+  ControlFrame + `SendCommandRequest.connection_id` protocol only routes
+  per-connection commands when the client echoes the `connection_id` back. The
+  SvelteKit terminal does; future clients must too (documented in
+  `site/docs/extending/binary-plugins.md`).
 
 ### `theme:plugin-capability-architecture` — Unified plugin capability & dependency model
 
-Epic `holomush-eykuh`. A do-it-right redesign of how plugins declare,
-discover, and consume capabilities and dependencies — triggered by a small
-bug (`holomush-oeb4d`: a phantom `requires` that silently disabled DAG
-load-order validation on every boot) that root-caused into a deeper
-architectural conflation.
+Epic `holomush-eykuh` (shipped). A do-it-right redesign of how plugins declare,
+discover, and consume capabilities and dependencies — triggered by a small bug
+(`holomush-oeb4d`: a phantom `requires` that silently disabled DAG load-order
+validation on every boot) that root-caused into a deeper conflation. Kept active
+only for a P3 polish tail (query below); the architecture is in place. Move this
+section to Completed when the tail drains.
 
-#### Why now
+**Why it mattered** (the problems it fixed, while there were still no users or
+deployments to migrate): the manifest `requires` field was overloaded — it drove
+both DAG load-order *and* Lua capability injection, so capability-backed
+requires failed and the loader silently fell back to a priority sort on every
+boot; capability delivery was asymmetric and not least-privilege (Lua got most
+host functions unconditionally, while `PluginHostService` was a 25-RPC
+god-service); and Lua had no `plugin → host → plugin` story at all.
 
-There are no users or deployments yet, so the cost of getting the plugin
-trust-and-dependency substrate *right* is at its lowest it will ever be. The
-current model has accreted three problems that compound:
-
-- The manifest `requires` field is **overloaded** — it drives both DAG
-  load-order resolution *and* Lua capability injection, and the resolver is
-  blind to the capability registry, so capability-backed requires fail
-  `UNSATISFIED_REQUIRES` and the loader silently falls back to a priority
-  sort for the whole plugin set on every boot.
-- Capability delivery is **asymmetric and not least-privilege**: Lua plugins
-  get most host functions *unconditionally* (every Lua plugin can mutate the
-  world), while binary plugins consume host capabilities as gRPC services via
-  the grpcbroker. `PluginHostService` is a 25-RPC god-service, so
-  service-granularity declarations can't express least privilege.
-- There is **no `plugin → host → plugin` story for Lua**: binary plugins can
-  call another plugin's provided service through the broker, but Lua plugins
-  have no mechanism to consume a plugin-provided service at all.
-
-#### The three mandates
+**What it guarantees now** (the three mandates):
 
 1. **Runtime parity** — binary and Lua plugins consume host capabilities *and*
    plugin services through one identical host-brokered mechanism (extends the
    `plugin-runtime-symmetry` invariant).
-2. **Full dependency graph** — the model covers `plugin → host` (capabilities),
-   `host → plugin` (event/command delivery), and `plugin → host → plugin` (a
-   plugin depends on another plugin's service).
-3. **Least-privilege security** — capability-scoped contracts (decompose the
-   `PluginHostService` god-service), declaration-gated access, plugin-as-ABAC
-   subject.
+2. **Full dependency graph** — `plugin → host` (capabilities), `host → plugin`
+   (event/command delivery), and `plugin → host → plugin` (a plugin depends on
+   another plugin's service) are all expressible.
+3. **Least-privilege** — capability-scoped contracts (the god-service split into
+   14 `host.v1` services), declaration-gated access, plugin-as-ABAC-subject.
 
-#### Decomposition (foundation-first)
-
-| Sub-spec | Bead | Scope |
-| --- | --- | --- |
-| 1 — Foundation | `holomush-oeb4d` | Capability/dependency model, manifest vocabulary, unified resolver, symmetry contract. Fixes the boot bug as a byproduct. |
-| 2 — Host-service decomposition | `holomush-eykuh.1` | Split `PluginHostService` into capability-scoped proto contracts. |
-| 3 — Lua parity layer | `holomush-eykuh.2` | Host-brokered consumption of capabilities + plugin services from Lua. |
-| 4 — Least-privilege + plugin-trust security | `holomush-eykuh.3` | Declaration-gated access; ABAC with plugin subject. |
-| 5 — Migration + `o262d` | `holomush-eykuh.4` | Atomic manifest cutover; fail-fast on unsatisfied deps. |
-
-Framing decision recorded in `holomush-eykuh.5`. Grounds against the existing
+Pointers: foundation `holomush-oeb4d`; framing decision `holomush-eykuh.5`;
+grounds against
 `docs/superpowers/specs/2026-04-06-grpcbroker-service-injection-design.md` and
-`2026-03-28-plugin-first-command-architecture-design.md`.
+`docs/specs/2026-03-28-plugin-first-command-architecture-design.md`.
 
-#### Risks / sequencing
+Remaining P3 tail:
 
-- **Atomic cutover**: moving Lua from unconditional to declared capabilities
-  breaks any plugin that uses an undeclared host function (`core-building`
-  declares zero `requires` today but mutates the world). Every manifest must
-  be audited and updated in lockstep with the enforcement flip.
-- **God-service decomposition** is a long-lived refactor touching every plugin
-  and both runtimes; partial-migration limbo is the main hazard. The foundation
-  sub-spec sequences it so each capability contract lands behind a stable
-  declaration model.
+```bash
+bd list -l theme:plugin-capability-architecture --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.title)"'
+```
 
 ### `theme:web-portals` — The web as a complete gaming surface
 
@@ -260,47 +168,44 @@ the same systems. A single web view — e.g. the scenes portal — carries both
 labels.
 
 **Why it exists.** The principle was implicit and got silently violated: web
-create-scene was an explicit Phase-9 acceptance criterion (`5rh.18`) that the
-E9.5 portal redesign (`5rh.8`) dropped with no recorded decision, shipping a
-design that even contradicts itself (a "scenes-only player with no terminal" is
-first-class, yet cannot originate a scene). Writing the principle down makes it a
-checkable artifact, so future surface designs stop re-narrowing scope by
-omission.
+create-scene was an explicit acceptance criterion that the portal redesign
+dropped with no recorded decision, shipping a design that contradicted itself (a
+"scenes-only player with no terminal" is first-class, yet could not originate a
+scene). Writing the principle down makes it a checkable artifact, so future
+surface designs stop re-narrowing scope by omission.
 
-**Why a label, not an epic.** Web surfaces are split across two organizing
-schemes — Epic 8 (`qve`) owns the non-subsystem portals (wiki, characters, admin,
+**Why a label, not an epic.** Web surfaces split across two organizing schemes —
+Epic 8 (`qve`) owns the non-subsystem portals (wiki, characters, admin,
 char-CRUD, offline); each subsystem epic owns its own web view (scenes `5rh`,
 channels `0sc`, forums `djj`). No single epic owns "the web as a complete
 surface," so the unifying instrument is a cross-cutting label.
 
-#### Surface map
+**Not a registry invariant** (decision 2026-06-19): "web ⊇ telnet" is a
+directional principle, not a test-pinnable guarantee (most surfaces are unbuilt —
+missing features, not regressions). The testable unit is per-subsystem ("a
+*shipped* web surface is self-sufficient — core ops never require telnet"); a
+narrow invariant MAY be minted later, bound by a per-surface E2E, once the first
+surface is genuinely telnet-free.
 
-| Surface                                           | Web GUI state                   | Home (epic / beads)     |
-| ------------------------------------------------- | ------------------------------- | ----------------------- |
-| On-grid play (move, look, room say/pose, exits)   | shipped (web terminal)          | Epic 8 `qve`            |
-| Scenes — browse/read/participate/watch/export     | shipped                         | E9.5 `5rh.8`            |
-| Scenes — create                                   | gap                             | `5rh.22`                |
-| Scenes — lifecycle/management (end/invite/vote/…) | gap                             | `5rh.24`                |
-| Scenes — guest gating                             | gap                             | `5rh.23`                |
-| DMs — 1:1 (page/whisper)                           | gap                             | `qve.17`                |
-| DMs — 1:N (channels)                               | not started (backend in flight) | Epic 10 `0sc`           |
-| Forums                                            | not started                     | Epic 11 `djj` + `5rh.9` |
-| Wiki / help / lore / setting docs                 | not started                     | `qve.8`                 |
-| Character profiles / sheets / directory           | not started                     | `qve.9`                 |
-| Character create / edit / per-char settings       | picker shipped, CRUD not        | `qve.15`                |
-| Character roster / claim / transfer (web)         | not started                     | `gloh` (mechanic)       |
-| Player settings / preferences                     | partial (theme only)            | `w7t5`                  |
-| Administration                                    | not started                     | `qve.10`                |
-| Offline / replay                                  | strategic question pending      | `qve.7`                 |
+#### Surface map (surface → owning epic / beads)
 
-Not a registry invariant (decision 2026-06-19): "web ⊇ telnet" is a directional
-principle, not a test-pinnable guarantee (most surfaces are unbuilt — missing
-features, not regressions). The testable unit is per-subsystem ("a *shipped* web
-surface is self-sufficient — core ops never require telnet"); a narrow invariant
-MAY be minted later, bound by a per-surface E2E, once the first surface is
-genuinely telnet-free.
+| Surface                                                           | Home (epic / beads)     |
+| ---------------------------------------------------------------- | ----------------------- |
+| On-grid play (move, look, room say/pose, exits)                  | Epic 8 `qve` (terminal) |
+| Scenes — browse/read/participate/watch/export/create/guest-gating | Epic 9 `5rh`            |
+| Scenes — lifecycle/management (end/invite/vote/…)                | `5rh.24`                |
+| DMs — 1:1 (page/whisper)                                          | `qve.17`                |
+| DMs — 1:N (channels)                                             | Epic 10 `0sc`           |
+| Forums                                                           | Epic 11 `djj` + `5rh.9` |
+| Wiki / help / lore / setting docs                                | `qve.8`                 |
+| Character profiles / sheets / directory                          | `qve.9`                 |
+| Character create / edit / per-char settings                      | `qve.15`                |
+| Character roster / claim / transfer (web)                        | `gloh`                  |
+| Player settings / preferences                                    | `w7t5`                  |
+| Administration                                                   | `qve.10`                |
+| Offline / replay (strategic question pending)                    | `qve.7`                 |
 
-Query:
+Live status (which surfaces are shipped vs still open):
 
 ```bash
 bd list -l theme:web-portals --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.title)"'
@@ -392,9 +297,9 @@ Four defects, each found only by the strengthened E2E, fixed in sequence:
 **Lesson (durable framing):** a shipped capability is not a live capability. The
 "completed substrate pivots" above track capability *landing*; production
 *activation* is its own milestone and can lag a capability by months — undetected
-until an E2E exercises the real browser → gateway → live-fan-out path. Follow-ups:
-`holomush-tn12i` (server-side backfill time-window), `holomush-8lqco` (test-suite
-audit, merged #4414).
+until an E2E exercises the real browser → gateway → live-fan-out path. Both
+follow-ups have since closed: `holomush-tn12i` (server-side backfill time-window)
+and `holomush-8lqco` (test-suite audit, merged #4414).
 
 ## Future themes (sketches — not yet labels)
 
@@ -403,7 +308,7 @@ multi-epic shape yet to warrant a `theme:` label.
 
 ### Hardening / audit-finding cohort
 
-~58 beads carrying the `audit-finding` label (created during the
+A cohort of beads carrying the `audit-finding` label (created during the
 2026-05-16 cleanup). Mix of P1 real bugs, P2 quality items, and P3 polish.
 Lands organically as developers pick from the cohort. Might become its
 own theme if a "hardening sprint" becomes the strategy; today it's
@@ -434,9 +339,9 @@ Listed here so future sessions know it exists without grepping `docs/`.
 
 Four read-only audit reports live at `docs/repository-audit/2026-05-13/`:
 
-| Report                       | Tracking epic   | State                                                               |
+| Report                       | Tracking epic   | Shape                                                                |
 | ---------------------------- | --------------- | ------------------------------------------------------------------- |
-| `architecture-audit.md`      | `holomush-dj95` | 13 children materialized; in-flight                                 |
+| `architecture-audit.md`      | `holomush-dj95` | children materialized; in-flight                                    |
 | `design-alignment-review.md` | `holomush-yvdm` | empty container; high-leverage findings re-filed as top-level beads |
 | `humanization-review.md`     | `holomush-89o9` | empty container; high-leverage findings re-filed as top-level beads |
 | `layer-review.md`            | `holomush-1bft` | empty container; high-leverage findings re-filed as top-level beads |
@@ -468,17 +373,15 @@ annotation, at which point it flips to `bound` (per the `binding: pending`
 tolerance decision `holomush-hz0v4.10`). The meta-test tolerates `pending`, so
 this lands incrementally rather than as a mega-PR.
 
-As of 2026-06-07: 31 of 301 entries `bound` (INV-PRIVACY fully bound;
-INV-PLUGIN-40, added by the event-type wire-convention work, is now bound).
-Remaining backfill is tracked per scope under the still-open epic — `hz0v4.11`
-(CRYPTO), `hz0v4.16` (SCENE), `hz0v4.17` (PLUGIN), `hz0v4.18` (EVENTBUS),
-`hz0v4.19` (long-tail); the pending counts in each child-bead title are
-filing-time snapshots, so derive the live numbers from the queries below rather
-than from prose. Pick-from-`bd`-ready gardening, like the repo audit above —
-not a strategic theme. Remaining count:
+INV-PRIVACY is fully bound; the rest backfill incrementally per scope under the
+still-open epic — `hz0v4.11` (CRYPTO), `hz0v4.16` (SCENE), `hz0v4.17` (PLUGIN),
+`hz0v4.18` (EVENTBUS), `hz0v4.19` (long-tail). Pick-from-`bd`-ready gardening,
+like the repo audit above — not a strategic theme. Live counts come from the
+registry itself, not from prose:
 
 ```bash
-rg -c 'binding: pending' docs/architecture/invariants.yaml
+rg -c 'binding: pending' docs/architecture/invariants.yaml   # remaining
+rg -c 'binding: bound'   docs/architecture/invariants.yaml   # done
 ```
 
 ## Conventions
@@ -486,4 +389,5 @@ rg -c 'binding: pending' docs/architecture/invariants.yaml
 - **Theme label format**: `theme:<kebab-case-slug>`. Examples: `theme:social-spaces`, `theme:hardening`. No nesting (flat namespace).
 - **Adding a theme**: when 2+ epics or a 5+ bead cluster share a strategic frame, file a `bd create -t decision` recording the framing and add the section to this doc.
 - **Retiring a theme**: when the underlying work is done or the framing no longer fits, move the section to "Completed themes" with a brief retrospective and a date.
+- **Altitude**: active sections stay at why + pointers + a `bd` query (see "How this works"); don't hand-maintain status. Completed retrospectives may keep frozen specifics.
 - **GitHub Projects**: not used today. The break-even cost of double-entry (bd ↔ GH) exceeds the benefit of a visual board for a solo-developer workflow. Revisit if team grows or external roadmap visibility becomes a real need.
