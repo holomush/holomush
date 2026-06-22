@@ -38,6 +38,7 @@ async function waitForOutputMatching(
   page: Page,
   pattern: RegExp,
   sinceIndex: number,
+  timeoutMs = 10000,
 ): Promise<string> {
   const events = page.locator('[data-testid="event"]');
 
@@ -59,7 +60,7 @@ async function waitForOutputMatching(
         }
         return false;
       },
-      { timeout: 10000 },
+      { timeout: timeoutMs },
     )
     .toBe(true);
 
@@ -451,17 +452,32 @@ test.describe('Scenes workspace (E9.5)', () => {
       const token2 = `iso-after-${Date.now()}`;
       const sayAfter = await currentEventCount(terminalPage);
       await sendCommand(terminalPage, `say ${token2}`);
-      // With tab 2's focus burst drained above, token2 arrives on the terminal's
-      // already-live, uncontended stream — the same situation as the token1 wait,
-      // so the default 10s poll suffices (no fat timeout needed). This asserts
-      // the real invariant: the terminal (grid focus) KEEPS its location
-      // subscription after the comms_hub connection focuses a scene. That
-      // per-connection isolation is pinned deterministically by INV-SCENE-23
-      // (test/integration/scenes/multi_connection_visibility_test.go) and
-      // TestSendToConnection_TargetsOneConnectionOnly
-      // (internal/grpc/stream_registry_test.go), so a token2 miss here is a real
-      // delivery regression, not flake.
-      await waitForOutputMatching(terminalPage, new RegExp(token2), sayAfter);
+      // This asserts the real invariant: the terminal (grid focus) KEEPS its
+      // location subscription after the comms_hub connection focuses a scene.
+      // That per-connection isolation is pinned deterministically by
+      // INV-SCENE-23 (test/integration/scenes/multi_connection_visibility_test.go)
+      // and TestSendToConnection_TargetsOneConnectionOnly
+      // (internal/grpc/stream_registry_test.go), so the EVENT is guaranteed to
+      // arrive — the only question is latency.
+      //
+      // token2's poll gets a CI-scaled ceiling, NOT the default 10s. The mwmzt
+      // focus-burst-drain (the `await focusBurstDone` above) closes the
+      // CLIENT-side RPC contention, but two residual latency sources survive it
+      // on a loaded runner: (1) tab 1 was backgrounded while tab 2 was front, so
+      // its WebSocket processing was browser-throttled until bringToFront()
+      // above, and (2) JoinFocus / DEK EnsureParticipant trigger SERVER-side
+      // focus settling that continues briefly after the RPCs return. Under peak
+      // two-context CI load these push token2's say→JetStream→WS→render past 10s
+      // (holomush-hjk6x: this spec passed on #4492's E2E gate but flaked twice on
+      // #4493's, a Go-only diff — pure load variance). 30s on CI matches this
+      // test's other budgets (the 30s WebGetScene wait, the 150s test ceiling);
+      // a genuine delivery regression never arrives, so 30s still fails it.
+      await waitForOutputMatching(
+        terminalPage,
+        new RegExp(token2),
+        sayAfter,
+        process.env.CI ? 30000 : 10000,
+      );
 
       // Terminal page shows no scenes-workspace UI.
       await expect(
