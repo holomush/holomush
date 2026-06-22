@@ -23,8 +23,7 @@ import (
 //   - Migration 30 down: restores legacy (key) column.
 func TestMigration_000030_BootstrapMetadataReplacement(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
+	pool := rawPool(t)
 
 	// Apply migrations 1-20 to reach the pre-30 schema.
 	// bootstrap_metadata at this point has (key TEXT PRIMARY KEY, value TEXT NOT NULL).
@@ -79,8 +78,7 @@ func TestMigration_000030_BootstrapMetadataReplacement(t *testing.T) {
 // migrations being present. Runs against a fresh isolated Postgres instance.
 func TestMigration_000031_CryptoRekeyCheckpoints(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
+	pool := rawPool(t)
 
 	// Apply all migrations up through 000031.
 	require.NoError(t, runMigrations(ctx, pool, 31))
@@ -150,8 +148,7 @@ func TestMigration_000031_CryptoRekeyCheckpoints(t *testing.T) {
 // kept separate from bootstrap_metadata which is now owned by the auditchain primitive.
 func TestMigration_000032_CreateSettingBootstrapState(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup := newTestPool(t)
-	defer cleanup()
+	pool := rawPool(t)
 
 	// Apply all migrations up through 000032.
 	require.NoError(t, runMigrations(ctx, pool, 32))
