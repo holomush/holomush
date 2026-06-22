@@ -137,7 +137,7 @@ jobs:
           DATABASE_URL: postgres://holomush:holomush@localhost:5432/holomush_test?sslmode=disable
 
       - name: Upload coverage
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.out
@@ -173,7 +173,7 @@ jobs:
         run: task test:int
 
       - name: Upload integration coverage
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage-int.out
@@ -229,7 +229,7 @@ jobs:
         run: task test:e2e:cover -- --grep-invert @quarantine
 
       - name: Upload E2E coverage
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage-e2e.out
