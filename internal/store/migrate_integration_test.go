@@ -16,10 +16,10 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/testsupport/quarantinetest"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // expectedTables lists every table present after all migrations have been applied.
@@ -120,19 +120,7 @@ var _ = Describe("Migrator", func() {
 		It("applies all migrations, rolls back to zero, and is idempotent on re-apply", func() {
 			ctx := context.Background()
 
-			pgContainer, err := postgres.Run(
-				ctx,
-				"postgres:18-alpine",
-				postgres.WithDatabase("test"),
-				postgres.WithUsername("test"),
-				postgres.WithPassword("test"),
-				postgres.BasicWaitStrategies(),
-			)
-			Expect(err).NotTo(HaveOccurred())
-			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
-
-			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-			Expect(err).NotTo(HaveOccurred())
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
 
 			migrator, err := store.NewMigrator(connStr)
 			Expect(err).NotTo(HaveOccurred())
@@ -188,20 +176,7 @@ var _ = Describe("Migrator", func() {
 		It("detects dirty state and recovers via Force()", func() {
 			ctx := context.Background()
 
-			// Start PostgreSQL container
-			pgContainer, err := postgres.Run(
-				ctx,
-				"postgres:18-alpine",
-				postgres.WithDatabase("test"),
-				postgres.WithUsername("test"),
-				postgres.WithPassword("test"),
-				postgres.BasicWaitStrategies(),
-			)
-			Expect(err).NotTo(HaveOccurred())
-			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
-
-			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-			Expect(err).NotTo(HaveOccurred())
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
 
 			// Create migrator and apply migrations
 			migrator, err := store.NewMigrator(connStr)
@@ -260,22 +235,7 @@ var _ = Describe("Migrator", func() {
 			if !quarantinetest.Enabled() {
 				Skip("quarantined: holomush-pqzv")
 			}
-			ctx := context.Background()
-
-			// Start PostgreSQL container
-			pgContainer, err := postgres.Run(
-				ctx,
-				"postgres:18-alpine",
-				postgres.WithDatabase("test"),
-				postgres.WithUsername("test"),
-				postgres.WithPassword("test"),
-				postgres.BasicWaitStrategies(),
-			)
-			Expect(err).NotTo(HaveOccurred())
-			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
-
-			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-			Expect(err).NotTo(HaveOccurred())
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
 
 			// Create two migrators pointing to the same database
 			migrator1, err := store.NewMigrator(connStr)
@@ -351,22 +311,7 @@ var _ = Describe("Migrator", func() {
 	// artificially advance the version.
 	Describe("Force_VersionExceedsAvailable", func() {
 		It("documents dangerous behavior: PendingMigrations() returns empty but Up() fails", func() {
-			ctx := context.Background()
-
-			// Start PostgreSQL container
-			pgContainer, err := postgres.Run(
-				ctx,
-				"postgres:18-alpine",
-				postgres.WithDatabase("test"),
-				postgres.WithUsername("test"),
-				postgres.WithPassword("test"),
-				postgres.BasicWaitStrategies(),
-			)
-			Expect(err).NotTo(HaveOccurred())
-			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
-
-			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-			Expect(err).NotTo(HaveOccurred())
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
 
 			// Create migrator
 			migrator, err := store.NewMigrator(connStr)
@@ -425,20 +370,7 @@ var _ = Describe("Migrator", func() {
 		It("both migrators detect dirty state and recover via Force()", func() {
 			ctx := context.Background()
 
-			// Start PostgreSQL container
-			pgContainer, err := postgres.Run(
-				ctx,
-				"postgres:18-alpine",
-				postgres.WithDatabase("test"),
-				postgres.WithUsername("test"),
-				postgres.WithPassword("test"),
-				postgres.BasicWaitStrategies(),
-			)
-			Expect(err).NotTo(HaveOccurred())
-			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
-
-			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-			Expect(err).NotTo(HaveOccurred())
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
 
 			// Apply migrations first to establish baseline
 			migrator1, err := store.NewMigrator(connStr)
@@ -565,19 +497,7 @@ var _ = Describe("Migrator", func() {
 		It("drops both FK constraints on crypto_rekey_checkpoints after migration 000035", func() {
 			ctx := context.Background()
 
-			pgContainer, err := postgres.Run(
-				ctx,
-				"postgres:18-alpine",
-				postgres.WithDatabase("test"),
-				postgres.WithUsername("test"),
-				postgres.WithPassword("test"),
-				postgres.BasicWaitStrategies(),
-			)
-			Expect(err).NotTo(HaveOccurred())
-			defer pgContainer.Terminate(ctx) //nolint:errcheck // best-effort cleanup
-
-			connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-			Expect(err).NotTo(HaveOccurred())
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
 
 			migrator, err := store.NewMigrator(connStr)
 			Expect(err).NotTo(HaveOccurred())
