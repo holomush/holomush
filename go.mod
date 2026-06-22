@@ -52,7 +52,7 @@ require (
 	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0
 	golang.org/x/tools v0.45.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260618152121-87f3d3e198d3
 	google.golang.org/grpc v1.81.1
 	// op_args_hash cross-binary stability: pin protobuf-go since
 	// proto.MarshalOptions{Deterministic: true} is documented stable within
