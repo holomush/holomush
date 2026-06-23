@@ -11,11 +11,17 @@
 # regenerated locally — doing so creates duplicate runtime registries.
 version: v2
 plugins:
-  - remote: buf.build/bufbuild/es
+  # Remote plugin versions are pinned (not bare `buf.build/bufbuild/es`) so
+  # `buf generate` is a pure function of checked-in inputs. A bare reference
+  # resolves to whatever is latest on the BSR at run time, which silently
+  # re-stamped every generated `_pb.ts` stub from v2.12.0 to a newer release on
+  # an unrelated web build (holomush-h6aj1). `bufbuild/es` MUST track the
+  # `@bufbuild/protoc-gen-es` pin in package.json; bump both together.
+  - remote: buf.build/bufbuild/es:v2.12.0
     out: src/lib/connect
     opt: target=ts
     include_imports: true
-  - remote: buf.build/connectrpc/es
+  - remote: buf.build/connectrpc/es:v1.6.1
     out: src/lib/connect
     opt: target=ts
     include_imports: true
