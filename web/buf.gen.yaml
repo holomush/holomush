@@ -1,6 +1,6 @@
 # buf.gen.yaml — TypeScript ConnectRPC code generation
 #
-# `include_imports: true` makes both plugins emit code for transitive
+# `include_imports: true` makes the es plugin emit code for transitive
 # imports (notably `buf/validate/validate.proto` from
 # buf.build/bufbuild/protovalidate, which the generated _pb.ts files
 # reference at runtime via `file_buf_validate_validate`). Without it,
@@ -11,17 +11,18 @@
 # regenerated locally — doing so creates duplicate runtime registries.
 version: v2
 plugins:
-  # Remote plugin versions are pinned (not bare `buf.build/bufbuild/es`) so
+  # The remote plugin version is pinned (not bare `buf.build/bufbuild/es`) so
   # `buf generate` is a pure function of checked-in inputs. A bare reference
   # resolves to whatever is latest on the BSR at run time, which silently
   # re-stamped every generated `_pb.ts` stub from v2.12.0 to a newer release on
   # an unrelated web build (holomush-h6aj1). `bufbuild/es` MUST track the
   # `@bufbuild/protoc-gen-es` pin in package.json; bump both together.
+  #
+  # connect-es v2 derives clients directly from the `GenService` descriptors in
+  # the `_pb.ts` stubs (`createClient(SomeService, transport)`), so the v1
+  # `protoc-gen-connect-es` plugin that emitted `_connect.ts` service stubs was
+  # removed per the connect-es v2 migration (holomush-dxmqg).
   - remote: buf.build/bufbuild/es:v2.12.0
-    out: src/lib/connect
-    opt: target=ts
-    include_imports: true
-  - remote: buf.build/connectrpc/es:v1.6.1
     out: src/lib/connect
     opt: target=ts
     include_imports: true
