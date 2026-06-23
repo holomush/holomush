@@ -12,6 +12,19 @@
       "/(^|/)go\\.mod$/"
     ]
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track web/buf.gen.yaml BSR codegen plugin pins via their inline `# renovate:` annotations",
+      "managerFilePatterns": [
+        "/(^|/)web/buf\\.gen\\.yaml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+- remote: [^:\\s]+:v(?<currentValue>\\S+)"
+      ],
+      "versioningTemplate": "npm"
+    }
+  ],
   "packageRules": [
     {
       "description": "Auto-merge minor/patch Go deps",
@@ -93,6 +106,15 @@
       "matchUpdateTypes": ["major"],
       "automerge": false,
       "addLabels": ["major-update"]
+    },
+    {
+      "description": "Group the web/buf.gen.yaml bufbuild/es pin with its @bufbuild/protoc-gen-es web/package.json devDependency so they bump together in one PR. Not auto-merged — a pin bump doesn't regenerate the committed _pb.ts stubs, so a human runs `task web:generate` on the bump PR (holomush-ai3o5).",
+      "matchPackageNames": [
+        "@bufbuild/protoc-gen-es"
+      ],
+      "groupName": "buf codegen",
+      "automerge": false,
+      "addLabels": ["codegen", "web"]
     }
   ],
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],

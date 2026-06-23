@@ -16,12 +16,15 @@ plugins:
   # resolves to whatever is latest on the BSR at run time, which silently
   # re-stamped every generated `_pb.ts` stub from v2.12.0 to a newer release on
   # an unrelated web build (holomush-h6aj1). `bufbuild/es` MUST track the
-  # `@bufbuild/protoc-gen-es` pin in package.json; bump both together.
+  # `@bufbuild/protoc-gen-es` pin in package.json; bump both together — the
+  # `# renovate:` annotation below wires that into Renovate
+  # (see .github/renovate.json customManagers + "buf codegen" packageRule).
   #
   # connect-es v2 derives clients directly from the `GenService` descriptors in
   # the `_pb.ts` stubs (`createClient(SomeService, transport)`), so the v1
   # `protoc-gen-connect-es` plugin that emitted `_connect.ts` service stubs was
   # removed per the connect-es v2 migration (holomush-dxmqg).
+  # renovate: datasource=npm depName=@bufbuild/protoc-gen-es
   - remote: buf.build/bufbuild/es:v2.12.0
     out: src/lib/connect
     opt: target=ts
