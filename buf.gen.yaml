@@ -17,13 +17,22 @@ managed:
     - file_option: go_package_prefix
       value: github.com/holomush/holomush/pkg/proto
 plugins:
-  - remote: buf.build/protocolbuffers/go
+  # Remote plugin versions are pinned (not bare `buf.build/protocolbuffers/go`)
+  # so `buf generate` is a pure function of checked-in inputs. A bare reference
+  # resolves to whatever is latest on the BSR at run time; when buf.build
+  # publishes a newer generator, an unrelated `task proto` run re-stamps every
+  # `*.pb.go` ahead of the go.mod runtime pin (same drift class fixed for the
+  # web stubs in holomush-h6aj1). Keep each pin in lockstep with its go.mod
+  # runtime: protocolbuffers/go ↔ google.golang.org/protobuf,
+  # connectrpc/go ↔ connectrpc.com/connect. grpc/go (protoc-gen-go-grpc) is
+  # versioned independently of google.golang.org/grpc — track its own release.
+  - remote: buf.build/protocolbuffers/go:v1.36.11
     out: pkg/proto
     opt: paths=source_relative
-  - remote: buf.build/grpc/go
+  - remote: buf.build/grpc/go:v1.6.2
     out: pkg/proto
     opt: paths=source_relative
-  - remote: buf.build/connectrpc/go
+  - remote: buf.build/connectrpc/go:v1.20.0
     out: pkg/proto
     opt: paths=source_relative
 inputs:
