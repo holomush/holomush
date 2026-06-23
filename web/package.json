@@ -11,7 +11,7 @@
     "test:unit:watch": "vitest"
   },
   "devDependencies": {
-    "@bufbuild/protoc-gen-es": "2.12.0",
+    "@bufbuild/protoc-gen-es": "2.12.1",
     "@internationalized/date": "3.12.2",
     "@lucide/svelte": "1.17.0",
     "@opentelemetry/api": "1.9.1",
