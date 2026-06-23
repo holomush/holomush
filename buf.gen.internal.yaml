@@ -19,7 +19,10 @@ version: v2
 managed:
   enabled: false
 plugins:
-  - remote: buf.build/protocolbuffers/go
+  # Pinned to match buf.gen.yaml and the google.golang.org/protobuf go.mod pin
+  # (holomush-pw76v) — a bare remote ref drifts to the latest BSR generator and
+  # silently re-stamps cursor.pb.go on an unrelated `task proto` run.
+  - remote: buf.build/protocolbuffers/go:v1.36.11
     out: internal/eventbus/cursor/cursorv1
     opt: paths=source_relative
 inputs:
