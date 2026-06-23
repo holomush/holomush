@@ -23,6 +23,18 @@
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+- remote: [^:\\s]+:v(?<currentValue>\\S+)"
       ],
       "versioningTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the Go buf.gen.yaml / buf.gen.internal.yaml BSR codegen plugin pins via their inline `# renovate:` annotations (holomush-9vyc3). Separate from the web manager: the patterns are root-anchored (`^buf.gen…`) so they exclude web/buf.gen.yaml and buf.gen.docs.yaml, the datasource is `go` (per-line via the annotation), and the version `v` prefix is captured into currentValue — Renovate's go versioning writes the bump back as `vX.Y.Z`, so capturing after `:v` (as the web manager does) would corrupt the pin to `:vvX.Y.Z`.",
+      "managerFilePatterns": [
+        "/^buf\\.gen\\.yaml$/",
+        "/^buf\\.gen\\.internal\\.yaml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+- remote: [^:\\s]+:(?<currentValue>v\\S+)"
+      ],
+      "versioningTemplate": "go"
     }
   ],
   "packageRules": [
@@ -115,6 +127,17 @@
       "groupName": "buf codegen",
       "automerge": false,
       "addLabels": ["codegen", "web"]
+    },
+    {
+      "description": "Group the Go buf.gen.yaml / buf.gen.internal.yaml BSR codegen plugin pins with their go.mod runtimes so each bumps in lockstep: protocolbuffers/go↔google.golang.org/protobuf, connectrpc/go↔connectrpc.com/connect (both ship the generator in the runtime module, same version); protoc-gen-go-grpc tracks its own google.golang.org/grpc/cmd/protoc-gen-go-grpc submodule, independent of the google.golang.org/grpc runtime. Not auto-merged — a pin bump doesn't regenerate the committed *.pb.go stubs, so a human runs `task proto` on the bump PR. Last in the array so it overrides the broader gomod auto-merge and 'Google Go' grouping for these packages (holomush-9vyc3).",
+      "matchPackageNames": [
+        "google.golang.org/protobuf",
+        "connectrpc.com/connect",
+        "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
+      ],
+      "groupName": "buf codegen go",
+      "automerge": false,
+      "addLabels": ["codegen", "go"]
     }
   ],
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
