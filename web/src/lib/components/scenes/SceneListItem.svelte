@@ -57,7 +57,11 @@
       {/if}
     </span>
     {#if scene.asCharacterName}
-      <span class="text-[11px] text-muted-foreground truncate block">as {scene.asCharacterName}</span>
+      <span
+        class={cn(
+          'text-[12px] truncate block',
+          isActive ? 'text-accent-foreground' : 'text-muted-foreground',
+        )}>as {scene.asCharacterName}</span>
     {/if}
   </span>
 </button>
