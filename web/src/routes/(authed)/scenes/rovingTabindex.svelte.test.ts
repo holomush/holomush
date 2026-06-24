@@ -10,8 +10,8 @@
  *   - Navigation MUST wrap circularly
  *   - Enter/Space MUST select the FOCUSED item (not a stale index)
  *
- * Tests use a minimal DOM structure matching the +page.svelte listbox markup
- * ([data-roving-index=N] wrappers containing <button> children) and a
+ * Tests use a minimal DOM structure matching the ScenesShell.svelte listbox
+ * markup ([data-roving-index=N] wrappers containing <button> children) and a
  * self-contained copy of the roving handler logic — this validates the
  * contract without needing to mount the full SvelteKit page.
  *
