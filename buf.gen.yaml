@@ -26,12 +26,23 @@ plugins:
   # runtime: protocolbuffers/go ↔ google.golang.org/protobuf,
   # connectrpc/go ↔ connectrpc.com/connect. grpc/go (protoc-gen-go-grpc) is
   # versioned independently of google.golang.org/grpc — track its own release.
+  #
+  # The `# renovate:` annotations below let Renovate's customManager bump these
+  # BSR pins in lockstep with their go.mod runtimes — protoc-gen-go ships in
+  # google.golang.org/protobuf, protoc-gen-connect-go in connectrpc.com/connect
+  # (both same version as the runtime), protoc-gen-go-grpc in its own
+  # google.golang.org/grpc/cmd/protoc-gen-go-grpc submodule. See
+  # .github/renovate.json customManagers + "buf codegen go" packageRule
+  # (holomush-9vyc3).
+  # renovate: datasource=go depName=google.golang.org/protobuf
   - remote: buf.build/protocolbuffers/go:v1.36.11
     out: pkg/proto
     opt: paths=source_relative
+  # renovate: datasource=go depName=google.golang.org/grpc/cmd/protoc-gen-go-grpc
   - remote: buf.build/grpc/go:v1.6.2
     out: pkg/proto
     opt: paths=source_relative
+  # renovate: datasource=go depName=connectrpc.com/connect
   - remote: buf.build/connectrpc/go:v1.20.0
     out: pkg/proto
     opt: paths=source_relative
