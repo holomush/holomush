@@ -17,6 +17,7 @@
     SheetDescription,
   } from '$lib/components/ui/sheet/index.js';
   import { workspaceStore } from '$lib/scenes/workspaceStore.svelte';
+  import { sceneStateDotClass } from '$lib/scenes/stateStyle';
   import SceneListItem from '$lib/components/scenes/SceneListItem.svelte';
   import PoseCard from '$lib/components/scenes/PoseCard.svelte';
   import PoseOrderStrip from '$lib/components/scenes/PoseOrderStrip.svelte';
@@ -462,7 +463,13 @@
         <!-- Scene title bar -->
         <header class="flex items-center gap-3 px-4 py-2 border-b border-border bg-card/50 shrink-0">
           <span class="font-semibold text-sm truncate">{selectedScene.title}</span>
-          <span class="text-[11px] text-muted-foreground shrink-0">● {selectedScene.state}</span>
+          <span class="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+            <span
+              class={cn('size-2 shrink-0 rounded-full', sceneStateDotClass(selectedScene.state))}
+              aria-hidden="true"
+            ></span>
+            {selectedScene.state}
+          </span>
         </header>
 
         <!-- Log: ARIA live region (spec §5.4 + Task 16 a11y requirement) -->
