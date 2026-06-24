@@ -3285,6 +3285,18 @@ invariants:
       - "internal/grpc/sceneaccess_service_test.go"
     refs: []
 
+  - id: INV-SCENE-65
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-06-24-scenes-web-management-actions-design.md"
+    legacy: []
+    summary: "SceneService mutating lifecycle/membership RPC handlers (EndScene, PauseScene, ResumeScene, UpdateScene, InviteToScene,
+      KickFromScene, TransferOwnership, LeaveScene) MUST self-enforce ABAC by evaluating the per-verb action on scene:<id>
+      with the subject taken from the dispatch-actor context, so authorization holds for every caller — the telnet command
+      path and the web SceneAccessService facade alike — not only when the telnet command wrapper gates first. Publish handlers
+      are excluded by INV-SCENE-33 (participant-only read path forbids the ABAC engine)."
+    binding: pending
+    refs: []
+
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride
   # with crypto; EVENTBUS took 3/4/10; remainder → CRYPTO .14.15). Dense by family: PC 1..8→1..8,
