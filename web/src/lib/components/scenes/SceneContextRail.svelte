@@ -7,6 +7,7 @@
   import { Badge } from '$lib/components/ui/badge/index.js';
   import { Separator } from '$lib/components/ui/separator/index.js';
   import type { WorkspaceScene } from '$lib/scenes/types';
+  import { sceneStateDotClass } from '$lib/scenes/stateStyle';
 
   let { scene }: { scene: WorkspaceScene | null } = $props();
 
@@ -27,13 +28,6 @@
     ended: 'Ended',
     published: 'Published',
   };
-
-  const stateDot: Record<string, string> = {
-    active: 'bg-emerald-500',
-    paused: 'bg-amber-400',
-    ended: 'bg-muted-foreground',
-    published: 'bg-blue-400',
-  };
 </script>
 
 <aside
@@ -47,7 +41,7 @@
       <div class="space-y-1.5">
         <div class="flex items-center gap-2">
           <span
-            class={cn('size-2 shrink-0 rounded-full', stateDot[scene.state] ?? 'bg-muted-foreground')}
+            class={cn('size-2 shrink-0 rounded-full', sceneStateDotClass(scene.state))}
             aria-hidden="true"
           ></span>
           <span class="text-sm font-medium leading-snug">{scene.title}</span>
