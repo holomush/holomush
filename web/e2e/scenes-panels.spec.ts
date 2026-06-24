@@ -126,3 +126,31 @@ test.describe('scenes workspace collapsible panels', () => {
     await expect(page.getByRole('button', { name: 'Show scene list' })).toBeVisible();
   });
 });
+
+// Verifies holomush-5rh.30: the scene-list sidebar is hoisted out of the
+// /scenes index page into the shared scenes layout (ScenesShell), so every
+// scenes sub-route — not just /scenes — keeps the persistent sidebar + context
+// rail for navigation continuity. The panes render regardless of scene data.
+test.describe('scenes shell persists across sub-routes', () => {
+  const listPaneSelector = '[data-pane]:has(nav[aria-label="Scene list"])';
+
+  test('the scene-list sidebar wraps /scenes/browse alongside the board', async ({ page }) => {
+    await registerAndEnterTerminal(page, 'brw');
+    await page.goto('/scenes/browse');
+
+    // The shared shell (with its collapsible scene-list pane) wraps the route.
+    await expect(page.getByTestId('scenes-workspace')).toBeVisible();
+    await expect(page.locator(listPaneSelector)).toBeVisible();
+    // The route's own content still renders, in the shell's center column.
+    await expect(page.getByRole('heading', { name: 'Scene Board' })).toBeVisible();
+  });
+
+  test('the scene-list sidebar wraps /scenes/archive alongside the archive', async ({ page }) => {
+    await registerAndEnterTerminal(page, 'arc');
+    await page.goto('/scenes/archive');
+
+    await expect(page.getByTestId('scenes-workspace')).toBeVisible();
+    await expect(page.locator(listPaneSelector)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Scene Archive' })).toBeVisible();
+  });
+});

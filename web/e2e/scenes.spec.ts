@@ -331,6 +331,77 @@ test.describe('Scenes workspace (E9.5)', () => {
     await expect(page.locator('textarea[name="scene-composer"]')).toBeEnabled();
   });
 
+  // ── S2b: Navigate-on-select from a sub-route ────────────────────────────────
+  //
+  // Regression guard for holomush-5rh.30: now that the scene-list sidebar is
+  // persistent on every /scenes/* route (ScenesShell), selecting a My Scenes item
+  // while on a SUB-route (/scenes/browse) must both select the scene AND navigate
+  // back to /scenes — handleSceneSelect's goto('/scenes') — so the live center
+  // (log + composer) renders. Without it the user is stranded on the sub-route
+  // with an active-but-invisible scene. The creator is auto-joined as owner, so
+  // the seeded scene appears in the sidebar's "My Scenes" listbox.
+  test('selecting a My Scenes item from a sub-route returns to /scenes and shows the scene', async ({
+    page,
+  }) => {
+    await registerAndEnterTerminal(page, 'nvs');
+
+    const title = `NavSelect ${Date.now()}`;
+    const sceneId = await createSceneViaTerminal(page, title);
+    expect(sceneId).toMatch(/^[0-9A-Z]{26}$/);
+
+    // Land on a sub-route — the persistent sidebar lists "My Scenes".
+    await page.goto('/scenes/browse');
+    await expect(page.locator('[data-testid="scenes-workspace"]')).toBeVisible({ timeout: 15000 });
+
+    // Click the seeded scene in the sidebar's My Scenes listbox (NOT the browse
+    // board list, which uses role="list"/role="listitem").
+    const item = page
+      .getByRole('listbox', { name: 'My scenes' })
+      .getByRole('option')
+      .filter({ hasText: title });
+    await expect(item).toBeVisible({ timeout: 10000 });
+    await item.click();
+
+    // handleSceneSelect navigates back to /scenes and renders the scene's center.
+    await expect(page).toHaveURL(/\/scenes$/, { timeout: 10000 });
+    await expect(page.locator('.font-semibold').filter({ hasText: title })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByRole('log', { name: 'scene log' })).toBeVisible({ timeout: 10000 });
+  });
+
+  // ── S2c: Deep-link selection via in-layout client-side navigation ───────────
+  //
+  // Regression guard for the PR #4520 review finding: SceneBoardRow's "Join"
+  // (and "Watch") do a client-side goto('/scenes?join=…') from the browse board.
+  // Because ScenesShell lives in the scenes LAYOUT and persists across /scenes/*,
+  // it must consume those params REACTIVELY ($effect on $page) — reading them only
+  // in onMount skipped selection on this in-layout navigation, leaving the user on
+  // the board with the scene unselected.
+  test('Join from the browse board selects the scene via in-layout navigation', async ({
+    page,
+  }) => {
+    await registerAndEnterTerminal(page, 'dlk');
+
+    const title = `DeepLink ${Date.now()}`;
+    const sceneId = await createSceneViaTerminal(page, title);
+    expect(sceneId).toMatch(/^[0-9A-Z]{26}$/);
+
+    // The seeded open+active scene is listed on the board with a Join action.
+    await page.goto('/scenes/browse');
+    const joinBtn = page.getByRole('button', { name: `Join scene ${title}` });
+    await expect(joinBtn).toBeVisible({ timeout: 15000 });
+    await joinBtn.click();
+
+    // Client-side goto('/scenes?join=…') → ScenesShell's reactive effect selects the
+    // scene and replaceState's the URL to /scenes, rendering the live center.
+    await expect(page).toHaveURL(/\/scenes$/, { timeout: 10000 });
+    await expect(page.locator('.font-semibold').filter({ hasText: title })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByRole('log', { name: 'scene log' })).toBeVisible({ timeout: 10000 });
+  });
+
   // ── S3: Participate — pose appears live in the scene log ─────────────────
   //
   // Owner enters the workspace, types a pose in the composer, clicks Pose,
