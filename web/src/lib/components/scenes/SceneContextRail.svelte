@@ -36,6 +36,20 @@
     ended: 'Ended',
     published: 'Published',
   };
+
+  let lifecycleErr = $state('');
+
+  async function runLifecycle(
+    action: (a: { sceneId: string; characterId: string }) => Promise<void>,
+  ): Promise<void> {
+    if (!scene) return;
+    lifecycleErr = '';
+    try {
+      await action({ sceneId: scene.sceneId, characterId: scene.asCharacterId });
+    } catch (e) {
+      lifecycleErr = e instanceof Error ? e.message : 'Action failed';
+    }
+  }
 </script>
 
 <aside
@@ -70,17 +84,20 @@
         <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
           {#if showPause}
             <Button variant="outline" size="sm" class="h-6 text-xs"
-              onclick={() => pauseSceneAction({ sceneId: scene!.sceneId, characterId: scene!.asCharacterId })}>Pause</Button>
+              onclick={() => runLifecycle(pauseSceneAction)}>Pause</Button>
           {/if}
           {#if showResume}
             <Button variant="outline" size="sm" class="h-6 text-xs"
-              onclick={() => resumeSceneAction({ sceneId: scene!.sceneId, characterId: scene!.asCharacterId })}>Resume</Button>
+              onclick={() => runLifecycle(resumeSceneAction)}>Resume</Button>
           {/if}
           {#if showEnd}
             <Button variant="outline" size="sm" class="h-6 text-xs text-destructive"
-              onclick={() => endSceneAction({ sceneId: scene!.sceneId, characterId: scene!.asCharacterId })}>End</Button>
+              onclick={() => runLifecycle(endSceneAction)}>End</Button>
           {/if}
         </div>
+        {#if lifecycleErr}
+          <p class="text-xs text-destructive pl-4 pt-1">{lifecycleErr}</p>
+        {/if}
       {/if}
     </section>
 

@@ -1291,6 +1291,26 @@ func TestSceneServiceEndSceneFailsClosedWithoutEvaluator(t *testing.T) {
 	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
+func TestSceneServicePauseSceneFailsClosedWithoutEvaluator(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
+	svc := newTestService(t, store) // no evaluator wired
+
+	_, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{CharacterId: "char-alice", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+}
+
+func TestSceneServiceResumeSceneFailsClosedWithoutEvaluator(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStatePaused)}
+	svc := newTestService(t, store) // no evaluator wired
+
+	_, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{CharacterId: "char-alice", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+}
+
 func TestSceneServicePauseSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
