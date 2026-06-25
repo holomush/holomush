@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Extract a shared web communication rendering primitive instead of per-bug patching](holomush-914rn-extract-shared-web-communication-rendering-primitive-instead.md) | 2026-06-26 | Accepted | `holomush-914rn` |
+| [Scope rendering-seam invariants (SEAM-*) as web-local vitest checks, not central-registry entries](holomush-bbwe7-scope-rendering-seam-invariants-seam-as-web-local-vitest-che.md) | 2026-06-26 | Accepted | `holomush-bbwe7` |
 | [Self-gate ABAC at SceneService handlers, not the facade](holomush-f9z8f-self-gate-abac-at-sceneservice-handlers-not-facade.md) | 2026-06-25 | Accepted | `holomush-f9z8f` |
 | [Resolve scene roster names host-side via facade, not plugin](holomush-sv1ei-resolve-scene-roster-names-host-side-via-facade-not-plugin.md) | 2026-06-20 | Accepted | `holomush-sv1ei` |
 | [Section registry is the single source of nav truth (Rail + palette)](holomush-stds8-section-registry-is-single-source-nav-truth-rail-palette.md) | 2026-06-20 | Accepted | `holomush-stds8` |
