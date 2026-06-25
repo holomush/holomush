@@ -352,6 +352,94 @@ func (s *SceneAccessServer) CreateScene(ctx context.Context, req *sceneaccessv1.
 	return &sceneaccessv1.CreateSceneResponse{Scene: resp.GetScene()}, nil
 }
 
+// EndScene resolves the verified owner from the player session and forwards an
+// EndScene call to the plugin SceneService (which self-enforces the ABAC `end`
+// policy, INV-SCENE-65). resolveAndGate enforces the guest gate (INV-SCENE-64);
+// ownedCharacter enforces ownership (INV-SCENE-63).
+func (s *SceneAccessServer) EndScene(ctx context.Context, req *sceneaccessv1.EndSceneRequest) (*sceneaccessv1.EndSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	resp, err := s.sceneClient.EndScene(dctx, &scenev1.EndSceneRequest{
+		CharacterId: char.ID.String(),
+		SceneId:     req.GetSceneId(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.EndSceneResponse{Scene: resp.GetScene()}, nil
+}
+
+// PauseScene resolves the verified owner from the player session and forwards a
+// PauseScene call to the plugin SceneService (which self-enforces the ABAC `pause`
+// policy, INV-SCENE-65). resolveAndGate enforces the guest gate (INV-SCENE-64);
+// ownedCharacter enforces ownership (INV-SCENE-63).
+func (s *SceneAccessServer) PauseScene(ctx context.Context, req *sceneaccessv1.PauseSceneRequest) (*sceneaccessv1.PauseSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	resp, err := s.sceneClient.PauseScene(dctx, &scenev1.PauseSceneRequest{
+		CharacterId: char.ID.String(),
+		SceneId:     req.GetSceneId(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.PauseSceneResponse{Scene: resp.GetScene()}, nil
+}
+
+// ResumeScene resolves the verified participant from the player session and
+// forwards a ResumeScene call to the plugin SceneService (which self-enforces
+// the ABAC `resume` policy — participant-wide, INV-SCENE-65). resolveAndGate
+// enforces the guest gate (INV-SCENE-64); ownedCharacter enforces ownership
+// (INV-SCENE-63).
+func (s *SceneAccessServer) ResumeScene(ctx context.Context, req *sceneaccessv1.ResumeSceneRequest) (*sceneaccessv1.ResumeSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	resp, err := s.sceneClient.ResumeScene(dctx, &scenev1.ResumeSceneRequest{
+		CharacterId: char.ID.String(),
+		SceneId:     req.GetSceneId(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.ResumeSceneResponse{Scene: resp.GetScene()}, nil
+}
+
 // ExportScene renders the verified character's scene IC log.
 func (s *SceneAccessServer) ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
 	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
