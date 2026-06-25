@@ -417,6 +417,33 @@ func (c *Client) CreateScene(ctx context.Context, req *sceneaccessv1.CreateScene
 	return resp, nil
 }
 
+// EndScene delegates to SceneAccessService.EndScene (identity-resolving facade).
+func (c *Client) EndScene(ctx context.Context, req *sceneaccessv1.EndSceneRequest) (*sceneaccessv1.EndSceneResponse, error) {
+	resp, err := c.sceneAccessClient.EndScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "EndScene").Wrap(err)
+	}
+	return resp, nil
+}
+
+// PauseScene delegates to SceneAccessService.PauseScene (identity-resolving facade).
+func (c *Client) PauseScene(ctx context.Context, req *sceneaccessv1.PauseSceneRequest) (*sceneaccessv1.PauseSceneResponse, error) {
+	resp, err := c.sceneAccessClient.PauseScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "PauseScene").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ResumeScene delegates to SceneAccessService.ResumeScene (identity-resolving facade).
+func (c *Client) ResumeScene(ctx context.Context, req *sceneaccessv1.ResumeSceneRequest) (*sceneaccessv1.ResumeSceneResponse, error) {
+	resp, err := c.sceneAccessClient.ResumeScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ResumeScene").Wrap(err)
+	}
+	return resp, nil
+}
+
 // ExportScene renders the verified player's owned character's scene IC log to a downloadable document.
 func (c *Client) ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
 	resp, err := c.sceneAccessClient.ExportScene(ctx, req)
