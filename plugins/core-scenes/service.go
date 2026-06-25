@@ -173,9 +173,10 @@ type SceneServiceImpl struct {
 	// nil until SetSettingsClient wires it; effectiveTaxonomy falls back to
 	// DefaultCWTaxonomy when nil (INV-SCENE-57).
 	settings pluginsdk.SettingsClient
-	// evaluator is the host ABAC evaluator used by WatchScene's spectate
-	// gate. nil until scenePlugin.SetHostEvaluator forwards it; WatchScene
-	// fails closed when nil (mirrors handleEmit's nil-evaluator handling).
+	// evaluator is the host ABAC evaluator used by WatchScene's spectate gate
+	// and the lifecycle handlers' end/pause/resume gates. nil until
+	// scenePlugin.SetHostEvaluator forwards it; all gated handlers fail closed
+	// when nil (mirrors handleEmit's nil-evaluator handling).
 	evaluator pluginsdk.HostEvaluator
 	// focusClient drives session focus state for service-owned RPCs
 	// (WatchScene registers the watcher's scene FocusMembership). nil until
@@ -228,8 +229,9 @@ func (s *SceneServiceImpl) SetSettingsClient(c pluginsdk.SettingsClient) {
 }
 
 // SetHostEvaluator installs the host ABAC evaluator used by WatchScene's
-// spectate gate. Wired via scenePlugin.SetHostEvaluator before Init; nil
-// until then (WatchScene fails closed).
+// spectate gate and the lifecycle handlers' end/pause/resume gates. Wired via
+// scenePlugin.SetHostEvaluator before Init; nil until then (all gated
+// handlers fail closed).
 func (s *SceneServiceImpl) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
 	s.evaluator = ev
 }
@@ -644,6 +646,21 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 	)
 	defer span.End()
 
+	if s.evaluator == nil {
+		slog.WarnContext(ctx, "scene.lifecycle.end evaluator not configured",
+			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
+		return nil, status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	dec, evalErr := s.evaluator.Evaluate(ctx, "end", "scene:"+req.GetSceneId())
+	if evalErr != nil {
+		recordError(span, evalErr)
+		errutil.LogErrorContext(ctx, "scene.lifecycle.end evaluation failed", evalErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return nil, status.Error(codes.PermissionDenied, "not permitted to end this scene") //nolint:wrapcheck // gRPC status is the wire contract
+	}
+
 	row, err := s.store.End(ctx, req.GetSceneId())
 	if err != nil {
 		recordError(span, err)
@@ -677,6 +694,21 @@ func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSce
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
+
+	if s.evaluator == nil {
+		slog.WarnContext(ctx, "scene.lifecycle.pause evaluator not configured",
+			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
+		return nil, status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	dec, evalErr := s.evaluator.Evaluate(ctx, "pause", "scene:"+req.GetSceneId())
+	if evalErr != nil {
+		recordError(span, evalErr)
+		errutil.LogErrorContext(ctx, "scene.lifecycle.pause evaluation failed", evalErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return nil, status.Error(codes.PermissionDenied, "not permitted to pause this scene") //nolint:wrapcheck // gRPC status is the wire contract
+	}
 
 	row, err := s.store.Pause(ctx, req.GetSceneId())
 	if err != nil {
@@ -712,6 +744,21 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
+
+	if s.evaluator == nil {
+		slog.WarnContext(ctx, "scene.lifecycle.resume evaluator not configured",
+			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
+		return nil, status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	dec, evalErr := s.evaluator.Evaluate(ctx, "resume", "scene:"+req.GetSceneId())
+	if evalErr != nil {
+		recordError(span, evalErr)
+		errutil.LogErrorContext(ctx, "scene.lifecycle.resume evaluation failed", evalErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return nil, status.Error(codes.PermissionDenied, "not permitted to resume this scene") //nolint:wrapcheck // gRPC status is the wire contract
+	}
 
 	row, err := s.store.Resume(ctx, req.GetSceneId())
 	if err != nil {
