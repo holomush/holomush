@@ -9,6 +9,9 @@ import {
 	type WebWatchSceneRequest,
 	type WebCreateSceneRequest,
 	type WebExportSceneRequest,
+	type WebEndSceneRequest,
+	type WebPauseSceneRequest,
+	type WebResumeSceneRequest,
 } from '$lib/connect/holomush/web/v1/web_pb';
 import { transport } from '$lib/transport';
 
@@ -148,6 +151,39 @@ export async function listPublishedScenes(
 export async function getPublicSceneArchive(sessionId: string, publishedSceneId: string) {
 	const res = await client.webGetPublicSceneArchive({ sessionId, publishedSceneId });
 	return res;
+}
+
+/**
+ * Ends a scene; returns the post-transition SceneInfo. Typed RPC (structural write).
+ */
+export async function endScene(
+	sessionId: string,
+	opts: Pick<WebEndSceneRequest, 'characterId' | 'sceneId'>,
+) {
+	const res = await client.webEndScene({ sessionId, ...opts });
+	return res.scene;
+}
+
+/**
+ * Pauses a scene; returns the post-transition SceneInfo. Typed RPC (structural write).
+ */
+export async function pauseScene(
+	sessionId: string,
+	opts: Pick<WebPauseSceneRequest, 'characterId' | 'sceneId'>,
+) {
+	const res = await client.webPauseScene({ sessionId, ...opts });
+	return res.scene;
+}
+
+/**
+ * Resumes a paused scene; returns the post-transition SceneInfo. Typed RPC (structural write).
+ */
+export async function resumeScene(
+	sessionId: string,
+	opts: Pick<WebResumeSceneRequest, 'characterId' | 'sceneId'>,
+) {
+	const res = await client.webResumeScene({ sessionId, ...opts });
+	return res.scene;
 }
 
 /**

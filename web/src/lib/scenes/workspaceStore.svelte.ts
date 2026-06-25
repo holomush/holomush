@@ -20,6 +20,7 @@
  */
 
 import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
+import type { SceneInfo } from '$lib/connect/holomush/scene/v1/scene_pb';
 import { eventFrameToLogEntry, type LogEntry, type WorkspaceScene } from './types';
 import {
 	listMyScenes,
@@ -257,6 +258,35 @@ function bumpUnread(sceneId: string): void {
 }
 
 /**
+ * Merges the post-mutation SceneInfo into the cached scene(s) matched by scene.id.
+ * Updates both myScenes and watching in-place (Svelte 5 proxied $state arrays).
+ * Fields mapped: state, title, tags, locationId, participants, observers, lastActivityMs.
+ * Fields not mapped (no WorkspaceScene counterpart): description, ownerId, poseOrderMode,
+ * contentWarnings, visibility, createdAt, endedAt.
+ */
+function applySceneInfo(scene: SceneInfo): void {
+	const apply = (list: WorkspaceScene[]) => {
+		const s = list.find((x) => x.sceneId === scene.id);
+		if (!s) return;
+		s.state = scene.state;
+		s.title = scene.title;
+		s.tags = scene.tags;
+		s.locationId = scene.locationId;
+		if (scene.participants.length > 0) {
+			s.participants = scene.participants.map((p) => ({ id: p.characterId, name: p.characterName }));
+		}
+		if (scene.observers.length > 0) {
+			s.observers = scene.observers.map((p) => ({ id: p.characterId, name: p.characterName }));
+		}
+		if (scene.lastActivityMs) {
+			s.lastActivityMs = scene.lastActivityMs;
+		}
+	};
+	apply(myScenes);
+	apply(watching);
+}
+
+/**
  * Exported store object following the Svelte 5 runes pattern.
  * Consumers import and destructure: `const { myScenes, select, ... } = workspaceStore`.
  */
@@ -280,7 +310,8 @@ export const workspaceStore = {
 	select,
 	ingestEvent,
 	bumpUnread,
+	applySceneInfo,
 };
 
 // Named exports for direct import in tests.
-export { refresh, select, ingestEvent, bumpUnread };
+export { refresh, select, ingestEvent, bumpUnread, applySceneInfo };
