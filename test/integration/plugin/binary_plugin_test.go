@@ -27,6 +27,7 @@ import (
 
 	policy "github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	policytypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
@@ -579,6 +580,13 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				goplugin.WithSchemaProvisioner(provisioner),
 				goplugin.WithServiceRegistry(registry),
 				goplugin.WithIdentityRegistry(plugintest.NewStubRegistry("core-scenes")),
+				// INV-SCENE-65: EndScene/PauseScene/ResumeScene self-gate ABAC through
+				// the host evaluator. Without a wired engine the gate fails closed with
+				// Internal (host EvalService has no engine). This suite exercises the
+				// lifecycle state machine, not ABAC enforcement (the deny / fail-closed
+				// paths are unit-tested in service_test.go and commands_test.go), so an
+				// allow-all engine satisfies the gate.
+				goplugin.WithEngine(policytest.AllowAllEngine()),
 			)
 
 			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))
@@ -605,6 +613,20 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(err).NotTo(HaveOccurred())
 			lifecyclesceneID = createResp.GetScene().GetId()
 			Expect(lifecyclesceneID).NotTo(BeEmpty())
+
+			// INV-SCENE-65: EndScene/PauseScene/ResumeScene self-gate ABAC via a
+			// host-capability call that requires a host-issued dispatch token. Mirror
+			// production's SceneAccessServer.beginDispatch — mint a dispatch context
+			// for the owner (char-alice) and run the gated lifecycle RPCs through it.
+			// CreateScene above is not self-gated, so it uses the pre-dispatch context;
+			// the title-only UpdateScene specs are likewise un-gated and ride this
+			// context harmlessly. Without this the self-gate fails with "plugin called
+			// host capability without a host-issued dispatch token".
+			dispatchActor := core.Actor{Kind: core.ActorCharacter, ID: "char-alice"}
+			dctx, release, err := lifecyclehost.BeginServiceDispatch(lifecyclectx, "core-scenes", dispatchActor, "")
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(release)
+			lifecyclectx = dctx
 		})
 
 		AfterEach(func() {

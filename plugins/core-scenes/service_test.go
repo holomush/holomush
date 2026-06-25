@@ -1127,6 +1127,7 @@ func TestSceneServiceEndSceneTransitionsScene(t *testing.T) {
 		Visibility: string(SceneVisibilityOpen),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	resp, err := svc.EndScene(context.Background(), &scenev1.EndSceneRequest{
 		CharacterId: "char-alice",
@@ -1139,6 +1140,7 @@ func TestSceneServiceEndSceneTransitionsScene(t *testing.T) {
 
 func TestSceneServiceEndSceneReturnsNotFoundForMissingScene(t *testing.T) {
 	svc := newTestService(t, newFakeStore())
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.EndScene(context.Background(), &scenev1.EndSceneRequest{
 		CharacterId: "char-alice",
@@ -1156,6 +1158,7 @@ func TestSceneServiceEndSceneReturnsFailedPreconditionForEndedScene(t *testing.T
 		State: string(SceneStateEnded),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.EndScene(context.Background(), &scenev1.EndSceneRequest{
 		CharacterId: "char-alice",
@@ -1174,6 +1177,7 @@ func TestSceneServicePauseSceneTransitionsScene(t *testing.T) {
 		Visibility: string(SceneVisibilityOpen),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	resp, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{
 		CharacterId: "char-alice",
@@ -1185,6 +1189,7 @@ func TestSceneServicePauseSceneTransitionsScene(t *testing.T) {
 
 func TestSceneServicePauseSceneReturnsNotFoundForMissingScene(t *testing.T) {
 	svc := newTestService(t, newFakeStore())
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{
 		CharacterId: "char-alice",
@@ -1202,6 +1207,7 @@ func TestSceneServicePauseSceneReturnsFailedPreconditionForAlreadyPausedScene(t 
 		State: string(SceneStatePaused),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{
 		CharacterId: "char-alice",
@@ -1220,6 +1226,7 @@ func TestSceneServiceResumeSceneTransitionsScene(t *testing.T) {
 		Visibility: string(SceneVisibilityOpen),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	resp, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{
 		CharacterId: "char-alice",
@@ -1231,6 +1238,7 @@ func TestSceneServiceResumeSceneTransitionsScene(t *testing.T) {
 
 func TestSceneServiceResumeSceneReturnsNotFoundForMissingScene(t *testing.T) {
 	svc := newTestService(t, newFakeStore())
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{
 		CharacterId: "char-alice",
@@ -1248,6 +1256,7 @@ func TestSceneServiceResumeSceneReturnsFailedPreconditionForActiveScene(t *testi
 		State: string(SceneStateActive),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{
 		CharacterId: "char-alice",
@@ -1256,6 +1265,75 @@ func TestSceneServiceResumeSceneReturnsFailedPreconditionForActiveScene(t *testi
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.FailedPrecondition, st.Code())
+}
+
+func TestSceneServiceEndSceneDeniedWhenPolicyDenies(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-bob", State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(denyEvaluator{})
+
+	_, err := svc.EndScene(context.Background(), &scenev1.EndSceneRequest{CharacterId: "char-mallory", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	// Gate fires before the store: the scene is untouched.
+	assert.Equal(t, string(SceneStateActive), store.scenes["scene-1"].State)
+}
+
+func TestSceneServiceEndSceneFailsClosedWithoutEvaluator(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
+	svc := newTestService(t, store) // no evaluator wired
+
+	_, err := svc.EndScene(context.Background(), &scenev1.EndSceneRequest{CharacterId: "char-alice", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+}
+
+func TestSceneServicePauseSceneFailsClosedWithoutEvaluator(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
+	svc := newTestService(t, store) // no evaluator wired
+
+	_, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{CharacterId: "char-alice", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+}
+
+func TestSceneServiceResumeSceneFailsClosedWithoutEvaluator(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStatePaused)}
+	svc := newTestService(t, store) // no evaluator wired
+
+	_, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{CharacterId: "char-alice", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+}
+
+func TestSceneServicePauseSceneDeniedWhenPolicyDenies(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(denyEvaluator{})
+
+	_, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{CharacterId: "char-mallory", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	// Gate fires before the store: the scene is untouched.
+	assert.Equal(t, string(SceneStateActive), store.scenes["scene-1"].State)
+}
+
+func TestSceneServiceResumeSceneDeniedWhenPolicyDenies(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStatePaused)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(denyEvaluator{})
+
+	_, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{CharacterId: "char-mallory", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	// Gate fires before the store: the scene is untouched.
+	assert.Equal(t, string(SceneStatePaused), store.scenes["scene-1"].State)
 }
 
 func TestSceneServiceUpdateSceneAppliesTitleChange(t *testing.T) {

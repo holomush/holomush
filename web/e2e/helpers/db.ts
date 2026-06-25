@@ -314,6 +314,19 @@ export async function getSceneById(sceneId: string): Promise<DbScene | null> {
   return rows[0] ?? null;
 }
 
+export async function getSceneByTitle(title: string): Promise<DbScene | null> {
+  const { rows } = await getPool().query<DbScene>(
+    `SELECT id, title, description, owner_id, state, visibility, pose_order,
+            location_id, created_at, ended_at, archived_at
+     FROM plugin_core_scenes.scenes
+     WHERE title = $1
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [title],
+  );
+  return rows[0] ?? null;
+}
+
 // ── Zero ULID check ─────────────────────────────────────────────
 
 const ZERO_ULID = '00000000000000000000000000';

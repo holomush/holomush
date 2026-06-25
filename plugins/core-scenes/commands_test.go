@@ -24,6 +24,7 @@ func newTestPlugin(t testing.TB) *scenePlugin {
 	store := newFakeStore()
 	svc := newTestService(t, store)
 	svc.SetEventSink(&recordingEventSink{})
+	svc.SetHostEvaluator(allowEvaluator{}) // allow all; propagate to service-level gates (EndScene/PauseScene/ResumeScene)
 	return &scenePlugin{
 		store:     nil, // not used by command handlers
 		service:   svc,
@@ -944,12 +945,14 @@ func (errorEvaluator) Evaluate(_ context.Context, _, _ string) (pluginsdk.Evalua
 }
 
 // newScenePluginWithEvaluator builds a minimal scenePlugin wired with the
-// given HostEvaluator, ready for extend gate tests.
+// given HostEvaluator, ready for extend gate tests. Propagates ev to the
+// service so service-level gates (EndScene/PauseScene/ResumeScene) honour it.
 func newScenePluginWithEvaluator(t *testing.T, ev pluginsdk.HostEvaluator) *scenePlugin {
 	t.Helper()
 	store := newFakeStore()
 	svc := newTestService(t, store)
 	svc.SetEventSink(&recordingEventSink{})
+	svc.SetHostEvaluator(ev)
 	return &scenePlugin{
 		service:   svc,
 		evaluator: ev,

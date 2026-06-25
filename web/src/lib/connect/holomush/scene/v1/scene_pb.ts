@@ -2559,8 +2559,9 @@ export const SceneService: GenService<{
     output: typeof PauseSceneResponseSchema;
   },
   /**
-   * ResumeScene transitions a `paused` scene back to `active` (owner-only via
-   * ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+   * ResumeScene transitions a `paused` scene back to `active`
+   * (participant-wide via ABAC — any participant may resume (spec D6)).
+   * Rejected with codes.FailedPrecondition from any non-paused state.
    * See service.go::ResumeScene.
    *
    * @generated from rpc holomush.scene.v1.SceneService.ResumeScene

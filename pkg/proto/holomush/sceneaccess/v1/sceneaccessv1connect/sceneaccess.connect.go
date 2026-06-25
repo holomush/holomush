@@ -51,6 +51,15 @@ const (
 	// SceneAccessServiceCreateSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// CreateScene RPC.
 	SceneAccessServiceCreateSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/CreateScene"
+	// SceneAccessServiceEndSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// EndScene RPC.
+	SceneAccessServiceEndSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/EndScene"
+	// SceneAccessServicePauseSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// PauseScene RPC.
+	SceneAccessServicePauseSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/PauseScene"
+	// SceneAccessServiceResumeSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// ResumeScene RPC.
+	SceneAccessServiceResumeSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/ResumeScene"
 	// SceneAccessServiceExportSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// ExportScene RPC.
 	SceneAccessServiceExportSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/ExportScene"
@@ -105,6 +114,20 @@ type SceneAccessServiceClient interface {
 	// with the server-verified character_id. Unlike WatchScene it requires no
 	// existing game session — creation does not touch focus.
 	CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error)
+	// EndScene transitions the verified owner's scene to `ended`. The facade
+	// resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.EndScene,
+	// which self-enforces the ABAC `end` policy (INV-SCENE-65). Returns the
+	// post-transition scene row.
+	EndScene(context.Context, *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error)
+	// PauseScene transitions the verified owner's active scene to `paused`.
+	// Same identity/guest gating as EndScene; forwards to SceneService.PauseScene
+	// which self-enforces the ABAC `pause` policy (INV-SCENE-65).
+	PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error)
+	// ResumeScene transitions the verified participant's paused scene to `active`.
+	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
+	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
+	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -177,6 +200,24 @@ func NewSceneAccessServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(sceneAccessServiceMethods.ByName("CreateScene")),
 			connect.WithClientOptions(opts...),
 		),
+		endScene: connect.NewClient[v1.EndSceneRequest, v1.EndSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceEndSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("EndScene")),
+			connect.WithClientOptions(opts...),
+		),
+		pauseScene: connect.NewClient[v1.PauseSceneRequest, v1.PauseSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServicePauseSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("PauseScene")),
+			connect.WithClientOptions(opts...),
+		),
+		resumeScene: connect.NewClient[v1.ResumeSceneRequest, v1.ResumeSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceResumeSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("ResumeScene")),
+			connect.WithClientOptions(opts...),
+		),
 		exportScene: connect.NewClient[v1.ExportSceneRequest, v1.ExportSceneResponse](
 			httpClient,
 			baseURL+SceneAccessServiceExportSceneProcedure,
@@ -217,6 +258,9 @@ type sceneAccessServiceClient struct {
 	listMyScenes               *connect.Client[v1.ListMyScenesRequest, v1.ListMyScenesResponse]
 	watchScene                 *connect.Client[v1.WatchSceneRequest, v1.WatchSceneResponse]
 	createScene                *connect.Client[v1.CreateSceneRequest, v1.CreateSceneResponse]
+	endScene                   *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
+	pauseScene                 *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
+	resumeScene                *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
 	exportScene                *connect.Client[v1.ExportSceneRequest, v1.ExportSceneResponse]
 	setSceneFocus              *connect.Client[v1.SetSceneFocusRequest, v1.SetSceneFocusResponse]
 	listPublishedScenes        *connect.Client[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse]
@@ -247,6 +291,21 @@ func (c *sceneAccessServiceClient) WatchScene(ctx context.Context, req *connect.
 // CreateScene calls holomush.sceneaccess.v1.SceneAccessService.CreateScene.
 func (c *sceneAccessServiceClient) CreateScene(ctx context.Context, req *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error) {
 	return c.createScene.CallUnary(ctx, req)
+}
+
+// EndScene calls holomush.sceneaccess.v1.SceneAccessService.EndScene.
+func (c *sceneAccessServiceClient) EndScene(ctx context.Context, req *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error) {
+	return c.endScene.CallUnary(ctx, req)
+}
+
+// PauseScene calls holomush.sceneaccess.v1.SceneAccessService.PauseScene.
+func (c *sceneAccessServiceClient) PauseScene(ctx context.Context, req *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error) {
+	return c.pauseScene.CallUnary(ctx, req)
+}
+
+// ResumeScene calls holomush.sceneaccess.v1.SceneAccessService.ResumeScene.
+func (c *sceneAccessServiceClient) ResumeScene(ctx context.Context, req *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
+	return c.resumeScene.CallUnary(ctx, req)
 }
 
 // ExportScene calls holomush.sceneaccess.v1.SceneAccessService.ExportScene.
@@ -313,6 +372,20 @@ type SceneAccessServiceHandler interface {
 	// with the server-verified character_id. Unlike WatchScene it requires no
 	// existing game session — creation does not touch focus.
 	CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error)
+	// EndScene transitions the verified owner's scene to `ended`. The facade
+	// resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.EndScene,
+	// which self-enforces the ABAC `end` policy (INV-SCENE-65). Returns the
+	// post-transition scene row.
+	EndScene(context.Context, *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error)
+	// PauseScene transitions the verified owner's active scene to `paused`.
+	// Same identity/guest gating as EndScene; forwards to SceneService.PauseScene
+	// which self-enforces the ABAC `pause` policy (INV-SCENE-65).
+	PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error)
+	// ResumeScene transitions the verified participant's paused scene to `active`.
+	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
+	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
+	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -381,6 +454,24 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 		connect.WithSchema(sceneAccessServiceMethods.ByName("CreateScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneAccessServiceEndSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceEndSceneProcedure,
+		svc.EndScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("EndScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServicePauseSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServicePauseSceneProcedure,
+		svc.PauseScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("PauseScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServiceResumeSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceResumeSceneProcedure,
+		svc.ResumeScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("ResumeScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sceneAccessServiceExportSceneHandler := connect.NewUnaryHandler(
 		SceneAccessServiceExportSceneProcedure,
 		svc.ExportScene,
@@ -423,6 +514,12 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 			sceneAccessServiceWatchSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceCreateSceneProcedure:
 			sceneAccessServiceCreateSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceEndSceneProcedure:
+			sceneAccessServiceEndSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServicePauseSceneProcedure:
+			sceneAccessServicePauseSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceResumeSceneProcedure:
+			sceneAccessServiceResumeSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceExportSceneProcedure:
 			sceneAccessServiceExportSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceSetSceneFocusProcedure:
@@ -460,6 +557,18 @@ func (UnimplementedSceneAccessServiceHandler) WatchScene(context.Context, *conne
 
 func (UnimplementedSceneAccessServiceHandler) CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.CreateScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) EndScene(context.Context, *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.EndScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.PauseScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.ResumeScene is not implemented"))
 }
 
 func (UnimplementedSceneAccessServiceHandler) ExportScene(context.Context, *connect.Request[v1.ExportSceneRequest]) (*connect.Response[v1.ExportSceneResponse], error) {

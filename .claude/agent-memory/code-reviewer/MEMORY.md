@@ -249,3 +249,15 @@
   cmd for plugin-DB roster row (JoinScene store-shortcut only touches focus_memberships, doc'd) + cross-loc
   not-ULID regex + ContainElement seeded names + decrypted pose author. int roster checks participants only (not
   observers) but unit covers observers — OK. All 5 unit tests pass; go vet -tags integration green.
+- **BFF lifecycle mirror (5rh.24.4/.5 NOT READY, 2026-06-25) — build+test GREEN masks gofumpt drift.**
+  Client wrappers + Web*Scene handlers that faithfully mirror CreateScene/WebCreateScene are
+  trivially correct (gateway-boundary pure forwarder, oops With("method",<Verb>) per-method label,
+  errutil.LogErrorContext + nil,err //nolint:wrapcheck, own req/resp types, 4 fields SessionId/
+  PlayerSessionToken/CharacterId/SceneId). orchestrator "build 0 + N tests pass" CANNOT catch fmt
+  drift — gofumpt is orthogonal to compile. ALWAYS run `task fmt:check` (NOT bare gofmt — hook blocks
+  it) regardless of green build; fmt:check is in pr-prep fast lane = CI gate. Trap: a NEW contiguous
+  struct-field block whose LONGEST name (resumeSceneReq, 14ch) forces a wider type-column than the
+  earlier rows align to → first rows under-indented → drift. fmt:check ALSO surfaces PRE-EXISTING
+  drift in out-of-scope sibling files (sceneaccess_service_test.go) — note separately, still gates
+  branch. Logging-test docstring "all ten handlers" went stale (13 cases now) — implementer claimed
+  to maintain "every handler" invariant but didn't bump count = Low non-blocking.

@@ -525,3 +525,22 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   PATTERN: when gating on a subject attr, verify the attr's namespace actually
   merges onto THAT subject type's principal via resolveEntity — cross-namespace
   gates (player attr on character principal) fail-open silently.
+- **Partial INV binding on multi-handler invariant (5rh.24.2, 2026-06-25) — READY**:
+  EndScene/PauseScene/ResumeScene self-gate added (mirrors WatchScene spectate gate,
+  service.go:649-761). Gate is fail-closed (nil evaluator → codes.Internal BEFORE
+  store), opaque (Internal "internal error" on eval err, no %v leak), deny →
+  PermissionDenied, placed before s.store.End/Pause/Resume. Subject spoof-proof:
+  HostEvaluator.Evaluate(ctx, action, resource) carries NO subject (INV-PLUGIN-22,
+  host-derived from dispatch token); req.CharacterId is logging-only. Action strings
+  match telnet gated() exactly (commands.go:484-488 → end/pause/resume on scene:<id>)
+  so double-eval is harmless. KEY FINDING: INV-SCENE-65 covers 8 handlers (End/Pause/
+  Resume + Update/Invite/Kick/Transfer/Leave) but this bead gates only 3 — Update
+  (service.go:797) & Invite (1317) etc. still have NO service-level gate. Test got a
+  `// Verifies: INV-SCENE-65` annotation but registry left `binding: pending`. This is
+  a PARTIAL binding: meta-test won't go red (checkRegistryBindings only fails pending
+  entries carrying asserted_by; doesn't cross-check stray Verifies annotations;
+  invariant_registry_test.go:215-220), but the annotation overstates coverage. PATTERN:
+  when a test carries `// Verifies: INV-X` but the INV summary spans more handlers than
+  the diff gates, flag it — either narrow the INV summary or defer the annotation until
+  all clauses are upheld. Non-blocking (contained false-green, sound posture on the 3
+  in-scope handlers).

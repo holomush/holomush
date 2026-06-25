@@ -5,11 +5,19 @@
 <script lang="ts">
   import { cn } from '$lib/utils.js';
   import { Badge } from '$lib/components/ui/badge/index.js';
+  import { Button } from '$lib/components/ui/button/index.js';
   import { Separator } from '$lib/components/ui/separator/index.js';
   import type { WorkspaceScene } from '$lib/scenes/types';
   import { sceneStateDotClass } from '$lib/scenes/stateStyle';
+  import { endSceneAction, pauseSceneAction, resumeSceneAction } from '$lib/scenes/lifecycleFlow';
 
   let { scene }: { scene: WorkspaceScene | null } = $props();
+
+  let isOwner = $derived(!!scene && scene.ownerId === scene.asCharacterId);
+  let isParticipant = $derived(!!scene && (scene.role === 'owner' || scene.role === 'member'));
+  let showPause = $derived(isOwner && scene?.state === 'active');
+  let showEnd = $derived(isOwner && (scene?.state === 'active' || scene?.state === 'paused'));
+  let showResume = $derived(isParticipant && scene?.state === 'paused');
 
   function formatRelativeTime(ms: bigint): string {
     if (!ms) return '';
@@ -28,6 +36,20 @@
     ended: 'Ended',
     published: 'Published',
   };
+
+  let lifecycleErr = $state('');
+
+  async function runLifecycle(
+    action: (a: { sceneId: string; characterId: string }) => Promise<void>,
+  ): Promise<void> {
+    if (!scene) return;
+    lifecycleErr = '';
+    try {
+      await action({ sceneId: scene.sceneId, characterId: scene.asCharacterId });
+    } catch (e) {
+      lifecycleErr = e instanceof Error ? e.message : 'Action failed';
+    }
+  }
 </script>
 
 <aside
@@ -58,6 +80,25 @@
           </div>
         {/if}
       </div>
+      {#if showPause || showResume || showEnd}
+        <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
+          {#if showPause}
+            <Button variant="outline" size="sm" class="h-6 text-xs"
+              onclick={() => runLifecycle(pauseSceneAction)}>Pause</Button>
+          {/if}
+          {#if showResume}
+            <Button variant="outline" size="sm" class="h-6 text-xs"
+              onclick={() => runLifecycle(resumeSceneAction)}>Resume</Button>
+          {/if}
+          {#if showEnd}
+            <Button variant="outline" size="sm" class="h-6 text-xs text-destructive"
+              onclick={() => runLifecycle(endSceneAction)}>End</Button>
+          {/if}
+        </div>
+        {#if lifecycleErr}
+          <p class="text-xs text-destructive pl-4 pt-1">{lifecycleErr}</p>
+        {/if}
+      {/if}
     </section>
 
     <Separator />

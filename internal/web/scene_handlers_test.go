@@ -48,6 +48,13 @@ type mockSceneAccessClient struct {
 	createSceneReq *sceneaccessv1.CreateSceneRequest
 	createSceneErr error
 
+	endSceneReq    *sceneaccessv1.EndSceneRequest
+	endSceneErr    error
+	pauseSceneReq  *sceneaccessv1.PauseSceneRequest
+	pauseSceneErr  error
+	resumeSceneReq *sceneaccessv1.ResumeSceneRequest
+	resumeSceneErr error
+
 	exportSceneReq  *sceneaccessv1.ExportSceneRequest
 	exportSceneResp *sceneaccessv1.ExportSceneResponse
 	exportSceneErr  error
@@ -95,6 +102,30 @@ func (m *mockSceneAccessClient) CreateScene(_ context.Context, req *sceneaccessv
 		return nil, m.createSceneErr
 	}
 	return &sceneaccessv1.CreateSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123"}}, nil
+}
+
+func (m *mockSceneAccessClient) EndScene(_ context.Context, req *sceneaccessv1.EndSceneRequest) (*sceneaccessv1.EndSceneResponse, error) {
+	m.endSceneReq = req
+	if m.endSceneErr != nil {
+		return nil, m.endSceneErr
+	}
+	return &sceneaccessv1.EndSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123", State: "ended"}}, nil
+}
+
+func (m *mockSceneAccessClient) PauseScene(_ context.Context, req *sceneaccessv1.PauseSceneRequest) (*sceneaccessv1.PauseSceneResponse, error) {
+	m.pauseSceneReq = req
+	if m.pauseSceneErr != nil {
+		return nil, m.pauseSceneErr
+	}
+	return &sceneaccessv1.PauseSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123", State: "paused"}}, nil
+}
+
+func (m *mockSceneAccessClient) ResumeScene(_ context.Context, req *sceneaccessv1.ResumeSceneRequest) (*sceneaccessv1.ResumeSceneResponse, error) {
+	m.resumeSceneReq = req
+	if m.resumeSceneErr != nil {
+		return nil, m.resumeSceneErr
+	}
+	return &sceneaccessv1.ResumeSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123", State: "active"}}, nil
 }
 
 func (m *mockSceneAccessClient) ExportScene(_ context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
@@ -327,6 +358,93 @@ func TestWebCreateScenePassesStatusErrorThroughAsIs(t *testing.T) {
 	req.Header().Set(headerInjectSessionToken, "tok")
 
 	_, err := h.WebCreateScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// --- WebEndScene ---
+
+func TestWebEndSceneForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebEndSceneRequest{SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-123"})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	resp, err := h.WebEndScene(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "ended", resp.Msg.GetScene().GetState())
+	require.NotNil(t, sc.endSceneReq)
+	assert.Equal(t, "tok-abc", sc.endSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.endSceneReq.GetCharacterId())
+	assert.Equal(t, "scene-123", sc.endSceneReq.GetSceneId())
+}
+
+func TestWebEndScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	sc := &mockSceneAccessClient{endSceneErr: status.Error(codes.PermissionDenied, "not permitted to end this scene")}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebEndSceneRequest{SessionId: "s", CharacterId: "c", SceneId: "x"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebEndScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// --- WebPauseScene ---
+
+func TestWebPauseSceneForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebPauseSceneRequest{SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-123"})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	resp, err := h.WebPauseScene(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "paused", resp.Msg.GetScene().GetState())
+	require.NotNil(t, sc.pauseSceneReq)
+	assert.Equal(t, "tok-abc", sc.pauseSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.pauseSceneReq.GetCharacterId())
+	assert.Equal(t, "scene-123", sc.pauseSceneReq.GetSceneId())
+}
+
+func TestWebPauseScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	sc := &mockSceneAccessClient{pauseSceneErr: status.Error(codes.PermissionDenied, "not permitted to pause this scene")}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebPauseSceneRequest{SessionId: "s", CharacterId: "c", SceneId: "x"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebPauseScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// --- WebResumeScene ---
+
+func TestWebResumeSceneForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebResumeSceneRequest{SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-123"})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	resp, err := h.WebResumeScene(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "active", resp.Msg.GetScene().GetState())
+	require.NotNil(t, sc.resumeSceneReq)
+	assert.Equal(t, "tok-abc", sc.resumeSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.resumeSceneReq.GetCharacterId())
+	assert.Equal(t, "scene-123", sc.resumeSceneReq.GetSceneId())
+}
+
+func TestWebResumeScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	sc := &mockSceneAccessClient{resumeSceneErr: status.Error(codes.PermissionDenied, "not permitted to resume this scene")}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebResumeSceneRequest{SessionId: "s", CharacterId: "c", SceneId: "x"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebResumeScene(context.Background(), req)
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }

@@ -27,7 +27,7 @@ import (
 // flat, whereas slog.ErrorContext(ctx, msg, "error", err) renders the oops
 // LogValuer as a nested group under the (non-empty) "error" key, leaving
 // "code" absent at top level. Asserting the flat "code" thus pins the
-// migration for all ten handlers.
+// migration for all thirteen handlers.
 func TestWebSceneHandlersLogFacadeErrorsWithStructuredOopsFields(t *testing.T) {
 	const wantCode = "WEB_SCENE_FACADE_ERR"
 
@@ -84,6 +84,36 @@ func TestWebSceneHandlersLogFacadeErrorsWithStructuredOopsFields(t *testing.T) {
 			invoke: func(h *Handler) error {
 				_, err := h.WebCreateScene(context.Background(),
 					connect.NewRequest(&webv1.WebCreateSceneRequest{SessionId: "sess-err", Title: "t"}))
+				return err
+			},
+		},
+		{
+			name:    "WebEndScene",
+			wantMsg: "web: end scene RPC failed",
+			setErr:  func(m *mockSceneAccessClient, err error) { m.endSceneErr = err },
+			invoke: func(h *Handler) error {
+				_, err := h.WebEndScene(context.Background(),
+					connect.NewRequest(&webv1.WebEndSceneRequest{SessionId: "sess-err", SceneId: "sc-1"}))
+				return err
+			},
+		},
+		{
+			name:    "WebPauseScene",
+			wantMsg: "web: pause scene RPC failed",
+			setErr:  func(m *mockSceneAccessClient, err error) { m.pauseSceneErr = err },
+			invoke: func(h *Handler) error {
+				_, err := h.WebPauseScene(context.Background(),
+					connect.NewRequest(&webv1.WebPauseSceneRequest{SessionId: "sess-err", SceneId: "sc-1"}))
+				return err
+			},
+		},
+		{
+			name:    "WebResumeScene",
+			wantMsg: "web: resume scene RPC failed",
+			setErr:  func(m *mockSceneAccessClient, err error) { m.resumeSceneErr = err },
+			invoke: func(h *Handler) error {
+				_, err := h.WebResumeScene(context.Background(),
+					connect.NewRequest(&webv1.WebResumeSceneRequest{SessionId: "sess-err", SceneId: "sc-1"}))
 				return err
 			},
 		},

@@ -44,8 +44,9 @@ func CanPause(state SceneState) bool {
 }
 
 // CanResume reports whether a scene in the given state can be resumed.
-// Resume is only allowed from paused. Phase 2 gates this on owner-only;
-// Phase 3 widens to any member per spec D6 (async safety).
+// Resume is only allowed from paused; this function checks the state
+// precondition only. The participant gate (any participant per spec D6) is
+// enforced by the ABAC resume-scene-as-participant policy.
 func CanResume(state SceneState) bool {
 	return state == SceneStatePaused
 }

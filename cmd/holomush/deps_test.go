@@ -211,6 +211,18 @@ func (m *mockGRPCClient) CreateScene(_ context.Context, _ *sceneaccessv1.CreateS
 	return nil, nil
 }
 
+func (m *mockGRPCClient) EndScene(_ context.Context, _ *sceneaccessv1.EndSceneRequest) (*sceneaccessv1.EndSceneResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) PauseScene(_ context.Context, _ *sceneaccessv1.PauseSceneRequest) (*sceneaccessv1.PauseSceneResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ResumeScene(_ context.Context, _ *sceneaccessv1.ResumeSceneRequest) (*sceneaccessv1.ResumeSceneResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) ExportScene(_ context.Context, _ *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
 	return nil, nil
 }
