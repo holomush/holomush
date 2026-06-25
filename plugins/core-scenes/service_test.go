@@ -1267,7 +1267,6 @@ func TestSceneServiceResumeSceneReturnsFailedPreconditionForActiveScene(t *testi
 	assert.Equal(t, codes.FailedPrecondition, st.Code())
 }
 
-// Verifies: INV-SCENE-65
 func TestSceneServiceEndSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-bob", State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen)}

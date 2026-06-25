@@ -269,20 +269,21 @@ function bumpUnread(sceneId: string): void {
  */
 function applySceneInfo(scene: SceneInfo): void {
 	const apply = (list: WorkspaceScene[]) => {
-		const s = list.find((x) => x.sceneId === scene.id);
-		if (!s) return;
-		s.state = scene.state;
-		s.title = scene.title;
-		s.tags = scene.tags;
-		s.locationId = scene.locationId;
-		if (scene.participants.length > 0) {
-			s.participants = scene.participants.map((p) => ({ id: p.characterId, name: p.characterName }));
-		}
-		if (scene.observers.length > 0) {
-			s.observers = scene.observers.map((p) => ({ id: p.characterId, name: p.characterName }));
-		}
-		if (scene.lastActivityMs) {
-			s.lastActivityMs = scene.lastActivityMs;
+		for (const s of list) {
+			if (s.sceneId !== scene.id) continue;
+			s.state = scene.state;
+			s.title = scene.title;
+			s.tags = scene.tags;
+			s.locationId = scene.locationId;
+			if (scene.participants.length > 0) {
+				s.participants = scene.participants.map((p) => ({ id: p.characterId, name: p.characterName }));
+			}
+			if (scene.observers.length > 0) {
+				s.observers = scene.observers.map((p) => ({ id: p.characterId, name: p.characterName }));
+			}
+			if (scene.lastActivityMs) {
+				s.lastActivityMs = scene.lastActivityMs;
+			}
 		}
 	};
 	apply(myScenes);
