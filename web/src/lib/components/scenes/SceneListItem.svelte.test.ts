@@ -40,6 +40,7 @@ function makeScene(overrides: Partial<WorkspaceScene> = {}): WorkspaceScene {
 		state: 'active',
 		tags: [],
 		role: 'owner',
+		ownerId: 'char-1',
 		asCharacterId: 'char-1',
 		asCharacterName: 'Alice',
 		lastActivityMs: 0n,

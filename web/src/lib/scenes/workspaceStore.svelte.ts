@@ -99,6 +99,7 @@ async function refresh(
 				state: si?.state ?? '',
 				tags: si?.tags ?? [],
 				role: csi.role,
+				ownerId: si?.ownerId ?? '',
 				asCharacterId: characterId,
 				asCharacterName: characterName,
 				lastActivityMs: csi.lastActivityMs,
@@ -192,7 +193,7 @@ async function select(
 			// Enrich the matching WorkspaceScene in myScenes.
 			myScenes = myScenes.map((s) =>
 				s.sceneId === sceneId && s.asCharacterId === characterId
-					? { ...s, participants, observers }
+					? { ...s, participants, observers, ownerId: si.ownerId }
 					: s,
 			);
 			// Keep watching in sync.
@@ -261,7 +262,9 @@ function bumpUnread(sceneId: string): void {
  * Merges the post-mutation SceneInfo into the cached scene(s) matched by scene.id.
  * Updates both myScenes and watching in-place (Svelte 5 proxied $state arrays).
  * Fields mapped: state, title, tags, locationId, participants, observers, lastActivityMs.
- * Fields not mapped (no WorkspaceScene counterpart): description, ownerId, poseOrderMode,
+ * ownerId is intentionally NOT re-applied: ownership is immutable across lifecycle
+ * transitions, so the value set by refresh()/select() is preserved.
+ * Fields not mapped (no WorkspaceScene counterpart): description, poseOrderMode,
  * contentWarnings, visibility, createdAt, endedAt.
  */
 function applySceneInfo(scene: SceneInfo): void {

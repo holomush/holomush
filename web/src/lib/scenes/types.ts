@@ -16,6 +16,8 @@ export interface WorkspaceScene {
 	tags: string[];
 	/** 'owner' | 'member' | 'observer' */
 	role: string;
+	/** Character ID of the scene owner (from SceneInfo.ownerId). */
+	ownerId: string;
 	/** Character ID the alt session is acting as for this scene. */
 	asCharacterId: string;
 	asCharacterName: string;

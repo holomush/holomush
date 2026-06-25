@@ -5,11 +5,19 @@
 <script lang="ts">
   import { cn } from '$lib/utils.js';
   import { Badge } from '$lib/components/ui/badge/index.js';
+  import { Button } from '$lib/components/ui/button/index.js';
   import { Separator } from '$lib/components/ui/separator/index.js';
   import type { WorkspaceScene } from '$lib/scenes/types';
   import { sceneStateDotClass } from '$lib/scenes/stateStyle';
+  import { endSceneAction, pauseSceneAction, resumeSceneAction } from '$lib/scenes/lifecycleFlow';
 
   let { scene }: { scene: WorkspaceScene | null } = $props();
+
+  let isOwner = $derived(!!scene && scene.ownerId === scene.asCharacterId);
+  let isParticipant = $derived(!!scene && (scene.role === 'owner' || scene.role === 'member'));
+  let showPause = $derived(isOwner && scene?.state === 'active');
+  let showEnd = $derived(isOwner && (scene?.state === 'active' || scene?.state === 'paused'));
+  let showResume = $derived(isParticipant && scene?.state === 'paused');
 
   function formatRelativeTime(ms: bigint): string {
     if (!ms) return '';
@@ -58,6 +66,22 @@
           </div>
         {/if}
       </div>
+      {#if showPause || showResume || showEnd}
+        <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
+          {#if showPause}
+            <Button variant="outline" size="sm" class="h-6 text-xs"
+              onclick={() => pauseSceneAction({ sceneId: scene!.sceneId, characterId: scene!.asCharacterId })}>Pause</Button>
+          {/if}
+          {#if showResume}
+            <Button variant="outline" size="sm" class="h-6 text-xs"
+              onclick={() => resumeSceneAction({ sceneId: scene!.sceneId, characterId: scene!.asCharacterId })}>Resume</Button>
+          {/if}
+          {#if showEnd}
+            <Button variant="outline" size="sm" class="h-6 text-xs text-destructive"
+              onclick={() => endSceneAction({ sceneId: scene!.sceneId, characterId: scene!.asCharacterId })}>End</Button>
+          {/if}
+        </div>
+      {/if}
     </section>
 
     <Separator />
