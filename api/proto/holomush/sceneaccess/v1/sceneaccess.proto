@@ -60,6 +60,23 @@ service SceneAccessService {
   // existing game session — creation does not touch focus.
   rpc CreateScene(CreateSceneRequest) returns (CreateSceneResponse);
 
+  // EndScene transitions the verified owner's scene to `ended`. The facade
+  // resolves the acting character from the player session (INV-SCENE-63),
+  // rejects guests (INV-SCENE-64), then forwards to SceneService.EndScene,
+  // which self-enforces the ABAC `end` policy (INV-SCENE-65). Returns the
+  // post-transition scene row.
+  rpc EndScene(EndSceneRequest) returns (EndSceneResponse);
+
+  // PauseScene transitions the verified owner's active scene to `paused`.
+  // Same identity/guest gating as EndScene; forwards to SceneService.PauseScene
+  // which self-enforces the ABAC `pause` policy (INV-SCENE-65).
+  rpc PauseScene(PauseSceneRequest) returns (PauseSceneResponse);
+
+  // ResumeScene transitions the verified participant's paused scene to `active`.
+  // Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
+  // which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
+  rpc ResumeScene(ResumeSceneRequest) returns (ResumeSceneResponse);
+
   // ExportScene renders the verified player's owned character's scene IC
   // log to a downloadable document. The facade resolves the acting character
   // from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -448,4 +465,65 @@ message DownloadPublicSceneArchiveResponse {
   // mime_type is the content's MIME type (text/markdown, text/plain, or
   // application/jsonl).
   string mime_type = 2;
+}
+
+// EndSceneRequest is the facade request to end a scene. player_session_token
+// authenticates the caller; the facade resolves the acting character SERVER-SIDE
+// (INV-SCENE-63) and forwards the verified id to SceneService.EndScene.
+message EndSceneRequest {
+  // session_id is the client-declared player-session ULID (forward-looking hint;
+  // authentication is solely via player_session_token).
+  string session_id = 1;
+  // player_session_token is the raw bearer token; the facade rejects
+  // unauthenticated callers (Unauthenticated) and guests (PermissionDenied).
+  string player_session_token = 2;
+  // character_id selects which owned alt acts; the facade verifies ownership
+  // (NotFound when not owned).
+  string character_id = 3;
+  // scene_id identifies the scene to end; required.
+  string scene_id = 4;
+}
+
+// EndSceneResponse wraps the scene as of the ended transition.
+message EndSceneResponse {
+  // scene is the post-transition scene row (state == "ended").
+  holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// PauseSceneRequest is the facade request to pause a scene; fields mirror
+// EndSceneRequest.
+message PauseSceneRequest {
+  // session_id is the client-declared player-session ULID (hint only).
+  string session_id = 1;
+  // player_session_token authenticates the caller (see EndSceneRequest).
+  string player_session_token = 2;
+  // character_id selects the acting owned alt (ownership verified server-side).
+  string character_id = 3;
+  // scene_id identifies the scene to pause; required.
+  string scene_id = 4;
+}
+
+// PauseSceneResponse wraps the scene as of the paused transition.
+message PauseSceneResponse {
+  // scene is the post-transition scene row (state == "paused").
+  holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// ResumeSceneRequest is the facade request to resume a scene; fields mirror
+// EndSceneRequest.
+message ResumeSceneRequest {
+  // session_id is the client-declared player-session ULID (hint only).
+  string session_id = 1;
+  // player_session_token authenticates the caller (see EndSceneRequest).
+  string player_session_token = 2;
+  // character_id selects the acting owned alt (ownership verified server-side).
+  string character_id = 3;
+  // scene_id identifies the scene to resume; required.
+  string scene_id = 4;
+}
+
+// ResumeSceneResponse wraps the scene as of the resumed transition.
+message ResumeSceneResponse {
+  // scene is the post-transition scene row (state == "active").
+  holomush.scene.v1.SceneInfo scene = 1;
 }

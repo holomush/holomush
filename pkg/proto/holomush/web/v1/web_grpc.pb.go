@@ -50,6 +50,9 @@ const (
 	WebService_WebListMyScenes_FullMethodName               = "/holomush.web.v1.WebService/WebListMyScenes"
 	WebService_WebWatchScene_FullMethodName                 = "/holomush.web.v1.WebService/WebWatchScene"
 	WebService_WebCreateScene_FullMethodName                = "/holomush.web.v1.WebService/WebCreateScene"
+	WebService_WebEndScene_FullMethodName                   = "/holomush.web.v1.WebService/WebEndScene"
+	WebService_WebPauseScene_FullMethodName                 = "/holomush.web.v1.WebService/WebPauseScene"
+	WebService_WebResumeScene_FullMethodName                = "/holomush.web.v1.WebService/WebResumeScene"
 	WebService_WebExportScene_FullMethodName                = "/holomush.web.v1.WebService/WebExportScene"
 	WebService_WebSetSceneFocus_FullMethodName              = "/holomush.web.v1.WebService/WebSetSceneFocus"
 	WebService_WebListPublishedScenes_FullMethodName        = "/holomush.web.v1.WebService/WebListPublishedScenes"
@@ -202,6 +205,14 @@ type WebServiceClient interface {
 	// SceneAccessService.CreateScene; player_session_token is read from the HTTP
 	// cookie by gateway middleware.
 	WebCreateScene(ctx context.Context, in *WebCreateSceneRequest, opts ...grpc.CallOption) (*WebCreateSceneResponse, error)
+	// WebEndScene proxies to SceneAccessService.EndScene. The gateway reads
+	// player_session_token from the X-Session-Token cookie; the facade owns
+	// authorization. Returns the post-transition scene.
+	WebEndScene(ctx context.Context, in *WebEndSceneRequest, opts ...grpc.CallOption) (*WebEndSceneResponse, error)
+	// WebPauseScene proxies to SceneAccessService.PauseScene (see WebEndScene).
+	WebPauseScene(ctx context.Context, in *WebPauseSceneRequest, opts ...grpc.CallOption) (*WebPauseSceneResponse, error)
+	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
+	WebResumeScene(ctx context.Context, in *WebResumeSceneRequest, opts ...grpc.CallOption) (*WebResumeSceneResponse, error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -523,6 +534,36 @@ func (c *webServiceClient) WebCreateScene(ctx context.Context, in *WebCreateScen
 	return out, nil
 }
 
+func (c *webServiceClient) WebEndScene(ctx context.Context, in *WebEndSceneRequest, opts ...grpc.CallOption) (*WebEndSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebEndSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebEndScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebPauseScene(ctx context.Context, in *WebPauseSceneRequest, opts ...grpc.CallOption) (*WebPauseSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebPauseSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebPauseScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebResumeScene(ctx context.Context, in *WebResumeSceneRequest, opts ...grpc.CallOption) (*WebResumeSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebResumeSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebResumeScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *webServiceClient) WebExportScene(ctx context.Context, in *WebExportSceneRequest, opts ...grpc.CallOption) (*WebExportSceneResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebExportSceneResponse)
@@ -718,6 +759,14 @@ type WebServiceServer interface {
 	// SceneAccessService.CreateScene; player_session_token is read from the HTTP
 	// cookie by gateway middleware.
 	WebCreateScene(context.Context, *WebCreateSceneRequest) (*WebCreateSceneResponse, error)
+	// WebEndScene proxies to SceneAccessService.EndScene. The gateway reads
+	// player_session_token from the X-Session-Token cookie; the facade owns
+	// authorization. Returns the post-transition scene.
+	WebEndScene(context.Context, *WebEndSceneRequest) (*WebEndSceneResponse, error)
+	// WebPauseScene proxies to SceneAccessService.PauseScene (see WebEndScene).
+	WebPauseScene(context.Context, *WebPauseSceneRequest) (*WebPauseSceneResponse, error)
+	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
+	WebResumeScene(context.Context, *WebResumeSceneRequest) (*WebResumeSceneResponse, error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -833,6 +882,15 @@ func (UnimplementedWebServiceServer) WebWatchScene(context.Context, *WebWatchSce
 }
 func (UnimplementedWebServiceServer) WebCreateScene(context.Context, *WebCreateSceneRequest) (*WebCreateSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebCreateScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebEndScene(context.Context, *WebEndSceneRequest) (*WebEndSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebEndScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebPauseScene(context.Context, *WebPauseSceneRequest) (*WebPauseSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebPauseScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebResumeScene(context.Context, *WebResumeSceneRequest) (*WebResumeSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebResumeScene not implemented")
 }
 func (UnimplementedWebServiceServer) WebExportScene(context.Context, *WebExportSceneRequest) (*WebExportSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebExportScene not implemented")
@@ -1367,6 +1425,60 @@ func _WebService_WebCreateScene_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebEndScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebEndSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebEndScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebEndScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebEndScene(ctx, req.(*WebEndSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebPauseScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebPauseSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebPauseScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebPauseScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebPauseScene(ctx, req.(*WebPauseSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebResumeScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebResumeSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebResumeScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebResumeScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebResumeScene(ctx, req.(*WebResumeSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WebService_WebExportScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WebExportSceneRequest)
 	if err := dec(in); err != nil {
@@ -1571,6 +1683,18 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebCreateScene",
 			Handler:    _WebService_WebCreateScene_Handler,
+		},
+		{
+			MethodName: "WebEndScene",
+			Handler:    _WebService_WebEndScene_Handler,
+		},
+		{
+			MethodName: "WebPauseScene",
+			Handler:    _WebService_WebPauseScene_Handler,
+		},
+		{
+			MethodName: "WebResumeScene",
+			Handler:    _WebService_WebResumeScene_Handler,
 		},
 		{
 			MethodName: "WebExportScene",

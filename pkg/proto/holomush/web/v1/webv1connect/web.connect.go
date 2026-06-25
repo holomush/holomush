@@ -115,6 +115,14 @@ const (
 	// WebServiceWebCreateSceneProcedure is the fully-qualified name of the WebService's WebCreateScene
 	// RPC.
 	WebServiceWebCreateSceneProcedure = "/holomush.web.v1.WebService/WebCreateScene"
+	// WebServiceWebEndSceneProcedure is the fully-qualified name of the WebService's WebEndScene RPC.
+	WebServiceWebEndSceneProcedure = "/holomush.web.v1.WebService/WebEndScene"
+	// WebServiceWebPauseSceneProcedure is the fully-qualified name of the WebService's WebPauseScene
+	// RPC.
+	WebServiceWebPauseSceneProcedure = "/holomush.web.v1.WebService/WebPauseScene"
+	// WebServiceWebResumeSceneProcedure is the fully-qualified name of the WebService's WebResumeScene
+	// RPC.
+	WebServiceWebResumeSceneProcedure = "/holomush.web.v1.WebService/WebResumeScene"
 	// WebServiceWebExportSceneProcedure is the fully-qualified name of the WebService's WebExportScene
 	// RPC.
 	WebServiceWebExportSceneProcedure = "/holomush.web.v1.WebService/WebExportScene"
@@ -265,6 +273,14 @@ type WebServiceClient interface {
 	// SceneAccessService.CreateScene; player_session_token is read from the HTTP
 	// cookie by gateway middleware.
 	WebCreateScene(context.Context, *connect.Request[v1.WebCreateSceneRequest]) (*connect.Response[v1.WebCreateSceneResponse], error)
+	// WebEndScene proxies to SceneAccessService.EndScene. The gateway reads
+	// player_session_token from the X-Session-Token cookie; the facade owns
+	// authorization. Returns the post-transition scene.
+	WebEndScene(context.Context, *connect.Request[v1.WebEndSceneRequest]) (*connect.Response[v1.WebEndSceneResponse], error)
+	// WebPauseScene proxies to SceneAccessService.PauseScene (see WebEndScene).
+	WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error)
+	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
+	WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -468,6 +484,24 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebCreateScene")),
 			connect.WithClientOptions(opts...),
 		),
+		webEndScene: connect.NewClient[v1.WebEndSceneRequest, v1.WebEndSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebEndSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebEndScene")),
+			connect.WithClientOptions(opts...),
+		),
+		webPauseScene: connect.NewClient[v1.WebPauseSceneRequest, v1.WebPauseSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebPauseSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebPauseScene")),
+			connect.WithClientOptions(opts...),
+		),
+		webResumeScene: connect.NewClient[v1.WebResumeSceneRequest, v1.WebResumeSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebResumeSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebResumeScene")),
+			connect.WithClientOptions(opts...),
+		),
 		webExportScene: connect.NewClient[v1.WebExportSceneRequest, v1.WebExportSceneResponse](
 			httpClient,
 			baseURL+WebServiceWebExportSceneProcedure,
@@ -531,6 +565,9 @@ type webServiceClient struct {
 	webListMyScenes               *connect.Client[v1.WebListMyScenesRequest, v1.WebListMyScenesResponse]
 	webWatchScene                 *connect.Client[v1.WebWatchSceneRequest, v1.WebWatchSceneResponse]
 	webCreateScene                *connect.Client[v1.WebCreateSceneRequest, v1.WebCreateSceneResponse]
+	webEndScene                   *connect.Client[v1.WebEndSceneRequest, v1.WebEndSceneResponse]
+	webPauseScene                 *connect.Client[v1.WebPauseSceneRequest, v1.WebPauseSceneResponse]
+	webResumeScene                *connect.Client[v1.WebResumeSceneRequest, v1.WebResumeSceneResponse]
 	webExportScene                *connect.Client[v1.WebExportSceneRequest, v1.WebExportSceneResponse]
 	webSetSceneFocus              *connect.Client[v1.WebSetSceneFocusRequest, v1.WebSetSceneFocusResponse]
 	webListPublishedScenes        *connect.Client[v1.WebListPublishedScenesRequest, v1.WebListPublishedScenesResponse]
@@ -676,6 +713,21 @@ func (c *webServiceClient) WebWatchScene(ctx context.Context, req *connect.Reque
 // WebCreateScene calls holomush.web.v1.WebService.WebCreateScene.
 func (c *webServiceClient) WebCreateScene(ctx context.Context, req *connect.Request[v1.WebCreateSceneRequest]) (*connect.Response[v1.WebCreateSceneResponse], error) {
 	return c.webCreateScene.CallUnary(ctx, req)
+}
+
+// WebEndScene calls holomush.web.v1.WebService.WebEndScene.
+func (c *webServiceClient) WebEndScene(ctx context.Context, req *connect.Request[v1.WebEndSceneRequest]) (*connect.Response[v1.WebEndSceneResponse], error) {
+	return c.webEndScene.CallUnary(ctx, req)
+}
+
+// WebPauseScene calls holomush.web.v1.WebService.WebPauseScene.
+func (c *webServiceClient) WebPauseScene(ctx context.Context, req *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error) {
+	return c.webPauseScene.CallUnary(ctx, req)
+}
+
+// WebResumeScene calls holomush.web.v1.WebService.WebResumeScene.
+func (c *webServiceClient) WebResumeScene(ctx context.Context, req *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error) {
+	return c.webResumeScene.CallUnary(ctx, req)
 }
 
 // WebExportScene calls holomush.web.v1.WebService.WebExportScene.
@@ -836,6 +888,14 @@ type WebServiceHandler interface {
 	// SceneAccessService.CreateScene; player_session_token is read from the HTTP
 	// cookie by gateway middleware.
 	WebCreateScene(context.Context, *connect.Request[v1.WebCreateSceneRequest]) (*connect.Response[v1.WebCreateSceneResponse], error)
+	// WebEndScene proxies to SceneAccessService.EndScene. The gateway reads
+	// player_session_token from the X-Session-Token cookie; the facade owns
+	// authorization. Returns the post-transition scene.
+	WebEndScene(context.Context, *connect.Request[v1.WebEndSceneRequest]) (*connect.Response[v1.WebEndSceneResponse], error)
+	// WebPauseScene proxies to SceneAccessService.PauseScene (see WebEndScene).
+	WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error)
+	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
+	WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -1035,6 +1095,24 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebCreateScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebEndSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebEndSceneProcedure,
+		svc.WebEndScene,
+		connect.WithSchema(webServiceMethods.ByName("WebEndScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebPauseSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebPauseSceneProcedure,
+		svc.WebPauseScene,
+		connect.WithSchema(webServiceMethods.ByName("WebPauseScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebResumeSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebResumeSceneProcedure,
+		svc.WebResumeScene,
+		connect.WithSchema(webServiceMethods.ByName("WebResumeScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	webServiceWebExportSceneHandler := connect.NewUnaryHandler(
 		WebServiceWebExportSceneProcedure,
 		svc.WebExportScene,
@@ -1123,6 +1201,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebWatchSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebCreateSceneProcedure:
 			webServiceWebCreateSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebEndSceneProcedure:
+			webServiceWebEndSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebPauseSceneProcedure:
+			webServiceWebPauseSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebResumeSceneProcedure:
+			webServiceWebResumeSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebExportSceneProcedure:
 			webServiceWebExportSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebSetSceneFocusProcedure:
@@ -1252,6 +1336,18 @@ func (UnimplementedWebServiceHandler) WebWatchScene(context.Context, *connect.Re
 
 func (UnimplementedWebServiceHandler) WebCreateScene(context.Context, *connect.Request[v1.WebCreateSceneRequest]) (*connect.Response[v1.WebCreateSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebCreateScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebEndScene(context.Context, *connect.Request[v1.WebEndSceneRequest]) (*connect.Response[v1.WebEndSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebEndScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebPauseScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebResumeScene is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebExportScene(context.Context, *connect.Request[v1.WebExportSceneRequest]) (*connect.Response[v1.WebExportSceneResponse], error) {

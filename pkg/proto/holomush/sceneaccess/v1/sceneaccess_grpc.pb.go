@@ -27,6 +27,9 @@ const (
 	SceneAccessService_ListMyScenes_FullMethodName               = "/holomush.sceneaccess.v1.SceneAccessService/ListMyScenes"
 	SceneAccessService_WatchScene_FullMethodName                 = "/holomush.sceneaccess.v1.SceneAccessService/WatchScene"
 	SceneAccessService_CreateScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/CreateScene"
+	SceneAccessService_EndScene_FullMethodName                   = "/holomush.sceneaccess.v1.SceneAccessService/EndScene"
+	SceneAccessService_PauseScene_FullMethodName                 = "/holomush.sceneaccess.v1.SceneAccessService/PauseScene"
+	SceneAccessService_ResumeScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/ResumeScene"
 	SceneAccessService_ExportScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/ExportScene"
 	SceneAccessService_SetSceneFocus_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/SetSceneFocus"
 	SceneAccessService_ListPublishedScenes_FullMethodName        = "/holomush.sceneaccess.v1.SceneAccessService/ListPublishedScenes"
@@ -84,6 +87,20 @@ type SceneAccessServiceClient interface {
 	// with the server-verified character_id. Unlike WatchScene it requires no
 	// existing game session — creation does not touch focus.
 	CreateScene(ctx context.Context, in *CreateSceneRequest, opts ...grpc.CallOption) (*CreateSceneResponse, error)
+	// EndScene transitions the verified owner's scene to `ended`. The facade
+	// resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.EndScene,
+	// which self-enforces the ABAC `end` policy (INV-SCENE-65). Returns the
+	// post-transition scene row.
+	EndScene(ctx context.Context, in *EndSceneRequest, opts ...grpc.CallOption) (*EndSceneResponse, error)
+	// PauseScene transitions the verified owner's active scene to `paused`.
+	// Same identity/guest gating as EndScene; forwards to SceneService.PauseScene
+	// which self-enforces the ABAC `pause` policy (INV-SCENE-65).
+	PauseScene(ctx context.Context, in *PauseSceneRequest, opts ...grpc.CallOption) (*PauseSceneResponse, error)
+	// ResumeScene transitions the verified participant's paused scene to `active`.
+	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
+	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
+	ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -167,6 +184,36 @@ func (c *sceneAccessServiceClient) CreateScene(ctx context.Context, in *CreateSc
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateSceneResponse)
 	err := c.cc.Invoke(ctx, SceneAccessService_CreateScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) EndScene(ctx context.Context, in *EndSceneRequest, opts ...grpc.CallOption) (*EndSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EndSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_EndScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) PauseScene(ctx context.Context, in *PauseSceneRequest, opts ...grpc.CallOption) (*PauseSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PauseSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_PauseScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResumeSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_ResumeScene_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -273,6 +320,20 @@ type SceneAccessServiceServer interface {
 	// with the server-verified character_id. Unlike WatchScene it requires no
 	// existing game session — creation does not touch focus.
 	CreateScene(context.Context, *CreateSceneRequest) (*CreateSceneResponse, error)
+	// EndScene transitions the verified owner's scene to `ended`. The facade
+	// resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.EndScene,
+	// which self-enforces the ABAC `end` policy (INV-SCENE-65). Returns the
+	// post-transition scene row.
+	EndScene(context.Context, *EndSceneRequest) (*EndSceneResponse, error)
+	// PauseScene transitions the verified owner's active scene to `paused`.
+	// Same identity/guest gating as EndScene; forwards to SceneService.PauseScene
+	// which self-enforces the ABAC `pause` policy (INV-SCENE-65).
+	PauseScene(context.Context, *PauseSceneRequest) (*PauseSceneResponse, error)
+	// ResumeScene transitions the verified participant's paused scene to `active`.
+	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
+	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
+	ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -326,6 +387,15 @@ func (UnimplementedSceneAccessServiceServer) WatchScene(context.Context, *WatchS
 }
 func (UnimplementedSceneAccessServiceServer) CreateScene(context.Context, *CreateSceneRequest) (*CreateSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) EndScene(context.Context, *EndSceneRequest) (*EndSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EndScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) PauseScene(context.Context, *PauseSceneRequest) (*PauseSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResumeScene not implemented")
 }
 func (UnimplementedSceneAccessServiceServer) ExportScene(context.Context, *ExportSceneRequest) (*ExportSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExportScene not implemented")
@@ -453,6 +523,60 @@ func _SceneAccessService_CreateScene_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SceneAccessService_EndScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EndSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).EndScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_EndScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).EndScene(ctx, req.(*EndSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_PauseScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).PauseScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_PauseScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).PauseScene(ctx, req.(*PauseSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_ResumeScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).ResumeScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_ResumeScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).ResumeScene(ctx, req.(*ResumeSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SceneAccessService_ExportScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExportSceneRequest)
 	if err := dec(in); err != nil {
@@ -569,6 +693,18 @@ var SceneAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateScene",
 			Handler:    _SceneAccessService_CreateScene_Handler,
+		},
+		{
+			MethodName: "EndScene",
+			Handler:    _SceneAccessService_EndScene_Handler,
+		},
+		{
+			MethodName: "PauseScene",
+			Handler:    _SceneAccessService_PauseScene_Handler,
+		},
+		{
+			MethodName: "ResumeScene",
+			Handler:    _SceneAccessService_ResumeScene_Handler,
 		},
 		{
 			MethodName: "ExportScene",

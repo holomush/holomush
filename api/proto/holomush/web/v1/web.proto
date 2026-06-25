@@ -278,6 +278,17 @@ service WebService {
   // cookie by gateway middleware.
   rpc WebCreateScene(WebCreateSceneRequest) returns (WebCreateSceneResponse);
 
+  // WebEndScene proxies to SceneAccessService.EndScene. The gateway reads
+  // player_session_token from the X-Session-Token cookie; the facade owns
+  // authorization. Returns the post-transition scene.
+  rpc WebEndScene(WebEndSceneRequest) returns (WebEndSceneResponse);
+
+  // WebPauseScene proxies to SceneAccessService.PauseScene (see WebEndScene).
+  rpc WebPauseScene(WebPauseSceneRequest) returns (WebPauseSceneResponse);
+
+  // WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
+  rpc WebResumeScene(WebResumeSceneRequest) returns (WebResumeSceneResponse);
+
   // WebExportScene renders the verified player's owned character's scene IC
   // log to a downloadable document. Proxies to SceneAccessService.ExportScene;
   // player_session_token is read from the HTTP cookie by gateway middleware.
@@ -1144,4 +1155,53 @@ message WebDownloadPublicSceneArchiveResponse {
   bytes content = 1;
   // mime_type is the content's MIME type.
   string mime_type = 2;
+}
+
+// WebEndSceneRequest proxies to SceneAccessService.EndScene.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebEndSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // scene_id identifies the scene to end; required.
+  string scene_id = 3;
+}
+
+// WebEndSceneResponse re-exports the post-transition scene from the facade.
+message WebEndSceneResponse {
+  // scene is the scene row after the ended transition.
+  holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// WebPauseSceneRequest proxies to SceneAccessService.PauseScene.
+message WebPauseSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // scene_id identifies the scene to pause; required.
+  string scene_id = 3;
+}
+
+// WebPauseSceneResponse re-exports the post-transition scene from the facade.
+message WebPauseSceneResponse {
+  // scene is the scene row after the paused transition.
+  holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// WebResumeSceneRequest proxies to SceneAccessService.ResumeScene.
+message WebResumeSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // scene_id identifies the scene to resume; required.
+  string scene_id = 3;
+}
+
+// WebResumeSceneResponse re-exports the post-transition scene from the facade.
+message WebResumeSceneResponse {
+  // scene is the scene row after the resumed transition.
+  holomush.scene.v1.SceneInfo scene = 1;
 }
