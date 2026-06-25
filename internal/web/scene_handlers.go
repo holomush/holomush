@@ -177,6 +177,93 @@ func (h *Handler) WebCreateScene(ctx context.Context, req *connect.Request[webv1
 	return connect.NewResponse(&webv1.WebCreateSceneResponse{Scene: resp.GetScene()}), nil
 }
 
+// WebEndScene proxies to SceneAccessService.EndScene. The gateway reads the
+// player_session_token from the X-Session-Token cookie header and forwards it
+// with character_id and scene_id. Authorization is owned by the facade.
+func (h *Handler) WebEndScene(ctx context.Context, req *connect.Request[webv1.WebEndSceneRequest]) (*connect.Response[webv1.WebEndSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebEndScene", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.sceneAccess.EndScene(rpcCtx, &sceneaccessv1.EndSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		SceneId:            req.Msg.GetSceneId(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: end scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebEndSceneResponse{Scene: resp.GetScene()}), nil
+}
+
+// WebPauseScene proxies to SceneAccessService.PauseScene. The gateway reads the
+// player_session_token from the X-Session-Token cookie header and forwards it
+// with character_id and scene_id. Authorization is owned by the facade.
+func (h *Handler) WebPauseScene(ctx context.Context, req *connect.Request[webv1.WebPauseSceneRequest]) (*connect.Response[webv1.WebPauseSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebPauseScene", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.sceneAccess.PauseScene(rpcCtx, &sceneaccessv1.PauseSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		SceneId:            req.Msg.GetSceneId(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: pause scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebPauseSceneResponse{Scene: resp.GetScene()}), nil
+}
+
+// WebResumeScene proxies to SceneAccessService.ResumeScene. The gateway reads
+// the player_session_token from the X-Session-Token cookie header and forwards
+// it with character_id and scene_id. Authorization is owned by the facade.
+func (h *Handler) WebResumeScene(ctx context.Context, req *connect.Request[webv1.WebResumeSceneRequest]) (*connect.Response[webv1.WebResumeSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebResumeScene", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.sceneAccess.ResumeScene(rpcCtx, &sceneaccessv1.ResumeSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		SceneId:            req.Msg.GetSceneId(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: resume scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebResumeSceneResponse{Scene: resp.GetScene()}), nil
+}
+
 // WebExportScene proxies to SceneAccessService.ExportScene. The gateway reads
 // the player_session_token from the X-Session-Token cookie header and forwards
 // it with scene_id, character_id, and format. Authorization and identity
