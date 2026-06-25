@@ -268,6 +268,7 @@ invariants.
 | `INV-SCENE-62` | scene_activity notifications fan out only to connections of sessions whose FocusMemberships include the scene; non-participant sessions never receive them. | — | bound |
 | `INV-SCENE-63` | Every web scene read/write/export path derives the acting character from the authenticated session server-side; client-supplied character_id/player_id request fields are never trusted (the scene-access facade overrides them). | — | bound |
 | `INV-SCENE-64` | Scene web-portal surfaces (board, workspace, archive, export) require an authenticated non-guest player; is_guest subjects are denied at the scene-access facade. | — | bound |
+| `INV-SCENE-65` | SceneService mutating lifecycle/membership RPC handlers (EndScene, PauseScene, ResumeScene, UpdateScene, InviteToScene, KickFromScene, TransferOwnership, LeaveScene) MUST self-enforce ABAC by evaluating the per-verb action on scene:<id> with the subject taken from the dispatch-actor context, so authorization holds for every caller — the telnet command path and the web SceneAccessService facade alike — not only when the telnet command wrapper gates first. Publish handlers are excluded by INV-SCENE-33 (participant-only read path forbids the ABAC engine). | — | pending |
 
 ### `INV-PLUGIN`
 
