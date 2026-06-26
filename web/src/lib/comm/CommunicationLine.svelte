@@ -10,6 +10,7 @@
 </script>
 
 {#if line.kind === 'ooc'}
+  {#if line.channel}<span class="channel-prefix">[{line.channel}]</span>{' '}{/if}
   {#if line.oocStyle === 'pose'}
     <span class="ooc-prefix">{line.oocPrefix ?? '[OOC]'}</span>{' '}<span class="ooc-actor">{line.actor}</span>{' '}<span class="ooc-message">{@html linkUrls(line.text)}</span>
   {:else if line.oocStyle === 'semipose'}

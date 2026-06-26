@@ -17,7 +17,9 @@ describe('SEAM-2 message renderers carry no brand colors; coloring uses --mush-*
   it('CommunicationRenderer uses no --brand-* color', () => {
     expect(src('terminal/CommunicationRenderer.svelte')).not.toContain('--brand-');
   });
-  it('the shared primitive uses --mush- tokens', () => {
-    expect(readFileSync(`${process.cwd()}/src/lib/comm/CommunicationLine.svelte`, 'utf8')).toContain('var(--mush-say-speaker)');
+  it('the shared primitive uses --mush- tokens and no brand colors', () => {
+    const file = readFileSync(`${process.cwd()}/src/lib/comm/CommunicationLine.svelte`, 'utf8');
+    expect(file).toContain('var(--mush-say-speaker)');
+    expect(file).not.toContain('--brand-');
   });
 });

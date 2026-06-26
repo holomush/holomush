@@ -52,11 +52,42 @@ describe('SEAM-1 terminal↔scene parity', () => {
   }
 });
 
+// A channelized message renders its [channel] prefix for every kind that
+// carries one — say, pose, AND ooc. Regression guard: the ooc branch silently
+// dropped the prefix while say/pose rendered it.
+describe('channel prefix renders uniformly across channelized kinds', () => {
+  const cases: { event: CommEvent; expected: string }[] = [
+    {
+      event: { type: 'core-communication:say', category: 'communication', format: 'speech', actor: 'Bob', text: 'Hi.', metadata: { channel: 'public' } },
+      expected: '[public] Bob says, "Hi."',
+    },
+    {
+      event: { type: 'core-communication:pose', category: 'communication', format: 'action', actor: 'Alice', text: 'waves.', metadata: { channel: 'public' } },
+      expected: '[public] Alice waves.',
+    },
+    {
+      event: { type: 'core-communication:ooc', category: 'communication', format: 'speech', actor: 'Foob', text: 'brb', metadata: { channel: 'public' } },
+      expected: '[public] [OOC] Foob says, "brb"',
+    },
+  ];
+
+  for (const c of cases) {
+    it(`renders "${c.expected}"`, () => {
+      expect(renderText(commEventToLine(c.event))).toBe(c.expected);
+    });
+  }
+});
+
 // SEAM-4: TS phrasing matches the Go renderPlainText golden for say/pose/emit.
 // Golden file is pinned Go-side by publish_render_test.go:74.
 describe('SEAM-4 Go↔TS golden', () => {
   it('matches publish_render_plain_text.golden for say/pose/emit', () => {
-    const golden = readFileSync(resolve(process.cwd(), '../plugins/core-scenes/testdata/publish_render_plain_text.golden'), 'utf8')
+    // File-relative (not CWD-relative) so the parity check resolves regardless
+    // of where Vitest is launched. import.meta.dirname is web/src/lib/comm.
+    const golden = readFileSync(
+      resolve(import.meta.dirname, '../../../../plugins/core-scenes/testdata/publish_render_plain_text.golden'),
+      'utf8'
+    )
       .split('\n').filter((l) => l.length > 0);
     // Golden lines correspond to these entries (speaker/kind/content):
     const entries: LogEntry[] = [
