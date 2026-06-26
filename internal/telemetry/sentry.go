@@ -76,7 +76,6 @@ func initSentry(ctx context.Context, cfg sentryEnv, serviceName, serviceVersion 
 		Environment:      cfg.Environment,
 		Release:          release,
 		EnableTracing:    true,
-		EnableLogs:       true,
 		TracesSampleRate: cfg.TracesSampleRate,
 		ServerName:       serviceName,
 	}); err != nil {
