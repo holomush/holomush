@@ -23,8 +23,8 @@ require (
 	github.com/nats-io/nats.go v1.52.0
 	github.com/nats-io/prometheus-nats-exporter v0.20.1
 	github.com/oklog/ulid/v2 v2.1.1
-	github.com/onsi/ginkgo/v2 v2.29.0
-	github.com/onsi/gomega v1.41.0
+	github.com/onsi/ginkgo/v2 v2.32.0
+	github.com/onsi/gomega v1.42.0
 	github.com/pashagolub/pgxmock/v5 v5.1.0
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.23.2
@@ -68,8 +68,8 @@ require (
 require github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 
 require (
-	github.com/getsentry/sentry-go v0.46.2
-	github.com/getsentry/sentry-go/otel/otlp v0.46.2
+	github.com/getsentry/sentry-go v0.47.0
+	github.com/getsentry/sentry-go/otel/otlp v0.47.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
