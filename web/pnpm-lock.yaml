@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  protobufjs: 8.4.0
+  protobufjs: 8.6.0
 
 importers:
 
