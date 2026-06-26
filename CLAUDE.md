@@ -381,6 +381,8 @@ This repo is developed primarily by concurrent AI agent sessions. Because jj sna
 
 `bd` commands: see `.claude/rules/beads-project.md` and `bd prime`. `jj` workflow: see the `jj:jujutsu` skill.
 
+**`.beads/interactions.jsonl` is git-tracked** (bd's interaction log — status/field-change history), distinct from the Dolt DB (live bead state, synced separately via `bd dolt push`). It accumulates as you run `bd` and is committed periodically. When committing or pushing other work, **include any pending `.beads/interactions.jsonl` change as needed** so the tracked log stays current — `bd dolt push` does NOT commit it.
+
 ## Reference
 
 - **Directory structure**: see top-level `tree -L 2` or `ls`. Public layout overview lives in `site/src/content/docs/contributing/`.
