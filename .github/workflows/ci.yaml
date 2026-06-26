@@ -225,6 +225,15 @@ jobs:
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@11.0.3 --activate
 
+      - name: Cache pnpm store
+        uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1
+        with:
+          # MUST run after `Install pnpm`: nscloud-cache-action plans the pnpm
+          # cache by exec'ing `pnpm --version`, so pnpm must be on PATH (the
+          # earlier go-cache step runs before pnpm exists). web:install
+          # (`pnpm install`) store is the e2e/build hot path.
+          cache: pnpm
+
       - name: Install buf
         uses: bufbuild/buf-setup-action@v1
         with:
@@ -278,6 +287,15 @@ jobs:
 
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@11.0.3 --activate
+
+      - name: Cache pnpm store
+        uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1
+        with:
+          # MUST run after `Install pnpm`: nscloud-cache-action plans the pnpm
+          # cache by exec'ing `pnpm --version`, so pnpm must be on PATH (the
+          # earlier go-cache step runs before pnpm exists). web:install
+          # (`pnpm install`) store is the e2e/build hot path.
+          cache: pnpm
 
       - name: Install buf
         uses: bufbuild/buf-setup-action@v1
