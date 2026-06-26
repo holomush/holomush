@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Place character directory on CoreService; guest-inclusive, names-only](holomush-kn78o-place-character-directory-coreservice-guest-inclusive-names.md) | 2026-06-26 | Accepted | `holomush-kn78o` |
 | [Extract a shared web communication rendering primitive instead of per-bug patching](holomush-914rn-extract-shared-web-communication-rendering-primitive-instead.md) | 2026-06-26 | Accepted | `holomush-914rn` |
 | [Scope rendering-seam invariants (SEAM-*) as web-local vitest checks, not central-registry entries](holomush-bbwe7-scope-rendering-seam-invariants-seam-as-web-local-vitest-che.md) | 2026-06-26 | Accepted | `holomush-bbwe7` |
 | [Self-gate ABAC at SceneService handlers, not the facade](holomush-f9z8f-self-gate-abac-at-sceneservice-handlers-not-facade.md) | 2026-06-25 | Accepted | `holomush-f9z8f` |

@@ -2127,6 +2127,15 @@ invariants:
       - {file: "internal/access/policy/seed.go", token: "INV-A16"}
       - {file: "internal/access/policy/seed_test.go", token: "INV-A16",}
 
+  - id: INV-ACCESS-9
+    scope: INV-ACCESS
+    origin_spec: "docs/superpowers/plans/2026-06-26-scenes-web-membership-actions.md"
+    summary: "The character-directory read (CoreService.ListAllCharacters) is ABAC-gated by action=list_character_directory
+      on resource=character_directory, seeded default-permit for any authenticated character principal (registered or guest);
+      it exposes character id+name only — connection/online state is NOT included and requires a separate, more-restrictive
+      permission."
+    binding: pending
+
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
   # boundary note). FIRST bare-INV-N scope: dense per-scope renumbering (legacy 28,29,53-60
