@@ -170,20 +170,35 @@ tasks:
     desc: Run integration tests (needs Docker for testcontainers)
     env:
       HOLOMUSH_REQUIRE_PLUGINS: "1"
+    vars:
+      # Race detection is a 2–10× runtime multiplier. It's moved OFF the
+      # per-PR gating path (this default) and run nightly instead — the
+      # Nightly Soak workflow invokes `task test:int RACE=-race`. Unit tests
+      # (`task test` / `test:cover`) keep -race on every run, so the primary
+      # race signal is unchanged; this only defers the integration-tier race
+      # pass to nightly. Opt in locally with `RACE=-race task test:int`.
+      RACE: '{{.RACE | default ""}}'
     cmds:
-      - task: plugin:build-all
+      # Host-platform plugin build only — the in-process test runner loads the
+      # host-arch plugin subprocess; cross-compiled targets are dead weight on
+      # the test path (release/Docker still build the full matrix).
+      - task: plugin:build:host
       # No package enumeration: the only //go:build !integration helper
       # (the in-memory event store) was extracted to internal/core/coretest
       # (holomush-1eps2), so ./... compiles cleanly under -tags=integration.
       # -coverpkg=./... makes integration tests contribute coverage to every
-      # production package they exercise (see .codecov.yml).
-      - "{{.GO_TOOL}} gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic
+      # production package they exercise (see .codecov.yml) — it feeds the
+      # gating codecov status, so it stays even though -race does not.
+      - "{{.GO_TOOL}} gotestsum --format pkgname -- {{.RACE}} -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic
         -coverpkg=./... {{.CLI_ARGS | default \"./...\"}}"
 
   test:int:focus:
     desc: Run focused integration tests with Ginkgo focus filter (pass -ginkgo.focus="..." after --)
     cmds:
-      - task: plugin:build-all
+      - task: plugin:build:host
+      # -race stays hardcoded here (unlike test:int): focus is a local single-
+      # suite debugging tool, not a gating path, and the race detector is
+      # usually what you want when reproducing a flaky integration failure.
       - "{{.GO_TOOL}} gotestsum --format pkgname -- -race -tags=integration -count=1 -timeout 8m github.com/holomush/holomush/test/integration/plugin
         {{.CLI_ARGS}}"
 
@@ -302,6 +317,33 @@ tasks:
     # Direct `task test:int` invocations after an internal/** API change
     # may run against a stale cached binary; if symptoms are confusing,
     # `rm -rf build/plugins && task test:int` forces rebuild.
+    sources:
+      - plugins/**/*.go
+      - plugins/**/plugin.yaml
+      - plugins/**/migrations/**
+      - pkg/plugin/**/*.go
+      - pkg/proto/**/*.go
+      - scripts/build-plugins.sh
+      - go.mod
+      - go.sum
+    generates:
+      - build/plugins/*/plugin.yaml
+      - build/plugins/*/*-*/*
+      - build/plugins/*/migrations/**
+    cmds:
+      - ./scripts/build-plugins.sh
+
+  plugin:build:host:
+    desc: Compile binary plugins for the host platform only (test path — no cross-compile)
+    # The integration/E2E test runner loads the host-arch plugin binary in a
+    # subprocess; the cross-compiled linux/arm64 (and, off-CI, linux/amd64)
+    # artifacts that plugin:build-all produces are dead weight on the per-PR
+    # test path. This is a SEPARATE task from plugin:build-all so each keeps its
+    # own sources/generates fingerprint — a host-only build here can never
+    # stale-skip the full-matrix build the Docker/release path depends on.
+    # PLUGIN_PLATFORMS=host tells build-plugins.sh to emit only the native target.
+    env:
+      PLUGIN_PLATFORMS: host
     sources:
       - plugins/**/*.go
       - plugins/**/plugin.yaml

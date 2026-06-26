@@ -89,6 +89,18 @@ func startPostgresOnce(ctx context.Context) (*PostgresEnv, error) {
 		postgres.WithDatabase("holomush_test"),
 		postgres.WithUsername("postgres"),
 		postgres.WithPassword("postgres"),
+		// Durability tuning for ephemeral test containers. The container is
+		// torn down at process exit and never recovered, so crash-safety
+		// (fsync, WAL full-page writes) and commit durability buy nothing —
+		// they only slow down the once-per-binary template migration build and
+		// every per-test write. Disabling them speeds startup and writes with
+		// zero coverage/behavior impact. NEVER use these flags in production.
+		testcontainers.WithCmd(
+			"postgres",
+			"-c", "fsync=off",
+			"-c", "synchronous_commit=off",
+			"-c", "full_page_writes=off",
+		),
 		testcontainers.WithWaitStrategyAndDeadline(
 			2*time.Minute,
 			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
