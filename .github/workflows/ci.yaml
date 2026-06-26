@@ -146,7 +146,13 @@ jobs:
   integration:
     name: Integration Test
     runs-on: namespace-profile-linux-amd64-4x8
-    needs: [test]
+    # No `needs:` — integration consumes no artifact from `test`; it builds its
+    # own plugins and stands up its own testcontainers. Running it in parallel
+    # with `test` (instead of after it) removes the unit job's wall-clock from
+    # the critical path. `build` still joins on all of [lint, test, integration,
+    # e2e], so a unit-test failure still blocks the build artifact. Trade: a
+    # broken commit spends runner minutes on integration too — acceptable on
+    # cloud runners for the wall-clock win.
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
@@ -183,7 +189,9 @@ jobs:
   e2e:
     name: E2E Test
     runs-on: namespace-profile-linux-amd64-4x8
-    needs: [test]
+    # No `needs:` — see the Integration Test job. E2E builds its own image and
+    # stack; running it in parallel with `test` keeps the unit job off its
+    # critical path. `build` still joins on all four jobs.
     # web:generate (via docker:build:cover) runs `buf generate`, which pulls
     # the remote BSR plugins (buf.build/bufbuild/es, buf.build/connectrpc/es).
     # Authenticate so it uses the token's BSR rate limit, not the anonymous one

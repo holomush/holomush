@@ -11,23 +11,41 @@
 #
 # The plugin loader resolves the correct binary at runtime using GOOS/GOARCH.
 #
+# Platform selection:
+#   Default (PLUGIN_PLATFORMS unset) → host native + linux/amd64 + linux/arm64,
+#   the full matrix the Docker/release path needs.
+#   Override with PLUGIN_PLATFORMS (space- or comma-separated); the literal
+#   token `host` expands to the native GOOS-GOARCH. The integration/E2E test
+#   path passes PLUGIN_PLATFORMS=host to skip the cross-compiles it never loads.
+#
 # Usage:
 #   ./scripts/build-plugins.sh              # build all binary plugins
 #   ./scripts/build-plugins.sh core-scenes  # build a single plugin
+#   PLUGIN_PLATFORMS=host ./scripts/build-plugins.sh   # native target only
 
 set -euo pipefail
 
 PLUGINS_DIR="${PLUGINS_DIR:-plugins}"
 BUILD_DIR="${BUILD_DIR:-build/plugins}"
 
-# Platforms to build: host native + linux targets.
+# Platforms to build: host native + linux targets, unless PLUGIN_PLATFORMS
+# narrows the set.
 HOST_OS="$(go env GOOS)"
 HOST_ARCH="$(go env GOARCH)"
 
 declare -A PLATFORMS
-PLATFORMS["${HOST_OS}-${HOST_ARCH}"]=1
-PLATFORMS["linux-amd64"]=1
-PLATFORMS["linux-arm64"]=1
+if [ -n "${PLUGIN_PLATFORMS:-}" ]; then
+  IFS=', ' read -r -a _requested_platforms <<< "$PLUGIN_PLATFORMS"
+  for _platform in "${_requested_platforms[@]}"; do
+    [ -z "$_platform" ] && continue
+    [ "$_platform" = "host" ] && _platform="${HOST_OS}-${HOST_ARCH}"
+    PLATFORMS["$_platform"]=1
+  done
+else
+  PLATFORMS["${HOST_OS}-${HOST_ARCH}"]=1
+  PLATFORMS["linux-amd64"]=1
+  PLATFORMS["linux-arm64"]=1
+fi
 
 build_plugin_platform() {
   local dir="$1"
