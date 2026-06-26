@@ -6,8 +6,11 @@ import { readFileSync } from 'node:fs';
 
 const src = (rel: string) => readFileSync(`${process.cwd()}/src/lib/components/${rel}`, 'utf8');
 
-// SEAM-2: message renderers MUST color via --mush-* tokens, never brand colors.
-describe('SEAM-2 message renderers use --mush-* not brand colors', () => {
+// SEAM-2: message renderers MUST NOT use brand colors. Message coloring lives in
+// --mush-* tokens, centralized in the shared CommunicationLine primitive — the
+// renderer components (PoseCard, CommunicationRenderer) delegate to it, so the
+// guard asserts the brand-color fence on them and the --mush-* presence on the primitive.
+describe('SEAM-2 message renderers carry no brand colors; coloring uses --mush-* tokens', () => {
   it('PoseCard uses no --brand-* color', () => {
     expect(src('scenes/PoseCard.svelte')).not.toContain('--brand-');
   });

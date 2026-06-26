@@ -35,6 +35,18 @@ describe('CommunicationLine', () => {
   it('renders ooc default style as prefixed speech', () => {
     expect(render({ kind: 'ooc', actor: 'Bob', text: 'brb' }).text).toBe('[OOC] Bob says, "brb"');
   });
+  it('renders an ooc pose style as prefix + actor inline with the action', () => {
+    expect(render({ kind: 'ooc', actor: 'Foob', text: 'waves', oocStyle: 'pose' }).text).toBe('[OOC] Foob waves');
+  });
+  it('omits the actor-action space for an ooc semipose', () => {
+    expect(render({ kind: 'ooc', actor: 'Foob', text: "'s data is gone", oocStyle: 'semipose' }).text).toBe("[OOC] Foob's data is gone");
+  });
+  it('honors a custom ooc prefix', () => {
+    expect(render({ kind: 'ooc', actor: 'Bob', text: 'brb', oocPrefix: '[ic-ooc]' }).text).toBe('[ic-ooc] Bob says, "brb"');
+  });
+  it('renders a channel prefix before a say', () => {
+    expect(render({ kind: 'say', actor: 'Bob', text: 'hi', channel: 'public' }).text).toBe('[public] Bob says, "hi"');
+  });
   it('renders emit as bare narration', () => {
     expect(render({ kind: 'emit', actor: '', text: 'A bell rings in the distance.' }).text).toBe('A bell rings in the distance.');
   });
