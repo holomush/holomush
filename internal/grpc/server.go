@@ -1480,22 +1480,42 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		}, nil
 	}
 
-	// Remove specific connection if provided
-	if req.ConnectionId != "" {
-		connID, parseErr := ulid.Parse(req.ConnectionId)
-		if parseErr == nil {
-			if err := s.sessionStore.RemoveConnection(ctx, connID); err != nil {
-				slog.WarnContext(
-					ctx, "failed to remove connection",
-					"request_id", requestID,
-					"connection_id", req.ConnectionId,
-					"error", err,
-				)
-			}
+	// Remove the named connection and read the session's remaining connection
+	// counts. With a connection_id these run in ONE transaction under a
+	// sessions-row lock (RemoveConnectionAndCount): concurrent disconnects on
+	// the same session serialize, so exactly one observes totalCount==0 and
+	// runs cleanup — closing the double-cleanup race (holomush-cizj). Done
+	// BEFORE the Get below so a transient Get error still removes the
+	// connection, matching the prior remove-then-lookup ordering.
+	var totalCount, gridConns int
+	var counted bool
+	// mayCleanup gates the lifecycle transition below. The session-level
+	// (no connection_id) path removes nothing and has no removal signal, so it
+	// keeps the prior unconditional behavior.
+	mayCleanup := true
+	if connID, parseErr := ulid.Parse(req.ConnectionId); req.ConnectionId != "" && parseErr == nil {
+		counts, removed, cErr := s.sessionStore.RemoveConnectionAndCount(ctx, req.SessionId, connID)
+		if cErr != nil {
+			slog.WarnContext(
+				ctx, "failed to remove connection and count — skipping lifecycle transition",
+				"request_id", requestID,
+				"session_id", req.SessionId,
+				"connection_id", req.ConnectionId,
+				"error", cErr,
+			)
+			return &corev1.DisconnectResponse{Meta: responseMeta(requestID), Success: true}, nil
 		}
+		totalCount, gridConns = counts.Total, counts.Grid
+		counted = true
+		// Only the disconnect that actually removed the connection owns the
+		// lifecycle cleanup; a duplicate disconnect for an already-removed
+		// connection_id (removed=false) must not re-emit leave/session_ended
+		// (holomush-cizj duplicate-disconnect guard).
+		mayCleanup = removed
 	}
 
-	// Look up session
+	// Look up session — needed for the lifecycle branch below. If it is
+	// already gone, Disconnect is idempotent success.
 	info, err := s.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
 		//nolint:nilerr // intentional: session already gone, return success (idempotent)
@@ -1505,43 +1525,31 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		}, nil
 	}
 
-	// Count remaining connections by type.
-	// NOTE: These counts are read separately from the RemoveConnection above,
-	// creating a small race window. In practice this is benign — concurrent
-	// disconnects may both observe totalCount==0 and both call UpdateStatus,
-	// but UpdateStatus is idempotent. A proper transactional
-	// RemoveConnectionAndCount would eliminate this race.
-	// TODO: replace two CountConnectionsByType calls with a single query.
-	totalCount, err := s.sessionStore.CountConnections(ctx, req.SessionId)
-	if err != nil {
-		slog.WarnContext(
-			ctx, "failed to count connections — skipping lifecycle transition",
-			"request_id", requestID,
-			"session_id", req.SessionId,
-			"error", err,
-		)
-		return &corev1.DisconnectResponse{Meta: responseMeta(requestID), Success: true}, nil
+	// No-connection_id path (e.g. a session-level disconnect) removes nothing,
+	// so these separate counts carry no remove/count race.
+	if !counted {
+		totalCount, err = s.sessionStore.CountConnections(ctx, req.SessionId)
+		if err != nil {
+			slog.WarnContext(
+				ctx, "failed to count connections — skipping lifecycle transition",
+				"request_id", requestID,
+				"session_id", req.SessionId,
+				"error", err,
+			)
+			return &corev1.DisconnectResponse{Meta: responseMeta(requestID), Success: true}, nil
+		}
+		termCount, tErr := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "terminal")
+		if tErr != nil {
+			slog.WarnContext(ctx, "failed to count terminal connections", "request_id", requestID, "error", tErr)
+		}
+		telCount, tlErr := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "telnet")
+		if tlErr != nil {
+			slog.WarnContext(ctx, "failed to count telnet connections", "request_id", requestID, "error", tlErr)
+		}
+		gridConns = termCount + telCount
 	}
 
-	termCount, err := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "terminal")
-	if err != nil {
-		slog.WarnContext(
-			ctx, "failed to count terminal connections",
-			"request_id", requestID,
-			"error", err,
-		)
-	}
-	telCount, err := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "telnet")
-	if err != nil {
-		slog.WarnContext(
-			ctx, "failed to count telnet connections",
-			"request_id", requestID,
-			"error", err,
-		)
-	}
-	gridConns := termCount + telCount
-
-	if totalCount == 0 {
+	if mayCleanup && totalCount == 0 {
 		// No connections at all
 		if info.IsGuest {
 			// Guests can't reconnect — delete immediately
@@ -1595,7 +1603,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				)
 			}
 		}
-	} else if gridConns == 0 && info.GridPresent {
+	} else if mayCleanup && gridConns == 0 && info.GridPresent {
 		// Only comms_hub connections remain — phase out from grid.
 		// Emit the leave event (engine concern), then update grid presence via helper.
 		char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}

@@ -1311,6 +1311,71 @@ func (_c *MockStore_RemoveConnection_Call) RunAndReturn(run func(context.Context
 	return _c
 }
 
+// RemoveConnectionAndCount provides a mock function with given fields: ctx, sessionID, connectionID
+func (_m *MockStore) RemoveConnectionAndCount(ctx context.Context, sessionID string, connectionID ulid.ULID) (session.ConnectionCounts, bool, error) {
+	ret := _m.Called(ctx, sessionID, connectionID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveConnectionAndCount")
+	}
+
+	var r0 session.ConnectionCounts
+	var r1 bool
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, ulid.ULID) (session.ConnectionCounts, bool, error)); ok {
+		return rf(ctx, sessionID, connectionID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, ulid.ULID) session.ConnectionCounts); ok {
+		r0 = rf(ctx, sessionID, connectionID)
+	} else {
+		r0 = ret.Get(0).(session.ConnectionCounts)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, ulid.ULID) bool); ok {
+		r1 = rf(ctx, sessionID, connectionID)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, string, ulid.ULID) error); ok {
+		r2 = rf(ctx, sessionID, connectionID)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockStore_RemoveConnectionAndCount_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveConnectionAndCount'
+type MockStore_RemoveConnectionAndCount_Call struct {
+	*mock.Call
+}
+
+// RemoveConnectionAndCount is a helper method to define mock.On call
+//   - ctx context.Context
+//   - sessionID string
+//   - connectionID ulid.ULID
+func (_e *MockStore_Expecter) RemoveConnectionAndCount(ctx interface{}, sessionID interface{}, connectionID interface{}) *MockStore_RemoveConnectionAndCount_Call {
+	return &MockStore_RemoveConnectionAndCount_Call{Call: _e.mock.On("RemoveConnectionAndCount", ctx, sessionID, connectionID)}
+}
+
+func (_c *MockStore_RemoveConnectionAndCount_Call) Run(run func(ctx context.Context, sessionID string, connectionID ulid.ULID)) *MockStore_RemoveConnectionAndCount_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockStore_RemoveConnectionAndCount_Call) Return(_a0 session.ConnectionCounts, _a1 bool, _a2 error) *MockStore_RemoveConnectionAndCount_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockStore_RemoveConnectionAndCount_Call) RunAndReturn(run func(context.Context, string, ulid.ULID) (session.ConnectionCounts, bool, error)) *MockStore_RemoveConnectionAndCount_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Set provides a mock function with given fields: ctx, id, info
 func (_m *MockStore) Set(ctx context.Context, id string, info *session.Info) error {
 	ret := _m.Called(ctx, id, info)
