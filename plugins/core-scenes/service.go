@@ -259,6 +259,26 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 	)
 	defer span.End()
 
+	// Actor-binding identity cross-check (mirrors WatchScene and the other
+	// acting-character handlers). The scene_id-keyed lifecycle handlers carry
+	// this as defense-in-depth behind their in-handler ABAC evaluator check;
+	// CreateScene has no in-handler evaluator, so here it is the primary control
+	// binding the new scene's owner to the authenticated character:
+	// req.CharacterId becomes OwnerID below, so advisory actor metadata that
+	// contradicts the acting character_id is rejected fail-closed before the row
+	// is persisted — blocking owner forgery from this session. The host dispatch
+	// token remains the outer identity gate. Do not drop this guard as
+	// ABAC-redundant.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.create_scene actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to create for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
 	// Title is trimmed before storage so empty-only-after-trim becomes
 	// empty after trimming. The protovalidate annotation rejects empty
 	// titles at unmarshal time, but a title of "   " (spaces) passes
