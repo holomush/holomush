@@ -1329,7 +1329,8 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 }
 
 // InviteToScene adds an 'invited' participant row for the target character.
-// ABAC enforces owner-only invite at the dispatcher layer.
+// ABAC enforces participant-wide invite (any owner or member of an
+// active/paused scene) — self-gated at this handler and at the dispatcher.
 func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.InviteToSceneRequest) (*scenev1.InviteToSceneResponse, error) {
 	ctx, span := startSpan(
 		ctx, "scene.service.invite_to_scene",

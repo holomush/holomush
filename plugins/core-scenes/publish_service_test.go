@@ -519,6 +519,30 @@ func TestPluginManifestDeclaresWithdrawPublishAsOwnerPolicy(t *testing.T) {
 	assert.Contains(t, manifest, "resource.scene.owner == principal.id", "policy must be owner-only")
 }
 
+// TestPluginManifestDeclaresInviteAsParticipantPolicy pins the 5rh.24
+// relaxation of invite-to-scene from owner-only to participant-wide: any
+// scene participant may invite (Cedar `in` membership over
+// resource.scene.participants), while a non-participant is denied by the
+// absence of a permit. The active/paused state clause is retained because
+// the InviteParticipant store method does not enforce scene state.
+func TestPluginManifestDeclaresInviteAsParticipantPolicy(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("plugin.yaml")
+	require.NoError(t, err)
+	manifest := string(data)
+
+	assert.Contains(t, manifest, "invite-to-scene", "the invite-to-scene ABAC policy must be declared")
+	assert.Contains(t, manifest, `action in ["invite"]`, "policy must gate the invite action")
+	assert.Contains(t, manifest, "principal is character", "policy principal must be a character")
+	assert.Contains(t, manifest, "resource is scene", "policy must target scene resources")
+	// Teeth: this exact clause fails if the policy is reverted to owner-only.
+	assert.Contains(t, manifest,
+		`permit(principal is character, action in ["invite"], resource is scene) when { principal.id in resource.scene.participants`,
+		"invite must be participant-wide, not owner-only")
+	assert.Contains(t, manifest, `resource.scene.state in ["active", "paused"]`,
+		"invite must retain the active/paused state clause")
+}
+
 // TestPublishVoteTransitionsEmitLifecycleEvents pins D3's wiring: each vote cast
 // emits scene_publish_vote_cast, an all-yes resolution emits
 // scene_publish_cooloff_started (the COLLECTING→COOLOFF transition), and a
