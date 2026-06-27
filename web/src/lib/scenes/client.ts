@@ -12,6 +12,10 @@ import {
 	type WebEndSceneRequest,
 	type WebPauseSceneRequest,
 	type WebResumeSceneRequest,
+	type WebInviteToSceneRequest,
+	type WebKickFromSceneRequest,
+	type WebTransferOwnershipRequest,
+	type WebLeaveSceneRequest,
 } from '$lib/connect/holomush/web/v1/web_pb';
 import { transport } from '$lib/transport';
 
@@ -184,6 +188,50 @@ export async function resumeScene(
 ) {
 	const res = await client.webResumeScene({ sessionId, ...opts });
 	return res.scene;
+}
+
+/**
+ * Invites target_character_id to scene sceneId on behalf of characterId.
+ * Returns void — the response is empty (SceneAccessService.InviteToScene).
+ */
+export async function inviteToScene(
+	sessionId: string,
+	opts: Pick<WebInviteToSceneRequest, 'characterId' | 'sceneId' | 'targetCharacterId'>,
+): Promise<void> {
+	await client.webInviteToScene({ sessionId, ...opts });
+}
+
+/**
+ * Kicks target_character_id from scene sceneId on behalf of characterId.
+ * Returns void — the response is empty (SceneAccessService.KickFromScene).
+ */
+export async function kickFromScene(
+	sessionId: string,
+	opts: Pick<WebKickFromSceneRequest, 'characterId' | 'sceneId' | 'targetCharacterId'>,
+): Promise<void> {
+	await client.webKickFromScene({ sessionId, ...opts });
+}
+
+/**
+ * Transfers scene ownership to new_owner_character_id on behalf of characterId.
+ * Returns void — the response is empty (SceneAccessService.TransferOwnership).
+ */
+export async function transferOwnership(
+	sessionId: string,
+	opts: Pick<WebTransferOwnershipRequest, 'characterId' | 'sceneId' | 'newOwnerCharacterId'>,
+): Promise<void> {
+	await client.webTransferOwnership({ sessionId, ...opts });
+}
+
+/**
+ * Leaves scene sceneId on behalf of characterId.
+ * Returns void — the response is empty (SceneAccessService.LeaveScene).
+ */
+export async function leaveScene(
+	sessionId: string,
+	opts: Pick<WebLeaveSceneRequest, 'characterId' | 'sceneId'>,
+): Promise<void> {
+	await client.webLeaveScene({ sessionId, ...opts });
 }
 
 /**
