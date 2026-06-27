@@ -261,3 +261,14 @@
   drift in out-of-scope sibling files (sceneaccess_service_test.go) — note separately, still gates
   branch. Logging-test docstring "all ten handlers" went stale (13 cases now) — implementer claimed
   to maintain "every handler" invariant but didn't bump count = Low non-blocking.
+- **Widened repo interface → MISSED Nth implementor, harness compile break (5rh.24.10 NOT READY, 2026-06-26).**
+  Adding a method to an interface (`auth.CharacterRepository.ListAll`) breaks EVERY type with a `var _ Iface = (*T)(nil)`
+  assertion that wasn't updated. `auth.CharacterRepository` has THREE adapter impls — setup/adapters.go AND
+  test/integration/auth/auth_suite_test.go AND a SECOND `authCharRepoAdapter` in internal/testsupport/integrationtest/
+  harness.go (//go:build integration, assertion at :1282). Diff updated the first two, MISSED the harness → integration
+  CI gate red. Local `task test:int -- ./internal/world/postgres/` is BLIND (postgres pkg doesn't import the harness).
+  METHOD: enumerate all implementors via the interface's UNIQUE method (ListByPlayer→[]*world.Character distinguishes
+  auth.CharacterRepository from world.CharacterRepository which lacks it AND from narrow ISP `CharacterLister`/
+  `mockCharLister` which only has ListByPlayer→not full impl), then check each defines the new method. Narrow ISP test
+  fakes are SAFE (don't implement the full iface). To prove harness compiles, run a test:int pkg that IMPORTS it
+  (test/integration/...), never just the changed pkg's own test.

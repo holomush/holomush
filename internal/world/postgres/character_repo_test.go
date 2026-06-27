@@ -563,3 +563,40 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
 	})
 }
+
+func TestCharacterRepository_ListAll(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	playerID := createTestPlayer(ctx, t)
+
+	// Unique names so residue from sibling tests can't collide; "AAA-" sorts
+	// before "ZZZ-" under ORDER BY name ASC.
+	alice := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "AAA-" + ulid.Make().String()}
+	bob := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "ZZZ-" + ulid.Make().String()}
+	require.NoError(t, repo.Create(ctx, alice))
+	require.NoError(t, repo.Create(ctx, bob))
+	t.Cleanup(func() {
+		_ = repo.Delete(ctx, alice.ID)
+		_ = repo.Delete(ctx, bob.ID)
+	})
+
+	got, err := repo.ListAll(ctx)
+	require.NoError(t, err)
+
+	// Locate the two seeded rows by ID (the shared pool may hold others).
+	idxAlice, idxBob := -1, -1
+	for i, c := range got {
+		switch c.ID {
+		case alice.ID:
+			idxAlice = i
+			assert.Equal(t, alice.Name, c.Name, "name returned for alice")
+		case bob.ID:
+			idxBob = i
+			assert.Equal(t, bob.Name, c.Name, "name returned for bob")
+		}
+	}
+	require.NotEqual(t, -1, idxAlice, "ListAll must include the first seeded character")
+	require.NotEqual(t, -1, idxBob, "ListAll must include the second seeded character")
+	assert.Less(t, idxAlice, idxBob, "ListAll must be ordered by name ascending")
+}

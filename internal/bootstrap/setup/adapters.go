@@ -118,6 +118,12 @@ func (a *CharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) 
 	return chars, nil
 }
 
+// ListAll returns every character ordered by name ascending (id + name only).
+// Delegates to the underlying world repository.
+func (a *CharRepoAdapter) ListAll(ctx context.Context) ([]*world.Character, error) {
+	return a.charRepo.ListAll(ctx)
+}
+
 // LocRepoAdapter implements auth.LocationRepository using a pointer to the starting
 // location ID. The pointer is necessary because the ID may be resolved after bootstrap,
 // which runs after this adapter is created.

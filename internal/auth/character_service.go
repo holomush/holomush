@@ -26,6 +26,11 @@ type CharacterRepository interface {
 
 	// ListByPlayer returns all characters owned by a player.
 	ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error)
+
+	// ListAll returns ALL characters (id + name only) for the directory picker —
+	// fetch-all, NO pagination, ordered by name ascending. Names only; no
+	// connection state. Backs the membership-invite character directory.
+	ListAll(ctx context.Context) ([]*world.Character, error)
 }
 
 // LocationRepository defines the location operations needed by CharacterService.
