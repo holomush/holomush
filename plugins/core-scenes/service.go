@@ -647,6 +647,24 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 	)
 	defer span.End()
 
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before the ABAC evaluation and store mutation. This lifecycle
+	// transition is keyed on scene_id and the store records the scene owner as
+	// the ops-event actor, so the guard's role here is uniformity with the
+	// other acting-character scene handlers plus keeping a forged character_id
+	// out of this RPC's span/log subject attribution.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.lifecycle.end actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to end for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
 	if s.evaluator == nil {
 		slog.WarnContext(ctx, "scene.lifecycle.end evaluator not configured",
 			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
@@ -695,6 +713,24 @@ func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSce
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
+
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before the ABAC evaluation and store mutation. This lifecycle
+	// transition is keyed on scene_id and the store records the scene owner as
+	// the ops-event actor, so the guard's role here is uniformity with the
+	// other acting-character scene handlers plus keeping a forged character_id
+	// out of this RPC's span/log subject attribution.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.lifecycle.pause actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to pause for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
 
 	if s.evaluator == nil {
 		slog.WarnContext(ctx, "scene.lifecycle.pause evaluator not configured",
@@ -745,6 +781,24 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
+
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before the ABAC evaluation and store mutation. This lifecycle
+	// transition is keyed on scene_id and the store records the scene owner as
+	// the ops-event actor, so the guard's role here is uniformity with the
+	// other acting-character scene handlers plus keeping a forged character_id
+	// out of this RPC's span/log subject attribution.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.lifecycle.resume actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to resume for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
 
 	if s.evaluator == nil {
 		slog.WarnContext(ctx, "scene.lifecycle.resume evaluator not configured",
@@ -802,6 +856,24 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
+
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before any validation or store mutation. The update is keyed on
+	// scene_id (the store records the scene owner as the ops-event actor), but
+	// the service emits scene_pose_order_changed_ic with req.character_id as the
+	// actor — so the guard keeps a forged character_id off that IC notice and
+	// out of this RPC's span/log subject attribution.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.update_scene actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to update for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
 
 	update, err := buildSceneUpdate(req)
 	if err != nil {
@@ -930,6 +1002,22 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
+
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before the store mutation, so a caller authorized as one
+	// character cannot add a different character as a participant by forging
+	// character_id (AddParticipant keys the membership row on character_id).
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.join_scene actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to join for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
 
 	_, result, err := s.store.AddParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
 	if err != nil {
