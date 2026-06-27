@@ -440,6 +440,123 @@ func (s *SceneAccessServer) ResumeScene(ctx context.Context, req *sceneaccessv1.
 	return &sceneaccessv1.ResumeSceneResponse{Scene: resp.GetScene()}, nil
 }
 
+// InviteToScene resolves the verified inviter from the player session and
+// forwards to the plugin SceneService (which self-enforces the participant-wide
+// `invite` policy, INV-SCENE-65). resolveAndGate enforces the guest gate
+// (INV-SCENE-64); ownedCharacter enforces ownership of the acting alt (INV-SCENE-63).
+func (s *SceneAccessServer) InviteToScene(ctx context.Context, req *sceneaccessv1.InviteToSceneRequest) (*sceneaccessv1.InviteToSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	if _, err := s.sceneClient.InviteToScene(dctx, &scenev1.InviteToSceneRequest{
+		CharacterId:       char.ID.String(),
+		SceneId:           req.GetSceneId(),
+		TargetCharacterId: req.GetTargetCharacterId(),
+	}); err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.InviteToSceneResponse{}, nil
+}
+
+// KickFromScene resolves the verified owner from the player session and
+// forwards to the plugin SceneService (which self-enforces the owner-only
+// `kick` policy, INV-SCENE-65). resolveAndGate enforces the guest gate
+// (INV-SCENE-64); ownedCharacter enforces ownership of the acting alt (INV-SCENE-63).
+func (s *SceneAccessServer) KickFromScene(ctx context.Context, req *sceneaccessv1.KickFromSceneRequest) (*sceneaccessv1.KickFromSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	if _, err := s.sceneClient.KickFromScene(dctx, &scenev1.KickFromSceneRequest{
+		CharacterId:       char.ID.String(),
+		SceneId:           req.GetSceneId(),
+		TargetCharacterId: req.GetTargetCharacterId(),
+	}); err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.KickFromSceneResponse{}, nil
+}
+
+// TransferOwnership resolves the verified current owner from the player session
+// and forwards to the plugin SceneService (which self-enforces the owner-only
+// `transfer-ownership` policy, INV-SCENE-65). resolveAndGate enforces the guest
+// gate (INV-SCENE-64); ownedCharacter enforces ownership of the acting alt
+// (INV-SCENE-63).
+func (s *SceneAccessServer) TransferOwnership(ctx context.Context, req *sceneaccessv1.TransferOwnershipRequest) (*sceneaccessv1.TransferOwnershipResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	if _, err := s.sceneClient.TransferOwnership(dctx, &scenev1.TransferOwnershipRequest{
+		CharacterId:         char.ID.String(),
+		SceneId:             req.GetSceneId(),
+		NewOwnerCharacterId: req.GetNewOwnerCharacterId(),
+	}); err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.TransferOwnershipResponse{}, nil
+}
+
+// LeaveScene resolves the verified participant from the player session and
+// forwards to the plugin SceneService (which self-enforces the participant
+// `leave` policy; the owner cannot leave — INV-SCENE-65). resolveAndGate
+// enforces the guest gate (INV-SCENE-64); ownedCharacter enforces ownership of
+// the acting alt (INV-SCENE-63).
+func (s *SceneAccessServer) LeaveScene(ctx context.Context, req *sceneaccessv1.LeaveSceneRequest) (*sceneaccessv1.LeaveSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	if _, err := s.sceneClient.LeaveScene(dctx, &scenev1.LeaveSceneRequest{
+		CharacterId: char.ID.String(),
+		SceneId:     req.GetSceneId(),
+	}); err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.LeaveSceneResponse{}, nil
+}
+
 // ExportScene renders the verified character's scene IC log.
 func (s *SceneAccessServer) ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
 	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
