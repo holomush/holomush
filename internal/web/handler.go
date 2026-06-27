@@ -119,6 +119,10 @@ type SceneAccessClient interface {
 	ListPublishedScenes(ctx context.Context, req *sceneaccessv1.ListPublishedScenesRequest) (*sceneaccessv1.ListPublishedScenesResponse, error)
 	GetPublicSceneArchive(ctx context.Context, req *sceneaccessv1.GetPublicSceneArchiveRequest) (*sceneaccessv1.GetPublicSceneArchiveResponse, error)
 	DownloadPublicSceneArchive(ctx context.Context, req *sceneaccessv1.DownloadPublicSceneArchiveRequest) (*sceneaccessv1.DownloadPublicSceneArchiveResponse, error)
+	InviteToScene(ctx context.Context, req *sceneaccessv1.InviteToSceneRequest) (*sceneaccessv1.InviteToSceneResponse, error)
+	KickFromScene(ctx context.Context, req *sceneaccessv1.KickFromSceneRequest) (*sceneaccessv1.KickFromSceneResponse, error)
+	TransferOwnership(ctx context.Context, req *sceneaccessv1.TransferOwnershipRequest) (*sceneaccessv1.TransferOwnershipResponse, error)
+	LeaveScene(ctx context.Context, req *sceneaccessv1.LeaveSceneRequest) (*sceneaccessv1.LeaveSceneResponse, error)
 }
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.

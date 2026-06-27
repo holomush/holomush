@@ -74,6 +74,18 @@ type mockSceneAccessClient struct {
 	downloadArchiveReq  *sceneaccessv1.DownloadPublicSceneArchiveRequest
 	downloadArchiveResp *sceneaccessv1.DownloadPublicSceneArchiveResponse
 	downloadArchiveErr  error
+
+	inviteToSceneReq *sceneaccessv1.InviteToSceneRequest
+	inviteToSceneErr error
+
+	kickFromSceneReq *sceneaccessv1.KickFromSceneRequest
+	kickFromSceneErr error
+
+	transferOwnershipReq *sceneaccessv1.TransferOwnershipRequest
+	transferOwnershipErr error
+
+	leaveSceneReq *sceneaccessv1.LeaveSceneRequest
+	leaveSceneErr error
 }
 
 func (m *mockSceneAccessClient) ListScenesForViewer(_ context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
@@ -151,6 +163,38 @@ func (m *mockSceneAccessClient) GetPublicSceneArchive(_ context.Context, req *sc
 func (m *mockSceneAccessClient) DownloadPublicSceneArchive(_ context.Context, req *sceneaccessv1.DownloadPublicSceneArchiveRequest) (*sceneaccessv1.DownloadPublicSceneArchiveResponse, error) {
 	m.downloadArchiveReq = req
 	return m.downloadArchiveResp, m.downloadArchiveErr
+}
+
+func (m *mockSceneAccessClient) InviteToScene(_ context.Context, req *sceneaccessv1.InviteToSceneRequest) (*sceneaccessv1.InviteToSceneResponse, error) {
+	m.inviteToSceneReq = req
+	if m.inviteToSceneErr != nil {
+		return nil, m.inviteToSceneErr
+	}
+	return &sceneaccessv1.InviteToSceneResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) KickFromScene(_ context.Context, req *sceneaccessv1.KickFromSceneRequest) (*sceneaccessv1.KickFromSceneResponse, error) {
+	m.kickFromSceneReq = req
+	if m.kickFromSceneErr != nil {
+		return nil, m.kickFromSceneErr
+	}
+	return &sceneaccessv1.KickFromSceneResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) TransferOwnership(_ context.Context, req *sceneaccessv1.TransferOwnershipRequest) (*sceneaccessv1.TransferOwnershipResponse, error) {
+	m.transferOwnershipReq = req
+	if m.transferOwnershipErr != nil {
+		return nil, m.transferOwnershipErr
+	}
+	return &sceneaccessv1.TransferOwnershipResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) LeaveScene(_ context.Context, req *sceneaccessv1.LeaveSceneRequest) (*sceneaccessv1.LeaveSceneResponse, error) {
+	m.leaveSceneReq = req
+	if m.leaveSceneErr != nil {
+		return nil, m.leaveSceneErr
+	}
+	return &sceneaccessv1.LeaveSceneResponse{}, nil
 }
 
 // --- WebListScenes ---

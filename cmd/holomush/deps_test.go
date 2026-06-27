@@ -247,6 +247,22 @@ func (m *mockGRPCClient) DownloadPublicSceneArchive(_ context.Context, _ *scenea
 	return nil, nil
 }
 
+func (m *mockGRPCClient) InviteToScene(_ context.Context, _ *sceneaccessv1.InviteToSceneRequest) (*sceneaccessv1.InviteToSceneResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) KickFromScene(_ context.Context, _ *sceneaccessv1.KickFromSceneRequest) (*sceneaccessv1.KickFromSceneResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) TransferOwnership(_ context.Context, _ *sceneaccessv1.TransferOwnershipRequest) (*sceneaccessv1.TransferOwnershipResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) LeaveScene(_ context.Context, _ *sceneaccessv1.LeaveSceneRequest) (*sceneaccessv1.LeaveSceneResponse, error) {
+	return nil, nil
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)

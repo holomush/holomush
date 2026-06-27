@@ -497,3 +497,39 @@ func (c *Client) DownloadPublicSceneArchive(ctx context.Context, req *sceneacces
 	}
 	return resp, nil
 }
+
+// InviteToScene delegates to SceneAccessService.InviteToScene (identity-resolving facade).
+func (c *Client) InviteToScene(ctx context.Context, req *sceneaccessv1.InviteToSceneRequest) (*sceneaccessv1.InviteToSceneResponse, error) {
+	resp, err := c.sceneAccessClient.InviteToScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "InviteToScene").Wrap(err)
+	}
+	return resp, nil
+}
+
+// KickFromScene delegates to SceneAccessService.KickFromScene (identity-resolving facade).
+func (c *Client) KickFromScene(ctx context.Context, req *sceneaccessv1.KickFromSceneRequest) (*sceneaccessv1.KickFromSceneResponse, error) {
+	resp, err := c.sceneAccessClient.KickFromScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "KickFromScene").Wrap(err)
+	}
+	return resp, nil
+}
+
+// TransferOwnership delegates to SceneAccessService.TransferOwnership (identity-resolving facade).
+func (c *Client) TransferOwnership(ctx context.Context, req *sceneaccessv1.TransferOwnershipRequest) (*sceneaccessv1.TransferOwnershipResponse, error) {
+	resp, err := c.sceneAccessClient.TransferOwnership(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "TransferOwnership").Wrap(err)
+	}
+	return resp, nil
+}
+
+// LeaveScene delegates to SceneAccessService.LeaveScene (identity-resolving facade).
+func (c *Client) LeaveScene(ctx context.Context, req *sceneaccessv1.LeaveSceneRequest) (*sceneaccessv1.LeaveSceneResponse, error) {
+	resp, err := c.sceneAccessClient.LeaveScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "LeaveScene").Wrap(err)
+	}
+	return resp, nil
+}
