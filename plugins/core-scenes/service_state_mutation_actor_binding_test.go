@@ -69,9 +69,9 @@ func TestStateMutatingHandlersRejectForgedActingCharacter(t *testing.T) {
 		// state is the scene's initial lifecycle state.
 		state string
 		// consultsABAC is true for handlers that call s.evaluator.Evaluate
-		// inline (end/pause/resume). JoinScene and UpdateScene are ABAC-gated at
-		// the dispatch layer and never touch the service-layer evaluator, so
-		// asserting ev.calls is empty would be vacuously true for them — the
+		// inline (end/pause/resume/update). JoinScene is ABAC-gated at the
+		// dispatch layer and never touches the service-layer evaluator, so
+		// asserting ev.calls is empty would be vacuously true for it — the
 		// per-handler verify is what proves the mutation was blocked there.
 		consultsABAC bool
 		call         func(svc *SceneServiceImpl) error
@@ -146,7 +146,7 @@ func TestStateMutatingHandlersRejectForgedActingCharacter(t *testing.T) {
 		{
 			name:         "update rejects a forged acting character",
 			state:        string(SceneStateActive),
-			consultsABAC: false,
+			consultsABAC: true,
 			call: func(svc *SceneServiceImpl) error {
 				_, err := svc.UpdateScene(ctx, &scenev1.UpdateSceneRequest{
 					SceneId:     sceneID,

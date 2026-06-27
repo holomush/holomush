@@ -614,14 +614,15 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			lifecyclesceneID = createResp.GetScene().GetId()
 			Expect(lifecyclesceneID).NotTo(BeEmpty())
 
-			// INV-SCENE-65: EndScene/PauseScene/ResumeScene self-gate ABAC via a
-			// host-capability call that requires a host-issued dispatch token. Mirror
-			// production's SceneAccessServer.beginDispatch — mint a dispatch context
-			// for the owner (char-alice) and run the gated lifecycle RPCs through it.
+			// INV-SCENE-65: EndScene/PauseScene/ResumeScene/UpdateScene self-gate ABAC
+			// via a host-capability call that requires a host-issued dispatch token.
+			// Mirror production's SceneAccessServer.beginDispatch — mint a dispatch
+			// context for the owner (char-alice) and run the gated RPCs through it.
 			// CreateScene above is not self-gated, so it uses the pre-dispatch context;
-			// the title-only UpdateScene specs are likewise un-gated and ride this
-			// context harmlessly. Without this the self-gate fails with "plugin called
-			// host capability without a host-issued dispatch token".
+			// the UpdateScene specs below are now self-gated too (holomush-ug7sq) and
+			// genuinely require this owner dispatch context. Without it the self-gate
+			// fails with "plugin called host capability without a host-issued dispatch
+			// token".
 			dispatchActor := core.Actor{Kind: core.ActorCharacter, ID: "char-alice"}
 			dctx, release, err := lifecyclehost.BeginServiceDispatch(lifecyclectx, "core-scenes", dispatchActor, "")
 			Expect(err).NotTo(HaveOccurred())

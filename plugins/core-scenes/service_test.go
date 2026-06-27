@@ -1395,6 +1395,7 @@ func TestSceneServiceUpdateSceneAppliesTitleChange(t *testing.T) {
 		Visibility: string(SceneVisibilityOpen),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	resp, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		CharacterId: "char-alice",
@@ -1413,6 +1414,7 @@ func TestSceneServiceUpdateSceneRejectsEndedScene(t *testing.T) {
 		State: string(SceneStateEnded),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		CharacterId: "char-alice",
@@ -1435,6 +1437,7 @@ func TestSceneServiceUpdateSceneAppliesContentWarnings(t *testing.T) {
 		ContentWarnings: []string{"violence"},
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		CharacterId:     "char-alice",
@@ -1456,6 +1459,7 @@ func TestSceneServiceUpdateSceneRejectsEmptyTitleInMask(t *testing.T) {
 		Visibility: string(SceneVisibilityOpen),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		CharacterId: "char-alice",
@@ -1476,6 +1480,7 @@ func TestSceneServiceUpdateSceneRejectsUnknownMaskPath(t *testing.T) {
 		State: string(SceneStateActive),
 	}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		CharacterId: "char-alice",
@@ -1511,6 +1516,7 @@ func TestSceneServiceUpdateSceneEmptyMaskIsNoOp(t *testing.T) {
 				Visibility: string(SceneVisibilityOpen),
 			}
 			svc := newTestService(t, store)
+			svc.SetHostEvaluator(allowEvaluator{})
 
 			resp, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 				CharacterId: "char-alice",
@@ -1524,6 +1530,71 @@ func TestSceneServiceUpdateSceneEmptyMaskIsNoOp(t *testing.T) {
 			assert.Equal(t, "Unchanged", store.scenes["scene-1"].Title)
 		})
 	}
+}
+
+// TestSceneServiceUpdateSceneDeniedWhenPolicyDenies asserts UpdateScene
+// self-enforces ABAC at the service layer (parity with End/Pause/Resume per
+// INV-SCENE-65): a denied subject is rejected with PermissionDenied before the
+// store is touched, so authorization holds for every caller — not only the
+// telnet command path that gates at dispatch.
+func TestSceneServiceUpdateSceneDeniedWhenPolicyDenies(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-bob", Title: "Original", State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(denyEvaluator{})
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId: "char-mallory",
+		SceneId:     "scene-1",
+		Title:       "Hijacked",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	// Gate fires before the store: the scene title is untouched.
+	assert.Equal(t, "Original", store.scenes["scene-1"].Title)
+}
+
+// TestSceneServiceUpdateSceneFailsClosedWithoutEvaluator asserts UpdateScene
+// fails closed (Internal) when no evaluator is wired, mirroring the sibling
+// lifecycle handlers — an unconfigured permission check MUST NOT silently
+// permit a mutation.
+func TestSceneServiceUpdateSceneFailsClosedWithoutEvaluator(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", Title: "Original", State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen)}
+	svc := newTestService(t, store) // no evaluator wired
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+		Title:       "Updated",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+	// Fail-closed: the scene title is untouched.
+	assert.Equal(t, "Original", store.scenes["scene-1"].Title)
+}
+
+// TestSceneServiceUpdateSceneFailsClosedWhenEvaluatorErrors asserts UpdateScene
+// fails closed (Internal) when the evaluator itself errors — the eval-error
+// branch surfaces an opaque Internal and never proceeds to mutate.
+func TestSceneServiceUpdateSceneFailsClosedWhenEvaluatorErrors(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", Title: "Original", State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(errorEvaluator{})
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+		Title:       "Updated",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+	// Fail-closed: the scene title is untouched.
+	assert.Equal(t, "Original", store.scenes["scene-1"].Title)
 }
 
 func TestSceneServiceJoinSceneInsertsMemberAndReturnsSuccess(t *testing.T) {
@@ -1981,6 +2052,7 @@ func TestUpdateScene_EmitsPoseOrderChangedIC_OnModeChange(t *testing.T) {
 	sink := &recordingEventSink{}
 	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		SceneId:       "scene-mode-change",
@@ -2015,6 +2087,7 @@ func TestUpdateScene_NoEmit_OnNoModeChange(t *testing.T) {
 	sink := &recordingEventSink{}
 	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		SceneId:       "scene-mode-noop",
@@ -2048,6 +2121,7 @@ func TestUpdateScene_NoEmit_OnNonModeUpdate(t *testing.T) {
 	sink := &recordingEventSink{}
 	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		SceneId:     "scene-other-update",
