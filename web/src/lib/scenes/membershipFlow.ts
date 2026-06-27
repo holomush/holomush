@@ -22,8 +22,24 @@ export async function inviteCharacters({
 	targetIds,
 }: Base & { targetIds: string[] }): Promise<void> {
 	const sessionId = await ensureSession(characterId);
+	let invitedAny = false;
 	for (const targetCharacterId of targetIds) {
-		await inviteToScene(sessionId, { characterId, sceneId, targetCharacterId });
+		try {
+			await inviteToScene(sessionId, { characterId, sceneId, targetCharacterId });
+			invitedAny = true;
+		} catch (error) {
+			// Partial successes stand (see docstring): refresh the roster so the
+			// UI reflects invites that already took effect before re-surfacing.
+			// A refetch failure here must not mask the original invite error.
+			if (invitedAny) {
+				try {
+					await refetch(sceneId, characterId);
+				} catch {
+					// best-effort refresh; the original invite failure is authoritative
+				}
+			}
+			throw error;
+		}
 	}
 	await refetch(sceneId, characterId);
 }

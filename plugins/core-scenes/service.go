@@ -1251,6 +1251,22 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 	)
 	defer span.End()
 
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before the ABAC evaluation and store mutation, so a caller
+	// authorized as one character cannot remove a different member by forging
+	// character_id.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.leave_scene actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to leave for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
 	if s.evaluator == nil {
 		slog.WarnContext(ctx, "scene.membership.leave evaluator not configured",
 			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
@@ -1340,6 +1356,21 @@ func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.Invit
 	)
 	defer span.End()
 
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before the ABAC evaluation and store mutation, so a caller
+	// authorized as one character cannot invite as another.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.invite_to_scene actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to invite for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
 	if s.evaluator == nil {
 		slog.WarnContext(ctx, "scene.membership.invite evaluator not configured",
 			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
@@ -1391,6 +1422,21 @@ func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickF
 		attribute.String("target_id", req.GetTargetCharacterId()),
 	)
 	defer span.End()
+
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before the ABAC evaluation and store mutation, so a caller
+	// authorized as one character cannot kick as another.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.kick_from_scene actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to kick for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
 
 	if s.evaluator == nil {
 		slog.WarnContext(ctx, "scene.membership.kick evaluator not configured",
@@ -1454,6 +1500,21 @@ func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.T
 		attribute.String("new_owner", req.GetNewOwnerCharacterId()),
 	)
 	defer span.End()
+
+	// Defense-in-depth identity cross-check (mirrors WatchScene): advisory
+	// actor metadata that contradicts the request's acting character_id is
+	// rejected before the ABAC evaluation and store mutation, so a caller
+	// authorized as one character cannot transfer ownership as another.
+	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok &&
+		kind == pluginsdk.ActorCharacter && id != req.GetCharacterId() {
+		slog.WarnContext(
+			ctx, "scene.service.transfer_ownership actor metadata mismatch",
+			"metadata_character_id", id,
+			"request_character_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+		)
+		return nil, status.Error(codes.PermissionDenied, "not permitted to transfer for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
 
 	if s.evaluator == nil {
 		slog.WarnContext(ctx, "scene.membership.transfer evaluator not configured",

@@ -1245,6 +1245,7 @@ message WebInviteToSceneRequest {
   // target_character_id is the invitee from the directory picker; required.
   string target_character_id = 4;
 }
+
 // WebInviteToSceneResponse is empty.
 message WebInviteToSceneResponse {}
 
@@ -1259,6 +1260,7 @@ message WebKickFromSceneRequest {
   // target_character_id is the member to remove; required.
   string target_character_id = 4;
 }
+
 // WebKickFromSceneResponse is empty.
 message WebKickFromSceneResponse {}
 
@@ -1273,6 +1275,7 @@ message WebTransferOwnershipRequest {
   // new_owner_character_id is the existing member who becomes owner; required.
   string new_owner_character_id = 4;
 }
+
 // WebTransferOwnershipResponse is empty.
 message WebTransferOwnershipResponse {}
 
@@ -1285,5 +1288,6 @@ message WebLeaveSceneRequest {
   // scene_id identifies the scene to leave; required.
   string scene_id = 3;
 }
+
 // WebLeaveSceneResponse is empty.
 message WebLeaveSceneResponse {}
