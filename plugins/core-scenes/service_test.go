@@ -1344,7 +1344,8 @@ func TestSceneServiceInviteToSceneDeniedWhenPolicyDenies(t *testing.T) {
 	svc.SetHostEvaluator(denyEvaluator{})
 
 	_, err := svc.InviteToScene(context.Background(), &scenev1.InviteToSceneRequest{
-		CharacterId: "char-mallory", SceneId: "scene-1", TargetCharacterId: "char-eve"})
+		CharacterId: "char-mallory", SceneId: "scene-1", TargetCharacterId: "char-eve",
+	})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
@@ -1355,7 +1356,8 @@ func TestSceneServiceKickFromSceneDeniedWhenPolicyDenies(t *testing.T) {
 	svc := newTestService(t, store)
 	svc.SetHostEvaluator(denyEvaluator{})
 	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
-		CharacterId: "char-mallory", SceneId: "scene-1", TargetCharacterId: "char-eve"})
+		CharacterId: "char-mallory", SceneId: "scene-1", TargetCharacterId: "char-eve",
+	})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
@@ -1366,7 +1368,8 @@ func TestSceneServiceTransferOwnershipDeniedWhenPolicyDenies(t *testing.T) {
 	svc := newTestService(t, store)
 	svc.SetHostEvaluator(denyEvaluator{})
 	_, err := svc.TransferOwnership(context.Background(), &scenev1.TransferOwnershipRequest{
-		CharacterId: "char-mallory", SceneId: "scene-1", NewOwnerCharacterId: "char-eve"})
+		CharacterId: "char-mallory", SceneId: "scene-1", NewOwnerCharacterId: "char-eve",
+	})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
@@ -1377,7 +1380,8 @@ func TestSceneServiceLeaveSceneDeniedWhenPolicyDenies(t *testing.T) {
 	svc := newTestService(t, store)
 	svc.SetHostEvaluator(denyEvaluator{})
 	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
-		CharacterId: "char-mallory", SceneId: "scene-1"})
+		CharacterId: "char-mallory", SceneId: "scene-1",
+	})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }

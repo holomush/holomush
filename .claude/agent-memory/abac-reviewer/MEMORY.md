@@ -545,3 +545,31 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   the diff gates, flag it — either narrow the INV summary or defer the annotation until
   all clauses are upheld. Non-blocking (contained false-green, sound posture on the 3
   in-scope handlers).
+
+## ABAC-subject spoofing: ownership MUST precede Evaluate (holomush-5rh.24.12, 2026-06-26)
+
+When a gRPC handler uses a CLIENT-SUPPLIED `req.CharacterId` as the ABAC subject
+(`access.CharacterSubject(req.GetCharacterId())`), the handler MUST verify that
+character is owned by the resolved player session BEFORE calling `accessEngine.Evaluate`
+— otherwise a caller spoofs any principal. Canonical correct shape in
+`internal/grpc/auth_handlers.go::ListAllCharacters`: resolvePlayerSession →
+ulid.Parse(charId) (NotFound on bad) → charRepo.ListByPlayer(ps.PlayerID) + scan
+`c.ID == charID` (NotFound if absent) → THEN NewAccessRequest + Evaluate → THEN the
+actual read (ListAll). `world.Character.ID` is `ulid.ULID` ([16]byte) so `==` is a
+correct value compare. Parse-fail and not-owned return IDENTICAL NotFound (no
+enumeration oracle). When reviewing any handler that stamps an ABAC subject from
+request fields, trace the ordering: ownership/identity binding first, policy second,
+data read last. CharacterSubject("") panics — confirm an upstream parse rejects empty.
+
+## Target-only seeds need no AttributeProvider (INV-ACCESS-9 pattern)
+
+A seed with no `when` clause (e.g. `permit(principal is character, action in [...],
+resource is character_directory);`) references zero attributes, so registering an
+AttributeProvider is NOT required — `TestValidateSeedProviderCoverage_TargetOnlyMatchesNotFlagged`
+exempts it. Don't flag a missing provider for target-only seeds. New singleton resource:
+add prefix const + append to `knownPrefixes` (else NewAccessRequest rejects the ref),
+provide a `<Type>Resource()` returning `<type>:all`; DSL `resource is <type>` matches the
+prefix-derived type. Binding a multi-clause INV to the DENY test (deny engine +
+NO ListAll mock expectation, so a read would fail the test) is the defensible choice —
+it pins the security-critical gate-blocks-read clause; sibling permit/field-shape clauses
+MAY stay unannotated (low, non-blocking).

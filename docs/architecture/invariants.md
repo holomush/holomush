@@ -390,7 +390,7 @@ invariants.
 | `INV-ACCESS-6` | Option order MUST NOT affect the resulting stack: Start(t,A,B) and Start(t,B,A) produce identical permit/deny behavior. | `INV-RA-6` | pending |
 | `INV-ACCESS-7` | ABAC denies subscribe to events.*.system.* (and audit.>) streams for kind={plugin\|character} at the gRPC subscribe boundary; the Rekey system audit event lands on a subject those principals cannot read. | `INV-15` | pending |
 | `INV-ACCESS-8` | Two ABAC seed forbid policies MUST deny character and plugin principals from reading events.*.system.crypto_totp.* streams (sub-epic A; A16 extends INV-15's system-namespace deny across crypto audit namespaces). | `INV-A16` | pending |
-| `INV-ACCESS-9` | The character-directory read (CoreService.ListAllCharacters) is ABAC-gated by action=list_character_directory on resource=character_directory, seeded default-permit for any authenticated character principal (registered or guest); it exposes character id+name only — connection/online state is NOT included and requires a separate, more-restrictive permission. | — | pending |
+| `INV-ACCESS-9` | The character-directory read (CoreService.ListAllCharacters) is ABAC-gated by action=list_character_directory on resource=character_directory, seeded default-permit for any authenticated character principal (registered or guest); it exposes character id+name only — connection/online state is NOT included and requires a separate, more-restrictive permission. | — | bound |
 
 ### `INV-SESSION`
 

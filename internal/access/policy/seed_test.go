@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 40 permit + 9 forbid = 49 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location + 1 eykuh.3 plugin world.mutation own-location + 11 holomush-kplrr plugin host-capability default-permit seeds + 1 holomush-xakba plugin instance-level stream read)
-	assert.Len(t, seeds, 49, "expected 49 seed policies (40 permit, 9 forbid)")
+	// 41 permit + 9 forbid = 50 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds + 2 phase-5 sub-epic D events.*.system.crypto_policy.* deny seeds + 2 phase-5 sub-epic E events.*.system.* broad deny seeds + 1 phase-5 iwzt staff-read-unrestricted-history + 1 presence list_presence_same_location + 1 eykuh.3 plugin world.mutation own-location + 11 holomush-kplrr plugin host-capability default-permit seeds + 1 holomush-xakba plugin instance-level stream read + 1 character-directory INV-ACCESS-9)
+	assert.Len(t, seeds, 50, "expected 50 seed policies (41 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 40, permitCount, "expected 40 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read)")
+	assert.Equal(t, 41, permitCount, "expected 41 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 character-directory INV-ACCESS-9)")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -137,6 +137,8 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:plugin-cap-stream",
 		"seed:plugin-cap-audit",
 		"seed:plugin-stream-read",
+		// Character directory (INV-ACCESS-9)
+		"seed:directory-list-characters",
 	}
 
 	seeds := SeedPolicies()
@@ -450,4 +452,27 @@ func TestSeedPoliciesPlayerTeleportPolicyExists(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "seed:player-teleport policy must exist")
+}
+
+// Character directory policy tests (INV-ACCESS-9)
+
+func TestSeedPoliciesDirectoryListCharactersPolicyExists(t *testing.T) {
+	seeds := SeedPolicies()
+	var found bool
+	for _, s := range seeds {
+		if s.Name == "seed:directory-list-characters" {
+			found = true
+			compiler := NewCompiler(emptySchema())
+			compiled, _, err := compiler.Compile(s.DSLText)
+			require.NoError(t, err)
+			assert.Equal(t, "permit", string(compiled.Effect),
+				"seed:directory-list-characters must be a permit policy")
+			assert.Contains(t, compiled.Target.ActionList, "list_character_directory",
+				"seed:directory-list-characters must include list_character_directory action")
+			rType := "character_directory"
+			assert.Equal(t, &rType, compiled.Target.ResourceType,
+				"seed:directory-list-characters must target character_directory resources")
+		}
+	}
+	assert.True(t, found, "seed:directory-list-characters policy must exist (INV-ACCESS-9)")
 }

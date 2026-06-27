@@ -2134,7 +2134,9 @@ invariants:
       on resource=character_directory, seeded default-permit for any authenticated character principal (registered or guest);
       it exposes character id+name only — connection/online state is NOT included and requires a separate, more-restrictive
       permission."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/grpc/auth_handlers_test.go"
 
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the

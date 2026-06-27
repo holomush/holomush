@@ -272,3 +272,15 @@
   `mockCharLister` which only has ListByPlayer→not full impl), then check each defines the new method. Narrow ISP test
   fakes are SAFE (don't implement the full iface). To prove harness compiles, run a test:int pkg that IMPORTS it
   (test/integration/...), never just the changed pkg's own test.
+- **gofumpt const-block-comment regrouping (5rh.24.12 NOT READY, 2026-06-26) — same fmt-drift trap as .24.4/.5.**
+  Inserting a `// Doc` comment line BEFORE the last entry of an aligned const block and aligning ALL entries to the
+  new longest name is NOT gofumpt-clean: gofumpt breaks the alignment section at the comment, so entries above align
+  among themselves (narrow) and the post-comment entry is its own group. `task fmt:check` (pr-prep fast lane / CI gate)
+  goes RED; `task build`/unit tests stay GREEN (gofumpt orthogonal to compile). ALWAYS run `task fmt:check` on any diff
+  touching a Go const/var/struct block regardless of green build — never trust "the realignment is benign". fmt:check
+  is whole-repo: it also surfaces PRE-EXISTING drift in out-of-scope siblings (here plugins/core-scenes/service_test.go)
+  — note those separately, they don't gate the bead but redden branch fmt. Rest of this bead was CLEAN: slog.ErrorContext
+  (not errutil) FINE per file convention + vdy2z precedent (ctx carried, opaque "internal error" returned, no leak);
+  deny-test binding genuine (mock leaves ListAll un-expected → fails if gate doesn't block before read). One real
+  non-blocker: handler claims "mirrors list_focus_presence.go:116-137" but DROPPED the precedent's accessEngine==nil
+  guard at :100-107 (panic-recovered-as-Internal = fail-closed not fail-open, so Medium not blocker).
