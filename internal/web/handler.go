@@ -90,6 +90,8 @@ type CoreClient interface {
 	ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error)
 	// Liveness RPCs
 	RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error)
+	// Directory RPCs
+	ListAllCharacters(ctx context.Context, req *corev1.ListAllCharactersRequest) (*corev1.ListAllCharactersResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the

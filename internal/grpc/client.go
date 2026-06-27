@@ -211,6 +211,15 @@ func (c *Client) ListCharacters(ctx context.Context, req *corev1.ListCharactersR
 	return resp, nil
 }
 
+// ListAllCharacters delegates to CoreService.ListAllCharacters (directory).
+func (c *Client) ListAllCharacters(ctx context.Context, req *corev1.ListAllCharactersRequest) (*corev1.ListAllCharactersResponse, error) {
+	resp, err := c.client.ListAllCharacters(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListAllCharacters").Wrap(err)
+	}
+	return resp, nil
+}
+
 // RequestPasswordReset requests a password reset.
 func (c *Client) RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error) {
 	resp, err := c.client.RequestPasswordReset(ctx, req)

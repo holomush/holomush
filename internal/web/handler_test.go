@@ -115,6 +115,11 @@ type mockCoreClient struct {
 	refreshConnectionErr   error
 	refreshConnectionCalls atomic.Int32
 	refreshConnectionReq   atomic.Pointer[corev1.RefreshConnectionRequest] // last captured request (atomic for -race)
+
+	// ListAllCharacters fields
+	listAllCharactersResp *corev1.ListAllCharactersResponse
+	listAllCharactersErr  error
+	listAllCharactersReq  *corev1.ListAllCharactersRequest // captured for assertion
 }
 
 func (m *mockCoreClient) HandleCommand(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -172,6 +177,11 @@ func (m *mockCoreClient) CreateCharacter(_ context.Context, _ *corev1.CreateChar
 
 func (m *mockCoreClient) ListCharacters(_ context.Context, _ *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error) {
 	return m.listCharsResp, m.listCharsErr
+}
+
+func (m *mockCoreClient) ListAllCharacters(_ context.Context, req *corev1.ListAllCharactersRequest) (*corev1.ListAllCharactersResponse, error) {
+	m.listAllCharactersReq = req
+	return m.listAllCharactersResp, m.listAllCharactersErr
 }
 
 func (m *mockCoreClient) RequestPasswordReset(_ context.Context, _ *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error) {

@@ -131,6 +131,10 @@ func (m *mockGRPCClient) ListCharacters(_ context.Context, _ *corev1.ListCharact
 	return nil, nil
 }
 
+func (m *mockGRPCClient) ListAllCharacters(_ context.Context, _ *corev1.ListAllCharactersRequest) (*corev1.ListAllCharactersResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) RequestPasswordReset(_ context.Context, _ *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error) {
 	return nil, nil
 }

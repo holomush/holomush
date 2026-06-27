@@ -1187,3 +1187,23 @@ func TestWebCreateGuestReturnsErrorMessageOnRPCFailure(t *testing.T) {
 	assert.Equal(t, "guest creation error", resp.Msg.GetErrorMessage())
 	assert.Empty(t, resp.Header().Get(headerSetSessionToken))
 }
+
+// --- WebListAllCharacters ---
+
+func TestWebListAllCharactersForwardsTokenAndReturnsDirectory(t *testing.T) {
+	client := &mockCoreClient{
+		listAllCharactersResp: &corev1.ListAllCharactersResponse{
+			Characters: []*corev1.CharacterDirectoryEntry{{CharacterId: "c1", Name: "Alice"}},
+		},
+	}
+	h := NewHandler(client)
+	req := requestWithToken(&webv1.WebListAllCharactersRequest{CharacterId: "char-1"}, "tok-dir")
+
+	resp, err := h.WebListAllCharacters(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetCharacters(), 1)
+	assert.Equal(t, "Alice", resp.Msg.GetCharacters()[0].GetName())
+	require.NotNil(t, client.listAllCharactersReq)
+	assert.Equal(t, "tok-dir", client.listAllCharactersReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", client.listAllCharactersReq.GetCharacterId())
+}
