@@ -54,6 +54,10 @@ const (
 	WebService_WebEndScene_FullMethodName                   = "/holomush.web.v1.WebService/WebEndScene"
 	WebService_WebPauseScene_FullMethodName                 = "/holomush.web.v1.WebService/WebPauseScene"
 	WebService_WebResumeScene_FullMethodName                = "/holomush.web.v1.WebService/WebResumeScene"
+	WebService_WebInviteToScene_FullMethodName              = "/holomush.web.v1.WebService/WebInviteToScene"
+	WebService_WebKickFromScene_FullMethodName              = "/holomush.web.v1.WebService/WebKickFromScene"
+	WebService_WebTransferOwnership_FullMethodName          = "/holomush.web.v1.WebService/WebTransferOwnership"
+	WebService_WebLeaveScene_FullMethodName                 = "/holomush.web.v1.WebService/WebLeaveScene"
 	WebService_WebExportScene_FullMethodName                = "/holomush.web.v1.WebService/WebExportScene"
 	WebService_WebSetSceneFocus_FullMethodName              = "/holomush.web.v1.WebService/WebSetSceneFocus"
 	WebService_WebListPublishedScenes_FullMethodName        = "/holomush.web.v1.WebService/WebListPublishedScenes"
@@ -218,6 +222,14 @@ type WebServiceClient interface {
 	WebPauseScene(ctx context.Context, in *WebPauseSceneRequest, opts ...grpc.CallOption) (*WebPauseSceneResponse, error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(ctx context.Context, in *WebResumeSceneRequest, opts ...grpc.CallOption) (*WebResumeSceneResponse, error)
+	// WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token).
+	WebInviteToScene(ctx context.Context, in *WebInviteToSceneRequest, opts ...grpc.CallOption) (*WebInviteToSceneResponse, error)
+	// WebKickFromScene proxies to SceneAccessService.KickFromScene.
+	WebKickFromScene(ctx context.Context, in *WebKickFromSceneRequest, opts ...grpc.CallOption) (*WebKickFromSceneResponse, error)
+	// WebTransferOwnership proxies to SceneAccessService.TransferOwnership.
+	WebTransferOwnership(ctx context.Context, in *WebTransferOwnershipRequest, opts ...grpc.CallOption) (*WebTransferOwnershipResponse, error)
+	// WebLeaveScene proxies to SceneAccessService.LeaveScene.
+	WebLeaveScene(ctx context.Context, in *WebLeaveSceneRequest, opts ...grpc.CallOption) (*WebLeaveSceneResponse, error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -579,6 +591,46 @@ func (c *webServiceClient) WebResumeScene(ctx context.Context, in *WebResumeScen
 	return out, nil
 }
 
+func (c *webServiceClient) WebInviteToScene(ctx context.Context, in *WebInviteToSceneRequest, opts ...grpc.CallOption) (*WebInviteToSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebInviteToSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebInviteToScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebKickFromScene(ctx context.Context, in *WebKickFromSceneRequest, opts ...grpc.CallOption) (*WebKickFromSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebKickFromSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebKickFromScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebTransferOwnership(ctx context.Context, in *WebTransferOwnershipRequest, opts ...grpc.CallOption) (*WebTransferOwnershipResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebTransferOwnershipResponse)
+	err := c.cc.Invoke(ctx, WebService_WebTransferOwnership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebLeaveScene(ctx context.Context, in *WebLeaveSceneRequest, opts ...grpc.CallOption) (*WebLeaveSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebLeaveSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebLeaveScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *webServiceClient) WebExportScene(ctx context.Context, in *WebExportSceneRequest, opts ...grpc.CallOption) (*WebExportSceneResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebExportSceneResponse)
@@ -786,6 +838,14 @@ type WebServiceServer interface {
 	WebPauseScene(context.Context, *WebPauseSceneRequest) (*WebPauseSceneResponse, error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(context.Context, *WebResumeSceneRequest) (*WebResumeSceneResponse, error)
+	// WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token).
+	WebInviteToScene(context.Context, *WebInviteToSceneRequest) (*WebInviteToSceneResponse, error)
+	// WebKickFromScene proxies to SceneAccessService.KickFromScene.
+	WebKickFromScene(context.Context, *WebKickFromSceneRequest) (*WebKickFromSceneResponse, error)
+	// WebTransferOwnership proxies to SceneAccessService.TransferOwnership.
+	WebTransferOwnership(context.Context, *WebTransferOwnershipRequest) (*WebTransferOwnershipResponse, error)
+	// WebLeaveScene proxies to SceneAccessService.LeaveScene.
+	WebLeaveScene(context.Context, *WebLeaveSceneRequest) (*WebLeaveSceneResponse, error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -913,6 +973,18 @@ func (UnimplementedWebServiceServer) WebPauseScene(context.Context, *WebPauseSce
 }
 func (UnimplementedWebServiceServer) WebResumeScene(context.Context, *WebResumeSceneRequest) (*WebResumeSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebResumeScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebInviteToScene(context.Context, *WebInviteToSceneRequest) (*WebInviteToSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebInviteToScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebKickFromScene(context.Context, *WebKickFromSceneRequest) (*WebKickFromSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebKickFromScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebTransferOwnership(context.Context, *WebTransferOwnershipRequest) (*WebTransferOwnershipResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebTransferOwnership not implemented")
+}
+func (UnimplementedWebServiceServer) WebLeaveScene(context.Context, *WebLeaveSceneRequest) (*WebLeaveSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebLeaveScene not implemented")
 }
 func (UnimplementedWebServiceServer) WebExportScene(context.Context, *WebExportSceneRequest) (*WebExportSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebExportScene not implemented")
@@ -1519,6 +1591,78 @@ func _WebService_WebResumeScene_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebInviteToScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebInviteToSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebInviteToScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebInviteToScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebInviteToScene(ctx, req.(*WebInviteToSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebKickFromScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebKickFromSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebKickFromScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebKickFromScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebKickFromScene(ctx, req.(*WebKickFromSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebTransferOwnership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebTransferOwnershipRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebTransferOwnership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebTransferOwnership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebTransferOwnership(ctx, req.(*WebTransferOwnershipRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebLeaveScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebLeaveSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebLeaveScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebLeaveScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebLeaveScene(ctx, req.(*WebLeaveSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WebService_WebExportScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WebExportSceneRequest)
 	if err := dec(in); err != nil {
@@ -1739,6 +1883,22 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebResumeScene",
 			Handler:    _WebService_WebResumeScene_Handler,
+		},
+		{
+			MethodName: "WebInviteToScene",
+			Handler:    _WebService_WebInviteToScene_Handler,
+		},
+		{
+			MethodName: "WebKickFromScene",
+			Handler:    _WebService_WebKickFromScene_Handler,
+		},
+		{
+			MethodName: "WebTransferOwnership",
+			Handler:    _WebService_WebTransferOwnership_Handler,
+		},
+		{
+			MethodName: "WebLeaveScene",
+			Handler:    _WebService_WebLeaveScene_Handler,
 		},
 		{
 			MethodName: "WebExportScene",

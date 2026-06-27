@@ -295,6 +295,15 @@ service WebService {
   // WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
   rpc WebResumeScene(WebResumeSceneRequest) returns (WebResumeSceneResponse);
 
+  // WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token).
+  rpc WebInviteToScene(WebInviteToSceneRequest) returns (WebInviteToSceneResponse);
+  // WebKickFromScene proxies to SceneAccessService.KickFromScene.
+  rpc WebKickFromScene(WebKickFromSceneRequest) returns (WebKickFromSceneResponse);
+  // WebTransferOwnership proxies to SceneAccessService.TransferOwnership.
+  rpc WebTransferOwnership(WebTransferOwnershipRequest) returns (WebTransferOwnershipResponse);
+  // WebLeaveScene proxies to SceneAccessService.LeaveScene.
+  rpc WebLeaveScene(WebLeaveSceneRequest) returns (WebLeaveSceneResponse);
+
   // WebExportScene renders the verified player's owned character's scene IC
   // log to a downloadable document. Proxies to SceneAccessService.ExportScene;
   // player_session_token is read from the HTTP cookie by gateway middleware.
@@ -1224,3 +1233,57 @@ message WebResumeSceneResponse {
   // scene is the scene row after the resumed transition.
   holomush.scene.v1.SceneInfo scene = 1;
 }
+
+// WebInviteToSceneRequest proxies to SceneAccessService.InviteToScene.
+message WebInviteToSceneRequest {
+  // session_id is forwarded to the facade.
+  string session_id = 1;
+  // character_id selects the acting owned alt (the inviter).
+  string character_id = 2;
+  // scene_id identifies the scene; required.
+  string scene_id = 3;
+  // target_character_id is the invitee from the directory picker; required.
+  string target_character_id = 4;
+}
+// WebInviteToSceneResponse is empty.
+message WebInviteToSceneResponse {}
+
+// WebKickFromSceneRequest proxies to SceneAccessService.KickFromScene.
+message WebKickFromSceneRequest {
+  // session_id is forwarded to the facade.
+  string session_id = 1;
+  // character_id selects the acting owned alt (the owner).
+  string character_id = 2;
+  // scene_id identifies the scene; required.
+  string scene_id = 3;
+  // target_character_id is the member to remove; required.
+  string target_character_id = 4;
+}
+// WebKickFromSceneResponse is empty.
+message WebKickFromSceneResponse {}
+
+// WebTransferOwnershipRequest proxies to SceneAccessService.TransferOwnership.
+message WebTransferOwnershipRequest {
+  // session_id is forwarded to the facade.
+  string session_id = 1;
+  // character_id selects the acting owned alt (the current owner).
+  string character_id = 2;
+  // scene_id identifies the scene; required.
+  string scene_id = 3;
+  // new_owner_character_id is the existing member who becomes owner; required.
+  string new_owner_character_id = 4;
+}
+// WebTransferOwnershipResponse is empty.
+message WebTransferOwnershipResponse {}
+
+// WebLeaveSceneRequest proxies to SceneAccessService.LeaveScene.
+message WebLeaveSceneRequest {
+  // session_id is forwarded to the facade.
+  string session_id = 1;
+  // character_id selects the acting owned alt (the leaver).
+  string character_id = 2;
+  // scene_id identifies the scene to leave; required.
+  string scene_id = 3;
+}
+// WebLeaveSceneResponse is empty.
+message WebLeaveSceneResponse {}

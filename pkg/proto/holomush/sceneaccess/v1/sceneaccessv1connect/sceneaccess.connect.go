@@ -60,6 +60,18 @@ const (
 	// SceneAccessServiceResumeSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// ResumeScene RPC.
 	SceneAccessServiceResumeSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/ResumeScene"
+	// SceneAccessServiceInviteToSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// InviteToScene RPC.
+	SceneAccessServiceInviteToSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/InviteToScene"
+	// SceneAccessServiceKickFromSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// KickFromScene RPC.
+	SceneAccessServiceKickFromSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/KickFromScene"
+	// SceneAccessServiceTransferOwnershipProcedure is the fully-qualified name of the
+	// SceneAccessService's TransferOwnership RPC.
+	SceneAccessServiceTransferOwnershipProcedure = "/holomush.sceneaccess.v1.SceneAccessService/TransferOwnership"
+	// SceneAccessServiceLeaveSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// LeaveScene RPC.
+	SceneAccessServiceLeaveSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/LeaveScene"
 	// SceneAccessServiceExportSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// ExportScene RPC.
 	SceneAccessServiceExportSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/ExportScene"
@@ -128,6 +140,20 @@ type SceneAccessServiceClient interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// InviteToScene resolves the verified acting character from the player session
+	// (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
+	// SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
+	// (participant-wide per the relaxation, INV-SCENE-65).
+	InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error)
+	// KickFromScene forwards to SceneService.KickFromScene, which self-enforces the
+	// owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above.
+	KickFromScene(context.Context, *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error)
+	// TransferOwnership forwards to SceneService.TransferOwnership, which
+	// self-enforces the owner-only `transfer-ownership` policy (INV-SCENE-65).
+	TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error)
+	// LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
+	// participant `leave` policy (INV-SCENE-65). The owner cannot leave.
+	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -218,6 +244,30 @@ func NewSceneAccessServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(sceneAccessServiceMethods.ByName("ResumeScene")),
 			connect.WithClientOptions(opts...),
 		),
+		inviteToScene: connect.NewClient[v1.InviteToSceneRequest, v1.InviteToSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceInviteToSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("InviteToScene")),
+			connect.WithClientOptions(opts...),
+		),
+		kickFromScene: connect.NewClient[v1.KickFromSceneRequest, v1.KickFromSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceKickFromSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("KickFromScene")),
+			connect.WithClientOptions(opts...),
+		),
+		transferOwnership: connect.NewClient[v1.TransferOwnershipRequest, v1.TransferOwnershipResponse](
+			httpClient,
+			baseURL+SceneAccessServiceTransferOwnershipProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("TransferOwnership")),
+			connect.WithClientOptions(opts...),
+		),
+		leaveScene: connect.NewClient[v1.LeaveSceneRequest, v1.LeaveSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceLeaveSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("LeaveScene")),
+			connect.WithClientOptions(opts...),
+		),
 		exportScene: connect.NewClient[v1.ExportSceneRequest, v1.ExportSceneResponse](
 			httpClient,
 			baseURL+SceneAccessServiceExportSceneProcedure,
@@ -261,6 +311,10 @@ type sceneAccessServiceClient struct {
 	endScene                   *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
 	pauseScene                 *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
 	resumeScene                *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
+	inviteToScene              *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
+	kickFromScene              *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
+	transferOwnership          *connect.Client[v1.TransferOwnershipRequest, v1.TransferOwnershipResponse]
+	leaveScene                 *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
 	exportScene                *connect.Client[v1.ExportSceneRequest, v1.ExportSceneResponse]
 	setSceneFocus              *connect.Client[v1.SetSceneFocusRequest, v1.SetSceneFocusResponse]
 	listPublishedScenes        *connect.Client[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse]
@@ -306,6 +360,26 @@ func (c *sceneAccessServiceClient) PauseScene(ctx context.Context, req *connect.
 // ResumeScene calls holomush.sceneaccess.v1.SceneAccessService.ResumeScene.
 func (c *sceneAccessServiceClient) ResumeScene(ctx context.Context, req *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
 	return c.resumeScene.CallUnary(ctx, req)
+}
+
+// InviteToScene calls holomush.sceneaccess.v1.SceneAccessService.InviteToScene.
+func (c *sceneAccessServiceClient) InviteToScene(ctx context.Context, req *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error) {
+	return c.inviteToScene.CallUnary(ctx, req)
+}
+
+// KickFromScene calls holomush.sceneaccess.v1.SceneAccessService.KickFromScene.
+func (c *sceneAccessServiceClient) KickFromScene(ctx context.Context, req *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error) {
+	return c.kickFromScene.CallUnary(ctx, req)
+}
+
+// TransferOwnership calls holomush.sceneaccess.v1.SceneAccessService.TransferOwnership.
+func (c *sceneAccessServiceClient) TransferOwnership(ctx context.Context, req *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error) {
+	return c.transferOwnership.CallUnary(ctx, req)
+}
+
+// LeaveScene calls holomush.sceneaccess.v1.SceneAccessService.LeaveScene.
+func (c *sceneAccessServiceClient) LeaveScene(ctx context.Context, req *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error) {
+	return c.leaveScene.CallUnary(ctx, req)
 }
 
 // ExportScene calls holomush.sceneaccess.v1.SceneAccessService.ExportScene.
@@ -386,6 +460,20 @@ type SceneAccessServiceHandler interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// InviteToScene resolves the verified acting character from the player session
+	// (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
+	// SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
+	// (participant-wide per the relaxation, INV-SCENE-65).
+	InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error)
+	// KickFromScene forwards to SceneService.KickFromScene, which self-enforces the
+	// owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above.
+	KickFromScene(context.Context, *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error)
+	// TransferOwnership forwards to SceneService.TransferOwnership, which
+	// self-enforces the owner-only `transfer-ownership` policy (INV-SCENE-65).
+	TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error)
+	// LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
+	// participant `leave` policy (INV-SCENE-65). The owner cannot leave.
+	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -472,6 +560,30 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 		connect.WithSchema(sceneAccessServiceMethods.ByName("ResumeScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneAccessServiceInviteToSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceInviteToSceneProcedure,
+		svc.InviteToScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("InviteToScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServiceKickFromSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceKickFromSceneProcedure,
+		svc.KickFromScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("KickFromScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServiceTransferOwnershipHandler := connect.NewUnaryHandler(
+		SceneAccessServiceTransferOwnershipProcedure,
+		svc.TransferOwnership,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("TransferOwnership")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServiceLeaveSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceLeaveSceneProcedure,
+		svc.LeaveScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("LeaveScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sceneAccessServiceExportSceneHandler := connect.NewUnaryHandler(
 		SceneAccessServiceExportSceneProcedure,
 		svc.ExportScene,
@@ -520,6 +632,14 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 			sceneAccessServicePauseSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceResumeSceneProcedure:
 			sceneAccessServiceResumeSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceInviteToSceneProcedure:
+			sceneAccessServiceInviteToSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceKickFromSceneProcedure:
+			sceneAccessServiceKickFromSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceTransferOwnershipProcedure:
+			sceneAccessServiceTransferOwnershipHandler.ServeHTTP(w, r)
+		case SceneAccessServiceLeaveSceneProcedure:
+			sceneAccessServiceLeaveSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceExportSceneProcedure:
 			sceneAccessServiceExportSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceSetSceneFocusProcedure:
@@ -569,6 +689,22 @@ func (UnimplementedSceneAccessServiceHandler) PauseScene(context.Context, *conne
 
 func (UnimplementedSceneAccessServiceHandler) ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.ResumeScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.InviteToScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) KickFromScene(context.Context, *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.KickFromScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.TransferOwnership is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.LeaveScene is not implemented"))
 }
 
 func (UnimplementedSceneAccessServiceHandler) ExportScene(context.Context, *connect.Request[v1.ExportSceneRequest]) (*connect.Response[v1.ExportSceneResponse], error) {
