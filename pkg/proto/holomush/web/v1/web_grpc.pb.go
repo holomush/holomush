@@ -32,6 +32,7 @@ const (
 	WebService_WebCreateGuest_FullMethodName                = "/holomush.web.v1.WebService/WebCreateGuest"
 	WebService_WebCreateCharacter_FullMethodName            = "/holomush.web.v1.WebService/WebCreateCharacter"
 	WebService_WebListCharacters_FullMethodName             = "/holomush.web.v1.WebService/WebListCharacters"
+	WebService_WebListAllCharacters_FullMethodName          = "/holomush.web.v1.WebService/WebListAllCharacters"
 	WebService_WebLogout_FullMethodName                     = "/holomush.web.v1.WebService/WebLogout"
 	WebService_WebRequestPasswordReset_FullMethodName       = "/holomush.web.v1.WebService/WebRequestPasswordReset"
 	WebService_WebConfirmPasswordReset_FullMethodName       = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
@@ -123,6 +124,10 @@ type WebServiceClient interface {
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(ctx context.Context, in *WebListCharactersRequest, opts ...grpc.CallOption) (*WebListCharactersResponse, error)
+	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
+	// reads player_session_token from the X-Session-Token cookie; any
+	// authenticated caller (guest included) may list character names.
+	WebListAllCharacters(ctx context.Context, in *WebListAllCharactersRequest, opts ...grpc.CallOption) (*WebListAllCharactersResponse, error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -348,6 +353,16 @@ func (c *webServiceClient) WebListCharacters(ctx context.Context, in *WebListCha
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebListCharactersResponse)
 	err := c.cc.Invoke(ctx, WebService_WebListCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebListAllCharacters(ctx context.Context, in *WebListAllCharactersRequest, opts ...grpc.CallOption) (*WebListAllCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListAllCharactersResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListAllCharacters_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -677,6 +692,10 @@ type WebServiceServer interface {
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error)
+	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
+	// reads player_session_token from the X-Session-Token cookie; any
+	// authenticated caller (guest included) may list character names.
+	WebListAllCharacters(context.Context, *WebListAllCharactersRequest) (*WebListAllCharactersResponse, error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -828,6 +847,9 @@ func (UnimplementedWebServiceServer) WebCreateCharacter(context.Context, *WebCre
 }
 func (UnimplementedWebServiceServer) WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListCharacters not implemented")
+}
+func (UnimplementedWebServiceServer) WebListAllCharacters(context.Context, *WebListAllCharactersRequest) (*WebListAllCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListAllCharacters not implemented")
 }
 func (UnimplementedWebServiceServer) WebLogout(context.Context, *WebLogoutRequest) (*WebLogoutResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebLogout not implemented")
@@ -1097,6 +1119,24 @@ func _WebService_WebListCharacters_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WebServiceServer).WebListCharacters(ctx, req.(*WebListCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebListAllCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListAllCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListAllCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListAllCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListAllCharacters(ctx, req.(*WebListAllCharactersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1611,6 +1651,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebListCharacters",
 			Handler:    _WebService_WebListCharacters_Handler,
+		},
+		{
+			MethodName: "WebListAllCharacters",
+			Handler:    _WebService_WebListAllCharacters_Handler,
 		},
 		{
 			MethodName: "WebLogout",

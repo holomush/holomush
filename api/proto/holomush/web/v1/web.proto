@@ -7,6 +7,7 @@ package holomush.web.v1;
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "holomush/core/v1/core.proto";
 import "holomush/scene/v1/scene.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1";
@@ -177,6 +178,11 @@ service WebService {
   // Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
   // CodeUnauthenticated (session expired or invalid).
   rpc WebListCharacters(WebListCharactersRequest) returns (WebListCharactersResponse);
+
+  // WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
+  // reads player_session_token from the X-Session-Token cookie; any
+  // authenticated caller (guest included) may list character names.
+  rpc WebListAllCharacters(WebListAllCharactersRequest) returns (WebListAllCharactersResponse);
 
   // WebLogout ends the player session and clears the session cookie. Proxies
   // to CoreService.Logout (best-effort) when a token is present, then always
@@ -624,6 +630,19 @@ message WebListCharactersRequest {}
 message WebListCharactersResponse {
   // characters is the player's full character roster.
   repeated CharacterSummary characters = 1;
+}
+
+// WebListAllCharactersRequest proxies to CoreService.ListAllCharacters; token
+// is injected from the X-Session-Token cookie.
+message WebListAllCharactersRequest {
+  // character_id is the acting alt (forwarded as the ABAC subject). Required.
+  string character_id = 1;
+}
+
+// WebListAllCharactersResponse re-exports the directory page from core.
+message WebListAllCharactersResponse {
+  // characters is the id+name list from CoreService.ListAllCharacters.
+  repeated holomush.core.v1.CharacterDirectoryEntry characters = 1;
 }
 
 // WebLogoutRequest is the empty request to end the current session; the session

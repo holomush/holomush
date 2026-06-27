@@ -32,6 +32,7 @@ const (
 	CoreService_CreateGuest_FullMethodName               = "/holomush.core.v1.CoreService/CreateGuest"
 	CoreService_CreateCharacter_FullMethodName           = "/holomush.core.v1.CoreService/CreateCharacter"
 	CoreService_ListCharacters_FullMethodName            = "/holomush.core.v1.CoreService/ListCharacters"
+	CoreService_ListAllCharacters_FullMethodName         = "/holomush.core.v1.CoreService/ListAllCharacters"
 	CoreService_RequestPasswordReset_FullMethodName      = "/holomush.core.v1.CoreService/RequestPasswordReset"
 	CoreService_ConfirmPasswordReset_FullMethodName      = "/holomush.core.v1.CoreService/ConfirmPasswordReset"
 	CoreService_Logout_FullMethodName                    = "/holomush.core.v1.CoreService/Logout"
@@ -103,6 +104,13 @@ type CoreServiceClient interface {
 	// ListCharacters returns the authenticated player's character roster enriched
 	// with per-character session status and last-known location.
 	ListCharacters(ctx context.Context, in *ListCharactersRequest, opts ...grpc.CallOption) (*ListCharactersResponse, error)
+	// ListAllCharacters returns the id+name of every character in the game for
+	// the directory picker (fetch-all, no pagination). The handler verifies the
+	// acting character is owned by the session, then ABAC-gates on action
+	// list_character_directory (resource character_directory), seeded default-permit
+	// for any authenticated character (registered OR guest). Connection/online
+	// state is NOT included; that is a separately-permissioned attribute.
+	ListAllCharacters(ctx context.Context, in *ListAllCharactersRequest, opts ...grpc.CallOption) (*ListAllCharactersResponse, error)
 	// RequestPasswordReset begins a password-reset flow for the given email. The
 	// reply is ALWAYS success regardless of whether the email exists — this is an
 	// intentional enumeration-prevention measure; delivery is stubbed (logged).
@@ -278,6 +286,16 @@ func (c *coreServiceClient) ListCharacters(ctx context.Context, in *ListCharacte
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListCharactersResponse)
 	err := c.cc.Invoke(ctx, CoreService_ListCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListAllCharacters(ctx context.Context, in *ListAllCharactersRequest, opts ...grpc.CallOption) (*ListAllCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAllCharactersResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListAllCharacters_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -461,6 +479,13 @@ type CoreServiceServer interface {
 	// ListCharacters returns the authenticated player's character roster enriched
 	// with per-character session status and last-known location.
 	ListCharacters(context.Context, *ListCharactersRequest) (*ListCharactersResponse, error)
+	// ListAllCharacters returns the id+name of every character in the game for
+	// the directory picker (fetch-all, no pagination). The handler verifies the
+	// acting character is owned by the session, then ABAC-gates on action
+	// list_character_directory (resource character_directory), seeded default-permit
+	// for any authenticated character (registered OR guest). Connection/online
+	// state is NOT included; that is a separately-permissioned attribute.
+	ListAllCharacters(context.Context, *ListAllCharactersRequest) (*ListAllCharactersResponse, error)
 	// RequestPasswordReset begins a password-reset flow for the given email. The
 	// reply is ALWAYS success regardless of whether the email exists — this is an
 	// intentional enumeration-prevention measure; delivery is stubbed (logged).
@@ -562,6 +587,9 @@ func (UnimplementedCoreServiceServer) CreateCharacter(context.Context, *CreateCh
 }
 func (UnimplementedCoreServiceServer) ListCharacters(context.Context, *ListCharactersRequest) (*ListCharactersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListCharacters not implemented")
+}
+func (UnimplementedCoreServiceServer) ListAllCharacters(context.Context, *ListAllCharactersRequest) (*ListAllCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAllCharacters not implemented")
 }
 func (UnimplementedCoreServiceServer) RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestPasswordReset not implemented")
@@ -789,6 +817,24 @@ func _CoreService_ListCharacters_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CoreServiceServer).ListCharacters(ctx, req.(*ListCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListAllCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAllCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListAllCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListAllCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListAllCharacters(ctx, req.(*ListAllCharactersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1051,6 +1097,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListCharacters",
 			Handler:    _CoreService_ListCharacters_Handler,
+		},
+		{
+			MethodName: "ListAllCharacters",
+			Handler:    _CoreService_ListAllCharacters_Handler,
 		},
 		{
 			MethodName: "RequestPasswordReset",
