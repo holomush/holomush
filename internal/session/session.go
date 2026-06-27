@@ -279,6 +279,14 @@ type LapsedConnection struct {
 	ClientType string
 }
 
+// ConnectionCounts reports a session's connection tallies after a connection
+// mutation. Total counts connections of any client type; Grid counts only
+// grid-bearing connections (terminal + telnet), excluding comms_hub.
+type ConnectionCounts struct {
+	Total int
+	Grid  int
+}
+
 // Access provides session operations for command handlers.
 // This is a narrow subset of Store — only what handlers need.
 type Access interface {
@@ -323,7 +331,8 @@ type Store interface {
 	FindByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)
 
 	// ListByPlayer returns all non-expired sessions for a player's characters.
-	// TODO: filter by playerID when player-character relationship table exists.
+	// Filters on the denormalized sessions.player_id column, which every
+	// session row carries — so no player→character join table is required.
 	ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*Info, error)
 
 	// ListByPlayerSession returns all active/detached sessions whose
@@ -353,6 +362,25 @@ type Store interface {
 
 	// RemoveConnection removes a connection from a session.
 	RemoveConnection(ctx context.Context, connectionID ulid.ULID) error
+
+	// RemoveConnectionAndCount atomically removes connectionID from sessionID
+	// and returns the session's connection counts as observed AFTER the
+	// removal, computed in the same transaction under a sessions-row lock
+	// (D11 / INV-SCENE-27 canonical order: sessions row FOR UPDATE first).
+	// Serializing on the sessions row guarantees concurrent disconnects on the
+	// same session see a consistent post-removal count — exactly one can
+	// observe Total==0 — closing the double-cleanup race (holomush-cizj).
+	//
+	// The bool reports whether this call actually deleted a connection row
+	// (i.e. RowsAffected > 0). Callers MUST gate lifecycle cleanup on it: a
+	// duplicate disconnect for an already-removed connection returns
+	// removed=false even when Total==0, so only the caller that truly mutated
+	// state runs the (non-idempotent) leave/end-session work.
+	//
+	// Removing a connection that is absent, or whose session row is already
+	// gone, is a no-op that returns removed=false and the current counts
+	// without error.
+	RemoveConnectionAndCount(ctx context.Context, sessionID string, connectionID ulid.ULID) (ConnectionCounts, bool, error)
 
 	// CountConnections returns the number of active connections for a session.
 	CountConnections(ctx context.Context, sessionID string) (int, error)

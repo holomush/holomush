@@ -462,6 +462,176 @@ func TestGuestDisconnectEmitsSessionEndedOnCharacterStream(t *testing.T) {
 	assert.Equal(t, "Session ended.", payload.Reason)
 }
 
+// removedSignalStore wraps a session.Store and forces RemoveConnectionAndCount
+// to return fixed (counts, removed) values, so Disconnect's duplicate-disconnect
+// guard can be exercised deterministically (holomush-cizj). All other methods
+// delegate to the embedded store.
+type removedSignalStore struct {
+	session.Store
+	counts  session.ConnectionCounts
+	removed bool
+}
+
+func (s removedSignalStore) RemoveConnectionAndCount(
+	context.Context, string, ulid.ULID,
+) (session.ConnectionCounts, bool, error) {
+	return s.counts, s.removed, nil
+}
+
+// TestDisconnectGatesGuestCleanupOnRemovalSignal pins the holomush-cizj
+// duplicate-disconnect guard at the Disconnect level: guest cleanup
+// (HandleDisconnect + EndSession) runs only for the caller whose
+// RemoveConnectionAndCount actually removed the connection. A duplicate
+// disconnect for an already-removed connection_id reports removed=false and,
+// even with Total==0, MUST NOT re-emit session_ended.
+func TestDisconnectGatesGuestCleanupOnRemovalSignal(t *testing.T) {
+	tests := []struct {
+		name           string
+		removed        bool
+		wantEndedCount int
+	}{
+		{"removing caller runs cleanup", true, 1},
+		{"duplicate no-op removal skips cleanup", false, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			charID := core.NewULID()
+			sessionID := core.NewULID()
+			locationID := core.NewULID()
+			store := coretest.NewMemoryEventStore()
+			server := newDispatcherTestServer(t, store)
+
+			ctx := context.Background()
+			require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
+				ID:            sessionID.String(),
+				CharacterID:   charID,
+				CharacterName: "GuestChar",
+				LocationID:    locationID,
+				IsGuest:       true,
+				Status:        session.StatusActive,
+				TTLSeconds:    1800,
+			}))
+			// Wrap so RemoveConnectionAndCount reports Total==0 with the removed
+			// signal under test, deleting nothing — isolating the gate.
+			server.sessionStore = removedSignalStore{
+				Store:   server.sessionStore,
+				counts:  session.ConnectionCounts{Total: 0, Grid: 0},
+				removed: tt.removed,
+			}
+
+			resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
+				Meta:               &corev1.RequestMeta{RequestId: "guard-test", Timestamp: timestamppb.Now()},
+				SessionId:          sessionID.String(),
+				ConnectionId:       ulid.Make().String(),
+				PlayerSessionToken: testPlayerSessionToken,
+			})
+			require.NoError(t, err)
+			assert.True(t, resp.Success, "Disconnect is idempotent success regardless of the guard")
+
+			charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
+			require.NoError(t, err)
+			ended := 0
+			for i := range charEvents {
+				if charEvents[i].Type == core.EventTypeSessionEnded {
+					ended++
+				}
+			}
+			assert.Equal(t, tt.wantEndedCount, ended,
+				"holomush-cizj: guest session_ended emission MUST be gated on the removal signal")
+		})
+	}
+}
+
+// disconnectErrStore wraps a session.Store and injects errors into the methods
+// Disconnect calls while counting connections, so the handler's defensive
+// skip/log branches can be exercised. Unset error fields delegate to the
+// embedded store.
+type disconnectErrStore struct {
+	session.Store
+	rcacErr   error // RemoveConnectionAndCount
+	countErr  error // CountConnections
+	byTypeErr error // CountConnectionsByType
+}
+
+func (s disconnectErrStore) RemoveConnectionAndCount(
+	ctx context.Context, sid string, cid ulid.ULID,
+) (session.ConnectionCounts, bool, error) {
+	if s.rcacErr != nil {
+		return session.ConnectionCounts{}, false, s.rcacErr
+	}
+	return s.Store.RemoveConnectionAndCount(ctx, sid, cid)
+}
+
+func (s disconnectErrStore) CountConnections(ctx context.Context, sid string) (int, error) {
+	if s.countErr != nil {
+		return 0, s.countErr
+	}
+	return s.Store.CountConnections(ctx, sid)
+}
+
+func (s disconnectErrStore) CountConnectionsByType(ctx context.Context, sid, ct string) (int, error) {
+	if s.byTypeErr != nil {
+		return 0, s.byTypeErr
+	}
+	return s.Store.CountConnectionsByType(ctx, sid, ct)
+}
+
+// TestDisconnectToleratesStoreCountErrors covers Disconnect's defensive
+// branches when the session store errors while counting connections: a
+// RemoveConnectionAndCount error (connection_id path) and a CountConnections
+// error (session-level path) skip the lifecycle transition; CountConnectionsByType
+// errors are logged but non-fatal. Every case still returns idempotent success.
+func TestDisconnectToleratesStoreCountErrors(t *testing.T) {
+	boom := errors.New("store boom")
+	tests := []struct {
+		name   string
+		connID string
+		wrap   func(base session.Store) session.Store
+	}{
+		{
+			name:   "RemoveConnectionAndCount error on connection_id path",
+			connID: ulid.Make().String(),
+			wrap:   func(base session.Store) session.Store { return disconnectErrStore{Store: base, rcacErr: boom} },
+		},
+		{
+			name:   "CountConnections error on session-level path",
+			connID: "",
+			wrap:   func(base session.Store) session.Store { return disconnectErrStore{Store: base, countErr: boom} },
+		},
+		{
+			name:   "CountConnectionsByType errors are non-fatal",
+			connID: "",
+			wrap:   func(base session.Store) session.Store { return disconnectErrStore{Store: base, byTypeErr: boom} },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			charID := core.NewULID()
+			sessionID := core.NewULID()
+			store := coretest.NewMemoryEventStore()
+			server := newDispatcherTestServer(t, store)
+
+			ctx := context.Background()
+			require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
+				ID:          sessionID.String(),
+				CharacterID: charID,
+				Status:      session.StatusActive,
+				TTLSeconds:  1800,
+			}))
+			server.sessionStore = tt.wrap(server.sessionStore)
+
+			resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
+				Meta:               &corev1.RequestMeta{RequestId: "err-path-test", Timestamp: timestamppb.Now()},
+				SessionId:          sessionID.String(),
+				ConnectionId:       tt.connID,
+				PlayerSessionToken: testPlayerSessionToken,
+			})
+			require.NoError(t, err)
+			assert.True(t, resp.Success, "Disconnect returns idempotent success despite store count errors")
+		})
+	}
+}
+
 // TestAdminBootEmitsSessionEndedWithKickedCause verifies that the admin-boot
 // teardown path (triggered when a command records a BootedSession via
 // exec.RecordBootedSession) emits a session_ended event on the target

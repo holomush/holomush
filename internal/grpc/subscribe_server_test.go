@@ -252,6 +252,56 @@ func TestSubscribeRejectsConnectionIDWithoutClientType(t *testing.T) {
 	assert.Equal(t, "SUBSCRIBE_INVALID_CONNECTION", o.Code())
 }
 
+// errAddConnStore wraps a session.Store and forces AddConnection to fail;
+// every other method delegates to the embedded store. Used to drive the
+// Subscribe fail-fast path (holomush-x6tr).
+type errAddConnStore struct {
+	session.Store
+	err error
+}
+
+func (e errAddConnStore) AddConnection(context.Context, *session.Connection) error { return e.err }
+
+// TestSubscribeAddConnectionErrorFailsFastWithoutOpeningSession pins
+// holomush-x6tr: when AddConnection fails, Subscribe MUST abort with
+// SUBSCRIBE_ADD_CONNECTION_FAILED before opening the bus session, leaving no
+// untracked ("zombie") connection. A silent log-and-continue (the original
+// bug) would let CountConnections later undercount and prematurely
+// detach/delete the session.
+func TestSubscribeAddConnectionErrorFailsFastWithoutOpeningSession(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	info := &session.Info{
+		ID:          "s1",
+		ExpiresAt:   &future,
+		Status:      session.StatusActive,
+		CharacterID: core.NewULID(),
+	}
+	sub := &fakeSubscriber{stream: newFakeSessionStream()}
+	s := &CoreServer{
+		subscriber: sub,
+		sessionStore: errAddConnStore{
+			Store: newTestSessionStore(t, map[string]*session.Info{"s1": info}),
+			err:   errors.New("connection insert failed"),
+		},
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
+	}
+
+	err := s.Subscribe(&corev1.SubscribeRequest{
+		SessionId:          "s1",
+		PlayerSessionToken: testPlayerSessionToken,
+		ConnectionId:       core.NewULID().String(),
+		ClientType:         "terminal",
+	}, &fakeSubscribeStream{ctx: context.Background()})
+
+	require.Error(t, err)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "SUBSCRIBE_ADD_CONNECTION_FAILED", o.Code())
+	assert.Equal(t, 0, sub.opens,
+		"fail-fast: the bus session MUST NOT open after AddConnection fails")
+}
+
 var _ eventbus.Subscriber = (*fakeSubscriber)(nil)
 
 // concurrentFakeSubscriber is a thread-safe eventbus.Subscriber for tests

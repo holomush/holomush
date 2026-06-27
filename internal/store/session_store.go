@@ -576,6 +576,78 @@ func (s *PostgresSessionStore) RemoveConnection(ctx context.Context, connectionI
 	return nil
 }
 
+// RemoveConnectionAndCount removes a single connection and reports the
+// session's remaining connection counts plus whether a row was actually
+// deleted, all inside one transaction. See the session.Store interface doc for
+// the contract (holomush-cizj). The sessions row is locked FOR UPDATE first
+// (D11 / INV-SCENE-27 canonical order), which serializes concurrent disconnects
+// on the same session: each caller's post-delete COUNT then reflects every
+// earlier-committed removal, so exactly one observes Total==0 and runs cleanup.
+// A plain DELETE...RETURNING count would NOT suffice — under READ COMMITTED two
+// concurrent deletes are mutually invisible, so both could read Total==1 and
+// skip cleanup entirely. The returned bool (RowsAffected > 0) lets the caller
+// distinguish the removal that drove the count from a duplicate no-op.
+func (s *PostgresSessionStore) RemoveConnectionAndCount(
+	ctx context.Context,
+	sessionID string,
+	connectionID ulid.ULID,
+) (session.ConnectionCounts, bool, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return session.ConnectionCounts{}, false, oops.With("operation", "begin tx for remove connection and count").
+			With("session_id", sessionID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	// D11 canonical lock order: sessions row FOR UPDATE first. A missing
+	// session is not an error — Disconnect is idempotent and the row may
+	// already be gone; with no session there is nothing to remove and no
+	// connections remain.
+	var ignored string
+	err = tx.QueryRow(ctx, `SELECT id FROM sessions WHERE id = $1 FOR UPDATE`, sessionID).Scan(&ignored)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return session.ConnectionCounts{}, false, nil
+	}
+	if err != nil {
+		return session.ConnectionCounts{}, false, oops.With("operation", "lock session for connection removal").
+			With("session_id", sessionID).Wrap(err)
+	}
+
+	// Delete the named connection, scoped by session_id so a foreign
+	// connection ULID cannot be removed under this session (I-SEC-1). A
+	// missing connection affects zero rows — idempotent; the RowsAffected
+	// count is the "this call mutated state" signal returned below.
+	tag, err := tx.Exec(ctx,
+		`DELETE FROM session_connections WHERE id = $1 AND session_id = $2`,
+		connectionID.String(), sessionID)
+	if err != nil {
+		return session.ConnectionCounts{}, false, oops.With("operation", "remove connection").
+			With("connection_id", connectionID.String()).
+			With("session_id", sessionID).Wrap(err)
+	}
+	removed := tag.RowsAffected() > 0
+
+	// Post-delete counts within the same locked transaction. Grid =
+	// terminal + telnet (comms_hub excluded), matching the grid-presence
+	// definition used by Disconnect and recomputeSessionLiveness.
+	var counts session.ConnectionCounts
+	if err = tx.QueryRow(ctx, `
+		SELECT
+			COUNT(*),
+			COUNT(*) FILTER (WHERE client_type IN ('terminal', 'telnet'))
+		FROM session_connections WHERE session_id = $1
+	`, sessionID).Scan(&counts.Total, &counts.Grid); err != nil {
+		return session.ConnectionCounts{}, false, oops.With("operation", "count connections after removal").
+			With("session_id", sessionID).Wrap(err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return session.ConnectionCounts{}, false, oops.With("operation", "commit remove connection and count").
+			With("session_id", sessionID).Wrap(err)
+	}
+	return counts, removed, nil
+}
+
 // RefreshConnection bumps a connection's lease to now (holomush-rsoe6, I-LIVE-2).
 // The UPDATE is scoped by both id AND session_id so a connection can only be
 // refreshed by its owning session; pairing a foreign connection ULID with a
