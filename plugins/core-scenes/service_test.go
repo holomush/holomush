@@ -829,6 +829,7 @@ func TestSceneServiceLeaveSceneReturnsOpaqueInternalWhenLoadFails(t *testing.T) 
 	// Non-SCENE_NOT_FOUND error → the Internal branch, not the NotFound branch.
 	store.getErr = errors.New("pgx: connection refused")
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
 		CharacterId: "char-bob", SceneId: "scene-x",
@@ -1336,6 +1337,51 @@ func TestSceneServiceResumeSceneDeniedWhenPolicyDenies(t *testing.T) {
 	assert.Equal(t, string(SceneStatePaused), store.scenes["scene-1"].State)
 }
 
+func TestSceneServiceInviteToSceneDeniedWhenPolicyDenies(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-bob", State: string(SceneStateActive)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(denyEvaluator{})
+
+	_, err := svc.InviteToScene(context.Background(), &scenev1.InviteToSceneRequest{
+		CharacterId: "char-mallory", SceneId: "scene-1", TargetCharacterId: "char-eve"})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestSceneServiceKickFromSceneDeniedWhenPolicyDenies(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(denyEvaluator{})
+	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
+		CharacterId: "char-mallory", SceneId: "scene-1", TargetCharacterId: "char-eve"})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestSceneServiceTransferOwnershipDeniedWhenPolicyDenies(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(denyEvaluator{})
+	_, err := svc.TransferOwnership(context.Background(), &scenev1.TransferOwnershipRequest{
+		CharacterId: "char-mallory", SceneId: "scene-1", NewOwnerCharacterId: "char-eve"})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestSceneServiceLeaveSceneDeniedWhenPolicyDenies(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-owner", State: string(SceneStateActive)}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(denyEvaluator{})
+	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
+		CharacterId: "char-mallory", SceneId: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
 func TestSceneServiceUpdateSceneAppliesTitleChange(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{
@@ -1540,6 +1586,7 @@ func TestSceneServiceLeaveSceneRejectsOwnerWithFailedPrecondition(t *testing.T) 
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
 		CharacterId: "char-alice",
@@ -1560,6 +1607,7 @@ func TestSceneServiceLeaveSceneRemovesMember(t *testing.T) {
 	_, _, err := store.AddParticipant(context.Background(), "scene-ls-1", "char-bob")
 	require.NoError(t, err)
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err = svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
 		CharacterId: "char-bob",
@@ -1577,6 +1625,7 @@ func TestSceneServiceInviteToSceneCallsStore(t *testing.T) {
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
 	}))
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.InviteToScene(context.Background(), &scenev1.InviteToSceneRequest{
 		CharacterId:       "char-alice",
@@ -1596,6 +1645,7 @@ func TestSceneServiceKickFromSceneRemovesMember(t *testing.T) {
 	_, _, err := store.AddParticipant(context.Background(), "scene-kfs-1", "char-bob")
 	require.NoError(t, err)
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err = svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
 		CharacterId:       "char-alice",
@@ -1614,6 +1664,7 @@ func TestSceneServiceKickFromSceneRejectsKickingOwner(t *testing.T) {
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
 		CharacterId:       "char-alice",
@@ -1634,6 +1685,7 @@ func TestSceneServiceTransferOwnershipUpdatesOwner(t *testing.T) {
 	_, _, err := store.AddParticipant(context.Background(), "scene-tos-1", "char-bob")
 	require.NoError(t, err)
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err = svc.TransferOwnership(context.Background(), &scenev1.TransferOwnershipRequest{
 		CharacterId:         "char-alice",
@@ -1651,6 +1703,7 @@ func TestSceneServiceTransferOwnershipRejectsNonMemberTargetWithFailedPreconditi
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.TransferOwnership(context.Background(), &scenev1.TransferOwnershipRequest{
 		CharacterId:         "char-alice",
@@ -1666,6 +1719,7 @@ func TestSceneServiceTransferOwnershipRejectsNonMemberTargetWithFailedPreconditi
 
 func TestSceneServiceLeaveSceneReturnsNotFoundForMissingScene(t *testing.T) {
 	svc := newTestService(t, newFakeStore())
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
 		CharacterId: "char-bob",
@@ -1683,6 +1737,7 @@ func TestSceneServiceLeaveSceneReturnsNotFoundForNonParticipant(t *testing.T) {
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
 		CharacterId: "char-stranger",
@@ -1702,6 +1757,7 @@ func TestSceneServiceInviteToSceneReturnsAlreadyExistsForMember(t *testing.T) {
 	_, _, err := store.AddParticipant(context.Background(), "scene-inv-ae", "char-bob")
 	require.NoError(t, err)
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err = svc.InviteToScene(context.Background(), &scenev1.InviteToSceneRequest{
 		CharacterId:       "char-alice",
@@ -1720,6 +1776,7 @@ func TestSceneServiceKickFromSceneReturnsNotFoundForNonParticipant(t *testing.T)
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
 		CharacterId:       "char-alice",
@@ -1855,6 +1912,7 @@ func TestLeaveScene_EmitsSceneLeaveIC_ReasonLeft(t *testing.T) {
 	store.participants["scene-leave-emit"]["char-bob"] = "member"
 	sink := &recordingEventSink{}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 	svc.SetEventSink(sink)
 
 	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
@@ -1884,6 +1942,7 @@ func TestKickFromScene_EmitsSceneLeaveIC_ReasonKicked(t *testing.T) {
 	store.participants["scene-kick-emit"]["char-target"] = "member"
 	sink := &recordingEventSink{}
 	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
 	svc.SetEventSink(sink)
 
 	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
