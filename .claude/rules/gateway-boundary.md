@@ -36,3 +36,24 @@ When adding a new gateway endpoint:
 2. If no RPC exists for what you need, add the RPC to the core server first
 3. Have the gateway call the RPC; do **not** add a DB query, repo lookup, or service struct field to the gateway
 4. The gateway holds gRPC clients, not service instances
+
+## Structural writes use typed RPCs, not the command path
+
+Web/GUI **structural writes** (create / set / end / invite / kick / transfer —
+anything driven by a button or form) MUST go through a **typed RPC on the BFF
+facade**, never through `sendCommand` / `HandleCommand`. The command path
+(`HandleCommand`) is reserved for **human/CLI conversational verbs** typed into a
+terminal — `pose`, `say`, `ooc`, `join`.
+
+Reaching for `sendCommand` to perform a structural mutation from the GUI is the
+anti-pattern: it routes a machine-initiated action through the human
+text-command parser. If the facade has no typed RPC for the operation, **add the
+RPC** (per "How to apply" above) rather than string-building a command.
+
+| Caller                        | Surface                        | Example                       |
+| ----------------------------- | ------------------------------ | ----------------------------- |
+| GUI button / form (machine)   | typed facade RPC               | `EndScene`, `InviteToScene`   |
+| Human / CLI (conversational)  | `HandleCommand` / `sendCommand` | `pose`, `say`, `join`        |
+
+Grounded in ADR `holomush-v4qmu`
+(`docs/adr/holomush-v4qmu-typed-rpcs-structural-scene-writes-command-path-human-cli-ve.md`).

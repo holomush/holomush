@@ -135,6 +135,13 @@ All tasks MUST be reviewed before completion via `pr-review-toolkit:review-pr`. 
 | **MUST** address all findings              | Fix issues or document why not applicable            |
 | **MUST NOT** skip review                   | Even for "simple" changes                            |
 
+**Responding to PR review comments:** address **every** review thread, not just
+CodeRabbit's — after `/autofix` handles CodeRabbit, check for unresolved threads
+from other reviewers (the `octopus-fzymgc` bot, humans). Reply to **each thread
+individually** with its outcome — fixed (what changed), won't-fix (why), or
+deferred (bead id) — so each one resolves. A single summary comment does **not**
+resolve the individual threads.
+
 ### Plan → bd materialization
 
 Plans drive bd state via `dev-flow:plan-to-beads`, which reads the plan's task table (each `### Task N:` heading inside a `## Phase N:` section) and materializes the epic + child beads + dependency graph in one pass. **Plans do NOT carry a `## Bead chain structure` section** — bd is the source of truth for graph topology (per the `dev-flow:plan-to-beads` skill spec Rule 4). The ancestor `bead-chain-design` / `bead-chain-from-plan` convention is superseded.
@@ -325,6 +332,8 @@ task test:int                                    # Integration tests (needs Dock
 | **MUST NOT** disable lint/format rules | Without explicit user confirmation                 |
 | **SHOULD** run `task fmt`              | Before committing to ensure consistent formatting  |
 
+> **`task fmt` mutates files** (adds SPDX headers, reflows markdown tables). Those edits are part of your change — **commit them**. Uncommitted `fmt` output is a common cause of a red CI (`license:check` / markdown lint) on an otherwise-green PR.
+
 **MUST** run `task pr-prep` (the **fast lane**) before creating a PR or
 pushing to a PR branch. The fast lane runs bats → schema-check →
 license:check → plugin:build-all → lint → fmt:check → unit tests → build.
@@ -365,6 +374,17 @@ writes that file with a `status=` line (`pass`/`fail`/`contention`) — match th
 `▸ pr-prep result:` prefix (don't assume a line number) and read the file for
 the authoritative verdict; the behavioral cues above are the fallback.
 
+### Generated code
+
+Some generated output is committed; regenerate and commit it in the **same
+change** or CI fails a stale-diff check:
+
+| After changing         | Run                               | Commit                                 |
+| ---------------------- | --------------------------------- | -------------------------------------- |
+| `api/proto/**` schemas | `task proto && task web:generate` | `pkg/proto/**/*.pb.go` + web `*_pb.ts` |
+
+`task lint:proto` MUST be green after any proto change.
+
 ### Session isolation
 
 This repo is developed primarily by concurrent AI agent sessions. Because jj snapshots the working copy on every command, two sessions sharing the same jj workspace will collide on uncommitted edits.
@@ -372,10 +392,21 @@ This repo is developed primarily by concurrent AI agent sessions. Because jj sna
 | Requirement | Description |
 |---|---|
 | **MUST** isolate per session | Agents: `task workspace:new -- <name>`, then `cd <printed-path>`. Humans: see [sessions guide](site/src/content/docs/contributing/sessions.md) for shell-function setup. |
-| **SHOULD NOT** edit files in `default` | A `SessionStart` hook warns when a session begins there. Reserved for read-only inspection. |
+| **MUST NOT** edit files in `default` | The shared workspace is for **read-only inspection only** (search, reads, answering questions). A `SessionStart` hook flags any session that starts there. If you are in `default` and intend to edit, isolate **first** (row above) before touching any file — concurrent sessions silently corrupt each other's uncommitted edits at every `jj` command boundary. |
 | **MUST** clean up post-merge | After landing: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>`. The `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. |
 
 `task workspace:new` is idempotent, runs `jj git fetch` first, and writes a `.beads/redirect` so `bd` works in the new workspace. New workspaces inherit `.claude/` (tracked in git), so all hooks fire identically. Sub-agents launched via the `Task` tool inherit the parent's workspace; the parent MUST NOT dispatch parallel `Task` calls that edit the same files.
+
+**`gh` in a jj workspace** has no `.git` directory to auto-detect the repo, so it cannot infer the remote — always pass `-R holomush/holomush` explicitly (e.g. `gh pr view 123 -R holomush/holomush`, `gh pr create -R holomush/holomush ...`).
+
+### Required session-start skills
+
+Two skills MUST be loaded via the `Skill` tool **before your first response** in any session (both enforced by `SessionStart` hooks):
+
+| Skill | Why |
+|---|---|
+| `jj:jujutsu` | jj-colocated repo — all VCS goes through jj (the jj plugin's guard hooks block mutating `git`). |
+| `dev-flow:grepping` | The search-tool ladder (`mcp__probe__*` for Go symbol/AST → `rg` for text → `ast-grep` for structural) is non-obvious; loading it up front prevents defaulting to bare `grep`/full-file reads. Pairs with `.claude/rules/search-tools.md`. |
 
 ### Beads, jj
 

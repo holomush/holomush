@@ -32,6 +32,10 @@ bd dep add <issue> <depends-on>       # Add dependency
 bd dolt push                          # Sync with remote
 ```
 
+## Command gotchas
+
+- **`--parent` requires the full canonical ID, not a short prefix.** `bd list --parent holomush-5rh` lists the children; `bd list --parent 5rh` prints `Error: error checking parent issue: not found: issue 5rh` and returns **zero** children — even though `bd show 5rh` resolves the short ID fine (`--parent` does not run the same resolver). Worse, that error goes to **stderr while the command still exits `0`**, so a script checking only the exit code sees a silent empty result — this is what produces false "epic has no children" reads in drain/epic pre-flight. Always pass the `holomush-` prefix to `--parent`.
+
 ## Workflow
 
 1. Check for ready work: `bd ready`

@@ -40,10 +40,15 @@ if [ "${IS_DEFAULT:-no}" != "yes" ]; then
 fi
 
 cat <<'EOF'
-**You are in the shared `default` jj workspace.** If you intend to edit files, another Claude Code session in the same workspace can collide with your edits at any `jj` command boundary (jj snapshots the working copy on every command). To isolate this session, exit and:
+**⚠️ You are in the shared `default` jj workspace — read-only inspection ONLY.**
 
-- **Humans:** run `claude-iso <name>` (the shell function in `~/.config/fish/config.fish` or `~/.bashrc` — see CLAUDE.md "Session isolation" for the snippet)
-- **Agents (or humans without the function):** run `task workspace:new -- <name>`, then `cd <printed-path> && claude`
+You MUST NOT edit files here. Concurrent agent sessions share this workspace and
+collide at every `jj` command boundary (jj snapshots the working copy on every
+command), silently corrupting each other's uncommitted edits. Before editing ANY
+file, isolate this session first:
 
-To ignore this warning, continue as normal.
+- **Agents (or humans without the function):** run `task workspace:new -- <name>`, then `cd <printed-path>` and do all work there.
+- **Humans:** run `claude-iso <name>` (the shell function in `~/.config/fish/config.fish` or `~/.bashrc` — see CLAUDE.md "Session isolation").
+
+Read-only work (search, reads, answering questions) is fine to continue here.
 EOF

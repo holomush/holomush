@@ -191,6 +191,12 @@ NATS (`internal/eventbus/subsystem.go`); external/clustered NATS is unimplemente
 
 Known-flaky integration and E2E specs are quarantined so they self-skip in gating CI and in `task pr-prep:full`, running only nightly or locally with `HOLOMUSH_RUN_QUARANTINED=1`. Quarantine is for **flakiness with an open bead** — never for a real failure.
 
+Quarantine is for **genuinely intermittent failures without a reproducible cause**. If the root cause is *known* — resource contention, a race, undersized CI infra — **fix it; do not quarantine it.** Quarantining a known-cause failure hides a real infrastructure problem instead of resolving it.
+
+### Diagnosing CI-only integration failures
+
+`Integration Test` failures showing `connection refused` / `unexpected EOF` / testcontainer-start errors are usually a **transient Postgres testcontainer drop under CI load**, not a code defect. Before filing a bug or quarantining: check whether the **parent commit's** CI also failed the same way, then re-run the job. Treat it as a real failure only if it reproduces on a clean parent.
+
 **Three marker idioms:**
 
 | Stack | Marker |
