@@ -63,6 +63,9 @@ const (
 	// WebServiceWebListCharactersProcedure is the fully-qualified name of the WebService's
 	// WebListCharacters RPC.
 	WebServiceWebListCharactersProcedure = "/holomush.web.v1.WebService/WebListCharacters"
+	// WebServiceWebListAllCharactersProcedure is the fully-qualified name of the WebService's
+	// WebListAllCharacters RPC.
+	WebServiceWebListAllCharactersProcedure = "/holomush.web.v1.WebService/WebListAllCharacters"
 	// WebServiceWebLogoutProcedure is the fully-qualified name of the WebService's WebLogout RPC.
 	WebServiceWebLogoutProcedure = "/holomush.web.v1.WebService/WebLogout"
 	// WebServiceWebRequestPasswordResetProcedure is the fully-qualified name of the WebService's
@@ -123,6 +126,18 @@ const (
 	// WebServiceWebResumeSceneProcedure is the fully-qualified name of the WebService's WebResumeScene
 	// RPC.
 	WebServiceWebResumeSceneProcedure = "/holomush.web.v1.WebService/WebResumeScene"
+	// WebServiceWebInviteToSceneProcedure is the fully-qualified name of the WebService's
+	// WebInviteToScene RPC.
+	WebServiceWebInviteToSceneProcedure = "/holomush.web.v1.WebService/WebInviteToScene"
+	// WebServiceWebKickFromSceneProcedure is the fully-qualified name of the WebService's
+	// WebKickFromScene RPC.
+	WebServiceWebKickFromSceneProcedure = "/holomush.web.v1.WebService/WebKickFromScene"
+	// WebServiceWebTransferOwnershipProcedure is the fully-qualified name of the WebService's
+	// WebTransferOwnership RPC.
+	WebServiceWebTransferOwnershipProcedure = "/holomush.web.v1.WebService/WebTransferOwnership"
+	// WebServiceWebLeaveSceneProcedure is the fully-qualified name of the WebService's WebLeaveScene
+	// RPC.
+	WebServiceWebLeaveSceneProcedure = "/holomush.web.v1.WebService/WebLeaveScene"
 	// WebServiceWebExportSceneProcedure is the fully-qualified name of the WebService's WebExportScene
 	// RPC.
 	WebServiceWebExportSceneProcedure = "/holomush.web.v1.WebService/WebExportScene"
@@ -191,6 +206,10 @@ type WebServiceClient interface {
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
+	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
+	// reads player_session_token from the X-Session-Token cookie; any
+	// authenticated caller (guest included) may list character names.
+	WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -281,6 +300,14 @@ type WebServiceClient interface {
 	WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error)
+	// WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token).
+	WebInviteToScene(context.Context, *connect.Request[v1.WebInviteToSceneRequest]) (*connect.Response[v1.WebInviteToSceneResponse], error)
+	// WebKickFromScene proxies to SceneAccessService.KickFromScene.
+	WebKickFromScene(context.Context, *connect.Request[v1.WebKickFromSceneRequest]) (*connect.Response[v1.WebKickFromSceneResponse], error)
+	// WebTransferOwnership proxies to SceneAccessService.TransferOwnership.
+	WebTransferOwnership(context.Context, *connect.Request[v1.WebTransferOwnershipRequest]) (*connect.Response[v1.WebTransferOwnershipResponse], error)
+	// WebLeaveScene proxies to SceneAccessService.LeaveScene.
+	WebLeaveScene(context.Context, *connect.Request[v1.WebLeaveSceneRequest]) (*connect.Response[v1.WebLeaveSceneResponse], error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -374,6 +401,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+WebServiceWebListCharactersProcedure,
 			connect.WithSchema(webServiceMethods.ByName("WebListCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		webListAllCharacters: connect.NewClient[v1.WebListAllCharactersRequest, v1.WebListAllCharactersResponse](
+			httpClient,
+			baseURL+WebServiceWebListAllCharactersProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListAllCharacters")),
 			connect.WithClientOptions(opts...),
 		),
 		webLogout: connect.NewClient[v1.WebLogoutRequest, v1.WebLogoutResponse](
@@ -502,6 +535,30 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebResumeScene")),
 			connect.WithClientOptions(opts...),
 		),
+		webInviteToScene: connect.NewClient[v1.WebInviteToSceneRequest, v1.WebInviteToSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebInviteToSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebInviteToScene")),
+			connect.WithClientOptions(opts...),
+		),
+		webKickFromScene: connect.NewClient[v1.WebKickFromSceneRequest, v1.WebKickFromSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebKickFromSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebKickFromScene")),
+			connect.WithClientOptions(opts...),
+		),
+		webTransferOwnership: connect.NewClient[v1.WebTransferOwnershipRequest, v1.WebTransferOwnershipResponse](
+			httpClient,
+			baseURL+WebServiceWebTransferOwnershipProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebTransferOwnership")),
+			connect.WithClientOptions(opts...),
+		),
+		webLeaveScene: connect.NewClient[v1.WebLeaveSceneRequest, v1.WebLeaveSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebLeaveSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebLeaveScene")),
+			connect.WithClientOptions(opts...),
+		),
 		webExportScene: connect.NewClient[v1.WebExportSceneRequest, v1.WebExportSceneResponse](
 			httpClient,
 			baseURL+WebServiceWebExportSceneProcedure,
@@ -547,6 +604,7 @@ type webServiceClient struct {
 	webCreateGuest                *connect.Client[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse]
 	webCreateCharacter            *connect.Client[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse]
 	webListCharacters             *connect.Client[v1.WebListCharactersRequest, v1.WebListCharactersResponse]
+	webListAllCharacters          *connect.Client[v1.WebListAllCharactersRequest, v1.WebListAllCharactersResponse]
 	webLogout                     *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
 	webRequestPasswordReset       *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
 	webConfirmPasswordReset       *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
@@ -568,6 +626,10 @@ type webServiceClient struct {
 	webEndScene                   *connect.Client[v1.WebEndSceneRequest, v1.WebEndSceneResponse]
 	webPauseScene                 *connect.Client[v1.WebPauseSceneRequest, v1.WebPauseSceneResponse]
 	webResumeScene                *connect.Client[v1.WebResumeSceneRequest, v1.WebResumeSceneResponse]
+	webInviteToScene              *connect.Client[v1.WebInviteToSceneRequest, v1.WebInviteToSceneResponse]
+	webKickFromScene              *connect.Client[v1.WebKickFromSceneRequest, v1.WebKickFromSceneResponse]
+	webTransferOwnership          *connect.Client[v1.WebTransferOwnershipRequest, v1.WebTransferOwnershipResponse]
+	webLeaveScene                 *connect.Client[v1.WebLeaveSceneRequest, v1.WebLeaveSceneResponse]
 	webExportScene                *connect.Client[v1.WebExportSceneRequest, v1.WebExportSceneResponse]
 	webSetSceneFocus              *connect.Client[v1.WebSetSceneFocusRequest, v1.WebSetSceneFocusResponse]
 	webListPublishedScenes        *connect.Client[v1.WebListPublishedScenesRequest, v1.WebListPublishedScenesResponse]
@@ -623,6 +685,11 @@ func (c *webServiceClient) WebCreateCharacter(ctx context.Context, req *connect.
 // WebListCharacters calls holomush.web.v1.WebService.WebListCharacters.
 func (c *webServiceClient) WebListCharacters(ctx context.Context, req *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error) {
 	return c.webListCharacters.CallUnary(ctx, req)
+}
+
+// WebListAllCharacters calls holomush.web.v1.WebService.WebListAllCharacters.
+func (c *webServiceClient) WebListAllCharacters(ctx context.Context, req *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error) {
+	return c.webListAllCharacters.CallUnary(ctx, req)
 }
 
 // WebLogout calls holomush.web.v1.WebService.WebLogout.
@@ -730,6 +797,26 @@ func (c *webServiceClient) WebResumeScene(ctx context.Context, req *connect.Requ
 	return c.webResumeScene.CallUnary(ctx, req)
 }
 
+// WebInviteToScene calls holomush.web.v1.WebService.WebInviteToScene.
+func (c *webServiceClient) WebInviteToScene(ctx context.Context, req *connect.Request[v1.WebInviteToSceneRequest]) (*connect.Response[v1.WebInviteToSceneResponse], error) {
+	return c.webInviteToScene.CallUnary(ctx, req)
+}
+
+// WebKickFromScene calls holomush.web.v1.WebService.WebKickFromScene.
+func (c *webServiceClient) WebKickFromScene(ctx context.Context, req *connect.Request[v1.WebKickFromSceneRequest]) (*connect.Response[v1.WebKickFromSceneResponse], error) {
+	return c.webKickFromScene.CallUnary(ctx, req)
+}
+
+// WebTransferOwnership calls holomush.web.v1.WebService.WebTransferOwnership.
+func (c *webServiceClient) WebTransferOwnership(ctx context.Context, req *connect.Request[v1.WebTransferOwnershipRequest]) (*connect.Response[v1.WebTransferOwnershipResponse], error) {
+	return c.webTransferOwnership.CallUnary(ctx, req)
+}
+
+// WebLeaveScene calls holomush.web.v1.WebService.WebLeaveScene.
+func (c *webServiceClient) WebLeaveScene(ctx context.Context, req *connect.Request[v1.WebLeaveSceneRequest]) (*connect.Response[v1.WebLeaveSceneResponse], error) {
+	return c.webLeaveScene.CallUnary(ctx, req)
+}
+
 // WebExportScene calls holomush.web.v1.WebService.WebExportScene.
 func (c *webServiceClient) WebExportScene(ctx context.Context, req *connect.Request[v1.WebExportSceneRequest]) (*connect.Response[v1.WebExportSceneResponse], error) {
 	return c.webExportScene.CallUnary(ctx, req)
@@ -806,6 +893,10 @@ type WebServiceHandler interface {
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
+	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
+	// reads player_session_token from the X-Session-Token cookie; any
+	// authenticated caller (guest included) may list character names.
+	WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -896,6 +987,14 @@ type WebServiceHandler interface {
 	WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error)
+	// WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token).
+	WebInviteToScene(context.Context, *connect.Request[v1.WebInviteToSceneRequest]) (*connect.Response[v1.WebInviteToSceneResponse], error)
+	// WebKickFromScene proxies to SceneAccessService.KickFromScene.
+	WebKickFromScene(context.Context, *connect.Request[v1.WebKickFromSceneRequest]) (*connect.Response[v1.WebKickFromSceneResponse], error)
+	// WebTransferOwnership proxies to SceneAccessService.TransferOwnership.
+	WebTransferOwnership(context.Context, *connect.Request[v1.WebTransferOwnershipRequest]) (*connect.Response[v1.WebTransferOwnershipResponse], error)
+	// WebLeaveScene proxies to SceneAccessService.LeaveScene.
+	WebLeaveScene(context.Context, *connect.Request[v1.WebLeaveSceneRequest]) (*connect.Response[v1.WebLeaveSceneResponse], error)
 	// WebExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. Proxies to SceneAccessService.ExportScene;
 	// player_session_token is read from the HTTP cookie by gateway middleware.
@@ -985,6 +1084,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		WebServiceWebListCharactersProcedure,
 		svc.WebListCharacters,
 		connect.WithSchema(webServiceMethods.ByName("WebListCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebListAllCharactersHandler := connect.NewUnaryHandler(
+		WebServiceWebListAllCharactersProcedure,
+		svc.WebListAllCharacters,
+		connect.WithSchema(webServiceMethods.ByName("WebListAllCharacters")),
 		connect.WithHandlerOptions(opts...),
 	)
 	webServiceWebLogoutHandler := connect.NewUnaryHandler(
@@ -1113,6 +1218,30 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebResumeScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebInviteToSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebInviteToSceneProcedure,
+		svc.WebInviteToScene,
+		connect.WithSchema(webServiceMethods.ByName("WebInviteToScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebKickFromSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebKickFromSceneProcedure,
+		svc.WebKickFromScene,
+		connect.WithSchema(webServiceMethods.ByName("WebKickFromScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebTransferOwnershipHandler := connect.NewUnaryHandler(
+		WebServiceWebTransferOwnershipProcedure,
+		svc.WebTransferOwnership,
+		connect.WithSchema(webServiceMethods.ByName("WebTransferOwnership")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebLeaveSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebLeaveSceneProcedure,
+		svc.WebLeaveScene,
+		connect.WithSchema(webServiceMethods.ByName("WebLeaveScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	webServiceWebExportSceneHandler := connect.NewUnaryHandler(
 		WebServiceWebExportSceneProcedure,
 		svc.WebExportScene,
@@ -1165,6 +1294,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebCreateCharacterHandler.ServeHTTP(w, r)
 		case WebServiceWebListCharactersProcedure:
 			webServiceWebListCharactersHandler.ServeHTTP(w, r)
+		case WebServiceWebListAllCharactersProcedure:
+			webServiceWebListAllCharactersHandler.ServeHTTP(w, r)
 		case WebServiceWebLogoutProcedure:
 			webServiceWebLogoutHandler.ServeHTTP(w, r)
 		case WebServiceWebRequestPasswordResetProcedure:
@@ -1207,6 +1338,14 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebPauseSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebResumeSceneProcedure:
 			webServiceWebResumeSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebInviteToSceneProcedure:
+			webServiceWebInviteToSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebKickFromSceneProcedure:
+			webServiceWebKickFromSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebTransferOwnershipProcedure:
+			webServiceWebTransferOwnershipHandler.ServeHTTP(w, r)
+		case WebServiceWebLeaveSceneProcedure:
+			webServiceWebLeaveSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebExportSceneProcedure:
 			webServiceWebExportSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebSetSceneFocusProcedure:
@@ -1264,6 +1403,10 @@ func (UnimplementedWebServiceHandler) WebCreateCharacter(context.Context, *conne
 
 func (UnimplementedWebServiceHandler) WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListCharacters is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListAllCharacters is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error) {
@@ -1348,6 +1491,22 @@ func (UnimplementedWebServiceHandler) WebPauseScene(context.Context, *connect.Re
 
 func (UnimplementedWebServiceHandler) WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebResumeScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebInviteToScene(context.Context, *connect.Request[v1.WebInviteToSceneRequest]) (*connect.Response[v1.WebInviteToSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebInviteToScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebKickFromScene(context.Context, *connect.Request[v1.WebKickFromSceneRequest]) (*connect.Response[v1.WebKickFromSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebKickFromScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebTransferOwnership(context.Context, *connect.Request[v1.WebTransferOwnershipRequest]) (*connect.Response[v1.WebTransferOwnershipResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebTransferOwnership is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebLeaveScene(context.Context, *connect.Request[v1.WebLeaveSceneRequest]) (*connect.Response[v1.WebLeaveSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebLeaveScene is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebExportScene(context.Context, *connect.Request[v1.WebExportSceneRequest]) (*connect.Response[v1.WebExportSceneResponse], error) {

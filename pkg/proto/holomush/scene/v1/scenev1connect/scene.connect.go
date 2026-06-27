@@ -141,8 +141,9 @@ type SceneServiceClient interface {
 	// Rejected with codes.FailedPrecondition from any non-active state. See
 	// service.go::PauseScene.
 	PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error)
-	// ResumeScene transitions a `paused` scene back to `active` (owner-only via
-	// ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+	// ResumeScene transitions a `paused` scene back to `active`
+	// (participant-wide via ABAC — any participant may resume (spec D6)).
+	// Rejected with codes.FailedPrecondition from any non-paused state.
 	// See service.go::ResumeScene.
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
 	// UpdateScene applies a partial update to mutable scene metadata, driven by
@@ -646,8 +647,9 @@ type SceneServiceHandler interface {
 	// Rejected with codes.FailedPrecondition from any non-active state. See
 	// service.go::PauseScene.
 	PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error)
-	// ResumeScene transitions a `paused` scene back to `active` (owner-only via
-	// ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+	// ResumeScene transitions a `paused` scene back to `active`
+	// (participant-wide via ABAC — any participant may resume (spec D6)).
+	// Rejected with codes.FailedPrecondition from any non-paused state.
 	// See service.go::ResumeScene.
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
 	// UpdateScene applies a partial update to mutable scene metadata, driven by

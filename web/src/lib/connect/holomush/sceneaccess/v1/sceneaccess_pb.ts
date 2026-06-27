@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/sceneaccess/v1/sceneaccess.proto.
  */
 export const file_holomush_sceneaccess_v1_sceneaccess: GenFile = /*@__PURE__*/
-  fileDesc("Cilob2xvbXVzaC9zY2VuZWFjY2Vzcy92MS9zY2VuZWFjY2Vzcy5wcm90bxIXaG9sb211c2guc2NlbmVhY2Nlc3MudjEiswEKGkxpc3RTY2VuZXNGb3JWaWV3ZXJSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEg0KBWxpbWl0GAQgASgFEg4KBm9mZnNldBgFIAEoBRIMCgR0YWdzGAYgAygJEiAKGGV4Y2x1ZGVfY29udGVudF93YXJuaW5ncxgHIAMoCSJLChtMaXN0U2NlbmVzRm9yVmlld2VyUmVzcG9uc2USLAoGc2NlbmVzGAEgAygLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvInQKGEdldFNjZW5lRm9yVmlld2VyUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhQKDGNoYXJhY3Rlcl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSJIChlHZXRTY2VuZUZvclZpZXdlclJlc3BvbnNlEisKBXNjZW5lGAEgASgLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvIl0KE0xpc3RNeVNjZW5lc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAyABKAkiTQoUTGlzdE15U2NlbmVzUmVzcG9uc2USNQoGc2NlbmVzGAEgAygLMiUuaG9sb211c2guc2NlbmUudjEuQ2hhcmFjdGVyU2NlbmVJbmZvIm0KEVdhdGNoU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJIk0KEldhdGNoU2NlbmVSZXNwb25zZRI3CgtwYXJ0aWNpcGFudBgBIAEoCzIiLmhvbG9tdXNoLnNjZW5lLnYxLlBhcnRpY2lwYW50SW5mbyKAAQoSQ3JlYXRlU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEg0KBXRpdGxlGAQgASgJEhMKC2Rlc2NyaXB0aW9uGAUgASgJIkIKE0NyZWF0ZVNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8ifgoSRXhwb3J0U2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJEg4KBmZvcm1hdBgFIAEoCSJLChNFeHBvcnRTY2VuZVJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSEQoJbWltZV90eXBlGAIgASgJEhAKCGZpbGVuYW1lGAMgASgJInEKFFNldFNjZW5lRm9jdXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSIXChVTZXRTY2VuZUZvY3VzUmVzcG9uc2UiewoaTGlzdFB1Ymxpc2hlZFNjZW5lc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRINCgVsaW1pdBgDIAEoBRIOCgZvZmZzZXQYBCABKAUSDAoEdGFncxgFIAMoCSJWChtMaXN0UHVibGlzaGVkU2NlbmVzUmVzcG9uc2USNwoIYXJjaGl2ZXMYASADKAsyJS5ob2xvbXVzaC5zY2VuZS52MS5QdWJsaWNTY2VuZUFyY2hpdmUibAocR2V0UHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhoKEnB1Ymxpc2hlZF9zY2VuZV9pZBgDIAEoCSLBAQodR2V0UHVibGljU2NlbmVBcmNoaXZlUmVzcG9uc2USCgoCaWQYASABKAkSFgoOdGl0bGVfc25hcHNob3QYAiABKAkSHQoVcGFydGljaXBhbnRzX3NuYXBzaG90GAMgAygJEj8KD2NvbnRlbnRfZW50cmllcxgEIAMoCzImLmhvbG9tdXNoLnNjZW5lLnYxLlB1Ymxpc2hlZFNjZW5lRW50cnkSHAoUcHVibGlzaGVkX2F0X3VuaXhfbnMYBSABKAMigQEKIURvd25sb2FkUHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhoKEnB1Ymxpc2hlZF9zY2VuZV9pZBgDIAEoCRIOCgZmb3JtYXQYBCABKAkiSAoiRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZRIPCgdjb250ZW50GAEgASgMEhEKCW1pbWVfdHlwZRgCIAEoCSJrCg9FbmRTY2VuZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAyABKAkSEAoIc2NlbmVfaWQYBCABKAkiPwoQRW5kU2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyJtChFQYXVzZVNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhQKDGNoYXJhY3Rlcl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSJBChJQYXVzZVNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8ibgoSUmVzdW1lU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJIkIKE1Jlc3VtZVNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8ygQwKElNjZW5lQWNjZXNzU2VydmljZRKAAQoTTGlzdFNjZW5lc0ZvclZpZXdlchIzLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkxpc3RTY2VuZXNGb3JWaWV3ZXJSZXF1ZXN0GjQuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdFNjZW5lc0ZvclZpZXdlclJlc3BvbnNlEnoKEUdldFNjZW5lRm9yVmlld2VyEjEuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuR2V0U2NlbmVGb3JWaWV3ZXJSZXF1ZXN0GjIuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuR2V0U2NlbmVGb3JWaWV3ZXJSZXNwb25zZRJrCgxMaXN0TXlTY2VuZXMSLC5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MaXN0TXlTY2VuZXNSZXF1ZXN0Gi0uaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdE15U2NlbmVzUmVzcG9uc2USZQoKV2F0Y2hTY2VuZRIqLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLldhdGNoU2NlbmVSZXF1ZXN0GisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuV2F0Y2hTY2VuZVJlc3BvbnNlEmgKC0NyZWF0ZVNjZW5lEisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuQ3JlYXRlU2NlbmVSZXF1ZXN0GiwuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuQ3JlYXRlU2NlbmVSZXNwb25zZRJfCghFbmRTY2VuZRIoLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkVuZFNjZW5lUmVxdWVzdBopLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkVuZFNjZW5lUmVzcG9uc2USZQoKUGF1c2VTY2VuZRIqLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLlBhdXNlU2NlbmVSZXF1ZXN0GisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuUGF1c2VTY2VuZVJlc3BvbnNlEmgKC1Jlc3VtZVNjZW5lEisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuUmVzdW1lU2NlbmVSZXF1ZXN0GiwuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuUmVzdW1lU2NlbmVSZXNwb25zZRJoCgtFeHBvcnRTY2VuZRIrLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkV4cG9ydFNjZW5lUmVxdWVzdBosLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkV4cG9ydFNjZW5lUmVzcG9uc2USbgoNU2V0U2NlbmVGb2N1cxItLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLlNldFNjZW5lRm9jdXNSZXF1ZXN0Gi4uaG9sb211c2guc2NlbmVhY2Nlc3MudjEuU2V0U2NlbmVGb2N1c1Jlc3BvbnNlEoABChNMaXN0UHVibGlzaGVkU2NlbmVzEjMuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdFB1Ymxpc2hlZFNjZW5lc1JlcXVlc3QaNC5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MaXN0UHVibGlzaGVkU2NlbmVzUmVzcG9uc2UShgEKFUdldFB1YmxpY1NjZW5lQXJjaGl2ZRI1LmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkdldFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QaNi5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5HZXRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZRKVAQoaRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmUSOi5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5Eb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlcXVlc3QaOy5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5Eb3dubG9hZFB1YmxpY1NjZW5lQXJjaGl2ZVJlc3BvbnNlQk5aTGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3NjZW5lYWNjZXNzL3YxO3NjZW5lYWNjZXNzdjFiBnByb3RvMw", [file_holomush_scene_v1_scene]);
+  fileDesc("Cilob2xvbXVzaC9zY2VuZWFjY2Vzcy92MS9zY2VuZWFjY2Vzcy5wcm90bxIXaG9sb211c2guc2NlbmVhY2Nlc3MudjEiswEKGkxpc3RTY2VuZXNGb3JWaWV3ZXJSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEg0KBWxpbWl0GAQgASgFEg4KBm9mZnNldBgFIAEoBRIMCgR0YWdzGAYgAygJEiAKGGV4Y2x1ZGVfY29udGVudF93YXJuaW5ncxgHIAMoCSJLChtMaXN0U2NlbmVzRm9yVmlld2VyUmVzcG9uc2USLAoGc2NlbmVzGAEgAygLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvInQKGEdldFNjZW5lRm9yVmlld2VyUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhQKDGNoYXJhY3Rlcl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSJIChlHZXRTY2VuZUZvclZpZXdlclJlc3BvbnNlEisKBXNjZW5lGAEgASgLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvIl0KE0xpc3RNeVNjZW5lc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAyABKAkiTQoUTGlzdE15U2NlbmVzUmVzcG9uc2USNQoGc2NlbmVzGAEgAygLMiUuaG9sb211c2guc2NlbmUudjEuQ2hhcmFjdGVyU2NlbmVJbmZvIm0KEVdhdGNoU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJIk0KEldhdGNoU2NlbmVSZXNwb25zZRI3CgtwYXJ0aWNpcGFudBgBIAEoCzIiLmhvbG9tdXNoLnNjZW5lLnYxLlBhcnRpY2lwYW50SW5mbyKAAQoSQ3JlYXRlU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEg0KBXRpdGxlGAQgASgJEhMKC2Rlc2NyaXB0aW9uGAUgASgJIkIKE0NyZWF0ZVNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8ifgoSRXhwb3J0U2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJEg4KBmZvcm1hdBgFIAEoCSJLChNFeHBvcnRTY2VuZVJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSEQoJbWltZV90eXBlGAIgASgJEhAKCGZpbGVuYW1lGAMgASgJInEKFFNldFNjZW5lRm9jdXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSIXChVTZXRTY2VuZUZvY3VzUmVzcG9uc2UiewoaTGlzdFB1Ymxpc2hlZFNjZW5lc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRINCgVsaW1pdBgDIAEoBRIOCgZvZmZzZXQYBCABKAUSDAoEdGFncxgFIAMoCSJWChtMaXN0UHVibGlzaGVkU2NlbmVzUmVzcG9uc2USNwoIYXJjaGl2ZXMYASADKAsyJS5ob2xvbXVzaC5zY2VuZS52MS5QdWJsaWNTY2VuZUFyY2hpdmUibAocR2V0UHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhoKEnB1Ymxpc2hlZF9zY2VuZV9pZBgDIAEoCSLBAQodR2V0UHVibGljU2NlbmVBcmNoaXZlUmVzcG9uc2USCgoCaWQYASABKAkSFgoOdGl0bGVfc25hcHNob3QYAiABKAkSHQoVcGFydGljaXBhbnRzX3NuYXBzaG90GAMgAygJEj8KD2NvbnRlbnRfZW50cmllcxgEIAMoCzImLmhvbG9tdXNoLnNjZW5lLnYxLlB1Ymxpc2hlZFNjZW5lRW50cnkSHAoUcHVibGlzaGVkX2F0X3VuaXhfbnMYBSABKAMigQEKIURvd25sb2FkUHVibGljU2NlbmVBcmNoaXZlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhoKEnB1Ymxpc2hlZF9zY2VuZV9pZBgDIAEoCRIOCgZmb3JtYXQYBCABKAkiSAoiRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZRIPCgdjb250ZW50GAEgASgMEhEKCW1pbWVfdHlwZRgCIAEoCSJrCg9FbmRTY2VuZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAyABKAkSEAoIc2NlbmVfaWQYBCABKAkiPwoQRW5kU2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyJtChFQYXVzZVNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhQKDGNoYXJhY3Rlcl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSJBChJQYXVzZVNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8ibgoSUmVzdW1lU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJIkIKE1Jlc3VtZVNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8ijQEKFEludml0ZVRvU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJEhsKE3RhcmdldF9jaGFyYWN0ZXJfaWQYBSABKAkiFwoVSW52aXRlVG9TY2VuZVJlc3BvbnNlIo0BChRLaWNrRnJvbVNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhQKDGNoYXJhY3Rlcl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCRIbChN0YXJnZXRfY2hhcmFjdGVyX2lkGAUgASgJIhcKFUtpY2tGcm9tU2NlbmVSZXNwb25zZSKUAQoYVHJhbnNmZXJPd25lcnNoaXBSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJEhAKCHNjZW5lX2lkGAQgASgJEh4KFm5ld19vd25lcl9jaGFyYWN0ZXJfaWQYBSABKAkiGwoZVHJhbnNmZXJPd25lcnNoaXBSZXNwb25zZSJtChFMZWF2ZVNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhQKDGNoYXJhY3Rlcl9pZBgDIAEoCRIQCghzY2VuZV9pZBgEIAEoCSIUChJMZWF2ZVNjZW5lUmVzcG9uc2UyxA8KElNjZW5lQWNjZXNzU2VydmljZRKAAQoTTGlzdFNjZW5lc0ZvclZpZXdlchIzLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkxpc3RTY2VuZXNGb3JWaWV3ZXJSZXF1ZXN0GjQuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdFNjZW5lc0ZvclZpZXdlclJlc3BvbnNlEnoKEUdldFNjZW5lRm9yVmlld2VyEjEuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuR2V0U2NlbmVGb3JWaWV3ZXJSZXF1ZXN0GjIuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuR2V0U2NlbmVGb3JWaWV3ZXJSZXNwb25zZRJrCgxMaXN0TXlTY2VuZXMSLC5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MaXN0TXlTY2VuZXNSZXF1ZXN0Gi0uaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdE15U2NlbmVzUmVzcG9uc2USZQoKV2F0Y2hTY2VuZRIqLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLldhdGNoU2NlbmVSZXF1ZXN0GisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuV2F0Y2hTY2VuZVJlc3BvbnNlEmgKC0NyZWF0ZVNjZW5lEisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuQ3JlYXRlU2NlbmVSZXF1ZXN0GiwuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuQ3JlYXRlU2NlbmVSZXNwb25zZRJfCghFbmRTY2VuZRIoLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkVuZFNjZW5lUmVxdWVzdBopLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkVuZFNjZW5lUmVzcG9uc2USZQoKUGF1c2VTY2VuZRIqLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLlBhdXNlU2NlbmVSZXF1ZXN0GisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuUGF1c2VTY2VuZVJlc3BvbnNlEmgKC1Jlc3VtZVNjZW5lEisuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuUmVzdW1lU2NlbmVSZXF1ZXN0GiwuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuUmVzdW1lU2NlbmVSZXNwb25zZRJuCg1JbnZpdGVUb1NjZW5lEi0uaG9sb211c2guc2NlbmVhY2Nlc3MudjEuSW52aXRlVG9TY2VuZVJlcXVlc3QaLi5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5JbnZpdGVUb1NjZW5lUmVzcG9uc2USbgoNS2lja0Zyb21TY2VuZRItLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLktpY2tGcm9tU2NlbmVSZXF1ZXN0Gi4uaG9sb211c2guc2NlbmVhY2Nlc3MudjEuS2lja0Zyb21TY2VuZVJlc3BvbnNlEnoKEVRyYW5zZmVyT3duZXJzaGlwEjEuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuVHJhbnNmZXJPd25lcnNoaXBSZXF1ZXN0GjIuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuVHJhbnNmZXJPd25lcnNoaXBSZXNwb25zZRJlCgpMZWF2ZVNjZW5lEiouaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGVhdmVTY2VuZVJlcXVlc3QaKy5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5MZWF2ZVNjZW5lUmVzcG9uc2USaAoLRXhwb3J0U2NlbmUSKy5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5FeHBvcnRTY2VuZVJlcXVlc3QaLC5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5FeHBvcnRTY2VuZVJlc3BvbnNlEm4KDVNldFNjZW5lRm9jdXMSLS5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5TZXRTY2VuZUZvY3VzUmVxdWVzdBouLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLlNldFNjZW5lRm9jdXNSZXNwb25zZRKAAQoTTGlzdFB1Ymxpc2hlZFNjZW5lcxIzLmhvbG9tdXNoLnNjZW5lYWNjZXNzLnYxLkxpc3RQdWJsaXNoZWRTY2VuZXNSZXF1ZXN0GjQuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuTGlzdFB1Ymxpc2hlZFNjZW5lc1Jlc3BvbnNlEoYBChVHZXRQdWJsaWNTY2VuZUFyY2hpdmUSNS5ob2xvbXVzaC5zY2VuZWFjY2Vzcy52MS5HZXRQdWJsaWNTY2VuZUFyY2hpdmVSZXF1ZXN0GjYuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuR2V0UHVibGljU2NlbmVBcmNoaXZlUmVzcG9uc2USlQEKGkRvd25sb2FkUHVibGljU2NlbmVBcmNoaXZlEjouaG9sb211c2guc2NlbmVhY2Nlc3MudjEuRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmVSZXF1ZXN0GjsuaG9sb211c2guc2NlbmVhY2Nlc3MudjEuRG93bmxvYWRQdWJsaWNTY2VuZUFyY2hpdmVSZXNwb25zZUJOWkxnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9zY2VuZWFjY2Vzcy92MTtzY2VuZWFjY2Vzc3YxYgZwcm90bzM", [file_holomush_scene_v1_scene]);
 
 /**
  * ListScenesForViewerRequest is the facade request for the public scene board.
@@ -1071,6 +1071,255 @@ export const ResumeSceneResponseSchema: GenMessage<ResumeSceneResponse> = /*@__P
   messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 25);
 
 /**
+ * InviteToSceneRequest authenticates the inviter and names the invitee.
+ *
+ * @generated from message holomush.sceneaccess.v1.InviteToSceneRequest
+ */
+export type InviteToSceneRequest = Message<"holomush.sceneaccess.v1.InviteToSceneRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID (hint only).
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * player_session_token authenticates the caller; guests are rejected.
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id selects the acting owned alt (ownership verified server-side).
+   *
+   * @generated from field: string character_id = 3;
+   */
+  characterId: string;
+
+  /**
+   * scene_id identifies the scene to invite into; required.
+   *
+   * @generated from field: string scene_id = 4;
+   */
+  sceneId: string;
+
+  /**
+   * target_character_id is the invitee (from the directory picker); required.
+   *
+   * @generated from field: string target_character_id = 5;
+   */
+  targetCharacterId: string;
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.InviteToSceneRequest.
+ * Use `create(InviteToSceneRequestSchema)` to create a new message.
+ */
+export const InviteToSceneRequestSchema: GenMessage<InviteToSceneRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 26);
+
+/**
+ * InviteToSceneResponse is empty; success is signaled by the absence of error.
+ *
+ * @generated from message holomush.sceneaccess.v1.InviteToSceneResponse
+ */
+export type InviteToSceneResponse = Message<"holomush.sceneaccess.v1.InviteToSceneResponse"> & {
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.InviteToSceneResponse.
+ * Use `create(InviteToSceneResponseSchema)` to create a new message.
+ */
+export const InviteToSceneResponseSchema: GenMessage<InviteToSceneResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 27);
+
+/**
+ * KickFromSceneRequest authenticates the acting owner and names the target.
+ *
+ * @generated from message holomush.sceneaccess.v1.KickFromSceneRequest
+ */
+export type KickFromSceneRequest = Message<"holomush.sceneaccess.v1.KickFromSceneRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID (hint only).
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * player_session_token authenticates the caller; guests are rejected.
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id selects the acting owned alt (ownership verified server-side).
+   *
+   * @generated from field: string character_id = 3;
+   */
+  characterId: string;
+
+  /**
+   * scene_id identifies the scene; required.
+   *
+   * @generated from field: string scene_id = 4;
+   */
+  sceneId: string;
+
+  /**
+   * target_character_id is the member to remove (not the owner); required.
+   *
+   * @generated from field: string target_character_id = 5;
+   */
+  targetCharacterId: string;
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.KickFromSceneRequest.
+ * Use `create(KickFromSceneRequestSchema)` to create a new message.
+ */
+export const KickFromSceneRequestSchema: GenMessage<KickFromSceneRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 28);
+
+/**
+ * KickFromSceneResponse is empty.
+ *
+ * @generated from message holomush.sceneaccess.v1.KickFromSceneResponse
+ */
+export type KickFromSceneResponse = Message<"holomush.sceneaccess.v1.KickFromSceneResponse"> & {
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.KickFromSceneResponse.
+ * Use `create(KickFromSceneResponseSchema)` to create a new message.
+ */
+export const KickFromSceneResponseSchema: GenMessage<KickFromSceneResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 29);
+
+/**
+ * TransferOwnershipRequest authenticates the current owner and names the heir.
+ *
+ * @generated from message holomush.sceneaccess.v1.TransferOwnershipRequest
+ */
+export type TransferOwnershipRequest = Message<"holomush.sceneaccess.v1.TransferOwnershipRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID (hint only).
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * player_session_token authenticates the caller; guests are rejected.
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id selects the acting owned alt (the current owner); verified.
+   *
+   * @generated from field: string character_id = 3;
+   */
+  characterId: string;
+
+  /**
+   * scene_id identifies the scene; required.
+   *
+   * @generated from field: string scene_id = 4;
+   */
+  sceneId: string;
+
+  /**
+   * new_owner_character_id is the existing member who becomes owner; required.
+   *
+   * @generated from field: string new_owner_character_id = 5;
+   */
+  newOwnerCharacterId: string;
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.TransferOwnershipRequest.
+ * Use `create(TransferOwnershipRequestSchema)` to create a new message.
+ */
+export const TransferOwnershipRequestSchema: GenMessage<TransferOwnershipRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 30);
+
+/**
+ * TransferOwnershipResponse is empty.
+ *
+ * @generated from message holomush.sceneaccess.v1.TransferOwnershipResponse
+ */
+export type TransferOwnershipResponse = Message<"holomush.sceneaccess.v1.TransferOwnershipResponse"> & {
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.TransferOwnershipResponse.
+ * Use `create(TransferOwnershipResponseSchema)` to create a new message.
+ */
+export const TransferOwnershipResponseSchema: GenMessage<TransferOwnershipResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 31);
+
+/**
+ * LeaveSceneRequest authenticates the leaving participant.
+ *
+ * @generated from message holomush.sceneaccess.v1.LeaveSceneRequest
+ */
+export type LeaveSceneRequest = Message<"holomush.sceneaccess.v1.LeaveSceneRequest"> & {
+  /**
+   * session_id is the client-declared player-session ULID (hint only).
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * player_session_token authenticates the caller; guests are rejected.
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id selects the acting owned alt (the leaver); verified.
+   *
+   * @generated from field: string character_id = 3;
+   */
+  characterId: string;
+
+  /**
+   * scene_id identifies the scene to leave; required.
+   *
+   * @generated from field: string scene_id = 4;
+   */
+  sceneId: string;
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.LeaveSceneRequest.
+ * Use `create(LeaveSceneRequestSchema)` to create a new message.
+ */
+export const LeaveSceneRequestSchema: GenMessage<LeaveSceneRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 32);
+
+/**
+ * LeaveSceneResponse is empty.
+ *
+ * @generated from message holomush.sceneaccess.v1.LeaveSceneResponse
+ */
+export type LeaveSceneResponse = Message<"holomush.sceneaccess.v1.LeaveSceneResponse"> & {
+};
+
+/**
+ * Describes the message holomush.sceneaccess.v1.LeaveSceneResponse.
+ * Use `create(LeaveSceneResponseSchema)` to create a new message.
+ */
+export const LeaveSceneResponseSchema: GenMessage<LeaveSceneResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_sceneaccess_v1_sceneaccess, 33);
+
+/**
  * SceneAccessService is the host-side facade that owns player authentication,
  * identity resolution, and guest-player rejection for all scene-surface RPCs
  * exposed through the web portal. It wraps the plugin SceneService, ensuring
@@ -1197,6 +1446,52 @@ export const SceneAccessService: GenService<{
     methodKind: "unary";
     input: typeof ResumeSceneRequestSchema;
     output: typeof ResumeSceneResponseSchema;
+  },
+  /**
+   * InviteToScene resolves the verified acting character from the player session
+   * (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
+   * SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
+   * (participant-wide per the relaxation, INV-SCENE-65).
+   *
+   * @generated from rpc holomush.sceneaccess.v1.SceneAccessService.InviteToScene
+   */
+  inviteToScene: {
+    methodKind: "unary";
+    input: typeof InviteToSceneRequestSchema;
+    output: typeof InviteToSceneResponseSchema;
+  },
+  /**
+   * KickFromScene forwards to SceneService.KickFromScene, which self-enforces the
+   * owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above.
+   *
+   * @generated from rpc holomush.sceneaccess.v1.SceneAccessService.KickFromScene
+   */
+  kickFromScene: {
+    methodKind: "unary";
+    input: typeof KickFromSceneRequestSchema;
+    output: typeof KickFromSceneResponseSchema;
+  },
+  /**
+   * TransferOwnership forwards to SceneService.TransferOwnership, which
+   * self-enforces the owner-only `transfer-ownership` policy (INV-SCENE-65).
+   *
+   * @generated from rpc holomush.sceneaccess.v1.SceneAccessService.TransferOwnership
+   */
+  transferOwnership: {
+    methodKind: "unary";
+    input: typeof TransferOwnershipRequestSchema;
+    output: typeof TransferOwnershipResponseSchema;
+  },
+  /**
+   * LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
+   * participant `leave` policy (INV-SCENE-65). The owner cannot leave.
+   *
+   * @generated from rpc holomush.sceneaccess.v1.SceneAccessService.LeaveScene
+   */
+  leaveScene: {
+    methodKind: "unary";
+    input: typeof LeaveSceneRequestSchema;
+    output: typeof LeaveSceneResponseSchema;
   },
   /**
    * ExportScene renders the verified player's owned character's scene IC

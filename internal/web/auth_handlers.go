@@ -290,6 +290,30 @@ func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[we
 	}), nil
 }
 
+// WebListAllCharacters returns the full character directory (id+name) for the
+// picker. Proxies to CoreService.ListAllCharacters, which authorizes the call:
+// any session (registered or guest) holding the named, session-owned acting
+// character may list names (INV-ACCESS-9). Authorization is enforced at core;
+// this BFF only forwards the cookie token and character_id.
+func (h *Handler) WebListAllCharacters(ctx context.Context, req *connect.Request[webv1.WebListAllCharactersRequest]) (*connect.Response[webv1.WebListAllCharactersResponse], error) {
+	slog.DebugContext(ctx, "web: WebListAllCharacters")
+	token, err := playerTokenFromHeader(req.Header())
+	if err != nil {
+		return nil, err
+	}
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	coreResp, err := h.client.ListAllCharacters(rpcCtx, &corev1.ListAllCharactersRequest{
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: list all characters RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return connect.NewResponse(&webv1.WebListAllCharactersResponse{Characters: coreResp.GetCharacters()}), nil
+}
+
 // WebLogout ends the current session and clears the session cookie.
 func (h *Handler) WebLogout(ctx context.Context, req *connect.Request[webv1.WebLogoutRequest]) (*connect.Response[webv1.WebLogoutResponse], error) {
 	slog.DebugContext(ctx, "web: WebLogout")

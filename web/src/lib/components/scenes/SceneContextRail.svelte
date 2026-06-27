@@ -7,9 +7,12 @@
   import { Badge } from '$lib/components/ui/badge/index.js';
   import { Button } from '$lib/components/ui/button/index.js';
   import { Separator } from '$lib/components/ui/separator/index.js';
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
   import type { WorkspaceScene } from '$lib/scenes/types';
   import { sceneStateDotClass } from '$lib/scenes/stateStyle';
   import { endSceneAction, pauseSceneAction, resumeSceneAction } from '$lib/scenes/lifecycleFlow';
+  import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
+  import CharacterMultiSelect from './CharacterMultiSelect.svelte';
 
   let { scene }: { scene: WorkspaceScene | null } = $props();
 
@@ -37,6 +40,8 @@
     published: 'Published',
   };
 
+  let inviteIds = $state<string[]>([]);
+  let canManage = $derived(scene?.state === 'active' || scene?.state === 'paused');
   let lifecycleErr = $state('');
 
   async function runLifecycle(
@@ -125,6 +130,41 @@
               {#if p.id === scene.asCharacterId}
                 <Badge variant="secondary" class="text-[9px] h-3.5 px-1 ml-auto shrink-0">you</Badge>
               {/if}
+              {#if isOwner && p.id !== scene.asCharacterId && canManage}
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger>
+                    {#snippet child({ props })}
+                      <button
+                        {...props}
+                        class="ml-auto px-1 text-muted-foreground"
+                        aria-label={`Manage ${p.name}`}
+                      >⋯</button>
+                    {/snippet}
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content align="end">
+                    <DropdownMenu.Item
+                      onSelect={() =>
+                        transferAction({
+                          sceneId: scene.sceneId,
+                          characterId: scene.asCharacterId,
+                          newOwnerCharacterId: p.id,
+                        })}
+                    >
+                      Transfer ownership
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onSelect={() =>
+                        kickAction({
+                          sceneId: scene.sceneId,
+                          characterId: scene.asCharacterId,
+                          targetCharacterId: p.id,
+                        })}
+                    >
+                      Kick
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
+              {/if}
             </div>
           {/each}
         {:else if scene.asCharacterName}
@@ -143,6 +183,42 @@
           <p class="text-xs text-muted-foreground italic">Loading roster…</p>
         {/if}
       </div>
+
+      <!-- Invite picker + Leave for participants (owner/member) -->
+      {#if isParticipant}
+        <div class="mt-2 space-y-1.5">
+          <CharacterMultiSelect
+            characterId={scene.asCharacterId}
+            selected={inviteIds}
+            onChange={(ids) => (inviteIds = ids)}
+          />
+          {#if inviteIds.length}
+            <Button
+              size="sm"
+              class="h-6 text-xs"
+              disabled={!canManage}
+              onclick={() =>
+                inviteCharacters({
+                  sceneId: scene.sceneId,
+                  characterId: scene.asCharacterId,
+                  targetIds: inviteIds,
+                }).then(() => (inviteIds = []))}
+            >
+              Invite {inviteIds.length}
+            </Button>
+          {/if}
+          {#if !isOwner}
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-6 text-xs"
+              disabled={!canManage}
+              onclick={() =>
+                leaveAction({ sceneId: scene.sceneId, characterId: scene.asCharacterId })}
+            >Leave</Button>
+          {/if}
+        </div>
+      {/if}
 
       <!-- Observers listed separately per INV-SCENE-61 -->
       {#if scene.observers && scene.observers.length > 0}

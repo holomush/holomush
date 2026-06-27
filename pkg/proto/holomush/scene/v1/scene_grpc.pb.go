@@ -102,8 +102,9 @@ type SceneServiceClient interface {
 	// Rejected with codes.FailedPrecondition from any non-active state. See
 	// service.go::PauseScene.
 	PauseScene(ctx context.Context, in *PauseSceneRequest, opts ...grpc.CallOption) (*PauseSceneResponse, error)
-	// ResumeScene transitions a `paused` scene back to `active` (owner-only via
-	// ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+	// ResumeScene transitions a `paused` scene back to `active`
+	// (participant-wide via ABAC — any participant may resume (spec D6)).
+	// Rejected with codes.FailedPrecondition from any non-paused state.
 	// See service.go::ResumeScene.
 	ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error)
 	// UpdateScene applies a partial update to mutable scene metadata, driven by
@@ -564,8 +565,9 @@ type SceneServiceServer interface {
 	// Rejected with codes.FailedPrecondition from any non-active state. See
 	// service.go::PauseScene.
 	PauseScene(context.Context, *PauseSceneRequest) (*PauseSceneResponse, error)
-	// ResumeScene transitions a `paused` scene back to `active` (owner-only via
-	// ABAC). Rejected with codes.FailedPrecondition from any non-paused state.
+	// ResumeScene transitions a `paused` scene back to `active`
+	// (participant-wide via ABAC — any participant may resume (spec D6)).
+	// Rejected with codes.FailedPrecondition from any non-paused state.
 	// See service.go::ResumeScene.
 	ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error)
 	// UpdateScene applies a partial update to mutable scene metadata, driven by

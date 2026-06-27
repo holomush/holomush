@@ -1279,6 +1279,10 @@ func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.UL
 	return chars, nil
 }
 
+func (a *authCharRepoAdapter) ListAll(ctx context.Context) ([]*world.Character, error) {
+	return a.charRepo.ListAll(ctx)
+}
+
 var _ auth.CharacterRepository = (*authCharRepoAdapter)(nil)
 
 // allowAllPolicyEngine is a minimal AccessPolicyEngine that grants every

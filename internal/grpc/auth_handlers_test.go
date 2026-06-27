@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/auth"
 	authmocks "github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/core"
@@ -2713,4 +2714,170 @@ func TestSelectCharacterGridPresent(t *testing.T) {
 				tt.clientType, tt.wantGridPresent)
 		})
 	}
+}
+
+// --- ListAllCharacters ---
+
+// Verifies: INV-ACCESS-9
+func TestListAllCharactersDeniedWhenPolicyDenies(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	// Ownership check: ListByPlayer returns the requesting char so ownership passes.
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Alice"}}, nil)
+	// ListAll MUST NOT be called when ABAC denies — the gate must block before the read.
+
+	server := &CoreServer{
+		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		sessionStore:      sessiontest.NewStore(t),
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		accessEngine:      policytest.DenyAllEngine(),
+	}
+
+	_, err := server.ListAllCharacters(ctx, &corev1.ListAllCharactersRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+}
+
+// TestListAllCharactersDeniedWhenEngineUnconfigured exercises the fail-closed
+// nil-engine guard: a CoreServer with no accessEngine must deny (not panic),
+// and must not reach the directory read.
+func TestListAllCharactersDeniedWhenEngineUnconfigured(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	// Ownership passes; the nil-engine guard must fire before ListAll is reached.
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Alice"}}, nil)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		sessionStore:      sessiontest.NewStore(t),
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		// accessEngine intentionally nil → fail-closed default-deny.
+	}
+
+	_, err := server.ListAllCharacters(ctx, &corev1.ListAllCharactersRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+}
+
+func TestListAllCharactersReturnsDirectoryForAnyAuthenticatedCaller(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	alice := &world.Character{ID: ulid.Make(), Name: "Alice"}
+	bob := &world.Character{ID: ulid.Make(), Name: "Bob"}
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Guest"}}, nil)
+	charRepo.EXPECT().ListAll(mock.Anything).Return([]*world.Character{alice, bob}, nil).Once()
+
+	server := &CoreServer{
+		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		sessionStore:      sessiontest.NewStore(t),
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		accessEngine:      policytest.AllowAllEngine(),
+	}
+
+	resp, err := server.ListAllCharacters(ctx, &corev1.ListAllCharactersRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetCharacters(), 2)
+	assert.Equal(t, alice.ID.String(), resp.GetCharacters()[0].CharacterId)
+	assert.Equal(t, "Alice", resp.GetCharacters()[0].Name)
+	assert.Equal(t, bob.ID.String(), resp.GetCharacters()[1].CharacterId)
+	assert.Equal(t, "Bob", resp.GetCharacters()[1].Name)
+}
+
+func TestListAllCharactersRejectsMissingToken(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+
+	// Session repo will find no session for an empty/unknown token.
+	ps := makePlayerSession(playerID)
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	// For an empty token the hash won't match any session.
+	sessionRepo.EXPECT().
+		GetByTokenHash(mock.Anything, mock.Anything).
+		Return(nil, samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("not found"))
+
+	server := &CoreServer{
+		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		sessionStore:      sessiontest.NewStore(t),
+		playerSessionRepo: sessionRepo,
+		accessEngine:      policytest.AllowAllEngine(),
+	}
+	_ = ps // declared for clarity; session repo is pre-wired to reject
+
+	_, err := server.ListAllCharacters(ctx, &corev1.ListAllCharactersRequest{
+		PlayerSessionToken: "",
+		CharacterId:        ulid.Make().String(),
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+}
+
+func TestListAllCharactersRejectsNonOwnedCharacter(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	ownedCharID := ulid.Make()
+	foreignCharID := ulid.Make() // not in this player's roster
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{{ID: ownedCharID, PlayerID: playerID, Name: "Alice"}}, nil)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		sessionStore:      sessiontest.NewStore(t),
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		accessEngine:      policytest.AllowAllEngine(),
+	}
+
+	_, err := server.ListAllCharacters(ctx, &corev1.ListAllCharactersRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        foreignCharID.String(),
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, st.Code())
 }

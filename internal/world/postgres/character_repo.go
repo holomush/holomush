@@ -244,5 +244,32 @@ func (r *CharacterRepository) GetNamesByIDs(ctx context.Context, ids []ulid.ULID
 	return out, nil
 }
 
+// ListAll returns every character ordered by name ascending (id + name only —
+// directory surface; other columns are left zero). Fetch-all: no LIMIT/OFFSET.
+func (r *CharacterRepository) ListAll(ctx context.Context) ([]*world.Character, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM characters ORDER BY name ASC`)
+	if err != nil {
+		return nil, oops.Code("CHARACTER_LIST_ALL_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	out := make([]*world.Character, 0)
+	for rows.Next() {
+		var idStr, name string
+		if err := rows.Scan(&idStr, &name); err != nil {
+			return nil, oops.Code("CHARACTER_LIST_ALL_SCAN_FAILED").Wrap(err)
+		}
+		id, err := ulid.Parse(idStr)
+		if err != nil {
+			return nil, oops.Code("CHARACTER_PARSE_FAILED").With("field", "id").With("value", idStr).Wrap(err)
+		}
+		out = append(out, &world.Character{ID: id, Name: name})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("CHARACTER_ITERATE_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
 // Compile-time interface check.
 var _ world.CharacterRepository = (*CharacterRepository)(nil)

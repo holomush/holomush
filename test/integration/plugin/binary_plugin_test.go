@@ -894,6 +894,12 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				goplugin.WithSchemaProvisioner(provisioner),
 				goplugin.WithServiceRegistry(registry),
 				goplugin.WithIdentityRegistry(plugintest.NewStubRegistry("core-scenes")),
+				// INV-SCENE-65: the membership handlers (invite/kick/transfer/leave)
+				// self-gate ABAC through the host evaluator (5rh.24.17). Without a wired
+				// engine the gate fails closed (Internal) over the binary boundary. AllowAll
+				// because this suite exercises the membership state machine, not ABAC
+				// enforcement (the deny / fail-closed paths are unit-tested in core-scenes).
+				goplugin.WithEngine(policytest.AllowAllEngine()),
 			)
 
 			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))
@@ -936,6 +942,21 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			return createResp.GetScene().GetId()
 		}
 
+		// dispatchAs runs fn inside a host-issued dispatch window for charID — required
+		// by the membership self-gates (invite/kick/transfer/leave added in 5rh.24.17),
+		// which call the host's ABAC evaluator capability and require a dispatch token.
+		// The dispatch actor is authoritative for the self-gate subject, so charID MUST
+		// match the acting CharacterId field in the wrapped RPC call. Mirrors production's
+		// per-call SceneAccessServer.beginDispatch. Un-gated calls (CreateScene, JoinScene)
+		// must NOT be wrapped — their CharacterId field is the subject, no token needed.
+		dispatchAs := func(charID string, fn func(ctx context.Context)) {
+			actor := core.Actor{Kind: core.ActorCharacter, ID: charID}
+			dctx, release, derr := membershipHost.BeginServiceDispatch(membershipCtx, "core-scenes", actor, "")
+			Expect(derr).NotTo(HaveOccurred())
+			defer release()
+			fn(dctx)
+		}
+
 		Describe("Full membership lifecycle over the binary plugin boundary", func() {
 			It("supports create→invite→join→kick→reinvite→join→transfer→leave", func() {
 				// 1. Create a private scene as char-alice.
@@ -964,10 +985,13 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(createdEventCount).To(Equal(1))
 
 				// 2. Invite char-bob to the private scene.
-				_, err := membershipClient.InviteToScene(membershipCtx, &scenev1.InviteToSceneRequest{
-					CharacterId:       "char-alice",
-					SceneId:           sceneID,
-					TargetCharacterId: "char-bob",
+				var err error
+				dispatchAs("char-alice", func(ctx context.Context) {
+					_, err = membershipClient.InviteToScene(ctx, &scenev1.InviteToSceneRequest{
+						CharacterId:       "char-alice",
+						SceneId:           sceneID,
+						TargetCharacterId: "char-bob",
+					})
 				})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -1010,10 +1034,12 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(joinPayload).To(HaveKeyWithValue("visibility", "private"))
 
 				// 4. char-alice (owner) kicks char-bob.
-				_, err = membershipClient.KickFromScene(membershipCtx, &scenev1.KickFromSceneRequest{
-					CharacterId:       "char-alice",
-					SceneId:           sceneID,
-					TargetCharacterId: "char-bob",
+				dispatchAs("char-alice", func(ctx context.Context) {
+					_, err = membershipClient.KickFromScene(ctx, &scenev1.KickFromSceneRequest{
+						CharacterId:       "char-alice",
+						SceneId:           sceneID,
+						TargetCharacterId: "char-bob",
+					})
 				})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -1036,10 +1062,12 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(kickCount).To(Equal(1))
 
 				// 5. Re-invite + re-join.
-				_, err = membershipClient.InviteToScene(membershipCtx, &scenev1.InviteToSceneRequest{
-					CharacterId:       "char-alice",
-					SceneId:           sceneID,
-					TargetCharacterId: "char-bob",
+				dispatchAs("char-alice", func(ctx context.Context) {
+					_, err = membershipClient.InviteToScene(ctx, &scenev1.InviteToSceneRequest{
+						CharacterId:       "char-alice",
+						SceneId:           sceneID,
+						TargetCharacterId: "char-bob",
+					})
 				})
 				Expect(err).NotTo(HaveOccurred())
 				_, err = membershipClient.JoinScene(membershipCtx, &scenev1.JoinSceneRequest{
@@ -1056,10 +1084,12 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(bobRole).To(Equal("member"))
 
 				// 6. char-alice transfers ownership to char-bob.
-				_, err = membershipClient.TransferOwnership(membershipCtx, &scenev1.TransferOwnershipRequest{
-					CharacterId:         "char-alice",
-					SceneId:             sceneID,
-					NewOwnerCharacterId: "char-bob",
+				dispatchAs("char-alice", func(ctx context.Context) {
+					_, err = membershipClient.TransferOwnership(ctx, &scenev1.TransferOwnershipRequest{
+						CharacterId:         "char-alice",
+						SceneId:             sceneID,
+						NewOwnerCharacterId: "char-bob",
+					})
 				})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -1099,9 +1129,11 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(transferCount).To(Equal(1))
 
 				// 7. char-alice (now member) can leave.
-				_, err = membershipClient.LeaveScene(membershipCtx, &scenev1.LeaveSceneRequest{
-					CharacterId: "char-alice",
-					SceneId:     sceneID,
+				dispatchAs("char-alice", func(ctx context.Context) {
+					_, err = membershipClient.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
+						CharacterId: "char-alice",
+						SceneId:     sceneID,
+					})
 				})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -1131,9 +1163,11 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(err).NotTo(HaveOccurred())
 				sceneID := createResp.GetScene().GetId()
 
-				_, err = membershipClient.LeaveScene(membershipCtx, &scenev1.LeaveSceneRequest{
-					CharacterId: "char-alice",
-					SceneId:     sceneID,
+				dispatchAs("char-alice", func(ctx context.Context) {
+					_, err = membershipClient.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
+						CharacterId: "char-alice",
+						SceneId:     sceneID,
+					})
 				})
 				Expect(err).To(HaveOccurred())
 				st, ok := status.FromError(err)
@@ -1163,10 +1197,12 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				Expect(err).NotTo(HaveOccurred())
 				sceneID := createResp.GetScene().GetId()
 
-				_, err = membershipClient.TransferOwnership(membershipCtx, &scenev1.TransferOwnershipRequest{
-					CharacterId:         "char-alice",
-					SceneId:             sceneID,
-					NewOwnerCharacterId: "char-bob",
+				dispatchAs("char-alice", func(ctx context.Context) {
+					_, err = membershipClient.TransferOwnership(ctx, &scenev1.TransferOwnershipRequest{
+						CharacterId:         "char-alice",
+						SceneId:             sceneID,
+						NewOwnerCharacterId: "char-bob",
+					})
 				})
 				Expect(err).To(HaveOccurred())
 				st, ok := status.FromError(err)

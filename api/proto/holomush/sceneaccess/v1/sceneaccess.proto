@@ -77,6 +77,24 @@ service SceneAccessService {
   // which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
   rpc ResumeScene(ResumeSceneRequest) returns (ResumeSceneResponse);
 
+  // InviteToScene resolves the verified acting character from the player session
+  // (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
+  // SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
+  // (participant-wide per the relaxation, INV-SCENE-65).
+  rpc InviteToScene(InviteToSceneRequest) returns (InviteToSceneResponse);
+
+  // KickFromScene forwards to SceneService.KickFromScene, which self-enforces the
+  // owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above.
+  rpc KickFromScene(KickFromSceneRequest) returns (KickFromSceneResponse);
+
+  // TransferOwnership forwards to SceneService.TransferOwnership, which
+  // self-enforces the owner-only `transfer-ownership` policy (INV-SCENE-65).
+  rpc TransferOwnership(TransferOwnershipRequest) returns (TransferOwnershipResponse);
+
+  // LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
+  // participant `leave` policy (INV-SCENE-65). The owner cannot leave.
+  rpc LeaveScene(LeaveSceneRequest) returns (LeaveSceneResponse);
+
   // ExportScene renders the verified player's owned character's scene IC
   // log to a downloadable document. The facade resolves the acting character
   // from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -527,3 +545,69 @@ message ResumeSceneResponse {
   // scene is the post-transition scene row (state == "active").
   holomush.scene.v1.SceneInfo scene = 1;
 }
+
+// InviteToSceneRequest authenticates the inviter and names the invitee.
+message InviteToSceneRequest {
+  // session_id is the client-declared player-session ULID (hint only).
+  string session_id = 1;
+  // player_session_token authenticates the caller; guests are rejected.
+  string player_session_token = 2;
+  // character_id selects the acting owned alt (ownership verified server-side).
+  string character_id = 3;
+  // scene_id identifies the scene to invite into; required.
+  string scene_id = 4;
+  // target_character_id is the invitee (from the directory picker); required.
+  string target_character_id = 5;
+}
+
+// InviteToSceneResponse is empty; success is signaled by the absence of error.
+message InviteToSceneResponse {}
+
+// KickFromSceneRequest authenticates the acting owner and names the target.
+message KickFromSceneRequest {
+  // session_id is the client-declared player-session ULID (hint only).
+  string session_id = 1;
+  // player_session_token authenticates the caller; guests are rejected.
+  string player_session_token = 2;
+  // character_id selects the acting owned alt (ownership verified server-side).
+  string character_id = 3;
+  // scene_id identifies the scene; required.
+  string scene_id = 4;
+  // target_character_id is the member to remove (not the owner); required.
+  string target_character_id = 5;
+}
+
+// KickFromSceneResponse is empty.
+message KickFromSceneResponse {}
+
+// TransferOwnershipRequest authenticates the current owner and names the heir.
+message TransferOwnershipRequest {
+  // session_id is the client-declared player-session ULID (hint only).
+  string session_id = 1;
+  // player_session_token authenticates the caller; guests are rejected.
+  string player_session_token = 2;
+  // character_id selects the acting owned alt (the current owner); verified.
+  string character_id = 3;
+  // scene_id identifies the scene; required.
+  string scene_id = 4;
+  // new_owner_character_id is the existing member who becomes owner; required.
+  string new_owner_character_id = 5;
+}
+
+// TransferOwnershipResponse is empty.
+message TransferOwnershipResponse {}
+
+// LeaveSceneRequest authenticates the leaving participant.
+message LeaveSceneRequest {
+  // session_id is the client-declared player-session ULID (hint only).
+  string session_id = 1;
+  // player_session_token authenticates the caller; guests are rejected.
+  string player_session_token = 2;
+  // character_id selects the acting owned alt (the leaver); verified.
+  string character_id = 3;
+  // scene_id identifies the scene to leave; required.
+  string scene_id = 4;
+}
+
+// LeaveSceneResponse is empty.
+message LeaveSceneResponse {}

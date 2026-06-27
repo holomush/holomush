@@ -30,6 +30,10 @@ const (
 	SceneAccessService_EndScene_FullMethodName                   = "/holomush.sceneaccess.v1.SceneAccessService/EndScene"
 	SceneAccessService_PauseScene_FullMethodName                 = "/holomush.sceneaccess.v1.SceneAccessService/PauseScene"
 	SceneAccessService_ResumeScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/ResumeScene"
+	SceneAccessService_InviteToScene_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/InviteToScene"
+	SceneAccessService_KickFromScene_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/KickFromScene"
+	SceneAccessService_TransferOwnership_FullMethodName          = "/holomush.sceneaccess.v1.SceneAccessService/TransferOwnership"
+	SceneAccessService_LeaveScene_FullMethodName                 = "/holomush.sceneaccess.v1.SceneAccessService/LeaveScene"
 	SceneAccessService_ExportScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/ExportScene"
 	SceneAccessService_SetSceneFocus_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/SetSceneFocus"
 	SceneAccessService_ListPublishedScenes_FullMethodName        = "/holomush.sceneaccess.v1.SceneAccessService/ListPublishedScenes"
@@ -101,6 +105,20 @@ type SceneAccessServiceClient interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error)
+	// InviteToScene resolves the verified acting character from the player session
+	// (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
+	// SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
+	// (participant-wide per the relaxation, INV-SCENE-65).
+	InviteToScene(ctx context.Context, in *InviteToSceneRequest, opts ...grpc.CallOption) (*InviteToSceneResponse, error)
+	// KickFromScene forwards to SceneService.KickFromScene, which self-enforces the
+	// owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above.
+	KickFromScene(ctx context.Context, in *KickFromSceneRequest, opts ...grpc.CallOption) (*KickFromSceneResponse, error)
+	// TransferOwnership forwards to SceneService.TransferOwnership, which
+	// self-enforces the owner-only `transfer-ownership` policy (INV-SCENE-65).
+	TransferOwnership(ctx context.Context, in *TransferOwnershipRequest, opts ...grpc.CallOption) (*TransferOwnershipResponse, error)
+	// LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
+	// participant `leave` policy (INV-SCENE-65). The owner cannot leave.
+	LeaveScene(ctx context.Context, in *LeaveSceneRequest, opts ...grpc.CallOption) (*LeaveSceneResponse, error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -214,6 +232,46 @@ func (c *sceneAccessServiceClient) ResumeScene(ctx context.Context, in *ResumeSc
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResumeSceneResponse)
 	err := c.cc.Invoke(ctx, SceneAccessService_ResumeScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) InviteToScene(ctx context.Context, in *InviteToSceneRequest, opts ...grpc.CallOption) (*InviteToSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InviteToSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_InviteToScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) KickFromScene(ctx context.Context, in *KickFromSceneRequest, opts ...grpc.CallOption) (*KickFromSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KickFromSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_KickFromScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) TransferOwnership(ctx context.Context, in *TransferOwnershipRequest, opts ...grpc.CallOption) (*TransferOwnershipResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TransferOwnershipResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_TransferOwnership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) LeaveScene(ctx context.Context, in *LeaveSceneRequest, opts ...grpc.CallOption) (*LeaveSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaveSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_LeaveScene_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -334,6 +392,20 @@ type SceneAccessServiceServer interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error)
+	// InviteToScene resolves the verified acting character from the player session
+	// (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
+	// SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
+	// (participant-wide per the relaxation, INV-SCENE-65).
+	InviteToScene(context.Context, *InviteToSceneRequest) (*InviteToSceneResponse, error)
+	// KickFromScene forwards to SceneService.KickFromScene, which self-enforces the
+	// owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above.
+	KickFromScene(context.Context, *KickFromSceneRequest) (*KickFromSceneResponse, error)
+	// TransferOwnership forwards to SceneService.TransferOwnership, which
+	// self-enforces the owner-only `transfer-ownership` policy (INV-SCENE-65).
+	TransferOwnership(context.Context, *TransferOwnershipRequest) (*TransferOwnershipResponse, error)
+	// LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
+	// participant `leave` policy (INV-SCENE-65). The owner cannot leave.
+	LeaveScene(context.Context, *LeaveSceneRequest) (*LeaveSceneResponse, error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -396,6 +468,18 @@ func (UnimplementedSceneAccessServiceServer) PauseScene(context.Context, *PauseS
 }
 func (UnimplementedSceneAccessServiceServer) ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) InviteToScene(context.Context, *InviteToSceneRequest) (*InviteToSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InviteToScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) KickFromScene(context.Context, *KickFromSceneRequest) (*KickFromSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method KickFromScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) TransferOwnership(context.Context, *TransferOwnershipRequest) (*TransferOwnershipResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TransferOwnership not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) LeaveScene(context.Context, *LeaveSceneRequest) (*LeaveSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveScene not implemented")
 }
 func (UnimplementedSceneAccessServiceServer) ExportScene(context.Context, *ExportSceneRequest) (*ExportSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExportScene not implemented")
@@ -577,6 +661,78 @@ func _SceneAccessService_ResumeScene_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SceneAccessService_InviteToScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InviteToSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).InviteToScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_InviteToScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).InviteToScene(ctx, req.(*InviteToSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_KickFromScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KickFromSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).KickFromScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_KickFromScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).KickFromScene(ctx, req.(*KickFromSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_TransferOwnership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TransferOwnershipRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).TransferOwnership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_TransferOwnership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).TransferOwnership(ctx, req.(*TransferOwnershipRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_LeaveScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).LeaveScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_LeaveScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).LeaveScene(ctx, req.(*LeaveSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SceneAccessService_ExportScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExportSceneRequest)
 	if err := dec(in); err != nil {
@@ -705,6 +861,22 @@ var SceneAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResumeScene",
 			Handler:    _SceneAccessService_ResumeScene_Handler,
+		},
+		{
+			MethodName: "InviteToScene",
+			Handler:    _SceneAccessService_InviteToScene_Handler,
+		},
+		{
+			MethodName: "KickFromScene",
+			Handler:    _SceneAccessService_KickFromScene_Handler,
+		},
+		{
+			MethodName: "TransferOwnership",
+			Handler:    _SceneAccessService_TransferOwnership_Handler,
+		},
+		{
+			MethodName: "LeaveScene",
+			Handler:    _SceneAccessService_LeaveScene_Handler,
 		},
 		{
 			MethodName: "ExportScene",

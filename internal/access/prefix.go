@@ -29,6 +29,8 @@ const (
 	ResourceExit      = "exit:"
 	ResourceScene     = "scene:"
 	ResourceKV        = "kv:"
+	// ResourceCharacterDirectory is the singleton character-directory resource (no instance id).
+	ResourceCharacterDirectory = "character_directory:"
 )
 
 // Session error code constants.
@@ -55,6 +57,7 @@ var knownPrefixes = []string{
 	ResourceExit,
 	ResourceScene,
 	ResourceKV,
+	ResourceCharacterDirectory,
 }
 
 // PluginSubject returns a properly formatted plugin subject identifier.
@@ -165,6 +168,10 @@ func StreamResource(streamID string) string {
 	}
 	return ResourceStream + streamID
 }
+
+// CharacterDirectoryResource returns the singleton directory resource ref.
+// There is no per-instance variant: the character directory is server-wide.
+func CharacterDirectoryResource() string { return ResourceCharacterDirectory + "all" }
 
 // KVResource returns a properly formatted key-value store resource identifier.
 // Panics if namespace or key is empty, since either would create an invalid reference.

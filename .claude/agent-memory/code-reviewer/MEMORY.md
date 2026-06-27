@@ -75,7 +75,7 @@
   never grant — correct defense-in-depth polarity. Caller MUST pass server-verified actor; token outlives unload (Low).
 - **Harness event-path parity (5rh.8.4, 2026-06-07).** Production busEventAppender publishes via wrapPublisher's RenderingPublisher (sub_grpc.go:207) — a harness mirror using raw `bus.Bus.Publisher()` ships nil-Rendering frames (INV-EVENTBUS-6: gateway drops them); check publisher WRAPPING not just Append fidelity. harness.go is SHARED — a change un-dropping events affects EVERY suite → require full `task test:int`. Fake-level exclusion pins (re-implement role filter in Go) pin the fake not the SQL — demand a DB-level twin.
 
-- **Gateway scene-RPC passthrough (5rh.8.12 READY, 2026-06-08).** RECURRING gateway-wide trap (NOT per-PR, non-blocking): `*grpc.Client` wrappers `oops.Code("RPC_FAILED").Wrap` a grpc-go status.Status err; web handler returns it to connect-go (server.go:69 NewWebServiceHandler, NO error interceptor) under a FALSE `//nolint:wrapcheck // pass through as-is`. connect-go CodeOf only sees `*connect.Error` via errors.As → oops-wrapped status collapses to CodeUnknown/HTTP500; facade PERMISSION_DENIED/NOT_FOUND all become Unknown at browser. IDENTICAL to WebListFocusPresence (handler.go:792) etc → track separately. `...PassesStatusErrorThroughAsIs` unit tests use the MOCK (no wrap) so CANNOT catch it. Token header-injected (headerInjectSessionToken), never body/logged.
+- **Gateway scene-RPC passthrough — RESOLVED by interceptor (orig 5rh.8.12 2026-06-08; fixed by 5rh.24.13 2026-06-26).** The old RECURRING trap (`*grpc.Client` oops-wraps a grpc status.Status; web handler `return nil,err //nolint:wrapcheck // pass through as-is`; connect-go CodeOf collapsed oops-wrapped status to CodeUnknown/HTTP500) is now FIXED: `statusTranslationInterceptor()` is wired at server.go:76 (impl `internal/web/status_interceptor.go`). It `errors.As`-walks the oops chain for a `GRPCStatus()` and maps to the right connect code (unclassified→CodeInternal, NOT Unknown); roundtrip tests in status_interceptor_test.go prove PermissionDenied/NotFound/Internal reach the browser correctly + no oops-chain leak. So `//nolint:wrapcheck // gRPC status errors pass through as-is` on web BFF handlers is now LEGITIMATE — do NOT re-raise the old collapse finding. Token still header-injected, never body/logged.
 
 - **Frontend/E2E ports + proto-vocab traps (5rh.8.15/.16/.17/.19, 2026-06-08) — CONSOLIDATED.** (a) .svelte.ts ports DROP hard parts: backoff inside recursive fn (hoist to while-loop), gate resolved only in STREAM_OPENED, counter declared-never-incremented=inert, Map keyed charId but delete(sessionId)=dead cache; "N pass" proves nothing — `grep -c 'it('` the NEW file. (b) Load-bearing blocker often in the CONSUMED store not the diff (refresh() hardcoded asCharacterId:'' → blank roster): trace each consumed field to its PRODUCER, verify POPULATED not just typed; pnpm-check blind to empty-but-valid. (c) proto STRING field vs literal: grep the proto/Go const set — UI authors cross state↔visibility↔role vocab (SceneInfo.state∈{active,paused,ended,archived}, 'open' is VISIBILITY → state==='open' never true). nav params DEAD unless +page reads searchParams; charId='' → RPC never fires. (d) re-check a prior NOT-READY blocker STILL holds in CURRENT source before failing a dependent PR (upstream may have fixed). Honest-degradation OK iff test title+comment scope it + cite a tracked bead. Flakiness: no sleeps; expect.poll/toPass; conn-pill gate; unique titles.
 - **Guest/auth-flag gate via one-shot get(store) in PERSISTENT component (5rh.23 NOT READY, 2026-06-20).**
@@ -261,3 +261,45 @@
   drift in out-of-scope sibling files (sceneaccess_service_test.go) — note separately, still gates
   branch. Logging-test docstring "all ten handlers" went stale (13 cases now) — implementer claimed
   to maintain "every handler" invariant but didn't bump count = Low non-blocking.
+- **Widened repo interface → MISSED Nth implementor, harness compile break (5rh.24.10 NOT READY, 2026-06-26).**
+  Adding a method to an interface (`auth.CharacterRepository.ListAll`) breaks EVERY type with a `var _ Iface = (*T)(nil)`
+  assertion that wasn't updated. `auth.CharacterRepository` has THREE adapter impls — setup/adapters.go AND
+  test/integration/auth/auth_suite_test.go AND a SECOND `authCharRepoAdapter` in internal/testsupport/integrationtest/
+  harness.go (//go:build integration, assertion at :1282). Diff updated the first two, MISSED the harness → integration
+  CI gate red. Local `task test:int -- ./internal/world/postgres/` is BLIND (postgres pkg doesn't import the harness).
+  METHOD: enumerate all implementors via the interface's UNIQUE method (ListByPlayer→[]*world.Character distinguishes
+  auth.CharacterRepository from world.CharacterRepository which lacks it AND from narrow ISP `CharacterLister`/
+  `mockCharLister` which only has ListByPlayer→not full impl), then check each defines the new method. Narrow ISP test
+  fakes are SAFE (don't implement the full iface). To prove harness compiles, run a test:int pkg that IMPORTS it
+  (test/integration/...), never just the changed pkg's own test.
+- **gofumpt const-block-comment regrouping (5rh.24.12 NOT READY, 2026-06-26) — same fmt-drift trap as .24.4/.5.**
+  Inserting a `// Doc` comment line BEFORE the last entry of an aligned const block and aligning ALL entries to the
+  new longest name is NOT gofumpt-clean: gofumpt breaks the alignment section at the comment, so entries above align
+  among themselves (narrow) and the post-comment entry is its own group. `task fmt:check` (pr-prep fast lane / CI gate)
+  goes RED; `task build`/unit tests stay GREEN (gofumpt orthogonal to compile). ALWAYS run `task fmt:check` on any diff
+  touching a Go const/var/struct block regardless of green build — never trust "the realignment is benign". fmt:check
+  is whole-repo: it also surfaces PRE-EXISTING drift in out-of-scope siblings (here plugins/core-scenes/service_test.go)
+  — note those separately, they don't gate the bead but redden branch fmt. Rest of this bead was CLEAN: slog.ErrorContext
+  (not errutil) FINE per file convention + vdy2z precedent (ctx carried, opaque "internal error" returned, no leak);
+  deny-test binding genuine (mock leaves ListAll un-expected → fails if gate doesn't block before read). One real
+  non-blocker: handler claims "mirrors list_focus_presence.go:116-137" but DROPPED the precedent's accessEngine==nil
+  guard at :100-107 (panic-recovered-as-Internal = fail-closed not fail-open, so Medium not blocker).
+- **E2E scene-membership: raw char-name in UI selectors + stale failing artifact (5rh.24.24 NOT READY, 2026-06-27).**
+  TWO traps. (1) NAME NORMALIZATION: registerAndEnterTerminal returns the RAW input charName (fixtures uniqueSceneUser
+  "Sc<Cap> <suffix>", e.g. "ScMbs aafdab") but server NormalizeCharacterName (internal/world/validation.go:114) Initial-
+  Caps's it → stored/displayed "Scmbs Aafdab". Any UI selector keyed on the raw name (Join scene as {asCharacterName}
+  SceneComposer:109; Manage {p.name}/<span>{p.name} SceneContextRail:129/140; getByText(name,exact)) CANNOT match →
+  CI E2E red. Fix = derive display name via getClientCharacterName(page) (reads sessionStorage normalized) not the input.
+  Spec's OWN comment used role-only DB asserts "name may be normalized" then violated it in UI selectors — read that
+  caveat then check EVERY name selector honors it. (2) STALE-ARTIFACT GROUNDING: web/e2e/test-results/<spec>/error-
+  context.md + summary.md are written per-run (summary-reporter.ts every run; error-context on FAILURE). Compare their
+  mtime vs the spec mtime: if spec edited AFTER the last summary.md and summary shows FAILED, the pushed version was
+  NEVER re-run = no green evidence (NOT READY for a "final E2E" deliverable). The a11y snapshot + console logs in error-
+  context.md are FREE grounding (showed banner "Scmbs Aafdab" vs locator, 401s, empty workspace). test-results/ is
+  gitignored (jj st won't list it) + task test:e2e rm -rf's it at start — ephemeral, not a push artifact. PRETTIER non-
+  gate: web has NO prettier dep/config/format script; e2e .ts not in any pr-prep/CI format lane (Go fmt only) — `npx
+  prettier@latest` flagging files (incl pre-existing db.ts) is NOT a repo gate, DROP it. CLEAN parts: getParticipants
+  BySceneId SQL matches scene_participants(character_id,role) owner/member/invited/observer (migs 000003+000010);
+  waitForURL(/\/scenes$/) workaround sound — ScenesShell deep-link $effect strips ?watch= via goto('/scenes',replaceState)
+  after awaited watchScene (ScenesShell:204-215); kickAction auto-refetch (membershipFlow.ts:41); selectors otherwise
+  all verified against components; create defaults active/open valid.

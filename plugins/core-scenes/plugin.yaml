@@ -318,7 +318,7 @@ policies:
       };
   - name: invite-to-scene
     dsl: >-
-      permit(principal is character, action in ["invite"], resource is scene) when { resource.scene.owner == principal.id
+      permit(principal is character, action in ["invite"], resource is scene) when { principal.id in resource.scene.participants
       && resource.scene.state in ["active", "paused"] };
   - name: kick-from-scene
     dsl: >-

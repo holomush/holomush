@@ -63,6 +63,9 @@ const (
 	// CoreServiceListCharactersProcedure is the fully-qualified name of the CoreService's
 	// ListCharacters RPC.
 	CoreServiceListCharactersProcedure = "/holomush.core.v1.CoreService/ListCharacters"
+	// CoreServiceListAllCharactersProcedure is the fully-qualified name of the CoreService's
+	// ListAllCharacters RPC.
+	CoreServiceListAllCharactersProcedure = "/holomush.core.v1.CoreService/ListAllCharacters"
 	// CoreServiceRequestPasswordResetProcedure is the fully-qualified name of the CoreService's
 	// RequestPasswordReset RPC.
 	CoreServiceRequestPasswordResetProcedure = "/holomush.core.v1.CoreService/RequestPasswordReset"
@@ -148,6 +151,13 @@ type CoreServiceClient interface {
 	// ListCharacters returns the authenticated player's character roster enriched
 	// with per-character session status and last-known location.
 	ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error)
+	// ListAllCharacters returns the id+name of every character in the game for
+	// the directory picker (fetch-all, no pagination). The handler verifies the
+	// acting character is owned by the session, then ABAC-gates on action
+	// list_character_directory (resource character_directory), seeded default-permit
+	// for any authenticated character (registered OR guest). Connection/online
+	// state is NOT included; that is a separately-permissioned attribute.
+	ListAllCharacters(context.Context, *connect.Request[v1.ListAllCharactersRequest]) (*connect.Response[v1.ListAllCharactersResponse], error)
 	// RequestPasswordReset begins a password-reset flow for the given email. The
 	// reply is ALWAYS success regardless of whether the email exists — this is an
 	// intentional enumeration-prevention measure; delivery is stubbed (logged).
@@ -283,6 +293,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("ListCharacters")),
 			connect.WithClientOptions(opts...),
 		),
+		listAllCharacters: connect.NewClient[v1.ListAllCharactersRequest, v1.ListAllCharactersResponse](
+			httpClient,
+			baseURL+CoreServiceListAllCharactersProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("ListAllCharacters")),
+			connect.WithClientOptions(opts...),
+		),
 		requestPasswordReset: connect.NewClient[v1.RequestPasswordResetRequest, v1.RequestPasswordResetResponse](
 			httpClient,
 			baseURL+CoreServiceRequestPasswordResetProcedure,
@@ -370,6 +386,7 @@ type coreServiceClient struct {
 	createGuest               *connect.Client[v1.CreateGuestRequest, v1.CreateGuestResponse]
 	createCharacter           *connect.Client[v1.CreateCharacterRequest, v1.CreateCharacterResponse]
 	listCharacters            *connect.Client[v1.ListCharactersRequest, v1.ListCharactersResponse]
+	listAllCharacters         *connect.Client[v1.ListAllCharactersRequest, v1.ListAllCharactersResponse]
 	requestPasswordReset      *connect.Client[v1.RequestPasswordResetRequest, v1.RequestPasswordResetResponse]
 	confirmPasswordReset      *connect.Client[v1.ConfirmPasswordResetRequest, v1.ConfirmPasswordResetResponse]
 	logout                    *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
@@ -432,6 +449,11 @@ func (c *coreServiceClient) CreateCharacter(ctx context.Context, req *connect.Re
 // ListCharacters calls holomush.core.v1.CoreService.ListCharacters.
 func (c *coreServiceClient) ListCharacters(ctx context.Context, req *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error) {
 	return c.listCharacters.CallUnary(ctx, req)
+}
+
+// ListAllCharacters calls holomush.core.v1.CoreService.ListAllCharacters.
+func (c *coreServiceClient) ListAllCharacters(ctx context.Context, req *connect.Request[v1.ListAllCharactersRequest]) (*connect.Response[v1.ListAllCharactersResponse], error) {
+	return c.listAllCharacters.CallUnary(ctx, req)
 }
 
 // RequestPasswordReset calls holomush.core.v1.CoreService.RequestPasswordReset.
@@ -542,6 +564,13 @@ type CoreServiceHandler interface {
 	// ListCharacters returns the authenticated player's character roster enriched
 	// with per-character session status and last-known location.
 	ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error)
+	// ListAllCharacters returns the id+name of every character in the game for
+	// the directory picker (fetch-all, no pagination). The handler verifies the
+	// acting character is owned by the session, then ABAC-gates on action
+	// list_character_directory (resource character_directory), seeded default-permit
+	// for any authenticated character (registered OR guest). Connection/online
+	// state is NOT included; that is a separately-permissioned attribute.
+	ListAllCharacters(context.Context, *connect.Request[v1.ListAllCharactersRequest]) (*connect.Response[v1.ListAllCharactersResponse], error)
 	// RequestPasswordReset begins a password-reset flow for the given email. The
 	// reply is ALWAYS success regardless of whether the email exists — this is an
 	// intentional enumeration-prevention measure; delivery is stubbed (logged).
@@ -673,6 +702,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("ListCharacters")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceListAllCharactersHandler := connect.NewUnaryHandler(
+		CoreServiceListAllCharactersProcedure,
+		svc.ListAllCharacters,
+		connect.WithSchema(coreServiceMethods.ByName("ListAllCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
 	coreServiceRequestPasswordResetHandler := connect.NewUnaryHandler(
 		CoreServiceRequestPasswordResetProcedure,
 		svc.RequestPasswordReset,
@@ -767,6 +802,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceCreateCharacterHandler.ServeHTTP(w, r)
 		case CoreServiceListCharactersProcedure:
 			coreServiceListCharactersHandler.ServeHTTP(w, r)
+		case CoreServiceListAllCharactersProcedure:
+			coreServiceListAllCharactersHandler.ServeHTTP(w, r)
 		case CoreServiceRequestPasswordResetProcedure:
 			coreServiceRequestPasswordResetHandler.ServeHTTP(w, r)
 		case CoreServiceConfirmPasswordResetProcedure:
@@ -838,6 +875,10 @@ func (UnimplementedCoreServiceHandler) CreateCharacter(context.Context, *connect
 
 func (UnimplementedCoreServiceHandler) ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListCharacters is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) ListAllCharacters(context.Context, *connect.Request[v1.ListAllCharactersRequest]) (*connect.Response[v1.ListAllCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListAllCharacters is not implemented"))
 }
 
 func (UnimplementedCoreServiceHandler) RequestPasswordReset(context.Context, *connect.Request[v1.RequestPasswordResetRequest]) (*connect.Response[v1.RequestPasswordResetResponse], error) {

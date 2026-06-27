@@ -74,6 +74,18 @@ type mockSceneAccessClient struct {
 	downloadArchiveReq  *sceneaccessv1.DownloadPublicSceneArchiveRequest
 	downloadArchiveResp *sceneaccessv1.DownloadPublicSceneArchiveResponse
 	downloadArchiveErr  error
+
+	inviteToSceneReq *sceneaccessv1.InviteToSceneRequest
+	inviteToSceneErr error
+
+	kickFromSceneReq *sceneaccessv1.KickFromSceneRequest
+	kickFromSceneErr error
+
+	transferOwnershipReq *sceneaccessv1.TransferOwnershipRequest
+	transferOwnershipErr error
+
+	leaveSceneReq *sceneaccessv1.LeaveSceneRequest
+	leaveSceneErr error
 }
 
 func (m *mockSceneAccessClient) ListScenesForViewer(_ context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
@@ -151,6 +163,38 @@ func (m *mockSceneAccessClient) GetPublicSceneArchive(_ context.Context, req *sc
 func (m *mockSceneAccessClient) DownloadPublicSceneArchive(_ context.Context, req *sceneaccessv1.DownloadPublicSceneArchiveRequest) (*sceneaccessv1.DownloadPublicSceneArchiveResponse, error) {
 	m.downloadArchiveReq = req
 	return m.downloadArchiveResp, m.downloadArchiveErr
+}
+
+func (m *mockSceneAccessClient) InviteToScene(_ context.Context, req *sceneaccessv1.InviteToSceneRequest) (*sceneaccessv1.InviteToSceneResponse, error) {
+	m.inviteToSceneReq = req
+	if m.inviteToSceneErr != nil {
+		return nil, m.inviteToSceneErr
+	}
+	return &sceneaccessv1.InviteToSceneResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) KickFromScene(_ context.Context, req *sceneaccessv1.KickFromSceneRequest) (*sceneaccessv1.KickFromSceneResponse, error) {
+	m.kickFromSceneReq = req
+	if m.kickFromSceneErr != nil {
+		return nil, m.kickFromSceneErr
+	}
+	return &sceneaccessv1.KickFromSceneResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) TransferOwnership(_ context.Context, req *sceneaccessv1.TransferOwnershipRequest) (*sceneaccessv1.TransferOwnershipResponse, error) {
+	m.transferOwnershipReq = req
+	if m.transferOwnershipErr != nil {
+		return nil, m.transferOwnershipErr
+	}
+	return &sceneaccessv1.TransferOwnershipResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) LeaveScene(_ context.Context, req *sceneaccessv1.LeaveSceneRequest) (*sceneaccessv1.LeaveSceneResponse, error) {
+	m.leaveSceneReq = req
+	if m.leaveSceneErr != nil {
+		return nil, m.leaveSceneErr
+	}
+	return &sceneaccessv1.LeaveSceneResponse{}, nil
 }
 
 // --- WebListScenes ---
@@ -661,4 +705,123 @@ func TestWebDownloadPublicSceneArchivePassesStatusErrorThroughAsIs(t *testing.T)
 		connect.NewRequest(&webv1.WebDownloadPublicSceneArchiveRequest{SessionId: "s"}))
 	require.Error(t, err)
 	assert.Equal(t, facadeErr, err)
+}
+
+// --- WebInviteToScene ---
+
+func TestWebInviteToSceneForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebInviteToSceneRequest{
+		SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-123", TargetCharacterId: "char-eve",
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	_, err := h.WebInviteToScene(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, sc.inviteToSceneReq)
+	assert.Equal(t, "tok-abc", sc.inviteToSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.inviteToSceneReq.GetCharacterId())
+	assert.Equal(t, "scene-123", sc.inviteToSceneReq.GetSceneId())
+	assert.Equal(t, "char-eve", sc.inviteToSceneReq.GetTargetCharacterId())
+}
+
+func TestWebInviteToScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	sc := &mockSceneAccessClient{inviteToSceneErr: status.Error(codes.PermissionDenied, "not permitted to invite")}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebInviteToSceneRequest{SessionId: "s", CharacterId: "c", SceneId: "x", TargetCharacterId: "t"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebInviteToScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// --- WebKickFromScene ---
+
+func TestWebKickFromSceneForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebKickFromSceneRequest{
+		SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-123", TargetCharacterId: "char-bad",
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	_, err := h.WebKickFromScene(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, sc.kickFromSceneReq)
+	assert.Equal(t, "tok-abc", sc.kickFromSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.kickFromSceneReq.GetCharacterId())
+	assert.Equal(t, "scene-123", sc.kickFromSceneReq.GetSceneId())
+	assert.Equal(t, "char-bad", sc.kickFromSceneReq.GetTargetCharacterId())
+}
+
+func TestWebKickFromScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	sc := &mockSceneAccessClient{kickFromSceneErr: status.Error(codes.PermissionDenied, "not permitted to kick")}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebKickFromSceneRequest{SessionId: "s", CharacterId: "c", SceneId: "x", TargetCharacterId: "t"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebKickFromScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// --- WebTransferOwnership ---
+
+func TestWebTransferOwnershipForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebTransferOwnershipRequest{
+		SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-123", NewOwnerCharacterId: "char-heir",
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	_, err := h.WebTransferOwnership(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, sc.transferOwnershipReq)
+	assert.Equal(t, "tok-abc", sc.transferOwnershipReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.transferOwnershipReq.GetCharacterId())
+	assert.Equal(t, "scene-123", sc.transferOwnershipReq.GetSceneId())
+	assert.Equal(t, "char-heir", sc.transferOwnershipReq.GetNewOwnerCharacterId())
+}
+
+func TestWebTransferOwnershipPassesStatusErrorThroughAsIs(t *testing.T) {
+	sc := &mockSceneAccessClient{transferOwnershipErr: status.Error(codes.PermissionDenied, "not the owner")}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebTransferOwnershipRequest{SessionId: "s", CharacterId: "c", SceneId: "x", NewOwnerCharacterId: "h"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebTransferOwnership(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// --- WebLeaveScene ---
+
+func TestWebLeaveSceneForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebLeaveSceneRequest{
+		SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-123",
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	_, err := h.WebLeaveScene(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, sc.leaveSceneReq)
+	assert.Equal(t, "tok-abc", sc.leaveSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.leaveSceneReq.GetCharacterId())
+	assert.Equal(t, "scene-123", sc.leaveSceneReq.GetSceneId())
+}
+
+func TestWebLeaveScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	sc := &mockSceneAccessClient{leaveSceneErr: status.Error(codes.PermissionDenied, "not a member")}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebLeaveSceneRequest{SessionId: "s", CharacterId: "c", SceneId: "x"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebLeaveScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }

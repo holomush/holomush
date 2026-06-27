@@ -11,10 +11,12 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 37 seed policies (28 permit, 9 forbid).
+// SeedPolicies returns the complete set of 50 seed policies (41 permit, 9 forbid).
 // The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G5),
 // 1 phase-2 command policy, 2 system bootstrap policies, and 1 plugin host-capability
-// scope policy (eykuh.3; world.mutation own-location).
+// scope policy (eykuh.3; world.mutation own-location), 11 holomush-kplrr plugin
+// host-capability default-permit seeds, 1 holomush-xakba plugin instance-level stream read,
+// and 1 character-directory seed (INV-ACCESS-9).
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
 //
@@ -444,6 +446,20 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:plugin-stream-read",
 			Description: "Permit a declared plugin to read a concrete stream's history; audit/crypto/system forbids override forbidden namespaces (INV-PLUGIN-50; holomush-xakba)",
 			DSLText:     `permit(principal is plugin, action in ["read"], resource is stream);`,
+			SeedVersion: 1,
+		},
+
+		// --- Character directory (INV-ACCESS-9) ---
+		//
+		// Any authenticated character (registered or guest) may list the server-wide
+		// character directory (id + name only). Connection/online state requires a
+		// separate, more-restrictive permission (not part of this seed). The resource
+		// is the singleton "character_directory:all" — target-only match, no `when`
+		// clause needed. Evaluated by CoreService.ListAllCharacters.
+		{
+			Name:        "seed:directory-list-characters",
+			Description: "Any authenticated character (incl. guest) may list the character directory (names only)",
+			DSLText:     `permit(principal is character, action in ["list_character_directory"], resource is character_directory);`,
 			SeedVersion: 1,
 		},
 	}

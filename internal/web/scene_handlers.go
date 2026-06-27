@@ -430,3 +430,118 @@ func (h *Handler) WebDownloadPublicSceneArchive(ctx context.Context, req *connec
 		MimeType: resp.GetMimeType(),
 	}), nil
 }
+
+// WebInviteToScene proxies to SceneAccessService.InviteToScene. The session
+// token is read from the X-Session-Token header; the facade verifies identity,
+// guest rejection, and scene-ownership before adding the invitee.
+func (h *Handler) WebInviteToScene(ctx context.Context, req *connect.Request[webv1.WebInviteToSceneRequest]) (*connect.Response[webv1.WebInviteToSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebInviteToScene", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	if _, err := h.sceneAccess.InviteToScene(rpcCtx, &sceneaccessv1.InviteToSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		SceneId:            req.Msg.GetSceneId(),
+		TargetCharacterId:  req.Msg.GetTargetCharacterId(),
+	}); err != nil {
+		errutil.LogErrorContext(ctx, "web: invite to scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebInviteToSceneResponse{}), nil
+}
+
+// WebKickFromScene proxies to SceneAccessService.KickFromScene. The session
+// token is read from the X-Session-Token header; the facade verifies ownership
+// before removing the target member.
+func (h *Handler) WebKickFromScene(ctx context.Context, req *connect.Request[webv1.WebKickFromSceneRequest]) (*connect.Response[webv1.WebKickFromSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebKickFromScene", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	if _, err := h.sceneAccess.KickFromScene(rpcCtx, &sceneaccessv1.KickFromSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		SceneId:            req.Msg.GetSceneId(),
+		TargetCharacterId:  req.Msg.GetTargetCharacterId(),
+	}); err != nil {
+		errutil.LogErrorContext(ctx, "web: kick from scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebKickFromSceneResponse{}), nil
+}
+
+// WebTransferOwnership proxies to SceneAccessService.TransferOwnership. The
+// session token is read from the X-Session-Token header; the facade verifies
+// the caller is the current owner and that the heir is an existing member.
+func (h *Handler) WebTransferOwnership(ctx context.Context, req *connect.Request[webv1.WebTransferOwnershipRequest]) (*connect.Response[webv1.WebTransferOwnershipResponse], error) {
+	slog.DebugContext(ctx, "web: WebTransferOwnership", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	if _, err := h.sceneAccess.TransferOwnership(rpcCtx, &sceneaccessv1.TransferOwnershipRequest{
+		SessionId:           req.Msg.GetSessionId(),
+		PlayerSessionToken:  token,
+		CharacterId:         req.Msg.GetCharacterId(),
+		SceneId:             req.Msg.GetSceneId(),
+		NewOwnerCharacterId: req.Msg.GetNewOwnerCharacterId(),
+	}); err != nil {
+		errutil.LogErrorContext(ctx, "web: transfer ownership RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebTransferOwnershipResponse{}), nil
+}
+
+// WebLeaveScene proxies to SceneAccessService.LeaveScene. The session token is
+// read from the X-Session-Token header; the facade verifies membership and
+// rejects the scene owner (who must transfer ownership first).
+func (h *Handler) WebLeaveScene(ctx context.Context, req *connect.Request[webv1.WebLeaveSceneRequest]) (*connect.Response[webv1.WebLeaveSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebLeaveScene", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	if _, err := h.sceneAccess.LeaveScene(rpcCtx, &sceneaccessv1.LeaveSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		SceneId:            req.Msg.GetSceneId(),
+	}); err != nil {
+		errutil.LogErrorContext(ctx, "web: leave scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebLeaveSceneResponse{}), nil
+}

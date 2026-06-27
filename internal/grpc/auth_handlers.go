@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
@@ -551,6 +552,89 @@ func (s *CoreServer) ListCharacters(ctx context.Context, req *corev1.ListCharact
 	}
 
 	return &corev1.ListCharactersResponse{Characters: characters}, nil
+}
+
+// ListAllCharacters returns id+name for every character in the directory
+// (fetch-all for the directory picker). The acting character (identified by
+// CharacterId) must belong to the calling player session — this prevents
+// ABAC-subject spoofing. ABAC gate: action=list_character_directory on
+// resource=character_directory:all; seeded default-permit for any
+// authenticated character including guests (INV-ACCESS-9). Connection/online
+// state is excluded — it requires a separate, more-restrictive permission.
+func (s *CoreServer) ListAllCharacters(ctx context.Context, req *corev1.ListAllCharactersRequest) (*corev1.ListAllCharactersResponse, error) {
+	ps, err := s.resolvePlayerSession(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		if st := authFailureToStatus(err); st != nil {
+			return nil, st // Unauthenticated on bad/missing/expired token
+		}
+		slog.ErrorContext(ctx, "core: list-directory session resolve failed", "error", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+
+	// Ownership: the acting character must belong to this session to prevent
+	// ABAC-subject spoofing (a caller cannot assert an arbitrary character ID).
+	charID, err := ulid.Parse(req.GetCharacterId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "character not found")
+	}
+	ownedChars, err := s.charRepo.ListByPlayer(ctx, ps.PlayerID)
+	if err != nil {
+		slog.ErrorContext(ctx, "core: list-directory ownership lookup failed", "error", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	owned := false
+	for _, c := range ownedChars {
+		if c.ID == charID {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		return nil, status.Errorf(codes.NotFound, "character not found")
+	}
+
+	// Fail-closed: a nil ABAC engine means default-deny. Production wire-up
+	// (cmd/holomush/sub_grpc.go) always sets it, but tests and future
+	// construction sites might not — mirrors list_focus_presence.go:100-107.
+	if s.accessEngine == nil {
+		slog.ErrorContext(ctx, "core: list-directory access engine not configured",
+			"character_id", req.GetCharacterId())
+		return nil, status.Errorf(codes.PermissionDenied, "not permitted to list the character directory")
+	}
+
+	// ABAC gate — mirrors list_focus_presence.go:116-137.
+	accessReq, err := types.NewAccessRequest(
+		access.CharacterSubject(req.GetCharacterId()),
+		"list_character_directory",
+		access.CharacterDirectoryResource(),
+		nil,
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	decision, err := s.accessEngine.Evaluate(ctx, accessReq)
+	if err != nil {
+		slog.ErrorContext(ctx, "core: list-directory ABAC error", "error", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	if !decision.IsAllowed() {
+		return nil, status.Errorf(codes.PermissionDenied, "not permitted to list the character directory")
+	}
+
+	allChars, err := s.charRepo.ListAll(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "core: list all characters failed", "error", err)
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+
+	out := make([]*corev1.CharacterDirectoryEntry, 0, len(allChars))
+	for _, c := range allChars {
+		out = append(out, &corev1.CharacterDirectoryEntry{
+			CharacterId: c.ID.String(),
+			Name:        c.Name,
+		})
+	}
+	return &corev1.ListAllCharactersResponse{Characters: out}, nil
 }
 
 // RequestPasswordReset handles password reset requests.

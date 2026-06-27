@@ -299,7 +299,9 @@ func TestSceneCommandInviteParsesSceneIDAndTarget(t *testing.T) {
 		ID: "scene-cmd-i", OwnerID: "char-alice",
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
 	}))
-	plugin := &scenePlugin{service: newTestService(t, store), evaluator: allowEvaluator{}}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
+	plugin := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "invite scene-cmd-i char-bob", CharacterID: "char-alice",
@@ -328,7 +330,9 @@ func TestSceneCommandLeaveForwardsToServiceWithCorrectSceneID(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-l", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: newTestService(t, store), evaluator: allowEvaluator{}}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
+	plugin := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "leave scene-cmd-l", CharacterID: "char-bob",
@@ -346,7 +350,9 @@ func TestSceneCommandKickRemovesTargetFromScene(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-k", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: newTestService(t, store), evaluator: allowEvaluator{}}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
+	plugin := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "kick scene-cmd-k char-bob", CharacterID: "char-alice",
@@ -364,7 +370,9 @@ func TestSceneCommandTransferChangesOwnership(t *testing.T) {
 	}))
 	_, _, err := store.AddParticipant(context.Background(), "scene-cmd-t", "char-bob")
 	require.NoError(t, err)
-	plugin := &scenePlugin{service: newTestService(t, store), evaluator: allowEvaluator{}}
+	svc := newTestService(t, store)
+	svc.SetHostEvaluator(allowEvaluator{})
+	plugin := &scenePlugin{service: svc, evaluator: allowEvaluator{}}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "transfer scene-cmd-t char-bob", CharacterID: "char-alice",

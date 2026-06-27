@@ -216,6 +216,7 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
 - **Audit assertion gap / service-layer INV-S9 authz coexistence (rmsi.5 + 8kkv5.8)**: (1) `seed_policies_test.go` FORBID seeds lack audit-trail assertions — flag in integration suite reviews; (2) `GetPoseOrder` uses a direct `IsParticipant` store check (INV-S9, fail-closed) that is NOT replaced by the engine — intentional per spec. Dead policies in plugin.yaml (e.g., `join-open-scene`) are a Low doc risk — no fail-open.
 - **Authz/business-state separation pattern (yznw, 2026-05-25)**: Removing `resource.scene.state` from ABAC `when` clauses is safe IFF the store layer enforces state via SQL `WHERE state IN (...)` + `classifyTransitionMiss`. Verified pattern for core-scenes: end/pause/resume/update/transfer all enforce via SQL; write-scene is safe because `ListScenesForCharacter` filters to active/paused (indirect, document the coupling). `InviteParticipant` and `KickParticipant` do NOT enforce state in SQL — their ABAC state clauses are the ONLY gate; retaining them is mandatory. When reviewing policy `when`-clause removals: (1) cite the store SQL guard; (2) flag if the only enforcement is indirect (membership filter, not explicit WHERE); (3) check real store, not fakeStore — fakes may omit state guards their real counterparts also omit.
 - **Token-ferry pattern for PluginHostService clients (vqxkowlz, 2026-05-25)**: `hostEvaluateClient.Evaluate` and `pluginHostEventSink.Emit` both ferry the `x-holomush-emit-token` from `metadata.FromIncomingContext` → `metadata.AppendToOutgoingContext`. The ferry is safe: plugin cannot forge the incoming metadata; host validates via `tokenStore.Lookup(pluginName, token)`. Evaluate intentionally omits the self-token fallback (always command-gated). When reviewing future PluginHostService client methods, check: (1) outgoing-already-set guard present; (2) incoming→outgoing copy present; (3) self-token fallback absent (Evaluate) or present (EmitEvent) per spec; (4) missing-token path ends in `EMIT_TOKEN_MISSING`, not allow.
+- **scene `participants` set composition (5rh.24.18, 2026-06-26)**: `resource.scene.participants` (resolver.go:108 ← store.GetWithMembership SQL `role IN ('owner','member')`, store.go:291) INCLUDES the owner (CreateWithOwner inserts an `'owner'`-role participant row, store.go:209) and EXCLUDES not-yet-joined invitees (role `'invited'` → separate `invitees` list) and observers (role `'observer'`). So relaxing a scene policy from `resource.scene.owner == principal.id` to `principal.id in resource.scene.participants` is NOT an owner regression and does NOT admit invitees/observers. The form is identical to read/write/resume/leave (plugin.yaml:275/284/288/317). When reviewing scene-membership policy relaxations, this is the decisive fact — verify owner∈participants via CreateWithOwner, not just the SQL filter.
 - **Plugin resolver wiring pattern (8kkv5.18, 2026-05-25)**: `ABACSubsystem.AttributeResolver()` returns `stack.Resolver` — the same `*attribute.Resolver` instance passed to `policy.NewEngine`. `PluginSubsystem.Start()` captures it via `resolver := s.cfg.ABAC.AttributeResolver()` (line 286) and closes over it in `WithAttributeProviderRegistrar`/`WithAttributeProviderUnregistrar` callbacks (lines 293-298). Registration happens synchronously inside `LoadAll` (line 318), before health registration (line 333) and before gRPC traffic — no TOCTOU window. Future reviewers: (1) confirm same-instance by tracing `BuildABACStack` → `ABACStack.Resolver` → `AttributeResolver()` return; (2) `Resolver` struct has NO mutex — concurrent `Evaluate` + `RegisterProvider` would data-race; safe under current single-threaded boot order but flag if startup concurrency changes; (3) plugin namespace collision fails closed (load aborts, rollback unregisters), not open; (4) `EngineProvider` interface widening is guarded by compile-time `var _ setup.EngineProvider = (*fakeEngineProvider)(nil)` in subsystem_test.go.
 - **Scene publish split-gate (5rh.20.11 / Phase 6, 2026-05-24)**: `StartScenePublish`
   (`plugins/core-scenes/publish_service.go`) follows the spec §5-row-243 split: ABAC
@@ -544,3 +545,31 @@ Accumulated patterns from prior reviews. Read at the start of each review; updat
   the diff gates, flag it — either narrow the INV summary or defer the annotation until
   all clauses are upheld. Non-blocking (contained false-green, sound posture on the 3
   in-scope handlers).
+
+## ABAC-subject spoofing: ownership MUST precede Evaluate (holomush-5rh.24.12, 2026-06-26)
+
+When a gRPC handler uses a CLIENT-SUPPLIED `req.CharacterId` as the ABAC subject
+(`access.CharacterSubject(req.GetCharacterId())`), the handler MUST verify that
+character is owned by the resolved player session BEFORE calling `accessEngine.Evaluate`
+— otherwise a caller spoofs any principal. Canonical correct shape in
+`internal/grpc/auth_handlers.go::ListAllCharacters`: resolvePlayerSession →
+ulid.Parse(charId) (NotFound on bad) → charRepo.ListByPlayer(ps.PlayerID) + scan
+`c.ID == charID` (NotFound if absent) → THEN NewAccessRequest + Evaluate → THEN the
+actual read (ListAll). `world.Character.ID` is `ulid.ULID` ([16]byte) so `==` is a
+correct value compare. Parse-fail and not-owned return IDENTICAL NotFound (no
+enumeration oracle). When reviewing any handler that stamps an ABAC subject from
+request fields, trace the ordering: ownership/identity binding first, policy second,
+data read last. CharacterSubject("") panics — confirm an upstream parse rejects empty.
+
+## Target-only seeds need no AttributeProvider (INV-ACCESS-9 pattern)
+
+A seed with no `when` clause (e.g. `permit(principal is character, action in [...],
+resource is character_directory);`) references zero attributes, so registering an
+AttributeProvider is NOT required — `TestValidateSeedProviderCoverage_TargetOnlyMatchesNotFlagged`
+exempts it. Don't flag a missing provider for target-only seeds. New singleton resource:
+add prefix const + append to `knownPrefixes` (else NewAccessRequest rejects the ref),
+provide a `<Type>Resource()` returning `<type>:all`; DSL `resource is <type>` matches the
+prefix-derived type. Binding a multi-clause INV to the DENY test (deny engine +
+NO ListAll mock expectation, so a read would fail the test) is the defensible choice —
+it pins the security-critical gate-blocks-read clause; sibling permit/field-shape clauses
+MAY stay unannotated (low, non-blocking).

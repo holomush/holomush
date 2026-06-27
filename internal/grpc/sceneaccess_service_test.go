@@ -1287,3 +1287,387 @@ func TestSceneAccessResumeScene(t *testing.T) {
 		})
 	}
 }
+
+func TestSceneAccessInviteToScene(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	targetCharID := idgen.New().String()
+	ps := buildSATestPS(t, playerID)
+	wantID := "scene-10"
+
+	nonGuest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		return pr
+	}
+	guest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: true}, nil).Maybe()
+		return pr
+	}
+	ownsAlice := func(t *testing.T) *authmocks.MockCharacterRepository {
+		cr := authmocks.NewMockCharacterRepository(t)
+		cr.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		return cr
+	}
+
+	tests := []struct {
+		name       string
+		playerRepo func(*testing.T) *authmocks.MockPlayerRepository
+		charRepo   func(*testing.T) *authmocks.MockCharacterRepository
+		sceneMock  func(*testing.T) *scenemocks.MockSceneServiceClient
+		req        *sceneaccessv1.InviteToSceneRequest
+		check      func(t *testing.T, resp *sceneaccessv1.InviteToSceneResponse, err error)
+	}{
+		{
+			name:       "owned character invites with verified ids",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().InviteToScene(mock.Anything, mock.MatchedBy(func(r *scenev1.InviteToSceneRequest) bool {
+					return r.GetCharacterId() == char.ID.String() && r.GetSceneId() == wantID && r.GetTargetCharacterId() == targetCharID
+				})).Return(&scenev1.InviteToSceneResponse{}, nil).Once()
+				return sm
+			},
+			req: &sceneaccessv1.InviteToSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        char.ID.String(),
+				SceneId:            wantID,
+				TargetCharacterId:  targetCharID,
+			},
+			check: func(t *testing.T, resp *sceneaccessv1.InviteToSceneResponse, err error) {
+				require.NoError(t, err)
+				assert.NotNil(t, resp)
+			},
+		},
+		{
+			name:       "guest denied; downstream never called",
+			playerRepo: guest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.InviteToSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        char.ID.String(),
+				SceneId:            wantID,
+				TargetCharacterId:  targetCharID,
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.InviteToSceneResponse, err error) {
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			},
+		},
+		{
+			name:       "character not owned returns NotFound",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.InviteToSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        idgen.New().String(),
+				SceneId:            wantID,
+				TargetCharacterId:  targetCharID,
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.InviteToSceneResponse, err error) {
+				assert.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sceneMock := tt.sceneMock(t)
+			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
+				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+			resp, err := srv.InviteToScene(ctx, tt.req)
+			tt.check(t, resp, err)
+		})
+	}
+}
+
+func TestSceneAccessKickFromScene(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	targetCharID := idgen.New().String()
+	ps := buildSATestPS(t, playerID)
+	wantID := "scene-11"
+
+	nonGuest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		return pr
+	}
+	guest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: true}, nil).Maybe()
+		return pr
+	}
+	ownsAlice := func(t *testing.T) *authmocks.MockCharacterRepository {
+		cr := authmocks.NewMockCharacterRepository(t)
+		cr.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		return cr
+	}
+
+	tests := []struct {
+		name       string
+		playerRepo func(*testing.T) *authmocks.MockPlayerRepository
+		charRepo   func(*testing.T) *authmocks.MockCharacterRepository
+		sceneMock  func(*testing.T) *scenemocks.MockSceneServiceClient
+		req        *sceneaccessv1.KickFromSceneRequest
+		check      func(t *testing.T, resp *sceneaccessv1.KickFromSceneResponse, err error)
+	}{
+		{
+			name:       "owned character kicks target with verified ids",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().KickFromScene(mock.Anything, mock.MatchedBy(func(r *scenev1.KickFromSceneRequest) bool {
+					return r.GetCharacterId() == char.ID.String() && r.GetSceneId() == wantID && r.GetTargetCharacterId() == targetCharID
+				})).Return(&scenev1.KickFromSceneResponse{}, nil).Once()
+				return sm
+			},
+			req: &sceneaccessv1.KickFromSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        char.ID.String(),
+				SceneId:            wantID,
+				TargetCharacterId:  targetCharID,
+			},
+			check: func(t *testing.T, resp *sceneaccessv1.KickFromSceneResponse, err error) {
+				require.NoError(t, err)
+				assert.NotNil(t, resp)
+			},
+		},
+		{
+			name:       "guest denied; downstream never called",
+			playerRepo: guest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.KickFromSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        char.ID.String(),
+				SceneId:            wantID,
+				TargetCharacterId:  targetCharID,
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.KickFromSceneResponse, err error) {
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			},
+		},
+		{
+			name:       "character not owned returns NotFound",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.KickFromSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        idgen.New().String(),
+				SceneId:            wantID,
+				TargetCharacterId:  targetCharID,
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.KickFromSceneResponse, err error) {
+				assert.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sceneMock := tt.sceneMock(t)
+			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
+				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+			resp, err := srv.KickFromScene(ctx, tt.req)
+			tt.check(t, resp, err)
+		})
+	}
+}
+
+func TestSceneAccessTransferOwnership(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	newOwnerCharID := idgen.New().String()
+	ps := buildSATestPS(t, playerID)
+	wantID := "scene-12"
+
+	nonGuest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		return pr
+	}
+	guest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: true}, nil).Maybe()
+		return pr
+	}
+	ownsAlice := func(t *testing.T) *authmocks.MockCharacterRepository {
+		cr := authmocks.NewMockCharacterRepository(t)
+		cr.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		return cr
+	}
+
+	tests := []struct {
+		name       string
+		playerRepo func(*testing.T) *authmocks.MockPlayerRepository
+		charRepo   func(*testing.T) *authmocks.MockCharacterRepository
+		sceneMock  func(*testing.T) *scenemocks.MockSceneServiceClient
+		req        *sceneaccessv1.TransferOwnershipRequest
+		check      func(t *testing.T, resp *sceneaccessv1.TransferOwnershipResponse, err error)
+	}{
+		{
+			name:       "owned character transfers ownership with verified ids",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().TransferOwnership(mock.Anything, mock.MatchedBy(func(r *scenev1.TransferOwnershipRequest) bool {
+					return r.GetCharacterId() == char.ID.String() && r.GetSceneId() == wantID && r.GetNewOwnerCharacterId() == newOwnerCharID
+				})).Return(&scenev1.TransferOwnershipResponse{}, nil).Once()
+				return sm
+			},
+			req: &sceneaccessv1.TransferOwnershipRequest{
+				PlayerSessionToken:  testSAToken,
+				CharacterId:         char.ID.String(),
+				SceneId:             wantID,
+				NewOwnerCharacterId: newOwnerCharID,
+			},
+			check: func(t *testing.T, resp *sceneaccessv1.TransferOwnershipResponse, err error) {
+				require.NoError(t, err)
+				assert.NotNil(t, resp)
+			},
+		},
+		{
+			name:       "guest denied; downstream never called",
+			playerRepo: guest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.TransferOwnershipRequest{
+				PlayerSessionToken:  testSAToken,
+				CharacterId:         char.ID.String(),
+				SceneId:             wantID,
+				NewOwnerCharacterId: newOwnerCharID,
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.TransferOwnershipResponse, err error) {
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			},
+		},
+		{
+			name:       "character not owned returns NotFound",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.TransferOwnershipRequest{
+				PlayerSessionToken:  testSAToken,
+				CharacterId:         idgen.New().String(),
+				SceneId:             wantID,
+				NewOwnerCharacterId: newOwnerCharID,
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.TransferOwnershipResponse, err error) {
+				assert.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sceneMock := tt.sceneMock(t)
+			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
+				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+			resp, err := srv.TransferOwnership(ctx, tt.req)
+			tt.check(t, resp, err)
+		})
+	}
+}
+
+func TestSceneAccessLeaveScene(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	ps := buildSATestPS(t, playerID)
+	wantID := "scene-13"
+
+	nonGuest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		return pr
+	}
+	guest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: true}, nil).Maybe()
+		return pr
+	}
+	ownsAlice := func(t *testing.T) *authmocks.MockCharacterRepository {
+		cr := authmocks.NewMockCharacterRepository(t)
+		cr.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		return cr
+	}
+
+	tests := []struct {
+		name       string
+		playerRepo func(*testing.T) *authmocks.MockPlayerRepository
+		charRepo   func(*testing.T) *authmocks.MockCharacterRepository
+		sceneMock  func(*testing.T) *scenemocks.MockSceneServiceClient
+		req        *sceneaccessv1.LeaveSceneRequest
+		check      func(t *testing.T, resp *sceneaccessv1.LeaveSceneResponse, err error)
+	}{
+		{
+			name:       "owned character leaves scene with verified id",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().LeaveScene(mock.Anything, mock.MatchedBy(func(r *scenev1.LeaveSceneRequest) bool {
+					return r.GetCharacterId() == char.ID.String() && r.GetSceneId() == wantID
+				})).Return(&scenev1.LeaveSceneResponse{}, nil).Once()
+				return sm
+			},
+			req: &sceneaccessv1.LeaveSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        char.ID.String(),
+				SceneId:            wantID,
+			},
+			check: func(t *testing.T, resp *sceneaccessv1.LeaveSceneResponse, err error) {
+				require.NoError(t, err)
+				assert.NotNil(t, resp)
+			},
+		},
+		{
+			name:       "guest denied; downstream never called",
+			playerRepo: guest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.LeaveSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        char.ID.String(),
+				SceneId:            wantID,
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.LeaveSceneResponse, err error) {
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			},
+		},
+		{
+			name:       "character not owned returns NotFound",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.LeaveSceneRequest{
+				PlayerSessionToken: testSAToken,
+				CharacterId:        idgen.New().String(),
+				SceneId:            wantID,
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.LeaveSceneResponse, err error) {
+				assert.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sceneMock := tt.sceneMock(t)
+			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
+				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+			resp, err := srv.LeaveScene(ctx, tt.req)
+			tt.check(t, resp, err)
+		})
+	}
+}
