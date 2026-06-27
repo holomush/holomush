@@ -327,6 +327,29 @@ export async function getSceneByTitle(title: string): Promise<DbScene | null> {
   return rows[0] ?? null;
 }
 
+// ── Scene participant queries ───────────────────────────────────
+
+export interface DbSceneParticipant {
+  character_id: string;
+  role: string;
+}
+
+/**
+ * Returns all participant rows for a scene from the plugin_core_scenes schema.
+ * Includes every role (owner, member, observer, invited) so callers can assert
+ * membership state directly against the database without going through GetScene,
+ * which only surfaces owner/member rows in its proto response.
+ */
+export async function getParticipantsBySceneId(sceneId: string): Promise<DbSceneParticipant[]> {
+  const { rows } = await getPool().query<DbSceneParticipant>(
+    `SELECT character_id, role
+     FROM plugin_core_scenes.scene_participants
+     WHERE scene_id = $1`,
+    [sceneId],
+  );
+  return rows;
+}
+
 // ── Zero ULID check ─────────────────────────────────────────────
 
 const ZERO_ULID = '00000000000000000000000000';

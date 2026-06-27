@@ -568,19 +568,19 @@ func (s *CoreServer) ListAllCharacters(ctx context.Context, req *corev1.ListAllC
 			return nil, st // Unauthenticated on bad/missing/expired token
 		}
 		slog.ErrorContext(ctx, "core: list-directory session resolve failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal error")
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	// Ownership: the acting character must belong to this session to prevent
 	// ABAC-subject spoofing (a caller cannot assert an arbitrary character ID).
 	charID, err := ulid.Parse(req.GetCharacterId())
 	if err != nil {
-		return nil, status.Error(codes.NotFound, "character not found")
+		return nil, status.Errorf(codes.NotFound, "character not found")
 	}
 	ownedChars, err := s.charRepo.ListByPlayer(ctx, ps.PlayerID)
 	if err != nil {
 		slog.ErrorContext(ctx, "core: list-directory ownership lookup failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal error")
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 	owned := false
 	for _, c := range ownedChars {
@@ -590,7 +590,7 @@ func (s *CoreServer) ListAllCharacters(ctx context.Context, req *corev1.ListAllC
 		}
 	}
 	if !owned {
-		return nil, status.Error(codes.NotFound, "character not found")
+		return nil, status.Errorf(codes.NotFound, "character not found")
 	}
 
 	// Fail-closed: a nil ABAC engine means default-deny. Production wire-up
@@ -599,7 +599,7 @@ func (s *CoreServer) ListAllCharacters(ctx context.Context, req *corev1.ListAllC
 	if s.accessEngine == nil {
 		slog.ErrorContext(ctx, "core: list-directory access engine not configured",
 			"character_id", req.GetCharacterId())
-		return nil, status.Error(codes.PermissionDenied, "not permitted to list the character directory")
+		return nil, status.Errorf(codes.PermissionDenied, "not permitted to list the character directory")
 	}
 
 	// ABAC gate — mirrors list_focus_presence.go:116-137.
@@ -610,21 +610,21 @@ func (s *CoreServer) ListAllCharacters(ctx context.Context, req *corev1.ListAllC
 		nil,
 	)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "internal error")
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 	decision, err := s.accessEngine.Evaluate(ctx, accessReq)
 	if err != nil {
 		slog.ErrorContext(ctx, "core: list-directory ABAC error", "error", err)
-		return nil, status.Error(codes.Internal, "internal error")
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 	if !decision.IsAllowed() {
-		return nil, status.Error(codes.PermissionDenied, "not permitted to list the character directory")
+		return nil, status.Errorf(codes.PermissionDenied, "not permitted to list the character directory")
 	}
 
 	allChars, err := s.charRepo.ListAll(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "core: list all characters failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal error")
+		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
 	out := make([]*corev1.CharacterDirectoryEntry, 0, len(allChars))

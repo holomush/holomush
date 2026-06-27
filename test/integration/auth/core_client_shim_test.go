@@ -66,6 +66,10 @@ func (c *coreClientShim) ListCharacters(ctx context.Context, req *corev1.ListCha
 	return c.s.ListCharacters(ctx, req)
 }
 
+func (c *coreClientShim) ListAllCharacters(ctx context.Context, req *corev1.ListAllCharactersRequest) (*corev1.ListAllCharactersResponse, error) {
+	return c.s.ListAllCharacters(ctx, req)
+}
+
 func (c *coreClientShim) RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error) {
 	return c.s.RequestPasswordReset(ctx, req)
 }

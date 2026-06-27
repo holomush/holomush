@@ -284,3 +284,22 @@
   deny-test binding genuine (mock leaves ListAll un-expected → fails if gate doesn't block before read). One real
   non-blocker: handler claims "mirrors list_focus_presence.go:116-137" but DROPPED the precedent's accessEngine==nil
   guard at :100-107 (panic-recovered-as-Internal = fail-closed not fail-open, so Medium not blocker).
+- **E2E scene-membership: raw char-name in UI selectors + stale failing artifact (5rh.24.24 NOT READY, 2026-06-27).**
+  TWO traps. (1) NAME NORMALIZATION: registerAndEnterTerminal returns the RAW input charName (fixtures uniqueSceneUser
+  "Sc<Cap> <suffix>", e.g. "ScMbs aafdab") but server NormalizeCharacterName (internal/world/validation.go:114) Initial-
+  Caps's it → stored/displayed "Scmbs Aafdab". Any UI selector keyed on the raw name (Join scene as {asCharacterName}
+  SceneComposer:109; Manage {p.name}/<span>{p.name} SceneContextRail:129/140; getByText(name,exact)) CANNOT match →
+  CI E2E red. Fix = derive display name via getClientCharacterName(page) (reads sessionStorage normalized) not the input.
+  Spec's OWN comment used role-only DB asserts "name may be normalized" then violated it in UI selectors — read that
+  caveat then check EVERY name selector honors it. (2) STALE-ARTIFACT GROUNDING: web/e2e/test-results/<spec>/error-
+  context.md + summary.md are written per-run (summary-reporter.ts every run; error-context on FAILURE). Compare their
+  mtime vs the spec mtime: if spec edited AFTER the last summary.md and summary shows FAILED, the pushed version was
+  NEVER re-run = no green evidence (NOT READY for a "final E2E" deliverable). The a11y snapshot + console logs in error-
+  context.md are FREE grounding (showed banner "Scmbs Aafdab" vs locator, 401s, empty workspace). test-results/ is
+  gitignored (jj st won't list it) + task test:e2e rm -rf's it at start — ephemeral, not a push artifact. PRETTIER non-
+  gate: web has NO prettier dep/config/format script; e2e .ts not in any pr-prep/CI format lane (Go fmt only) — `npx
+  prettier@latest` flagging files (incl pre-existing db.ts) is NOT a repo gate, DROP it. CLEAN parts: getParticipants
+  BySceneId SQL matches scene_participants(character_id,role) owner/member/invited/observer (migs 000003+000010);
+  waitForURL(/\/scenes$/) workaround sound — ScenesShell deep-link $effect strips ?watch= via goto('/scenes',replaceState)
+  after awaited watchScene (ScenesShell:204-215); kickAction auto-refetch (membershipFlow.ts:41); selectors otherwise
+  all verified against components; create defaults active/open valid.
