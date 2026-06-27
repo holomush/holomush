@@ -213,6 +213,7 @@ func TestUpdateSceneRejectsUnknownContentWarning(t *testing.T) {
 	sink := &recordingEventSink{}
 	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
+	svc.SetHostEvaluator(allowEvaluator{})
 	// nil settings → DefaultCWTaxonomy; "forbidden-cw" is not in it
 
 	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
@@ -251,6 +252,7 @@ func TestUpdateSceneAcceptsValidContentWarnings(t *testing.T) {
 	sink := &recordingEventSink{}
 	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
+	svc.SetHostEvaluator(allowEvaluator{})
 
 	resp, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
 		SceneId:         "scene-cw-valid",
@@ -278,6 +280,7 @@ func TestUpdateSceneWithCustomTaxonomyAcceptsCustomWarning(t *testing.T) {
 	sink := &recordingEventSink{}
 	svc := newTestService(t, store)
 	svc.SetEventSink(sink)
+	svc.SetHostEvaluator(allowEvaluator{})
 	svc.settings = &fakeSettingsClient{values: []string{"custom-tag"}, found: true}
 
 	resp, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{

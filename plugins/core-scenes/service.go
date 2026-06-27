@@ -229,7 +229,7 @@ func (s *SceneServiceImpl) SetSettingsClient(c pluginsdk.SettingsClient) {
 }
 
 // SetHostEvaluator installs the host ABAC evaluator used by WatchScene's
-// spectate gate, the lifecycle handlers' end/pause/resume gates, and the
+// spectate gate, the lifecycle handlers' end/pause/resume/update gates, and the
 // membership handlers' invite/kick/transfer-ownership/leave gates. Wired via
 // scenePlugin.SetHostEvaluator before Init; nil until then (all gated
 // handlers fail closed).
@@ -893,6 +893,26 @@ func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateS
 			"scene_id", req.GetSceneId(),
 		)
 		return nil, status.Error(codes.PermissionDenied, "not permitted to update for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
+	// Service-layer ABAC: owner-only update is self-enforced here (parity with
+	// EndScene/PauseScene/ResumeScene per INV-SCENE-65), so authorization holds
+	// for any direct gRPC caller — including the web SceneAccessService facade
+	// that INV-SCENE-65 anticipates reaching this RPC — not only when the telnet
+	// command wrapper gates at dispatch.
+	if s.evaluator == nil {
+		slog.WarnContext(ctx, "scene.service.update_scene evaluator not configured",
+			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
+		return nil, status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	dec, evalErr := s.evaluator.Evaluate(ctx, "update", "scene:"+req.GetSceneId())
+	if evalErr != nil {
+		recordError(span, evalErr)
+		errutil.LogErrorContext(ctx, "scene.service.update_scene evaluation failed", evalErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return nil, status.Error(codes.PermissionDenied, "not permitted to update this scene") //nolint:wrapcheck // gRPC status is the wire contract
 	}
 
 	update, err := buildSceneUpdate(req)
