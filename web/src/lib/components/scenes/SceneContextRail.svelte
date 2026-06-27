@@ -43,6 +43,16 @@
   let inviteIds = $state<string[]>([]);
   let canManage = $derived(scene?.state === 'active' || scene?.state === 'paused');
   let lifecycleErr = $state('');
+  let membershipErr = $state('');
+
+  // The rail is reused across scene switches (persistent in ScenesShell), so
+  // clear any surfaced error when the active scene changes — a stale alert from
+  // one scene must not bleed into the next.
+  $effect(() => {
+    void scene?.sceneId;
+    lifecycleErr = '';
+    membershipErr = '';
+  });
 
   async function runLifecycle(
     action: (a: { sceneId: string; characterId: string }) => Promise<void>,
@@ -53,6 +63,20 @@
       await action({ sceneId: scene.sceneId, characterId: scene.asCharacterId });
     } catch (e) {
       lifecycleErr = e instanceof Error ? e.message : 'Action failed';
+    }
+  }
+
+  // Membership actions (transfer/kick/invite/leave) have heterogeneous argument
+  // shapes, so this takes a thunk rather than runLifecycle's uniform action.
+  // It never rejects: failures (network, or a PermissionDenied from the facade
+  // self-gate) land in membershipErr for the user instead of becoming an
+  // unhandled promise rejection.
+  async function runMembership(action: () => Promise<void>): Promise<void> {
+    membershipErr = '';
+    try {
+      await action();
+    } catch (e) {
+      membershipErr = e instanceof Error ? e.message : 'Action failed';
     }
   }
 </script>
@@ -144,21 +168,26 @@
                   <DropdownMenu.Content align="end">
                     <DropdownMenu.Item
                       onSelect={() =>
-                        transferAction({
-                          sceneId: scene.sceneId,
-                          characterId: scene.asCharacterId,
-                          newOwnerCharacterId: p.id,
-                        })}
+                        runMembership(() =>
+                          transferAction({
+                            sceneId: scene.sceneId,
+                            characterId: scene.asCharacterId,
+                            newOwnerCharacterId: p.id,
+                          }),
+                        )}
                     >
                       Transfer ownership
                     </DropdownMenu.Item>
                     <DropdownMenu.Item
+                      variant="destructive"
                       onSelect={() =>
-                        kickAction({
-                          sceneId: scene.sceneId,
-                          characterId: scene.asCharacterId,
-                          targetCharacterId: p.id,
-                        })}
+                        runMembership(() =>
+                          kickAction({
+                            sceneId: scene.sceneId,
+                            characterId: scene.asCharacterId,
+                            targetCharacterId: p.id,
+                          }),
+                        )}
                     >
                       Kick
                     </DropdownMenu.Item>
@@ -198,11 +227,15 @@
               class="h-6 text-xs"
               disabled={!canManage}
               onclick={() =>
-                inviteCharacters({
-                  sceneId: scene.sceneId,
-                  characterId: scene.asCharacterId,
-                  targetIds: inviteIds,
-                }).then(() => (inviteIds = []))}
+                runMembership(() =>
+                  inviteCharacters({
+                    sceneId: scene.sceneId,
+                    characterId: scene.asCharacterId,
+                    targetIds: inviteIds,
+                  }).then(() => {
+                    inviteIds = [];
+                  }),
+                )}
             >
               Invite {inviteIds.length}
             </Button>
@@ -214,10 +247,16 @@
               class="h-6 text-xs"
               disabled={!canManage}
               onclick={() =>
-                leaveAction({ sceneId: scene.sceneId, characterId: scene.asCharacterId })}
+                runMembership(() =>
+                  leaveAction({ sceneId: scene.sceneId, characterId: scene.asCharacterId }),
+                )}
             >Leave</Button>
           {/if}
         </div>
+      {/if}
+
+      {#if membershipErr}
+        <p class="text-xs text-destructive pt-2" role="alert">{membershipErr}</p>
       {/if}
 
       <!-- Observers listed separately per INV-SCENE-61 -->

@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mount } from 'svelte';
+import { mount, flushSync } from 'svelte';
 import type { WorkspaceScene } from '$lib/scenes/types';
 
 vi.mock('$lib/scenes/lifecycleFlow', () => ({
@@ -22,6 +22,8 @@ vi.mock('$lib/scenes/membershipFlow', () => ({
 // (render the real picker so its trigger appears, but no fetch).
 vi.mock('$lib/scenes/directoryClient', () => ({ listAllCharacters: vi.fn(async () => []) }));
 
+import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
+import { listAllCharacters } from '$lib/scenes/directoryClient';
 import SceneContextRail from './SceneContextRail.svelte';
 
 const OWNER_ID = 'char-owner';
@@ -200,5 +202,211 @@ describe('SceneContextRail roster actions', () => {
 		expect(t.querySelector('[aria-label^="Manage"]')).toBeNull();
 		// Owner never gets Leave
 		expect(lifecycleButton(t, /^Leave$/)).toBeNull();
+	});
+
+	it('member of an ended scene: Leave is rendered but disabled (canManage=false)', () => {
+		const t = render(
+			makeScene({
+				state: 'ended',
+				role: 'member',
+				ownerId: OWNER_ID,
+				asCharacterId: MEMBER_ID,
+				participants: TWO_PARTICIPANTS,
+			}),
+		);
+		const leave = lifecycleButton(t, /^Leave$/);
+		expect(leave).not.toBeNull();
+		expect(leave?.disabled).toBe(true);
+	});
+});
+
+describe('SceneContextRail membership action errors', () => {
+	const TWO_PARTICIPANTS = [
+		{ id: OWNER_ID, name: 'Alice' },
+		{ id: MEMBER_ID, name: 'Bob' },
+	];
+
+	// Flush Svelte reactivity + the microtask chain inside runMembership (plus
+	// the invite success-path .then) so the surfaced error / cleared selection render.
+	async function settle(): Promise<void> {
+		for (let i = 0; i < 6; i++) {
+			flushSync();
+			await Promise.resolve();
+		}
+		flushSync();
+	}
+
+	function alertText(t: HTMLElement): string | null {
+		return t.querySelector('[role="alert"]')?.textContent?.trim() ?? null;
+	}
+
+	// The submit button reads "Invite <n>"; the picker trigger reads
+	// "Invite characters…" / "<n> selected". Match only the submit button.
+	function inviteButton(t: HTMLElement): HTMLButtonElement | null {
+		return lifecycleButton(t, /^Invite \d/);
+	}
+
+	// Portaled bits-ui content (menu items, picker options) lands on document.body.
+	function findByRole(role: string, label: RegExp): HTMLElement | null {
+		return (
+			([...document.querySelectorAll(`[role="${role}"]`)] as HTMLElement[]).find((el) =>
+				label.test((el.textContent ?? '').trim()),
+			) ?? null
+		);
+	}
+	const menuItem = (label: RegExp) => findByRole('menuitem', label);
+	const option = (label: RegExp) => findByRole('option', label);
+
+	it('surfaces an error when Leave rejects', async () => {
+		vi.mocked(leaveAction).mockRejectedValue(new Error('cannot leave: permission denied'));
+		const t = render(
+			makeScene({ state: 'active', role: 'member', ownerId: OWNER_ID, asCharacterId: MEMBER_ID }),
+		);
+		lifecycleButton(t, /^Leave$/)?.click();
+		await settle();
+		expect(alertText(t)).toContain('cannot leave: permission denied');
+	});
+
+	it('does not surface an error when Leave succeeds', async () => {
+		vi.mocked(leaveAction).mockResolvedValue(undefined);
+		const t = render(
+			makeScene({ state: 'active', role: 'member', ownerId: OWNER_ID, asCharacterId: MEMBER_ID }),
+		);
+		lifecycleButton(t, /^Leave$/)?.click();
+		await settle();
+		expect(leaveAction).toHaveBeenCalledTimes(1);
+		expect(t.querySelector('[role="alert"]')).toBeNull();
+	});
+
+	// Open the kebab manager menu for Bob. The bits-ui trigger attaches its
+	// open behavior via a deferred effect, so effects MUST be flushed (settle
+	// after render) before the trigger click registers.
+	async function openManageBob(t: HTMLElement): Promise<void> {
+		await settle();
+		(t.querySelector('[aria-label="Manage Bob"]') as HTMLElement).click();
+		await settle();
+	}
+
+	it('surfaces an error when Kick rejects', async () => {
+		vi.mocked(kickAction).mockRejectedValue(new Error('kick failed: forbidden'));
+		const t = render(
+			makeScene({
+				state: 'active',
+				role: 'owner',
+				ownerId: OWNER_ID,
+				asCharacterId: OWNER_ID,
+				participants: TWO_PARTICIPANTS,
+			}),
+		);
+		await openManageBob(t);
+		menuItem(/^Kick$/)?.click();
+		await settle();
+		expect(alertText(t)).toContain('kick failed: forbidden');
+	});
+
+	it('Kick menu item carries the destructive variant', async () => {
+		const t = render(
+			makeScene({
+				state: 'active',
+				role: 'owner',
+				ownerId: OWNER_ID,
+				asCharacterId: OWNER_ID,
+				participants: TWO_PARTICIPANTS,
+			}),
+		);
+		await openManageBob(t);
+		expect(menuItem(/^Kick$/)?.getAttribute('data-variant')).toBe('destructive');
+	});
+
+	it('surfaces an error when Transfer ownership rejects', async () => {
+		vi.mocked(transferAction).mockRejectedValue(new Error('transfer failed: denied'));
+		const t = render(
+			makeScene({
+				state: 'active',
+				role: 'owner',
+				ownerId: OWNER_ID,
+				asCharacterId: OWNER_ID,
+				participants: TWO_PARTICIPANTS,
+			}),
+		);
+		await openManageBob(t);
+		menuItem(/^Transfer/)?.click();
+		await settle();
+		expect(alertText(t)).toContain('transfer failed: denied');
+	});
+
+	it('does not surface an error when Kick succeeds', async () => {
+		vi.mocked(kickAction).mockResolvedValue(undefined);
+		const t = render(
+			makeScene({
+				state: 'active',
+				role: 'owner',
+				ownerId: OWNER_ID,
+				asCharacterId: OWNER_ID,
+				participants: TWO_PARTICIPANTS,
+			}),
+		);
+		await openManageBob(t);
+		menuItem(/^Kick$/)?.click();
+		await settle();
+		expect(kickAction).toHaveBeenCalledTimes(1);
+		expect(t.querySelector('[role="alert"]')).toBeNull();
+	});
+
+	it('does not surface an error when Transfer ownership succeeds', async () => {
+		vi.mocked(transferAction).mockResolvedValue(undefined);
+		const t = render(
+			makeScene({
+				state: 'active',
+				role: 'owner',
+				ownerId: OWNER_ID,
+				asCharacterId: OWNER_ID,
+				participants: TWO_PARTICIPANTS,
+			}),
+		);
+		await openManageBob(t);
+		menuItem(/^Transfer/)?.click();
+		await settle();
+		expect(transferAction).toHaveBeenCalledTimes(1);
+		expect(t.querySelector('[role="alert"]')).toBeNull();
+	});
+
+	it('surfaces an error AND preserves the selection when Invite rejects', async () => {
+		vi.mocked(listAllCharacters).mockResolvedValue([{ id: 'c1', name: 'Charlie' }]);
+		vi.mocked(inviteCharacters).mockRejectedValue(new Error('invite failed: blocked'));
+		const t = render(
+			makeScene({ state: 'active', role: 'member', ownerId: OWNER_ID, asCharacterId: MEMBER_ID }),
+		);
+		await settle();
+		(t.querySelector('[name="invite-picker"]') as HTMLElement).click();
+		await settle();
+		option(/^Charlie$/)?.click();
+		await settle();
+		expect(inviteButton(t)).not.toBeNull(); // selection populated → button visible
+		inviteButton(t)?.click();
+		await settle();
+		expect(alertText(t)).toContain('invite failed: blocked');
+		// clear-on-success-only: selection is KEPT on failure so the user can
+		// retry without re-selecting (cj3k8.1 — matters for a PermissionDenied
+		// self-gate, where nothing was sent).
+		expect(inviteButton(t)).not.toBeNull();
+	});
+
+	it('resets the selection after a successful Invite', async () => {
+		vi.mocked(listAllCharacters).mockResolvedValue([{ id: 'c1', name: 'Charlie' }]);
+		vi.mocked(inviteCharacters).mockResolvedValue(undefined);
+		const t = render(
+			makeScene({ state: 'active', role: 'member', ownerId: OWNER_ID, asCharacterId: MEMBER_ID }),
+		);
+		await settle();
+		(t.querySelector('[name="invite-picker"]') as HTMLElement).click();
+		await settle();
+		option(/^Charlie$/)?.click();
+		await settle();
+		expect(inviteButton(t)).not.toBeNull();
+		inviteButton(t)?.click();
+		await settle();
+		expect(t.querySelector('[role="alert"]')).toBeNull();
+		expect(inviteButton(t)).toBeNull();
 	});
 });
