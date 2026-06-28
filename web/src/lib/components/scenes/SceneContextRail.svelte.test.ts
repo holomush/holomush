@@ -22,6 +22,15 @@ vi.mock('$lib/scenes/membershipFlow', () => ({
 // (render the real picker so its trigger appears, but no fetch).
 vi.mock('$lib/scenes/directoryClient', () => ({ listAllCharacters: vi.fn(async () => []) }));
 
+// The SceneSettingsSheet (mounted by the rail) imports the form, which imports
+// settingsFlow. The form only fetches once the sheet's open=true; stub anyway so
+// no import-time network reference leaks into the rail render.
+vi.mock('$lib/scenes/settingsFlow', () => ({
+	loadSceneSettings: vi.fn(async () => ({})),
+	settingsMask: vi.fn(() => []),
+	saveSceneSettings: vi.fn(),
+}));
+
 import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
 import { listAllCharacters } from '$lib/scenes/directoryClient';
 import SceneContextRail from './SceneContextRail.svelte';
@@ -408,5 +417,29 @@ describe('SceneContextRail membership action errors', () => {
 		await settle();
 		expect(t.querySelector('[role="alert"]')).toBeNull();
 		expect(inviteButton(t)).toBeNull();
+	});
+});
+
+describe('SceneContextRail settings trigger', () => {
+	const settingsBtn = (t: HTMLElement) => t.querySelector('[aria-label="Scene settings"]');
+
+	it('shows ⚙ Settings for an owner of an active scene', () => {
+		const t = render(makeScene({ state: 'active', role: 'owner', ownerId: OWNER_ID, asCharacterId: OWNER_ID }));
+		expect(settingsBtn(t)).not.toBeNull();
+	});
+
+	it('shows ⚙ Settings for an owner of a paused scene', () => {
+		const t = render(makeScene({ state: 'paused', role: 'owner', ownerId: OWNER_ID, asCharacterId: OWNER_ID }));
+		expect(settingsBtn(t)).not.toBeNull();
+	});
+
+	it('hides ⚙ Settings from a non-owner participant', () => {
+		const t = render(makeScene({ state: 'active', role: 'member', ownerId: OWNER_ID, asCharacterId: MEMBER_ID }));
+		expect(settingsBtn(t)).toBeNull();
+	});
+
+	it('hides ⚙ Settings once the scene has ended (UpdateScene rejects ended)', () => {
+		const t = render(makeScene({ state: 'ended', role: 'owner', ownerId: OWNER_ID, asCharacterId: OWNER_ID }));
+		expect(settingsBtn(t)).toBeNull();
 	});
 });
