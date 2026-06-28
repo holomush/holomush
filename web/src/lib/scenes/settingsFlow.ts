@@ -15,17 +15,24 @@ export type SceneSettings = {
 	contentWarnings: string[];
 };
 
-/** Loads the current settings baseline for the sheet from the authoritative read RPC. */
+/**
+ * Loads the current settings baseline for the sheet from the authoritative read RPC.
+ * Throws if the scene cannot be read so the form surfaces an error rather than
+ * rendering a blank baseline (which would silently mis-seed the diff). Visibility
+ * and pose-order are normalized to the create-time defaults so the baseline matches
+ * the form's own normalization — otherwise an empty server value reads as dirty on load.
+ */
 export async function loadSceneSettings(characterId: string, sceneId: string): Promise<SceneSettings> {
 	const sessionId = await ensureSession(characterId);
 	const s = await getScene(sessionId, characterId, sceneId);
+	if (!s) throw new Error('scene not found');
 	return {
-		title: s?.title ?? '',
-		description: s?.description ?? '',
-		visibility: s?.visibility ?? '',
-		poseOrderMode: s?.poseOrderMode ?? '',
-		tags: s?.tags ?? [],
-		contentWarnings: s?.contentWarnings ?? [],
+		title: s.title ?? '',
+		description: s.description ?? '',
+		visibility: s.visibility || 'open',
+		poseOrderMode: s.poseOrderMode || 'free',
+		tags: s.tags ?? [],
+		contentWarnings: s.contentWarnings ?? [],
 	};
 }
 
@@ -70,6 +77,7 @@ export async function saveSceneSettings(args: {
 		contentWarnings: args.next.contentWarnings,
 		updateMask: { paths },
 	});
-	if (scene) workspaceStore.applySceneInfo(scene);
+	if (!scene) throw new Error('update returned no scene');
+	workspaceStore.applySceneInfo(scene);
 	return true;
 }

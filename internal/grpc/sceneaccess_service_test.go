@@ -1755,6 +1755,41 @@ func TestSceneAccessUpdateScene(t *testing.T) {
 				assert.Equal(t, codes.NotFound, status.Code(err))
 			},
 		},
+		{
+			name:       "downstream status error passes through unchanged",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().UpdateScene(mock.Anything, mock.Anything).
+					Return(nil, status.Error(codes.FailedPrecondition, "scene already ended")).Once()
+				return sm
+			},
+			req: &sceneaccessv1.UpdateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), SceneId: wantID,
+				Title: "x", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+			},
+			check: func(t *testing.T, resp *sceneaccessv1.UpdateSceneResponse, err error) {
+				assert.Nil(t, resp)
+				// The plugin status code must survive the facade hop verbatim (opacity).
+				assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+			},
+		},
+		{
+			name:       "update_mask with unsupported path rejected; downstream never called",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.UpdateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), SceneId: wantID,
+				// "location_id" is a real scenev1.UpdateScene mask path the settings
+				// surface does not expose; the facade must reject it (no passthrough).
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"visibility", "location_id"}},
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.UpdateSceneResponse, err error) {
+				assert.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -767,11 +767,29 @@ func (s *SceneAccessServer) GetPublicSceneArchive(ctx context.Context, req *scen
 	}, nil
 }
 
+// updateSceneMaskablePaths is the closed set of update_mask paths the settings
+// facade accepts — the six editable fields UpdateSceneRequest exposes. The facade
+// forwards update_mask verbatim to scenev1.UpdateScene, whose buildSceneUpdate
+// also honors "location_id" (clearing the scene's location anchor on an empty
+// value). The settings surface deliberately omits a settable location_id, so the
+// facade rejects any path outside this set rather than let a direct gRPC caller
+// drive an unadvertised mutation through the mask (defense-in-depth; the action
+// is already owner-only ABAC-gated downstream).
+var updateSceneMaskablePaths = map[string]struct{}{
+	"title":            {},
+	"description":      {},
+	"visibility":       {},
+	"pose_order_mode":  {},
+	"tags":             {},
+	"content_warnings": {},
+}
+
 // UpdateScene resolves the verified owner from the player session and forwards an
 // UpdateScene call to the plugin SceneService (which self-enforces the ABAC
 // `update` policy, owner-only, INV-SCENE-65, and applies only the masked fields).
 // resolveAndGate enforces the guest gate (INV-SCENE-64); ownedCharacter enforces
-// ownership (INV-SCENE-63).
+// ownership (INV-SCENE-63). The update_mask is constrained to the six editable
+// fields so a caller cannot reach unlisted scene columns via verbatim passthrough.
 func (s *SceneAccessServer) UpdateScene(ctx context.Context, req *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error) {
 	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
 	if err != nil {
@@ -780,6 +798,11 @@ func (s *SceneAccessServer) UpdateScene(ctx context.Context, req *sceneaccessv1.
 	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
 	if err != nil {
 		return nil, err
+	}
+	for _, path := range req.GetUpdateMask().GetPaths() {
+		if _, ok := updateSceneMaskablePaths[path]; !ok {
+			return nil, status.Error(codes.InvalidArgument, "update_mask contains an unsupported path") //nolint:wrapcheck // gRPC status error at handler boundary
+		}
 	}
 	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
 	if err != nil {
