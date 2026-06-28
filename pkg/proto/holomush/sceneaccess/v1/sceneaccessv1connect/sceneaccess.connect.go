@@ -75,6 +75,18 @@ const (
 	// SceneAccessServiceLeaveSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// LeaveScene RPC.
 	SceneAccessServiceLeaveSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/LeaveScene"
+	// SceneAccessServiceStartScenePublishProcedure is the fully-qualified name of the
+	// SceneAccessService's StartScenePublish RPC.
+	SceneAccessServiceStartScenePublishProcedure = "/holomush.sceneaccess.v1.SceneAccessService/StartScenePublish"
+	// SceneAccessServiceCastPublishSceneVoteProcedure is the fully-qualified name of the
+	// SceneAccessService's CastPublishSceneVote RPC.
+	SceneAccessServiceCastPublishSceneVoteProcedure = "/holomush.sceneaccess.v1.SceneAccessService/CastPublishSceneVote"
+	// SceneAccessServiceWithdrawScenePublishProcedure is the fully-qualified name of the
+	// SceneAccessService's WithdrawScenePublish RPC.
+	SceneAccessServiceWithdrawScenePublishProcedure = "/holomush.sceneaccess.v1.SceneAccessService/WithdrawScenePublish"
+	// SceneAccessServiceGetPublishedSceneProcedure is the fully-qualified name of the
+	// SceneAccessService's GetPublishedScene RPC.
+	SceneAccessServiceGetPublishedSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/GetPublishedScene"
 	// SceneAccessServiceExportSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// ExportScene RPC.
 	SceneAccessServiceExportSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/ExportScene"
@@ -164,6 +176,21 @@ type SceneAccessServiceClient interface {
 	// LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
 	// participant `leave` policy (INV-SCENE-65). The owner cannot leave.
 	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
+	// StartScenePublish starts a publication vote on an ended scene. Participant-
+	// gated inside the plugin (INV-SCENE-33: no ABAC engine on this path); the
+	// facade resolves session/character and dispatches without an engine call.
+	StartScenePublish(context.Context, *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error)
+	// CastPublishSceneVote casts or changes the caller's Yes/No vote on the
+	// active attempt. Frozen-roster participant gate enforced in the plugin store.
+	CastPublishSceneVote(context.Context, *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error)
+	// WithdrawScenePublish aborts the active attempt (scene owner only; gate in
+	// the plugin handler).
+	WithdrawScenePublish(context.Context, *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error)
+	// GetPublishedScene reads the active attempt's status + vote tally for a
+	// participant cold-start snapshot. Participant-gated (INV-SCENE-60); the
+	// facade passes the plugin's status; the response is trimmed (no frozen
+	// content — that is GetPublicSceneArchive's job).
+	GetPublishedScene(context.Context, *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -284,6 +311,30 @@ func NewSceneAccessServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(sceneAccessServiceMethods.ByName("LeaveScene")),
 			connect.WithClientOptions(opts...),
 		),
+		startScenePublish: connect.NewClient[v1.StartScenePublishRequest, v1.StartScenePublishResponse](
+			httpClient,
+			baseURL+SceneAccessServiceStartScenePublishProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("StartScenePublish")),
+			connect.WithClientOptions(opts...),
+		),
+		castPublishSceneVote: connect.NewClient[v1.CastPublishSceneVoteRequest, v1.CastPublishSceneVoteResponse](
+			httpClient,
+			baseURL+SceneAccessServiceCastPublishSceneVoteProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("CastPublishSceneVote")),
+			connect.WithClientOptions(opts...),
+		),
+		withdrawScenePublish: connect.NewClient[v1.WithdrawScenePublishRequest, v1.WithdrawScenePublishResponse](
+			httpClient,
+			baseURL+SceneAccessServiceWithdrawScenePublishProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("WithdrawScenePublish")),
+			connect.WithClientOptions(opts...),
+		),
+		getPublishedScene: connect.NewClient[v1.GetPublishedSceneRequest, v1.GetPublishedSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceGetPublishedSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("GetPublishedScene")),
+			connect.WithClientOptions(opts...),
+		),
 		exportScene: connect.NewClient[v1.ExportSceneRequest, v1.ExportSceneResponse](
 			httpClient,
 			baseURL+SceneAccessServiceExportSceneProcedure,
@@ -332,6 +383,10 @@ type sceneAccessServiceClient struct {
 	kickFromScene              *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
 	transferOwnership          *connect.Client[v1.TransferOwnershipRequest, v1.TransferOwnershipResponse]
 	leaveScene                 *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
+	startScenePublish          *connect.Client[v1.StartScenePublishRequest, v1.StartScenePublishResponse]
+	castPublishSceneVote       *connect.Client[v1.CastPublishSceneVoteRequest, v1.CastPublishSceneVoteResponse]
+	withdrawScenePublish       *connect.Client[v1.WithdrawScenePublishRequest, v1.WithdrawScenePublishResponse]
+	getPublishedScene          *connect.Client[v1.GetPublishedSceneRequest, v1.GetPublishedSceneResponse]
 	exportScene                *connect.Client[v1.ExportSceneRequest, v1.ExportSceneResponse]
 	setSceneFocus              *connect.Client[v1.SetSceneFocusRequest, v1.SetSceneFocusResponse]
 	listPublishedScenes        *connect.Client[v1.ListPublishedScenesRequest, v1.ListPublishedScenesResponse]
@@ -402,6 +457,26 @@ func (c *sceneAccessServiceClient) TransferOwnership(ctx context.Context, req *c
 // LeaveScene calls holomush.sceneaccess.v1.SceneAccessService.LeaveScene.
 func (c *sceneAccessServiceClient) LeaveScene(ctx context.Context, req *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error) {
 	return c.leaveScene.CallUnary(ctx, req)
+}
+
+// StartScenePublish calls holomush.sceneaccess.v1.SceneAccessService.StartScenePublish.
+func (c *sceneAccessServiceClient) StartScenePublish(ctx context.Context, req *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error) {
+	return c.startScenePublish.CallUnary(ctx, req)
+}
+
+// CastPublishSceneVote calls holomush.sceneaccess.v1.SceneAccessService.CastPublishSceneVote.
+func (c *sceneAccessServiceClient) CastPublishSceneVote(ctx context.Context, req *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error) {
+	return c.castPublishSceneVote.CallUnary(ctx, req)
+}
+
+// WithdrawScenePublish calls holomush.sceneaccess.v1.SceneAccessService.WithdrawScenePublish.
+func (c *sceneAccessServiceClient) WithdrawScenePublish(ctx context.Context, req *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error) {
+	return c.withdrawScenePublish.CallUnary(ctx, req)
+}
+
+// GetPublishedScene calls holomush.sceneaccess.v1.SceneAccessService.GetPublishedScene.
+func (c *sceneAccessServiceClient) GetPublishedScene(ctx context.Context, req *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error) {
+	return c.getPublishedScene.CallUnary(ctx, req)
 }
 
 // ExportScene calls holomush.sceneaccess.v1.SceneAccessService.ExportScene.
@@ -503,6 +578,21 @@ type SceneAccessServiceHandler interface {
 	// LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
 	// participant `leave` policy (INV-SCENE-65). The owner cannot leave.
 	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
+	// StartScenePublish starts a publication vote on an ended scene. Participant-
+	// gated inside the plugin (INV-SCENE-33: no ABAC engine on this path); the
+	// facade resolves session/character and dispatches without an engine call.
+	StartScenePublish(context.Context, *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error)
+	// CastPublishSceneVote casts or changes the caller's Yes/No vote on the
+	// active attempt. Frozen-roster participant gate enforced in the plugin store.
+	CastPublishSceneVote(context.Context, *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error)
+	// WithdrawScenePublish aborts the active attempt (scene owner only; gate in
+	// the plugin handler).
+	WithdrawScenePublish(context.Context, *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error)
+	// GetPublishedScene reads the active attempt's status + vote tally for a
+	// participant cold-start snapshot. Participant-gated (INV-SCENE-60); the
+	// facade passes the plugin's status; the response is trimmed (no frozen
+	// content — that is GetPublicSceneArchive's job).
+	GetPublishedScene(context.Context, *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -619,6 +709,30 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 		connect.WithSchema(sceneAccessServiceMethods.ByName("LeaveScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneAccessServiceStartScenePublishHandler := connect.NewUnaryHandler(
+		SceneAccessServiceStartScenePublishProcedure,
+		svc.StartScenePublish,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("StartScenePublish")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServiceCastPublishSceneVoteHandler := connect.NewUnaryHandler(
+		SceneAccessServiceCastPublishSceneVoteProcedure,
+		svc.CastPublishSceneVote,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("CastPublishSceneVote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServiceWithdrawScenePublishHandler := connect.NewUnaryHandler(
+		SceneAccessServiceWithdrawScenePublishProcedure,
+		svc.WithdrawScenePublish,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("WithdrawScenePublish")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServiceGetPublishedSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceGetPublishedSceneProcedure,
+		svc.GetPublishedScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("GetPublishedScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sceneAccessServiceExportSceneHandler := connect.NewUnaryHandler(
 		SceneAccessServiceExportSceneProcedure,
 		svc.ExportScene,
@@ -677,6 +791,14 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 			sceneAccessServiceTransferOwnershipHandler.ServeHTTP(w, r)
 		case SceneAccessServiceLeaveSceneProcedure:
 			sceneAccessServiceLeaveSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceStartScenePublishProcedure:
+			sceneAccessServiceStartScenePublishHandler.ServeHTTP(w, r)
+		case SceneAccessServiceCastPublishSceneVoteProcedure:
+			sceneAccessServiceCastPublishSceneVoteHandler.ServeHTTP(w, r)
+		case SceneAccessServiceWithdrawScenePublishProcedure:
+			sceneAccessServiceWithdrawScenePublishHandler.ServeHTTP(w, r)
+		case SceneAccessServiceGetPublishedSceneProcedure:
+			sceneAccessServiceGetPublishedSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceExportSceneProcedure:
 			sceneAccessServiceExportSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceSetSceneFocusProcedure:
@@ -746,6 +868,22 @@ func (UnimplementedSceneAccessServiceHandler) TransferOwnership(context.Context,
 
 func (UnimplementedSceneAccessServiceHandler) LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.LeaveScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) StartScenePublish(context.Context, *connect.Request[v1.StartScenePublishRequest]) (*connect.Response[v1.StartScenePublishResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.StartScenePublish is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) CastPublishSceneVote(context.Context, *connect.Request[v1.CastPublishSceneVoteRequest]) (*connect.Response[v1.CastPublishSceneVoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.CastPublishSceneVote is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) WithdrawScenePublish(context.Context, *connect.Request[v1.WithdrawScenePublishRequest]) (*connect.Response[v1.WithdrawScenePublishResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.WithdrawScenePublish is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) GetPublishedScene(context.Context, *connect.Request[v1.GetPublishedSceneRequest]) (*connect.Response[v1.GetPublishedSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.GetPublishedScene is not implemented"))
 }
 
 func (UnimplementedSceneAccessServiceHandler) ExportScene(context.Context, *connect.Request[v1.ExportSceneRequest]) (*connect.Response[v1.ExportSceneResponse], error) {

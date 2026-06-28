@@ -337,6 +337,15 @@ service WebService {
   // SceneAccessService.DownloadPublicSceneArchive; player_session_token is
   // read from the HTTP cookie by gateway middleware.
   rpc WebDownloadPublicSceneArchive(WebDownloadPublicSceneArchiveRequest) returns (WebDownloadPublicSceneArchiveResponse);
+
+  // WebStartScenePublish proxies StartScenePublish to the facade.
+  rpc WebStartScenePublish(WebStartScenePublishRequest) returns (WebStartScenePublishResponse);
+  // WebCastPublishSceneVote proxies CastPublishSceneVote to the facade.
+  rpc WebCastPublishSceneVote(WebCastPublishSceneVoteRequest) returns (WebCastPublishSceneVoteResponse);
+  // WebWithdrawScenePublish proxies WithdrawScenePublish to the facade.
+  rpc WebWithdrawScenePublish(WebWithdrawScenePublishRequest) returns (WebWithdrawScenePublishResponse);
+  // WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
+  rpc WebGetPublishedScene(WebGetPublishedSceneRequest) returns (WebGetPublishedSceneResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -1207,6 +1216,81 @@ message WebEndSceneRequest {
 message WebEndSceneResponse {
   // scene is the scene row after the ended transition.
   holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// WebStartScenePublishRequest starts a publish vote from the web portal.
+message WebStartScenePublishRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // scene_id identifies the scene to start a publish vote on; MUST be ended.
+  string scene_id = 3;
+}
+
+// WebStartScenePublishResponse mirrors the facade response.
+message WebStartScenePublishResponse {
+  // published_scene_id is the new publication attempt's id.
+  string published_scene_id = 1;
+  // attempt_number is the attempt's 1-based ordinal within the scene's budget.
+  int32 attempt_number = 2;
+}
+
+// WebCastPublishSceneVoteRequest casts/changes a vote from the web portal.
+message WebCastPublishSceneVoteRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // published_scene_id identifies the attempt to vote on.
+  string published_scene_id = 3;
+  // vote is the ballot choice: true = yes, false = no.
+  bool vote = 4;
+}
+
+// WebCastPublishSceneVoteResponse mirrors the facade response.
+message WebCastPublishSceneVoteResponse {
+  // is_change is true when the caller had already voted and this flipped the choice.
+  bool is_change = 1;
+}
+
+// WebWithdrawScenePublishRequest withdraws an attempt from the web portal.
+message WebWithdrawScenePublishRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // published_scene_id identifies the attempt to abort.
+  string published_scene_id = 3;
+}
+
+// WebWithdrawScenePublishResponse is empty.
+message WebWithdrawScenePublishResponse {}
+
+// WebGetPublishedSceneRequest reads the cold-start tally snapshot.
+message WebGetPublishedSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // published_scene_id identifies the attempt whose status + tally to read.
+  string published_scene_id = 3;
+}
+
+// WebGetPublishedSceneResponse is the trimmed status + tally view.
+message WebGetPublishedSceneResponse {
+  // id is the publication attempt id.
+  string id = 1;
+  // scene_id is the scene the attempt belongs to.
+  string scene_id = 2;
+  // attempt_number is the attempt's 1-based ordinal.
+  int32 attempt_number = 3;
+  // status is the state-machine phase: COLLECTING / COOLOFF / PUBLISHED / ATTEMPT_FAILED.
+  string status = 4;
+  // failure_reason is the cause when status is ATTEMPT_FAILED; empty otherwise.
+  string failure_reason = 5;
+  // vote_summary is the current yes/no/pending tally.
+  holomush.scene.v1.PublishedSceneVoteSummary vote_summary = 6;
 }
 
 // WebPauseSceneRequest proxies to SceneAccessService.PauseScene.

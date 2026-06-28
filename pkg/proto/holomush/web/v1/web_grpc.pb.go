@@ -64,6 +64,10 @@ const (
 	WebService_WebListPublishedScenes_FullMethodName        = "/holomush.web.v1.WebService/WebListPublishedScenes"
 	WebService_WebGetPublicSceneArchive_FullMethodName      = "/holomush.web.v1.WebService/WebGetPublicSceneArchive"
 	WebService_WebDownloadPublicSceneArchive_FullMethodName = "/holomush.web.v1.WebService/WebDownloadPublicSceneArchive"
+	WebService_WebStartScenePublish_FullMethodName          = "/holomush.web.v1.WebService/WebStartScenePublish"
+	WebService_WebCastPublishSceneVote_FullMethodName       = "/holomush.web.v1.WebService/WebCastPublishSceneVote"
+	WebService_WebWithdrawScenePublish_FullMethodName       = "/holomush.web.v1.WebService/WebWithdrawScenePublish"
+	WebService_WebGetPublishedScene_FullMethodName          = "/holomush.web.v1.WebService/WebGetPublishedScene"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -257,6 +261,14 @@ type WebServiceClient interface {
 	// SceneAccessService.DownloadPublicSceneArchive; player_session_token is
 	// read from the HTTP cookie by gateway middleware.
 	WebDownloadPublicSceneArchive(ctx context.Context, in *WebDownloadPublicSceneArchiveRequest, opts ...grpc.CallOption) (*WebDownloadPublicSceneArchiveResponse, error)
+	// WebStartScenePublish proxies StartScenePublish to the facade.
+	WebStartScenePublish(ctx context.Context, in *WebStartScenePublishRequest, opts ...grpc.CallOption) (*WebStartScenePublishResponse, error)
+	// WebCastPublishSceneVote proxies CastPublishSceneVote to the facade.
+	WebCastPublishSceneVote(ctx context.Context, in *WebCastPublishSceneVoteRequest, opts ...grpc.CallOption) (*WebCastPublishSceneVoteResponse, error)
+	// WebWithdrawScenePublish proxies WithdrawScenePublish to the facade.
+	WebWithdrawScenePublish(ctx context.Context, in *WebWithdrawScenePublishRequest, opts ...grpc.CallOption) (*WebWithdrawScenePublishResponse, error)
+	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
+	WebGetPublishedScene(ctx context.Context, in *WebGetPublishedSceneRequest, opts ...grpc.CallOption) (*WebGetPublishedSceneResponse, error)
 }
 
 type webServiceClient struct {
@@ -696,6 +708,46 @@ func (c *webServiceClient) WebDownloadPublicSceneArchive(ctx context.Context, in
 	return out, nil
 }
 
+func (c *webServiceClient) WebStartScenePublish(ctx context.Context, in *WebStartScenePublishRequest, opts ...grpc.CallOption) (*WebStartScenePublishResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebStartScenePublishResponse)
+	err := c.cc.Invoke(ctx, WebService_WebStartScenePublish_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebCastPublishSceneVote(ctx context.Context, in *WebCastPublishSceneVoteRequest, opts ...grpc.CallOption) (*WebCastPublishSceneVoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebCastPublishSceneVoteResponse)
+	err := c.cc.Invoke(ctx, WebService_WebCastPublishSceneVote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebWithdrawScenePublish(ctx context.Context, in *WebWithdrawScenePublishRequest, opts ...grpc.CallOption) (*WebWithdrawScenePublishResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebWithdrawScenePublishResponse)
+	err := c.cc.Invoke(ctx, WebService_WebWithdrawScenePublish_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebGetPublishedScene(ctx context.Context, in *WebGetPublishedSceneRequest, opts ...grpc.CallOption) (*WebGetPublishedSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebGetPublishedSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebGetPublishedScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -887,6 +939,14 @@ type WebServiceServer interface {
 	// SceneAccessService.DownloadPublicSceneArchive; player_session_token is
 	// read from the HTTP cookie by gateway middleware.
 	WebDownloadPublicSceneArchive(context.Context, *WebDownloadPublicSceneArchiveRequest) (*WebDownloadPublicSceneArchiveResponse, error)
+	// WebStartScenePublish proxies StartScenePublish to the facade.
+	WebStartScenePublish(context.Context, *WebStartScenePublishRequest) (*WebStartScenePublishResponse, error)
+	// WebCastPublishSceneVote proxies CastPublishSceneVote to the facade.
+	WebCastPublishSceneVote(context.Context, *WebCastPublishSceneVoteRequest) (*WebCastPublishSceneVoteResponse, error)
+	// WebWithdrawScenePublish proxies WithdrawScenePublish to the facade.
+	WebWithdrawScenePublish(context.Context, *WebWithdrawScenePublishRequest) (*WebWithdrawScenePublishResponse, error)
+	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
+	WebGetPublishedScene(context.Context, *WebGetPublishedSceneRequest) (*WebGetPublishedSceneResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1022,6 +1082,18 @@ func (UnimplementedWebServiceServer) WebGetPublicSceneArchive(context.Context, *
 }
 func (UnimplementedWebServiceServer) WebDownloadPublicSceneArchive(context.Context, *WebDownloadPublicSceneArchiveRequest) (*WebDownloadPublicSceneArchiveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebDownloadPublicSceneArchive not implemented")
+}
+func (UnimplementedWebServiceServer) WebStartScenePublish(context.Context, *WebStartScenePublishRequest) (*WebStartScenePublishResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebStartScenePublish not implemented")
+}
+func (UnimplementedWebServiceServer) WebCastPublishSceneVote(context.Context, *WebCastPublishSceneVoteRequest) (*WebCastPublishSceneVoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebCastPublishSceneVote not implemented")
+}
+func (UnimplementedWebServiceServer) WebWithdrawScenePublish(context.Context, *WebWithdrawScenePublishRequest) (*WebWithdrawScenePublishResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebWithdrawScenePublish not implemented")
+}
+func (UnimplementedWebServiceServer) WebGetPublishedScene(context.Context, *WebGetPublishedSceneRequest) (*WebGetPublishedSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebGetPublishedScene not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -1793,6 +1865,78 @@ func _WebService_WebDownloadPublicSceneArchive_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebStartScenePublish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebStartScenePublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebStartScenePublish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebStartScenePublish_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebStartScenePublish(ctx, req.(*WebStartScenePublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebCastPublishSceneVote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebCastPublishSceneVoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebCastPublishSceneVote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebCastPublishSceneVote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebCastPublishSceneVote(ctx, req.(*WebCastPublishSceneVoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebWithdrawScenePublish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebWithdrawScenePublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebWithdrawScenePublish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebWithdrawScenePublish_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebWithdrawScenePublish(ctx, req.(*WebWithdrawScenePublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebGetPublishedScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebGetPublishedSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebGetPublishedScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebGetPublishedScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebGetPublishedScene(ctx, req.(*WebGetPublishedSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1963,6 +2107,22 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebDownloadPublicSceneArchive",
 			Handler:    _WebService_WebDownloadPublicSceneArchive_Handler,
+		},
+		{
+			MethodName: "WebStartScenePublish",
+			Handler:    _WebService_WebStartScenePublish_Handler,
+		},
+		{
+			MethodName: "WebCastPublishSceneVote",
+			Handler:    _WebService_WebCastPublishSceneVote_Handler,
+		},
+		{
+			MethodName: "WebWithdrawScenePublish",
+			Handler:    _WebService_WebWithdrawScenePublish_Handler,
+		},
+		{
+			MethodName: "WebGetPublishedScene",
+			Handler:    _WebService_WebGetPublishedScene_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

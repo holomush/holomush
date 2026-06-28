@@ -35,6 +35,10 @@ const (
 	SceneAccessService_KickFromScene_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/KickFromScene"
 	SceneAccessService_TransferOwnership_FullMethodName          = "/holomush.sceneaccess.v1.SceneAccessService/TransferOwnership"
 	SceneAccessService_LeaveScene_FullMethodName                 = "/holomush.sceneaccess.v1.SceneAccessService/LeaveScene"
+	SceneAccessService_StartScenePublish_FullMethodName          = "/holomush.sceneaccess.v1.SceneAccessService/StartScenePublish"
+	SceneAccessService_CastPublishSceneVote_FullMethodName       = "/holomush.sceneaccess.v1.SceneAccessService/CastPublishSceneVote"
+	SceneAccessService_WithdrawScenePublish_FullMethodName       = "/holomush.sceneaccess.v1.SceneAccessService/WithdrawScenePublish"
+	SceneAccessService_GetPublishedScene_FullMethodName          = "/holomush.sceneaccess.v1.SceneAccessService/GetPublishedScene"
 	SceneAccessService_ExportScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/ExportScene"
 	SceneAccessService_SetSceneFocus_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/SetSceneFocus"
 	SceneAccessService_ListPublishedScenes_FullMethodName        = "/holomush.sceneaccess.v1.SceneAccessService/ListPublishedScenes"
@@ -127,6 +131,21 @@ type SceneAccessServiceClient interface {
 	// LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
 	// participant `leave` policy (INV-SCENE-65). The owner cannot leave.
 	LeaveScene(ctx context.Context, in *LeaveSceneRequest, opts ...grpc.CallOption) (*LeaveSceneResponse, error)
+	// StartScenePublish starts a publication vote on an ended scene. Participant-
+	// gated inside the plugin (INV-SCENE-33: no ABAC engine on this path); the
+	// facade resolves session/character and dispatches without an engine call.
+	StartScenePublish(ctx context.Context, in *StartScenePublishRequest, opts ...grpc.CallOption) (*StartScenePublishResponse, error)
+	// CastPublishSceneVote casts or changes the caller's Yes/No vote on the
+	// active attempt. Frozen-roster participant gate enforced in the plugin store.
+	CastPublishSceneVote(ctx context.Context, in *CastPublishSceneVoteRequest, opts ...grpc.CallOption) (*CastPublishSceneVoteResponse, error)
+	// WithdrawScenePublish aborts the active attempt (scene owner only; gate in
+	// the plugin handler).
+	WithdrawScenePublish(ctx context.Context, in *WithdrawScenePublishRequest, opts ...grpc.CallOption) (*WithdrawScenePublishResponse, error)
+	// GetPublishedScene reads the active attempt's status + vote tally for a
+	// participant cold-start snapshot. Participant-gated (INV-SCENE-60); the
+	// facade passes the plugin's status; the response is trimmed (no frozen
+	// content — that is GetPublicSceneArchive's job).
+	GetPublishedScene(ctx context.Context, in *GetPublishedSceneRequest, opts ...grpc.CallOption) (*GetPublishedSceneResponse, error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -296,6 +315,46 @@ func (c *sceneAccessServiceClient) LeaveScene(ctx context.Context, in *LeaveScen
 	return out, nil
 }
 
+func (c *sceneAccessServiceClient) StartScenePublish(ctx context.Context, in *StartScenePublishRequest, opts ...grpc.CallOption) (*StartScenePublishResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartScenePublishResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_StartScenePublish_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) CastPublishSceneVote(ctx context.Context, in *CastPublishSceneVoteRequest, opts ...grpc.CallOption) (*CastPublishSceneVoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CastPublishSceneVoteResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_CastPublishSceneVote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) WithdrawScenePublish(ctx context.Context, in *WithdrawScenePublishRequest, opts ...grpc.CallOption) (*WithdrawScenePublishResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WithdrawScenePublishResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_WithdrawScenePublish_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) GetPublishedScene(ctx context.Context, in *GetPublishedSceneRequest, opts ...grpc.CallOption) (*GetPublishedSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPublishedSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_GetPublishedScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *sceneAccessServiceClient) ExportScene(ctx context.Context, in *ExportSceneRequest, opts ...grpc.CallOption) (*ExportSceneResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ExportSceneResponse)
@@ -431,6 +490,21 @@ type SceneAccessServiceServer interface {
 	// LeaveScene forwards to SceneService.LeaveScene, which self-enforces the
 	// participant `leave` policy (INV-SCENE-65). The owner cannot leave.
 	LeaveScene(context.Context, *LeaveSceneRequest) (*LeaveSceneResponse, error)
+	// StartScenePublish starts a publication vote on an ended scene. Participant-
+	// gated inside the plugin (INV-SCENE-33: no ABAC engine on this path); the
+	// facade resolves session/character and dispatches without an engine call.
+	StartScenePublish(context.Context, *StartScenePublishRequest) (*StartScenePublishResponse, error)
+	// CastPublishSceneVote casts or changes the caller's Yes/No vote on the
+	// active attempt. Frozen-roster participant gate enforced in the plugin store.
+	CastPublishSceneVote(context.Context, *CastPublishSceneVoteRequest) (*CastPublishSceneVoteResponse, error)
+	// WithdrawScenePublish aborts the active attempt (scene owner only; gate in
+	// the plugin handler).
+	WithdrawScenePublish(context.Context, *WithdrawScenePublishRequest) (*WithdrawScenePublishResponse, error)
+	// GetPublishedScene reads the active attempt's status + vote tally for a
+	// participant cold-start snapshot. Participant-gated (INV-SCENE-60); the
+	// facade passes the plugin's status; the response is trimmed (no frozen
+	// content — that is GetPublicSceneArchive's job).
+	GetPublishedScene(context.Context, *GetPublishedSceneRequest) (*GetPublishedSceneResponse, error)
 	// ExportScene renders the verified player's owned character's scene IC
 	// log to a downloadable document. The facade resolves the acting character
 	// from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -508,6 +582,18 @@ func (UnimplementedSceneAccessServiceServer) TransferOwnership(context.Context, 
 }
 func (UnimplementedSceneAccessServiceServer) LeaveScene(context.Context, *LeaveSceneRequest) (*LeaveSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LeaveScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) StartScenePublish(context.Context, *StartScenePublishRequest) (*StartScenePublishResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartScenePublish not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) CastPublishSceneVote(context.Context, *CastPublishSceneVoteRequest) (*CastPublishSceneVoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CastPublishSceneVote not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) WithdrawScenePublish(context.Context, *WithdrawScenePublishRequest) (*WithdrawScenePublishResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WithdrawScenePublish not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) GetPublishedScene(context.Context, *GetPublishedSceneRequest) (*GetPublishedSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPublishedScene not implemented")
 }
 func (UnimplementedSceneAccessServiceServer) ExportScene(context.Context, *ExportSceneRequest) (*ExportSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExportScene not implemented")
@@ -779,6 +865,78 @@ func _SceneAccessService_LeaveScene_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SceneAccessService_StartScenePublish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartScenePublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).StartScenePublish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_StartScenePublish_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).StartScenePublish(ctx, req.(*StartScenePublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_CastPublishSceneVote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CastPublishSceneVoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).CastPublishSceneVote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_CastPublishSceneVote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).CastPublishSceneVote(ctx, req.(*CastPublishSceneVoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_WithdrawScenePublish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WithdrawScenePublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).WithdrawScenePublish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_WithdrawScenePublish_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).WithdrawScenePublish(ctx, req.(*WithdrawScenePublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_GetPublishedScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPublishedSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).GetPublishedScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_GetPublishedScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).GetPublishedScene(ctx, req.(*GetPublishedSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SceneAccessService_ExportScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExportSceneRequest)
 	if err := dec(in); err != nil {
@@ -927,6 +1085,22 @@ var SceneAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LeaveScene",
 			Handler:    _SceneAccessService_LeaveScene_Handler,
+		},
+		{
+			MethodName: "StartScenePublish",
+			Handler:    _SceneAccessService_StartScenePublish_Handler,
+		},
+		{
+			MethodName: "CastPublishSceneVote",
+			Handler:    _SceneAccessService_CastPublishSceneVote_Handler,
+		},
+		{
+			MethodName: "WithdrawScenePublish",
+			Handler:    _SceneAccessService_WithdrawScenePublish_Handler,
+		},
+		{
+			MethodName: "GetPublishedScene",
+			Handler:    _SceneAccessService_GetPublishedScene_Handler,
 		},
 		{
 			MethodName: "ExportScene",
