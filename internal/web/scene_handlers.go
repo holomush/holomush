@@ -264,9 +264,36 @@ func (h *Handler) WebResumeScene(ctx context.Context, req *connect.Request[webv1
 	return connect.NewResponse(&webv1.WebResumeSceneResponse{Scene: resp.GetScene()}), nil
 }
 
-// WebUpdateScene is not yet implemented; the full handler body ships in the next bead (holomush-5rh.24.28).
-func (h *Handler) WebUpdateScene(_ context.Context, _ *connect.Request[webv1.WebUpdateSceneRequest]) (*connect.Response[webv1.WebUpdateSceneResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("WebUpdateScene not yet implemented"))
+// WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads the
+// player_session_token from the X-Session-Token cookie header and forwards it
+// with character_id, scene_id, the editable fields, and update_mask.
+// Authorization (owner-only) is owned by the facade/handler.
+func (h *Handler) WebUpdateScene(ctx context.Context, req *connect.Request[webv1.WebUpdateSceneRequest]) (*connect.Response[webv1.WebUpdateSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebUpdateScene", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+	token := req.Header().Get(headerInjectSessionToken)
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	resp, err := h.sceneAccess.UpdateScene(rpcCtx, &sceneaccessv1.UpdateSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		SceneId:            req.Msg.GetSceneId(),
+		Title:              req.Msg.GetTitle(),
+		Description:        req.Msg.GetDescription(),
+		Visibility:         req.Msg.GetVisibility(),
+		PoseOrderMode:      req.Msg.GetPoseOrderMode(),
+		Tags:               req.Msg.GetTags(),
+		ContentWarnings:    req.Msg.GetContentWarnings(),
+		UpdateMask:         req.Msg.GetUpdateMask(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: update scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return connect.NewResponse(&webv1.WebUpdateSceneResponse{Scene: resp.GetScene()}), nil
 }
 
 // WebExportScene proxies to SceneAccessService.ExportScene. The gateway reads
