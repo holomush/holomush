@@ -140,6 +140,10 @@ func (m *mockSceneAccessClient) ResumeScene(_ context.Context, req *sceneaccessv
 	return &sceneaccessv1.ResumeSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123", State: "active"}}, nil
 }
 
+func (m *mockSceneAccessClient) UpdateScene(_ context.Context, _ *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error) {
+	return nil, nil
+}
+
 func (m *mockSceneAccessClient) ExportScene(_ context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
 	m.exportSceneReq = req
 	return m.exportSceneResp, m.exportSceneErr

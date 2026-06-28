@@ -264,6 +264,11 @@ func (h *Handler) WebResumeScene(ctx context.Context, req *connect.Request[webv1
 	return connect.NewResponse(&webv1.WebResumeSceneResponse{Scene: resp.GetScene()}), nil
 }
 
+// WebUpdateScene is not yet implemented; the full handler body ships in the next bead (holomush-5rh.24.28).
+func (h *Handler) WebUpdateScene(_ context.Context, _ *connect.Request[webv1.WebUpdateSceneRequest]) (*connect.Response[webv1.WebUpdateSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("WebUpdateScene not yet implemented"))
+}
+
 // WebExportScene proxies to SceneAccessService.ExportScene. The gateway reads
 // the player_session_token from the X-Session-Token cookie header and forwards
 // it with scene_id, character_id, and format. Authorization and identity

@@ -453,6 +453,15 @@ func (c *Client) ResumeScene(ctx context.Context, req *sceneaccessv1.ResumeScene
 	return resp, nil
 }
 
+// UpdateScene delegates to SceneAccessService.UpdateScene (identity-resolving facade).
+func (c *Client) UpdateScene(ctx context.Context, req *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error) {
+	resp, err := c.sceneAccessClient.UpdateScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "UpdateScene").Wrap(err)
+	}
+	return resp, nil
+}
+
 // ExportScene renders the verified player's owned character's scene IC log to a downloadable document.
 func (c *Client) ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
 	resp, err := c.sceneAccessClient.ExportScene(ctx, req)

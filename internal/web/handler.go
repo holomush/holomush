@@ -114,6 +114,7 @@ type SceneAccessClient interface {
 	EndScene(ctx context.Context, req *sceneaccessv1.EndSceneRequest) (*sceneaccessv1.EndSceneResponse, error)
 	PauseScene(ctx context.Context, req *sceneaccessv1.PauseSceneRequest) (*sceneaccessv1.PauseSceneResponse, error)
 	ResumeScene(ctx context.Context, req *sceneaccessv1.ResumeSceneRequest) (*sceneaccessv1.ResumeSceneResponse, error)
+	UpdateScene(ctx context.Context, req *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error)
 	ExportScene(ctx context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error)
 	SetSceneFocus(ctx context.Context, req *sceneaccessv1.SetSceneFocusRequest) (*sceneaccessv1.SetSceneFocusResponse, error)
 	ListPublishedScenes(ctx context.Context, req *sceneaccessv1.ListPublishedScenesRequest) (*sceneaccessv1.ListPublishedScenesResponse, error)
