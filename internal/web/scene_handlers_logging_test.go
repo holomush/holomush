@@ -27,7 +27,7 @@ import (
 // flat, whereas slog.ErrorContext(ctx, msg, "error", err) renders the oops
 // LogValuer as a nested group under the (non-empty) "error" key, leaving
 // "code" absent at top level. Asserting the flat "code" thus pins the
-// migration for all thirteen handlers.
+// migration for every handler in the table below.
 func TestWebSceneHandlersLogFacadeErrorsWithStructuredOopsFields(t *testing.T) {
 	const wantCode = "WEB_SCENE_FACADE_ERR"
 
@@ -164,6 +164,46 @@ func TestWebSceneHandlersLogFacadeErrorsWithStructuredOopsFields(t *testing.T) {
 			invoke: func(h *Handler) error {
 				_, err := h.WebDownloadPublicSceneArchive(context.Background(),
 					connect.NewRequest(&webv1.WebDownloadPublicSceneArchiveRequest{SessionId: "sess-err", PublishedSceneId: "pub-1"}))
+				return err
+			},
+		},
+		{
+			name:    "WebStartScenePublish",
+			wantMsg: "web: start scene publish RPC failed",
+			setErr:  func(m *mockSceneAccessClient, err error) { m.startScenePublishErr = err },
+			invoke: func(h *Handler) error {
+				_, err := h.WebStartScenePublish(context.Background(),
+					connect.NewRequest(&webv1.WebStartScenePublishRequest{SessionId: "sess-err", SceneId: "sc-1"}))
+				return err
+			},
+		},
+		{
+			name:    "WebCastPublishSceneVote",
+			wantMsg: "web: cast publish vote RPC failed",
+			setErr:  func(m *mockSceneAccessClient, err error) { m.castPublishSceneVoteErr = err },
+			invoke: func(h *Handler) error {
+				_, err := h.WebCastPublishSceneVote(context.Background(),
+					connect.NewRequest(&webv1.WebCastPublishSceneVoteRequest{SessionId: "sess-err", PublishedSceneId: "pub-1"}))
+				return err
+			},
+		},
+		{
+			name:    "WebWithdrawScenePublish",
+			wantMsg: "web: withdraw scene publish RPC failed",
+			setErr:  func(m *mockSceneAccessClient, err error) { m.withdrawScenePublishErr = err },
+			invoke: func(h *Handler) error {
+				_, err := h.WebWithdrawScenePublish(context.Background(),
+					connect.NewRequest(&webv1.WebWithdrawScenePublishRequest{SessionId: "sess-err", PublishedSceneId: "pub-1"}))
+				return err
+			},
+		},
+		{
+			name:    "WebGetPublishedScene",
+			wantMsg: "web: get published scene RPC failed",
+			setErr:  func(m *mockSceneAccessClient, err error) { m.getPublishedSceneErr = err },
+			invoke: func(h *Handler) error {
+				_, err := h.WebGetPublishedScene(context.Background(),
+					connect.NewRequest(&webv1.WebGetPublishedSceneRequest{SessionId: "sess-err", PublishedSceneId: "pub-1"}))
 				return err
 			},
 		},
