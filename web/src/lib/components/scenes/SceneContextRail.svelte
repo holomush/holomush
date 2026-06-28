@@ -13,9 +13,11 @@
   import { endSceneAction, pauseSceneAction, resumeSceneAction } from '$lib/scenes/lifecycleFlow';
   import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
   import CharacterMultiSelect from './CharacterMultiSelect.svelte';
+  import SceneSettingsSheet from './SceneSettingsSheet.svelte';
 
   let { scene }: { scene: WorkspaceScene | null } = $props();
 
+  let settingsOpen = $state(false);
   let isOwner = $derived(!!scene && scene.ownerId === scene.asCharacterId);
   let isParticipant = $derived(!!scene && (scene.role === 'owner' || scene.role === 'member'));
   let showPause = $derived(isOwner && scene?.state === 'active');
@@ -42,6 +44,7 @@
 
   let inviteIds = $state<string[]>([]);
   let canManage = $derived(scene?.state === 'active' || scene?.state === 'paused');
+  let canEditSettings = $derived(isOwner && canManage);
   let lifecycleErr = $state('');
   let membershipErr = $state('');
 
@@ -109,8 +112,13 @@
           </div>
         {/if}
       </div>
-      {#if showPause || showResume || showEnd}
+      {#if showPause || showResume || showEnd || canEditSettings}
         <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
+          {#if canEditSettings}
+            <Button variant="outline" size="sm" class="h-6 text-xs"
+              aria-label="Scene settings"
+              onclick={() => (settingsOpen = true)}>⚙ Settings</Button>
+          {/if}
           {#if showPause}
             <Button variant="outline" size="sm" class="h-6 text-xs"
               onclick={() => runLifecycle(pauseSceneAction)}>Pause</Button>
@@ -316,6 +324,8 @@
         {/if}
       </div>
     </section>
+
+    <SceneSettingsSheet bind:open={settingsOpen} sceneId={scene.sceneId} characterId={scene.asCharacterId} />
   {:else}
     <div class="flex flex-1 items-center justify-center p-8 text-center">
       <p class="text-sm text-muted-foreground">Select a scene to view details</p>

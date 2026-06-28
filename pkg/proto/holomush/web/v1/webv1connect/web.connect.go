@@ -126,6 +126,9 @@ const (
 	// WebServiceWebResumeSceneProcedure is the fully-qualified name of the WebService's WebResumeScene
 	// RPC.
 	WebServiceWebResumeSceneProcedure = "/holomush.web.v1.WebService/WebResumeScene"
+	// WebServiceWebUpdateSceneProcedure is the fully-qualified name of the WebService's WebUpdateScene
+	// RPC.
+	WebServiceWebUpdateSceneProcedure = "/holomush.web.v1.WebService/WebUpdateScene"
 	// WebServiceWebInviteToSceneProcedure is the fully-qualified name of the WebService's
 	// WebInviteToScene RPC.
 	WebServiceWebInviteToSceneProcedure = "/holomush.web.v1.WebService/WebInviteToScene"
@@ -300,6 +303,10 @@ type WebServiceClient interface {
 	WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error)
+	// WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads
+	// player_session_token from the X-Session-Token cookie; the facade owns
+	// authorization. Returns the post-update scene.
+	WebUpdateScene(context.Context, *connect.Request[v1.WebUpdateSceneRequest]) (*connect.Response[v1.WebUpdateSceneResponse], error)
 	// WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token).
 	WebInviteToScene(context.Context, *connect.Request[v1.WebInviteToSceneRequest]) (*connect.Response[v1.WebInviteToSceneResponse], error)
 	// WebKickFromScene proxies to SceneAccessService.KickFromScene.
@@ -535,6 +542,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebResumeScene")),
 			connect.WithClientOptions(opts...),
 		),
+		webUpdateScene: connect.NewClient[v1.WebUpdateSceneRequest, v1.WebUpdateSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebUpdateSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebUpdateScene")),
+			connect.WithClientOptions(opts...),
+		),
 		webInviteToScene: connect.NewClient[v1.WebInviteToSceneRequest, v1.WebInviteToSceneResponse](
 			httpClient,
 			baseURL+WebServiceWebInviteToSceneProcedure,
@@ -626,6 +639,7 @@ type webServiceClient struct {
 	webEndScene                   *connect.Client[v1.WebEndSceneRequest, v1.WebEndSceneResponse]
 	webPauseScene                 *connect.Client[v1.WebPauseSceneRequest, v1.WebPauseSceneResponse]
 	webResumeScene                *connect.Client[v1.WebResumeSceneRequest, v1.WebResumeSceneResponse]
+	webUpdateScene                *connect.Client[v1.WebUpdateSceneRequest, v1.WebUpdateSceneResponse]
 	webInviteToScene              *connect.Client[v1.WebInviteToSceneRequest, v1.WebInviteToSceneResponse]
 	webKickFromScene              *connect.Client[v1.WebKickFromSceneRequest, v1.WebKickFromSceneResponse]
 	webTransferOwnership          *connect.Client[v1.WebTransferOwnershipRequest, v1.WebTransferOwnershipResponse]
@@ -795,6 +809,11 @@ func (c *webServiceClient) WebPauseScene(ctx context.Context, req *connect.Reque
 // WebResumeScene calls holomush.web.v1.WebService.WebResumeScene.
 func (c *webServiceClient) WebResumeScene(ctx context.Context, req *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error) {
 	return c.webResumeScene.CallUnary(ctx, req)
+}
+
+// WebUpdateScene calls holomush.web.v1.WebService.WebUpdateScene.
+func (c *webServiceClient) WebUpdateScene(ctx context.Context, req *connect.Request[v1.WebUpdateSceneRequest]) (*connect.Response[v1.WebUpdateSceneResponse], error) {
+	return c.webUpdateScene.CallUnary(ctx, req)
 }
 
 // WebInviteToScene calls holomush.web.v1.WebService.WebInviteToScene.
@@ -987,6 +1006,10 @@ type WebServiceHandler interface {
 	WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error)
+	// WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads
+	// player_session_token from the X-Session-Token cookie; the facade owns
+	// authorization. Returns the post-update scene.
+	WebUpdateScene(context.Context, *connect.Request[v1.WebUpdateSceneRequest]) (*connect.Response[v1.WebUpdateSceneResponse], error)
 	// WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token).
 	WebInviteToScene(context.Context, *connect.Request[v1.WebInviteToSceneRequest]) (*connect.Response[v1.WebInviteToSceneResponse], error)
 	// WebKickFromScene proxies to SceneAccessService.KickFromScene.
@@ -1218,6 +1241,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebResumeScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebUpdateSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebUpdateSceneProcedure,
+		svc.WebUpdateScene,
+		connect.WithSchema(webServiceMethods.ByName("WebUpdateScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	webServiceWebInviteToSceneHandler := connect.NewUnaryHandler(
 		WebServiceWebInviteToSceneProcedure,
 		svc.WebInviteToScene,
@@ -1338,6 +1367,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebPauseSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebResumeSceneProcedure:
 			webServiceWebResumeSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebUpdateSceneProcedure:
+			webServiceWebUpdateSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebInviteToSceneProcedure:
 			webServiceWebInviteToSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebKickFromSceneProcedure:
@@ -1491,6 +1522,10 @@ func (UnimplementedWebServiceHandler) WebPauseScene(context.Context, *connect.Re
 
 func (UnimplementedWebServiceHandler) WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebResumeScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebUpdateScene(context.Context, *connect.Request[v1.WebUpdateSceneRequest]) (*connect.Response[v1.WebUpdateSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebUpdateScene is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebInviteToScene(context.Context, *connect.Request[v1.WebInviteToSceneRequest]) (*connect.Response[v1.WebInviteToSceneResponse], error) {

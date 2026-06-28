@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
+
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -54,6 +56,9 @@ type mockSceneAccessClient struct {
 	pauseSceneErr  error
 	resumeSceneReq *sceneaccessv1.ResumeSceneRequest
 	resumeSceneErr error
+
+	updateSceneReq *sceneaccessv1.UpdateSceneRequest
+	updateSceneErr error
 
 	exportSceneReq  *sceneaccessv1.ExportSceneRequest
 	exportSceneResp *sceneaccessv1.ExportSceneResponse
@@ -138,6 +143,14 @@ func (m *mockSceneAccessClient) ResumeScene(_ context.Context, req *sceneaccessv
 		return nil, m.resumeSceneErr
 	}
 	return &sceneaccessv1.ResumeSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123", State: "active"}}, nil
+}
+
+func (m *mockSceneAccessClient) UpdateScene(_ context.Context, req *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error) {
+	m.updateSceneReq = req
+	if m.updateSceneErr != nil {
+		return nil, m.updateSceneErr
+	}
+	return &sceneaccessv1.UpdateSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123", Visibility: "private"}}, nil
 }
 
 func (m *mockSceneAccessClient) ExportScene(_ context.Context, req *sceneaccessv1.ExportSceneRequest) (*sceneaccessv1.ExportSceneResponse, error) {
@@ -824,4 +837,45 @@ func TestWebLeaveScenePassesStatusErrorThroughAsIs(t *testing.T) {
 	_, err := h.WebLeaveScene(context.Background(), req)
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// --- WebUpdateScene ---
+
+func TestWebUpdateSceneForwardsTokenFieldsAndMaskToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebUpdateSceneRequest{
+		SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-123",
+		Visibility: "private", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"visibility"}},
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	resp, err := h.WebUpdateScene(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "private", resp.Msg.GetScene().GetVisibility())
+	require.NotNil(t, sc.updateSceneReq)
+	assert.Equal(t, "tok-abc", sc.updateSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-1", sc.updateSceneReq.GetCharacterId())
+	assert.Equal(t, "scene-123", sc.updateSceneReq.GetSceneId())
+	assert.Equal(t, []string{"visibility"}, sc.updateSceneReq.GetUpdateMask().GetPaths())
+}
+
+func TestWebUpdateScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	sc := &mockSceneAccessClient{updateSceneErr: status.Error(codes.PermissionDenied, "not permitted to update this scene")}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebUpdateSceneRequest{SessionId: "s", CharacterId: "c", SceneId: "x"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebUpdateScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestWebUpdateSceneReturnsUnimplementedWhenClientAbsent(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	_, err := h.WebUpdateScene(context.Background(),
+		connect.NewRequest(&webv1.WebUpdateSceneRequest{SessionId: "s"}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
 }

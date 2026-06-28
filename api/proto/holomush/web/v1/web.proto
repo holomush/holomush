@@ -5,6 +5,8 @@ syntax = "proto3";
 
 package holomush.web.v1;
 
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "holomush/core/v1/core.proto";
@@ -294,6 +296,11 @@ service WebService {
 
   // WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
   rpc WebResumeScene(WebResumeSceneRequest) returns (WebResumeSceneResponse);
+
+  // WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads
+  // player_session_token from the X-Session-Token cookie; the facade owns
+  // authorization. Returns the post-update scene.
+  rpc WebUpdateScene(WebUpdateSceneRequest) returns (WebUpdateSceneResponse);
 
   // WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token).
   rpc WebInviteToScene(WebInviteToSceneRequest) returns (WebInviteToSceneResponse);
@@ -1291,3 +1298,49 @@ message WebLeaveSceneRequest {
 
 // WebLeaveSceneResponse is empty.
 message WebLeaveSceneResponse {}
+
+// WebUpdateSceneRequest proxies to SceneAccessService.UpdateScene.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebUpdateSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2 [(buf.validate.field).string.min_len = 1];
+  // scene_id identifies the scene to update; required.
+  string scene_id = 3 [(buf.validate.field).string.min_len = 1];
+  // New title (applied only when "title" is in the mask). Max 200 chars.
+  string title = 4 [(buf.validate.field).string.max_len = 200];
+  // New description (applied only when "description" is in the mask). Max 4096.
+  string description = 5 [(buf.validate.field).string.max_len = 4096];
+  // New visibility (applied only when "visibility" is in the mask).
+  string visibility = 6 [(buf.validate.field).string = {
+    in: [
+      "",
+      "open",
+      "private"
+    ]
+  }];
+  // New pose-order mode (applied only when "pose_order_mode" is in the mask).
+  string pose_order_mode = 7 [(buf.validate.field).string = {
+    in: [
+      "",
+      "free",
+      "strict",
+      "3pr",
+      "5pr"
+    ]
+  }];
+  // Replacement tags (applied only when "tags" is in the mask). Max 32.
+  repeated string tags = 8 [(buf.validate.field).repeated.max_items = 32];
+  // Replacement content warnings (applied only when "content_warnings" is in the
+  // mask). Max 32.
+  repeated string content_warnings = 9 [(buf.validate.field).repeated.max_items = 32];
+  // The set of field paths to apply (snake_case proto names).
+  google.protobuf.FieldMask update_mask = 99;
+}
+
+// WebUpdateSceneResponse re-exports the post-update scene from the facade.
+message WebUpdateSceneResponse {
+  // scene is the scene row after the partial update.
+  holomush.scene.v1.SceneInfo scene = 1;
+}

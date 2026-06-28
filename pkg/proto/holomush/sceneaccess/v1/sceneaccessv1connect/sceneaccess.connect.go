@@ -60,6 +60,9 @@ const (
 	// SceneAccessServiceResumeSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// ResumeScene RPC.
 	SceneAccessServiceResumeSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/ResumeScene"
+	// SceneAccessServiceUpdateSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// UpdateScene RPC.
+	SceneAccessServiceUpdateSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/UpdateScene"
 	// SceneAccessServiceInviteToSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// InviteToScene RPC.
 	SceneAccessServiceInviteToSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/InviteToScene"
@@ -140,6 +143,13 @@ type SceneAccessServiceClient interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// UpdateScene applies an owner's partial edit to mutable scene metadata. The
+	// facade resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
+	// which self-enforces the ABAC `update` policy (owner-only, INV-SCENE-65) and
+	// applies only the fields named in update_mask (AIP-134). Returns the
+	// post-update scene row.
+	UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error)
 	// InviteToScene resolves the verified acting character from the player session
 	// (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
 	// SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
@@ -244,6 +254,12 @@ func NewSceneAccessServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(sceneAccessServiceMethods.ByName("ResumeScene")),
 			connect.WithClientOptions(opts...),
 		),
+		updateScene: connect.NewClient[v1.UpdateSceneRequest, v1.UpdateSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceUpdateSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("UpdateScene")),
+			connect.WithClientOptions(opts...),
+		),
 		inviteToScene: connect.NewClient[v1.InviteToSceneRequest, v1.InviteToSceneResponse](
 			httpClient,
 			baseURL+SceneAccessServiceInviteToSceneProcedure,
@@ -311,6 +327,7 @@ type sceneAccessServiceClient struct {
 	endScene                   *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
 	pauseScene                 *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
 	resumeScene                *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
+	updateScene                *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
 	inviteToScene              *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
 	kickFromScene              *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
 	transferOwnership          *connect.Client[v1.TransferOwnershipRequest, v1.TransferOwnershipResponse]
@@ -360,6 +377,11 @@ func (c *sceneAccessServiceClient) PauseScene(ctx context.Context, req *connect.
 // ResumeScene calls holomush.sceneaccess.v1.SceneAccessService.ResumeScene.
 func (c *sceneAccessServiceClient) ResumeScene(ctx context.Context, req *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
 	return c.resumeScene.CallUnary(ctx, req)
+}
+
+// UpdateScene calls holomush.sceneaccess.v1.SceneAccessService.UpdateScene.
+func (c *sceneAccessServiceClient) UpdateScene(ctx context.Context, req *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error) {
+	return c.updateScene.CallUnary(ctx, req)
 }
 
 // InviteToScene calls holomush.sceneaccess.v1.SceneAccessService.InviteToScene.
@@ -460,6 +482,13 @@ type SceneAccessServiceHandler interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// UpdateScene applies an owner's partial edit to mutable scene metadata. The
+	// facade resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
+	// which self-enforces the ABAC `update` policy (owner-only, INV-SCENE-65) and
+	// applies only the fields named in update_mask (AIP-134). Returns the
+	// post-update scene row.
+	UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error)
 	// InviteToScene resolves the verified acting character from the player session
 	// (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
 	// SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
@@ -560,6 +589,12 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 		connect.WithSchema(sceneAccessServiceMethods.ByName("ResumeScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneAccessServiceUpdateSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceUpdateSceneProcedure,
+		svc.UpdateScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("UpdateScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sceneAccessServiceInviteToSceneHandler := connect.NewUnaryHandler(
 		SceneAccessServiceInviteToSceneProcedure,
 		svc.InviteToScene,
@@ -632,6 +667,8 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 			sceneAccessServicePauseSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceResumeSceneProcedure:
 			sceneAccessServiceResumeSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceUpdateSceneProcedure:
+			sceneAccessServiceUpdateSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceInviteToSceneProcedure:
 			sceneAccessServiceInviteToSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceKickFromSceneProcedure:
@@ -689,6 +726,10 @@ func (UnimplementedSceneAccessServiceHandler) PauseScene(context.Context, *conne
 
 func (UnimplementedSceneAccessServiceHandler) ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.ResumeScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.UpdateScene is not implemented"))
 }
 
 func (UnimplementedSceneAccessServiceHandler) InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error) {

@@ -190,6 +190,25 @@ export async function resumeScene(
 	return res.scene;
 }
 
+/** Applies a masked partial update to scene settings; returns the post-update SceneInfo. */
+export async function updateScene(
+	sessionId: string,
+	opts: {
+		characterId: string;
+		sceneId: string;
+		title?: string;
+		description?: string;
+		visibility?: string;
+		poseOrderMode?: string;
+		tags?: string[];
+		contentWarnings?: string[];
+		updateMask: { paths: string[] };
+	},
+) {
+	const res = await client.webUpdateScene({ sessionId, ...opts });
+	return res.scene;
+}
+
 /**
  * Invites target_character_id to scene sceneId on behalf of characterId.
  * Returns void — the response is empty (SceneAccessService.InviteToScene).
