@@ -5,6 +5,8 @@ syntax = "proto3";
 
 package holomush.sceneaccess.v1;
 
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
 import "holomush/scene/v1/scene.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1;sceneaccessv1";
@@ -76,6 +78,14 @@ service SceneAccessService {
   // Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
   // which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
   rpc ResumeScene(ResumeSceneRequest) returns (ResumeSceneResponse);
+
+  // UpdateScene applies an owner's partial edit to mutable scene metadata. The
+  // facade resolves the acting character from the player session (INV-SCENE-63),
+  // rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
+  // which self-enforces the ABAC `update` policy (owner-only, INV-SCENE-65) and
+  // applies only the fields named in update_mask (AIP-134). Returns the
+  // post-update scene row.
+  rpc UpdateScene(UpdateSceneRequest) returns (UpdateSceneResponse);
 
   // InviteToScene resolves the verified acting character from the player session
   // (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
@@ -611,3 +621,60 @@ message LeaveSceneRequest {
 
 // LeaveSceneResponse is empty.
 message LeaveSceneResponse {}
+
+// UpdateSceneRequest is the facade request to edit scene settings.
+// player_session_token authenticates the caller; the facade resolves the acting
+// character SERVER-SIDE (INV-SCENE-63) and forwards the verified id, the six
+// editable fields, and update_mask to SceneService.UpdateScene. Fields absent
+// from update_mask are ignored by the handler (their values here are immaterial).
+message UpdateSceneRequest {
+  // session_id is the client-declared player-session ULID (hint only;
+  // authentication is solely via player_session_token).
+  string session_id = 1;
+  // player_session_token is the raw bearer token; the facade rejects
+  // unauthenticated callers (Unauthenticated) and guests (PermissionDenied).
+  string player_session_token = 2;
+  // character_id selects which owned alt acts; ownership verified (NotFound).
+  string character_id = 3 [(buf.validate.field).string.min_len = 1];
+  // scene_id identifies the scene to update; required.
+  string scene_id = 4 [(buf.validate.field).string.min_len = 1];
+  // New title (applied only when "title" is in the mask). Max 200 chars.
+  string title = 5 [(buf.validate.field).string.max_len = 200];
+  // New description (applied only when "description" is in the mask; empty
+  // clears it). Max 4096 chars.
+  string description = 6 [(buf.validate.field).string.max_len = 4096];
+  // New visibility (applied only when "visibility" is in the mask). Constrained
+  // to ""|"open"|"private".
+  string visibility = 7 [(buf.validate.field).string = {
+    in: [
+      "",
+      "open",
+      "private"
+    ]
+  }];
+  // New pose-order mode (applied only when "pose_order_mode" is in the mask).
+  // Constrained to ""|"free"|"strict"|"3pr"|"5pr".
+  string pose_order_mode = 8 [(buf.validate.field).string = {
+    in: [
+      "",
+      "free",
+      "strict",
+      "3pr",
+      "5pr"
+    ]
+  }];
+  // Replacement tags (applied only when "tags" is in the mask). Max 32.
+  repeated string tags = 9 [(buf.validate.field).repeated.max_items = 32];
+  // Replacement content warnings (applied only when "content_warnings" is in the
+  // mask). Max 32.
+  repeated string content_warnings = 10 [(buf.validate.field).repeated.max_items = 32];
+  // The set of field paths to apply (snake_case proto names). An empty mask is a
+  // no-op success at the handler; the web client avoids the round-trip entirely.
+  google.protobuf.FieldMask update_mask = 99;
+}
+
+// UpdateSceneResponse wraps the scene after the partial update.
+message UpdateSceneResponse {
+  // scene is the post-update scene row.
+  holomush.scene.v1.SceneInfo scene = 1;
+}

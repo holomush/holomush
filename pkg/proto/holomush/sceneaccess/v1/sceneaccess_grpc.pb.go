@@ -30,6 +30,7 @@ const (
 	SceneAccessService_EndScene_FullMethodName                   = "/holomush.sceneaccess.v1.SceneAccessService/EndScene"
 	SceneAccessService_PauseScene_FullMethodName                 = "/holomush.sceneaccess.v1.SceneAccessService/PauseScene"
 	SceneAccessService_ResumeScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/ResumeScene"
+	SceneAccessService_UpdateScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/UpdateScene"
 	SceneAccessService_InviteToScene_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/InviteToScene"
 	SceneAccessService_KickFromScene_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/KickFromScene"
 	SceneAccessService_TransferOwnership_FullMethodName          = "/holomush.sceneaccess.v1.SceneAccessService/TransferOwnership"
@@ -105,6 +106,13 @@ type SceneAccessServiceClient interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error)
+	// UpdateScene applies an owner's partial edit to mutable scene metadata. The
+	// facade resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
+	// which self-enforces the ABAC `update` policy (owner-only, INV-SCENE-65) and
+	// applies only the fields named in update_mask (AIP-134). Returns the
+	// post-update scene row.
+	UpdateScene(ctx context.Context, in *UpdateSceneRequest, opts ...grpc.CallOption) (*UpdateSceneResponse, error)
 	// InviteToScene resolves the verified acting character from the player session
 	// (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
 	// SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
@@ -232,6 +240,16 @@ func (c *sceneAccessServiceClient) ResumeScene(ctx context.Context, in *ResumeSc
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResumeSceneResponse)
 	err := c.cc.Invoke(ctx, SceneAccessService_ResumeScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) UpdateScene(ctx context.Context, in *UpdateSceneRequest, opts ...grpc.CallOption) (*UpdateSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_UpdateScene_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -392,6 +410,13 @@ type SceneAccessServiceServer interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error)
+	// UpdateScene applies an owner's partial edit to mutable scene metadata. The
+	// facade resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
+	// which self-enforces the ABAC `update` policy (owner-only, INV-SCENE-65) and
+	// applies only the fields named in update_mask (AIP-134). Returns the
+	// post-update scene row.
+	UpdateScene(context.Context, *UpdateSceneRequest) (*UpdateSceneResponse, error)
 	// InviteToScene resolves the verified acting character from the player session
 	// (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to
 	// SceneService.InviteToScene, which self-enforces the ABAC `invite` policy
@@ -468,6 +493,9 @@ func (UnimplementedSceneAccessServiceServer) PauseScene(context.Context, *PauseS
 }
 func (UnimplementedSceneAccessServiceServer) ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) UpdateScene(context.Context, *UpdateSceneRequest) (*UpdateSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateScene not implemented")
 }
 func (UnimplementedSceneAccessServiceServer) InviteToScene(context.Context, *InviteToSceneRequest) (*InviteToSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InviteToScene not implemented")
@@ -657,6 +685,24 @@ func _SceneAccessService_ResumeScene_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SceneAccessServiceServer).ResumeScene(ctx, req.(*ResumeSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_UpdateScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).UpdateScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_UpdateScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).UpdateScene(ctx, req.(*UpdateSceneRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -861,6 +907,10 @@ var SceneAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResumeScene",
 			Handler:    _SceneAccessService_ResumeScene_Handler,
+		},
+		{
+			MethodName: "UpdateScene",
+			Handler:    _SceneAccessService_UpdateScene_Handler,
 		},
 		{
 			MethodName: "InviteToScene",
