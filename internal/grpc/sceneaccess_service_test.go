@@ -29,6 +29,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // fakeNameResolver is a hand-rolled double for the unexported
@@ -1667,6 +1668,101 @@ func TestSceneAccessLeaveScene(t *testing.T) {
 			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
 				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
 			resp, err := srv.LeaveScene(ctx, tt.req)
+			tt.check(t, resp, err)
+		})
+	}
+}
+
+func TestSceneAccessUpdateScene(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	ps := buildSATestPS(t, playerID)
+	wantID := "scene-1"
+
+	nonGuest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		return pr
+	}
+	guest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: true}, nil).Maybe()
+		return pr
+	}
+	ownsAlice := func(t *testing.T) *authmocks.MockCharacterRepository {
+		cr := authmocks.NewMockCharacterRepository(t)
+		cr.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		return cr
+	}
+
+	tests := []struct {
+		name       string
+		playerRepo func(*testing.T) *authmocks.MockPlayerRepository
+		charRepo   func(*testing.T) *authmocks.MockCharacterRepository
+		sceneMock  func(*testing.T) *scenemocks.MockSceneServiceClient
+		req        *sceneaccessv1.UpdateSceneRequest
+		check      func(t *testing.T, resp *sceneaccessv1.UpdateSceneResponse, err error)
+	}{
+		{
+			name:       "owned character updates scene with verified id and mask",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().UpdateScene(mock.Anything, mock.MatchedBy(func(r *scenev1.UpdateSceneRequest) bool {
+					return r.GetCharacterId() == char.ID.String() &&
+						r.GetSceneId() == wantID &&
+						r.GetVisibility() == "private" &&
+						r.GetUpdateMask() != nil &&
+						len(r.GetUpdateMask().GetPaths()) == 1 &&
+						r.GetUpdateMask().GetPaths()[0] == "visibility"
+				})).Return(&scenev1.UpdateSceneResponse{Scene: &scenev1.SceneInfo{Id: wantID, Visibility: "private"}}, nil).Once()
+				return sm
+			},
+			req: &sceneaccessv1.UpdateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), SceneId: wantID,
+				Visibility: "private", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"visibility"}},
+			},
+			check: func(t *testing.T, resp *sceneaccessv1.UpdateSceneResponse, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "private", resp.GetScene().GetVisibility())
+			},
+		},
+		{
+			name:       "guest denied; downstream never called",
+			playerRepo: guest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.UpdateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), SceneId: wantID,
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.UpdateSceneResponse, err error) {
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			},
+		},
+		{
+			name:       "character not owned returns NotFound",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.UpdateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: idgen.New().String(), SceneId: wantID,
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+			},
+			check: func(t *testing.T, _ *sceneaccessv1.UpdateSceneResponse, err error) {
+				assert.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sceneMock := tt.sceneMock(t)
+			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
+				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+			resp, err := srv.UpdateScene(ctx, tt.req)
 			tt.check(t, resp, err)
 		})
 	}

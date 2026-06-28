@@ -767,6 +767,43 @@ func (s *SceneAccessServer) GetPublicSceneArchive(ctx context.Context, req *scen
 	}, nil
 }
 
+// UpdateScene resolves the verified owner from the player session and forwards an
+// UpdateScene call to the plugin SceneService (which self-enforces the ABAC
+// `update` policy, owner-only, INV-SCENE-65, and applies only the masked fields).
+// resolveAndGate enforces the guest gate (INV-SCENE-64); ownedCharacter enforces
+// ownership (INV-SCENE-63).
+func (s *SceneAccessServer) UpdateScene(ctx context.Context, req *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	resp, err := s.sceneClient.UpdateScene(dctx, &scenev1.UpdateSceneRequest{
+		CharacterId:     char.ID.String(),
+		SceneId:         req.GetSceneId(),
+		Title:           req.GetTitle(),
+		Description:     req.GetDescription(),
+		Visibility:      req.GetVisibility(),
+		PoseOrderMode:   req.GetPoseOrderMode(),
+		Tags:            req.GetTags(),
+		ContentWarnings: req.GetContentWarnings(),
+		UpdateMask:      req.GetUpdateMask(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.UpdateSceneResponse{Scene: resp.GetScene()}, nil
+}
+
 // DownloadPublicSceneArchive returns a PUBLISHED scene archive in the requested
 // format (INV-SCENE-35). Guest gate enforced (INV-SCENE-64).
 func (s *SceneAccessServer) DownloadPublicSceneArchive(ctx context.Context, req *sceneaccessv1.DownloadPublicSceneArchiveRequest) (*sceneaccessv1.DownloadPublicSceneArchiveResponse, error) {
