@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Split publish read model: broad pointer on SceneInfo, tally behind participant gate](holomush-o8gx8-split-publish-read-model-broad-pointer-sceneinfo-tally-behin.md) | 2026-06-28 | Accepted | `holomush-o8gx8` |
 | [AIP-134 FieldMask + client-side changed-fields diff for partial scene updates](holomush-nla30-aip-134-fieldmask-client-side-changed-fields-diff-partial-sc.md) | 2026-06-27 | Accepted | `holomush-nla30` |
 | [Place character directory on CoreService; guest-inclusive, names-only](holomush-kn78o-place-character-directory-coreservice-guest-inclusive-names.md) | 2026-06-26 | Accepted | `holomush-kn78o` |
 | [Extract a shared web communication rendering primitive instead of per-bug patching](holomush-914rn-extract-shared-web-communication-rendering-primitive-instead.md) | 2026-06-26 | Accepted | `holomush-914rn` |
