@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [AIP-134 FieldMask + client-side changed-fields diff for partial scene updates](holomush-nla30-aip-134-fieldmask-client-side-changed-fields-diff-partial-sc.md) | 2026-06-27 | Accepted | `holomush-nla30` |
 | [Place character directory on CoreService; guest-inclusive, names-only](holomush-kn78o-place-character-directory-coreservice-guest-inclusive-names.md) | 2026-06-26 | Accepted | `holomush-kn78o` |
 | [Extract a shared web communication rendering primitive instead of per-bug patching](holomush-914rn-extract-shared-web-communication-rendering-primitive-instead.md) | 2026-06-26 | Accepted | `holomush-914rn` |
 | [Scope rendering-seam invariants (SEAM-*) as web-local vitest checks, not central-registry entries](holomush-bbwe7-scope-rendering-seam-invariants-seam-as-web-local-vitest-che.md) | 2026-06-26 | Accepted | `holomush-bbwe7` |
