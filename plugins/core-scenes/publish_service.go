@@ -176,6 +176,22 @@ func (s *SceneServiceImpl) StartScenePublish(ctx context.Context, req *scenev1.S
 	if err != nil {
 		return nil, mapStoreErr(ctx, err)
 	}
+
+	// Participant gate. The web facade (SceneAccessServer) reaches this RPC
+	// directly with no command-layer gate, so handlePublishStart's IsParticipant
+	// check cannot be the only gate — enforce participation here so telnet and
+	// web gate identically (spec §6.1). No ABAC engine is consulted
+	// (INV-SCENE-33); mirrors GetPublishedScene's plugin-code participant gate.
+	isParticipant, err := s.store.IsParticipant(ctx, req.GetSceneId(), callerID)
+	if err != nil {
+		return nil, internalErr(ctx, err)
+	}
+	if !isParticipant {
+		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_NOT_PARTICIPANT").
+			With("scene_id", req.GetSceneId()).
+			Errorf("only a scene participant may start a publish vote"))
+	}
+
 	if scene.State != string(SceneStateEnded) {
 		return nil, mapStoreErr(ctx, oops.Code("SCENE_PUBLISH_INVALID_STATE").
 			With("scene_id", req.GetSceneId()).With("current_state", scene.State).

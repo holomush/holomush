@@ -1817,3 +1817,58 @@ func TestSceneAccessUpdateScene(t *testing.T) {
 		})
 	}
 }
+
+func TestSceneAccessStartScenePublishDispatchesWithoutEngine(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	ps := buildSATestPS(t, playerID)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+	sceneMock.EXPECT().StartScenePublish(mock.Anything, mock.MatchedBy(func(r *scenev1.StartScenePublishRequest) bool {
+		return r.GetCallerCharacterId() == char.ID.String() && r.GetSceneId() == "scene-1"
+	})).Return(&scenev1.StartScenePublishResponse{PublishedSceneId: "att-9", AttemptNumber: 1}, nil).Once()
+
+	srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), playerRepo, charRepo,
+		sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+
+	resp, err := srv.StartScenePublish(ctx, &sceneaccessv1.StartScenePublishRequest{
+		PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), SceneId: "scene-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "att-9", resp.GetPublishedSceneId())
+}
+
+func TestSceneAccessGetPublishedSceneTrimsToStatusAndTally(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	ps := buildSATestPS(t, playerID)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+	sceneMock.EXPECT().GetPublishedScene(mock.Anything, mock.Anything).Return(&scenev1.GetPublishedSceneResponse{
+		Id: "att-9", SceneId: "scene-1", AttemptNumber: 1, Status: "COLLECTING",
+		Tally: &scenev1.PublishedSceneVoteSummary{Yes: 2, No: 0, Pending: 3},
+	}, nil).Once()
+
+	srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), playerRepo, charRepo,
+		sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+
+	resp, err := srv.GetPublishedScene(ctx, &sceneaccessv1.GetPublishedSceneRequest{
+		PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), PublishedSceneId: "att-9",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "COLLECTING", resp.GetStatus())
+	assert.EqualValues(t, 2, resp.GetVoteSummary().GetYes())
+	assert.EqualValues(t, 3, resp.GetVoteSummary().GetPending())
+}

@@ -77,6 +77,7 @@ func startPublishFixture(t *testing.T, state SceneState) (*fakeStore, *SceneServ
 		OwnerID: callerID,
 		State:   string(state),
 	}
+	store.participants[sceneID] = map[string]string{callerID: "owner"}
 	svc := newTestService(t, store)
 	return store, svc, sceneID, callerID
 }
@@ -179,6 +180,24 @@ func TestStartScenePublishReturnsNotFoundForMissingScene(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, codes.NotFound, status.Code(err), "a missing scene MUST map to NotFound, not Internal")
 	assert.Equal(t, "SCENE_NOT_FOUND", status.Convert(err).Message())
+	assert.Empty(t, store.createdAttempts)
+}
+
+func TestStartScenePublishRejectsNonParticipant(t *testing.T) {
+	t.Parallel()
+	store, svc, sceneID, _ := startPublishFixture(t, SceneStateEnded)
+	store.maxPublishAttempts[sceneID] = 3
+	store.attemptCounts[sceneID] = AttemptCounts{Total: 0, Active: 0, Published: 0}
+	outsider := ulid.Make().String() // not in store.participants[sceneID]
+
+	_, err := svc.StartScenePublish(context.Background(), &scenev1.StartScenePublishRequest{
+		SceneId:           sceneID,
+		CallerCharacterId: outsider,
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Equal(t, "SCENE_PUBLISH_NOT_PARTICIPANT", status.Convert(err).Message())
 	assert.Empty(t, store.createdAttempts)
 }
 
