@@ -210,6 +210,25 @@ func (m *mockSceneAccessClient) LeaveScene(_ context.Context, req *sceneaccessv1
 	return &sceneaccessv1.LeaveSceneResponse{}, nil
 }
 
+// Publish-vote facade methods. Minimal stubs so mockSceneAccessClient satisfies
+// the extended SceneAccessClient interface; the BFF publish-handler tests
+// (holomush-5rh.24.37) enrich these with request capture as needed.
+func (m *mockSceneAccessClient) StartScenePublish(_ context.Context, _ *sceneaccessv1.StartScenePublishRequest) (*sceneaccessv1.StartScenePublishResponse, error) {
+	return &sceneaccessv1.StartScenePublishResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) CastPublishSceneVote(_ context.Context, _ *sceneaccessv1.CastPublishSceneVoteRequest) (*sceneaccessv1.CastPublishSceneVoteResponse, error) {
+	return &sceneaccessv1.CastPublishSceneVoteResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) WithdrawScenePublish(_ context.Context, _ *sceneaccessv1.WithdrawScenePublishRequest) (*sceneaccessv1.WithdrawScenePublishResponse, error) {
+	return &sceneaccessv1.WithdrawScenePublishResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) GetPublishedScene(_ context.Context, _ *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error) {
+	return &sceneaccessv1.GetPublishedSceneResponse{}, nil
+}
+
 // --- WebListScenes ---
 
 func TestWebListScenesForwardsTokenAndOpFieldsToFacade(t *testing.T) {
