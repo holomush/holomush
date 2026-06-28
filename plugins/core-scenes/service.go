@@ -523,6 +523,25 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 		})
 	}
 
+	// Surface the active publish attempt (COLLECTING/COOLOFF) so the web portal
+	// can gate the publish panel. Active-only; tally stays behind the
+	// participant-gated GetPublishedScene (INV-SCENE-60/61). Best-effort: a
+	// lookup failure must not fail the scene read.
+	if attempts, attErr := s.store.ListSceneAttempts(ctx, row.ID); attErr == nil {
+		if attID, ok := activeAttemptID(attempts); ok {
+			resp.ActivePublishAttemptId = attID
+			for i := range attempts {
+				if attempts[i].ID == attID {
+					resp.PublishStatus = string(attempts[i].Status)
+					break
+				}
+			}
+		}
+	} else {
+		slog.WarnContext(ctx, "scene.service.get_scene publish-attempt lookup failed",
+			"scene_id", row.ID, "error", attErr)
+	}
+
 	return &scenev1.GetSceneResponse{Scene: resp}, nil
 }
 
