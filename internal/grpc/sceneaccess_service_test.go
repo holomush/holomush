@@ -1790,6 +1790,21 @@ func TestSceneAccessUpdateScene(t *testing.T) {
 				assert.Equal(t, codes.InvalidArgument, status.Code(err))
 			},
 		},
+		{
+			name:       "empty update_mask is a no-op success; downstream never called",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req: &sceneaccessv1.UpdateSceneRequest{
+				PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), SceneId: wantID,
+				// No update_mask: the proto documents an empty mask as a handler-level
+				// no-op success, so the facade must NOT dispatch to SceneService.
+			},
+			check: func(t *testing.T, resp *sceneaccessv1.UpdateSceneResponse, err error) {
+				require.NoError(t, err)
+				assert.Nil(t, resp.GetScene())
+			},
+		},
 	}
 
 	for _, tt := range tests {

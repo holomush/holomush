@@ -88,7 +88,7 @@
 </script>
 
 {#if loading}
-  <p class="px-4 py-3 text-sm text-muted-foreground">Loading settings…</p>
+  <p class="px-4 py-3 text-xs text-muted-foreground">Loading settings…</p>
 {:else}
   <form class="flex flex-col gap-3 px-4 py-3" onsubmit={(e) => { e.preventDefault(); save(); }}>
     <div class="flex flex-col gap-1">

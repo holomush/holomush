@@ -804,6 +804,12 @@ func (s *SceneAccessServer) UpdateScene(ctx context.Context, req *sceneaccessv1.
 			return nil, status.Error(codes.InvalidArgument, "update_mask contains an unsupported path") //nolint:wrapcheck // gRPC status error at handler boundary
 		}
 	}
+	// An empty mask is a documented handler-level no-op success (sceneaccess.proto
+	// update_mask): short-circuit after ownership is verified so non-web callers
+	// cannot drive downstream validation/store work through a no-op request.
+	if len(req.GetUpdateMask().GetPaths()) == 0 {
+		return &sceneaccessv1.UpdateSceneResponse{}, nil
+	}
 	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
 	if err != nil {
 		return nil, err
