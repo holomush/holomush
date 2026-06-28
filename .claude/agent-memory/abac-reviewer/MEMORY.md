@@ -590,3 +590,22 @@ names (`GetPublishedScene*`) but the facade copy is genuinely trimmed; verify th
 trim, don't assume name-equality means shape-equality. Justification check: a
 pointer is safe if it reveals nothing the existing event stream doesn't (ADR cited
 `scene_publish_*` streaming role-agnostically to FocusMembership holders).
+
+## Facade bypasses command-handler-only gate (holomush-5rh.24.35, 2026-06-28)
+
+Recurring bypass shape: a participant/owner/voter gate enforced ONLY in the
+telnet command handler (`plugins/core-scenes/commands.go` `handlePublishStart`
+etc.) is NOT enforced when the web facade (`SceneAccessServer`) calls the plugin
+service RPC (`SceneServiceImpl.*`) directly — the facade has no command-layer
+gate. Round 1 caught this for `StartScenePublish` (non-participant could create a
+publish attempt via the facade). Fix pattern: move the gate INTO the service
+handler as a direct `store.IsParticipant` / owner / voter check (NOT
+engine.Evaluate — INV-SCENE-33 forbids ABAC on publication RPCs), placed before
+any write. When reviewing any new `SceneAccessServer` facade method, confirm the
+authz gate lives in the SERVICE handler it dispatches to, not only in the telnet
+command path. Gate-ordering note: a `store.Get`→NotFound before the participant
+gate reveals scene existence (NOT_FOUND vs PermissionDenied) — Low/acceptable,
+matches WithdrawScenePublish precedent; the protected secret is publication-
+attempt existence/content (SCENE_PRIVACY_BOUNDARY_BLOCK paths), not scene
+existence. NOTE: MEMORY.md is ~600 lines, 3x over the 200 cap — needs
+consolidation pass (many FIXED/stale Phase-5 entries can be pruned).
