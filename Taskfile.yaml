@@ -1183,6 +1183,11 @@ tasks:
     cmds:
       - gh workflow run release.yaml -f expected_increment={{.increment | default "auto"}}
 
+  release:notes:collect:
+    desc: "Print the structured context block for narrative release notes. Args: <vX.Y.Z>"
+    cmds:
+      - scripts/release-notes-collect.sh {{.CLI_ARGS}}
+
   release:deploy:
     desc: "Deploy a released tag to the sandbox. Required: tag=vX.Y.Z"
     preconditions:

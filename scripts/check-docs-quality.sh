@@ -31,7 +31,7 @@ inv1_ok=1
 ((inv1_ok)) && ok "INV-1 files: style guide and audit file both present"
 
 # ── INV-2: audit row count == content-page count ──────────────────────────
-page_count=$(rg --files -g '*.md' -g '*.mdx' "$CONTENT" | rg -v 'docs/index\.mdx|reference/events/' | wc -l | tr -d ' ')
+page_count=$(rg --files -g '*.md' -g '*.mdx' "$CONTENT" | rg -v 'docs/index\.mdx|reference/events/|releases/' | wc -l | tr -d ' ')
 row_count=$(rg -c '^\| \`' "$AUDIT" 2>/dev/null || echo 0)
 if [[ "$page_count" -eq "$row_count" ]]; then
   ok "INV-2 row-parity: audit rows ($row_count) == content pages ($page_count)"
