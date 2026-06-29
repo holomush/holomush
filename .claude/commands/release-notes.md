@@ -33,3 +33,6 @@ holomush-jfb9x).
    body) and add a reverse-chronological link to
    `site/src/content/docs/releases/index.mdx`. Confirm the `releases` topic is
    registered in `site/astro.config.mjs` (Task 4) or the page orphans silently.
+   The frontmatter MUST set `slug: releases/$ARGUMENTS` — a `vX.Y.Z` filename
+   would otherwise be slugified to a dot-stripped URL (`v0.10.0` → `/releases/v0100/`),
+   breaking the index link and the docs-IA parity gate.
