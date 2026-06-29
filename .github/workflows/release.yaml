@@ -126,7 +126,7 @@ jobs:
           cache: false
 
       - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1
+        uses: namespacelabs/nscloud-cache-action@d6b68aa38adace8976c09629021052d57bb1ce9c # v1
         with:
           cache: go
 
@@ -196,7 +196,7 @@ jobs:
       # published with unsigned artifacts.
       - name: Run GoReleaser
         id: goreleaser
-        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           distribution: goreleaser
           version: "~> v2"
