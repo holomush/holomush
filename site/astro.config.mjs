@@ -75,6 +75,12 @@ export default defineConfig({
               icon: 'information',
               items: [{ autogenerate: { directory: 'reference' } }],
             },
+            {
+              label: 'Releases',
+              link: '/releases/',
+              icon: 'rocket',
+              items: [{ autogenerate: { directory: 'releases' } }],
+            },
           ],
           { exclude: ['/'] },
         ),
