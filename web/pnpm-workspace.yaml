@@ -1,5 +1,5 @@
 overrides:
-  protobufjs: 8.6.0
+  protobufjs: 8.6.5
 
 allowBuilds:
   esbuild: true
