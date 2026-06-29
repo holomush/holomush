@@ -76,3 +76,53 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"could not resolve a previous tag"* ]]
 }
+
+@test "publish refuses an empty narrative file" {
+  echo -n "" > "$BATS_TEST_TMPDIR/narr.md"
+  run "$REPO_ROOT/scripts/release-notes-publish.sh" --tag v0.2.0 --narrative-file "$BATS_TEST_TMPDIR/narr.md"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"narrative file is empty"* ]]
+}
+
+@test "publish combines narrative with the existing GoReleaser body" {
+  # Mock gh: 'release view' prints a fixture body; 'release edit' records its
+  # --notes-file argument's contents to a sentinel file.
+  BIN="$BATS_TEST_TMPDIR/bin"; mkdir -p "$BIN"
+  cat > "$BIN/gh" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1 $2" = "release view" ]; then printf '## Changelog\n- feat: existing (#1)\n'; exit 0; fi
+if [ "$1 $2" = "release edit" ]; then
+  while [ $# -gt 0 ]; do [ "$1" = "--notes-file" ] && cp "$2" "$GH_SENTINEL"; shift; done
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "$BIN/gh"
+  printf '## What changed\nNarrative TLDR here.\n' > "$BATS_TEST_TMPDIR/narr.md"
+  GH_SENTINEL="$BATS_TEST_TMPDIR/published.md" PATH="$BIN:$PATH" \
+    run "$REPO_ROOT/scripts/release-notes-publish.sh" --tag v0.2.0 --narrative-file "$BATS_TEST_TMPDIR/narr.md"
+  [ "$status" -eq 0 ]
+  # Combined body MUST contain BOTH the narrative AND the existing mechanical list.
+  grep -q "Narrative TLDR here." "$BATS_TEST_TMPDIR/published.md"
+  grep -q "feat: existing (#1)" "$BATS_TEST_TMPDIR/published.md"
+}
+
+@test "publish fails closed when the existing release body is empty" {
+  # Mock gh: 'release view' returns an EMPTY body; 'release edit' would record a
+  # publish. Fail-closed means we MUST exit non-zero and never reach release edit.
+  BIN="$BATS_TEST_TMPDIR/bin"; mkdir -p "$BIN"
+  cat > "$BIN/gh" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1 $2" = "release view" ]; then printf ''; exit 0; fi
+if [ "$1 $2" = "release edit" ]; then touch "$GH_SENTINEL"; exit 0; fi
+exit 0
+EOF
+  chmod +x "$BIN/gh"
+  printf '## What changed\nNarrative TLDR here.\n' > "$BATS_TEST_TMPDIR/narr.md"
+  GH_SENTINEL="$BATS_TEST_TMPDIR/published.md" PATH="$BIN:$PATH" \
+    run "$REPO_ROOT/scripts/release-notes-publish.sh" --tag v0.2.0 --narrative-file "$BATS_TEST_TMPDIR/narr.md"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"existing release body for v0.2.0 is empty"* ]]
+  # release edit MUST NOT have run — no narrative-only publish.
+  [ ! -e "$BATS_TEST_TMPDIR/published.md" ]
+}
