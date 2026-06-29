@@ -14,6 +14,10 @@ setup() {
   git init -q -b main
   git config user.email "t@example.com"
   git config user.name "Test"
+  # Hermetic: never inherit the global commit.gpgsign/gpg.format — SSH/GPG
+  # signing blocks on a locked agent with no TTY in the bats subprocess.
+  git config commit.gpgsign false
+  git config tag.gpgsign false
   echo seed > seed.txt
   git add -A
   git commit -q -m "chore: seed"
@@ -24,6 +28,11 @@ setup() {
   # match scoped docs(scope):, so the fixture MUST be unscoped to be excluded.
   git commit -q --allow-empty -m "docs: mark SP1 landed"
   git commit -q --allow-empty -m "feat(session): liveness leases"
+  # Multi-level sub-bead id: the harvest regex must capture all depth levels,
+  # not truncate to the first (holomush-5rh.8).
+  git commit -q --allow-empty -m "feat(crypto): scene DEK genesis (holomush-5rh.8.29.13)"
+  # Scoped docs(scope): — GoReleaser anchors ^docs: so this is NOT excluded.
+  git commit -q --allow-empty -m "docs(scenes): settings actions plan"
   git tag v0.2.0
   # A range with NO holomush-* bead refs: exercises the zero-match path where
   # the bead-ref grep pipeline exits 1 under `set -euo pipefail`.
@@ -51,6 +60,22 @@ setup() {
   run "$REPO_ROOT/scripts/release-notes-collect.sh" v0.2.0
   [[ "$output" == *"holomush-5rh.24"* ]]
   [[ "$output" == *"holomush-66228"* ]]
+}
+
+@test "collect harvests multi-level bead ids without truncation" {
+  run "$REPO_ROOT/scripts/release-notes-collect.sh" v0.2.0
+  [ "$status" -eq 0 ]
+  # The harvested ref under "## Referenced beads" MUST be the full 3-deep id,
+  # not truncated to holomush-5rh.8. The leading "- " (no preceding paren)
+  # distinguishes the harvested ref line from the filtered-commit subject line.
+  [[ "$output" == *"- holomush-5rh.8.29.13"* ]]
+}
+
+@test "collect keeps scoped docs(scope): commits (GoReleaser anchors ^docs: only)" {
+  run "$REPO_ROOT/scripts/release-notes-collect.sh" v0.2.0
+  [ "$status" -eq 0 ]
+  # ^docs: is anchored — 'docs(scenes):' is NOT excluded, mirroring GoReleaser.
+  [[ "$output" == *"docs(scenes): settings actions plan"* ]]
 }
 
 @test "collect reports commits with no bead ref under coverage gaps" {
@@ -105,6 +130,11 @@ EOF
   # Combined body MUST contain BOTH the narrative AND the existing mechanical list.
   grep -q "Narrative TLDR here." "$BATS_TEST_TMPDIR/published.md"
   grep -q "feat: existing (#1)" "$BATS_TEST_TMPDIR/published.md"
+  # INV-7: the narrative MUST appear ABOVE the GoReleaser list, not merely be
+  # present. A reversed assembly order would otherwise pass the presence checks.
+  narr_line=$(grep -n "Narrative TLDR here." "$BATS_TEST_TMPDIR/published.md" | head -1 | cut -d: -f1)
+  gor_line=$(grep -n "feat: existing (#1)" "$BATS_TEST_TMPDIR/published.md" | head -1 | cut -d: -f1)
+  [ "$narr_line" -lt "$gor_line" ]
 }
 
 @test "publish fails closed when the existing release body is empty" {

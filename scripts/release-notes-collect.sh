@@ -41,7 +41,7 @@ echo
 echo "## Referenced beads"
 echo
 printf '%s\n' "${SUBJECTS[@]}" \
-  | grep -oE 'holomush-[a-z0-9]+(\.[0-9]+)?' \
+  | grep -oE 'holomush-[a-z0-9]+(\.[0-9]+)*' \
   | sort -u \
   | while read -r id; do
       # bd show is best-effort: degrade to the bare id if bd is unavailable
@@ -55,6 +55,8 @@ printf '%s\n' "${SUBJECTS[@]}" \
       else
         echo "- $id"
       fi
+    # Outer guard: when the range has zero bead refs, `grep -oE` exits 1 and
+    # `pipefail` would abort the script here; `|| true` keeps it going.
     done || true
 echo
 

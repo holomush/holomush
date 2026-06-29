@@ -15,6 +15,10 @@ setup() {
   git init -q -b main
   git config user.email "t@example.com"
   git config user.name "Test"
+  # Hermetic: never inherit the global commit.gpgsign/gpg.format — SSH/GPG
+  # signing blocks on a locked agent with no TTY in the bats subprocess.
+  git config commit.gpgsign false
+  git config tag.gpgsign false
   cp "$REPO_ROOT/cog.toml" .
   echo seed > seed.txt
   git add -A

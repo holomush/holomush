@@ -26,21 +26,29 @@ if [ ! -s "$NARR" ]; then
   exit 1
 fi
 
-EXISTING="$(gh release view "$TAG" --json body -q .body 2>/dev/null || true)"
+# Fetch the existing GoReleaser body. A gh failure (auth, network, missing
+# release) is surfaced verbatim; only a genuinely empty body trips the jfb9x
+# INV-7 fail-closed guard below. -R is explicit because a jj workspace has no
+# .git for gh to infer the repo from (CLAUDE.md session-isolation rule).
+ERRLOG="$(mktemp)"
+COMBINED="$(mktemp)"
+trap 'rm -f "$ERRLOG" "$COMBINED"' EXIT
+if ! EXISTING="$(gh release view "$TAG" -R holomush/holomush --json body -q .body 2>"$ERRLOG")"; then
+  echo "::error:: failed to fetch release $TAG: $(tr '\n' ' ' <"$ERRLOG")" >&2
+  exit 1
+fi
 if [ -z "$EXISTING" ]; then
-  # Fail closed: an empty body means GoReleaser hasn't run (or the wrong tag was
-  # given). Publishing narrative-only would silently drop the mechanical list and
-  # violate INV-7. Surface the anomaly instead of papering over it.
-  echo "::error:: existing release body for $TAG is empty — refusing to publish narrative-only (GoReleaser notes missing; INV-7). Run GoReleaser first or check the tag." >&2
+  # Empty body = GoReleaser hasn't run (or the wrong tag was given). Publishing
+  # narrative-only would silently drop the mechanical list and violate jfb9x
+  # INV-7. Surface the anomaly instead of papering over it.
+  echo "::error:: existing release body for $TAG is empty — refusing to publish narrative-only (GoReleaser notes missing; jfb9x INV-7). Run GoReleaser first or check the tag." >&2
   exit 1
 fi
 
-COMBINED="$(mktemp)"
-trap 'rm -f "$COMBINED"' EXIT
 cat "$NARR" > "$COMBINED"
 printf '\n\n---\n\n' >> "$COMBINED"
 printf '%s\n' "$EXISTING" >> "$COMBINED"
 
 # --notes-file (never --notes inline): the combined file is the whole body.
-gh release edit "$TAG" --notes-file "$COMBINED"
+gh release edit "$TAG" -R holomush/holomush --notes-file "$COMBINED"
 echo "Published combined release notes for $TAG" >&2
