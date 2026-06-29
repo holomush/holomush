@@ -24,7 +24,7 @@ require (
 	github.com/nats-io/prometheus-nats-exporter v0.20.1
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/onsi/ginkgo/v2 v2.32.0
-	github.com/onsi/gomega v1.42.0
+	github.com/onsi/gomega v1.42.1
 	github.com/pashagolub/pgxmock/v5 v5.1.0
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.23.2
