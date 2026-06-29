@@ -573,3 +573,39 @@ prefix-derived type. Binding a multi-clause INV to the DENY test (deny engine +
 NO ListAll mock expectation, so a read would fail the test) is the defensible choice —
 it pins the security-critical gate-blocks-read clause; sibling permit/field-shape clauses
 MAY stay unannotated (low, non-blocking).
+
+## Split read model: broad pointer vs participant-gated tally (ADR o8gx8, INV-SCENE-60/61)
+
+When a broadly-readable struct (`SceneInfo` via `GetScene`) must signal that a
+sensitive aggregate exists, the schema-level boundary is: broad struct gets a
+POINTER/PHASE only (`active_publish_attempt_id` + `publish_status` strings — id +
+FSM phase, NO counts); the aggregate (vote tally) stays behind a participant-gated
+RPC (`GetPublishedScene` → `PublishedSceneVoteSummary` yes/no/pending). When
+reviewing a field added to a broadly-readable message, ask: does it carry counts /
+per-voter / per-subject data? If yes → INV-SCENE-60/61 violation. Aggregate-only
+counts (yes/no/pending) are NOT per-voter and are fine behind the gate. Facade
+trimmed responses MUST exclude frozen content (that's the archive RPC's job) —
+note that plugin `scene.v1` and facade `sceneaccess.v1` reuse identical message
+names (`GetPublishedScene*`) but the facade copy is genuinely trimmed; verify the
+trim, don't assume name-equality means shape-equality. Justification check: a
+pointer is safe if it reveals nothing the existing event stream doesn't (ADR cited
+`scene_publish_*` streaming role-agnostically to FocusMembership holders).
+
+## Facade bypasses command-handler-only gate (holomush-5rh.24.35, 2026-06-28)
+
+Recurring bypass shape: a participant/owner/voter gate enforced ONLY in the
+telnet command handler (`plugins/core-scenes/commands.go` `handlePublishStart`
+etc.) is NOT enforced when the web facade (`SceneAccessServer`) calls the plugin
+service RPC (`SceneServiceImpl.*`) directly — the facade has no command-layer
+gate. Round 1 caught this for `StartScenePublish` (non-participant could create a
+publish attempt via the facade). Fix pattern: move the gate INTO the service
+handler as a direct `store.IsParticipant` / owner / voter check (NOT
+engine.Evaluate — INV-SCENE-33 forbids ABAC on publication RPCs), placed before
+any write. When reviewing any new `SceneAccessServer` facade method, confirm the
+authz gate lives in the SERVICE handler it dispatches to, not only in the telnet
+command path. Gate-ordering note: a `store.Get`→NotFound before the participant
+gate reveals scene existence (NOT_FOUND vs PermissionDenied) — Low/acceptable,
+matches WithdrawScenePublish precedent; the protected secret is publication-
+attempt existence/content (SCENE_PRIVACY_BOUNDARY_BLOCK paths), not scene
+existence. NOTE: MEMORY.md is ~600 lines, 3x over the 200 cap — needs
+consolidation pass (many FIXED/stale Phase-5 entries can be pruned).

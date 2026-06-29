@@ -267,6 +267,22 @@ func (m *mockGRPCClient) LeaveScene(_ context.Context, _ *sceneaccessv1.LeaveSce
 	return nil, nil
 }
 
+func (m *mockGRPCClient) StartScenePublish(_ context.Context, _ *sceneaccessv1.StartScenePublishRequest) (*sceneaccessv1.StartScenePublishResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) CastPublishSceneVote(_ context.Context, _ *sceneaccessv1.CastPublishSceneVoteRequest) (*sceneaccessv1.CastPublishSceneVoteResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) WithdrawScenePublish(_ context.Context, _ *sceneaccessv1.WithdrawScenePublishRequest) (*sceneaccessv1.WithdrawScenePublishResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) GetPublishedScene(_ context.Context, _ *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error) {
+	return nil, nil
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)

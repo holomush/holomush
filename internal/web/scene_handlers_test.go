@@ -91,6 +91,22 @@ type mockSceneAccessClient struct {
 
 	leaveSceneReq *sceneaccessv1.LeaveSceneRequest
 	leaveSceneErr error
+
+	startScenePublishReq  *sceneaccessv1.StartScenePublishRequest
+	startScenePublishResp *sceneaccessv1.StartScenePublishResponse
+	startScenePublishErr  error
+
+	castPublishSceneVoteReq  *sceneaccessv1.CastPublishSceneVoteRequest
+	castPublishSceneVoteResp *sceneaccessv1.CastPublishSceneVoteResponse
+	castPublishSceneVoteErr  error
+
+	withdrawScenePublishReq  *sceneaccessv1.WithdrawScenePublishRequest
+	withdrawScenePublishResp *sceneaccessv1.WithdrawScenePublishResponse
+	withdrawScenePublishErr  error
+
+	getPublishedSceneReq  *sceneaccessv1.GetPublishedSceneRequest
+	getPublishedSceneResp *sceneaccessv1.GetPublishedSceneResponse
+	getPublishedSceneErr  error
 }
 
 func (m *mockSceneAccessClient) ListScenesForViewer(_ context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
@@ -208,6 +224,26 @@ func (m *mockSceneAccessClient) LeaveScene(_ context.Context, req *sceneaccessv1
 		return nil, m.leaveSceneErr
 	}
 	return &sceneaccessv1.LeaveSceneResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) StartScenePublish(_ context.Context, req *sceneaccessv1.StartScenePublishRequest) (*sceneaccessv1.StartScenePublishResponse, error) {
+	m.startScenePublishReq = req
+	return m.startScenePublishResp, m.startScenePublishErr
+}
+
+func (m *mockSceneAccessClient) CastPublishSceneVote(_ context.Context, req *sceneaccessv1.CastPublishSceneVoteRequest) (*sceneaccessv1.CastPublishSceneVoteResponse, error) {
+	m.castPublishSceneVoteReq = req
+	return m.castPublishSceneVoteResp, m.castPublishSceneVoteErr
+}
+
+func (m *mockSceneAccessClient) WithdrawScenePublish(_ context.Context, req *sceneaccessv1.WithdrawScenePublishRequest) (*sceneaccessv1.WithdrawScenePublishResponse, error) {
+	m.withdrawScenePublishReq = req
+	return m.withdrawScenePublishResp, m.withdrawScenePublishErr
+}
+
+func (m *mockSceneAccessClient) GetPublishedScene(_ context.Context, req *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error) {
+	m.getPublishedSceneReq = req
+	return m.getPublishedSceneResp, m.getPublishedSceneErr
 }
 
 // --- WebListScenes ---
@@ -878,4 +914,89 @@ func TestWebUpdateSceneReturnsUnimplementedWhenClientAbsent(t *testing.T) {
 		connect.NewRequest(&webv1.WebUpdateSceneRequest{SessionId: "s"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
+// --- WebStartScenePublish ---
+
+func TestWebStartScenePublishForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{
+		startScenePublishResp: &sceneaccessv1.StartScenePublishResponse{PublishedSceneId: "att-9", AttemptNumber: 1},
+	}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebStartScenePublishRequest{SessionId: "sess-1", CharacterId: "char-1", SceneId: "scene-1"})
+	req.Header().Set(headerInjectSessionToken, "tok-abc")
+
+	resp, err := h.WebStartScenePublish(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "att-9", resp.Msg.GetPublishedSceneId())
+	require.NotNil(t, sc.startScenePublishReq)
+	assert.Equal(t, "tok-abc", sc.startScenePublishReq.GetPlayerSessionToken())
+	assert.Equal(t, "scene-1", sc.startScenePublishReq.GetSceneId())
+}
+
+// --- WebGetPublishedScene ---
+
+func TestWebGetPublishedSceneForwardsTokenAndFieldsToFacade(t *testing.T) {
+	sc := &mockSceneAccessClient{
+		getPublishedSceneResp: &sceneaccessv1.GetPublishedSceneResponse{
+			Id: "pub-7", SceneId: "scene-1", AttemptNumber: 2, Status: "voting",
+		},
+	}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebGetPublishedSceneRequest{
+		SessionId: "sess-1", CharacterId: "char-1", PublishedSceneId: "pub-7",
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-xyz")
+
+	resp, err := h.WebGetPublishedScene(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "pub-7", resp.Msg.GetId())
+	assert.Equal(t, "voting", resp.Msg.GetStatus())
+	require.NotNil(t, sc.getPublishedSceneReq)
+	assert.Equal(t, "tok-xyz", sc.getPublishedSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "pub-7", sc.getPublishedSceneReq.GetPublishedSceneId())
+}
+
+// --- WebCastPublishSceneVote ---
+
+func TestWebCastPublishSceneVoteForwardsTokenVoteAndMapsIsChange(t *testing.T) {
+	sc := &mockSceneAccessClient{
+		castPublishSceneVoteResp: &sceneaccessv1.CastPublishSceneVoteResponse{IsChange: true},
+	}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebCastPublishSceneVoteRequest{
+		SessionId: "sess-1", CharacterId: "char-1", PublishedSceneId: "pub-7", Vote: true,
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-cast")
+
+	resp, err := h.WebCastPublishSceneVote(context.Background(), req)
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetIsChange())
+	require.NotNil(t, sc.castPublishSceneVoteReq)
+	assert.Equal(t, "tok-cast", sc.castPublishSceneVoteReq.GetPlayerSessionToken())
+	assert.Equal(t, "pub-7", sc.castPublishSceneVoteReq.GetPublishedSceneId())
+	assert.True(t, sc.castPublishSceneVoteReq.GetVote())
+}
+
+// --- WebWithdrawScenePublish ---
+
+func TestWebWithdrawScenePublishForwardsTokenAndPublishedSceneID(t *testing.T) {
+	sc := &mockSceneAccessClient{
+		withdrawScenePublishResp: &sceneaccessv1.WithdrawScenePublishResponse{},
+	}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebWithdrawScenePublishRequest{
+		SessionId: "sess-1", CharacterId: "char-1", PublishedSceneId: "pub-7",
+	})
+	req.Header().Set(headerInjectSessionToken, "tok-wd")
+
+	_, err := h.WebWithdrawScenePublish(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, sc.withdrawScenePublishReq)
+	assert.Equal(t, "tok-wd", sc.withdrawScenePublishReq.GetPlayerSessionToken())
+	assert.Equal(t, "pub-7", sc.withdrawScenePublishReq.GetPublishedSceneId())
 }

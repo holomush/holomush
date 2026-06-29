@@ -852,3 +852,119 @@ func (s *SceneAccessServer) DownloadPublicSceneArchive(ctx context.Context, req 
 		MimeType: resp.GetMimeType(),
 	}, nil
 }
+
+// StartScenePublish starts a publish vote. INV-SCENE-33: no ABAC engine on the
+// publish path; the plugin handler self-protects (participant + ended).
+func (s *SceneAccessServer) StartScenePublish(ctx context.Context, req *sceneaccessv1.StartScenePublishRequest) (*sceneaccessv1.StartScenePublishResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	resp, err := s.sceneClient.StartScenePublish(dctx, &scenev1.StartScenePublishRequest{
+		CallerCharacterId: char.ID.String(),
+		SceneId:           req.GetSceneId(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.StartScenePublishResponse{
+		PublishedSceneId: resp.GetPublishedSceneId(),
+		AttemptNumber:    resp.GetAttemptNumber(),
+	}, nil
+}
+
+// CastPublishSceneVote casts/changes the caller's vote. INV-SCENE-33: no engine.
+func (s *SceneAccessServer) CastPublishSceneVote(ctx context.Context, req *sceneaccessv1.CastPublishSceneVoteRequest) (*sceneaccessv1.CastPublishSceneVoteResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	resp, err := s.sceneClient.CastPublishSceneVote(dctx, &scenev1.CastPublishSceneVoteRequest{
+		CallerCharacterId: char.ID.String(),
+		PublishedSceneId:  req.GetPublishedSceneId(),
+		Vote:              req.GetVote(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.CastPublishSceneVoteResponse{IsChange: resp.GetIsChange()}, nil
+}
+
+// WithdrawScenePublish aborts the active attempt (owner gate in the plugin).
+func (s *SceneAccessServer) WithdrawScenePublish(ctx context.Context, req *sceneaccessv1.WithdrawScenePublishRequest) (*sceneaccessv1.WithdrawScenePublishResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	if _, err := s.sceneClient.WithdrawScenePublish(dctx, &scenev1.WithdrawScenePublishRequest{
+		CallerCharacterId: char.ID.String(),
+		PublishedSceneId:  req.GetPublishedSceneId(),
+	}); err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.WithdrawScenePublishResponse{}, nil
+}
+
+// GetPublishedScene reads the active attempt's status + tally (participant-
+// gated in the plugin). Trimmed: no frozen content (GetPublicSceneArchive).
+func (s *SceneAccessServer) GetPublishedScene(ctx context.Context, req *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	resp, err := s.sceneClient.GetPublishedScene(dctx, &scenev1.GetPublishedSceneRequest{
+		CallerCharacterId: char.ID.String(),
+		PublishedSceneId:  req.GetPublishedSceneId(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.GetPublishedSceneResponse{
+		Id:            resp.GetId(),
+		SceneId:       resp.GetSceneId(),
+		AttemptNumber: resp.GetAttemptNumber(),
+		Status:        resp.GetStatus(),
+		FailureReason: resp.GetFailureReason(),
+		VoteSummary:   resp.GetTally(),
+	}, nil
+}

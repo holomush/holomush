@@ -105,6 +105,22 @@ service SceneAccessService {
   // participant `leave` policy (INV-SCENE-65). The owner cannot leave.
   rpc LeaveScene(LeaveSceneRequest) returns (LeaveSceneResponse);
 
+  // StartScenePublish starts a publication vote on an ended scene. Participant-
+  // gated inside the plugin (INV-SCENE-33: no ABAC engine on this path); the
+  // facade resolves session/character and dispatches without an engine call.
+  rpc StartScenePublish(StartScenePublishRequest) returns (StartScenePublishResponse);
+  // CastPublishSceneVote casts or changes the caller's Yes/No vote on the
+  // active attempt. Frozen-roster participant gate enforced in the plugin store.
+  rpc CastPublishSceneVote(CastPublishSceneVoteRequest) returns (CastPublishSceneVoteResponse);
+  // WithdrawScenePublish aborts the active attempt (scene owner only; gate in
+  // the plugin handler).
+  rpc WithdrawScenePublish(WithdrawScenePublishRequest) returns (WithdrawScenePublishResponse);
+  // GetPublishedScene reads the active attempt's status + vote tally for a
+  // participant cold-start snapshot. Participant-gated (INV-SCENE-60); the
+  // facade passes the plugin's status; the response is trimmed (no frozen
+  // content — that is GetPublicSceneArchive's job).
+  rpc GetPublishedScene(GetPublishedSceneRequest) returns (GetPublishedSceneResponse);
+
   // ExportScene renders the verified player's owned character's scene IC
   // log to a downloadable document. The facade resolves the acting character
   // from the player session (INV-SCENE-63) and forwards an ExportSceneLog
@@ -621,6 +637,99 @@ message LeaveSceneRequest {
 
 // LeaveSceneResponse is empty.
 message LeaveSceneResponse {}
+
+// StartScenePublishRequest carries the resolved session + acting character and
+// the scene to publish.
+message StartScenePublishRequest {
+  // session_id is the client-declared player-session ULID (hint only;
+  // authentication is solely via player_session_token).
+  string session_id = 1;
+  // player_session_token is the raw bearer token; the facade rejects
+  // unauthenticated callers and verifies character ownership.
+  string player_session_token = 2;
+  // character_id is the acting alt; ownership verified by ownedCharacter.
+  string character_id = 3;
+  // The scene to start a publish vote on; MUST be ended.
+  string scene_id = 4;
+}
+
+// StartScenePublishResponse returns the new attempt's id + ordinal.
+message StartScenePublishResponse {
+  // The publication attempt id (published_scenes.id).
+  string published_scene_id = 1;
+  // The attempt's 1-based ordinal within the scene's budget.
+  int32 attempt_number = 2;
+}
+
+// CastPublishSceneVoteRequest carries the attempt id + the Yes/No choice.
+message CastPublishSceneVoteRequest {
+  // session_id is the client-declared player-session ULID (hint only;
+  // authentication is solely via player_session_token).
+  string session_id = 1;
+  // player_session_token is the raw bearer token; the facade rejects
+  // unauthenticated callers and verifies character ownership.
+  string player_session_token = 2;
+  // character_id is the acting alt; ownership verified by ownedCharacter.
+  string character_id = 3;
+  // The publication attempt to vote on.
+  string published_scene_id = 4;
+  // The vote: true = yes, false = no.
+  bool vote = 5;
+}
+
+// CastPublishSceneVoteResponse reports whether this changed an existing vote.
+message CastPublishSceneVoteResponse {
+  // True when the caller had already voted and this flipped the choice.
+  bool is_change = 1;
+}
+
+// WithdrawScenePublishRequest aborts the attempt (owner-gated in the plugin).
+message WithdrawScenePublishRequest {
+  // session_id is the client-declared player-session ULID (hint only;
+  // authentication is solely via player_session_token).
+  string session_id = 1;
+  // player_session_token is the raw bearer token; the facade rejects
+  // unauthenticated callers and verifies character ownership.
+  string player_session_token = 2;
+  // character_id is the acting alt; ownership verified by ownedCharacter.
+  string character_id = 3;
+  // published_scene_id identifies the attempt to abort.
+  string published_scene_id = 4;
+}
+
+// WithdrawScenePublishResponse is empty.
+message WithdrawScenePublishResponse {}
+
+// GetPublishedSceneRequest reads the attempt's status + tally (participant-gated).
+message GetPublishedSceneRequest {
+  // session_id is the client-declared player-session ULID (hint only;
+  // authentication is solely via player_session_token).
+  string session_id = 1;
+  // player_session_token is the raw bearer token; the facade rejects
+  // unauthenticated callers and verifies character ownership.
+  string player_session_token = 2;
+  // character_id is the acting alt; ownership verified by ownedCharacter.
+  string character_id = 3;
+  // published_scene_id identifies the attempt whose status + tally to read.
+  string published_scene_id = 4;
+}
+
+// GetPublishedSceneResponse is the trimmed participant view of an attempt:
+// status + tally, no frozen content (that is GetPublicSceneArchive).
+message GetPublishedSceneResponse {
+  // The attempt id.
+  string id = 1;
+  // The scene the attempt belongs to.
+  string scene_id = 2;
+  // The attempt's 1-based ordinal.
+  int32 attempt_number = 3;
+  // State-machine status: COLLECTING / COOLOFF / PUBLISHED / ATTEMPT_FAILED.
+  string status = 4;
+  // Failure cause when status is ATTEMPT_FAILED; empty otherwise.
+  string failure_reason = 5;
+  // The current yes/no/pending tally.
+  holomush.scene.v1.PublishedSceneVoteSummary vote_summary = 6;
+}
 
 // UpdateSceneRequest is the facade request to edit scene settings.
 // player_session_token authenticates the caller; the facade resolves the acting

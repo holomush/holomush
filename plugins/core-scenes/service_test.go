@@ -61,6 +61,8 @@ type fakeStore struct {
 	exportLogRows    []LogRow
 	exportLogErr     error
 	exportLogSubject string // records the fullSubject passed by the service
+	// ListSceneAttempts control field (publish-pointer best-effort path).
+	listSceneAttemptsErr error
 }
 
 type recordingEventSink struct {
@@ -140,6 +142,9 @@ func (f *fakeStore) ListPublishVoters(_ context.Context, publishedSceneID string
 // ListSceneAttempts returns all installed attempts for a scene, ordered by
 // attempt_number (mirroring the store's ORDER BY).
 func (f *fakeStore) ListSceneAttempts(_ context.Context, sceneID string) ([]PublishedScene, error) {
+	if f.listSceneAttemptsErr != nil {
+		return nil, f.listSceneAttemptsErr
+	}
 	var out []PublishedScene
 	for _, pub := range f.publishedScenes {
 		if pub.SceneID == sceneID {
@@ -2731,4 +2736,77 @@ func TestListPublishedScenesStoreErrorMapsToInternal(t *testing.T) {
 	st := status.Convert(err)
 	assert.Equal(t, codes.Internal, st.Code())
 	assert.Equal(t, "internal error", st.Message(), "store error MUST NOT leak through the wire message")
+}
+
+func TestSceneServiceGetScenePopulatesActivePublishPointer(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-pub",
+		Title:      "Ended Scene",
+		OwnerID:    "char-alice",
+		State:      string(SceneStateEnded),
+		Visibility: string(SceneVisibilityOpen),
+	}))
+	// One active (COLLECTING) attempt for the scene.
+	store.publishedScenes = map[string]*PublishedScene{
+		"att-1": {ID: "att-1", SceneID: "scene-pub", AttemptNumber: 1, Status: StatusCollecting},
+	}
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-pub",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "att-1", resp.GetScene().GetActivePublishAttemptId())
+	assert.Equal(t, "COLLECTING", resp.GetScene().GetPublishStatus())
+}
+
+func TestSceneServiceGetSceneLeavesPublishPointerEmptyWhenNoActiveAttempt(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-noatt",
+		Title:      "No Attempt",
+		OwnerID:    "char-alice",
+		State:      string(SceneStateEnded),
+		Visibility: string(SceneVisibilityOpen),
+	}))
+	// A resolved (terminal) attempt must NOT surface as active.
+	store.publishedScenes = map[string]*PublishedScene{
+		"att-x": {ID: "att-x", SceneID: "scene-noatt", AttemptNumber: 1, Status: StatusPublished},
+	}
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-noatt",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetScene().GetActivePublishAttemptId())
+	assert.Empty(t, resp.GetScene().GetPublishStatus())
+}
+
+func TestSceneServiceGetSceneSucceedsWhenPublishAttemptLookupFails(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID:         "scene-lookuperr",
+		Title:      "Lookup Error",
+		OwnerID:    "char-alice",
+		State:      string(SceneStateEnded),
+		Visibility: string(SceneVisibilityOpen),
+	}))
+	// The publish-attempt lookup is best-effort: an error must NOT fail the
+	// scene read; the pointer fields are simply left empty.
+	store.listSceneAttemptsErr = errors.New("attempt store unavailable")
+	svc := newTestService(t, store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-lookuperr",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetScene())
+	assert.Equal(t, "scene-lookuperr", resp.GetScene().GetId())
+	assert.Empty(t, resp.GetScene().GetActivePublishAttemptId())
+	assert.Empty(t, resp.GetScene().GetPublishStatus())
 }

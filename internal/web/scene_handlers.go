@@ -581,3 +581,97 @@ func (h *Handler) WebLeaveScene(ctx context.Context, req *connect.Request[webv1.
 
 	return connect.NewResponse(&webv1.WebLeaveSceneResponse{}), nil
 }
+
+// WebStartScenePublish proxies to SceneAccessService.StartScenePublish. The
+// gateway reads the player_session_token from the X-Session-Token cookie header
+// and forwards it with the scene and character IDs. Returns the new
+// published_scene_id and attempt_number for the publish vote.
+func (h *Handler) WebStartScenePublish(ctx context.Context, req *connect.Request[webv1.WebStartScenePublishRequest]) (*connect.Response[webv1.WebStartScenePublishResponse], error) {
+	slog.DebugContext(ctx, "web: WebStartScenePublish", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+	token := req.Header().Get(headerInjectSessionToken)
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	resp, err := h.sceneAccess.StartScenePublish(rpcCtx, &sceneaccessv1.StartScenePublishRequest{
+		SessionId: req.Msg.GetSessionId(), PlayerSessionToken: token,
+		CharacterId: req.Msg.GetCharacterId(), SceneId: req.Msg.GetSceneId(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: start scene publish RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return connect.NewResponse(&webv1.WebStartScenePublishResponse{
+		PublishedSceneId: resp.GetPublishedSceneId(), AttemptNumber: resp.GetAttemptNumber(),
+	}), nil
+}
+
+// WebCastPublishSceneVote proxies to SceneAccessService.CastPublishSceneVote.
+// The gateway reads the player_session_token from the X-Session-Token cookie
+// header and forwards it with the publish attempt ID, character ID, and vote.
+func (h *Handler) WebCastPublishSceneVote(ctx context.Context, req *connect.Request[webv1.WebCastPublishSceneVoteRequest]) (*connect.Response[webv1.WebCastPublishSceneVoteResponse], error) {
+	slog.DebugContext(ctx, "web: WebCastPublishSceneVote", "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId())
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+	token := req.Header().Get(headerInjectSessionToken)
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	resp, err := h.sceneAccess.CastPublishSceneVote(rpcCtx, &sceneaccessv1.CastPublishSceneVoteRequest{
+		SessionId: req.Msg.GetSessionId(), PlayerSessionToken: token,
+		CharacterId: req.Msg.GetCharacterId(), PublishedSceneId: req.Msg.GetPublishedSceneId(), Vote: req.Msg.GetVote(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: cast publish vote RPC failed", err, "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return connect.NewResponse(&webv1.WebCastPublishSceneVoteResponse{IsChange: resp.GetIsChange()}), nil
+}
+
+// WebWithdrawScenePublish proxies to SceneAccessService.WithdrawScenePublish.
+// The gateway reads the player_session_token from the X-Session-Token cookie
+// header. Only the scene owner may withdraw an active publish attempt.
+func (h *Handler) WebWithdrawScenePublish(ctx context.Context, req *connect.Request[webv1.WebWithdrawScenePublishRequest]) (*connect.Response[webv1.WebWithdrawScenePublishResponse], error) {
+	slog.DebugContext(ctx, "web: WebWithdrawScenePublish", "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId())
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+	token := req.Header().Get(headerInjectSessionToken)
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	if _, err := h.sceneAccess.WithdrawScenePublish(rpcCtx, &sceneaccessv1.WithdrawScenePublishRequest{
+		SessionId: req.Msg.GetSessionId(), PlayerSessionToken: token,
+		CharacterId: req.Msg.GetCharacterId(), PublishedSceneId: req.Msg.GetPublishedSceneId(),
+	}); err != nil {
+		errutil.LogErrorContext(ctx, "web: withdraw scene publish RPC failed", err, "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return connect.NewResponse(&webv1.WebWithdrawScenePublishResponse{}), nil
+}
+
+// WebGetPublishedScene proxies to SceneAccessService.GetPublishedScene. The
+// gateway reads the player_session_token from the X-Session-Token cookie header
+// and forwards it with the published_scene_id. Returns the cold-start status
+// and vote tally for participants.
+func (h *Handler) WebGetPublishedScene(ctx context.Context, req *connect.Request[webv1.WebGetPublishedSceneRequest]) (*connect.Response[webv1.WebGetPublishedSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebGetPublishedScene", "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId())
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+	token := req.Header().Get(headerInjectSessionToken)
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	resp, err := h.sceneAccess.GetPublishedScene(rpcCtx, &sceneaccessv1.GetPublishedSceneRequest{
+		SessionId: req.Msg.GetSessionId(), PlayerSessionToken: token,
+		CharacterId: req.Msg.GetCharacterId(), PublishedSceneId: req.Msg.GetPublishedSceneId(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: get published scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "published_scene_id", req.Msg.GetPublishedSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return connect.NewResponse(&webv1.WebGetPublishedSceneResponse{
+		Id: resp.GetId(), SceneId: resp.GetSceneId(), AttemptNumber: resp.GetAttemptNumber(),
+		Status: resp.GetStatus(), FailureReason: resp.GetFailureReason(), VoteSummary: resp.GetVoteSummary(),
+	}), nil
+}

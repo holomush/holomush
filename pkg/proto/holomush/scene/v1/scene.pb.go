@@ -75,8 +75,20 @@ type SceneInfo struct {
 	// path does not compute the value (e.g. GetScene). Mirrors
 	// CharacterSceneInfo.last_activity_ms.
 	LastActivityMs int64 `protobuf:"varint,15,opt,name=last_activity_ms,json=lastActivityMs,proto3" json:"last_activity_ms,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The in-flight publication attempt's ID, or empty when no attempt is
+	// active. Populated by GetScene from activeAttemptID (commands.go) over the
+	// scene's published_scenes rows. Active-only: reflects an attempt in
+	// COLLECTING or COOLOFF and clears once the attempt resolves. The portal
+	// uses it to gate the publish panel's Start-vs-in-progress affordance and to
+	// key the participant-gated tally read (GetPublishedScene). Carries NO tally
+	// (SceneInfo is broadly readable; INV-SCENE-60/61).
+	ActivePublishAttemptId string `protobuf:"bytes,16,opt,name=active_publish_attempt_id,json=activePublishAttemptId,proto3" json:"active_publish_attempt_id,omitempty"`
+	// The active attempt's state-machine phase ("COLLECTING" or "COOLOFF"), or
+	// empty when no attempt is active. Non-sensitive phase signal; the counts
+	// stay behind GetPublishedScene's participant gate.
+	PublishStatus string `protobuf:"bytes,17,opt,name=publish_status,json=publishStatus,proto3" json:"publish_status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SceneInfo) Reset() {
@@ -212,6 +224,20 @@ func (x *SceneInfo) GetLastActivityMs() int64 {
 		return x.LastActivityMs
 	}
 	return 0
+}
+
+func (x *SceneInfo) GetActivePublishAttemptId() string {
+	if x != nil {
+		return x.ActivePublishAttemptId
+	}
+	return ""
+}
+
+func (x *SceneInfo) GetPublishStatus() string {
+	if x != nil {
+		return x.PublishStatus
+	}
+	return ""
 }
 
 // ParticipantInfo is one entry in a scene's roster — a character's relationship
@@ -4423,7 +4449,7 @@ var File_holomush_scene_v1_scene_proto protoreflect.FileDescriptor
 
 const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\n" +
-	"\x1dholomush/scene/v1/scene.proto\x12\x11holomush.scene.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd2\x04\n" +
+	"\x1dholomush/scene/v1/scene.proto\x12\x11holomush.scene.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb4\x05\n" +
 	"\tSceneInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -4444,7 +4470,9 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\bended_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12F\n" +
 	"\fparticipants\x18\r \x03(\v2\".holomush.scene.v1.ParticipantInfoR\fparticipants\x12@\n" +
 	"\tobservers\x18\x0e \x03(\v2\".holomush.scene.v1.ParticipantInfoR\tobservers\x12(\n" +
-	"\x10last_activity_ms\x18\x0f \x01(\x03R\x0elastActivityMs\"\xa8\x01\n" +
+	"\x10last_activity_ms\x18\x0f \x01(\x03R\x0elastActivityMs\x129\n" +
+	"\x19active_publish_attempt_id\x18\x10 \x01(\tR\x16activePublishAttemptId\x12%\n" +
+	"\x0epublish_status\x18\x11 \x01(\tR\rpublishStatus\"\xa8\x01\n" +
 	"\x0fParticipantInfo\x12!\n" +
 	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x12\n" +

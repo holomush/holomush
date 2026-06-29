@@ -156,6 +156,18 @@ const (
 	// WebServiceWebDownloadPublicSceneArchiveProcedure is the fully-qualified name of the WebService's
 	// WebDownloadPublicSceneArchive RPC.
 	WebServiceWebDownloadPublicSceneArchiveProcedure = "/holomush.web.v1.WebService/WebDownloadPublicSceneArchive"
+	// WebServiceWebStartScenePublishProcedure is the fully-qualified name of the WebService's
+	// WebStartScenePublish RPC.
+	WebServiceWebStartScenePublishProcedure = "/holomush.web.v1.WebService/WebStartScenePublish"
+	// WebServiceWebCastPublishSceneVoteProcedure is the fully-qualified name of the WebService's
+	// WebCastPublishSceneVote RPC.
+	WebServiceWebCastPublishSceneVoteProcedure = "/holomush.web.v1.WebService/WebCastPublishSceneVote"
+	// WebServiceWebWithdrawScenePublishProcedure is the fully-qualified name of the WebService's
+	// WebWithdrawScenePublish RPC.
+	WebServiceWebWithdrawScenePublishProcedure = "/holomush.web.v1.WebService/WebWithdrawScenePublish"
+	// WebServiceWebGetPublishedSceneProcedure is the fully-qualified name of the WebService's
+	// WebGetPublishedScene RPC.
+	WebServiceWebGetPublishedSceneProcedure = "/holomush.web.v1.WebService/WebGetPublishedScene"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -337,6 +349,14 @@ type WebServiceClient interface {
 	// SceneAccessService.DownloadPublicSceneArchive; player_session_token is
 	// read from the HTTP cookie by gateway middleware.
 	WebDownloadPublicSceneArchive(context.Context, *connect.Request[v1.WebDownloadPublicSceneArchiveRequest]) (*connect.Response[v1.WebDownloadPublicSceneArchiveResponse], error)
+	// WebStartScenePublish proxies StartScenePublish to the facade.
+	WebStartScenePublish(context.Context, *connect.Request[v1.WebStartScenePublishRequest]) (*connect.Response[v1.WebStartScenePublishResponse], error)
+	// WebCastPublishSceneVote proxies CastPublishSceneVote to the facade.
+	WebCastPublishSceneVote(context.Context, *connect.Request[v1.WebCastPublishSceneVoteRequest]) (*connect.Response[v1.WebCastPublishSceneVoteResponse], error)
+	// WebWithdrawScenePublish proxies WithdrawScenePublish to the facade.
+	WebWithdrawScenePublish(context.Context, *connect.Request[v1.WebWithdrawScenePublishRequest]) (*connect.Response[v1.WebWithdrawScenePublishResponse], error)
+	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
+	WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -602,6 +622,30 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebDownloadPublicSceneArchive")),
 			connect.WithClientOptions(opts...),
 		),
+		webStartScenePublish: connect.NewClient[v1.WebStartScenePublishRequest, v1.WebStartScenePublishResponse](
+			httpClient,
+			baseURL+WebServiceWebStartScenePublishProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebStartScenePublish")),
+			connect.WithClientOptions(opts...),
+		),
+		webCastPublishSceneVote: connect.NewClient[v1.WebCastPublishSceneVoteRequest, v1.WebCastPublishSceneVoteResponse](
+			httpClient,
+			baseURL+WebServiceWebCastPublishSceneVoteProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebCastPublishSceneVote")),
+			connect.WithClientOptions(opts...),
+		),
+		webWithdrawScenePublish: connect.NewClient[v1.WebWithdrawScenePublishRequest, v1.WebWithdrawScenePublishResponse](
+			httpClient,
+			baseURL+WebServiceWebWithdrawScenePublishProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebWithdrawScenePublish")),
+			connect.WithClientOptions(opts...),
+		),
+		webGetPublishedScene: connect.NewClient[v1.WebGetPublishedSceneRequest, v1.WebGetPublishedSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebGetPublishedSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebGetPublishedScene")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -649,6 +693,10 @@ type webServiceClient struct {
 	webListPublishedScenes        *connect.Client[v1.WebListPublishedScenesRequest, v1.WebListPublishedScenesResponse]
 	webGetPublicSceneArchive      *connect.Client[v1.WebGetPublicSceneArchiveRequest, v1.WebGetPublicSceneArchiveResponse]
 	webDownloadPublicSceneArchive *connect.Client[v1.WebDownloadPublicSceneArchiveRequest, v1.WebDownloadPublicSceneArchiveResponse]
+	webStartScenePublish          *connect.Client[v1.WebStartScenePublishRequest, v1.WebStartScenePublishResponse]
+	webCastPublishSceneVote       *connect.Client[v1.WebCastPublishSceneVoteRequest, v1.WebCastPublishSceneVoteResponse]
+	webWithdrawScenePublish       *connect.Client[v1.WebWithdrawScenePublishRequest, v1.WebWithdrawScenePublishResponse]
+	webGetPublishedScene          *connect.Client[v1.WebGetPublishedSceneRequest, v1.WebGetPublishedSceneResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -861,6 +909,26 @@ func (c *webServiceClient) WebDownloadPublicSceneArchive(ctx context.Context, re
 	return c.webDownloadPublicSceneArchive.CallUnary(ctx, req)
 }
 
+// WebStartScenePublish calls holomush.web.v1.WebService.WebStartScenePublish.
+func (c *webServiceClient) WebStartScenePublish(ctx context.Context, req *connect.Request[v1.WebStartScenePublishRequest]) (*connect.Response[v1.WebStartScenePublishResponse], error) {
+	return c.webStartScenePublish.CallUnary(ctx, req)
+}
+
+// WebCastPublishSceneVote calls holomush.web.v1.WebService.WebCastPublishSceneVote.
+func (c *webServiceClient) WebCastPublishSceneVote(ctx context.Context, req *connect.Request[v1.WebCastPublishSceneVoteRequest]) (*connect.Response[v1.WebCastPublishSceneVoteResponse], error) {
+	return c.webCastPublishSceneVote.CallUnary(ctx, req)
+}
+
+// WebWithdrawScenePublish calls holomush.web.v1.WebService.WebWithdrawScenePublish.
+func (c *webServiceClient) WebWithdrawScenePublish(ctx context.Context, req *connect.Request[v1.WebWithdrawScenePublishRequest]) (*connect.Response[v1.WebWithdrawScenePublishResponse], error) {
+	return c.webWithdrawScenePublish.CallUnary(ctx, req)
+}
+
+// WebGetPublishedScene calls holomush.web.v1.WebService.WebGetPublishedScene.
+func (c *webServiceClient) WebGetPublishedScene(ctx context.Context, req *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error) {
+	return c.webGetPublishedScene.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1040,6 +1108,14 @@ type WebServiceHandler interface {
 	// SceneAccessService.DownloadPublicSceneArchive; player_session_token is
 	// read from the HTTP cookie by gateway middleware.
 	WebDownloadPublicSceneArchive(context.Context, *connect.Request[v1.WebDownloadPublicSceneArchiveRequest]) (*connect.Response[v1.WebDownloadPublicSceneArchiveResponse], error)
+	// WebStartScenePublish proxies StartScenePublish to the facade.
+	WebStartScenePublish(context.Context, *connect.Request[v1.WebStartScenePublishRequest]) (*connect.Response[v1.WebStartScenePublishResponse], error)
+	// WebCastPublishSceneVote proxies CastPublishSceneVote to the facade.
+	WebCastPublishSceneVote(context.Context, *connect.Request[v1.WebCastPublishSceneVoteRequest]) (*connect.Response[v1.WebCastPublishSceneVoteResponse], error)
+	// WebWithdrawScenePublish proxies WithdrawScenePublish to the facade.
+	WebWithdrawScenePublish(context.Context, *connect.Request[v1.WebWithdrawScenePublishRequest]) (*connect.Response[v1.WebWithdrawScenePublishResponse], error)
+	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
+	WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1301,6 +1377,30 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebDownloadPublicSceneArchive")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebStartScenePublishHandler := connect.NewUnaryHandler(
+		WebServiceWebStartScenePublishProcedure,
+		svc.WebStartScenePublish,
+		connect.WithSchema(webServiceMethods.ByName("WebStartScenePublish")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebCastPublishSceneVoteHandler := connect.NewUnaryHandler(
+		WebServiceWebCastPublishSceneVoteProcedure,
+		svc.WebCastPublishSceneVote,
+		connect.WithSchema(webServiceMethods.ByName("WebCastPublishSceneVote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebWithdrawScenePublishHandler := connect.NewUnaryHandler(
+		WebServiceWebWithdrawScenePublishProcedure,
+		svc.WebWithdrawScenePublish,
+		connect.WithSchema(webServiceMethods.ByName("WebWithdrawScenePublish")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebGetPublishedSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebGetPublishedSceneProcedure,
+		svc.WebGetPublishedScene,
+		connect.WithSchema(webServiceMethods.ByName("WebGetPublishedScene")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1387,6 +1487,14 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebGetPublicSceneArchiveHandler.ServeHTTP(w, r)
 		case WebServiceWebDownloadPublicSceneArchiveProcedure:
 			webServiceWebDownloadPublicSceneArchiveHandler.ServeHTTP(w, r)
+		case WebServiceWebStartScenePublishProcedure:
+			webServiceWebStartScenePublishHandler.ServeHTTP(w, r)
+		case WebServiceWebCastPublishSceneVoteProcedure:
+			webServiceWebCastPublishSceneVoteHandler.ServeHTTP(w, r)
+		case WebServiceWebWithdrawScenePublishProcedure:
+			webServiceWebWithdrawScenePublishHandler.ServeHTTP(w, r)
+		case WebServiceWebGetPublishedSceneProcedure:
+			webServiceWebGetPublishedSceneHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1562,4 +1670,20 @@ func (UnimplementedWebServiceHandler) WebGetPublicSceneArchive(context.Context, 
 
 func (UnimplementedWebServiceHandler) WebDownloadPublicSceneArchive(context.Context, *connect.Request[v1.WebDownloadPublicSceneArchiveRequest]) (*connect.Response[v1.WebDownloadPublicSceneArchiveResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebDownloadPublicSceneArchive is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebStartScenePublish(context.Context, *connect.Request[v1.WebStartScenePublishRequest]) (*connect.Response[v1.WebStartScenePublishResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebStartScenePublish is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebCastPublishSceneVote(context.Context, *connect.Request[v1.WebCastPublishSceneVoteRequest]) (*connect.Response[v1.WebCastPublishSceneVoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebCastPublishSceneVote is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebWithdrawScenePublish(context.Context, *connect.Request[v1.WebWithdrawScenePublishRequest]) (*connect.Response[v1.WebWithdrawScenePublishResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebWithdrawScenePublish is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetPublishedScene is not implemented"))
 }

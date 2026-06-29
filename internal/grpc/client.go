@@ -542,3 +542,39 @@ func (c *Client) LeaveScene(ctx context.Context, req *sceneaccessv1.LeaveSceneRe
 	}
 	return resp, nil
 }
+
+// StartScenePublish delegates to SceneAccessService.StartScenePublish.
+func (c *Client) StartScenePublish(ctx context.Context, req *sceneaccessv1.StartScenePublishRequest) (*sceneaccessv1.StartScenePublishResponse, error) {
+	resp, err := c.sceneAccessClient.StartScenePublish(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "StartScenePublish").Wrap(err)
+	}
+	return resp, nil
+}
+
+// CastPublishSceneVote delegates to SceneAccessService.CastPublishSceneVote.
+func (c *Client) CastPublishSceneVote(ctx context.Context, req *sceneaccessv1.CastPublishSceneVoteRequest) (*sceneaccessv1.CastPublishSceneVoteResponse, error) {
+	resp, err := c.sceneAccessClient.CastPublishSceneVote(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "CastPublishSceneVote").Wrap(err)
+	}
+	return resp, nil
+}
+
+// WithdrawScenePublish delegates to SceneAccessService.WithdrawScenePublish.
+func (c *Client) WithdrawScenePublish(ctx context.Context, req *sceneaccessv1.WithdrawScenePublishRequest) (*sceneaccessv1.WithdrawScenePublishResponse, error) {
+	resp, err := c.sceneAccessClient.WithdrawScenePublish(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "WithdrawScenePublish").Wrap(err)
+	}
+	return resp, nil
+}
+
+// GetPublishedScene delegates to SceneAccessService.GetPublishedScene.
+func (c *Client) GetPublishedScene(ctx context.Context, req *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error) {
+	resp, err := c.sceneAccessClient.GetPublishedScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetPublishedScene").Wrap(err)
+	}
+	return resp, nil
+}
