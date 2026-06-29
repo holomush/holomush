@@ -10,7 +10,7 @@ set -euo pipefail
 TAG="${1:?usage: release-notes-collect.sh <vX.Y.Z>}"
 
 # Previous tag = the tag immediately before <tag> in version order.
-PREV="$(git tag --sort=-v:refname | grep -A1 -xF "$TAG" | tail -n1)" || true
+PREV="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -A1 -xF "$TAG" | tail -n1)" || true
 if [ -z "$PREV" ] || [ "$PREV" = "$TAG" ]; then
   echo "::error:: could not resolve a previous tag before $TAG" >&2
   exit 1
@@ -41,6 +41,7 @@ echo
 echo "## Referenced beads"
 echo
 printf '%s\n' "${SUBJECTS[@]}" \
+  | grep -Ev "$EXCLUDE" \
   | grep -oE 'holomush-[a-z0-9]+(\.[0-9]+)*' \
   | sort -u \
   | while read -r id; do
