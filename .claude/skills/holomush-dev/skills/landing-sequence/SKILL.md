@@ -1,5 +1,7 @@
 ---
+name: landing-sequence
 description: Orchestrate the session-completion checklist (Landing the Plane) — pr-prep + bead status + push + workspace cleanup
+disable-model-invocation: true
 ---
 
 You are landing the plane on this session's work. Walk through the

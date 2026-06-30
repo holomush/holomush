@@ -1,5 +1,7 @@
 ---
+name: pr-prep
 description: Run the appropriate pr-prep lane (fast by default; full for int+e2e) and surface the first failure clearly
+disable-model-invocation: true
 ---
 
 Run the **fast** `task pr-prep` before push — it's the mandatory gate (schema,

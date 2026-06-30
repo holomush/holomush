@@ -1,5 +1,7 @@
 ---
+name: spawn-workspace
 description: Create a new isolated jj workspace for parallel agent work — wraps `task workspace:new`
+disable-model-invocation: true
 ---
 
 Create an isolated jj workspace for this work. Per CLAUDE.md "Session

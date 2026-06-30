@@ -1,5 +1,7 @@
 ---
+name: audit-beads
 description: Audit open `bd` issues for stale/closeable beads with grounded evidence
+disable-model-invocation: true
 ---
 
 @agent-bead-auditor Audit open beads using the methodology in your system
