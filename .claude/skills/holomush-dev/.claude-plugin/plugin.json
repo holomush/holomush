@@ -1,0 +1,5 @@
+{
+  "name": "holomush-dev",
+  "description": "HoloMUSH in-repo dev tooling: release notes, review gates, pr-prep, workspace + bead helpers.",
+  "version": "0.1.0"
+}
