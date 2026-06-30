@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { getScene, getPublishedScene } = vi.hoisted(() => ({ getScene: vi.fn(), getPublishedScene: vi.fn() }));
 vi.mock('./client', () => ({ getScene, getPublishedScene }));
@@ -10,8 +10,6 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	publishStore.reset();
 });
-
-import { afterEach } from 'vitest';
 
 function makeEvent(type: string, scnId: string): { type: string; metadata: Record<string, unknown> } {
 	return { type: `core-scenes:${type}`, metadata: { scene_id: scnId } };
@@ -110,5 +108,65 @@ describe('publishStore onEvent', () => {
 		expect(publishStore.isParticipant).toBe(false);
 		expect(publishStore.tally).toBeNull();
 		expect(publishStore.voteInProgress).toBe(true); // still in progress (existence unchanged)
+	});
+
+	it('superseded in-flight tally refetch is dropped by the signal guard', async () => {
+		// Start as participant.
+		getScene.mockResolvedValue({ activePublishAttemptId: 'att-1', publishStatus: 'COLLECTING' });
+		getPublishedScene.mockResolvedValueOnce({
+			id: 'att-1', status: 'COLLECTING', voteSummary: { yes: 1, no: 0, pending: 4 },
+		});
+		await publishStore.loadColdStart('C1', 'SC1');
+
+		// First vote_cast: hold getPublishedScene pending via a deferred promise.
+		let resolveFirst!: (v: unknown) => void;
+		getPublishedScene.mockImplementationOnce(() => new Promise((r) => { resolveFirst = r; }));
+
+		publishStore.onEvent(makeEvent('scene_publish_vote_cast', 'SC1') as never);
+		await vi.advanceTimersByTimeAsync(300); // debounce fires; refetch #1 starts (pending)
+
+		// Second vote_cast: aborts refetch #1 and starts refetch #2 with a newer tally.
+		const newerTally = { yes: 3, no: 1, pending: 1 };
+		getPublishedScene.mockResolvedValueOnce({
+			id: 'att-1', status: 'COLLECTING', voteSummary: newerTally,
+		});
+		publishStore.onEvent(makeEvent('scene_publish_vote_cast', 'SC1') as never);
+		await vi.advanceTimersByTimeAsync(300); // second debounce fires; aborts AC1; refetch #2 resolves
+
+		// Resolve the stale refetch #1 with bogus data — signal guard must drop it.
+		resolveFirst({ id: 'att-1', status: 'COLLECTING', voteSummary: { yes: 99, no: 99, pending: 99 } });
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(publishStore.tally).toEqual(newerTally);
+	});
+
+	it('lifecycle attempt-gone aborts a pending tally refetch and clears tally', async () => {
+		// Start as participant.
+		getScene.mockResolvedValueOnce({ activePublishAttemptId: 'att-1', publishStatus: 'COLLECTING' });
+		getPublishedScene.mockResolvedValueOnce({
+			id: 'att-1', status: 'COLLECTING', voteSummary: { yes: 1, no: 0, pending: 4 },
+		});
+		await publishStore.loadColdStart('C1', 'SC1');
+
+		// Hold the next tally refetch pending.
+		let resolveStale!: (v: unknown) => void;
+		getPublishedScene.mockImplementationOnce(() => new Promise((r) => { resolveStale = r; }));
+
+		publishStore.onEvent(makeEvent('scene_publish_vote_cast', 'SC1') as never);
+		await vi.advanceTimersByTimeAsync(300); // debounce fires; stale refetch starts (pending)
+
+		// Lifecycle event: getScene returns empty → reloadPointer aborts inFlight, clears tally.
+		getScene.mockResolvedValueOnce({ activePublishAttemptId: '', publishStatus: '' });
+		publishStore.onEvent(makeEvent('scene_publish_resolved', 'SC1') as never);
+		await vi.advanceTimersByTimeAsync(0); // flush reloadPointer's async chain
+
+		expect(publishStore.tally).toBeNull();
+		expect(publishStore.voteInProgress).toBe(false);
+
+		// Late resolution of the stale refetch must NOT repopulate the tally.
+		resolveStale({ id: 'att-1', status: 'COLLECTING', voteSummary: { yes: 1, no: 0, pending: 4 } });
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(publishStore.tally).toBeNull();
 	});
 });

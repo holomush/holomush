@@ -32,6 +32,9 @@ const DEBOUNCE_MS = 300;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: AbortController | null = null;
+// Sequence number: incremented at each reloadPointer entry; checked after every await
+// so that a superseded (older) invocation bails out rather than clobbering state.
+let reloadPointerSeq = 0;
 
 function scheduleTallyRefetch(): void {
 	if (debounceTimer) clearTimeout(debounceTimer);
@@ -44,20 +47,29 @@ function scheduleTallyRefetch(): void {
 }
 
 async function reloadPointer(): Promise<void> {
-	const sessionId = await ensureSession(characterId);
-	const scene = await getScene(sessionId, characterId, sceneId);
-	activeAttemptId = scene?.activePublishAttemptId ?? '';
-	phase = scene?.publishStatus ?? '';
-	if (activeAttemptId) {
-		scheduleTallyRefetch();
-	} else {
-		// Attempt is gone (resolved/withdrawn) — cancel any pending or in-flight
-		// tally refetch so a late response cannot repopulate the tally.
-		if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
-		inFlight?.abort();
-		inFlight = null;
-		tally = null;
-		isParticipant = false;
+	const seq = ++reloadPointerSeq;
+	try {
+		const sessionId = await ensureSession(characterId);
+		if (seq !== reloadPointerSeq) return; // superseded by a newer invocation
+		const scene = await getScene(sessionId, characterId, sceneId);
+		if (seq !== reloadPointerSeq) return; // superseded by a newer invocation
+		activeAttemptId = scene?.activePublishAttemptId ?? '';
+		phase = scene?.publishStatus ?? '';
+		if (activeAttemptId) {
+			scheduleTallyRefetch();
+		} else {
+			// Attempt is gone (resolved/withdrawn) — cancel any pending or in-flight
+			// tally refetch so a late response cannot repopulate the tally.
+			if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+			inFlight?.abort();
+			inFlight = null;
+			tally = null;
+			isParticipant = false;
+		}
+	} catch (err) {
+		void err;
+		if (seq !== reloadPointerSeq) return; // superseded; ignore
+		stale = true; // transient: keep last-known state, retry on next event
 	}
 }
 
@@ -91,12 +103,13 @@ async function refetchTally(signal?: AbortSignal): Promise<void> {
 			: { yes: 0, no: 0, pending: 0 };
 		stale = false;
 	} catch (err) {
+		if (signal?.aborted) return;                 // aborted by a superseding refetch; discard
 		if (isPermissionDenied(err)) {
 			isParticipant = false; // observer: existence only, never an error
 			tally = null;
 			return;
 		}
-		if (!signal?.aborted) stale = true; // transient: keep last-known tally, retry on next event
+		stale = true; // transient: keep last-known tally, retry on next event
 	}
 }
 
@@ -118,6 +131,7 @@ async function loadColdStart(charId: string, scnId: string): Promise<void> {
 function reset(): void {
 	if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
 	inFlight?.abort(); inFlight = null;
+	reloadPointerSeq = 0;
 	activeAttemptId = '';
 	phase = '';
 	tally = null;
