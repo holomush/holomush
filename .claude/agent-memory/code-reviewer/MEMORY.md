@@ -303,3 +303,15 @@
   waitForURL(/\/scenes$/) workaround sound — ScenesShell deep-link $effect strips ?watch= via goto('/scenes',replaceState)
   after awaited watchScene (ScenesShell:204-215); kickAction auto-refetch (membershipFlow.ts:41); selectors otherwise
   all verified against components; create defaults active/open valid.
+- **Svelte debounce+abort orchestration (5rh.24.41.3 READY, 2026-06-30) — CLEAN.** publishStore onEvent/scheduleTallyRefetch/
+  reloadPointer + abort-aware refetchTally. Critical race-check: success-path abort guard `if(signal?.aborted)return` AFTER
+  the await + scheduleTallyRefetch aborting prior controller BEFORE new = superseded success can't write stale tally (SOLID).
+  Recurring NON-blocking shapes for fire-and-forget event orchestration: (1) `void asyncFn()` with NO try/catch = unhandled
+  rejection on transient getScene fail (the SHAPE to watch — in this store reloadPointer + loadColdStart + refetchTally are now ALL try/catch-guarded: reloadPointer hardened in 5rh.24.41.8; loadColdStart guards + ensureSession-moved-inside-try in the #4562 autofix). (2) abort/late-
+  response-suppression contracts UNTESTED — synchronous mock never reacts to abort(); 5 tests proved debounce-count/observer/
+  cross-scene/lifecycle-pointer/transition but NOT supersede-no-write. (3) permission_denied catch branch unguarded by
+  signal.aborted (narrow: real abort→Canceled not perm_denied, and transition runs on non-aborted latest). (4) concurrent
+  pointer-load races getScene — RESOLVED via a reloadPointerSeq counter checked after every await (reloadPointer in
+  5rh.24.41.8; loadColdStart in the #4562 autofix). All were NON-blocking for verbatim-from-plan+plan-READY+green. connect-es v2 CallOptions
+  `(req,{signal})` validated by svelte-check (wrong shape=compile err). optional 3rd-arg signal keeps 2-arg client.test green.
+  vi.advanceTimersByTimeAsync flushes microtasks between timers so async reloadPointer awaits resolve before its setTimeout fires.

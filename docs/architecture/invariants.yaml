@@ -3274,6 +3274,7 @@ invariants:
     binding: bound
     asserted_by:
       - "test/integration/scenes/scene_activity_badge_test.go"
+      - "test/integration/scenes/publish_web_delivery_test.go"
     refs: []
   - id: INV-SCENE-63
     scope: INV-SCENE

@@ -16,6 +16,10 @@ import {
 	type WebKickFromSceneRequest,
 	type WebTransferOwnershipRequest,
 	type WebLeaveSceneRequest,
+	type WebStartScenePublishRequest,
+	type WebCastPublishSceneVoteRequest,
+	type WebWithdrawScenePublishRequest,
+	type WebGetPublishedSceneRequest,
 } from '$lib/connect/holomush/web/v1/web_pb';
 import { transport } from '$lib/transport';
 
@@ -286,4 +290,46 @@ export async function queryStreamHistory(
 		cursor: new Uint8Array(),
 	});
 	return res;
+}
+
+/**
+ * Starts a publish vote on the given scene (structural write → typed RPC, not
+ * the command path). Returns the new attempt id + number.
+ */
+export async function startScenePublish(
+	sessionId: string,
+	opts: Pick<WebStartScenePublishRequest, 'characterId' | 'sceneId'>,
+) {
+	return client.webStartScenePublish({ sessionId, ...opts });
+}
+
+/** Casts or changes the character's vote (true = yes) on an in-flight attempt. */
+export async function castPublishSceneVote(
+	sessionId: string,
+	opts: Pick<WebCastPublishSceneVoteRequest, 'characterId' | 'publishedSceneId' | 'vote'>,
+) {
+	return client.webCastPublishSceneVote({ sessionId, ...opts });
+}
+
+/** Withdraws (cancels) an in-flight publish attempt the character owns. */
+export async function withdrawScenePublish(
+	sessionId: string,
+	opts: Pick<WebWithdrawScenePublishRequest, 'characterId' | 'publishedSceneId'>,
+) {
+	return client.webWithdrawScenePublish({ sessionId, ...opts });
+}
+
+/**
+ * Reads the participant-gated published-scene snapshot (status + aggregate
+ * yes/no/pending tally). Throws ConnectError(PermissionDenied) for
+ * non-participants — callers MUST treat that as observer mode, not an error.
+ * Optional signal allows callers to abort the request (e.g., debounced tally
+ * refetch superseded by a newer in-flight call).
+ */
+export async function getPublishedScene(
+	sessionId: string,
+	opts: Pick<WebGetPublishedSceneRequest, 'characterId' | 'publishedSceneId'>,
+	signal?: AbortSignal,
+) {
+	return client.webGetPublishedScene({ sessionId, ...opts }, { signal });
 }

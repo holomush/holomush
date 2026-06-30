@@ -144,6 +144,15 @@ vi.mock('./client', () => ({
 	queryStreamHistory: vi.fn().mockResolvedValue({ events: [], hasMore: false }),
 }));
 
+// ── publish store mock (hoisted to avoid TDZ with vi.mock hoisting) ──────────
+// loadColdStart returns a Promise (the select() call site does `.catch(...)`),
+// so the spy must resolve a thenable, not undefined.
+const { onEvent, loadColdStart } = vi.hoisted(() => ({
+	onEvent: vi.fn(),
+	loadColdStart: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('./publishStore.svelte', () => ({ publishStore: { onEvent, loadColdStart } }));
+
 describe('bumpUnread dedup (spec D7)', () => {
 	it('skips bump when sceneId matches selectedSceneId', async () => {
 		// Import dynamically so mocks are applied.
@@ -499,5 +508,46 @@ describe('select roster enrichment', () => {
 			expect.any(String), // connectionId from awaitConnectionId (may vary across mock reset cycles)
 			'SCENE_NOENRICH',
 		);
+	});
+
+	it('cold-starts the publish store for the selected scene', async () => {
+		const altSessions = await import('./altSessions.svelte');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		vi.mocked(altSessions.ensureSession).mockResolvedValue('SESSION_PUB');
+
+		await workspaceStore.select('SCENE_PUB', '', 'CHAR_PUB');
+
+		// Wiring (holomush-5rh.24.41.10): selecting a scene MUST cold-start the
+		// publish store with (characterId, sceneId) so ScenePublishPanel populates
+		// and publishStore.onEvent has a sceneId to match live scene_publish_*
+		// events against. Without this the feature is non-functional in the browser.
+		expect(loadColdStart).toHaveBeenCalledWith('CHAR_PUB', 'SCENE_PUB');
+	});
+});
+
+// ── 7. ingestEvent publish-event wiring ──────────────────────────────────────
+
+describe('ingestEvent publish-event wiring', () => {
+	it('dispatches scene_publish_* to the publish store AND keeps it out of the IC log', async () => {
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+		const ev = makeGameEvent('core-scenes:scene_publish_vote_cast', {
+			eventId: 'PUB_EV_1', metadata: { scene_id: 'SCENE_P' },
+		});
+		const before = workspaceStore.logsBySceneId['SCENE_P']?.length ?? 0;
+		workspaceStore.ingestEvent('SESSION_1', ev);
+		expect(onEvent).toHaveBeenCalledTimes(1);
+		const after = workspaceStore.logsBySceneId['SCENE_P']?.length ?? 0;
+		expect(after).toBe(before); // not added to the IC log
+	});
+
+	it('does not dispatch a normal IC pose to the publish store', async () => {
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+		const ev = makeGameEvent('core-scenes:scene_pose', {
+			eventId: 'POSE_EV_1', metadata: { scene_id: 'SCENE_P', text: 'nods.' },
+		});
+		onEvent.mockClear();
+		workspaceStore.ingestEvent('SESSION_1', ev);
+		expect(onEvent).not.toHaveBeenCalled();
 	});
 });

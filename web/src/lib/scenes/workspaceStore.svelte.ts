@@ -22,6 +22,7 @@
 import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 import type { SceneInfo } from '$lib/connect/holomush/scene/v1/scene_pb';
 import { eventFrameToLogEntry, type LogEntry, type WorkspaceScene } from './types';
+import { publishStore } from './publishStore.svelte';
 import {
 	listMyScenes,
 	getScene,
@@ -152,6 +153,14 @@ async function select(
 	selectedSceneId = sceneId;
 	unreadBySceneId = { ...unreadBySceneId, [sceneId]: 0 };
 
+	// 3b. Cold-start the publish-vote store for this scene so ScenePublishPanel
+	//     renders any in-progress vote AND publishStore.onEvent has a sceneId to
+	//     match incoming scene_publish_* events against (its cross-scene filter
+	//     compares ev.metadata.scene_id to the store's sceneId, set only here via
+	//     loadColdStart). Best-effort and fire-and-forget — never blocks scene
+	//     selection. (holomush-5rh.24.41.10)
+	void publishStore.loadColdStart(characterId, sceneId).catch(() => {});
+
 	// 4. Notify server of the new focus so SCENE_ACTIVITY suppression fires.
 	await setSceneFocus(altSessionId, connectionId, sceneId);
 
@@ -216,6 +225,14 @@ async function select(
  * but routing is now done via the parsed entry, not the session.
  */
 function ingestEvent(_sessionId: string, ev: GameEvent): void {
+	// Publish lifecycle/vote events are NOT IC log entries — fan them to the
+	// publish store, then fall through (eventFrameToLogEntry returns null for
+	// them, so the log path below is a no-op). scene_id rides ev.metadata,
+	// stamped by translate.go's sceneIDFromSubject for all scene IC events.
+	if (ev.type.startsWith('core-scenes:scene_publish_')) {
+		publishStore.onEvent(ev as unknown as { type: string; metadata?: Record<string, unknown> });
+	}
+
 	const entry = eventFrameToLogEntry(ev);
 	if (!entry) return;
 
