@@ -20,14 +20,70 @@ let stale = $state(false);
 let sceneId = $state('');
 let characterId = $state('');
 
-async function refetchTally(): Promise<void> {
+const LIFECYCLE = new Set([
+	'core-scenes:scene_publish_started',
+	'core-scenes:scene_publish_resolved',
+	'core-scenes:scene_publish_withdrawn',
+	'core-scenes:scene_publish_cooloff_started',
+	'core-scenes:scene_publish_vote_attempts_extended',
+]);
+const VOTE_CAST = 'core-scenes:scene_publish_vote_cast';
+const DEBOUNCE_MS = 300;
+
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let inFlight: AbortController | null = null;
+
+function scheduleTallyRefetch(): void {
+	if (debounceTimer) clearTimeout(debounceTimer);
+	debounceTimer = setTimeout(() => {
+		debounceTimer = null;
+		inFlight?.abort();           // cancel any stale in-flight refetch
+		inFlight = new AbortController();
+		void refetchTally(inFlight.signal);
+	}, DEBOUNCE_MS);
+}
+
+async function reloadPointer(): Promise<void> {
+	const sessionId = await ensureSession(characterId);
+	const scene = await getScene(sessionId, characterId, sceneId);
+	activeAttemptId = scene?.activePublishAttemptId ?? '';
+	phase = scene?.publishStatus ?? '';
+	if (activeAttemptId) {
+		scheduleTallyRefetch();
+	} else {
+		// Attempt is gone (resolved/withdrawn) — cancel any pending or in-flight
+		// tally refetch so a late response cannot repopulate the tally.
+		if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+		inFlight?.abort();
+		inFlight = null;
+		tally = null;
+		isParticipant = false;
+	}
+}
+
+function onEvent(ev: { type: string; metadata?: Record<string, unknown> }): void {
+	const evScene = typeof ev.metadata?.['scene_id'] === 'string' ? ev.metadata['scene_id'] : '';
+	if (evScene !== sceneId) return;                 // cross-scene isolation
+	if (LIFECYCLE.has(ev.type)) { void reloadPointer(); return; }
+	if (ev.type === VOTE_CAST) {
+		if (!isParticipant) return;                  // observer: ignore vote_cast
+		scheduleTallyRefetch();
+	}
+}
+
+async function refetchTally(signal?: AbortSignal): Promise<void> {
 	if (!activeAttemptId) {
 		tally = null;
 		return;
 	}
 	const sessionId = await ensureSession(characterId);
 	try {
-		const snap = await getPublishedScene(sessionId, { characterId, publishedSceneId: activeAttemptId });
+		const snap = await getPublishedScene(
+			sessionId,
+			{ characterId, publishedSceneId: activeAttemptId },
+			signal,
+		);
+		if (signal?.aborted) return;                 // a newer refetch superseded us
 		isParticipant = true;
 		phase = snap.status;
 		tally = snap.voteSummary
@@ -40,7 +96,7 @@ async function refetchTally(): Promise<void> {
 			tally = null;
 			return;
 		}
-		stale = true; // transient: keep last-known tally, retry on next event
+		if (!signal?.aborted) stale = true; // transient: keep last-known tally, retry on next event
 	}
 }
 
@@ -60,6 +116,8 @@ async function loadColdStart(charId: string, scnId: string): Promise<void> {
 }
 
 function reset(): void {
+	if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+	inFlight?.abort(); inFlight = null;
 	activeAttemptId = '';
 	phase = '';
 	tally = null;
@@ -78,6 +136,7 @@ export const publishStore = {
 	get stale() { return stale; },
 	loadColdStart,
 	reset,
+	onEvent,
 	// internal, exported for Task 3 + tests:
 	_refetchTally: refetchTally,
 	_setActiveAttempt: (id: string) => { activeAttemptId = id; },

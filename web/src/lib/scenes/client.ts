@@ -323,10 +323,13 @@ export async function withdrawScenePublish(
  * Reads the participant-gated published-scene snapshot (status + aggregate
  * yes/no/pending tally). Throws ConnectError(PermissionDenied) for
  * non-participants — callers MUST treat that as observer mode, not an error.
+ * Optional signal allows callers to abort the request (e.g., debounced tally
+ * refetch superseded by a newer in-flight call).
  */
 export async function getPublishedScene(
 	sessionId: string,
 	opts: Pick<WebGetPublishedSceneRequest, 'characterId' | 'publishedSceneId'>,
+	signal?: AbortSignal,
 ) {
-	return client.webGetPublishedScene({ sessionId, ...opts });
+	return client.webGetPublishedScene({ sessionId, ...opts }, { signal });
 }
