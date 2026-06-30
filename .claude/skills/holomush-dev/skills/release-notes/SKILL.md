@@ -1,5 +1,7 @@
 ---
-description: Draft and publish a narrative TLDR for a release (GitHub Release body + docs site)
+name: release-notes
+description: Draft and publish a narrative TLDR for a release (GitHub Release body + docs site). Invoke as /holomush-dev:release-notes <vX.Y.Z>.
+disable-model-invocation: true
 ---
 
 Produce human-readable narrative release notes for tag **$ARGUMENTS** (a
@@ -9,8 +11,9 @@ holomush-jfb9x).
 
 **Steps:**
 
-1. **Gather context.** Run `task release:notes:collect -- $ARGUMENTS` (or
-   `scripts/release-notes-collect.sh $ARGUMENTS`). Read the structured block:
+1. **Gather context.** Run
+   `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/release_notes_collect.py" $ARGUMENTS`
+   (or `task release:notes:collect -- $ARGUMENTS`). Read the structured block:
    filtered commits, referenced beads (with theme labels), coverage gaps, and
    the roadmap theme pointer.
 
@@ -24,7 +27,7 @@ holomush-jfb9x).
    the maintainer rather than guessing.
 
 4. **Publish to GitHub** (only after the maintainer approves the draft):
-   `scripts/release-notes-publish.sh --tag $ARGUMENTS --narrative-file <temp>`.
+   `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/release_notes_publish.py" --tag $ARGUMENTS --narrative-file <temp>`.
    The script fetches the existing GoReleaser body and combines; never pass a
    narrative-only body.
 
@@ -32,7 +35,7 @@ holomush-jfb9x).
    PR): write `site/src/content/docs/releases/$ARGUMENTS.md` (same narrative
    body) and add a reverse-chronological link to
    `site/src/content/docs/releases/index.mdx`. Confirm the `releases` topic is
-   registered in `site/astro.config.mjs` (Task 4) or the page orphans silently.
-   The frontmatter MUST set `slug: releases/$ARGUMENTS` — a `vX.Y.Z` filename
-   would otherwise be slugified to a dot-stripped URL (`v0.10.0` → `/releases/v0100/`),
+   registered in `site/astro.config.mjs` or the page orphans silently. The
+   frontmatter MUST set `slug: releases/$ARGUMENTS` — a `vX.Y.Z` filename would
+   otherwise be slugified to a dot-stripped URL (`v0.10.0` → `/releases/v0100/`),
    breaking the index link and the docs-IA parity gate.

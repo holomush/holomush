@@ -1,4 +1,5 @@
 ---
+name: review-crypto
 description: Adversarially review crypto-domain code changes against the master spec invariants before code-reviewer runs
 ---
 
@@ -39,8 +40,8 @@ also persists the full report to `.claude/agent-memory/crypto-reviewer/reports/`
 when it has memory configured. Do NOT spawn a second agent to "retrieve full
 findings"; subagents are stateless across invocations.
 
-**Ordering:** this gate runs BEFORE `/review-code`. After crypto-reviewer
-returns READY, then invoke `/review-code` for the generic adversarial pass.
+**Ordering:** this gate runs BEFORE `/holomush-dev:review-code`. After crypto-reviewer
+returns READY, then invoke `/holomush-dev:review-code` for the generic adversarial pass.
 If crypto-reviewer returns NOT READY, address findings before invoking
 code-reviewer (so code-reviewer doesn't waste a pass on code that's still
 crypto-broken).

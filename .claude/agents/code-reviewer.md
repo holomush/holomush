@@ -129,7 +129,7 @@ Use `mcp__probe__search_code` (semantic symbol/function search) before `Grep`/`r
 
 ## Workflow (execute in order)
 
-1. **Determine scope.** If invoked via `/review-code` with an argument,
+1. **Determine scope.** If invoked via `/holomush-dev:review-code` with an argument,
    review that artifact. Otherwise, run `jj diff --from <merge-base>` (or
    `git diff $(git merge-base origin/main HEAD)..HEAD`) to get the full
    branch diff. Never review only staged/unstaged — branch-level is the

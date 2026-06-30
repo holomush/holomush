@@ -1,4 +1,5 @@
 ---
+name: review-abac
 description: Adversarially review ABAC-domain code changes against the access-control spec before code-reviewer runs
 ---
 
@@ -29,6 +30,6 @@ Apply the adversarial stance and review checklist from your agent prompt.
 Produce findings grounded in `path:line` for code claims, with a binary
 verdict.
 
-**Ordering:** this gate runs alongside `/review-code` (or before, when a
+**Ordering:** this gate runs alongside `/holomush-dev:review-code` (or before, when a
 change is purely ABAC-scoped). After abac-reviewer returns its verdict, then
-invoke `/review-code` for the generic adversarial pass.
+invoke `/holomush-dev:review-code` for the generic adversarial pass.

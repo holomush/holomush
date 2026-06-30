@@ -1186,7 +1186,7 @@ tasks:
   release:notes:collect:
     desc: "Print the structured context block for narrative release notes. Args: <vX.Y.Z>"
     cmds:
-      - scripts/release-notes-collect.sh {{.CLI_ARGS}}
+      - uv run "{{.ROOT_DIR}}/.claude/skills/holomush-dev/scripts/release_notes_collect.py" {{.CLI_ARGS}}
 
   release:deploy:
     desc: "Deploy a released tag to the sandbox. Required: tag=vX.Y.Z"

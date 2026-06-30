@@ -1,4 +1,5 @@
 ---
+name: review-code
 description: Adversarially review uncommitted or branch-local code before push
 ---
 
