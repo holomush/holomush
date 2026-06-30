@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Package in-repo Claude Code tooling as a @skills-dir plugin](holomush-jpn4w-package-repo-claude-code-tooling-as-skills-dir-plugin.md) | 2026-06-29 | Accepted | `holomush-jpn4w` |
 | [Split publish read model: broad pointer on SceneInfo, tally behind participant gate](holomush-o8gx8-split-publish-read-model-broad-pointer-sceneinfo-tally-behin.md) | 2026-06-28 | Accepted | `holomush-o8gx8` |
 | [Release narrative via in-session Claude Code skill, not CI automation](holomush-avxk7-release-narrative-via-session-claude-code-skill-not-ci-autom.md) | 2026-06-28 | Accepted | `holomush-avxk7` |
 | [Source release narrative from roadmap themes and bead graph, not raw-commit clustering](holomush-3rmph-source-release-narrative-from-roadmap-themes-and-bead-graph.md) | 2026-06-28 | Accepted | `holomush-3rmph` |
