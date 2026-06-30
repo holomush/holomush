@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Route scene_publish_* web events as refetch triggers, not payload carriers](holomush-uqrr7-route-scene-publish-web-events-as-refetch-triggers-not-paylo.md) | 2026-06-30 | Accepted | `holomush-uqrr7` |
 | [Package in-repo Claude Code tooling as a @skills-dir plugin](holomush-jpn4w-package-repo-claude-code-tooling-as-skills-dir-plugin.md) | 2026-06-29 | Accepted | `holomush-jpn4w` |
 | [Split publish read model: broad pointer on SceneInfo, tally behind participant gate](holomush-o8gx8-split-publish-read-model-broad-pointer-sceneinfo-tally-behin.md) | 2026-06-28 | Accepted | `holomush-o8gx8` |
 | [Release narrative via in-session Claude Code skill, not CI automation](holomush-avxk7-release-narrative-via-session-claude-code-skill-not-ci-autom.md) | 2026-06-28 | Accepted | `holomush-avxk7` |
