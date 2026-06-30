@@ -2,7 +2,7 @@
 # Copyright 2026 HoloMUSH Contributors
 """Pytest port of scripts/tests/release-notes.bats (collect + publish)."""
 
-import os  # noqa: F401  # used by publish helpers added in Task 3
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -116,3 +116,97 @@ def test_fails_when_tag_is_oldest(repo):
     p = run_collect(repo, "v0.1.0")
     assert p.returncode == 1
     assert "could not resolve a previous tag" in (p.stdout + p.stderr)
+
+
+def _write_gh_stub(bin_dir: Path) -> None:
+    """Write a fake `gh`: prints $GH_BODY for 'release view'; copies the
+    --notes-file contents to $GH_SENTINEL for 'release edit'. Both are read
+    from the environment (set per-call in run_publish's env)."""
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    gh = bin_dir / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ -n "$GH_VIEW_FAIL" ] && [ "$1 $2" = "release view" ]; then echo "boom" >&2; exit 1; fi\n'
+        'if [ "$1 $2" = "release view" ]; then printf %s "$GH_BODY"; exit 0; fi\n'
+        'if [ "$1 $2" = "release edit" ]; then\n'
+        '  while [ $# -gt 0 ]; do [ "$1" = "--notes-file" ] && cp "$2" "$GH_SENTINEL"; shift; done\n'
+        "  exit 0\n"
+        "fi\nexit 0\n"
+    )
+    gh.chmod(0o755)
+
+
+def run_publish(env_extra: dict, bin_dir: Path, tag: str, narr: Path):
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", **env_extra}
+    return subprocess.run(
+        [sys.executable, str(PUBLISH), "--tag", tag, "--narrative-file", str(narr)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_publish_refuses_empty_narrative(tmp_path):
+    narr = tmp_path / "narr.md"
+    narr.write_text("")
+    p = subprocess.run(
+        [sys.executable, str(PUBLISH), "--tag", "v0.2.0", "--narrative-file", str(narr)],
+        capture_output=True,
+        text=True,
+    )
+    assert p.returncode != 0
+    assert "narrative file is empty" in (p.stdout + p.stderr)
+
+
+def test_publish_combines_narrative_above_existing(tmp_path):
+    bin_dir = tmp_path / "bin"
+    sentinel = tmp_path / "published.md"
+    _write_gh_stub(bin_dir)
+    narr = tmp_path / "narr.md"
+    narr.write_text("## What changed\nNarrative TLDR here.\n")
+    p = run_publish(
+        {"GH_BODY": "## Changelog\n- feat: existing (#1)\n", "GH_SENTINEL": str(sentinel)},
+        bin_dir,
+        "v0.2.0",
+        narr,
+    )
+    assert p.returncode == 0
+    published = sentinel.read_text()
+    assert "Narrative TLDR here." in published
+    assert "feat: existing (#1)" in published
+    # INV-7: narrative MUST be ABOVE the GoReleaser list.
+    assert published.index("Narrative TLDR here.") < published.index("feat: existing (#1)")
+
+
+def test_publish_fails_closed_on_empty_existing_body(tmp_path):
+    bin_dir = tmp_path / "bin"
+    sentinel = tmp_path / "published.md"
+    _write_gh_stub(bin_dir)
+    narr = tmp_path / "narr.md"
+    narr.write_text("## What changed\nNarrative TLDR here.\n")
+    p = run_publish(
+        {"GH_BODY": "", "GH_SENTINEL": str(sentinel)},
+        bin_dir,
+        "v0.2.0",
+        narr,
+    )
+    assert p.returncode != 0
+    assert "existing release body for v0.2.0 is empty" in (p.stdout + p.stderr)
+    assert not sentinel.exists()  # release edit MUST NOT have run
+
+
+def test_publish_fails_when_release_view_errors(tmp_path):
+    bin_dir = tmp_path / "bin"
+    sentinel = tmp_path / "published.md"
+    _write_gh_stub(bin_dir)
+    narr = tmp_path / "narr.md"
+    narr.write_text("## What changed\nNarrative TLDR here.\n")
+    p = run_publish(
+        {"GH_VIEW_FAIL": "1", "GH_SENTINEL": str(sentinel)},
+        bin_dir,
+        "v0.2.0",
+        narr,
+    )
+    assert p.returncode != 0
+    assert "failed to fetch release" in (p.stdout + p.stderr)
+    assert not sentinel.exists()  # release edit MUST NOT have run
