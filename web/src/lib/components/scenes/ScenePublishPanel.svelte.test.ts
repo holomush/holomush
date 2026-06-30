@@ -38,6 +38,17 @@ describe('ScenePublishPanel', () => {
 		unmount(comp); target.remove();
 	});
 
+	it('shows a neutral loading state during cold start, not the observer badge', () => {
+		// voteInProgress true but participant status not yet resolved.
+		state = { voteInProgress: true, loading: true, isParticipant: false, phase: 'COLLECTING', tally: null };
+		const { target, comp } = renderPanel();
+		expect(target.textContent).toMatch(/publication vote/i);
+		expect(target.textContent).not.toMatch(/in progress/i); // not the observer copy
+		expect(target.textContent).not.toMatch(/COLLECTING/);   // no phase leak while loading
+		expect(target.querySelector('[aria-busy="true"]')).not.toBeNull();
+		unmount(comp); target.remove();
+	});
+
 	it('participant sees the yes/no/pending tally and phase', () => {
 		state = { voteInProgress: true, isParticipant: true, phase: 'COLLECTING', tally: { yes: 2, no: 1, pending: 3 } };
 		const { target, comp } = renderPanel();

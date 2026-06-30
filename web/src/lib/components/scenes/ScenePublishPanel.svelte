@@ -7,7 +7,14 @@
 </script>
 
 {#if publishStore.voteInProgress}
-	{#if publishStore.isParticipant && publishStore.tally}
+	{#if publishStore.loading}
+		<!-- Cold start in progress: isParticipant is not yet resolved, so show a
+		     neutral loading state rather than the observer badge (which would
+		     flash the wrong copy at a real participant on every initial load). -->
+		<section class="publish-panel" aria-label="Publication vote" aria-busy="true">
+			<span class="badge">Publication vote…</span>
+		</section>
+	{:else if publishStore.isParticipant && publishStore.tally}
 		<section class="publish-panel" aria-label="Publication vote">
 			<header>Publication vote — {publishStore.phase}</header>
 			<ul class="tally">

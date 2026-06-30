@@ -45,6 +45,49 @@ describe('publishStore cold-start', () => {
 	});
 });
 
+describe('publishStore loadColdStart concurrency + loading', () => {
+	it('a superseded (slower) cold-start does not clobber the newer scene state', async () => {
+		// Select scene A (slow getScene), then scene B (fast). A's late resolution
+		// MUST bail via the sequence guard rather than overwrite B's state.
+		let resolveA!: (v: unknown) => void;
+		const aGetScene = new Promise((r) => {
+			resolveA = r;
+		});
+		getScene.mockImplementation((_s: string, _c: string, scn: string) =>
+			scn === 'SCENE_A'
+				? aGetScene
+				: Promise.resolve({ activePublishAttemptId: 'att-B', publishStatus: 'COOLOFF' }),
+		);
+		getPublishedScene.mockResolvedValue({ id: 'att-B', status: 'COOLOFF', voteSummary: { yes: 0, no: 1, pending: 2 } });
+
+		const pA = publishStore.loadColdStart('C1', 'SCENE_A');
+		const pB = publishStore.loadColdStart('C1', 'SCENE_B');
+		await pB;
+		expect(publishStore.activeAttemptId).toBe('att-B');
+		expect(publishStore.phase).toBe('COOLOFF');
+
+		// A resolves LATE — the guard must drop it.
+		resolveA({ activePublishAttemptId: 'att-A', publishStatus: 'COLLECTING' });
+		await pA;
+		expect(publishStore.activeAttemptId).toBe('att-B');
+		expect(publishStore.phase).toBe('COOLOFF');
+	});
+
+	it('loading is true during cold-start and false after it resolves', async () => {
+		let resolveScene!: (v: unknown) => void;
+		getScene.mockReturnValue(
+			new Promise((r) => {
+				resolveScene = r;
+			}),
+		);
+		const p = publishStore.loadColdStart('C1', 'SC1');
+		expect(publishStore.loading).toBe(true);
+		resolveScene({ activePublishAttemptId: '', publishStatus: '' });
+		await p;
+		expect(publishStore.loading).toBe(false);
+	});
+});
+
 describe('publishStore onEvent', () => {
 	beforeEach(() => { vi.useFakeTimers(); });
 	afterEach(() => { vi.useRealTimers(); });

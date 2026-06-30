@@ -19,6 +19,10 @@ let isParticipant = $state(false);
 let stale = $state(false);
 let sceneId = $state('');
 let characterId = $state('');
+// True while a cold-start load is resolving, so the panel can show a neutral
+// loading state instead of briefly falling into the observer branch before
+// refetchTally() determines isParticipant.
+let loading = $state(false);
 
 const LIFECYCLE = new Set([
 	'core-scenes:scene_publish_started',
@@ -88,8 +92,11 @@ async function refetchTally(signal?: AbortSignal): Promise<void> {
 		tally = null;
 		return;
 	}
-	const sessionId = await ensureSession(characterId);
 	try {
+		// ensureSession is inside the try so a rejection on the scheduled
+		// (void refetchTally) path flips `stale` rather than escaping as an
+		// unhandled promise rejection.
+		const sessionId = await ensureSession(characterId);
 		const snap = await getPublishedScene(
 			sessionId,
 			{ characterId, publishedSceneId: activeAttemptId },
@@ -114,18 +121,42 @@ async function refetchTally(signal?: AbortSignal): Promise<void> {
 }
 
 async function loadColdStart(charId: string, scnId: string): Promise<void> {
+	// Cancel any pending/in-flight work from a previously selected scene, and
+	// take a sequence number so a superseded (older) cold-start bails out rather
+	// than clobbering the newly selected scene's state (workspaceStore.select
+	// calls this fire-and-forget on every scene switch).
+	if (debounceTimer) {
+		clearTimeout(debounceTimer);
+		debounceTimer = null;
+	}
+	inFlight?.abort();
+	inFlight = null;
+	const seq = ++reloadPointerSeq;
 	characterId = charId;
 	sceneId = scnId;
-	const sessionId = await ensureSession(charId);
-	const scene = await getScene(sessionId, charId, scnId);
-	activeAttemptId = scene?.activePublishAttemptId ?? '';
-	phase = scene?.publishStatus ?? '';
-	if (!activeAttemptId) {
-		isParticipant = false;
-		tally = null;
-		return;
+	loading = true;
+	try {
+		const sessionId = await ensureSession(charId);
+		if (seq !== reloadPointerSeq) return; // superseded by a newer selection
+		const scene = await getScene(sessionId, charId, scnId);
+		if (seq !== reloadPointerSeq) return; // superseded by a newer selection
+		activeAttemptId = scene?.activePublishAttemptId ?? '';
+		phase = scene?.publishStatus ?? '';
+		if (!activeAttemptId) {
+			isParticipant = false;
+			tally = null;
+			return;
+		}
+		// Abortable refetch so a newer cold-start's inFlight?.abort() discards it.
+		inFlight = new AbortController();
+		await refetchTally(inFlight.signal);
+	} catch (err) {
+		void err;
+		if (seq !== reloadPointerSeq) return; // superseded; ignore
+		stale = true;
+	} finally {
+		if (seq === reloadPointerSeq) loading = false;
 	}
-	await refetchTally();
 }
 
 function reset(): void {
@@ -137,6 +168,7 @@ function reset(): void {
 	tally = null;
 	isParticipant = false;
 	stale = false;
+	loading = false;
 	sceneId = '';
 	characterId = '';
 }
@@ -148,6 +180,7 @@ export const publishStore = {
 	get tally() { return tally; },
 	get isParticipant() { return isParticipant; },
 	get stale() { return stale; },
+	get loading() { return loading; },
 	loadColdStart,
 	reset,
 	onEvent,
