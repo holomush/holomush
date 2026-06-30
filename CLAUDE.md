@@ -181,9 +181,9 @@ by providing an earlier, in-session review pass.
 | ----------------- | -------------------------------------------------------------------------------------- | --------------------------------------- |
 | `design-reviewer` | `dev-flow:writing-plans` is invoked on a spec                                       | `/review-design [<spec-path>]` or auto  |
 | `plan-reviewer`   | `dev-flow:executing-plans` or `dev-flow:subagent-driven-development` runs a plan | `/review-plan [<plan-path>]` or auto    |
-| `code-reviewer`   | `bd close`, `jj git push`, or PR creation                                              | `/review-code [<target>]` or auto       |
-| `crypto-reviewer` | `code-reviewer` (runs FIRST), for changes touching `internal/eventbus/crypto/`, `internal/eventbus/codec/`, `internal/eventbus/history/dispatcher.go`, `internal/eventbus/history/cold_postgres.go`, `internal/plugin/event_emitter.go::Emit`, `internal/eventbus/audit/projection.go`, plugin manifest `crypto.emits` declarations, or migrations on `crypto_keys` / `events_audit` | `/review-crypto` or auto via `remind-pre-action-review.sh` |
-| `abac-reviewer`   | `code-reviewer` (runs alongside), for changes touching `internal/access/`              | `/review-abac` or auto via `remind-pre-action-review.sh` |
+| `code-reviewer`   | `bd close`, `jj git push`, or PR creation                                              | `/holomush-dev:review-code [<target>]` or auto       |
+| `crypto-reviewer` | `code-reviewer` (runs FIRST), for changes touching `internal/eventbus/crypto/`, `internal/eventbus/codec/`, `internal/eventbus/history/dispatcher.go`, `internal/eventbus/history/cold_postgres.go`, `internal/plugin/event_emitter.go::Emit`, `internal/eventbus/audit/projection.go`, plugin manifest `crypto.emits` declarations, or migrations on `crypto_keys` / `events_audit` | `/holomush-dev:review-crypto` or auto via `remind-pre-action-review.sh` |
+| `abac-reviewer`   | `code-reviewer` (runs alongside), for changes touching `internal/access/`              | `/holomush-dev:review-abac` or auto via `remind-pre-action-review.sh` |
 
 | Requirement                         | Description                                                                             |
 | ----------------------------------- | --------------------------------------------------------------------------------------- |
