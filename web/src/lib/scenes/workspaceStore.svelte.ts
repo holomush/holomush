@@ -22,6 +22,7 @@
 import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 import type { SceneInfo } from '$lib/connect/holomush/scene/v1/scene_pb';
 import { eventFrameToLogEntry, type LogEntry, type WorkspaceScene } from './types';
+import { publishStore } from './publishStore.svelte';
 import {
 	listMyScenes,
 	getScene,
@@ -216,6 +217,14 @@ async function select(
  * but routing is now done via the parsed entry, not the session.
  */
 function ingestEvent(_sessionId: string, ev: GameEvent): void {
+	// Publish lifecycle/vote events are NOT IC log entries — fan them to the
+	// publish store, then fall through (eventFrameToLogEntry returns null for
+	// them, so the log path below is a no-op). scene_id rides ev.metadata,
+	// stamped by translate.go's sceneIDFromSubject for all scene IC events.
+	if (ev.type.startsWith('core-scenes:scene_publish_')) {
+		publishStore.onEvent(ev as unknown as { type: string; metadata?: Record<string, unknown> });
+	}
+
 	const entry = eventFrameToLogEntry(ev);
 	if (!entry) return;
 

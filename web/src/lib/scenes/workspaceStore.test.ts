@@ -144,6 +144,10 @@ vi.mock('./client', () => ({
 	queryStreamHistory: vi.fn().mockResolvedValue({ events: [], hasMore: false }),
 }));
 
+// ── publish store mock (hoisted to avoid TDZ with vi.mock hoisting) ──────────
+const { onEvent } = vi.hoisted(() => ({ onEvent: vi.fn() }));
+vi.mock('./publishStore.svelte', () => ({ publishStore: { onEvent } }));
+
 describe('bumpUnread dedup (spec D7)', () => {
 	it('skips bump when sceneId matches selectedSceneId', async () => {
 		// Import dynamically so mocks are applied.
@@ -499,5 +503,31 @@ describe('select roster enrichment', () => {
 			expect.any(String), // connectionId from awaitConnectionId (may vary across mock reset cycles)
 			'SCENE_NOENRICH',
 		);
+	});
+});
+
+// ── 7. ingestEvent publish-event wiring ──────────────────────────────────────
+
+describe('ingestEvent publish-event wiring', () => {
+	it('dispatches scene_publish_* to the publish store AND keeps it out of the IC log', async () => {
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+		const ev = makeGameEvent('core-scenes:scene_publish_vote_cast', {
+			eventId: 'PUB_EV_1', metadata: { scene_id: 'SCENE_P' },
+		});
+		const before = workspaceStore.logsBySceneId['SCENE_P']?.length ?? 0;
+		workspaceStore.ingestEvent('SESSION_1', ev);
+		expect(onEvent).toHaveBeenCalledTimes(1);
+		const after = workspaceStore.logsBySceneId['SCENE_P']?.length ?? 0;
+		expect(after).toBe(before); // not added to the IC log
+	});
+
+	it('does not dispatch a normal IC pose to the publish store', async () => {
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+		const ev = makeGameEvent('core-scenes:scene_pose', {
+			eventId: 'POSE_EV_1', metadata: { scene_id: 'SCENE_P', text: 'nods.' },
+		});
+		onEvent.mockClear();
+		workspaceStore.ingestEvent('SESSION_1', ev);
+		expect(onEvent).not.toHaveBeenCalled();
 	});
 });
