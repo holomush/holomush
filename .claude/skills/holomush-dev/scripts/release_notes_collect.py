@@ -22,9 +22,17 @@ import sys
 # mechanical list it cross-checks.
 EXCLUDE = re.compile(r"^docs:|^test:|^chore:|Merge pull request|Merge branch")
 BEAD = re.compile(r"holomush-[a-z0-9]+(?:\.[0-9]+)*")
+# Accepted release-tag shape (semver vX.Y.Z with optional pre-release/build).
+# Validated at entry so only this constrained shape ever reaches a subprocess arg.
+TAG_RE = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?")
 
 
 def _run(*args: str, timeout: float | None = None) -> subprocess.CompletedProcess:
+    # shell=False (list form): args are passed directly to execve, never through a
+    # shell, so command injection is not possible (shlex.quote is a no-op here).
+    # The only argv-derived value, `tag`, is additionally validated against TAG_RE
+    # in main() and is maintainer-supplied at release time, not untrusted input.
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
     return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", timeout=timeout)
 
 
@@ -33,6 +41,9 @@ def main() -> int:
         print("usage: release_notes_collect.py <vX.Y.Z>", file=sys.stderr)
         return 2
     tag = sys.argv[1]
+    if not TAG_RE.fullmatch(tag):
+        print(f"::error:: invalid tag {tag!r}; expected vX.Y.Z", file=sys.stderr)
+        return 2
 
     # Previous tag = the semver tag immediately before <tag> in version order.
     tags = _run(

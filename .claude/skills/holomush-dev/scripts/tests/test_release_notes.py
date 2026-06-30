@@ -210,3 +210,19 @@ def test_publish_fails_when_release_view_errors(tmp_path):
     assert p.returncode != 0
     assert "failed to fetch release" in (p.stdout + p.stderr)
     assert not sentinel.exists()  # release edit MUST NOT have run
+
+
+def test_collect_rejects_invalid_tag(repo):
+    p = run_collect(repo, "not-a-tag")
+    assert p.returncode == 2
+    assert "invalid tag" in (p.stdout + p.stderr)
+
+
+def test_publish_rejects_invalid_tag(tmp_path):
+    # A tag carrying shell metacharacters must be refused at validation, well
+    # before it could reach the gh subprocess argv.
+    narr = tmp_path / "narr.md"
+    narr.write_text("x\n")
+    p = run_publish({}, tmp_path / "bin", "v1.0.0; rm -rf /", narr)
+    assert p.returncode == 2
+    assert "invalid tag" in (p.stdout + p.stderr)

@@ -15,10 +15,15 @@ jfb9x INV-7. Faithful port of the former scripts/release-notes-publish.sh.
 """
 
 import argparse
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# Accepted release-tag shape (semver vX.Y.Z with optional pre-release/build).
+# Validated before `tag` reaches any `gh` subprocess argument.
+TAG_RE = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?")
 
 
 def main() -> int:
@@ -34,6 +39,9 @@ def main() -> int:
         return 2
     if not args.tag:
         print("::error:: --tag is required", file=sys.stderr)
+        return 2
+    if not TAG_RE.fullmatch(args.tag):
+        print(f"::error:: invalid tag {args.tag!r}; expected vX.Y.Z", file=sys.stderr)
         return 2
     if not args.narrative_file:
         print("::error:: --narrative-file is required", file=sys.stderr)
