@@ -14,6 +14,7 @@
   import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
   import CharacterMultiSelect from './CharacterMultiSelect.svelte';
   import SceneSettingsSheet from './SceneSettingsSheet.svelte';
+  import ScenePublishPanel from './ScenePublishPanel.svelte';
 
   let { scene }: { scene: WorkspaceScene | null } = $props();
 
@@ -137,6 +138,8 @@
         {/if}
       {/if}
     </section>
+
+    <ScenePublishPanel />
 
     <Separator />
 
