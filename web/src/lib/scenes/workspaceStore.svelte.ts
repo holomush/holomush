@@ -153,6 +153,14 @@ async function select(
 	selectedSceneId = sceneId;
 	unreadBySceneId = { ...unreadBySceneId, [sceneId]: 0 };
 
+	// 3b. Cold-start the publish-vote store for this scene so ScenePublishPanel
+	//     renders any in-progress vote AND publishStore.onEvent has a sceneId to
+	//     match incoming scene_publish_* events against (its cross-scene filter
+	//     compares ev.metadata.scene_id to the store's sceneId, set only here via
+	//     loadColdStart). Best-effort and fire-and-forget — never blocks scene
+	//     selection. (holomush-5rh.24.41.10)
+	void publishStore.loadColdStart(characterId, sceneId).catch(() => {});
+
 	// 4. Notify server of the new focus so SCENE_ACTIVITY suppression fires.
 	await setSceneFocus(altSessionId, connectionId, sceneId);
 

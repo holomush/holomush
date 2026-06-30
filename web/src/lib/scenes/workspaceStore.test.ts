@@ -145,8 +145,13 @@ vi.mock('./client', () => ({
 }));
 
 // ── publish store mock (hoisted to avoid TDZ with vi.mock hoisting) ──────────
-const { onEvent } = vi.hoisted(() => ({ onEvent: vi.fn() }));
-vi.mock('./publishStore.svelte', () => ({ publishStore: { onEvent } }));
+// loadColdStart returns a Promise (the select() call site does `.catch(...)`),
+// so the spy must resolve a thenable, not undefined.
+const { onEvent, loadColdStart } = vi.hoisted(() => ({
+	onEvent: vi.fn(),
+	loadColdStart: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('./publishStore.svelte', () => ({ publishStore: { onEvent, loadColdStart } }));
 
 describe('bumpUnread dedup (spec D7)', () => {
 	it('skips bump when sceneId matches selectedSceneId', async () => {
@@ -503,6 +508,21 @@ describe('select roster enrichment', () => {
 			expect.any(String), // connectionId from awaitConnectionId (may vary across mock reset cycles)
 			'SCENE_NOENRICH',
 		);
+	});
+
+	it('cold-starts the publish store for the selected scene', async () => {
+		const altSessions = await import('./altSessions.svelte');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		vi.mocked(altSessions.ensureSession).mockResolvedValue('SESSION_PUB');
+
+		await workspaceStore.select('SCENE_PUB', '', 'CHAR_PUB');
+
+		// Wiring (holomush-5rh.24.41.10): selecting a scene MUST cold-start the
+		// publish store with (characterId, sceneId) so ScenePublishPanel populates
+		// and publishStore.onEvent has a sceneId to match live scene_publish_*
+		// events against. Without this the feature is non-functional in the browser.
+		expect(loadColdStart).toHaveBeenCalledWith('CHAR_PUB', 'SCENE_PUB');
 	});
 });
 
