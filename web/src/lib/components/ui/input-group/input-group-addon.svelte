@@ -44,7 +44,7 @@
 		if ((e.target as HTMLElement).closest("button")) {
 			return;
 		}
-		e.currentTarget.parentElement?.querySelector("input, textarea")?.focus();
+		e.currentTarget.parentElement?.querySelector<HTMLElement>("input, textarea")?.focus();
 	}}
 	{...restProps}
 >
