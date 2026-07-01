@@ -9,27 +9,31 @@
 
 **Goal:** Let a scene participant start a publication vote, cast/change a Yes/No vote, and (owner) withdraw it — all from the web GUI, over the typed BFF RPC wrappers that already exist.
 
-**Architecture:** A new thin `publishFlow.ts` (mirroring `lifecycleFlow.ts`) drives the three writes over `client.ts`. `publishStore` gains the caller's optimistic vote (`myVote`/`myVotePending`/`myVoteAcked`) for a dark→bright button transition; the aggregate tally stays purely event-driven. `ScenePublishPanel` hosts Yes/No + owner Withdraw during `COLLECTING`; `SceneContextRail` hosts Start in its action group. No Go/proto/facade change.
+**Architecture:** A new thin `publishFlow.ts` (mirroring `lifecycleFlow.ts`) drives the three writes over `client.ts`. `publishStore` models the caller's vote as a **confirmed** value plus an optional **in-flight** value (`myVote` / `pendingVote` / `castInFlight`); the dark→bright transition is driven by the cast's **own RPC ack** (`_ackVote` promotes pending→confirmed), casts are serialized (lock raised synchronously before any await), and a failed cast reverts to the last confirmed vote; the aggregate tally stays purely event-driven. `ScenePublishPanel` hosts Yes/No + owner Withdraw during `COLLECTING`; `SceneContextRail` hosts Start in its action group. No Go/proto/facade change.
 
 **Tech Stack:** SvelteKit 5 (runes), TypeScript, Vitest (`pnpm -C web test:unit`), Connect-ES generated clients. Spec: `docs/superpowers/specs/2026-06-30-publish-vote-web-interactive-controls-design.md`.
 
 ---
 
-## Task 1: publishStore — caller's optimistic vote (`myVote` / `myVotePending` / `myVoteAcked`)
+## Phase 1: Interactive publish-vote controls
+
+Four sequential tasks: store state → flow → panel controls → rail Start. Each depends on the previous.
+
+### Task 1: publishStore — caller vote state (confirmed + in-flight)
 
 **Files:**
 
 - Modify: `web/src/lib/scenes/publishStore.svelte.ts`
 - Test: `web/src/lib/scenes/publishStore.test.ts`
 
-Adds the caller's own-vote state and the dark→bright signal. `myVote` is `boolean | null` (`true`=Yes, `false`=No), matching the RPC's `bool vote`. Brighten (clear `myVotePending`) requires **both** the caller's own cast RPC to have acked (`myVoteAcked`, set by `publishFlow` in Task 2 via `_ackVote()`) **and** a subsequent `refetchTally` to complete — so a different participant's vote→refetch can't brighten the button early (the debounce at `:43-51` is per-scene, not per-voter). Getters gate on `myVoteAttemptId === activeAttemptId`, so a stale ballot never bleeds into a new attempt.
+Models the caller's vote as a **confirmed** value (`myVote`) plus an **in-flight** value (`pendingVote`), with `castInFlight` serializing casts (the panel disables the buttons while true, and `castVoteAction` raises the lock synchronously before any await). All boolean (`true`=Yes, `false`=No), matching the RPC's `bool vote`. Getters gate on `myVoteAttemptId === activeAttemptId`. The dark→bright promotion happens in `_ackVote` — driven by the cast's **own RPC ack**, never by a tally refetch — so no refetch can confirm a ballot; a failed cast (`_clearVote`) clears only `pendingVote`, leaving the last confirmed `myVote` intact. See spec §5.
 
 - [ ] **Step 1: Write the failing tests**
 
 Append this block to `web/src/lib/scenes/publishStore.test.ts` (after the existing `describe('publishStore onEvent', …)` block, before the final closing lines):
 
 ```ts
-describe('publishStore myVote (caller optimistic vote)', () => {
+describe('publishStore caller vote (confirmed + in-flight)', () => {
 	beforeEach(() => { vi.useFakeTimers(); });
 	afterEach(() => { vi.useRealTimers(); });
 
@@ -41,59 +45,59 @@ describe('publishStore myVote (caller optimistic vote)', () => {
 		await publishStore.loadColdStart('C1', 'SC1');
 	}
 
-	it('_markVotePending sets the ballot and the dark (pending) flag', async () => {
+	it('_markVotePending sets the in-flight ballot dark and locks (castInFlight)', async () => {
 		await asParticipant();
 		publishStore._markVotePending(true);
-		expect(publishStore.myVote).toBe(true);
-		expect(publishStore.myVotePending).toBe(true);
+		expect(publishStore.pendingVote).toBe(true);
+		expect(publishStore.castInFlight).toBe(true);
+		expect(publishStore.myVote).toBeNull(); // not confirmed yet
 	});
 
-	it('brightens (clears pending) only after the vote is acked AND a refetch lands', async () => {
+	it('ack promotes the in-flight ballot to confirmed and unlocks (brighten)', async () => {
 		await asParticipant();
 		publishStore._markVotePending(true);
-		// A refetch WITHOUT an ack must NOT brighten.
-		getPublishedScene.mockResolvedValueOnce({ id: 'att-1', status: 'COLLECTING', voteSummary: { yes: 2, no: 0, pending: 3 } });
-		publishStore.onEvent({ type: 'core-scenes:scene_publish_vote_cast', metadata: { scene_id: 'SC1' } } as never);
-		await vi.advanceTimersByTimeAsync(300);
-		expect(publishStore.myVotePending).toBe(true); // still dark: not acked yet
-
-		// Once acked, the NEXT refetch brightens.
 		publishStore._ackVote();
-		getPublishedScene.mockResolvedValueOnce({ id: 'att-1', status: 'COLLECTING', voteSummary: { yes: 2, no: 0, pending: 3 } });
-		publishStore.onEvent({ type: 'core-scenes:scene_publish_vote_cast', metadata: { scene_id: 'SC1' } } as never);
-		await vi.advanceTimersByTimeAsync(300);
-		expect(publishStore.myVotePending).toBe(false); // bright
-		expect(publishStore.myVote).toBe(true);
+		expect(publishStore.pendingVote).toBeNull(); // promoted
+		expect(publishStore.myVote).toBe(true);      // confirmed (bright)
+		expect(publishStore.castInFlight).toBe(false); // unlocked
 	});
 
-	it('_clearVote resets the ballot and both flags', async () => {
+	it('a failed re-cast reverts to the previously confirmed vote, not null', async () => {
 		await asParticipant();
+		// First cast confirmed: Yes (ack promotes directly).
+		publishStore._markVotePending(true);
+		publishStore._ackVote();
+		expect(publishStore.myVote).toBe(true);
+		// Re-cast No, then it fails → clearVote.
 		publishStore._markVotePending(false);
-		publishStore._ackVote();
+		expect(publishStore.pendingVote).toBe(false);
 		publishStore._clearVote();
-		expect(publishStore.myVote).toBeNull();
-		expect(publishStore.myVotePending).toBe(false);
+		expect(publishStore.pendingVote).toBeNull();
+		expect(publishStore.castInFlight).toBe(false);
+		expect(publishStore.myVote).toBe(true); // previous confirmed retained
 	});
 
-	it('a ballot from a prior attempt does not bleed into a new attempt', async () => {
+	it('vote state from a prior attempt does not bleed into a new attempt', async () => {
 		await asParticipant();
 		publishStore._markVotePending(true);
-		expect(publishStore.myVote).toBe(true);
-		// A lifecycle event advances the pointer to a different attempt id.
+		expect(publishStore.pendingVote).toBe(true);
 		getScene.mockResolvedValueOnce({ activePublishAttemptId: 'att-2', publishStatus: 'COLLECTING' });
 		getPublishedScene.mockResolvedValueOnce({ id: 'att-2', status: 'COLLECTING', voteSummary: { yes: 0, no: 0, pending: 5 } });
 		publishStore.onEvent({ type: 'core-scenes:scene_publish_started', metadata: { scene_id: 'SC1' } } as never);
 		await vi.advanceTimersByTimeAsync(300);
 		expect(publishStore.activeAttemptId).toBe('att-2');
-		expect(publishStore.myVote).toBeNull(); // scoped out by attempt guard
+		expect(publishStore.pendingVote).toBeNull(); // scoped out by attempt guard
+		expect(publishStore.myVote).toBeNull();
+		expect(publishStore.castInFlight).toBe(false);
 	});
 
-	it('reset clears the optimistic vote', async () => {
+	it('reset clears all vote state', async () => {
 		await asParticipant();
 		publishStore._markVotePending(true);
 		publishStore.reset();
 		expect(publishStore.myVote).toBeNull();
-		expect(publishStore.myVotePending).toBe(false);
+		expect(publishStore.pendingVote).toBeNull();
+		expect(publishStore.castInFlight).toBe(false);
 	});
 });
 ```
@@ -101,66 +105,61 @@ describe('publishStore myVote (caller optimistic vote)', () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -C web test:unit src/lib/scenes/publishStore.test.ts`
-Expected: FAIL — `publishStore._markVotePending is not a function` (and `myVote` getter undefined).
+Expected: FAIL — `publishStore._markVotePending is not a function` (and `pendingVote` / `castInFlight` getters undefined).
 
-- [ ] **Step 3: Add the state, transitions, and getters**
+- [ ] **Step 3: Add the state and the brighten/reset transitions**
 
 In `web/src/lib/scenes/publishStore.svelte.ts`, add these `$state` declarations next to the existing ones (after `let loading = $state(false);`, around line 25):
 
 ```ts
-// Caller's own ballot for this attempt: true=Yes, false=No, null=not cast.
-// Boolean to match the RPC's `bool vote` field — no string↔bool mapping.
+// Caller's CONFIRMED vote for this attempt (true=Yes, false=No, null=none) —
+// drives the bright highlight. Boolean matches the RPC's `bool vote`.
 let myVote = $state<boolean | null>(null);
-// Dark (pending) between click and the count landing; brightens once the
-// caller's own cast is acked AND a fresh tally has been refetched.
-let myVotePending = $state(false);
-// The caller's own cast RPC has resolved (set by publishFlow via _ackVote).
-// Gates brighten so a *different* participant's refetch can't brighten early.
-let myVoteAcked = $state(false);
-// The attempt myVote was cast under (scoping guard for the getters).
+// Caller's IN-FLIGHT optimistic ballot — drives the dark highlight; null when idle.
+let pendingVote = $state<boolean | null>(null);
+// A cast RPC is in flight (click → ack/fail). The panel disables Yes/No while true,
+// and castVoteAction raises it synchronously before any await, so a second cast
+// can never overlap the first.
+let castInFlight = $state(false);
+// The attempt the vote state belongs to (scoping guard for the getters).
 let myVoteAttemptId = $state('');
 ```
 
-In `refetchTally`, inside the success path, immediately after `stale = false;` (currently line 111), add the brighten check:
+> The dark→bright promotion happens in `_ackVote` (Step 4), driven by the cast's
+> own RPC ack — **not** by a tally refetch. `refetchTally` is therefore NOT
+> modified for vote state; it keeps updating only the aggregate `tally` as today.
 
-```ts
-			stale = false;
-			// Brighten the caller's own vote button only once their cast has acked
-			// AND this fresh count has landed (own-ack gate closes the cross-voter race).
-			if (myVotePending && myVoteAcked && myVoteAttemptId === activeAttemptId) {
-				myVotePending = false;
-			}
-```
-
-In `reset()`, add the four clears alongside the existing resets (after `characterId = '';`, currently line 173):
+In `reset()`, add the clears alongside the existing resets (after `characterId = '';`, currently line 173):
 
 ```ts
 		myVote = null;
-		myVotePending = false;
-		myVoteAcked = false;
+		pendingVote = null;
+		castInFlight = false;
 		myVoteAttemptId = '';
 ```
 
 - [ ] **Step 4: Export the getters and internal setters**
 
-In the `export const publishStore = { … }` object, add getters after `get loading() { return loading; },` (line 183) — the getters **gate on the attempt** so a stale ballot reads as absent:
+In the `export const publishStore = { … }` object, add getters after `get loading() { return loading; },` (line 183) — all three **gate on the attempt** so stale state reads as absent/idle:
 
 ```ts
 	get myVote() { return myVoteAttemptId === activeAttemptId ? myVote : null; },
-	get myVotePending() { return myVoteAttemptId === activeAttemptId ? myVotePending : false; },
+	get pendingVote() { return myVoteAttemptId === activeAttemptId ? pendingVote : null; },
+	get castInFlight() { return myVoteAttemptId === activeAttemptId ? castInFlight : false; },
 ```
 
 And add the internal setters alongside the existing `_refetchTally` / `_setActiveAttempt` (after line 189):
 
 ```ts
 	_markVotePending: (v: boolean) => {
-		myVote = v;
-		myVotePending = true;
-		myVoteAcked = false;
+		pendingVote = v;
+		castInFlight = true;
 		myVoteAttemptId = activeAttemptId;
 	},
-	_ackVote: () => { myVoteAcked = true; },
-	_clearVote: () => { myVote = null; myVotePending = false; myVoteAcked = false; },
+	// Promote the in-flight ballot to confirmed (brighten) + unlock — driven by the
+	// caller's own RPC ack, never by a refetch, so no refetch can confirm a ballot.
+	_ackVote: () => { myVote = pendingVote; pendingVote = null; castInFlight = false; },
+	_clearVote: () => { pendingVote = null; castInFlight = false; },
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
@@ -171,21 +170,19 @@ Expected: PASS (all existing + 5 new tests).
 - [ ] **Step 6: Commit**
 
 ```bash
-jj commit -m "feat(scenes-web): publishStore caller optimistic vote (myVote/pending/acked)
+jj commit -m "feat(scenes-web): publishStore caller vote state (confirmed + in-flight)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
 
----
-
-## Task 2: publishFlow.ts — start / cast / withdraw actions
+### Task 2: publishFlow.ts — start / cast / withdraw actions
 
 **Files:**
 
 - Create: `web/src/lib/scenes/publishFlow.ts`
 - Test: `web/src/lib/scenes/publishFlow.test.ts`
 
-Three thin actions mirroring `lifecycleFlow.ts:14-38`, over the existing wrappers (`client.ts:299/307/315`). `startPublishAction` takes the uniform `{ sceneId, characterId }` (so the rail's `runLifecycle` wrapper can call it). `castVoteAction` / `withdrawAction` are panel-invoked and take only what they use; both derive the attempt from `publishStore.activeAttemptId` and early-return a silent no-op if it's empty (defensive — the controls only render when an attempt exists).
+Three thin actions mirroring `lifecycleFlow.ts:14-38`, over the existing wrappers (`client.ts:299-335`). `startPublishAction` takes the uniform `{ sceneId, characterId }` (so the rail's `runLifecycle` wrapper can call it). `castVoteAction` / `withdrawAction` are panel-invoked and take only what they use; both derive the attempt from `publishStore.activeAttemptId` and early-return a silent no-op if it's empty. `castVoteAction` additionally no-ops when `publishStore.castInFlight` (serialize — defensive; the panel also disables the buttons).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -203,7 +200,13 @@ vi.mock('./client', () => ({
 	castPublishSceneVote: vi.fn(async () => ({})),
 	withdrawScenePublish: vi.fn(async () => ({})),
 }));
-const store = { activeAttemptId: 'att-1', _markVotePending: vi.fn(), _ackVote: vi.fn(), _clearVote: vi.fn() };
+const store = {
+	activeAttemptId: 'att-1',
+	castInFlight: false,
+	_markVotePending: vi.fn(),
+	_ackVote: vi.fn(),
+	_clearVote: vi.fn(),
+};
 vi.mock('./publishStore.svelte', () => ({ publishStore: store }));
 
 import { startPublishAction, castVoteAction, withdrawAction } from './publishFlow';
@@ -213,6 +216,7 @@ import { startScenePublish, castPublishSceneVote, withdrawScenePublish } from '.
 beforeEach(() => {
 	vi.clearAllMocks();
 	store.activeAttemptId = 'att-1';
+	store.castInFlight = false;
 });
 
 describe('startPublishAction', () => {
@@ -245,6 +249,13 @@ describe('castVoteAction', () => {
 		store.activeAttemptId = '';
 		await castVoteAction({ characterId: 'char-1', vote: true });
 		expect(ensureSession).not.toHaveBeenCalled();
+		expect(castPublishSceneVote).not.toHaveBeenCalled();
+		expect(store._markVotePending).not.toHaveBeenCalled();
+	});
+
+	it('is a silent no-op when a cast is already in flight (serialize)', async () => {
+		store.castInFlight = true;
+		await castVoteAction({ characterId: 'char-1', vote: true });
 		expect(castPublishSceneVote).not.toHaveBeenCalled();
 		expect(store._markVotePending).not.toHaveBeenCalled();
 	});
@@ -301,16 +312,19 @@ export async function startPublishAction({ sceneId, characterId }: StartArgs): P
 
 /**
  * Casts or changes the caller's Yes(true)/No(false) vote on the active attempt.
- * Optimistically marks the button dark (pending) before the RPC; reverts on
- * failure; acks on success so the next refetch brightens it (publishStore §5).
- * Silent no-op if no attempt is active (defensive — controls only render then).
+ * Optimistically marks the button dark (pending) before the RPC; reverts to the
+ * previous confirmed vote on failure; on success acks → promotes it to confirmed
+ * (brighten, publishStore §5). No-op if no attempt is active or a cast is already
+ * in flight (serialize). The lock (_markVotePending → castInFlight) is raised
+ * SYNCHRONOUSLY before any await, so a second click during session setup bails.
  */
 export async function castVoteAction({ characterId, vote }: VoteArgs): Promise<void> {
 	const publishedSceneId = publishStore.activeAttemptId;
 	if (!publishedSceneId) return;
-	const sessionId = await ensureSession(characterId);
-	publishStore._markVotePending(vote);
+	if (publishStore.castInFlight) return;
+	publishStore._markVotePending(vote); // raise the lock before any await
 	try {
+		const sessionId = await ensureSession(characterId);
 		await castPublishSceneVote(sessionId, { characterId, publishedSceneId, vote });
 	} catch (e) {
 		publishStore._clearVote();
@@ -345,20 +359,18 @@ jj commit -m "feat(scenes-web): publishFlow start/cast/withdraw actions
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
 
----
-
-## Task 3: ScenePublishPanel — Yes/No + owner Withdraw controls
+### Task 3: ScenePublishPanel — Yes/No + owner Withdraw controls
 
 **Files:**
 
 - Modify: `web/src/lib/components/scenes/ScenePublishPanel.svelte`
 - Test: `web/src/lib/components/scenes/ScenePublishPanel.svelte.test.ts`
 
-Adds props `{ characterId, isOwner }` and, in the participant `COLLECTING` branch, Yes/No vote buttons (the chosen one dark via `opacity-60` while `myVotePending`, bright via the `default` variant once confirmed — brand cyan tokens, no new hex) plus an owner-only inline Withdraw confirm (`confirmingWithdraw` swaps the button for "Cancel this publication vote? [Withdraw] [Keep]" — inline, so it's testable without a portal). A panel-local `controlErr` line surfaces RPC errors. Observer/loading branches are unchanged.
+Adds props `{ characterId, isOwner }` and, in the participant `COLLECTING` branch, Yes/No vote buttons plus an owner-only inline Withdraw confirm. Each vote button renders **dark** (`opacity-60`, brand `default` variant) when `pendingVote` matches it, **bright** (`default` variant, no opacity) when it is the confirmed `myVote` and nothing is pending, and `outline` otherwise; **both are disabled while `castInFlight`** (serializes casts). A panel-local `controlErr` line surfaces RPC errors. Observer/loading branches unchanged.
 
 - [ ] **Step 1: Update the test harness and write the failing tests**
 
-In `web/src/lib/components/scenes/ScenePublishPanel.svelte.test.ts`, replace the mock block and `renderPanel` helper (lines 8-22) with a version that also mocks `publishFlow` and passes the new required props:
+In `web/src/lib/components/scenes/ScenePublishPanel.svelte.test.ts`, replace the mock block and `renderPanel` helper (lines 8-22) with a version that mocks `publishFlow` and passes the new props:
 
 ```ts
 // Drive the panel by mocking the store getters.
@@ -383,7 +395,7 @@ function renderPanel(props: { characterId?: string; isOwner?: boolean } = {}) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	state = { voteInProgress: false, isParticipant: false, phase: '', tally: null, myVote: null, myVotePending: false };
+	state = { voteInProgress: false, isParticipant: false, phase: '', tally: null, myVote: null, pendingVote: null, castInFlight: false };
 });
 ```
 
@@ -400,7 +412,7 @@ describe('ScenePublishPanel controls', () => {
 	const collecting = { voteInProgress: true, isParticipant: true, phase: 'COLLECTING', tally: { yes: 1, no: 0, pending: 4 } };
 
 	it('participant in COLLECTING sees Yes and No buttons; clicking Yes casts true', async () => {
-		state = { ...collecting, myVote: null, myVotePending: false };
+		state = { ...collecting, myVote: null, pendingVote: null, castInFlight: false };
 		const { target, comp } = renderPanel({ characterId: 'C1' });
 		const yes = button(target, /^Yes$/);
 		expect(yes).toBeTruthy();
@@ -411,16 +423,25 @@ describe('ScenePublishPanel controls', () => {
 		unmount(comp); target.remove();
 	});
 
-	it('shows the chosen vote dark (opacity-60) while pending, bright once confirmed', () => {
-		state = { ...collecting, myVote: true, myVotePending: true };
+	it('shows the in-flight ballot dark (opacity-60), the confirmed vote bright', () => {
+		// in-flight → dark
+		state = { ...collecting, myVote: null, pendingVote: true, castInFlight: true };
 		let r = renderPanel();
 		expect(button(r.target, /^Yes$/)!.className).toMatch(/opacity-60/);
 		unmount(r.comp); r.target.remove();
-
-		state = { ...collecting, myVote: true, myVotePending: false };
+		// confirmed (no pending) → bright, no opacity
+		state = { ...collecting, myVote: true, pendingVote: null, castInFlight: false };
 		r = renderPanel();
 		expect(button(r.target, /^Yes$/)!.className).not.toMatch(/opacity-60/);
 		unmount(r.comp); r.target.remove();
+	});
+
+	it('disables both vote buttons while a cast is in flight', () => {
+		state = { ...collecting, myVote: null, pendingVote: true, castInFlight: true };
+		const { target, comp } = renderPanel();
+		expect(button(target, /^Yes$/)!.disabled).toBe(true);
+		expect(button(target, /^No$/)!.disabled).toBe(true);
+		unmount(comp); target.remove();
 	});
 
 	it('owner sees Withdraw; confirm then withdraw calls withdrawAction', async () => {
@@ -443,7 +464,7 @@ describe('ScenePublishPanel controls', () => {
 	});
 
 	it('no vote controls outside COLLECTING (e.g. COOLOFF)', () => {
-		state = { voteInProgress: true, isParticipant: true, phase: 'COOLOFF', tally: { yes: 3, no: 0, pending: 0 } };
+		state = { voteInProgress: true, isParticipant: true, phase: 'COOLOFF', tally: { yes: 3, no: 0, pending: 0 }, myVote: null, pendingVote: null, castInFlight: false };
 		const { target, comp } = renderPanel({ isOwner: true });
 		expect(button(target, /^Yes$/)).toBeUndefined();
 		expect(button(target, /Withdraw/)).toBeUndefined();
@@ -479,6 +500,16 @@ Replace the entire contents of `web/src/lib/components/scenes/ScenePublishPanel.
 
 	let controlErr = $state('');
 	let confirmingWithdraw = $state(false);
+
+	// A vote button is "active" (brand variant) when it is the in-flight ballot OR
+	// the confirmed vote with nothing pending; it is dark (opacity-60) only while
+	// in-flight (pendingVote matches).
+	function isPending(v: boolean): boolean {
+		return publishStore.pendingVote === v;
+	}
+	function isActive(v: boolean): boolean {
+		return isPending(v) || (publishStore.pendingVote === null && publishStore.myVote === v);
+	}
 
 	async function vote(v: boolean): Promise<void> {
 		controlErr = '';
@@ -520,13 +551,15 @@ Replace the entire contents of `web/src/lib/components/scenes/ScenePublishPanel.
 				<div class="vote-buttons">
 					<Button
 						size="sm"
-						class={`h-6 text-xs ${publishStore.myVote === true && publishStore.myVotePending ? 'opacity-60' : ''}`}
-						variant={publishStore.myVote === true ? 'default' : 'outline'}
+						class={`h-6 text-xs ${isPending(true) ? 'opacity-60' : ''}`}
+						variant={isActive(true) ? 'default' : 'outline'}
+						disabled={publishStore.castInFlight}
 						onclick={() => vote(true)}>Yes</Button>
 					<Button
 						size="sm"
-						class={`h-6 text-xs ${publishStore.myVote === false && publishStore.myVotePending ? 'opacity-60' : ''}`}
-						variant={publishStore.myVote === false ? 'default' : 'outline'}
+						class={`h-6 text-xs ${isPending(false) ? 'opacity-60' : ''}`}
+						variant={isActive(false) ? 'default' : 'outline'}
+						disabled={publishStore.castInFlight}
 						onclick={() => vote(false)}>No</Button>
 				</div>
 				{#if isOwner}
@@ -556,7 +589,7 @@ Replace the entire contents of `web/src/lib/components/scenes/ScenePublishPanel.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm -C web test:unit src/lib/components/scenes/ScenePublishPanel.svelte.test.ts`
-Expected: PASS (existing 4 + 5 new tests). The existing tests already pass the new required props via the updated `renderPanel`.
+Expected: PASS (existing 4 + 6 new tests). The existing tests already pass the new props via the updated `renderPanel`.
 
 - [ ] **Step 5: Commit**
 
@@ -566,9 +599,7 @@ jj commit -m "feat(scenes-web): ScenePublishPanel vote + owner withdraw controls
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
 
----
-
-## Task 4: SceneContextRail — Start publish vote button + panel props
+### Task 4: SceneContextRail — Start publish vote button + panel prop wiring
 
 **Files:**
 
@@ -713,5 +744,5 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - [ ] Run `pnpm -C web check` (svelte-check / tsc) — no errors.
 - [ ] Run `task pr-prep` from the repo root — fast lane green (it runs `fmt:check`, license, lint; the web unit suite runs in CI's web job).
 - [ ] `holomush-5rh.24.41.7` (Tier-3 Playwright E2E) is now unblocked: drive the participant cast path UI-driven (telnet-free); seed the second voter / observer via a second browser context. Not part of this plan.
-- [ ] Manual smoke (optional): `task dev`, open a scene as owner, end it, Start publish vote, cast Yes (dark→bright), change to No, Withdraw (confirm) → panel clears; observe as a non-participant → badge only.
-<!-- adr-capture: sha256=c7f0d2f507cda584; session=cli; ts=2026-07-01T00:43:00Z; adrs= -->
+- [ ] Manual smoke (optional): `task dev`, open a scene as owner, end it, Start publish vote, cast Yes (dark→bright), change to No (buttons disable during each cast), Withdraw (confirm) → panel clears; observe as a non-participant → badge only.
+<!-- adr-capture: sha256=cd23c8bb1df1eac8; session=cli; ts=2026-07-01T13:38:55Z; adrs= -->

@@ -72,8 +72,10 @@ without a backend change and is out of scope (§4).
 - A new `web/src/lib/scenes/publishFlow.ts` with three thin actions
   (`startPublishAction`, `castVoteAction`, `withdrawAction`) over the existing
   client wrappers, mirroring `lifecycleFlow.ts`.
-- `publishStore` additions for the caller's optimistic vote
-  (`myVote` / `myVotePending`) and the dark→bright transition.
+- `publishStore` additions for the caller's confirmed + in-flight vote
+  (`myVote` / `pendingVote` / `castInFlight`) and the dark→bright transition
+  (brighten on the cast's own RPC ack; serialized casts; revert-to-confirmed on
+  failure).
 - A **Start publish vote** button in `SceneContextRail`'s action group, with a new
   `ended`-scene visibility branch.
 - **Yes/No** vote controls and an owner-only **Withdraw** (confirm dialog) inside
@@ -96,7 +98,7 @@ purpose and a narrow interface.
 | Unit | Change | Responsibility |
 | --- | --- | --- |
 | `web/src/lib/scenes/publishFlow.ts` **(new)** | `startPublishAction` / `castVoteAction` / `withdrawAction` | `ensureSession` → client wrapper → set/clear store optimistic state. No UI, no rendering. Mirrors `lifecycleFlow.ts`. |
-| `publishStore.svelte.ts` | add `myVote` / `myVotePending` / `myVoteAcked` (+ getters and internal `_markVotePending` / `_ackVote` / `_clearVote`); auto-clear on attempt change | Owns the caller's optimistic vote and the dark→bright signal. Tally counts unchanged. |
+| `publishStore.svelte.ts` | add `myVote` (confirmed) / `pendingVote` (in-flight) / `castInFlight` (+ getters and internal `_markVotePending` / `_ackVote` / `_clearVote`); auto-clear on attempt change | Owns the caller's confirmed + in-flight vote; `_ackVote` promotes pending→confirmed (brighten). Serializes casts. Tally counts unchanged. |
 | `ScenePublishPanel.svelte` | new props `{ characterId, isOwner }`; Yes/No + Withdraw in the `COLLECTING` participant branch; panel-local error line | Renders controls during a vote; gates Yes/No on `publishStore.isParticipant`, Withdraw on `isOwner`. |
 | `SceneContextRail.svelte` | new `ended`-scene branch with **Start publish vote**; pass `characterId` + `isOwner` to the panel; Start runs through the existing `runLifecycle` wrapper | Hosts Start alongside Pause/Resume/End; Start errors land in the existing `lifecycleErr`. |
 
@@ -111,11 +113,13 @@ startPublishAction({ sceneId, characterId }):
 castVoteAction({ characterId, vote }):                // vote: boolean — Yes=true, No=false
   attemptId = publishStore.activeAttemptId            // guard: silent no-op if empty (see below)
   if (!attemptId) return
-  sessionId = await ensureSession(characterId)
-  publishStore._markVotePending(vote)                 // optimistic: dark highlight now
-  try { await castPublishSceneVote(sessionId, { characterId, publishedSceneId: attemptId, vote }) }
-  catch (e) { publishStore._clearVote(); throw e }    // revert highlight, surface error
-  publishStore._ackVote()                             // own RPC acked → brighten on next refetch (§5, §6)
+  if (publishStore.castInFlight) return               // serialize: one cast at a time
+  publishStore._markVotePending(vote)                 // raise the lock SYNCHRONOUSLY, before any await (dark + castInFlight=true)
+  try {
+    sessionId = await ensureSession(characterId)
+    await castPublishSceneVote(sessionId, { characterId, publishedSceneId: attemptId, vote })
+  } catch (e) { publishStore._clearVote(); throw e }  // revert to previous confirmed vote, unlock, surface error
+  publishStore._ackVote()                             // promote pendingVote→myVote (brighten) + unlock (§5)
 
 withdrawAction({ characterId }):
   attemptId = publishStore.activeAttemptId            // guard: silent no-op if empty (see below)
@@ -145,36 +149,54 @@ unreachable in normal flow. A unit test asserts the no-op (no RPC issued).
 
 ## 5. State model — caller's optimistic vote
 
-`publishStore` gains, alongside its existing state:
+`publishStore` gains, alongside its existing state. A cast is modelled as a
+**confirmed** vote plus an optional **in-flight** vote — not a single ack/pending
+slot — and the dark→bright transition is driven by the **cast's own RPC
+outcome**, never by a tally refetch. This is what makes it race-free (both issues
+raised in review):
 
-- `myVote: boolean | null` — the caller's last-cast ballot this attempt (`true` =
-  Yes, `false` = No, `null` = not yet cast). Boolean to match the RPC's `bool vote`
-  wire field (`api/proto/holomush/web/v1/web.proto:1248`) — no string↔bool mapping
-  needed anywhere in the flow.
-- `myVotePending: boolean` — true between click and the count landing (dark shade).
-- `myVoteAcked: boolean` — the caller's own cast RPC has resolved (gates brighten
-  so a *different* participant's refetch cannot brighten the button early).
-- `myVoteAttemptId: string` — the attempt `myVote` was cast under (scoping guard).
+- `myVote: boolean | null` — the caller's **confirmed** vote (last cast that the
+  server acked; `true` = Yes, `false` = No, `null` = none). Drives the **bright**
+  highlight. Boolean to match the RPC's `bool vote` wire field
+  (`api/proto/holomush/web/v1/web.proto:1248`) — no string↔bool mapping anywhere.
+- `pendingVote: boolean | null` — an **in-flight** optimistic ballot (drives the
+  **dark** highlight); `null` when no cast is in progress.
+- `castInFlight: boolean` — a cast RPC is in flight (from click until it acks or
+  fails). The panel **disables both Yes/No buttons while this is true** (§7.2), and
+  `castVoteAction` **raises this flag synchronously before any `await`** (§4.1), so
+  a second click during session setup cannot slip past the guard. One cast always
+  settles before another begins.
+- `myVoteAttemptId: string` — the attempt the vote state belongs to (scoping guard).
 
 Transitions:
 
 | Trigger | Effect |
 | --- | --- |
-| `_markVotePending(vote: boolean)` (from `castVoteAction`, on click) | `myVote = vote`, `myVotePending = true`, `myVoteAcked = false`, `myVoteAttemptId = activeAttemptId` |
-| `_ackVote()` (caller's own `castPublishSceneVote` RPC resolves) | `myVoteAcked = true` |
-| `refetchTally` success **while** `myVotePending && myVoteAcked && myVoteAttemptId === activeAttemptId` | `myVotePending = false` (own vote acked **and** a fresh count landed → **brighten**) |
-| `_clearVote()` (RPC reject) | `myVote = null`, `myVotePending = false`, `myVoteAcked = false` |
-| `activeAttemptId` changes to a different id (new attempt) / `reset()` | clear all four |
+| `_markVotePending(vote: boolean)` (raised synchronously in `castVoteAction` before any await; the buttons are also disabled while `castInFlight`) | `pendingVote = vote`, `castInFlight = true`, `myVoteAttemptId = activeAttemptId` |
+| `_ackVote()` (the caller's own `castPublishSceneVote` RPC resolves OK) | `myVote = pendingVote`, `pendingVote = null`, `castInFlight = false` (**brighten**: promote in-flight → confirmed) |
+| `_clearVote()` (RPC reject) | `pendingVote = null`, `castInFlight = false` — **`myVote` (the previous confirmed vote) is left intact** |
+| `activeAttemptId` changes to a different id (new attempt) / `reset()` | clear all (`myVote`, `pendingVote`, `castInFlight`, `myVoteAttemptId`) |
 
-The getters return `myVote` only when `myVoteAttemptId === activeAttemptId`, so a
-stale ballot can never bleed into a new attempt. **Brighten requires both the
-caller's own cast RPC to have acked (`myVoteAcked`) and a subsequent `refetchTally`
-to complete** — matching the "dark on click, bright once the count arrives" feel
-while ensuring a *different* participant's `vote_cast`→refetch (the debounce is
-per-scene, not per-voter — `publishStore.svelte.ts:43-51`) cannot brighten the
-button before the caller's own vote is acknowledged. If no event/refetch follows
-(e.g. transient network failure), the button stays dark (honestly *unconfirmed*)
-until the next event; the RPC reject path reverts it outright.
+The getters gate on `myVoteAttemptId === activeAttemptId`, so stale state never
+bleeds into a new attempt. This model guarantees the two properties review called
+out:
+
+1. **No overlapping casts.** `castVoteAction` sets `castInFlight` synchronously
+   *before* awaiting `ensureSession`, and the panel disables Yes/No while it is
+   true, so a second click (even during session setup) bails at the guard. One
+   cast RPC always settles before another begins.
+2. **Brighten is fenced to the cast that produced it.** Promotion
+   (`pendingVote → myVote`) happens **only** in `_ackVote`, i.e. from the caller's
+   *own* RPC resolving — never from a tally refetch. An older or another
+   participant's refetch can therefore never confirm a ballot, and a failed cast
+   clears only `pendingVote`, leaving `myVote` so the highlight reverts to the
+   previously confirmed vote (never to `null`).
+
+The button brightens the moment the server **confirms** the vote (RPC ack); the
+**tally counts** update independently and slightly later via the event-driven
+refetch (§6) — so the vote highlight and the count are decoupled, and neither can
+race the other. If the RPC never resolves (transient network failure), the ballot
+stays dark and the buttons stay disabled until it settles, then unlocks.
 
 ## 6. Live updates — tally stays event-driven
 
@@ -230,10 +252,13 @@ participant branch (`publishStore.isParticipant && publishStore.tally`), when
 `publishStore.phase === 'COLLECTING'`:
 
 - **Yes / No** buttons for participants — Yes calls `castVoteAction({ characterId,
-  vote: true })`, No `{ vote: false }`. The button matching `publishStore.myVote`
-  (`true` → Yes, `false` → No) renders dark (`myVotePending`) then bright
-  (confirmed) per §5; the other stays default. Vote is freely changeable (click No
-  after Yes) — each click re-enters `castVoteAction`.
+  vote: true })`, No `{ vote: false }`. Each button (value `X` ∈ {`true`,`false`})
+  renders **dark** when `publishStore.pendingVote === X` (in-flight / awaiting the
+  count), **bright** when `pendingVote === null && publishStore.myVote === X`
+  (confirmed), and default otherwise. **Both buttons are `disabled` while
+  `publishStore.castInFlight`** — this serializes casts (§5). Vote is freely
+  changeable (click No after a confirmed Yes) once the prior cast settles and the
+  buttons re-enable.
 - **Withdraw** for `isOwner` only, behind a confirm dialog ("Cancel this
   publication vote?" → [Withdraw] [Keep]).
 - Non-`COLLECTING` phases (`COOLOFF`, resolved) render the tally without active
@@ -313,4 +338,4 @@ button shows dark→bright as the refreshed count lands, then changes to **No**;
 sees the badge only (no tally, no controls). Backend, facade, proto, and telnet
 surfaces are unchanged. `task pr-prep` passes; `design-reviewer` and `code-reviewer`
 return READY.
-<!-- adr-capture: sha256=bf0e6f2bf515cd31; session=cli; ts=2026-07-01T00:43:00Z; adrs= -->
+<!-- adr-capture: sha256=138a9c57d78ef4f3; session=cli; ts=2026-07-01T13:38:12Z; adrs= -->
