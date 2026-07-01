@@ -31,8 +31,15 @@ vi.mock('$lib/scenes/settingsFlow', () => ({
 	saveSceneSettings: vi.fn(),
 }));
 
+vi.mock('$lib/scenes/publishFlow', () => ({ startPublishAction: vi.fn(), castVoteAction: vi.fn(), withdrawAction: vi.fn() }));
+let publishState: Record<string, unknown> = { voteInProgress: false, loading: false, isParticipant: false, tally: null, phase: '' };
+vi.mock('$lib/scenes/publishStore.svelte', () => ({
+	publishStore: new Proxy({}, { get: (_t, k) => publishState[k as string] }),
+}));
+
 import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
 import { listAllCharacters } from '$lib/scenes/directoryClient';
+import { startPublishAction } from '$lib/scenes/publishFlow';
 import SceneContextRail from './SceneContextRail.svelte';
 
 const OWNER_ID = 'char-owner';
@@ -66,6 +73,7 @@ function render(scene: WorkspaceScene): HTMLElement {
 afterEach(() => {
 	document.body.replaceChildren();
 	vi.clearAllMocks();
+	publishState = { voteInProgress: false, loading: false, isParticipant: false, tally: null, phase: '' };
 });
 
 /** Find a button whose trimmed text matches the anchored regex. */
@@ -441,5 +449,41 @@ describe('SceneContextRail settings trigger', () => {
 	it('hides ⚙ Settings once the scene has ended (UpdateScene rejects ended)', () => {
 		const t = render(makeScene({ state: 'ended', role: 'owner', ownerId: OWNER_ID, asCharacterId: OWNER_ID }));
 		expect(settingsBtn(t)).toBeNull();
+	});
+});
+
+describe('SceneContextRail — start publish vote', () => {
+	it('shows Start on an ended scene for a participant with no active attempt', () => {
+		const target = render(makeScene({ state: 'ended', role: 'owner', ownerId: OWNER_ID, asCharacterId: OWNER_ID }));
+		expect(lifecycleButton(target, /^Start publish vote$/)).not.toBeNull();
+	});
+
+	it('hides Start while cold-start is loading', () => {
+		publishState = { ...publishState, loading: true };
+		const target = render(makeScene({ state: 'ended', role: 'owner' }));
+		expect(lifecycleButton(target, /^Start publish vote$/)).toBeNull();
+	});
+
+	it('hides Start when a vote is already in progress', () => {
+		publishState = { ...publishState, voteInProgress: true };
+		const target = render(makeScene({ state: 'ended', role: 'owner' }));
+		expect(lifecycleButton(target, /^Start publish vote$/)).toBeNull();
+	});
+
+	it('hides Start on a non-ended scene', () => {
+		const target = render(makeScene({ state: 'active', role: 'owner' }));
+		expect(lifecycleButton(target, /^Start publish vote$/)).toBeNull();
+	});
+
+	it('hides Start for an observer', () => {
+		const target = render(makeScene({ state: 'ended', role: 'observer', asCharacterId: MEMBER_ID }));
+		expect(lifecycleButton(target, /^Start publish vote$/)).toBeNull();
+	});
+
+	it('clicking Start invokes startPublishAction with the scene + acting character', () => {
+		const target = render(makeScene({ state: 'ended', role: 'owner', asCharacterId: OWNER_ID }));
+		lifecycleButton(target, /^Start publish vote$/)!.click();
+		flushSync();
+		expect(startPublishAction).toHaveBeenCalledWith({ sceneId: 'scene-1', characterId: OWNER_ID });
 	});
 });

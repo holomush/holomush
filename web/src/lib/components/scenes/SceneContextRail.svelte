@@ -12,6 +12,8 @@
   import { sceneStateDotClass } from '$lib/scenes/stateStyle';
   import { endSceneAction, pauseSceneAction, resumeSceneAction } from '$lib/scenes/lifecycleFlow';
   import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
+  import { startPublishAction } from '$lib/scenes/publishFlow';
+  import { publishStore } from '$lib/scenes/publishStore.svelte';
   import CharacterMultiSelect from './CharacterMultiSelect.svelte';
   import SceneSettingsSheet from './SceneSettingsSheet.svelte';
   import ScenePublishPanel from './ScenePublishPanel.svelte';
@@ -24,6 +26,9 @@
   let showPause = $derived(isOwner && scene?.state === 'active');
   let showEnd = $derived(isOwner && (scene?.state === 'active' || scene?.state === 'paused'));
   let showResume = $derived(isParticipant && scene?.state === 'paused');
+  let showStartPublish = $derived(
+    isParticipant && scene?.state === 'ended' && !publishStore.loading && !publishStore.voteInProgress,
+  );
 
   function formatRelativeTime(ms: bigint): string {
     if (!ms) return '';
@@ -58,15 +63,23 @@
     membershipErr = '';
   });
 
+  // Disables lifecycle buttons while a runLifecycle call is in flight, so a
+  // rapid double-click can't fire the RPC twice before the store reacts (the
+  // scene_publish_started/etc. event round-trips before showStartPublish flips).
+  let lifecycleBusy = $state(false);
+
   async function runLifecycle(
     action: (a: { sceneId: string; characterId: string }) => Promise<void>,
   ): Promise<void> {
     if (!scene) return;
     lifecycleErr = '';
+    lifecycleBusy = true;
     try {
       await action({ sceneId: scene.sceneId, characterId: scene.asCharacterId });
     } catch (e) {
       lifecycleErr = e instanceof Error ? e.message : 'Action failed';
+    } finally {
+      lifecycleBusy = false;
     }
   }
 
@@ -113,7 +126,7 @@
           </div>
         {/if}
       </div>
-      {#if showPause || showResume || showEnd || canEditSettings}
+      {#if showPause || showResume || showEnd || canEditSettings || showStartPublish}
         <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
           {#if canEditSettings}
             <Button variant="outline" size="sm" class="h-6 text-xs"
@@ -121,16 +134,20 @@
               onclick={() => (settingsOpen = true)}>⚙ Settings</Button>
           {/if}
           {#if showPause}
-            <Button variant="outline" size="sm" class="h-6 text-xs"
+            <Button variant="outline" size="sm" class="h-6 text-xs" disabled={lifecycleBusy}
               onclick={() => runLifecycle(pauseSceneAction)}>Pause</Button>
           {/if}
           {#if showResume}
-            <Button variant="outline" size="sm" class="h-6 text-xs"
+            <Button variant="outline" size="sm" class="h-6 text-xs" disabled={lifecycleBusy}
               onclick={() => runLifecycle(resumeSceneAction)}>Resume</Button>
           {/if}
           {#if showEnd}
-            <Button variant="outline" size="sm" class="h-6 text-xs text-destructive"
+            <Button variant="outline" size="sm" class="h-6 text-xs text-destructive" disabled={lifecycleBusy}
               onclick={() => runLifecycle(endSceneAction)}>End</Button>
+          {/if}
+          {#if showStartPublish}
+            <Button variant="outline" size="sm" class="h-6 text-xs" disabled={lifecycleBusy}
+              onclick={() => runLifecycle(startPublishAction)}>Start publish vote</Button>
           {/if}
         </div>
         {#if lifecycleErr}
@@ -139,7 +156,7 @@
       {/if}
     </section>
 
-    <ScenePublishPanel />
+    <ScenePublishPanel characterId={scene.asCharacterId} isOwner={isOwner} />
 
     <Separator />
 
