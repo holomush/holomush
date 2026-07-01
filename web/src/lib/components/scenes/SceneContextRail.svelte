@@ -63,15 +63,23 @@
     membershipErr = '';
   });
 
+  // Disables lifecycle buttons while a runLifecycle call is in flight, so a
+  // rapid double-click can't fire the RPC twice before the store reacts (the
+  // scene_publish_started/etc. event round-trips before showStartPublish flips).
+  let lifecycleBusy = $state(false);
+
   async function runLifecycle(
     action: (a: { sceneId: string; characterId: string }) => Promise<void>,
   ): Promise<void> {
     if (!scene) return;
     lifecycleErr = '';
+    lifecycleBusy = true;
     try {
       await action({ sceneId: scene.sceneId, characterId: scene.asCharacterId });
     } catch (e) {
       lifecycleErr = e instanceof Error ? e.message : 'Action failed';
+    } finally {
+      lifecycleBusy = false;
     }
   }
 
@@ -126,19 +134,19 @@
               onclick={() => (settingsOpen = true)}>⚙ Settings</Button>
           {/if}
           {#if showPause}
-            <Button variant="outline" size="sm" class="h-6 text-xs"
+            <Button variant="outline" size="sm" class="h-6 text-xs" disabled={lifecycleBusy}
               onclick={() => runLifecycle(pauseSceneAction)}>Pause</Button>
           {/if}
           {#if showResume}
-            <Button variant="outline" size="sm" class="h-6 text-xs"
+            <Button variant="outline" size="sm" class="h-6 text-xs" disabled={lifecycleBusy}
               onclick={() => runLifecycle(resumeSceneAction)}>Resume</Button>
           {/if}
           {#if showEnd}
-            <Button variant="outline" size="sm" class="h-6 text-xs text-destructive"
+            <Button variant="outline" size="sm" class="h-6 text-xs text-destructive" disabled={lifecycleBusy}
               onclick={() => runLifecycle(endSceneAction)}>End</Button>
           {/if}
           {#if showStartPublish}
-            <Button variant="outline" size="sm" class="h-6 text-xs"
+            <Button variant="outline" size="sm" class="h-6 text-xs" disabled={lifecycleBusy}
               onclick={() => runLifecycle(startPublishAction)}>Start publish vote</Button>
           {/if}
         </div>

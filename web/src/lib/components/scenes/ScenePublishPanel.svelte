@@ -6,6 +6,7 @@
 	import { publishStore } from '$lib/scenes/publishStore.svelte';
 	import { castVoteAction, withdrawAction } from '$lib/scenes/publishFlow';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { cn } from '$lib/utils';
 
 	// Defaults are a safety net, not a real caller shape: the sole mount site
 	// (SceneContextRail) always supplies both props. `characterId` is only read
@@ -14,6 +15,10 @@
 
 	let controlErr = $state('');
 	let confirmingWithdraw = $state(false);
+	// Withdraw in-flight lock: doWithdraw() hides the confirm row immediately, which
+	// re-reveals the "Withdraw vote" button while the RPC is still pending — without
+	// this guard a second confirm+click would fire a concurrent withdrawAction.
+	let withdrawInFlight = $state(false);
 
 	// The panel persists across scene/attempt switches (both scenes can have an
 	// active vote), so a stale confirm-withdraw or error must not bleed into the
@@ -44,12 +49,16 @@
 	}
 
 	async function doWithdraw(): Promise<void> {
+		if (withdrawInFlight) return;
 		controlErr = '';
 		confirmingWithdraw = false;
+		withdrawInFlight = true;
 		try {
 			await withdrawAction({ characterId });
 		} catch (e) {
 			controlErr = e instanceof Error ? e.message : 'Withdraw failed';
+		} finally {
+			withdrawInFlight = false;
 		}
 	}
 </script>
@@ -74,13 +83,13 @@
 				<div class="vote-buttons">
 					<Button
 						size="sm"
-						class={`h-6 text-xs ${isPending(true) ? 'opacity-60' : ''}`}
+						class={cn('h-6 text-xs', isPending(true) && 'opacity-60')}
 						variant={isActive(true) ? 'default' : 'outline'}
 						disabled={publishStore.castInFlight}
 						onclick={() => vote(true)}>Yes</Button>
 					<Button
 						size="sm"
-						class={`h-6 text-xs ${isPending(false) ? 'opacity-60' : ''}`}
+						class={cn('h-6 text-xs', isPending(false) && 'opacity-60')}
 						variant={isActive(false) ? 'default' : 'outline'}
 						disabled={publishStore.castInFlight}
 						onclick={() => vote(false)}>No</Button>
@@ -89,11 +98,11 @@
 					{#if confirmingWithdraw}
 						<div class="withdraw-confirm">
 							<span class="text-xs text-muted-foreground">Cancel this publication vote?</span>
-							<Button size="sm" variant="destructive" class="h-6 text-xs" onclick={doWithdraw}>Withdraw</Button>
+							<Button size="sm" variant="destructive" class="h-6 text-xs" disabled={withdrawInFlight} onclick={doWithdraw}>Withdraw</Button>
 							<Button size="sm" variant="outline" class="h-6 text-xs" onclick={() => (confirmingWithdraw = false)}>Keep</Button>
 						</div>
 					{:else}
-						<Button size="sm" variant="outline" class="h-6 text-xs" onclick={() => (confirmingWithdraw = true)}>Withdraw vote</Button>
+						<Button size="sm" variant="outline" class="h-6 text-xs" disabled={withdrawInFlight} onclick={() => (confirmingWithdraw = true)}>Withdraw vote</Button>
 					{/if}
 				{/if}
 				{#if controlErr}
