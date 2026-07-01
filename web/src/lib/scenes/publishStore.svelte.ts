@@ -212,6 +212,15 @@ export const publishStore = {
 	},
 	// Promote the in-flight ballot to confirmed (brighten) + unlock — driven by the
 	// caller's own RPC ack, never by a refetch, so no refetch can confirm a ballot.
-	_ackVote: () => { myVote = pendingVote; pendingVote = null; castInFlight = false; },
-	_clearVote: () => { pendingVote = null; castInFlight = false; },
+	// Guarded by the attempt the cast belongs to: if the active attempt has moved
+	// on since the cast started, this is a stale continuation and MUST NOT stomp
+	// the newer attempt's vote state.
+	_ackVote: (attemptId: string) => {
+		if (attemptId !== activeAttemptId) return; // superseded — do not stomp the newer attempt
+		myVote = pendingVote; pendingVote = null; castInFlight = false;
+	},
+	_clearVote: (attemptId: string) => {
+		if (attemptId !== activeAttemptId) return; // superseded — leave the newer attempt's state intact
+		pendingVote = null; castInFlight = false;
+	},
 };

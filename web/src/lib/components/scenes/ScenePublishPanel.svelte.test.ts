@@ -7,8 +7,16 @@ import ScenePublishPanel from './ScenePublishPanel.svelte';
 
 // Drive the panel by mocking the store getters.
 let state: Record<string, unknown>;
+// `activeAttemptId` is backed by a real rune (rather than a plain `state` field)
+// so a test can mutate it after mount and observe the panel's `$effect` react —
+// the plain `state` object is NOT reactive, so mutating a plain field would not
+// re-fire the component's effect.
+let activeAttemptId = $state('');
 vi.mock('$lib/scenes/publishStore.svelte', () => ({
-	publishStore: new Proxy({}, { get: (_t, k) => state[k as string] }),
+	publishStore: new Proxy(
+		{},
+		{ get: (_t, k) => (k === 'activeAttemptId' ? activeAttemptId : state[k as string]) },
+	),
 }));
 // vi.hoisted: the mock factory below references these eagerly, so they must be
 // initialized before vi.mock hoists (TDZ otherwise; see workspaceStore.test.ts).
@@ -32,6 +40,7 @@ function renderPanel(props: { characterId?: string; isOwner?: boolean } = {}) {
 beforeEach(() => {
 	vi.clearAllMocks();
 	state = { voteInProgress: false, isParticipant: false, phase: '', tally: null, myVote: null, pendingVote: null, castInFlight: false };
+	activeAttemptId = '';
 });
 
 describe('ScenePublishPanel', () => {
@@ -129,6 +138,25 @@ describe('ScenePublishPanel controls', () => {
 		state = { ...collecting };
 		const { target, comp } = renderPanel({ isOwner: false });
 		expect(button(target, /Withdraw/)).toBeUndefined();
+		unmount(comp); target.remove();
+	});
+
+	it('resets an armed withdraw-confirm when the active attempt changes (o5urv.6)', () => {
+		activeAttemptId = 'att-1';
+		state = { ...collecting };
+		const { target, comp } = renderPanel({ characterId: 'C1', isOwner: true });
+		button(target, /Withdraw vote/)!.click();
+		flushSync();
+		expect(target.textContent).toMatch(/cancel this publication vote/i);
+
+		// The active attempt changes (e.g. this attempt resolved/withdrew and a new
+		// one started) while the confirm is still armed — it MUST NOT bleed forward
+		// onto the new attempt.
+		activeAttemptId = 'att-2';
+		flushSync();
+		expect(target.textContent).not.toMatch(/cancel this publication vote/i);
+		expect(button(target, /Withdraw vote/)).toBeTruthy();
+
 		unmount(comp); target.remove();
 	});
 

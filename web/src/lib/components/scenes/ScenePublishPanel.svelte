@@ -7,14 +7,22 @@
 	import { castVoteAction, withdrawAction } from '$lib/scenes/publishFlow';
 	import { Button } from '$lib/components/ui/button/index.js';
 
-	// Defaults keep the tree type-clean between this task's commit and Task 4
-	// (which updates the rail's `<ScenePublishPanel />` mount to pass real values).
-	// The rail always passes both once Task 4 lands; the panel only reads
-	// `characterId` inside vote()/doWithdraw(), which fire only when rendered.
+	// Defaults are a safety net, not a real caller shape: the sole mount site
+	// (SceneContextRail) always supplies both props. `characterId` is only read
+	// inside vote()/doWithdraw(), which fire only when the panel is rendered.
 	let { characterId = '', isOwner = false }: { characterId?: string; isOwner?: boolean } = $props();
 
 	let controlErr = $state('');
 	let confirmingWithdraw = $state(false);
+
+	// The panel persists across scene/attempt switches (both scenes can have an
+	// active vote), so a stale confirm-withdraw or error must not bleed into the
+	// next attempt — mirrors SceneContextRail's lifecycleErr reset on scene change.
+	$effect(() => {
+		void publishStore.activeAttemptId;
+		confirmingWithdraw = false;
+		controlErr = '';
+	});
 
 	// A vote button is "active" (brand variant) when it is the in-flight ballot OR
 	// the confirmed vote with nothing pending; it is dark (opacity-60) only while

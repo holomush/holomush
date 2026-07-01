@@ -37,10 +37,10 @@ export async function castVoteAction({ characterId, vote }: VoteArgs): Promise<v
 		const sessionId = await ensureSession(characterId);
 		await castPublishSceneVote(sessionId, { characterId, publishedSceneId, vote });
 	} catch (e) {
-		publishStore._clearVote();
+		publishStore._clearVote(publishedSceneId);
 		throw e;
 	}
-	publishStore._ackVote();
+	publishStore._ackVote(publishedSceneId);
 }
 
 /**
