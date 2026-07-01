@@ -12,6 +12,8 @@
   import { sceneStateDotClass } from '$lib/scenes/stateStyle';
   import { endSceneAction, pauseSceneAction, resumeSceneAction } from '$lib/scenes/lifecycleFlow';
   import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
+  import { startPublishAction } from '$lib/scenes/publishFlow';
+  import { publishStore } from '$lib/scenes/publishStore.svelte';
   import CharacterMultiSelect from './CharacterMultiSelect.svelte';
   import SceneSettingsSheet from './SceneSettingsSheet.svelte';
   import ScenePublishPanel from './ScenePublishPanel.svelte';
@@ -24,6 +26,9 @@
   let showPause = $derived(isOwner && scene?.state === 'active');
   let showEnd = $derived(isOwner && (scene?.state === 'active' || scene?.state === 'paused'));
   let showResume = $derived(isParticipant && scene?.state === 'paused');
+  let showStartPublish = $derived(
+    isParticipant && scene?.state === 'ended' && !publishStore.loading && !publishStore.voteInProgress,
+  );
 
   function formatRelativeTime(ms: bigint): string {
     if (!ms) return '';
@@ -113,7 +118,7 @@
           </div>
         {/if}
       </div>
-      {#if showPause || showResume || showEnd || canEditSettings}
+      {#if showPause || showResume || showEnd || canEditSettings || showStartPublish}
         <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
           {#if canEditSettings}
             <Button variant="outline" size="sm" class="h-6 text-xs"
@@ -132,6 +137,10 @@
             <Button variant="outline" size="sm" class="h-6 text-xs text-destructive"
               onclick={() => runLifecycle(endSceneAction)}>End</Button>
           {/if}
+          {#if showStartPublish}
+            <Button variant="outline" size="sm" class="h-6 text-xs"
+              onclick={() => runLifecycle(startPublishAction)}>Start publish vote</Button>
+          {/if}
         </div>
         {#if lifecycleErr}
           <p class="text-xs text-destructive pl-4 pt-1">{lifecycleErr}</p>
@@ -139,7 +148,7 @@
       {/if}
     </section>
 
-    <ScenePublishPanel />
+    <ScenePublishPanel characterId={scene.asCharacterId} isOwner={isOwner} />
 
     <Separator />
 
