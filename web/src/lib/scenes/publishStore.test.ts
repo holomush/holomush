@@ -213,3 +213,71 @@ describe('publishStore onEvent', () => {
 		expect(publishStore.tally).toBeNull();
 	});
 });
+
+describe('publishStore caller vote (confirmed + in-flight)', () => {
+	beforeEach(() => { vi.useFakeTimers(); });
+	afterEach(() => { vi.useRealTimers(); });
+
+	async function asParticipant() {
+		getScene.mockResolvedValue({ activePublishAttemptId: 'att-1', publishStatus: 'COLLECTING' });
+		getPublishedScene.mockResolvedValue({
+			id: 'att-1', status: 'COLLECTING', voteSummary: { yes: 1, no: 0, pending: 4 },
+		});
+		await publishStore.loadColdStart('C1', 'SC1');
+	}
+
+	it('_markVotePending sets the in-flight ballot dark and locks (castInFlight)', async () => {
+		await asParticipant();
+		publishStore._markVotePending(true);
+		expect(publishStore.pendingVote).toBe(true);
+		expect(publishStore.castInFlight).toBe(true);
+		expect(publishStore.myVote).toBeNull(); // not confirmed yet
+	});
+
+	it('ack promotes the in-flight ballot to confirmed and unlocks (brighten)', async () => {
+		await asParticipant();
+		publishStore._markVotePending(true);
+		publishStore._ackVote();
+		expect(publishStore.pendingVote).toBeNull(); // promoted
+		expect(publishStore.myVote).toBe(true);      // confirmed (bright)
+		expect(publishStore.castInFlight).toBe(false); // unlocked
+	});
+
+	it('a failed re-cast reverts to the previously confirmed vote, not null', async () => {
+		await asParticipant();
+		// First cast confirmed: Yes (ack promotes directly).
+		publishStore._markVotePending(true);
+		publishStore._ackVote();
+		expect(publishStore.myVote).toBe(true);
+		// Re-cast No, then it fails → clearVote.
+		publishStore._markVotePending(false);
+		expect(publishStore.pendingVote).toBe(false);
+		publishStore._clearVote();
+		expect(publishStore.pendingVote).toBeNull();
+		expect(publishStore.castInFlight).toBe(false);
+		expect(publishStore.myVote).toBe(true); // previous confirmed retained
+	});
+
+	it('vote state from a prior attempt does not bleed into a new attempt', async () => {
+		await asParticipant();
+		publishStore._markVotePending(true);
+		expect(publishStore.pendingVote).toBe(true);
+		getScene.mockResolvedValueOnce({ activePublishAttemptId: 'att-2', publishStatus: 'COLLECTING' });
+		getPublishedScene.mockResolvedValueOnce({ id: 'att-2', status: 'COLLECTING', voteSummary: { yes: 0, no: 0, pending: 5 } });
+		publishStore.onEvent({ type: 'core-scenes:scene_publish_started', metadata: { scene_id: 'SC1' } } as never);
+		await vi.advanceTimersByTimeAsync(300);
+		expect(publishStore.activeAttemptId).toBe('att-2');
+		expect(publishStore.pendingVote).toBeNull(); // scoped out by attempt guard
+		expect(publishStore.myVote).toBeNull();
+		expect(publishStore.castInFlight).toBe(false);
+	});
+
+	it('reset clears all vote state', async () => {
+		await asParticipant();
+		publishStore._markVotePending(true);
+		publishStore.reset();
+		expect(publishStore.myVote).toBeNull();
+		expect(publishStore.pendingVote).toBeNull();
+		expect(publishStore.castInFlight).toBe(false);
+	});
+});

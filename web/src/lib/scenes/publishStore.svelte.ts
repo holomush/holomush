@@ -23,6 +23,17 @@ let characterId = $state('');
 // loading state instead of briefly falling into the observer branch before
 // refetchTally() determines isParticipant.
 let loading = $state(false);
+// Caller's CONFIRMED vote for this attempt (true=Yes, false=No, null=none) —
+// drives the bright highlight. Boolean matches the RPC's `bool vote`.
+let myVote = $state<boolean | null>(null);
+// Caller's IN-FLIGHT optimistic ballot — drives the dark highlight; null when idle.
+let pendingVote = $state<boolean | null>(null);
+// A cast RPC is in flight (click → ack/fail). The panel disables Yes/No while true,
+// and castVoteAction raises it synchronously before any await, so a second cast
+// can never overlap the first.
+let castInFlight = $state(false);
+// The attempt the vote state belongs to (scoping guard for the getters).
+let myVoteAttemptId = $state('');
 
 const LIFECYCLE = new Set([
 	'core-scenes:scene_publish_started',
@@ -171,6 +182,10 @@ function reset(): void {
 	loading = false;
 	sceneId = '';
 	characterId = '';
+	myVote = null;
+	pendingVote = null;
+	castInFlight = false;
+	myVoteAttemptId = '';
 }
 
 export const publishStore = {
@@ -181,10 +196,22 @@ export const publishStore = {
 	get isParticipant() { return isParticipant; },
 	get stale() { return stale; },
 	get loading() { return loading; },
+	get myVote() { return myVoteAttemptId === activeAttemptId ? myVote : null; },
+	get pendingVote() { return myVoteAttemptId === activeAttemptId ? pendingVote : null; },
+	get castInFlight() { return myVoteAttemptId === activeAttemptId ? castInFlight : false; },
 	loadColdStart,
 	reset,
 	onEvent,
 	// internal, exported for Task 3 + tests:
 	_refetchTally: refetchTally,
 	_setActiveAttempt: (id: string) => { activeAttemptId = id; },
+	_markVotePending: (v: boolean) => {
+		pendingVote = v;
+		castInFlight = true;
+		myVoteAttemptId = activeAttemptId;
+	},
+	// Promote the in-flight ballot to confirmed (brighten) + unlock — driven by the
+	// caller's own RPC ack, never by a refetch, so no refetch can confirm a ballot.
+	_ackVote: () => { myVote = pendingVote; pendingVote = null; castInFlight = false; },
+	_clearVote: () => { pendingVote = null; castInFlight = false; },
 };
