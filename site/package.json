@@ -11,7 +11,7 @@
     "brand:build": "node scripts/build-brand-assets.mjs"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.40.0",
+    "@astrojs/starlight": "^0.41.0",
     "@pasqal-io/starlight-client-mermaid": "^0.1.0",
     "astro": "^6.4.4",
     "sharp": "^0.35.0",
