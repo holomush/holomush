@@ -68,11 +68,11 @@
 		<!-- Cold start in progress: isParticipant is not yet resolved, so show a
 		     neutral loading state rather than the observer badge (which would
 		     flash the wrong copy at a real participant on every initial load). -->
-		<section class="publish-panel" aria-label="Publication vote" aria-busy="true">
+		<section class="publish-panel" aria-label="Publication vote" aria-busy="true" data-testid="scene-publish-panel">
 			<span class="badge">Publication vote…</span>
 		</section>
 	{:else if publishStore.isParticipant && publishStore.tally}
-		<section class="publish-panel" aria-label="Publication vote">
+		<section class="publish-panel" aria-label="Publication vote" data-testid="scene-publish-panel">
 			<header>Publication vote — {publishStore.phase}</header>
 			<ul class="tally">
 				<li>Yes <strong>{publishStore.tally.yes}</strong></li>
@@ -111,7 +111,7 @@
 			{/if}
 		</section>
 	{:else}
-		<section class="publish-panel" aria-label="Publication vote">
+		<section class="publish-panel" aria-label="Publication vote" data-testid="scene-publish-panel">
 			<span class="badge">Publication vote in progress</span>
 		</section>
 	{/if}
