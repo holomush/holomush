@@ -1046,6 +1046,11 @@ func TestSceneAccessCreateScene(t *testing.T) {
 	}
 }
 
+// Verifies: INV-SCENE-63 — the facade forwards the SERVER-verified acting
+// character to SceneService.EndScene and rejects a character the player does
+// not own (NotFound), never trusting a client-supplied character_id.
+// Verifies: INV-SCENE-64 — a guest subject is denied at the facade and the
+// downstream SceneService is never called.
 func TestSceneAccessEndScene(t *testing.T) {
 	ctx := context.Background()
 	playerID := idgen.New()
@@ -1127,6 +1132,11 @@ func TestSceneAccessEndScene(t *testing.T) {
 	}
 }
 
+// Verifies: INV-SCENE-63 — the facade forwards the SERVER-verified acting
+// character to SceneService.PauseScene and rejects a character the player does
+// not own (NotFound), never trusting a client-supplied character_id.
+// Verifies: INV-SCENE-64 — a guest subject is denied at the facade and the
+// downstream SceneService is never called.
 func TestSceneAccessPauseScene(t *testing.T) {
 	ctx := context.Background()
 	playerID := idgen.New()
@@ -1208,6 +1218,11 @@ func TestSceneAccessPauseScene(t *testing.T) {
 	}
 }
 
+// Verifies: INV-SCENE-63 — the facade forwards the SERVER-verified acting
+// character to SceneService.ResumeScene and rejects a character the player does
+// not own (NotFound), never trusting a client-supplied character_id.
+// Verifies: INV-SCENE-64 — a guest subject is denied at the facade and the
+// downstream SceneService is never called.
 func TestSceneAccessResumeScene(t *testing.T) {
 	ctx := context.Background()
 	playerID := idgen.New()
