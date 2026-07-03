@@ -16,6 +16,8 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Reuse verb category as the communication-content discriminator](holomush-2hhq2-reuse-verb-category-as-communication-content-discriminator.md) | 2026-07-04 | Accepted | `holomush-2hhq2` |
+| [Enforce communication content via a protovalidate gate plus dual-runtime builders](holomush-byqph-enforce-communication-content-via-protovalidate-gate-plus-du.md) | 2026-07-04 | Accepted | `holomush-byqph` |
 | [Run-and-distill contract for local-* offload agents](holomush-cr3gq-run-and-distill-contract-local-offload-agents.md) | 2026-07-03 | Accepted | `holomush-cr3gq` |
 | [Do not slim plugin-owned skill loads from the repo](holomush-etnfd-do-not-slim-plugin-owned-skill-loads-from-repo.md) | 2026-07-03 | Accepted | `holomush-etnfd` |
 | [Narrow the subagent model-floor to a haiku carve-out](holomush-w1a26-narrow-subagent-model-floor-haiku-carve-out.md) | 2026-07-03 | Accepted | `holomush-w1a26` |
