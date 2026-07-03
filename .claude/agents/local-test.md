@@ -28,14 +28,21 @@ The caller gives you a package path and/or `-run` filter, or nothing.
 
 - No args:            `task test`
 - Package given: `task test -- ./internal/command/`
-- Filter given: `task test -- -run TestName ./internal/command/`
+- Filter given: `task test -- -run='TestName' ./internal/command/`
 
 Before building the command, validate any caller-supplied value:
 - Package path MUST match `^\./[A-Za-z0-9_./-]+$` (or be `./...`) — refuse and
   report an error if it contains anything else.
-- `-run` filter MUST NOT contain shell metacharacters (`;`, `|`, `` ` ``, `$(`,
-  `&&`, `>`, newlines, quotes). Refuse and report an error rather than passing
-  an unvalidated value through.
+- `-run` filter: refuse and report an error if the value contains a
+  single-quote character (`'`) — there is no safe way to embed one in the
+  single-quoted argument below. Otherwise standard Go regexp syntax is
+  expected and allowed, INCLUDING `|` for multi-test alternation (e.g.
+  `TestA|TestB`, the pattern `.claude/rules/invariants.md` itself prescribes).
+- ALWAYS bind the `-run` value with `=` and single-quote it as ONE token —
+  `-run='<value>'`, never `-run <value>` as two separate tokens. `=`-binding
+  means the value can never be misparsed as a separate flag (even if it
+  starts with `-`); single-quoting means no character inside it is special to
+  the shell except the single quote already excluded above.
 
 Run the command as the SOLE command in one Bash call (no `| tee`/`| tail`/
 trailing `echo`, which mask the exit code). Use `task` — never raw `go test`.
