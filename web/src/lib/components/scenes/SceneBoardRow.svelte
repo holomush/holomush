@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { Badge } from '$lib/components/ui/badge';
+  import { Button } from '$lib/components/ui/button/index.js';
   import { goto } from '$app/navigation';
   import { watchScene } from '$lib/scenes/client';
   import type { SceneInfo } from '$lib/connect/holomush/scene/v1/scene_pb';
@@ -109,28 +110,29 @@
   <!-- Actions -->
   <div class="flex gap-2 shrink-0">
     {#if scene.visibility === 'open' && (scene.state === 'active' || scene.state === 'paused')}
-      <button
+      <Button
+        variant="outline"
+        size="sm"
+        class="h-6 text-xs"
         onclick={handleWatch}
         disabled={watching}
         aria-label="Watch scene {scene.title}"
-        class="text-xs px-2.5 py-1 rounded border border-border hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50"
       >
         {watching ? 'Watching…' : 'Watch'}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="default"
+        size="sm"
+        class="h-6 text-xs"
         onclick={handleJoin}
         aria-label="Join scene {scene.title}"
-        class="text-xs px-2.5 py-1 rounded bg-[var(--brand-cyan-deep)] text-white hover:opacity-90 transition-opacity"
       >
         Join
-      </button>
+      </Button>
     {:else}
-      <a
-        href="/scenes/{scene.id}"
-        class="text-xs px-2.5 py-1 rounded border border-border hover:bg-accent transition-colors"
-      >
+      <Button href="/scenes/{scene.id}" variant="outline" size="sm" class="h-6 text-xs">
         View
-      </a>
+      </Button>
     {/if}
   </div>
 </article>
