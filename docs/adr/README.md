@@ -16,6 +16,9 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Run-and-distill contract for local-* offload agents](holomush-cr3gq-run-and-distill-contract-local-offload-agents.md) | 2026-07-03 | Accepted | `holomush-cr3gq` |
+| [Do not slim plugin-owned skill loads from the repo](holomush-etnfd-do-not-slim-plugin-owned-skill-loads-from-repo.md) | 2026-07-03 | Accepted | `holomush-etnfd` |
+| [Narrow the subagent model-floor to a haiku carve-out](holomush-w1a26-narrow-subagent-model-floor-haiku-carve-out.md) | 2026-07-03 | Accepted | `holomush-w1a26` |
 | [Route scene_publish_* web events as refetch triggers, not payload carriers](holomush-uqrr7-route-scene-publish-web-events-as-refetch-triggers-not-paylo.md) | 2026-06-30 | Accepted | `holomush-uqrr7` |
 | [Package in-repo Claude Code tooling as a @skills-dir plugin](holomush-jpn4w-package-repo-claude-code-tooling-as-skills-dir-plugin.md) | 2026-06-29 | Accepted | `holomush-jpn4w` |
 | [Split publish read model: broad pointer on SceneInfo, tally behind participant gate](holomush-o8gx8-split-publish-read-model-broad-pointer-sceneinfo-tally-behin.md) | 2026-06-28 | Accepted | `holomush-o8gx8` |
