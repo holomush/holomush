@@ -51,6 +51,7 @@ On pass:
 
 PASS — task pr-prep (status=pass)
 ✓ All PR checks passed.
+Advisory only — the parent MUST run `task pr-prep` itself before the actual push (schema-regen side-effects).
 
 ```
 
