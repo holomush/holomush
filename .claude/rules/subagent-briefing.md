@@ -24,10 +24,12 @@ context, skills, or tool habits from the parent session.
 | Code search | probe MCP for Go symbol/AST; `rg` for text (never bare `grep`); `ast-grep` for structural/codemods (`.claude/rules/search-tools.md`) |
 | Implementation | line-scoped `//nolint:<rule>` only — never widen `.golangci.yaml`. Repo precedent: `internal/web/handler.go:381,418,460,484` use `//nolint:wrapcheck // gRPC status errors pass through as-is`. 27+ such directives in the codebase. |
 | TDD | run `task test -- ./<package>` per change; use Ginkgo for integration tests (build tag `//go:build integration`) |
-| Sub-agent dispatch | model floor is `sonnet` (never `haiku` for sub-agents) |
+| Sub-agent dispatch | Default model floor `sonnet`. `haiku` ONLY for agents whose output is schema-constrained AND independently verified downstream (e.g. a mechanical distiller in a fan-out that a sonnet+ verifier checks); NEVER `haiku` for judgment the caller acts on unverified (test triage, review, flake-vs-real). Prefer `effort: low` on a sonnet agent over haiku — `effort` errors on haiku 4.5, and haiku's $ win on a short agent is tiny. Repo-owned reviewer agents (code/crypto/abac-reviewer) stay `opus` — never downgrade for cost (design/plan-reviewer: see the tiering note below) |
 | jj workspace work | verify `jj st` is clean BEFORE they run `jj describe` — otherwise their describe clobbers the in-flight change's description |
 | Op-log mutations | `jj op restore` / `jj op abandon` are gated by the `jj:jujutsu` plugin's `guard-jj-mutating` hook (bypass: `# jj-op-approved`); ensure the sub-agent's frontmatter lists `jj:jujutsu` in `skills:` so they read the recovery ladder before reaching for either command |
 | Closing beads | grounded evidence required; in-bead "Closed:"/"Fixed:" comments are NOT proof — verify the cited fix in current code (the `bead-auditor` agent caught false-fix cases on `wfza.21`, `wfza.62`) |
+
+> **Repo-agent model tiers (verified 2026-07-03):** reviewers (`code`/`crypto`/`abac`-reviewer) = `opus`; investigators/runners (`bead-auditor`, `branch-readiness-check`, `adr-extractor`, `local-test`, `local-pr-prep`, `local-build`, `local-lint`) = `sonnet`. Plugin agents (design/plan-reviewer, fix-worker, Explore, …) are plugin-owned — the repo cannot set their model here.
 
 ## Anti-patterns
 
@@ -35,3 +37,4 @@ context, skills, or tool habits from the parent session.
 - DO NOT dispatch parallel `bd create` — there's an ID-allocation race; parallel calls all report the same ID with their respective titles but only ONE actually commits
 - DO NOT trust a sub-agent's claim that `task pr-prep` passed — always run it yourself in the parent before pushing. Sub-agents can't catch schema-regeneration side-effects (e.g., `go generate` updating `schemas/plugin.schema.json`) that must be committed before the PR is current
 - DO NOT delegate UNDERSTANDING to the sub-agent ("based on your findings, fix the bug"). Synthesize first; give them concrete actions.
+- DO NOT dispatch a `local-*` offload agent (`local-test`/`local-pr-prep`/`local-build`/`local-lint`) in the same parallel tool batch as another maybe-failing call — a `local-*` failure alongside a sibling failure risks a cancel-storm (ADR holomush-cr3gq)
