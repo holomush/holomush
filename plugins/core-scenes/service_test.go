@@ -1273,6 +1273,7 @@ func TestSceneServiceResumeSceneReturnsFailedPreconditionForActiveScene(t *testi
 	assert.Equal(t, codes.FailedPrecondition, st.Code())
 }
 
+// Verifies: INV-SCENE-65
 func TestSceneServiceEndSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-bob", State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen)}
@@ -1316,6 +1317,7 @@ func TestSceneServiceResumeSceneFailsClosedWithoutEvaluator(t *testing.T) {
 	assert.Equal(t, codes.Internal, status.Code(err))
 }
 
+// Verifies: INV-SCENE-65
 func TestSceneServicePauseSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
@@ -1329,6 +1331,7 @@ func TestSceneServicePauseSceneDeniedWhenPolicyDenies(t *testing.T) {
 	assert.Equal(t, string(SceneStateActive), store.scenes["scene-1"].State)
 }
 
+// Verifies: INV-SCENE-65
 func TestSceneServiceResumeSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStatePaused)}
@@ -1342,6 +1345,7 @@ func TestSceneServiceResumeSceneDeniedWhenPolicyDenies(t *testing.T) {
 	assert.Equal(t, string(SceneStatePaused), store.scenes["scene-1"].State)
 }
 
+// Verifies: INV-SCENE-65
 func TestSceneServiceInviteToSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-bob", State: string(SceneStateActive)}
@@ -1355,6 +1359,7 @@ func TestSceneServiceInviteToSceneDeniedWhenPolicyDenies(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+// Verifies: INV-SCENE-65
 func TestSceneServiceKickFromSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
@@ -1367,6 +1372,7 @@ func TestSceneServiceKickFromSceneDeniedWhenPolicyDenies(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+// Verifies: INV-SCENE-65
 func TestSceneServiceTransferOwnershipDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", State: string(SceneStateActive)}
@@ -1379,6 +1385,7 @@ func TestSceneServiceTransferOwnershipDeniedWhenPolicyDenies(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+// Verifies: INV-SCENE-65
 func TestSceneServiceLeaveSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-owner", State: string(SceneStateActive)}
@@ -1542,6 +1549,7 @@ func TestSceneServiceUpdateSceneEmptyMaskIsNoOp(t *testing.T) {
 // INV-SCENE-65): a denied subject is rejected with PermissionDenied before the
 // store is touched, so authorization holds for every caller — not only the
 // telnet command path that gates at dispatch.
+// Verifies: INV-SCENE-65
 func TestSceneServiceUpdateSceneDeniedWhenPolicyDenies(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{ID: "scene-1", OwnerID: "char-bob", Title: "Original", State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen)}
