@@ -8,6 +8,7 @@ description: |
   NOT edit code or auto-fix.
 model: sonnet
 effort: low
+permissionMode: plan
 color: magenta
 tools:
   - Bash

@@ -9,6 +9,7 @@ description: |
   surface schema-regeneration side-effects. Read-only: runs the command, reports.
 model: sonnet
 effort: low
+permissionMode: plan
 color: yellow
 tools:
   - Bash
@@ -46,28 +47,28 @@ trailing `echo` (they mask `$?`). Do not add flags.
 ## What to return (STRICT)
 
 On pass:
-```
+```text
 
 PASS — task pr-prep (status=pass)
 ✓ All PR checks passed.
 
-```text
+```
 
 On real failure:
-```
+```text
 
 FAIL — task pr-prep (exit <code>, status=fail)
 Failed check: <named gate, e.g. lint:go / fmt:check / build / a test pkg>
 <one line of the first actionable error>
 
-```text
+```
 
 On contention:
-```
+```text
 
 CONTENTION — another pr-prep is running (status=contention). Retry-able; not a gate failure.
 
-```text
+```
 
 Rules:
 - One line per failed check; do NOT paste the full lane output or stack traces.

@@ -9,6 +9,7 @@ description: |
   code or fix failures.
 model: sonnet
 effort: low
+permissionMode: plan
 color: green
 tools:
   - Bash
@@ -29,6 +30,13 @@ The caller gives you a package path and/or `-run` filter, or nothing.
 - Package given: `task test -- ./internal/command/`
 - Filter given: `task test -- -run TestName ./internal/command/`
 
+Before building the command, validate any caller-supplied value:
+- Package path MUST match `^\./[A-Za-z0-9_./-]+$` (or be `./...`) — refuse and
+  report an error if it contains anything else.
+- `-run` filter MUST NOT contain shell metacharacters (`;`, `|`, `` ` ``, `$(`,
+  `&&`, `>`, newlines, quotes). Refuse and report an error rather than passing
+  an unvalidated value through.
+
 Run the command as the SOLE command in one Bash call (no `| tee`/`| tail`/
 trailing `echo`, which mask the exit code). Use `task` — never raw `go test`.
 
@@ -40,15 +48,15 @@ word "FAIL" from a test fixture). `$?` == 0 → pass. Non-zero → fail.
 ## What to return (STRICT — this is your whole output)
 
 On pass:
-```
+```text
 
 PASS — `<command you ran>`
 <N> packages ok (or: <N> tests ok)
 
-```text
+```
 
 On fail:
-```
+```text
 
 FAIL — `<command you ran>` (exit <code>)
 Failing tests:
@@ -57,7 +65,7 @@ Failing tests:
 - ...
 <if truncated:> (+<M> more — re-run scoped to see them)
 
-```text
+```
 
 Rules:
 - List at most 15 failing tests; if more, say how many were omitted.

@@ -7,6 +7,7 @@ description: |
   command, reports. Does NOT edit code.
 model: sonnet
 effort: low
+permissionMode: plan
 color: blue
 tools:
   - Bash
