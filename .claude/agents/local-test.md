@@ -31,8 +31,8 @@ The caller gives you a package path and/or `-run` filter, or nothing.
 - Filter given: `task test -- -run='TestName' ./internal/command/`
 
 Before building the command, validate any caller-supplied value:
-- Package path MUST match `^\./[A-Za-z0-9_./-]+$` (or be `./...`) — refuse and
-  report an error if it contains anything else.
+- Package path MUST match `^\./[A-Za-z0-9_./-]+$` — refuse and report an
+  error if it contains anything else (the pattern already covers `./...`).
 - `-run` filter: refuse and report an error if the value contains a
   single-quote character (`'`) — there is no safe way to embed one in the
   single-quoted argument below. Otherwise standard Go regexp syntax is
