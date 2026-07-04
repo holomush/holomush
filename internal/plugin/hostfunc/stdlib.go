@@ -14,7 +14,7 @@ import (
 )
 
 // RegisterStdlib registers the holo.* standard library functions in the Lua state.
-// This provides access to holo.fmt.* and holo.emit.* namespaces.
+// This provides access to holo.fmt.*, holo.emit.*, and holo.comm.* namespaces.
 func RegisterStdlib(ls *lua.LState) {
 	// Create the root holo table
 	holoTable := ls.NewTable()
@@ -24,6 +24,9 @@ func RegisterStdlib(ls *lua.LState) {
 
 	// Register holo.emit namespace
 	registerEmit(ls, holoTable)
+
+	// Register holo.comm namespace (say/pose/ooc/emit content builders)
+	registerComm(ls, holoTable)
 
 	ls.SetGlobal("holo", holoTable)
 }
