@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.comm.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/comm/v1;commv1";
+
+// CommunicationContent is the canonical instance-level payload body for every
+// real-time conversational-content event (say/pose/ooc/emit; page/whisper/pemit
+// arrive in Slice 2). It is the per-emit body the type-level rendering hints
+// stamped by RenderingPublisher (kind via Format, label) render over. Producers
+// build it via pkg/plugin/comm; the ContentValidationPublisher validates it.
+message CommunicationContent {
+  // actor_id is the stable character ULID of the author. Scene replay/export/
+  // publish-snapshot decoders read it self-contained from the payload to
+  // populate PublishedSceneEntry.Speaker (plugins/core-scenes/commands.go
+  // decodeReplayEntries; publish_snapshot.go decodeSnapshotEntry). Empty only
+  // for the actorless `emit` verb; never validated as required (emit).
+  string actor_id = 1;
+
+  // actor_display_name is the resolved author name for rendering. Empty when
+  // name resolution is deferred (scenes today) or for actorless `emit`; the
+  // renderer then falls back to actor_id.
+  string actor_display_name = 2;
+
+  // text is the raw, unrendered content ("waves", "Hello there."). Required
+  // non-empty. The renderer produces the surface form; producers MUST NOT
+  // pre-render (e.g. no "Alaric waves" here).
+  string text = 3 [(buf.validate.field).string.min_len = 1];
+
+  // no_space renders the actor and text with no separating space (the ";"
+  // semipose form -> "Alaric's eyes narrow"). Default false.
+  bool no_space = 4;
+
+  // ooc_style selects the OOC surface form for ooc events: "" (default, treated
+  // as "say") / "say" / "pose" / "semipose". Empty for non-ooc kinds.
+  string ooc_style = 5 [
+    (buf.validate.field).string.in = "",
+    (buf.validate.field).string.in = "say",
+    (buf.validate.field).string.in = "pose",
+    (buf.validate.field).string.in = "semipose"
+  ];
+}
