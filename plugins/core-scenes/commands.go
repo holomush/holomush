@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	"github.com/holomush/holomush/pkg/plugin/comm"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
@@ -1307,24 +1308,29 @@ func (p *scenePlugin) handleEmit(
 		subject = dotStyleSceneSubjectOOC(p.service.gameID, sceneID)
 	}
 
-	payloadMap := map[string]string{
-		"actor_id": req.CharacterID,
-		"scene_id": sceneID,
-		"text":     text,
-	}
-	// Stamp the author display name when the dispatcher provided one
-	// (internal/command/dispatcher.go:310). Empty → omit; GameEvent.actor then
-	// comes out empty and the web client falls back to actor_id, exactly as
-	// before. Rides the encrypted IC payload (crypto.emits) — no more sensitive
-	// than the pose text it labels.
-	if req.CharacterName != "" {
-		payloadMap["character_name"] = req.CharacterName
-	}
-	payload, err := json.Marshal(payloadMap)
-	if err != nil {
-		err = oops.Code("SCENE_EMIT_PAYLOAD_MARSHAL_FAILED").
+	// actor_id (CommunicationContent field 1) is preserved by Say/Pose/OOC for
+	// the replay/snapshot Speaker (decodeReplayEntries, decodeSnapshotEntry
+	// both decode "actor_id"); scene_emit is intentionally ACTORLESS —
+	// comm.Emit sets no actor_id, matching publish_render's content-only
+	// rendering of EntryKindEmit (publish_render.go:32,61). scene_id is
+	// dropped from the body — redundant with the subject, and no consumer
+	// reads it from the payload.
+	author := comm.Author{ID: req.CharacterID, Name: req.CharacterName}
+	var payload string
+	switch eventType {
+	case "core-scenes:scene_pose":
+		payload = comm.Pose(author, req.InvokedAs, text)
+	case "core-scenes:scene_say":
+		payload = comm.Say(author, text)
+	case "core-scenes:scene_ooc":
+		payload = comm.OOC(author, text)
+	case "core-scenes:scene_emit":
+		payload = comm.Emit(text)
+	default:
+		err := oops.Code("SCENE_EMIT_UNKNOWN_EVENT_TYPE").
 			With("event_type", eventType).
-			With("scene_id", sceneID).Wrap(err)
+			With("scene_id", sceneID).
+			Errorf("unknown scene emit event type %q", eventType)
 		recordError(span, err)
 		return nil, err
 	}
@@ -1341,7 +1347,7 @@ func (p *scenePlugin) handleEmit(
 	intent := pluginsdk.EmitIntent{
 		Subject:   subject,
 		Type:      pluginsdk.EventType(eventType),
-		Payload:   string(payload),
+		Payload:   payload,
 		Sensitive: true, // sensitivity:always per crypto.emits manifest §2 / INV-SCENE-3
 	}
 	if err := p.service.eventSink.Emit(ctx, intent); err != nil {
