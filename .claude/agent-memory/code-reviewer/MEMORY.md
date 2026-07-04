@@ -315,3 +315,13 @@
   5rh.24.41.8; loadColdStart in the #4562 autofix). All were NON-blocking for verbatim-from-plan+plan-READY+green. connect-es v2 CallOptions
   `(req,{signal})` validated by svelte-check (wrong shape=compile err). optional 3rd-arg signal keeps 2-arg client.test green.
   vi.advanceTimersByTimeAsync flushes microtasks between timers so async reloadPointer awaits resolve before its setTimeout fires.
+
+- **protojson.Marshal panics-behind-"cannot fail" comment (kk1ot.2, 2026-07-04).** A builder that
+  `panic`s on `protojson.Marshal` error with a comment "marshal of an in-hand proto cannot fail on
+  valid fields" is a REACHABLE crash: protojson returns `errInvalidUTF8` for any proto3 string field
+  holding invalid UTF-8 (`protobuf@v1.36.x encoding/protojson/encode.go:300-303`). If ANY string field
+  traces to player/telnet input, the panic fires — telnet input path has NO UTF-8 validation
+  (`internal/telnet/sanitize.go` is OUTPUT-only; `gateway_handler.go` reads raw via bufio). "Valid
+  fields" is the load-bearing qualifier the comment glosses. Block unless input is `strings.ToValidUTF8`'d
+  before marshal or the API returns `(_, error)`. Plan-sanctioned code with a false invariant comment is
+  still a defect — the next-bead author trusts the comment.
