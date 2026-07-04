@@ -734,6 +734,19 @@ scopes:
       - "internal/plugin/setup/subsystem.go"
       - "internal/testsupport/integrationtest/harness.go"
       - "test/integration/wholesystem/census_test.go"
+  - name: INV-COMM
+    description: "Canonical communication-content payload contract (CommunicationContent), its emit-time validation, and dual-runtime
+      builders."
+    boundary: "The conversational-content payload body and its enforcement. Does NOT include: rendering metadata (→ INV-EVENTBUS),
+      event payload encryption (→ INV-CRYPTO), focus-routing (holomush-g1qcw)."
+    status: migrated
+    origin_specs:
+      - "docs/superpowers/specs/2026-07-03-communication-content-contract-design.md"
+    owned_paths:
+      - "api/proto/holomush/comm/**"
+      - "pkg/plugin/comm/**"
+      - "internal/eventbus/content_publisher.go"
+      - "internal/plugin/hostfunc/stdlib_comm.go"
 
 invariants:
   # ── INV-CRYPTO ── migrated (holomush-hz0v4.14.15). Origins: 2026-04-25 master
@@ -4706,3 +4719,18 @@ invariants:
       - "internal/eventbus/crypto/dek/manager_integration_test.go"
     refs:
       - {file: "internal/eventbus/crypto/dek/manager_integration_test.go", token: "INV-CRYPTO-122"}
+  - id: INV-COMM-1
+    scope: INV-COMM
+    origin_spec: "docs/superpowers/specs/2026-07-03-communication-content-contract-design.md"
+    legacy: []
+    summary: "Every category:communication event carries a wire payload that validates as holomush.comm.v1.CommunicationContent."
+    binding: pending
+  - id: INV-COMM-2
+    scope: INV-COMM
+    origin_spec: "docs/superpowers/specs/2026-07-03-communication-content-contract-design.md"
+    legacy: []
+    summary: "The Go and Lua communication-content builders produce payloads that decode to an equal CommunicationContent
+      proto for the same inputs."
+    binding: bound
+    asserted_by:
+      - "internal/plugin/hostfunc/comm_parity_test.go"
