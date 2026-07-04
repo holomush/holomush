@@ -1317,20 +1317,29 @@ func (p *scenePlugin) handleEmit(
 	// reads it from the payload.
 	author := comm.Author{ID: req.CharacterID, Name: req.CharacterName}
 	var payload string
+	var buildErr error
 	switch eventType {
 	case "core-scenes:scene_pose":
-		payload = comm.Pose(author, req.InvokedAs, text)
+		payload, buildErr = comm.Pose(author, req.InvokedAs, text)
 	case "core-scenes:scene_say":
-		payload = comm.Say(author, text)
+		payload, buildErr = comm.Say(author, text)
 	case "core-scenes:scene_ooc":
-		payload = comm.OOC(author, text)
+		payload, buildErr = comm.OOC(author, text)
 	case "core-scenes:scene_emit":
-		payload = comm.Emit(text)
+		payload, buildErr = comm.Emit(text)
 	default:
 		err := oops.Code("SCENE_EMIT_UNKNOWN_EVENT_TYPE").
 			With("event_type", eventType).
 			With("scene_id", sceneID).
 			Errorf("unknown scene emit event type %q", eventType)
+		recordError(span, err)
+		return nil, err
+	}
+	if buildErr != nil {
+		err := oops.Code("SCENE_EMIT_PAYLOAD_BUILD_FAILED").
+			With("event_type", eventType).
+			With("scene_id", sceneID).
+			Wrap(buildErr)
 		recordError(span, err)
 		return nil, err
 	}

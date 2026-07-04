@@ -70,7 +70,8 @@ func TestDecodersPreserveSpeakerFromCommunicationContent(t *testing.T) {
 	t.Parallel()
 
 	// A pose built by the real CommunicationContent builder (":" alias → pose).
-	posePayload := comm.Pose(comm.Author{ID: "01HSPEAKER", Name: "Alaric"}, ":", "waves")
+	posePayload, poseErr := comm.Pose(comm.Author{ID: "01HSPEAKER", Name: "Alaric"}, ":", "waves")
+	require.NoError(t, poseErr)
 	want := PublishedSceneEntry{Speaker: "01HSPEAKER", Kind: EntryKindPose, Content: "waves"}
 
 	t.Run("decodeReplayEntries reads actor_id as Speaker", func(t *testing.T) {
@@ -93,7 +94,8 @@ func TestDecodersPreserveSpeakerFromCommunicationContent(t *testing.T) {
 
 	t.Run("scene_emit is actorless (empty Speaker) by design", func(t *testing.T) {
 		t.Parallel()
-		emitPayload := comm.Emit("a bell rings")
+		emitPayload, emitErr := comm.Emit("a bell rings")
+		require.NoError(t, emitErr)
 		entries, err := decodeReplayEntries([]pluginsdk.Event{
 			{ID: "1", Type: pluginsdk.EventType("core-scenes:scene_emit"), Payload: emitPayload},
 		})

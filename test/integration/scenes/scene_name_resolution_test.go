@@ -157,7 +157,7 @@ var _ = Describe("holomush-5rh.25: scene name resolution", func() {
 			ts.Stop()
 		})
 
-		It("decrypted pose payload carries character_name equal to the author's display name (not a ULID)", func() {
+		It("decrypted pose payload carries actor_display_name equal to the author's display name (not a ULID)", func() {
 			loc := ts.NewLocation(ctx)
 			sceneID := alice.CreateScene(ctx, loc)
 			Expect(sceneID).NotTo(BeZero())
@@ -173,8 +173,8 @@ var _ = Describe("holomush-5rh.25: scene name resolution", func() {
 
 			// Emit via the REAL `scene pose` command path (dispatcher →
 			// handleEmit). The dispatcher stamps req.CharacterName from
-			// session.Info.CharacterName — "Alice" — so the IC payload carries
-			// character_name: "Alice".
+			// session.Info.CharacterName — "Alice" — which the CommunicationContent
+			// builder carries as actor_display_name: "Alice".
 			const poseText = "stands at the window, watching the rain"
 			err := alice.SendCommand(ctx, "scene pose "+poseText)
 			Expect(err).NotTo(HaveOccurred(), "scene pose command must succeed")
@@ -197,21 +197,21 @@ var _ = Describe("holomush-5rh.25: scene name resolution", func() {
 				decryptedPayload = string(last.GetPayload())
 			}).Should(Succeed())
 
-			// Parse the JSON payload and assert character_name is the display name.
+			// Parse the JSON payload and assert actor_display_name is the display name.
 			var payloadMap map[string]string
 			Expect(json.Unmarshal([]byte(decryptedPayload), &payloadMap)).To(Succeed(),
 				"decrypted payload must be valid JSON")
 
-			charName, ok := payloadMap["character_name"]
+			displayName, ok := payloadMap["actor_display_name"]
 			Expect(ok).To(BeTrue(),
-				"decrypted IC payload must contain a character_name field; got: %s", decryptedPayload)
+				"decrypted IC payload must contain an actor_display_name field; got: %s", decryptedPayload)
 
-			Expect(charName).To(Equal("Alice"),
-				"pose author character_name must equal the seeded display name")
+			Expect(displayName).To(Equal("Alice"),
+				"pose author actor_display_name must equal the seeded display name")
 
 			ulid26RE := `^[0-9A-HJKMNP-TV-Z]{26}$`
-			Expect(charName).NotTo(MatchRegexp(ulid26RE),
-				"character_name must be a display name, not a ULID; got: %s", charName)
+			Expect(displayName).NotTo(MatchRegexp(ulid26RE),
+				"actor_display_name must be a display name, not a ULID; got: %s", displayName)
 		})
 	})
 })

@@ -53,6 +53,14 @@ func TestGoAndLuaCommBuildersAgree(t *testing.T) {
 		require.True(t, proto.Equal(g, l), "go=%v lua=%v", g, l)
 	}
 
+	// mustBuild adapts a builder's (payload, error) result to the single JSON
+	// string assertParity compares, failing the test on a builder error.
+	mustBuild := func(jsonStr string, err error) string {
+		t.Helper()
+		require.NoError(t, err)
+		return jsonStr
+	}
+
 	a := comm.Author{ID: "01H", Name: "Alaric"}
 
 	t.Run("pose semipose no-space, pose, and plain", func(t *testing.T) {
@@ -62,28 +70,28 @@ func TestGoAndLuaCommBuildersAgree(t *testing.T) {
 			{"", "plain pose"},
 		} {
 			assertParity(t,
-				comm.Pose(a, c.invoked, c.raw),
+				mustBuild(comm.Pose(a, c.invoked, c.raw)),
 				`holo.comm.pose("01H","Alaric","`+c.invoked+`","`+c.raw+`")`)
 		}
 	})
 
 	t.Run("say trims text", func(t *testing.T) {
 		assertParity(t,
-			comm.Say(a, "  hello there  "),
+			mustBuild(comm.Say(a, "  hello there  ")),
 			`holo.comm.say("01H","Alaric","  hello there  ")`)
 	})
 
 	t.Run("ooc classifies style", func(t *testing.T) {
 		for _, raw := range []string{":laughs", ";'s data is gone", "brb"} {
 			assertParity(t,
-				comm.OOC(a, raw),
+				mustBuild(comm.OOC(a, raw)),
 				`holo.comm.ooc("01H","Alaric","`+raw+`")`)
 		}
 	})
 
 	t.Run("emit is actorless", func(t *testing.T) {
 		assertParity(t,
-			comm.Emit("the ground trembles"),
+			mustBuild(comm.Emit("the ground trembles")),
 			`holo.comm.emit("the ground trembles")`)
 	})
 }
