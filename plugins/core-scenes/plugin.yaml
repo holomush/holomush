@@ -205,6 +205,15 @@ crypto:
 binary-plugin:
   executable: core-scenes
 
+# Focus-routed input (holomush-g1qcw): a scene-focused connection's top-level
+# ambient verbs redirect to this plugin's `scene` command, which re-derives the
+# exact scene from the connection's focus. The host dispatcher consults this
+# generically; it hardcodes no scene knowledge.
+focus_redirects:
+  - focus_kind: scene
+    verbs: [pose, say, ooc, emit]
+    target_command: scene
+
 commands:
   - name: scene
     capabilities:
