@@ -3330,7 +3330,10 @@ invariants:
     summary: "A scene-focused connection's ambient conversational verbs (pose/say/ooc/emit, including the :/;/\" sigil aliases)
       route to the focused scene's IC/OOC stream and never leak to the grid location; the leading sigil never reaches content
       and no-space/OOC-style semantics are preserved across the top-level focus redirect."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/command/dispatcher_focus_test.go"
+      - "test/integration/scenes/focus_routed_input_test.go"
 
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride
