@@ -24,6 +24,10 @@
 
   const isObserver = $derived(scene.role === 'observer');
   const draftKey = $derived(`scene-draft-${scene.sceneId}`);
+  // Gates sends until the server has confirmed scene focus, closing the
+  // sub-100ms race where a raw `pose` could reach the server before the
+  // scene-focus write (holomush-g1qcw).
+  const focusReady = $derived(workspaceStore.isFocusReady(scene.sceneId));
 
   // Restore draft from localStorage when scene changes.
   let draftText = $state('');
@@ -54,12 +58,12 @@
 
   async function send(verb: 'pose' | 'say' | 'ooc') {
     const text = draftText.trim();
-    if (!text) return;
+    if (!text || !focusReady) return;
     sending = true;
     errorMsg = '';
     try {
       const { sessionId, connectionId } = await resolveSessionAndConnection();
-      await sendSceneCommand(sessionId, connectionId, `scene ${verb} ${text}`);
+      await sendSceneCommand(sessionId, connectionId, `${verb} ${text}`);
       // Clear draft on success.
       draftText = '';
       if (typeof localStorage !== 'undefined') {
@@ -90,6 +94,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
+      if (!focusReady) return;
       send('pose');
     }
   }
@@ -142,7 +147,7 @@
         variant="default"
         size="sm"
         onclick={() => send('pose')}
-        disabled={sending || !draftText.trim()}
+        disabled={sending || !draftText.trim() || !focusReady}
         aria-label="Send pose"
       >
         Pose
@@ -151,7 +156,7 @@
         variant="outline"
         size="sm"
         onclick={() => send('say')}
-        disabled={sending || !draftText.trim()}
+        disabled={sending || !draftText.trim() || !focusReady}
         aria-label="Send say"
       >
         Say
@@ -160,7 +165,7 @@
         variant="ghost"
         size="sm"
         onclick={() => send('ooc')}
-        disabled={sending || !draftText.trim()}
+        disabled={sending || !draftText.trim() || !focusReady}
         aria-label="Send OOC"
       >
         OOC
