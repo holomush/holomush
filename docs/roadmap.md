@@ -68,6 +68,28 @@ Specs:
 - [Substrate-contract design](superpowers/specs/2026-05-16-social-spaces-substrate-contract.md) — boundary invariants, substrate inventory, INV-S1 – INV-S10
 - [INV-S5 mechanism design](superpowers/specs/2026-05-17-inv-s5-mechanism-design.md) — runtime validator (Load-pass + proto extension)
 
+#### Shared content contract
+
+Conversational content — say/pose/ooc/emit and the targeted page/whisper/pemit —
+is a cross-surface primitive: scenes, channels, and comms emit the same logical
+content through different addressing. The **communication-content contract**
+(`holomush.comm.v1.CommunicationContent`, `pkg/plugin/comm`) formalizes that
+content body once — `actor_display_name`, `text`, `no_space`, `ooc_style` — so
+both the Lua (`core-communication`) and Go (`core-scenes`) runtimes build against
+one source-of-truth shape and consumers decode it once instead of re-normalizing
+per plugin.
+
+- **Slice 1 (broadcast) — landed** (epic `holomush-kk1ot`, PR #4571): proto +
+  dual Go/Lua builders + `ContentValidationPublisher` (built; live gate wiring is
+  Slice 2) + both emit-path migrations, binding `INV-COMM-2` (Go↔Lua builder
+  parity). Unblocks focus-routed scene input (`holomush-g1qcw`) — routing a pose
+  into a scene now changes only the subject, not the content shape.
+- **Slice 2 (targeted) — next**: `page`/`whisper`/`pemit` (`sensitivity:always`,
+  encrypted), live `ContentValidationPublisher` wiring, and the `INV-COMM-1`
+  binding.
+
+Spec: [communication-content contract](superpowers/specs/2026-07-03-communication-content-contract-design.md); ADRs `holomush-2hhq2` (verb category as discriminator), `holomush-byqph` (protovalidate gate + dual builders).
+
 #### Uses
 
 | Use          | Epic           | Role                                                              |
