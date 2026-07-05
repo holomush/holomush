@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -130,6 +131,12 @@ func NewDispatcher(registry *Registry, engine types.AccessPolicyEngine, opts ...
 			return nil, d.optErr
 		}
 	}
+	// WithFocusReader and WithFocusRedirects are independently optional, but
+	// maybeRedirectForFocus needs BOTH non-nil to do anything — wiring only
+	// one silently disables the whole focus-redirect feature with no signal.
+	if (d.focusReader != nil) != (d.focusRedirects != nil) {
+		return nil, ErrFocusRedirectWiringIncomplete
+	}
 	return d, nil
 }
 
@@ -192,7 +199,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	// verb (pose/say/ooc/emit) to the plugin-declared target command before any
 	// telemetry/rate-limit/lookup read of parsed.Name, so all of them observe
 	// the effective (routed) command. invokedAs is preserved by construction.
-	redirectVerb, wasRedirected := d.maybeRedirectForFocus(ctx, parsed, exec.ConnectionID())
+	redirectVerb, wasRedirected, focusReadErr := d.maybeRedirectForFocus(ctx, parsed, exec.ConnectionID())
 
 	// Set command name for metrics (now we know it)
 	metrics.SetCommandName(parsed.Name)
@@ -224,6 +231,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		span.SetAttributes(
 			attribute.Bool("command.focus_redirected", true),
 			attribute.String("command.focus_redirect_verb", redirectVerb),
+		)
+	}
+
+	// The focus-read fail-open path already logged a WARN and counted an
+	// engine-failure metric inside maybeRedirectForFocus (before the span
+	// existed); surface it on the span too so a live degradation is visible
+	// in tracing, not just logs. The command still proceeds routed to
+	// location per the fail-open contract (§4.5) — this only adds signal.
+	if focusReadErr != nil {
+		span.SetAttributes(
+			attribute.Bool("command.focus_redirect_failed_open", true),
+			attribute.String("command.focus_redirect_error", focusReadErr.Error()),
 		)
 	}
 
@@ -323,29 +342,36 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 // route to location) on any focus-read error, mapping to the spec's §4.5
 // failure semantics. invokedAs is intentionally NOT touched here so no-space /
 // OOC-style semantics carried on invokedAs survive (spec §4.4).
+//
+// focusReadErr is returned (rather than only logged) so the caller — which
+// starts the trace span after this call returns — can also record the
+// fail-open degradation as span telemetry, mirroring the fail-open
+// observability pattern in RateLimitMiddleware.Enforce (metric + span
+// attribute, not just a WARN log).
 func (d *Dispatcher) maybeRedirectForFocus(
 	ctx context.Context, parsed *ParsedCommand, connID ulid.ULID,
-) (origVerb string, redirected bool) {
+) (origVerb string, redirected bool, focusReadErr error) {
 	if d.focusRedirects == nil || d.focusReader == nil {
-		return "", false
+		return "", false, nil
 	}
 	if connID == (ulid.ULID{}) || !d.focusRedirects.Redirects(parsed.Name) {
-		return "", false
+		return "", false, nil
 	}
 	kind, err := d.focusReader.ConnectionFocusKind(ctx, connID)
 	if err != nil {
 		slog.WarnContext(ctx, "focus-redirect lookup failed; routing to location",
 			"command", parsed.Name, "connection_id", connID.String(), "error", err)
-		return "", false
+		observability.RecordEngineFailure("focus_redirect")
+		return "", false, oops.Wrap(err)
 	}
 	target, ok := d.focusRedirects.Target(parsed.Name, string(kind))
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
 	verb := parsed.Name
 	parsed.Name = target
 	parsed.Args = strings.TrimSpace(verb + " " + parsed.Args)
-	return verb, true
+	return verb, true, nil
 }
 
 // dispatchToPlugin routes a command through the PluginManager and processes the response.

@@ -12,21 +12,22 @@ import (
 
 // Error codes for command dispatch failures.
 const (
-	CodeUnknownCommand         = "UNKNOWN_COMMAND"
-	CodePermissionDenied       = "PERMISSION_DENIED"
-	CodeAccessEvaluationFailed = "ACCESS_EVALUATION_FAILED"
-	CodeInvalidArgs            = "INVALID_ARGS"
-	CodeWorldError             = "WORLD_ERROR"
-	CodeRateLimited            = "RATE_LIMITED"
-	CodeCircularAlias          = "CIRCULAR_ALIAS"
-	CodeAliasConflict          = "ALIAS_CONFLICT"
-	CodeNoCharacter            = "NO_CHARACTER"
-	CodeTargetNotFound         = "TARGET_NOT_FOUND"
-	CodeShutdownRequested      = "SHUTDOWN_REQUESTED"
-	CodeNilServices            = "NIL_SERVICES"
-	CodeInvalidName            = "INVALID_NAME"
-	CodeNoAliasCache           = "NO_ALIAS_CACHE"
-	CodeResetPasswordFailed    = "RESET_PASSWORD_FAILED"
+	CodeUnknownCommand                = "UNKNOWN_COMMAND"
+	CodePermissionDenied              = "PERMISSION_DENIED"
+	CodeAccessEvaluationFailed        = "ACCESS_EVALUATION_FAILED"
+	CodeInvalidArgs                   = "INVALID_ARGS"
+	CodeWorldError                    = "WORLD_ERROR"
+	CodeRateLimited                   = "RATE_LIMITED"
+	CodeCircularAlias                 = "CIRCULAR_ALIAS"
+	CodeAliasConflict                 = "ALIAS_CONFLICT"
+	CodeNoCharacter                   = "NO_CHARACTER"
+	CodeTargetNotFound                = "TARGET_NOT_FOUND"
+	CodeShutdownRequested             = "SHUTDOWN_REQUESTED"
+	CodeNilServices                   = "NIL_SERVICES"
+	CodeInvalidName                   = "INVALID_NAME"
+	CodeNoAliasCache                  = "NO_ALIAS_CACHE"
+	CodeResetPasswordFailed           = "RESET_PASSWORD_FAILED"
+	CodeFocusRedirectWiringIncomplete = "FOCUS_REDIRECT_WIRING_INCOMPLETE"
 )
 
 // Sentinel errors for special conditions.
@@ -52,6 +53,13 @@ var (
 
 	// ErrNilRateLimiter is returned when creating a rate limit middleware with a nil rate limiter.
 	ErrNilRateLimiter = oops.Errorf("rate limiter cannot be nil")
+
+	// ErrFocusRedirectWiringIncomplete is returned when exactly one of
+	// WithFocusReader / WithFocusRedirects is configured. Focus-redirect
+	// requires both — wiring only one silently disables the whole feature
+	// with no signal, regressing INV-SCENE-66.
+	ErrFocusRedirectWiringIncomplete = oops.Code(CodeFocusRedirectWiringIncomplete).
+						Errorf("dispatcher: WithFocusReader and WithFocusRedirects must both be provided or both omitted")
 
 	// ErrSessionEnded signals that the handler ended the session gracefully.
 	// Server-side teardown (leave event, PG delete, hooks) happens in the
