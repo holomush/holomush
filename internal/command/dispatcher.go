@@ -188,6 +188,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		return err
 	}
 
+	// Focus-routed redirect (holomush-g1qcw). Rewrites a scene-focused ambient
+	// verb (pose/say/ooc/emit) to the plugin-declared target command before any
+	// telemetry/rate-limit/lookup read of parsed.Name, so all of them observe
+	// the effective (routed) command. invokedAs is preserved by construction.
+	redirectVerb, wasRedirected := d.maybeRedirectForFocus(ctx, parsed, exec.ConnectionID())
+
 	// Set command name for metrics (now we know it)
 	metrics.SetCommandName(parsed.Name)
 
@@ -212,6 +218,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		span.SetAttributes(attribute.Bool("command.alias_expanded", true))
 		span.SetAttributes(attribute.String("command.original_input", input))
 		span.SetAttributes(attribute.String("command.alias_used", aliasResult.AliasUsed))
+	}
+
+	if wasRedirected {
+		span.SetAttributes(
+			attribute.Bool("command.focus_redirected", true),
+			attribute.String("command.focus_redirect_verb", redirectVerb),
+		)
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
@@ -301,6 +314,38 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		}
 	}
 	return err
+}
+
+// maybeRedirectForFocus rewrites parsed in place when the connection's focus
+// kind maps parsed.Name to a target command. Returns the original verb and true
+// when a redirect was applied (for span telemetry). It reads focus lazily —
+// only when parsed.Name is a redirect candidate — and fails open (no rewrite,
+// route to location) on any focus-read error, mapping to the spec's §4.5
+// failure semantics. invokedAs is intentionally NOT touched here so no-space /
+// OOC-style semantics carried on invokedAs survive (spec §4.4).
+func (d *Dispatcher) maybeRedirectForFocus(
+	ctx context.Context, parsed *ParsedCommand, connID ulid.ULID,
+) (origVerb string, redirected bool) {
+	if d.focusRedirects == nil || d.focusReader == nil {
+		return "", false
+	}
+	if connID == (ulid.ULID{}) || !d.focusRedirects.Redirects(parsed.Name) {
+		return "", false
+	}
+	kind, err := d.focusReader.ConnectionFocusKind(ctx, connID)
+	if err != nil {
+		slog.WarnContext(ctx, "focus-redirect lookup failed; routing to location",
+			"command", parsed.Name, "connection_id", connID.String(), "error", err)
+		return "", false
+	}
+	target, ok := d.focusRedirects.Target(parsed.Name, string(kind))
+	if !ok {
+		return "", false
+	}
+	verb := parsed.Name
+	parsed.Name = target
+	parsed.Args = strings.TrimSpace(verb + " " + parsed.Args)
+	return verb, true
 }
 
 // dispatchToPlugin routes a command through the PluginManager and processes the response.
