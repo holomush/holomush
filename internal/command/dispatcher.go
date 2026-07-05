@@ -41,6 +41,8 @@ type Dispatcher struct {
 	aliasCache      *AliasCache            // optional, can be nil
 	rateLimiter     *RateLimitMiddleware   // optional, can be nil
 	pluginDeliverer PluginCommandDeliverer // optional, can be nil
+	focusReader     FocusReader            // optional, can be nil; enables focus-redirect
+	focusRedirects  FocusRedirectTable     // optional, can be nil; verb→kind→target
 	auditLogger     *audit.Logger          // optional, can be nil; when nil, plugin-audit flush is skipped
 	optErr          error                  // error from applying options
 }
@@ -61,6 +63,23 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 func WithPluginDeliverer(pd PluginCommandDeliverer) DispatcherOption {
 	return func(d *Dispatcher) {
 		d.pluginDeliverer = pd
+	}
+}
+
+// WithFocusReader configures the dispatcher to read a connection's focus kind
+// for focus-routed command redirection. If not provided (or nil), the redirect
+// is disabled and all commands route normally.
+func WithFocusReader(fr FocusReader) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.focusReader = fr
+	}
+}
+
+// WithFocusRedirects configures the plugin-declared verb→focus-kind→target
+// redirect table. If not provided (or empty), no verb is ever redirected.
+func WithFocusRedirects(t FocusRedirectTable) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.focusRedirects = t
 	}
 }
 
