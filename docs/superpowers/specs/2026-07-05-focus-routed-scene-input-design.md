@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Focus-Routed Scene Input — Design
 
 **Bead:** holomush-g1qcw · **Date:** 2026-07-05 · **Status:** design (self-reviewed)
@@ -233,7 +238,7 @@ submitted text (design INV-4). A scene-focused terminal `pose` / `:bows` is
 therefore routed by the Part-1 redirect with **no web change** — this surface is
 verify-only (an integration/E2E assertion, not new code).
 
-**Scene Board (`SceneComposer.svelte`) — drop the `scene ` prefix.** The composer
+**Scene Board (`SceneComposer.svelte`) — drop the `scene` prefix.** The composer
 today string-builds `scene ${verb} ${text}`
 (`web/src/lib/components/scenes/SceneComposer.svelte:62`, via `sendSceneCommand`
 → `client.sendCommand`). It MUST instead send the **raw** conversational verb
@@ -300,7 +305,7 @@ grid/no-focus fall-through.
   scene-focused telnet `pose` lands on `events.<game>.scene.<id>.ic`; a
   non-participant scene focus yields an explicit permission error; a grid-focused
   `pose` lands on the location stream.
-- **Web — Scene Board**: `SceneComposer` sends raw `<verb> <text>` (no `scene `
+- **Web — Scene Board**: `SceneComposer` sends raw `<verb> <text>` (no `scene`
   prefix) via `sendSceneCommand`; and the composer cannot send before the
   selected scene's `setSceneFocus` has resolved (focus-before-send gate — no send
   races ahead of focus).
@@ -346,3 +351,4 @@ connections are unaffected.
 - **Client-side sigil stripping** (`parseComposerInput` in the UI) — rejected:
   pushes command parsing into the gateway boundary, stays asymmetric with telnet,
   and papers over the missing server routing.
+<!-- adr-capture: sha256=1268666ccd4f49d2; session=cli; ts=2026-07-05T14:52:02Z; adrs=holomush-4u3qe,holomush-11488 -->

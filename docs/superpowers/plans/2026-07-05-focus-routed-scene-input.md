@@ -1,10 +1,15 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Focus-Routed Scene Input Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A scene-focused connection's top-level `pose`/`say`/`ooc`/`emit` (telnet, web terminal, web portal) routes to the focused scene's IC/OOC stream via a manifest-declared, plugin-agnostic dispatcher redirect — never leaking to the grid location or leaking the leading sigil.
 
-**Architecture:** core-scenes declares `focus_redirects` in its manifest; the loader builds a generic verb-keyed table the core dispatcher consults (reading focus lazily only for redirect verbs) and rewrites `pose bows` → `scene pose bows` when the connection's focus kind is `scene`, preserving `invokedAs` so no-space/sigil semantics survive. The scene handler re-derives the exact scene. The web Scene Board composer drops its `scene ` prefix for surface symmetry, gated so it can't send before focus is set.
+**Architecture:** core-scenes declares `focus_redirects` in its manifest; the loader builds a generic verb-keyed table the core dispatcher consults (reading focus lazily only for redirect verbs) and rewrites `pose bows` → `scene pose bows` when the connection's focus kind is `scene`, preserving `invokedAs` so no-space/sigil semantics survive. The scene handler re-derives the exact scene. The web Scene Board composer drops its `scene` prefix for surface symmetry, gated so it can't send before focus is set.
 
 **Tech Stack:** Go (`internal/command`, `internal/plugin`), plugin YAML manifests + generated JSON schema, SvelteKit 5 (`web/`), Ginkgo integration tests, the invariant registry.
 
@@ -192,7 +197,7 @@ Expected: `schemas/plugin.schema.json` now contains a `focus_redirects` array pr
 
 - [ ] **Step 7: Commit**
 
-```
+```text
 jj commit -m "feat(plugin): focus_redirects manifest field + parse validation (holomush-g1qcw)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -410,7 +415,7 @@ Expected: PASS. Also run `task test -- ./internal/command/` to confirm the new f
 
 - [ ] **Step 7: Commit**
 
-```
+```text
 jj commit -m "feat(command): FocusRedirectTable + FocusReader + dispatcher options (holomush-g1qcw)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -641,7 +646,7 @@ Expected: PASS (the new focus tests plus all existing dispatcher tests — confi
 
 - [ ] **Step 6: Commit**
 
-```
+```text
 jj commit -m "feat(command): focus-routed dispatcher redirect, invokedAs-preserving (holomush-g1qcw)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -853,7 +858,7 @@ Expected: PASS; the binary builds with the new wiring.
 
 - [ ] **Step 8: Commit**
 
-```
+```text
 jj commit -m "feat(plugin): collect focus_redirects + wire dispatcher (prod + harness) (holomush-g1qcw)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -897,7 +902,7 @@ Expected: PASS — all in-tree plugins load with the new field present (INV-5 / 
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 jj commit -m "feat(core-scenes): declare focus_redirects for pose/say/ooc/emit (holomush-g1qcw)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -959,7 +964,7 @@ Expected: PASS — INV-SCENE-66 is now `bound`, `invariants.md` matches `invaria
 
 - [ ] **Step 5: Commit**
 
-```
+```text
 jj commit -m "test(scenes): focus-routed input integration + bind INV-SCENE-66 (holomush-g1qcw)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -1032,7 +1037,7 @@ Add `|| !focusReady` to each button's `disabled` expression (the Pose/Say/OOC bu
 
 Add `web/src/lib/components/scenes/SceneComposer.svelte.test.ts` following the sibling pattern — `web/src/lib/components/scenes/CreateSceneForm.svelte.test.ts` uses **vitest + raw `svelte` `mount`/`unmount`** (`@testing-library/svelte` is NOT a dependency in this repo — do not import it). Assert two behaviors:
 
-1. Clicking **Pose** with `draftText = "bows"` on a focus-ready scene calls `sendSceneCommand` with `"pose bows"` (NO `scene ` prefix). Mock `$lib/scenes/client`'s `sendSceneCommand`.
+1. Clicking **Pose** with `draftText = "bows"` on a focus-ready scene calls `sendSceneCommand` with `"pose bows"` (NO `scene` prefix). Mock `$lib/scenes/client`'s `sendSceneCommand`.
 2. The Pose/Say/OOC buttons are `disabled` while `isFocusReady(sceneId)` is false, and enabled once it is true.
 
 - [ ] **Step 4: Run the web tests**
@@ -1042,7 +1047,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
-```
+```text
 jj commit -m "feat(scenes-web): SceneComposer sends raw input, gated on focus-ready (holomush-g1qcw)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -1092,7 +1097,7 @@ Expected: PASS. E2E requires the full Docker stack; CI's E2E Test gate is the ba
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 jj commit -m "test(web): terminal focus-routing verify + chip-purity guard (holomush-g1qcw)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -1105,3 +1110,4 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - [ ] **Run the fast lane:** `task pr-prep` — MUST be green (schema/license/lint/fmt/unit/build). Commit any `task fmt` output (SPDX headers, markdown reflow).
 - [ ] **Run the full lane** (this diff touches integration + E2E surface): `task pr-prep:full` (Docker). Confirm the new scene integration spec and the E2E spec pass.
 - [ ] **Confirm INV-SCENE-66 is bound and genuinely asserted** (Task 6 meta-test run is green).
+<!-- adr-capture: sha256=d804582b0d7e15a8; session=cli; ts=2026-07-05T14:52:02Z; adrs=holomush-4u3qe,holomush-11488 -->
