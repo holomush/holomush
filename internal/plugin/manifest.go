@@ -67,6 +67,23 @@ type ManifestPolicy struct {
 	DSL  string `yaml:"dsl" json:"dsl"`
 }
 
+// FocusRedirect declares that, when a connection's focus is of the given kind,
+// the listed top-level verbs are redirected to the target command. The host
+// dispatcher consults these generically (it hardcodes no plugin verbs); the
+// target command re-derives the specific focus target itself. See
+// docs/superpowers/specs/2026-07-05-focus-routed-scene-input-design.md §4.1.
+type FocusRedirect struct {
+	FocusKind     string   `yaml:"focus_kind" json:"focus_kind" jsonschema:"required,enum=scene"`
+	Verbs         []string `yaml:"verbs" json:"verbs" jsonschema:"required,minItems=1"`
+	TargetCommand string   `yaml:"target_command" json:"target_command" jsonschema:"required,minLength=1"`
+}
+
+// knownFocusKinds is the set of focus_kind values the host understands today.
+// Grid/no-focus is the nil FocusKey (never a redirect source), so only "scene"
+// is a valid redirect kind. New kinds (e.g. "channel") add an entry here and an
+// enum value on FocusRedirect.FocusKind.
+var knownFocusKinds = map[string]bool{"scene": true}
+
 // Manifest represents a plugin.yaml file.
 type Manifest struct {
 	Name         string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
@@ -85,6 +102,7 @@ type Manifest struct {
 	Policies            []ManifestPolicy `yaml:"policies,omitempty" json:"policies,omitempty"`
 	Commands            []CommandSpec    `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
 	Verbs               []VerbSpec       `yaml:"verbs,omitempty" json:"verbs,omitempty" jsonschema:"description=Verb registrations contributed by this plugin"`
+	FocusRedirects      []FocusRedirect  `yaml:"focus_redirects,omitempty" json:"focus_redirects,omitempty" jsonschema:"description=Top-level verbs redirected to a target command when a connection has the given focus kind"`
 	Priority            *LoadPriority    `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
 	SessionStreams      bool             `yaml:"session_streams,omitempty" json:"session_streams,omitempty" jsonschema:"description=Plugin contributes streams to session subscriptions via QuerySessionStreams"`
 	LuaPlugin           *LuaConfig       `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
@@ -704,7 +722,44 @@ func (m *Manifest) Validate() error {
 		}
 	}
 
+	if err := validateFocusRedirects(m.FocusRedirects); err != nil {
+		return err
+	}
+
 	return validateConfigSchema(m.Config)
+}
+
+// validateFocusRedirects checks each declared redirect at parse time: known
+// focus_kind, at least one non-empty verb, non-empty target_command. Target
+// existence and cross-plugin duplicate detection are load-time concerns
+// (Manager.BuildFocusRedirects) because they need the full command registry.
+func validateFocusRedirects(redirects []FocusRedirect) error {
+	for i := range redirects {
+		fr := &redirects[i]
+		if !knownFocusKinds[fr.FocusKind] {
+			return oops.Code("MANIFEST_FOCUS_REDIRECT_INVALID").
+				With("focus_kind", fr.FocusKind).
+				Errorf("focus_redirect has unknown focus_kind %q", fr.FocusKind)
+		}
+		if len(fr.Verbs) == 0 {
+			return oops.Code("MANIFEST_FOCUS_REDIRECT_INVALID").
+				With("focus_kind", fr.FocusKind).
+				Errorf("focus_redirect for %q declares no verbs", fr.FocusKind)
+		}
+		for _, v := range fr.Verbs {
+			if strings.TrimSpace(v) == "" {
+				return oops.Code("MANIFEST_FOCUS_REDIRECT_INVALID").
+					With("focus_kind", fr.FocusKind).
+					Errorf("focus_redirect for %q has an empty verb", fr.FocusKind)
+			}
+		}
+		if strings.TrimSpace(fr.TargetCommand) == "" {
+			return oops.Code("MANIFEST_FOCUS_REDIRECT_INVALID").
+				With("focus_kind", fr.FocusKind).
+				Errorf("focus_redirect for %q has an empty target_command", fr.FocusKind)
+		}
+	}
+	return nil
 }
 
 // validateActorKindsClaimable applies spec §3.2 validation rules and
