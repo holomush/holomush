@@ -342,3 +342,15 @@
   web/translate) already prefer new fields w/ legacy fallback → field-name swap degrades safe. NON-BLOCK: rejection
   tests asserted only output string (not status/no-events); Lua success tests hit one grammar branch each (rest
   covered by pkg/plugin/comm/comm_test.go). NOTE: this MEMORY.md is 300+ lines — needs consolidation next pass.
+- **Web focus-ready gate: flip-after-await + uncaught caller = silent stuck-false (g1qcw.7 READY, 2026-07-05).**
+  Pattern: a per-key `$state` map flag set false pre-op then true ONLY after `await rpc()` (workspaceStore.select:175-176,
+  no try/catch); a component `$derived(store.isFn(id))` gates UI on it. If the RPC REJECTS, flag stays false forever →
+  UI silently disabled. ALWAYS trace the INTERACTIVE caller: here handleSceneSelect (ScenesShell.svelte:159-160) calls
+  select() FIRE-AND-FORGET (no await/.catch) → unhandled rejection, no error UI. Verdict NON-BLOCKING when: (a) the
+  disable is fail-CLOSED-correct (raw `pose` w/o confirmed focus would MISROUTE — safer than pre-change misrouted send),
+  (b) a recovery path exists (re-select re-runs select()), (c) plan didn't scope error UX. Recommend follow-up bead for
+  the error surface, don't block. Reactivity: module-level `$state` in .svelte.ts read THROUGH an exported plain fn
+  (not a getter) still tracks in a consumer's $derived — idiomatic, same as unread/selected getters; new-object
+  reassignment `{...m,[k]:v}` triggers. Component test that MOCKS the store with a local `$state` rune proves the
+  COMPONENT side only, NOT real-store propagation — Low awareness note, not a defect (bun check clean). gateway-boundary:
+  pose/say/ooc are CONVERSATIONAL → command path (sendSceneCommand) correct; only structural writes owe typed RPCs.
