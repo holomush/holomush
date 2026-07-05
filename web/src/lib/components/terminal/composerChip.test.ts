@@ -46,3 +46,44 @@ describe('resolveComposerChip', () => {
     expect(resolveComposerChip('g', stale)).toBeNull();
   });
 });
+
+// holomush-g1qcw.8: chip-purity regression guard. resolveComposerChip is a
+// preview-only mapper (design INV-4, server-sourced recognition) — it MUST
+// return a {kind,label} description of the text without ever rewriting it or
+// mutating the CommandListState it was handed. If a future change turned this
+// into a client-side text transformer (e.g. stripping the sigil and returning
+// the rewritten command), the submitted command and its chip preview could
+// silently diverge.
+describe('resolveComposerChip purity (INV-4)', () => {
+  it('leaves the submitted text and command-list state untouched', () => {
+    const original = ':bows to the crowd';
+    const inputState = {
+      names: new Set(['look', 'scene', 'say', 'pose', 'ooc']),
+      aliases: { l: 'look', '"': 'say', ':': 'pose', ';': 'pose' },
+      incomplete: false,
+    };
+    const namesSnapshot = new Set(inputState.names);
+    const aliasesSnapshot = { ...inputState.aliases };
+
+    const chip = resolveComposerChip(original, inputState);
+
+    // The chip is a {kind,label} preview — never the (possibly rewritten)
+    // command text itself.
+    expect(chip).toEqual({ kind: 'pose', label: 'pose' });
+    expect(chip).not.toHaveProperty('text');
+
+    // The caller's text is exactly what gets submitted — resolveComposerChip
+    // must not have mutated it (strings are immutable, but this pins the
+    // contract at the call-site level: no rewritten value ever finds its way
+    // back into `original`).
+    expect(original).toBe(':bows to the crowd');
+
+    // The command-list state (names/aliases) must be read-only input, not a
+    // scratch pad the resolver writes through.
+    expect(inputState.names).toEqual(namesSnapshot);
+    expect(inputState.aliases).toEqual(aliasesSnapshot);
+
+    // Calling again with the same inputs is deterministic (no hidden state).
+    expect(resolveComposerChip(original, inputState)).toEqual(chip);
+  });
+});

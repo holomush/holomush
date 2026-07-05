@@ -433,6 +433,16 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// NO_PLUGIN_DELIVERER, so command-driven plugin E2Es cannot run.
 	var dispatcherOpts []command.DispatcherOption
 	if pluginSub != nil {
+		// WithAliasCache mirrors cmd/holomush/sub_grpc.go:369 (s.cfg.Plugins.AliasCache()).
+		// Without it, manifest-seeded sigil aliases (":"/";" -> "pose", etc. —
+		// SeedManifestAliases via plugin subsystem startup) are seeded into
+		// pluginSub's AliasCache but never consulted by this harness's
+		// Dispatcher (Dispatcher.Dispatch skips alias resolution entirely when
+		// its aliasCache is nil), so a terminal-style sigil command like
+		// ":bows" would 404 as an unknown command instead of expanding to
+		// "pose bows" — a harness fidelity gap relative to production
+		// (holomush-g1qcw.8).
+		dispatcherOpts = append(dispatcherOpts, command.WithAliasCache(pluginSub.AliasCache()))
 		dispatcherOpts = append(dispatcherOpts, command.WithPluginDeliverer(pluginSub.Manager()))
 		focusRedirects, frErr := pluginSub.Manager().BuildFocusRedirects(cmdRegistry)
 		require.NoError(t, frErr, "integrationtest.Start: build focus redirects")

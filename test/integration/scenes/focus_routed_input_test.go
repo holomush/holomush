@@ -246,3 +246,98 @@ var _ = Describe("holomush-g1qcw.6: focus-routed pose keeps grid routing when un
 			"the delivered event's stream MUST be the location subject (back-compat, no redirect)")
 	})
 })
+
+// holomush-g1qcw.8: verify.substitute-for-E2E — the web TERMINAL surface was
+// not exercised by a Playwright spec here because the compose e2e stack
+// (task test:e2e) requires a from-scratch `task docker:build` (web:embed +
+// plugin:build-all + a full image build) — disproportionate for a
+// verify-only bead whose real question ("does the redirect cover raw
+// terminal input, sigils included?") is already answered at this
+// connection-scoped integration tier, which drives the SAME production
+// CoreServer + Subscribe path a terminal session uses. This spec is that
+// substitute.
+//
+// The terminal's composer chip (web/src/lib/components/terminal/
+// composerChip.ts, pinned by composerChip.test.ts's "purity" guard) never
+// rewrites submitted text — a user typing the ":" sigil sends the literal
+// string ":bows" verbatim over the wire. Sigil expansion happens
+// SERVER-SIDE, strictly BEFORE the dispatcher's focus redirect:
+// internal/command/alias.go:357-361,454-488 (resolvePrefixLocked) resolves
+// the ":" prefix to "pose" via the manifest-seeded AliasCache
+// (plugins/core-communication/plugin.yaml declares pose's aliases as
+// [":", ";"]); internal/command/dispatcher.go:174-195 runs that alias
+// resolution BEFORE calling maybeRedirectForFocus, so the redirect always
+// sees an already-resolved "pose" command name — exactly as the
+// dispatcher-level unit test
+// TestDispatcherRedirectPreservesInvokedAsForWithSpacePoseSigil
+// (internal/command/dispatcher_focus_test.go:134-145) proves in isolation
+// with fakes. This spec proves the same claim through the REAL production
+// CoreServer + real manifest-seeded AliasCache + real JetStream delivery —
+// the terminal-facing raw-sigil path, not just the "pose waves" long form
+// the first Describe block above already covers.
+//
+// Harness fidelity fix (holomush-g1qcw.8): this spec surfaced that
+// internal/testsupport/integrationtest/harness.go built its Dispatcher
+// without a WithAliasCache option, so manifest-seeded aliases were loaded
+// into pluginSub's AliasCache but never consulted by dispatch — every
+// sigil-prefixed command 404'd as unknown regardless of seeding. Production
+// wires this at cmd/holomush/sub_grpc.go:369 (command.WithAliasCache(aliasCache));
+// the harness now mirrors that.
+var _ = Describe("holomush-g1qcw.8: a terminal-style sigil-prefixed pose also reaches the scene IC stream", func() {
+	var (
+		ts    *integrationtest.Server
+		ctx   context.Context
+		owner *integrationtest.Session
+	)
+
+	BeforeEach(func() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 90*time.Second)
+		DeferCleanup(cancel)
+		ts = integrationtest.Start(
+			suiteT,
+			integrationtest.WithInTreePlugins(),
+			integrationtest.WithPluginCrypto(),
+			integrationtest.WithFocusDelivery(),
+		)
+		owner = ts.ConnectAuthed(ctx, "Owner")
+	})
+
+	AfterEach(func() {
+		if owner != nil {
+			owner.Logout(ctx)
+		}
+		ts.Stop()
+	})
+
+	// Verifies: INV-SCENE-66
+	It("routes a scene-focused sigil pose (\":bows\") to the scene IC stream, matching the terminal's raw-input path", func() {
+		loc := ts.NewLocation(ctx)
+		sceneID := owner.CreateScene(ctx, loc)
+		Expect(sceneID).NotTo(BeZero(), "CreateScene must return a non-zero bare ULID")
+
+		Expect(owner.SendCommand(ctx, "scene join "+sceneID.String())).To(Succeed())
+
+		// The literal, unrewritten text a terminal user would type — the
+		// composer chip previews ":bows" as a "pose" chip but never rewrites
+		// the submitted text (composerChip.ts's purity contract). What's
+		// sent on the wire here is exactly ":bows", sigil intact.
+		Expect(owner.SendCommandOnConnection(ctx, ":bows")).To(Succeed())
+
+		frame := owner.WaitForEvent(ctx, "core-scenes:scene_pose")
+		Expect(frame).NotTo(BeNil(),
+			"holomush-g1qcw.8: a scene-focused terminal-style sigil pose MUST redirect to the scene "+
+				"command and land on the scene IC stream, same as the plain \"pose waves\" form")
+		Expect(frame.GetStream()).To(ContainSubstring("scene."+sceneID.String()+".ic"),
+			"the delivered event's stream MUST be the scene IC subject, not the location subject")
+
+		// Negative control, mirroring the plain-pose spec above: no grid pose
+		// leaked onto the location stream.
+		evs, err := owner.QueryStreamHistory(ctx, "location."+owner.LocationID.String())
+		Expect(err).NotTo(HaveOccurred())
+		for _, e := range evs {
+			Expect(e.GetType()).NotTo(Equal("core-communication:pose"),
+				"a scene-focused sigil pose MUST NOT leak onto the grid location stream")
+		}
+	})
+})
