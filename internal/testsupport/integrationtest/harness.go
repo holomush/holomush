@@ -434,6 +434,13 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	var dispatcherOpts []command.DispatcherOption
 	if pluginSub != nil {
 		dispatcherOpts = append(dispatcherOpts, command.WithPluginDeliverer(pluginSub.Manager()))
+		focusRedirects, frErr := pluginSub.Manager().BuildFocusRedirects(cmdRegistry)
+		require.NoError(t, frErr, "integrationtest.Start: build focus redirects")
+		dispatcherOpts = append(
+			dispatcherOpts,
+			command.WithFocusReader(command.NewStoreFocusReader(sessionStoreInst)),
+			command.WithFocusRedirects(focusRedirects),
+		)
 	}
 	dispatcher, err := command.NewDispatcher(cmdRegistry, pe, dispatcherOpts...)
 	require.NoError(t, err, "integrationtest.Start: create command dispatcher")
