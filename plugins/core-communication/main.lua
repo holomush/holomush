@@ -80,8 +80,7 @@ local function handle_say(ctx)
         return error_response("What do you want to say?")
     end
 
-    local payload = '{"character_name":' .. json_string(ctx.character_name) ..
-                    ',"message":' .. json_string(msg) .. '}'
+    local payload = holo.comm.say(ctx.character_id or "", ctx.character_name, msg)
 
     return ok_events({
         {subject ="location." .. ctx.location_id, type = "core-communication:say", payload = payload}
@@ -95,24 +94,14 @@ end
 local function handle_pose(ctx)
     local args = trim(ctx.args or "")
 
-    -- Check for pose-prefix variants embedded in args (:action or ;action).
-    -- The invoked_as field tells us which prefix was used by the alias.
+    -- Check for pose-prefix variants embedded in args (:action or ;action) to
+    -- determine whether there's an action to pose. holo.comm.pose applies the
+    -- identical ";"/":" grammar when building the payload below
+    -- (pkg/plugin/comm.ParsePose) — this mirrors it only to guard emptiness.
     local action = args
-    local no_space = false
-
-    if ctx.invoked_as == ";" then
-        -- Prefix alias ';' sets no_space; args holds the raw action (no prefix).
-        no_space = true
-    elseif ctx.invoked_as == ":" then
-        -- Prefix alias ':' is regular pose; args holds the raw action.
-        no_space = false
-    else
+    if ctx.invoked_as ~= ";" and ctx.invoked_as ~= ":" then
         -- Not invoked via prefix alias — check if args itself starts with : or ;.
-        if args:sub(1, 1) == ";" then
-            no_space = true
-            action = trim(args:sub(2))
-        elseif args:sub(1, 1) == ":" then
-            no_space = false
+        if args:sub(1, 1) == ";" or args:sub(1, 1) == ":" then
             action = trim(args:sub(2))
         end
     end
@@ -121,12 +110,7 @@ local function handle_pose(ctx)
         return error_response("What do you want to pose?")
     end
 
-    local payload = '{"character_name":' .. json_string(ctx.character_name) ..
-                    ',"action":' .. json_string(action)
-    if no_space then
-        payload = payload .. ',"no_space":true'
-    end
-    payload = payload .. '}'
+    local payload = holo.comm.pose(ctx.character_id or "", ctx.character_name, ctx.invoked_as or "", ctx.args or "")
 
     return ok_events({
         {subject ="location." .. ctx.location_id, type = "core-communication:pose", payload = payload}
@@ -143,25 +127,19 @@ local function handle_ooc(ctx)
         return error_response("Usage: ooc <message>")
     end
 
-    local style, text
-    if msg:sub(1, 1) == ":" then
-        style = "pose"
+    -- Determine the OOC surface text (stripping a leading ":"/";" sigil) to
+    -- guard against a sigil-only, textless message. holo.comm.ooc applies the
+    -- identical grammar when building the payload below (pkg/plugin/comm.ParseOOC).
+    local text = msg
+    if msg:sub(1, 1) == ":" or msg:sub(1, 1) == ";" then
         text = trim(msg:sub(2))
-    elseif msg:sub(1, 1) == ";" then
-        style = "semipose"
-        text = trim(msg:sub(2))
-    else
-        style = "say"
-        text = msg
     end
 
     if text == "" then
         return error_response("Usage: ooc <message>")
     end
 
-    local payload = '{"character_name":' .. json_string(ctx.character_name) ..
-                    ',"message":' .. json_string(text) ..
-                    ',"style":' .. json_string(style) .. '}'
+    local payload = holo.comm.ooc(ctx.character_id or "", ctx.character_name, msg)
 
     return ok_events({
         {subject ="location." .. ctx.location_id, type = "core-communication:ooc", payload = payload}
@@ -183,7 +161,7 @@ local function handle_emit(ctx)
         return error_response("You must be in a location to emit.")
     end
 
-    local payload = '{"message":' .. json_string(msg) .. '}'
+    local payload = holo.comm.emit(msg)
 
     return ok_events({
         {subject ="location." .. loc, type = "core-communication:emit", payload = payload}

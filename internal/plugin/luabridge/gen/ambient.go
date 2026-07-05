@@ -105,4 +105,12 @@ var ambientDecls = []ambientFn{
 	{Module: "holo.emit", Name: "character", Params: []ambientParam{{"character_id", "string"}, {"event_type", "string"}, {"payload", "table"}}, Doc: "Emit an event to a character."},
 	{Module: "holo.emit", Name: "global", Params: []ambientParam{{"event_type", "string"}, {"payload", "table"}}, Doc: "Emit a global event."},
 	{Module: "holo.emit", Name: "flush", Doc: "Flush buffered emit calls."},
+
+	// stdlib_comm.go registerComm:19-38 → pose/say/ooc(character_id, character_name, …),
+	// emit(text). Each returns the CommunicationContent JSON string built by
+	// pkg/plugin/comm (the single source shared with binary plugins).
+	{Module: "holo.comm", Name: "pose", Params: []ambientParam{{"character_id", "string"}, {"character_name", "string"}, {"invoked_as", "string"}, {"text", "string"}}, Returns: []string{"string"}, Doc: "Build a pose CommunicationContent payload (JSON). invoked_as is the firing alias (\";\" semipose/no-space, \":\" pose)."},
+	{Module: "holo.comm", Name: "say", Params: []ambientParam{{"character_id", "string"}, {"character_name", "string"}, {"text", "string"}}, Returns: []string{"string"}, Doc: "Build a say CommunicationContent payload (JSON)."},
+	{Module: "holo.comm", Name: "ooc", Params: []ambientParam{{"character_id", "string"}, {"character_name", "string"}, {"text", "string"}}, Returns: []string{"string"}, Doc: "Build an OOC CommunicationContent payload (JSON). A leading \":\"/\";\" in text selects the OOC style."},
+	{Module: "holo.comm", Name: "emit", Params: []ambientParam{{"text", "string"}}, Returns: []string{"string"}, Doc: "Build an actorless emit CommunicationContent payload (JSON)."},
 }

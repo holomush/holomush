@@ -185,7 +185,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(resp.Events).To(HaveLen(1))
 				Expect(resp.Events[0].Stream).To(Equal("location.loc456"))
 				Expect(resp.Events[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypeSay)))
-				Expect(resp.Events[0].Payload).To(ContainSubstring(`"character_name":"Alice"`))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"actor_display_name":"Alice"`))
 				Expect(resp.Events[0].Payload).To(ContainSubstring(`Hello everyone!`))
 			})
 		})
@@ -224,9 +224,9 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(resp.Events).To(HaveLen(1))
 				Expect(resp.Events[0].Stream).To(Equal("location.loc456"))
 				Expect(resp.Events[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypePose)))
-				// Payload is structured JSON: {character_name, action}; rendering happens at display layer
-				Expect(resp.Events[0].Payload).To(ContainSubstring(`"character_name":"Bob"`))
-				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"waves hello."`))
+				// Payload is structured JSON: {actor_display_name, text}; rendering happens at display layer
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"actor_display_name":"Bob"`))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"text":"waves hello."`))
 			})
 		})
 
@@ -242,8 +242,8 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 				Expect(resp.Events).To(HaveLen(1))
-				// : prefix stripped; action is "smiles warmly." with no no_space flag
-				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"smiles warmly."`))
+				// : prefix stripped; text is "smiles warmly." with no no_space flag
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"text":"smiles warmly."`))
 				Expect(resp.Events[0].Payload).NotTo(ContainSubstring(`"no_space"`))
 			})
 		})
@@ -260,8 +260,8 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 				Expect(resp.Events).To(HaveLen(1))
-				// ; prefix stripped; action includes the possessive and no_space=true is set
-				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"'s eyes widen."`))
+				// ; prefix stripped; text includes the possessive and no_space=true is set
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"text":"'s eyes widen."`))
 				Expect(resp.Events[0].Payload).To(ContainSubstring(`"no_space":true`))
 			})
 		})
@@ -280,7 +280,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 				Expect(resp.Events).To(HaveLen(1))
 				// invoked_as=; sets no_space=true in payload
-				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"'s sword gleams."`))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"text":"'s sword gleams."`))
 				Expect(resp.Events[0].Payload).To(ContainSubstring(`"no_space":true`))
 			})
 
@@ -297,7 +297,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(resp.Status).To(Equal(pluginsdk.CommandOK))
 				Expect(resp.Events).To(HaveLen(1))
 				// invoked_as=: does not set no_space flag
-				Expect(resp.Events[0].Payload).To(ContainSubstring(`"action":"draws their blade."`))
+				Expect(resp.Events[0].Payload).To(ContainSubstring(`"text":"draws their blade."`))
 				Expect(resp.Events[0].Payload).NotTo(ContainSubstring(`"no_space"`))
 			})
 		})

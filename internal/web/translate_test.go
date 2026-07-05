@@ -622,6 +622,59 @@ func TestTranslateEvent_SceneICEventStampsSceneIdFromSubject(t *testing.T) {
 	}
 }
 
+// TestTranslateReadsCommunicationContentFieldNames asserts that translateEvent
+// reads the new CommunicationContent field names (actor_display_name, text)
+// so migrated emitters (kk1ot.7, kk1ot.9) render correctly on the web client.
+func TestTranslateReadsCommunicationContentFieldNames(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type:    "core-communication:pose",
+		Payload: mustMarshal(t, map[string]any{"actor_id": "01H", "actor_display_name": "Alaric", "text": "waves", "no_space": true}),
+	}
+
+	got := h.translateEvent(withRendering(ev))
+	require.NotNil(t, got)
+	assert.Equal(t, "Alaric", got.GetActor()) // from actor_display_name, not character_name
+	assert.Equal(t, "waves", got.GetText())
+	require.NotNil(t, got.GetMetadata())
+	assert.Equal(t, true, got.GetMetadata().AsMap()["no_space"])
+}
+
+// TestTranslateStillReadsLegacyFieldNames asserts that un-migrated emitters
+// still using the legacy character_name/action field names keep rendering
+// correctly (new->old fallback, not a breaking rename).
+func TestTranslateStillReadsLegacyFieldNames(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type:    "core-communication:pose",
+		Payload: mustMarshal(t, map[string]any{"character_name": "Bob", "action": "nods", "no_space": false}),
+	}
+
+	got := h.translateEvent(withRendering(ev))
+	require.NotNil(t, got)
+	assert.Equal(t, "Bob", got.GetActor()) // legacy character_name still works
+	assert.Equal(t, "nods", got.GetText())
+}
+
+// TestTranslateReadsOocStyleFieldName asserts that translateEvent reads the new
+// CommunicationContent ooc_style field into the style metadata (preferring it
+// over the legacy style key), so migrated OOC emitters render with the right
+// surface form on the web client.
+func TestTranslateReadsOocStyleFieldName(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type:    "core-communication:ooc",
+		Payload: mustMarshal(t, map[string]any{"actor_id": "01H", "actor_display_name": "Alaric", "text": "brb", "ooc_style": "pose"}),
+	}
+
+	got := h.translateEvent(withRendering(ev))
+	require.NotNil(t, got)
+	assert.Equal(t, "Alaric", got.GetActor())
+	assert.Equal(t, "brb", got.GetText())
+	require.NotNil(t, got.GetMetadata())
+	assert.Equal(t, "pose", got.GetMetadata().AsMap()["style"]) // from ooc_style, not the legacy style key
+}
+
 // TestEventChannelEnumsInLockstep is INV-EVENTBUS-16. corev1.EventChannel and
 // webv1.EventChannel MUST stay in lockstep — same enum values, same names,
 // same numeric assignments.

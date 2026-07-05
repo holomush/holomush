@@ -16,19 +16,26 @@ import (
 )
 
 // genericPayload captures the common fields from any event payload.
+//
+// ActorDisplayName and OocStyle are the CommunicationContent contract's field
+// names (holomush-kk1ot); CharacterName/SenderName and Style are the legacy
+// names. Both are read so un-migrated emitters keep rendering while emitters
+// migrate to the new contract independently (kk1ot.7, kk1ot.9).
 type genericPayload struct {
-	CharacterName string `json:"character_name"`
-	SenderName    string `json:"sender_name"`
-	TargetName    string `json:"target_name"`
-	Message       string `json:"message"`
-	Text          string `json:"text"`
-	Action        string `json:"action"`
-	Notice        string `json:"notice"`
-	Reason        string `json:"reason"`
-	NoSpace       bool   `json:"no_space,omitempty"`
-	Style         string `json:"style,omitempty"`
-	Channel       string `json:"channel,omitempty"`
-	IsPose        bool   `json:"is_pose,omitempty"`
+	CharacterName    string `json:"character_name"`
+	SenderName       string `json:"sender_name"`
+	ActorDisplayName string `json:"actor_display_name"`
+	TargetName       string `json:"target_name"`
+	Message          string `json:"message"`
+	Text             string `json:"text"`
+	Action           string `json:"action"`
+	Notice           string `json:"notice"`
+	Reason           string `json:"reason"`
+	NoSpace          bool   `json:"no_space,omitempty"`
+	Style            string `json:"style,omitempty"`
+	OocStyle         string `json:"ooc_style,omitempty"`
+	Channel          string `json:"channel,omitempty"`
+	IsPose           bool   `json:"is_pose,omitempty"`
 }
 
 // translateEvent converts an EventFrame proto into a GameEvent proto suitable
@@ -78,8 +85,12 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 		return nil
 	}
 
-	// Extract actor: prefer character_name, then sender_name.
-	actor := p.CharacterName
+	// Extract actor: prefer actor_display_name (CommunicationContent), then
+	// fall back to the legacy character_name / sender_name.
+	actor := p.ActorDisplayName
+	if actor == "" {
+		actor = p.CharacterName
+	}
 	if actor == "" {
 		actor = p.SenderName
 	}
@@ -112,7 +123,9 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 	if p.NoSpace {
 		meta["no_space"] = true
 	}
-	if p.Style != "" {
+	if s := p.OocStyle; s != "" {
+		meta["style"] = s
+	} else if p.Style != "" {
 		meta["style"] = p.Style
 	}
 	if p.Channel != "" {

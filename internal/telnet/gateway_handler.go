@@ -1153,24 +1153,28 @@ func (h *GatewayHandler) formatCommunication(ev *corev1.EventFrame, rendering *c
 		return ""
 	}
 
-	actor := stringFromPayload(payload, "character_name", "sender_name")
+	// actor_display_name and text are the CommunicationContent contract's
+	// field names (holomush-kk1ot); the remaining keys are legacy. Both are
+	// read so un-migrated emitters keep rendering while emitters migrate to
+	// the new contract independently (kk1ot.7, kk1ot.9).
+	actor := stringFromPayload(payload, "actor_display_name", "character_name", "sender_name")
 	if actor == "" {
 		actor = truncateActorID(ev.GetActorId())
 	}
 
 	switch rendering.GetFormat() {
 	case "speech":
-		text := stringFromPayload(payload, "message")
+		text := stringFromPayload(payload, "text", "message")
 		return fmt.Sprintf("%s %s, %q", actor, rendering.GetLabel(), text)
 	case "action":
-		text := stringFromPayload(payload, "action", "notice", "message")
+		text := stringFromPayload(payload, "text", "action", "notice", "message")
 		noSpace, ok := payload["no_space"].(bool)
 		if ok && noSpace {
 			return fmt.Sprintf("%s%s", actor, text)
 		}
 		return fmt.Sprintf("%s %s", actor, text)
 	default:
-		text := stringFromPayload(payload, "message", "action", "notice")
+		text := stringFromPayload(payload, "text", "message", "action", "notice")
 		return fmt.Sprintf("%s %s", actor, text)
 	}
 }

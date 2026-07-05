@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	"github.com/holomush/holomush/pkg/plugin/comm"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,6 +56,53 @@ func TestDecodeReplayEntriesRejectsMalformedPayload(t *testing.T) {
 		{ID: "x", Type: pluginsdk.EventType("core-scenes:scene_say"), Payload: `{not json}`},
 	})
 	require.Error(t, err)
+}
+
+// TestDecodersPreserveSpeakerFromCommunicationContent is the characterization
+// test for holomush-kk1ot.8: payloads built by the CommunicationContent builders
+// (pkg/plugin/comm, wired into handleEmit by kk1ot.7) MUST still decode through
+// BOTH scene-log decoders — decodeReplayEntries (scene log replay) and
+// decodeSnapshotEntry (frozen published-scene snapshot + export) — with actor_id
+// round-tripping to PublishedSceneEntry.Speaker. This guards replay/export/frozen
+// rendering against a future divergence of the builder from the decoders. If this
+// fails, the emit-side migration dropped or renamed actor_id.
+func TestDecodersPreserveSpeakerFromCommunicationContent(t *testing.T) {
+	t.Parallel()
+
+	// A pose built by the real CommunicationContent builder (":" alias → pose).
+	posePayload, poseErr := comm.Pose(comm.Author{ID: "01HSPEAKER", Name: "Alaric"}, ":", "waves")
+	require.NoError(t, poseErr)
+	want := PublishedSceneEntry{Speaker: "01HSPEAKER", Kind: EntryKindPose, Content: "waves"}
+
+	t.Run("decodeReplayEntries reads actor_id as Speaker", func(t *testing.T) {
+		t.Parallel()
+		entries, err := decodeReplayEntries([]pluginsdk.Event{
+			{ID: "1", Type: pluginsdk.EventType("core-scenes:scene_pose"), Payload: posePayload},
+		})
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, want, entries[0])
+	})
+
+	t.Run("decodeSnapshotEntry reads actor_id as Speaker", func(t *testing.T) {
+		t.Parallel()
+		entry, ok, err := decodeSnapshotEntry("core-scenes:scene_pose", []byte(posePayload))
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.Equal(t, want, entry)
+	})
+
+	t.Run("scene_emit is actorless (empty Speaker) by design", func(t *testing.T) {
+		t.Parallel()
+		emitPayload, emitErr := comm.Emit("a bell rings")
+		require.NoError(t, emitErr)
+		entries, err := decodeReplayEntries([]pluginsdk.Event{
+			{ID: "1", Type: pluginsdk.EventType("core-scenes:scene_emit"), Payload: emitPayload},
+		})
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, PublishedSceneEntry{Speaker: "", Kind: EntryKindEmit, Content: "a bell rings"}, entries[0])
+	})
 }
 
 // TestHandleLogDeniesNonParticipant pins the INV-SCENE-60 gate: a non-participant is

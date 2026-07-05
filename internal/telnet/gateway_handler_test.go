@@ -1130,6 +1130,12 @@ func TestFormatEvent_Communication_Speech(t *testing.T) {
 			`{"sender_name":"Carol","message":"psst"}`,
 			`Carol whispers, "psst"`,
 		},
+		{
+			"CommunicationContent shape (actor_display_name, text)",
+			"core-communication:say",
+			`{"actor_id":"01H","actor_display_name":"Alaric","text":"hi"}`,
+			`Alaric says, "hi"`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1170,6 +1176,12 @@ func TestFormatEvent_Communication_Action(t *testing.T) {
 			"core-communication:whisper_notice",
 			`{"sender_name":"Bob","target_name":"Carol","notice":"whispers something to Carol."}`,
 			"Bob whispers something to Carol.",
+		},
+		{
+			"CommunicationContent shape (actor_display_name, text, no_space)",
+			"core-communication:pose",
+			`{"actor_id":"01H","actor_display_name":"Alaric","text":"waves","no_space":true}`,
+			"Alaricwaves",
 		},
 	}
 

@@ -10,8 +10,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	commv1 "github.com/holomush/holomush/pkg/proto/holomush/comm/v1"
 )
 
 // newTestPluginWithMember returns a scene plugin with a single scene
@@ -54,8 +56,37 @@ func TestSceneSubcommand_Pose_EmitsSceneEventOnICFacet(t *testing.T) {
 	assert.Equal(t, dotStyleSceneSubjectIC("main", "scene-pose-test"), found.Subject)
 	assert.True(t, found.Sensitive, "scene_pose MUST be Sensitive=true (sensitivity:always)")
 	assert.Contains(t, found.Payload, `"actor_id":"char-alice"`)
-	assert.Contains(t, found.Payload, `"scene_id":"scene-pose-test"`)
 	assert.Contains(t, found.Payload, `"text":"smiles at the room"`)
+	assert.NotContains(t, found.Payload, "scene_id", "scene_id is dropped — redundant with the emit subject")
+}
+
+// TestHandleEmitPoseInvokedWithSemicolonPreservesActorIDAndSetsNoSpace verifies
+// the migrated handleEmit builds its payload via pkg/plugin/comm: a pose
+// invoked with the ";" alias carries no_space=true while actor_id (the field
+// decodeReplayEntries/decodeSnapshotEntry read to populate Speaker) is still
+// preserved.
+func TestHandleEmitPoseInvokedWithSemicolonPreservesActorIDAndSetsNoSpace(t *testing.T) {
+	t.Parallel()
+	p, sink := newTestPluginWithMember(t, "scene-nospace-test")
+
+	resp, err := p.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "pose waves",
+		CharacterID: "char-alice",
+		InvokedAs:   ";",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+
+	found := findIntentByType(sink.intents, "core-scenes:scene_pose")
+	require.NotNil(t, found, "scene pose MUST emit scene_pose")
+
+	var got commv1.CommunicationContent
+	require.NoError(t, protojson.Unmarshal([]byte(found.Payload), &got))
+	assert.Equal(t, "char-alice", got.GetActorId(), "actor_id MUST be preserved for the replay/snapshot Speaker")
+	assert.Equal(t, "waves", got.GetText())
+	assert.True(t, got.GetNoSpace())
 }
 
 func TestSceneSubcommand_Say_EmitsSceneEventOnICFacet(t *testing.T) {
@@ -128,19 +159,19 @@ func TestSceneSubcommand_Pose_AuthorCharacterNameInPayload(t *testing.T) {
 		assertPayload func(t *testing.T, payload string)
 	}{
 		{
-			name:          "includes character_name when the dispatcher provides one",
+			name:          "includes actor_display_name when the dispatcher provides one",
 			scene:         "scene-author-test",
 			characterName: "Alice",
 			assertPayload: func(t *testing.T, payload string) {
-				assert.Contains(t, payload, `"character_name":"Alice"`)
+				assert.Contains(t, payload, `"actor_display_name":"Alice"`)
 			},
 		},
 		{
-			name:          "omits character_name when the dispatcher provides none",
+			name:          "omits actor_display_name when the dispatcher provides none",
 			scene:         "scene-noauthor-test",
 			characterName: "",
 			assertPayload: func(t *testing.T, payload string) {
-				assert.NotContains(t, payload, "character_name")
+				assert.NotContains(t, payload, "actor_display_name")
 			},
 		},
 	}

@@ -660,3 +660,29 @@ function holo.emit.character(character_id, event_type, payload) end
 function holo.emit.global(event_type, payload) end
 ---Flush buffered emit calls.
 function holo.emit.flush() end
+
+---@class holo.comm
+holo.comm = {}
+---Build a pose CommunicationContent payload (JSON). invoked_as is the firing alias (";" semipose/no-space, ":" pose).
+---@param character_id string
+---@param character_name string
+---@param invoked_as string
+---@param text string
+---@return string
+function holo.comm.pose(character_id, character_name, invoked_as, text) end
+---Build a say CommunicationContent payload (JSON).
+---@param character_id string
+---@param character_name string
+---@param text string
+---@return string
+function holo.comm.say(character_id, character_name, text) end
+---Build an OOC CommunicationContent payload (JSON). A leading ":"/";" in text selects the OOC style.
+---@param character_id string
+---@param character_name string
+---@param text string
+---@return string
+function holo.comm.ooc(character_id, character_name, text) end
+---Build an actorless emit CommunicationContent payload (JSON).
+---@param text string
+---@return string
+function holo.comm.emit(text) end

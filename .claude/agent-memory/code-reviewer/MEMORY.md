@@ -315,3 +315,30 @@
   5rh.24.41.8; loadColdStart in the #4562 autofix). All were NON-blocking for verbatim-from-plan+plan-READY+green. connect-es v2 CallOptions
   `(req,{signal})` validated by svelte-check (wrong shape=compile err). optional 3rd-arg signal keeps 2-arg client.test green.
   vi.advanceTimersByTimeAsync flushes microtasks between timers so async reloadPointer awaits resolve before its setTimeout fires.
+
+- **protojson.Marshal panics-behind-"cannot fail" comment (kk1ot.2, 2026-07-04).** A builder that
+  `panic`s on `protojson.Marshal` error with a comment "marshal of an in-hand proto cannot fail on
+  valid fields" is a REACHABLE crash: protojson returns `errInvalidUTF8` for any proto3 string field
+  holding invalid UTF-8 (`protobuf@v1.36.x encoding/protojson/encode.go:300-303`). If ANY string field
+  traces to player/telnet input, the panic fires — telnet input path has NO UTF-8 validation
+  (`internal/telnet/sanitize.go` is OUTPUT-only; `gateway_handler.go` reads raw via bufio). "Valid
+  fields" is the load-bearing qualifier the comment glosses. Block unless input is `strings.ToValidUTF8`'d
+  before marshal or the API returns `(_, error)`. Plan-sanctioned code with a false invariant comment is
+  still a defect — the next-bead author trusts the comment.
+
+- **Lua emitter→shared-builder migration (kk1ot.9 READY, 2026-07-04) — guard-vs-builder equivalence.**
+  Slice pattern: hand-built JSON → `holo.comm.*` builders (pkg/plugin/comm; ParsePose/ParseOOC sigil grammar).
+  KEY TRAP the PLAN ITSELF got wrong: builders NEVER return "" (build() always marshals ≥{text}), so the plan's
+  Step-3 example `if payload=="" then error` is BROKEN — correct guards check INPUT (trim(msg)=="", action=="",
+  text=="") BEFORE building. Verify each guard sits BEFORE the build call (no event on reject; error_response
+  has no events field structurally). CRUX = trace guard's empty-decision ⟺ builder's empty-Text on EVERY sigil
+  case (";"/":"/sigil-only/": "/prefix-alias+embedded-sigil): local guard strips sigil to compute `action`/`text`
+  then passes RAW args to builder which re-parses via ParsePose/ParseOOC — a divergence would leak empty text or
+  wrong-reject. All matched here (builder TrimSpace + guard trim idempotent). Field-fidelity: builders emit ONLY
+  proto fields → no legacy character_name/message/action co-emitted (new-names-only holds for free); actor_id from
+  ctx.character_id, emit actorless. Harness (mirror core-help runHelp): drive on_command GLOBAL not file-local
+  handle_* (locals unreachable); stub holomush.{register_emit_type ×8, log}; RegisterStdlib gives holo.comm.
+  Renderers (telnet gateway_handler stringFromPayload "actor_display_name"→"character_name", "text"→"message";
+  web/translate) already prefer new fields w/ legacy fallback → field-name swap degrades safe. NON-BLOCK: rejection
+  tests asserted only output string (not status/no-events); Lua success tests hit one grammar branch each (rest
+  covered by pkg/plugin/comm/comm_test.go). NOTE: this MEMORY.md is 300+ lines — needs consolidation next pass.
