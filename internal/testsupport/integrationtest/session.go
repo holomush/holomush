@@ -109,6 +109,51 @@ func (s *Session) SendCommand(ctx context.Context, cmd string) error {
 	return nil
 }
 
+// SendCommandOnConnection dispatches a text command via HandleCommand,
+// additionally threading the session's active transport connection ID
+// (holomush-g1qcw). SendCommand omits ConnectionId entirely — the
+// harness's long-standing default, since most specs don't exercise
+// per-connection dispatch behavior. This variant is required for tests
+// that DO: the dispatcher's focus-routed redirect
+// (Dispatcher.maybeRedirectForFocus, internal/command/dispatcher.go) and
+// handleEmit's focus-based scene-ID resolution
+// (plugins/core-scenes/commands.go:1248) both key off exec.ConnectionID(),
+// which stays the zero ULID — and is therefore never redirected — unless
+// the request carries a real connection_id.
+//
+// Requires an active transport (ConnectAuthed / ConnectGuest / attach
+// already establish one). A session with no attached transport sends
+// connection_id="" — same as SendCommand; dispatch treats the zero ULID
+// as "no connection context" and never redirects (mirrors the
+// dispatchToPlugin zero-ULID-to-empty-string convention, CodeRabbit PR
+// #4191).
+func (s *Session) SendCommandOnConnection(ctx context.Context, cmd string) error {
+	s.transportMu.Lock()
+	connID := s.transportConnID
+	s.transportMu.Unlock()
+	connIDStr := ""
+	if connID != (ulid.ULID{}) {
+		connIDStr = connID.String()
+	}
+	resp, err := s.server.coreServer.HandleCommand(ctx, &corev1.HandleCommandRequest{
+		PlayerSessionToken: s.playerSessionToken,
+		SessionId:          s.SessionID,
+		Command:            cmd,
+		ConnectionId:       connIDStr,
+	})
+	if err != nil {
+		return oops.With("operation", "send_command_on_connection").With("command", cmd).Wrap(err)
+	}
+	if !resp.GetSuccess() {
+		return oops.Code("COMMAND_REJECTED").
+			With("operation", "send_command_on_connection").
+			With("command", cmd).
+			With("error_message", resp.GetError()).
+			Errorf("command rejected by server: %s", resp.GetError())
+	}
+	return nil
+}
+
 // WaitForEvent blocks until an event matching eventType is received on the
 // session's live event stream, the session's transport is detached, or ctx
 // is cancelled. Events whose Type does NOT match eventType are skipped (they

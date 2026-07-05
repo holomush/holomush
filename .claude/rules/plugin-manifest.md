@@ -33,6 +33,7 @@ Each plugin in `plugins/<n>/` has a `plugin.yaml` that the loader consumes.
 ## Optional but consequential
 
 - `emits: [<event-domain>...]` — event domains the plugin publishes (e.g., `[scene]` ⇒ `events.<game_id>.scene.>`)
+- `focus_redirects: [{focus_kind, verbs, target_command}]` — top-level verbs redirected to a target command when a connection has the given focus kind (e.g. `focus_kind: scene`, `verbs: [pose, say, ooc, emit]`, `target_command: scene` redirects a scene-focused connection's ambient verbs to the plugin's own command). Consumed generically by the host dispatcher (`command.WithFocusRedirects`) — core owns no verb/focus vocabulary. Validated at parse (known `focus_kind`, non-empty `verbs`, non-empty `target_command`) and at load (`target_command` resolves to a registered command; no duplicate `(focus_kind, verb)` pair across plugins).
 - `actor_kinds_claimable: [<kind>...]` — which actor kinds this plugin may stamp on emitted events (`plugin`, `character`, etc.). Enforced by `event_emitter.go::Emit` for both Lua and binary runtimes — see `.claude/rules/plugin-runtime-symmetry.md`.
 - `audit:` — declares plugin-owned audit subjects, schema, and table. The host audit projector ack-and-skips these; deliveries forward to the plugin's `PluginAuditService.AuditEvent` RPC.
 - `crypto.emits: []` — declare event types whose payloads MUST be encrypted. Enforced by the crypto-reviewer agent.

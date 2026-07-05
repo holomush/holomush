@@ -831,6 +831,50 @@ func CollectActions(discovered []*DiscoveredPlugin) map[string]bool {
 	return known
 }
 
+// CollectFocusRedirects merges every discovered plugin's focus_redirects into a
+// verb-keyed command.FocusRedirectTable. It validates that each target_command
+// is a registered command and that no (verb, focus_kind) pair is claimed by two
+// plugins — both are fail-closed startup errors. Verb keys are trimmed so a
+// whitespace-padded manifest verb matches the parser-trimmed dispatch token.
+// Exported as a test seam (mirrors CollectResourceTypes / CollectActions).
+func CollectFocusRedirects(discovered []*DiscoveredPlugin, registry *command.Registry) (command.FocusRedirectTable, error) {
+	table := command.FocusRedirectTable{}
+	for _, dp := range discovered {
+		for i := range dp.Manifest.FocusRedirects {
+			fr := &dp.Manifest.FocusRedirects[i]
+			if _, ok := registry.Get(fr.TargetCommand); !ok {
+				return nil, oops.Code("FOCUS_REDIRECT_UNKNOWN_TARGET").
+					With("plugin", dp.Manifest.Name).
+					With("target_command", fr.TargetCommand).
+					Errorf("focus_redirect target command %q is not a registered command", fr.TargetCommand)
+			}
+			for _, verbRaw := range fr.Verbs {
+				verb := strings.TrimSpace(verbRaw)
+				byKind := table[verb]
+				if byKind == nil {
+					byKind = map[string]string{}
+					table[verb] = byKind
+				}
+				if existing, dup := byKind[fr.FocusKind]; dup {
+					return nil, oops.Code("FOCUS_REDIRECT_DUPLICATE").
+						With("verb", verb).With("focus_kind", fr.FocusKind).
+						With("existing_target", existing).With("plugin", dp.Manifest.Name).
+						Errorf("duplicate focus_redirect for verb %q + focus_kind %q", verb, fr.FocusKind)
+				}
+				byKind[fr.FocusKind] = fr.TargetCommand
+			}
+		}
+	}
+	return table, nil
+}
+
+// BuildFocusRedirects collects redirects from the loaded plugin set in
+// deterministic load order. Thin wrapper over CollectFocusRedirects used by the
+// dispatcher wiring.
+func (m *Manager) BuildFocusRedirects(registry *command.Registry) (command.FocusRedirectTable, error) {
+	return CollectFocusRedirects(m.loadedOrder, registry)
+}
+
 // resolvePolicy decides loader behavior from a structured resolve result.
 // The concrete function is swappable so a future gracefulDegradation quarantine
 // strategy can replace defaultResolvePolicy at this single call site without

@@ -2712,3 +2712,75 @@ func TestManifestAcceptsKnownScopeTokenOnCapability(t *testing.T) {
 	m := validBaseManifest(t, "requires:\n  - capability: world.mutation\n    scope: own-location\n")
 	require.NoError(t, m.Validate())
 }
+
+func TestParseManifestAcceptsFocusRedirects(t *testing.T) {
+	data := []byte(`
+name: core-scenes
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: core-scenes
+focus_redirects:
+  - focus_kind: scene
+    verbs: [pose, say, ooc, emit]
+    target_command: scene
+`)
+	m, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	require.Len(t, m.FocusRedirects, 1)
+	fr := m.FocusRedirects[0]
+	assert.Equal(t, "scene", fr.FocusKind)
+	assert.Equal(t, []string{"pose", "say", "ooc", "emit"}, fr.Verbs)
+	assert.Equal(t, "scene", fr.TargetCommand)
+}
+
+func TestParseManifestRejectsFocusRedirectEmptyVerbs(t *testing.T) {
+	data := []byte(`
+name: core-scenes
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: core-scenes
+focus_redirects:
+  - focus_kind: scene
+    verbs: []
+    target_command: scene
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "verbs")
+}
+
+func TestParseManifestRejectsFocusRedirectUnknownKind(t *testing.T) {
+	data := []byte(`
+name: core-scenes
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: core-scenes
+focus_redirects:
+  - focus_kind: galaxy
+    verbs: [pose]
+    target_command: scene
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "focus_kind")
+}
+
+func TestParseManifestRejectsFocusRedirectEmptyTarget(t *testing.T) {
+	data := []byte(`
+name: core-scenes
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: core-scenes
+focus_redirects:
+  - focus_kind: scene
+    verbs: [pose]
+    target_command: ""
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "target_command")
+}

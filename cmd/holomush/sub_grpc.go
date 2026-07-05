@@ -360,10 +360,16 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		return oops.Code("COMMAND_SERVICES_FAILED").Wrap(cmdSvcErr)
 	}
 
+	focusRedirects, frErr := pluginManager.BuildFocusRedirects(cmdRegistry)
+	if frErr != nil {
+		return oops.Code("FOCUS_REDIRECTS_INVALID").Wrap(frErr)
+	}
 	cmdDispatcher, cmdDispErr := command.NewDispatcher(
 		cmdRegistry, policyEngine,
 		command.WithAliasCache(aliasCache),
 		command.WithPluginDeliverer(pluginManager),
+		command.WithFocusReader(command.NewStoreFocusReader(sessionStore)),
+		command.WithFocusRedirects(focusRedirects),
 	)
 	if cmdDispErr != nil {
 		return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)

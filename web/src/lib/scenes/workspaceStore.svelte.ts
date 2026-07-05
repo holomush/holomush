@@ -4,7 +4,7 @@
 /**
  * workspaceStore is the Svelte 5 runes state container for the scenes
  * workspace. It holds the scene list, per-scene log entries, unread badge
- * counts, and the currently selected sceneId.
+ * counts, the currently selected sceneId, and per-scene focus-ready state.
  *
  * State mutations:
  *   refresh(characters) – fan-out ListMyScenes across all owned alts →
@@ -15,8 +15,11 @@
  *   select(id)          – ensure alt session + stream, wait for connectionId,
  *                         call setSceneFocus, clear unread, backfill gap,
  *                         then best-effort enrich roster from getScene.
+ *                         focusReadyBySceneId[id] flips false→true around the
+ *                         setSceneFocus call (see isFocusReady()).
  *   ingestEvent()       – append LogEntry to the focused scene's log
  *   bumpUnread()        – increment badge (skip when sceneId === selectedSceneId)
+ *   isFocusReady(id)    – true once select(id)'s setSceneFocus call resolved
  */
 
 import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
@@ -51,6 +54,11 @@ let logsBySceneId = $state<Record<string, LogEntry[]>>({});
 
 /** Per-scene unread badge counts keyed by sceneId. */
 let unreadBySceneId = $state<Record<string, number>>({});
+
+// focusReadyBySceneId[sceneId] === true once select() has awaited setSceneFocus.
+// The SceneComposer gates sends on this so raw `pose` never races ahead of the
+// server-side focus write (holomush-g1qcw).
+let focusReadyBySceneId = $state<Record<string, boolean>>({});
 
 // ── actions ──────────────────────────────────────────────────────────────────
 
@@ -149,9 +157,11 @@ async function select(
 	//    setSceneFocus). Uses the alt session's connectionIdPromise.
 	const connectionId = await awaitConnectionId(characterId);
 
-	// 3. Update selected scene and clear unread.
+	// 3. Update selected scene and clear unread. Focus is not yet confirmed by
+	//    the server, so the composer's focus-ready gate starts closed.
 	selectedSceneId = sceneId;
 	unreadBySceneId = { ...unreadBySceneId, [sceneId]: 0 };
+	focusReadyBySceneId = { ...focusReadyBySceneId, [sceneId]: false };
 
 	// 3b. Cold-start the publish-vote store for this scene so ScenePublishPanel
 	//     renders any in-progress vote AND publishStore.onEvent has a sceneId to
@@ -163,6 +173,7 @@ async function select(
 
 	// 4. Notify server of the new focus so SCENE_ACTIVITY suppression fires.
 	await setSceneFocus(altSessionId, connectionId, sceneId);
+	focusReadyBySceneId = { ...focusReadyBySceneId, [sceneId]: true };
 
 	// 5. Backfill: query IC stream history to fill any gap.
 	//    Uses per-alt sessionId (not playerId). notAfterMs = attachMomentMs
@@ -263,6 +274,18 @@ function ingestEvent(_sessionId: string, ev: GameEvent): void {
 }
 
 /**
+ * Reports whether the server has confirmed scene focus for sceneId — i.e.
+ * select()'s setSceneFocus call for this scene has resolved. False while
+ * unset (scene never selected) or while the focus write is still in flight.
+ * SceneComposer gates Pose/Say/OOC sends on this to close the sub-100ms race
+ * where a raw `pose` could reach the server before the scene-focus write
+ * (holomush-g1qcw).
+ */
+function isFocusReady(sceneId: string): boolean {
+	return focusReadyBySceneId[sceneId] === true;
+}
+
+/**
  * Increments the unread badge for a scene.
  * Spec D7 dedup rule: skip when sceneId === selectedSceneId (the scene is
  * currently in focus so events are already visible to the user).
@@ -332,7 +355,8 @@ export const workspaceStore = {
 	ingestEvent,
 	bumpUnread,
 	applySceneInfo,
+	isFocusReady,
 };
 
 // Named exports for direct import in tests.
-export { refresh, select, ingestEvent, bumpUnread, applySceneInfo };
+export { refresh, select, ingestEvent, bumpUnread, applySceneInfo, isFocusReady };

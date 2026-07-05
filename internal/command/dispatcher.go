@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -41,6 +42,8 @@ type Dispatcher struct {
 	aliasCache      *AliasCache            // optional, can be nil
 	rateLimiter     *RateLimitMiddleware   // optional, can be nil
 	pluginDeliverer PluginCommandDeliverer // optional, can be nil
+	focusReader     FocusReader            // optional, can be nil; enables focus-redirect
+	focusRedirects  FocusRedirectTable     // optional, can be nil; verb→kind→target
 	auditLogger     *audit.Logger          // optional, can be nil; when nil, plugin-audit flush is skipped
 	optErr          error                  // error from applying options
 }
@@ -61,6 +64,23 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 func WithPluginDeliverer(pd PluginCommandDeliverer) DispatcherOption {
 	return func(d *Dispatcher) {
 		d.pluginDeliverer = pd
+	}
+}
+
+// WithFocusReader configures the dispatcher to read a connection's focus kind
+// for focus-routed command redirection. If not provided (or nil), the redirect
+// is disabled and all commands route normally.
+func WithFocusReader(fr FocusReader) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.focusReader = fr
+	}
+}
+
+// WithFocusRedirects configures the plugin-declared verb→focus-kind→target
+// redirect table. If not provided (or empty), no verb is ever redirected.
+func WithFocusRedirects(t FocusRedirectTable) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.focusRedirects = t
 	}
 }
 
@@ -110,6 +130,12 @@ func NewDispatcher(registry *Registry, engine types.AccessPolicyEngine, opts ...
 		if d.optErr != nil {
 			return nil, d.optErr
 		}
+	}
+	// WithFocusReader and WithFocusRedirects are independently optional, but
+	// maybeRedirectForFocus needs BOTH non-nil to do anything — wiring only
+	// one silently disables the whole focus-redirect feature with no signal.
+	if (d.focusReader != nil) != (d.focusRedirects != nil) {
+		return nil, ErrFocusRedirectWiringIncomplete
 	}
 	return d, nil
 }
@@ -169,6 +195,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		return err
 	}
 
+	// Focus-routed redirect (holomush-g1qcw). Rewrites a scene-focused ambient
+	// verb (pose/say/ooc/emit) to the plugin-declared target command before any
+	// telemetry/rate-limit/lookup read of parsed.Name, so all of them observe
+	// the effective (routed) command. invokedAs is preserved by construction.
+	redirectVerb, wasRedirected, focusReadErr := d.maybeRedirectForFocus(ctx, parsed, exec.ConnectionID())
+
 	// Set command name for metrics (now we know it)
 	metrics.SetCommandName(parsed.Name)
 
@@ -193,6 +225,25 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		span.SetAttributes(attribute.Bool("command.alias_expanded", true))
 		span.SetAttributes(attribute.String("command.original_input", input))
 		span.SetAttributes(attribute.String("command.alias_used", aliasResult.AliasUsed))
+	}
+
+	if wasRedirected {
+		span.SetAttributes(
+			attribute.Bool("command.focus_redirected", true),
+			attribute.String("command.focus_redirect_verb", redirectVerb),
+		)
+	}
+
+	// The focus-read fail-open path already logged a WARN and counted an
+	// engine-failure metric inside maybeRedirectForFocus (before the span
+	// existed); surface it on the span too so a live degradation is visible
+	// in tracing, not just logs. The command still proceeds routed to
+	// location per the fail-open contract (§4.5) — this only adds signal.
+	if focusReadErr != nil {
+		span.SetAttributes(
+			attribute.Bool("command.focus_redirect_failed_open", true),
+			attribute.String("command.focus_redirect_error", focusReadErr.Error()),
+		)
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
@@ -282,6 +333,45 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		}
 	}
 	return err
+}
+
+// maybeRedirectForFocus rewrites parsed in place when the connection's focus
+// kind maps parsed.Name to a target command. Returns the original verb and true
+// when a redirect was applied (for span telemetry). It reads focus lazily —
+// only when parsed.Name is a redirect candidate — and fails open (no rewrite,
+// route to location) on any focus-read error, mapping to the spec's §4.5
+// failure semantics. invokedAs is intentionally NOT touched here so no-space /
+// OOC-style semantics carried on invokedAs survive (spec §4.4).
+//
+// focusReadErr is returned (rather than only logged) so the caller — which
+// starts the trace span after this call returns — can also record the
+// fail-open degradation as span telemetry, mirroring the fail-open
+// observability pattern in RateLimitMiddleware.Enforce (metric + span
+// attribute, not just a WARN log).
+func (d *Dispatcher) maybeRedirectForFocus(
+	ctx context.Context, parsed *ParsedCommand, connID ulid.ULID,
+) (origVerb string, redirected bool, focusReadErr error) {
+	if d.focusRedirects == nil || d.focusReader == nil {
+		return "", false, nil
+	}
+	if connID == (ulid.ULID{}) || !d.focusRedirects.Redirects(parsed.Name) {
+		return "", false, nil
+	}
+	kind, err := d.focusReader.ConnectionFocusKind(ctx, connID)
+	if err != nil {
+		slog.WarnContext(ctx, "focus-redirect lookup failed; routing to location",
+			"command", parsed.Name, "connection_id", connID.String(), "error", err)
+		observability.RecordEngineFailure("focus_redirect")
+		return "", false, oops.Wrap(err)
+	}
+	target, ok := d.focusRedirects.Target(parsed.Name, string(kind))
+	if !ok {
+		return "", false, nil
+	}
+	verb := parsed.Name
+	parsed.Name = target
+	parsed.Args = strings.TrimSpace(verb + " " + parsed.Args)
+	return verb, true, nil
 }
 
 // dispatchToPlugin routes a command through the PluginManager and processes the response.
