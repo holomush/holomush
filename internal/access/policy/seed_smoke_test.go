@@ -702,18 +702,38 @@ func TestSeedSmoke_PlayerSceneAccess(t *testing.T) {
 		),
 	})
 
-	// G4: read and write scenes
-	for _, action := range []string{"read", "write"} {
-		t.Run(action, func(t *testing.T) {
-			decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-				Subject:  "character:01CHAR01",
-				Action:   action,
-				Resource: "scene:01SCENE01",
-			})
-			require.NoError(t, err)
-			assert.True(t, decision.IsAllowed(), "player should %s scene (G4); got: %s — %s", action, decision.Effect(), decision.Reason())
+	// G4 read: seed:player-scene-read is an unconditional permit, so the HOST
+	// seed corpus alone grants scene read to any character.
+	t.Run("read", func(t *testing.T) {
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:  "character:01CHAR01",
+			Action:   "read",
+			Resource: "scene:01SCENE01",
 		})
-	}
+		require.NoError(t, err)
+		assert.True(t, decision.IsAllowed(), "player should read scene (G4); got: %s — %s", decision.Effect(), decision.Reason())
+	})
+
+	// G4 write (holomush-8m01u): the host seed corpus NO LONGER grants scene
+	// write. The vestigial unconditional seed:player-scene-participant was
+	// removed; scene-write authorization now lives solely in the core-scenes
+	// plugin's participant-conditioned write-scene-as-participant policy, which
+	// is NOT part of the seed corpus this smoke test loads. So a bare
+	// seed-only engine (no plugin policy, no SceneResolver) MUST default-deny
+	// scene write. The participant-permit / non-participant-deny behavior of
+	// the plugin policy is proved end-to-end in
+	// test/integration/scenes/focus_routed_input_test.go (WithRealABAC).
+	t.Run("write default-denies under the seed corpus alone", func(t *testing.T) {
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:  "character:01CHAR01",
+			Action:   "write",
+			Resource: "scene:01SCENE01",
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"scene write MUST NOT be granted by the host seed corpus after holomush-8m01u; "+
+				"got: %s — %s", decision.Effect(), decision.Reason())
+	})
 }
 
 func TestSeedSmokePlayerDeniedLocationWrite(t *testing.T) {

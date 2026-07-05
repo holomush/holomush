@@ -159,15 +159,27 @@ var _ = Describe("holomush-g1qcw.6: focus-routed pose denies a non-participant s
 		ts.Stop()
 	})
 
-	// XIt (Pending): the non-participant denial this asserts is NOT enforced
-	// today. seed:player-scene-participant (internal/access/policy/seed.go:179-181)
-	// is an UNCONDITIONAL permit for scene writes, so handleEmit's ABAC gate
-	// allows a non-participant (confirmed: the pose succeeds). Blocked on
-	// holomush-8m01u (the ABAC gap); re-enable via holomush-n8ld7 once participant
-	// enforcement lands. INV-SCENE-66 does NOT depend on this spec — the invariant
-	// (routing + no-leak + sigil preservation) is asserted by the passing spec #1
-	// above plus the dispatcher unit tests.
-	XIt("delivers an explicit error for a non-participant scene focus", func() {
+	// Re-enabled by holomush-8m01u (was XIt-pending; re-enable tracked as
+	// holomush-n8ld7). The non-participant denial is now enforced: the vestigial
+	// unconditional seed:player-scene-participant permit was removed from the
+	// host seed corpus (internal/access/policy/seed.go), so handleEmit's ABAC
+	// gate (plugins/core-scenes/commands.go:1285) is governed solely by the
+	// plugin's participant-conditioned write-scene-as-participant policy
+	// (plugins/core-scenes/plugin.yaml), which default-denies a character absent
+	// from resource.scene.participants. INV-SCENE-66 does not depend on this
+	// spec — the invariant (routing + no-leak + sigil preservation) is asserted
+	// by the passing spec #1 above plus the dispatcher unit tests — but this
+	// spec is the end-to-end proof of the 8m01u fix under WithRealABAC.
+	//
+	// This is the first test to genuinely prove INV-SCENE-11 ("pose/say/emit/ooc
+	// MUST require the actor to be a participant of the target scene") end-to-end:
+	// all four verbs share the single handleEmit → Evaluate("write", "scene:…")
+	// gate, so the pose case is representative of the class. The pre-existing
+	// registry refs (commands_emit_test.go's allowEvaluator stub, the coverage
+	// meta-test) never exercised a real denial.
+	//
+	// Verifies: INV-SCENE-11
+	It("delivers an explicit error for a non-participant scene focus", func() {
 		loc := ts.NewLocation(ctx)
 		sceneID := owner.CreateScene(ctx, loc)
 		Expect(sceneID).NotTo(BeZero(), "CreateScene must return a non-zero bare ULID")
@@ -196,6 +208,37 @@ var _ = Describe("holomush-g1qcw.6: focus-routed pose denies a non-participant s
 		Expect(crp.Text).To(ContainSubstring("not permitted to write to scene"),
 			"holomush-g1qcw.6: denial text MUST confirm the write-scene-as-participant ABAC gate "+
 				"fired (plugins/core-scenes/commands.go:1285), not a silent success")
+	})
+
+	// Positive control (holomush-8m01u): the write-scene-as-participant gate must
+	// PERMIT a genuine participant under real ABAC — otherwise removing the
+	// unconditional seed could have silently over-restricted (fail-closed) and
+	// the deny spec above would still pass. Owner is a participant (role='owner'
+	// via CreateWithOwner), so their scene-focused pose lands on the scene IC
+	// stream. This is the allow-path companion that, together with the deny spec,
+	// shows the gate is a real membership check rather than deny-all.
+	It("permits a participant (the scene owner) to emit a scene-focused pose", func() {
+		loc := ts.NewLocation(ctx)
+		sceneID := owner.CreateScene(ctx, loc)
+		Expect(sceneID).NotTo(BeZero(), "CreateScene must return a non-zero bare ULID")
+
+		// `scene join` runs AutoFocusOnJoin, which sets owner's connection
+		// FocusKey to the scene (the redirect precondition) and wires the live
+		// subscription so WaitForEvent can observe the delivery. Joining one's
+		// own scene is idempotent at the DB layer (role='owner' preserved).
+		Expect(owner.SendCommand(ctx, "scene join "+sceneID.String())).To(Succeed())
+
+		// Top-level ambient verb (not "scene pose") — the dispatcher redirect
+		// rewrites it, and handleEmit's ABAC gate evaluates against a REAL
+		// participant, which write-scene-as-participant permits.
+		Expect(owner.SendCommandOnConnection(ctx, "pose waves")).To(Succeed())
+
+		frame := owner.WaitForEvent(ctx, "core-scenes:scene_pose")
+		Expect(frame).NotTo(BeNil(),
+			"a participant's scene-focused pose MUST be permitted by write-scene-as-participant "+
+				"and land on the scene IC stream")
+		Expect(frame.GetStream()).To(ContainSubstring("scene."+sceneID.String()+".ic"),
+			"the delivered event's stream MUST be the scene IC subject")
 	})
 })
 

@@ -609,3 +609,26 @@ matches WithdrawScenePublish precedent; the protected secret is publication-
 attempt existence/content (SCENE_PRIVACY_BOUNDARY_BLOCK paths), not scene
 existence. NOTE: MEMORY.md is ~600 lines, 3x over the 200 cap — needs
 consolidation pass (many FIXED/stale Phase-5 entries can be pruned).
+
+## Unconditional-seed subsumes plugin gate (holomush-8m01u, 2026-07-05) — READY
+OR-of-permits engine (forbid-overrides, NO most-specific-wins) means an
+UNCONDITIONAL seed `permit(character, write, scene)` SUBSUMES/nullifies the
+plugin's conditioned `write-scene-as-participant` (`plugin.yaml:291`), letting a
+non-participant emit into any scene via handleEmit (`commands.go:1285`, the SOLE
+scene-write Evaluate). Fix = remove the seed from `SeedPolicies()` + migration
+`000047` disables the stale row. VERIFICATION LADDER for "disable a stale seed
+row" migrations: (1) `enabled=false` truly stops eval — `Cache.Reload`→
+`ListEnabled`→`WHERE enabled=true` (`postgres.go:301`), snapshot feeds BOTH
+Evaluate + CanPerformAction; (2) bootstrap won't resurrect — `bootstrap.go` only
+creates/upgrades corpus seeds, NEVER prunes/re-enables a removed one, so ordering
+vs migrations is irrelevant; (3) up guard `name+source='seed'+EXACT dsl_text+
+enabled=true` = CAS respecting operator edits (bootstrap stores DSLText verbatim
+so exact-string match holds); (4) removed unconditional seed matched ONLY its
+action, so siblings (read/end/pause/join…) don't regress — each scene action has
+its own action+policy, join is substrate-gated. RECURRING Low: the paired DOWN
+re-enables if `enabled=false`+exact-DSL — can restore the bypass on a row an
+operator disabled independently; inherent to reversible seed-disable, documented,
+acceptable. The read twin `seed:player-scene-read` is the SAME bug shape, left in
+(holomush-sjtlz) — independent action, write fix doesn't depend on it; metadata-
+only exposure (content stays I-17/INV-SCENE-60 gated). Re-enabled denial spec
+MUST use WithRealABAC+WithInTreePlugins (allow-all default makes the gate a no-op).

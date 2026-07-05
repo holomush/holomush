@@ -2729,7 +2729,9 @@ invariants:
     legacy: ["INV-P4-11@docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md"]
     summary: "scene pose/say/emit/ooc subcommands MUST require the actor to be a participant of the target scene (inherits
       the write-scene-as-participant ABAC policy via command-capability pre-flight)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/integration/scenes/focus_routed_input_test.go"
     refs:
       - {file: "internal/test/invariants/inv_p4_coverage_meta_test.go", token: "INV-P4-11"}
       - {file: "plugins/core-scenes/commands_emit_test.go", token: "INV-P4-11"}
