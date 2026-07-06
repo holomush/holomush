@@ -293,8 +293,8 @@ code, only a verifying test.
 ## 5. Invariant
 
 This design introduces one system-behavior guarantee, registered as
-**INV-SCENE-66** (`binding: pending`, added to
-`docs/architecture/invariants.yaml` as part of finalizing this spec). The
+**INV-SCENE-66** (added to `docs/architecture/invariants.yaml` as
+`binding: pending` when this spec was finalized; since `bound`). The
 holomush-uprtc revision (§4.5) later registered a second, **INV-SCENE-67**
 (fail-closed on focus-read error; `binding: bound`, ADR holomush-pbp9j):
 
