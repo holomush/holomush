@@ -145,7 +145,11 @@ control-flow splitting and `first_cmd_word`):
      quote-stripping, mirroring the `# jj-exempt` precedent) → allowed;
 - **Action on match (main session, no exempt):** emit
   `hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: … }`
-  where the reason names the exact replacement — e.g. *"Inline `task test`
+  — this concrete shape is the current-hooks-reference best candidate (twice
+  corroborated via context7 during design/plan review), but per §1 fact 2 the
+  §7 probe remains authoritative: if the live shape differs, the probed shape
+  wins and §1 is updated in the same change. The reason names the exact
+  replacement — e.g. *"Inline `task test`
   floods the main context. Dispatch the `local-check` agent
   (`Agent` tool, `subagent_type: local-check`, prompt: `test -- ./internal/foo/`)
   and read its compact verdict. If raw output is genuinely needed in-thread,
@@ -341,4 +345,4 @@ exists in `docs/architecture/invariants.yaml` and none is warranted.
   need). Sub-task variants (`lint:go`, `test:e2e`, `docs:*`) stay
   inline-allowed — targeted/short-output or no wrapper. Widening is a one-line
   follow-up if usage shows leakage.
-<!-- adr-capture: sha256=87ea758033843f27; session=cli; ts=2026-07-06T22:20:25Z; adrs=holomush-g53q7,holomush-zcyvb -->
+<!-- adr-capture: sha256=f0ec9dd028a9cc61; session=cli; ts=2026-07-06T23:50:07Z; adrs=holomush-g53q7,holomush-zcyvb -->

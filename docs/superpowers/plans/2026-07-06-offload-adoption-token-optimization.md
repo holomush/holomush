@@ -201,11 +201,17 @@ jj --no-pager commit -m "feat(agents): merge local-test/lint/build into local-ch
 
 - Modify (temporarily, reverted in-task): `.claude/hooks/enforce-task-runner.sh`
 
-- [ ] **Step 1: Add the probe line.** In `enforce-task-runner.sh`, immediately after the line `[[ -z "$COMMAND" ]] && exit 0`, insert:
+- [ ] **Step 1: Create a private probe log, then add the probe line.** Create the log with restrictive permissions first — a fixed world-readable `/tmp` name could be read by other local users or pre-created/symlinked; `mktemp` gives 0600 and a random suffix:
+
+```bash
+PROBE_LOG=$(mktemp /tmp/holomush-hook-probe.XXXXXX) && echo "$PROBE_LOG"
+```
+
+Then in `enforce-task-runner.sh`, immediately after the line `[[ -z "$COMMAND" ]] && exit 0`, insert — substituting the LITERAL path mktemp printed (hook invocations are separate processes and cannot see your shell variable):
 
 ```bash
 # TEMP PROBE (holomush-drf7b §7) — remove before commit
-printf '%s\n' "$INPUT" >> /tmp/holomush-hook-probe.jsonl
+printf '%s\n' "$INPUT" >> /tmp/holomush-hook-probe.XXXXXX   # ← replace with the actual mktemp path
 ```
 
 - [ ] **Step 2: Generate a main-session sample** — run any Bash command in the main session (the hook fires on it):
@@ -219,7 +225,7 @@ echo probe-main
 - [ ] **Step 4: Read the probe log and compare**
 
 ```bash
-jq -c '{agent_id: (.agent_id // "ABSENT"), agent_type: (.agent_type // "ABSENT"), cmd: .tool_input.command}' /tmp/holomush-hook-probe.jsonl
+jq -c '{agent_id: (.agent_id // "ABSENT"), agent_type: (.agent_type // "ABSENT"), cmd: .tool_input.command}' "$PROBE_LOG"
 ```
 
 Expected: the `probe-main` entry shows `agent_id: "ABSENT"`; the `probe-sub` entry shows a non-empty `agent_id`. **Decision rule (RD5):** both as expected → Task 3 ships `OFFLOAD_ENFORCE` defaulting to `deny`. `agent_id` absent in the subagent entry (or present in the main entry) → Task 3 ships defaulting to `nudge`, and you MUST file a follow-up bead: `bd create --type=task --title="Flip OFFLOAD_ENFORCE to deny once agent_id lands in PreToolUse hook input" --priority=2 --description="holomush-drf7b RD5 fallback: the empirical probe found agent_id unusable for main-vs-subagent discrimination on this CC version; enforce-task-runner.sh shipped OFFLOAD_ENFORCE=nudge. Re-probe on CC upgrades and flip the default to deny."`
@@ -227,7 +233,7 @@ Expected: the `probe-main` entry shows `agent_id: "ABSENT"`; the `probe-sub` ent
 - [ ] **Step 5: Remove the probe line and the log; record the finding**
 
 ```bash
-rm -f /tmp/holomush-hook-probe.jsonl
+rm -f "$PROBE_LOG"
 jj --no-pager diff --git   # expect ONLY the probe line as a leftover; remove it via Edit, then expect empty diff
 bd note holomush-drf7b "probe (§7): agent_id main=<ABSENT|value> sub=<value|ABSENT> → OFFLOAD_ENFORCE default=<deny|nudge>"
 ```
@@ -478,7 +484,7 @@ jj --no-pager commit -m "feat(hooks): main-session offload deny/nudge for task t
 ```bash
 # local-check offload triggers: prompt asks to run tests/lint/build. Remind to
 # dispatch the offload agent rather than running the task inline (holomush-drf7b §3.4).
-if printf '%s' "$lower" | grep -qE '(run[[:space:]]+(the[[:space:]]+)?tests?\b|does[[:space:]]+it[[:space:]]+(build|compile)|check[[:space:]]+(the[[:space:]]+)?lint|run[[:space:]]+lint|is[[:space:]]+(it|the[[:space:]]+build)[[:space:]]+green)'; then
+if printf '%s' "$lower" | grep -qE '(run[[:space:]]+(the[[:space:]]+)?(integration[[:space:]]+)?tests?\b|does[[:space:]]+it[[:space:]]+(build|compile)|check[[:space:]]+(the[[:space:]]+)?lint|run[[:space:]]+lint|check[[:space:]]+(the[[:space:]]+)?(test[[:space:]]+)?coverage\b|is[[:space:]]+(it|the[[:space:]]+build)[[:space:]]+green)'; then
   reminders+=("**Offload reminder:** dispatch the \`local-check\` agent (\`subagent_type: local-check\`, prompt: \`<test|lint|build|int|cover> [args]\`) instead of running \`task test\`/\`task lint\`/\`task build\` inline — inline runs are hook-denied in the main session (\`# offload-exempt\` to override).")
 fi
 ```
@@ -831,4 +837,4 @@ jj --no-pager st   # expect clean
 | Guardrail preservation | Task 7/8 MUST-diffs, Task 10 Step 5, Task 11 Step 1 |
 | Existing gates | Task 3 Step 6 (`task test:bats`), Task 11 Step 4 (`task pr-prep`) |
 
-<!-- adr-capture: sha256=ca99f8250a6f560f; session=cli; ts=2026-07-06T22:20:25Z; adrs= -->
+<!-- adr-capture: sha256=76620fb4fb543df1; session=cli; ts=2026-07-06T23:50:07Z; adrs= -->
