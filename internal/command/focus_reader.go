@@ -16,7 +16,9 @@ import (
 // FocusReader reads a connection's current focus kind for redirect routing.
 // Returns the zero value FocusKind("") for grid/no-focus. Implementations MUST
 // treat a connection that vanished between dispatch and lookup as absent focus
-// (empty kind, nil error) so the dispatcher fails open to location routing.
+// (empty kind, nil error) — a genuine no-focus state, not an infra failure —
+// and MUST return genuine read failures as errors, never mapped to absent
+// focus: the dispatcher fails closed on them (INV-SCENE-67, ADR holomush-pbp9j).
 type FocusReader interface {
 	ConnectionFocusKind(ctx context.Context, connectionID ulid.ULID) (session.FocusKind, error)
 }

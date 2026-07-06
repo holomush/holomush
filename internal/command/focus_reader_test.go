@@ -40,6 +40,7 @@ func TestStoreFocusReaderReturnsEmptyKindWhenGridFocused(t *testing.T) {
 	assert.Equal(t, session.FocusKind(""), kind)
 }
 
+// Verifies: INV-SCENE-67
 func TestStoreFocusReaderTreatsConnectionNotFoundAsAbsentFocus(t *testing.T) {
 	r := command.NewStoreFocusReader(fakeConnGetter{err: oops.Code("CONNECTION_NOT_FOUND").Errorf("gone")})
 	kind, err := r.ConnectionFocusKind(context.Background(), ulid.Make())

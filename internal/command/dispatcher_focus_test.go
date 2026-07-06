@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
@@ -132,6 +133,7 @@ func TestDispatcherRedirectsSceneFocusedVerbToSceneCommand(t *testing.T) {
 }
 
 // Verifies: INV-SCENE-66
+// Verifies: INV-SCENE-67
 func TestDispatcherDoesNotRedirectWhenGridFocused(t *testing.T) {
 	d, deliverer := focusRedirectDispatcher(t, fakeFocusReader{kind: ""}, nil)
 	exec := newFocusExec(ulid.Make())
@@ -139,20 +141,47 @@ func TestDispatcherDoesNotRedirectWhenGridFocused(t *testing.T) {
 	assert.Equal(t, "pose", deliverer.last.Command, "grid focus must route to the location pose handler")
 }
 
-func TestDispatcherFailsOpenToLocationOnFocusReadError(t *testing.T) {
+// Verifies: INV-SCENE-67
+func TestDispatcherFailsClosedOnFocusReadError(t *testing.T) {
 	before := testutil.ToFloat64(observability.EngineFailureCounter("focus_redirect"))
+	execBefore := testutil.ToFloat64(command.CommandExecutions.With(prometheus.Labels{
+		"command": "pose", "source": "", "status": command.StatusEngineFailure,
+	}))
 
-	d, deliverer := focusRedirectDispatcher(t, fakeFocusReader{err: oops.Errorf("focus store down")}, nil)
+	// The fake error carries its own oops code, mirroring production store
+	// errors. oops v1.22.0 resolves Code() to the DEEPEST code in the wrap
+	// chain, so this pins that an inner coded error cannot shadow
+	// FOCUS_READ_FAILED (holomush-1zp8c.1).
+	d, deliverer := focusRedirectDispatcher(t, fakeFocusReader{err: oops.Code("STORE_UNAVAILABLE").Errorf("focus store down")}, nil)
 	exec := newFocusExec(ulid.Make())
-	require.NoError(t, d.Dispatch(context.Background(), "pose bows", exec))
-	assert.Equal(t, "pose", deliverer.last.Command, "a focus-read infra error must fail open to location, not drop the command")
+	err := d.Dispatch(context.Background(), "pose bows", exec)
+	require.Error(t, err, "a focus-read infra error must abort dispatch (holomush-uprtc)")
 
-	// The fail-open path MUST also surface an engine-failure metric — mirrors
-	// RateLimitMiddleware.Enforce's fail-open observability (metric + span
-	// attribute, not just a WARN log) so a live degradation is visible to
-	// Prometheus, not only Loki.
+	// The command must reach NO handler — routing to location on a focus-read
+	// error is the plaintext downgrade INV-SCENE-67 forbids (ADR holomush-pbp9j).
+	assert.Empty(t, deliverer.last.Command, "no handler may receive the command on a focus-read error")
+
+	// The abort is player-visible and retryable, never silent: the player must
+	// learn the message was NOT delivered anywhere.
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, command.CodeFocusReadFailed, oopsErr.Code())
+	assert.Contains(t, command.PlayerMessage(err), "not sent")
+
+	// The fail-closed path keeps the engine-failure metric — mirrors
+	// RateLimitMiddleware.Enforce's observability (metric + span attribute,
+	// not just a WARN log) so a live degradation is visible to Prometheus,
+	// not only Loki.
 	after := testutil.ToFloat64(observability.EngineFailureCounter("focus_redirect"))
-	assert.Equal(t, before+1, after, "focus-read fail-open must increment the focus_redirect engine-failure counter")
+	assert.Equal(t, before+1, after, "focus-read failure must increment the focus_redirect engine-failure counter")
+
+	// Pin the command_executions_total shape for the abort: source is blank
+	// because the abort deliberately fires before the registry lookup that
+	// sets it — the same shape as the pre-existing rate-limited early abort.
+	execAfter := testutil.ToFloat64(command.CommandExecutions.With(prometheus.Labels{
+		"command": "pose", "source": "", "status": command.StatusEngineFailure,
+	}))
+	assert.Equal(t, execBefore+1, execAfter, "fail-closed abort must record engine_failure with blank source")
 }
 
 func TestDispatcherDoesNotRedirectWithoutConnectionID(t *testing.T) {
