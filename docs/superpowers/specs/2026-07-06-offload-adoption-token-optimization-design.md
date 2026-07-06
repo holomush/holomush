@@ -10,9 +10,9 @@
 - **Status:** Draft (design phase)
 - **Author:** AI-assisted (Claude Fable 5) + Sean Brandt
 - **Extends:** `docs/superpowers/specs/2026-07-03-token-cost-latency-optimization-design.md`
-  (holomush-wagqb) — its RD1/RD2 mechanism decisions carry over unchanged; this
-  spec adds the adoption layer wagqb never designed and schedules its
-  unimplemented Phases 3–4.
+  (holomush-wagqb) — its RD1/RD2 mechanism decisions carry over, with one T1c
+  grounding correction (§4.1); this spec adds the adoption layer wagqb never
+  designed and schedules its unimplemented Phases 3–4.
 
 The keywords **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** are
 to be interpreted as described in RFC 2119 / RFC 8174.
@@ -211,10 +211,13 @@ one **grounding correction** discovered in this design round:
   before pushing", the `jj op restore`/`jj op abandon` sibling-workspace
   warning). Pointer-izing it would delete guardrails (violates G4 / wagqb N2).
   Revised T1c: `landing-the-plane.md` **remains the canonical checklist home**;
-  slim it only by de-duplicating the pre-push-rebase recipe detail that
-  appears in all three of the rule, CLAUDE.md, and the jj-skill cheat-sheet
-  (one authoritative statement + pointers), keeping every MUST whose only home
-  it is. Expected saving is modest (~1 KB); honesty over the stale claim.
+  slim it only by collapsing the **two repo-owned copies** of the
+  pre-push-rebase recipe detail (the rule + CLAUDE.md §Landing) into one
+  authoritative statement + pointer, keeping every MUST whose only home the
+  rule is. The third copy — the jj plugin's SessionStart cheat-sheet — is
+  **plugin-owned and untouched** (N3; same posture as wagqb T2a took for the
+  jj skill), accepted as residual duplication. Expected saving is modest
+  (~1 KB); honesty over the stale claim.
   `subagent-briefing.md` slimmed in place as originally designed — every MUST
   retained; local-* references updated per §3.4.
 - **T2a:** `require-grepping-skill.sh` stops requiring the full `grepping`
