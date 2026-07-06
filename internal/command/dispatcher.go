@@ -243,10 +243,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	// already logged a WARN and counted the engine-failure metric (before the
 	// span existed); surface the abort on the span, then error the command so
 	// the player knows the message was NOT delivered anywhere.
+	// Fresh coded error, NOT Wrap(focusReadErr): oops resolves Code() to the
+	// DEEPEST code in the chain, so wrapping a coded store error would shadow
+	// FOCUS_READ_FAILED and silently break PlayerMessage / isUserFacingError.
+	// The cause is preserved as oops context; the full error was already
+	// WARN-logged with trace ctx inside maybeRedirectForFocus.
 	if focusReadErr != nil {
 		span.SetAttributes(attribute.Bool("command.focus_redirect_failed_closed", true))
 		metrics.SetStatus(StatusEngineFailure)
-		return oops.Code(CodeFocusReadFailed).Wrap(focusReadErr)
+		return oops.Code(CodeFocusReadFailed).
+			With("cause", focusReadErr.Error()).
+			Errorf("focus read failed")
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
@@ -342,12 +349,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 // kind maps parsed.Name to a target command. Returns the original verb and true
 // when a redirect was applied (for span telemetry). It reads focus lazily —
 // only when parsed.Name is a redirect candidate. A focus-read error is
-// returned for the caller to fail CLOSED (abort dispatch), per the §4.5
-// failure semantics as revised by holomush-uprtc: an error is NOT the same as
-// no-focus, because treating it as no-focus routed a scene-focused player's
-// participant-only content to the plaintext location stream. invokedAs is
-// intentionally NOT touched here so no-space / OOC-style semantics carried on
-// invokedAs survive (spec §4.4).
+// returned for the caller to fail CLOSED per the revised §4.5 semantics
+// (INV-SCENE-67, ADR holomush-pbp9j) — an error is NOT the same as no-focus.
+// invokedAs is intentionally NOT touched here so no-space / OOC-style
+// semantics carried on invokedAs survive (spec §4.4).
 //
 // focusReadErr is returned (rather than only logged) so the caller — which
 // starts the trace span after this call returns — can abort dispatch and

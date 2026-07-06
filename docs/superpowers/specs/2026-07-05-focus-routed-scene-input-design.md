@@ -270,7 +270,8 @@ server-side, on one path, for every surface.
 (`workspaceStore.svelte.ts:165`, wrapper `web/src/lib/scenes/client.ts:112-118`).
 Because the composer now relies on the server redirect rather than an explicit
 `scene` target, a send in that sub-100ms window would find no focus set and
-fail open to the grid location. The composer MUST therefore gate sends until the
+route to the grid location (the genuine no-focus row of §4.5 — not the
+infra-error row). The composer MUST therefore gate sends until the
 selected scene's `setSceneFocus` write has resolved — e.g. a per-scene
 focus-ready flag on the workspace store that disables the Pose/Say/OOC buttons
 and the ⌘↵ shortcut until focus is confirmed. This closes the window that the old
@@ -293,7 +294,9 @@ code, only a verifying test.
 
 This design introduces one system-behavior guarantee, registered as
 **INV-SCENE-66** (`binding: pending`, added to
-`docs/architecture/invariants.yaml` as part of finalizing this spec):
+`docs/architecture/invariants.yaml` as part of finalizing this spec). The
+holomush-uprtc revision (§4.5) later registered a second, **INV-SCENE-67**
+(fail-closed on focus-read error; `binding: bound`, ADR holomush-pbp9j):
 
 > A scene-focused connection's ambient conversational verbs
 > (`pose`/`say`/`ooc`/`emit`, including the `:`/`;`/`"` sigil aliases) route to
@@ -308,9 +311,11 @@ grid/no-focus fall-through.
 ## 6. Testing
 
 - **Dispatcher unit** (`internal/command/dispatcher_test.go`): scene-focused →
-  rewrites to `scene <verb>`; grid-focused / no-focus / `FocusReader` error → no
-  rewrite (location); `pose`/`:`/`;`/`"` preserve no-space and OOC style through
-  the redirect (asserted via the delivered `CommandRequest`).
+  rewrites to `scene <verb>`; grid-focused / no-focus → no rewrite (location);
+  `FocusReader` error → dispatch aborts with `FOCUS_READ_FAILED`, no handler
+  reached (§4.5 as revised by holomush-uprtc); `pose`/`:`/`;`/`"` preserve
+  no-space and OOC style through the redirect (asserted via the delivered
+  `CommandRequest`).
 - **Manifest** (`internal/plugin/manifest_test.go`): `focus_redirects` parses;
   validation rejects unknown `target_command`, empty `verbs`, bad `focus_kind`;
   duplicate `(focus_kind, verb)` across plugins fails closed at load.
