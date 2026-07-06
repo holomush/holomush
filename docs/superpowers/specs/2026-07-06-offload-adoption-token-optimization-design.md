@@ -341,3 +341,4 @@ exists in `docs/architecture/invariants.yaml` and none is warranted.
   need). Sub-task variants (`lint:go`, `test:e2e`, `docs:*`) stay
   inline-allowed — targeted/short-output or no wrapper. Widening is a one-line
   follow-up if usage shows leakage.
+<!-- adr-capture: sha256=87ea758033843f27; session=cli; ts=2026-07-06T22:20:25Z; adrs=holomush-g53q7,holomush-zcyvb -->

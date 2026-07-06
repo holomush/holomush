@@ -802,6 +802,7 @@ b=$(git show main:CLAUDE.md | wc -c); a=$(wc -c < CLAUDE.md); echo "CLAUDE.md de
 ```
 
 `bd note holomush-drf7b "token deltas: CLAUDE.md -<N>B, testing.md core -<N>B, invariants.md core -<N>B, grepping injection -<N>B, agent descriptions -<N>w"`
+
 - [ ] **Step 3: §4.4 documentary note (operator-side, no repo change):** `bd note holomush-drf7b "OPERATOR NOTE (spec §4.4): per-session agent listing is dominated by marketplace plugin agents (~40+ descriptions); disabling unused plugins for this project in ~/.claude config saves more per session than all repo trims combined. Operator's call — their config spans other projects."`
 - [ ] **Step 4: Full gate + push prep.** Run the final gate INLINE (the pr-prep nudge is advisory; N4 requires the parent run):
 
@@ -810,6 +811,7 @@ task pr-prep
 ```
 
 Expected: exit 0, `✓ All PR checks passed.` — the hook does not deny pr-prep (nudge only). If `fmt`/`license` mutated files, commit them. Then follow `.claude/rules/landing-the-plane.md`: `jj git fetch`, the `-s` rebase recipe, `jj bookmark set <branch> -r @-`, `jj git push --branch <branch>`, include any pending `.beads/interactions.jsonl` change.
+
 - [ ] **Step 5: Commit any residue + done**
 
 ```bash
@@ -828,3 +830,5 @@ jj --no-pager st   # expect clean
 | Context tax before/after | Task 11 Step 2 |
 | Guardrail preservation | Task 7/8 MUST-diffs, Task 10 Step 5, Task 11 Step 1 |
 | Existing gates | Task 3 Step 6 (`task test:bats`), Task 11 Step 4 (`task pr-prep`) |
+
+<!-- adr-capture: sha256=ca99f8250a6f560f; session=cli; ts=2026-07-06T22:20:25Z; adrs= -->

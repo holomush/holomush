@@ -40,7 +40,7 @@
   no docs/ exclude) -- pr-prep validates the @ SNAPSHOT, push unit @- fails CI. cat/Read shows @-fixed state NOT
   what ships; compare `jj file show -r @-` vs main. (2) Spec revised in plan-grounding leaves STALE instructions
   contradicting the captured ADR -- grep spec for every mechanism the ADR REJECTED. probe missed
-  ReadSceneLogForSnapshot; confirm probe zero-results with rg before claiming absence.
+  ReadSceneLogForSnapshot; confirm probe zero-results with rg before claiming absence. (3) drf7b 2026-07-06: new failure MODE — render-adr NOW emits `---\ntitle:` frontmatter + NO SPDX (all ~172 legacy ADRs = H1 + SPDX block); if fmt was never run, @ is CLEAN yet the 2 files lack SPDX → `task license:check` RED (docs/adr under docs/**, no ADR ignore). Always `rg -L SPDX docs/adr/*.md` on any new ADR; fix = `task fmt` folded into @- (but SPDX `<!-- -->` above `---` shoves frontmatter off line1 → prefer regenerating to sibling H1+SPDX shape).
 
 - **Plugin migrations: `.down.sql` is NEVER executed** — `RunMigrationsFS` filters `.up.sql` only
   (pkg/plugin/storage/storage.go:68) and embed is `migrations/*.up.sql` (core-scenes store.go:50).
