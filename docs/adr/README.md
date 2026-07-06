@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Focus-redirect fails closed on focus-read error](holomush-pbp9j-focus-redirect-fails-closed-focus-read-error.md) | 2026-07-06 | Accepted | `holomush-pbp9j` |
 | [Manifest-declared focus redirects, not dispatcher-owned](holomush-4u3qe-manifest-declared-focus-redirects-not-dispatcher-owned.md) | 2026-07-05 | Accepted | `holomush-4u3qe` |
 | [Drop SceneComposer scene-prefix for redirect symmetry](holomush-11488-drop-scenecomposer-scene-prefix-redirect-symmetry.md) | 2026-07-05 | Accepted | `holomush-11488` |
 | [Reuse verb category as the communication-content discriminator](holomush-2hhq2-reuse-verb-category-as-communication-content-discriminator.md) | 2026-07-04 | Accepted | `holomush-2hhq2` |
