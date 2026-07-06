@@ -354,3 +354,16 @@
   reassignment `{...m,[k]:v}` triggers. Component test that MOCKS the store with a local `$state` rune proves the
   COMPONENT side only, NOT real-store propagation — Low awareness note, not a defect (bun check clean). gateway-boundary:
   pose/say/ooc are CONVERSATIONAL → command path (sendSceneCommand) correct; only structural writes owe typed RPCs.
+- **Seed removal + disable-row migration (holomush-8m01u READY, 2026-07-05).** Fix = delete a vestigial seed from
+  `SeedPolicies()` (fresh installs) + migration to disable the stale DB row (existing deploys). Correctness hinges on
+  TWO grounded checks the diff comments assert: (1) bootstrap MUST iterate the shipped set not DB rows — verified
+  `bootstrapSeed` (bootstrap.go:61) Get→create/upgrade only, never enumerates/prunes/re-enables rows absent from
+  `SeedPolicies()`, so the disabled row stays disabled (else the fix silently self-heals the hole on next boot).
+  (2) A migration writing `updated_at = (EXTRACT(EPOCH FROM now())*1e9)::BIGINT` on a table whose BASELINE column is
+  TIMESTAMPTZ is only correct if an EARLIER migration converted it — access_policies was converted in 000043:162-168;
+  postgres.go:245 writes the identical form. ALWAYS trace the column's real current type, don't trust the INV-STORE-1
+  comment alone. Idempotency: up guards `enabled=true`, down guards `enabled=false` (both no-op on re-run). Operator-
+  safety: guard on `name AND source='seed' AND dsl_text='<exact>'` so `policy edit` customizations survive. Count-test
+  shape here uses `assert.ElementsMatch` (no length pin) + a retained `case "<name>":` that flips a bool feeding
+  `assert.False` = genuine re-add regression trap. Smoke test True→False flip on an UNCHANGED `createSeedEngine`
+  (loads SeedPolicies() only, no plugin policy) = genuine behavioral assertion, not no-op.

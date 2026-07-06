@@ -215,7 +215,7 @@ invariants.
 | `INV-SCENE-8` | Maintained pose-order metadata (scenes.total_pose_count, scene_participants.last_pose_at/last_pose_seq) MUST be a function of scene_log scene_pose rows; the recovery SQL MUST reproduce identical values. | `INV-P4-8` | pending |
 | `INV-SCENE-9` | Late-joining participants MUST see only IC events from scene_participants.joined_at forward via QueryStreamHistory; pose-order computation remains scene-global. | `INV-P4-9` | pending |
 | `INV-SCENE-10` | scene_pose audit-row insertion AND pose-metadata update MUST be transactional — either both commit or both roll back. | `INV-P4-10` | pending |
-| `INV-SCENE-11` | scene pose/say/emit/ooc subcommands MUST require the actor to be a participant of the target scene (inherits the write-scene-as-participant ABAC policy via command-capability pre-flight). | `INV-P4-11` | pending |
+| `INV-SCENE-11` | scene pose/say/emit/ooc subcommands MUST require the actor to be a participant of the target scene (inherits the write-scene-as-participant ABAC policy via command-capability pre-flight). | `INV-P4-11` | bound |
 | `INV-SCENE-12` | scene update with pose_order_mode in update_mask MUST require the actor to be the scene owner (inherits the update-own-scene ABAC policy). | `INV-P4-12` | pending |
 | `INV-SCENE-13` | Meta: every numbered INV-P4-* MUST have at least one cited test file; the §12.1 coverage matrix MUST exist. | `INV-P4-13` | pending |
 | `INV-SCENE-14` | Focus-without-membership MUST NOT be possible: substrate validates against info.FocusMemberships inside the SessionConnectionMutator callback before applying any non-nil Connection.FocusKey; validation and write are atomic under one Store-lock. | `INV-P5-1` | pending |

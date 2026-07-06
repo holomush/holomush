@@ -174,13 +174,18 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is character, action in ["list_presence"], resource is location) when { resource.location.id == principal.character.location };`,
 			SeedVersion: 6,
 		},
-		// G4: Scene participant access (target matching only; scene provider is a stub).
-		{
-			Name:        "seed:player-scene-participant",
-			Description: "Characters can join and leave scenes",
-			DSLText:     `permit(principal is character, action in ["write"], resource is scene);`,
-			SeedVersion: 1,
-		},
+		// G4: Scene read access (target matching only).
+		//
+		// NOTE: the former "seed:player-scene-participant" write seed was removed
+		// in holomush-8m01u. It was an UNCONDITIONAL permit(character, write,
+		// scene) that — because the engine OR-combines matching permits — subsumed
+		// and nullified the core-scenes plugin's participant-conditioned
+		// write-scene-as-participant policy (plugins/core-scenes/plugin.yaml), so a
+		// non-participant could emit IC/OOC into any scene. Scene-write
+		// authorization now lives solely in that plugin policy, evaluated against
+		// the plugin's SceneResolver `participants` attribute. Existing deployments
+		// have the stale row disabled by migration 000047. The read seed below is
+		// the identical vestigial pattern and is tracked separately.
 		{
 			Name:        "seed:player-scene-read",
 			Description: "Characters can view scenes",
