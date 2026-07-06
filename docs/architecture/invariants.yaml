@@ -3349,8 +3349,6 @@ invariants:
     asserted_by:
       - "internal/command/dispatcher_focus_test.go"
       - "internal/command/focus_reader_test.go"
-  # NOTE: INV-SCENE-67 is allocated by the in-flight holomush-uprtc branch
-  # (PR #4585, fail-closed focus-read). Do not reuse the number.
   - id: INV-SCENE-68
     scope: INV-SCENE
     origin_spec: "docs/superpowers/specs/2026-04-07-scenes-phase-3-membership-design.md"

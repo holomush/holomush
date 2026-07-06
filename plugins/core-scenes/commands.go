@@ -563,8 +563,10 @@ func (p *scenePlugin) handleCreate(ctx context.Context, req pluginsdk.CommandReq
 }
 
 // handleInfo shows scene metadata for the given scene ID. Authorization is
-// enforced via the host ABAC evaluator (read-scene-as-participant policy)
-// before this handler is called.
+// enforced via the host ABAC evaluator before this handler is called — the
+// read action is permitted by any of the three sibling policies
+// (read-scene-as-participant, read-scene-as-invitee, read-open-scene;
+// INV-SCENE-68, ADR holomush-gcr2k).
 func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := normalizeSceneID(args)
 	if sceneID == "" {

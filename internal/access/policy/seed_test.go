@@ -239,7 +239,7 @@ func TestSeedPoliciesPlayerLocationListCharactersPolicyExists(t *testing.T) {
 	assert.True(t, found, "seed:player-location-list-characters policy must exist (G3)")
 }
 
-func TestSeedPoliciesScenePoliciesExist(t *testing.T) {
+func TestSeedPoliciesVestigialSceneSeedsStayRemoved(t *testing.T) {
 	seeds := SeedPolicies()
 	var participantFound, readFound bool
 	for _, s := range seeds {
