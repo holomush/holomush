@@ -3336,6 +3336,19 @@ invariants:
     asserted_by:
       - "internal/command/dispatcher_focus_test.go"
       - "test/integration/scenes/focus_routed_input_test.go"
+  - id: INV-SCENE-67
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-07-05-focus-routed-scene-input-design.md"
+    legacy: []
+    summary: "A focus-read infra error during dispatch of a redirect-candidate verb (pose/say/ooc/emit) fails closed: dispatch
+      aborts with a player-visible retryable error (FOCUS_READ_FAILED) and the command reaches no handler — it is never routed
+      to the plaintext location stream, which would downgrade participant-only encrypted scene content (ADR holomush-pbp9j;
+      revises the original §4.5 fail-open contract). Genuine no-focus (nil focus, grid, vanished connection) still routes
+      to location unchanged."
+    binding: bound
+    asserted_by:
+      - "internal/command/dispatcher_focus_test.go"
+      - "internal/command/focus_reader_test.go"
 
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride

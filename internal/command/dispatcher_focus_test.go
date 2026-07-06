@@ -132,6 +132,7 @@ func TestDispatcherRedirectsSceneFocusedVerbToSceneCommand(t *testing.T) {
 }
 
 // Verifies: INV-SCENE-66
+// Verifies: INV-SCENE-67
 func TestDispatcherDoesNotRedirectWhenGridFocused(t *testing.T) {
 	d, deliverer := focusRedirectDispatcher(t, fakeFocusReader{kind: ""}, nil)
 	exec := newFocusExec(ulid.Make())
@@ -139,20 +140,34 @@ func TestDispatcherDoesNotRedirectWhenGridFocused(t *testing.T) {
 	assert.Equal(t, "pose", deliverer.last.Command, "grid focus must route to the location pose handler")
 }
 
-func TestDispatcherFailsOpenToLocationOnFocusReadError(t *testing.T) {
+// Verifies: INV-SCENE-67
+func TestDispatcherFailsClosedOnFocusReadError(t *testing.T) {
 	before := testutil.ToFloat64(observability.EngineFailureCounter("focus_redirect"))
 
 	d, deliverer := focusRedirectDispatcher(t, fakeFocusReader{err: oops.Errorf("focus store down")}, nil)
 	exec := newFocusExec(ulid.Make())
-	require.NoError(t, d.Dispatch(context.Background(), "pose bows", exec))
-	assert.Equal(t, "pose", deliverer.last.Command, "a focus-read infra error must fail open to location, not drop the command")
+	err := d.Dispatch(context.Background(), "pose bows", exec)
+	require.Error(t, err, "a focus-read infra error must abort dispatch (holomush-uprtc)")
 
-	// The fail-open path MUST also surface an engine-failure metric — mirrors
-	// RateLimitMiddleware.Enforce's fail-open observability (metric + span
-	// attribute, not just a WARN log) so a live degradation is visible to
-	// Prometheus, not only Loki.
+	// The command must reach NO handler. Routing to the location handler on a
+	// focus-read error (the pre-uprtc fail-open contract) broadcast a
+	// scene-focused user's participant-only encrypted content in plaintext to
+	// grid bystanders — an INV-SCENE-3 sensitivity downgrade.
+	assert.Empty(t, deliverer.last.Command, "no handler may receive the command on a focus-read error")
+
+	// The abort is player-visible and retryable, never silent: the player must
+	// learn the message was NOT delivered anywhere.
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, command.CodeFocusReadFailed, oopsErr.Code())
+	assert.Contains(t, command.PlayerMessage(err), "not sent")
+
+	// The fail-closed path keeps the engine-failure metric — mirrors
+	// RateLimitMiddleware.Enforce's observability (metric + span attribute,
+	// not just a WARN log) so a live degradation is visible to Prometheus,
+	// not only Loki.
 	after := testutil.ToFloat64(observability.EngineFailureCounter("focus_redirect"))
-	assert.Equal(t, before+1, after, "focus-read fail-open must increment the focus_redirect engine-failure counter")
+	assert.Equal(t, before+1, after, "focus-read failure must increment the focus_redirect engine-failure counter")
 }
 
 func TestDispatcherDoesNotRedirectWithoutConnectionID(t *testing.T) {

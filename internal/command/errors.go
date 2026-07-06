@@ -28,6 +28,7 @@ const (
 	CodeNoAliasCache                  = "NO_ALIAS_CACHE"
 	CodeResetPasswordFailed           = "RESET_PASSWORD_FAILED"
 	CodeFocusRedirectWiringIncomplete = "FOCUS_REDIRECT_WIRING_INCOMPLETE"
+	CodeFocusReadFailed               = "FOCUS_READ_FAILED"
 )
 
 // Sentinel errors for special conditions.
@@ -266,6 +267,8 @@ func PlayerMessage(err error) string {
 		return "Alias system is not available. Contact the server administrator."
 	case CodeResetPasswordFailed:
 		return "Password reset failed. Please try again."
+	case CodeFocusReadFailed:
+		return "Couldn't check your scene focus, so your message was not sent. Please try again."
 	default:
 		slog.Warn("unhandled error code in PlayerMessage",
 			"code", code,

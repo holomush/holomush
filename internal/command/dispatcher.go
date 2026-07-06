@@ -234,16 +234,19 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		)
 	}
 
-	// The focus-read fail-open path already logged a WARN and counted an
-	// engine-failure metric inside maybeRedirectForFocus (before the span
-	// existed); surface it on the span too so a live degradation is visible
-	// in tracing, not just logs. The command still proceeds routed to
-	// location per the fail-open contract (§4.5) — this only adds signal.
+	// A focus-read failure aborts dispatch — fail-CLOSED per §4.5 (revised by
+	// holomush-uprtc; ADR supersedes the original fail-open contract). Routing
+	// to the plaintext location stream on error would broadcast a scene-focused
+	// player's participant-only encrypted scene content (INV-SCENE-3,
+	// sensitivity: always) to grid bystanders. Distinct from the no-focus case,
+	// which proceeds to the location handler unchanged. maybeRedirectForFocus
+	// already logged a WARN and counted the engine-failure metric (before the
+	// span existed); surface the abort on the span, then error the command so
+	// the player knows the message was NOT delivered anywhere.
 	if focusReadErr != nil {
-		span.SetAttributes(
-			attribute.Bool("command.focus_redirect_failed_open", true),
-			attribute.String("command.focus_redirect_error", focusReadErr.Error()),
-		)
+		span.SetAttributes(attribute.Bool("command.focus_redirect_failed_closed", true))
+		metrics.SetStatus(StatusEngineFailure)
+		return oops.Code(CodeFocusReadFailed).Wrap(focusReadErr)
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
@@ -338,16 +341,19 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 // maybeRedirectForFocus rewrites parsed in place when the connection's focus
 // kind maps parsed.Name to a target command. Returns the original verb and true
 // when a redirect was applied (for span telemetry). It reads focus lazily —
-// only when parsed.Name is a redirect candidate — and fails open (no rewrite,
-// route to location) on any focus-read error, mapping to the spec's §4.5
-// failure semantics. invokedAs is intentionally NOT touched here so no-space /
-// OOC-style semantics carried on invokedAs survive (spec §4.4).
+// only when parsed.Name is a redirect candidate. A focus-read error is
+// returned for the caller to fail CLOSED (abort dispatch), per the §4.5
+// failure semantics as revised by holomush-uprtc: an error is NOT the same as
+// no-focus, because treating it as no-focus routed a scene-focused player's
+// participant-only content to the plaintext location stream. invokedAs is
+// intentionally NOT touched here so no-space / OOC-style semantics carried on
+// invokedAs survive (spec §4.4).
 //
 // focusReadErr is returned (rather than only logged) so the caller — which
-// starts the trace span after this call returns — can also record the
-// fail-open degradation as span telemetry, mirroring the fail-open
-// observability pattern in RateLimitMiddleware.Enforce (metric + span
-// attribute, not just a WARN log).
+// starts the trace span after this call returns — can abort dispatch and
+// record the degradation as span telemetry, mirroring the observability
+// pattern in RateLimitMiddleware.Enforce (metric + span attribute, not just
+// a WARN log).
 func (d *Dispatcher) maybeRedirectForFocus(
 	ctx context.Context, parsed *ParsedCommand, connID ulid.ULID,
 ) (origVerb string, redirected bool, focusReadErr error) {
@@ -359,7 +365,7 @@ func (d *Dispatcher) maybeRedirectForFocus(
 	}
 	kind, err := d.focusReader.ConnectionFocusKind(ctx, connID)
 	if err != nil {
-		slog.WarnContext(ctx, "focus-redirect lookup failed; routing to location",
+		slog.WarnContext(ctx, "focus-redirect lookup failed; aborting dispatch",
 			"command", parsed.Name, "connection_id", connID.String(), "error", err)
 		observability.RecordEngineFailure("focus_redirect")
 		return "", false, oops.Wrap(err)

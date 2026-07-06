@@ -170,9 +170,10 @@ Key properties:
   today defines only `FocusKindScene` and grid/no-focus is a **nil**
   `*session.FocusKey` (`internal/session/session.go:270`), the adapter MUST map a
   nil focus (grid) to the zero value `session.FocusKind("")`, which the
-  verb-keyed `targets[kind]` lookup correctly no-ops on. A read error maps the
-  same way (fail-open; see §4.5). The dispatcher never needs a non-scene
-  `FocusKind` constant.
+  verb-keyed `targets[kind]` lookup correctly no-ops on. A vanished connection
+  (`CONNECTION_NOT_FOUND`) also maps to absent focus, but a genuine read error
+  MUST propagate — the dispatcher fails closed on it (§4.5, as revised by
+  holomush-uprtc). The dispatcher never needs a non-scene `FocusKind` constant.
 - **Kind-only decision.** The dispatcher needs only the focus *kind*; the target
   scene is re-derived by `handleEmit` from its own `GetConnectionFocus` read
   (`commands.go:1248`). The dispatcher MUST NOT resolve or pass the scene ID.
@@ -211,17 +212,29 @@ eliminate. Tests MUST cover `pose`, `:`, `;`, and `"` through the redirect.
 
 ### 4.5 Failure semantics
 
+> **Revised 2026-07-06 (holomush-uprtc).** The original contract failed OPEN
+> to location on a `FocusReader` infra error. That routed a scene-focused
+> player's participant-only encrypted content (INV-SCENE-3, sensitivity:
+> always) to the plaintext location stream with no user-facing notice — an
+> unrecoverable confidentiality downgrade. The infra-error row now fails
+> CLOSED; INV-SCENE-67 pins it. A vanished connection (`CONNECTION_NOT_FOUND`)
+> is genuine no-focus, not an infra error, and stays on the no-focus row.
+
 | Condition | Behavior |
 | --- | --- |
-| No focus / grid focus | No redirect → location handler (unchanged, back-compat) |
-| `FocusReader` infra error | **Fail-open to location** — treat as not-scene-focused; the command MUST NOT be dropped |
+| No focus / grid focus / connection vanished | No redirect → location handler (unchanged, back-compat) |
+| `FocusReader` infra error | **Fail-closed** — abort dispatch with `FOCUS_READ_FAILED`; the player is told the message was **not sent** and to retry. The command MUST NOT be routed to any handler |
 | Scene focus, participant | Redirect → scene IC/OOC stream |
 | Scene focus, non-participant / stale | Redirect fires; `handleEmit`'s `write-scene-as-participant` ABAC gate (`commands.go:1285`) returns an **explicit** permission error |
 
-The fail-open-on-infra-error / explicit-error-on-non-participant split is
-deliberate: a transient focus-store hiccup MUST degrade to today's location
-behavior rather than silently swallowing a player's pose, whereas a genuine
-authorization failure MUST be surfaced.
+The fail-closed-on-infra-error / explicit-error-on-non-participant split is
+deliberate: a transient focus-store hiccup MUST surface as a retryable,
+player-visible delivery failure rather than silently broadcasting the pose to
+the wrong (plaintext) audience, and a genuine authorization failure MUST be
+surfaced as a permission error. A dropped pose is a retry; a leaked pose is
+unrecoverable. The UX cost of fail-closed (a store blip errors the ambient
+verbs) shrinks to near zero once the focus read is served from memory
+(holomush-wm0fi).
 
 ### 4.6 Web (Part 2)
 
@@ -264,8 +277,8 @@ and the ⌘↵ shortcut until focus is confirmed. This closes the window that th
 `scene <verb>` wrapper masked via `handleEmit`'s single-membership fallback.
 
 **Symmetric failure is intended.** After the change, every surface degrades
-identically: on a focus-read infra error the redirect fails open to the grid
-location (§4.5) for telnet, terminal, and Scene Board alike. The Scene Board
+identically: on a focus-read infra error the dispatch aborts with a retryable
+delivery error (§4.5, revised) for telnet, terminal, and Scene Board alike. The Scene Board
 gives up its bespoke `scene pose` fallback (single-membership inference) — which
 in a multi-scene workspace usually could not resolve a target anyway — in
 exchange for uniform, predictable behavior across surfaces. That uniformity is
@@ -334,8 +347,8 @@ connections are unaffected.
 2. **Actor identity per alt** — resolved. Each connection maps to one session →
    one `CharacterID`; actor is `exec.CharacterID()`, unambiguous per connection.
    Alts are separate sessions.
-3. **Failure split** — resolved as §4.5 (infra error → fail-open to location;
-   non-participant → explicit ABAC error).
+3. **Failure split** — resolved as §4.5 (infra error → fail-closed abort per
+   the holomush-uprtc revision; non-participant → explicit ABAC error).
 
 ## 9. Rejected Alternatives
 
