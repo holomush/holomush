@@ -45,9 +45,13 @@ CLAUDE.md at 36 KB (T3a target ≤ 24 KB), the grepping full-skill force-load
 1. Hook stdin JSON includes `agent_id` / `agent_type` **only for subagent tool
    calls** — a PreToolUse hook can scope enforcement to the main session.
    (Requires a one-line empirical probe at implementation time; see §7 and RD5.)
-2. PreToolUse hooks may return
-   `hookSpecificOutput: { permissionDecision: "allow"|"deny"|"ask", permissionDecisionReason }`
-   on stdout — the reason is shown to the model. Richer than exit-2/stderr.
+2. PreToolUse hooks may return a JSON permission decision on stdout
+   (`hookSpecificOutput.permissionDecision: "allow"|"deny"|"ask"` plus a reason
+   string shown to the model) — richer than exit-2/stderr. The **exact field
+   names** (whether the reason rides in `permissionDecisionReason` vs a
+   top-level `systemMessage`; whether `hookEventName` is required) vary across
+   doc sources and MUST be confirmed against the live hooks reference during
+   the §7 probe, not treated as settled here.
 3. Project hooks fire for subagent tool calls too (hence the `agent_id` gate).
 4. Agent frontmatter `tools:` cannot scope Bash to specific commands; command
    gating belongs in PreToolUse hooks.
@@ -128,10 +132,12 @@ A new rule in the existing top-level-segment parser (reusing its chain/pipe/
 control-flow splitting and `first_cmd_word`):
 
 - **Match:** first word `task`, second word ∈ exactly
-  `{test, test:int, test:cover, test:verbose, lint, build}`.
-  Sub-task variants (`lint:go`, `lint:proto`, `test:e2e`, `docs:*`, …) are
-  **deliberately not matched** — narrow start; they are targeted/short-output
-  or have no offload wrapper (RD6).
+  `{test, test:int, test:cover, lint, build}` — the five names `local-check`
+  can actually serve. `task test:verbose` is **deliberately excluded**: its
+  entire purpose is full raw output in-thread, so denying it would name a
+  replacement (`local-check`) that cannot serve the need. Sub-task variants
+  (`lint:go`, `lint:proto`, `test:e2e`, `docs:*`, …) are likewise not matched —
+  narrow start; targeted/short-output or no offload wrapper (RD6).
 - **Skip conditions (checked in order):**
   1. hook input has a non-empty `agent_id` → subagent session → all new rules
      skipped entirely (existing raw-`go`/lint blocks still apply everywhere);
@@ -150,13 +156,25 @@ control-flow splitting and `first_cmd_word`):
 - **Enforcement mode constant:** a single variable at the top of the script,
   `OFFLOAD_ENFORCE=deny|nudge`. Ships as `deny` **only after** the §7 probe
   confirms `agent_id` is present in this CC version's hook input; otherwise
-  ships as `nudge` with a follow-up bead to flip it (RD5).
+  ships as `nudge` with a follow-up bead to flip it (RD5). Nudge-mode text
+  (stderr, exit 0, matching the file's existing soft-nudge idiom): *"Nudge:
+  dispatch the `local-check` agent (`subagent_type: local-check`, prompt:
+  `<kind> [args]`) instead of inline `task <name>` — keeps raw output out of
+  the main context. Append `# offload-exempt` if raw output is needed.
+  (`task <name>` still runs.)"*
 - **Known cost (documented in the hook header):** a deny cancels sibling calls
   in a parallel tool batch. Accepted: the replacement is an `Agent` dispatch,
   verbose task runs are usually solo calls, and the hook header already
   documents this hazard class for the pre-existing hard blocks.
-- **Tests:** bats coverage for the new matcher — main-vs-subagent input, each
-  matched task name, exempt token, pr-prep nudge path, `OFFLOAD_ENFORCE` modes.
+- **Tests:** follow the repo's existing hook-test precedent — a **colocated
+  `enforce-task-runner.test.sh`** harness (cf.
+  `.claude/hooks/nudge-adr-capture.test.sh`), NOT a bats file: `task test:bats`
+  runs only `scripts/tests/` and does not reach `.claude/hooks/`. Coverage
+  matrix: main-vs-subagent input, each matched task name, exempt token,
+  pr-prep nudge path, both `OFFLOAD_ENFORCE` modes. If the plan finds the
+  colocated precedent has no wired runner, it MUST wire the harness into an
+  executed target (e.g. a `scripts/tests/` bats shim that invokes it) rather
+  than land an unexecuted test.
 
 ### 3.4 Policy text
 
@@ -180,11 +198,25 @@ control-flow splitting and `first_cmd_word`):
 
 ### 4.1 wagqb Phase 3 (T1c, T2a, T2b) — scheduled, mechanisms unchanged
 
-Implemented exactly per wagqb RD1 (index-pointer; no false moment-triggering):
+Implemented per wagqb RD1 (index-pointer; no false moment-triggering), with
+one **grounding correction** discovered in this design round:
 
-- **T1c:** `landing-the-plane.md` → one-line pointer to CLAUDE.md's canonical
-  "Landing the Plane" section. `subagent-briefing.md` slimmed in place — every
-  MUST retained; local-* references updated per §3.4.
+- **T1c (revised — wagqb's version is grounded against a stale CLAUDE.md and
+  MUST NOT be executed as written there):** wagqb prescribed truncating
+  `landing-the-plane.md` to a pointer, claiming CLAUDE.md held the canonical
+  copy. Today the relationship is **inverted**: CLAUDE.md's "Landing the
+  Plane" section is itself a ~4-line pointer *to* the rule file, and the rule
+  file is the sole home of several MUSTs (file-beads-for-remaining-work,
+  bd-close/bd-update step, `superpowers:handoff-prompt` hand-off, "NEVER stop
+  before pushing", the `jj op restore`/`jj op abandon` sibling-workspace
+  warning). Pointer-izing it would delete guardrails (violates G4 / wagqb N2).
+  Revised T1c: `landing-the-plane.md` **remains the canonical checklist home**;
+  slim it only by de-duplicating the pre-push-rebase recipe detail that
+  appears in all three of the rule, CLAUDE.md, and the jj-skill cheat-sheet
+  (one authoritative statement + pointers), keeping every MUST whose only home
+  it is. Expected saving is modest (~1 KB); honesty over the stale claim.
+  `subagent-briefing.md` slimmed in place as originally designed — every MUST
+  retained; local-* references updated per §3.4.
 - **T2a:** `require-grepping-skill.sh` stops requiring the full `grepping`
   skill; it injects a compact search-ladder cheat-sheet instead. The
   cheat-sheet **MUST retain verbatim:** never bare `grep` (use `rg`),
@@ -201,10 +233,10 @@ Implemented exactly per wagqb RD1 (index-pointer; no false moment-triggering):
 
 36 KB → **≤ 24 KB**, MUST-preserving, conservative. The pr-prep reading-guide,
 session-isolation walkthrough, and Pre-Push Gate detail tables relocate to
-their existing homes under `site/src/content/docs/contributing/` (`pr-prep.md`,
-`pr-guide.md`, `sessions.md`); every MUST stays in CLAUDE.md as a ≤ 1-line
-index entry. The three stale pre-`how-to/` links (wagqb noted lines 77/355/394)
-are fixed in the same diff. The §3.4 delegation rows land as part of the
+their existing homes at `site/src/content/docs/contributing/how-to/`
+(`pr-prep.md`, `pr-guide.md`, `sessions.md`); every MUST stays in CLAUDE.md as
+a ≤ 1-line index entry. CLAUDE.md's stale pre-`how-to/` links (wagqb noted
+lines 77/355/394) are fixed in the same diff. The §3.4 delegation rows land as part of the
 trimmed Commands section. **The diff MUST be human-reviewed before landing.**
 
 ### 4.3 Reviewer/aux description trims
@@ -230,6 +262,8 @@ call is the operator's (their config spans other projects); out of repo scope.
 | Risk | Mitigation |
 | --- | --- |
 | `agent_id` absent from hook input on the current CC version → deny would also fire inside subagents | §7 probe **before** enabling; `OFFLOAD_ENFORCE=nudge` fallback mode + follow-up bead (RD5) |
+| Deny-JSON field names drift across doc sources (`permissionDecisionReason` vs `systemMessage`, `hookEventName`) | §7 probe also confirms the exact schema against the live hooks reference before deny mode ships |
+| A wagqb-inherited claim is stale against current files (T1c was) | Every inherited Phase-3/4 item re-verified against the file on disk at plan time; T1c already corrected (§4.1) |
 | Deny cancels sibling calls in a parallel batch | Documented in hook header; verbose runs are usually solo; replacement is an Agent dispatch |
 | Hard deny blocks a legitimate inline need | `# offload-exempt` token (mirrors `# jj-exempt`); pr-prep is never denied (N4) |
 | `local-check` false PASS | Exit-code-first protocol retained verbatim; final pr-prep still runs in parent (N4) |
@@ -252,10 +286,11 @@ One PR, one jj commit per item, in this order (cheap/safe → careful):
 
 ## 7. Verification
 
-- **`agent_id` probe (gates §3.3 deny mode):** a temporary logging line in a
-  PreToolUse hook captures the input JSON during one `local-check` (or any
-  subagent) dispatch and one main-session Bash call; confirm the field's
-  presence/absence split. Remove the probe in the same branch.
+- **`agent_id` + schema probe (gates §3.3 deny mode):** a temporary logging
+  line in a PreToolUse hook captures the input JSON during one `local-check`
+  (or any subagent) dispatch and one main-session Bash call; confirm (a) the
+  `agent_id` presence/absence split and (b) the exact deny-JSON output schema
+  accepted by this CC version (§1 fact 2). Remove the probe in the same branch.
 - **Hook bats matrix:** per §3.3 — matched names, exempt token, subagent skip,
   pr-prep nudge, both `OFFLOAD_ENFORCE` modes.
 - **Offload behavior check:** in a fresh session, ask for "run the tests for
@@ -278,7 +313,7 @@ exists in `docs/architecture/invariants.yaml` and none is warranted.
 ## 9. Resolved Decisions
 
 - **RD1 — Enforcement mode (user, 2026-07-06): hard deny + escape hatch.**
-  Inline `task test|lint|build|test:int|test:cover|test:verbose` in the main
+  Inline `task test|lint|build|test:int|test:cover` in the main
   session → PreToolUse JSON `deny` naming the `local-check` replacement;
   `# offload-exempt` runs inline; pr-prep is soft-nudge only (N4). Soft-only
   and ask-mode rejected: repo history (raw `go test` block) shows nudges get
@@ -297,7 +332,9 @@ exists in `docs/architecture/invariants.yaml` and none is warranted.
   absent on the current CC version, §3.3 ships `OFFLOAD_ENFORCE=nudge` and a
   follow-up bead tracks the flip. Rationale: without main-vs-subagent
   discrimination, a deny would break the offload agents themselves.
-- **RD6 — Narrow hook match list (design).** Exactly six `task` names; sub-task
-  variants (`lint:go`, `test:e2e`, `docs:*`) stay inline-allowed — they are
-  targeted/short-output or have no wrapper. Widening is a one-line follow-up if
-  usage shows leakage.
+- **RD6 — Narrow hook match list (design).** Exactly five `task` names — the
+  set `local-check` can serve. `task test:verbose` is excluded (its purpose is
+  raw output in-thread; a deny would name a replacement that cannot serve the
+  need). Sub-task variants (`lint:go`, `test:e2e`, `docs:*`) stay
+  inline-allowed — targeted/short-output or no wrapper. Widening is a one-line
+  follow-up if usage shows leakage.
