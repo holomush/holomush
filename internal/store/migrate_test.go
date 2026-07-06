@@ -291,16 +291,17 @@ func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testin
 	// add_session_history_floor_columns + eventbus_crypto_timestamps_to_bigint +
 	// connection_focus_key + player_character_bindings_cascade + auth_timestamps_to_bigint +
 	// world_timestamps_to_bigint + totp_misc_timestamps_to_bigint + pregfo6_gap_timestamps_to_bigint +
-	// character_preferences + session_connection_last_seen + disable_unconditional_scene_write_seed)
+	// character_preferences + session_connection_last_seen + disable_unconditional_scene_write_seed
+	// + disable_unconditional_scene_read_seed)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 47 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 47}}
+	// At version 48 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 48}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)

@@ -505,6 +505,13 @@ policies:
   # the policy itself.
 
   # ─── REPLACED — was owner-only, now any participant ───────────────────────────────────
+  # Revised 2026-07-06 (holomush-sjtlz, ADR holomush-gcr2k): after the vestigial
+  # unconditional host seed:player-scene-read was retired (read twin of
+  # holomush-8m01u; migration 000048), this policy became the sole participant
+  # grant for the `scene info` read gate, and two SIBLING policies were added
+  # alongside it in plugin.yaml — read-scene-as-invitee (invitees may inspect
+  # before accepting) and read-open-scene (visibility=open metadata is public,
+  # coherent with spectate-open-scene). Net contract: INV-SCENE-68.
   - name: read-scene-as-participant
     dsl: >-
       permit(principal is character, action in ["read"], resource is scene)

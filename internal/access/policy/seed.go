@@ -174,24 +174,19 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is character, action in ["list_presence"], resource is location) when { resource.location.id == principal.character.location };`,
 			SeedVersion: 6,
 		},
-		// G4: Scene read access (target matching only).
-		//
-		// NOTE: the former "seed:player-scene-participant" write seed was removed
-		// in holomush-8m01u. It was an UNCONDITIONAL permit(character, write,
-		// scene) that — because the engine OR-combines matching permits — subsumed
-		// and nullified the core-scenes plugin's participant-conditioned
-		// write-scene-as-participant policy (plugins/core-scenes/plugin.yaml), so a
-		// non-participant could emit IC/OOC into any scene. Scene-write
-		// authorization now lives solely in that plugin policy, evaluated against
-		// the plugin's SceneResolver `participants` attribute. Existing deployments
-		// have the stale row disabled by migration 000047. The read seed below is
-		// the identical vestigial pattern and is tracked separately.
-		{
-			Name:        "seed:player-scene-read",
-			Description: "Characters can view scenes",
-			DSLText:     `permit(principal is character, action in ["read"], resource is scene);`,
-			SeedVersion: 1,
-		},
+		// NOTE: the former "seed:player-scene-participant" (write) and
+		// "seed:player-scene-read" seeds were removed in holomush-8m01u and
+		// holomush-sjtlz respectively. Both were UNCONDITIONAL
+		// permit(character, <action>, scene) stubs that — because the engine
+		// OR-combines matching permits — subsumed and nullified the core-scenes
+		// plugin's membership-conditioned policies (plugins/core-scenes/
+		// plugin.yaml), so a non-participant could emit IC/OOC into any scene
+		// (write) or `scene info` any scene's metadata (read). Scene
+		// authorization now lives solely in the plugin policies
+		// (write-scene-as-participant; read-scene-as-participant /
+		// read-scene-as-invitee / read-open-scene), evaluated against the
+		// plugin's SceneResolver attributes. Existing deployments have the
+		// stale rows disabled by migrations 000047 (write) and 000048 (read).
 
 		// --- Phase-2 command policies ---
 
