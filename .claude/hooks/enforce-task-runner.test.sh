@@ -37,7 +37,9 @@ expect_case() {
   else
     printf '%s' "$got_out" | grep -qE "$want_out" || { echo "FAIL $name: stdout '$got_out' !~ /$want_out/" >&2; fail=$((fail+1)); return; }
   fi
-  if [ -n "$want_err" ]; then
+  if [ -z "$want_err" ]; then
+    [ -n "$got_err" ] && { echo "FAIL $name: stderr non-empty: $got_err" >&2; fail=$((fail+1)); return; }
+  else
     printf '%s' "$got_err" | grep -qE "$want_err" || { echo "FAIL $name: stderr '$got_err' !~ /$want_err/" >&2; fail=$((fail+1)); return; }
   fi
   pass=$((pass+1))
@@ -74,6 +76,13 @@ expect_case "nudge-mode" nudge "$(mkinput 'task test')" 0 "" 'local-check'
 
 # --- pre-existing rules unaffected: raw go test still exit-2 blocked ---
 expect_case "go-test-still-blocked" deny "$(mkinput 'go test ./...')" 2 "" "task test"
+
+# --- documented-limitation pins (Known limitations block in the hook) ---
+# Control-flow body exemption: task inside do…done is depth>0, not matched.
+expect_case "loopbody-exempt-documented" deny "$(mkinput 'for i in 1; do task test; done')" 0 "" ""
+# Exempt token is a raw-command substring check: a quoted occurrence anywhere
+# exempts all task segments in the command.
+expect_case "exempt-substring-documented" deny "$(mkinput 'jj describe -m "see # offload-exempt docs" && task test')" 0 "" ""
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

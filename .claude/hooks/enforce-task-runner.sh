@@ -105,6 +105,8 @@ first_cmd_word() {
 # - Quoted strings containing && ; || are incorrectly split.
 # - || fallback clauses are checked as independent commands, which may
 #   produce false positives (e.g., "cmd || cat /dev/null").
+# - The control-flow body exemption (depth>0) applies to the offload redirect too: 'for …; do task test; done' is not matched — same accepted hole as the pre-existing go-test block; do not "fix" by changing depth semantics (it exists to kill cat/tail false positives).
+# - '# offload-exempt' is a raw-command substring check (mirrors # jj-exempt): a quoted occurrence anywhere in a multi-segment command exempts all its task segments. Accepted: fail-open on an advisory layer.
 
 # Strip single- and double-quoted string contents (across newlines) before
 # segment-splitting so commands like `jj describe -m 'message contains find
