@@ -14,6 +14,10 @@
 # `task test … ; tail /tmp/log` verification idiom loses the real test run.
 # grep was softened first (see its case); cat/head/tail/find followed for the
 # same reason.
+# Additionally REDIRECTS main-session inline 'task test|test:int|test:cover|
+# lint|build' to the local-check offload agent (deny or nudge per
+# OFFLOAD_ENFORCE; '# offload-exempt' escape hatch; subagent calls exempt via
+# agent_id) — holomush-drf7b §3.3.
 # Error strategy: enforcement hook — fails open on jq/parse errors
 # (command proceeds unchecked), but reliably blocks known bad patterns
 # (go/lint/fmt) when parsing succeeds.
@@ -29,6 +33,18 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || {
 }
 
 [[ -z "$COMMAND" ]] && exit 0
+
+# --- Offload enforcement config (holomush-drf7b §3.3) ---
+# Main-session inline `task test|test:int|test:cover|lint|build` is redirected
+# to the local-check agent. deny = PreToolUse JSON permission denial (cancels
+# the call — NOTE: a deny also cancels sibling calls in a parallel tool batch;
+# accepted, since the replacement is an Agent dispatch and verbose runs are
+# usually solo). nudge = stderr advisory only. Env-overridable for tests and
+# emergencies. Subagent calls (agent_id present) are exempt: offload agents
+# and implementer subagents run task freely in their own cheap contexts.
+# Escape hatch: append `# offload-exempt` to the command (cf. # jj-exempt).
+OFFLOAD_ENFORCE="${OFFLOAD_ENFORCE:-nudge}"   # ← nudge per RD5: live probe impossible pre-merge (hooks execute from the session project dir); flip tracked in holomush-afq2t
+AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null) || AGENT_ID=""
 
 # --- Enforcement phase: errors here are bugs, not parse failures ---
 trap - ERR
@@ -138,6 +154,34 @@ while IFS= read -r segment; do
   second_word="${rest%% *}"
 
   case "$word" in
+    task)
+      # Offload redirect — main session only, exempt token honored.
+      if [[ -z "$AGENT_ID" ]] && [[ "$COMMAND" != *"# offload-exempt"* ]]; then
+        offload_kind=""
+        case "$second_word" in
+          test)       offload_kind="test" ;;
+          test:int)   offload_kind="int" ;;
+          test:cover) offload_kind="cover" ;;
+          lint)       offload_kind="lint" ;;
+          build)      offload_kind="build" ;;
+          pr-prep|pr-prep:full|pr-prep:docs)
+            echo "Nudge: iterating on pr-prep? Dispatch the local-pr-prep agent for a compact verdict. Final pre-push gate? Run inline — the parent MUST run it itself. (task $second_word still runs.)" >&2
+            ;;
+        esac
+        if [[ -n "$offload_kind" ]]; then
+          offload_args="${rest#"$second_word"}"
+          offload_args="$(strip_leading_ws "$offload_args")"
+          suggested="$offload_kind${offload_args:+ $offload_args}"
+          if [[ "$OFFLOAD_ENFORCE" == "deny" ]]; then
+            jq -cn --arg reason "Inline \`task $second_word\` floods the main context. Dispatch the local-check agent (Agent tool, subagent_type: local-check, prompt: '$suggested') and read its compact verdict. If raw output is genuinely needed in-thread, re-run with \`# offload-exempt\` appended." \
+              '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$reason}}'
+            exit 0
+          else
+            echo "Nudge: dispatch the local-check agent (subagent_type: local-check, prompt: '$suggested') instead of inline task $second_word — keeps raw output out of the main context. Append # offload-exempt if raw output is needed. (task $second_word still runs.)" >&2
+          fi
+        fi
+      fi
+      ;;
     go)
       case "$second_word" in
         test)
