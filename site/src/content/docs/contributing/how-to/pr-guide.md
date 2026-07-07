@@ -235,6 +235,19 @@ gh pr edit --add-reviewer username
 7. Get approval and merge
 ```
 
+## Pre-Push Review Gates
+
+Three adversarial read-only sub-agents (`design-reviewer`, `plan-reviewer`,
+`code-reviewer`, plus `crypto-reviewer` / `abac-reviewer` when applicable) gate
+hand-offs BEFORE the PR surface. They complement `pr-review-toolkit:review-pr`
+(which runs on the PR itself) by providing an earlier, in-session review pass.
+The gate tables (which agent fires when, and the READY / NOT READY contract)
+live in the root `CLAUDE.md` under "Pre-Push Review Gates".
+
+Agent definitions live in `.claude/agents/`; slash commands in
+`.claude/commands/`; persistent memory in `.claude/agent-memory/`
+(checked into VCS).
+
 ## Further Reading
 
 - [Coding Standards](/contributing/reference/coding-standards/) - Style and conventions

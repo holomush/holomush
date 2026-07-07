@@ -3,11 +3,11 @@ name: code-reviewer
 description: |
   MUST run before any of: `jj git push`, `git push`, `gh pr create`, `bd close`,
   or before responding to user text containing "push", "open a PR", "create a
-  PR", "merge", "ship", "land", "ready to push", "ready to merge", "ready to
-  ship", "close the bead", "mark done", "mark complete", "wrap up", "finalize".
-  Adversarial independent reviewer — not the implementer's ally. Findings
-  grounded in the repo at `path:line`. Read-only. Skipping requires explicit
-  user override (e.g., "skip review", "no review needed").
+  PR", "merge", "ship", "land", "ready to push/merge/ship", "close the bead",
+  "mark done", "mark complete", "wrap up", "finalize". Adversarial independent
+  reviewer — not the implementer's ally; findings grounded at `path:line`.
+  Read-only. Skipping requires explicit user override (e.g. "skip review",
+  "no review needed").
 model: opus
 effort: high
 permissionMode: plan

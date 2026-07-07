@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
-# SessionStart hook: requires the `dev-flow:grepping` skill to be loaded at the
-# start of every session, alongside the `jj:jujutsu` skill (which the jj
-# plugin's own SessionStart hook enforces). The grepping skill establishes this
-# repo's search-tool ladder — mcp__probe__* for Go symbol/AST queries, rg for
-# text (never bare grep), ast-grep for structural matches — so loading it up
-# front prevents defaulting to bare grep / full-file reads.
+# SessionStart hook: injects a compact search-tool-ladder cheat-sheet into the
+# session's additional context — mcp__probe__* for Go symbol/AST queries, rg
+# for text (never bare grep), ast-grep for structural matches — instead of
+# requiring the full `dev-flow:grepping` skill to load. The dev-flow plugin's
+# nudge-rg-failure PostToolUse hook points back at the full skill on demand
+# after any rg failure.
 #
-# Output contract: emit the requirement to plain stdout (the Claude Code
+# Output contract: emit the cheat-sheet to plain stdout (the Claude Code
 # SessionStart hook concatenates stdout into the session's additional context).
 # Never block session start.
 
@@ -19,12 +19,25 @@ set -euo pipefail
 cat >/dev/null
 
 cat <<'EOF'
-## REQUIRED: Load grepping skill
+## Search-tool ladder (grepping cheat-sheet)
 
-You MUST invoke the Skill tool with skill="dev-flow:grepping" BEFORE your first
-response in this session — alongside the required jj:jujutsu skill. It establishes
-the repo's search-tool ladder (mcp__probe__* for Go symbol/AST queries, rg for
-text — never bare grep, ast-grep for structural matches and codemods) per
-.claude/rules/search-tools.md. Brief sub-agents on the same ladder; they default
-to rg / full-file reads without it.
+Repo search ladder (full skill: `dev-flow:grepping` — load on demand; the
+dev-flow plugin's nudge-rg-failure hook will point you at it after any rg
+failure):
+
+- **Go symbol / "where is X defined, how does Y work"** → `mcp__probe__search_code`
+  first (whole AST blocks; beats grep→Read).
+- **Raw text** → `rg`. NEVER bare `grep`/`egrep`/`fgrep` (PreToolUse hook nudges).
+- **Structural code shapes / codemods** → `ast-grep` (`sg` alias where
+  installed); NOT for pkg-qualified call patterns (misparses — use `rg`).
+
+rg silent-failure traps (these produce WRONG results, not errors):
+- `rg 'A\|B'` — `\|` matches a LITERAL pipe; alternation is bare `|`.
+- `rg -rn 'pat'` — rg's `-r` is --replace and EATS `n` as replacement text;
+  rg is already recursive: use `rg -n 'pat'`.
+
+Judging command success: decide pass/fail by EXIT CODE, never by grepping
+stdout/stderr for success/error strings (fixtures echo those; May 2026
+pr-prep incident). Brief sub-agents on this ladder — they default to bare
+grep / full-file reads without it.
 EOF

@@ -204,6 +204,28 @@ Note: the `stream:location:*` form in the DSL is an **ABAC resource ID** using
 `<resource_type>:<id>` convention — not a pub/sub stream subject. ABAC resource
 IDs retain the colon separator; only pub/sub subjects use dot-style.
 
+#### Plugin types, manifest, and registry
+
+Three plugin runtimes exist: `lua` (gopher-lua VM, lightweight event handlers),
+`binary` (hashicorp/go-plugin subprocess, complex services with proto contracts),
+and `setting` (bootstrap-only, configuration plugins with no runtime).
+
+**Manifest schema** (`plugin.yaml`): Each plugin declares `requires` (proto
+services it depends on), `provides` (proto services it implements), and
+`storage` (database tables it needs). The plugin loader performs DAG dependency
+resolution to determine load order and validates that all `requires` are
+satisfied by another plugin's `provides`.
+
+**Service registry**: Maps proto service names to implementations. Binary
+plugins register services over gRPC; Lua plugins register via the Lua host.
+
+**Plugin admin commands:**
+
+```bash
+plugin list            # List loaded plugins with name, type, version
+plugin info <name>     # Detailed plugin info (requires, provides, storage, commands)
+```
+
 ### Access Control
 
 HoloMUSH uses phased access control:
@@ -214,7 +236,25 @@ HoloMUSH uses phased access control:
 | **Full ABAC** | Attribute-based | Dynamic policies with attributes      |
 
 The core phase provides a simple `Check(subject, action, resource)` interface
-that the full ABAC implementation extends.
+that the full ABAC implementation extends. Default deny — explicit permission
+is required for all operations.
+
+#### Command Authorization
+
+Commands use two-layer authorization at dispatch time:
+
+1. **Layer 1 — Command Execution:** `engine.Evaluate(subject, "execute", "command:<name>")` — can this character run this command?
+2. **Layer 2 — Capability Pre-Flight:** `engine.CanPerformAction(subject, action, resource, scope)` per declared capability — does this character have the class of permissions this command needs?
+
+Commands declare capabilities as structured objects:
+
+```go
+Capabilities: []command.Capability{
+    {Action: "write", Resource: "location", Scope: command.ScopeLocal},
+}
+```
+
+Scope: `ScopeSelf` (default, own character), `ScopeLocal` (current location), `ScopeGlobal` (server-wide).
 
 ## Data Flow
 
@@ -306,6 +346,20 @@ This means:
 
 See [Gateway Boundary](/contributing/explanation/gateway-boundary/) for the full forbidden-import list
 and the `gateway_imports_test.go` CI tripwire.
+
+## Implementation Patterns
+
+### HTTP Middleware
+
+When wrapping `http.ResponseWriter` (e.g., cookie middleware), the wrapper
+MUST implement `http.Flusher` and `Unwrap()` — ConnectRPC server-streaming
+calls `Flush()` after each frame and will error if the interface is missing.
+
+### Web Client
+
+See `web/CLAUDE.md` for SvelteKit-specific patterns including theme system
+architecture, shadcn-svelte conventions, Tailwind v4 guidance, and Svelte 5
+runes patterns.
 
 ## Further Reading
 

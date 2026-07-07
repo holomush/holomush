@@ -173,6 +173,17 @@ Under `WithRealABAC`, tests that pass under allow-all may see denials until
 they seed the roles their actions require — see
 [live role semantics](/contributing/explanation/integration-test-harness/#real-abac-role-semantics).
 
+## Session-store testing (Docker required)
+
+Tests in `internal/grpc/`, `internal/grpc/focus/`, `internal/command/handlers/`, and `internal/session/` that exercise `session.Store`-touching logic require Docker even under `task test` — they use the `internal/testsupport/sessiontest.NewStore(t)` helper, which is backed by a fresh database on the shared Postgres testcontainer. This is the **deliberate exception** to the "SharedPostgres tests MUST be `//go:build integration`" convention (`session.Store` has exactly one implementation — `store.PostgresSessionStore` — so there is no in-memory fake to test against). See [docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md](https://github.com/holomush/holomush/blob/main/docs/superpowers/specs/2026-05-23-remove-session-memstore-design.md) for the rationale.
+
+| Requirement                                | Description                                                                                              |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| **MUST** use `sessiontest.NewStore(t)`     | For any test needing a `session.Store` — never construct one ad hoc.                                     |
+| **MUST** seed FK parents when needed       | Sessions Set with a non-zero `PlayerSessionID` need `sessiontest.NewStoreWithPool(t)` + `SeedPlayerSession(t, pool, ps)` (the `sessions.player_session_id` FK is enforced). |
+| **MUST NOT** add `//go:build integration`  | The `sessiontest` package is the deliberate exception; Ginkgo suites pass their captured `suiteT`.       |
+| **MUST** have Docker running               | Absence surfaces as testcontainers container-start errors at test runtime, not compile failures.         |
+
 ## Related
 
 - `internal/eventbus/eventbustest/` — bus-only harness for unit tests that

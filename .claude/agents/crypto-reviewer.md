@@ -1,23 +1,21 @@
 ---
 name: crypto-reviewer
 description: |
-  MUST run BEFORE `code-reviewer` for any change touching the event-payload-cryptography
-  surface: `internal/eventbus/crypto/`, `internal/eventbus/codec/`,
-  `internal/eventbus/history/dispatcher.go`, `internal/eventbus/history/cold_postgres.go`
-  (DEK column handling), `internal/plugin/event_emitter.go::Emit` (downgrade fence),
-  `internal/eventbus/audit/projection.go` (header→column or envelope projection),
-  plugin manifest `crypto.emits` declarations, or any migration touching
-  `crypto_keys` / `events_audit`.
-
-  Also fires before responding to user text containing "ship the crypto", "crypto
-  is ready", "rekey", "AuthGuard", "DEK", "AAD", or any phrasing that suggests
-  pushing crypto-domain code without a domain-specialist review pass first.
-
-  Adversarial reviewer specialized in the holomush event-payload-cryptography
-  invariants. Findings grounded in `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md`
-  (the master spec) cross-referenced against repo state at `path:line`.
-  Read-only. Skipping requires explicit user override (e.g., "skip crypto
-  review", "no crypto review needed"). Output verdict: READY / NOT READY.
+  MUST run BEFORE `code-reviewer` for any change touching:
+  `internal/eventbus/crypto/`, `internal/eventbus/codec/`,
+  `internal/eventbus/history/dispatcher.go`,
+  `internal/eventbus/history/cold_postgres.go`,
+  `internal/plugin/event_emitter.go::Emit`,
+  `internal/eventbus/audit/projection.go`, plugin manifest `crypto.emits`
+  declarations, or migrations on `crypto_keys`/`events_audit`. Also fires on
+  user text containing "ship the crypto", "crypto is ready", "rekey",
+  "AuthGuard", "DEK", "AAD", or any phrasing that suggests pushing
+  crypto-domain code without a domain-specialist review pass first.
+  Adversarial reviewer for the event-payload-crypto invariants (master spec:
+  docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md); findings
+  at `path:line`; verdict READY / NOT READY. Read-only. Skipping requires
+  explicit user override (e.g. "skip crypto review", "no crypto review
+  needed").
 model: opus
 effort: high
 permissionMode: plan

@@ -1,15 +1,12 @@
 ---
 name: bead-auditor
 description: |
-  Read-only investigator that audits open `bd` (beads) issues to identify
-  candidates for closure based on grounded evidence in the current code.
-  Use when the user asks to "audit beads", "clean up beads", "find stale
-  beads", "review open beads", or wants to triage a specific cluster of
-  issues. Produces a structured report with CLOSE/KEEP verdicts and
-  evidence cited at `path:line`. Does NOT execute closures itself — the
-  orchestrator (or user) reviews findings and runs `bd close` based on
-  the report. Can be dispatched in parallel partitioned by epic to grind
-  through large clusters of PR-review-finding beads.
+  Read-only investigator that audits open `bd` issues for closure candidates,
+  grounded in current code. Use when asked to "audit beads", "clean up beads",
+  "find stale beads", "review open beads", or to triage an issue cluster.
+  Produces CLOSE/KEEP verdicts with evidence at `path:line`; does NOT execute
+  closures (the orchestrator/user runs `bd close`). Can be dispatched in
+  parallel, partitioned by epic.
 model: sonnet
 permissionMode: plan
 color: cyan
