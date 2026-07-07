@@ -97,7 +97,7 @@ plugins via `setup.PluginSubsystem` → `Manager.LoadAll` (INV-5, INV-WS-1). The
 `test/integration/wholesystem/` census suite (`holomush-0f0f4`) asserts the full
 plugin set loads and the `help` command is registered. Requires binary artifacts
 (`task plugin:build-all`; automatic in `task test:int`). See
-`site/docs/contributing/integration-tests.md#whole-system-plugin-tier-withintreeplugins`
+`site/src/content/docs/contributing/how-to/integration-tests.md#whole-system-plugin-tier-withintreeplugins`
 for the full capability doc.
 
 `eventbustest` provides the in-process embedded NATS server (`MemoryStorage`)

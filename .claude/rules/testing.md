@@ -129,8 +129,6 @@ See [site/src/content/docs/contributing/how-to/quarantine.md](../../site/src/con
 
 ```bash
 task test:int
-# or, equivalent:
-go test -race -v -tags=integration ./test/integration/...
 ```
 
 Deep reference: .claude/rules/references/testing-detail.md (read on demand).

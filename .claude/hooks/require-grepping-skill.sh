@@ -28,8 +28,8 @@ failure):
 - **Go symbol / "where is X defined, how does Y work"** → `mcp__probe__search_code`
   first (whole AST blocks; beats grep→Read).
 - **Raw text** → `rg`. NEVER bare `grep`/`egrep`/`fgrep` (PreToolUse hook nudges).
-- **Structural code shapes / codemods** → `ast-grep` (`sg -l go`); NOT for
-  pkg-qualified call patterns (misparses — use `rg`).
+- **Structural code shapes / codemods** → `ast-grep` (`sg` alias where
+  installed); NOT for pkg-qualified call patterns (misparses — use `rg`).
 
 rg silent-failure traps (these produce WRONG results, not errors):
 - `rg 'A\|B'` — `\|` matches a LITERAL pipe; alternation is bare `|`.

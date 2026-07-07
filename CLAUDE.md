@@ -204,7 +204,11 @@ Session-store tests need Docker even under `task test` — MUST use `sessiontest
 **MUST use `task` for all build, test, lint, and format operations.** Do NOT run `go build`, `go test`, `golangci-lint`, etc. directly.
 
 ```bash
-task lint | fmt | test | build | dev              # core loop
+task lint      # core loop: lint,
+task fmt       #   format,
+task test      #   unit tests,
+task build     #   build,
+task dev       #   dev server
 task plugin:build-all                             # compile all binary plugins (linux/amd64)
 task plugin:build -- core-scenes                  # one binary plugin
 task test -- ./internal/command/                  # scope to a package
