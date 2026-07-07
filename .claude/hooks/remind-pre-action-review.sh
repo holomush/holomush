@@ -77,6 +77,12 @@ if [ "$handoff_intent" = "1" ] && printf '%s' "$changed_paths" | grep -qE '(test
   reminders+=("**int/e2e surface touched:** \`Integration Test\` / \`E2E Test\` are CI-required checks. A targeted local run before push (\`task test:int -- ./<domain>\` or \`task pr-prep:full\`) catches failures a CI round-trip sooner — recommended, not mandatory (CI is authoritative).")
 fi
 
+# local-check offload triggers: prompt asks to run tests/lint/build. Remind to
+# dispatch the offload agent rather than running the task inline (holomush-drf7b §3.4).
+if printf '%s' "$lower" | grep -qE '(run[[:space:]]+(the[[:space:]]+)?((integration|unit)[[:space:]]+)?tests?\b|does[[:space:]]+it[[:space:]]+(build|compile)\b|check[[:space:]]+(the[[:space:]]+)?lint\b|run[[:space:]]+lint\b|check[[:space:]]+(the[[:space:]]+)?(test[[:space:]]+)?coverage\b|is[[:space:]]+(it|the[[:space:]]+build)[[:space:]]+green)'; then
+  reminders+=("**Offload reminder:** dispatch the \`local-check\` agent (\`subagent_type: local-check\`, prompt: \`<test|lint|build|int|cover> [args]\`) instead of running \`task test\`/\`task lint\`/\`task build\` inline — inline runs are hook-enforced in the main session (\`# offload-exempt\` to override).")
+fi
+
 # plan-reviewer triggers: anything that implies a plan is about to be executed.
 if printf '%s' "$lower" | grep -qE '(execute[[:space:]]+(the[[:space:]]+)?plan|run[[:space:]]+(the[[:space:]]+)?plan|start[[:space:]]+implementing|begin[[:space:]]+(the[[:space:]]+)?plan|plan[[:space:]]+is[[:space:]]+ready|approve[[:space:]]+(the[[:space:]]+)?plan|\bapproved\b)'; then
   reminders+=("**Pre-execute gate:** Before \`superpowers:executing-plans\` or \`superpowers:subagent-driven-development\` consumes a plan, the \`plan-reviewer\` adversarial sub-agent MUST run on it. Invoke \`/review-plan\` now if it has not already run for the latest revision of the plan.")
