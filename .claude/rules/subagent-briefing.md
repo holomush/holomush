@@ -13,9 +13,10 @@ context, skills, or tool habits from the parent session.
 
 1. **Goal** — what specifically you want done. Not "look at this" — "find X, fix Y in `path:line`".
 2. **Working directory** — agents start in the parent's cwd; tell them if they need to `cd` somewhere else.
-3. **Tool precedence** — point them at the project's search ladder (`.claude/rules/search-tools.md`): `mcp__probe__search_code`/`extract_code` for Go symbol/AST queries, `rg` for text (never bare `grep`), `ast-grep` for structural matches/codemods, `Read` with offset/limit for known paths. Sub-agents default to `rg` and full-file `Read` without explicit reminder.
+3. **Tool precedence** — brief them on the search ladder per `.claude/rules/search-tools.md` (probe → rg → ast-grep; never bare grep). Sub-agents default to rg/full-file reads without it.
 4. **VCS skill** — if the agent may run `jj`/`git` commands or set up worktrees, ensure its agent definition has `jj:jujutsu` in `skills:` frontmatter. Sub-agents do NOT inherit skills from the parent session.
 5. **Output expectations** — word count, structure (verdict / report / file path), what NOT to include.
+6. **Verbose task runs** — sub-agents run `task test`/`lint`/`build` inline in their own context (they are exempt from the offload deny); the PARENT session must not.
 
 ## Per-task additions
 
@@ -29,7 +30,7 @@ context, skills, or tool habits from the parent session.
 | Op-log mutations | `jj op restore` / `jj op abandon` are gated by the `jj:jujutsu` plugin's `guard-jj-mutating` hook (bypass: `# jj-op-approved`); ensure the sub-agent's frontmatter lists `jj:jujutsu` in `skills:` so they read the recovery ladder before reaching for either command |
 | Closing beads | grounded evidence required; in-bead "Closed:"/"Fixed:" comments are NOT proof — verify the cited fix in current code (the `bead-auditor` agent caught false-fix cases on `wfza.21`, `wfza.62`) |
 
-> **Repo-agent model tiers (verified 2026-07-03):** reviewers (`code`/`crypto`/`abac`-reviewer) = `opus`; investigators/runners (`bead-auditor`, `branch-readiness-check`, `adr-extractor`, `local-test`, `local-pr-prep`, `local-build`, `local-lint`) = `sonnet`. Plugin agents (design/plan-reviewer, fix-worker, Explore, …) are plugin-owned — the repo cannot set their model here.
+> **Repo-agent model tiers (verified 2026-07-03):** reviewers (`code`/`crypto`/`abac`-reviewer) = `opus`; investigators/runners (`bead-auditor`, `branch-readiness-check`, `adr-extractor`, `local-check`, `local-pr-prep`) = `sonnet`. Plugin agents (design/plan-reviewer, fix-worker, Explore, …) are plugin-owned — the repo cannot set their model here.
 
 ## Anti-patterns
 
@@ -37,4 +38,4 @@ context, skills, or tool habits from the parent session.
 - DO NOT dispatch parallel `bd create` — there's an ID-allocation race; parallel calls all report the same ID with their respective titles but only ONE actually commits
 - DO NOT trust a sub-agent's claim that `task pr-prep` passed — always run it yourself in the parent before pushing. Sub-agents can't catch schema-regeneration side-effects (e.g., `go generate` updating `schemas/plugin.schema.json`) that must be committed before the PR is current
 - DO NOT delegate UNDERSTANDING to the sub-agent ("based on your findings, fix the bug"). Synthesize first; give them concrete actions.
-- DO NOT dispatch a `local-*` offload agent (`local-test`/`local-pr-prep`/`local-build`/`local-lint`) in the same parallel tool batch as another maybe-failing call — a `local-*` failure alongside a sibling failure risks a cancel-storm (ADR holomush-cr3gq)
+- DO NOT dispatch a `local-*` offload agent (`local-check`/`local-pr-prep`) in the same parallel tool batch as another maybe-failing call — a `local-*` failure alongside a sibling failure risks a cancel-storm (ADR holomush-cr3gq)

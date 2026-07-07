@@ -529,4 +529,4 @@ runes patterns.
 
 Work is NOT complete until `jj git push` succeeds. The full session-completion checklist lives in `.claude/rules/landing-the-plane.md` (always loaded). Skip the chain only for small fixes (typo, dependency bump, single-file bug).
 
-**Pre-push rebase** — defer to the `jj:jujutsu` skill's "Pre-Push Rebase" section. Use `jj rebase -s "$(jj log -r 'roots(trunk()..@)' --no-graph -T 'change_id.short(12)')" -o main@origin --skip-emptied` — it's chain-safe for single-commit and multi-commit PRs alike. The `guard-jj-rebase-chain` PreToolUse hook blocks the truncation-prone `jj rebase -r @ -o <trunk>` shape (PR #4049 incident).
+**Pre-push rebase:** use the chain-safe `-s` recipe — canonical copy in `.claude/rules/landing-the-plane.md` (Mandatory checklist, "Push" item) and the `jj:jujutsu` skill ("Pre-Push Rebase"); the `guard-jj-rebase-chain` hook blocks the truncation-prone `-r @` shape.
