@@ -84,6 +84,12 @@ New workspaces inherit `.claude/` (tracked in git), so `SessionStart`, `UserProm
 
 The `SessionStart` hook also warns if you start a session in the shared `default` workspace, which is reserved for read-only inspection.
 
+## Using `gh` in a workspace
+
+A `jj` workspace has no `.git` directory for `gh` to auto-detect the repo, so `gh`
+cannot infer the remote — always pass `-R holomush/holomush` explicitly (e.g.
+`gh pr view 123 -R holomush/holomush`, `gh pr create -R holomush/holomush ...`).
+
 ## Cleanup after landing
 
 After your branch lands on `main`, remove the workspace. The leading `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd:

@@ -14,8 +14,8 @@ sequencing.
 - **Single source of truth: `bd`.** This file never duplicates bead state —
   query `bd list` for current status.
 - **Themes are labels.** Each theme is a `theme:<slug>` label applied to
-  relevant beads. Query (includes `in_progress`):
-  `bd list -l theme:<slug> --limit 0 --json | jq -r '.[] | select(.status != "closed")'`.
+  relevant beads. Query (includes `in_progress`, not just `open`):
+  `bd list -l theme:<slug> --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.title)"'`.
   `bd list --status open` does NOT include `in_progress` beads, so use the
   json filter when you want active work surfaced.
 - **The narrative lives here.** Strategic framing, sequencing rationale,
