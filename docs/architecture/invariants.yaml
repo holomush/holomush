@@ -3349,6 +3349,18 @@ invariants:
     asserted_by:
       - "internal/command/dispatcher_focus_test.go"
       - "internal/command/focus_reader_test.go"
+  - id: INV-SCENE-68
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-04-07-scenes-phase-3-membership-design.md"
+    legacy: []
+    summary: "scene info (the sole per-scene read-action gate) permits exactly participants, invitees, and any character for
+      visibility=open scenes — via the sibling plugin policies read-scene-as-participant / read-scene-as-invitee / read-open-scene
+      — and denies a private scene's metadata (owner, state, roster, invitees) to everyone else. No host seed may widen this:
+      the vestigial unconditional seed:player-scene-read was retired (holomush-sjtlz, read twin of holomush-8m01u; migration
+      000048 disables it in existing deployments)."
+    binding: bound
+    asserted_by:
+      - "test/integration/scenes/scene_info_read_access_test.go"
 
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride

@@ -702,16 +702,26 @@ func TestSeedSmoke_PlayerSceneAccess(t *testing.T) {
 		),
 	})
 
-	// G4 read: seed:player-scene-read is an unconditional permit, so the HOST
-	// seed corpus alone grants scene read to any character.
-	t.Run("read", func(t *testing.T) {
+	// G4 read (holomush-sjtlz): the host seed corpus NO LONGER grants scene
+	// read. The vestigial unconditional seed:player-scene-read was removed
+	// (read twin of holomush-8m01u); scene-read authorization now lives solely
+	// in the core-scenes plugin's membership-conditioned policies
+	// (read-scene-as-participant / read-scene-as-invitee / read-open-scene),
+	// which are NOT part of the seed corpus this smoke test loads. So a bare
+	// seed-only engine (no plugin policy, no SceneResolver) MUST default-deny
+	// scene read. The participant/invitee/open permit behavior of the plugin
+	// policies is proved end-to-end in
+	// test/integration/scenes/scene_info_read_access_test.go (WithRealABAC).
+	t.Run("read default-denies under the seed corpus alone", func(t *testing.T) {
 		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 			Subject:  "character:01CHAR01",
 			Action:   "read",
 			Resource: "scene:01SCENE01",
 		})
 		require.NoError(t, err)
-		assert.True(t, decision.IsAllowed(), "player should read scene (G4); got: %s — %s", decision.Effect(), decision.Reason())
+		assert.False(t, decision.IsAllowed(),
+			"scene read MUST NOT be granted by the host seed corpus after holomush-sjtlz; "+
+				"got: %s — %s", decision.Effect(), decision.Reason())
 	})
 
 	// G4 write (holomush-8m01u): the host seed corpus NO LONGER grants scene

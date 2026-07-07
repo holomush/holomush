@@ -140,7 +140,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(47)))
+			Expect(version).To(Equal(uint(48)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)
@@ -163,7 +163,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(47)))
+			Expect(version).To(Equal(uint(48)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)
@@ -630,6 +630,93 @@ var _ = Describe("Migrator", func() {
 
 			Expect(enabledOf(ctx, conn)).To(BeTrue(),
 				"migration 000047 MUST NOT disable an operator-customized row (dsl_text != the vestigial "+
+					"permit) — the WHERE guard's exact-DSL clause respects `policy edit` customizations")
+		})
+	})
+
+	// Migration000048_DisablesUnconditionalSceneReadSeed is the read twin of the
+	// 000047 suite above (holomush-sjtlz mirrors holomush-8m01u): the vestigial
+	// unconditional seed:player-scene-read was removed from the Go corpus, but a
+	// deployment that already bootstrapped it keeps a live enabled row until this
+	// migration disables it. The fresh-DB integration specs never create the row,
+	// so without this test the migration's compare-and-swap guard — the sole
+	// mechanism closing the metadata-read bypass in production — is never run
+	// against a real pre-existing row.
+	Describe("Migration000048_DisablesUnconditionalSceneReadSeed", func() {
+		const (
+			seedName     = "seed:player-scene-read"
+			vestigialDSL = `permit(principal is character, action in ["read"], resource is scene);`
+		)
+
+		// insertSceneReadSeed seeds a source='seed', enabled=true access_policies
+		// row, modelling a deployment that bootstrapped the vestigial seed.
+		insertSceneReadSeed := func(ctx context.Context, conn *pgx.Conn, dsl string) {
+			_, err := conn.Exec(ctx, `
+				INSERT INTO access_policies
+					(id, name, description, effect, source, dsl_text, compiled_ast, enabled, seed_version, created_by)
+				VALUES
+					('pol-sjtlz-test', $1, 'scene read seed', 'permit', 'seed', $2, '{"grammar_version":1}'::jsonb, true, 1, 'system')`,
+				seedName, dsl)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		enabledOf := func(ctx context.Context, conn *pgx.Conn) bool {
+			var enabled bool
+			Expect(conn.QueryRow(
+				ctx,
+				`SELECT enabled FROM access_policies WHERE name = $1`, seedName,
+			).Scan(&enabled)).To(Succeed())
+			return enabled
+		}
+
+		It("disables a pre-existing enabled seed row carrying the exact vestigial DSL", func() {
+			ctx := context.Background()
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			// Stop at 47 so access_policies exists but 000048 has not run.
+			Expect(migrator.Migrate(47)).To(Succeed())
+
+			conn, err := pgx.Connect(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close(ctx)
+
+			insertSceneReadSeed(ctx, conn, vestigialDSL)
+			Expect(enabledOf(ctx, conn)).To(BeTrue(), "precondition: the seed row starts enabled")
+
+			Expect(migrator.Migrate(48)).To(Succeed())
+
+			Expect(enabledOf(ctx, conn)).To(BeFalse(),
+				"migration 000048 (holomush-sjtlz) MUST disable the vestigial unconditional scene-read "+
+					"seed so the metadata-read bypass is closed in existing deployments")
+		})
+
+		It("leaves an operator-customized seed row untouched (exact-DSL guard)", func() {
+			ctx := context.Background()
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			Expect(migrator.Migrate(47)).To(Succeed())
+
+			conn, err := pgx.Connect(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close(ctx)
+
+			// An operator who narrowed the seed via `policy edit` carries a
+			// different dsl_text; the migration's exact-DSL guard MUST skip it.
+			customDSL := `permit(principal is character, action in ["read"], resource is scene) when { principal.id in resource.scene.participants };`
+			insertSceneReadSeed(ctx, conn, customDSL)
+
+			Expect(migrator.Migrate(48)).To(Succeed())
+
+			Expect(enabledOf(ctx, conn)).To(BeTrue(),
+				"migration 000048 MUST NOT disable an operator-customized row (dsl_text != the vestigial "+
 					"permit) — the WHERE guard's exact-DSL clause respects `policy edit` customizations")
 		})
 	})

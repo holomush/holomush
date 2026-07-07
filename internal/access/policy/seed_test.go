@@ -13,13 +13,14 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 49 seed policies total: 40 permit + 9 forbid. TestSeedPoliciesExpectedNames
+	// 48 seed policies total: 39 permit + 9 forbid. TestSeedPoliciesExpectedNames
 	// below is the authoritative per-name inventory; this count is the coarse
 	// guard against an accidental add/remove. holomush-8m01u removed the vestigial
-	// unconditional seed:player-scene-participant write permit (50 → 49); scene
-	// writes are now gated solely by the core-scenes plugin's
-	// write-scene-as-participant policy.
-	assert.Len(t, seeds, 49, "expected 49 seed policies (40 permit, 9 forbid)")
+	// unconditional seed:player-scene-participant write permit (50 → 49), and
+	// holomush-sjtlz removed its read twin seed:player-scene-read (49 → 48);
+	// scene reads/writes are now gated solely by the core-scenes plugin's
+	// read-scene-as-* / write-scene-as-participant policies.
+	assert.Len(t, seeds, 48, "expected 48 seed policies (39 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -76,7 +77,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 40, permitCount, "expected 40 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 character-directory INV-ACCESS-9, −1 holomush-8m01u removed vestigial seed:player-scene-participant)")
+	assert.Equal(t, 39, permitCount, "expected 39 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 character-directory INV-ACCESS-9, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -105,11 +106,12 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:player-exit-read",                // G1
 		"seed:builder-exit-write",              // G2
 		"seed:player-location-list-characters", // G3
-		// G4 seed:player-scene-participant removed (holomush-8m01u): it was an
-		// unconditional permit(character, write, scene) that subsumed the
-		// plugin's participant-conditioned write-scene-as-participant gate. The
-		// plugin policy (plugins/core-scenes/plugin.yaml) is now the sole write gate.
-		"seed:player-scene-read",             // G4
+		// G4 seed:player-scene-participant removed (holomush-8m01u) and
+		// seed:player-scene-read removed (holomush-sjtlz): both were
+		// unconditional permit(character, <action>, scene) stubs that subsumed
+		// the plugin's membership-conditioned gates. The plugin policies
+		// (plugins/core-scenes/plugin.yaml read-scene-as-* /
+		// write-scene-as-participant) are now the sole scene gates.
 		"seed:player-location-list-presence", // G5
 		// Phase-2 command policies
 		"seed:player-teleport", // all players can execute home and teleport
@@ -237,22 +239,15 @@ func TestSeedPoliciesPlayerLocationListCharactersPolicyExists(t *testing.T) {
 	assert.True(t, found, "seed:player-location-list-characters policy must exist (G3)")
 }
 
-func TestSeedPoliciesScenePoliciesExist(t *testing.T) {
+func TestSeedPoliciesVestigialSceneSeedsStayRemoved(t *testing.T) {
 	seeds := SeedPolicies()
 	var participantFound, readFound bool
-	compiler := NewCompiler(emptySchema())
 	for _, s := range seeds {
 		switch s.Name {
 		case "seed:player-scene-participant":
 			participantFound = true
 		case "seed:player-scene-read":
 			readFound = true
-			compiled, _, err := compiler.Compile(s.DSLText)
-			require.NoError(t, err)
-			assert.Equal(t, "permit", string(compiled.Effect))
-			assert.Contains(t, compiled.Target.ActionList, "read")
-			rType := "scene"
-			assert.Equal(t, &rType, compiled.Target.ResourceType)
 		}
 	}
 	// Regression guard (holomush-8m01u): the write seed MUST NOT be re-added.
@@ -265,7 +260,15 @@ func TestSeedPoliciesScenePoliciesExist(t *testing.T) {
 	assert.False(t, participantFound,
 		"seed:player-scene-participant MUST NOT exist — removed in holomush-8m01u; "+
 			"scene writes are gated by the plugin's write-scene-as-participant policy")
-	assert.True(t, readFound, "seed:player-scene-read policy must exist (G4)")
+	// Regression guard (holomush-sjtlz): the read twin MUST NOT be re-added
+	// either. Same vestigial pattern — an unconditional permit(character, read,
+	// scene) that subsumed the plugin's membership-conditioned read policies,
+	// letting any character `scene info` any scene's metadata. Scene-read
+	// authorization now lives solely in the plugin policies
+	// (read-scene-as-participant / read-scene-as-invitee / read-open-scene).
+	assert.False(t, readFound,
+		"seed:player-scene-read MUST NOT exist — removed in holomush-sjtlz; "+
+			"scene reads are gated by the plugin's read-scene-as-* policies")
 }
 
 // Phase-3b audit deny policy tests

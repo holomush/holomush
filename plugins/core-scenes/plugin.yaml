@@ -227,9 +227,10 @@ commands:
     # ownership or membership gate — the board returns only visibility='open'
     # scenes that any character may browse. We use a DISTINCT "browse" action
     # (not "read") so this public-board grant does NOT widen the per-scene
-    # "read" action used by `scene info` (which stays membership-gated via
-    # read-scene-as-participant). The browse-open-scenes-board policy below
-    # permits it; the Layer-2 pre-flight fires on this declared capability.
+    # "read" action used by `scene info` (gated by the read-scene-as-* policies:
+    # participants, invitees, and open-scene visibility — holomush-sjtlz). The
+    # browse-open-scenes-board policy below permits it; the Layer-2 pre-flight
+    # fires on this declared capability.
     capabilities:
       - action: browse
         resource: scene
@@ -283,6 +284,22 @@ policies:
     dsl: >-
       permit(principal is character, action in ["read"], resource is scene) when { principal.id in resource.scene.participants
       };
+  # `scene info` read siblings (holomush-sjtlz). After the vestigial host
+  # seed:player-scene-read was retired (read twin of holomush-8m01u), scene
+  # read is gated solely by these plugin policies. The two siblings below
+  # mirror the join-policy shape (join-private-scene-as-invitee /
+  # join-open-scene): an invitee may inspect a scene before accepting the
+  # invitation, and an open scene's metadata is readable by anyone — its
+  # content is already spectatable by anyone (spectate-open-scene), so hiding
+  # the roster would be incoherent. Net: `scene info` denies only for private
+  # scenes the caller is neither in nor invited to.
+  - name: read-scene-as-invitee
+    dsl: >-
+      permit(principal is character, action in ["read"], resource is scene) when { principal.id in resource.scene.invitees
+      };
+  - name: read-open-scene
+    dsl: >-
+      permit(principal is character, action in ["read"], resource is scene) when { resource.scene.visibility == "open" };
   # State validity for write is enforced implicitly by handleEmit's
   # resolveSingleSceneMembership → ListScenesForCharacter, which filters
   # `state IN ('active','paused')` (ended scenes are invisible to membership
@@ -361,8 +378,9 @@ policies:
   # returns only visibility='open' scenes; the distinct "browse" action on the
   # scene resource type is scoped globally (not per-resource) since the board
   # is a list query, not a per-scene read. Using "browse" (not "read") keeps
-  # this grant from widening `scene info`'s membership-gated "read" action. The
-  # membership-gated read-scene-as-participant policy does NOT cover this case.
+  # this grant from widening `scene info`'s per-scene "read" action (gated by
+  # the read-scene-as-* policies above). Those per-resource policies do NOT
+  # cover this list-query case.
   - name: browse-open-scenes-board
     dsl: >-
       permit(principal is character, action in ["browse"], resource is scene) when { resource.scene.visibility == "open" };

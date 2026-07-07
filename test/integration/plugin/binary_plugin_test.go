@@ -476,9 +476,15 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(connErr).NotTo(HaveOccurred())
 			sceneClient := scenev1.NewSceneServiceClient(pluginConn)
 
+			// Visibility MUST be explicit: CreateScene defaults to "open", and an
+			// open scene is readable by ANY character via the read-open-scene
+			// sibling policy (holomush-sjtlz, ADR holomush-gcr2k). The deny spec
+			// below models "no policy permits", which holds only for a private
+			// scene whose reader is neither a participant nor an invitee.
 			createResp, createErr := sceneClient.CreateScene(abacCtx, &scenev1.CreateSceneRequest{
 				CharacterId: "char-alice",
 				Title:       "Tea at the Manor",
+				Visibility:  "private",
 			})
 			Expect(createErr).NotTo(HaveOccurred())
 			sceneID = createResp.GetScene().GetId()
