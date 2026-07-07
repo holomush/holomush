@@ -43,7 +43,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || {
 # emergencies. Subagent calls (agent_id present) are exempt: offload agents
 # and implementer subagents run task freely in their own cheap contexts.
 # Escape hatch: append `# offload-exempt` to the command (cf. # jj-exempt).
-OFFLOAD_ENFORCE="${OFFLOAD_ENFORCE:-nudge}"   # ← nudge per RD5: live probe impossible pre-merge (hooks execute from the session project dir); flip tracked in holomush-afq2t
+OFFLOAD_ENFORCE="${OFFLOAD_ENFORCE:-deny}"   # ← deny default: agent_id split + live deny path verified in a post-merge fresh-workspace session (holomush-afq2t). Env-overridable for tests/emergencies.
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null) || AGENT_ID=""
 
 # --- Enforcement phase: errors here are bugs, not parse failures ---
