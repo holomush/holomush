@@ -39,17 +39,6 @@ is a *regression in a guarantee* rather than a *missing feature*, it is an
 invariant. Do NOT register every RFC2119 MUST: a local feature requirement ("the
 create-scene RPC MUST return the new ID") is not an invariant.
 
-### In scope vs. out of scope
-
-| In scope | Out of scope |
-| --- | --- |
-| **System-behavior guarantees** — fail-closed ABAC defaults, no-plaintext-to-non-participant, runtime symmetry, ordering ownership. The core of the registry. | **Migration / refactor-completeness bookkeeping** — "every pre-consolidation test is named in a `// replaces:` chain". Tracks a one-time migration, not a durable guarantee. |
-| **Test-infrastructure fidelity** — durable guarantees about *how the system is verified* (e.g. "the load harness drives the real Connect/TCP path, never a stub"; "`sessiontest.NewStore` returns an isolated store per call"). These can be silently broken and are worth pinning. Keep them, but make the summary state the **guarantee**, not the harness wiring. | **Self-admitted documentary / non-testable notes** — anything whose own summary says "documentary", "verified by spec review", "operational property, not an invariant", or describes a transient phase-implementation detail ("Phase 4 introduces no status transitions"). If no test can fail when it's violated, it is not an invariant. |
-
-Borderline test-infra entries SHOULD be phrased as the property under test, not
-the test's construction ("no `t.Fatalf`", "adds zero production code", "E6
-acceptance" are PR acceptance criteria, not invariants).
-
 Pick the **scope** by its declared `boundary` in `invariants.yaml` (CRYPTO,
 SCENE, PLUGIN, EVENTBUS, CLUSTER, ACCESS, SESSION, STORE, TELEMETRY, PRIVACY,
 PRESENCE, COMMAND — all migrated; BRANDING/DOCS pending). Allocate the next free
@@ -61,7 +50,7 @@ When **authoring or reviewing a spec**:
 
 | Requirement | Rule |
 | --- | --- |
-| **MUST** capture, not scatter | When a spec introduces a system-level guarantee, give it a canonical `INV-<SCOPE>-N` id and add it to `invariants.yaml` as part of finalizing the spec. Do NOT invent a fresh ad-hoc family (`I-FOO-1`, `INV-XY-3`). The whole registry exists because pre-2026-05 specs each minted their own un-indexed family and a migration (epic `holomush-hz0v4`) had to dig them all out and renumber. Don't recreate that debt. |
+| **MUST** capture, not scatter | When a spec introduces a system-level guarantee, give it a canonical `INV-<SCOPE>-N` id and add it to `invariants.yaml` as part of finalizing the spec. Do NOT invent a fresh ad-hoc family (`I-FOO-1`, `INV-XY-3`). |
 | **MUST** consult before designing | Before designing in a domain, read the registry entries for the relevant scope(s). Your design MUST NOT silently violate, duplicate, or contradict an existing invariant. |
 | **MUST** update on change | If a design changes or retires an existing invariant, edit its registry entry (and `origin_spec`) in the same change — never leave the registry describing a guarantee the code no longer makes. |
 | **MUST NOT** renumber casually | Canonical ids are referenced from tests and other specs. Renaming is a migration, not an edit. Use the `legacy:` list to preserve the old token's provenance. |
@@ -95,8 +84,7 @@ An invariant is only *proven* when a test asserts it. The mechanism:
 
 ### Known escape hatches — register these by hand
 
-The orphan check walks only `docs/superpowers/specs/`. It does **not** scan code,
-and it does **not** scan `docs/specs/`. So a new canonical-form `INV-<SCOPE>-N`
-introduced only in code/tests, or only in a `docs/specs/` spec, is NOT auto-caught
-and will silently be missing from the registry. In either case you MUST add the
-registry entry yourself — the meta-test will not remind you.
+The orphan check walks only `docs/superpowers/specs/`; invariants introduced
+in `docs/specs/` or code MUST be registered by hand.
+
+Deep reference: `.claude/rules/references/invariants-detail.md` (read on demand).
