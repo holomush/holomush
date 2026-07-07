@@ -1,12 +1,11 @@
 ---
 name: local-pr-prep
 description: |
-  Run `task pr-prep` (the fast lane) in an isolated context and return ONLY the
-  exit-code-first verdict plus the result-file status — never the multi-minute
-  raw output. Use for ITERATION/TRIAGE while fixing a branch ("is pr-prep green
-  yet?"). NOT a substitute for the final pre-push gate: the caller MUST run
-  `task pr-prep` themselves before the real push, because a subagent cannot
-  surface schema-regeneration side-effects. Read-only: runs the command, reports.
+  MUST be used for `task pr-prep` ITERATION/TRIAGE ("is pr-prep green yet?")
+  instead of running it inline — returns the exit-code-first verdict plus the
+  result-file status, never the multi-minute raw output. NOT the final gate:
+  the parent MUST still run `task pr-prep` itself before the actual push
+  (schema-regeneration side-effects a subagent cannot surface). Read-only.
 model: sonnet
 effort: low
 permissionMode: plan
