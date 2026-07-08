@@ -37,6 +37,16 @@ type fakeServiceStore struct {
 	joined                                [][2]string
 	left                                  [][2]string
 	listFor                               map[string][]channelRow
+
+	// 01-05b moderation + read surface.
+	muteErr, banErr, kickErr    error
+	transferErr, listMembersErr error
+	isMutedErr, membershipErr   error
+	setMuted, setBanned         [][2]string // {channelID, targetID}
+	kicked, transferred         [][2]string // {channelID, target/newOwner}
+	members                     map[string][]channelMemberRow
+	mutedMap                    map[string]bool      // key channelID|characterID
+	memberMap                   map[string]time.Time // key channelID|characterID ⇒ member (value = joined_at)
 }
 
 func (f *fakeServiceStore) CreateChannel(_ context.Context, row *channelRow) error {
@@ -73,6 +83,94 @@ func (f *fakeServiceStore) ListForCharacter(_ context.Context, characterID strin
 	}
 	return f.listFor[characterID], nil
 }
+
+func (f *fakeServiceStore) SetMuted(_ context.Context, channelID, characterID string, muted bool) error {
+	if f.muteErr != nil {
+		return f.muteErr
+	}
+	if muted {
+		f.setMuted = append(f.setMuted, [2]string{channelID, characterID})
+	}
+	return nil
+}
+
+func (f *fakeServiceStore) SetBanned(_ context.Context, channelID, characterID string, banned bool) error {
+	if f.banErr != nil {
+		return f.banErr
+	}
+	if banned {
+		f.setBanned = append(f.setBanned, [2]string{channelID, characterID})
+	}
+	return nil
+}
+
+func (f *fakeServiceStore) KickMember(_ context.Context, channelID, _, targetID string) error {
+	if f.kickErr != nil {
+		return f.kickErr
+	}
+	f.kicked = append(f.kicked, [2]string{channelID, targetID})
+	return nil
+}
+
+func (f *fakeServiceStore) TransferOwnership(_ context.Context, channelID, _, newOwnerID string) error {
+	if f.transferErr != nil {
+		return f.transferErr
+	}
+	f.transferred = append(f.transferred, [2]string{channelID, newOwnerID})
+	return nil
+}
+
+func (f *fakeServiceStore) ListMembers(_ context.Context, channelID string) ([]channelMemberRow, error) {
+	if f.listMembersErr != nil {
+		return nil, f.listMembersErr
+	}
+	return f.members[channelID], nil
+}
+
+func (f *fakeServiceStore) IsMuted(_ context.Context, channelID, characterID string) (bool, error) {
+	if f.isMutedErr != nil {
+		return false, f.isMutedErr
+	}
+	return f.mutedMap[channelID+"|"+characterID], nil
+}
+
+func (f *fakeServiceStore) MembershipForHistory(_ context.Context, channelID, characterID string) (bool, time.Time, error) {
+	if f.membershipErr != nil {
+		return false, time.Time{}, f.membershipErr
+	}
+	ts, ok := f.memberMap[channelID+"|"+characterID]
+	return ok, ts, nil
+}
+
+// fakeHistory is a controllable channelHistoryFetcher recording its arguments.
+type fakeHistory struct {
+	rows       []channelLogRow
+	err        error
+	gotSubject string
+	gotChannel string
+	gotCaller  string
+	gotLimit   int
+}
+
+func (f *fakeHistory) HistoryForMember(_ context.Context, subject, channelID, callerCharID string, limit int) ([]channelLogRow, error) {
+	f.gotSubject, f.gotChannel, f.gotCaller, f.gotLimit = subject, channelID, callerCharID, limit
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.rows, nil
+}
+
+// newFullServiceForTest builds a service with an emitter (backed by a capturing
+// sink) and a game id, for the 01-05b content/notice-emitting RPCs.
+func newFullServiceForTest(store channelServiceStorer, ev pluginsdk.HostEvaluator) (*channelService, *fakeEventSink) {
+	s := newServiceForTest(store, 5, nil, ev)
+	sink := &fakeEventSink{}
+	s.gameID = testGameID
+	s.emitter = newChannelEventEmitter(sink, testGameID)
+	return s, sink
+}
+
+const testTargetID = "char-target-02"
 
 // fakeEvaluator is a controllable HostEvaluator for unit tests.
 type fakeEvaluator struct {
@@ -440,4 +538,301 @@ func TestListChannelsActorMismatchDenied(t *testing.T) {
 	_, err := svc.ListChannels(ctx, &channelv1.ListChannelsRequest{CharacterId: testCharID})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// ── 01-05b: moderation RPCs (Invite/Mute/Ban/Kick/Transfer) ────────────────
+
+func TestInviteToChannelNonOwnerDeniedUniformNotFound(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, _ := newFullServiceForTest(store, denyEvaluator)
+	_, err := svc.InviteToChannel(context.Background(), &channelv1.InviteToChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: testTargetID,
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err), "a denied caller cannot distinguish hidden vs absent")
+	assert.Empty(t, store.joined, "no membership recorded when denied")
+}
+
+func TestInviteToChannelOwnerAdmitsTargetAndEmitsJoin(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, sink := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.InviteToChannel(context.Background(), &channelv1.InviteToChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: testTargetID,
+	})
+	require.NoError(t, err)
+	require.Len(t, store.joined, 1)
+	assert.Equal(t, [2]string{"ch-1", testTargetID}, store.joined[0], "invite adds the TARGET as a member")
+	require.Len(t, sink.intents, 1)
+	assert.Equal(t, channelJoinType, sink.intents[0].Type)
+}
+
+func TestMuteMemberNonOwnerDeniedUniformNotFound(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, _ := newFullServiceForTest(store, denyEvaluator)
+	_, err := svc.MuteMember(context.Background(), &channelv1.MuteMemberRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: testTargetID,
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+	assert.Empty(t, store.setMuted)
+}
+
+func TestMuteMemberOwnerMutesAndEmits(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, sink := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.MuteMember(context.Background(), &channelv1.MuteMemberRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: testTargetID,
+	})
+	require.NoError(t, err)
+	require.Len(t, store.setMuted, 1)
+	assert.Equal(t, [2]string{"ch-1", testTargetID}, store.setMuted[0])
+	require.Len(t, sink.intents, 1)
+	assert.Equal(t, channelMuteType, sink.intents[0].Type)
+}
+
+func TestMuteMemberAdminOverridePermitted(t *testing.T) {
+	// The plugin only observes Allowed — the owner-vs-admin distinction is the
+	// host's; an admin-override permit reaches the service as allowed=true.
+	store := &fakeServiceStore{}
+	svc, _ := newFullServiceForTest(store, fakeEvaluator{allowed: true, matched: "plugin:core-channels:admin-override-channel"})
+	_, err := svc.MuteMember(context.Background(), &channelv1.MuteMemberRequest{
+		CharacterId: "admin-char", ChannelId: "ch-1", TargetCharacterId: testTargetID,
+	})
+	require.NoError(t, err)
+	require.Len(t, store.setMuted, 1)
+}
+
+func TestBanMemberOwnerBansAndEmits(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, sink := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.BanMember(context.Background(), &channelv1.BanMemberRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: testTargetID,
+	})
+	require.NoError(t, err)
+	require.Len(t, store.setBanned, 1)
+	assert.Equal(t, [2]string{"ch-1", testTargetID}, store.setBanned[0])
+	require.Len(t, sink.intents, 1)
+	assert.Equal(t, channelBanType, sink.intents[0].Type)
+}
+
+func TestKickMemberOwnerKicksAndEmits(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, sink := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.KickMember(context.Background(), &channelv1.KickMemberRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: testTargetID,
+	})
+	require.NoError(t, err)
+	require.Len(t, store.kicked, 1)
+	assert.Equal(t, [2]string{"ch-1", testTargetID}, store.kicked[0])
+	require.Len(t, sink.intents, 1)
+	assert.Equal(t, channelKickType, sink.intents[0].Type)
+}
+
+func TestKickMemberOwnerCannotBeKicked(t *testing.T) {
+	store := &fakeServiceStore{kickErr: oops.Code("CHANNEL_OWNER_CANNOT_KICK").Errorf("owner")}
+	svc, _ := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.KickMember(context.Background(), &channelv1.KickMemberRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: "the-owner",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestKickMemberTargetNotMemberUniformNotFound(t *testing.T) {
+	store := &fakeServiceStore{kickErr: oops.Code("CHANNEL_MEMBERSHIP_NOT_FOUND").Errorf("absent")}
+	svc, _ := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.KickMember(context.Background(), &channelv1.KickMemberRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: "ghost",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestTransferOwnershipToMemberSucceedsAndEmits(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, sink := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.TransferOwnership(context.Background(), &channelv1.TransferOwnershipRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", NewOwnerCharacterId: testTargetID,
+	})
+	require.NoError(t, err)
+	require.Len(t, store.transferred, 1)
+	assert.Equal(t, [2]string{"ch-1", testTargetID}, store.transferred[0])
+	require.Len(t, sink.intents, 1)
+	assert.Equal(t, channelRenameType, sink.intents[0].Type)
+}
+
+func TestTransferOwnershipToNonMemberRejected(t *testing.T) {
+	store := &fakeServiceStore{transferErr: oops.Code("CHANNEL_TRANSFER_TARGET_NOT_MEMBER").Errorf("not a member")}
+	svc, _ := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.TransferOwnership(context.Background(), &channelv1.TransferOwnershipRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", NewOwnerCharacterId: "outsider",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestTransferOwnershipNonOwnerDeniedUniformNotFound(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, _ := newFullServiceForTest(store, denyEvaluator)
+	_, err := svc.TransferOwnership(context.Background(), &channelv1.TransferOwnershipRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", NewOwnerCharacterId: testTargetID,
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+	assert.Empty(t, store.transferred)
+}
+
+func TestModerationActorMismatchDenied(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, _ := newFullServiceForTest(store, allowEvaluator)
+	ctx := actorCtx(pluginsdk.ActorCharacter, "char-other")
+	_, err := svc.MuteMember(ctx, &channelv1.MuteMemberRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", TargetCharacterId: testTargetID,
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Empty(t, store.setMuted)
+}
+
+// ── 01-05b: content + read RPCs (Post/Who/History) ─────────────────────────
+
+func TestPostToChannelMemberEmitsSayNoChannelName(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, sink := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.PostToChannel(context.Background(), &channelv1.PostToChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", Text: "hello channel",
+	})
+	require.NoError(t, err)
+	require.Len(t, sink.intents, 1)
+	assert.Equal(t, channelSayType, sink.intents[0].Type)
+	assert.False(t, sink.intents[0].Sensitive, "channel content is plaintext (D-04)")
+	assertNoChannelNameField(t, sink.intents[0].Payload)
+}
+
+func TestPostToChannelPoseKind(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, sink := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.PostToChannel(context.Background(), &channelv1.PostToChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", Kind: "pose", Text: "waves",
+	})
+	require.NoError(t, err)
+	require.Len(t, sink.intents, 1)
+	assert.Equal(t, channelPoseType, sink.intents[0].Type)
+}
+
+func TestPostToChannelNonMemberDeniedUniformNotFound(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, sink := newFullServiceForTest(store, denyEvaluator)
+	_, err := svc.PostToChannel(context.Background(), &channelv1.PostToChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", Text: "hi",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+	assert.Empty(t, sink.intents)
+}
+
+func TestPostToChannelMutedMemberDenied(t *testing.T) {
+	store := &fakeServiceStore{mutedMap: map[string]bool{"ch-1|" + testCharID: true}}
+	svc, sink := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.PostToChannel(context.Background(), &channelv1.PostToChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", Text: "hi",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err), "a muted member is a member — not an existence oracle")
+	assert.Empty(t, sink.intents)
+}
+
+func TestPostToChannelOOCRejected(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, _ := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.PostToChannel(context.Background(), &channelv1.PostToChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", Kind: "ooc", Text: "hi",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestPostToChannelEmptyTextRejected(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc, _ := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.PostToChannel(context.Background(), &channelv1.PostToChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", Text: "   ",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestWhoInChannelMemberReturnsRoster(t *testing.T) {
+	now := time.Now()
+	store := &fakeServiceStore{
+		memberMap: map[string]time.Time{"ch-1|" + testCharID: now},
+		members: map[string][]channelMemberRow{"ch-1": {
+			{CharacterID: testCharID, Role: "owner", JoinedAt: now},
+			{CharacterID: testTargetID, Role: "member", Muted: true, JoinedAt: now},
+		}},
+	}
+	svc, _ := newFullServiceForTest(store, allowEvaluator)
+	resp, err := svc.WhoInChannel(context.Background(), &channelv1.WhoInChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1",
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetMembers(), 2)
+	assert.Equal(t, testCharID, resp.GetMembers()[0].GetCharacterId())
+	assert.Equal(t, "owner", resp.GetMembers()[0].GetRole())
+	assert.True(t, resp.GetMembers()[1].GetMuted())
+}
+
+func TestWhoInChannelNonMemberUniformNotFound(t *testing.T) {
+	store := &fakeServiceStore{} // memberMap empty ⇒ non-member
+	svc, _ := newFullServiceForTest(store, allowEvaluator)
+	_, err := svc.WhoInChannel(context.Background(), &channelv1.WhoInChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-1",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestQueryChannelHistoryMemberReturnsEntries(t *testing.T) {
+	hist := &fakeHistory{rows: []channelLogRow{{
+		id:        make([]byte, 16),
+		eventType: string(channelSayType),
+		timestamp: time.Now(),
+		payload:   []byte(`{"actor_id":"char-01","actor_display_name":"Alice","text":"hi"}`),
+	}}}
+	svc, _ := newFullServiceForTest(&fakeServiceStore{}, allowEvaluator)
+	svc.history = hist
+	resp, err := svc.QueryChannelHistory(context.Background(), &channelv1.QueryChannelHistoryRequest{
+		CharacterId: testCharID, ChannelId: "ch-1", Limit: 25,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetEntries(), 1)
+	assert.Equal(t, string(channelSayType), resp.GetEntries()[0].GetType())
+	assert.Equal(t, "hi", resp.GetEntries()[0].GetContent())
+	assert.Equal(t, "Alice", resp.GetEntries()[0].GetActorName())
+	// The service builds the qualified subject + forwards the limit to the fence.
+	assert.Equal(t, dotStyleChannelSubject(testGameID, "ch-1"), hist.gotSubject)
+	assert.Equal(t, "ch-1", hist.gotChannel)
+	assert.Equal(t, testCharID, hist.gotCaller)
+	assert.Equal(t, 25, hist.gotLimit)
+}
+
+func TestQueryChannelHistoryNonMemberUniformNotFound(t *testing.T) {
+	hist := &fakeHistory{err: status.Error(codes.PermissionDenied, "not a member")}
+	svc, _ := newFullServiceForTest(&fakeServiceStore{}, allowEvaluator)
+	svc.history = hist
+	_, err := svc.QueryChannelHistory(context.Background(), &channelv1.QueryChannelHistoryRequest{
+		CharacterId: testCharID, ChannelId: "ch-1",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err), "the fence's PermissionDenied is presented as a uniform not-found")
+}
+
+func TestQueryChannelHistoryNilFetcherFailsClosed(t *testing.T) {
+	svc, _ := newFullServiceForTest(&fakeServiceStore{}, allowEvaluator)
+	svc.history = nil
+	_, err := svc.QueryChannelHistory(context.Background(), &channelv1.QueryChannelHistoryRequest{
+		CharacterId: testCharID, ChannelId: "ch-1",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
 }

@@ -184,6 +184,11 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 	p.auditSrv.memberLookup = store // *channelStore satisfies channelMembershipAuthLookup
 	p.auditSrv.scrollbackCap = p.cfg.ScrollbackCap
 
+	// The service's QueryChannelHistory delegates to the audit server's
+	// membership-gated read (HistoryForMember), reusing the SINGLE history fence
+	// (01-06) rather than a second unfenced path (01-05b HIGH-4).
+	p.service.history = p.auditSrv
+
 	// Set the game id for JetStream dot-style emit subjects. Substrate uses
 	// "main" as the default game_id when unset (mirrors core-scenes main.go);
 	// ServiceConfig carries no game_id field yet — documented expedient until

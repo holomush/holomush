@@ -46,15 +46,35 @@ const createRateResource = "channel:new"
 const createRateWindow = time.Hour
 
 // channelServiceStorer is the narrow persistence dependency of channelService.
-// The concrete *channelStore satisfies it; tests substitute a fake. The service
-// deliberately does NOT depend on the wider store surface — join/leave
-// visibility is enforced by the host ABAC read gate, not a service-side
-// membership read.
+// The concrete *channelStore satisfies it; tests substitute a fake. Structural
+// join/leave visibility is enforced by the host ABAC read gate; the moderation
+// and read verbs (01-05b) additionally consult the plugin-owned membership store
+// for the muted flag, the roster, and the who-membership gate.
 type channelServiceStorer interface {
 	CreateChannel(ctx context.Context, row *channelRow) error
 	JoinChannel(ctx context.Context, channelID, characterID string) error
 	LeaveChannel(ctx context.Context, channelID, characterID string) error
 	ListForCharacter(ctx context.Context, characterID string) ([]channelRow, error)
+	// Moderation + read surface (01-05b).
+	SetMuted(ctx context.Context, channelID, characterID string, muted bool) error
+	SetBanned(ctx context.Context, channelID, characterID string, banned bool) error
+	KickMember(ctx context.Context, channelID, actorID, targetID string) error
+	TransferOwnership(ctx context.Context, channelID, actorID, newOwnerID string) error
+	ListMembers(ctx context.Context, channelID string) ([]channelMemberRow, error)
+	IsMuted(ctx context.Context, channelID, characterID string) (bool, error)
+	// MembershipForHistory is the who-membership gate for WhoInChannel: reports
+	// whether characterID is an active member (existence-oracle-safe — a missing
+	// channel and a non-member both return false).
+	MembershipForHistory(ctx context.Context, channelID, characterID string) (bool, time.Time, error)
+}
+
+// channelHistoryFetcher is the membership-gated history read QueryChannelHistory
+// delegates to. *ChannelAuditServer satisfies it via HistoryForMember, which
+// shares the SAME membership fence (authorizeMember) as the streaming
+// PluginAuditService.QueryHistory — history authorization stays in one place
+// (01-06). The service NEVER re-implements the auth.
+type channelHistoryFetcher interface {
+	HistoryForMember(ctx context.Context, subject, channelID, callerCharID string, limit int) ([]channelLogRow, error)
 }
 
 // trustedOwningPlayerKey is the private context key carrying the host-vouched
@@ -152,6 +172,10 @@ type channelService struct {
 	eventSink pluginsdk.EventSink
 	gameID    string
 	emitter   *channelEventEmitter
+	// history is the membership-gated audit history read QueryChannelHistory
+	// delegates to (01-06 ChannelAuditServer). Wired in Init; nil until then, so
+	// QueryChannelHistory fails closed with Internal.
+	history channelHistoryFetcher
 }
 
 // NewChannelService builds a service backed by store with the given per-player
@@ -435,6 +459,10 @@ func mapStoreError(ctx context.Context, span trace.Span, err error, op string) e
 			return status.Error(codes.InvalidArgument, "invalid channel request") //nolint:wrapcheck // opaque per grpc-errors.md
 		case "CHANNEL_OWNER_CANNOT_LEAVE":
 			return status.Error(codes.FailedPrecondition, "channel owners cannot leave; transfer ownership or archive") //nolint:wrapcheck // opaque per grpc-errors.md
+		case "CHANNEL_OWNER_CANNOT_KICK":
+			return status.Error(codes.FailedPrecondition, "the channel owner cannot be kicked; transfer ownership first") //nolint:wrapcheck // opaque per grpc-errors.md
+		case "CHANNEL_TRANSFER_TARGET_NOT_MEMBER":
+			return status.Error(codes.FailedPrecondition, "the new owner must already be a member of the channel") //nolint:wrapcheck // opaque per grpc-errors.md
 		case "CHANNEL_BANNED":
 			return status.Error(codes.PermissionDenied, "not permitted to join this channel") //nolint:wrapcheck // opaque per grpc-errors.md
 		}

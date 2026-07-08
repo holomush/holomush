@@ -247,9 +247,11 @@ policies:
   # has_owner=false with the owner key OMITTED (resolver.go), so this permit
   # fail-closes on system channels — only the admin override applies there
   # (T-01-14). The dormant `op` role (01-03) grants no moderation this phase.
+  # invite is owner+admin authority (same as mute/ban/kick, D-05): an owner may
+  # admit a character to their channel; the admin override below covers admins.
   - name: moderate-own-channel
     dsl: >-
-      permit(principal is character, action in ["mute", "ban", "kick"], resource is channel) when { resource.channel.owner
+      permit(principal is character, action in ["invite", "mute", "ban", "kick"], resource is channel) when { resource.channel.owner
       == principal.id };
   # ─── Owner-only lifecycle (D-05) ──────────────────────────────────────
   - name: manage-own-channel
@@ -261,8 +263,8 @@ policies:
   # scenes' admin-extend-publish-attempts role check.
   - name: admin-override-channel
     dsl: >-
-      permit(principal is character, action in ["mute", "ban", "kick", "transfer", "archive"], resource is channel) when {
-      "admin" in principal.character.roles };
+      permit(principal is character, action in ["invite", "mute", "ban", "kick", "transfer", "archive"], resource is channel)
+      when { "admin" in principal.character.roles };
   # ─── Admin-default channel creation (D-06) ────────────────────────────
   # GRANT SEAM: creation is admin-default, but an operator can widen it to a role
   # or specific players by adding a seed policy that permits action "create" on

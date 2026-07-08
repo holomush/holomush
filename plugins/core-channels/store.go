@@ -509,6 +509,204 @@ func (s *channelStore) DeleteChannel(ctx context.Context, id, actorID string) er
 	return nil
 }
 
+// channelMemberRow is one row of a channel's roster: the member's character id,
+// role ("owner"/"member"), moderation flags, and join time. Returned by
+// ListMembers to project the WhoInChannel roster (01-05b).
+type channelMemberRow struct {
+	CharacterID string
+	Role        string
+	Muted       bool
+	Banned      bool
+	JoinedAt    time.Time
+}
+
+// ListMembers returns the active (non-banned) roster of channelID ordered owner
+// first then by character id. The membership gate at the service boundary runs
+// BEFORE this call, so an absent channel simply yields an empty roster here (the
+// gate already returned the uniform not-found). Banned rows are excluded — a
+// banned character is no longer on the roster (their row is retained only so
+// JoinChannel can refuse a rejoin).
+func (s *channelStore) ListMembers(ctx context.Context, channelID string) ([]channelMemberRow, error) {
+	rows, err := s.pool.Query(
+		ctx, `
+		SELECT character_id, role, muted, banned, joined_at
+		FROM channel_memberships
+		WHERE channel_id = $1 AND banned = false
+		ORDER BY (role = 'owner') DESC, character_id`,
+		channelID,
+	)
+	if err != nil {
+		return nil, oops.Code("CHANNEL_LIST_MEMBERS_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	defer rows.Close()
+
+	out := make([]channelMemberRow, 0)
+	for rows.Next() {
+		var r channelMemberRow
+		if err := rows.Scan(&r.CharacterID, &r.Role, &r.Muted, &r.Banned, &r.JoinedAt); err != nil {
+			return nil, oops.Code("CHANNEL_LIST_MEMBERS_FAILED").With("channel_id", channelID).Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("CHANNEL_LIST_MEMBERS_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	return out, nil
+}
+
+// IsMuted reports whether characterID's active (non-banned) membership in
+// channelID carries the muted flag. A missing/banned row returns (false, nil):
+// the PostToChannel membership gate (ABAC emit) already ran, so a non-member is
+// never reached here — a false result simply means "not muted".
+func (s *channelStore) IsMuted(ctx context.Context, channelID, characterID string) (bool, error) {
+	var muted bool
+	err := s.pool.QueryRow(
+		ctx, `
+		SELECT muted FROM channel_memberships
+		WHERE channel_id = $1 AND character_id = $2 AND banned = false`,
+		channelID, characterID,
+	).Scan(&muted)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, oops.Code("CHANNEL_MEMBERSHIP_LOOKUP_FAILED").
+			With("channel_id", channelID).With("character_id", characterID).Wrap(err)
+	}
+	return muted, nil
+}
+
+// KickMember removes targetID's non-owner membership from channelID and records
+// a membership.kick ops event (actorID is the acting owner/admin). The owner
+// cannot be kicked: the role<>'owner' filter yields no row for the owner, which
+// classifyKickMiss maps to CHANNEL_OWNER_CANNOT_KICK; a target that is not a
+// member maps to the uniform CHANNEL_MEMBERSHIP_NOT_FOUND.
+func (s *channelStore) KickMember(ctx context.Context, channelID, actorID, targetID string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.Code("CHANNEL_KICK_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	var role string
+	err = tx.QueryRow(
+		ctx, `
+		DELETE FROM channel_memberships
+		WHERE channel_id = $1 AND character_id = $2 AND role <> 'owner'
+		RETURNING role`,
+		channelID, targetID,
+	).Scan(&role)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.classifyKickMiss(ctx, tx, channelID, targetID, err)
+		}
+		return oops.Code("CHANNEL_KICK_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+
+	if err := recordChannelOpsEventTx(ctx, tx, channelID, opsKindMembershipKick, actorID, targetID, map[string]any{"prior_role": role}); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Code("CHANNEL_KICK_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	return nil
+}
+
+// classifyKickMiss distinguishes "owner cannot be kicked" from "target not a
+// member" when the kick DELETE matched no row.
+func (s *channelStore) classifyKickMiss(ctx context.Context, tx pgx.Tx, channelID, targetID string, cause error) error {
+	var role string
+	err := tx.QueryRow(
+		ctx, `SELECT role FROM channel_memberships WHERE channel_id = $1 AND character_id = $2`,
+		channelID, targetID,
+	).Scan(&role)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("CHANNEL_MEMBERSHIP_NOT_FOUND").
+				With("channel_id", channelID).With("character_id", targetID).Wrap(cause)
+		}
+		return oops.Code("CHANNEL_KICK_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	return oops.Code("CHANNEL_OWNER_CANNOT_KICK").
+		With("channel_id", channelID).With("character_id", targetID).
+		Errorf("the channel owner cannot be kicked; transfer ownership first")
+}
+
+// TransferOwnership reassigns ownership of channelID to newOwnerID (who MUST
+// already be a non-banned member) and demotes the current owner to member.
+// actorID is the acting caller (owner or admin per the service ABAC gate),
+// recorded as the ops-event actor. The current owner is read from the channel
+// row, so an admin who is not the owner can still transfer. Returns
+// CHANNEL_NOT_FOUND for an absent channel and CHANNEL_TRANSFER_TARGET_NOT_MEMBER
+// when the target is not an eligible member.
+func (s *channelStore) TransferOwnership(ctx context.Context, channelID, actorID, newOwnerID string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.Code("CHANNEL_TRANSFER_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	var currentOwner string
+	err = tx.QueryRow(ctx, `SELECT owner_id FROM channels WHERE id = $1`, channelID).Scan(&currentOwner)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("CHANNEL_NOT_FOUND").With("channel_id", channelID).Wrap(err)
+		}
+		return oops.Code("CHANNEL_TRANSFER_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	if currentOwner == newOwnerID {
+		// Already the owner — idempotent no-op.
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return oops.Code("CHANNEL_TRANSFER_FAILED").With("channel_id", channelID).Wrap(commitErr)
+		}
+		return nil
+	}
+
+	// Promote the target: it MUST currently be a non-banned member (not owner).
+	var promoted string
+	err = tx.QueryRow(
+		ctx, `
+		UPDATE channel_memberships SET role = 'owner'
+		WHERE channel_id = $1 AND character_id = $2 AND role = 'member' AND banned = false
+		RETURNING character_id`,
+		channelID, newOwnerID,
+	).Scan(&promoted)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("CHANNEL_TRANSFER_TARGET_NOT_MEMBER").
+				With("channel_id", channelID).With("new_owner", newOwnerID).Wrap(err)
+		}
+		return oops.Code("CHANNEL_TRANSFER_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+
+	// Demote the previous owner to member.
+	if _, err := tx.Exec(
+		ctx, `
+		UPDATE channel_memberships SET role = 'member'
+		WHERE channel_id = $1 AND character_id = $2 AND role = 'owner'`,
+		channelID, currentOwner,
+	); err != nil {
+		return oops.Code("CHANNEL_TRANSFER_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+
+	// Update the denormalised owner_id on the channel row.
+	if _, err := tx.Exec(
+		ctx, `UPDATE channels SET owner_id = $1 WHERE id = $2`, newOwnerID, channelID,
+	); err != nil {
+		return oops.Code("CHANNEL_TRANSFER_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+
+	if err := recordChannelOpsEventTx(ctx, tx, channelID, opsKindMembershipTransfer, actorID, newOwnerID, map[string]any{"from": currentOwner}); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Code("CHANNEL_TRANSFER_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	return nil
+}
+
 // prefixedChannelColumns returns channelSelectColumns with each column prefixed
 // by the given table alias, for use in JOIN queries.
 func prefixedChannelColumns(alias string) string {

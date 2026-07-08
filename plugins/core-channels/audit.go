@@ -319,23 +319,11 @@ func (s *ChannelAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, str
 		return status.Error(codes.InvalidArgument, err.Error()) //nolint:wrapcheck // preserve gRPC status code
 	}
 
-	// Membership check — fail closed if the lookup wasn't wired (field
-	// injection in main.go), so a missed setup surfaces as Internal, not a panic.
-	if s.memberLookup == nil {
-		return status.Error(codes.Internal, "membership lookup not configured") //nolint:wrapcheck // gRPC status is the contract
-	}
-	isMember, joinedAt, err := s.memberLookup.MembershipForHistory(ctx, channelID, callerCharID)
+	// Membership fence — the single authorization step shared with the
+	// service-layer QueryChannelHistory (HistoryForMember). Fails closed.
+	joinedAt, err := s.authorizeMember(ctx, channelID, callerCharID)
 	if err != nil {
-		slog.ErrorContext(ctx, "channel audit membership lookup failed",
-			"subject", req.GetSubject(), "channel_id", channelID,
-			"character_id", callerCharID, "err", err.Error())
-		return status.Error(codes.Internal, "membership lookup failed") //nolint:wrapcheck // gRPC status is the contract
-	}
-	if !isMember {
-		slog.InfoContext(ctx, "channel audit denied — non-member",
-			"subject", req.GetSubject(), "channel_id", channelID,
-			"character_id", callerCharID, "code", "CHANNEL_AUDIT_ACCESS_DENIED")
-		return status.Error(codes.PermissionDenied, "not a member") //nolint:wrapcheck // preserve gRPC status code
+		return err //nolint:wrapcheck // authorizeMember already returns a gRPC status
 	}
 
 	// joined_at floor (D-07): history never crosses the member's most-recent
@@ -348,17 +336,7 @@ func (s *ChannelAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, str
 	}
 
 	// Page size: default when unset, clamp to the scrollback cap (D-07).
-	pageSize := int(req.GetPageSize())
-	if pageSize <= 0 {
-		pageSize = channelAuditDefaultPageSize
-	}
-	maxPage := s.scrollbackCap
-	if maxPage <= 0 {
-		maxPage = channelScrollbackFallback
-	}
-	if pageSize > maxPage {
-		pageSize = maxPage
-	}
+	pageSize := s.clampHistoryPageSize(int(req.GetPageSize()))
 
 	dir := req.GetDirection()
 	if dir == 0 {
@@ -394,6 +372,70 @@ func (s *ChannelAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, str
 		}
 	}
 	return nil
+}
+
+// authorizeMember is the single channel-history membership fence, shared by the
+// streaming QueryHistory and the service-layer QueryChannelHistory
+// (HistoryForMember) so history authorization lives in ONE place. It returns the
+// member's most-recent joined_at (the D-07 history floor) on success, or a gRPC
+// status error: Internal when the lookup is unwired or fails, PermissionDenied
+// for a non-member. MembershipForHistory returns the same false for an absent
+// channel and a non-member, so denial is existence-oracle-safe.
+func (s *ChannelAuditServer) authorizeMember(ctx context.Context, channelID, callerCharID string) (time.Time, error) {
+	if s.memberLookup == nil {
+		return time.Time{}, status.Error(codes.Internal, "membership lookup not configured") //nolint:wrapcheck // gRPC status is the contract
+	}
+	isMember, joinedAt, err := s.memberLookup.MembershipForHistory(ctx, channelID, callerCharID)
+	if err != nil {
+		slog.ErrorContext(ctx, "channel audit membership lookup failed",
+			"channel_id", channelID, "character_id", callerCharID, "err", err.Error())
+		return time.Time{}, status.Error(codes.Internal, "membership lookup failed") //nolint:wrapcheck // gRPC status is the contract
+	}
+	if !isMember {
+		slog.InfoContext(ctx, "channel audit denied — non-member",
+			"channel_id", channelID, "character_id", callerCharID, "code", "CHANNEL_AUDIT_ACCESS_DENIED")
+		return time.Time{}, status.Error(codes.PermissionDenied, "not a member") //nolint:wrapcheck // preserve gRPC status code
+	}
+	return joinedAt, nil
+}
+
+// clampHistoryPageSize applies the default page size when limit <= 0 and clamps
+// to the scrollback cap (D-07). Shared by both history read paths.
+func (s *ChannelAuditServer) clampHistoryPageSize(limit int) int {
+	pageSize := limit
+	if pageSize <= 0 {
+		pageSize = channelAuditDefaultPageSize
+	}
+	maxPage := s.scrollbackCap
+	if maxPage <= 0 {
+		maxPage = channelScrollbackFallback
+	}
+	if pageSize > maxPage {
+		pageSize = maxPage
+	}
+	return pageSize
+}
+
+// HistoryForMember is the membership-gated history read the service-layer
+// QueryChannelHistory delegates to. It reuses the SAME fence (authorizeMember)
+// and floor/cap logic as the streaming QueryHistory — the auth is NOT
+// re-implemented. subject is the fully-qualified channel subject the caller's
+// channel maps to (events.<game>.channel.<id>); channelID is that channel's id
+// (fence key); callerCharID is the reading character; limit is the requested
+// page size (clamped). Returns rows oldest-first, or a gRPC status error.
+func (s *ChannelAuditServer) HistoryForMember(ctx context.Context, subject, channelID, callerCharID string, limit int) ([]channelLogRow, error) {
+	joinedAt, err := s.authorizeMember(ctx, channelID, callerCharID)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // authorizeMember already returns a gRPC status
+	}
+	notBefore := timestamppb.New(joinedAt)
+	pageSize := s.clampHistoryPageSize(limit)
+	rows, err := s.store.queryLog(ctx, subject, nil, nil, notBefore, nil, false, pageSize)
+	if err != nil {
+		slog.ErrorContext(ctx, "channel history query failed", "subject", subject, "err", err.Error())
+		return nil, status.Error(codes.Internal, "history query failed") //nolint:wrapcheck // gRPC status is the contract
+	}
+	return rows, nil
 }
 
 // parseChannelSubject extracts channelID from a JetStream-native channel
