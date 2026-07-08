@@ -68,14 +68,14 @@ live when chained or assumed (see Gotchas). Capture the new surface ref from ste
 ```text
 Drain worker for bead <DRAIN_ID>. Invoke the dev-flow:draining-beads skill for the iteration
 protocol, then run `bd show <DRAIN_ID> --json` for your assignment (workspace, mode, scope,
-lessons, rejection counts). cd to the workspace named in that bead before any bd/jj/file
-operation. Also invoke the jj:jujutsu skill before any commit/rebase/topology surgery. Execute
-exactly ONE ready bead this turn following the protocol, then stop. Goal met when: <SENTINEL>.
+lessons, rejection counts). cd to the workspace named in that bead before any bd/git/file
+operation. Before pushing, `git fetch origin && git rebase origin/main` (native git; no VCS skill
+needed). Execute exactly ONE ready bead this turn following the protocol, then stop. Goal met when: <SENTINEL>.
 ```
 
-The `jj:jujutsu` clause is load-bearing: a long drain drifts from `main`, so the finish-branch
-pre-push rebase will conflict, and per-iteration `jj new` can fork the topology — the worker
-must use canonical recipes, not improvise. [Gotcha #7]
+The rebase clause is load-bearing: a long drain drifts from `main`, so the finish-branch
+pre-push `git rebase origin/main` will hit conflicts to resolve — the worker must rebase onto
+`origin/main` before pushing, never force-push over the divergence. [Gotcha #7]
 
 ## Watchdog (arm after the worker is iterating)
 
@@ -122,7 +122,7 @@ in_progress/closed probes to the explicit id set; v1 is validated for `epic` mod
 | 3 | `/goal` rejects conditions >4000 chars | use the thin bead-driven condition (no handoff file) |
 | 5 | Fresh split hits a blocked `.envrc` → no workspace env | `direnv allow` + verify `direnv: loading` before launch |
 | 6 | Drain bead is itself an in_progress epic child → stall signature unreachable | filter `startswith("$SCOPE.")` to count task-children only |
-| 7 | Long drain drifts from main; pre-push rebase conflicts; `jj new` forks topology | worker condition tells it to invoke `jj:jujutsu` |
+| 7 | Long drain drifts from main; pre-push `git rebase origin/main` hits conflicts | worker condition tells it to rebase onto `origin/main` before pushing |
 | — | Long multi-line nudge races the TUI submit (types but doesn't send) | SHORT single-line nudge + 2s before Enter; `Escape` clears a stuck box (`C-u` is not a valid key) |
 | — | Watchdog completion via closed-count is wrong (review-finding beads inflate it) | completion = **drain bead status==closed**, never a count |
 | — | Worker closes the drain bead BEFORE the interactive landing | PushNotification + idle-poll through landing |
