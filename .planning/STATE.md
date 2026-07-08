@@ -1,6 +1,14 @@
 ---
-gsd_state_version: '1.0'
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+current_phase: 1
+current_phase_name: Channels Subsystem
 status: planning
+stopped_at: Phase 1 context gathered
+last_updated: "2026-07-08T13:33:05.747Z"
+last_activity: 2026-07-07
+last_activity_desc: Brownfield ingest (48 SPECs + invariant registry + `docs/roadmap.md` theme
 progress:
   total_phases: 3
   completed_phases: 0
@@ -60,8 +68,10 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 
 - **Ingest resolution**: scenes are plugin-owned (`core-scenes`), superseding the 2026-01-22
   `world-model-design.md` locations-table scene section (INGEST-CONFLICTS.md WARNING 1)
+
 - **Ingest resolution**: web structural scene writes use typed RPCs (proto→facade→BFF), superseding E9.5's
   command-path-only decision for structural writes (INGEST-CONFLICTS.md WARNING 2)
+
 - **Codebase verification**: confirmed via `rg`/`bd` that Scenes/RP (Epic 9, all 17 specs through
   focus-routed-input) is fully shipped; Channels/Forums/Discord plugins do not exist in-tree; `eventkit`/
   `groupkit` SDKs are not yet extracted (consistent with INV-S7's N=2 deferral)
@@ -90,9 +100,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-07 — `.planning/` bootstrap via ingest (SYNTHESIS.md/constraints.md/context.md) plus
+Last session: 2026-07-08T13:33:05.742Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
-Stopped at: ROADMAP created (3 forward phases: Channels Subsystem, Scenes Lineage Completion, Platform
+Stopped at: Phase 1 context gathered
 Hardening & Deployment Scaling); awaiting user approval before `/gsd-plan-phase 1`.
-Resume file: None
+Resume file: .planning/phases/01-channels-subsystem/01-CONTEXT.md
