@@ -69,9 +69,181 @@ audit:
     schema: plugin_core_channels
     table: channel_log
 
-# NOTE: ChannelService `provides`, `verbs`, `commands`, `policies`, and host
-# `requires` capabilities are added by later plans (01-04 resolver/policies,
-# 01-05 service/commands, 01-06 audit). They are intentionally omitted here so
-# this foundation skeleton stays coherent and loadable on its own.
+# Custom (non-core) ABAC actions the channel domain uses. Declaring them here
+# admits them to knownActions (CollectActions) so the per-subcommand Layer-2
+# CanPerformAction checks in the command/service handlers (01-05/01-07) — and
+# their command capabilities — validate. read/write/emit/execute are CORE
+# actions (internal/command validActions) and need NO declaration. NOTE:
+# holomush.plugin.v1.AttributeResolverService is auto-registered by the host via
+# RegisterAttributeResolver (main.go) — it MUST NOT appear in `provides`
+# (SERVICE_ALREADY_REGISTERED). ChannelService `provides`, `commands`, and host
+# `requires` capabilities land in later plans (01-05 service/commands, 01-06
+# audit); they are intentionally omitted here.
+actions:
+  - create
+  - join
+  - leave
+  - invite
+  - mute
+  - ban
+  - kick
+  - transfer
+  - archive
+
+# Verb registrations. Wire type + verbs[].type MUST be plugin-qualified
+# core-channels:<verb> (INV-PLUGIN-40); channel events are plaintext (D-04, no
+# crypto.emits), so there is no bare registered-emit set to keep in sync. The IC
+# content verbs (say/pose) carry player speech; the notice verbs are operational
+# membership/moderation/lifecycle notifications with no message content.
+verbs:
+  # Message content verbs
+  - type: core-channels:channel_say
+    category: communication
+    format: speech
+    label: says
+    display_target: terminal
+  - type: core-channels:channel_pose
+    category: communication
+    format: action
+    display_target: terminal
+
+  # Notice verbs (operational metadata; no message content)
+  - type: core-channels:channel_join
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-channels:channel_leave
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-channels:channel_mute
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-channels:channel_ban
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-channels:channel_kick
+    category: system
+    format: notification
+    display_target: terminal
+  - type: core-channels:channel_rename
+    category: system
+    format: notification
+    display_target: terminal
+
 binary-plugin:
   executable: core-channels
+
+# ─── ABAC seed policies (Layer-1 command gate + Layer-2 per-action gates) ────
+# Channel ABAC ships HERE, in the plugin manifest — NOT in the host's
+# SeedPolicies(): the host must never seed permits for a plugin-owned resource
+# type. Default-deny is the core security control of this phase (CHAN-02,
+# CHAN-04): any principal not matching a permit below is denied.
+#
+# D-03 (Landmine 1) reconciliation: membership is modelled RESOURCE-side as
+# resource.channel.members (resolved by ChannelResolver, resolver.go), not the
+# principal-side principal.channel_memberships that D-03 literally names — the
+# plugin AttributeResolverService proto exposes no subject/principal RPC.
+# Policies therefore read `principal.id in resource.channel.members`.
+policies:
+  # ─── Layer 1: command execution gate — DEFERRED to the command's plan ─
+  # The Layer-1 gate is:
+  #   permit(principal is character, action in ["execute"], resource is command)
+  #     when { resource.command.name in ["channel"]
+  #            && principal.character.is_guest == false };
+  # It CANNOT ship here: the plugin policy validator
+  # (internal/plugin/policy_validator.go:145 validateCommandPolicy) rejects a
+  # command-targeting policy for a command the plugin does not declare
+  # ("plugins can only target their own commands"), and the `channel` command
+  # (with its {action: write, resource: channel} capability, MED-5) is added by
+  # 01-05/01-07 — this plan intentionally omits the `commands:` block. So the
+  # execute gate lands together with the `channel` command declaration in that
+  # plan (exactly as scenes ships execute-scene-commands alongside its commands
+  # block). The guest fail-CLOSED exclusion (is_guest == false) travels with it.
+  # This is not a security gap: with no `channel` command declared, command
+  # dispatch has nothing to gate; the Layer-2 resource permits below already
+  # fail-closed for read/emit/write/moderation.
+
+  # ─── Layer 2: read (channel VISIBILITY / discoverability) ─────────────
+  # The `read` action governs whether a character can SEE / target / join-eval a
+  # channel — NOT whether they can read its history CONTENT. History content is a
+  # SEPARATE gate: 01-06 QueryHistory membership-checks at auth step-1 for EVERY
+  # channel type (public included), so the public-read clause below does NOT grant
+  # a non-member access to history. This keeps 01-04 consistent with INV-CHANNEL-1
+  # (01-09).
+  - name: read-channel-as-member
+    dsl: >-
+      permit(principal is character, action in ["read"], resource is channel) when { principal.id in resource.channel.members
+      };
+  # Public channels are discoverable/visible to any character (visibility, not
+  # content — see the note above). Private/admin channels have NO public clause,
+  # so their read fail-closes to membership only (CHAN-04).
+  - name: read-public-channel
+    dsl: >-
+      permit(principal is character, action in ["read"], resource is channel) when { resource.channel.type == "public" };
+
+  # ─── Layer 2: emit / post (requires membership regardless of type) ────
+  # Posting requires membership for EVERY channel type — public included. There
+  # is deliberately NO public clause on emit: visibility (read) is open on public
+  # channels, but posting still requires having joined (CHAN-04 distinction).
+  - name: emit-channel-as-member
+    dsl: >-
+      permit(principal is character, action in ["emit"], resource is channel) when { principal.id in resource.channel.members
+      }; #magic___^_^___line
+  # ─── Layer 2: write (backs the 01-07 command capability, review MED-5) ─
+  # The `channel` command declares a {action: write, resource: channel} capability;
+  # the dispatcher preflights it via CanPerformAction. Without this permit the
+  # command fails preflight even for members. Scoped to membership so it does NOT
+  # widen access beyond emit — it exists solely to satisfy the command-capability
+  # preflight (Layer-2), mirroring scenes' write-scene-as-participant
+  # (plugins/core-scenes/plugin.yaml:308-311).
+  #
+  # D-03 faction seam: private/admin read/emit/write is covered by the membership
+  # clause (keyed on resource.channel.members / .type). A future per-character
+  # faction gate slots in here as an added `principal.faction == "..."` clause
+  # (principal.faction is a CHARACTER attribute added in
+  # internal/access/policy/attribute/character.go — NOT a channel-plugin concern)
+  # with NO schema migration and NO policy rewrite.
+  - name: write-channel-as-member
+    dsl: >-
+      permit(principal is character, action in ["write"], resource is channel) when { principal.id in resource.channel.members
+      }; #magic___^_^___line
+  # ─── Owner-only moderation (D-05: owner + admin, NO op role) ──────────
+  # The owner_id sentinel for a system-owned default channel (D-01) resolves to
+  # has_owner=false with the owner key OMITTED (resolver.go), so this permit
+  # fail-closes on system channels — only the admin override applies there
+  # (T-01-14). The dormant `op` role (01-03) grants no moderation this phase.
+  - name: moderate-own-channel
+    dsl: >-
+      permit(principal is character, action in ["mute", "ban", "kick"], resource is channel) when { resource.channel.owner
+      == principal.id }; #magic___^_^___line
+  # ─── Owner-only lifecycle (D-05) ──────────────────────────────────────
+  - name: manage-own-channel
+    dsl: >-
+      permit(principal is character, action in ["transfer", "archive"], resource is channel) when { resource.channel.owner
+      == principal.id }; #magic___^_^___line
+  # ─── Admin override (D-06) ────────────────────────────────────────────
+  # Admins moderate and manage any channel regardless of ownership; mirrors
+  # scenes' admin-extend-publish-attempts role check.
+  - name: admin-override-channel
+    dsl: >-
+      permit(principal is character, action in ["mute", "ban", "kick", "transfer", "archive"], resource is channel) when {
+      "admin" in principal.character.roles }; #magic___^_^___line
+  # ─── Admin-default channel creation (D-06) ────────────────────────────
+  # GRANT SEAM: creation is admin-default, but an operator can widen it to a role
+  # or specific players by adding a seed policy that permits action "create" on
+  # resource "channel" for that principal set — NO code change needed. The
+  # per-player create rate limit (create_rate_limit config) is enforced
+  # service-side (01-05), not in ABAC.
+  - name: seed-channel-admin-create
+    dsl: >-
+      permit(principal is character, action in ["create"], resource is channel) when { "admin" in principal.character.roles
+      }; #magic___^_^___line
+    # NOTE: join / leave / invite are declared actions above but are governed by
+    # policies that land with their command/service wiring (01-05/01-07) — join
+    # admission (public-open vs private-invited) is enforced substrate-side in the
+    # store (JoinChannel checks ban; visibility is a service-side check), exactly
+    # as scenes enforces join in classifyJoinMiss rather than through an engine gate
+    # that cannot express open-channel admission.
