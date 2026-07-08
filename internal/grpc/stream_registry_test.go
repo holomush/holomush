@@ -151,18 +151,36 @@ func TestAddStreamWithModeAcceptsFromCursor(t *testing.T) {
 	assert.Equal(t, focus.ReplayModeFromCursor, update.replayMode)
 }
 
-func TestAddStreamWithModeRejectsUnsupportedModes(t *testing.T) {
-	// Post-F3 only ReplayModeFromCursor is honoured — BoundedTail /
-	// LiveOnly must fail explicitly rather than silently downgrade.
+// TestAddStreamWithModeAcceptsLiveOnly proves HIGH-2: a mid-session LIVE_ONLY add
+// is accepted (no REPLAY_MODE_NOT_SUPPORTED) and carries the mode as an add
+// update. The no-history-flood guarantee is structural (SetFilters preserves the
+// live consumer's start policy on filter rotation) and covered by the subscriber
+// SetFilters tests; here we lock that the registry accepts and forwards the mode.
+func TestAddStreamWithModeAcceptsLiveOnly(t *testing.T) {
 	reg := NewSessionStreamRegistry()
 	ch := make(chan sessionStreamUpdate, 4)
 	reg.Register("sess-1", ch)
 	defer reg.Deregister("sess-1", ch)
 
-	err := reg.AddStreamWithMode(context.Background(), "sess-1", "channel:x", session.ReplayModeLiveOnly)
-	errutil.AssertErrorCode(t, err, "REPLAY_MODE_NOT_SUPPORTED")
+	err := reg.AddStreamWithMode(context.Background(), "sess-1", "channel.x", session.ReplayModeLiveOnly)
+	require.NoError(t, err)
 
-	err = reg.AddStreamWithMode(context.Background(), "sess-1", "channel:x", session.ReplayModeBoundedTail)
+	update := <-ch
+	assert.Equal(t, "channel.x", update.stream)
+	assert.True(t, update.add)
+	assert.Equal(t, focus.ReplayModeLiveOnly, update.replayMode)
+}
+
+func TestAddStreamWithModeRejectsUnsupportedModes(t *testing.T) {
+	// Post-F3 FROM_CURSOR (scenes) and LIVE_ONLY (channels, HIGH-2) are honoured;
+	// BoundedTail remains unsupported and must fail explicitly rather than
+	// silently downgrade.
+	reg := NewSessionStreamRegistry()
+	ch := make(chan sessionStreamUpdate, 4)
+	reg.Register("sess-1", ch)
+	defer reg.Deregister("sess-1", ch)
+
+	err := reg.AddStreamWithMode(context.Background(), "sess-1", "channel.x", session.ReplayModeBoundedTail)
 	errutil.AssertErrorCode(t, err, "REPLAY_MODE_NOT_SUPPORTED")
 }
 

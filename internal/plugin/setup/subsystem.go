@@ -320,6 +320,12 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	}
 
 	binaryHost := goplugin.NewHost(hostOpts...)
+	// Wire the session stream registry so the served stream.subscription
+	// capability (AddSessionStream/RemoveSessionStream) reaches the same host
+	// SessionStreamRegistry the Lua hostfunc path uses (plugin-runtime-symmetry).
+	if s.cfg.StreamRegistry != nil {
+		binaryHost.SetStreamRegistry(s.cfg.StreamRegistry)
+	}
 	instrumentedBinaryHost, binaryMWErr := plugins.NewHostMiddleware(
 		binaryHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
 	)

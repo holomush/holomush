@@ -95,6 +95,11 @@ func NewStreamHistoryServer(base hostCapabilityBase) hostv1.StreamHistoryService
 	return &streamHistoryServer{hostCapabilityBase: base}
 }
 
+// NewStreamSubscriptionServer builds the StreamSubscriptionService capability server bound to base.
+func NewStreamSubscriptionServer(base hostCapabilityBase) hostv1.StreamSubscriptionServiceServer {
+	return &streamSubscriptionServer{hostCapabilityBase: base}
+}
+
 // NewAuditServer builds the AuditService capability server bound to base.
 func NewAuditServer(base hostCapabilityBase) hostv1.AuditServiceServer {
 	return &auditServer{hostCapabilityBase: base}

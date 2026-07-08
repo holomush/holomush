@@ -13,14 +13,16 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 48 seed policies total: 39 permit + 9 forbid. TestSeedPoliciesExpectedNames
+	// 49 seed policies total: 40 permit + 9 forbid. TestSeedPoliciesExpectedNames
 	// below is the authoritative per-name inventory; this count is the coarse
 	// guard against an accidental add/remove. holomush-8m01u removed the vestigial
 	// unconditional seed:player-scene-participant write permit (50 → 49), and
 	// holomush-sjtlz removed its read twin seed:player-scene-read (49 → 48);
 	// scene reads/writes are now gated solely by the core-scenes plugin's
-	// read-scene-as-* / write-scene-as-participant policies.
-	assert.Len(t, seeds, 48, "expected 48 seed policies (39 permit, 9 forbid)")
+	// read-scene-as-* / write-scene-as-participant policies. Phase-1 channels
+	// added seed:plugin-stream-subscribe (48 → 49) — the instance-level write
+	// analogue of seed:plugin-stream-read (HIGH-3).
+	assert.Len(t, seeds, 49, "expected 49 seed policies (40 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -77,7 +79,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 39, permitCount, "expected 39 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 character-directory INV-ACCESS-9, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
+	assert.Equal(t, 40, permitCount, "expected 40 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -147,6 +149,8 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:plugin-cap-stream",
 		"seed:plugin-cap-audit",
 		"seed:plugin-stream-read",
+		// Plugin instance-level stream write (phase-1 channels; HIGH-3)
+		"seed:plugin-stream-subscribe",
 		// Character directory (INV-ACCESS-9)
 		"seed:directory-list-characters",
 	}

@@ -182,18 +182,22 @@ func (r *SessionStreamRegistry) AddStream(_ context.Context, sessionID, stream s
 
 // AddStreamWithMode implements plugins.StreamRegistry. Subscribes with explicit replay mode.
 //
-// Post-F3 the Subscribe handler uses cursor-mode replay via
-// SessionStream.SetFilters exclusively; BoundedTail and LiveOnline are not
-// honoured. We reject those modes eagerly (option A of TODO(holomush-6uvc))
-// instead of silently downgrading, so plugins requesting a specific replay
-// window see an explicit error rather than the wrong behaviour.
+// FROM_CURSOR replays from the live consumer's saved start policy (scene
+// catch-up). LIVE_ONLY (channels' mid-session join, HIGH-2) delivers ONLY
+// newly-arriving events with no historical flood — the guarantee is structural:
+// the Subscribe handler rotates filters via SessionStream.SetFilters, which
+// PRESERVES the live consumer's start policy on rotation (internal/eventbus/
+// subscriber.go SetFilters), so a stream added to an already-live consumer never
+// re-reads history regardless of the advisory replayMode carried here. Both
+// modes are accepted; BoundedTail remains unsupported post-F3 and is rejected
+// eagerly (option A of TODO(holomush-6uvc)) rather than silently downgraded.
 func (r *SessionStreamRegistry) AddStreamWithMode(_ context.Context, sessionID, stream string, mode session.ReplayMode) error {
-	if mode != focus.ReplayModeFromCursor {
+	if mode != focus.ReplayModeFromCursor && mode != focus.ReplayModeLiveOnly {
 		return oops.Code("REPLAY_MODE_NOT_SUPPORTED").
 			With("session_id", sessionID).
 			With("stream", stream).
 			With("mode", mode).
-			Errorf("replay mode %v is not supported post-F3; only ReplayModeFromCursor is honored", mode)
+			Errorf("replay mode %v is not supported post-F3; only ReplayModeFromCursor and ReplayModeLiveOnly are honored", mode)
 	}
 	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true, replayMode: mode})
 }

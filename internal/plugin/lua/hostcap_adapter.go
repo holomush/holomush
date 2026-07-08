@@ -233,6 +233,27 @@ func (a *luaHostCapAdapter) HistoryReader() plugins.HistoryReader {
 	return hr
 }
 
+// StreamRegistry returns the session stream registry from the Functions backing
+// (nil when unset ⇒ the served stream.subscription handler fails closed).
+// Satisfies hostcap.HostCapabilities.
+func (a *luaHostCapAdapter) StreamRegistry() plugins.StreamRegistry {
+	return a.f.GetStreamRegistry()
+}
+
+// OwnedEmitDomains returns nil for the Lua runtime: *hostfunc.Functions exposes
+// no per-plugin manifest emit surface, so the served stream.subscription
+// capability's owned-namespace fence has no domains to authorize against and
+// fails closed for Lua. This is a fail-closed availability-shape difference, not
+// a policy asymmetry (plugin-runtime-symmetry permitted asymmetry): no in-tree
+// Lua plugin declares session_streams or consumes stream.subscription via the
+// host.v1 path, and the fence chokepoint (AuthorizeStreamSubscribe) is identical
+// for both runtimes. Lua's ambient add_session_stream hostfunc (stdlib_streams)
+// is a separate pre-existing path out of scope here. Satisfies
+// hostcap.HostCapabilities.
+func (a *luaHostCapAdapter) OwnedEmitDomains(_ string) []string {
+	return nil
+}
+
 // ReadbackDecryptor returns a plugins.ReadbackDecryptor backed by the Functions'
 // AuditDecryptor, or nil when the decryptor is unconfigured.
 func (a *luaHostCapAdapter) ReadbackDecryptor() plugins.ReadbackDecryptor {
