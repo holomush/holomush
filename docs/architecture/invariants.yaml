@@ -3361,6 +3361,16 @@ invariants:
     binding: bound
     asserted_by:
       - "test/integration/scenes/scene_info_read_access_test.go"
+  - id: INV-SCENE-69
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-07-07-focus-hotpath-cache-design.md"
+    legacy: []
+    summary: "No stale connection focus kind is served on the dispatch hot path: after any committed change to a live connection's
+      Connection.FocusKey, the next focus read observes the new value. Enforced by eviction on session.Store.UpdateSessionConnection
+      (the sole path that changes a live connection's focus) plus a generation-guarded cache populate that discards any read
+      whose value predates a concurrent eviction. Bounded-memory reclaim on connection create/remove is an operational property,
+      not part of this invariant. Binding pending until holomush-wm0fi.6 binds it to the cache/decorator/integration tests."
+    binding: pending
 
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride
