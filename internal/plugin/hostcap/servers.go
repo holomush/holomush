@@ -949,7 +949,9 @@ func (s *streamSubscriptionServer) authorizeSubscribe(ctx context.Context, strea
 	if decErr != nil {
 		var code string
 		if oopsErr, ok := oops.AsOops(decErr); ok {
-			code, _ = oopsErr.Code().(string)
+			if c, isStr := oopsErr.Code().(string); isStr {
+				code = c
+			}
 		}
 		switch code {
 		case "STREAM_NOT_RELATIVE", "STREAM_WILDCARD_FORBIDDEN":
