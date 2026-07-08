@@ -73,18 +73,18 @@ same substrate guarantees (EventBus, ABAC, audit) already proven by Scenes.
 4. Faction-restricted channels enforce membership-based access distinct from open channels
 5. `core-channels` validates the `eventkit`/`groupkit` SDK extraction pattern as the substrate's second
    consumer (INV-S7, N=2 rule) — extraction itself is a follow-on, not a blocking criterion of this phase
-**Plans**: 9 plans
+**Plans**: 10 plans
 
 Plans:
 **Wave 1**
 
 - [ ] 01-01-PLAN.md — holomush.channel.v1 proto + generated bindings (wave 1)
-- [ ] 01-02-PLAN.md — Live-delivery substrate: SDK QuerySessionStreams hook + stream.subscription serving [holomush-l6std] (wave 1)
+- [ ] 01-02-PLAN.md — Live-delivery substrate: SDK QuerySessionStreams hook + dot-subject acceptance (HIGH-1) + stream.subscription served with real LIVE_ONLY (HIGH-2) + concrete-stream authz guard (HIGH-3) [holomush-l6std] (wave 1)
 - [ ] 01-03-PLAN.md — Plugin scaffold + schema/migrations + types + store (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-04-PLAN.md — ChannelResolver (resource-side membership, D-03) + ABAC seed policies (wave 2)
+- [ ] 01-04-PLAN.md — ChannelResolver (resource-side membership, D-03) + ABAC seed policies (incl. write-channel-as-member, MED-5) (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -96,15 +96,19 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-07-PLAN.md — channel commands + =name shorthand + moderation + retention prune (wave 5)
+- [ ] 01-05b-PLAN.md — Remaining ChannelService RPCs: post/who/history/invite/mute/ban/kick/transfer (completes the service surface, HIGH-4) (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 01-08-PLAN.md — Live delivery wiring: QuerySessionStreams impl + mid-session join/leave (wave 6)
+- [ ] 01-07-PLAN.md — channel commands + =name shorthand (manifest alias, MED-6) + moderation + retention prune (wave 6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 01-09-PLAN.md — Whole-system census + e2e integration + invariant registration (wave 7)
+- [ ] 01-08-PLAN.md — Live delivery wiring: QuerySessionStreams impl + mid-session join/leave (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 01-09-PLAN.md — Whole-system census + e2e integration + invariant registration (wave 8)
 
 ### Phase 2: Scenes Lineage Completion
 
@@ -156,7 +160,7 @@ completion, and platform hardening can proceed in parallel if desired)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Channels Subsystem | 0/9 | Not started | - |
+| 1. Channels Subsystem | 0/10 | Not started | - |
 | 2. Scenes Lineage Completion | 0/TBD | Not started | - |
 | 3. Platform Hardening & Deployment Scaling | 0/TBD | Not started | - |
 

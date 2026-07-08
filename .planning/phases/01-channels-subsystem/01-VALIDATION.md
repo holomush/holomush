@@ -44,25 +44,27 @@ created: 2026-07-08
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 01-01-01 | 01 | 1 | CHAN-01, CHAN-02 | T-01-06 | ChannelService proto contract (no channel_name authz field; plaintext) | proto-lint | `task lint:proto` | ❌ | ⬜ pending |
 | 01-01-02 | 01 | 1 | CHAN-01, CHAN-02 | T-01-06 | generated Go/web bindings committed, no stale-diff | proto-lint | `task lint:proto` | ❌ | ⬜ pending |
-| 01-02-01 | 02 | 1 | CHAN-01, CHAN-02 | T-01-07 | binary SDK SessionStreamsHandler hook routes QuerySessionStreams | unit | `task test -- ./pkg/plugin/` | ❌ | ⬜ pending |
-| 01-02-02 | 02 | 1 | CHAN-01, CHAN-02 | T-01-08, T-01-09 | stream.subscription served → host StreamRegistry, LIVE_ONLY mapping | unit | `task test -- ./internal/plugin/hostcap/` | ❌ | ⬜ pending |
+| 01-02-01 | 02 | 1 | CHAN-01, CHAN-02 | T-01-07 | binary SDK SessionStreamsHandler hook routes QuerySessionStreams + manager isValidStreamName accepts dot subjects (HIGH-1) | unit | `task test -- ./pkg/plugin/ ./internal/plugin/` | ❌ | ⬜ pending |
+| 01-02-02 | 02 | 1 | CHAN-01, CHAN-02 | T-01-09, T-01-22, T-01-08 | stream.subscription served with real LIVE_ONLY (HIGH-2, no history flood + FROM_CURSOR regression) + concrete-stream authz guard + seed:plugin-stream-subscribe (HIGH-3) | unit | `task test -- ./internal/plugin/hostcap/ ./internal/plugin/pluginauthz/ ./internal/grpc/ ./internal/access/` | ❌ | ⬜ pending |
 | 01-02-03 | 02 | 1 | CHAN-01, CHAN-02 | T-01-07 | StreamSubscription client + undeclared-capability fails closed | unit | `task test -- ./pkg/plugin/` | ❌ | ⬜ pending |
 | 01-03-01 | 03 | 1 | CHAN-01, CHAN-03 | T-01-10 | plugin skeleton + migrations + name regex + transition validation | unit | `task test -- ./plugins/core-channels/` | ❌ W0 | ⬜ pending |
 | 01-03-02 | 03 | 1 | CHAN-01 | T-01-10, T-01-11 | store CRUD, idempotent join, case-insensitive name lookup, soft archive | unit + int | `task test:int` | ❌ | ⬜ pending |
 | 01-03-03 | 03 | 1 | CHAN-01 (D-01) | T-01-13 | idempotent default-channel seed (`Public`, no dup, no membership rows) + ListDefaultChannels | unit + int | `task test:int` | ❌ | ⬜ pending |
 | 01-04-01 | 04 | 2 | CHAN-02, CHAN-04 | T-01-01, T-01-12, T-01-13 | resource-side membership resolver, omit-don't-sentinel, uniform NotFound | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
-| 01-04-02 | 04 | 2 | CHAN-02, CHAN-04 | T-01-01, T-01-02, T-01-14 | default-deny Layer-1/2 policies, public-vs-private/admin, owner moderation, faction seam | unit + lint | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
+| 01-04-02 | 04 | 2 | CHAN-02, CHAN-04 | T-01-01, T-01-02, T-01-14 | default-deny Layer-1/2 policies, public-read=visibility (LOW/MED-7), write-channel-as-member (MED-5), owner moderation, faction seam | unit + lint | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
 | 01-05-01 | 05 | 3 | CHAN-01, CHAN-02, CHAN-04 | T-01-02, T-01-12, T-01-15, T-01-16 | per-RPC ABAC, admin-gated + 5/hr rate-limited create, uniform not-found | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
 | 01-05-02 | 05 | 3 | CHAN-01 | — | ChannelService registered via ServiceProvider; eval capability wired | unit + lint | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
 | 01-06-01 | 06 | 4 | CHAN-02, CHAN-03 | T-01-04 | CommunicationContent emit on dot subjects, qualified wire type, plaintext, no channel_name authz | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
-| 01-06-02 | 06 | 4 | CHAN-02, CHAN-03 | T-01-01, T-01-17, T-01-18, T-01-05 | idempotent AuditEvent, membership-gated QueryHistory (auth step-1), joined_at floor, scrollback cap | int | `task test:int` | ❌ | ⬜ pending |
-| 01-07-01 | 07 | 5 | CHAN-01, CHAN-02, CHAN-04 | T-01-14, T-01-02 | command router + `=name` shorthand + owner/admin-only moderation, uniform not-found | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
-| 01-07-02 | 07 | 5 | CHAN-02 | T-01-05, T-01-19 | retention prune sweep window boundary; unlimited-retention preserved | unit + int | `task test:int` | ❌ | ⬜ pending |
-| 01-08-01 | 08 | 6 | CHAN-01, CHAN-02 (D-01) | T-01-01, T-01-20 | QuerySessionStreams memberships ∪ ListDefaultChannels; guest gets seeded only; banned excluded | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
-| 01-08-02 | 08 | 6 | CHAN-01, CHAN-02 | T-01-01, T-01-09 | mid-session join/leave AddStream/RemoveStream (LIVE_ONLY) | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
-| 01-09-01 | 09 | 7 | CHAN-05 | T-01-21 | whole-system census loads core-channels fail-closed (INV-PLUGIN-54) | whole-system int | `task test:int` | ❌ | ⬜ pending |
-| 01-09-02 | 09 | 7 | CHAN-01, CHAN-02, CHAN-03, CHAN-04 | T-01-01, T-01-12 | e2e join→post→live delivery; non-member denied + no delivery; private uniform not-found | int | `task test:int` | ❌ | ⬜ pending |
-| 01-09-03 | 09 | 7 | CHAN-05 | — | INV-CHANNEL-1/2 registered + genuinely bound; INV-S7 (N=2) validated | meta | `task test -- ./test/meta/` | ❌ | ⬜ pending |
+| 01-06-02 | 06 | 4 | CHAN-02, CHAN-03 | T-01-01, T-01-17, T-01-18, T-01-05 | idempotent AuditEvent, membership-gated QueryHistory (auth step-1, all types), joined_at floor, scrollback cap | int | `task test:int` | ❌ | ⬜ pending |
+| 01-05b-01 | 05b | 5 | CHAN-02, CHAN-04 | T-01-14, T-01-12, T-01-16 | ChannelService moderation RPCs (invite/mute/ban/kick/transfer) owner+admin-only ABAC + notice emit (HIGH-4) | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
+| 01-05b-02 | 05b | 5 | CHAN-02 | T-01-02, T-01-01, T-01-12 | ChannelService PostToChannel/WhoInChannel/QueryChannelHistory membership-gated (HIGH-4) | unit + int | `task test:int` | ❌ | ⬜ pending |
+| 01-07-01 | 07 | 6 | CHAN-01, CHAN-02, CHAN-04 | T-01-14, T-01-02 | command router delegates to complete service + `=name` manifest-alias routing (MED-6) + write cap↔policy (MED-5) + owner/admin-only moderation, uniform not-found | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
+| 01-07-02 | 07 | 6 | CHAN-02 | T-01-05, T-01-19 | retention prune sweep window boundary; unlimited-retention preserved | unit + int | `task test:int` | ❌ | ⬜ pending |
+| 01-08-01 | 08 | 7 | CHAN-01, CHAN-02 (D-01) | T-01-01, T-01-20 | QuerySessionStreams memberships ∪ ListDefaultChannels; guest gets seeded only; banned excluded | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
+| 01-08-02 | 08 | 7 | CHAN-01, CHAN-02 | T-01-01, T-01-09 | mid-session join/leave AddStream/RemoveStream (LIVE_ONLY, via HIGH-2/HIGH-3-guarded 01-02 substrate) | unit | `task test -- ./plugins/core-channels/` | ❌ | ⬜ pending |
+| 01-09-01 | 09 | 8 | CHAN-05 | T-01-21 | whole-system census loads core-channels fail-closed (INV-PLUGIN-54) | whole-system int | `task test:int` | ❌ | ⬜ pending |
+| 01-09-02 | 09 | 8 | CHAN-01, CHAN-02, CHAN-03, CHAN-04 | T-01-01, T-01-12 | e2e join→post→live delivery; non-member denied + no delivery; private uniform not-found; `=Public hello` raw-input routing (MED-6) | int | `task test:int` | ❌ | ⬜ pending |
+| 01-09-03 | 09 | 8 | CHAN-05 | — | INV-CHANNEL-1 (history-content, all types; LOW/MED-7 wording) /2 registered + genuinely bound; INV-S7 (N=2) validated | meta | `task test -- ./test/meta/` | ❌ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -82,11 +84,7 @@ created: 2026-07-08
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| `=name message` telnet shorthand routing | CHAN-02 | terminal input routing over a real telnet connection | connect telnet, join a channel, type `=chan hello`, confirm live delivery to a second connected member |
-
-*All other behaviors have automated verification (see map above).*
+*None.* Cross-AI review MED-6 resolved the `=name` routing to a concrete manifest-seeded system prefix alias (`aliases: ["="]` on the `channel` command), so the previously manual `=name` shorthand routing is now AUTOMATED: the parser/router mapping is covered by `commands_test.go` (01-07) and the live alias-seeded raw-input hop (`=Public hello` reaches core-channels and posts, with live delivery to a second member) is covered by the 01-09 whole-system e2e (`task test:int`). All behaviors have automated verification (see map above).
 
 ---
 
