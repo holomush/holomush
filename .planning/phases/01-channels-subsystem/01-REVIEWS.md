@@ -1,56 +1,63 @@
 ---
 phase: 1
 reviewers: [codex]
-review_round: 3
+review_round: 4
 reviewed_at: 2026-07-08
 plans_reviewed: [01-01-PLAN.md, 01-02-PLAN.md, 01-03-PLAN.md, 01-04-PLAN.md, 01-05-PLAN.md, 01-05b-PLAN.md, 01-06-PLAN.md, 01-07-PLAN.md, 01-08-PLAN.md, 01-09-PLAN.md]
 reviewer_cli: codex-cli 0.142.5
-prior_round_commits: [853efae32, 22bd3578d]
-verdict: NOT READY — R2-A/B/C all RESOLVED, but 1 new HIGH (R3-A): the namespace fence guards only the mid-session stream.subscription path, not the session-establishment QuerySessionStreams path (which HIGH-1 widened to accept full events. subjects). Close via /gsd-plan-phase 1 --reviews.
+prior_round_commits: [853efae32, 22bd3578d, 735577aa9]
+verdict: NOT READY — R3-A RESOLVED, but 1 new HIGH (R4-A, latent): history_scope:channel fails manifest validation (closed enum {grid,scene,custom}) so core-channels won't load. Close via /gsd-plan-phase 1 --reviews.
 ---
 
-# Cross-AI Plan Review — Phase 1 (Round 3 — final confirmation)
+# Cross-AI Plan Review — Phase 1 (Round 4 — final confirmation)
 
-> Round 1 (`853efae32`): 4 HIGH + 2 MED + 1 LOW → incorporated. Round 2 (`22bd3578d`): 5 resolved + 3 new (R2-A/B/C) → incorporated (`cb8cb2056`). This round confirms R2-A/B/C are genuinely resolved and hunts for regressions/new issues from the round-2 edits. **The `## Actionable (round 3)` section (R3-A) is what a `/gsd-plan-phase 1 --reviews` pass must incorporate.**
+> Taper: round 1 = 7 findings, round 2 = 3 (R2-A/B/C), round 3 = 1 (R3-A) — all incorporated. This round confirms R3-A and hunts for regressions/latent blockers. **The `## Actionable (round 4)` section (R4-A) is what a `/gsd-plan-phase 1 --reviews` pass must incorporate.**
 
 ## Codex Review
 
 **Summary**
 
-R2-A, R2-B, and R2-C are genuinely addressed in the current plan text for the paths they target. However, the round-2 stream work exposes one new HIGH issue: the session-establishment `QuerySessionStreams` path can still subscribe a session to arbitrary plugin-returned streams without the namespace/relative-form fence now planned for `stream.subscription`.
+R3-A is **RESOLVED** in the plans: the establishment path and mid-session path are now planned to share one `AuthorizePluginStreamContribution` fence, with relative-only stream refs and explicit establishment-path tests.
 
-**R2 Resolution Check**
+However, final verdict is **NOT READY** because I found one genuine existing blocker outside the R3-A edit: the plans declare `history_scope: channel`, but current source rejects any `history_scope` outside `grid`, `scene`, or `custom`.
 
-- **R2-A: RESOLVED.**
-  01-02 now defines `stream.subscription` input as domain-relative, rejects `events.` with `STREAM_NOT_RELATIVE`, and requires an own-domain `channel.<id>` permit test: `01-02-PLAN.md:31,144,148,195`. 01-08 now passes `relativeChannelStream(id) => "channel."+id` for `QuerySessionStreams`, `AddStream`, and `RemoveStream`, while keeping the emit subject separate/full: `01-08-PLAN.md:18,28,73-75,102-107`. This matches the existing read guard pattern: `AuthorizeStreamRead` rejects pre-qualified `events.` at `internal/plugin/pluginauthz/streamread.go:50-54` and qualifies relative refs at `:55`. The downstream filter paths qualify relative refs via `eventbus.Qualify`: `internal/grpc/server.go:713-724,1382`, `internal/eventbus/qualify.go:23-33`.
+**R3-A Resolution Check**
 
-- **R2-B: RESOLVED for `stream.subscription`.**
-  The plan explicitly makes forbidden namespace rejection load-bearing in `AuthorizeStreamSubscribe`, before registry mutation, and tests it with the broad write permit active: `01-02-PLAN.md:32,38-39,145,148,186,196`. The source supports the premise: existing forbids are read-only (`internal/access/policy/seed.go:234-236,251-253,272-274,296-298`) and the concrete stream permit is also read-only (`:436-448`), with the current comment saying stream writes remain type-level only at `:443-444`. The planned owned-namespace check is source-compatible with the existing emit fence helpers: namespace extraction at `internal/plugin/event_emitter.go:211-226` and manifest emits matching at `:290-296`.
+**RESOLVED.**
 
-- **R2-C: RESOLVED.**
-  The plan no longer trusts a request field. It keys rate limiting on a private trusted context binding, populated only from `pluginsdk.CommandRequest.PlayerID`, and fails closed for non-admin create when absent: `01-05-PLAN.md:19-20,29,50,77,89,96`; command delegation stamps it in 01-07 at `01-07-PLAN.md:31,97`. Source confirms `CommandRequest.PlayerID` exists (`pkg/plugin/command.go:25-34`) and the dispatcher stamps it from `exec.PlayerID()` (`internal/command/dispatcher.go:407-415`) while separately documenting the owning-player value as authenticated and never plugin-supplied (`:432-449`). Typed service identity is still only actor kind/id (`pkg/plugin/actor_metadata.go:45-53`), and `HostEvaluator.Evaluate` has no player-id channel (`pkg/plugin/evaluate_client.go:26-33`), so this is the right current seam.
+The original source hole is real: `Manager.QuerySessionStreams` currently copies opted-in plugins, calls each host, and merges returned streams directly after only `isValidStreamName` validation (`internal/plugin/manager.go:1512,1566`). The gRPC subscribe path appends those flattened plugin streams directly into the initial filter plan (`internal/grpc/server.go:966`), then qualifies them later (`internal/grpc/server.go:987`). `eventbus.Qualify` passes `events.` subjects through unchanged, so pre-qualified foreign subjects would bypass game scoping (`internal/eventbus/qualify.go:23`).
+
+The updated plan closes that by requiring one shared `pluginauthz.AuthorizePluginStreamContribution(pluginName, ownedEmitDomains, relativeRef)` function and explicitly reusing it from both paths (`01-02-PLAN.md:120,122`). The establishment chokepoint is correctly placed in `Manager.QuerySessionStreams`, before `server.go` loses per-plugin identity (`01-02-PLAN.md:145`). The mid-session guard is required to call the same function first, before `Qualify` and the `write` ABAC decision (`01-02-PLAN.md:163`).
+
+The domain extraction is source-compatible: current emit fencing extracts the leading namespace from dot-relative refs (`internal/plugin/event_emitter.go:229`) and checks it against `Manifest.Emits` (`internal/plugin/event_emitter.go:290`). The plan mirrors that and keeps the fence gameID-free (`01-02-PLAN.md:121`).
+
+The relative-only tightening is also covered: current `isValidStreamName` still requires a colon (`internal/plugin/manager.go:1496`), and the plan replaces that with relative-only acceptance while rejecting `events.` and colon refs (`01-02-PLAN.md:143`). `01-08` is aligned: `QuerySessionStreams`, `AddStream`, and `RemoveStream` must pass `channel.<id>`, not a full `events.` subject (`01-08-PLAN.md:18,107`).
+
+The required establishment-path tests are present: manager tests must prove forbidden/foreign/full/wildcard refs are dropped and own-domain `channel.<id>` is kept, backed by shared fence unit tests (`01-02-PLAN.md:138,213`).
 
 **New Concerns**
 
-- **HIGH: Session-establishment stream contribution lacks the same namespace fence as mid-session subscription.**
-  01-02 fixes `Manager.QuerySessionStreams` to accept relative `channel.<id>` and full `events.<game>...` subjects: `01-02-PLAN.md:27,127,130,134`. But the planned R2-B guard only covers `stream.subscription` `AddSessionStream`/`RemoveSessionStream`: `01-02-PLAN.md:113,148,202`.
+**HIGH: `history_scope: channel` will fail manifest validation.**
 
-  Existing source appends plugin-contributed streams directly into the Subscribe plan (`internal/grpc/server.go:966-981`) and then qualifies them into actual filters (`internal/grpc/server.go:987,713-724`). `eventbus.Qualify` passes pre-qualified `events.` subjects through unchanged (`internal/eventbus/qualify.go:27-29`). `session_streams` is only a manifest boolean, not a per-stream namespace entitlement (`internal/plugin/manifest.go:107,540-543`). So a `session_streams: true` plugin could return `events.<other-game>.system...`, `system.rekey...`, `audit...`, or another plugin's domain at establishment and bypass the in-handler R2-B fence entirely.
+The plans declare `history_scope: channel` for `core-channels` (`01-03-PLAN.md:78`, `01-06-PLAN.md:80`). Current source has a closed enum of only `grid`, `scene`, and `custom` (`internal/plugin/manifest.go:381`), and rejects unknown values during manifest validation (`internal/plugin/manifest.go:557`). As written, `core-channels` will not load once `emits: [channel]` is present. Use `history_scope: custom` or explicitly plan the validator/schema change for a `channel` scope.
 
-  Required fix: apply the same relative-only, no-wildcard, forbidden-namespace, owned-emits-domain guard to each `QuerySessionStreams` contribution before it is merged. Do not keep full `events.` acceptance for plugin-contributed session streams unless there is a separate host-owned reason and test proving cross-game/system subjects are rejected.
+I did not find a new blocker from the R3-A shared-fence design itself. The `Manifest.Emits` capture must be implemented under `m.mu.RLock()` or copied into the local `pluginEntry`; the plan says to respect the existing lock discipline (`01-02-PLAN.md:145`), so I'm treating that as an implementation requirement, not a separate plan failure.
 
 **Final Verdict**
 
-**NOT READY.** The R2 findings are resolved, but the stream namespace fence is only applied to mid-session subscription; the initial `QuerySessionStreams` path can still install forbidden or foreign filters before Subscribe opens.
+**NOT READY** — R3-A is resolved, but `history_scope: channel` is incompatible with the current manifest validator and will fail plugin load.
 
 ---
 
-## Actionable (round 3) — feed into `/gsd-plan-phase 1 --reviews`
+## Actionable (round 4) — feed into `/gsd-plan-phase 1 --reviews`
 
-Round-2 findings R2-A, R2-B, R2-C are **RESOLVED** and need no change. One item remains:
+R3-A is **RESOLVED**; no change needed there. One item remains:
 
-1. **[HIGH — R3-A] Fence the session-establishment `QuerySessionStreams` path with the same guard as mid-session subscription.** The R2-B owned-namespace/forbidden-namespace fence lives only in `AuthorizeStreamSubscribe` (the mid-session `stream.subscription` capability). But `Manager.QuerySessionStreams` — widened by HIGH-1 to accept both relative and full `events.` subjects — merges plugin-contributed streams straight into the Subscribe filter plan (`internal/grpc/server.go:966-981` → qualified at `:987,713-724`), and `session_streams: true` is only a manifest boolean, not a per-stream entitlement (`internal/plugin/manifest.go:540-543`). A `session_streams` plugin could therefore contribute `events.<other-game>.system…` / `system.rekey…` / `audit…` / another plugin's domain at establishment and bypass the mid-session fence. **Fix:** apply the SAME relative-only + no-wildcard + forbidden-namespace + owned-emits-domain guard to each plugin `QuerySessionStreams` contribution BEFORE it is merged into the Subscribe plan. **Strongly prefer forcing plugin session-stream contributions to be RELATIVE-only** (drop full `events.` acceptance for *plugin-contributed* streams — reconsider the HIGH-1 widening, which was intended to make core-channels' dot subjects deliverable, not to admit pre-qualified foreign subjects) so both stream-contribution paths (establishment + mid-session) share ONE guard. Add a test: a `session_streams` plugin returning a cross-game / `system` / `audit` / foreign-domain stream is REJECTED at establishment (with the guard active). This is the substrate half — it belongs in 01-02 alongside the R2-B work; ensure 01-08's `QuerySessionStreams` returns only relative own-domain refs consistent with the tightened guard.
+1. **[HIGH — R4-A] `history_scope: channel` fails manifest validation → `core-channels` won't load.** Plans 01-03 (`:78`) and 01-06 (`:80`) declare `history_scope: channel`, but the manifest `history_scope` enum is closed to `{grid, scene, custom}` (`internal/plugin/manifest.go:381`) and unknown values are rejected at load (`internal/plugin/manifest.go:557`). **Fix — choose one and land it in 01-03 (manifest) + 01-06 (any history-scope reference):**
+   - **(a) `history_scope: custom`** — zero host change; `custom` is the generic escape hatch for plugin-owned history scopes. Verify what `history_scope` actually governs (how `QueryHistory` scopes/filters) and that `custom` gives channels the membership-gated, per-channel history semantics it needs. **Preferred if `custom` is semantically adequate** (smallest change, no host churn).
+   - **(b) Add `channel` to the enum** — a host change to `internal/plugin/manifest.go:381` (+ the validator at `:557` + `schemas/plugin.schema.json` if it enumerates the values), mirroring how `scene` was added for `core-scenes`. Consistent with channels being the second substrate consumer, but it's a host change with its own test surface. Only take this if `custom` is semantically wrong for channels.
+   Whichever is chosen, add an acceptance criterion that `core-channels` LOADS (manifest validates) with `emits: [channel]` present — the whole-system census in 01-09 already asserts load, but the manifest-scope value must be fixed for that to pass.
 
 ## Consensus Summary
 
-Single reviewer (Codex, round 3, source-grounded). Strong convergence: all of round-1 (7) and round-2's R2-A/B/C are resolved and verified against source. The one remaining HIGH (R3-A) is a direct corollary of the round-2 fix — the fence was applied to one of the two stream-contribution paths but not the other. It's narrow and lands in the same plan (01-02) as the existing fence. **Recommendation: one `/gsd-plan-phase 1 --reviews` pass** unifying the guard across both paths should reach READY.
+Single reviewer (Codex, round 4, source-grounded). R3-A confirmed resolved. The one remaining finding (R4-A) is a **latent manifest-validation blocker** present since the early rounds — not a regression from the round-3 edit — that would fail plugin load at execution. It escaped rounds 1–3 (and the internal plan-checker) because those focused on the stream-subscription/service surface, not the manifest enum. It's a one-line manifest fix (or a small, well-scoped host enum addition). **Recommendation: one `/gsd-plan-phase 1 --reviews` pass** to fix `history_scope`, then the plan set should reach READY.
