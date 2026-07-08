@@ -398,7 +398,9 @@ func channelLogRowToHistoryEntry(r *channelLogRow) *channelv1.ChannelHistoryEntr
 		id = u.String()
 	}
 	var cp channelContentPayload
-	_ = json.Unmarshal(r.payload, &cp) // best-effort; a notice payload leaves fields empty
+	if err := json.Unmarshal(r.payload, &cp); err != nil {
+		cp = channelContentPayload{} // best-effort: a notice payload isn't CommunicationContent; leave fields empty
+	}
 	actorID := cp.ActorID
 	if actorID == "" && len(r.actorID) == 16 {
 		var u ulid.ULID

@@ -200,6 +200,8 @@ func newServiceForTest(store channelServiceStorer, limit int, now func() time.Ti
 }
 
 // actorCtx builds an incoming gRPC context carrying host-vouched actor metadata.
+//
+//nolint:unparam // kind is kept general (the metadata carries any actor kind); current callers all assert ActorCharacter mismatches.
 func actorCtx(kind pluginsdk.ActorKind, id string) context.Context {
 	md := metadata.New(map[string]string{
 		"x-holomush-actor-kind": strconv.Itoa(int(kind)),

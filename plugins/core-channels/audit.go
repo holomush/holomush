@@ -323,7 +323,7 @@ func (s *ChannelAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, str
 	// service-layer QueryChannelHistory (HistoryForMember). Fails closed.
 	joinedAt, err := s.authorizeMember(ctx, channelID, callerCharID)
 	if err != nil {
-		return err //nolint:wrapcheck // authorizeMember already returns a gRPC status
+		return err
 	}
 
 	// joined_at floor (D-07): history never crosses the member's most-recent
@@ -426,7 +426,7 @@ func (s *ChannelAuditServer) clampHistoryPageSize(limit int) int {
 func (s *ChannelAuditServer) HistoryForMember(ctx context.Context, subject, channelID, callerCharID string, limit int) ([]channelLogRow, error) {
 	joinedAt, err := s.authorizeMember(ctx, channelID, callerCharID)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // authorizeMember already returns a gRPC status
+		return nil, err
 	}
 	notBefore := timestamppb.New(joinedAt)
 	pageSize := s.clampHistoryPageSize(limit)
