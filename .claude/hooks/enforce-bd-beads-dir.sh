@@ -146,7 +146,7 @@ fi
 
 # Strip single- and double-quoted string contents (across newlines) before
 # segment-splitting so commands like `git commit -m 'msg containing bd'`
-# don't false-trigger. See enforce-gh-repo.sh for the same pattern + caveats.
+# don't false-trigger. See enforce-task-runner.sh for the same pattern + caveats.
 STRIPPED=$(printf '%s' "$COMMAND" | perl -0777 -pe "s/'[^']*'//g; s/\"[^\"]*\"//g" 2>/dev/null) || STRIPPED="$COMMAND"
 SEGMENTS=$(printf '%s' "$STRIPPED" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
 

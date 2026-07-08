@@ -113,7 +113,7 @@ first_cmd_word() {
 # or rg or cat in the body'` don't false-trigger on lines whose first
 # non-quote token happens to match a blocked tool name. Crude — does not
 # handle escaped quotes inside quotes — but covers real hook inputs. See
-# enforce-gh-repo.sh for the same pattern + caveats.
+# enforce-bd-beads-dir.sh for the same pattern + caveats.
 STRIPPED=$(printf '%s' "$COMMAND" | perl -0777 -pe "s/'[^']*'//g; s/\"[^\"]*\"//g" 2>/dev/null) || STRIPPED="$COMMAND"
 
 # Split on && ; || using awk for portability (BSD sed does not support \n
