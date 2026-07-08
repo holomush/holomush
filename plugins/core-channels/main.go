@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -40,14 +41,19 @@ type channelConfig struct {
 //   - pluginsdk.Handler                    (HandleEvent)
 //   - pluginsdk.ServiceProvider            (RegisterServices, Init)
 //   - pluginsdk.AttributeResolverProvider  (RegisterAttributeResolver)
+//   - pluginsdk.HostEvaluatorAware         (SetHostEvaluator)
 //
-// resolver is pre-allocated in main() so the gRPC server registration in
-// RegisterAttributeResolver (which runs before Init) has a valid receiver; Init
-// wires the store into it after NewChannelStore returns.
+// service and resolver are pre-allocated in main() so the gRPC server
+// registration in RegisterServices/RegisterAttributeResolver (which runs before
+// Init) has valid receivers; Init wires the store (and the create rate limiter)
+// into both after NewChannelStore returns. The host evaluator is injected via
+// SetHostEvaluator before Init (SDK lifecycle).
 type channelPlugin struct {
-	cfg      channelConfig
-	store    *channelStore
-	resolver *ChannelResolver
+	cfg       channelConfig
+	store     *channelStore
+	service   *channelService
+	resolver  *ChannelResolver
+	evaluator pluginsdk.HostEvaluator
 }
 
 // HandleEvent is a no-op for this foundation plan. The channel plugin does not
@@ -56,10 +62,26 @@ func (p *channelPlugin) HandleEvent(_ context.Context, _ pluginsdk.Event) ([]plu
 	return nil, nil
 }
 
-// RegisterServices is a no-op for this plan. ChannelService (01-05) and
-// PluginAuditService (01-06) are registered by later plans; the manifest
-// declares no `provides` yet, so nothing is registered here.
-func (p *channelPlugin) RegisterServices(_ grpc.ServiceRegistrar) {}
+// RegisterServices registers the ChannelServiceServer on the go-plugin gRPC
+// transport so the host can proxy channel RPCs to this plugin. It embeds
+// UnimplementedChannelServiceServer, so the not-yet-filled RPCs (added in
+// 01-05b) return Unimplemented and nothing calls them until then.
+// PluginAuditService (01-06) is registered by a later plan.
+func (p *channelPlugin) RegisterServices(registrar grpc.ServiceRegistrar) {
+	channelv1.RegisterChannelServiceServer(registrar, p.service)
+}
+
+// SetHostEvaluator is called by the SDK adapter during Init when the plugin
+// declares HostEvaluatorAware (manifest `requires: capability: eval`). The
+// evaluator drives the per-RPC ABAC self-enforcement in the channel service
+// (and admin-gated commands in 01-07). Wired before Init; nil until then so all
+// gated RPCs fail closed.
+func (p *channelPlugin) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
+	p.evaluator = ev
+	if p.service != nil {
+		p.service.SetHostEvaluator(ev)
+	}
+}
 
 // RegisterAttributeResolver registers the ChannelResolver on the go-plugin gRPC
 // transport so the host's ABAC engine can resolve channel attributes during
@@ -132,6 +154,10 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 	}
 	p.store = store
 	p.resolver.store = store
+	// Wire the service's store + create rate limiter now that config is decoded.
+	// The evaluator was already injected via SetHostEvaluator before Init.
+	p.service.store = store
+	p.service.limiter = newCreateRateLimiter(p.cfg.CreateRateLimit, createRateWindow, time.Now)
 
 	// Seed the default channel set (incl. Public) idempotently. Safe to re-run
 	// on every Init — ON CONFLICT DO NOTHING on lower(name) (D-01, T-01-13).
@@ -149,6 +175,7 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 
 func main() {
 	plugin := &channelPlugin{
+		service:  &channelService{},
 		resolver: &ChannelResolver{},
 	}
 	pluginsdk.ServeWithServices(

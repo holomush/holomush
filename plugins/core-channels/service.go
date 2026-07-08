@@ -182,13 +182,13 @@ func actorMismatch(ctx context.Context, characterID string) bool {
 // evaluator or an engine error fails closed.
 func (s *channelService) gateRead(ctx context.Context, span trace.Span, channelID, op string) error {
 	if s.evaluator == nil {
-		slog.WarnContext(ctx, op+" evaluator not configured", "channel_id", channelID)
+		slog.WarnContext(ctx, "channel service read gate: evaluator not configured", "op", op, "channel_id", channelID)
 		return status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // opaque per grpc-errors.md
 	}
 	dec, err := s.evaluator.Evaluate(ctx, "read", "channel:"+channelID)
 	if err != nil {
 		recordError(span, err)
-		errutil.LogErrorContext(ctx, op+" evaluation failed", err)
+		errutil.LogErrorContext(ctx, "channel service read gate: evaluation failed", err, "op", op)
 		return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque per grpc-errors.md
 	}
 	if !dec.Allowed {
@@ -424,6 +424,6 @@ func mapStoreError(ctx context.Context, span trace.Span, err error, op string) e
 			return status.Error(codes.PermissionDenied, "not permitted to join this channel") //nolint:wrapcheck // opaque per grpc-errors.md
 		}
 	}
-	errutil.LogErrorContext(ctx, op+" store error", err)
+	errutil.LogErrorContext(ctx, "channel service: store error", err, "op", op)
 	return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque per grpc-errors.md
 }

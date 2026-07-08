@@ -32,6 +32,26 @@ emits: [channel]
 history_scope: custom
 actor_kinds_claimable: [plugin, character]
 
+# ChannelService is the typed structural-write surface (create/join/leave/list
+# this plan; the remaining RPCs land in 01-05b). It is proxied by the host, so
+# it is declared in `provides`. holomush.plugin.v1.AttributeResolverService is
+# auto-registered by the host via RegisterAttributeResolver (main.go) and MUST
+# NOT appear here (SERVICE_ALREADY_REGISTERED). PluginAuditService `provides`
+# lands with the audit RPC (01-06).
+provides:
+  - holomush.channel.v1.ChannelService
+
+# Host capabilities core-channels invokes through its SDK clients. `eval`
+# (EvalService.Evaluate) drives the per-RPC ABAC self-enforcement in the channel
+# service (admin-gated create D-06, and the read visibility gate on
+# join/leave/list); the host capability interceptor default-denies any host.v1
+# capability a manifest does not declare, so it must be declared. `emit` is
+# self-gated by the emit fence (declarationExemptCapabilities) and is
+# intentionally NOT declared — the live-notice emit path lands in 01-06.
+requires:
+  - capability: eval
+    access: read
+
 storage: postgres
 
 # Runtime config (plugin-owned, opaque to the host). The host validates the
@@ -191,7 +211,7 @@ policies:
   - name: emit-channel-as-member
     dsl: >-
       permit(principal is character, action in ["emit"], resource is channel) when { principal.id in resource.channel.members
-      }; #magic___^_^___line
+      };
   # ─── Layer 2: write (backs the 01-07 command capability, review MED-5) ─
   # The `channel` command declares a {action: write, resource: channel} capability;
   # the dispatcher preflights it via CanPerformAction. Without this permit the
@@ -209,7 +229,7 @@ policies:
   - name: write-channel-as-member
     dsl: >-
       permit(principal is character, action in ["write"], resource is channel) when { principal.id in resource.channel.members
-      }; #magic___^_^___line
+      };
   # ─── Owner-only moderation (D-05: owner + admin, NO op role) ──────────
   # The owner_id sentinel for a system-owned default channel (D-01) resolves to
   # has_owner=false with the owner key OMITTED (resolver.go), so this permit
@@ -218,19 +238,19 @@ policies:
   - name: moderate-own-channel
     dsl: >-
       permit(principal is character, action in ["mute", "ban", "kick"], resource is channel) when { resource.channel.owner
-      == principal.id }; #magic___^_^___line
+      == principal.id };
   # ─── Owner-only lifecycle (D-05) ──────────────────────────────────────
   - name: manage-own-channel
     dsl: >-
       permit(principal is character, action in ["transfer", "archive"], resource is channel) when { resource.channel.owner
-      == principal.id }; #magic___^_^___line
+      == principal.id };
   # ─── Admin override (D-06) ────────────────────────────────────────────
   # Admins moderate and manage any channel regardless of ownership; mirrors
   # scenes' admin-extend-publish-attempts role check.
   - name: admin-override-channel
     dsl: >-
       permit(principal is character, action in ["mute", "ban", "kick", "transfer", "archive"], resource is channel) when {
-      "admin" in principal.character.roles }; #magic___^_^___line
+      "admin" in principal.character.roles };
   # ─── Admin-default channel creation (D-06) ────────────────────────────
   # GRANT SEAM: creation is admin-default, but an operator can widen it to a role
   # or specific players by adding a seed policy that permits action "create" on
@@ -240,7 +260,7 @@ policies:
   - name: seed-channel-admin-create
     dsl: >-
       permit(principal is character, action in ["create"], resource is channel) when { "admin" in principal.character.roles
-      }; #magic___^_^___line
+      };
     # NOTE: join / leave / invite are declared actions above but are governed by
     # policies that land with their command/service wiring (01-05/01-07) — join
     # admission (public-open vs private-invited) is enforced substrate-side in the
