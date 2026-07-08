@@ -5,13 +5,22 @@ package main
 
 import (
 	"context"
+	"errors"
+	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
-	pluginsdk "github.com/holomush/holomush/pkg/plugin"
-	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
+	"github.com/samber/oops"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/holomush/holomush/pkg/errutil"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
 )
 
 // adminCreatePolicyID is the fully-qualified id of the admin-default channel
@@ -155,22 +164,266 @@ func (s *channelService) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
 	s.evaluator = ev
 }
 
-// CreateChannel is UNIMPLEMENTED in the RED skeleton.
-func (s *channelService) CreateChannel(_ context.Context, _ *channelv1.CreateChannelRequest) (*channelv1.CreateChannelResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented") //nolint:wrapcheck // RED skeleton
+// actorMismatch reports whether the host-vouched character actor on ctx
+// contradicts the request's acting character id. A mismatch means a caller
+// authenticated as one character is trying to act as another; reject fail-closed
+// (mirrors core-scenes service.go:272). Absent metadata is not a mismatch — the
+// host dispatch token remains the outer identity gate.
+func actorMismatch(ctx context.Context, characterID string) bool {
+	kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx)
+	return ok && kind == pluginsdk.ActorCharacter && id != characterID
 }
 
-// JoinChannel is UNIMPLEMENTED in the RED skeleton.
-func (s *channelService) JoinChannel(_ context.Context, _ *channelv1.JoinChannelRequest) (*channelv1.JoinChannelResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented") //nolint:wrapcheck // RED skeleton
+// gateRead self-enforces the ABAC `read` (visibility) gate for a per-channel
+// RPC BEFORE any store mutation. The read policies (01-04) admit a member of any
+// channel and any character to a public channel; a private/admin non-member is
+// denied. A denied read collapses to a uniform codes.NotFound so join/leave
+// cannot be used to probe for a hidden channel's existence (T-01-12). A nil
+// evaluator or an engine error fails closed.
+func (s *channelService) gateRead(ctx context.Context, span trace.Span, channelID, op string) error {
+	if s.evaluator == nil {
+		slog.WarnContext(ctx, op+" evaluator not configured", "channel_id", channelID)
+		return status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+	dec, err := s.evaluator.Evaluate(ctx, "read", "channel:"+channelID)
+	if err != nil {
+		recordError(span, err)
+		errutil.LogErrorContext(ctx, op+" evaluation failed", err)
+		return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return status.Error(codes.NotFound, "channel not found") //nolint:wrapcheck // uniform hidden/absent per T-01-12
+	}
+	return nil
 }
 
-// LeaveChannel is UNIMPLEMENTED in the RED skeleton.
-func (s *channelService) LeaveChannel(_ context.Context, _ *channelv1.LeaveChannelRequest) (*channelv1.LeaveChannelResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented") //nolint:wrapcheck // RED skeleton
+// CreateChannel allocates a new channel owned by the calling character. It
+// self-enforces the admin-gated create policy (D-06) via the host evaluator,
+// then applies the per-player rate limit keyed on the host-vouched
+// owning-player id from the trusted dispatch binding (R2-C) — admins (create
+// authorised by adminCreatePolicyID) bypass the limit. A create with no trusted
+// owning-player id fails closed for a non-admin. The name is validated, the type
+// defaults to public, and the creator becomes owner.
+func (s *channelService) CreateChannel(ctx context.Context, req *channelv1.CreateChannelRequest) (*channelv1.CreateChannelResponse, error) {
+	ctx, span := startSpan(ctx, "channel.service.create_channel",
+		attribute.String("subject_id", req.GetCharacterId()))
+	defer span.End()
+
+	// Actor-binding identity cross-check: a caller authenticated as one
+	// character cannot create a channel owned by another (req.character_id
+	// becomes the owner). Mirrors core-scenes CreateScene.
+	if actorMismatch(ctx, req.GetCharacterId()) {
+		slog.WarnContext(ctx, "channel.service.create_channel actor metadata mismatch",
+			"request_character_id", req.GetCharacterId())
+		return nil, status.Error(codes.PermissionDenied, "not permitted to create for this character") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+
+	// Input validation: trim + regex. protovalidate enforces this at the host
+	// boundary, but a direct handler caller (and the command layer) bypasses it.
+	name := strings.TrimSpace(req.GetName())
+	if !validateChannelName(name) {
+		return nil, status.Error(codes.InvalidArgument, "channel name does not match the accepted pattern") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+
+	// Self-enforced ABAC create gate (INV-SCENE-65 analog). Fail closed when the
+	// evaluator is not wired.
+	if s.evaluator == nil {
+		slog.WarnContext(ctx, "channel.service.create_channel evaluator not configured",
+			"subject_id", req.GetCharacterId())
+		return nil, status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+	dec, evalErr := s.evaluator.Evaluate(ctx, "create", createRateResource)
+	if evalErr != nil {
+		recordError(span, evalErr)
+		errutil.LogErrorContext(ctx, "channel.service.create_channel evaluation failed", evalErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return nil, status.Error(codes.PermissionDenied, "not permitted to create channels") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+
+	// Per-player create rate limit (D-06). Admins bypass; a non-admin create
+	// keys ONLY on the trusted owning-player id and fails closed when absent
+	// (R2-C — never bucket into an empty/shared key nor allow through).
+	if dec.MatchedPolicy != adminCreatePolicyID {
+		player, ok := trustedOwningPlayerFromContext(ctx)
+		if !ok {
+			slog.WarnContext(ctx,
+				"channel.service.create_channel denied: no trusted owning-player id (fail-closed, R2-C)",
+				"subject_id", req.GetCharacterId())
+			return nil, status.Error(codes.PermissionDenied, "not permitted to create channels") //nolint:wrapcheck // opaque per grpc-errors.md
+		}
+		if !s.limiter.allow(player) {
+			return nil, status.Error(codes.ResourceExhausted, "channel creation rate limit exceeded") //nolint:wrapcheck // opaque per grpc-errors.md
+		}
+	}
+
+	// Default the type here (not only in the store) so the persisted row and the
+	// response projection agree even when the store does not backfill (CHAN-04).
+	channelType := req.GetType()
+	if channelType == "" {
+		channelType = string(channelTypePublic)
+	}
+	row := &channelRow{
+		Name:    name,
+		Type:    channelType,
+		OwnerID: req.GetCharacterId(),
+	}
+	if rd := req.GetRetentionDays(); rd > 0 {
+		v := int(rd)
+		row.RetentionDays = &v
+	}
+	if err := s.store.CreateChannel(ctx, row); err != nil {
+		return nil, mapStoreError(ctx, span, err, "channel.service.create_channel")
+	}
+	span.SetAttributes(attribute.String("channel_id", row.ID))
+
+	slog.InfoContext(ctx, "channel.service.create_channel ok",
+		"subject_id", req.GetCharacterId(), "channel_id", row.ID, "type", row.Type)
+
+	now := time.Now().UTC()
+	members := []*channelv1.MemberInfo{{
+		CharacterId:   row.OwnerID,
+		CharacterName: row.OwnerID, // best-effort: no name resolver wired
+		Role:          "owner",
+		JoinedAt:      timestamppb.New(now),
+	}}
+	return &channelv1.CreateChannelResponse{Channel: rowToChannelInfo(row, members, now)}, nil
 }
 
-// ListChannels is UNIMPLEMENTED in the RED skeleton.
-func (s *channelService) ListChannels(_ context.Context, _ *channelv1.ListChannelsRequest) (*channelv1.ListChannelsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented") //nolint:wrapcheck // RED skeleton
+// JoinChannel adds the calling character to a channel. A public channel admits
+// any character; a private/admin channel admits only a member (the read gate
+// denies a non-member, yielding a uniform not-found). A banned character is
+// refused; a repeat join by an existing member is an idempotent success.
+func (s *channelService) JoinChannel(ctx context.Context, req *channelv1.JoinChannelRequest) (*channelv1.JoinChannelResponse, error) {
+	ctx, span := startSpan(ctx, "channel.service.join_channel",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("channel_id", req.GetChannelId()))
+	defer span.End()
+
+	if actorMismatch(ctx, req.GetCharacterId()) {
+		slog.WarnContext(ctx, "channel.service.join_channel actor metadata mismatch",
+			"request_character_id", req.GetCharacterId(), "channel_id", req.GetChannelId())
+		return nil, status.Error(codes.PermissionDenied, "not permitted to join for this character") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+
+	if err := s.gateRead(ctx, span, req.GetChannelId(), "channel.service.join_channel"); err != nil {
+		return nil, err
+	}
+
+	if err := s.store.JoinChannel(ctx, req.GetChannelId(), req.GetCharacterId()); err != nil {
+		return nil, mapStoreError(ctx, span, err, "channel.service.join_channel")
+	}
+
+	slog.InfoContext(ctx, "channel.service.join_channel ok",
+		"subject_id", req.GetCharacterId(), "channel_id", req.GetChannelId())
+	return &channelv1.JoinChannelResponse{}, nil
+}
+
+// LeaveChannel removes the calling character's membership. The read gate yields
+// a uniform not-found for a hidden channel; the owner cannot leave
+// (FailedPrecondition); leaving a channel the caller is not in returns the same
+// uniform not-found.
+func (s *channelService) LeaveChannel(ctx context.Context, req *channelv1.LeaveChannelRequest) (*channelv1.LeaveChannelResponse, error) {
+	ctx, span := startSpan(ctx, "channel.service.leave_channel",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("channel_id", req.GetChannelId()))
+	defer span.End()
+
+	if actorMismatch(ctx, req.GetCharacterId()) {
+		slog.WarnContext(ctx, "channel.service.leave_channel actor metadata mismatch",
+			"request_character_id", req.GetCharacterId(), "channel_id", req.GetChannelId())
+		return nil, status.Error(codes.PermissionDenied, "not permitted to leave for this character") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+
+	if err := s.gateRead(ctx, span, req.GetChannelId(), "channel.service.leave_channel"); err != nil {
+		return nil, err
+	}
+
+	if err := s.store.LeaveChannel(ctx, req.GetChannelId(), req.GetCharacterId()); err != nil {
+		return nil, mapStoreError(ctx, span, err, "channel.service.leave_channel")
+	}
+
+	slog.InfoContext(ctx, "channel.service.leave_channel ok",
+		"subject_id", req.GetCharacterId(), "channel_id", req.GetChannelId())
+	return &channelv1.LeaveChannelResponse{}, nil
+}
+
+// ListChannels returns exactly the channels the calling character is an active
+// (non-banned, non-archived) member of (CHAN-01) — a self-scoped membership
+// query (ListForCharacter), never a world/location query. The ABAC
+// self-enforcement here is the actor-identity binding: a caller can only list
+// their own memberships (the query is keyed on the host-vouched character), so
+// the listing cannot probe another character's or a hidden channel's membership.
+func (s *channelService) ListChannels(ctx context.Context, req *channelv1.ListChannelsRequest) (*channelv1.ListChannelsResponse, error) {
+	ctx, span := startSpan(ctx, "channel.service.list_channels",
+		attribute.String("subject_id", req.GetCharacterId()))
+	defer span.End()
+
+	if actorMismatch(ctx, req.GetCharacterId()) {
+		slog.WarnContext(ctx, "channel.service.list_channels actor metadata mismatch",
+			"request_character_id", req.GetCharacterId())
+		return nil, status.Error(codes.PermissionDenied, "not permitted to list for this character") //nolint:wrapcheck // opaque per grpc-errors.md
+	}
+
+	rows, err := s.store.ListForCharacter(ctx, req.GetCharacterId())
+	if err != nil {
+		return nil, mapStoreError(ctx, span, err, "channel.service.list_channels")
+	}
+
+	out := make([]*channelv1.ChannelInfo, 0, len(rows))
+	for i := range rows {
+		out = append(out, rowToChannelInfo(&rows[i], nil, rows[i].CreatedAt))
+	}
+	return &channelv1.ListChannelsResponse{Channels: out}, nil
+}
+
+// rowToChannelInfo projects a channelRow into the wire ChannelInfo. members may
+// be nil for list results (roster is fetched via WhoInChannel, 01-05b). created
+// is the timestamp to stamp when the row's own CreatedAt is not populated (e.g.
+// fresh from CreateChannel, whose store call does not return the DB timestamp).
+func rowToChannelInfo(row *channelRow, members []*channelv1.MemberInfo, created time.Time) *channelv1.ChannelInfo {
+	ts := created
+	if !row.CreatedAt.IsZero() {
+		ts = row.CreatedAt
+	}
+	retention := int32(0)
+	if row.RetentionDays != nil {
+		retention = int32(*row.RetentionDays) //nolint:gosec // retention days is a small config-bounded value
+	}
+	return &channelv1.ChannelInfo{
+		Id:            row.ID,
+		Name:          row.Name,
+		Type:          row.Type,
+		OwnerId:       row.OwnerID,
+		Archived:      row.Archived,
+		RetentionDays: retention,
+		CreatedAt:     timestamppb.New(ts),
+		Members:       members,
+	}
+}
+
+// mapStoreError translates plugin store oops codes to opaque gRPC status errors
+// with generic messages, logging inner detail via errutil (grpc-errors.md). A
+// hidden or absent channel collapses to a uniform codes.NotFound so operations
+// cannot be used to probe for a channel's existence (T-01-12).
+func mapStoreError(ctx context.Context, span trace.Span, err error, op string) error {
+	recordError(span, err)
+	var oe oops.OopsError
+	if errors.As(err, &oe) {
+		switch oe.Code() {
+		case "CHANNEL_NOT_FOUND", "CHANNEL_MEMBERSHIP_NOT_FOUND":
+			return status.Error(codes.NotFound, "channel not found") //nolint:wrapcheck // opaque per grpc-errors.md
+		case "CHANNEL_NAME_TAKEN":
+			return status.Error(codes.AlreadyExists, "a channel with that name already exists") //nolint:wrapcheck // opaque per grpc-errors.md
+		case "CHANNEL_NAME_INVALID", "CHANNEL_TYPE_INVALID", "CHANNEL_OWNER_REQUIRED":
+			return status.Error(codes.InvalidArgument, "invalid channel request") //nolint:wrapcheck // opaque per grpc-errors.md
+		case "CHANNEL_OWNER_CANNOT_LEAVE":
+			return status.Error(codes.FailedPrecondition, "channel owners cannot leave; transfer ownership or archive") //nolint:wrapcheck // opaque per grpc-errors.md
+		case "CHANNEL_BANNED":
+			return status.Error(codes.PermissionDenied, "not permitted to join this channel") //nolint:wrapcheck // opaque per grpc-errors.md
+		}
+	}
+	errutil.LogErrorContext(ctx, op+" store error", err)
+	return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque per grpc-errors.md
 }
