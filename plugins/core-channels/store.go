@@ -1,0 +1,553 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package main
+
+import (
+	"context"
+	"embed"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/pkg/plugin/storage"
+)
+
+//go:embed migrations/*.up.sql
+var migrationsFS embed.FS
+
+// pgUniqueViolation is the PostgreSQL SQLSTATE for a unique-constraint
+// violation; pgForeignKeyViolation is the FK-constraint SQLSTATE.
+const (
+	pgUniqueViolation     = "23505"
+	pgForeignKeyViolation = "23503"
+)
+
+// channelSelectColumns is the column list shared by every statement that reads
+// a full channelRow. The scan order below MUST match it.
+const channelSelectColumns = `id, name, type, owner_id, archived, is_default, retention_days, created_at`
+
+// channelRow is the persistence-layer representation of a channel; the shape
+// matches the channels table column-for-column. RetentionDays is a pointer
+// because the column is nullable (NULL = use the plugin config default, D-07).
+type channelRow struct {
+	ID            string
+	Name          string
+	Type          string
+	OwnerID       string
+	Archived      bool
+	IsDefault     bool
+	RetentionDays *int
+	CreatedAt     time.Time
+}
+
+// scanChannelRow scans a single row into dst. Column order MUST match
+// channelSelectColumns.
+//
+//nolint:wrapcheck // callers wrap with an operation-specific oops code
+func scanChannelRow(scanner pgx.Row, dst *channelRow) error {
+	return scanner.Scan(
+		&dst.ID, &dst.Name, &dst.Type, &dst.OwnerID,
+		&dst.Archived, &dst.IsDefault, &dst.RetentionDays, &dst.CreatedAt,
+	)
+}
+
+// channelStore provides PostgreSQL persistence for the channel domain. It is
+// the membership source of truth that the resolver (01-04) and audit
+// QueryHistory (01-06) authorize against.
+type channelStore struct {
+	pool *pgxpool.Pool
+}
+
+// NewChannelStore opens a connection pool and runs the embedded migrations.
+//
+// The connection string is the one provided by the host's SchemaProvisioner in
+// ServiceConfig.ConnectionString — it has search_path=plugin_core_channels
+// pre-configured, so all queries automatically target the plugin's schema.
+func NewChannelStore(ctx context.Context, connString string) (*channelStore, error) {
+	pool, err := storage.Connect(ctx, connString)
+	if err != nil {
+		return nil, oops.Code("CHANNEL_STORE_CONNECT_FAILED").Wrap(err)
+	}
+
+	sub, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
+		pool.Close()
+		return nil, oops.Code("CHANNEL_STORE_INIT_FAILED").Wrap(err)
+	}
+	if err := storage.RunMigrationsFS(ctx, pool, sub); err != nil {
+		pool.Close()
+		return nil, oops.Code("CHANNEL_STORE_MIGRATIONS_FAILED").Wrap(err)
+	}
+
+	return &channelStore{pool: pool}, nil
+}
+
+// Close releases the underlying connection pool. Safe to defer in main().
+func (s *channelStore) Close() {
+	if s.pool != nil {
+		s.pool.Close()
+	}
+}
+
+// Pool exposes the underlying pgxpool so sibling subsystems inside the plugin
+// (e.g. the audit store, 01-06) can share a single connection pool.
+func (s *channelStore) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
+// isPgCode reports whether err carries the given PostgreSQL SQLSTATE.
+func isPgCode(err error, code string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == code
+}
+
+// CreateChannel inserts a new channel row, an owner membership row (role
+// 'owner'), and a lifecycle.created ops event in a single transaction. The
+// channel name is validated at the store boundary (T-01-10) and uniqueness is
+// enforced case-insensitively; a same-name collision (any case) returns
+// CHANNEL_NAME_TAKEN. If row.ID is empty a fresh crypto/rand ULID is minted.
+func (s *channelStore) CreateChannel(ctx context.Context, row *channelRow) error {
+	if !validateChannelName(row.Name) {
+		return oops.Code("CHANNEL_NAME_INVALID").With("name", row.Name).
+			Errorf("channel name does not match the accepted pattern")
+	}
+	if row.Type == "" {
+		row.Type = string(channelTypePublic)
+	}
+	if !channelType(row.Type).IsValid() {
+		return oops.Code("CHANNEL_TYPE_INVALID").With("type", row.Type).
+			Errorf("unknown channel type")
+	}
+	if row.OwnerID == "" {
+		return oops.Code("CHANNEL_OWNER_REQUIRED").Errorf("owner_id is required")
+	}
+	if row.ID == "" {
+		row.ID = idgen.New().String()
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.Code("CHANNEL_CREATE_FAILED").With("channel_id", row.ID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	_, err = tx.Exec(
+		ctx, `
+		INSERT INTO channels (id, name, type, owner_id, is_default, retention_days)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		row.ID, row.Name, row.Type, row.OwnerID, row.IsDefault, row.RetentionDays,
+	)
+	if err != nil {
+		if isPgCode(err, pgUniqueViolation) {
+			return oops.Code("CHANNEL_NAME_TAKEN").With("name", row.Name).Wrap(err)
+		}
+		return oops.Code("CHANNEL_CREATE_FAILED").With("channel_id", row.ID).Wrap(err)
+	}
+
+	_, err = tx.Exec(
+		ctx, `
+		INSERT INTO channel_memberships (channel_id, character_id, role)
+		VALUES ($1, $2, 'owner')`,
+		row.ID, row.OwnerID,
+	)
+	if err != nil {
+		return oops.Code("CHANNEL_CREATE_OWNER_MEMBERSHIP_FAILED").
+			With("channel_id", row.ID).With("owner_id", row.OwnerID).Wrap(err)
+	}
+
+	if err := recordChannelOpsEventTx(ctx, tx, row.ID, opsKindLifecycleCreated, row.OwnerID, "", map[string]any{"type": row.Type}); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Code("CHANNEL_CREATE_FAILED").With("channel_id", row.ID).Wrap(err)
+	}
+	return nil
+}
+
+// GetByID loads a single channel by id. Returns CHANNEL_NOT_FOUND if absent.
+func (s *channelStore) GetByID(ctx context.Context, id string) (*channelRow, error) {
+	row := &channelRow{}
+	err := scanChannelRow(s.pool.QueryRow(
+		ctx, `SELECT `+channelSelectColumns+` FROM channels WHERE id = $1`, id,
+	), row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.Code("CHANNEL_NOT_FOUND").With("channel_id", id).Wrap(err)
+		}
+		return nil, oops.Code("CHANNEL_GET_FAILED").With("channel_id", id).Wrap(err)
+	}
+	return row, nil
+}
+
+// GetByName loads a single channel by case-insensitive name. Returns
+// CHANNEL_NOT_FOUND if absent.
+func (s *channelStore) GetByName(ctx context.Context, name string) (*channelRow, error) {
+	row := &channelRow{}
+	err := scanChannelRow(s.pool.QueryRow(
+		ctx, `SELECT `+channelSelectColumns+` FROM channels WHERE lower(name) = lower($1)`, name,
+	), row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.Code("CHANNEL_NOT_FOUND").With("name", name).Wrap(err)
+		}
+		return nil, oops.Code("CHANNEL_GET_FAILED").With("name", name).Wrap(err)
+	}
+	return row, nil
+}
+
+// JoinChannel adds characterID to channelID as a member. Idempotent: an
+// existing non-banned membership is a no-op (no error, no duplicate ops event).
+// A banned character cannot rejoin (CHANNEL_BANNED). Joining a channel that does
+// not exist returns CHANNEL_NOT_FOUND.
+func (s *channelStore) JoinChannel(ctx context.Context, channelID, characterID string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.Code("CHANNEL_JOIN_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	var banned bool
+	err = tx.QueryRow(
+		ctx, `SELECT banned FROM channel_memberships WHERE channel_id = $1 AND character_id = $2`,
+		channelID, characterID,
+	).Scan(&banned)
+	switch {
+	case err == nil:
+		if banned {
+			return oops.Code("CHANNEL_BANNED").
+				With("channel_id", channelID).With("character_id", characterID).
+				Errorf("character is banned from this channel")
+		}
+		// Already a member — idempotent no-op.
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return oops.Code("CHANNEL_JOIN_FAILED").With("channel_id", channelID).Wrap(commitErr)
+		}
+		return nil
+	case errors.Is(err, pgx.ErrNoRows):
+		// Not a member yet — fall through to insert.
+	default:
+		return oops.Code("CHANNEL_JOIN_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+
+	_, err = tx.Exec(
+		ctx, `
+		INSERT INTO channel_memberships (channel_id, character_id, role)
+		VALUES ($1, $2, 'member')`,
+		channelID, characterID,
+	)
+	if err != nil {
+		if isPgCode(err, pgForeignKeyViolation) {
+			return oops.Code("CHANNEL_NOT_FOUND").With("channel_id", channelID).Wrap(err)
+		}
+		return oops.Code("CHANNEL_JOIN_FAILED").
+			With("channel_id", channelID).With("character_id", characterID).Wrap(err)
+	}
+
+	if err := recordChannelOpsEventTx(ctx, tx, channelID, opsKindMembershipJoin, characterID, characterID, nil); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Code("CHANNEL_JOIN_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	return nil
+}
+
+// LeaveChannel removes characterID's membership from channelID and records a
+// membership.leave ops event. The owner cannot leave (CHANNEL_OWNER_CANNOT_LEAVE)
+// — ownership transfer or archive is the exit path. Returns
+// CHANNEL_MEMBERSHIP_NOT_FOUND if the character is not a member.
+func (s *channelStore) LeaveChannel(ctx context.Context, channelID, characterID string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.Code("CHANNEL_LEAVE_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	var role string
+	err = tx.QueryRow(
+		ctx, `
+		DELETE FROM channel_memberships
+		WHERE channel_id = $1 AND character_id = $2 AND role <> 'owner'
+		RETURNING role`,
+		channelID, characterID,
+	).Scan(&role)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.classifyLeaveMiss(ctx, tx, channelID, characterID, err)
+		}
+		return oops.Code("CHANNEL_LEAVE_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+
+	if err := recordChannelOpsEventTx(ctx, tx, channelID, opsKindMembershipLeave, characterID, characterID, map[string]any{"prior_role": role}); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Code("CHANNEL_LEAVE_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	return nil
+}
+
+// classifyLeaveMiss distinguishes "owner cannot leave" from "not a member" when
+// the leave DELETE matched no row.
+func (s *channelStore) classifyLeaveMiss(ctx context.Context, tx pgx.Tx, channelID, characterID string, cause error) error {
+	var role string
+	err := tx.QueryRow(
+		ctx, `SELECT role FROM channel_memberships WHERE channel_id = $1 AND character_id = $2`,
+		channelID, characterID,
+	).Scan(&role)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("CHANNEL_MEMBERSHIP_NOT_FOUND").
+				With("channel_id", channelID).With("character_id", characterID).Wrap(cause)
+		}
+		return oops.Code("CHANNEL_LEAVE_FAILED").With("channel_id", channelID).Wrap(err)
+	}
+	return oops.Code("CHANNEL_OWNER_CANNOT_LEAVE").
+		With("channel_id", channelID).With("character_id", characterID).
+		Errorf("channel owners cannot leave; transfer ownership or archive the channel")
+}
+
+// ListForCharacter returns the non-archived channels characterID is an active
+// (non-banned) member of, ordered by name. Empty (not nil-error) for a
+// non-member.
+func (s *channelStore) ListForCharacter(ctx context.Context, characterID string) ([]channelRow, error) {
+	rows, err := s.pool.Query(
+		ctx, `
+		SELECT `+prefixedChannelColumns("c")+`
+		FROM channels c
+		JOIN channel_memberships m ON m.channel_id = c.id
+		WHERE m.character_id = $1 AND m.banned = false AND c.archived = false
+		ORDER BY c.name`,
+		characterID,
+	)
+	if err != nil {
+		return nil, oops.Code("CHANNEL_LIST_FAILED").With("character_id", characterID).Wrap(err)
+	}
+	defer rows.Close()
+
+	out := make([]channelRow, 0)
+	for rows.Next() {
+		var r channelRow
+		if err := scanChannelRow(rows, &r); err != nil {
+			return nil, oops.Code("CHANNEL_LIST_FAILED").With("character_id", characterID).Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("CHANNEL_LIST_FAILED").With("character_id", characterID).Wrap(err)
+	}
+	return out, nil
+}
+
+// GetWithMembership returns the channel row plus its members / banned / muted
+// character-id lists in a single round trip. Used by the resolver (01-04) to
+// materialise ABAC attributes without separate queries. members contains
+// non-banned character ids; banned and muted contain the ids with the
+// respective flag set.
+func (s *channelStore) GetWithMembership(ctx context.Context, id string) (channel *channelRow, members, banned, muted []string, err error) {
+	row := &channelRow{}
+	err = s.pool.QueryRow(
+		ctx, `
+		SELECT `+prefixedChannelColumns("c")+`,
+			COALESCE((SELECT array_agg(character_id) FROM channel_memberships
+			          WHERE channel_id = c.id AND banned = false), '{}'::TEXT[]) AS members,
+			COALESCE((SELECT array_agg(character_id) FROM channel_memberships
+			          WHERE channel_id = c.id AND banned = true), '{}'::TEXT[]) AS banned,
+			COALESCE((SELECT array_agg(character_id) FROM channel_memberships
+			          WHERE channel_id = c.id AND muted = true), '{}'::TEXT[]) AS muted
+		FROM channels c
+		WHERE c.id = $1`,
+		id,
+	).Scan(
+		&row.ID, &row.Name, &row.Type, &row.OwnerID, &row.Archived,
+		&row.IsDefault, &row.RetentionDays, &row.CreatedAt,
+		&members, &banned, &muted,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, nil, nil, oops.Code("CHANNEL_NOT_FOUND").With("channel_id", id).Wrap(err)
+		}
+		return nil, nil, nil, nil, oops.Code("CHANNEL_GET_FAILED").With("channel_id", id).Wrap(err)
+	}
+	return row, members, banned, muted, nil
+}
+
+// SetMuted sets the muted flag on characterID's membership in channelID and
+// records a moderation.mute / moderation.unmute ops event. Returns
+// CHANNEL_MEMBERSHIP_NOT_FOUND if the character is not a member.
+func (s *channelStore) SetMuted(ctx context.Context, channelID, characterID string, muted bool) error {
+	kind := opsKindModerationMute
+	if !muted {
+		kind = opsKindModerationUnmute
+	}
+	return s.setMembershipFlag(ctx, channelID, characterID, "muted", muted, kind, "CHANNEL_MUTE_FAILED")
+}
+
+// SetBanned sets the banned flag on characterID's membership in channelID and
+// records a moderation.ban / moderation.unban ops event. A banned member's row
+// is retained (banned = true) so JoinChannel refuses a rejoin. Returns
+// CHANNEL_MEMBERSHIP_NOT_FOUND if the character is not a member.
+func (s *channelStore) SetBanned(ctx context.Context, channelID, characterID string, banned bool) error {
+	kind := opsKindModerationBan
+	if !banned {
+		kind = opsKindModerationUnban
+	}
+	return s.setMembershipFlag(ctx, channelID, characterID, "banned", banned, kind, "CHANNEL_BAN_FAILED")
+}
+
+// setMembershipFlag is the shared implementation for SetMuted/SetBanned. The
+// column name is a hard-coded literal at the two call sites (never user input),
+// so interpolating it into the UPDATE is safe; the value is parameterized.
+func (s *channelStore) setMembershipFlag(ctx context.Context, channelID, characterID, column string, value bool, kind channelOpsEventKind, failCode string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.Code(failCode).With("channel_id", channelID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	var characterOut string
+	err = tx.QueryRow(
+		ctx,
+		`UPDATE channel_memberships SET `+column+` = $3
+		 WHERE channel_id = $1 AND character_id = $2
+		 RETURNING character_id`,
+		channelID, characterID, value,
+	).Scan(&characterOut)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("CHANNEL_MEMBERSHIP_NOT_FOUND").
+				With("channel_id", channelID).With("character_id", characterID).Wrap(err)
+		}
+		return oops.Code(failCode).With("channel_id", channelID).Wrap(err)
+	}
+
+	if err := recordChannelOpsEventTx(ctx, tx, channelID, kind, characterID, characterID, map[string]any{column: value}); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Code(failCode).With("channel_id", channelID).Wrap(err)
+	}
+	return nil
+}
+
+// DeleteChannel soft-archives a channel: it sets archived = true and NEVER
+// hard-deletes the row (spec §specifics). Idempotent — archiving an
+// already-archived channel is a no-op success. Records a lifecycle.archived ops
+// event. Returns CHANNEL_NOT_FOUND if the channel does not exist.
+func (s *channelStore) DeleteChannel(ctx context.Context, id, actorID string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.Code("CHANNEL_ARCHIVE_FAILED").With("channel_id", id).Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	// RETURNING yields a row only when the UPDATE matched an existing channel;
+	// archived is unconditionally true afterward, so it serves only as a
+	// not-found sentinel. Archiving an already-archived channel is idempotent.
+	var archived bool
+	err = tx.QueryRow(
+		ctx, `UPDATE channels SET archived = true WHERE id = $1 RETURNING archived`,
+		id,
+	).Scan(&archived)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("CHANNEL_NOT_FOUND").With("channel_id", id).Wrap(err)
+		}
+		return oops.Code("CHANNEL_ARCHIVE_FAILED").With("channel_id", id).Wrap(err)
+	}
+
+	if err := recordChannelOpsEventTx(ctx, tx, id, opsKindLifecycleArchived, actorID, "", nil); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Code("CHANNEL_ARCHIVE_FAILED").With("channel_id", id).Wrap(err)
+	}
+	return nil
+}
+
+// prefixedChannelColumns returns channelSelectColumns with each column prefixed
+// by the given table alias, for use in JOIN queries.
+func prefixedChannelColumns(alias string) string {
+	return alias + `.id, ` + alias + `.name, ` + alias + `.type, ` + alias + `.owner_id, ` +
+		alias + `.archived, ` + alias + `.is_default, ` + alias + `.retention_days, ` + alias + `.created_at`
+}
+
+// channelOpsEventKind enumerates the recognised ops-event kinds. The dotted
+// naming convention is also enforced by the DB CHECK on channel_ops_events.kind.
+type channelOpsEventKind string
+
+// Ops event kinds. The full membership/moderation/lifecycle vocabulary is
+// declared here; methods emit the subset they implement.
+const (
+	opsKindLifecycleCreated   channelOpsEventKind = "lifecycle.created"
+	opsKindLifecycleArchived  channelOpsEventKind = "lifecycle.archived"
+	opsKindMembershipJoin     channelOpsEventKind = "membership.join"
+	opsKindMembershipLeave    channelOpsEventKind = "membership.leave"
+	opsKindMembershipKick     channelOpsEventKind = "membership.kick"
+	opsKindMembershipTransfer channelOpsEventKind = "membership.transfer"
+	opsKindModerationBan      channelOpsEventKind = "moderation.ban"
+	opsKindModerationUnban    channelOpsEventKind = "moderation.unban"
+	opsKindModerationMute     channelOpsEventKind = "moderation.mute"
+	opsKindModerationUnmute   channelOpsEventKind = "moderation.unmute"
+)
+
+// IsValid reports whether k is one of the declared channelOpsEventKind constants.
+func (k channelOpsEventKind) IsValid() bool {
+	switch k {
+	case opsKindLifecycleCreated, opsKindLifecycleArchived,
+		opsKindMembershipJoin, opsKindMembershipLeave, opsKindMembershipKick,
+		opsKindMembershipTransfer, opsKindModerationBan, opsKindModerationUnban,
+		opsKindModerationMute, opsKindModerationUnmute:
+		return true
+	}
+	return false
+}
+
+// recordChannelOpsEventTx inserts a channel_ops_events row inside an existing
+// transaction. The kind MUST be a declared channelOpsEventKind — unknown kinds
+// are rejected so typos surface as errors instead of writing junk. targetID may
+// be empty for whole-channel events (lifecycle.*); pass "" for those. payload is
+// marshalled to JSONB; pass nil for none.
+func recordChannelOpsEventTx(ctx context.Context, tx pgx.Tx, channelID string, kind channelOpsEventKind, actorID, targetID string, payload map[string]any) error {
+	if !kind.IsValid() {
+		return oops.Code("CHANNEL_OPS_EVENT_INVALID_KIND").With("kind", string(kind)).
+			Errorf("unknown ops event kind")
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return oops.Code("CHANNEL_OPS_EVENT_PAYLOAD_MARSHAL_FAILED").With("kind", string(kind)).Wrap(err)
+	}
+
+	var targetParam any
+	if targetID != "" {
+		targetParam = targetID
+	}
+
+	_, err = tx.Exec(
+		ctx, `
+		INSERT INTO channel_ops_events (id, channel_id, kind, actor_id, target_id, payload)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		"coe-"+idgen.New().String(), channelID, string(kind), actorID, targetParam, payloadJSON,
+	)
+	if err != nil {
+		return oops.Code("CHANNEL_OPS_EVENT_INSERT_FAILED").
+			With("channel_id", channelID).With("kind", string(kind)).Wrap(err)
+	}
+	return nil
+}
