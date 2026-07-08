@@ -84,13 +84,15 @@ status: complete
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Stripped stray `#magic___^_^___line` dprint sentinels from the 01-04 ABAC DSL folded scalars**
+
 - **Found during:** Task 2 (whole-system census verification).
 - **Issue:** 01-04's manifest embedded the dprint line-preservation sentinel `#magic___^_^___line` INSIDE six `dsl: >-` folded-scalar values (emit/write/moderate/manage/admin-override/seed-create). YAML folded scalars treat `#` as literal content, so each DSL string ended `...}; #magic___^_^___line`; the ABAC DSL lexer rejected it (`invalid input text "#magic..."` at col 124), failing `PolicyInstaller` → `Manager.LoadAll` → the whole-system census `BeforeAll` panicked. core-channels could not load at all.
-- **Fix:** Removed the trailing ` #magic___^_^___line` from all six DSL lines, matching the clean `core-scenes` folded-scalar format (which carries no sentinel and loads fine). Confirmed `task fmt` does NOT re-insert it. This is a bug in a file I was already editing (adding `provides`/`requires`) and it blocked my required census verification (Rule 1 / Rule 3).
+- **Fix:** Removed the trailing `#magic___^_^___line` from all six DSL lines, matching the clean `core-scenes` folded-scalar format (which carries no sentinel and loads fine). Confirmed `task fmt` does NOT re-insert it. This is a bug in a file I was already editing (adding `provides`/`requires`) and it blocked my required census verification (Rule 1 / Rule 3).
 - **Files modified:** plugins/core-channels/plugin.yaml
 - **Committed in:** `3a3319a9d` (Task 2 commit)
 
 **2. [Rule 3 - Blocking] Static log messages for sloglint**
+
 - **Found during:** Task 2 (`task lint`).
 - **Issue:** `gateRead`/`mapStoreError` used dynamic `op+" ..."` slog message strings; sloglint's `static-msg` check rejects non-literal messages.
 - **Fix:** Made the messages static string literals and moved the per-RPC discriminator to an `"op"` attribute.
@@ -146,5 +148,6 @@ None.
 - Census + channels unit/integration suites green after final state.
 
 ---
+
 *Phase: 01-channels-subsystem*
 *Completed: 2026-07-08*
