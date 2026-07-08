@@ -6,7 +6,7 @@ current_phase: 01
 current_phase_name: channels-subsystem
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-08T23:31:24.949Z"
+last_updated: "2026-07-08T23:31:52.101Z"
 last_activity: 2026-07-08
 last_activity_desc: Phase 01 execution started
 progress:
@@ -87,6 +87,8 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: 01-02: LIVE_ONLY served end-to-end (AddStreamWithMode accepts ReplayModeLiveOnly); no-history-flood is structural via SetFilters start-policy preservation
 - [Phase ?]: 01-04: channel membership resolved RESOURCE-side (resource.channel.members) — D-03 Landmine-1; plugin proto has no subject RPC
 - [Phase ?]: 01-04: Layer-1 execute-channel-commands gate deferred to the channel command's plan (01-05/01-07) — policy validator rejects a policy targeting an undeclared command
+- [Phase ?]: 01-06: PluginAuditService is NOT in a plugin's provides (per-plugin reachability via PluginAuditClient + audit: block); a duplicate declaration collides with core-scenes (DUPLICATE_SERVICE_PROVIDER)
+- [Phase ?]: 01-06: channel history membership-gated at auth step-1 for every channel type incl. public (INV-CHANNEL-1); joined_at floor + scrollback cap (D-07); channel_log plaintext no crypto.emits (D-04)
 
 ### Pending Todos
 
