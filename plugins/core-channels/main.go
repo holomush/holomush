@@ -83,6 +83,18 @@ func (p *channelPlugin) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
 	}
 }
 
+// SetEventSink is called by the SDK adapter during Init when the plugin
+// declares EventSinkAware. It forwards the sink to the channel service so
+// service-owned RPC handlers can emit live channel content + notice events
+// through the shared EventBus (CHAN-03). Emit is fence-self-gated, so no
+// manifest capability declaration is required. The concrete emitter is built in
+// Init once the game id is known.
+func (p *channelPlugin) SetEventSink(sink pluginsdk.EventSink) {
+	if p.service != nil {
+		p.service.SetEventSink(sink)
+	}
+}
+
 // RegisterAttributeResolver registers the ChannelResolver on the go-plugin gRPC
 // transport so the host's ABAC engine can resolve channel attributes during
 // policy evaluation. The host auto-registers
@@ -158,6 +170,22 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 	// The evaluator was already injected via SetHostEvaluator before Init.
 	p.service.store = store
 	p.service.limiter = newCreateRateLimiter(p.cfg.CreateRateLimit, createRateWindow, time.Now)
+
+	// Set the game id for JetStream dot-style emit subjects. Substrate uses
+	// "main" as the default game_id when unset (mirrors core-scenes main.go);
+	// ServiceConfig carries no game_id field yet — documented expedient until
+	// multi-tenant deployment is real.
+	p.service.gameID = "main"
+
+	// Build the live-emit emitter now that the sink + gameID are set.
+	// SetEventSink runs before Init in the SDK lifecycle, so eventSink is
+	// already populated. Guard against a nil sink (test harnesses that call
+	// Init directly bypass the full SDK lifecycle).
+	if p.service.eventSink != nil {
+		p.service.emitter = newChannelEventEmitter(p.service.eventSink, p.service.gameID)
+	} else {
+		slog.WarnContext(ctx, "core-channels: event sink nil at Init; emitter left unset")
+	}
 
 	// Seed the default channel set (incl. Public) idempotently. Safe to re-run
 	// on every Init — ON CONFLICT DO NOTHING on lower(name) (D-01, T-01-13).

@@ -5,6 +5,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+
+	"github.com/samber/oops"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	"github.com/holomush/holomush/pkg/plugin/comm"
@@ -64,40 +67,72 @@ func dotStyleChannelSubject(gameID, channelID string) string {
 	return "events." + gameID + ".channel." + channelID
 }
 
-// emitSay builds a CommunicationContent JSON payload for a channel "say" and
-// emits it plaintext (Sensitive:false). RED stub — GREEN implements the build.
-func (e *channelEventEmitter) emitSay(_ context.Context, _ string, _ comm.Author, _ string) error {
-	return nil
+// emitContent builds the CommunicationContent JSON payload (via the comm
+// builder) and emits it plaintext (Sensitive:false, D-04) on the channel
+// subject with the given qualified wire type. The payload carries the actor +
+// text only — never a channel_name authz field (D-08).
+func (e *channelEventEmitter) emitContent(ctx context.Context, channelID string, evType pluginsdk.EventType, payload string) error {
+	return e.sink.Emit(ctx, pluginsdk.EmitIntent{ //nolint:wrapcheck // EventSink error passes through as-is; caller decides logging
+		Subject:   dotStyleChannelSubject(e.gameID, channelID),
+		Type:      evType,
+		Payload:   payload,
+		Sensitive: false,
+	})
 }
 
-// emitPose builds a CommunicationContent JSON payload for a channel "pose" and
-// emits it plaintext. RED stub.
-func (e *channelEventEmitter) emitPose(_ context.Context, _ string, _ comm.Author, _, _ string) error {
-	return nil
+// emitSay builds a CommunicationContent JSON payload for a channel "say" and
+// emits it plaintext.
+func (e *channelEventEmitter) emitSay(ctx context.Context, channelID string, author comm.Author, text string) error {
+	payload, err := comm.Say(author, text)
+	if err != nil {
+		return oops.Code("CHANNEL_EMIT_PAYLOAD_FAILED").With("type", string(channelSayType)).Wrap(err)
+	}
+	return e.emitContent(ctx, channelID, channelSayType, payload)
+}
+
+// emitPose builds a CommunicationContent JSON payload for a channel "pose"
+// (":"/";" grammar via comm.Pose) and emits it plaintext.
+func (e *channelEventEmitter) emitPose(ctx context.Context, channelID string, author comm.Author, invokedAs, raw string) error {
+	payload, err := comm.Pose(author, invokedAs, raw)
+	if err != nil {
+		return oops.Code("CHANNEL_EMIT_PAYLOAD_FAILED").With("type", string(channelPoseType)).Wrap(err)
+	}
+	return e.emitContent(ctx, channelID, channelPoseType, payload)
+}
+
+// emitNotice marshals the bespoke notice payload and emits it plaintext on the
+// channel subject with the given qualified wire type.
+func (e *channelEventEmitter) emitNotice(ctx context.Context, channelID string, evType pluginsdk.EventType, notice channelNotice) error {
+	payload, err := json.Marshal(notice)
+	if err != nil {
+		return oops.Code("CHANNEL_EMIT_PAYLOAD_FAILED").With("type", string(evType)).Wrap(err)
+	}
+	return e.emitContent(ctx, channelID, evType, string(payload))
 }
 
 // emitJoin/emitLeave/emitMute/emitBan/emitKick/emitRename emit the notice
-// events. RED stubs.
-func (e *channelEventEmitter) emitJoin(_ context.Context, _ string, _ channelNotice) error {
-	return nil
+// events. Each stamps its qualified wire type; the payload is operational
+// metadata only.
+func (e *channelEventEmitter) emitJoin(ctx context.Context, channelID string, notice channelNotice) error {
+	return e.emitNotice(ctx, channelID, channelJoinType, notice)
 }
 
-func (e *channelEventEmitter) emitLeave(_ context.Context, _ string, _ channelNotice) error {
-	return nil
+func (e *channelEventEmitter) emitLeave(ctx context.Context, channelID string, notice channelNotice) error {
+	return e.emitNotice(ctx, channelID, channelLeaveType, notice)
 }
 
-func (e *channelEventEmitter) emitMute(_ context.Context, _ string, _ channelNotice) error {
-	return nil
+func (e *channelEventEmitter) emitMute(ctx context.Context, channelID string, notice channelNotice) error {
+	return e.emitNotice(ctx, channelID, channelMuteType, notice)
 }
 
-func (e *channelEventEmitter) emitBan(_ context.Context, _ string, _ channelNotice) error {
-	return nil
+func (e *channelEventEmitter) emitBan(ctx context.Context, channelID string, notice channelNotice) error {
+	return e.emitNotice(ctx, channelID, channelBanType, notice)
 }
 
-func (e *channelEventEmitter) emitKick(_ context.Context, _ string, _ channelNotice) error {
-	return nil
+func (e *channelEventEmitter) emitKick(ctx context.Context, channelID string, notice channelNotice) error {
+	return e.emitNotice(ctx, channelID, channelKickType, notice)
 }
 
-func (e *channelEventEmitter) emitRename(_ context.Context, _ string, _ channelNotice) error {
-	return nil
+func (e *channelEventEmitter) emitRename(ctx context.Context, channelID string, notice channelNotice) error {
+	return e.emitNotice(ctx, channelID, channelRenameType, notice)
 }

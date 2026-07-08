@@ -145,6 +145,13 @@ type channelService struct {
 	store     channelServiceStorer
 	evaluator pluginsdk.HostEvaluator
 	limiter   *createRateLimiter
+	// eventSink + emitter drive the live content/notice emit path (CHAN-03).
+	// SetEventSink runs before Init in the SDK lifecycle; main.go builds the
+	// emitter once the sink + gameID are known. The emit-consuming RPCs
+	// (PostToChannel / moderation notices) land in 01-05b and reuse emitter.
+	eventSink pluginsdk.EventSink
+	gameID    string
+	emitter   *channelEventEmitter
 }
 
 // NewChannelService builds a service backed by store with the given per-player
@@ -162,6 +169,14 @@ func NewChannelService(store channelServiceStorer, createRateLimit int, now func
 // Init; nil until then (all gated RPCs fail closed).
 func (s *channelService) SetHostEvaluator(ev pluginsdk.HostEvaluator) {
 	s.evaluator = ev
+}
+
+// SetEventSink stores the SDK-injected event sink so the service can emit live
+// channel content + notice events (CHAN-03). Wired via
+// channelPlugin.SetEventSink before Init (emit is fence-self-gated, exempt from
+// capability declaration). main.go builds the emitter after gameID is known.
+func (s *channelService) SetEventSink(sink pluginsdk.EventSink) {
+	s.eventSink = sink
 }
 
 // actorMismatch reports whether the host-vouched character actor on ctx
