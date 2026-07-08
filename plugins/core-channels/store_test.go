@@ -54,6 +54,15 @@ func countOpsEvents(store *channelStore, channelID string, kind channelOpsEventK
 	return n
 }
 
+// countRows returns the total row count of the named table.
+func countRows(store *channelStore, table string) int {
+	GinkgoHelper()
+	var n int
+	err := store.pool.QueryRow(context.Background(), `SELECT count(*) FROM `+table).Scan(&n)
+	Expect(err).NotTo(HaveOccurred())
+	return n
+}
+
 var _ = Describe("channelStore CRUD + membership", func() {
 	var (
 		ctx   context.Context
@@ -197,6 +206,58 @@ var _ = Describe("channelStore CRUD + membership", func() {
 		It("returns a typed NOT_FOUND for an absent name", func() {
 			_, err := store.GetByName(ctx, "missing")
 			expectCode(err, "CHANNEL_NOT_FOUND")
+		})
+	})
+
+	Describe("default-channel seeding", func() {
+		It("seeds Public with is_default=true and no membership rows", func() {
+			Expect(store.SeedDefaultChannels(ctx, defaultChannels)).To(Succeed())
+
+			got, err := store.GetByName(ctx, "Public")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsDefault).To(BeTrue())
+			Expect(got.Type).To(Equal(string(channelTypePublic)))
+			Expect(got.OwnerID).To(Equal(systemOwnerID))
+			Expect(countRows(store, "channel_memberships")).To(Equal(0), "seeding MUST create no membership rows")
+		})
+
+		It("is idempotent — a second seed adds zero rows", func() {
+			Expect(store.SeedDefaultChannels(ctx, defaultChannels)).To(Succeed())
+			before := countRows(store, "channels")
+			Expect(store.SeedDefaultChannels(ctx, defaultChannels)).To(Succeed())
+			Expect(countRows(store, "channels")).To(Equal(before), "second seed MUST NOT duplicate a default")
+		})
+
+		It("ListDefaultChannels returns the seeded set", func() {
+			Expect(store.SeedDefaultChannels(ctx, defaultChannels)).To(Succeed())
+			defaults, err := store.ListDefaultChannels(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			names := make([]string, 0, len(defaults))
+			for _, d := range defaults {
+				names = append(names, d.Name)
+			}
+			Expect(names).To(ContainElement("Public"))
+			Expect(defaults).To(HaveLen(len(defaultChannels)))
+		})
+
+		It("ListDefaultChannels is empty before any seed", func() {
+			defaults, err := store.ListDefaultChannels(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaults).To(BeEmpty())
+		})
+
+		It("a collision with a pre-existing user channel is a no-op (existing row wins)", func() {
+			Expect(store.CreateChannel(ctx, &channelRow{Name: "Public", OwnerID: "real-owner"})).To(Succeed())
+			Expect(store.SeedDefaultChannels(ctx, defaultChannels)).To(Succeed())
+
+			got, err := store.GetByName(ctx, "public")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.OwnerID).To(Equal("real-owner"), "user channel MUST win the collision")
+			Expect(got.IsDefault).To(BeFalse())
+
+			defaults, err := store.ListDefaultChannels(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaults).To(BeEmpty(), "the pre-existing user channel is not a default")
 		})
 	})
 

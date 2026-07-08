@@ -485,6 +485,82 @@ func prefixedChannelColumns(alias string) string {
 		alias + `.archived, ` + alias + `.is_default, ` + alias + `.retention_days, ` + alias + `.created_at`
 }
 
+// systemOwnerID is the sentinel owner_id stamped on seeded default channels.
+// Default channels have no human owner and no owner membership row; the
+// sentinel documents that ownership is system-held (D-01).
+const systemOwnerID = "system-core-channels"
+
+// defaultChannel describes one channel in the seeded default set.
+type defaultChannel struct {
+	Name string
+	Type channelType
+}
+
+// defaultChannels is the default channel set seeded idempotently at plugin
+// Init (D-01). `Public` MUST be present — it is the channel every guest and
+// player receives. The set is intentionally small; further defaults are
+// additive and safe (ON CONFLICT DO NOTHING).
+var defaultChannels = []defaultChannel{
+	{Name: "Public", Type: channelTypePublic},
+}
+
+// SeedDefaultChannels idempotently inserts each default channel with
+// is_default = true and NO membership row (guest auto-join is served by the
+// ListDefaultChannels ∪ memberships union in 01-08, not a membership write).
+// Each insert is `ON CONFLICT (lower(name)) DO NOTHING`, so a re-run Init or a
+// concurrent plugin start never duplicates a default (T-01-13), and a
+// case-insensitive collision with a pre-existing user channel is a silent
+// no-op (the existing row wins) rather than an error.
+func (s *channelStore) SeedDefaultChannels(ctx context.Context, defaults []defaultChannel) error {
+	for _, d := range defaults {
+		if !validateChannelName(d.Name) {
+			return oops.Code("CHANNEL_NAME_INVALID").With("name", d.Name).
+				Errorf("default channel name does not match the accepted pattern")
+		}
+		if !d.Type.IsValid() {
+			return oops.Code("CHANNEL_TYPE_INVALID").With("type", string(d.Type)).
+				Errorf("unknown default channel type")
+		}
+		_, err := s.pool.Exec(
+			ctx, `
+			INSERT INTO channels (id, name, type, owner_id, is_default)
+			VALUES ($1, $2, $3, $4, true)
+			ON CONFLICT (lower(name)) DO NOTHING`,
+			idgen.New().String(), d.Name, string(d.Type), systemOwnerID,
+		)
+		if err != nil {
+			return oops.Code("CHANNEL_SEED_FAILED").With("name", d.Name).Wrap(err)
+		}
+	}
+	return nil
+}
+
+// ListDefaultChannels returns the channels flagged is_default = true, ordered by
+// name. This is the seam 01-08 unions into QuerySessionStreams for guest
+// auto-join (D-01). Returns an empty (non-nil) slice when none are seeded.
+func (s *channelStore) ListDefaultChannels(ctx context.Context) ([]channelRow, error) {
+	rows, err := s.pool.Query(
+		ctx, `SELECT `+channelSelectColumns+` FROM channels WHERE is_default = true ORDER BY name`,
+	)
+	if err != nil {
+		return nil, oops.Code("CHANNEL_LIST_DEFAULTS_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	out := make([]channelRow, 0)
+	for rows.Next() {
+		var r channelRow
+		if err := scanChannelRow(rows, &r); err != nil {
+			return nil, oops.Code("CHANNEL_LIST_DEFAULTS_FAILED").Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("CHANNEL_LIST_DEFAULTS_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
 // channelOpsEventKind enumerates the recognised ops-event kinds. The dotted
 // naming convention is also enforced by the DB CHECK on channel_ops_events.kind.
 type channelOpsEventKind string

@@ -4,7 +4,15 @@
 name: core-channels
 version: 1.0.0
 type: binary
-resource_types: [channel]
+
+# NOTE: `resource_types: [channel]` is deliberately DEFERRED to plan 01-04
+# (the ChannelAttributeProvider / resolver). Declaring a resource type makes the
+# host perform schema discovery against the plugin's AttributeResolverService at
+# load (manager.go:1247 → discoverAndRegisterAttributes); a plugin that declares
+# a resource type but does not yet serve that RPC fails to load. This foundation
+# skeleton serves no resolver, so it must not declare `resource_types` — 01-04
+# adds `resource_types: [channel]` together with RegisterAttributeResolver so the
+# pair lands atomically and the plugin stays loadable at every step.
 
 # emits: [channel] declares the plugin-owned event domain (subjects
 # events.<game_id>.channel.>). Per INV-PRIVACY-7 a non-empty emits requires a

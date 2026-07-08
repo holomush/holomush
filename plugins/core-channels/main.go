@@ -40,7 +40,8 @@ type channelConfig struct {
 //   - pluginsdk.Handler         (HandleEvent)
 //   - pluginsdk.ServiceProvider (RegisterServices, Init)
 type channelPlugin struct {
-	cfg channelConfig
+	cfg   channelConfig
+	store *channelStore
 }
 
 // HandleEvent is a no-op for this foundation plan. The channel plugin does not
@@ -93,21 +94,36 @@ func (p *channelPlugin) applyConfig(config *pluginv1.ServiceConfig) error {
 }
 
 // Init is called by the host after the gRPC connection is established and the
-// Postgres schema/role have been provisioned. This foundation plan decodes and
-// validates config; store open + default-channel seeding are wired by the
-// seeding task. The connection string from ServiceConfig has
-// search_path=plugin_core_channels pre-set.
+// Postgres schema/role have been provisioned. It decodes and validates config,
+// opens the store (running the embedded migrations), then seeds the default
+// channel set idempotently. A seed failure fails Init loud so there is no silent
+// partial seed. The connection string from ServiceConfig has
+// search_path=plugin_core_channels pre-set, so queries target the plugin schema.
 func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) error {
-	if config.GetConnectionString() == "" {
+	connStr := config.GetConnectionString()
+	if connStr == "" {
 		return oops.Code("CHANNEL_INIT_FAILED").Errorf("connection_string is required")
 	}
 	if err := p.applyConfig(config); err != nil {
 		return err
 	}
 
+	store, err := NewChannelStore(ctx, connStr)
+	if err != nil {
+		return oops.Code("CHANNEL_INIT_FAILED").Wrap(err)
+	}
+	p.store = store
+
+	// Seed the default channel set (incl. Public) idempotently. Safe to re-run
+	// on every Init — ON CONFLICT DO NOTHING on lower(name) (D-01, T-01-13).
+	if err := store.SeedDefaultChannels(ctx, defaultChannels); err != nil {
+		return oops.Code("CHANNEL_INIT_FAILED").Wrap(err)
+	}
+
 	slog.InfoContext(
 		ctx, "core-channels plugin initialised",
 		"storage", "postgres",
+		"default_channels", len(defaultChannels),
 	)
 	return nil
 }
