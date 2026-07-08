@@ -15,7 +15,7 @@ This project uses [Beads (bd)](https://github.com/steveyegge/beads) for issue tr
 - Use `bd dolt push` at end of session to sync the beads database with remote
 - **NEVER run `bd github sync`** — bidirectional GH-Issues bridge with `--prefer-newer` default that flips local closures back to open (regression hit 2026-05-16 and 2026-05-17, see `feedback_bd_dolt_vs_github` memory). `bd dolt` is canonical; manage GitHub Issues manually if a public-facing surface is needed.
 - Run `bd prime` for complete workflow context (SSOT for operational commands)
-- **VCS**: This repo is **jj-colocated** (`.jj/` present) — prefer `jj` over `git`. `bd dolt push` syncs the beads DB only; pushing code is a separate step (see [Landing the Plane](../../CLAUDE.md#landing-the-plane-session-completion) in CLAUDE.md)
+- **VCS**: This repo uses **native git** (a feature branch per worktree). `bd dolt push` syncs the beads DB only; pushing code is a separate `git push` step (see [Landing the Plane](../../CLAUDE.md#landing-the-plane-session-completion) in CLAUDE.md)
 - **Dolt tags (recovery checkpoints)**: tag the dolt DB at confirmed-good states. Use the `dolt` CLI directly (not `bd dolt`), `cd "$HOME/.beads/shared-server/dolt/holomush" && dolt tag -m "<msg>" <tag>`. Convention: `safe-YYYY-MM-DD` for date-stamped snapshots, `last-known-good` as rolling pointer to most-recent snapshot. Snapshots are pointers, not copies — cheap to keep. **Retention: prune `safe-*` tags older than 30 days** (manual sweep; the rolling pointer keeps the latest accessible).
 - **Strategic themes**: multi-epic clusters use `theme:<slug>` labels paired with a narrative section in [`docs/roadmap.md`](../../docs/roadmap.md). When adding a `theme:*` label to a bead, MUST also add/update the roadmap section. When closing all work in a theme, MUST move its roadmap section to "Completed themes" with a date. Full directive at root CLAUDE.md "Strategic Themes".
 
@@ -43,7 +43,7 @@ bd dolt push                          # Sync with remote
 3. Do the work
 4. Mark complete: `bd close <id>`
 5. Sync beads DB: `bd dolt push`
-6. Push code: use `jj git push --branch <branch>` (jj-colocated) or `git push` (plain git). See CLAUDE.md "Landing the Plane" for the full pre-push checklist (`task pr-prep`, targeted rebase, etc.)
+6. Push code: `git push -u origin <branch>`. See CLAUDE.md "Landing the Plane" for the full pre-push checklist (`task pr-prep`, rebase onto `origin/main`, etc.)
 
 ## Issue Types
 

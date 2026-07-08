@@ -3,9 +3,9 @@
 # Copyright 2026 HoloMUSH Contributors
 #
 # WorktreeCreate hook: maps Claude Code's `isolation: "worktree"` request to
-# a fresh jj workspace under <repo-parent>/.worktrees/<name> via the existing
+# a fresh git worktree under <repo-parent>/.worktrees/<name> via the existing
 # `task workspace:new -- <name>` primitive (which is idempotent and fetches
-# main@origin first).
+# origin/main first).
 #
 # Contract (from https://code.claude.com/docs/en/hooks.md):
 #   - Stdin: JSON event with common fields (session_id, cwd, hook_event_name).
@@ -72,10 +72,10 @@ if [ -z "$SAFE_NAME" ]; then
 fi
 
 # Resolve a working directory we can run task from. The hook's cwd may be
-# any worktree (or the main repo); jj workspace root works in either.
-WS_ROOT="$(jj workspace root 2>/dev/null || true)"
+# any worktree (or the main repo); git rev-parse --show-toplevel works in either.
+WS_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "$WS_ROOT" ]; then
-  echo "ERROR: worktree-create.sh: not in a jj repo (jj workspace root failed)" >&2
+  echo "ERROR: worktree-create.sh: not in a git repository (git rev-parse --show-toplevel failed)" >&2
   exit 1
 fi
 cd "$WS_ROOT"

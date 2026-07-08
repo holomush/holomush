@@ -3,8 +3,8 @@
 # Copyright 2026 HoloMUSH Contributors
 #
 # SessionStart hook: warns the assistant when the Claude Code session is
-# operating in the shared `default` jj workspace. Stays silent when the
-# session is in any other workspace.
+# operating in the shared primary worktree (the main checkout). Stays silent
+# when the session is in any linked worktree.
 #
 # Output contract: emit warning text to plain stdout (the Claude Code
 # SessionStart hook concatenates stdout into the session's additional
@@ -17,35 +17,36 @@ set -euo pipefail
 cat >/dev/null
 
 # Source the shared MAIN_REPO/IS_DEFAULT helper. The hook script's cwd is
-# the Claude session's launching cwd, so .jj/repo resolution from . is
-# the right starting point.
-ws_root="$(jj workspace root 2>/dev/null || true)"
-if [ -z "$ws_root" ] || [ ! -e "$ws_root/scripts/jj-main-repo.sh" ]; then
-  # Not in a jj repo, or helper missing — silently exit. The hook is
+# the Claude session's launching cwd, so git rev-parse from . resolves the
+# right worktree.
+ws_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$ws_root" ] || [ ! -e "$ws_root/scripts/git-main-repo.sh" ]; then
+  # Not in a git repo, or helper missing — silently exit. The hook is
   # purely informational; never block session start.
   exit 0
 fi
 
-# shellcheck source=../../scripts/jj-main-repo.sh
-( cd "$ws_root" && . "$ws_root/scripts/jj-main-repo.sh" >/dev/null 2>&1 ) || exit 0
+# shellcheck source=../../scripts/git-main-repo.sh
+( cd "$ws_root" && . "$ws_root/scripts/git-main-repo.sh" >/dev/null 2>&1 ) || exit 0
 
 # Re-source in current shell to populate IS_DEFAULT (the subshell above
-# only validated the script doesn't error; we need the var here).
-cd "$ws_root"
-# shellcheck source=../../scripts/jj-main-repo.sh
-. "$ws_root/scripts/jj-main-repo.sh"
+# only validated the script doesn't error; we need the var here). Guard the
+# cd with `|| exit 0` so a worktree that vanished between the dry-run above
+# and here never blocks session start (this hook is informational only).
+cd "$ws_root" || exit 0
+# shellcheck source=../../scripts/git-main-repo.sh
+. "$ws_root/scripts/git-main-repo.sh"
 
 if [ "${IS_DEFAULT:-no}" != "yes" ]; then
   exit 0
 fi
 
 cat <<'EOF'
-**⚠️ You are in the shared `default` jj workspace — read-only inspection ONLY.**
+**⚠️ You are in the shared main checkout (primary worktree) — read-only inspection ONLY.**
 
-You MUST NOT edit files here. Concurrent agent sessions share this workspace and
-collide at every `jj` command boundary (jj snapshots the working copy on every
-command), silently corrupting each other's uncommitted edits. Before editing ANY
-file, isolate this session first:
+You MUST NOT edit files here. Concurrent agent sessions share this one working tree,
+so their uncommitted edits clobber each other (last write wins on the filesystem).
+Before editing ANY file, isolate this session in its own git worktree first:
 
 - **Agents (or humans without the function):** run `task workspace:new -- <name>`, then `cd <printed-path>` and do all work there.
 - **Humans:** run `claude-iso <name>` (the shell function in `~/.config/fish/config.fish` or `~/.bashrc` — see CLAUDE.md "Session isolation").

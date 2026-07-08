@@ -1,21 +1,20 @@
 ---
 name: review-abac
-description: Adversarially review ABAC-domain code changes against the access-control spec before code-reviewer runs
+description: Adversarially review ABAC-domain code changes against the access-control spec before /gsd-code-review runs
 ---
 
 @agent-abac-reviewer Review the ABAC-domain code changes described below
 against the access-control architecture in `internal/access/`. This gate runs
-ALONGSIDE `code-reviewer` for any change touching the access control surface
+ALONGSIDE `/gsd-code-review` for any change touching the access control surface
 (`internal/access/`, policy DSL, attribute providers, authorization decision
 points, seed policies). For purely ABAC-scoped changes, run it BEFORE
-`code-reviewer` since it carries the dispositive verdict.
+`/gsd-code-review` since it carries the dispositive verdict.
 
 **Target:** $ARGUMENTS
 
 **If no target was given:** review the full branch diff against the merge
-base. Use `jj diff --from $(jj log -r 'trunk()' --no-graph -T commit_id --limit 1)`
-(or the git equivalent) to get the diff. Review the diff AND the full files
-it touches.
+base. Use `git diff origin/main...HEAD` to get the diff. Review the diff AND
+the full files it touches.
 
 **If a target was given:** treat it as either a path (review that file's
 changes vs merge base), a commit revset (review that revset's diff), or a
@@ -30,6 +29,6 @@ Apply the adversarial stance and review checklist from your agent prompt.
 Produce findings grounded in `path:line` for code claims, with a binary
 verdict.
 
-**Ordering:** this gate runs alongside `/holomush-dev:review-code` (or before, when a
+**Ordering:** this gate runs alongside `/gsd-code-review` (or before, when a
 change is purely ABAC-scoped). After abac-reviewer returns its verdict, then
-invoke `/holomush-dev:review-code` for the generic adversarial pass.
+run `/gsd-code-review` for the generic adversarial pass.

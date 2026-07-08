@@ -63,36 +63,37 @@ Work MUST NOT start without a spec/design/plan. Specs live in `docs/specs/` or `
 
 ## Workflow
 
-Work is tracked in `bd` (see `.claude/rules/beads-project.md` and `bd prime`).
+Planning and execution run on **GSD** (`/gsd-*` commands; artifacts in `.planning/`). Issue tracking stays in **bd** (see `.claude/rules/beads-project.md` and `bd prime`). The two are complementary: GSD owns the phase loop and its artifacts; bd owns issues, dependencies, and cross-session memory. Do **not** duplicate bd's dependency graph into `.planning/`.
 
-### Stage-gated workflow (multi-task work)
+### GSD-native loop (multi-task work)
 
-| Stage | Skill / Action                                  | Gate before next stage         |
-| ----- | ----------------------------------------------- | ------------------------------ |
-| 1     | `dev-flow:brainstorming`                        | (conversation only)            |
-| 2     | (writes spec from brainstorming)                | `design-reviewer` — READY      |
-| 3     | `dev-flow:writing-plans`                        | `plan-reviewer` — READY        |
-| 4     | `dev-flow:plan-to-beads` (auto-fired by writing-plans on READY; preceded by `dev-flow:capture-adrs`) | user reviews dry-run manifest before materialization |
-| 5     | `dev-flow:subagent-driven-development`          | `code-reviewer` (+ `crypto-reviewer` / `abac-reviewer` when applicable) before push |
-| 6     | `gh pr create`                                  | `task pr-prep` green; `/autofix <PR#>` for CodeRabbit |
+| Stage | Command / Action                          | Gate before next stage                         |
+| ----- | ----------------------------------------- | ---------------------------------------------- |
+| 1     | `/gsd-new-project` / `/gsd-new-milestone` → roadmap | roadmap reviewed                       |
+| 2     | `/gsd-discuss-phase`                       | gray areas surfaced + captured                 |
+| 3     | `/gsd-plan-phase`                          | `gsd-plan-checker` — plan achieves phase goal  |
+| 4     | `/gsd-execute-phase`                       | `gsd-verifier` — phase goal met                |
+| 5     | domain gates (when applicable)             | `crypto-reviewer` / `abac-reviewer` — READY before push |
+| 6     | `/gsd-ship` → `gh pr create`               | `task pr-prep` green; `/autofix <PR#>` for CodeRabbit |
 
-Detail on each gate: `## Pre-Push Review Gates` (skipping requires explicit user override). **Skip the chain** for small fixes (typo, dependency bump, single-file bug) — direct bead → implementation → review → PR.
+Settings: `/gsd-config` (`--advanced`, `--integrations`, `--profile <name>`); toggles via `/gsd-settings`. **Skip the loop** for small fixes (typo, dependency bump, single-file bug) — `/gsd-quick` (atomic-commit guarantees) or `/gsd-fast` (trivial), or a direct bead → implementation → review → PR.
 
 ### Code review
 
-All tasks MUST be reviewed before completion via `pr-review-toolkit:review-pr` (workflow: [PR guide](site/src/content/docs/contributing/how-to/pr-guide.md)).
+Primary code review is **`/gsd-code-review`** (GSD's `gsd-code-reviewer`). Two domain-specialized adversarial gates layer on top for their surfaces (see `## Pre-Push Review Gates`).
 
-| Requirement                                | Description                                          |
-| ------------------------------------------ | ---------------------------------------------------- |
-| **MUST** use `pr-review-toolkit:review-pr` | Launch comprehensive review using specialized agents |
-| **MUST** address all findings              | Fix issues or document why not applicable            |
-| **MUST NOT** skip review                   | Even for "simple" changes                            |
+| Requirement                     | Description                                                   |
+| ------------------------------- | ------------------------------------------------------------ |
+| **MUST** review before merge    | Run `/gsd-code-review` over the phase's changed files        |
+| **MUST** run domain gates       | `crypto-reviewer` / `abac-reviewer` when their surfaces are touched |
+| **MUST** address all findings   | Fix issues or document why not applicable                    |
+| **MUST NOT** skip review        | Even for "simple" changes                                    |
 
-**Responding to PR review comments:** address **every** thread, not just CodeRabbit's; after `/autofix`, check other reviewers (`octopus-fzymgc` bot, humans). Reply to **each thread individually** (fixed / won't-fix / deferred-bead-id) so each resolves — a summary comment does **not** resolve individual threads. Detail: `dev-flow:respond-to-comments`.
+**Responding to PR review comments:** address **every** thread, not just CodeRabbit's; after `/autofix`, check other reviewers (`octopus-fzymgc` bot, humans). Reply to **each thread individually** (fixed / won't-fix / deferred-bead-id) so each resolves — a summary comment does **not** resolve individual threads.
 
-### Plan → bd materialization
+### Issue tracking (bd)
 
-`dev-flow:plan-to-beads` reads the plan's task table and materializes the epic + child beads + dependency graph in one pass. **Plans do NOT carry a `## Bead chain structure` section** — bd owns graph topology (skill spec Rule 4; the ancestor `bead-chain-design` convention is superseded). Per Rule 3, each task bead's `--description` is **narrative only** (Goal, Plan ref, Files, Out of scope); acceptance/verification/deps/labels live in `--acceptance`/`--deps`/`--labels`/`--skills`.
+bd tracks issues, dependencies, and cross-session memory independently of GSD's phase artifacts. Create beads for discovered work with `bd create`; `bd ready` surfaces unblocked work; `bd dolt push` syncs. GSD phases MAY reference bead IDs, but bd owns the graph topology — never mirror dependency structure into `.planning/`.
 
 ## Strategic Themes
 
@@ -109,15 +110,12 @@ Multi-epic clusters use `theme:<slug>` bd labels + a narrative section in [`docs
 
 ## Pre-Push Review Gates
 
-Adversarial read-only sub-agents gate hand-offs BEFORE the PR surface (complementing `pr-review-toolkit:review-pr`). Agent/command/memory locations: [pr-guide](site/src/content/docs/contributing/how-to/pr-guide.md).
+GSD's own gates run inside the loop: `gsd-plan-checker` (plan quality, before execute) and `gsd-verifier` (phase-goal achievement, after execute). Two **domain-specialized** adversarial sub-agents layer on top BEFORE the PR surface — GSD has no equivalent for these. Agent/command/memory locations: [pr-guide](site/src/content/docs/contributing/how-to/pr-guide.md).
 
 | Agent             | Fires before                                                                           | Invocation                              |
 | ----------------- | -------------------------------------------------------------------------------------- | --------------------------------------- |
-| `design-reviewer` | `dev-flow:writing-plans` is invoked on a spec                                       | `/review-design [<spec-path>]` or auto  |
-| `plan-reviewer`   | `dev-flow:executing-plans` or `dev-flow:subagent-driven-development` runs a plan | `/review-plan [<plan-path>]` or auto    |
-| `code-reviewer`   | `bd close`, `jj git push`, or PR creation                                              | `/holomush-dev:review-code [<target>]` or auto       |
-| `crypto-reviewer` | `code-reviewer` (runs FIRST), for changes touching `internal/eventbus/crypto/`, `internal/eventbus/codec/`, `internal/eventbus/history/dispatcher.go`, `internal/eventbus/history/cold_postgres.go`, `internal/plugin/event_emitter.go::Emit`, `internal/eventbus/audit/projection.go`, plugin manifest `crypto.emits` declarations, or migrations on `crypto_keys` / `events_audit` | `/holomush-dev:review-crypto` or auto via `remind-pre-action-review.sh` |
-| `abac-reviewer`   | `code-reviewer` (runs alongside), for changes touching `internal/access/`              | `/holomush-dev:review-abac` or auto via `remind-pre-action-review.sh` |
+| `crypto-reviewer` | `git push` / PR creation, for changes touching `internal/eventbus/crypto/`, `internal/eventbus/codec/`, `internal/eventbus/history/dispatcher.go`, `internal/eventbus/history/cold_postgres.go`, `internal/plugin/event_emitter.go::Emit`, `internal/eventbus/audit/projection.go`, plugin manifest `crypto.emits` declarations, or migrations on `crypto_keys` / `events_audit` | `/holomush-dev:review-crypto` or auto via `remind-pre-action-review.sh` |
+| `abac-reviewer`   | `git push` / PR creation, for changes touching `internal/access/`                      | `/holomush-dev:review-abac` or auto via `remind-pre-action-review.sh` |
 
 | Requirement                         | Description                                                                             |
 | ----------------------------------- | --------------------------------------------------------------------------------------- |
@@ -185,7 +183,7 @@ Detail in `.claude/rules/testing.md` (auto-loads on test files): coverage, ACE n
 
 | Always-on rule                                    | Description                                                                                                              |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **MUST** write tests before impl                  | TDD — see `dev-flow:test-driven-development`                                                                          |
+| **MUST** write tests before impl                  | TDD — write the test first. GSD `tdd_mode` enforces RED/GREEN/REFACTOR gates when enabled (toggle via `/gsd-settings`) |
 | **MUST** maintain >80% coverage                   | Per-package; verify with `task test:cover`                                                                               |
 | **MUST** use Ginkgo/Gomega for full-stack integration tests | Build tag `//go:build integration`; runs via `task test:int`                                               |
 | **MUST** run `task test:int` on refactors         | `task test` does NOT compile integration files — refactors of shared types break silently otherwise                      |
@@ -227,7 +225,7 @@ task test:int                                     # integration tests (needs Doc
 | **MUST** delegate verbose task runs | Dispatch `local-check` for `task test\|lint\|build\|test:int\|test:cover` (and `local-pr-prep` for pr-prep iteration) instead of inline Bash — hook-enforced; `# offload-exempt` overrides when raw output is genuinely needed |
 | **MUST** run final gate inline      | A `local-check` PASS satisfies "run `task test` before claiming complete"; the FINAL `task pr-prep` before a push still runs inline in the parent |
 
-> **`task fmt` mutates files** (SPDX headers, reflowed tables) — **commit those edits**. Uncommitted `fmt` output is a common cause of red CI (`license:check` / markdown lint) on an otherwise-green PR.
+> **`task fmt` mutates files** (SPDX headers, reflowed tables) — **commit those edits**. Uncommitted `fmt` output is a common cause of red CI (`license:check` / markdown lint) on an otherwise-green PR. Editing an aligned Go `const`/`var`/`struct` block (inserting a longer name or a mid-block comment) can pass `task build` + unit tests yet fail `task fmt:check` in CI — run `task fmt` after touching any aligned Go block.
 
 **MUST** run `task pr-prep` (fast lane) before creating a PR / pushing a PR branch; docs-only diffs auto-delegate to `task pr-prep:docs`. `task pr-prep:full` (opt-in; `HOLOMUSH_PR_PREP_FORCE_FULL=1` forces) adds integration + E2E in Docker. `Integration Test` + `E2E Test` are required CI checks protecting `main`. Lanes + lock/contention: [pr-prep how-to](site/src/content/docs/contributing/how-to/pr-prep.md).
 
@@ -245,28 +243,25 @@ Some generated output is committed; regenerate + commit it in the **same change*
 
 ### Session isolation
 
-Concurrent AI sessions share a jj repo; jj snapshots every command, so shared-workspace sessions collide on uncommitted edits. Full guide (creation, cleanup, `gh -R`): [sessions how-to](site/src/content/docs/contributing/how-to/sessions.md).
+Concurrent AI sessions MUST work in separate **git worktrees** so uncommitted edits never collide. Full guide (creation, cleanup, `gh -R`): [sessions how-to](site/src/content/docs/contributing/how-to/sessions.md).
 
 | Requirement | Description |
 |---|---|
-| **MUST** isolate per session | Agents: `task workspace:new -- <name>`, then `cd <printed-path>`. Humans: see [sessions guide](site/src/content/docs/contributing/how-to/sessions.md) for shell-function setup. |
-| **MUST NOT** edit files in `default` | The shared workspace is for **read-only inspection only** (search, reads, answering questions). A `SessionStart` hook flags any session that starts there. If you are in `default` and intend to edit, isolate **first** (row above) before touching any file — concurrent sessions silently corrupt each other's uncommitted edits at every `jj` command boundary. |
-| **MUST** clean up post-merge | After landing: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>`. The `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. |
+| **MUST** isolate per session | `task workspace:new -- <name>` creates a git worktree at `<repo-parent>/.worktrees/<name>` (branched off `main@origin`, bd redirect wired) and prints its path; then `cd <printed-path>`. Raw equivalent: `git worktree add -b <branch> ../.worktrees/<name> origin/main`. |
+| **MUST NOT** edit files in the primary worktree | The main checkout is for **read-only inspection only** (search, reads, answering questions). A `SessionStart` hook flags any session that starts there. If you intend to edit, isolate **first** (row above) before touching any file. |
+| **MUST** clean up post-merge | After landing: `cd <repo-root> && git worktree remove <repo-parent>/.worktrees/<name>` (add `--force` if it holds throwaway artifacts), then `git branch -d <branch>`. The `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. |
 
-Sub-agents inherit the parent's workspace; the parent MUST NOT dispatch parallel `Task` calls that edit the same files. `gh` in a jj workspace: always pass `-R holomush/holomush`.
+Sub-agents inherit the parent's worktree; the parent MUST NOT dispatch parallel `Task` calls that edit the same files. `gh` from a worktree: always pass `-R holomush/holomush`.
 
 ### Required session-start skills
 
-Two skills MUST be loaded via the `Skill` tool **before your first response** in any session (both enforced by `SessionStart` hooks):
+`dev-flow:grepping` MUST be loaded via the `Skill` tool **before your first response** in any session (enforced by a `SessionStart` hook): the search-tool ladder (`mcp__probe__*` Go symbol/AST → `rg` text → `ast-grep` structural) prevents defaulting to bare `grep`/full-file reads. Pairs with `.claude/rules/search-tools.md`.
 
-| Skill | Why |
-|---|---|
-| `jj:jujutsu` | jj-colocated repo — all VCS via jj (guard hooks block mutating `git`). |
-| `dev-flow:grepping` | Search-tool ladder (`mcp__probe__*` Go symbol/AST → `rg` text → `ast-grep` structural); prevents defaulting to bare `grep`/full-file reads. Pairs with `.claude/rules/search-tools.md`. |
+VCS is **native git** (no jj): use `git` directly — no VCS skill is required.
 
-### Beads, jj
+### Beads
 
-`bd` commands: see `.claude/rules/beads-project.md` and `bd prime`. `jj` workflow: see the `jj:jujutsu` skill.
+`bd` commands: see `.claude/rules/beads-project.md` and `bd prime`.
 
 **`.beads/interactions.jsonl` is git-tracked** (bd's interaction log), distinct from the Dolt DB (live bead state, synced via `bd dolt push`). It accumulates as you run `bd`; **include any pending change when committing/pushing other work** — `bd dolt push` does NOT commit it.
 
@@ -286,4 +281,4 @@ Full architecture map (world model, plugin host, event bus, sessions, access con
 
 ## Landing the Plane (Session Completion)
 
-Work is NOT complete until `jj git push` succeeds. Full checklist: `.claude/rules/landing-the-plane.md` (always loaded). Skip the chain only for small fixes (typo, dependency bump, single-file bug). **Pre-push rebase:** chain-safe `-s` recipe in that rule + the `jj:jujutsu` skill ("Pre-Push Rebase"); the `guard-jj-rebase-chain` hook blocks the truncation-prone `-r @` shape.
+Work is NOT complete until `git push` succeeds and a PR is open. Full checklist: `.claude/rules/landing-the-plane.md` (always loaded). Skip the loop only for small fixes (typo, dependency bump, single-file bug). **Pre-push rebase:** `git fetch origin && git rebase origin/main`, resolve conflicts, re-run `task pr-prep`, then `git push -u origin <branch>`.

@@ -1,14 +1,14 @@
 ---
 name: spawn-workspace
-description: Create a new isolated jj workspace for parallel agent work — wraps `task workspace:new`
+description: Create a new isolated git worktree for parallel agent work — wraps `task workspace:new`
 disable-model-invocation: true
 ---
 
-Create an isolated jj workspace for this work. Per CLAUDE.md "Session
+Create an isolated git worktree for this work. Per CLAUDE.md "Session
 isolation", any non-trivial work or sub-agent dispatch in this repo SHOULD
-happen in a feature workspace, not the default — jj snapshots the working
-copy on every command, and parallel sessions sharing a workspace will
-collide on uncommitted edits.
+happen in a feature worktree, not the shared main checkout — parallel sessions
+sharing one working tree clobber each other's uncommitted edits (last write
+wins on the filesystem).
 
 **Name:** $ARGUMENTS
 
@@ -23,29 +23,31 @@ context). Names must match `[A-Za-z0-9._-]+` (no slashes, no `..`).
    ```
    This:
    - Validates the name
-   - `jj git fetch` first (so the new workspace is current)
-   - `jj workspace add ../.worktrees/$ARGUMENTS --name $ARGUMENTS -r main@origin`
-   - Writes `.beads/redirect` so `bd` works. Each jj workspace materialises an empty `.beads/`; the redirect points back to the main repo's Dolt DB.
-   - Prints the absolute workspace path
+   - `git fetch origin` first (so the new worktree is current)
+   - `git worktree add -b $ARGUMENTS ../.worktrees/$ARGUMENTS origin/main`
+   - Writes `.beads/redirect` so `bd` works. Each git worktree gets a fresh
+     checkout with an empty `.beads/`; the redirect points back to the main
+     repo's Dolt DB.
+   - Prints the absolute worktree path
 
 2. `cd` into the printed path.
 
 3. Verify the move:
    ```bash
-   jj st
+   git status --short && git branch --show-current
    ```
-   The working copy `(@)` should show your new workspace's empty change.
+   You should be on branch `$ARGUMENTS` with a clean working tree.
 
-4. Continue work from inside the new workspace.
+4. Continue work from inside the new worktree.
 
 ## When NOT to use
 
 - Quick read-only inspections (no file edits planned) — the warning hook for
-  the default workspace is just precautionary; reads are safe.
+  the main checkout is just precautionary; reads are safe.
 - Tiny one-line fixes that won't conflict with parallel sessions.
 
 ## Cleanup
 
 When the work is done and pushed, run the cleanup steps from
-`.claude/rules/landing-the-plane.md` step 5 — `jj workspace forget` + `rm -rf`
-(the post-push hook will remind you).
+`.claude/rules/landing-the-plane.md` step 5 — `git worktree remove` +
+`git branch -d` (the post-push hook will remind you).

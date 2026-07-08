@@ -1,12 +1,12 @@
 ---
 name: review-crypto
-description: Adversarially review crypto-domain code changes against the master spec invariants before code-reviewer runs
+description: Adversarially review crypto-domain code changes against the master spec invariants before /gsd-code-review runs
 ---
 
 @agent-crypto-reviewer Review the crypto-domain code changes described below
 against `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` (the
 master spec) and the Phase 3a/3d grounding docs. This gate runs BEFORE
-`code-reviewer` for any change touching the event-payload-cryptography surface
+`/gsd-code-review` for any change touching the event-payload-cryptography surface
 (`internal/eventbus/crypto/`, `internal/eventbus/codec/`,
 `internal/eventbus/history/dispatcher.go`,
 `internal/eventbus/history/cold_postgres.go`,
@@ -17,9 +17,8 @@ declarations, or migrations affecting `crypto_keys` / `events_audit`).
 **Target:** $ARGUMENTS
 
 **If no target was given:** review the full branch diff against the merge
-base. Use `jj diff --from $(jj log -r 'trunk()' --no-graph -T commit_id --limit 1)`
-(or the git equivalent) to get the diff. Review the diff AND the full files
-it touches.
+base. Use `git diff origin/main...HEAD` to get the diff. Review the diff AND
+the full files it touches.
 
 **If a target was given:** treat it as either a path (review that file's
 changes vs merge base), a commit revset (review that revset's diff), or a
@@ -40,8 +39,8 @@ also persists the full report to `.claude/agent-memory/crypto-reviewer/reports/`
 when it has memory configured. Do NOT spawn a second agent to "retrieve full
 findings"; subagents are stateless across invocations.
 
-**Ordering:** this gate runs BEFORE `/holomush-dev:review-code`. After crypto-reviewer
-returns READY, then invoke `/holomush-dev:review-code` for the generic adversarial pass.
-If crypto-reviewer returns NOT READY, address findings before invoking
-code-reviewer (so code-reviewer doesn't waste a pass on code that's still
+**Ordering:** this gate runs BEFORE `/gsd-code-review`. After crypto-reviewer
+returns READY, then run `/gsd-code-review` for the generic adversarial pass.
+If crypto-reviewer returns NOT READY, address findings before running
+`/gsd-code-review` (so it doesn't waste a pass on code that's still
 crypto-broken).

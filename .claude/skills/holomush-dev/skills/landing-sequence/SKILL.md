@@ -1,6 +1,6 @@
 ---
 name: landing-sequence
-description: Orchestrate the session-completion checklist (Landing the Plane) — pr-prep + bead status + push + workspace cleanup
+description: Orchestrate the session-completion checklist (Landing the Plane) — pr-prep + bead status + push + worktree cleanup
 disable-model-invocation: true
 ---
 
@@ -9,14 +9,14 @@ session-completion checklist from `.claude/rules/landing-the-plane.md`,
 verifying each step before moving to the next. Stop on any failure and
 surface it; do not paper over.
 
-**Scope:** $ARGUMENTS (optional — if you got a branch/bookmark name, use it
-for push; otherwise infer from the current jj workspace).
+**Scope:** $ARGUMENTS (optional — if you got a branch name, use it for push;
+otherwise infer from the current git branch).
 
 ## Sequence
 
 1. **Status sweep**
-   - `jj st` — confirm what's in the working copy
-   - `jj log -r 'main..@' --no-pager --no-graph -T 'change_id.shortest() ++ " | " ++ description.first_line() ++ "\n"'` — show the chain that will be pushed
+   - `git status --short` — confirm what's in the working copy
+   - `git log --oneline origin/main..HEAD` — show the commits that will be pushed
 
 2. **Bead hygiene**
    - `bd list --status in_progress --assignee $(git config user.email)` — anything still claimed but unfinished?
@@ -27,32 +27,33 @@ for push; otherwise infer from the current jj workspace).
    - If pr-prep fails: STOP, surface the failure, do not push.
    - For `.claude/`-touching changes, additionally verify `task lint:docs-symmetry` passes (the docs-symmetry lint runs as part of `task lint`, which `task pr-prep` invokes — but call it out separately if a CLAUDE.md/AGENTS.md edit was the primary motivation).
 
-4. **Pre-push rebase** — defer to the `jj:jujutsu` skill's "Pre-Push Rebase" section. The chain-safe recipe handles single-commit PRs and chains identically:
+4. **Pre-push rebase**
 
    ```bash
-   jj git fetch
-   jj rebase -s "$(jj --no-pager log -r 'roots(trunk()..@)' --no-graph -T 'change_id.short(12)')" -o main@origin --skip-emptied
+   git fetch origin
+   git rebase origin/main
    ```
 
-   The `guard-jj-rebase-chain` PreToolUse hook (shipped with the `jj` plugin) BLOCKS the truncation-prone `jj rebase -r @ -o <trunk>` shape — the failure mode that lost 8 of 9 commits on PR #4049 (`holomush-lfri`). If you genuinely need to extract `@` alone (confirmed single-commit PR), append `# jj-exempt` to escalate-to-ASK.
+   Resolve any conflicts, then re-run `task pr-prep`. Never force-push a shared
+   branch; use `--force-with-lease` only on your own feature branch after a
+   rebase. `git reflog` recovers commits after a bad rebase/reset — check it
+   before assuming work is gone.
 
 5. **Push**
-   - `jj bookmark set <branch> -r @-` (or whichever rev is the tip)
-   - Sanity-check the chain length one more time before push: `jj log -r 'main@origin..@' --no-pager --no-graph -T 'change_id ++ "\n"' | wc -l`. If it dropped unexpectedly between sessions (e.g., 9 → 1), STOP — investigate before pushing.
-   - `jj git push --branch <branch>`
-   - `jj st` to verify
+   - `git push -u origin <branch>`
+   - `git status` to verify (working tree clean) — the ahead-of-`main` gap was established by the rebase step above; `git status` compares against the branch's own upstream, not `main`
 
-6. **Workspace cleanup** (only if this is a feature workspace, not the default)
-   - `cd <repo-root>` — the cd matters
-   - `jj workspace forget <name>`
-   - `rm -rf <repo-parent>/.worktrees/<name>`
+6. **Worktree cleanup** (post-merge only — skip if the PR hasn't landed yet; the post-push hook reminds you)
+   - `cd <repo-root>` — the cd matters; `../.worktrees/<name>` is unsafe from any nested cwd
+   - `git worktree remove <repo-parent>/.worktrees/<name>`
+   - `git branch -d <branch>`
 
 7. **Handoff** (optional)
    - If there's pickup work for next session, invoke `superpowers:handoff-prompt`
 
 ## Critical rules
 
-- Work is NOT complete until `jj git push` succeeds.
+- Work is NOT complete until `git push` succeeds.
 - Never claim "ready to push" — push.
 - If anything blocks (bd issue, pr-prep red, push rejected): fix it, don't ignore it.
 - For an undeployed codebase: skip prod-shape discipline (no migration backfills, no reserved proto fields, no deprecation windows, no fallback paths) — when no consumers exist, those tools protect nothing and add complexity.

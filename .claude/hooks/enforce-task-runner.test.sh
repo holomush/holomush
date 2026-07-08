@@ -82,7 +82,7 @@ expect_case "go-test-still-blocked" deny "$(mkinput 'go test ./...')" 2 "" "task
 expect_case "loopbody-exempt-documented" deny "$(mkinput 'for i in 1; do task test; done')" 0 "" ""
 # Exempt token is a raw-command substring check: a quoted occurrence anywhere
 # exempts all task segments in the command.
-expect_case "exempt-substring-documented" deny "$(mkinput 'jj describe -m "see # offload-exempt docs" && task test')" 0 "" ""
+expect_case "exempt-substring-documented" deny "$(mkinput 'git commit -m "see # offload-exempt docs" && task test')" 0 "" ""
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

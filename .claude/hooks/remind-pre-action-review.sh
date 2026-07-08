@@ -21,12 +21,9 @@ lower="$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')"
 
 # Best-effort: collect changed files vs trunk so domain reminders can fire when
 # the prompt is generic ("push this branch") but the diff actually touches
-# crypto/ABAC paths. Silent on failure (no jj/git, detached state, etc.).
+# crypto/ABAC paths. Silent on failure (no git, detached state, etc.).
 changed_paths=""
-if command -v jj >/dev/null 2>&1; then
-  changed_paths="$(jj diff --name-only --from 'trunk()' --to '@' 2>/dev/null || true)"
-fi
-if [ -z "$changed_paths" ] && command -v git >/dev/null 2>&1; then
+if command -v git >/dev/null 2>&1; then
   base="$(git merge-base HEAD origin/main 2>/dev/null || true)"
   if [ -n "$base" ]; then
     changed_paths="$(git diff --name-only "$base"...HEAD 2>/dev/null || true)"
@@ -38,26 +35,26 @@ reminders=()
 # Detect handoff-intent verbs (push/ship/close/PR creation). Cached so multiple
 # downstream gates can reuse it without re-running grep.
 handoff_intent=0
-if printf '%s' "$lower" | grep -qE '(\bpush\b|jj[[:space:]]+git[[:space:]]+push|git[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create|bd[[:space:]]+close|open[[:space:]]+(a[[:space:]]+)?pr|create[[:space:]]+(a[[:space:]]+)?pr|\bmerge\b|\bship\b|\bland\b|ready[[:space:]]+to[[:space:]]+(push|merge|ship)|close[[:space:]]+(the[[:space:]]+)?bead|mark[[:space:]]+(done|complete)|wrap[[:space:]]+up|finalize)'; then
+if printf '%s' "$lower" | grep -qE '(\bpush\b|git[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create|bd[[:space:]]+close|open[[:space:]]+(a[[:space:]]+)?pr|create[[:space:]]+(a[[:space:]]+)?pr|\bmerge\b|\bship\b|\bland\b|ready[[:space:]]+to[[:space:]]+(push|merge|ship)|close[[:space:]]+(the[[:space:]]+)?bead|mark[[:space:]]+(done|complete)|wrap[[:space:]]+up|finalize)'; then
   handoff_intent=1
 fi
 
-# code-reviewer triggers: anything that implies the work is leaving the session.
+# Review-gate trigger: anything that implies the work is leaving the session.
 if [ "$handoff_intent" = "1" ]; then
-  reminders+=("**Pre-hand-off gate:** Before you run \`jj git push\`, \`gh pr create\`, or \`bd close\` for this work, the \`code-reviewer\` adversarial sub-agent MUST run on the branch diff. Invoke \`/holomush-dev:review-code\` (or \`Agent\` with \`subagent_type: code-reviewer\`) now if it has not already run for the current branch tip. To skip, the user must explicitly say so (e.g. \"skip review\").")
+  reminders+=("**Pre-hand-off gate:** Before you run \`git push\`, \`gh pr create\`, or \`bd close\` for this work, run \`/gsd-code-review\` over the branch's changed files if it has not already run for the current branch tip. To skip, the user must explicitly say so (e.g. \"skip review\").")
 fi
 
 # crypto-reviewer triggers: handoff intent AND (crypto-domain mention in prompt
 # OR crypto-domain paths in the diff). Path-based detection closes the gap
 # where a generic handoff like "push this branch" would otherwise miss the
 # crypto gate when the diff actually touches the crypto surface. Combines
-# with the code-reviewer reminder so the user gets BOTH: crypto-reviewer
-# first, then code-reviewer.
+# with the /gsd-code-review reminder so the user gets BOTH: crypto-reviewer
+# first, then /gsd-code-review.
 if [ "$handoff_intent" = "1" ] && {
      printf '%s' "$lower" | grep -qE '(internal/eventbus/crypto|internal/eventbus/codec|internal/eventbus/history/dispatcher|internal/eventbus/history/cold_postgres|internal/plugin/event_emitter|internal/eventbus/audit/projection|crypto_keys|events_audit|\baad\b|\bdek\b|authguard|rekey|encrypt|decrypt|crypto\.emits)' ||
      printf '%s' "$changed_paths" | grep -qE '(internal/eventbus/crypto/|internal/eventbus/codec/|internal/eventbus/history/dispatcher\.go|internal/eventbus/history/cold_postgres\.go|internal/plugin/event_emitter\.go|internal/eventbus/audit/projection\.go|migrations/.*crypto_keys|migrations/.*events_audit)';
    }; then
-  reminders+=("**Pre-hand-off crypto gate:** Changes touch the event-payload-cryptography surface. \`crypto-reviewer\` MUST run BEFORE \`code-reviewer\`. Invoke \`/holomush-dev:review-crypto\` (or \`Agent\` with \`subagent_type: crypto-reviewer\`) first; address NOT-READY findings; then invoke \`/holomush-dev:review-code\`. To skip, the user must explicitly say so (e.g. \"skip crypto review\").")
+  reminders+=("**Pre-hand-off crypto gate:** Changes touch the event-payload-cryptography surface. \`crypto-reviewer\` MUST run BEFORE \`/gsd-code-review\`. Invoke \`/holomush-dev:review-crypto\` (or \`Agent\` with \`subagent_type: crypto-reviewer\`) first; address NOT-READY findings; then run \`/gsd-code-review\`. To skip, the user must explicitly say so (e.g. \"skip crypto review\").")
 fi
 
 # abac-reviewer triggers: handoff intent AND (access-control mention in prompt
@@ -67,7 +64,7 @@ if [ "$handoff_intent" = "1" ] && {
      printf '%s' "$lower" | grep -qE '(internal/access|access[[:space:]]*control|abac|access[[:space:]]+policy|policy[[:space:]]+dsl|attribute[[:space:]]+provider|access[[:space:]]+decision)' ||
      printf '%s' "$changed_paths" | grep -qE '(internal/access/)';
    }; then
-  reminders+=("**Pre-hand-off ABAC gate:** Changes touch the access-control surface. \`abac-reviewer\` MUST run alongside \`code-reviewer\`. Invoke \`/holomush-dev:review-abac\` (or \`Agent\` with \`subagent_type: abac-reviewer\`) before pushing. To skip, the user must explicitly say so (e.g. \"skip ABAC review\").")
+  reminders+=("**Pre-hand-off ABAC gate:** Changes touch the access-control surface. \`abac-reviewer\` MUST run alongside \`/gsd-code-review\`. Invoke \`/holomush-dev:review-abac\` (or \`Agent\` with \`subagent_type: abac-reviewer\`) before pushing. To skip, the user must explicitly say so (e.g. \"skip ABAC review\").")
 fi
 
 # int/e2e surface nudge: handoff intent AND the diff touches integration/E2E

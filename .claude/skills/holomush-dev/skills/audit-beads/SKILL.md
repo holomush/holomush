@@ -27,14 +27,15 @@ cheaper than detailed reads.
 
 **Operational note:** the `bd` database lives in the main repo's `.beads/`,
 not in any worktree. If you're invoked from a worktree-local cwd you may
-see "no beads database found" — `cd` to the repo root (or the path printed
-by `jj root` then `realpath ../..` if in a worktree) and retry.
+see "no beads database found" — `cd` to the main checkout and retry (from a
+worktree, `git rev-parse --path-format=absolute --git-common-dir` prints
+`<main-repo>/.git`; its parent directory is the main checkout).
 
 **Critical anti-patterns** (called out in your system prompt — restated for emphasis):
 
 - Never close a bead based on an in-bead `Closed:`/`Fixed:` comment alone. Verify the cited fix in current code. The 2026-04-26 audit caught two false-fix cases (`wfza.21`, `wfza.62`) where sub-fix beads were closed but the actual code change never landed.
 - Never run `task`, `make`, `go build`, or any other long build. You are an investigator using `bd show`, `Read`, `Grep`/`rg`, `Glob`, `gh pr view`.
-- Never run mutating jj/git commands. Read-only only.
+- Never run mutating git commands. Read-only only.
 - Never write to project files other than your own report path under
   `.claude/agent-memory/bead-auditor/reports/`.
 
@@ -57,5 +58,5 @@ You do not execute these yourself.
 **For large queues (>50 beads):** dispatch multiple bead-auditor instances
 in parallel, each scoped to a distinct epic prefix. Each agent must use a
 unique `<slug>` so its report path doesn't collide. Agents do NOT need
-separate jj workspaces because they are read-only — same working copy is
+separate git worktrees because they are read-only — same working copy is
 fine.

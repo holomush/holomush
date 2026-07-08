@@ -745,8 +745,8 @@ tasks:
         # location where it would indicate the docs surface is still present.
         # Checked: site/ content tree, .github/workflows, CLAUDE.md (root).
         # NOT checked: Taskfile.yaml itself (this guard definition is the only
-        # remaining reference and is intentional) and .jj/node_modules/site/dist
-        # (build artifacts and VCS metadata).
+        # remaining reference and is intentional) and .git/, node_modules/,
+        # site/dist (VCS metadata and build artifacts).
         if rg -n 'zensical' .github/workflows site CLAUDE.md \
              --glob '!site/dist/**' --glob '!**/node_modules/**' 2>/dev/null; then
           echo "INV-7: zensical reference(s) found — docs surface not fully decommissioned" >&2
@@ -1077,22 +1077,18 @@ tasks:
 
   workspace:new:
     desc: |
-      Create a fresh jj workspace at <repo-parent>/.worktrees/<name>, fetching
-      main@origin first so it's current. Idempotent: if the workspace already
-      exists, prints its absolute path and exits 0. Works from any cwd inside
-      the repo or any worktree.
+      Create a fresh git worktree at <repo-parent>/.worktrees/<name> on a new
+      branch <name> off origin/main, fetching first so it's current.
+      Idempotent: if the worktree already exists, prints its absolute path and
+      exits 0. Works from any cwd inside the repo or any worktree.
 
       Usage: task workspace:new -- <name>
     cmds:
       - |
         set -euo pipefail
-        WS_ROOT="$(jj workspace root)"   # fail-fast if not in a jj repo
-        # The helper resolves .jj/repo from cwd, so we must cd to WS_ROOT first
-        # before sourcing — otherwise the task fails when invoked from any
-        # subdirectory of the workspace (e.g., from internal/, scripts/, etc).
-        cd "$WS_ROOT"
-        # shellcheck source=scripts/jj-main-repo.sh
-        . "$WS_ROOT/scripts/jj-main-repo.sh"
+        WS_ROOT="$(git rev-parse --show-toplevel)"   # fail-fast if not in a git repo
+        # shellcheck source=scripts/git-main-repo.sh
+        . "$WS_ROOT/scripts/git-main-repo.sh"
 
         NAME="{{.CLI_ARGS}}"
         [ -n "$NAME" ] || { echo "ERROR: usage: task workspace:new -- <name>" >&2; exit 1; }
@@ -1104,22 +1100,29 @@ tasks:
 
         TARGET="$WORKTREES/$NAME"
 
-        # Create the workspace if it doesn't exist. The redirect-file step
-        # below runs unconditionally so older workspaces self-heal when
-        # task workspace:new is re-invoked for them.
+        # Create the worktree if it doesn't exist. The redirect-file step
+        # below runs unconditionally so older worktrees self-heal when
+        # task workspace:new is re-invoked for them. All git-worktree commands
+        # run with `git -C "$MAIN_REPO"` so they're unambiguous from any cwd.
         if [ ! -d "$TARGET" ]; then
-          jj git fetch >&2
-          jj workspace add "$TARGET" --name "$NAME" -r main@origin >&2
+          git -C "$MAIN_REPO" fetch origin >&2
+          if git -C "$MAIN_REPO" show-ref --verify --quiet "refs/heads/$NAME"; then
+            # Branch already exists — attach a worktree to it (don't reset to
+            # origin/main and clobber in-flight commits on that branch).
+            git -C "$MAIN_REPO" worktree add "$TARGET" "$NAME" >&2
+          else
+            git -C "$MAIN_REPO" worktree add -b "$NAME" "$TARGET" origin/main >&2
+          fi
         fi
 
-        # Point bd at the main repo's .beads/. Each jj workspace
-        # materialises an empty .beads/ (only tracked config + .gitignore;
-        # the Dolt DB lives in the main repo's .beads/dolt/), so bd run
-        # from the workspace would fail with "no beads database found".
-        # `.beads/redirect` is bd's documented per-worktree override and
-        # is already in .beads/.gitignore, so it never gets committed
-        # (holomush-k98d). Don't overwrite an existing redirect — a user
-        # may have repointed it at a federation peer or alternate DB.
+        # Point bd at the main repo's .beads/. Each git worktree gets a fresh
+        # checkout whose .beads/ has only tracked config + .gitignore (the Dolt
+        # DB lives in the main repo's .beads/dolt/), so bd run from the worktree
+        # would fail with "no beads database found". `.beads/redirect` is bd's
+        # documented per-worktree override and is already in .beads/.gitignore,
+        # so it never gets committed (holomush-k98d). Don't overwrite an
+        # existing redirect — a user may have repointed it at a federation peer
+        # or alternate DB.
         mkdir -p "$TARGET/.beads"
         if [ ! -f "$TARGET/.beads/redirect" ]; then
           printf '%s\n' "$MAIN_REPO/.beads" > "$TARGET/.beads/redirect"
