@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: core-channels
+version: 1.0.0
+type: binary
+resource_types: [channel]
+
+# emits: [channel] declares the plugin-owned event domain (subjects
+# events.<game_id>.channel.>). Per INV-PRIVACY-7 a non-empty emits requires a
+# declared history_scope. We use `custom` (NOT `channel`): history_scope is a
+# CLOSED enum {grid, scene, custom} (internal/plugin/manifest.go:383) and any
+# other value fails ParseManifest / plugin load. `custom` = "plugin owns
+# visibility via QueryHistory RPC" (manifest.go:143) — exactly channels'
+# membership-gated, per-channel history model (01-06 authorizes reads against
+# the plugin-owned membership store). grid (all grid observers) and scene
+# (scene participants — channels are location-independent, CHAN-01) are both
+# semantically wrong. See plan 01-03 Decision R4-A.
+emits: [channel]
+history_scope: custom
+actor_kinds_claimable: [plugin, character]
+
+storage: postgres
+
+# Runtime config (plugin-owned, opaque to the host). The host validates the
+# generic types + merges any server override over these defaults; core-channels
+# decodes them via pluginsdk.DecodeConfig at Init (main.go applyConfig).
+config:
+  retention_window:
+    type: duration
+    default: 720h
+    description: "How long channel history is retained before the prune job sweeps it (D-07, default 30 days)."
+  replay_count:
+    type: int
+    default: "20"
+    description: "Number of recent channel messages replayed to a character on join (D-07)."
+  prune_interval:
+    type: duration
+    default: 1h
+    description: "How often the background retention prune job sweeps expired channel_log rows (D-07)."
+  create_rate_limit:
+    type: int
+    default: "5"
+    description: "Maximum channel creations per player per hour (D-06)."
+  scrollback_cap:
+    type: int
+    default: "500"
+    description: "Maximum messages a history scrollback request may return (D-07)."
+
+# Audit ownership: core-channels owns all events.*.channel.> subjects. The host
+# JetStream audit consumer ack-and-skips these and forwards deliveries to this
+# plugin's PluginAuditService.AuditEvent RPC (served by plan 01-06), which
+# persists into plugin_core_channels.channel_log. Channel events are plaintext
+# (D-04) — channel_log carries NO dek_ref/dek_version columns.
+audit:
+  - subjects: ["events.*.channel.>"]
+    schema: plugin_core_channels
+    table: channel_log
+
+# NOTE: ChannelService `provides`, `verbs`, `commands`, `policies`, and host
+# `requires` capabilities are added by later plans (01-04 resolver/policies,
+# 01-05 service/commands, 01-06 audit). They are intentionally omitted here so
+# this foundation skeleton stays coherent and loadable on its own.
+binary-plugin:
+  executable: core-channels
