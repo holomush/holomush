@@ -169,7 +169,7 @@ Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
 - [x] **CHAN-02**: Player can post to and read history from channels they are a member of, gated by
   ABAC channel-membership policies
 
-- [ ] **CHAN-03**: Channel events flow through the shared EventBus substrate with the same JetStream/audit
+- [x] **CHAN-03**: Channel events flow through the shared EventBus substrate with the same JetStream/audit
   guarantees as scenes
 
 - [ ] **CHAN-04**: Faction-restricted channels enforce membership-based access distinct from open channels
@@ -246,7 +246,7 @@ this GSD roadmap and are recorded as context (see above), not phase-mapped.
 |-------------|-------|--------|
 | CHAN-01 | Phase 1 | Complete |
 | CHAN-02 | Phase 1 | Complete |
-| CHAN-03 | Phase 1 | Pending |
+| CHAN-03 | Phase 1 | Complete |
 | CHAN-04 | Phase 1 | Pending |
 | CHAN-05 | Phase 1 | Pending |
 | SCENEFWD-01 | Phase 2 | Pending |
