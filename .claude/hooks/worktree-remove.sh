@@ -2,13 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
-# WorktreeRemove hook: cleans up the jj workspace + on-disk directory that
+# WorktreeRemove hook: cleans up the git worktree + on-disk directory that
 # WorktreeCreate provisioned. Mirrors the manual cleanup documented in
 # CLAUDE.md "Landing the Plane":
 #
 #     cd <repo-root>
-#     jj workspace forget <name>
-#     rm -rf <path>
+#     git worktree remove <path>
+#
+# (`git worktree remove` deletes both the working-tree directory and git's
+# per-worktree admin entry in one step, so no separate `rm -rf` is needed on
+# the happy path. The branch is intentionally left in place — parity with the
+# old `jj workspace forget`, which never deleted the bookmark.)
 #
 # Contract (from https://code.claude.com/docs/en/hooks.md):
 #   - Fire-and-forget. No decision control. Failures are logged in debug
@@ -63,19 +67,19 @@ if [ ! -d "$WT_PATH" ]; then
   exit 0
 fi
 
-# Resolve repo root and the .worktrees parent. jj workspace root works from
-# any workspace, including the one being removed (we'll cd out of it before
-# calling `jj workspace forget`).
-WS_ROOT="$(jj workspace root 2>/dev/null || true)"
+# Resolve repo root and the .worktrees parent. git rev-parse works from any
+# worktree, including the one being removed (we'll cd to the main repo before
+# calling `git worktree remove`).
+WS_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "$WS_ROOT" ]; then
-  echo "worktree-remove.sh: not in a jj repo; skipping" >&2
+  echo "worktree-remove.sh: not in a git repository; skipping" >&2
   exit 0
 fi
 cd "$WS_ROOT"
-# shellcheck source=../../scripts/jj-main-repo.sh
-. "$WS_ROOT/scripts/jj-main-repo.sh"
+# shellcheck source=../../scripts/git-main-repo.sh
+. "$WS_ROOT/scripts/git-main-repo.sh"
 
-# WORKTREES is set by jj-main-repo.sh as <repo-parent>/.worktrees. Both
+# WORKTREES is set by git-main-repo.sh as <repo-parent>/.worktrees. Both
 # sides are now symlink-resolved (the existence check above guarantees
 # the cd succeeds).
 ABS_WT="$(cd "$WT_PATH" && pwd -P)"
@@ -95,16 +99,21 @@ NAME="${ABS_WT##*/}"
   exit 0
 }
 
-# Run from the main repo so `jj workspace forget` is unambiguous and we
-# don't try to forget the workspace whose working copy is our cwd.
+# Run from the main repo so `git worktree remove` is unambiguous and we
+# don't try to remove the worktree whose working copy is our cwd.
 cd "$MAIN_REPO"
 
-# Order: rm-rf first, then jj workspace forget. The dominant failure mode
-# of two-step cleanup is "step 1 succeeds, step 2 fails". With this order
-# the recoverable orphan is a dangling jj workspace ref (which `jj
-# workspace forget` cleanly handles on next attempt). The opposite order
-# leaves an on-disk orphan dir under .worktrees/ that `task workspace:new`
-# would silently re-adopt via its idempotent `[ -d "$TARGET" ]` branch.
-rm -rf -- "$ABS_WT"
-jj workspace forget "$NAME" || \
-  echo "worktree-remove.sh: jj workspace forget '$NAME' failed (already forgotten?)" >&2
+# `git worktree remove` is atomic: it deletes the working-tree dir AND git's
+# per-worktree admin entry together, so there's no "step 1 succeeded, step 2
+# failed" orphan window that the old two-step jj cleanup had. `--force` is
+# appropriate here — this hook runs post-push, so any uncommitted/untracked
+# residue is throwaway. Fallback: if the dir exists but git doesn't track it
+# as a worktree (a hand-orphaned dir), rm it and prune the stale admin ref so
+# `task workspace:new` won't re-adopt it via its idempotent `[ -d ]` branch.
+if git worktree remove --force "$ABS_WT" 2>/dev/null; then
+  :
+else
+  rm -rf -- "$ABS_WT"
+  git worktree prune >/dev/null 2>&1 || \
+    echo "worktree-remove.sh: git worktree remove/prune '$NAME' failed (already gone?)" >&2
+fi

@@ -42,7 +42,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || {
 # usually solo). nudge = stderr advisory only. Env-overridable for tests and
 # emergencies. Subagent calls (agent_id present) are exempt: offload agents
 # and implementer subagents run task freely in their own cheap contexts.
-# Escape hatch: append `# offload-exempt` to the command (cf. # jj-exempt).
+# Escape hatch: append `# offload-exempt` to the command.
 OFFLOAD_ENFORCE="${OFFLOAD_ENFORCE:-deny}"   # ← deny default: agent_id split + live deny path verified in a post-merge fresh-workspace session (holomush-afq2t). Env-overridable for tests/emergencies.
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null) || AGENT_ID=""
 
@@ -106,10 +106,10 @@ first_cmd_word() {
 # - || fallback clauses are checked as independent commands, which may
 #   produce false positives (e.g., "cmd || cat /dev/null").
 # - The control-flow body exemption (depth>0) applies to the offload redirect too: 'for …; do task test; done' is not matched — same accepted hole as the pre-existing go-test block; do not "fix" by changing depth semantics (it exists to kill cat/tail false positives).
-# - '# offload-exempt' is a raw-command substring check (mirrors # jj-exempt): a quoted occurrence anywhere in a multi-segment command exempts all its task segments. Accepted: fail-open on an advisory layer.
+# - '# offload-exempt' is a raw-command substring check: a quoted occurrence anywhere in a multi-segment command exempts all its task segments. Accepted: fail-open on an advisory layer.
 
 # Strip single- and double-quoted string contents (across newlines) before
-# segment-splitting so commands like `jj describe -m 'message contains find
+# segment-splitting so commands like `git commit -m 'message contains find
 # or rg or cat in the body'` don't false-trigger on lines whose first
 # non-quote token happens to match a blocked tool name. Crude — does not
 # handle escaped quotes inside quotes — but covers real hook inputs. See

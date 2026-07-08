@@ -2,17 +2,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
-# PreToolUse hook: keep `gh` invocations from a jj workspace from failing
-# with the cryptic "fatal: not a git repository ... Stopping at filesystem
-# boundary" error.
+# PreToolUse hook: nudge `gh` invocations toward an explicit repo (-R /
+# GH_REPO=) when gh's git-based repo discovery might not resolve the remote.
 #
-# jj workspaces under `<repo-parent>/.worktrees/<name>/` don't materialise
-# a `.git/` directory — only the main checkout has one. `gh` follows git's
-# repo-discovery algorithm starting from cwd, walks up to the filesystem
-# boundary at `/Volumes`, and bails. This hook intercepts the failure mode
-# at the Bash boundary so the assistant gets an actionable message
-# pointing at the two valid fixes (-R / GH_REPO=) instead of having to
-# debug git's discovery rules.
+# Under native git this is a rare edge case: a linked worktree under
+# `<repo-parent>/.worktrees/<name>/` carries a `.git` FILE that links back to
+# the main checkout, so `gh` normally auto-detects the remote. This hook
+# stays a thin defensive net for the unusual case where a worktree's `.git`
+# link is broken or absent — there `gh` follows git's repo-discovery algorithm
+# from cwd, walks up to the filesystem boundary at `/Volumes`, and bails with
+# the cryptic "fatal: not a git repository ... Stopping at filesystem boundary"
+# error. The hook intercepts that at the Bash boundary so the assistant gets an
+# actionable message pointing at the two valid fixes (-R / GH_REPO=) instead of
+# having to debug git's discovery rules.
 #
 # Companion to enforce-bd-beads-dir.sh (same shape, different tool). Unlike
 # bd, many `gh` subcommands are repo-agnostic (auth, config, version,
@@ -189,24 +191,26 @@ has_repo_flag() {
   return 1
 }
 
-# Resolve workspace context. Same pattern as enforce-bd-beads-dir.sh.
-WS_ROOT="$(jj workspace root 2>/dev/null || true)"
-if [ -z "$WS_ROOT" ] || [ ! -e "$WS_ROOT/scripts/jj-main-repo.sh" ]; then
+# Resolve worktree context. Same pattern as enforce-bd-beads-dir.sh.
+WS_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$WS_ROOT" ] || [ ! -e "$WS_ROOT/scripts/git-main-repo.sh" ]; then
   exit 0
 fi
 
-# shellcheck source=../../scripts/jj-main-repo.sh
-( cd "$WS_ROOT" && . "$WS_ROOT/scripts/jj-main-repo.sh" >/dev/null 2>&1 ) || exit 0
+# shellcheck source=../../scripts/git-main-repo.sh
+( cd "$WS_ROOT" && . "$WS_ROOT/scripts/git-main-repo.sh" >/dev/null 2>&1 ) || exit 0
 cd "$WS_ROOT" || exit 0
-# shellcheck source=../../scripts/jj-main-repo.sh
-. "$WS_ROOT/scripts/jj-main-repo.sh"
+# shellcheck source=../../scripts/git-main-repo.sh
+. "$WS_ROOT/scripts/git-main-repo.sh"
 
 # In the main repo? cwd has .git/, gh discovery succeeds. Allow.
 if [ "${IS_DEFAULT:-no}" = "yes" ]; then
   exit 0
 fi
 
-# Defensive: if somehow the workspace has a usable .git/, gh works. Allow.
+# A linked worktree carries a `.git` file (or dir) → gh discovery succeeds.
+# This is the NORMAL case under native git, so the hook almost always allows
+# here; it only proceeds to nudge when the `.git` link is missing/broken.
 if [ -d "$WS_ROOT/.git" ] || [ -f "$WS_ROOT/.git" ]; then
   exit 0
 fi
@@ -251,7 +255,7 @@ fi
 
 # Strip single- and double-quoted string contents (including across newlines)
 # before segment-splitting. This prevents commands like
-#   jj describe -m 'multi-line\nmessage starting with "gh ..."'
+#   git commit -m 'multi-line\nmessage starting with "gh ..."'
 # from false-triggering on lines whose first non-quote token happens to be
 # `gh`. Crude — does not handle escaped quotes inside quotes — but covers
 # real-world hook inputs. If `gh` appears OUTSIDE quotes anywhere, the
@@ -312,8 +316,8 @@ while IFS= read -r segment; do
   # would be lost. The user has the original command in their shell history;
   # we just tell them how to make it work.
   cat >&2 <<EOF
-\`gh\` invoked from a jj workspace ($WS_ROOT) without a repo specifier.
-jj workspaces don't have their own .git/, so gh will fail with:
+\`gh\` invoked from a worktree ($WS_ROOT) whose .git link is missing or
+broken, so gh can't discover the repo and will fail with:
 "fatal: not a git repository ... Stopping at filesystem boundary".
 
 Pick one:

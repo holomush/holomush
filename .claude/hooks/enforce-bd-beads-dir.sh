@@ -2,22 +2,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
-# PreToolUse hook: keep `bd` invocations from a jj workspace from failing
-# with the unhelpful "no beads database found" error.
+# PreToolUse hook: keep `bd` invocations from a fresh git worktree from
+# failing with the unhelpful "no beads database found" error.
 #
-# Each jj workspace under `<repo-parent>/.worktrees/<name>/` materialises an
-# empty `.beads/` (only the tracked config + .gitignore land there; the Dolt
-# database lives in the main repo's `.beads/dolt/`). When `bd` is invoked
-# from such a workspace, its lookup terminates on the empty `.beads/` and
-# fails. This hook intercepts the failure mode at the Bash boundary so the
+# Each git worktree under `<repo-parent>/.worktrees/<name>/` gets a fresh
+# checkout with an empty `.beads/` (only the tracked config + .gitignore land
+# there; the Dolt database lives in the main repo's `.beads/dolt/`). When `bd`
+# is invoked from such a worktree, its lookup terminates on the empty `.beads/`
+# and fails. This hook intercepts the failure mode at the Bash boundary so the
 # assistant gets an actionable message instead of having to debug bd's
 # resolution logic.
 #
 # `task workspace:new` (and bd's own `.beads/redirect` mechanism) is the
-# proper fix: when a workspace is created we write `.beads/redirect`
+# proper fix: when a worktree is created we write `.beads/redirect`
 # pointing at the main repo's `.beads/`. This hook detects that the fix is
-# in place and stays silent. It only fires for legacy workspaces created
-# before the redirect-writing change landed.
+# in place and stays silent. It only fires for hand-made worktrees created
+# without the redirect (e.g. a bare `git worktree add`).
 #
 # Error strategy: same as enforce-task-runner.sh — fail open on parse
 # errors (bd command proceeds and bd's own error surfaces if it still
@@ -119,25 +119,25 @@ first_cmd_word() {
   echo "$word"
 }
 
-# Resolve workspace context. If we can't determine the main repo, fail
+# Resolve worktree context. If we can't determine the main repo, fail
 # open — bd's own error message will surface for the user.
-WS_ROOT="$(jj workspace root 2>/dev/null || true)"
-if [ -z "$WS_ROOT" ] || [ ! -e "$WS_ROOT/scripts/jj-main-repo.sh" ]; then
+WS_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$WS_ROOT" ] || [ ! -e "$WS_ROOT/scripts/git-main-repo.sh" ]; then
   exit 0
 fi
 
-# shellcheck source=../../scripts/jj-main-repo.sh
-( cd "$WS_ROOT" && . "$WS_ROOT/scripts/jj-main-repo.sh" >/dev/null 2>&1 ) || exit 0
+# shellcheck source=../../scripts/git-main-repo.sh
+( cd "$WS_ROOT" && . "$WS_ROOT/scripts/git-main-repo.sh" >/dev/null 2>&1 ) || exit 0
 cd "$WS_ROOT" || exit 0
-# shellcheck source=../../scripts/jj-main-repo.sh
-. "$WS_ROOT/scripts/jj-main-repo.sh"
+# shellcheck source=../../scripts/git-main-repo.sh
+. "$WS_ROOT/scripts/git-main-repo.sh"
 
 # In the main repo? bd's lookup will find the real .beads/ in cwd. Allow.
 if [ "${IS_DEFAULT:-no}" = "yes" ]; then
   exit 0
 fi
 
-# Proper fix already in place for this workspace? Allow.
+# Proper fix already in place for this worktree? Allow.
 # - .beads/redirect: bd's own per-worktree override (preferred form)
 # - .beads/dolt/: the Dolt directory got materialised here somehow
 if [ -f "$WS_ROOT/.beads/redirect" ] || [ -d "$WS_ROOT/.beads/dolt" ]; then
@@ -145,7 +145,7 @@ if [ -f "$WS_ROOT/.beads/redirect" ] || [ -d "$WS_ROOT/.beads/dolt" ]; then
 fi
 
 # Strip single- and double-quoted string contents (across newlines) before
-# segment-splitting so commands like `jj describe -m 'msg containing bd'`
+# segment-splitting so commands like `git commit -m 'msg containing bd'`
 # don't false-trigger. See enforce-gh-repo.sh for the same pattern + caveats.
 STRIPPED=$(printf '%s' "$COMMAND" | perl -0777 -pe "s/'[^']*'//g; s/\"[^\"]*\"//g" 2>/dev/null) || STRIPPED="$COMMAND"
 SEGMENTS=$(printf '%s' "$STRIPPED" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
@@ -186,8 +186,8 @@ while IFS= read -r segment; do
     # `bd note 'foo bar'`) would be lost. The user has the original command
     # in their shell history; we just tell them how to make it work.
     cat >&2 <<EOF
-\`bd\` invoked from a jj workspace ($WS_ROOT) without BEADS_DIR set.
-The workspace's .beads/ is empty; bd's lookup will fail with "no beads
+\`bd\` invoked from a git worktree ($WS_ROOT) without BEADS_DIR set.
+The worktree's .beads/ is empty; bd's lookup will fail with "no beads
 database found".
 
 Pick one:
@@ -195,12 +195,12 @@ Pick one:
   • Prepend BEADS_DIR to your bd command, e.g.:
         BEADS_DIR='$MAIN_REPO/.beads' bd ready
 
-  • Permanent fix for this workspace (one-time, then bd works bare):
+  • Permanent fix for this worktree (one-time, then bd works bare):
         printf '%s\n' '$MAIN_REPO/.beads' > '$WS_ROOT/.beads/redirect'
 
 The permanent fix uses bd's own per-worktree redirect mechanism;
-\`task workspace:new\` writes it automatically for new workspaces, but
-this workspace predates that change (holomush-k98d).
+\`task workspace:new\` writes it automatically for new worktrees, but
+this one was created without it (holomush-k98d).
 EOF
     exit 2
   fi

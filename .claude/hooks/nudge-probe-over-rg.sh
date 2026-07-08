@@ -22,7 +22,7 @@ INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 [[ -z "$COMMAND" ]] && exit 0
 
-# Strip quoted strings so rg inside `jj describe -m '...'` doesn't false-trigger.
+# Strip quoted strings so rg inside `git commit -m '...'` doesn't false-trigger.
 STRIPPED=$(printf '%s' "$COMMAND" | perl -0777 -pe "s/'[^']*'//g; s/\"[^\"]*\"//g" 2>/dev/null) || STRIPPED="$COMMAND"
 
 # Inspect each command segment separately. The previous one-shot

@@ -178,7 +178,7 @@ SKILL="$REPO_ROOT/.claude/skills/capture-adrs/SKILL.md"
 if [ -f "$SKILL" ]; then
   # Look for command-shaped forbidden strings (in code blocks or inline-command form).
   # The Anti-patterns section may mention them in 'DO NOT commit' prose; allow that.
-  if grep -qE '(^\s*\$\s*(jj commit|jj describe|git commit|git add)|^\s*`(jj commit|jj describe|git commit|git add)`)' "$SKILL"; then
+  if grep -qE '(^\s*\$\s*(git commit|git add)|^\s*`(git commit|git add)`)' "$SKILL"; then
     check_fail "$SKILL: contains a commit/describe command — skill MUST NOT commit"
   fi
 fi

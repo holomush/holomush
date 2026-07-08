@@ -21,12 +21,9 @@ lower="$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')"
 
 # Best-effort: collect changed files vs trunk so domain reminders can fire when
 # the prompt is generic ("push this branch") but the diff actually touches
-# crypto/ABAC paths. Silent on failure (no jj/git, detached state, etc.).
+# crypto/ABAC paths. Silent on failure (no git, detached state, etc.).
 changed_paths=""
-if command -v jj >/dev/null 2>&1; then
-  changed_paths="$(jj diff --name-only --from 'trunk()' --to '@' 2>/dev/null || true)"
-fi
-if [ -z "$changed_paths" ] && command -v git >/dev/null 2>&1; then
+if command -v git >/dev/null 2>&1; then
   base="$(git merge-base HEAD origin/main 2>/dev/null || true)"
   if [ -n "$base" ]; then
     changed_paths="$(git diff --name-only "$base"...HEAD 2>/dev/null || true)"

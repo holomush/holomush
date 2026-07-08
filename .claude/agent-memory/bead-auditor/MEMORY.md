@@ -80,7 +80,8 @@ jq -r '.[].id' /tmp/bead-audit/open.json |
 
 - **`.beads/` lives in main repo, not worktrees.** Running `bd show`
   from a worktree cwd emits `no beads database found`. Always `cd` to
-  the main repo root (resolve via `jj root` from `.jj/repo`).
+  the main repo root (resolve via `git rev-parse --path-format=absolute
+  --git-common-dir`; its parent directory is the main checkout).
 - **Closing children before parents.** `bd close <epic>` errors if any
   child is still open. Either close children first, or use `--force` on
   the epic (only after explicitly auditing why children remain open).

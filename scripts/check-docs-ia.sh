@@ -34,7 +34,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$REPO_ROOT/site/dist"
 CONTENT="$REPO_ROOT/site/src/content/docs"
 CONFIG="$REPO_ROOT/site/astro.config.mjs"
-DIFF_BASE="${SP2_DIFF_BASE:-main@origin}"
+DIFF_BASE="${SP2_DIFF_BASE:-origin/main}"
 AUDIENCES=(guide operating extending contributing)
 
 fail=0
@@ -118,16 +118,16 @@ fi
 rg -q "favicon: '/favicon.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs favicon is not '/favicon.svg'"; inv5_ok=0; }
 rg -q "light: './src/assets/logo-light.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs logo.light missing logo-light.svg"; inv5_ok=0; }
 rg -q "dark: './src/assets/logo-dark.svg'" "$CONFIG" || { err "INV-5: astro.config.mjs logo.dark missing logo-dark.svg"; inv5_ok=0; }
-# vs-base diffs (font stack + non-brand config identity + tsconfig) require jj.
+# vs-base diffs (font stack + non-brand config identity + tsconfig) require git.
 vsbase_ran=0
-if ! command -v jj >/dev/null 2>&1; then
-  note "⚑ INV-5: vs-base diffs skipped (jj not available); manifest + config-presence still enforced"
-elif ! ( cd "$REPO_ROOT" && jj --no-pager log -r "$DIFF_BASE" >/dev/null 2>&1 ); then
-  note "⚑ INV-5: vs-base diffs skipped (revset '$DIFF_BASE' not resolvable); manifest + config-presence still enforced"
+if ! command -v git >/dev/null 2>&1; then
+  note "⚑ INV-5: vs-base diffs skipped (git not available); manifest + config-presence still enforced"
+elif ! ( cd "$REPO_ROOT" && git rev-parse --verify --quiet "$DIFF_BASE^{commit}" >/dev/null 2>&1 ); then
+  note "⚑ INV-5: vs-base diffs skipped (ref '$DIFF_BASE' not resolvable); manifest + config-presence still enforced"
 else
   vsbase_ran=1
   # custom.css MAY be polished (spacing/accent) but its FONT STACK MUST be preserved (SP5 INV-9).
-  css_font="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/src/styles/custom.css 2>/dev/null \
+  css_font="$( cd "$REPO_ROOT" && git diff "$DIFF_BASE" -- site/src/styles/custom.css 2>/dev/null \
     | rg '^[+-]' | rg -v '^[+-]{3}' | rg -i 'font-family|--sl-font|@font-face|@import' || true )"
   if [[ -n "$css_font" ]]; then
     err "INV-5: custom.css changed a font declaration vs $DIFF_BASE (fonts MUST be preserved):"
@@ -135,13 +135,13 @@ else
   fi
   # Non-brand identity fields MUST NOT change vs base. logo/favicon are brand-managed
   # (manifest + presence above); social + plugins MAY evolve.
-  cfg_brand="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/astro.config.mjs 2>/dev/null \
+  cfg_brand="$( cd "$REPO_ROOT" && git diff "$DIFF_BASE" -- site/astro.config.mjs 2>/dev/null \
     | rg '^[+-]' | rg -v '^[+-]{3}' | rg 'title:|description:|customCss:|site:' || true )"
   if [[ -n "$cfg_brand" ]]; then
     err "INV-5: astro.config.mjs changed a non-brand identity field (title/description/customCss/site):"
     printf '    %s\n' "$cfg_brand"; inv5_ok=0
   fi
-  ts_removed="$( cd "$REPO_ROOT" && jj --no-pager diff --git --from "$DIFF_BASE" -- site/tsconfig.json 2>/dev/null \
+  ts_removed="$( cd "$REPO_ROOT" && git diff "$DIFF_BASE" -- site/tsconfig.json 2>/dev/null \
     | rg '^-' | rg -v '^-{3}' | rg 'extends|include|exclude' || true )"
   if [[ -n "$ts_removed" ]]; then
     err "INV-5: tsconfig.json removed a preserved key (only the paths alias may be added):"
@@ -152,7 +152,7 @@ if ((inv5_ok)); then
   if ((vsbase_ran)); then
     ok "INV-5 branding: identity assets match manifest; config wires logo light/dark + favicon.svg; fonts preserved; non-brand identity unchanged; tsconfig paths-alias only"
   else
-    ok "INV-5 branding: identity assets match manifest; config wires logo light/dark + favicon.svg (vs-base font/identity/tsconfig diffs skipped — no jj base)"
+    ok "INV-5 branding: identity assets match manifest; config wires logo light/dark + favicon.svg (vs-base font/identity/tsconfig diffs skipped — no git base)"
   fi
 fi
 
