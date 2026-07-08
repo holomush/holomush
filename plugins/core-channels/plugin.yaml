@@ -5,14 +5,18 @@ name: core-channels
 version: 1.0.0
 type: binary
 
-# NOTE: `resource_types: [channel]` is deliberately DEFERRED to plan 01-04
-# (the ChannelAttributeProvider / resolver). Declaring a resource type makes the
-# host perform schema discovery against the plugin's AttributeResolverService at
-# load (manager.go:1247 → discoverAndRegisterAttributes); a plugin that declares
-# a resource type but does not yet serve that RPC fails to load. This foundation
-# skeleton serves no resolver, so it must not declare `resource_types` — 01-04
-# adds `resource_types: [channel]` together with RegisterAttributeResolver so the
-# pair lands atomically and the plugin stays loadable at every step.
+# resource_types: [channel] auto-registers the host-side ABAC proxy provider
+# (CollectResourceTypes → NewPluginAttributeProvider) for the plugin-owned
+# `channel` resource type — NO edit to internal/access/prefix.go or
+# internal/command validResourceTypes is needed. Declaring it makes the host run
+# schema discovery against the plugin's AttributeResolverService at load
+# (manager.go → discoverAndRegisterAttributes), so it MUST land together with
+# RegisterAttributeResolver (main.go). 01-03 deferred this here for exactly that
+# reason: a resource type declared without a served resolver fails LoadAll. The
+# ChannelResolver (resolver.go) serves GetSchema + ResolveResource resource-side
+# (D-03 Landmine-1 reconciliation: membership is resource.channel.members, not a
+# principal-side attribute — the plugin proto exposes no subject RPC).
+resource_types: [channel]
 
 # emits: [channel] declares the plugin-owned event domain (subjects
 # events.<game_id>.channel.>). Per INV-PRIVACY-7 a non-empty emits requires a

@@ -37,11 +37,17 @@ type channelConfig struct {
 }
 
 // channelPlugin is the binary plugin entry struct. It implements:
-//   - pluginsdk.Handler         (HandleEvent)
-//   - pluginsdk.ServiceProvider (RegisterServices, Init)
+//   - pluginsdk.Handler                    (HandleEvent)
+//   - pluginsdk.ServiceProvider            (RegisterServices, Init)
+//   - pluginsdk.AttributeResolverProvider  (RegisterAttributeResolver)
+//
+// resolver is pre-allocated in main() so the gRPC server registration in
+// RegisterAttributeResolver (which runs before Init) has a valid receiver; Init
+// wires the store into it after NewChannelStore returns.
 type channelPlugin struct {
-	cfg   channelConfig
-	store *channelStore
+	cfg      channelConfig
+	store    *channelStore
+	resolver *ChannelResolver
 }
 
 // HandleEvent is a no-op for this foundation plan. The channel plugin does not
@@ -50,10 +56,22 @@ func (p *channelPlugin) HandleEvent(_ context.Context, _ pluginsdk.Event) ([]plu
 	return nil, nil
 }
 
-// RegisterServices is a no-op for this foundation plan. ChannelService (01-05)
-// and PluginAuditService (01-06) are registered by later plans; the manifest
+// RegisterServices is a no-op for this plan. ChannelService (01-05) and
+// PluginAuditService (01-06) are registered by later plans; the manifest
 // declares no `provides` yet, so nothing is registered here.
 func (p *channelPlugin) RegisterServices(_ grpc.ServiceRegistrar) {}
+
+// RegisterAttributeResolver registers the ChannelResolver on the go-plugin gRPC
+// transport so the host's ABAC engine can resolve channel attributes during
+// policy evaluation. The host auto-registers
+// holomush.plugin.v1.AttributeResolverService via this AttributeResolverProvider
+// method — it MUST NOT appear in the manifest `provides` (that causes
+// SERVICE_ALREADY_REGISTERED). The paired manifest `resource_types: [channel]`
+// declaration is what drives the host to call GetSchema at load; the two land
+// together so the plugin stays loadable (01-03 deferred resource_types to here).
+func (p *channelPlugin) RegisterAttributeResolver(registrar grpc.ServiceRegistrar) {
+	pluginv1.RegisterAttributeResolverServiceServer(registrar, p.resolver)
+}
 
 // applyConfig decodes the host-delivered plugin_config into p.cfg and performs
 // plugin-owned semantic validation. The host validates the generic duration/int
@@ -113,6 +131,7 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 		return oops.Code("CHANNEL_INIT_FAILED").Wrap(err)
 	}
 	p.store = store
+	p.resolver.store = store
 
 	// Seed the default channel set (incl. Public) idempotently. Safe to re-run
 	// on every Init — ON CONFLICT DO NOTHING on lower(name) (D-01, T-01-13).
@@ -129,7 +148,9 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 }
 
 func main() {
-	plugin := &channelPlugin{}
+	plugin := &channelPlugin{
+		resolver: &ChannelResolver{},
+	}
 	pluginsdk.ServeWithServices(
 		&pluginsdk.ServeConfig{Handler: plugin},
 		plugin,
