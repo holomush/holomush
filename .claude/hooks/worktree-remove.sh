@@ -113,6 +113,12 @@ cd "$MAIN_REPO"
 if git worktree remove --force "$ABS_WT" 2>/dev/null; then
   :
 else
+  # A LOCKED worktree makes `git worktree remove --force` fail, and a plain
+  # `git worktree prune` skips locked entries — so without unlocking, the dir
+  # would be removed but git would keep tracking a "missing but locked"
+  # worktree, blocking recreation of the same name. Unlock first (no-op if it
+  # wasn't locked), then rm + prune the now-stale admin ref.
+  git worktree unlock "$ABS_WT" 2>/dev/null || true
   rm -rf -- "$ABS_WT"
   git worktree prune >/dev/null 2>&1 || \
     echo "worktree-remove.sh: git worktree remove/prune '$NAME' failed (already gone?)" >&2

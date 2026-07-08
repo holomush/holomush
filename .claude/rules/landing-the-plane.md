@@ -16,7 +16,7 @@ When ending a work session, work is **NOT complete until changes are pushed**. V
    - `git add -A && git commit` your work (conventional-commit message; end with the AI authorship byline)
    - **Pre-push rebase**: `git fetch origin && git rebase origin/main`, resolve any conflicts, then re-run `task pr-prep`
    - `git push -u origin <branch>`
-   - Verify with `git status` (clean, ahead of `origin/main` by your commits)
+   - Verify with `git status` (working tree clean) — the branch-vs-`main` gap was already established by the rebase step above
 5. **Clean up worktree (post-merge):**
    ```bash
    cd <repo-root>

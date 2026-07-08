@@ -41,7 +41,7 @@ otherwise infer from the current git branch).
 
 5. **Push**
    - `git push -u origin <branch>`
-   - `git status` to verify (clean; ahead of `origin/main` by your commits)
+   - `git status` to verify (working tree clean) — the ahead-of-`main` gap was established by the rebase step above; `git status` compares against the branch's own upstream, not `main`
 
 6. **Worktree cleanup** (post-merge only — skip if the PR hasn't landed yet; the post-push hook reminds you)
    - `cd <repo-root>` — the cd matters; `../.worktrees/<name>` is unsafe from any nested cwd

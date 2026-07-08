@@ -30,8 +30,10 @@ fi
 ( cd "$ws_root" && . "$ws_root/scripts/git-main-repo.sh" >/dev/null 2>&1 ) || exit 0
 
 # Re-source in current shell to populate IS_DEFAULT (the subshell above
-# only validated the script doesn't error; we need the var here).
-cd "$ws_root"
+# only validated the script doesn't error; we need the var here). Guard the
+# cd with `|| exit 0` so a worktree that vanished between the dry-run above
+# and here never blocks session start (this hook is informational only).
+cd "$ws_root" || exit 0
 # shellcheck source=../../scripts/git-main-repo.sh
 . "$ws_root/scripts/git-main-repo.sh"
 
