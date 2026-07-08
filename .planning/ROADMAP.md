@@ -73,7 +73,7 @@ same substrate guarantees (EventBus, ABAC, audit) already proven by Scenes.
 4. Faction-restricted channels enforce membership-based access distinct from open channels
 5. `core-channels` validates the `eventkit`/`groupkit` SDK extraction pattern as the substrate's second
    consumer (INV-S7, N=2 rule) — extraction itself is a follow-on, not a blocking criterion of this phase
-**Plans**: 3/10 plans executed
+**Plans**: 4/10 plans executed
 
 Plans:
 **Wave 1**
@@ -84,7 +84,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-04-PLAN.md — ChannelResolver (resource-side membership, D-03) + ABAC seed policies (incl. write-channel-as-member, MED-5) (wave 2)
+- [x] 01-04-PLAN.md — ChannelResolver (resource-side membership, D-03) + ABAC seed policies (incl. write-channel-as-member, MED-5) (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -160,7 +160,7 @@ completion, and platform hardening can proceed in parallel if desired)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Channels Subsystem | 3/10 | In Progress|  |
+| 1. Channels Subsystem | 4/10 | In Progress|  |
 | 2. Scenes Lineage Completion | 0/TBD | Not started | - |
 | 3. Platform Hardening & Deployment Scaling | 0/TBD | Not started | - |
 

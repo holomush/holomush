@@ -6,14 +6,14 @@ current_phase: 01
 current_phase_name: channels-subsystem
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-08T22:20:01.068Z"
+last_updated: "2026-07-08T22:40:36.705Z"
 last_activity: 2026-07-08
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 10
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 01 (channels-subsystem) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Ready to execute
 Last activity: 2026-07-08 — Phase 01 execution started
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P01 | 11 | 2 tasks | 7 files |
 | Phase 01 P02 | 95min | 3 tasks | 24 files |
 | Phase 01-channels-subsystem P03 | 40min | 3 tasks | 11 files |
+| Phase 01 P04 | 40min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,8 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: 01-01: ChannelService proto mirrors SceneService; identity by ID not payload name (D-08); plaintext no crypto.emits (D-04)
 - [Phase ?]: 01-02: ONE shared pluginauthz fence (AuthorizePluginStreamContribution) enforced at BOTH session-establishment merge and mid-session stream.subscription — relative-only, forbidden system/audit/crypto, owned-emit-domain; in-handler control, not read-only seed forbids (R2-B/R3-A)
 - [Phase ?]: 01-02: LIVE_ONLY served end-to-end (AddStreamWithMode accepts ReplayModeLiveOnly); no-history-flood is structural via SetFilters start-policy preservation
+- [Phase ?]: 01-04: channel membership resolved RESOURCE-side (resource.channel.members) — D-03 Landmine-1; plugin proto has no subject RPC
+- [Phase ?]: 01-04: Layer-1 execute-channel-commands gate deferred to the channel command's plan (01-05/01-07) — policy validator rejects a policy targeting an undeclared command
 
 ### Pending Todos
 
@@ -107,7 +110,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-08T22:20:01.063Z
+Last session: 2026-07-08T22:40:26.626Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
 Stopped at: Phase 1 context gathered
