@@ -225,7 +225,7 @@ task test:int                                     # integration tests (needs Doc
 | **MUST** delegate verbose task runs | Dispatch `local-check` for `task test\|lint\|build\|test:int\|test:cover` (and `local-pr-prep` for pr-prep iteration) instead of inline Bash — hook-enforced; `# offload-exempt` overrides when raw output is genuinely needed |
 | **MUST** run final gate inline      | A `local-check` PASS satisfies "run `task test` before claiming complete"; the FINAL `task pr-prep` before a push still runs inline in the parent |
 
-> **`task fmt` mutates files** (SPDX headers, reflowed tables) — **commit those edits**. Uncommitted `fmt` output is a common cause of red CI (`license:check` / markdown lint) on an otherwise-green PR.
+> **`task fmt` mutates files** (SPDX headers, reflowed tables) — **commit those edits**. Uncommitted `fmt` output is a common cause of red CI (`license:check` / markdown lint) on an otherwise-green PR. Editing an aligned Go `const`/`var`/`struct` block (inserting a longer name or a mid-block comment) can pass `task build` + unit tests yet fail `task fmt:check` in CI — run `task fmt` after touching any aligned Go block.
 
 **MUST** run `task pr-prep` (fast lane) before creating a PR / pushing a PR branch; docs-only diffs auto-delegate to `task pr-prep:docs`. `task pr-prep:full` (opt-in; `HOLOMUSH_PR_PREP_FORCE_FULL=1` forces) adds integration + E2E in Docker. `Integration Test` + `E2E Test` are required CI checks protecting `main`. Lanes + lock/contention: [pr-prep how-to](site/src/content/docs/contributing/how-to/pr-prep.md).
 

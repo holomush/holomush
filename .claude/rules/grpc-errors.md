@@ -68,4 +68,4 @@ require.Equal(t, "STREAM_ACCESS_DENIED", got)
 
 ## Linter compliance
 
-When fixing lint failures in gRPC pass-through code, use **line-scoped** `//nolint:wrapcheck` directives with explanatory comments — NOT config-wide ignore patterns in `.golangci.yaml`. Repo precedent: `internal/web/handler.go:381,418,460,484` use `//nolint:wrapcheck // gRPC status errors pass through as-is`. There are 27+ such directives in the codebase. Widening `.golangci.yaml` violates CLAUDE.md ("MUST NOT disable lint/format rules without explicit user confirmation") and bypasses code-reviewer scrutiny on the actual offending site.
+When fixing lint failures in gRPC pass-through code, use **line-scoped** `//nolint:wrapcheck` directives with explanatory comments — NOT config-wide ignore patterns in `.golangci.yaml`. Repo precedent: `internal/web/handler.go:381,418,460,484` use `//nolint:wrapcheck // gRPC status errors pass through as-is`. There are 27+ such directives in the codebase. Widening `.golangci.yaml` violates CLAUDE.md ("MUST NOT disable lint/format rules without explicit user confirmation") and bypasses code-review scrutiny on the actual offending site.
