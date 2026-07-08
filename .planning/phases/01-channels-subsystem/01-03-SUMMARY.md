@@ -118,6 +118,7 @@ status: complete
 - **Files created:** 11
 
 ## Accomplishments
+
 - Loadable `core-channels` plugin skeleton — validated end-to-end by the whole-system census (`Manager.LoadAll` succeeds with core-channels present).
 - Plugin-owned schema with paired, reversible migrations: `channels` (case-insensitive unique name, `is_default` flag, `archived` soft-delete, per-channel `retention_days`), `channel_memberships` (per-character, `op` role dormant in CHECK), `channel_ops_events` (append-only journal), and plaintext `channel_log` (scene_log minus DEK columns, D-04). No location FK — channels are location-independent (CHAN-01).
 - `channelStore` covering create (tx: channel + owner membership + ops event), case-insensitive name lookup, idempotent join / ban-blocks-rejoin, leave (owner protected), list-for-character, GetWithMembership (members/banned/muted arrays for the resolver), mute/ban, and soft-archive delete.
@@ -129,9 +130,10 @@ status: complete
 2. **Task 2: channelStore CRUD + membership + case-insensitive name lookup** — `90a846799` (feat, TDD test+impl)
 3. **Task 3: idempotent default-channel seeding at Init + ListDefaultChannels** — `66d7e2a05` (feat, TDD test+impl)
 
-_Note: Task 2 and Task 3 are `tdd="true"`; see TDD Gate Compliance below._
+*Note: Task 2 and Task 3 are `tdd="true"`; see TDD Gate Compliance below.*
 
 ## Files Created/Modified
+
 - `plugins/core-channels/plugin.yaml` — DRAFT manifest (type binary, storage postgres, emits [channel], history_scope custom, audit block, config knobs)
 - `plugins/core-channels/main.go` — plugin entry; Init decodes/validates config, opens store, seeds defaults
 - `plugins/core-channels/types.go` — channelType/channelRole/channelState + name regex + transition validation
@@ -143,6 +145,7 @@ _Note: Task 2 and Task 3 are `tdd="true"`; see TDD Gate Compliance below._
 - `plugins/core-channels/store_test.go` — testcontainer integration tests
 
 ## Decisions Made
+
 - **history_scope: custom** (per plan R4-A) — the closed enum is {grid,scene,custom}; `custom` is the spec-correct fit for channels' membership-gated, plugin-owned QueryHistory visibility.
 - **`op` role kept dormant in the CHECK** (D-05 lightest path) — avoids a future migration to activate op/deop; `channelRole.IsValid()` treats only owner/member as usable.
 - **Timestamps as `TIMESTAMPTZ`/`time.Time`** (not pgnanos BIGINT) — this is a fresh plugin schema with no BIGINT-ns migration history to match; simplest correct choice.
@@ -153,6 +156,7 @@ _Note: Task 2 and Task 3 are `tdd="true"`; see TDD Gate Compliance below._
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Deferred `resource_types: [channel]` from the manifest to plan 01-04**
+
 - **Found during:** Task 3 (whole-system census verification)
 - **Issue:** The plan's manifest Artifacts list `resource_types: [channel]`. Declaring a resource type makes the host run schema discovery against the plugin's `AttributeResolverService` at load (`manager.go:1247 → discoverAndRegisterAttributes`). This foundation plan serves no resolver (that is plan 01-04), so the `GetSchema` RPC returns `Unimplemented`, the plugin fails `LoadAll`, and the existing `test/integration/wholesystem` census BeforeAll panics — a regression introduced purely by declaring the resource type early.
 - **Fix:** Removed `resource_types: [channel]` from `plugin.yaml` with an explanatory comment; 01-04 adds it back together with `RegisterAttributeResolver` so the pair lands atomically and the plugin stays loadable at every step. `emits: [channel]` + `history_scope: custom` + the audit block remain, so the manifest still parses and loads.
@@ -166,22 +170,28 @@ _Note: Task 2 and Task 3 are `tdd="true"`; see TDD Gate Compliance below._
 **Impact on plan:** Necessary to keep the plugin loadable and not regress the whole-system census. No scope change — resource_types is simply relocated to the plan that supplies its required resolver (01-04). All must_have truths still hold (manifest validates, core-channels loads, soft-archive prohibition asserted).
 
 ## TDD Gate Compliance
+
 Tasks 2 and 3 are `tdd="true"`. Because `channelStore` and its `store_test.go` are compilation-interdependent and the store tests are testcontainer integration tests (no meaningful RED run without the migrated schema), test and implementation were authored and committed together per task rather than as separate `test(...)` → `feat(...)` commits. Each task's behavior list was written as executable Ginkgo specs and verified GREEN (`task test:int -- ./plugins/core-channels/`, 45 tests, exit 0) before commit. No `feat` shipped without its asserting tests.
 
 ## Issues Encountered
+
 - **Markdown lint (`task lint`) reports 12 pre-existing MD041/MD075 issues in `.planning/` GSD artifacts** (PLAN.md/STATE.md/deferred-items.md — YAML-frontmatter files). None are in this plan's files. `lint:go` (0 issues) and `lint:proto` pass. Out of scope per the scope boundary; logged, not fixed.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Store + schema + seeding are the foundation for 01-04 (resolver/policies — which adds `resource_types: [channel]` + `RegisterAttributeResolver`), 01-05 (service/commands), 01-06 (audit `PluginAuditService`), 01-07 (prune), and 01-08 (guest auto-join via `ListDefaultChannels`).
 - 01-09 census: add `core-channels` to `expectedPlugins` once the resolver lands (01-04) so the census explicitly asserts its presence.
 
 ## Self-Check: PASSED
+
 - All created files verified present on disk (see Files Created).
 - All three task commits verified in `git log` (578b79bac, 90a846799, 66d7e2a05).
 
 ---
+
 *Phase: 01-channels-subsystem*
 *Completed: 2026-07-08*
