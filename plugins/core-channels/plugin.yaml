@@ -36,8 +36,20 @@ actor_kinds_claimable: [plugin, character]
 # this plan; the remaining RPCs land in 01-05b). It is proxied by the host, so
 # it is declared in `provides`. holomush.plugin.v1.AttributeResolverService is
 # auto-registered by the host via RegisterAttributeResolver (main.go) and MUST
-# NOT appear here (SERVICE_ALREADY_REGISTERED). PluginAuditService `provides`
-# lands with the audit RPC (01-06).
+# NOT appear here (SERVICE_ALREADY_REGISTERED). holomush.plugin.v1.PluginAuditService
+# is ALSO intentionally absent from `provides`: it is a per-plugin service reached
+# via the host's PluginAuditClient(pluginName) host-walk over the loaded plugin
+# hosts (manager.go), NOT via the shared singleton ServiceRegistry. Listing it in
+# `provides` makes the dependency DAG treat it as a globally-unique provided
+# service — and core-scenes already provides it, so the loader hard-fails
+# DUPLICATE_SERVICE_PROVIDER (dependency.go:112) and the whole-system census
+# panics. Audit reachability comes from THREE things that need no `provides`
+# entry: (1) RegisterServices calls RegisterPluginAuditServiceServer on this
+# plugin's own gRPC transport (main.go); (2) the `audit:` block below declares
+# subject ownership (events.*.channel.>) that drives the host's per-plugin audit
+# consumer + QueryHistory routing; (3) the host resolves the client per-plugin.
+# (01-06 R-DEV: the plan's "add PluginAuditService to provides" instruction was
+# corrected here — it collides with core-scenes' identical declaration.)
 provides:
   - holomush.channel.v1.ChannelService
 

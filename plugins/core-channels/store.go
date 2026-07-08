@@ -350,6 +350,37 @@ func (s *channelStore) ListForCharacter(ctx context.Context, characterID string)
 	return out, nil
 }
 
+// MembershipForHistory reports whether characterID is an active (non-banned)
+// owner/member of channelID, and their most-recent joined_at (the D-07 history
+// floor). It is the single membership+floor read the audit QueryHistory boundary
+// authorizes against (01-06).
+//
+// A missing channel and a missing/banned membership row both return
+// (false, zero, nil) by design: the audit-read boundary MUST NOT distinguish
+// "channel doesn't exist" from "you're not a member" — that would leak channel
+// existence to non-members (T-01-12). The primary key (channel_id, character_id)
+// makes joined_at single-valued; a leave+rejoin writes a fresh row, so joined_at
+// always reflects the most-recent join.
+func (s *channelStore) MembershipForHistory(ctx context.Context, channelID, characterID string) (bool, time.Time, error) {
+	var joinedAt time.Time
+	err := s.pool.QueryRow(
+		ctx, `
+		SELECT joined_at FROM channel_memberships
+		WHERE channel_id = $1 AND character_id = $2 AND banned = false
+		  AND role IN ('owner', 'member')
+		LIMIT 1`,
+		channelID, characterID,
+	).Scan(&joinedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, time.Time{}, nil
+		}
+		return false, time.Time{}, oops.Code("CHANNEL_MEMBERSHIP_LOOKUP_FAILED").
+			With("channel_id", channelID).With("character_id", characterID).Wrap(err)
+	}
+	return true, joinedAt, nil
+}
+
 // GetWithMembership returns the channel row plus its members / banned / muted
 // character-id lists in a single round trip. Used by the resolver (01-04) to
 // materialise ABAC attributes without separate queries. members contains

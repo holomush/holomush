@@ -53,6 +53,7 @@ type channelPlugin struct {
 	store     *channelStore
 	service   *channelService
 	resolver  *ChannelResolver
+	auditSrv  *ChannelAuditServer
 	evaluator pluginsdk.HostEvaluator
 }
 
@@ -66,9 +67,13 @@ func (p *channelPlugin) HandleEvent(_ context.Context, _ pluginsdk.Event) ([]plu
 // transport so the host can proxy channel RPCs to this plugin. It embeds
 // UnimplementedChannelServiceServer, so the not-yet-filled RPCs (added in
 // 01-05b) return Unimplemented and nothing calls them until then.
-// PluginAuditService (01-06) is registered by a later plan.
+// It also registers the PluginAuditService that serves the plugin-owned audit
+// subject prefix (events.*.channel.>) per the manifest's audit block: the host
+// forwards audit deliveries to AuditEvent and routes channel-subject
+// QueryHistory here.
 func (p *channelPlugin) RegisterServices(registrar grpc.ServiceRegistrar) {
 	channelv1.RegisterChannelServiceServer(registrar, p.service)
+	pluginv1.RegisterPluginAuditServiceServer(registrar, p.auditSrv)
 }
 
 // SetHostEvaluator is called by the SDK adapter during Init when the plugin
@@ -171,6 +176,14 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 	p.service.store = store
 	p.service.limiter = newCreateRateLimiter(p.cfg.CreateRateLimit, createRateWindow, time.Now)
 
+	// Wire the audit server: the log store shares the domain pool, and the
+	// membership lookup is the same store the resolver/service authorize against
+	// (field injection, fail-closed if unwired). The scrollback cap bounds a
+	// history page (D-07).
+	p.auditSrv.store = NewChannelAuditStore(store.Pool())
+	p.auditSrv.memberLookup = store // *channelStore satisfies channelMembershipAuthLookup
+	p.auditSrv.scrollbackCap = p.cfg.ScrollbackCap
+
 	// Set the game id for JetStream dot-style emit subjects. Substrate uses
 	// "main" as the default game_id when unset (mirrors core-scenes main.go);
 	// ServiceConfig carries no game_id field yet — documented expedient until
@@ -205,6 +218,7 @@ func main() {
 	plugin := &channelPlugin{
 		service:  &channelService{},
 		resolver: &ChannelResolver{},
+		auditSrv: &ChannelAuditServer{},
 	}
 	pluginsdk.ServeWithServices(
 		&pluginsdk.ServeConfig{Handler: plugin},
