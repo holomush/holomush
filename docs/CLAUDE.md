@@ -167,8 +167,7 @@ Content here
 
 ## Local quality checks
 
-There is no git pre-commit hook (the repo is `jj`-primary; `jj` does not fire
-git hooks reliably). Run `task fmt` to format and apply license headers, and
+Run `task fmt` to format and apply license headers, and
 `task pr-prep` to mirror the full CI gate before pushing. Documentation changes
 MUST pass `task lint:markdown`.
 
