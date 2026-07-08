@@ -54,21 +54,26 @@ Output: the remaining 8 RPC methods on `channelService` + main wiring; service t
 @.planning/phases/01-channels-subsystem/01-CONTEXT.md
 @.planning/phases/01-channels-subsystem/01-RESEARCH.md
 
-# Reference service — the structural verbs to MIRROR (self-enforcing ABAC per verb):
+# Reference service — the structural verbs to MIRROR (self-enforcing ABAC per verb)
+
 @plugins/core-scenes/service.go
 @plugins/core-scenes/plugin.yaml
-# Rules:
+
+## Rules
+
 @.claude/rules/gateway-boundary.md
 @.claude/rules/grpc-errors.md
 @.claude/rules/plugin-manifest.md
-# Prior artifacts this plan extends:
+
+## Prior artifacts this plan extends
+
 @plugins/core-channels/service.go
 @plugins/core-channels/store.go
 @plugins/core-channels/publish_events.go
 @plugins/core-channels/audit.go
 </context>
 
-## Artifacts this plan produces
+### Artifacts this plan produces
 
 - `plugins/core-channels/service.go` — adds to the existing `channelService` (from 01-05):
   - `InviteToChannel`, `MuteMember`, `BanMember`, `KickMember`, `TransferOwnership` — owner+admin ABAC self-enforced (D-05, no op), store mutation (`SetMuted`/`SetBanned`/membership removal/owner change from 01-03's store), `channel_ops_events` journal append, and a notice emit (channel_mute/ban/kick/rename) via the 01-06 emit path.
@@ -118,7 +123,8 @@ Output: the remaining 8 RPC methods on `channelService` + main wiring; service t
 </tasks>
 
 <threat_model>
-## Trust Boundaries
+
+### Trust Boundaries
 
 | Boundary | Description |
 |----------|-------------|
@@ -126,7 +132,7 @@ Output: the remaining 8 RPC methods on `channelService` + main wiring; service t
 | moderation RPC → authority | Only owner/admin may invite/mute/ban/kick/transfer |
 | content/history RPC → membership | Post/who/history must be gated by membership |
 
-## STRIDE Threat Register
+### STRIDE Threat Register
 
 | Threat ID | Category | Component | Severity | Disposition | Mitigation Plan |
 |-----------|----------|-----------|----------|-------------|-----------------|
@@ -136,6 +142,7 @@ Output: the remaining 8 RPC methods on `channelService` + main wiring; service t
 | T-01-12 | Information disclosure | hidden-channel oracle via new RPCs | medium | mitigate | Uniform codes.NotFound for absent vs hidden on every new per-channel RPC |
 | T-01-16 | Spoofing | client-supplied caller identity | high | mitigate | Service uses host-vouched dispatch subject; never trusts request-supplied ids |
 | T-01-SC | Tampering | package installs | n/a | accept | No package installs (all in-tree); SC checkpoint does not fire |
+
 </threat_model>
 
 <verification>

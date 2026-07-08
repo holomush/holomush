@@ -86,6 +86,7 @@ status: complete
 - **Files created:** 5 (proto + 4 generated); **modified:** 2 (regenerated drift)
 
 ## Accomplishments
+
 - Defined `ChannelService` with 12 RPCs and their request/response messages plus `ChannelInfo`, `MemberInfo`, `ChannelHistoryEntry`, structurally mirroring `holomush.scene.v1.SceneService`.
 - Every message, field, RPC, and service element carries a substantive Go-grounded doc comment describing the intended handler behavior; the name-echo gate passes.
 - Channel identity flows by ID + live name lookup — no `channel_name` field on any content/post message (D-08); no crypto/sensitive fields (D-04, plaintext).
@@ -99,6 +100,7 @@ status: complete
    - **Auto-fix (Rule 3):** `69560c9b2` (docs) — regenerated `grpc-api.md` for `TestGRPCReferenceCoversAllServices`
 
 ## Files Created/Modified
+
 - `api/proto/holomush/channel/v1/channel.proto` — new ChannelService contract + messages
 - `pkg/proto/holomush/channel/v1/channel.pb.go`, `channel_grpc.pb.go`, `channelv1connect/channel.connect.go` — generated Go/gRPC/ConnectRPC bindings
 - `web/src/lib/connect/holomush/channel/v1/channel_pb.ts` — generated web TS binding
@@ -106,6 +108,7 @@ status: complete
 - `site/src/content/docs/reference/grpc-api.md` — regenerated to include ChannelService (+ pre-existing drift sync)
 
 ## Decisions Made
+
 - Web bindings land under `web/src/lib/connect/` (the actual `web/buf.gen.yaml` output dir), not the `web/src/lib/proto/` path named in the plan frontmatter (see Deviations).
 - PostToChannel takes `kind` (say/pose/ooc) + `text`; Join/Leave carry `session_id` for host live-stream (un)subscription. Mutation RPCs return empty bodies, matching the SceneService convention.
 - Committed regenerated `comm.pb.go` and `grpc-api.md` rather than reverting them: both are legitimate generated outputs and required for a clean tree + passing stale-diff/API-coverage gates.
@@ -115,6 +118,7 @@ status: complete
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Stale comm.pb.go surfaced by full regeneration**
+
 - **Found during:** Task 2 (regenerate bindings)
 - **Issue:** `buf generate` regenerates all files; the committed `comm.pb.go` predated the SPDX header protoc-gen-go now copies from `comm.proto`'s leading comment, leaving an uncommitted diff (blocks clean tree + stale-diff CI gate).
 - **Fix:** Committed the regenerated `comm.pb.go`.
@@ -122,6 +126,7 @@ status: complete
 - **Committed in:** `29bff8ea9`
 
 **2. [Rule 3 - Blocking] grpc-api.md missing ChannelService section**
+
 - **Found during:** Task 2 (`task test`)
 - **Issue:** `TestGRPCReferenceCoversAllServices` failed — the new service was absent from `grpc-api.md`.
 - **Fix:** Ran `task docs:proto` (canonical regenerator the test mandates); it added the ChannelService section and synced pre-existing reference drift.
@@ -129,6 +134,7 @@ status: complete
 - **Committed in:** `69560c9b2`
 
 ### Non-blocking observations
+
 - **Plan frontmatter path drift:** plan listed `web/src/lib/proto/` for web bindings; the repo's `web/buf.gen.yaml` emits to `web/src/lib/connect/`. Followed the real output path.
 
 ---
@@ -137,18 +143,23 @@ status: complete
 **Impact on plan:** Both auto-fixes are canonical generated-output syncs required by CI gates. No scope creep — no hand-written Go/TS.
 
 ## Issues Encountered
+
 - `task lint` (full) fails only on `task lint:markdown`: 164 pre-existing rumdl issues across 12 `.planning/phases/01-channels-subsystem/*.md` GSD planning artifacts (01-02..01-09 PLAN, CONTEXT, RESEARCH). Not caused by this plan; logged to `deferred-items.md`. `lint:go`, `lint:proto`, `build`, and `task test` are all green.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - 01-05 (service.go create/join/leave/list) and 01-05b (post/who/history + moderation) now have a concrete generated `ChannelService` type to implement against, before the 01-07 command layer delegates to any method (HIGH-4 satisfied).
 - No blockers.
 
 ---
+
 *Phase: 01-channels-subsystem*
 *Completed: 2026-07-08*
 
 ## Self-Check: PASSED
+
 All created files present; all task commits (4c4e3ab23, 99a651c98, 29bff8ea9, 69560c9b2) exist in history.

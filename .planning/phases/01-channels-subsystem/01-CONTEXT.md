@@ -4,6 +4,7 @@
 **Status:** Ready for planning
 
 <domain>
+
 ## Phase Boundary
 
 Stand up `core-channels` — a new binary plugin providing persistent, named,
@@ -28,15 +29,18 @@ crypto/encryption.
 </domain>
 
 <decisions>
+
 ## Implementation Decisions
 
 ### Scope
+
 - **D-01:** Deliver the **full Epic-10 initial scope** (10.1 schema → 10.2 core
   commands → 10.3 types+invite → 10.4 moderation → 10.5 history) in this phase,
   narrowed only by D-05 (no op/deop). This exceeds the literal CHAN-01…05
   minimum by choice. OUT entirely: search, rich text, external bridging.
 
 ### Faction gating (CHAN-04)
+
 - **D-02:** CHAN-04 "faction-restricted channels enforce membership-based
   access" is satisfied **now** by the `private`/`admin` channel types with
   player-level ABAC membership enforcement (distinct from `public`/open). This
@@ -44,13 +48,14 @@ crypto/encryption.
   **player-level** (all of a player's alts gain access to a private channel).
 - **D-03:** Build the **seam** for future per-character faction gating: ship a
   `ChannelAttributeProvider` resolving `resource.name`/`type`/`owner`/`archived`
-  + `principal.channel_memberships`/`channel_banned`/`channel_muted`, and shape
+  - `principal.channel_memberships`/`channel_banned`/`channel_muted`, and shape
   the seed policies keyed on `resource.name` so a future
   `principal.faction == "..."` clause slots in with **no schema migration and no
   policy rewrite**. The full character-attribute pipeline (Vampire-IC hidden
   from the same player's Werewolf alt) stays deferred.
 
 ### Crypto / message privacy
+
 - **D-04:** All channel events are **plaintext** (`sensitivity: never`). **No
   `crypto.emits`** entries — the manifest declares no sensitive event types, so
   the crypto-reviewer gate does not fire for this phase. Rationale: coherent with
@@ -60,6 +65,7 @@ crypto/encryption.
   that scenes encrypt (INV-SCENE-60).
 
 ### Moderation authority (10.4)
+
 - **D-05:** Role model is **member / owner + admin** — **no `op` role**.
   A channel **owner** moderates their own channel (mute/ban/kick) and admins
   override everything; `op`/`deop` delegation is **deferred**. Do NOT ship the
@@ -69,6 +75,7 @@ crypto/encryption.
   migration and is the lighter path.)
 
 ### Channel creation
+
 - **D-06:** **Admin-default creation + grant seam.** Creation is admin-only by
   seed policy (`seed:channel-admin-create`), the per-player rate limit (5/hour)
   is enforced, and the ABAC is shaped so an operator can grant `create:channel`
@@ -76,6 +83,7 @@ crypto/encryption.
   D-03 "ship now + seam" philosophy.
 
 ### History retention & pruning
+
 - **D-07:** Retention default **30 days** (admin channels MAY be extended/
   unlimited per spec). The **background pruning job ships this phase** (it is a
   10.5 requirement; unbounded channel history is a real operational liability).
@@ -84,6 +92,7 @@ crypto/encryption.
   service layer.
 
 ### Message payload contract
+
 - **D-08:** Channel content events (`channel_say`/`channel_pose`) serialize as
   the canonical **`holomush.comm.v1.CommunicationContent`** (`actor_id`,
   `actor_display_name`, `text`, `no_space`, `ooc_style`) built via
@@ -98,6 +107,7 @@ crypto/encryption.
   **Epic 12** — the design MUST NOT preclude them, but does not build them now.
 
 ### Claude's Discretion
+
 - Exact command-parser wiring for the `=name` / `=name :pose` / `=name ;semipose`
   shorthand (reuse the say/pose `:`/`;`/`no_space` semantics from
   core-communication / the CommunicationContent builder).
@@ -109,11 +119,13 @@ crypto/encryption.
 </decisions>
 
 <canonical_refs>
+
 ## Canonical References
 
 **Downstream agents MUST read these before planning or implementing.**
 
 ### Product intent (rich, but architecturally STALE — reconcile against current substrate)
+
 - `docs/specs/2026-04-03-channels-architecture.md` — THE channels design:
   entity model, player-level membership + per-character gag, channel types,
   seeded channels + guest auto-join, command surface, moderation roles, history,
@@ -128,6 +140,7 @@ crypto/encryption.
   → `CommunicationContent` (D-08).
 
 ### Reference implementation to MIRROR (current substrate)
+
 - `plugins/core-scenes/plugin.yaml` — the template manifest: `type: binary`,
   `resource_types`, `requires: [capability: ...]` least-privilege declarations,
   `provides`, `emits`, `history_scope`, `actor_kinds_claimable`, `config`,
@@ -137,12 +150,14 @@ crypto/encryption.
   The whole-plugin shape channels mirrors.
 
 ### Payload contract
+
 - `pkg/proto/holomush/comm/v1/comm.pb.go` — `CommunicationContent` fields.
 - `pkg/plugin/comm/builder.go` — `Say`/`Pose`/`OOC`/`Emit` payload builders (D-08).
 - `docs/superpowers/specs/2026-07-03-communication-content-contract-design.md` —
   EVTBUS-05, the canonical contract + symmetric Lua/binary enforcement.
 
 ### Event bus / wire conventions
+
 - `.claude/rules/event-interfaces.md` — `Publisher`/`Subscriber`/`HistoryReader`
   (the deleted `EventStore` replacement); ordering owned by JetStream sequence.
 - `.claude/rules/event-conventions.md` — dot-subject naming, `core.NewEvent()`,
@@ -152,6 +167,7 @@ crypto/encryption.
   `<plugin>:<verb>` wire convention (so `core-channels:channel_say`).
 
 ### Plugin host / manifest / runtime symmetry
+
 - `.claude/rules/plugin-manifest.md` — manifest field reference incl.
   `capability:` least-privilege `access:`/`scope:`, `audit:`, `commands`,
   `policies`, DAG validation.
@@ -159,6 +175,7 @@ crypto/encryption.
   Lua+binary identically (binary here, but the emit fence / gates are shared).
 
 ### ABAC integration
+
 - `docs/specs/2026-04-03-channels-architecture.md` §ABAC Integration — resource
   prefix, `ChannelAttributeProvider` attributes, capabilities, seed policies.
 - `docs/specs/abac/01-core-types.md` — ABAC core types.
@@ -174,12 +191,14 @@ crypto/encryption.
   (scene.go is the closest analog; stream.go is the omit-optional reference).
 
 ### Verb registry / rendering (verify current relevance during research)
+
 - `docs/specs/2026-03-28-comm-event-extensibility-design.md` — verb registry,
   `channel_say`/`channel_pose` types + rendering categories. Referenced by the
   channels spec; confirm it still matches the current verb-registration path
   (`internal/core/builtins.go` / plugin `verbs:` manifest entries).
 
 ### Invariants
+
 - `.claude/rules/invariants.md` + `docs/architecture/invariants.yaml` — if the
   channels design mints a new named guarantee (e.g. channel privacy /
   membership-enforcement invariant), register it as `INV-<SCOPE>-N`
@@ -188,10 +207,12 @@ crypto/encryption.
   is validated by this phase (CHAN-05).
 
 ### Gateway boundary (relevant only if any surface touches the gateway)
+
 - `.claude/rules/gateway-boundary.md` — telnet-first this phase; no web work, but
   if a future surface appears, structural writes go through typed BFF RPCs.
 
 ### Issue tracking
+
 - bd epic `holomush-0sc` (Epic 10) + sub-beads `holomush-0sc.3`…`0sc.7`
   (10.1 schema … 10.5 history). Deferred: `holomush-0sc.8` (search), `vrzu`
   (rich text). Reconcile these with the GSD phase plan (do NOT mirror the bd
@@ -212,9 +233,11 @@ channel/membership primary keys.
 </canonical_refs>
 
 <code_context>
+
 ## Existing Code Insights
 
 ### Reusable Assets
+
 - **`plugins/core-scenes/`** — the whole-plugin template: manifest, store,
   service, commands, plugin-owned audit table + `PluginAuditService`,
   migrations, `main.go`. Channels is structurally a sibling.
@@ -231,11 +254,12 @@ channel/membership primary keys.
   precedent for the background **pruning** job (D-07).
 
 ### Established Patterns
+
 - Plugin-owned Postgres schema + `audit:` manifest declaration →
   `PluginAuditService.AuditEvent`/`QueryHistory` (channels get their own
   `plugin_core_channels` schema + `channel_log`-style table).
 - Two-layer ABAC: Layer-1 command-execution gate (`execute` on `command:channel*`)
-  + Layer-2 per-capability resource check (`emit`/`read`/`join`/… on
+  - Layer-2 per-capability resource check (`emit`/`read`/`join`/… on
   `channel:<id>`). Seed policies + a plugin `policies:` block.
 - Host-brokered capabilities via manifest `requires: [capability: ...]` with
   least-privilege `access:`.
@@ -244,6 +268,7 @@ channel/membership primary keys.
   interval, rate limits, message-size cap).
 
 ### Integration Points
+
 - `internal/access/prefix.go` — new `channel:` resource prefix.
 - `internal/command/types.go` — `validResourceTypes` + `validActions` additions.
 - **Bootstrap seeding** — seeded channels (default incl. `Public`) + guest
@@ -260,6 +285,7 @@ channel/membership primary keys.
 </code_context>
 
 <specifics>
+
 ## Specific Ideas
 
 - Command vocabulary is fixed by the spec: `channel <sub>` (no symbol prefix) +
@@ -277,6 +303,7 @@ channel/membership primary keys.
 </specifics>
 
 <deferred>
+
 ## Deferred Ideas
 
 - **`op`/`deop` role delegation** — deferred from Phase 1 (D-05). Owner+admin

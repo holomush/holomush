@@ -202,5 +202,6 @@ This plan touches `internal/access/policy/seed.go` and `internal/plugin/pluginau
 ## Self-Check: PASSED
 
 ---
+
 *Phase: 01-channels-subsystem*
 *Completed: 2026-07-08*

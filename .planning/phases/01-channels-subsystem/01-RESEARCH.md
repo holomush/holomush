@@ -217,11 +217,13 @@ Nyquist validation ENABLED. Test tiers per `.claude/rules/testing.md`: unit tabl
 | plugin loads (CHAN-05) | whole-system census | `task test:int` | `core-channels` in `expectedPlugins`; capability declarations satisfy INV-PLUGIN-54 |
 
 ### Sampling
+
 - **Per task commit:** `task test -- ./plugins/core-channels/` (+ `task lint`)
 - **Per wave merge:** `task test:int` (Docker; exercises audit/migrations/delivery)
 - **Phase gate:** `task pr-prep` green before `/gsd-verify-work`
 
 ### Wave 0 Gaps
+
 - [ ] `plugins/core-channels/core_channels_suite_test.go` — Ginkgo bootstrap
 - [ ] `plugins/core-channels/*_test.go` unit files (store/service/resolver/audit/commands/prune)
 - [ ] `test/integration/wholesystem/census_test.go` — add `core-channels` to `expectedPlugins:25-27`
@@ -281,6 +283,7 @@ Nyquist validation ENABLED. Test tiers per `.claude/rules/testing.md`: unit tabl
 ## Sources
 
 ### Primary (HIGH confidence — in-tree code, this session)
+
 - `plugins/core-scenes/{plugin.yaml,main.go,resolver.go,audit.go,ops_events.go,publish_events.go,publish_scheduler.go,lifecycle.go,commands.go}` — reference implementation
 - `plugins/core-scenes/migrations/000003,000004` — plugin schema + audit table
 - `internal/plugin/{manager.go,attribute_proxy.go,host.go}` — resource-type registration, session-stream delivery, StreamRegistry
@@ -294,11 +297,13 @@ Nyquist validation ENABLED. Test tiers per `.claude/rules/testing.md`: unit tabl
 - `.claude/rules/{plugin-manifest,event-conventions,event-interfaces,abac-providers,database-migrations,grpc-errors,testing,plugin-runtime-symmetry}.md`
 
 ### Tertiary (LOW — reconcile, do not trust architecture)
+
 - `docs/specs/2026-04-03-channels-architecture.md` — product intent only (stale architecture)
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - File/package layout: HIGH — direct 1:1 mapping to shipped `core-scenes`
 - Substrate wiring (emit/audit/resolver/ABAC): HIGH — verified against host code + reference plugin
 - Live-delivery mechanism: MEDIUM — mechanism identified and grounded, but core-channels is first consumer; SDK-facing plumbing may be net-new (Landmine 2)
