@@ -94,7 +94,7 @@ provides:
   - holomush.channel.v1.ChannelService     # NEW proto — see below
   - holomush.plugin.v1.PluginAuditService
 emits: [channel]
-history_scope: channel
+history_scope: custom          # R4-A: 'channel' is NOT valid — enum is {grid,scene,custom}; 'custom' = plugin-owned visibility via QueryHistory
 session_streams: true          # ← drives QuerySessionStreams live delivery
 actor_kinds_claimable: [plugin, character]
 storage: postgres
