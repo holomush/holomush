@@ -73,12 +73,12 @@ same substrate guarantees (EventBus, ABAC, audit) already proven by Scenes.
 4. Faction-restricted channels enforce membership-based access distinct from open channels
 5. `core-channels` validates the `eventkit`/`groupkit` SDK extraction pattern as the substrate's second
    consumer (INV-S7, N=2 rule) — extraction itself is a follow-on, not a blocking criterion of this phase
-**Plans**: 10 plans
+**Plans**: 1/10 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — holomush.channel.v1 proto + generated bindings (wave 1)
+- [x] 01-01-PLAN.md — holomush.channel.v1 proto + generated bindings (wave 1)
 - [ ] 01-02-PLAN.md — Live-delivery substrate: SDK QuerySessionStreams hook + dot-subject acceptance (HIGH-1) + stream.subscription served with real LIVE_ONLY (HIGH-2) + concrete-stream authz guard (HIGH-3) [holomush-l6std] (wave 1)
 - [ ] 01-03-PLAN.md — Plugin scaffold + schema/migrations + types + store (wave 1)
 
@@ -160,7 +160,7 @@ completion, and platform hardening can proceed in parallel if desired)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Channels Subsystem | 0/10 | Not started | - |
+| 1. Channels Subsystem | 1/10 | In Progress|  |
 | 2. Scenes Lineage Completion | 0/TBD | Not started | - |
 | 3. Platform Hardening & Deployment Scaling | 0/TBD | Not started | - |
 

@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Channels Subsystem
+current_phase: 01
+current_phase_name: channels-subsystem
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-08T14:36:57.586Z"
-last_activity: 2026-07-07
-last_activity_desc: Brownfield ingest (48 SPECs + invariant registry + `docs/roadmap.md` theme
+last_updated: "2026-07-08T21:23:26.785Z"
+last_activity: 2026-07-08
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 10
+  completed_plans: 1
   percent: 0
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 1 — Channels Subsystem
+**Current focus:** Phase 01 — channels-subsystem
 
 ## Current Position
 
-Phase: 1 of 3 (Channels Subsystem)
-Plan: 0 of TBD in current phase
+Phase: 01 (channels-subsystem) — EXECUTING
+Plan: 2 of 10
 Status: Ready to execute
-Last activity: 2026-07-07 — Brownfield ingest (48 SPECs + invariant registry + `docs/roadmap.md` theme
+Last activity: 2026-07-08 — Phase 01 execution started
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
 `/gsd-map-codebase` static analysis and live `bd`/codebase verification of shipped vs. forward scope.
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: N/A
 
 *Updated after each plan completion*
+| Phase 01 P01 | 11 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - **Codebase verification**: confirmed via `rg`/`bd` that Scenes/RP (Epic 9, all 17 specs through
   focus-routed-input) is fully shipped; Channels/Forums/Discord plugins do not exist in-tree; `eventkit`/
   `groupkit` SDKs are not yet extracted (consistent with INV-S7's N=2 deferral)
+
+- [Phase ?]: 01-01: ChannelService proto mirrors SceneService; identity by ID not payload name (D-08); plaintext no crypto.emits (D-04)
 
 ### Pending Todos
 
@@ -100,7 +103,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-08T13:33:05.742Z
+Last session: 2026-07-08T21:23:14.077Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
 Stopped at: Phase 1 context gathered
