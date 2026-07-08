@@ -1,0 +1,28 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-01-18-plugin-system-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plugin System Design",
+  "summary": "Defines the architecture for HoloMUSH's two-tier plugin system (Lua for lightweight scripts, go-plugin for process-isolated complex extensions), covering capability model, event-driven communication, and observability requirements.",
+  "scope": [
+    "plugin system",
+    "Lua scripts",
+    "go-plugin",
+    "PluginManager",
+    "CapabilityEnforcer",
+    "PluginHost",
+    "HostFunctions",
+    "capability model",
+    "OTel tracing"
+  ],
+  "cross_refs": [
+    "../plans/2026-01-18-holomush-roadmap-design.md",
+    "../specs/2026-01-17-phase1-tracer-bullet.md",
+    "holomush-1hq",
+    "holomush-1hq.1"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

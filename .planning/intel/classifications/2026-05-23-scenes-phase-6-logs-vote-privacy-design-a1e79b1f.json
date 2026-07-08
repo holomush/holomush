@@ -1,0 +1,33 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-23-scenes-phase-6-logs-vote-privacy-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scenes Phase 6: Logs, Publish Vote, and Hard Privacy Boundary",
+  "summary": "Specifies the Phase 6 scene publication artifact: a vote state machine, new gRPC RPCs and telnet/web commands, IC-stream event emission, a COOLOFF-to-PUBLISHED snapshot pipeline, observability signals, and scene log replay/export commands, with a hard participant-only privacy boundary.",
+  "scope": [
+    "scenes",
+    "published_scenes table",
+    "publish vote state machine",
+    "scene_log audit table",
+    "gRPC RPCs",
+    "telnet/web commands",
+    "IC-stream events",
+    "privacy boundary (INV-S9)",
+    "snapshot pipeline",
+    "observability"
+  ],
+  "cross_refs": [
+    "2026-04-06-scenes-and-rp-design-v2.md",
+    "2026-05-16-social-spaces-substrate-contract.md",
+    "2026-05-17-history-scope-privacy-design.md",
+    "holomush-5rh.15",
+    "holomush-5rh.20",
+    "holomush-cb4x",
+    "holomush-5rh.14",
+    "holomush-m7pxs"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

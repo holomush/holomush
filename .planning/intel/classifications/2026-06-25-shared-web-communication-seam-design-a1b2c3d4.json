@@ -1,0 +1,33 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-25-shared-web-communication-seam-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Shared Web Communication Rendering Seam — say/pose/ooc render parity",
+  "summary": "Specifies a single shared rendering primitive (CommLine model) so the web terminal and scene workspace both render say/pose/ooc/emit phrasing consistently via --mush-* tokens, replacing PoseCard's diverged implementation. Scoped to rendering only; composer sigil/input routing and server-side scene command changes are explicitly out of scope.",
+  "scope": [
+    "web scene workspace",
+    "web terminal",
+    "PoseCard.svelte",
+    "CommunicationRenderer.svelte",
+    "publish_render.go",
+    "CommLine model",
+    "core-communication event vocabulary",
+    "core-scenes scene_* events",
+    "mush-* theme tokens"
+  ],
+  "cross_refs": [
+    "holomush-c5zol",
+    "holomush-5rh.33",
+    "holomush-5rh",
+    "theme:social-spaces",
+    "holomush-2vfy",
+    "holomush-5rh.32",
+    "web/CLAUDE.md",
+    "scenes-v2 §3.2",
+    "Phase 9 web focus"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

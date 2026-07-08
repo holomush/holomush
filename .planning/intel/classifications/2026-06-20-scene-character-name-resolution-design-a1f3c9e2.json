@@ -1,0 +1,37 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-20-scene-character-name-resolution-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scene Character Name Resolution — Design",
+  "summary": "Host-side design resolving character ULIDs to display names in three web scene surfaces (roster, pose-order, pose author) via a non-ABAC name resolver, mirroring the ListFocusPresence pattern, without client or telnet changes.",
+  "scope": [
+    "scene roster",
+    "pose-order strip",
+    "pose author",
+    "GetSceneForViewer",
+    "characterNameResolver",
+    "world.CharacterRepository",
+    "core-scenes plugin",
+    "gateway translateEvent",
+    "GameEvent.actor"
+  ],
+  "cross_refs": [
+    "holomush-vdy2z",
+    "holomush-5rh.25",
+    "holomush-5rh.8.25",
+    "holomush-5rh.8",
+    "theme:social-spaces",
+    "plugins/core-scenes/service.go",
+    "plugins/core-scenes/commands.go",
+    "internal/web/translate.go",
+    "api/proto/holomush/web/v1/web.proto",
+    "web/src/lib/components/scenes/SceneContextRail.svelte",
+    "web/src/lib/components/scenes/PoseOrderStrip.svelte",
+    "web/src/lib/components/scenes/PoseCard.svelte",
+    "web/src/lib/scenes/workspaceStore.svelte.ts"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,33 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scenes Phase 5: Focus Model + Multi-Connection Visibility",
+  "summary": "Specifies per-connection focus tracking and multi-connection visibility for scenes, extending PluginHostService with three new RPCs, adding scene focus/grid/list subcommands, and wiring focus changes to JetStream subscription churn.",
+  "scope": [
+    "scenes",
+    "focus model",
+    "PluginHostService",
+    "session.Connection",
+    "SessionStreamRegistry",
+    "subscription_router",
+    "core-scenes plugin",
+    "session store (MemStore/Postgres)",
+    "JetStream subscriptions"
+  ],
+  "cross_refs": [
+    "2026-04-06-scenes-and-rp-design-v2.md",
+    "2026-05-16-social-spaces-substrate-contract.md",
+    "2026-05-17-history-scope-privacy-design.md",
+    "holomush-5rh.14",
+    "holomush-5rh.13",
+    "holomush-0sc.12",
+    "holomush-rops",
+    "holomush-fux3",
+    "holomush-djj"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

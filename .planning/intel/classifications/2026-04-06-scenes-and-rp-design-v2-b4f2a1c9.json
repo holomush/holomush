@@ -1,0 +1,33 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scenes & RP Architecture Design (v2)",
+  "summary": "Technical spec for the scenes/RP subsystem as a plugin-owned binary plugin (core-scenes), covering domain model, ABAC enforcement, gRPC API, plugin architecture, and observability, superseding the v1 server-centric design.",
+  "scope": [
+    "scenes",
+    "roleplay",
+    "core-scenes plugin",
+    "SceneService gRPC",
+    "ABAC enforcement",
+    "plugin architecture",
+    "IC/OOC event streams",
+    "focus model",
+    "Epic 9 (holomush-5rh)"
+  ],
+  "cross_refs": [
+    "docs/superpowers/specs/2026-04-04-scenes-and-rp-design.md",
+    "holomush-5rh",
+    "holomush-5rh.13",
+    "holomush-5rh.14",
+    "holomush-s9nu",
+    "holomush-rops",
+    "PR #192",
+    "PR #194",
+    "PR #195"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

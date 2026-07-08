@@ -1,0 +1,22 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-28-scene-bare-ulid-identity-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scene Bare-ULID Identity — Design",
+  "summary": "Specifies removing the undocumented 'scene-' prefix from scene entity IDs so scenes mint bare ULIDs like every other entity, fixing broken scene log/join/privacy-floor host boundaries that fail to parse the prefixed ID.",
+  "scope": [
+    "scene identifiers",
+    "ULID generation",
+    "event subject naming",
+    "ABAC resource-type prefix",
+    "scene join/subscribe",
+    "scene log",
+    "privacy temporal floor",
+    "core-scenes plugin"
+  ],
+  "cross_refs": ["holomush-y5inx", "holomush-5rh.20.42", "holomush-5rh.20.43", "capture-adrs"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

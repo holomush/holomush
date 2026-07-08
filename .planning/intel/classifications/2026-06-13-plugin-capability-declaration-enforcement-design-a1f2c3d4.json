@@ -1,0 +1,35 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-13-plugin-capability-declaration-enforcement-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plugin Capability-Declaration Enforcement at Load (binary half; Lua via eykuh.4)",
+  "summary": "Specifies fail-closed-at-load enforcement so a binary plugin whose code consumes an undeclared host.v1 capability cannot load, defining INV-PLUGIN-54 (bound) and INV-PLUGIN-55 (pending, Lua). Root cause: capability injection is code-driven, not manifest-driven, for both binary and Lua runtimes. Scopes only the binary half; the Lua migration is deferred to a separate epic sub-spec.",
+  "scope": [
+    "plugin capability declarations",
+    "plugin manifest requires:",
+    "binary plugin loader",
+    "hostcap interceptor",
+    "wholesystem census",
+    "Lua hostfunc shim",
+    "luabridge",
+    "INV-PLUGIN-54",
+    "INV-PLUGIN-55",
+    "core-scenes plugin"
+  ],
+  "cross_refs": [
+    "holomush-si3zs",
+    "holomush-eykuh",
+    "holomush-eykuh.3",
+    "holomush-eykuh.4",
+    "2026-06-11-plugin-capability-dependency-foundation-design.md",
+    "internal/plugin/hostcap/interceptor.go",
+    "internal/plugin/luabridge",
+    "internal/plugin/lua/host.go",
+    "pkg/plugin/sdk.go",
+    "PR #4434"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

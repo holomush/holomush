@@ -1,0 +1,22 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-03-19-session-persistence-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Server-Side Session Persistence Design",
+  "summary": "Sub-spec 2a of Epic 8 (Web Client): specifies a Postgres-backed SessionStore interface for durable, cross-protocol (telnet/web) sessions, gap-free event replay on reconnect, server-side command history, and per-role TTL/history limits resolved via ABAC.",
+  "scope": [
+    "SessionStore interface",
+    "Postgres session persistence",
+    "session detach/reattach TTL",
+    "event replay on reconnect",
+    "command history",
+    "cross-protocol session continuity",
+    "ABAC-resolved per-role limits",
+    "proto RPCs for session listing/reattachment/history"
+  ],
+  "cross_refs": ["holomush-qve"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

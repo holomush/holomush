@@ -1,0 +1,35 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "theme:social-spaces — Substrate Contract Design",
+  "summary": "Defines the substrate contract for the social-spaces theme (Scenes, Channels, Forums, Discord), naming what the EventBus/crypto/focus/plugin-host substrate provides, codifying the substrate-vs-use boundary, introducing eventkit/groupkit SDKs, and validating the prior Scenes v2 design against current substrate.",
+  "scope": [
+    "theme:social-spaces",
+    "Scenes",
+    "Channels",
+    "Forums",
+    "Discord bridge",
+    "JetStream event bus",
+    "crypto envelope",
+    "focus coordinator",
+    "plugin host RPC contract",
+    "pkg/plugin/eventkit",
+    "pkg/plugin/groupkit"
+  ],
+  "cross_refs": [
+    "docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md",
+    "internal/eventbus/bus.go",
+    ".claude/rules/event-interfaces.md",
+    "holomush-jg9b",
+    "holomush-5rh",
+    "holomush-0sc",
+    "holomush-djj",
+    "holomush-aqq",
+    ".claude/rules/beads-project.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

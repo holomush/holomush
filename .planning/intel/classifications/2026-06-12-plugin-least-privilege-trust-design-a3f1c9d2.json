@@ -1,0 +1,30 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plugin Least-Privilege Enforcement & Plugin-Trust Security — Design",
+  "summary": "Defines runtime semantics for manifest `access:`/`scope:` least-privilege parameters, a default-deny ABAC decision on plugin capability/service access keyed on host-stamped subjects, a host-vouched dispatch-context primitive, and a symmetric fix for the PR #4430 plugin-trust (subject-spoofing) finding across Lua and binary runtimes.",
+  "scope": [
+    "plugin manifest access/scope parameters",
+    "ABAC access gate for capability/service access",
+    "dispatch-context primitive",
+    "CommandRegistryService.ListCommands/GetCommandHelp",
+    "plugin-trust hardening",
+    "INV-PLUGIN-50 through INV-PLUGIN-53",
+    "epic holomush-eykuh"
+  ],
+  "cross_refs": [
+    "docs/roadmap.md",
+    "holomush-eykuh.3",
+    "holomush-oeb4d",
+    "holomush-eykuh.1",
+    "holomush-eykuh.2",
+    "holomush-eykuh.4",
+    "PR #4430",
+    "hostfunc/functions.go"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

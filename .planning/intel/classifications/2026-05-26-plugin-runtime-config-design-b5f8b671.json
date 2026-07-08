@@ -1,0 +1,25 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plugin Runtime Config: Manifest Schema + Opaque Host Passthrough",
+  "summary": "Specifies a generic plugin runtime config primitive: a typed config schema in plugin.yaml, host-opaque merge of manifest defaults with server overrides, and identical typed delivery to binary and Lua plugins via SDK helpers.",
+  "scope": [
+    "plugin.yaml manifest schema",
+    "config primitive",
+    "binary plugin SDK (DecodeConfig)",
+    "Lua plugin SDK (holomush.config)",
+    "core-scenes plugin",
+    "host config merge/delivery"
+  ],
+  "cross_refs": [
+    ".claude/rules/plugin-boundary.md",
+    ".claude/rules/plugin-runtime-symmetry.md",
+    "holomush-yzt86",
+    "holomush-shcyu"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

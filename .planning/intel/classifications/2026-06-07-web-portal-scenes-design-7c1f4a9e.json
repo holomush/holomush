@@ -1,0 +1,35 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Web Portal: Scenes — Player Workspace (E9.5)",
+  "summary": "Technical design for a web player workspace for scenes: browsing/watching/contributing to scenes, alt handling, live delivery via the Phase 5 focus system, BFF read/write RPCs, unread badges, log export, and auth boundaries.",
+  "scope": [
+    "web portal",
+    "scenes workspace",
+    "SceneService",
+    "WebService BFF RPCs",
+    "focus coordinator",
+    "ConnectRPC streaming",
+    "scene participants/roles",
+    "ABAC guest gate",
+    "scene log export",
+    "unread notifications"
+  ],
+  "cross_refs": [
+    "holomush-5rh.8",
+    "holomush-5rh.7",
+    "holomush-5rh.14",
+    "2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md",
+    "2026-04-06-scenes-and-rp-design-v2.md",
+    "2026-05-16-social-spaces-substrate-contract.md",
+    "2026-04-18-jetstream-event-log-design.md",
+    "holomush-ti1b",
+    "holomush-5rh.9",
+    "holomush-0sc"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

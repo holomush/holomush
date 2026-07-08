@@ -1,0 +1,103 @@
+# GSD ingest manifest — curated 50-doc strategic set (mode: new)
+# Generated 2026-07-08 by /gsd-ingest-docs (curated per user: foundational core + scenes arc + newest product designs)
+docs:
+  - path: docs/roadmap.md
+    type: DOC
+  - path: docs/architecture/invariants.md
+    type: DOC
+  - path: docs/plans/2026-01-18-holomush-roadmap-design.md
+    type: SPEC
+  - path: docs/plans/archive/2026-01-17-holomush-architecture-design.md
+    type: SPEC
+  - path: docs/specs/2026-01-18-plugin-system-design.md
+    type: SPEC
+  - path: docs/specs/2026-02-05-full-abac-design.md
+    type: SPEC
+  - path: docs/specs/abac/00-overview.md
+    type: SPEC
+  - path: docs/specs/2026-01-22-world-model-design.md
+    type: SPEC
+  - path: docs/specs/2026-01-25-auth-identity-design.md
+    type: SPEC
+  - path: docs/specs/2026-03-19-session-persistence-design.md
+    type: SPEC
+  - path: docs/specs/2026-03-18-web-client-adapter-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-31-invariant-registry-design.md
+    type: SPEC
+  - path: docs/specs/2026-04-03-channels-architecture.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md
+    type: SPEC
+  - path: docs/specs/2026-02-02-commands-behaviors-design.md
+    type: SPEC
+  - path: docs/specs/2026-03-17-config-file-system-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-07-05-focus-routed-scene-input-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-28-scenes-web-publish-vote-actions-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-24-scenes-web-management-actions-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-20-scene-character-name-resolution-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-19-web-create-scene-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-09-scene-dek-genesis-on-focus-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-28-scene-bare-ulid-identity-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-23-scenes-phase-6-logs-vote-privacy-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-04-16-b10-core-scenes-adoption-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-04-07-scenes-phase-3-membership-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-07-03-communication-content-contract-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-30-publish-vote-web-interactive-controls-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-29-publish-vote-web-live-event-delivery-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-25-shared-web-communication-seam-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-20-unified-authed-shell-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-14-plugin-capability-atomic-cutover-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-13-plugin-capability-declaration-enforcement-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-12-plugin-least-privilege-trust-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-12-lua-parity-host-brokered-consumption-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-11-plugin-host-capability-decomposition-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-09-sensitive-event-crypto-activation-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-06-06-event-type-wire-convention-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-30-session-liveness-and-gateway-survival-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-26-plugin-runtime-config-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md
+    type: SPEC
+  - path: docs/superpowers/specs/2026-05-19-presence-snapshot-design.md
+    type: SPEC

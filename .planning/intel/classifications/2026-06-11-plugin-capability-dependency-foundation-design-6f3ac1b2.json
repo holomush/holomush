@@ -1,0 +1,31 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-11-plugin-capability-dependency-foundation-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plugin Capability & Dependency Foundation — Design",
+  "summary": "Foundation sub-spec defining a unified manifest vocabulary and dependency resolver for plugin host-capability and inter-plugin-service declarations, establishing runtime-parity, least-privilege, and fail-fast invariants (INV-PLUGIN-41 through 45) that later sub-specs implement.",
+  "scope": [
+    "plugin manifest vocabulary",
+    "dependency resolver",
+    "capability declarations",
+    "Lua/binary runtime parity",
+    "fail-fast/fail-closed policy",
+    "invariant registry INV-PLUGIN-41..45",
+    "core-aliases boot bug holomush-oeb4d"
+  ],
+  "cross_refs": [
+    "holomush-oeb4d",
+    "holomush-eykuh",
+    "holomush-eykuh.1",
+    "holomush-eykuh.2",
+    "holomush-eykuh.3",
+    "holomush-eykuh.4",
+    "docs/roadmap.md",
+    "docs/specs/2026-03-28-plugin-first-command-architecture-design.md",
+    "INV-CRYPTO-34"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

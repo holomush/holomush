@@ -1,0 +1,33 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-07-03-communication-content-contract-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Communication Content Contract — Design",
+  "summary": "Defines one canonical content-body payload contract for conversational-content emitters (say/pose/ooc/emit/page/whisper/pemit), enforced symmetrically for Lua and binary plugins at a single host chokepoint, collapsing divergent per-consumer dialects.",
+  "scope": [
+    "communication content contract",
+    "core-communication plugin (Lua)",
+    "core-scenes plugin (Go)",
+    "web client CommLine model",
+    "BFF genericPayload translation",
+    "plugin-runtime-symmetry",
+    "conversational content verbs (say, pose, ooc, emit, page, whisper, pemit)",
+    "plugin SDK builder ergonomics"
+  ],
+  "cross_refs": [
+    "holomush-kk1ot",
+    "holomush-g1qcw",
+    "holomush-c5zol",
+    "holomush-5rh.33",
+    "plugins/core-communication/main.lua",
+    "plugins/core-scenes/commands.go",
+    "plugins/core-scenes/publish_render.go",
+    "web/src/lib/comm/commLine.ts",
+    "internal/web/translate.go",
+    "theme:social-spaces"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

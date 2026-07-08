@@ -1,0 +1,31 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-04-16-b10-core-scenes-adoption-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "B10 — core-scenes Plugin Adoption Design",
+  "summary": "Specifies B10 scope: a FocusClient SDK facade for binary plugins and core-scenes command-path wiring (join/leave/end/switch) integrating DB writes with focus RPCs, explicitly excluding session_id proto changes, multi-session fan-out, auto-join, and Lua adoption.",
+  "scope": [
+    "core-scenes plugin",
+    "FocusClient SDK facade",
+    "focus substrate",
+    "scene commands (join/leave/end/switch)",
+    "plugin host focus RPCs",
+    "SceneService"
+  ],
+  "cross_refs": [
+    "./2026-04-11-focus-substrate-design.md",
+    "holomush-oy6e.10",
+    "holomush-oy6e",
+    "holomush-5rh.13",
+    "holomush-oy6e.8",
+    "holomush-oy6e.9",
+    "PR #216",
+    "PR #223",
+    "PR #225",
+    "site/docs/extending/binary-plugins.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

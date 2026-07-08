@@ -1,0 +1,37 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-11-plugin-host-capability-decomposition-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plugin Host Capability Decomposition — Design",
+  "summary": "Decomposes the monolithic PluginHostService god-service into capability-scoped proto contracts under a new holomush.plugin.host.v1 namespace, defining the controlled capability vocabulary and a complete rehoming map for all 23 RPCs while deferring enforcement, Lua transport wiring, and manifest migration to later sub-specs.",
+  "scope": [
+    "PluginHostService",
+    "capability vocabulary",
+    "proto contracts",
+    "plugin manifest requires/capability declarations",
+    "binary plugin SDK",
+    "Lua hostfunc surface",
+    "holomush.plugin.host.v1 namespace"
+  ],
+  "cross_refs": [
+    "holomush-eykuh",
+    "holomush-eykuh.1",
+    "holomush-oeb4d",
+    "PR #4426",
+    "holomush-eykuh.2",
+    "holomush-eykuh.3",
+    "holomush-eykuh.4",
+    "holomush-l6std",
+    "api/proto/holomush/plugin/v1/plugin.proto",
+    "internal/plugin/hostfunc/functions.go",
+    "INV-PLUGIN-41",
+    "INV-PLUGIN-42",
+    "INV-PLUGIN-43",
+    "INV-PLUGIN-44",
+    "INV-PLUGIN-45"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

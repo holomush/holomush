@@ -1,0 +1,25 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-31-invariant-registry-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Central Invariant Registry Design",
+  "summary": "Establishes a single canonical registry (docs/architecture/invariants.yaml/.md) unifying 30+ scattered invariant naming schemes into one INV-<SCOPE>-N convention, a scope taxonomy, legacy-alias mapping, and a drift-protection meta-test.",
+  "scope": [
+    "invariant registry",
+    "docs/architecture/invariants.yaml",
+    "docs/architecture/invariants.md",
+    "INV-<SCOPE>-N naming scheme",
+    "scope index/taxonomy",
+    "drift-protection meta-test",
+    "legacy invariant ID aliases"
+  ],
+  "cross_refs": [
+    "docs/superpowers/specs/",
+    "holomush-6wcf2"
+  ],
+  "locked_markers": null,
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

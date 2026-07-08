@@ -1,0 +1,233 @@
+# Requirements: HoloMUSH
+
+**Defined:** 2026-07-07
+**Core Value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
+through either telnet or the web client, with every access-control decision default-deny and every plugin
+trusted identically.
+
+**Brownfield note:** HoloMUSH is a mature, actively-developed codebase. Most requirements below (the "Shipped
+Foundation" section) are already implemented and running — they are recorded here for traceability to their
+source SPEC, not as work items. Only the "v1 Requirements (Active Roadmap Scope)" section maps to
+`ROADMAP.md` phases and is subject to the 100%-coverage validation gate. Requirements are derived from
+`.planning/intel/constraints.md` (48 SPEC entries) and `.planning/intel/context.md` (invariant registry +
+`docs/roadmap.md` theme narratives) — no ADR/PRD documents existed in the ingest batch.
+
+## Shipped Foundation (Validated — Not Roadmap-Mapped)
+
+Implemented and running. Grouped by subsystem; each cites its source SPEC(s) for traceability.
+
+### Foundational Architecture (FOUND)
+
+- ✓ **FOUND-01**: Event-sourced Go core — immutable ordered events, state derives from replay/projection
+  (`docs/plans/2026-01-18-holomush-roadmap-design.md`, `2026-04-18-jetstream-event-log-design.md`)
+- ✓ **FOUND-02**: Two-tier plugin runtime — Lua (gopher-lua) for lightweight scripts, binary
+  (hashicorp/go-plugin, process-isolated) for complex extensions, with enforced runtime symmetry
+  (`docs/specs/2026-01-18-plugin-system-design.md`)
+- ✓ **FOUND-03**: Dual-protocol gateways — telnet + web (ConnectRPC), both pure protocol-translation with no
+  direct DB/service access (`docs/specs/2026-03-18-web-client-adapter-design.md`)
+- ✓ **FOUND-04**: Command dispatcher with two-layer ABAC authorization (coarse command-level pre-flight +
+  fine resource-instance check) and alias resolution (`docs/specs/2026-02-02-commands-behaviors-design.md`)
+- ✓ **FOUND-05**: YAML config file system via koanf, config-file-then-CLI-flag precedence
+  (`docs/specs/2026-03-17-config-file-system-design.md`)
+
+### Access Control (ABAC)
+
+- ✓ **ABAC-01**: Cedar-inspired ABAC policy DSL replacing static roles — `AccessPolicyEngine`, attributes,
+  properties, locks, seed policies, audit logging (`docs/specs/abac/00-overview.md`,
+  `docs/specs/2026-02-05-full-abac-design.md`)
+- ✓ **ABAC-02**: Default-deny evaluation — every subject/action/resource triple explicitly evaluated,
+  fail-closed on infra error (no permissive result on `Evaluate`/`CanPerformAction` failure)
+
+### Auth, Identity & Sessions (AUTHSESS)
+
+- ✓ **AUTHSESS-01**: argon2id password auth, player-character separation, progressive rate limiting
+  (`docs/specs/2026-01-25-auth-identity-design.md`)
+- ✓ **AUTHSESS-02**: Postgres-backed cross-protocol `SessionStore` — gap-free event replay on reconnect,
+  per-role TTL/history limits resolved via ABAC (`docs/specs/2026-03-19-session-persistence-design.md`)
+- ✓ **AUTHSESS-03**: Derived, actively-refreshed session liveness (not stored cooperative intent), with
+  gateway-held connection leases surviving core restarts
+  (`docs/superpowers/specs/2026-05-30-session-liveness-and-gateway-survival-design.md`)
+- ✓ **AUTHSESS-04**: Current-state presence snapshot RPC (not event replay) at `Subscribe` open, exempt from
+  the temporal-floor privacy invariant (`docs/superpowers/specs/2026-05-19-presence-snapshot-design.md`)
+
+### Scenes & RP Subsystem — Epic 9, plugin-owned (SCENE)
+
+- ✓ **SCENE-01**: Scenes owned entirely by the `core-scenes` binary plugin (own Postgres schema, gRPC
+  `SceneService`, plugin-enforced ABAC) — NOT a `locations`-table entity. Supersedes the
+  `2026-01-22-world-model-design.md` scene section (see PROJECT.md Key Decisions).
+  (`docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md`)
+- ✓ **SCENE-02**: Membership model — join/leave/invite/kick/transfer-ownership, member-based ABAC,
+  append-only `scene_ops_events` audit journal (`2026-04-07-scenes-phase-3-membership-design.md`)
+- ✓ **SCENE-03**: Plugin-owned content emission (pose/say/emit/ooc) with `crypto.emits`-gated sensitive
+  payloads, pose-order computation, IC/OOC event streams; non-participants at the same physical location
+  MUST NOT receive scene IC events (INV-SCENE-6) (`2026-05-19-scenes-phase-4-streams-and-pose-order-design.md`)
+- ✓ **SCENE-04**: Per-connection focus tracking and multi-connection visibility, atomic focus-state mutation
+  under a single store lock (`2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md`)
+- ✓ **SCENE-05**: Publish-vote lifecycle (COOLOFF→PUBLISHED atomic snapshot pipeline), hard participant-only
+  privacy boundary for scene-log reads (ABAC MUST NOT be consulted, INV-SCENE-60)
+  (`2026-05-23-scenes-phase-6-logs-vote-privacy-design.md`)
+- ✓ **SCENE-06**: Browsable/filterable scene board (`ListScenes`) with game-overridable content-warning
+  taxonomy, safety-accumulating union resolution across GAME/PLAYER/CHARACTER scope (INV-SCENE-56/58)
+  (`2026-05-29-scenes-phase-8-board-content-warnings-design.md`)
+- ✓ **SCENE-07**: Bare-ULID scene identifiers (no type-tag prefix), consistent with every other world entity
+  (`2026-05-28-scene-bare-ulid-identity-design.md`)
+- ✓ **SCENE-08**: Web scene creation via typed RPC (proto → facade → BFF → client → UI) — see PROJECT.md Key
+  Decision 5 (`2026-06-19-web-create-scene-design.md`)
+- ✓ **SCENE-09**: Web scene lifecycle/management actions (end/pause/resume/invite/kick/transfer/publish-vote)
+  via typed BFF facade; `SceneService` self-enforces ABAC per verb independent of the telnet command wrapper
+  (INV-SCENE-65) (`2026-06-24-scenes-web-management-actions-design.md`,
+  `2026-06-28-scenes-web-publish-vote-actions-design.md`, `2026-06-29-...live-event-delivery-design.md`,
+  `2026-06-30-publish-vote-web-interactive-controls-design.md`)
+- ✓ **SCENE-10**: Focus-routed conversational input — top-level pose/say/ooc/emit from a scene-focused
+  connection route to the scene's IC/OOC stream (not the grid location) across telnet, web terminal, and web
+  portal; fails CLOSED on focus-read infra error (INV-SCENE-67)
+  (`2026-07-05-focus-routed-scene-input-design.md`)
+
+### Event Bus, Crypto & Wire Conventions (EVTBUS)
+
+- ✓ **EVTBUS-01**: NATS JetStream event bus replacing Postgres LISTEN/NOTIFY; JetStream per-stream sequence
+  owns ordering, ULIDs are identity/dedup keys only (`2026-04-18-jetstream-event-log-design.md`)
+- ✓ **EVTBUS-02**: Sensitive event-payload encryption at rest/in-transit (DEK/KEK model, `crypto_keys`
+  rotation via `superseded_by`) without requiring a KMS (`2026-04-25-event-payload-crypto-design.md`)
+- ✓ **EVTBUS-03**: KEK presence is the sole activation gate for sensitive-event crypto; a provisioned KEK is
+  mandatory to boot, no KEK-less degraded mode (INV-CRYPTO-118/119)
+  (`2026-06-09-sensitive-event-crypto-activation-design.md`)
+- ✓ **EVTBUS-04**: Canonical `<plugin>:<verb>` wire event-type convention across all plugins
+  (`2026-06-06-event-type-wire-convention-design.md`)
+- ✓ **EVTBUS-05**: Single canonical `CommunicationContent` payload contract for conversational-content
+  emitters, enforced symmetrically for Lua and binary plugins
+  (`2026-07-03-communication-content-contract-design.md`)
+- ✓ **EVTBUS-06**: Central invariant registry (`docs/architecture/invariants.yaml`/`.md`) unifying all
+  `INV-<SCOPE>-N` guarantees with a `pending`→`bound` binding ratchet
+  (`2026-05-31-invariant-registry-design.md`)
+
+### Plugin Capability & Least-Privilege Architecture (PLUGCAP)
+
+- ✓ **PLUGCAP-01**: Unified manifest vocabulary + dependency DAG resolver for plugin host-capability and
+  inter-plugin-service declarations, runtime-parity enforced (INV-PLUGIN-41..45)
+  (`2026-06-11-plugin-capability-dependency-foundation-design.md`)
+- ✓ **PLUGCAP-02**: `PluginHostService` decomposed into capability-scoped `host.v1` namespace services;
+  single host-brokered consumption mechanism for both binary and Lua plugins
+  (`2026-06-11-plugin-host-capability-decomposition-design.md`,
+  `2026-06-12-lua-parity-host-brokered-consumption-design.md`)
+- ✓ **PLUGCAP-03**: Least-privilege `access:`/`scope:` manifest parameters + default-deny ABAC gate on
+  plugin capability/service access, host-vouched dispatch-context (INV-PLUGIN-50..53)
+  (`2026-06-12-plugin-least-privilege-trust-design.md`)
+- ✓ **PLUGCAP-04**: Fail-closed-at-load enforcement — a binary plugin whose code consumes an undeclared
+  `host.v1` capability cannot load (INV-PLUGIN-54)
+  (`2026-06-13-plugin-capability-declaration-enforcement-design.md`)
+- ✓ **PLUGCAP-05**: Atomic cutover to the declaration-gated brokered path as the SOLE capability-consumption
+  route for both runtimes — epic `holomush-eykuh` SHIPPED (P3 polish tail tracked in `bd`, not this roadmap)
+  (`2026-06-14-plugin-capability-atomic-cutover-design.md`)
+
+### Web Portal / Shell (WEBPORT)
+
+- ✓ **WEBPORT-01**: Shared `(authed)` SvelteKit layout (rail/footer/section-registry) unifying terminal and
+  scenes chrome (`2026-06-20-unified-authed-shell-design.md`)
+- ✓ **WEBPORT-02**: Web player workspace for scenes — browse/watch/contribute, alt handling, live delivery,
+  unread badges, log export (`2026-06-07-web-portal-scenes-design.md`)
+- ✓ **WEBPORT-03**: Shared `CommLine` rendering primitive for consistent say/pose/ooc/emit phrasing across
+  web terminal and scene workspace (`2026-06-25-shared-web-communication-seam-design.md`)
+
+## v1 Requirements (Active Roadmap Scope)
+
+Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
+
+### Channels Subsystem (CHAN)
+
+- [ ] **CHAN-01**: Player can join, leave, and list persistent named channels, independent of the spatial
+  world model
+- [ ] **CHAN-02**: Player can post to and read history from channels they are a member of, gated by
+  ABAC channel-membership policies
+- [ ] **CHAN-03**: Channel events flow through the shared EventBus substrate with the same JetStream/audit
+  guarantees as scenes
+- [ ] **CHAN-04**: Faction-restricted channels enforce membership-based access distinct from open channels
+- [ ] **CHAN-05**: `core-channels` plugin is the second substrate consumer, validating `eventkit`/`groupkit`
+  SDK extraction per INV-S7 (N=2 rule) — extraction happens only after this validates the pattern, not before
+
+### Scenes Lineage Completion (SCENEFWD)
+
+- [ ] **SCENEFWD-01**: Player can create a scene from a reusable template (participants/theme/timing
+  pre-filled) — bd epic "Scenes Phase 7: Templates"
+- [ ] **SCENEFWD-02**: Player receives a notification when a scene they participate in or are invited to has
+  relevant activity — bd epic "Scenes Phase 10: Notifications + telnet edge cases + polish"
+- [ ] **SCENEFWD-03**: Telnet scene commands handle previously-identified edge cases (e.g. mixed
+  focused/skipped render branches, `plugins/core-scenes/commands.go:890`) without silent failure
+
+### Platform Hardening & Deployment Scaling (CLUSTER)
+
+- [ ] **CLUSTER-01**: Operator can deploy HoloMUSH's event bus against external/clustered NATS JetStream
+  instead of only embedded in-process mode (epic `holomush-s5ts`)
+- [ ] **CLUSTER-02**: Server-account subject scoping enforces single-principal publish/subscribe on
+  game-topic subjects (`events.>`, `audit.>`, `internal.>`) in external mode
+- [ ] **CLUSTER-03**: Crypto key-invalidation coordinator propagates rotation events correctly across real
+  multi-node replicas, not just the embedded single-node path
+- [ ] **CLUSTER-04**: Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being
+  silently dropped (`internal/eventbus/audit/subsystem.go:59`)
+- [ ] **CLUSTER-05**: Operator has a documented runbook for external-NATS deployment
+
+## v2 Requirements (Deferred)
+
+Tracked but not in the current roadmap — blocked on a missing design or an unmet prerequisite.
+
+### Forums (Epic 11, `holomush-djj`)
+
+- **FORUM-01**: Forum-based scene request/scheduling integration — originally Epic 9's E9.6, lifted out
+  2026-07-03 because Forums has no design yet. Revisit once `holomush-djj` has a spec.
+
+### Discord Integration (Epic 12)
+
+- **DISCORD-01**: Discord/Slack channel bridging — depends on Channels (v1, above) shipping first
+- **DISCORD-02**: OAuth linking of Discord account to player account (`[E12.3]`) — needs an OAuth substrate
+  that does not yet exist
+
+### Web Portal Parity — Non-Scene Surfaces
+
+- **WEBPORTFWD-01**: World/building editing via the web client (currently telnet/CLI-only) —
+  `theme:web-portals`'s "web ⊇ telnet" principle is directional strategy, not yet backed by a SPEC. Needs
+  `/gsd-spec-phase` before it can be roadmapped.
+
+## Out of Scope
+
+Explicitly excluded or superseded. Documented to prevent scope creep or accidental resurrection.
+
+| Feature | Reason |
+|---------|--------|
+| Locations-table scene model (`docs/specs/2026-01-22-world-model-design.md` scene section) | Superseded by the plugin-owned `core-scenes` model — see PROJECT.md Key Decision 4. Do not resurrect. |
+| Command-path-only structural scene writes (E9.5 decision D4) | Superseded by the typed-RPC decision for structural writes — see PROJECT.md Key Decision 5. Conversational verbs (pose/say/ooc/emit) still correctly use the command path. |
+| WASM plugin system (archived 2026-01-17 design) | Abandoned one day after proposal in favor of the Lua + go-plugin two-tier model; no later document revisits it. |
+| `eventkit`/`groupkit` SDK extraction as a standalone effort | Deliberately deferred until Channels validates the two-consumer pattern (INV-S7) — folded into CHAN-05, not separate scope. |
+| Invariant binding backfill as a roadmap phase | 259/334 invariants are `binding: pending` (epic `holomush-hz0v4`) — a genuine, tracked gap, but task-shaped (write tests) rather than a user-observable phase outcome. Any phase touching crypto/scenes should bind relevant invariants as part of its own definition of done instead. |
+| Audit-metrics observability gap, telnet-handler gRPC rewrite | Both are real, small, `bd`-tracked TODOs (`internal/eventbus/authguard/audit/emitter.go:216,246`, `cmd/holomush/gateway.go:258`) — task-shaped, not phase-worthy on their own. |
+
+## Traceability
+
+Only "v1 Requirements (Active Roadmap Scope)" map to roadmap phases. Shipped Foundation requirements predate
+this GSD roadmap and are recorded as context (see above), not phase-mapped.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CHAN-01 | Phase 1 | Pending |
+| CHAN-02 | Phase 1 | Pending |
+| CHAN-03 | Phase 1 | Pending |
+| CHAN-04 | Phase 1 | Pending |
+| CHAN-05 | Phase 1 | Pending |
+| SCENEFWD-01 | Phase 2 | Pending |
+| SCENEFWD-02 | Phase 2 | Pending |
+| SCENEFWD-03 | Phase 2 | Pending |
+| CLUSTER-01 | Phase 3 | Pending |
+| CLUSTER-02 | Phase 3 | Pending |
+| CLUSTER-03 | Phase 3 | Pending |
+| CLUSTER-04 | Phase 3 | Pending |
+| CLUSTER-05 | Phase 3 | Pending |
+
+**Coverage:**
+
+- v1 requirements: 13 total
+- Mapped to phases: 13
+- Unmapped: 0 ✓
+
+---
+
+*Requirements defined: 2026-07-07*
+*Last updated: 2026-07-07 after brownfield ingest (48 SPEC + invariant registry + roadmap themes)*

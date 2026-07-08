@@ -1,0 +1,21 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-03-17-config-file-system-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Server Configuration File System Design",
+  "summary": "Specifies YAML config file support for HoloMUSH server using koanf, with two-layer precedence (config file < CLI flags), a single sectioned config.yaml at a well-known XDG path, and explicit non-goals (no env var mapping, hot-reload, init command, remote sources, secret management).",
+  "scope": [
+    "config file loading",
+    "koanf",
+    "CLI flags precedence",
+    "XDG config path",
+    "config.yaml sections",
+    "operator documentation",
+    "epic holomush-eagr"
+  ],
+  "cross_refs": ["site/docs/operators/configuration.md", "holomush-eagr"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

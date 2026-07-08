@@ -1,0 +1,35 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-14-plugin-capability-atomic-cutover-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Sub-spec 5: Plugin-capability atomic cutover + o262d settlement",
+  "summary": "Specifies the atomic cutover that removes the host-capability-bridge allowlist, retires legacy unconditional Lua capability injection, makes the declaration-gated brokered path the sole capability-consumption route for both binary and Lua plugins, and settles the o262d loader-policy bug.",
+  "scope": [
+    "plugin-capability-architecture",
+    "hostfunc.Register",
+    "luabridge.RegisterHostCaps",
+    "RegisterPluginService",
+    "hostcap servers",
+    "WithHostCapBridge allowlist",
+    "manifest capability declarations",
+    "loader policy / INV-PLUGIN-43",
+    "least-privilege grant resolver",
+    "INV-PLUGIN-44",
+    "INV-PLUGIN-45"
+  ],
+  "cross_refs": [
+    "holomush-eykuh",
+    "holomush-eykuh.4",
+    "o262d",
+    "oeb4d",
+    "internal/plugin/hostfunc/functions.go",
+    "internal/plugin/lua/host.go",
+    "internal/plugin/goplugin/host.go",
+    "internal/plugin/manager.go",
+    "internal/plugin/event_emitter.go"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

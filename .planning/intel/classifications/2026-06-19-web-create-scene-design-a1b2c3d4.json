@@ -1,0 +1,33 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-19-web-create-scene-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Web Create-Scene — Design",
+  "summary": "Specifies restoring web-based scene creation via a typed RPC path (proto → facade → BFF → client → UI), superseding E9.5's command-path-only decision for structural writes, and records the window-per-scene disposition.",
+  "scope": [
+    "web create-scene affordance",
+    "typed RPC",
+    "SceneService.CreateScene",
+    "BFF facade",
+    "Scenes Portal",
+    "command path vs structural writes",
+    "window-per-scene UI"
+  ],
+  "cross_refs": [
+    "holomush-5rh.22",
+    "holomush-5rh (Epic 9)",
+    "holomush-sz0h3 (theme:web-portals)",
+    "holomush-5rh.8 (E9.5 Scenes Portal)",
+    "holomush-5rh.18",
+    "holomush-5rh.24",
+    "holomush-5rh.23",
+    "holomush-5rh.9",
+    "internal/web/scene_handlers.go",
+    "internal/grpc/sceneaccess_service.go",
+    "plugins/core-scenes/commands.go"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

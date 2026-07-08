@@ -1,0 +1,39 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/architecture/invariants.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "HoloMUSH Invariant Registry",
+  "summary": "Generated registry (from invariants.yaml) cataloguing named system invariants by scope (INV-CRYPTO, INV-PRIVACY, INV-SCENE, INV-PLUGIN, INV-EVENTBUS, INV-CLUSTER, INV-ACCESS, INV-SESSION, INV-STORE, INV-TELEMETRY, INV-BRANDING, INV-DOCS, INV-COMMAND, INV-COMM), each entry with ID, summary, legacy alias, and binding status.",
+  "scope": [
+    "invariant registry",
+    "invariants.yaml",
+    "cmd/inv-render",
+    "test/meta/invariant_registry_test.go",
+    "crypto",
+    "privacy",
+    "scene",
+    "plugin",
+    "eventbus",
+    "cluster",
+    "access",
+    "session",
+    "store",
+    "telemetry",
+    "branding",
+    "docs",
+    "command",
+    "communication content"
+  ],
+  "cross_refs": [
+    "invariants.yaml",
+    "test/meta/invariant_registry_test.go",
+    "cmd/inv-render",
+    ".claude/rules/gateway-boundary.md",
+    "2026-05-29-recognized-command-chip-design.md",
+    "holomush-g1qcw"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

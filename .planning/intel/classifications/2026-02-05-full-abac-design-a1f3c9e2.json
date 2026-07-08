@@ -1,0 +1,35 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-02-05-full-abac-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Full ABAC Architecture Design",
+  "summary": "Index/overview document splitting the Full ABAC (attribute-based access control) architecture spec into nine standalone sections covering core types, policy DSL, property model, resolution, storage/audit, layers/commands, migration, and testing.",
+  "scope": [
+    "ABAC",
+    "AccessPolicyEngine",
+    "Policy DSL",
+    "Property Model",
+    "Attribute Providers",
+    "Audit Log",
+    "Lock Syntax",
+    "Seed Policies",
+    "Plugin Capability Migration"
+  ],
+  "cross_refs": [
+    "abac/00-overview.md",
+    "abac/01-core-types.md",
+    "abac/02-policy-dsl.md",
+    "abac/03-property-model.md",
+    "abac/04-resolution-evaluation.md",
+    "abac/05-storage-audit.md",
+    "abac/06-layers-commands.md",
+    "abac/07-migration-seeds.md",
+    "abac/08-testing-appendices.md",
+    "holomush-5k1",
+    "holomush-5k1.1"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}
