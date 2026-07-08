@@ -16,6 +16,9 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [Hook focus-cache invalidation at UpdateSessionConnection](holomush-sfxte-hook-focus-cache-invalidation-at-updatesessionconnection.md) | 2026-07-08 | Accepted | `holomush-sfxte` |
+| [Use a caching session.Store decorator for focus, not registry or session Info](holomush-cfqxp-use-caching-session-store-decorator-focus-not-registry-or-se.md) | 2026-07-08 | Accepted | `holomush-cfqxp` |
+| [Close the focus cache-aside race with a generation-guarded populate](holomush-sz877-close-focus-cache-aside-race-generation-guarded-populate.md) | 2026-07-08 | Accepted | `holomush-sz877` |
 | [Scene info read access: participants, invitees, and open scenes via sibling plugin policies](holomush-gcr2k-scene-info-read-access-participants-invitees-and-open-scenes.md) | 2026-07-06 | Accepted | `holomush-gcr2k` |
 | [Focus-redirect fails closed on focus-read error](holomush-pbp9j-focus-redirect-fails-closed-focus-read-error.md) | 2026-07-06 | Accepted | `holomush-pbp9j` |
 | [Hard PreToolUse deny for inline task test/lint/build in the main session](holomush-g53q7-hard-pretooluse-deny-inline-task-test-lint-build-main-sessio.md) | 2026-07-06 | Accepted | `holomush-g53q7` |
