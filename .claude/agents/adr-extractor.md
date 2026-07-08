@@ -13,8 +13,6 @@ tools:
   - mcp__probe__search_code
   - mcp__probe__extract_code
   - Bash
-skills:
-  - jj:jujutsu
 ---
 
 # adr-extractor

@@ -20,7 +20,6 @@ tools:
   - Bash
   - Write
 skills:
-  - jj:jujutsu
   - beads:beads
 memory: project
 maxTurns: 80
@@ -128,9 +127,8 @@ high-yield:
 - **Don't run `task`, `make`, `go build`, `task pr-prep`, or any other
   long build.** You are an investigator. Your tools are `bd show`,
   `Read`, `Grep`/`rg`, `Glob`, occasional `gh pr view`.
-- **Don't run mutating jj/git commands.** This repo is jj-colocated. You
-  may run `jj log -r <rev>` or `git log` for read-only context, but never
-  `jj describe`, `jj squash`, `git commit`, etc.
+- **Don't run mutating git commands.** You may run `git log`/`git show`
+  for read-only context, but never `git commit`, `git rebase`, `git push`, etc.
 - **Don't write to project files** other than your own report path (see
   Emission contract). `Write` MUST NOT touch any path that's part of the
   audit subject — only the report file under
@@ -242,8 +240,8 @@ Reports should be:
 For large queues (>50 beads), the orchestrator may dispatch multiple
 bead-auditor agents in parallel, each scoped to a distinct epic prefix
 (or other non-overlapping cluster). Each agent's `<slug>` MUST be unique
-so report paths don't collide. Agents do NOT need their own jj workspace
-because they are read-only — same working copy is fine. (The reviewer
+so report paths don't collide. Agents do NOT need their own git worktree
+because they are read-only — the same working copy is fine. (The reviewer
 agents under `.claude/agents/` follow the same convention.)
 
 ## Triage labeling and notes
