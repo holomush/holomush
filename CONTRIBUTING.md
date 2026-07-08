@@ -66,13 +66,12 @@ The `task pr-prep` gate covers most of this automatically before you open a PR.
 
 ## How we develop (optional — not required for contributors)
 
-HoloMUSH is developed heavily with AI coding agents, using
-[Jujutsu (jj)](https://jj-vcs.github.io/) for version control and an internal
-issue tracker. **You need none of that.** Standard `git`, GitHub Issues, and
-GitHub pull requests are fully supported and are the only thing we ask of
-contributors. (This is why you'll see a `CLAUDE.md`, a `.jj/` directory, and
-agent-authored commits — they're part of the maintainer workflow, not
-requirements for you.)
+HoloMUSH is developed heavily with AI coding agents, using native `git`
+worktrees for per-session isolation and an internal issue tracker. **You need
+none of that.** Standard `git`, GitHub Issues, and GitHub pull requests are
+fully supported and are the only thing we ask of contributors. (This is why
+you'll see a `CLAUDE.md`, a `.claude/` directory, and agent-authored commits —
+they're part of the maintainer workflow, not requirements for you.)
 
 ## Code of Conduct
 

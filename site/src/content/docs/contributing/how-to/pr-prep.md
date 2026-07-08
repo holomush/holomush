@@ -3,10 +3,10 @@ title: "Pre-Push Quality Gate (`task pr-prep`)"
 ---
 
 :::note[Maintainer workflow]
-This page documents the maintainer/agent workflow; its examples assume
-[Jujutsu (jj)](https://jj-vcs.github.io/) and the project's internal tooling.
-**External contributors don't need jj** — `task pr-prep` works identically under
-standard `git`. See
+This page documents the maintainer/agent workflow; its examples assume the
+project's internal tooling and git-worktree session isolation. **External
+contributors don't need any of that** — `task pr-prep` works identically in a
+plain `git` checkout. See
 [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md)
 for the contributor workflow.
 :::
@@ -205,12 +205,12 @@ Use this when a markdown change references not-yet-merged code via
 `mkdocstrings`-style includes, or when you want full validation regardless
 of diff classification.
 
-### jj snapshot caveat
+### Uncommitted-changes caveat
 
-Detection uses `git diff --name-only origin/main...HEAD`, which reflects
-jj's last auto-snapshot of `@`. If you've edited files since the last jj
-command, the changes are on disk but not yet in `@`. Run `jj st` (or any
-read-only jj command) before `task pr-prep` to force a snapshot.
+Lane detection uses `git diff --name-only origin/main...HEAD`, which reflects
+only **committed** changes. If you've edited files but not yet committed them,
+the diff won't include them and the docs-vs-code lane may be misclassified.
+Commit your work before `task pr-prep` so detection sees the full change set.
 
 ### Same-name skip workflow
 

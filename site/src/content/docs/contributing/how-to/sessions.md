@@ -4,23 +4,23 @@ title: "Session Isolation"
 
 :::note[Maintainer workflow]
 This page documents the maintainer/agent session-isolation workflow using
-[Jujutsu (jj)](https://jj-vcs.github.io/) workspaces. **External contributors
-don't need jj or workspaces** — a standard `git` fork-and-branch workflow is all
-that's required. See
+native [git worktrees](https://git-scm.com/docs/git-worktree). **External
+contributors don't need worktrees** — a standard `git` fork-and-branch workflow
+is all that's required. See
 [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md).
 :::
 
-HoloMUSH is developed primarily by concurrent AI agent sessions (Claude Code) and human contributors working in parallel. Because `jj` snapshots the working copy on every command, two sessions sharing the same `jj` workspace will collide on uncommitted edits.
+HoloMUSH is developed primarily by concurrent AI agent sessions (Claude Code) and human contributors working in parallel. Two sessions editing files in the same working tree clobber each other's uncommitted changes (last write wins on the filesystem), so each session gets its own isolated checkout.
 
-To prevent this, every Claude Code session runs in its own `jj` workspace under `<repo-parent>/.worktrees/<name>`.
+To prevent collisions, every Claude Code session runs in its own git worktree under `<repo-parent>/.worktrees/<name>`.
 
-## Creating a workspace
+## Creating a worktree
 
 `task workspace:new -- <name>` is the canonical entry point. It:
 
-- Resolves the main repo's `.jj/repo` path from any cwd
-- Runs `jj git fetch` first so `main@origin` is fresh
-- Creates the workspace at `<parent>/.worktrees/<name>` rooted at `main@origin`
+- Resolves the main repo from any cwd (via `git rev-parse`)
+- Runs `git fetch origin` first so `origin/main` is fresh
+- Creates the worktree at `<parent>/.worktrees/<name>` on a new branch `<name>` off `origin/main`
 - Writes `.beads/redirect` pointing at the main repo's `.beads/` so `bd` works
 - Is idempotent on re-invocation (just prints the existing path)
 
@@ -31,7 +31,7 @@ task workspace:new -- my-feature
 
 ## For agents
 
-Run `task workspace:new -- <name>`, then `cd` into the printed path. Sub-agents launched via the `Task` tool inherit the parent's workspace; the parent MUST NOT dispatch parallel `Task` calls that edit the same files.
+Run `task workspace:new -- <name>`, then `cd` into the printed path. Sub-agents launched via the `Task` tool inherit the parent's worktree; the parent MUST NOT dispatch parallel `Task` calls that edit the same files.
 
 ## For humans
 
@@ -45,7 +45,7 @@ Use a `claude-iso` shell function that wraps `task workspace:new` + `cd` + `exec
 # `cmd`'s. We therefore call `task workspace:new` twice — first to check
 # the exit status, then again inside command substitution to capture the
 # path. The second call is idempotent and just prints the path for an
-# existing workspace.
+# existing worktree.
 function claude-iso
     set name $argv[1]
     task workspace:new -- $name >/dev/null
@@ -75,35 +75,36 @@ claude-iso() {
 Usage:
 
 ```bash
-claude-iso my-feature   # creates workspace, cds in, launches claude
+claude-iso my-feature   # creates worktree, cds in, launches claude
 ```
 
 ## Hooks and `.claude/`
 
-New workspaces inherit `.claude/` (tracked in git), so `SessionStart`, `UserPromptSubmit`, and other Claude Code hooks fire identically in any workspace — no hook re-wiring is needed.
+New worktrees inherit `.claude/` (tracked in git), so `SessionStart`, `UserPromptSubmit`, and other Claude Code hooks fire identically in any worktree — no hook re-wiring is needed.
 
-The `SessionStart` hook also warns if you start a session in the shared `default` workspace, which is reserved for read-only inspection.
+The `SessionStart` hook also warns if you start a session in the shared main checkout (primary worktree), which is reserved for read-only inspection.
 
-## Using `gh` in a workspace
+## Using `gh` in a worktree
 
-A `jj` workspace has no `.git` directory for `gh` to auto-detect the repo, so `gh`
-cannot infer the remote — always pass `-R holomush/holomush` explicitly (e.g.
-`gh pr view 123 -R holomush/holomush`, `gh pr create -R holomush/holomush ...`).
+A git worktree carries its own `.git` file linking back to the main repo, so
+`gh` auto-detects the remote — no `-R` flag is required. You MAY still pass
+`-R holomush/holomush` explicitly in scripts for robustness (e.g.
+`gh pr view 123 -R holomush/holomush`).
 
 ## Cleanup after landing
 
-After your branch lands on `main`, remove the workspace. The leading `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd:
+After your branch lands on `main`, remove the worktree. The leading `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd:
 
 ```bash
 cd <repo-root>
-jj workspace forget <name>
-rm -rf <repo-parent>/.worktrees/<name>
+git worktree remove <repo-parent>/.worktrees/<name>
+git branch -d <name>
 ```
 
 ## Troubleshooting
 
-**`bd` fails with "no beads database found"** — the workspace's `.beads/redirect` is missing or stale. Re-run `task workspace:new -- <name>` to self-heal it.
+**`bd` fails with "no beads database found"** — the worktree's `.beads/redirect` is missing or stale. Re-run `task workspace:new -- <name>` to self-heal it.
 
-**Stale `main@origin`** — `task workspace:new` always runs `jj git fetch` first, so creating a fresh workspace is the easiest way to get a fresh starting point.
+**Stale `origin/main`** — `task workspace:new` always runs `git fetch origin` first, so creating a fresh worktree is the easiest way to get a fresh starting point.
 
-**Two sessions in `default`** — exit one, run `task workspace:new -- <name>` for the other.
+**Two sessions in the main checkout** — exit one, run `task workspace:new -- <name>` for the other.
