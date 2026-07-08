@@ -18,7 +18,7 @@
 
 **Linting:** `golangci-lint` v2 config at `.golangci.yaml`. Enabled linters: `errcheck`, `govet`, `staticcheck`, `nilerr` (bugs); `revive`, `misspell` (style); `prealloc`, `unconvert` (performance); `gosec` (security); `errorlint`, `wrapcheck` (error handling); `unparam`, `gocritic`, `nolintlint`, `depguard` (maintenance); `sloglint` (structured-logging discipline); `forbidigo` (custom bans, e.g. `time.Sleep` inside `internal/eventbus/`). Plus repo-authored custom analyzers (`gorules/`): `codeckeybytesallowlist`, `cursorpackageinternal`, `dekmaterialnofmtformatting`, `dekmaterialnogob`, `dekmaterialnojson`, `dekmaterialnolog`, `dekmaterialnoproto`, `dekmaterialnoslog`, `noremoteclockcompare`, `sceneopseventsappendonly`, `ulidmakeforbidden`.
 
-**`depguard` rule (`.golangci.yaml`):** `no-test-only-constructs-in-production` denies `internal/eventbus/eventbustest` import in any file that is not `*_test.go` and not under `internal/testsupport/**` / `internal/cluster/clustertest/**` / `test/testutil/**`.
+**`depguard` rule (`.golangci.yaml`):** `no-test-only-constructs-in-production` denies `internal/eventbus/eventbustest`, `internal/core/coretest`, and `internal/testsupport/quarantinetest` imports in any file that is not `*_test.go` and not under `internal/testsupport/**` / `internal/cluster/clustertest/**` / `test/testutil/**`.
 
 **Test-file exclusions:** `_test.go` files are exempted from `gocritic`, `wrapcheck`, `errcheck` (blank-identifier), `ulidmakeforbidden`, `cursorpackageinternal`, and a `gosec` G101 (test password-hash literals aren't real credentials).
 

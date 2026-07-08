@@ -194,7 +194,7 @@ Five sub-tiers: bus-integration (embedded NATS via `eventbustest`), audit-integr
 
 **E2E:** Playwright, full Docker stack, driven through a real browser client — run via `task test:e2e` (`task test:e2e:cover` for coverage-instrumented binaries). "E2E" is reserved for this Playwright suite; the Ginkgo suite is always called "integration" regardless of stack depth.
 
-Production code MUST NOT import `eventbustest` or `internal/core/coretest` — enforced by `depguard` in `.golangci.yaml`.
+Production code MUST NOT import `eventbustest`, `internal/core/coretest`, or `internal/testsupport/quarantinetest` — enforced by `depguard` in `.golangci.yaml`.
 
 ## Quarantine
 

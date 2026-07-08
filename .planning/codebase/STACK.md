@@ -20,7 +20,7 @@
 **Environment:**
 
 - Go 1.26.4 toolchain (`go.mod` line 3: `go 1.26.4`)
-- Node.js runtime for `web/` (SvelteKit) and `site/` (Astro) — no `.nvmrc` committed at root or in `web/`; version implied by `web/package.json` devDependency ranges (Vite 8, SvelteKit 2.69)
+- Node.js runtime for `web/` (SvelteKit) and `site/` (Astro) — no `.nvmrc`/`.node-version` committed; the authoritative pin is CI's `node-version: 24` (`.github/workflows/ci.yaml`, `release.yaml`, `site.yml`, `scripts-tests.yaml`)
 
 **Package Manager:**
 
