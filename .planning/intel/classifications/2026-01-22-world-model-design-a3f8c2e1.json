@@ -1,0 +1,24 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-01-22-world-model-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "World Model Architecture Design",
+  "summary": "Defines HoloMUSH's hybrid world model: persistent locations, scene/temporary rooms, PostgreSQL schema with recursive CTEs (AGE-compatible), bidirectional exits, object containment, and event-driven state changes with ABAC integration.",
+  "scope": [
+    "world model",
+    "locations",
+    "exits",
+    "objects",
+    "scenes",
+    "PostgreSQL schema",
+    "recursive CTEs",
+    "event-driven world state",
+    "ABAC world permissions",
+    "internal/world package"
+  ],
+  "cross_refs": ["holomush-x2t", "holomush-x2t.1"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

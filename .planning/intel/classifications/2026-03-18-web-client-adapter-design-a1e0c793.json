@@ -1,0 +1,26 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-03-18-web-client-adapter-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Web Client Adapter & SvelteKit Scaffold Design",
+  "summary": "Specifies the ConnectRPC HTTP adapter in the gateway process, a web-facing protobuf WebService, and a minimal embedded SvelteKit scaffold proving the full browser-to-core pipeline works end-to-end. Sub-spec 1 of 3 for Epic 8 (Web Client), covering scaffolding and adapter only, not terminal/chat UX or portal pages.",
+  "scope": [
+    "ConnectRPC gateway adapter",
+    "WebService protobuf",
+    "SvelteKit scaffold",
+    "go:embed static assets",
+    "--web-dir flag",
+    "Playwright E2E test",
+    "CharacterRef core struct",
+    "gateway boundary"
+  ],
+  "cross_refs": [
+    "holomush-qve",
+    "holomush-qve.1",
+    "site/docs/operators/configuration.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

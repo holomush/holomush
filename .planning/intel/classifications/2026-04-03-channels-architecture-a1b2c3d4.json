@@ -1,0 +1,31 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-04-03-channels-architecture.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Channels Architecture Design",
+  "summary": "Specifies the data model, storage, ABAC authorization, event-stream integration, and command surface for persistent named channels independent of the spatial world model.",
+  "scope": [
+    "channels",
+    "event store",
+    "ABAC policies",
+    "verb registry",
+    "channel membership",
+    "channel history",
+    "Discord/Slack bridging",
+    "faction channels"
+  ],
+  "cross_refs": [
+    "docs/specs/2026-03-28-comm-event-extensibility-design.md",
+    "docs/specs/abac/01-core-types.md",
+    "docs/specs/abac/07-migration-seeds.md",
+    "holomush-0sc",
+    "holomush-0sc.1",
+    "holomush-vrzu",
+    "holomush-0sc.8",
+    "PR #181"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

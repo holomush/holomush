@@ -1,0 +1,30 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-29-publish-vote-web-live-event-delivery-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Publish-vote web: live event delivery design",
+  "summary": "Specifies how the web client delivers live publish-vote events: refetch-on-event (Approach B) rather than client-side tally reconstruction, per ADR holomush-o8gx8's snapshot-read + live-event split. Defines observer vs participant UX visibility rules and client-side wiring at ingestEvent, with no host/proto/manifest changes required.",
+  "scope": [
+    "publish-vote web slice",
+    "scene_publish_* events",
+    "GetPublishedScene RPC",
+    "GetScene active-attempt pointer",
+    "workspaceStore.ingestEvent",
+    "translate.go event translation",
+    "observer vs participant UX"
+  ],
+  "cross_refs": [
+    "ADR holomush-o8gx8",
+    "INV-SCENE-60",
+    "INV-SCENE-61",
+    "INV-SCENE-62",
+    "epic holomush-5rh.24",
+    "holomush-5rh.24.41",
+    "holomush-vgc0t",
+    "PR #4541"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

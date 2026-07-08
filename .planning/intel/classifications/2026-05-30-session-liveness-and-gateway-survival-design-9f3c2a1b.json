@@ -1,0 +1,31 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-30-session-liveness-and-gateway-survival-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Session Liveness & Gateway Survival — Connection Leases, Derived Presence, Resilient Reconnect",
+  "summary": "Specifies a redesign of session liveness so active/grid_present presence state derives from a decaying, actively-refreshed signal rather than stored cooperative-transition intent, and defines gateway-held connection leases so a core restart does not drop or ghost live clients.",
+  "scope": [
+    "session liveness",
+    "gateway survival",
+    "connection leases",
+    "derived presence",
+    "grid_present",
+    "reconnect resilience",
+    "session reaper",
+    "guest reattach TTL",
+    "web and telnet transports"
+  ],
+  "cross_refs": [
+    "holomush-rsoe6",
+    "holomush-2iyrf",
+    "holomush-hfvc",
+    "holomush-cizj",
+    "holomush-r20h",
+    "holomush-bgxg",
+    "docs/plans/2026-04-07-cursor-lock-finding-1-closure.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

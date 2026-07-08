@@ -1,0 +1,26 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/plans/archive/2026-01-17-holomush-architecture-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "HoloMUSH Architecture Design",
+  "summary": "ARCHIVED (superseded by roadmap): original technical specification framing HoloMUSH's Go core, dual telnet/web protocol, WASM plugin system, session persistence, and PWA client architecture; superseded by docs/roadmap.md and later specs — historical context only, not current constraints.",
+  "scope": [
+    "Go core",
+    "event-oriented architecture",
+    "telnet adapter",
+    "web SvelteKit PWA",
+    "WASM plugin system",
+    "session persistence",
+    "development workflow (spec-driven, TDD)"
+  ],
+  "cross_refs": [
+    "docs/specs/",
+    "docs/plans/",
+    "docs/reference/",
+    "docs/roadmap.md (superseding doc, referenced in Status line)"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Archived/superseded document; manifest declares SPEC type. Content is largely historical framing rather than active technical constraints — treat as low-precedence context despite SPEC classification."
+}

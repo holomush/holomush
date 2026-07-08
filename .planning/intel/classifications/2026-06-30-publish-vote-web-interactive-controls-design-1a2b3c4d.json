@@ -1,0 +1,33 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-30-publish-vote-web-interactive-controls-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Publish-Vote Web — Interactive Controls Design",
+  "summary": "Specifies the web write-path integration for publish-vote (start/cast/withdraw actions, store state, UI controls) over existing typed BFF RPCs, respecting no-caller-vote-data and no-payload-events backend constraints.",
+  "scope": [
+    "publish-vote feature",
+    "web/src/lib/scenes/publishFlow.ts",
+    "publishStore",
+    "ScenePublishPanel",
+    "SceneContextRail",
+    "typed BFF RPC wrappers",
+    "scene lifecycle actions"
+  ],
+  "cross_refs": [
+    "2026-06-28-scenes-web-publish-vote-actions-design.md",
+    "2026-06-29-publish-vote-web-live-event-delivery-design.md",
+    "holomush-v4qmu",
+    "holomush-uqrr7",
+    "holomush-5rh.24.41.9",
+    "holomush-5rh.24.41",
+    "holomush-5rh.24",
+    "holomush-5rh.24.41.1",
+    "holomush-5rh.24.41.6",
+    "holomush-5rh.24.41.10",
+    "holomush-5rh.24.41.7"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

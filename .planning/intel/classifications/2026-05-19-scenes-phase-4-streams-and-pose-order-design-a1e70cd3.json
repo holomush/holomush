@@ -1,0 +1,32 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-19-scenes-phase-4-streams-and-pose-order-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scenes Phase 4 — Event streams + pose order",
+  "summary": "Technical spec for core-scenes Phase 4: plugin-owned content emission (pose/say/emit/ooc), crypto.emits + EmitTypeRegistrar adoption, pose-order computation with GetPoseOrder RPC, and IC/OOC notice events, all bound to prior substrate contracts.",
+  "scope": [
+    "core-scenes plugin",
+    "event streams",
+    "pose order computation",
+    "GetPoseOrder RPC",
+    "crypto.emits manifest",
+    "EmitTypeRegistrar",
+    "scene IC/OOC subjects",
+    "INV-P4-1..13 invariants"
+  ],
+  "cross_refs": [
+    "docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md",
+    "docs/superpowers/specs/2026-05-16-social-spaces-substrate-contract.md",
+    "docs/superpowers/specs/2026-05-17-inv-s5-mechanism-design.md",
+    "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md",
+    "docs/superpowers/specs/2026-05-13-event-payload-crypto-phase7-plugin-sdk-design.md",
+    "holomush-5rh.13",
+    "holomush-c8a9",
+    "holomush-cb4x",
+    "holomush-ac50"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

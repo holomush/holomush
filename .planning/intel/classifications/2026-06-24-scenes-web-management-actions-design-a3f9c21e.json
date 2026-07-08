@@ -1,0 +1,34 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-24-scenes-web-management-actions-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scenes Web — Lifecycle & Management Actions Design",
+  "summary": "Technical design for exposing scene lifecycle and management verbs (end/pause/resume, invite/kick/transfer, publish voting) to the web client via a typed BFF facade, closing an authorization gap in SceneService RPC handlers.",
+  "scope": [
+    "SceneService",
+    "SceneAccessService facade",
+    "WebService",
+    "scene lifecycle verbs (EndScene, PauseScene, ResumeScene, UpdateScene)",
+    "scene membership verbs (InviteToScene, KickFromScene, TransferOwnership, LeaveScene)",
+    "scene publish verbs (StartScenePublish, CastPublishVote, WithdrawScenePublish)",
+    "gateway-boundary invariant",
+    "INV-SCENE-33, INV-SCENE-63, INV-SCENE-64"
+  ],
+  "cross_refs": [
+    "holomush-5rh.24",
+    "holomush-v4qmu",
+    "holomush-sz0h3",
+    "holomush-5rh.8",
+    "holomush-5rh.22",
+    "api/proto/holomush/scene/v1/scene.proto",
+    ".claude/rules/gateway-boundary.md",
+    "docs/superpowers/plans/2026-06-24-scenes-web-lifecycle-actions.md",
+    "internal/grpc/sceneaccess_service.go",
+    "plugins/core-scenes/service.go",
+    "plugins/core-scenes/commands.go"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

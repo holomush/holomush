@@ -1,0 +1,31 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/abac/00-overview.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Full ABAC Architecture Design",
+  "summary": "Defines the full Attribute-Based Access Control architecture replacing static roles with a Cedar-inspired policy DSL, covering goals, non-goals, key design decisions, glossary, and migration approach.",
+  "scope": [
+    "ABAC engine",
+    "AccessPolicyEngine",
+    "policy DSL",
+    "attributes",
+    "properties",
+    "locks",
+    "seed policies",
+    "audit logging",
+    "policy CRUD admin commands"
+  ],
+  "cross_refs": [
+    "07-migration-seeds.md#seed-policies",
+    "01-core-types.md#accessrequest",
+    "04-resolution-evaluation.md#evaluation-algorithm",
+    "holomush-5k1",
+    "holomush-5k1.1",
+    "holomush-5k1.422",
+    "holomush-5k1.424"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

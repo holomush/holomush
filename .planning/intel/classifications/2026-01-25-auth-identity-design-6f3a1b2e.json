@@ -1,0 +1,22 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-01-25-auth-identity-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Auth & Identity Architecture Design",
+  "summary": "Specifies HoloMUSH's authentication and identity system: argon2id password auth, separate telnet/web auth flows, player-character separation, DB-backed web sessions with signed tokens, and progressive rate limiting.",
+  "scope": [
+    "authentication",
+    "player accounts",
+    "characters",
+    "web sessions",
+    "password hashing",
+    "rate limiting",
+    "token design",
+    "database schema"
+  ],
+  "cross_refs": ["holomush-dwk", "holomush-gloh"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

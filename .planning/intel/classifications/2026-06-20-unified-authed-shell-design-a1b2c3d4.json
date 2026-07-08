@@ -1,0 +1,31 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-20-unified-authed-shell-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Unified Authed Workspace Shell — Design",
+  "summary": "Specifies a shared (authed) SvelteKit layout unifying the terminal and scenes web-client chrome via a persistent rail, footer, and section registry.",
+  "scope": [
+    "web/(authed) layout",
+    "Rail navigation",
+    "TopBar",
+    "ShellFooter",
+    "CommandPalette",
+    "section registry",
+    "mobile drawer nav",
+    "terminal and scenes routes"
+  ],
+  "cross_refs": [
+    "holomush-q41kr",
+    "holomush-sz0h3 (theme:web-portals)",
+    "web/src/routes/(authed)/+layout.ts",
+    "web/src/routes/(authed)/scenes/+layout.svelte",
+    "web/src/lib/components/terminal/Rail.svelte",
+    "web/src/lib/components/TopBar.svelte",
+    "web/src/lib/components/terminal/CommandInput.svelte",
+    "memory a4baea60"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

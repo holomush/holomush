@@ -1,0 +1,32 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/roadmap.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "HoloMUSH Roadmap",
+  "summary": "Narrative doc framing strategic multi-epic work clusters (themes) as `bd` label complements, capturing why/sequencing rather than live status, which lives in bd.",
+  "scope": [
+    "roadmap themes",
+    "theme:social-spaces",
+    "scenes",
+    "channels",
+    "forums",
+    "discord",
+    "JetStream event bus",
+    "focus coordinator",
+    "AccessPolicyEngine (ABAC)",
+    "substrate contract (epic jg9b)",
+    "communication-content contract",
+    "core-scenes plugin",
+    "eventkit/groupkit SDK bundles"
+  ],
+  "cross_refs": [
+    "superpowers/specs/2026-05-16-social-spaces-substrate-contract.md",
+    "superpowers/specs/2026-05-17-inv-s5-mechanism-design.md",
+    "bd epic jg9b",
+    "INV-S1 through INV-S10"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,30 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-28-scenes-web-publish-vote-actions-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scenes Web — Publish-Vote Actions (slice 4/4) Design",
+  "summary": "Technical spec for exposing scene publish/vote/withdraw backend capabilities through facade, BFF, and web-client layers, plus a reactive publish panel UI, as the final slice of epic holomush-5rh.24.",
+  "scope": [
+    "scene publish",
+    "vote",
+    "withdraw",
+    "SceneAccessService facade",
+    "WebService BFF",
+    "web client scenes lib",
+    "SceneContextRail panel",
+    "scene_publish_* events",
+    "Playwright E2E"
+  ],
+  "cross_refs": [
+    "2026-06-24-scenes-web-management-actions-design.md",
+    "holomush-n95d9",
+    "holomush-5rh.24",
+    "holomush-sz0h3",
+    "INV-SCENE-33",
+    "INV-SCENE-60"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

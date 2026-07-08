@@ -1,0 +1,27 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/specs/2026-02-02-commands-behaviors-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Commands & Behaviors Architecture",
+  "summary": "Specifies the HoloMUSH command system architecture: input parsing, alias resolution, unified Go/Lua command dispatch, capability-gated ABAC security, and help integration.",
+  "scope": [
+    "command registry",
+    "command dispatch",
+    "alias resolution",
+    "capability gating",
+    "event emission",
+    "help system",
+    "Lua plugin commands",
+    "protocol-agnostic parser"
+  ],
+  "cross_refs": [
+    "../adr/0005-command-state-management.md",
+    "../plans/2026-01-18-holomush-roadmap-design.md",
+    "./2026-01-18-plugin-system-design.md",
+    "holomush-wr9"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

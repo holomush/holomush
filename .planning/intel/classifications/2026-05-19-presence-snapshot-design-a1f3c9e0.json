@@ -1,0 +1,29 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-19-presence-snapshot-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Presence snapshot — current-state RPC, not event replay",
+  "summary": "Specifies that presence MUST be populated via a current-state RPC query at Subscribe open (not event replay), defining presence semantics, single server-decided focus context, LOCATION-only resolver scope for this bead, and exemption from the I-PRIV-1 temporal floor.",
+  "scope": [
+    "presence",
+    "session store",
+    "Subscribe RPC",
+    "PresenceEntry/PresenceState proto",
+    "location resolver",
+    "scene resolver (deferred)",
+    "I-PRIV-1 privacy invariant"
+  ],
+  "cross_refs": [
+    "holomush-5b2j",
+    "holomush-iwzt.15",
+    "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md",
+    ".claude/rules/terminology.md",
+    "holomush-ofpi",
+    "web/e2e/terminal.spec.ts",
+    "web/src/routes/(authed)/terminal/+page.svelte"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Status: Draft (not Accepted); classified as SPEC per manifest override — contains explicit design decisions (D-1..D-4) analogous to ADR content but framed as a technical specification for a presence RPC/wire contract."
+}

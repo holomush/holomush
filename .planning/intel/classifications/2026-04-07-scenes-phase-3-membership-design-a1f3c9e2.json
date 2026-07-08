@@ -1,0 +1,29 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-04-07-scenes-phase-3-membership-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scenes Phase 3: Membership Design",
+  "summary": "Technical specification for Phase 3 of the scenes rework: participant model, membership RPCs/store methods, an append-only scene_ops_events audit journal, and ABAC policy replacement from owner-only to member-based access.",
+  "scope": [
+    "scene_participants table",
+    "scene_ops_events table",
+    "ParticipantRole enum",
+    "OpsEventKind enum",
+    "JoinScene/LeaveScene/InviteToScene/KickFromScene/TransferOwnership RPCs",
+    "ABAC member-based policies",
+    "scene join/leave/invite/kick/transfer commands",
+    "CreateWithOwner store method",
+    "resolver participants/invitees attributes"
+  ],
+  "cross_refs": [
+    "2026-04-06-scenes-and-rp-design-v2.md",
+    "holomush-5rh.12",
+    "PR #196",
+    "PR #200",
+    "PR #188"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

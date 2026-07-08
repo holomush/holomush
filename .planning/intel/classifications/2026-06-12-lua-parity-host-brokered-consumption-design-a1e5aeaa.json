@@ -1,0 +1,32 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-12-lua-parity-host-brokered-consumption-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Lua Parity Layer — Host-Brokered Consumption of Capabilities and Plugin Services — Design",
+  "summary": "Specifies a single host-brokered mechanism for Lua plugins to consume host capabilities and plugin services via the same host.v1 gRPC contracts and BrokerProxy binary plugins use, replacing divergent hand-written Lua shims. Binds INV-PLUGIN-44/45/49 and closes bug holomush-eykuh.6, deferring migration of existing Lua plugins to a later sub-spec.",
+  "scope": [
+    "Lua plugin runtime",
+    "host.v1 capabilities",
+    "BrokerProxy",
+    "hashicorp/go-plugin grpcbroker",
+    "hostcap package",
+    "plugin identity",
+    "Session/Property/World capabilities"
+  ],
+  "cross_refs": [
+    "holomush-eykuh",
+    "holomush-eykuh.2",
+    "holomush-oeb4d",
+    "holomush-eykuh.1",
+    "holomush-eykuh.6",
+    "holomush-eykuh.4",
+    "internal/plugin/goplugin/host.go",
+    "internal/plugin/hostfunc/cap_*.go",
+    "internal/plugin/hostcap/",
+    "CLAUDE.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

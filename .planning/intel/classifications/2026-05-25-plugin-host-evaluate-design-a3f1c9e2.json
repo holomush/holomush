@@ -1,0 +1,29 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-25-plugin-host-evaluate-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plugin Host `Evaluate` — per-action ABAC for plugin commands",
+  "summary": "Specifies a new plugin-host `Evaluate` RPC/host-capability enabling per-subcommand and principal-attribute ABAC checks for plugin commands, replacing coarse command/capability gates that never evaluate resource-instance or admin-role policies. Reuses existing plugin-owned resource types, AttributeResolver, and policy declarations from prior ABAC trust-boundary work. Unblocks admin-gating of the scene publish vote extend action (E2).",
+  "scope": [
+    "plugin host",
+    "ABAC",
+    "Evaluate RPC",
+    "core-scenes plugin",
+    "plugin.yaml capabilities",
+    "AttributeResolver",
+    "scene publish vote extend"
+  ],
+  "cross_refs": [
+    "holomush-8kkv5",
+    "holomush-5rh.20.35",
+    "site/docs/extending/",
+    "holomush-dttdj",
+    "holomush-qeypl",
+    "holomush-61rdl",
+    "holomush-9l9pu"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

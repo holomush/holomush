@@ -1,0 +1,30 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-09-sensitive-event-crypto-activation-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Sensitive-Event Crypto Activation — Design",
+  "summary": "Specifies making KEK presence the single activation gate for sensitive-event crypto across publish/subscribe, confirming character binding-row preconditions via tests, and making a provisioned KEK mandatory to boot while keeping provisioning frictionless.",
+  "scope": [
+    "sensitive-event crypto",
+    "KEK (key-encryption-key)",
+    "DEK manager",
+    "AuthGuard",
+    "EventBus publisher/subscriber",
+    "character bindings",
+    "boot/provisioning flow"
+  ],
+  "cross_refs": [
+    "2026-06-08-sensitive-event-crypto-production-golive-design.md",
+    "PR #4409",
+    "holomush-5rh.8.29.12",
+    "holomush-s5ts",
+    "internal/eventbus/publisher.go",
+    "internal/grpc/server.go",
+    "internal/grpc/query_stream_history.go",
+    "auth_handlers.go"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

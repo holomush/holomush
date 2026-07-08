@@ -1,0 +1,33 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-05-29-scenes-phase-8-board-content-warnings-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scenes Phase 8 — Scene Board + Content Warnings",
+  "summary": "Specifies implementing the ListScenes RPC and a browsable/filterable scene board, plus a game-overridable content-warning taxonomy with persistent player/character block preferences. Introduces a plugin-partitioned settings substrate on the host so content-warning preferences stay domain-ignorant at the plugin/host boundary.",
+  "scope": [
+    "scene board",
+    "ListScenes RPC",
+    "content warnings",
+    "content-warning taxonomy",
+    "settings substrate",
+    "core-scenes plugin",
+    "player preferences",
+    "PluginHostService",
+    "scenes command"
+  ],
+  "cross_refs": [
+    "holomush-iokti",
+    "holomush-5rh.17",
+    "holomush-ztiqj",
+    "holomush-lrt3",
+    "holomush-74ib4",
+    "holomush-uvbyt",
+    "holomush-0blcz",
+    "event-conventions.md",
+    "api/proto/holomush/scene/v1/scene.proto"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,29 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/superpowers/specs/2026-06-09-scene-dek-genesis-on-focus-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Scene DEK Genesis-on-First-Focus — Design",
+  "summary": "Technical spec diagnosing a chicken-and-egg gap where SetSceneFocus fails on a fresh scene because the scene DEK is not yet genesised, and specifying how the focus path should trigger DEK genesis to fix the failing E2E case.",
+  "scope": [
+    "SetSceneFocus",
+    "dek.Manager",
+    "scene DEK genesis",
+    "AuthGuard",
+    "publisher.go initialParticipantsForContext",
+    "sceneaccess_service",
+    "event-payload crypto architecture"
+  ],
+  "cross_refs": [
+    "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md",
+    "docs/adr/holomush-mihtk-dek-seed-failure-is-fatal-and-refuses-scene-focus.md",
+    "internal/eventbus/publisher.go",
+    "test/integration/crypto/genesis_seed_test.go",
+    "holomush-5rh.8.29.13",
+    "holomush-5rh.8.29.10",
+    "scenes.spec.ts"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

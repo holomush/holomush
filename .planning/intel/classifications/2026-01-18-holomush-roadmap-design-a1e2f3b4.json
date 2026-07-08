@@ -1,0 +1,41 @@
+{
+  "source_path": "/Volumes/Code/github.com/holomush/.worktrees/gsd-map/docs/plans/2026-01-18-holomush-roadmap-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "HoloMUSH Roadmap Design",
+  "summary": "Defines the HoloMUSH development roadmap as iterative epics with phase gates, key architecture decisions (plugin runtime, password hashing, command prefixes, access control), and the two-tier Lua/go-plugin extension model.",
+  "scope": [
+    "roadmap",
+    "epics",
+    "phase gates",
+    "plugin architecture",
+    "Lua runtime",
+    "go-plugin",
+    "access control",
+    "ABAC",
+    "event-oriented architecture",
+    "PWA web client",
+    "telnet protocol"
+  ],
+  "cross_refs": [
+    "holomush-30o",
+    "holomush-1hq",
+    "holomush-ql5",
+    "holomush-x2t",
+    "holomush-dwk",
+    "holomush-wr9",
+    "holomush-5k1",
+    "holomush-qve",
+    "holomush-5rh",
+    "holomush-0sc",
+    "holomush-djj",
+    "holomush-aqq",
+    "holomush-5g6",
+    "holomush-1hq.1",
+    "holomush-1hq.2"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}
