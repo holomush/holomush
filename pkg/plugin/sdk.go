@@ -181,12 +181,13 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	_, wantsSettings := a.serviceProvider.(SettingsClientAware)
 	_, wantsDecryptor := a.serviceProvider.(SnapshotDecryptorAware)
 	_, wantsCommandLister := a.serviceProvider.(CommandListerAware)
+	_, wantsStreamSub := a.serviceProvider.(StreamSubscriptionAware)
 
 	// Lazily dial a single plugin-host gRPC connection shared by every
 	// host-facing SDK facade the provider opts into. If the provider opts
 	// into none, we never dial.
 	var hostConn *grpc.ClientConn
-	if wantsSink || wantsFocus || wantsEvaluator || wantsSettings || wantsDecryptor || wantsCommandLister {
+	if wantsSink || wantsFocus || wantsEvaluator || wantsSettings || wantsDecryptor || wantsCommandLister || wantsStreamSub {
 		requiredServices := map[string]string(nil)
 		if config != nil {
 			requiredServices = config.GetRequiredServices()
@@ -215,6 +216,9 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	}
 	if clAware, ok := a.serviceProvider.(CommandListerAware); ok {
 		clAware.SetCommandLister(newHostCommandClient(hostConn))
+	}
+	if streamSubAware, ok := a.serviceProvider.(StreamSubscriptionAware); ok {
+		streamSubAware.SetStreamSubscription(newPluginHostStreamSubscriptionClient(hostConn))
 	}
 
 	if a.serviceProvider == nil {

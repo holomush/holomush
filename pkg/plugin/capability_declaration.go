@@ -29,6 +29,7 @@ var hostCapabilityRequirements = []capabilityRequirement{
 	{"SettingsClientAware", func(p any) bool { _, ok := p.(SettingsClientAware); return ok }, []string{"settings"}},
 	{"SnapshotDecryptorAware", func(p any) bool { _, ok := p.(SnapshotDecryptorAware); return ok }, []string{"audit"}},
 	{"CommandListerAware", func(p any) bool { _, ok := p.(CommandListerAware); return ok }, nil}, // command-registry: exempt
+	{"StreamSubscriptionAware", func(p any) bool { _, ok := p.(StreamSubscriptionAware); return ok }, []string{"stream.subscription"}},
 }
 
 // validateDeclaredCapabilities returns a CAPABILITY_NOT_DECLARED error when the

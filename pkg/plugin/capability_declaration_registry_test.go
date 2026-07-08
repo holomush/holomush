@@ -45,6 +45,7 @@ func TestHostCapabilityRequirementsCoverKnownAwareNames(t *testing.T) {
 	want := []string{
 		"EventSinkAware", "FocusClientAware", "HostEvaluatorAware",
 		"SettingsClientAware", "SnapshotDecryptorAware", "CommandListerAware",
+		"StreamSubscriptionAware",
 	}
 	for _, name := range want {
 		assert.Truef(t, got[name], "hostCapabilityRequirements missing %s", name)
