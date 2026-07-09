@@ -1104,6 +1104,33 @@ func TestGatewayHandler_TwoPhase_AuthFailure(t *testing.T) {
 	<-done
 }
 
+// TestFormatEvent_SceneIdleNudge_RendersViaGamenoticeIdle verifies that a
+// focused member's core-scenes:scene_idle_nudge EventFrame renders through the
+// shared gamenotice.Idle primitive as `[>GAME: Scene #<id> is now idle]` (review
+// Finding 4), reading the scene_id from the frame payload only — NOT the generic
+// SCENE_ACTIVITY "has new activity" leader and NOT raw formatSystem text.
+func TestFormatEvent_SceneIdleNudge_RendersViaGamenoticeIdle(t *testing.T) {
+	h := &GatewayHandler{}
+
+	ev := &corev1.EventFrame{
+		Type:    "core-scenes:scene_idle_nudge",
+		Payload: []byte(`{"scene_id":"01SCENE_IDLE_TELNET_A"}`),
+		Rendering: &corev1.RenderingMetadata{
+			Category:      "system",
+			Format:        "notification",
+			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			SourcePlugin:  "core-scenes",
+		},
+	}
+
+	got := h.formatEvent(ev)
+	assert.Equal(t, gamenotice.Idle("01SCENE_IDLE_TELNET_A"), got,
+		"the idle EventFrame renders the gamenotice.Idle leader")
+	assert.Equal(t, "[>GAME: Scene #01SCENE_IDLE_TELNET_A is now idle]", got)
+	assert.NotEqual(t, gamenotice.Activity("01SCENE_IDLE_TELNET_A"), got,
+		"the idle nudge is distinct from the SCENE_ACTIVITY activity leader")
+}
+
 func TestFormatEvent_Communication_Speech(t *testing.T) {
 	h := &GatewayHandler{}
 

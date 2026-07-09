@@ -1166,6 +1166,16 @@ func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
 		return ""
 	}
 
+	// The idle nudge (review Finding 4) renders through the shared gamenotice.Idle
+	// leader, NOT the generic system-notification path (which reads a "text"
+	// payload the idle nudge does not carry) and NOT the SCENE_ACTIVITY "has new
+	// activity" leader. Routed by event type before the category dispatch so the
+	// dedicated `[>GAME: … is now idle]` phrasing is used. The scene_id is read
+	// from the frame payload only — no scene service/store lookup (gateway-boundary).
+	if ev.GetType() == sceneIdleNudgeType {
+		return h.formatSceneIdleNudge(ev)
+	}
+
 	switch rendering.GetCategory() {
 	case "communication":
 		return h.formatCommunication(ev, rendering)
@@ -1260,6 +1270,28 @@ func (h *GatewayHandler) formatCommand(ev *corev1.EventFrame, rendering *corev1.
 		return fmt.Sprintf("[ERROR] %s", text)
 	}
 	return text
+}
+
+// sceneIdleNudgeType is the wire event type core-scenes emits when a scene goes
+// idle (plugins/core-scenes/idle_scheduler.go). Rendered via gamenotice.Idle.
+const sceneIdleNudgeType = "core-scenes:scene_idle_nudge"
+
+// formatSceneIdleNudge renders a scene_idle_nudge EventFrame as the shared
+// `[>GAME: Scene #<id> is now idle]` leader (gamenotice.Idle). It reads the
+// scene_id from the frame payload only — the gateway performs no scene
+// service/store lookup (gateway-boundary; the payload scene_id is authoritative).
+func (h *GatewayHandler) formatSceneIdleNudge(ev *corev1.EventFrame) string {
+	payload := make(map[string]any)
+	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+		slog.Error("gateway: failed to unmarshal scene_idle_nudge payload", "type", ev.GetType(), "error", err)
+		return ""
+	}
+	sceneID := stringFromPayload(payload, "scene_id")
+	if sceneID == "" {
+		slog.Warn("gateway: scene_idle_nudge missing scene_id", "type", ev.GetType())
+		return ""
+	}
+	return gamenotice.Idle(sceneID)
 }
 
 // formatSystem formats system notification text.
