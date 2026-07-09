@@ -33,13 +33,21 @@ import (
 // non-admin create and is rate-limited.
 const adminCreatePolicyID = "plugin:core-channels:seed-channel-admin-create"
 
+// createSentinelResourceID is the placeholder channel id used at create time,
+// before any channel row exists. The host requires a `type:id` ref with both
+// halves non-empty (pluginauthz.splitResourceRef). Under the real seeded ABAC
+// engine the ChannelResolver IS invoked for this ref, so it special-cases this
+// id to an empty attribute bag (resolver.go) rather than a fail-closed
+// CHANNEL_NOT_FOUND — the admin-create policy references only
+// principal.character.roles. A real channel id is a ULID and never collides.
+const createSentinelResourceID = "new"
+
 // createRateResource is the sentinel resource ref passed to the host evaluator
-// for the create gate. No channel instance exists at create time, so a
-// non-empty placeholder id is used; the host requires `type:id` with both
-// halves non-empty (pluginauthz.splitResourceRef). The admin-create policy
-// references only `principal.character.roles`, so no channel attribute is
-// resolved for this ref (the resolver is never called).
-const createRateResource = "channel:new"
+// for the create gate. No channel instance exists at create time, so the
+// createSentinelResourceID placeholder is used. The admin-create policy
+// references only `principal.character.roles`; the resolver resolves the
+// sentinel to an empty attribute bag (see resolver.go).
+const createRateResource = "channel:" + createSentinelResourceID
 
 // createRateWindow is the fixed sliding window for the per-player create rate
 // limit (D-06: N creations per player per hour).

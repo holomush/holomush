@@ -106,6 +106,23 @@ func (r *ChannelResolver) ResolveResource(ctx context.Context, req *pluginv1.Res
 		return nil, err
 	}
 
+	// Create sentinel: the create gate evaluates ABAC against `channel:new`
+	// (createRateResource) BEFORE any channel row exists. Under the real seeded
+	// ABAC engine the resolver IS invoked for this ref (the assumption that it is
+	// "never called" holds only for a mock evaluator), so a store lookup for the
+	// non-existent id would fail-close CHANNEL_NOT_FOUND and deny EVERY create.
+	// The admin-create policy references only principal.character.roles, so the
+	// sentinel resolves to an empty attribute bag: all resource.channel.* read as
+	// missing (fail-closed for instance-scoped policies per the DSL evaluator),
+	// while the principal-only create permit fires. A real channel id is never
+	// the sentinel (ids are ULIDs), so genuine missing-channel reads still return
+	// the uniform NotFound below.
+	if req.GetResourceId() == createSentinelResourceID {
+		return &pluginv1.ResolveResourceResponse{
+			Attributes: map[string]*pluginv1.AttributeValue{},
+		}, nil
+	}
+
 	row, members, banned, muted, err := r.store.GetWithMembership(ctx, req.GetResourceId())
 	if err != nil {
 		recordError(span, err)

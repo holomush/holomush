@@ -233,6 +233,26 @@ func TestChannelResolverReturnsNotFoundForMissingChannel(t *testing.T) {
 	assert.Equal(t, codes.NotFound, st.Code())
 }
 
+// TestChannelResolverCreateSentinelResolvesToEmptyAttributes asserts the create
+// sentinel id resolves to an empty attribute bag WITHOUT a store lookup, so the
+// real seeded ABAC engine can evaluate the principal-only admin-create policy at
+// create time (before any channel row exists) instead of fail-closing on a
+// CHANNEL_NOT_FOUND. Regression guard for the "resolver is never called"
+// assumption that broke channel creation under real ABAC (01-09).
+func TestChannelResolverCreateSentinelResolvesToEmptyAttributes(t *testing.T) {
+	store := newFakeChannelStore()
+	store.err = oops.Code("CHANNEL_NOT_FOUND").Errorf("must not be consulted for the create sentinel")
+	r := NewChannelResolver(store)
+
+	resp, err := r.ResolveResource(context.Background(), &pluginv1.ResolveResourceRequest{
+		ResourceType: resourceTypeChannel,
+		ResourceId:   createSentinelResourceID,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetAttributes(),
+		"the create sentinel MUST resolve to an empty attribute bag (no resource.channel.* keys)")
+}
+
 // TestChannelResolverGenericErrorDoesNotLeak asserts a non-not-found store error
 // surfaces as codes.Internal with a generic message (no inner detail on the
 // wire) per .claude/rules/grpc-errors.md.
