@@ -47,7 +47,8 @@
     "security_asvs_level": 1,
     "security_block_on": "high",
     "tdd_mode": true,
-    "max_discuss_passes": 5
+    "max_discuss_passes": 5,
+    "_auto_chain_active": false
   },
   "ship": {
     "pr_body_sections": []
