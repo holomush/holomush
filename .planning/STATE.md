@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: Scenes Lineage Completion
 status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-07-09T18:20:00.000Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-07-09T18:44:07.665Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 15
   percent: 33
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 02 (Scenes Lineage Completion) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-07-09 — Phase 02 execution started
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P02 | ~15m | 2 tasks | 4 files |
 | Phase 02 P03 | 20m | 4 tasks | 11 files |
 | Phase 02 P06 | ~40m | 4 tasks | 11 files |
+| Phase 02 P04 | ~35m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,7 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: Telnet scene-activity nudge debounce = 45s; reusable [>GAME] gamenotice primitive; INV-SCENE-70 bound (telnet privacy parity).
 - [Phase ?]: Scene notify prefs stored in one plugin table: NULL scene_id = per-character global pref (muted=NOT enabled), non-NULL = per-scene mute; mode column is the D-05 digest seam defaulting realtime.
 - [Phase 02]: 02-06: idle sweep transitions active→paused past effective threshold (explicit game-default param into a pool-only store — store never reads config; per-scene idle_timeout_secs overrides via COALESCE); idle nudge OFF by default, emitted via EventSink.Emit and rendered on telnet through gamenotice.Idle; idle math is epoch-nanos (plan's *1000/ms shorthand was a unit bug); INV-SCENE-71 bound.
+- [Phase 02]: 02-04: mute/notify-pref suppression at the SCENE_ACTIVITY badge downgrade via a dependency-inverted SceneMuteChecker (interface in server.go, concrete wired at sub_grpc.go); order global-notify-off then per-scene-muted then deliver; per-character 45s TTL cache, loader off-lock; fail-OPEN on nil/error (preferences, not access control); loader dials plugin SceneService with host-vouched actor+ownerPlayerID via BeginServiceDispatch.
 
 ### Pending Todos
 
@@ -127,9 +129,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-09T17:56:17.824Z
+Last session: 2026-07-09T18:44:07.660Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 02-04-PLAN.md
 Hardening & Deployment Scaling); awaiting user approval before `/gsd-plan-phase 1`.
 Resume file: None

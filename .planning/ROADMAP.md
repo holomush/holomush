@@ -125,7 +125,7 @@ backlog on 2026-07-08 — bd `holomush-x4n1r`, P4 — as not actively pursued at
 
 2. Telnet scene commands handle previously-identified edge cases (mixed focused/skipped render branches,
    reconnection membership+focus restore, multi-character-per-connection) without silent failure
-**Plans**: 3/7 plans executed
+**Plans**: 5/7 plans executed
 
 Plans:
 **Wave 1**
@@ -139,7 +139,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 02-04-PLAN.md — Core mute-suppression at badge downgrade (dependency-inverted SceneMuteChecker, TTL cache) (SCENEFWD-02)
+- [x] 02-04-PLAN.md — Core mute-suppression at badge downgrade (dependency-inverted SceneMuteChecker, TTL cache) (SCENEFWD-02)
 - [ ] 02-05-PLAN.md — Web mute/prefs typed 4-layer slice (WebMuteScene → facade → BFF → notifyFlow.ts) (SCENEFWD-02)
 - [x] 02-06-PLAN.md — Idle-timeout lifecycle (active→paused sweep) + optional idle nudge (OFF) + INV-SCENE-71 (SCENEFWD-02)
 
@@ -180,7 +180,7 @@ completion, and platform hardening can proceed in parallel if desired)
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
-| 2. Scenes Lineage Completion | 3/7 | In Progress|  |
+| 2. Scenes Lineage Completion | 5/7 | In Progress|  |
 | 3. Platform Hardening & Deployment Scaling | 0/TBD | Not started | - |
 
 ## Deferred (Not in This Roadmap)
