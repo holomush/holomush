@@ -41,7 +41,7 @@ exactly as Phase 1 (Channels) mirrored it.
 
 ### Scope
 
-- **D-01 (templates descoped):** SCENEFWD-01 (scene templates) is **removed from
+- **D-01 [deferred] (templates descoped):** SCENEFWD-01 (scene templates) is **removed from
   Phase 2 and returned to backlog**. It is already a standalone P4 backlog item
   (bd `holomush-x4n1r`, lifted out of the scenes epic 2026-07-03), so no new
   bead is needed. `ROADMAP.md` + `REQUIREMENTS.md` were updated in the **same
@@ -60,7 +60,7 @@ exactly as Phase 1 (Channels) mirrored it.
   gateway's rendering**; it does **NOT** introduce a new notification stream or
   subject (which the master spec §3.3 originally proposed but ADR `holomush-0qnnr`
   superseded). Makes SC #2 true on telnet, not just web.
-- **D-03 (`[>GAME: …]` leader is a reusable primitive):** Telnet system nudges
+- **D-03 (`[>GAME …]` leader is a reusable primitive):** Telnet system nudges
   render with a **shared, reusable** `[>GAME: <msg>]` leader — one telnet
   rendering primitive for **all** game-originated notices (scene activity, idle
   nudge, and future channel/system notices). Scenes wire it this phase; other
