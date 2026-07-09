@@ -3398,6 +3398,17 @@ invariants:
     asserted_by:
       - "internal/telnet/gateway_handler_test.go"
     refs: []
+  - id: INV-SCENE-71
+    scope: INV-SCENE
+    origin_spec: "docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md"
+    legacy: []
+    summary: "an active scene idle past its effective idle timeout (the per-scene idle_timeout_secs column when set, else the
+      game-wide default supplied explicitly by the scheduler) auto-transitions active → paused via the idle sweep, and a
+      paused scene is never re-transitioned (the sweep query excludes non-active scenes)."
+    binding: bound
+    asserted_by:
+      - "plugins/core-scenes/idle_scheduler_integration_test.go"
+    refs: []
 
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride
