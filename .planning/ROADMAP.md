@@ -145,7 +145,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 02-07-PLAN.md — Telnet edge cases: mixed-render branch + reconnect focus restore + multi-char no-leak (SCENEFWD-03)
+- [x] 02-07-PLAN.md — Telnet edge cases: mixed-render branch + reconnect focus restore + multi-char no-leak (SCENEFWD-03)
 
 **UI hint**: yes
 
