@@ -928,7 +928,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				trace.WithAttributes(attribute.String("connection.id", connID.String())))
 			if rcfErr := s.focusCoordinator.RestoreConnectionFocus(rcfCtx, req.GetSessionId(), connID); rcfErr != nil {
 				recordSpanError(rcfSpan, rcfErr)
-				slog.WarnContext(ctx, "subscribe: restore connection focus failed (non-fatal)",
+				slog.WarnContext(
+					ctx, "subscribe: restore connection focus failed (non-fatal)",
 					"session_id", req.GetSessionId(),
 					"connection_id", connID.String(),
 					"error", rcfErr,
