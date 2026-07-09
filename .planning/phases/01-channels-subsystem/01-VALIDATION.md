@@ -1,10 +1,11 @@
 ---
 phase: 01
 slug: channels-subsystem
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: passed
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-08
+validated: 2026-07-09
 ---
 
 # Phase 01 — Validation Strategy
@@ -98,3 +99,34 @@ created: 2026-07-08
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
+
+---
+
+## Validation Audit 2026-07-09
+
+`gsd-nyquist-auditor` (post-execution). Verdict: **COVERED / nyquist_compliant** — every CHAN requirement and key behavior maps to a targeting, non-trivial automated test. Confirmed live: `task test -- ./plugins/core-channels/` → 189 tests green; full suite `task test:int` 10394 green (whole-system census + channels E2E).
+
+| Metric | Count |
+|--------|-------|
+| Requirements audited | 5 (CHAN-01..05) + 7 key behaviors |
+| Gaps found | 0 |
+| Tests generated | 0 |
+| Escalated | 0 |
+
+### Requirement → test map (targeting tests)
+
+| Req | Status | Targeting test (path:line) |
+|-----|--------|----------------------------|
+| CHAN-01 join/leave/list, location-independent | ✅ COVERED | `plugins/core-channels/store_test.go:116,126,136,144,169`; `service_test.go:470,483,522`; `test/integration/channels/channels_e2e_test.go:98` |
+| CHAN-02 post + membership-gated history | ✅ COVERED | `service_test.go:701,725,736,797,821`; `audit_test.go:159,195,212`; `audit_integration_test.go:87`; e2e `:168` |
+| CHAN-03 EventBus emit + durable audit (scene-parity) | ✅ COVERED | `publish_events_test.go:50,94,143`; `audit_integration_test.go:63`; e2e `:168` |
+| CHAN-04 public/private/admin types | ✅ COVERED | `resolver_test.go:94,122,169`; `service_test.go:270`; `internal/access/policy/seed_test.go:82,152`; e2e `:226,248` |
+| CHAN-05 substrate-parity / INV-S7 N=2 | ✅ COVERED | `test/integration/wholesystem/census_test.go:26` (core-channels + core-scenes; INV-PLUGIN-54) |
+
+### Key behaviors (all ✅ COVERED)
+
+default-deny ABAC (`seed_test.go:82`, `audit_test.go:227`, `service_test.go:230,457`) · non-member negatives (e2e `:131`, `audit_test.go:159`, `service_test.go:821`) · guest auto-join union (`session_streams_test.go:74,88,101`) · admin-gated + rate-limited create (`service_test.go:240,284,298,318`) · retention prune (`prune_test.go:60`, `prune_integration_test.go:59`) · mid-session live subscribe (`service_test.go:875,906`, `pluginauthz/streamsubscribe_test.go:20`) · INV-CHANNEL-1/2 bound (`invariants.yaml`, `channels_e2e_test.go:159,222`, `test/meta` bound-genuinely-asserted).
+
+### Minor observations (non-gaps, no test owed)
+- Rate-limit **time-window rollover** (bucket reset after 1h via clock injection) is untested; the durable 5/hr enforcement + admin bypass + 5/6 count boundary are covered. Not a CHAN requirement.
+- WR-01 / WR-02 are behavioral WARNINGs already routed to human decision (beads holomush-0sc.13/.14), not test-coverage gaps.
