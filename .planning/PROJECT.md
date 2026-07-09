@@ -45,13 +45,17 @@ trusted identically by the host.
   emit + durable plaintext history, telnet command surface + `=name` shorthand, live delivery
   (`QuerySessionStreams` + `stream.subscription`), whole-system census + E2E; validates INV-S7 (N=2
   second-consumer rule). CHAN-01..05 shipped 2026-07-09 (Phase 1)
+- ✓ Scenes lineage completion (`theme:social-spaces` Phase 2) — scene-activity notifications on telnet
+  (throttled content-free `[>GAME: …]` nudge, INV-SCENE-70) + web mute/notify-prefs 4-layer slice,
+  plugin-owned notify-prefs store, participant-gated mute RPCs + core fail-open badge suppression,
+  idle-timeout active→paused lifecycle (INV-SCENE-71), and telnet edge-case hardening (mixed focused/skipped
+  render, reconnect focus restore, multi-character no-leak). SCENEFWD-02/03 shipped 2026-07-09 (Phase 2);
+  templates (SCENEFWD-01) descoped to backlog (`holomush-x4n1r`)
 
 ### Active
 
 <!-- Current GSD roadmap scope — genuine forward work not yet built. See ROADMAP.md for phase breakdown. -->
 
-- [ ] Scenes lineage completion — templates (bd "Scenes Phase 7"), notifications + telnet polish (bd
-  "Scenes Phase 10")
 - [ ] Platform hardening & deployment scaling — external/clustered NATS (`holomush-s5ts`), multi-node crypto
   invalidation verification, audit dead-letter queue
 
@@ -167,4 +171,4 @@ scenes should bind relevant invariants as part of its own definition of done rat
 
 ---
 
-*Last updated: 2026-07-09 — Phase 1 (Channels Subsystem, Epic 10) complete: CHAN-01..05 validated, moved to Validated Requirements.*
+*Last updated: 2026-07-09 — Phase 2 (Scenes Lineage Completion) complete: SCENEFWD-02/03 validated (scene-activity notifications + telnet edge-case hardening), moved to Validated Requirements; templates (SCENEFWD-01) descoped to backlog.*
