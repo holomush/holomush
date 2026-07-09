@@ -12,6 +12,7 @@
   import { sceneStateDotClass } from '$lib/scenes/stateStyle';
   import { endSceneAction, pauseSceneAction, resumeSceneAction } from '$lib/scenes/lifecycleFlow';
   import { inviteCharacters, kickAction, transferAction, leaveAction } from '$lib/scenes/membershipFlow';
+  import { toggleSceneMute } from '$lib/scenes/notifyFlow';
   import { startPublishAction } from '$lib/scenes/publishFlow';
   import { publishStore } from '$lib/scenes/publishStore.svelte';
   import CharacterMultiSelect from './CharacterMultiSelect.svelte';
@@ -53,6 +54,28 @@
   let canEditSettings = $derived(isOwner && canManage);
   let lifecycleErr = $state('');
   let membershipErr = $state('');
+  let muteErr = $state('');
+  let muteBusy = $state(false);
+
+  // Toggles this character's per-scene notification mute via the typed RPC
+  // (never the command path). Initialized from the persisted WorkspaceScene.muted
+  // (round-3 Concern 1), so the label reflects state across reloads.
+  async function toggleMute(): Promise<void> {
+    if (!scene) return;
+    muteErr = '';
+    muteBusy = true;
+    try {
+      await toggleSceneMute({
+        sceneId: scene.sceneId,
+        characterId: scene.asCharacterId,
+        muted: !scene.muted,
+      });
+    } catch (e) {
+      muteErr = e instanceof Error ? e.message : 'Mute toggle failed';
+    } finally {
+      muteBusy = false;
+    }
+  }
 
   // The rail is reused across scene switches (persistent in ScenesShell), so
   // clear any surfaced error when the active scene changes — a stale alert from
@@ -61,6 +84,7 @@
     void scene?.sceneId;
     lifecycleErr = '';
     membershipErr = '';
+    muteErr = '';
   });
 
   // Disables lifecycle buttons while a runLifecycle call is in flight, so a
@@ -153,6 +177,23 @@
         {#if lifecycleErr}
           <p class="text-xs text-destructive pl-4 pt-1">{lifecycleErr}</p>
         {/if}
+      {/if}
+      <!-- Mute toggle: per-scene notification mute via the typed RPC. Reflects
+           the persisted WorkspaceScene.muted so state survives reload. -->
+      <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-6 text-xs"
+          aria-label={scene.muted ? 'Unmute scene notifications' : 'Mute scene notifications'}
+          aria-pressed={scene.muted}
+          data-testid="scene-mute-toggle"
+          disabled={muteBusy}
+          onclick={toggleMute}
+        >{scene.muted ? '🔕 Muted' : '🔔 Mute'}</Button>
+      </div>
+      {#if muteErr}
+        <p class="text-xs text-destructive pl-4 pt-1" role="alert">{muteErr}</p>
       {/if}
     </section>
 

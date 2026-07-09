@@ -331,6 +331,39 @@ test.describe('Scenes workspace (E9.5)', () => {
     await expect(page.locator('textarea[name="scene-composer"]')).toBeEnabled();
   });
 
+  // ── Mute toggle round-trips across reload (Plan 05, round-3 Concern 1) ───────
+  //
+  // A structural GUI write via the typed WebMuteScene RPC (never the command
+  // path). Muting a scene from the workspace rail, then RELOADING, must show the
+  // toggle still muted — proving the persisted read-back (ListMyScenes carries
+  // CharacterSceneInfo.muted), not just an in-session flag.
+  test('mute toggle persists across a reload (typed WebMuteScene read-back)', async ({ page }) => {
+    await registerAndEnterTerminal(page, 'mut');
+
+    const title = `MuteTest ${Date.now()}`;
+    const sceneId = await createSceneViaTerminal(page, title);
+
+    await page.goto(`/scenes?watch=${sceneId}`);
+    await expect(page.locator('[data-testid="scenes-workspace"]')).toBeVisible({ timeout: 15000 });
+
+    const toggle = page.getByTestId('scene-mute-toggle');
+    await expect(toggle).toBeVisible({ timeout: 10000 });
+    // Starts unmuted.
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    // Mute via the typed RPC.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 });
+
+    // Reload the workspace — the mute state must survive from the persisted
+    // ListMyScenes read-back (not just the in-session optimistic update).
+    await page.goto(`/scenes?watch=${sceneId}`);
+    await expect(page.locator('[data-testid="scenes-workspace"]')).toBeVisible({ timeout: 15000 });
+    const toggleAfter = page.getByTestId('scene-mute-toggle');
+    await expect(toggleAfter).toBeVisible({ timeout: 10000 });
+    await expect(toggleAfter).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 });
+  });
+
   // ── S2b: Navigate-on-select from a sub-route ────────────────────────────────
   //
   // Regression guard for holomush-5rh.30: now that the scene-list sidebar is
