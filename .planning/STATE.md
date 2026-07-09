@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 2
+current_phase: 02
 current_phase_name: Scenes Lineage Completion
 status: executing
-stopped_at: Phase 2 context gathered (templates descoped)
-last_updated: "2026-07-09T04:32:17.122Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-07-09T17:23:25.545Z"
 last_activity: 2026-07-09
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 17
+  completed_plans: 11
   percent: 33
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 01 — channels-subsystem
+**Current focus:** Phase 02 — Scenes Lineage Completion
 
 ## Current Position
 
-Phase: 2 — Scenes Lineage Completion
-Plan: Not started
+Phase: 02 (Scenes Lineage Completion) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-07-09 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-07-09 — Phase 02 execution started
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
 `/gsd-map-codebase` static analysis and live `bd`/codebase verification of shipped vs. forward scope.
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P07 | 75min | 2 tasks | 9 files |
 | Phase 01 P08 | 55min | 2 tasks | 6 files |
 | Phase 01 P09 | 150min | 3 tasks | 11 files |
+| Phase 02 P01 | 20m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,7 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: 01-06: channel history membership-gated at auth step-1 for every channel type incl. public (INV-CHANNEL-1); joined_at floor + scrollback cap (D-07); channel_log plaintext no crypto.emits (D-04)
 - [Phase ?]: 01-08: guest auto-join served by unioning ListDefaultChannels into QuerySessionStreams (resource-side, no membership-row write, D-01)
 - [Phase ?]: 01-08: mid-session live-subscribe failure logged not propagated — degrades to next session-establishment delivery (holomush-l6std), never silently dropped
+- [Phase ?]: Telnet scene-activity nudge debounce = 45s; reusable [>GAME] gamenotice primitive; INV-SCENE-70 bound (telnet privacy parity).
 
 ### Pending Todos
 
@@ -120,9 +122,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-09T03:04:51.628Z
+Last session: 2026-07-09T17:23:25.541Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
-Stopped at: Phase 2 context gathered (templates descoped)
+Stopped at: Completed 02-01-PLAN.md
 Hardening & Deployment Scaling); awaiting user approval before `/gsd-plan-phase 1`.
-Resume file: .planning/phases/02-scenes-lineage-completion/02-CONTEXT.md
+Resume file: None

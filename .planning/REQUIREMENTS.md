@@ -181,7 +181,7 @@ Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
 > **SCENEFWD-01 (scene templates) descoped to backlog 2026-07-08** — not actively pursued at this time;
 > tracked as standalone P4 bead `holomush-x4n1r`. See "v2 Requirements (Deferred)" below.
 
-- [ ] **SCENEFWD-02**: Player receives a notification when a scene they participate in or are invited to has
+- [x] **SCENEFWD-02**: Player receives a notification when a scene they participate in or are invited to has
   relevant activity — bd epic "Scenes Phase 10: Notifications + telnet edge cases + polish"
 
 - [ ] **SCENEFWD-03**: Telnet scene commands handle previously-identified edge cases (e.g. mixed
@@ -258,7 +258,7 @@ this GSD roadmap and are recorded as context (see above), not phase-mapped.
 | CHAN-04 | Phase 1 | Complete |
 | CHAN-05 | Phase 1 | Complete |
 | SCENEFWD-01 | Backlog | Descoped 2026-07-08 |
-| SCENEFWD-02 | Phase 2 | Pending |
+| SCENEFWD-02 | Phase 2 | Complete |
 | SCENEFWD-03 | Phase 2 | Pending |
 | CLUSTER-01 | Phase 3 | Pending |
 | CLUSTER-02 | Phase 3 | Pending |
