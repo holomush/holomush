@@ -173,7 +173,7 @@ Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
   guarantees as scenes
 
 - [x] **CHAN-04**: Faction-restricted channels enforce membership-based access distinct from open channels
-- [ ] **CHAN-05**: `core-channels` plugin is the second substrate consumer, validating `eventkit`/`groupkit`
+- [x] **CHAN-05**: `core-channels` plugin is the second substrate consumer, validating `eventkit`/`groupkit`
   SDK extraction per INV-S7 (N=2 rule) — extraction happens only after this validates the pattern, not before
 
 ### Scenes Lineage Completion (SCENEFWD)
@@ -248,7 +248,7 @@ this GSD roadmap and are recorded as context (see above), not phase-mapped.
 | CHAN-02 | Phase 1 | Complete |
 | CHAN-03 | Phase 1 | Complete |
 | CHAN-04 | Phase 1 | Complete |
-| CHAN-05 | Phase 1 | Pending |
+| CHAN-05 | Phase 1 | Complete |
 | SCENEFWD-01 | Phase 2 | Pending |
 | SCENEFWD-02 | Phase 2 | Pending |
 | SCENEFWD-03 | Phase 2 | Pending |

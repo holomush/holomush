@@ -49,7 +49,7 @@ tools should treat this as historical context, not phase-parseable roadmap conte
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Channels Subsystem** - Stand up `core-channels` as the social-spaces substrate's second consumer
+- [x] **Phase 1: Channels Subsystem** - Stand up `core-channels` as the social-spaces substrate's second consumer (completed 2026-07-09)
 - [ ] **Phase 2: Scenes Lineage Completion** - Templates, notifications, and telnet polish for the shipped Scenes subsystem
 - [ ] **Phase 3: Platform Hardening & Deployment Scaling** - External/clustered NATS, multi-node crypto invalidation, audit durability
 
@@ -73,7 +73,7 @@ same substrate guarantees (EventBus, ABAC, audit) already proven by Scenes.
 4. Faction-restricted channels enforce membership-based access distinct from open channels
 5. `core-channels` validates the `eventkit`/`groupkit` SDK extraction pattern as the substrate's second
    consumer (INV-S7, N=2 rule) — extraction itself is a follow-on, not a blocking criterion of this phase
-**Plans**: 9/10 plans executed
+**Plans**: 10/10 plans complete
 
 Plans:
 **Wave 1**
@@ -108,7 +108,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 01-09-PLAN.md — Whole-system census + e2e integration + invariant registration (wave 8)
+- [x] 01-09-PLAN.md — Whole-system census + e2e integration + invariant registration (wave 8)
 
 ### Phase 2: Scenes Lineage Completion
 
@@ -160,7 +160,7 @@ completion, and platform hardening can proceed in parallel if desired)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Channels Subsystem | 9/10 | In Progress|  |
+| 1. Channels Subsystem | 10/10 | Complete   | 2026-07-09 |
 | 2. Scenes Lineage Completion | 0/TBD | Not started | - |
 | 3. Platform Hardening & Deployment Scaling | 0/TBD | Not started | - |
 
