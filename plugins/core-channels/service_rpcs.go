@@ -274,6 +274,9 @@ func (s *channelService) PostToChannel(ctx context.Context, req *channelv1.PostT
 		emitErr = s.emitter.emitSay(ctx, req.GetChannelId(), author, text)
 	case "pose":
 		emitErr = s.emitter.emitPose(ctx, req.GetChannelId(), author, ":", text)
+	case "semipose":
+		// The "=name ;text" shorthand: a no-space pose (comm ";"/":" grammar).
+		emitErr = s.emitter.emitPose(ctx, req.GetChannelId(), author, ";", text)
 	case "ooc":
 		// No channel_ooc verb is declared (01-06 D-04): the two content verbs are
 		// say + pose. Reject ooc explicitly rather than emit an unknown wire type.
