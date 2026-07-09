@@ -55,6 +55,10 @@ type channelPlugin struct {
 	resolver  *ChannelResolver
 	auditSrv  *ChannelAuditServer
 	evaluator pluginsdk.HostEvaluator
+	// channels resolves a channel name to its row for the command layer (01-07).
+	// Wired to the store in Init; the command handlers hold it as a narrow
+	// interface so unit tests can inject a fake resolver.
+	channels channelNameResolver
 }
 
 // HandleEvent is a no-op for this foundation plan. The channel plugin does not
@@ -171,6 +175,8 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 	}
 	p.store = store
 	p.resolver.store = store
+	// The command layer resolves channel names via the store (name → id).
+	p.channels = store
 	// Wire the service's store + create rate limiter now that config is decoded.
 	// The evaluator was already injected via SetHostEvaluator before Init.
 	p.service.store = store
