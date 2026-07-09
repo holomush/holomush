@@ -40,13 +40,16 @@ trusted identically by the host.
   least-privilege manifest gates, fail-closed-at-load enforcement — SHIPPED (P3 polish tail tracked in `bd`,
   not in this roadmap)
 - ✓ Unified web portal shell (`(authed)` layout) + shared `CommLine` rendering seam
+- ✓ Channels subsystem (`theme:social-spaces` Epic 10) — plugin-owned `core-channels`: persistent named
+  location-independent channels, membership-gated ABAC (resource-side `resource.channel.members`), EventBus
+  emit + durable plaintext history, telnet command surface + `=name` shorthand, live delivery
+  (`QuerySessionStreams` + `stream.subscription`), whole-system census + E2E; validates INV-S7 (N=2
+  second-consumer rule). CHAN-01..05 shipped 2026-07-09 (Phase 1)
 
 ### Active
 
 <!-- Current GSD roadmap scope — genuine forward work not yet built. See ROADMAP.md for phase breakdown. -->
 
-- [ ] Channels subsystem (`theme:social-spaces` Epic 10) — the second substrate consumer, validating
-  `eventkit`/`groupkit` SDK extraction (INV-S7, N=2 rule)
 - [ ] Scenes lineage completion — templates (bd "Scenes Phase 7"), notifications + telnet polish (bd
   "Scenes Phase 10")
 - [ ] Platform hardening & deployment scaling — external/clustered NATS (`holomush-s5ts`), multi-node crypto
@@ -164,4 +167,4 @@ scenes should bind relevant invariants as part of its own definition of done rat
 
 ---
 
-*Last updated: 2026-07-07 after ingest + brownfield roadmap bootstrap (48-SPEC ingest + prior /gsd-map-codebase run)*
+*Last updated: 2026-07-09 — Phase 1 (Channels Subsystem, Epic 10) complete: CHAN-01..05 validated, moved to Validated Requirements.*
