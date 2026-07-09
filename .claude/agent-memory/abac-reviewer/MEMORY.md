@@ -632,3 +632,44 @@ acceptable. The read twin `seed:player-scene-read` is the SAME bug shape, left i
 (holomush-sjtlz) — independent action, write fix doesn't depend on it; metadata-
 only exposure (content stays I-17/INV-SCENE-60 gated). Re-enabled denial spec
 MUST use WithRealABAC+WithInTreePlugins (allow-all default makes the gate a no-op).
+
+## Channels Phase-1 (CHAN-01..05, 2026-07-08) — READY
+Broad plugin-stream WRITE permit fenced in-handler, not by ABAC:
+`seed:plugin-stream-subscribe` = `permit(plugin, write, stream)` (seed.go). ABAC
+alone would allow a plugin to write ANY stream; the sole control is the SHARED
+`pluginauthz.AuthorizePluginStreamContribution` (streamsubscribe.go): rejects
+`events.`-prefixed/colon refs (STREAM_NOT_RELATIVE), wildcards, forbidden
+system/audit/crypto domains, and non-owned domains. Enforced on BOTH served
+host.v1 (`hostcap/servers.go::authorizeSubscribe`→AuthorizeStreamSubscribe, host-
+sourced OwnedEmitDomains+Subject) AND establishment merge
+(`manager.go::QuerySessionStreams`). Existing stream forbids are all
+`action in ["read"]` — they do NOT bound the write permit; the in-handler fence
+does. THIRD UNFENCED PATH (pre-existing, out of scope): Lua ambient
+`add_session_stream`/`remove_session_stream` (`hostfunc/stdlib_streams.go`,
+unconditionally registered functions.go:326) passes the raw client string
+straight to `SessionStreamRegistry.AddStream` (stream_registry.go:179) with NO
+fence/ABAC — any Lua plugin can subscribe any session to any stream. Channels is
+BINARY (uses fenced client) so it neither introduces nor depends on it; the
+fence doc's "BOTH paths" claim overstates (there are 3). Flag as Medium
+non-blocking + recommend a bead to fence the ambient path.
+Resolver pattern (resolver.go, mirrors scenes): membership RESOURCE-side as
+`resource.channel.members`; `owner` OMITTED (not ""-sentinel) with always-present
+`has_owner` witness (ti1b/9gtl); create sentinel `channel:new` → empty attr bag
+(principal-only admin-create permit fires, instance clauses fail-closed); real
+ids are ULIDs (no sentinel collision); CHANNEL_NOT_FOUND → uniform NotFound;
+foreign resource TYPE → InvalidArgument (fail-loud on host misrouting, type not
+user-controlled so not an oracle). Per-RPC self-enforce (INV-SCENE-65 analog):
+each moderation/structural RPC actorMismatch→gateAction(invite/mute/ban/kick/
+transfer)/gateRead/emit-gate BEFORE store mutation; denials collapse to uniform
+NotFound; muted→PermissionDenied (member, not an oracle). History fence
+(audit.go authorizeMember) at auth step-1 BEFORE DB; shared by streaming
+QueryHistory + service HistoryForMember; non-member==absent→PermissionDenied;
+plaintext content (D-04) so membership is the sole gate. Create rate limit keys
+on host-vouched `trustedOwningPlayerFromContext` (stamped from CommandRequest.
+PlayerID), fail-closed when absent for non-admin; admin bypass via
+`dec.MatchedPolicy==adminCreatePolicyID` (availability-only if host admin-wildcard
+matches first — no fail-open). WR-01 (holomush-0sc.13): actorMismatch no-ops when
+actor metadata ABSENT (`ok==false`) → req.CharacterId trusted for the store
+EFFECT (owner/target); ABAC subject itself is host-vouched (spoof-proof). Latent-
+not-live: all current dispatch paths pair token+metadata. Fail-closed fix
+(require `ok`) is right for the future BFF/typed-RPC path. CONCUR latent.
