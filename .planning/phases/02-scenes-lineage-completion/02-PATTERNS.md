@@ -38,6 +38,7 @@
 **Analog:** the `STREAM_CLOSED` case in the *same* control switch — mirror its shape for a new `CONTROL_SIGNAL_SCENE_ACTIVITY` case. **Main loop only (`:324`)** — NOT the `drainUntilClosed` switch at `:1057` (Pitfall 1).
 
 **Existing switch to extend** (`gateway_handler.go:324-345`):
+
 ```go
 case *corev1.SubscribeResponse_Control:
     if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
@@ -76,12 +77,14 @@ unit tests per notice type. Echoes the `>holomush_` wordmark (D-03).
 
 **Analog:** `end`/`pause`/`resume` gated subcommands. Add cases in the dispatch
 switch (`commands.go:479-538`) mirroring:
+
 ```go
 case "end":
     return gated("end", "end", sceneResourceRef, p.handleEnd)
 case "pause":
     return gated("pause", "pause", sceneResourceRef, p.handlePause)
 ```
+
 New: `case "mute": return gated("mute", "mute", sceneResourceRef, p.handleMute)` and
 symmetric `unmute`. Update the two usage strings + the `default` known-subcommands list.
 
@@ -97,10 +100,12 @@ Reuse `normalizeSceneID`/`resolveSceneRef` for the `#X` arg (ASVS V5).
 #### `plugins/core-scenes/plugin.yaml` — mute/unmute DSL policy (config)
 
 **Analog** — participant-gated policies (`plugin.yaml:273-314`):
-```
+
+```text
 permit(principal is character, action in ["end"], resource is scene) when { resource.scene.owner == principal.id };
 permit(principal is character, action in ["resume"], resource is scene) when { principal.id in resource.scene.participants ... };
 ```
+
 New: `permit(principal is character, action in ["mute"], resource is scene) when { principal.id in resource.scene.participants };`
 (fail-closed/default-deny; mute is a per-participant control, so gate on membership,
 not ownership). Same for `unmute`.
@@ -109,6 +114,7 @@ not ownership). Same for `unmute`.
 
 **Migration analog** (`000010_participants_observer_role.up.sql`) — SPDX header,
 `IF EXISTS`/`IF NOT EXISTS`, paired `.down.sql`:
+
 ```sql
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2026 HoloMUSH Contributors
@@ -141,6 +147,7 @@ query ergonomics during planning (Assumption A5).
   `//nolint:wrapcheck // gRPC status errors pass through as-is` on the error return.
   Log via `errutil.LogErrorContext`.
 - **Facade** `internal/grpc/client.go` — copy the `CreateScene`/`EndScene` shape (`:419-436`):
+
   ```go
   func (c *Client) MuteScene(ctx context.Context, req *sceneaccessv1.MuteSceneRequest) (*sceneaccessv1.MuteSceneResponse, error) {
       resp, err := c.sceneAccessClient.MuteScene(ctx, req)
@@ -150,6 +157,7 @@ query ergonomics during planning (Assumption A5).
       return resp, nil
   }
   ```
+
 - **Proto** `web.proto` (`WebMuteScene`) + `sceneaccess/v1` (`MuteScene`/`SetSceneNotifyPref`):
   mirror `WebCreateScene`/`CreateScene`. Every proto element needs a Go-grounded doc
   comment (`.claude/rules/proto-doc-comments.md`); run `task proto && task web:generate`
@@ -164,6 +172,7 @@ query ergonomics during planning (Assumption A5).
 #### `plugins/core-scenes/idle_scheduler.go` (NEW service, batch sweep)
 
 **Analog:** `plugins/core-scenes/publish_scheduler.go` — copy the whole shape:
+
 ```go
 type idleScheduler struct {
     svc      *SceneServiceImpl
@@ -187,6 +196,7 @@ func (s *idleScheduler) Run(ctx context.Context) {
     }
 }
 ```
+
 `sweep` mirrors `publishScheduler.sweep`: `nowNs := s.now().UnixNano()` (carry the
 `// pgnanos-exempt: scheduler clock ...` comment), query expired rows via a narrow
 store interface, per-row transition, **WARN-log per-row failures without aborting the
@@ -219,11 +229,13 @@ declarations untouched.
 
 **Analog:** the existing 5-branch switch (`commands.go:892-908`). Insert a case
 BEFORE `default` for both-non-empty (the current TODO at `:890`):
+
 ```go
 case len(afResult.FocusedConnectionIDs) > 0 && len(afResult.SkippedConnectionIDs) > 0:
     msg = fmt.Sprintf("Joined scene #%s and focused some connection(s); "+
         "others stay on their current focus (use 'scene focus #%s').", sceneID, sceneID)
 ```
+
 Keep the failure-first ordering (`FailedConnectionIDs > 0` stays the first case).
 Delete the `// TODO(Phase 6 §7.4)` comment.
 
@@ -253,6 +265,7 @@ Planner must pin the exact scenario (character-switch vs simultaneous) against
 ## Shared Patterns
 
 ### ABAC (Layer-2 Evaluate) — new telnet commands
+
 **Source:** `commands.go:463-477` (`gated` helper) + `plugin.yaml:273-314` (participant policies)
 **Apply to:** `scene mute`/`unmute`. Two-layer: Layer-1 command-execution gate
 (`execute-scene-commands` policy already covers `scene`, `plugin.yaml:254`); Layer-2
@@ -260,6 +273,7 @@ Planner must pin the exact scenario (character-switch vs simultaneous) against
 **Do NOT** register in `validActions` (research-confirmed).
 
 ### Error handling + logging
+
 **Source:** `publish_scheduler.go` (`oops.Code(...).Wrap(err)`, `errutil.LogErrorContext`,
 `slog.WarnContext` per-row), `scene_handlers.go:149-178` (`//nolint:wrapcheck` on gRPC
 pass-through)
@@ -268,16 +282,19 @@ scope (`.claude/rules/logging.md`). Never leak inner errors past the gRPC bounda
 (`.claude/rules/grpc-errors.md`).
 
 ### Typed BFF write (never command path)
+
 **Source:** `WebCreateScene` (`scene_handlers.go:149`) → `CreateScene` facade
 (`client.go:421`) → `SceneAccessService`
 **Apply to:** all web mute/prefs writes (`gateway-boundary.md` structural-writes rule).
 
 ### Deterministic ticker sweep
+
 **Source:** `publish_scheduler.go` (`Run`/`sweep`, injected `now func() time.Time`,
 per-row failure tolerance)
 **Apply to:** `idle_scheduler.go`.
 
 ### Invariant registration
+
 New INV-SCENE ids (next free per research: **INV-SCENE-70**). Candidates: INV-SCENE-70
 "telnet SCENE_ACTIVITY nudge carries no scene content" (privacy parity), and an idle-
 transition guarantee. Register in `docs/architecture/invariants.yaml` (`binding: pending`

@@ -47,18 +47,24 @@ The architecture/security decisions are sound and the prior-round fixes held. I 
 Round-4, single effective reviewer (Codex; Antigravity hung/failed). **All 3 prior rounds' fixes verified HELD** (clean regression check) and **no new correctness/security/ABAC/privacy flaw** was found. Codex surfaced 2 NEW **executor compile-traps** (build plumbing, not design). Overall reviewer risk: **MEDIUM until the two traps are patched, LOW afterward.**
 
 ### Verified sound (do not re-open)
+
 Telnet rendering-gap seam; no new stream; reconnect-restore wiring; no `validActions` change; ABAC self-scope split (global pref character-self, mute scene-scoped); `character_id`-guarded RPCs; `EmitIntent` emit; facade-server `CharacterId` stamp; and the round-3 typed read-back (`CharacterSceneInfo.muted` + `global_notify_enabled`, self-scoped, fail-open) — all confirmed against source.
 
 ### New Concerns (executor compile-traps — mechanical, worth pinning)
+
 1. **[MEDIUM] Generated Connect stubs + mockery mock not in `files_modified`.** Plan 03 adds 4 RPCs to `SceneService` but omits the committed Go Connect stub `pkg/proto/holomush/scene/v1/scenev1connect/scene.connect.go` and the mockery mock `internal/grpc/scenemocks/mock_SceneServiceClient.go` (generated per `.mockery.yaml:94-99`; tests pass it as the full `scenev1.SceneServiceClient` at `sceneaccess_service_test.go:163-172`). After the proto change the existing mock no longer implements the interface until regenerated → test compile failure + CI stale-diff failure on the uncommitted generated files. Same omission for Plan 05 (`sceneaccessv1connect`/`webv1connect`). **Fix:** add the Connect stubs + the mock to `files_modified`/artifacts and run `task proto && task web:generate && task mocks:generate` (commit the regen).
 2. **[LOW/MED] Unexported `sceneMuteCache` can't be constructed cross-package.** Plan 04 defines an unexported `sceneMuteCache` in `internal/grpc` (`02-04-PLAN.md:73-75,116-121`), but Task 3 constructs the checker from `cmd/holomush/sub_grpc.go` (imports `internal/grpc` as `holoGRPC`). An unexported type can't be instantiated across the package boundary. **Fix:** require an exported constructor `holoGRPC.NewSceneMuteChecker(loader, ttl, now)` (or an exported cache type).
 
 ### Divergent Views
+
 None — single effective reviewer (Antigravity unavailable).
 
 ### Recommended next step
+
 Both findings are mechanical but real (the generated-artifacts omission in particular causes a CI stale-diff failure if the executor forgets to regenerate + commit). Cheap to pin. Fold in with:
 
-    /gsd-plan-phase 2 --reviews
+```text
+/gsd-plan-phase 2 --reviews
+```
 
 then execute. No design/security work remains — this is the last plumbing pass.

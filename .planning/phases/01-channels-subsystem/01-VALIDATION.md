@@ -128,5 +128,6 @@ validated: 2026-07-09
 default-deny ABAC (`seed_test.go:82`, `audit_test.go:227`, `service_test.go:230,457`) · non-member negatives (e2e `:131`, `audit_test.go:159`, `service_test.go:821`) · guest auto-join union (`session_streams_test.go:74,88,101`) · admin-gated + rate-limited create (`service_test.go:240,284,298,318`) · retention prune (`prune_test.go:60`, `prune_integration_test.go:59`) · mid-session live subscribe (`service_test.go:875,906`, `pluginauthz/streamsubscribe_test.go:20`) · INV-CHANNEL-1/2 bound (`invariants.yaml`, `channels_e2e_test.go:159,222`, `test/meta` bound-genuinely-asserted).
 
 ### Minor observations (non-gaps, no test owed)
+
 - Rate-limit **time-window rollover** (bucket reset after 1h via clock injection) is untested; the durable 5/hr enforcement + admin bypass + 5/6 count boundary are covered. Not a CHAN requirement.
 - WR-01 / WR-02 are behavioral WARNINGs already routed to human decision (beads holomush-0sc.13/.14), not test-coverage gaps.

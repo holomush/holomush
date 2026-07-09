@@ -5,6 +5,7 @@
 **Confidence:** HIGH (all findings verified against current in-tree code at `path:line`; no external deps)
 
 <user_constraints>
+
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
@@ -36,12 +37,14 @@
 </user_constraints>
 
 <phase_requirements>
+
 ## Phase Requirements
 
 | ID | Description | Research Support |
 |----|-------------|------------------|
 | SCENEFWD-02 | Player receives a notification when a scene they participate in / are invited to has activity — on web (shipped) and telnet (throttled `[>GAME: …]` nudge) | Delivery mechanism confirmed at `internal/grpc/server.go:1287-1317` (badge downgrade) + `internal/web/handler.go:579-618` (web forward). Telnet control-frame seam is `internal/telnet/gateway_handler.go:324-345` (currently no `SCENE_ACTIVITY` case). Mute/prefs typed slice pattern extracted from `WebCreateScene` (`internal/web/scene_handlers.go:153`, `internal/grpc/client.go:421`, `web/src/lib/scenes/createFlow.ts`). Idle infra dormant at `store.go` (`idle_timeout_secs`) + `plugin.yaml:113` (`scene_idle_nudge`); ticker-sweep analog at `publish_scheduler.go`. |
 | SCENEFWD-03 | Telnet scene commands handle mixed focused/skipped render, reconnection membership+focus restore, multi-char-per-connection without silent failure | Mixed-render TODO at `commands.go:890` (5-branch switch missing the both-non-empty case). Reconnect-restore primitive `RestoreConnectionFocus` EXISTS + tested (`internal/grpc/focus/restore_connection_focus.go`) but has **no production caller** — the Subscribe/AddConnection path (`server.go:850-899`) never invokes it. Multi-char model characterized below. |
+
 </phase_requirements>
 
 ## Summary
@@ -98,7 +101,7 @@ This is a **brownfield feature-extension** phase against the already-shipped `co
 
 ### System Architecture Diagram — scene-activity notification flow (as-shipped + telnet extension)
 
-```
+```text
  Participant poses in scene #7
         │
         ▼
@@ -127,7 +130,7 @@ Trace: a busy scene produces one `SCENE_ACTIVITY` frame **per event** to a non-f
 
 ### Recommended slice structure
 
-```
+```text
 Slice A — telnet activity nudge (SCENEFWD-02 core)
   internal/telnet/gateway_handler.go   # SCENE_ACTIVITY case at :324 switch
   internal/telnet/gamenotice/*.go      # NEW shared [>GAME: …] Go primitive (D-03)
@@ -156,6 +159,7 @@ Slice D — telnet edge cases (SCENEFWD-03)
 **What:** Add a `CONTROL_SIGNAL_SCENE_ACTIVITY` case to the telnet event loop's control switch. The core already sends the frame; telnet just ignores it today.
 **Where:** `internal/telnet/gateway_handler.go:324` (main loop) — note there is a SECOND control switch at `:1057` (`drainUntilClosed`) that only needs `STREAM_CLOSED`; the nudge belongs in the **main** loop only.
 **Example (current, no SCENE_ACTIVITY handling):**
+
 ```go
 // Source: internal/telnet/gateway_handler.go:324-344 (VERIFIED)
 case *corev1.SubscribeResponse_Control:
@@ -165,6 +169,7 @@ case *corev1.SubscribeResponse_Control:
     // REPLAY_COMPLETE: no-op for telnet.
     slog.DebugContext(childCtx, "gateway: replay complete", "session_id", h.sessionID)
 ```
+
 The new case calls the shared `[>GAME: …]` primitive with `frame.Control.GetSceneId()`, gated by the per-scene debounce (Pattern 2). The gateway is a thin translation layer (INV-EVENTBUS-6 discipline at `:1109`): it renders the signal, it does not resolve scene titles from the DB — if a title (not `#id`) is wanted, that is a discretion call requiring the core to carry a label in the frame (the frame has only `scene_id` today, `server.go:1300`).
 
 ### Pattern 2: Per-scene debounce for coalescing (D-02 throttle — Claude's discretion)
@@ -177,7 +182,8 @@ The new case calls the shared `[>GAME: …]` primitive with `frame.Control.GetSc
 
 **What:** 4-layer typed write, NEVER the command path (gateway-boundary rule).
 **The exact shipped analog to copy** (structural write = invite/kick, closest to mute):
-```
+
+```text
 proto:   api/proto/holomush/web/v1/web.proto      rpc WebMuteScene(...)          (:287 WebCreateScene precedent)
          api/proto/holomush/sceneaccess/v1/...     rpc MuteScene / SetSceneNotifyPref
 BFF:     internal/web/scene_handlers.go:153        WebCreateScene → resolves session, forwards
@@ -185,12 +191,14 @@ facade:  internal/grpc/client.go:421               CreateScene → SceneAccessSe
 client:  web/src/lib/scenes/membershipFlow.ts      invite/kick flow (structural toggle analog)
          web/src/lib/scenes/client.ts              connect-web transport
 ```
+
 **Why membershipFlow, not createFlow:** mute is a toggle on an existing scene (structural write on a resource you already reference by id), exactly like invite/kick — createFlow builds a new resource. Reuse membershipFlow's request/response shape and error handling.
 
 ### Pattern 4: Ticker-sweep for idle transition (D-06) — mirror `publish_scheduler`
 
 **What:** A plugin-owned sweep that finds scenes idle past their threshold and transitions `active → paused`, optionally emitting `scene_idle_nudge`.
 **Exact analog:** `plugins/core-scenes/publish_scheduler.go` — `Run(ctx)` ticks at an interval, `sweep(ctx)` queries expired rows via a narrow store interface, applies per-row transitions, WARN-logs per-row failures without aborting the batch, uses an injected `now func() time.Time` for deterministic tests. Idle sweep needs:
+
 - `store.go`: `ListScenesIdlePastThreshold(ctx, nowNs)` filtered on `state='active'` AND `last_activity_ms + idle_timeout_secs*1000 ≤ now` (last-activity is already computed for the board — `ListCharacterScenes`/`ListBoard` use `last_activity_ms`, `store.go:1772`).
 - `idle_timeout_secs` is already a nullable column read into `IdleTimeoutSecs *int` (`store.go:68`); wire a **game-wide default** (config knob, following the `config:` block at `plugin.yaml:37`) with per-scene override (the column).
 - Transition uses the existing `IsValidTransition(active, paused)` (`lifecycle.go:22`, already valid).
@@ -204,6 +212,7 @@ client:  web/src/lib/scenes/membershipFlow.ts      invite/kick flow (structural 
 ### Pattern 6: Mixed-render branch (D-07) — one switch case
 
 **What:** `commands.go:892-908` is a 5-branch switch on `AutoFocusOnJoin` outcome. The both-non-empty case (`FocusedConnectionIDs>0 AND SkippedConnectionIDs>0`, no failures) currently falls to the bare `default` ("Joined scene #%s.") — the least-informative message, i.e. silent under-reporting. Add an explicit case before `default`:
+
 ```go
 // Source: commands.go:892 (VERIFIED — insert new case)
 case len(afResult.FocusedConnectionIDs) > 0 && len(afResult.SkippedConnectionIDs) > 0:
@@ -235,31 +244,37 @@ case len(afResult.FocusedConnectionIDs) > 0 && len(afResult.SkippedConnectionIDs
 ## Common Pitfalls
 
 ### Pitfall 1: Two telnet control switches
+
 **What goes wrong:** Adding the `SCENE_ACTIVITY` case only to `drainUntilClosed` (`gateway_handler.go:1057`), or to both.
 **Why:** `drainUntilClosed` runs only during quit/logout drain; nudges there are wrong. The live loop is `:324`.
 **How to avoid:** Add the case at `:324` only. **Warning sign:** nudges appearing during logout, or never during play.
 
 ### Pitfall 2: Badge/telnet privacy parity regression (INV-SCENE-62)
+
 **What goes wrong:** Extending telnet rendering in a way that leaks scene content to a non-participant/non-focused member.
 **Why:** The downgrade guard (`server.go:1287-1295`) is the privacy chokepoint; the telnet render must consume ONLY `scene_id` from the control frame, never re-fetch content.
 **How to avoid:** The nudge line is content-free (`[>GAME: Scene #7 has new activity]`). Bind a new `INV-SCENE-70` "telnet SCENE_ACTIVITY nudge carries no scene content." **Warning sign:** the render path touches `service`/`store`/decryption.
 
 ### Pitfall 3: Idle emitter set-equality (INV-PLUGIN-32 / INV-SCENE-2)
+
 **What goes wrong:** Changing `crypto.emits`/`EmitRegistry` for the idle nudge and breaking the manifest↔registry set-equality that fails plugin load.
 **Why:** `scene_idle_nudge` is ALREADY in both `phase4EmitTypes()` (`main.go:186`) and `plugin.yaml:177`. Do NOT re-add it. Just add the emitter call.
 **How to avoid:** Emitter only; leave the declarations. **Warning sign:** `EVENT_TYPE_REGISTRY_MISMATCH` at load.
 
 ### Pitfall 4: Bare `#id` vs scene title in the nudge
+
 **What goes wrong:** Rendering the scene *title* requires a DB lookup the gateway MUST NOT do (gateway-boundary).
 **Why:** The control frame carries only `SceneId` (`server.go:1300`).
 **How to avoid:** Either render `#id` (no lookup), or extend the frame to carry a short label at the core (a proto change). Recommend `#id` for this phase; flag title as a follow-up. **Warning sign:** a gateway-side `service.GetScene` call.
 
 ### Pitfall 5: Restoring focus for web tabs unintentionally (D-08)
+
 **What goes wrong:** Calling `RestoreConnectionFocus` unconditionally on every Subscribe clobbers a web tab's freshly-set focus.
 **Why:** Web sets per-tab focus explicitly; PresentingFocus is "primarily telnet single-pane reconnect UX" (`session.go:239-243`).
 **How to avoid:** Gate the restore (it is a no-op when `PresentingFocus==nil`; verify web sets PresentingFocus lazily/never per the comment). Confirm behavior with a web-tab test. **Warning sign:** a web tab losing its chosen scene focus after any resubscribe.
 
 ### Pitfall 6: `task test` does not compile integration files
+
 **What goes wrong:** Refactoring shared focus/session types and only running `task test`.
 **Why:** `//go:build integration` files (the whole `test/integration/scenes/` suite, incl. `reconnect_focus_restoration_test.go`) compile only under `task test:int`.
 **How to avoid:** Run `task test:int` after any change to `session`/`focus`/`SubscribeResponse` shapes.
@@ -267,6 +282,7 @@ case len(afResult.FocusedConnectionIDs) > 0 && len(afResult.SkippedConnectionIDs
 ## Code Examples
 
 ### Existing badge downgrade (the delivery this phase renders on telnet)
+
 ```go
 // Source: internal/grpc/server.go:1287-1316 (VERIFIED)
 if connID != nil {
@@ -292,6 +308,7 @@ if connID != nil {
 ```
 
 ### Existing web forward of the same frame (telnet must reach parity)
+
 ```go
 // Source: internal/web/handler.go:610-618 (VERIFIED)
 case *corev1.SubscribeResponse_Control:
@@ -307,6 +324,7 @@ case *corev1.SubscribeResponse_Control:
 ```
 
 ### Layer-2 ABAC precedent for mute/unmute
+
 ```go
 // Source: plugins/core-scenes/service.go:712 & commands.go:1287 (VERIFIED)
 dec, evalErr := s.evaluator.Evaluate(ctx, "end", "scene:"+req.GetSceneId())
@@ -335,6 +353,7 @@ Not applicable — this is a greenfield-within-brownfield feature extension (no 
 `workflow.nyquist_validation: true` (`.planning/config.json:24`) — VALIDATION.md derivable from below.
 
 ### Test Framework
+
 | Property | Value |
 |----------|-------|
 | Framework | Go stdlib `testing` + testify (unit); Ginkgo/Gomega (integration, `//go:build integration`) |
@@ -344,6 +363,7 @@ Not applicable — this is a greenfield-within-brownfield feature extension (no 
 | Coverage gate | >80% per-package (`task test:cover`) |
 
 ### Phase Requirements → Test Map
+
 | Req | Behavior | Test Type | Command | Exists? |
 |-----|----------|-----------|---------|---------|
 | SCENEFWD-02 | Non-focused telnet member renders `[>GAME: …]` on scene activity | integration | `task test:int` (extend `test/integration/scenes/scene_activity_badge_test.go`) | ✅ badge test exists; ❌ telnet-render assertion Wave 0 |
@@ -359,6 +379,7 @@ Not applicable — this is a greenfield-within-brownfield feature extension (no 
 | SCENEFWD-03 | Multi-character-per-connection focus/render targeting | integration | `task test:int` (`multi_connection_visibility_test.go` is the sibling) | ❌ Wave 0 (pending model clarification) |
 
 ### Sampling Rate (Nyquist edge cases the plans MUST cover)
+
 - **Throttle coalescing:** N poses in a window → exactly 1 telnet nudge; window boundary → 2nd nudge fires.
 - **Privacy parity on downgrade:** non-participant at same location gets NO nudge and NO content (INV-SCENE-6 + INV-SCENE-62); non-focused participant gets a content-free nudge only.
 - **Reconnection race:** concurrent reconnect vs leave (already covered by INV-SCENE-25 test — extend to the wired Subscribe path).
@@ -367,6 +388,7 @@ Not applicable — this is a greenfield-within-brownfield feature extension (no 
 - **Mute suppression:** muted scene emits no telnet nudge and no web badge for that character.
 
 ### Wave 0 Gaps
+
 - [ ] `internal/telnet/gamenotice/*_test.go` — `[>GAME: …]` primitive rendering.
 - [ ] Telnet-render assertion in `test/integration/scenes/scene_activity_badge_test.go` (or a new `telnet_scene_activity_nudge_test.go`).
 - [ ] `plugins/core-scenes/notify_prefs_test.go` + `idle_scheduler_test.go` (injected `now`).
@@ -379,6 +401,7 @@ Not applicable — this is a greenfield-within-brownfield feature extension (no 
 `security_enforcement: true` (`.planning/config.json:46`). ABAC + privacy are load-bearing here.
 
 ### Applicable ASVS Categories
+
 | ASVS Category | Applies | Standard Control |
 |---------------|---------|-----------------|
 | V4 Access Control | yes | Layer-1 command-execution gate (`execute-scene-commands` policy already covers `scene`); Layer-2 per-resource `Evaluate("mute", "scene:"+id)` with a new participant-gated DSL policy |
@@ -387,6 +410,7 @@ Not applicable — this is a greenfield-within-brownfield feature extension (no 
 | Privacy boundary | yes | INV-SCENE-62 (FocusMemberships ⊆ participants) + INV-SCENE-6 (non-participant location isolation) MUST hold when extending render to telnet |
 
 ### Known Threat Patterns
+
 | Pattern | STRIDE | Mitigation |
 |---------|--------|-----------|
 | Scene content leaks to non-focused/non-participant via telnet nudge | Information disclosure | Content-free `[>GAME: …]` line; render consumes only `scene_id`; bind INV-SCENE-70 |
@@ -414,6 +438,7 @@ Not applicable — this is a greenfield-within-brownfield feature extension (no 
 ## Sources
 
 ### Primary (HIGH confidence — in-tree code, authoritative)
+
 - `internal/grpc/server.go:850-899, 1278-1317` — connection registration + badge downgrade path.
 - `internal/web/handler.go:567-634` — web control-frame forward + signal mapping.
 - `internal/telnet/gateway_handler.go:312-345, 595-640, 1084-1143` — telnet control loop, reattach, render.
@@ -431,14 +456,17 @@ Not applicable — this is a greenfield-within-brownfield feature extension (no 
 - `.planning/config.json` — nyquist/security/tdd toggles all true.
 
 ### Secondary (MEDIUM confidence — design docs, reconciled against code)
+
 - ADR `holomush-0qnnr` (delivery mechanism), master spec `2026-04-06-scenes-and-rp-design-v2.md` §3.3/§4.4/§11, WEBPORT-03 `2026-06-25-shared-web-communication-seam-design.md`, AUTHSESS-03 `2026-05-30-...`, focus-model `2026-05-21-...`.
 
 ### Tertiary (LOW confidence)
+
 - None — all claims grounded in code or reconciled design docs.
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Delivery/rendering seams: HIGH — exact `path:line` verified for every frame hop.
 - ABAC/store patterns: HIGH — precedent handlers + policies read directly.
 - Idle sweep: HIGH — analog scheduler read; declared-but-unwired state confirmed.

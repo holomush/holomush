@@ -209,6 +209,6 @@ pruning, or run a periodic sweep keyed off `createRateWindow`.
 
 ---
 
-_Reviewed: 2026-07-09T01:55:00Z_
-_Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+*Reviewed: 2026-07-09T01:55:00Z*
+*Reviewer: Claude (gsd-code-reviewer)*
+*Depth: standard*

@@ -87,15 +87,18 @@ status: complete
 ### Auto-fixed / scope additions
 
 **1. [Rule 2 - Missing critical functionality] New store methods (store.go was not in `files_modified`)**
+
 - **Found during:** Task 1/2 implementation.
 - **Issue:** The moderation and roster RPCs require store operations that did not exist: kicking a non-owner member with a `membership.kick` ops event, transferring ownership (promote member / demote owner / update `owner_id`), the full roster (role+muted+joined_at), and a muted-flag lookup. The plan's `files_modified` listed only service.go/plugin.yaml/main.go/service_test.go.
 - **Fix:** Added `KickMember`, `TransferOwnership`, `ListMembers`, `IsMuted` to `store.go`, reusing the existing tx + ops-event + classify-miss patterns. The RPCs cannot function without them.
 - **Files modified:** plugins/core-channels/store.go
 
 **2. [Design decision] `service_rpcs.go` as a separate file**
+
 - The 8 RPC methods live in a new `service_rpcs.go` rather than appended to `service.go`. This produced a clean TDD RED (embedded `UnimplementedChannelServiceServer` answers the 8 methods when the file is absent) and keeps `service.go` focused on the 01-05 structural verbs + limiter + `mapStoreError`.
 
 **3. [Presentation normalisation] QueryChannelHistory not-found code**
+
 - The 01-06 fence (`authorizeMember`) returns `PermissionDenied` for a non-member (uniformly, incl. absent channel). The plan's key-link wants "uniform not-found across every new RPC". Rather than re-implement the auth, `QueryChannelHistory` translates the fence's `PermissionDenied` to `NotFound` at the service boundary — the authorization decision is still the single fence; only the wire code is normalised so history is not a hidden-channel oracle either.
 
 **Total deviations:** 1 scope addition (store methods, required), 2 design/presentation choices. No change to the plan's security posture — all must_have truths hold.

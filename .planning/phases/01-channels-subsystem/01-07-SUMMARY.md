@@ -91,21 +91,25 @@ status: complete
 ### Auto-fixed / scope additions
 
 **1. [Rule 2 - Missing critical functionality] PostToChannel `semipose` kind (service_rpcs.go, not in files_modified)**
+
 - **Found during:** Task 1.
 - **Issue:** The plan requires `=name ;semipose` → channel_pose with **no-space** semantics, but content posting MUST flow through `PostToChannel` (the single membership + not-muted fence, T-01-02), whose pose path hardcoded `invokedAs=":"` (spaced). Emitting directly from the command layer to honor `;` would bypass the Layer-2 emit gate.
 - **Fix:** Added a `semipose` case to `PostToChannel` (`emitPose(";")`), keeping the security chokepoint single. The command layer classifies `;` → kind `semipose`, `:` → `pose`, else `say`.
 - **Files modified:** plugins/core-channels/service_rpcs.go
 
 **2. [Rule 2 - Missing critical functionality] Prune store methods (store.go, not in files_modified)**
+
 - **Found during:** Task 2.
 - **Issue:** The sweep needs to enumerate channels for retention computation and delete `channel_log` rows older than a cutoff; neither store method existed.
 - **Fix:** Added `ListChannelsForPrune` + `DeleteChannelLogOlderThan` to store.go (mirrors 01-05b adding moderation store methods).
 - **Files modified:** plugins/core-channels/store.go
 
 **3. [Rule 2 - Test coverage] Prune DB delete-path integration test (prune_integration_test.go)**
+
 - The plan's verification requires `task test:int` green for the prune DB delete path; added a Ginkgo integration spec (real DB: default window, per-channel override, unlimited admin channel untouched).
 
 **4. [Design] Pruner lifecycle mirrors scenes (no Unload hook)**
+
 - The plan says "stop on Unload", but the SDK exposes no Unload/Shutdown lifecycle hook (scenes' publishScheduler has the same constraint). The pruner is a daemon goroutine tied to `context.WithCancel(context.Background())` with cancel intentionally uncalled; process exit is the shutdown signal.
 
 **Total deviations:** 2 required scope additions (semipose kind, prune store methods), 1 test-coverage addition, 1 documented lifecycle design choice. No change to security posture — all must_have truths hold.

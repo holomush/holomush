@@ -18,7 +18,7 @@ exactly as Phase 1 (Channels) mirrored it.
 - **Notifications (SCENEFWD-02):** a telnet notification surface for non-focused
   scene members (web badges already ship — ADR `holomush-0qnnr`); a reusable
   `[>GAME: …]` telnet notification leader; `scene mute`/`unmute` telnet commands
-  + per-character notify pref; a web mute/prefs UI (4-layer slice); idle-timeout
+  - per-character notify pref; a web mute/prefs UI (4-layer slice); idle-timeout
   defaults + transitions + optional idle nudge.
 - **Telnet edge cases (SCENEFWD-03):** the mixed focused/skipped auto-focus
   render branch (`commands.go:890` TODO); reconnection restoring scene
