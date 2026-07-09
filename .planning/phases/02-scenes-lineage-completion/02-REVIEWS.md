@@ -1,61 +1,71 @@
 ---
 phase: 2
 reviewers: [codex]
-review_round: 2
-reviewed_at: 2026-07-09T14:50:31Z
+reviewers_attempted: [codex, gemini]
+review_round: 3
+reviewed_at: 2026-07-09T15:25:43Z
 plans_reviewed: [02-01-PLAN.md,02-02-PLAN.md 02-03-PLAN.md,02-04-PLAN.md 02-05-PLAN.md,02-06-PLAN.md 02-07-PLAN.md]
-supersedes: round-1 review (incorporated at commit 44076c92a)
+supersedes: round-2 review (incorporated at commit 5bb539b22)
 ---
 
-# Cross-AI Plan Review — Phase 2: Scenes Lineage Completion (ROUND 2)
+# Cross-AI Plan Review — Phase 2: Scenes Lineage Completion (ROUND 3)
 
-> Reviewer: **Codex** (codex-cli 0.143.0). Source-grounded against the working tree at commit 44076c92a (post round-1 incorporation). Round 1's 5 findings were incorporated via `/gsd-plan-phase 2 --reviews`; this round verifies their resolution and surfaces issues the incorporation introduced. Single-reviewer run (`claude` skipped, self-CLI).
+> Reviewers requested: **Codex** + **Gemini**. Codex ran source-grounded against the working tree at commit 5bb539b22. **Gemini FAILED** — the `gemini` CLI account is not eligible for Gemini Code Assist (`IneligibleTierError: DASHER_USER`, a Workspace account without free-tier access); not a transient error, so it was skipped per the workflow's fail-and-continue rule. Round-3 focus: verify the round-2 ABAC self-scope fix is sound + a fresh adversarial pass.
 
 ## Codex Review
 
-**Round-1 Resolution Table**
+## 1. Round-2 Regression Check
 
-| Finding | Verdict | Evidence |
-|---|---|---|
-| 1. Idle store cannot see game default | RESOLVED | Plan 06 now requires `ListScenesIdlePastThreshold(ctx, nowNs, defaultIdleTimeoutSecs int)` and explicit scheduler passing at `.planning/phases/02-scenes-lineage-completion/02-06-PLAN.md:21`, `:84-85`, `:117`. That matches source reality: `SceneStore` only holds `pool *pgxpool.Pool` at `plugins/core-scenes/store.go:83-85`; config is decoded in plugin lifecycle at `plugins/core-scenes/main.go:46-74`; current manifest config lives under `plugins/core-scenes/plugin.yaml:37-49`. |
-| 2. Global notify-off persisted but not enforced | PARTIALLY-RESOLVED | The intended enforcement path is now present in the plans: Plan 02 persists `GetSceneNotifyPref`/`SetSceneNotifyPref` at `.planning/.../02-02-PLAN.md:70`, `:113`; Plan 03 adds plugin RPCs including `GetSceneNotifyPref` at `.planning/.../02-03-PLAN.md:73-79`, `:105`; Plan 04 reads both global pref and muted set in `ShouldSuppress` at `.planning/.../02-04-PLAN.md:74-77`, `:113`, and fails open at `:110`, `:140`. The source chokepoint is correct: `SCENE_ACTIVITY` is built and sent only in `internal/grpc/server.go:1278-1314`. However, see New Concern 1: Plan 03’s `SetSceneNotifyPref` ABAC/signature text is internally inconsistent and can block implementation. |
-| 3. Loader lacked trusted dispatch identity | RESOLVED | Plan 04 explicitly threads `playerID` through `ShouldSuppress` and loader dispatch at `.planning/.../02-04-PLAN.md:74`, `:89-91`, `:164`. This matches the existing facade shape: `BeginServiceDispatch(ctx, "core-scenes", actor, playerID.String())` in `internal/grpc/sceneaccess_service.go:152-154`, and the host contract says `ownerPlayerID` is the vouched owning player at `internal/plugin/goplugin/host.go:1321-1324`. The downgrade site can access session identity from `currentInfo` read at `internal/grpc/server.go:1256` and existing player/character identity use at `internal/grpc/server.go:993`. |
-| 4. Idle nudge could not reach `[>GAME: …]` | RESOLVED | Plan 01 creates `gamenotice.Idle` at `.planning/.../02-01-PLAN.md:66-73`, `:87-89`. Plan 06 depends on Plan 01 at `.planning/.../02-06-PLAN.md:6` and adds a separate `core-scenes:scene_idle_nudge` EventFrame render to `gamenotice.Idle` at `.planning/.../02-06-PLAN.md:23`, `:93-94`, `:190`. This is coherent with source: telnet’s control switch is currently only at `internal/telnet/gateway_handler.go:323-344`, while system EventFrames currently route through `formatSystem` at `internal/telnet/gateway_handler.go:1226-1234`. The event type already exists in manifest/registry at `plugins/core-scenes/plugin.yaml:113-117`, `plugins/core-scenes/main.go:177-187`. |
-| 5. Stale `scene.proto` ABAC comment | RESOLVED | Current source is indeed stale: it says “plugin itself runs NO ABAC engine” at `api/proto/holomush/scene/v1/scene.proto:22-29`. Plan 03 explicitly rewords it and gates with proto lint at `.planning/.../02-03-PLAN.md:73-79`, `:93-96`, `:115-116`. Source supports the correction: `SceneServiceImpl` already has `evaluator pluginsdk.HostEvaluator` at `plugins/core-scenes/service.go:176-180`, and lifecycle handlers call it, e.g. `Evaluate(ctx, "end", ...)` at `plugins/core-scenes/service.go:707-712`. |
+- **ABAC split: RESOLVED.** Plan 03 keeps `MuteScene` scene-scoped with `Evaluate("mute", "scene:"+scene_id)` and keeps `SetSceneNotifyPref` / `GetSceneNotifyPref` / `ListMutedScenes` character-self-scoped with no `scene_id` and no `scene:<id>` evaluation. See `.planning/phases/02-scenes-lineage-completion/02-03-PLAN.md:83`, `:86`, `:113-118`, `:128`.
 
-**New Concerns**
+- **`character_id` on all 4 plugin RPCs: RESOLVED.** Plan 03 explicitly requires `character_id` on `MuteSceneRequest`, `SetSceneNotifyPrefRequest`, `GetSceneNotifyPrefRequest`, and `ListMutedScenesRequest`, with actor-metadata mismatch denied before store writes. See `.planning/phases/02-scenes-lineage-completion/02-03-PLAN.md:78-86`, `:118-129`. Existing precedent is real: `EndScene` rejects mismatched actor metadata at `plugins/core-scenes/service.go:696-704`.
 
-[HIGH] `.planning/phases/02-scenes-lineage-completion/02-03-PLAN.md:109` — `SetSceneNotifyPref` is described as carrying only `enabled`, but the same action says `MuteScene/SetSceneNotifyPref` should call `req.GetSceneId()` and evaluate `scene:<id>`. A global notify preference has no scene id. Existing scene ABAC handlers only use `Evaluate(..., "scene:"+req.GetSceneId())` for requests that actually include `scene_id`, e.g. `EndSceneRequest` at `api/proto/holomush/scene/v1/scene.proto:404-410` and handler code at `plugins/core-scenes/service.go:707-712`. As written, an executor will either hit a compile-time missing `GetSceneId()` or invent an empty/nonsensical scene resource for a global preference.
+- **Idle emit via `pluginsdk.EmitIntent`: RESOLVED.** Plan 06 says `scene_idle_nudge` emits via `sink.Emit(ctx, pluginsdk.EmitIntent{Type: "core-scenes:scene_idle_nudge", ...})`, not `core.NewEvent()`. See `.planning/phases/02-scenes-lineage-completion/02-06-PLAN.md:80-85`, `:150-159`.
 
-[MEDIUM] `.planning/phases/02-scenes-lineage-completion/02-03-PLAN.md:109`, `.planning/phases/02-scenes-lineage-completion/02-04-PLAN.md:164` — the new plugin RPCs are “character-scoped via context,” but current plugin RPC convention carries `character_id` in the request and checks actor metadata against it, e.g. `scene.proto` request fields at `api/proto/holomush/scene/v1/scene.proto:406-410`, service mismatch guards at `plugins/core-scenes/service.go:696-704`, and facade forwarding of verified `CharacterId` at `internal/grpc/sceneaccess_service.go:433-436`. The host dispatch contract also says the vouched actor and request payload identity must match at `internal/plugin/goplugin/host.go:1312-1317`. The plans should require `character_id` on `MuteScene`, `SetSceneNotifyPref`, `GetSceneNotifyPref`, and `ListMutedScenes` plugin requests, populated from the verified actor/loader input.
+- **Facade-server handlers for web writes: RESOLVED.** Plan 05 adds `SceneAccessServer.MuteScene` and `SetSceneNotifyPref`, resolves ownership, calls `beginDispatch`, and forwards `CharacterId: char.ID.String()` so the plugin guard passes. See `.planning/phases/02-scenes-lineage-completion/02-05-PLAN.md:83-88`, `:118-130`. Existing facade pattern verifies ownership at `internal/grpc/sceneaccess_service.go:106-125` and dispatches host-vouched actor+owner at `internal/grpc/sceneaccess_service.go:150-155`.
 
-[LOW] `.planning/phases/02-scenes-lineage-completion/02-06-PLAN.md:138`, `:141` — Plan 06 says to emit through the plugin’s standard path but names `core.NewEvent()`. Existing binary plugin emission uses `pluginsdk.EmitIntent` through `EventSink.Emit`, not host-core `core.Event`: see `pkg/plugin/event.go:117-131`, `pkg/plugin/event_sink.go:25-29`, and existing core-scenes emitters at `plugins/core-scenes/service.go:1153-1159` / `plugins/core-scenes/publish_events.go:57-62`. This is likely executor confusion rather than architectural failure, but the plan should say `pluginsdk.EmitIntent{Type: "core-scenes:scene_idle_nudge", ...}`.
+## 2. ABAC Self-Scope Verdict
 
-**Summary + Overall Risk**
+**Correct and sufficient, with one wording caveat:** the global notify-pref authorization is sufficient only as **host-vouched actor binding**, not as raw request metadata.
 
-Overall risk: MEDIUM. The round-1 fixes are mostly incorporated and source-grounded, especially the explicit idle default, host-vouched dispatch identity, idle telnet render, and proto comment correction. The main remaining risk is Plan 03’s new RPC contract: global notify prefs and character-scoped reads need a clean identity/request shape before execution, or Plan 04/05 will be built on mismatched generated protobuf methods.
+The current ABAC/plugin shape supports this:
+
+- `core-scenes` owns only `resource_types: [scene]` (`plugins/core-scenes/plugin.yaml:4-8`).
+- Plugin-side `Evaluate` rejects resources outside owned types (`internal/plugin/pluginauthz/evaluate.go:195-201`), so a plugin-local Layer-2 `Evaluate("write", "character:"+id)` would not fit without broadening plugin authority.
+- The host evaluator derives the ABAC subject server-side from the dispatch token, not plugin-supplied identity (`internal/plugin/hostcap/servers.go:503-523`).
+- `BeginServiceDispatch` requires a server-vouched actor and owner player, stores them in the token, and attaches advisory actor metadata (`internal/plugin/goplugin/host.go:1301-1324`, `:1346-1359`).
+- The facade verifies the character is owned by the authenticated player before dispatch (`internal/grpc/sceneaccess_service.go:106-125`).
+
+So for a per-character global preference with no scene resource, `req.character_id == host-vouched actor.character_id` is the right self-scope. Adding `scene:<id>` would be wrong; adding `character:<id>` from inside `core-scenes` would fight plugin resource ownership.
+
+## 3. New Concerns
+
+**MEDIUM — Web prefs UI has writes but no typed read/snapshot path for persisted mute/global-pref state.**  
+Plan 05 adds `WebMuteScene` and `WebSetSceneNotifyPref` only (`.planning/phases/02-scenes-lineage-completion/02-05-PLAN.md:79-97`, `:122-130`). Existing `WebListMyScenes` returns only `CharacterSceneInfo` (`api/proto/holomush/web/v1/web.proto:1059-1062`), and `CharacterSceneInfo` contains scene, role, last activity, and entry count only (`api/proto/holomush/scene/v1/scene.proto:899-913`). The workspace store seeds UI state from `listMyScenes` (`web/src/lib/scenes/workspaceStore.svelte.ts:66-90`, `:101-117`) and `WorkspaceScene` has no muted/global-notify fields (`web/src/lib/scenes/types.ts:11-40`). Failure mode: the UI can toggle locally, but after reload/reconnect it has no typed source of truth to show which scenes are muted or whether global notifications are off. Add a typed read path or extend `ListMyScenes`/workspace snapshot with mute/global-pref fields.
+
+**LOW — `scene_idle_nudge` manifest description may drift from the implemented semantics.**  
+Plan 06 changes the rendered nudge to “Scene #id is now idle” and emits payload with `scene_id` (`.planning/phases/02-scenes-lineage-completion/02-06-PLAN.md:22-23`, `:150`), but the existing manifest describes `scene_idle_nudge` as “next-up character has been idle ... name + duration” (`plugins/core-scenes/plugin.yaml:177-180`). If the implementation follows the plan, update that existing description without re-declaring the event.
+
+## 4. Summary + Overall Risk
+
+**Overall risk: MEDIUM.** The security-critical ABAC split is sound, and the round-2 fixes stayed incorporated. I recommend **one more small fix pass** before execution: add a web read/snapshot path for persisted mute/global notify state, and align the idle-nudge manifest description with the planned event semantics.
 
 ---
 
 ## Consensus Summary
 
-Round-2 single-reviewer (Codex). **4 of 5 round-1 findings fully RESOLVED, 1 PARTIALLY-RESOLVED.** The 3 new concerns all stem from a single root — the new notify-preference RPCs (`SetSceneNotifyPref`/`GetSceneNotifyPref`) that round-1's fix added were given an identity/ABAC shape inconsistent with the plugin's existing RPC convention. Overall reviewer risk: **MEDIUM — one HIGH RPC-contract bug to fix before execution; the loop is converging (5→3 findings, all localized to new surface).**
+Round-3, single effective reviewer (Codex; Gemini ineligible). **All 4 round-2 fixes verified RESOLVED and the security-critical ABAC self-scope shape is CONFIRMED correct & sufficient** via a full authorization-chain trace. Two NEW concerns surfaced (neither a regression). Overall reviewer risk: **MEDIUM — one completeness gap (web read-back) + one doc-string drift; the loop has converged (no correctness/security issues remain).**
 
-### Round-1 Resolution
-- **RESOLVED (4):** #1 idle store explicit default; #3 dispatch identity (`playerID` via `BeginServiceDispatch`, matches `sceneaccess_service.go:152-154`); #4 idle render via `gamenotice.Idle`; #5 stale proto comment.
-- **PARTIALLY-RESOLVED (1):** #2 global notify-off — the enforcement *path* is correctly wired (persist in 02/03/05 → read in Plan 04 `ShouldSuppress` at the `server.go:1278-1314` chokepoint, fail-open), but the new `SetSceneNotifyPref` RPC's ABAC/identity shape is broken (New Concern 1/2).
+### Verified sound (do not re-open)
+- **ABAC self-scope (round-2 HIGH):** `req.character_id == host-vouched actor.character_id` is the correct self-scope for the global notify pref. Adding `scene:<id>` would be wrong; adding `character:<id>` inside `core-scenes` would fight its `resource_types:[scene]` ownership (`plugin.yaml:4-8`, `pluginauthz/evaluate.go:195-201`, `hostcap/servers.go:503-523`, `host.go:1301-1324`). The binding guard is sufficient — no extra Layer-2 policy needed for a character mutating its own preference.
+- character_id on all 4 plugin RPCs (guarded, `service.go:696-704`); idle emit via `pluginsdk.EmitIntent`; Plan 05 facade-server handlers stamp `CharacterId` (`sceneaccess_service.go:106-125`, `:150-155`) — all RESOLVED.
 
-### New Concerns (introduced by round-1 incorporation)
-1. **[HIGH] `SetSceneNotifyPref` ABAC resource mismatch** (`02-03-PLAN.md:109`). It is grouped with `MuteScene` under an action that evaluates `scene:<id>` via `req.GetSceneId()` — but a **global** notify pref has no scene id (contrast `EndSceneRequest` at `scene.proto:404-410` which does). Failure mode: executor hits a compile-time missing `GetSceneId()` or invents a nonsensical empty scene resource for a global pref. Fix: give the global pref its own ABAC shape (a character/self-scoped action, not `scene:<id>`), separate from the scene-scoped `MuteScene`.
-2. **[MEDIUM] Plugin RPC identity convention** (`02-03-PLAN.md:109`, `02-04-PLAN.md:164`). The new RPCs are specified "character-scoped via context", but the plugin convention carries `character_id` in the request and guards it against the vouched actor metadata (`service.go:696-704`, `sceneaccess_service.go:433-436`, `host.go:1312-1317`). Fix: require `character_id` on `MuteScene`/`SetSceneNotifyPref`/`GetSceneNotifyPref`/`ListMutedScenes`, populated from the verified actor/loader input.
-3. **[LOW] Emit API naming** (`02-06-PLAN.md:138,141`). Plan 06 says `core.NewEvent()`, but binary plugins emit via `pluginsdk.EmitIntent` through `EventSink.Emit` (`pkg/plugin/event.go:117-131`, `plugins/core-scenes/publish_events.go:57-62`). Fix: say `pluginsdk.EmitIntent{Type: "core-scenes:scene_idle_nudge", ...}`.
+### New Concerns
+1. **[MEDIUM] Web mute/prefs UI can write but has no typed READ/snapshot path.** Plan 05 adds only `WebMuteScene`/`WebSetSceneNotifyPref` (writes). `WebListMyScenes`→`CharacterSceneInfo` carries scene/role/last-activity/entry-count only (`web.proto:1059-1062`, `scene.proto:899-913`); the workspace store seeds from it (`web/src/lib/scenes/workspaceStore.svelte.ts:66-90`) and `WorkspaceScene` has no muted/global-notify fields (`web/src/lib/scenes/types.ts:11-40`). Failure mode: the UI can toggle locally but after reload/reconnect has no source of truth for which scenes are muted / whether global notifications are off. Fix: extend `ListMyScenes`/`CharacterSceneInfo` (or add a typed read RPC) with `muted` + `global_notify` fields and wire the workspace snapshot.
+2. **[LOW] `scene_idle_nudge` manifest description drift.** Plan 06 renders "Scene #id is now idle" with a `scene_id` payload, but the manifest still describes the event as "next-up character has been idle … name + duration" (`plugins/core-scenes/plugin.yaml:177-180`). Fix: update the description (do NOT re-declare the event).
 
 ### Divergent Views
-None — single reviewer.
+None — single effective reviewer (Gemini unavailable).
 
 ### Recommended next step
-Findings 1 (HIGH) and 2 (MEDIUM) are a coherent RPC-contract cleanup on the notify-pref surface; 3 is a naming correction. All three are cheap, localized plan edits. Fold in with:
-
-    /gsd-plan-phase 2 --reviews
-
-Then execute. Fixing the global-vs-scene ABAC shape (Concern 1) in the plan — rather than leaving the executor to improvise it on a security surface — is the reason to run one more `--reviews` pass before `/gsd-execute-phase 2`.
+Concern 1 is a scope call: a mute/prefs UI that can't reflect persisted state on reload is functionally incomplete (D-04), but adding the read path grows the phase (proto fields on `CharacterSceneInfo` + workspace-store wiring). Either fold both in with `/gsd-plan-phase 2 --reviews`, or accept Concern 1 as a fast-follow bead and incorporate only the LOW. No correctness/security blocker remains — execution is viable once the scope of Concern 1 is decided.
