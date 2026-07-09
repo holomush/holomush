@@ -50,7 +50,7 @@ tools should treat this as historical context, not phase-parseable roadmap conte
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Channels Subsystem** - Stand up `core-channels` as the social-spaces substrate's second consumer (completed 2026-07-09)
-- [ ] **Phase 2: Scenes Lineage Completion** - Notifications and telnet polish for the shipped Scenes subsystem (templates descoped to backlog)
+- [x] **Phase 2: Scenes Lineage Completion** - Notifications and telnet polish for the shipped Scenes subsystem (templates descoped to backlog) (completed 2026-07-09)
 - [ ] **Phase 3: Platform Hardening & Deployment Scaling** - External/clustered NATS, multi-node crypto invalidation, audit durability
 
 ## Phase Details
@@ -180,7 +180,7 @@ completion, and platform hardening can proceed in parallel if desired)
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
-| 2. Scenes Lineage Completion | 6/7 | In Progress|  |
+| 2. Scenes Lineage Completion | 7/7 | Complete    | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | 0/TBD | Not started | - |
 
 ## Deferred (Not in This Roadmap)
