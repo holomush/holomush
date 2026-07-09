@@ -3402,9 +3402,9 @@ invariants:
     scope: INV-SCENE
     origin_spec: "docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md"
     legacy: []
-    summary: "an active scene idle past its effective idle timeout (the per-scene idle_timeout_secs column when set, else the
-      game-wide default supplied explicitly by the scheduler) auto-transitions active → paused via the idle sweep, and a
-      paused scene is never re-transitioned (the sweep query excludes non-active scenes)."
+    summary: "an active scene idle past its effective idle timeout (the per-scene idle_timeout_secs column when set, else
+      the game-wide default supplied explicitly by the scheduler) auto-transitions active → paused via the idle sweep, and
+      a paused scene is never re-transitioned (the sweep query excludes non-active scenes)."
     binding: bound
     asserted_by:
       - "plugins/core-scenes/idle_scheduler_integration_test.go"
