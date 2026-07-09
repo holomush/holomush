@@ -3388,6 +3388,16 @@ invariants:
       whose value predates a concurrent eviction. Bounded-memory reclaim on connection create/remove is an operational property,
       not part of this invariant. Binding pending until holomush-wm0fi.6 binds it to the cache/decorator/integration tests."
     binding: pending
+  - id: INV-SCENE-70
+    scope: INV-SCENE
+    origin_spec: "docs/adr/holomush-0qnnr-scene-activity-uses-consumer-control-frame-downgrade-not-new.md"
+    legacy: []
+    summary: "the telnet SCENE_ACTIVITY nudge render path consumes only the control frame's scene_id and carries no scene
+      title, pose text, or other scene content — telnet privacy parity with INV-SCENE-62."
+    binding: bound
+    asserted_by:
+      - "internal/telnet/gateway_handler_test.go"
+    refs: []
 
   # -- INV-PLUGIN -- migrated from families PC/W9ML/WS + pluginauthz bare INV-N (holomush-hz0v4.14.14).
   # P7 SPLIT: PLUGIN gets ZERO P7 tokens (redesign §2.1: crypto half=1,2,5,6,7,9,11,12,15,16; P7-13/14 ride
