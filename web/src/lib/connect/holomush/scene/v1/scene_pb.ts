@@ -2994,7 +2994,8 @@ export const SceneService: GenService<{
   /**
    * GetPoseOrder returns the computed pose-order roster for a scene. Enforces
    * the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member,
-   * NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+   * NOT merely invited; the host ABAC evaluator is not consulted for this read).
+   * The PermissionDenied gate
    * fires before any existence check so a non-participant cannot distinguish a
    * missing scene from one they may not see. See service.go::GetPoseOrder.
    *

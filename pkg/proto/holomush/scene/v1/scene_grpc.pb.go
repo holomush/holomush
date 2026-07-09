@@ -192,7 +192,8 @@ type SceneServiceClient interface {
 	CastPublishVote(ctx context.Context, in *CastPublishVoteRequest, opts ...grpc.CallOption) (*CastPublishVoteResponse, error)
 	// GetPoseOrder returns the computed pose-order roster for a scene. Enforces
 	// the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member,
-	// NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+	// NOT merely invited; the host ABAC evaluator is not consulted for this read).
+	// The PermissionDenied gate
 	// fires before any existence check so a non-participant cannot distinguish a
 	// missing scene from one they may not see. See service.go::GetPoseOrder.
 	GetPoseOrder(ctx context.Context, in *GetPoseOrderRequest, opts ...grpc.CallOption) (*GetPoseOrderResponse, error)
@@ -731,7 +732,8 @@ type SceneServiceServer interface {
 	CastPublishVote(context.Context, *CastPublishVoteRequest) (*CastPublishVoteResponse, error)
 	// GetPoseOrder returns the computed pose-order roster for a scene. Enforces
 	// the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member,
-	// NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+	// NOT merely invited; the host ABAC evaluator is not consulted for this read).
+	// The PermissionDenied gate
 	// fires before any existence check so a non-participant cannot distinguish a
 	// missing scene from one they may not see. See service.go::GetPoseOrder.
 	GetPoseOrder(context.Context, *GetPoseOrderRequest) (*GetPoseOrderResponse, error)
