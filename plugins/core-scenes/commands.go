@@ -927,10 +927,11 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 		)
 	}
 
-	// 5-branch render based on substrate outcome. Failure check runs FIRST
+	// 6-branch render based on substrate outcome. Failure check runs FIRST
 	// so per-connection auto-focus failures aren't hidden under success or
-	// skipped messaging (CodeRabbit PR #4191).
-	// TODO(Phase 6 §7.4): add mixed-render branch when both focused and skipped are non-empty.
+	// skipped messaging (CodeRabbit PR #4191). The mixed focused/skipped case
+	// (D-07) renders an explicit informative line rather than falling to the
+	// least-informative default — no silent failure.
 	var msg string
 	switch {
 	case len(afResult.FailedConnectionIDs) > 0:
@@ -942,6 +943,12 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 	case len(afResult.SkippedConnectionIDs) > 0 && len(afResult.FocusedConnectionIDs) == 0:
 		// Explicitly-focused-elsewhere: terminal stays on its current focus (INV-SCENE-24).
 		msg = fmt.Sprintf("Joined scene #%s. Your terminal stays on its current focus; use 'scene focus #%s' to switch.", sceneID, sceneID)
+	case len(afResult.FocusedConnectionIDs) > 0 && len(afResult.SkippedConnectionIDs) > 0:
+		// Mixed outcome (D-07): some connections were auto-focused, others kept
+		// their current focus (INV-SCENE-24). No failures reached here (the
+		// failure-first case above is checked first).
+		msg = fmt.Sprintf("Joined scene #%s and focused some connection(s); "+
+			"others stay on their current focus (use 'scene focus #%s').", sceneID, sceneID)
 	case afResult.TotalConnectionCount > 0 && len(afResult.FocusedConnectionIDs) == 0 && len(afResult.SkippedConnectionIDs) == 0:
 		// Comms-hub-only: only non-terminal connections exist (INV-SCENE-17 filtered them out).
 		msg = fmt.Sprintf("Joined scene #%s. Use 'scene focus #%s' to enter.", sceneID, sceneID)
