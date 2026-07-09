@@ -92,11 +92,13 @@ the WRITE path denies them, leaving the feature permanently broken for observed
 scenes. Fail-closed, so not a security hole, but a real UI/backend inconsistency.
 **Fix:** Pick one contract and apply it on both sides. Either hide the control for
 observers:
+
 ```svelte
 {#if isParticipant}
   <div class="flex flex-wrap gap-1.5 pl-4 pt-2"> … mute button … </div>
 {/if}
 ```
+
 or, if observers are meant to mute, widen the policy resource attribute to include
 observer rows (and confirm the resolver surfaces them).
 
@@ -108,21 +110,23 @@ returns `false` — i.e. "not mismatched" — so the request is accepted. For
 `MuteScene`/`EndScene` this is backstopped by a fail-closed ABAC `Evaluate`
 (missing subject → no policy match → deny), but the notify-pref trio
 (`SetSceneNotifyPref`, `GetSceneNotifyPref`, `ListMutedScenes`) performs **no** ABAC
-evaluation — the actor-binding guard is their *sole* authorization. If any of these
+evaluation — the actor-binding guard is their _sole_ authorization. If any of these
 RPCs is ever reached without host-vouched actor metadata, the guard passes and the
 caller can read/write **any** `character_id`'s global notify preference. In the
 current architecture the host always stamps actor metadata via
 `BeginServiceDispatch` (facade at `sceneaccess_service.go:154`; loader at
 `sub_grpc.go:593`), so this is not reachable in production dispatch today — but the
-guard that is the *only* gate for a self-scoped write should fail CLOSED on absent
+guard that is the _only_ gate for a self-scoped write should fail CLOSED on absent
 identity rather than open.
 **Fix:** For the notify-pref handlers, require metadata presence explicitly:
+
 ```go
 kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx)
 if !ok || kind != pluginsdk.ActorCharacter || id != req.GetCharacterId() {
     return nil, status.Error(codes.PermissionDenied, "not permitted to set prefs for this character")
 }
 ```
+
 (i.e. a fail-closed variant of the guard for the RPCs that lack an ABAC backstop).
 
 ## Info

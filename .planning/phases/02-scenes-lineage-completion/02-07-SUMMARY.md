@@ -51,15 +51,18 @@ Closed the three telnet scene-command edge cases that previously failed silently
 ## What was built
 
 ### Task 1 — Mixed focused/skipped auto-focus render branch (D-07)
+
 - Added a 6th case to the auto-focus render switch in `plugins/core-scenes/commands.go` for `len(FocusedConnectionIDs) > 0 && len(SkippedConnectionIDs) > 0` (no failures), rendering: `"Joined scene #X and focused some connection(s); others stay on their current focus (use 'scene focus #X')."`
 - Preserved failure-first ordering (`FailedConnectionIDs > 0` remains the first case) and deleted the stale `// TODO(Phase 6 §7.4)` comment.
 - Added `TestHandleJoin_AutoFocus_MixedFocusedSkipped` asserting the message is distinct from the bare default.
 
 ### Task 2 — Wire RestoreConnectionFocus at Subscribe + web-tab safety (D-08)
+
 - In `internal/grpc/server.go` `Subscribe`, after `AddConnection`/`RegisterConnection`, call `focusCoordinator.RestoreConnectionFocus(ctx, sessionID, connID)` gated on `info.PresentingFocus != nil`. Best-effort: a failure is warn-logged via `slog.WarnContext` and does not fail the stream. Wrapped in a `subscribe.restore_connection_focus` span.
 - Added a D-08 integration `It` proving a `PresentingFocus == nil` restore is a no-op that preserves a web tab's already-chosen per-tab `FocusKey`.
 
 ### Task 3 — Multi-character-per-connection focus no-leak (D-09, TDD)
+
 - RED: a new integration test showed character B inheriting character A's stale `FocusKey` (#7) because `RestoreConnectionFocus` branch 3 returned the connection unchanged.
 - GREEN: `internal/grpc/focus/restore_connection_focus.go` now sets `conn.FocusKey = nil` on the `PresentingFocus != nil` but membership-absent branch (grid fallback), closing the cross-character leak. Updated the doc comment.
 - Added two D-09 `It`s: (a) A(#7) → swap to B non-member → grid, never #7; (b) B-member restores B's own #9, never A's #7.
@@ -76,6 +79,7 @@ Closed the three telnet scene-command edge cases that previously failed silently
 ### Auto-fixed / hardening
 
 **1. [Rule 2 — Critical hardening] D-09 defensive clear placed in the primitive (branch 3), not only at teardown**
+
 - **Found during:** Task 3 RED phase.
 - **Issue:** The plan framed D-09 as "confirm the guarantee, add a defensive clear at connection-teardown/character-unbind IF a leak is found." The RED test exposed that `RestoreConnectionFocus` branch 3 (`PresentingFocus` set, membership absent) returned the connection unchanged, leaving a stale non-entitled `FocusKey`.
 - **Fix:** Clear `conn.FocusKey = nil` on that branch — the correct chokepoint (grid fallback should mean no focus) and robust regardless of connection-lifecycle assumptions. Branch 1 (`PresentingFocus == nil`) stays a pure no-op to preserve web per-tab focus.
@@ -83,6 +87,7 @@ Closed the three telnet scene-command edge cases that previously failed silently
 - **Commit:** 81960af0d
 
 ### Out-of-scope (not fixed)
+
 - `task lint:markdown` reports pre-existing MD041/MD046/MD028/MD075 issues in `.planning/` plan/state docs (phases 01 and 02) — untouched by this plan, out of scope.
 
 ## Commits
@@ -93,6 +98,7 @@ Closed the three telnet scene-command edge cases that previously failed silently
 - 91c42540b — style(02-07): gofmt reflow of RestoreConnectionFocus warn log
 
 ## Self-Check: PASSED
+
 - plugins/core-scenes/commands.go — mixed-render case present, TODO removed (verified)
 - internal/grpc/server.go — RestoreConnectionFocus call gated on PresentingFocus != nil (verified)
 - internal/grpc/focus/restore_connection_focus.go — branch-3 conn.FocusKey = nil (verified)
