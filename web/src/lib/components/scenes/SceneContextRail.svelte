@@ -179,21 +179,28 @@
         {/if}
       {/if}
       <!-- Mute toggle: per-scene notification mute via the typed RPC. Reflects
-           the persisted WorkspaceScene.muted so state survives reload. -->
-      <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
-        <Button
-          variant="outline"
-          size="sm"
-          class="h-6 text-xs"
-          aria-label={scene.muted ? 'Unmute scene notifications' : 'Mute scene notifications'}
-          aria-pressed={scene.muted}
-          data-testid="scene-mute-toggle"
-          disabled={muteBusy}
-          onclick={toggleMute}
-        >{scene.muted ? '🔕 Muted' : '🔔 Mute'}</Button>
-      </div>
-      {#if muteErr}
-        <p class="text-xs text-destructive pl-4 pt-1" role="alert">{muteErr}</p>
+           the persisted WorkspaceScene.muted so state survives reload.
+           Participant-only (owner/member): the mute-scene-as-participant ABAC
+           policy resolves against resource.scene.participants, which structurally
+           excludes observers (INV-SCENE-61). Observers silence notifications via
+           the character-self global notify preference instead — showing them a
+           per-scene toggle would only yield PermissionDenied (WR-01, 02-REVIEW). -->
+      {#if isParticipant}
+        <div class="flex flex-wrap gap-1.5 pl-4 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-6 text-xs"
+            aria-label={scene.muted ? 'Unmute scene notifications' : 'Mute scene notifications'}
+            aria-pressed={scene.muted}
+            data-testid="scene-mute-toggle"
+            disabled={muteBusy}
+            onclick={toggleMute}
+          >{scene.muted ? '🔕 Muted' : '🔔 Mute'}</Button>
+        </div>
+        {#if muteErr}
+          <p class="text-xs text-destructive pl-4 pt-1" role="alert">{muteErr}</p>
+        {/if}
       {/if}
     </section>
 

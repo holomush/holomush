@@ -530,4 +530,19 @@ describe('SceneContextRail mute toggle', () => {
 			muted: false,
 		});
 	});
+
+	it('shows the mute toggle for a participant (member)', () => {
+		const target = render(makeScene({ role: 'member', ownerId: OWNER_ID, asCharacterId: MEMBER_ID }));
+		expect(muteButton(target)).not.toBeNull();
+	});
+
+	// WR-01 (02-REVIEW): per-scene mute is participant-scoped by design — the
+	// mute-scene-as-participant policy resolves against resource.scene.participants,
+	// which structurally excludes observers (role IN owner/member; INV-SCENE-61).
+	// An observer who saw the toggle would hit PermissionDenied. Observers silence
+	// notifications via the character-self global notify preference instead.
+	it('hides the mute toggle for an observer (per-scene mute is participant-scoped, INV-SCENE-61)', () => {
+		const target = render(makeScene({ role: 'observer', ownerId: OWNER_ID, asCharacterId: 'char-obs' }));
+		expect(muteButton(target)).toBeNull();
+	});
 });
