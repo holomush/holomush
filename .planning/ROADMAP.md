@@ -7,7 +7,7 @@ HoloMUSH is a mature, actively-developed platform — the event-sourced core, AB
 specs through the 2026-07-05 focus-routed-input design) are already shipped and running. This roadmap covers
 only the genuine **forward** work identified from the 48-SPEC ingest, the invariant registry, and
 `docs/roadmap.md`'s active theme narratives: standing up Channels as the social-spaces substrate's second
-consumer, closing out the remaining Scenes lineage items (templates, notifications, telnet polish), and
+consumer, closing out the remaining Scenes lineage items (notifications and telnet polish; templates deferred to backlog), and
 hardening the platform for real multi-node/production deployment. Forums and Discord integration remain
 explicitly deferred pending their own designs (see REQUIREMENTS.md v2).
 
@@ -50,7 +50,7 @@ tools should treat this as historical context, not phase-parseable roadmap conte
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Channels Subsystem** - Stand up `core-channels` as the social-spaces substrate's second consumer (completed 2026-07-09)
-- [ ] **Phase 2: Scenes Lineage Completion** - Templates, notifications, and telnet polish for the shipped Scenes subsystem
+- [ ] **Phase 2: Scenes Lineage Completion** - Notifications and telnet polish for the shipped Scenes subsystem (templates descoped to backlog)
 - [ ] **Phase 3: Platform Hardening & Deployment Scaling** - External/clustered NATS, multi-node crypto invalidation, audit durability
 
 ## Phase Details
@@ -112,21 +112,19 @@ Plans:
 
 ### Phase 2: Scenes Lineage Completion
 
-**Goal**: The shipped Scenes/RP subsystem reaches the remainder of its designed scope — repeatable scene
-setup, activity notifications, and telnet edge-case hardening — beyond the reference-implementation core
-already delivered through the 2026-07-05 focus-routed-input design.
+**Goal**: The shipped Scenes/RP subsystem reaches the remainder of its designed scope — activity
+notifications and telnet edge-case hardening — beyond the reference-implementation core already delivered
+through the 2026-07-05 focus-routed-input design. (Scene templates, originally SCENEFWD-01, were descoped to
+backlog on 2026-07-08 — bd `holomush-x4n1r`, P4 — as not actively pursued at this time.)
 **Depends on**: Nothing new — extends the already-shipped `core-scenes` plugin
-**Requirements**: SCENEFWD-01, SCENEFWD-02, SCENEFWD-03
+**Requirements**: SCENEFWD-02, SCENEFWD-03
 **Success Criteria** (what must be TRUE):
 
-1. Player can create a scene from a reusable template with participants/theme/timing pre-filled, via the
-   existing web create-scene UI or the telnet `scene create` command
+1. Player receives a notification when a scene they participate in or are invited to has activity requiring
+   their attention — on both web (already shipped) and telnet (via a throttled `[>GAME: …]` nudge line)
 
-2. Player receives a notification when a scene they participate in or are invited to has activity requiring
-   their attention
-
-3. Telnet scene commands handle previously-identified edge cases (e.g. mixed focused/skipped render
-   branches) without silent failure
+2. Telnet scene commands handle previously-identified edge cases (mixed focused/skipped render branches,
+   reconnection membership+focus restore, multi-character-per-connection) without silent failure
 **Plans**: TBD
 **UI hint**: yes
 

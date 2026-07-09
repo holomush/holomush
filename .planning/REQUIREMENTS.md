@@ -178,8 +178,8 @@ Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
 
 ### Scenes Lineage Completion (SCENEFWD)
 
-- [ ] **SCENEFWD-01**: Player can create a scene from a reusable template (participants/theme/timing
-  pre-filled) — bd epic "Scenes Phase 7: Templates"
+> **SCENEFWD-01 (scene templates) descoped to backlog 2026-07-08** — not actively pursued at this time;
+> tracked as standalone P4 bead `holomush-x4n1r`. See "v2 Requirements (Deferred)" below.
 
 - [ ] **SCENEFWD-02**: Player receives a notification when a scene they participate in or are invited to has
   relevant activity — bd epic "Scenes Phase 10: Notifications + telnet edge cases + polish"
@@ -205,7 +205,15 @@ Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
 
 ## v2 Requirements (Deferred)
 
-Tracked but not in the current roadmap — blocked on a missing design or an unmet prerequisite.
+Tracked but not in the current roadmap — blocked on a missing design or an unmet prerequisite, or descoped
+by explicit user decision.
+
+### Scene Templates (Scenes lineage backlog)
+
+- **SCENEFWD-01**: Player can create a scene from a reusable template (participants/theme/timing pre-filled)
+  — originally Phase 2, **descoped to backlog 2026-07-08** as not actively pursued at this time. Tracked as
+  standalone P4 bead `holomush-x4n1r` ("Scenes Phase 7: Templates"); spec ref
+  `docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md` §§1.4/6.5/7.2.
 
 ### Forums (Epic 11, `holomush-djj`)
 
@@ -249,7 +257,7 @@ this GSD roadmap and are recorded as context (see above), not phase-mapped.
 | CHAN-03 | Phase 1 | Complete |
 | CHAN-04 | Phase 1 | Complete |
 | CHAN-05 | Phase 1 | Complete |
-| SCENEFWD-01 | Phase 2 | Pending |
+| SCENEFWD-01 | Backlog | Descoped 2026-07-08 |
 | SCENEFWD-02 | Phase 2 | Pending |
 | SCENEFWD-03 | Phase 2 | Pending |
 | CLUSTER-01 | Phase 3 | Pending |
@@ -260,11 +268,11 @@ this GSD roadmap and are recorded as context (see above), not phase-mapped.
 
 **Coverage:**
 
-- v1 requirements: 13 total
-- Mapped to phases: 13
+- v1 requirements: 12 total (SCENEFWD-01 descoped to backlog 2026-07-08)
+- Mapped to phases: 12
 - Unmapped: 0 ✓
 
 ---
 
 *Requirements defined: 2026-07-07*
-*Last updated: 2026-07-07 after brownfield ingest (48 SPEC + invariant registry + roadmap themes)*
+*Last updated: 2026-07-08 — SCENEFWD-01 (scene templates) descoped from Phase 2 to backlog (bd `holomush-x4n1r`)*
