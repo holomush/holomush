@@ -6,14 +6,14 @@ current_phase: 01
 current_phase_name: channels-subsystem
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-09T00:27:04.560Z"
+last_updated: "2026-07-09T00:42:05.558Z"
 last_activity: 2026-07-08
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 01 (channels-subsystem) — EXECUTING
-Plan: 9 of 10
+Plan: 10 of 10
 Status: Ready to execute
 Last activity: 2026-07-08 — Phase 01 execution started
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P06 | 55min | 2 tasks | 9 files |
 | Phase 01 P05b | 70min | 2 tasks | 7 files |
 | Phase 01 P07 | 75min | 2 tasks | 9 files |
+| Phase 01 P08 | 55min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,8 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: 01-04: Layer-1 execute-channel-commands gate deferred to the channel command's plan (01-05/01-07) — policy validator rejects a policy targeting an undeclared command
 - [Phase ?]: 01-06: PluginAuditService is NOT in a plugin's provides (per-plugin reachability via PluginAuditClient + audit: block); a duplicate declaration collides with core-scenes (DUPLICATE_SERVICE_PROVIDER)
 - [Phase ?]: 01-06: channel history membership-gated at auth step-1 for every channel type incl. public (INV-CHANNEL-1); joined_at floor + scrollback cap (D-07); channel_log plaintext no crypto.emits (D-04)
+- [Phase ?]: 01-08: guest auto-join served by unioning ListDefaultChannels into QuerySessionStreams (resource-side, no membership-row write, D-01)
+- [Phase ?]: 01-08: mid-session live-subscribe failure logged not propagated — degrades to next session-establishment delivery (holomush-l6std), never silently dropped
 
 ### Pending Todos
 
@@ -116,7 +119,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-09T00:26:39.589Z
+Last session: 2026-07-09T00:41:15.809Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
 Stopped at: Phase 1 context gathered
