@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -247,6 +248,57 @@ func TestListMutedScenesRejectsForgedActingCharacter(t *testing.T) {
 	ctx := watchCtxWithActorMetadata(pluginsdk.ActorCharacter, "char-actual")
 	_, err := svc.ListMutedScenes(ctx, &scenev1.ListMutedScenesRequest{
 		CharacterId: "char-forged",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// ── WR-02 (holomush-gl751): fail CLOSED on absent/unverified actor metadata ────
+//
+// The character-self notify-pref trio has NO ABAC backstop (the plugin evaluator
+// rejects character:<id> resources outside owned types), so mismatchedActingCharacter
+// is their SOLE gate. Absent advisory actor metadata means the caller's identity is
+// unverified — it MUST be denied (default-deny), not allowed. In production
+// BeginServiceDispatch always stamps a matching character actor (sub_grpc.go:592,
+// sceneaccess_service.go facade), so these only fire on a non-character or
+// misconfigured dispatch — closing the fail-OPEN hole flagged as WR-02.
+
+// TestSetSceneNotifyPrefDeniesAbsentActorMetadata asserts a write is refused when
+// the ctx carries no advisory actor metadata (no write leaks).
+func TestSetSceneNotifyPrefDeniesAbsentActorMetadata(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(t, store)
+
+	_, err := svc.SetSceneNotifyPref(context.Background(), &scenev1.SetSceneNotifyPrefRequest{
+		CharacterId: "char-alice", Enabled: true,
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Empty(t, store.setSceneNotifyPrefCalls, "no write on unverified identity")
+}
+
+// TestGetSceneNotifyPrefDeniesAbsentActorMetadata asserts a read is refused when
+// the ctx carries no advisory actor metadata.
+func TestGetSceneNotifyPrefDeniesAbsentActorMetadata(t *testing.T) {
+	store := newFakeStore()
+	svc := newTestService(t, store)
+
+	_, err := svc.GetSceneNotifyPref(context.Background(), &scenev1.GetSceneNotifyPrefRequest{
+		CharacterId: "char-alice",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestListMutedScenesDeniesAbsentActorMetadata asserts the muted-scene list does
+// not leak when the ctx carries no advisory actor metadata.
+func TestListMutedScenesDeniesAbsentActorMetadata(t *testing.T) {
+	store := newFakeStore()
+	store.mutedScenes = []string{"scene-secret"}
+	svc := newTestService(t, store)
+
+	_, err := svc.ListMutedScenes(context.Background(), &scenev1.ListMutedScenesRequest{
+		CharacterId: "char-alice",
 	})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))

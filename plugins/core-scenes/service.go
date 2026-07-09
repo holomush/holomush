@@ -923,15 +923,40 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 	return &scenev1.ResumeSceneResponse{Scene: rowToProto(row, row.CreatedAt.Time())}, nil
 }
 
-// mismatchedActingCharacter reports whether the advisory actor metadata on ctx
-// identifies a character whose id contradicts the request's acting
-// character_id. It is the shared self-scope / anti-forgery guard for the mute
-// and notify-pref handlers, mirroring EndScene's inline check (service.go
-// EndScene): a caller may only act as, and for the notify-pref RPCs read/write
-// the prefs of, the character it is vouched to be.
+// mismatchedActingCharacter reports whether PRESENT advisory actor metadata
+// contradicts the request's acting character_id. It is the supplementary
+// anti-forgery guard for MuteScene, whose primary gates are the "mute" ABAC
+// evaluation against scene:<id> (participant-gated) plus a host-trusted
+// req.character_id (set from the authenticated session on the command path and
+// from the verified character on the facade path). Because those primary gates
+// stand on their own, this guard is ADVISORY: absent metadata is allowed
+// (fail-open) — e.g. an in-process command test that does not replicate the
+// host's command-actor stamping still reaches the ABAC gate.
+//
+// For a SOLE-GATE self-scope caller (the notify-pref trio) use
+// callerNotVouchedAsCharacter instead, which fails CLOSED on absent metadata.
 func mismatchedActingCharacter(ctx context.Context, requestCharacterID string) bool {
 	kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx)
 	return ok && kind == pluginsdk.ActorCharacter && id != requestCharacterID
+}
+
+// callerNotVouchedAsCharacter reports whether the caller is NOT host-vouched to be
+// exactly requestCharacterID. It FAILS CLOSED on unverified identity (WR-02,
+// holomush-gl751): absent advisory metadata, or metadata for a non-character
+// actor, is treated as not-vouched and denied.
+//
+// This is the SOLE authorization gate for the character-self notify-pref trio
+// (SetSceneNotifyPref / GetSceneNotifyPref / ListMutedScenes): those RPCs carry no
+// scene id and run no ABAC evaluation (the plugin evaluator rejects character:<id>
+// resources outside owned types), so an unverified caller MUST be denied by
+// default rather than allowed. Every production caller supplies a matching
+// character actor — the core mute-suppression checker
+// (cmd/holomush/sub_grpc.go, core.Actor{Kind: ActorCharacter, ID: characterID})
+// and the SceneAccessService facade both BeginServiceDispatch as the verified
+// character — so this only denies a non-character or misconfigured dispatch.
+func callerNotVouchedAsCharacter(ctx context.Context, requestCharacterID string) bool {
+	kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx)
+	return !ok || kind != pluginsdk.ActorCharacter || id != requestCharacterID
 }
 
 // MuteScene sets or clears the calling character's per-scene mute flag. It is
@@ -992,7 +1017,7 @@ func (s *SceneServiceImpl) SetSceneNotifyPref(ctx context.Context, req *scenev1.
 	)
 	defer span.End()
 
-	if mismatchedActingCharacter(ctx, req.GetCharacterId()) {
+	if callerNotVouchedAsCharacter(ctx, req.GetCharacterId()) {
 		slog.WarnContext(ctx, "scene.notify_pref.set actor metadata mismatch",
 			"request_character_id", req.GetCharacterId())
 		return nil, status.Error(codes.PermissionDenied, "not permitted to set prefs for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
@@ -1019,7 +1044,7 @@ func (s *SceneServiceImpl) GetSceneNotifyPref(ctx context.Context, req *scenev1.
 	)
 	defer span.End()
 
-	if mismatchedActingCharacter(ctx, req.GetCharacterId()) {
+	if callerNotVouchedAsCharacter(ctx, req.GetCharacterId()) {
 		slog.WarnContext(ctx, "scene.notify_pref.get actor metadata mismatch",
 			"request_character_id", req.GetCharacterId())
 		return nil, status.Error(codes.PermissionDenied, "not permitted to read prefs for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
@@ -1045,7 +1070,7 @@ func (s *SceneServiceImpl) ListMutedScenes(ctx context.Context, req *scenev1.Lis
 	)
 	defer span.End()
 
-	if mismatchedActingCharacter(ctx, req.GetCharacterId()) {
+	if callerNotVouchedAsCharacter(ctx, req.GetCharacterId()) {
 		slog.WarnContext(ctx, "scene.muted.list actor metadata mismatch",
 			"request_character_id", req.GetCharacterId())
 		return nil, status.Error(codes.PermissionDenied, "not permitted to list muted scenes for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
