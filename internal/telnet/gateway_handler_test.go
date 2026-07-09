@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/telnet/gamenotice"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -3036,4 +3037,52 @@ func TestGatewayHandlerTreatsWireSessionNotFoundAsTerminalAndDisconnects(t *test
 	// (2 total Subscribe calls: initial + the one terminal resubscribe).
 	assert.Equal(t, int32(2), subCalls.Load(),
 		"terminal SESSION_NOT_FOUND must not retry; exactly one resubscribe attempt")
+}
+
+// TestSceneActivityLineCoalescesPerScenePerWindow drives the SCENE_ACTIVITY
+// render decision directly: N frames for the same scene within one debounce
+// window render exactly one leader; a frame after the window renders a second;
+// distinct scenes debounce independently.
+func TestSceneActivityLineCoalescesPerScenePerWindow(t *testing.T) {
+	h := &GatewayHandler{}
+	base := time.Now()
+
+	// First frame for scene A renders.
+	if got := h.sceneActivityLine("sceneA", base); got == "" {
+		t.Fatal("first SCENE_ACTIVITY frame for a scene must render a leader")
+	}
+	// N more frames within the window coalesce to nothing.
+	for i := 1; i <= 5; i++ {
+		within := base.Add(sceneNudgeWindow - time.Second)
+		if got := h.sceneActivityLine("sceneA", within); got != "" {
+			t.Errorf("frame %d within window rendered %q, want coalesced (empty)", i, got)
+		}
+	}
+	// A frame at/after the window boundary renders again.
+	if got := h.sceneActivityLine("sceneA", base.Add(sceneNudgeWindow)); got == "" {
+		t.Error("SCENE_ACTIVITY frame after the debounce window must render a second leader")
+	}
+	// A different scene in the same window renders its own leader (per-scene).
+	if got := h.sceneActivityLine("sceneB", base); got == "" {
+		t.Error("debounce is per scene_id: a distinct scene must render its own leader")
+	}
+}
+
+// Verifies: INV-SCENE-70
+//
+// TestSceneActivityLineCarriesOnlySceneID asserts the telnet SCENE_ACTIVITY
+// render path emits exactly the content-free gamenotice leader for the frame's
+// scene id and carries no scene title or pose/content text — telnet privacy
+// parity with INV-SCENE-62. The render function's only input is the scene id,
+// so it is structurally incapable of leaking scene content.
+func TestSceneActivityLineCarriesOnlySceneID(t *testing.T) {
+	h := &GatewayHandler{}
+	sceneID := "01SCENEXYZ"
+
+	got := h.sceneActivityLine(sceneID, time.Now())
+
+	require.Equal(t, gamenotice.Activity(sceneID), got,
+		"rendered line must equal the content-free gamenotice leader")
+	assert.Equal(t, "[>GAME: Scene #01SCENEXYZ has new activity]", got,
+		"the nudge carries only the scene id, no title or pose content")
 }
