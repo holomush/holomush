@@ -30,6 +30,7 @@ import (
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -209,6 +210,13 @@ type pluginDeps struct {
 	// extraPluginDirs holds additional plugin directories (e.g. test-only Lua
 	// fixtures) staged into the plugin load path after the in-tree plugins.
 	extraPluginDirs []string
+	// streamRegistry is the shared SessionStreamRegistry threaded into the
+	// PluginSubsystemConfig so the plugin's stream.subscription capability
+	// (AddSessionStream/RemoveSessionStream) targets the SAME registry the
+	// CoreServer's Subscribe loop registers connections on (WithSessionStreamDelivery /
+	// WithFocusDelivery). nil under suites that need neither. Mirrors
+	// cmd/holomush/core.go passing one registry to both sinks.
+	streamRegistry *holoGRPC.SessionStreamRegistry
 }
 
 // startPlugins constructs and starts a PluginSubsystem mirroring production
@@ -309,9 +317,23 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		AdminDeps:             adminDepsProvider{deps: adminDeps},
 		Registry:              lifecycle.NewReadinessRegistry(),
 		VerbRegistry:          d.verbReg,
+		// GameID feeds the host capability qualifiers (hostfunc.WithGameID /
+		// goplugin.WithGameID) so a plugin's stream.subscription / stream.history
+		// host calls can qualify a domain-RELATIVE ref (channel.<id>) to the full
+		// events.<game>.channel.<id> subject. Without it the mid-session
+		// AddSessionStream fails STREAM_QUALIFY_FAILED and live delivery degrades.
+		GameID:                d.gameID,
 		LuaTimeout:            5 * time.Second,
 		LuaRegistryMaxSize:    1024 * 1024,
 		PluginConfigOverrides: d.pluginConfigOverrides,
+	}
+	// Thread the shared stream registry so the plugin's stream.subscription
+	// capability targets the same registry the CoreServer registers Subscribe
+	// connections on. Guarded on the concrete pointer so a nil registry (suites
+	// without session-stream/focus delivery) leaves cfg.StreamRegistry nil and
+	// SetStreamRegistry is never called (avoids the typed-nil-in-interface trap).
+	if d.streamRegistry != nil {
+		cfg.StreamRegistry = d.streamRegistry
 	}
 
 	ps := pluginsetup.NewPluginSubsystem(cfg)
