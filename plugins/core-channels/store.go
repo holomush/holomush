@@ -790,6 +790,48 @@ func (s *channelStore) ListDefaultChannels(ctx context.Context) ([]channelRow, e
 	return out, nil
 }
 
+// ListChannelsForPrune returns the id/type/retention_days of every channel for
+// the retention sweep (D-07). Archived channels are included: their history is
+// still subject to retention. Ordered by id for a stable sweep.
+func (s *channelStore) ListChannelsForPrune(ctx context.Context) ([]channelPruneInfo, error) {
+	rows, err := s.pool.Query(
+		ctx, `SELECT id, type, retention_days FROM channels ORDER BY id`,
+	)
+	if err != nil {
+		return nil, oops.Code("CHANNEL_PRUNE_LIST_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	out := make([]channelPruneInfo, 0)
+	for rows.Next() {
+		var info channelPruneInfo
+		if err := rows.Scan(&info.ID, &info.Type, &info.RetentionDays); err != nil {
+			return nil, oops.Code("CHANNEL_PRUNE_LIST_FAILED").Wrap(err)
+		}
+		out = append(out, info)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("CHANNEL_PRUNE_LIST_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
+// DeleteChannelLogOlderThan deletes channel_log rows for subject whose event
+// timestamp is strictly older than cutoff, returning the number deleted. The
+// strict `<` preserves a row exactly at the window edge (D-07 boundary). The
+// cutoff is a Go-clock value supplied by the prune sweep and passed as a SQL
+// parameter (noremoteclockcompare-compliant).
+func (s *channelStore) DeleteChannelLogOlderThan(ctx context.Context, subject string, cutoff time.Time) (int64, error) {
+	tag, err := s.pool.Exec(
+		ctx, `DELETE FROM channel_log WHERE subject = $1 AND timestamp < $2`,
+		subject, cutoff,
+	)
+	if err != nil {
+		return 0, oops.Code("CHANNEL_PRUNE_DELETE_FAILED").With("subject", subject).Wrap(err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // channelOpsEventKind enumerates the recognised ops-event kinds. The dotted
 // naming convention is also enforced by the DB CHECK on channel_ops_events.kind.
 type channelOpsEventKind string

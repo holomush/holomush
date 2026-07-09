@@ -217,6 +217,22 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 		return oops.Code("CHANNEL_INIT_FAILED").Wrap(err)
 	}
 
+	// Start the background retention prune sweep (D-07) in a goroutine tied to an
+	// independently cancellable context so it survives the request-scoped Init
+	// context. The goroutine is daemon-lifetime — it terminates on plugin
+	// shutdown (store pool close / SIGTERM); process exit is the signal. Mirrors
+	// core-scenes' publishScheduler start.
+	pruneCtx, pruneCancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel intentionally not called; goroutine is daemon-lifetime, process exit is the signal
+	_ = pruneCancel
+	pruner := &channelPruner{
+		store:         store,
+		gameID:        p.service.gameID,
+		defaultWindow: p.cfg.RetentionWindow,
+		interval:      p.cfg.PruneInterval,
+		now:           time.Now,
+	}
+	go pruner.Run(pruneCtx)
+
 	slog.InfoContext(
 		ctx, "core-channels plugin initialised",
 		"storage", "postgres",
