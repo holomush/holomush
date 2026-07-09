@@ -141,7 +141,7 @@ Plans:
 
 - [ ] 02-04-PLAN.md — Core mute-suppression at badge downgrade (dependency-inverted SceneMuteChecker, TTL cache) (SCENEFWD-02)
 - [ ] 02-05-PLAN.md — Web mute/prefs typed 4-layer slice (WebMuteScene → facade → BFF → notifyFlow.ts) (SCENEFWD-02)
-- [ ] 02-06-PLAN.md — Idle-timeout lifecycle (active→paused sweep) + optional idle nudge (OFF) + INV-SCENE-71 (SCENEFWD-02)
+- [x] 02-06-PLAN.md — Idle-timeout lifecycle (active→paused sweep) + optional idle nudge (OFF) + INV-SCENE-71 (SCENEFWD-02)
 
 **Wave 4** *(blocked on Wave 3)*
 

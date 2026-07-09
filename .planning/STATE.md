@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: Scenes Lineage Completion
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-09T17:56:29.291Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-07-09T18:20:00.000Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 02 execution started
 progress:
@@ -72,6 +72,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P01 | 20m | 3 tasks | 6 files |
 | Phase 02 P02 | ~15m | 2 tasks | 4 files |
 | Phase 02 P03 | 20m | 4 tasks | 11 files |
+| Phase 02 P06 | ~40m | 4 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,7 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: 01-08: mid-session live-subscribe failure logged not propagated — degrades to next session-establishment delivery (holomush-l6std), never silently dropped
 - [Phase ?]: Telnet scene-activity nudge debounce = 45s; reusable [>GAME] gamenotice primitive; INV-SCENE-70 bound (telnet privacy parity).
 - [Phase ?]: Scene notify prefs stored in one plugin table: NULL scene_id = per-character global pref (muted=NOT enabled), non-NULL = per-scene mute; mode column is the D-05 digest seam defaulting realtime.
+- [Phase 02]: 02-06: idle sweep transitions active→paused past effective threshold (explicit game-default param into a pool-only store — store never reads config; per-scene idle_timeout_secs overrides via COALESCE); idle nudge OFF by default, emitted via EventSink.Emit and rendered on telnet through gamenotice.Idle; idle math is epoch-nanos (plan's *1000/ms shorthand was a unit bug); INV-SCENE-71 bound.
 
 ### Pending Todos
 
