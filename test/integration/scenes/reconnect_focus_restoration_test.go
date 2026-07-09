@@ -412,4 +412,100 @@ var _ = Describe("D-08 + D-09: Subscribe-wiring web-tab safety and multi-charact
 		Expect(conn.FocusKey.TargetID).To(Equal(webSceneID),
 			"D-08: web tab's per-tab FocusKey MUST remain its chosen scene, not be clobbered")
 	})
+
+	// D-09 no-leak: a telnet connection that was focused on scene #7 as
+	// character A, after a SEQUENTIAL swap to character B (not a member of #7),
+	// MUST NOT inherit #7. INV-SCENE-18 membership validation forces the grid
+	// fallback, and RestoreConnectionFocus clears any stale non-entitled
+	// FocusKey so B's connection lands on grid, never on A's scene.
+	It("does not leak character A's scene focus to a swapped-in character B (D-09)", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+
+		h := newHarness()
+
+		charBID := newULID()
+		sceneAID := newULID() // scene #7 — character A's scene, B is NOT a member
+		sessionID := "sess-swap-d09-" + newULID().String()
+		connID := newULID()
+
+		staleAFocus := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneAID}
+
+		// After the swap the connection now serves character B. Worst case: the
+		// session still carries A's PresentingFocus (#7) but B holds NO
+		// membership in #7.
+		Expect(h.store.Set(ctx, sessionID, &session.Info{
+			ID:               sessionID,
+			CharacterID:      charBID,
+			LocationID:       newULID(),
+			Status:           session.StatusActive,
+			PresentingFocus:  &staleAFocus, // stale — belonged to character A
+			FocusMemberships: nil,          // B is not a member of #7
+		})).To(Succeed())
+
+		// The connection still carries A's stale per-connection FocusKey (#7).
+		Expect(h.store.AddConnection(ctx, &session.Connection{
+			ID:         connID,
+			SessionID:  sessionID,
+			ClientType: "terminal",
+			FocusKey:   &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneAID},
+		})).To(Succeed())
+
+		Expect(h.coord.RestoreConnectionFocus(ctx, sessionID, connID)).
+			To(Succeed(), "D-09: RestoreConnectionFocus MUST NOT error on a cross-character swap")
+
+		conn, err := h.store.GetConnection(ctx, connID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(conn.FocusKey).To(BeNil(),
+			"D-09: character B MUST fall back to grid — no stale FocusKey from character A may survive the swap")
+	})
+
+	// D-09 positive: when character B IS a member of a scene with its own
+	// PresentingFocus, B restores B's own focus — never character A's stale key.
+	It("restores character B's own scene focus, never character A's (D-09)", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+
+		h := newHarness()
+
+		charBID := newULID()
+		sceneAID := newULID() // #7 — A's scene (stale on the connection)
+		sceneBID := newULID() // #9 — B's own scene
+		sessionID := "sess-swap-member-d09-" + newULID().String()
+		connID := newULID()
+
+		bFocus := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneBID}
+
+		// Session now serves B: PresentingFocus + membership on B's own scene #9.
+		Expect(h.store.Set(ctx, sessionID, &session.Info{
+			ID:              sessionID,
+			CharacterID:     charBID,
+			LocationID:      newULID(),
+			Status:          session.StatusActive,
+			PresentingFocus: &bFocus,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: sceneBID, JoinedAt: time.Now()},
+			},
+		})).To(Succeed())
+
+		// The connection still carries A's stale FocusKey (#7).
+		Expect(h.store.AddConnection(ctx, &session.Connection{
+			ID:         connID,
+			SessionID:  sessionID,
+			ClientType: "terminal",
+			FocusKey:   &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneAID},
+		})).To(Succeed())
+
+		Expect(h.coord.RestoreConnectionFocus(ctx, sessionID, connID)).
+			To(Succeed(), "D-09: RestoreConnectionFocus MUST succeed restoring B's own focus")
+
+		conn, err := h.store.GetConnection(ctx, connID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(conn.FocusKey).NotTo(BeNil(),
+			"D-09: B's own scene focus MUST be restored")
+		Expect(conn.FocusKey.TargetID).To(Equal(sceneBID),
+			"D-09: restored focus MUST be B's scene #9, never character A's stale scene #7")
+		Expect(conn.FocusKey.TargetID).NotTo(Equal(sceneAID),
+			"D-09: character A's stale FocusKey MUST NOT survive the swap")
+	})
 })
