@@ -38,10 +38,11 @@ reconciled: 2026-07-09
 
 ## Per-Task Verification Map
 
-> Reconciled 2026-07-09 from the 7 planned PLAN.md files (20 tasks). Every task
-> carries an `<automated>` verify command; TDD-first tasks create their test file
-> on the RED step; no watch-mode flags. `File Exists` = when the test artifact is
-> created (in-task on TDD RED, or via existing meta/integration infra).
+> Reconciled 2026-07-09 from the 7 planned PLAN.md files (21 tasks; +1 from the
+> 2026-07-09 reviews pass — Plan 06 Task 4 telnet idle render). Every task carries
+> an `<automated>` verify command; TDD-first tasks create their test file on the
+> RED step; no watch-mode flags. `File Exists` = when the test artifact is created
+> (in-task on TDD RED, or via existing meta/integration infra).
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
@@ -53,15 +54,16 @@ reconciled: 2026-07-09
 | 2-03-01 | 03 | 2 | SCENEFWD-02 | T-02-07 | ABAC-gated mute RPCs, fail-closed | unit (TDD) | `task lint:proto && task test -- ./plugins/core-scenes/...` | ▶ in-task | ⬜ pending |
 | 2-03-02 | 03 | 2 | SCENEFWD-02 | T-02-08 | gated telnet mute/unmute (no validActions change) | unit | `task test -- ./plugins/core-scenes/...` | ▶ in-task | ⬜ pending |
 | 2-03-03 | 03 | 2 | SCENEFWD-02 | T-02-07 | participant-gated DSL policy, default-deny | unit + lint | `task lint && task test -- ./plugins/core-scenes/...` | ▶ in-task | ⬜ pending |
-| 2-04-01 | 04 | 3 | SCENEFWD-02 | T-02-11, T-02-12 | per-session TTL cache, cross-character isolation | unit (TDD) | `task test -- ./internal/grpc/... -run SceneMute` | ▶ in-task | ⬜ pending |
-| 2-04-02 | 04 | 3 | SCENEFWD-02 | T-02-10, T-02-13 | muted→suppress at downgrade, fail-open | unit + integration (TDD) | `task test -- ./internal/grpc/... && task test:int -- -run 'SceneActivity\|Mute' ./test/integration/scenes/ 2>/dev/null \|\| task test:int` | ▶ in-task | ⬜ pending |
-| 2-04-03 | 04 | 3 | SCENEFWD-02 | T-02-12 | checker wired via serviceRegistry SceneService dial | build + unit | `task build && task test -- ./cmd/holomush/... ./internal/grpc/...` | ▶ in-task | ⬜ pending |
+| 2-04-01 | 04 | 3 | SCENEFWD-02 | T-02-11, T-02-12 | per-character TTL cache holds {globalEnabled, mutedSet}, cross-character isolation (Finding 2) | unit (TDD) | `task test -- ./internal/grpc/... -run SceneMute` | ▶ in-task | ⬜ pending |
+| 2-04-02 | 04 | 3 | SCENEFWD-02 | T-02-10, T-02-13, T-02-13b | global-off OR muted → suppress at downgrade, fail-open (Finding 2) | unit + integration (TDD) | `task test -- ./internal/grpc/... && task test:int -- -run 'SceneActivity\|Mute' ./test/integration/scenes/ 2>/dev/null \|\| task test:int` | ▶ in-task | ⬜ pending |
+| 2-04-03 | 04 | 3 | SCENEFWD-02 | T-02-11b, T-02-12 | checker wired via serviceRegistry SceneService dial, host-vouched actor+ownerPlayerID dispatch (Finding 3) | build + unit | `task build && task test -- ./cmd/holomush/... ./internal/grpc/...` | ▶ in-task | ⬜ pending |
 | 2-05-01 | 05 | 3 | SCENEFWD-02 | T-02-14 | typed facade+web RPCs, opaque errors | unit + lint (TDD) | `task lint:proto && task test -- ./internal/grpc/...` | ▶ in-task | ⬜ pending |
 | 2-05-02 | 05 | 3 | SCENEFWD-02 | T-02-15, T-02-16 | BFF proxy, typed-RPC only, opaque errors | unit (TDD) | `task test -- ./internal/web/...` | ▶ in-task | ⬜ pending |
 | 2-05-03 | 05 | 3 | SCENEFWD-02 | T-02-14 | typed-RPC web toggle round-trip (no cmd path) | unit (Vitest) + e2e | `pnpm -C web run test:unit notifyFlow && { task test:e2e -- scenes 2>/dev/null \|\| task test:e2e; }` | ▶ in-task | ⬜ pending |
 | 2-06-01 | 06 | 3 | SCENEFWD-02 | T-02-18, T-02-19 | idle sweep active→paused, per-row fault-tolerant | unit (TDD) | `task test -- ./plugins/core-scenes/... -run Idle` | ▶ in-task | ⬜ pending |
 | 2-06-02 | 06 | 3 | SCENEFWD-02 | T-02-20 | flag-gated nudge (default OFF), no registry re-decl | unit + lint | `task test -- ./plugins/core-scenes/... && task lint` | ▶ in-task | ⬜ pending |
 | 2-06-03 | 06 | 3 | SCENEFWD-02 | T-02-18 | INV-SCENE-71 idle-transition bind | meta | `go run ./cmd/inv-render && git diff --exit-code docs/architecture/invariants.md; task test -- -run 'TestEveryRegistryInvariantHasBinding\|TestProvenanceGuard\|TestBoundInvariantsAreGenuinelyAsserted' ./test/meta/` | ✅ infra | ⬜ pending |
+| 2-06-04 | 06 | 3 | SCENEFWD-02 | T-02-17 | idle nudge renders via gamenotice.Idle `[>GAME: … is now idle]` (Finding 4) | unit (TDD) | `task test -- ./internal/telnet/...` | ▶ in-task | ⬜ pending |
 | 2-07-01 | 07 | 4 | SCENEFWD-03 | T-02-24 | mixed focused/skipped explicit render (no silent default) | unit | `task test -- ./plugins/core-scenes/... -run Focus` | ▶ in-task | ⬜ pending |
 | 2-07-02 | 07 | 4 | SCENEFWD-03 | T-02-21, T-02-23 | reconnect restore gated on PresentingFocus, web-tab safe | integration | `task test:int -- -run 'ReconnectFocus\|Restore' ./test/integration/scenes/ 2>/dev/null \|\| task test:int` | ▶ in-task | ⬜ pending |
 | 2-07-03 | 07 | 4 | SCENEFWD-03 | T-02-22 | no cross-character focus leak on connection swap | integration (TDD) | `task test:int -- -run 'MultiChar\|CharacterSwap\|Reconnect' ./test/integration/scenes/ 2>/dev/null \|\| task test:int` | ▶ in-task | ⬜ pending |
@@ -93,11 +95,11 @@ reconciled: 2026-07-09
 
 ## Validation Sign-Off
 
-- [x] All tasks have `<automated>` verify or Wave 0 dependencies (20/20 tasks mapped above)
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies (21/21 tasks mapped above; +1 from the 2026-07-09 reviews pass — Plan 06 Task 4)
 - [x] Sampling continuity: no 3 consecutive tasks without automated verify
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
 - [x] Feedback latency < 90s (unit) — every plan has a unit/Vitest tier; integration/e2e are wave-boundary gates by design (Sampling Rate)
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** reconciled 2026-07-09 — 20 tasks each carry an `<automated>` verify, TDD-first, no watch mode; Plan 05 Task 3 gains a fast Vitest smoke ahead of the e2e gate.
+**Approval:** reconciled 2026-07-09 — 21 tasks each carry an `<automated>` verify, TDD-first, no watch mode; Plan 05 Task 3 gains a fast Vitest smoke ahead of the e2e gate. Reviews pass (2026-07-09) added Plan 06 Task 4 (telnet idle render via gamenotice.Idle — Finding 4) and enriched Plan 03/04 tasks (global notify-pref consumer + host-vouched dispatch — Findings 2/3) without adding new frameworks.
