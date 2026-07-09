@@ -59,6 +59,87 @@ type channelPlugin struct {
 	// Wired to the store in Init; the command handlers hold it as a narrow
 	// interface so unit tests can inject a fake resolver.
 	channels channelNameResolver
+	// streamStore backs QuerySessionStreams (session-establishment channel
+	// subscription, 01-08). Wired to the store in Init; a narrow interface so
+	// unit tests inject a fake. Nil until Init, so QuerySessionStreams fails
+	// closed rather than contributing an empty set silently.
+	streamStore sessionStreamStore
+}
+
+// sessionStreamStore is the narrow persistence dependency of QuerySessionStreams:
+// the character's non-banned memberships, the seeded default channel set, and the
+// per-default ban filter. *channelStore satisfies it; tests substitute a fake.
+type sessionStreamStore interface {
+	ListForCharacter(ctx context.Context, characterID string) ([]channelRow, error)
+	ListDefaultChannels(ctx context.Context) ([]channelRow, error)
+	IsBannedFrom(ctx context.Context, channelID, characterID string) (bool, error)
+}
+
+// QuerySessionStreams implements pluginsdk.SessionStreamsHandler: at session
+// establishment (connect/reconnect) the host asks core-channels which streams to
+// subscribe the entering character to. It returns the domain-RELATIVE
+// channel.<id> ref (via relativeChannelStream, R2-A — NEVER a pre-qualified
+// events. subject) for the deduplicated UNION of:
+//
+//   - (a) every channel the character is a non-banned member of (ListForCharacter
+//     already excludes banned + archived), and
+//   - (b) every seeded default channel (ListDefaultChannels) the character is not
+//     banned from — guest auto-join is this default-channel union, NOT a
+//     membership-row write at establishment (resource-side, plaintext; D-01/D-04).
+//
+// Dedup is by channel id (a default the character is also an explicit member of
+// appears once). The list is empty (no error) ONLY when there are neither
+// memberships nor seeded defaults. Every returned ref is a RELATIVE own-domain
+// channel.<id>, so ALL pass 01-02's shared establishment namespace fence
+// (Manager.QuerySessionStreams → AuthorizePluginStreamContribution); the host
+// Qualifies each to events.<game>.channel.<id> (the emit subject).
+func (p *channelPlugin) QuerySessionStreams(ctx context.Context, req pluginsdk.SessionStreamsRequest) ([]string, error) {
+	if p.streamStore == nil {
+		return nil, oops.Code("CHANNEL_SESSION_STREAMS_FAILED").
+			Errorf("session-stream store not configured")
+	}
+
+	memberships, err := p.streamStore.ListForCharacter(ctx, req.CharacterID)
+	if err != nil {
+		return nil, oops.Code("CHANNEL_SESSION_STREAMS_FAILED").
+			With("character_id", req.CharacterID).Wrap(err)
+	}
+	defaults, err := p.streamStore.ListDefaultChannels(ctx)
+	if err != nil {
+		return nil, oops.Code("CHANNEL_SESSION_STREAMS_FAILED").
+			With("character_id", req.CharacterID).Wrap(err)
+	}
+
+	seen := make(map[string]struct{}, len(memberships)+len(defaults))
+	streams := make([]string, 0, len(memberships)+len(defaults))
+
+	for i := range memberships {
+		id := memberships[i].ID
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		streams = append(streams, relativeChannelStream(id))
+	}
+
+	for i := range defaults {
+		id := defaults[i].ID
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		banned, banErr := p.streamStore.IsBannedFrom(ctx, id, req.CharacterID)
+		if banErr != nil {
+			return nil, oops.Code("CHANNEL_SESSION_STREAMS_FAILED").
+				With("character_id", req.CharacterID).With("channel_id", id).Wrap(banErr)
+		}
+		if banned {
+			continue
+		}
+		seen[id] = struct{}{}
+		streams = append(streams, relativeChannelStream(id))
+	}
+
+	return streams, nil
 }
 
 // HandleEvent is a no-op for this foundation plan. The channel plugin does not
@@ -177,6 +258,9 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 	p.resolver.store = store
 	// The command layer resolves channel names via the store (name → id).
 	p.channels = store
+	// QuerySessionStreams reads memberships ∪ default channels from the store
+	// (01-08 session-establishment subscription).
+	p.streamStore = store
 	// Wire the service's store + create rate limiter now that config is decoded.
 	// The evaluator was already injected via SetHostEvaluator before Init.
 	p.service.store = store

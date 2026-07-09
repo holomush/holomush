@@ -32,6 +32,14 @@ emits: [channel]
 history_scope: custom
 actor_kinds_claimable: [plugin, character]
 
+# session_streams: true routes the host's QuerySessionStreams RPC to this
+# plugin's SessionStreamsHandler (main.go) at session establishment
+# (connect/reconnect). core-channels returns the domain-RELATIVE channel.<id>
+# refs for the character's non-banned memberships ∪ the seeded default channels
+# (guest auto-join, D-01); the host qualifies + fences each against this plugin's
+# owned `channel` emit domain before merging (01-02 R3-A). (01-08 CHAN-01)
+session_streams: true
+
 # ChannelService is the typed structural-write surface (create/join/leave/list
 # this plan; the remaining RPCs land in 01-05b). It is proxied by the host, so
 # it is declared in `provides`. holomush.plugin.v1.AttributeResolverService is

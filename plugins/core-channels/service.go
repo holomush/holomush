@@ -153,6 +153,22 @@ func (l *createRateLimiter) allow(player string) bool {
 	return true
 }
 
+// relativeChannelStream maps a channel id to its domain-RELATIVE session-stream
+// reference "channel.<id>" — the form BOTH QuerySessionStreams (establishment)
+// and the mid-session AddStream/RemoveStream calls pass to the host (R2-A).
+//
+// It is DELIBERATELY NOT the emit-path dotStyleChannelSubject(gameID, id): the
+// host owns qualification. It prepends events.<game>. via eventbus.Qualify
+// (computeInitialFilters at establishment, applyFilterCtrl mid-session), so the
+// qualified filter resolves to the SAME events.<game>.channel.<id> subject the
+// emit path publishes on. Passing a pre-qualified "events." subject to the
+// stream.subscription capability is rejected by 01-02's AuthorizeStreamSubscribe
+// (STREAM_NOT_RELATIVE); the relative "channel" domain is core-channels' OWN
+// declared emit domain, so the shared fence permits the plugin's own join.
+func relativeChannelStream(channelID string) string {
+	return "channel." + channelID
+}
+
 // channelService implements channelv1.ChannelServiceServer. This plan
 // implements ONLY the structural operations create/join/leave/list; the
 // remaining RPCs (post/who/history/invite/mute/ban/kick/transfer) remain

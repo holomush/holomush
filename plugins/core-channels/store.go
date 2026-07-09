@@ -790,6 +790,28 @@ func (s *channelStore) ListDefaultChannels(ctx context.Context) ([]channelRow, e
 	return out, nil
 }
 
+// IsBannedFrom reports whether characterID has a banned membership row in
+// channelID. It is the ban filter QuerySessionStreams (01-08) applies to the
+// seeded default channels: a banned character does NOT receive a default's
+// stream, while a guest — a character with NO membership row — is not banned and
+// receives it. A missing row therefore returns (false, nil): only an explicit
+// banned = true membership excludes the default.
+func (s *channelStore) IsBannedFrom(ctx context.Context, channelID, characterID string) (bool, error) {
+	var banned bool
+	err := s.pool.QueryRow(
+		ctx, `SELECT banned FROM channel_memberships WHERE channel_id = $1 AND character_id = $2`,
+		channelID, characterID,
+	).Scan(&banned)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, oops.Code("CHANNEL_MEMBERSHIP_LOOKUP_FAILED").
+			With("channel_id", channelID).With("character_id", characterID).Wrap(err)
+	}
+	return banned, nil
+}
+
 // ListChannelsForPrune returns the id/type/retention_days of every channel for
 // the retention sweep (D-07). Archived channels are included: their history is
 // still subject to retention. Ordered by id for a stable sweep.
