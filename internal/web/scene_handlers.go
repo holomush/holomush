@@ -111,6 +111,10 @@ func (h *Handler) WebListMyScenes(ctx context.Context, req *connect.Request[webv
 
 	return connect.NewResponse(&webv1.WebListMyScenesResponse{
 		Scenes: resp.GetScenes(),
+		// The per-scene muted flag rides inside resp.GetScenes() (re-exported
+		// CharacterSceneInfo); forward the top-level global notify preference too
+		// so the workspace renders both on reload (round-3 Concern 1 read-back).
+		GlobalNotifyEnabled: resp.GetGlobalNotifyEnabled(),
 	}), nil
 }
 
@@ -175,6 +179,65 @@ func (h *Handler) WebCreateScene(ctx context.Context, req *connect.Request[webv1
 	}
 
 	return connect.NewResponse(&webv1.WebCreateSceneResponse{Scene: resp.GetScene()}), nil
+}
+
+// WebMuteScene proxies to SceneAccessService.MuteScene. The gateway reads the
+// player_session_token from the X-Session-Token cookie header and forwards it
+// with character_id, scene_id, and the target mute flag. Authorization and
+// identity resolution are owned entirely by the facade. A structural GUI write —
+// the typed RPC, never the command path (gateway-boundary).
+func (h *Handler) WebMuteScene(ctx context.Context, req *connect.Request[webv1.WebMuteSceneRequest]) (*connect.Response[webv1.WebMuteSceneResponse], error) {
+	slog.DebugContext(ctx, "web: WebMuteScene", "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	if _, err := h.sceneAccess.MuteScene(rpcCtx, &sceneaccessv1.MuteSceneRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		SceneId:            req.Msg.GetSceneId(),
+		Muted:              req.Msg.GetMuted(),
+	}); err != nil {
+		errutil.LogErrorContext(ctx, "web: mute scene RPC failed", err, "session_id", req.Msg.GetSessionId(), "scene_id", req.Msg.GetSceneId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebMuteSceneResponse{}), nil
+}
+
+// WebSetSceneNotifyPref proxies to SceneAccessService.SetSceneNotifyPref
+// (character-self scope, no scene). Same header/timeout/opacity shape as
+// WebMuteScene; the facade owns authorization.
+func (h *Handler) WebSetSceneNotifyPref(ctx context.Context, req *connect.Request[webv1.WebSetSceneNotifyPrefRequest]) (*connect.Response[webv1.WebSetSceneNotifyPrefResponse], error) {
+	slog.DebugContext(ctx, "web: WebSetSceneNotifyPref", "session_id", req.Msg.GetSessionId(), "character_id", req.Msg.GetCharacterId())
+
+	if h.sceneAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("scene access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	if _, err := h.sceneAccess.SetSceneNotifyPref(rpcCtx, &sceneaccessv1.SetSceneNotifyPrefRequest{
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		Enabled:            req.Msg.GetEnabled(),
+	}); err != nil {
+		errutil.LogErrorContext(ctx, "web: set scene notify pref RPC failed", err, "session_id", req.Msg.GetSessionId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebSetSceneNotifyPrefResponse{}), nil
 }
 
 // WebEndScene proxies to SceneAccessService.EndScene. The gateway reads the

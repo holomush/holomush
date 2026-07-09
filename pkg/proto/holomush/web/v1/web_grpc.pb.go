@@ -54,6 +54,8 @@ const (
 	WebService_WebEndScene_FullMethodName                   = "/holomush.web.v1.WebService/WebEndScene"
 	WebService_WebPauseScene_FullMethodName                 = "/holomush.web.v1.WebService/WebPauseScene"
 	WebService_WebResumeScene_FullMethodName                = "/holomush.web.v1.WebService/WebResumeScene"
+	WebService_WebMuteScene_FullMethodName                  = "/holomush.web.v1.WebService/WebMuteScene"
+	WebService_WebSetSceneNotifyPref_FullMethodName         = "/holomush.web.v1.WebService/WebSetSceneNotifyPref"
 	WebService_WebUpdateScene_FullMethodName                = "/holomush.web.v1.WebService/WebUpdateScene"
 	WebService_WebInviteToScene_FullMethodName              = "/holomush.web.v1.WebService/WebInviteToScene"
 	WebService_WebKickFromScene_FullMethodName              = "/holomush.web.v1.WebService/WebKickFromScene"
@@ -227,6 +229,16 @@ type WebServiceClient interface {
 	WebPauseScene(ctx context.Context, in *WebPauseSceneRequest, opts ...grpc.CallOption) (*WebPauseSceneResponse, error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(ctx context.Context, in *WebResumeSceneRequest, opts ...grpc.CallOption) (*WebResumeSceneResponse, error)
+	// WebMuteScene toggles the verified character's per-scene notification mute.
+	// Proxies to SceneAccessService.MuteScene; the gateway reads
+	// player_session_token from the X-Session-Token cookie and the facade owns
+	// authorization. A structural GUI write — the typed RPC, never the command
+	// path (gateway-boundary).
+	WebMuteScene(ctx context.Context, in *WebMuteSceneRequest, opts ...grpc.CallOption) (*WebMuteSceneResponse, error)
+	// WebSetSceneNotifyPref writes the verified character's global scene-notify
+	// preference (character-self, no scene). Proxies to
+	// SceneAccessService.SetSceneNotifyPref (see WebMuteScene).
+	WebSetSceneNotifyPref(ctx context.Context, in *WebSetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*WebSetSceneNotifyPrefResponse, error)
 	// WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads
 	// player_session_token from the X-Session-Token cookie; the facade owns
 	// authorization. Returns the post-update scene.
@@ -608,6 +620,26 @@ func (c *webServiceClient) WebResumeScene(ctx context.Context, in *WebResumeScen
 	return out, nil
 }
 
+func (c *webServiceClient) WebMuteScene(ctx context.Context, in *WebMuteSceneRequest, opts ...grpc.CallOption) (*WebMuteSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebMuteSceneResponse)
+	err := c.cc.Invoke(ctx, WebService_WebMuteScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebSetSceneNotifyPref(ctx context.Context, in *WebSetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*WebSetSceneNotifyPrefResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebSetSceneNotifyPrefResponse)
+	err := c.cc.Invoke(ctx, WebService_WebSetSceneNotifyPref_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *webServiceClient) WebUpdateScene(ctx context.Context, in *WebUpdateSceneRequest, opts ...grpc.CallOption) (*WebUpdateSceneResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebUpdateSceneResponse)
@@ -905,6 +937,16 @@ type WebServiceServer interface {
 	WebPauseScene(context.Context, *WebPauseSceneRequest) (*WebPauseSceneResponse, error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(context.Context, *WebResumeSceneRequest) (*WebResumeSceneResponse, error)
+	// WebMuteScene toggles the verified character's per-scene notification mute.
+	// Proxies to SceneAccessService.MuteScene; the gateway reads
+	// player_session_token from the X-Session-Token cookie and the facade owns
+	// authorization. A structural GUI write — the typed RPC, never the command
+	// path (gateway-boundary).
+	WebMuteScene(context.Context, *WebMuteSceneRequest) (*WebMuteSceneResponse, error)
+	// WebSetSceneNotifyPref writes the verified character's global scene-notify
+	// preference (character-self, no scene). Proxies to
+	// SceneAccessService.SetSceneNotifyPref (see WebMuteScene).
+	WebSetSceneNotifyPref(context.Context, *WebSetSceneNotifyPrefRequest) (*WebSetSceneNotifyPrefResponse, error)
 	// WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads
 	// player_session_token from the X-Session-Token cookie; the facade owns
 	// authorization. Returns the post-update scene.
@@ -1052,6 +1094,12 @@ func (UnimplementedWebServiceServer) WebPauseScene(context.Context, *WebPauseSce
 }
 func (UnimplementedWebServiceServer) WebResumeScene(context.Context, *WebResumeSceneRequest) (*WebResumeSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebResumeScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebMuteScene(context.Context, *WebMuteSceneRequest) (*WebMuteSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebMuteScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebSetSceneNotifyPref(context.Context, *WebSetSceneNotifyPrefRequest) (*WebSetSceneNotifyPrefResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebSetSceneNotifyPref not implemented")
 }
 func (UnimplementedWebServiceServer) WebUpdateScene(context.Context, *WebUpdateSceneRequest) (*WebUpdateSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebUpdateScene not implemented")
@@ -1685,6 +1733,42 @@ func _WebService_WebResumeScene_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebMuteScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebMuteSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebMuteScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebMuteScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebMuteScene(ctx, req.(*WebMuteSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebSetSceneNotifyPref_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebSetSceneNotifyPrefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebSetSceneNotifyPref(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebSetSceneNotifyPref_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebSetSceneNotifyPref(ctx, req.(*WebSetSceneNotifyPrefRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WebService_WebUpdateScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WebUpdateSceneRequest)
 	if err := dec(in); err != nil {
@@ -2067,6 +2151,14 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebResumeScene",
 			Handler:    _WebService_WebResumeScene_Handler,
+		},
+		{
+			MethodName: "WebMuteScene",
+			Handler:    _WebService_WebMuteScene_Handler,
+		},
+		{
+			MethodName: "WebSetSceneNotifyPref",
+			Handler:    _WebService_WebSetSceneNotifyPref_Handler,
 		},
 		{
 			MethodName: "WebUpdateScene",

@@ -1304,6 +1304,214 @@ func TestSceneAccessResumeScene(t *testing.T) {
 	}
 }
 
+// Verifies: INV-SCENE-63 — the facade forwards the SERVER-verified acting
+// character to SceneService.MuteScene and rejects a character the player does
+// not own (NotFound), never trusting a client-supplied character_id. The
+// stamped CharacterId is what makes the plugin's mandatory character_id↔actor-
+// metadata guard pass instead of rejecting the web write fail-closed.
+// Verifies: INV-SCENE-64 — a guest subject is denied at the facade and the
+// downstream SceneService is never called.
+func TestSceneAccessMuteScene(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	ps := buildSATestPS(t, playerID)
+	wantID := "scene-mute-1"
+
+	nonGuest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		return pr
+	}
+	guest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: true}, nil).Maybe()
+		return pr
+	}
+	ownsAlice := func(t *testing.T) *authmocks.MockCharacterRepository {
+		cr := authmocks.NewMockCharacterRepository(t)
+		cr.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		return cr
+	}
+
+	tests := []struct {
+		name       string
+		playerRepo func(*testing.T) *authmocks.MockPlayerRepository
+		charRepo   func(*testing.T) *authmocks.MockCharacterRepository
+		sceneMock  func(*testing.T) *scenemocks.MockSceneServiceClient
+		req        *sceneaccessv1.MuteSceneRequest
+		check      func(t *testing.T, resp *sceneaccessv1.MuteSceneResponse, err error)
+	}{
+		{
+			name:       "owned character mutes scene with verified id",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().MuteScene(mock.Anything, mock.MatchedBy(func(r *scenev1.MuteSceneRequest) bool {
+					return r.GetCharacterId() == char.ID.String() && r.GetSceneId() == wantID && r.GetMuted()
+				})).Return(&scenev1.MuteSceneResponse{}, nil).Once()
+				return sm
+			},
+			req: &sceneaccessv1.MuteSceneRequest{PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), SceneId: wantID, Muted: true},
+			check: func(t *testing.T, resp *sceneaccessv1.MuteSceneResponse, err error) {
+				require.NoError(t, err)
+				assert.NotNil(t, resp)
+			},
+		},
+		{
+			name:       "guest denied; downstream never called",
+			playerRepo: guest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req:        &sceneaccessv1.MuteSceneRequest{PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), SceneId: wantID, Muted: true},
+			check: func(t *testing.T, _ *sceneaccessv1.MuteSceneResponse, err error) {
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			},
+		},
+		{
+			name:       "spoofed/unowned character_id rejected before any forward",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req:        &sceneaccessv1.MuteSceneRequest{PlayerSessionToken: testSAToken, CharacterId: idgen.New().String(), SceneId: wantID, Muted: true},
+			check: func(t *testing.T, _ *sceneaccessv1.MuteSceneResponse, err error) {
+				assert.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sceneMock := tt.sceneMock(t)
+			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
+				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+			resp, err := srv.MuteScene(ctx, tt.req)
+			tt.check(t, resp, err)
+		})
+	}
+}
+
+// Verifies: INV-SCENE-63 — the facade forwards the SERVER-verified acting
+// character to SceneService.SetSceneNotifyPref (character-self scope, no scene)
+// and rejects an unowned character_id (NotFound).
+// Verifies: INV-SCENE-64 — a guest subject is denied before any downstream call.
+func TestSceneAccessSetSceneNotifyPref(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	ps := buildSATestPS(t, playerID)
+
+	nonGuest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+		return pr
+	}
+	guest := func(t *testing.T) *authmocks.MockPlayerRepository {
+		pr := authmocks.NewMockPlayerRepository(t)
+		pr.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: true}, nil).Maybe()
+		return pr
+	}
+	ownsAlice := func(t *testing.T) *authmocks.MockCharacterRepository {
+		cr := authmocks.NewMockCharacterRepository(t)
+		cr.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+		return cr
+	}
+
+	tests := []struct {
+		name       string
+		playerRepo func(*testing.T) *authmocks.MockPlayerRepository
+		charRepo   func(*testing.T) *authmocks.MockCharacterRepository
+		sceneMock  func(*testing.T) *scenemocks.MockSceneServiceClient
+		req        *sceneaccessv1.SetSceneNotifyPrefRequest
+		check      func(t *testing.T, resp *sceneaccessv1.SetSceneNotifyPrefResponse, err error)
+	}{
+		{
+			name:       "owned character sets notify pref with verified id and no scene",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock: func(t *testing.T) *scenemocks.MockSceneServiceClient {
+				sm := scenemocks.NewMockSceneServiceClient(t)
+				sm.EXPECT().SetSceneNotifyPref(mock.Anything, mock.MatchedBy(func(r *scenev1.SetSceneNotifyPrefRequest) bool {
+					return r.GetCharacterId() == char.ID.String() && !r.GetEnabled()
+				})).Return(&scenev1.SetSceneNotifyPrefResponse{}, nil).Once()
+				return sm
+			},
+			req: &sceneaccessv1.SetSceneNotifyPrefRequest{PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), Enabled: false},
+			check: func(t *testing.T, resp *sceneaccessv1.SetSceneNotifyPrefResponse, err error) {
+				require.NoError(t, err)
+				assert.NotNil(t, resp)
+			},
+		},
+		{
+			name:       "guest denied; downstream never called",
+			playerRepo: guest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req:        &sceneaccessv1.SetSceneNotifyPrefRequest{PlayerSessionToken: testSAToken, CharacterId: char.ID.String(), Enabled: true},
+			check: func(t *testing.T, _ *sceneaccessv1.SetSceneNotifyPrefResponse, err error) {
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			},
+		},
+		{
+			name:       "spoofed/unowned character_id rejected before any forward",
+			playerRepo: nonGuest,
+			charRepo:   ownsAlice,
+			sceneMock:  func(t *testing.T) *scenemocks.MockSceneServiceClient { return scenemocks.NewMockSceneServiceClient(t) },
+			req:        &sceneaccessv1.SetSceneNotifyPrefRequest{PlayerSessionToken: testSAToken, CharacterId: idgen.New().String(), Enabled: true},
+			check: func(t *testing.T, _ *sceneaccessv1.SetSceneNotifyPrefResponse, err error) {
+				assert.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sceneMock := tt.sceneMock(t)
+			srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), tt.playerRepo(t), tt.charRepo(t),
+				sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+			resp, err := srv.SetSceneNotifyPref(ctx, tt.req)
+			tt.check(t, resp, err)
+		})
+	}
+}
+
+// TestSceneAccessListMyScenesReadBack verifies the facade forwards the plugin's
+// global_notify_enabled flag and passes the per-scene muted CharacterSceneInfo
+// rows through unchanged (round-3 Concern 1 read-back).
+func TestSceneAccessListMyScenesReadBack(t *testing.T) {
+	ctx := context.Background()
+	playerID := idgen.New()
+	char := &world.Character{ID: idgen.New(), PlayerID: playerID, Name: "Alice"}
+	ps := buildSATestPS(t, playerID)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).Return(&auth.Player{ID: playerID, IsGuest: false}, nil).Maybe()
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*world.Character{char}, nil).Maybe()
+
+	sceneMock := scenemocks.NewMockSceneServiceClient(t)
+	sceneMock.EXPECT().ListCharacterScenes(mock.Anything, mock.MatchedBy(func(r *scenev1.ListCharacterScenesRequest) bool {
+		return r.GetCharacterId() == char.ID.String()
+	})).Return(&scenev1.ListCharacterScenesResponse{
+		Scenes: []*scenev1.CharacterSceneInfo{
+			{Scene: &scenev1.SceneInfo{Id: "scene-A"}, Role: "member", Muted: true},
+		},
+		GlobalNotifyEnabled: false,
+	}, nil).Once()
+
+	srv := newTestSceneAccessServer(t, buildSASessionRepo(t, ps), playerRepo, charRepo,
+		sessionmocks.NewMockStore(t), &stubFocusCoordinator{}, sceneMock, &stubPluginManager{})
+
+	resp, err := srv.ListMyScenes(ctx, &sceneaccessv1.ListMyScenesRequest{
+		PlayerSessionToken: testSAToken, CharacterId: char.ID.String(),
+	})
+	require.NoError(t, err)
+	assert.False(t, resp.GetGlobalNotifyEnabled(), "facade forwards the plugin global_notify_enabled=false")
+	require.Len(t, resp.GetScenes(), 1)
+	assert.True(t, resp.GetScenes()[0].GetMuted(), "per-scene muted row passes through unchanged")
+}
+
 func TestSceneAccessInviteToScene(t *testing.T) {
 	ctx := context.Background()
 	playerID := idgen.New()

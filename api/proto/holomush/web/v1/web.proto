@@ -297,6 +297,18 @@ service WebService {
   // WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
   rpc WebResumeScene(WebResumeSceneRequest) returns (WebResumeSceneResponse);
 
+  // WebMuteScene toggles the verified character's per-scene notification mute.
+  // Proxies to SceneAccessService.MuteScene; the gateway reads
+  // player_session_token from the X-Session-Token cookie and the facade owns
+  // authorization. A structural GUI write — the typed RPC, never the command
+  // path (gateway-boundary).
+  rpc WebMuteScene(WebMuteSceneRequest) returns (WebMuteSceneResponse);
+
+  // WebSetSceneNotifyPref writes the verified character's global scene-notify
+  // preference (character-self, no scene). Proxies to
+  // SceneAccessService.SetSceneNotifyPref (see WebMuteScene).
+  rpc WebSetSceneNotifyPref(WebSetSceneNotifyPrefRequest) returns (WebSetSceneNotifyPrefResponse);
+
   // WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads
   // player_session_token from the X-Session-Token cookie; the facade owns
   // authorization. Returns the post-update scene.
@@ -1059,7 +1071,14 @@ message WebListMyScenesRequest {
 // WebListMyScenesResponse re-exports the character's scene participations from the facade.
 message WebListMyScenesResponse {
   // scenes is the character's scene participations, most recently active first.
+  // Each CharacterSceneInfo carries the per-scene `muted` flag from the facade
+  // ListMyScenes read, so the workspace renders persisted mute state on reload.
   repeated holomush.scene.v1.CharacterSceneInfo scenes = 1;
+  // global_notify_enabled is the character's persisted global notify preference,
+  // forwarded verbatim from SceneAccessService.ListMyScenes (default true;
+  // false when the character turned scene notifications off). Lets the web
+  // workspace render the global notify toggle state on reload.
+  bool global_notify_enabled = 2;
 }
 
 // WebWatchSceneRequest proxies to SceneAccessService.WatchScene.
@@ -1324,6 +1343,41 @@ message WebResumeSceneResponse {
   // scene is the scene row after the resumed transition.
   holomush.scene.v1.SceneInfo scene = 1;
 }
+
+// WebMuteSceneRequest proxies to SceneAccessService.MuteScene.
+// player_session_token is injected from the X-Session-Token cookie.
+message WebMuteSceneRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // scene_id identifies the scene whose mute flag to change; required.
+  string scene_id = 3;
+  // muted is the target flag: true suppresses this character's scene
+  // notifications, false clears the mute.
+  bool muted = 4;
+}
+
+// WebMuteSceneResponse is empty — the facade MuteScene carries no body; a
+// successful mute change is signaled by the absence of error.
+message WebMuteSceneResponse {}
+
+// WebSetSceneNotifyPrefRequest proxies to SceneAccessService.SetSceneNotifyPref
+// (character-self scope, no scene_id). player_session_token is injected from the
+// X-Session-Token cookie.
+message WebSetSceneNotifyPrefRequest {
+  // session_id is the client-declared player-session ULID forwarded to the facade.
+  string session_id = 1;
+  // character_id selects which owned alt acts (server-side ownership verified).
+  string character_id = 2;
+  // enabled is the target global preference: true keeps scene notifications on,
+  // false turns them off for this character.
+  bool enabled = 3;
+}
+
+// WebSetSceneNotifyPrefResponse is empty — the facade SetSceneNotifyPref carries
+// no body; success is signaled by the absence of error.
+message WebSetSceneNotifyPrefResponse {}
 
 // WebInviteToSceneRequest proxies to SceneAccessService.InviteToScene.
 message WebInviteToSceneRequest {

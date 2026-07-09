@@ -278,7 +278,13 @@ func (s *SceneAccessServer) ListMyScenes(ctx context.Context, req *sceneaccessv1
 	if err != nil {
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
-	return &sceneaccessv1.ListMyScenesResponse{Scenes: resp.GetScenes()}, nil
+	// The per-scene muted flag rides inside resp.GetScenes() (the re-exported
+	// CharacterSceneInfo); forward the top-level global notify preference too so
+	// the workspace renders both on reload (round-3 Concern 1 read-back).
+	return &sceneaccessv1.ListMyScenesResponse{
+		Scenes:              resp.GetScenes(),
+		GlobalNotifyEnabled: resp.GetGlobalNotifyEnabled(),
+	}, nil
 }
 
 // WatchScene auto-joins the verified character as observer, requiring an
@@ -438,6 +444,68 @@ func (s *SceneAccessServer) ResumeScene(ctx context.Context, req *sceneaccessv1.
 		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
 	}
 	return &sceneaccessv1.ResumeSceneResponse{Scene: resp.GetScene()}, nil
+}
+
+// MuteScene resolves the verified acting character from the player session and
+// forwards a MuteScene call to the plugin SceneService (which cross-checks the
+// character_id against the host-vouched actor metadata, then participant-gates
+// on the scene's `mute` ABAC policy). resolveAndGate enforces the guest gate
+// (INV-SCENE-64); ownedCharacter enforces ownership (INV-SCENE-63). The verified
+// char.ID is stamped as CharacterId on the forwarded request — without it the
+// plugin's mandatory character_id↔actor-metadata guard rejects the write
+// fail-closed (PermissionDenied).
+func (s *SceneAccessServer) MuteScene(ctx context.Context, req *sceneaccessv1.MuteSceneRequest) (*sceneaccessv1.MuteSceneResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	if _, err := s.sceneClient.MuteScene(dctx, &scenev1.MuteSceneRequest{
+		CharacterId: char.ID.String(),
+		SceneId:     req.GetSceneId(),
+		Muted:       req.GetMuted(),
+	}); err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.MuteSceneResponse{}, nil
+}
+
+// SetSceneNotifyPref resolves the verified acting character from the player
+// session and forwards a SetSceneNotifyPref call to the plugin SceneService
+// (character-self scope, no scene). Same identity/guest gating as MuteScene; the
+// verified char.ID is stamped as CharacterId so the plugin's character_id↔actor-
+// metadata guard passes.
+func (s *SceneAccessServer) SetSceneNotifyPref(ctx context.Context, req *sceneaccessv1.SetSceneNotifyPrefRequest) (*sceneaccessv1.SetSceneNotifyPrefResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacter(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	dctx, release, err := s.beginDispatch(ctx, char, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	if _, err := s.sceneClient.SetSceneNotifyPref(dctx, &scenev1.SetSceneNotifyPrefRequest{
+		CharacterId: char.ID.String(),
+		Enabled:     req.GetEnabled(),
+	}); err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	return &sceneaccessv1.SetSceneNotifyPrefResponse{}, nil
 }
 
 // InviteToScene resolves the verified inviter from the player session and

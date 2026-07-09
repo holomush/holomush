@@ -57,6 +57,12 @@ type mockSceneAccessClient struct {
 	resumeSceneReq *sceneaccessv1.ResumeSceneRequest
 	resumeSceneErr error
 
+	muteSceneReq *sceneaccessv1.MuteSceneRequest
+	muteSceneErr error
+
+	setNotifyPrefReq *sceneaccessv1.SetSceneNotifyPrefRequest
+	setNotifyPrefErr error
+
 	updateSceneReq *sceneaccessv1.UpdateSceneRequest
 	updateSceneErr error
 
@@ -159,6 +165,22 @@ func (m *mockSceneAccessClient) ResumeScene(_ context.Context, req *sceneaccessv
 		return nil, m.resumeSceneErr
 	}
 	return &sceneaccessv1.ResumeSceneResponse{Scene: &scenev1.SceneInfo{Id: "scene-123", State: "active"}}, nil
+}
+
+func (m *mockSceneAccessClient) MuteScene(_ context.Context, req *sceneaccessv1.MuteSceneRequest) (*sceneaccessv1.MuteSceneResponse, error) {
+	m.muteSceneReq = req
+	if m.muteSceneErr != nil {
+		return nil, m.muteSceneErr
+	}
+	return &sceneaccessv1.MuteSceneResponse{}, nil
+}
+
+func (m *mockSceneAccessClient) SetSceneNotifyPref(_ context.Context, req *sceneaccessv1.SetSceneNotifyPrefRequest) (*sceneaccessv1.SetSceneNotifyPrefResponse, error) {
+	m.setNotifyPrefReq = req
+	if m.setNotifyPrefErr != nil {
+		return nil, m.setNotifyPrefErr
+	}
+	return &sceneaccessv1.SetSceneNotifyPrefResponse{}, nil
 }
 
 func (m *mockSceneAccessClient) UpdateScene(_ context.Context, req *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error) {
@@ -540,6 +562,106 @@ func TestWebResumeScenePassesStatusErrorThroughAsIs(t *testing.T) {
 	_, err := h.WebResumeScene(context.Background(), req)
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// --- WebMuteScene ---
+
+func TestWebMuteSceneForwardsTokenAndFieldsToFacade(t *testing.T) {
+	const token = "tok-mute"
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebMuteSceneRequest{
+		SessionId: "sess-m", CharacterId: "char-m", SceneId: "scene-m", Muted: true,
+	})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.WebMuteScene(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, sc.muteSceneReq)
+	assert.Equal(t, "sess-m", sc.muteSceneReq.GetSessionId())
+	assert.Equal(t, token, sc.muteSceneReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-m", sc.muteSceneReq.GetCharacterId())
+	assert.Equal(t, "scene-m", sc.muteSceneReq.GetSceneId())
+	assert.True(t, sc.muteSceneReq.GetMuted())
+}
+
+func TestWebMuteScenePassesStatusErrorThroughAsIs(t *testing.T) {
+	facadeErr := status.Error(codes.PermissionDenied, "not a participant")
+	sc := &mockSceneAccessClient{muteSceneErr: facadeErr}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebMuteSceneRequest{SessionId: "s", CharacterId: "c", SceneId: "x", Muted: true})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebMuteScene(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestWebMuteSceneReturnsUnimplementedWhenClientAbsent(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	_, err := h.WebMuteScene(context.Background(),
+		connect.NewRequest(&webv1.WebMuteSceneRequest{}))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnimplemented, connectErr.Code())
+}
+
+// --- WebSetSceneNotifyPref ---
+
+func TestWebSetSceneNotifyPrefForwardsTokenAndFieldsToFacade(t *testing.T) {
+	const token = "tok-notify"
+	sc := &mockSceneAccessClient{}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebSetSceneNotifyPrefRequest{
+		SessionId: "sess-n", CharacterId: "char-n", Enabled: false,
+	})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.WebSetSceneNotifyPref(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, sc.setNotifyPrefReq)
+	assert.Equal(t, "sess-n", sc.setNotifyPrefReq.GetSessionId())
+	assert.Equal(t, token, sc.setNotifyPrefReq.GetPlayerSessionToken())
+	assert.Equal(t, "char-n", sc.setNotifyPrefReq.GetCharacterId())
+	assert.False(t, sc.setNotifyPrefReq.GetEnabled())
+}
+
+func TestWebSetSceneNotifyPrefPassesStatusErrorThroughAsIs(t *testing.T) {
+	facadeErr := status.Error(codes.Internal, "boom")
+	sc := &mockSceneAccessClient{setNotifyPrefErr: facadeErr}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+	req := connect.NewRequest(&webv1.WebSetSceneNotifyPrefRequest{SessionId: "s", CharacterId: "c", Enabled: true})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	_, err := h.WebSetSceneNotifyPref(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+}
+
+// --- WebListMyScenes read-back (round-3 Concern 1) ---
+
+func TestWebListMyScenesForwardsGlobalNotifyEnabled(t *testing.T) {
+	sc := &mockSceneAccessClient{
+		listMyScenesResp: &sceneaccessv1.ListMyScenesResponse{
+			Scenes:              []*scenev1.CharacterSceneInfo{{Scene: &scenev1.SceneInfo{Id: "sc-rb"}, Role: "member", Muted: true}},
+			GlobalNotifyEnabled: false,
+		},
+	}
+	h := NewHandler(&mockCoreClient{}, WithSceneAccessClient(sc))
+
+	req := connect.NewRequest(&webv1.WebListMyScenesRequest{SessionId: "s", CharacterId: "c"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	resp, err := h.WebListMyScenes(context.Background(), req)
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetGlobalNotifyEnabled(), "top-level global notify flag forwarded from facade")
+	require.Len(t, resp.Msg.GetScenes(), 1)
+	assert.True(t, resp.Msg.GetScenes()[0].GetMuted(), "per-scene muted rides inside the re-exported CharacterSceneInfo")
 }
 
 // --- WebExportScene ---

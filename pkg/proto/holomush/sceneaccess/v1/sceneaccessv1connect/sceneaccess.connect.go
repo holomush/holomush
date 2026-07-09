@@ -60,6 +60,12 @@ const (
 	// SceneAccessServiceResumeSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// ResumeScene RPC.
 	SceneAccessServiceResumeSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/ResumeScene"
+	// SceneAccessServiceMuteSceneProcedure is the fully-qualified name of the SceneAccessService's
+	// MuteScene RPC.
+	SceneAccessServiceMuteSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/MuteScene"
+	// SceneAccessServiceSetSceneNotifyPrefProcedure is the fully-qualified name of the
+	// SceneAccessService's SetSceneNotifyPref RPC.
+	SceneAccessServiceSetSceneNotifyPrefProcedure = "/holomush.sceneaccess.v1.SceneAccessService/SetSceneNotifyPref"
 	// SceneAccessServiceUpdateSceneProcedure is the fully-qualified name of the SceneAccessService's
 	// UpdateScene RPC.
 	SceneAccessServiceUpdateSceneProcedure = "/holomush.sceneaccess.v1.SceneAccessService/UpdateScene"
@@ -155,6 +161,19 @@ type SceneAccessServiceClient interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// MuteScene toggles the verified character's per-scene notification mute. The
+	// facade resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.MuteScene with
+	// the server-verified character_id; the plugin cross-checks that id against the
+	// host-vouched actor metadata and participant-gates on the scene's `mute` ABAC
+	// policy before persisting via SceneStore.SetSceneMute.
+	MuteScene(context.Context, *connect.Request[v1.MuteSceneRequest]) (*connect.Response[v1.MuteSceneResponse], error)
+	// SetSceneNotifyPref writes the verified character's global scene-notification
+	// preference (character-self scope, no scene). Same identity/guest gating as
+	// MuteScene; forwards to SceneService.SetSceneNotifyPref with the server-
+	// verified character_id, which the plugin cross-checks against the host-vouched
+	// actor metadata before persisting the NULL-scene_id global row.
+	SetSceneNotifyPref(context.Context, *connect.Request[v1.SetSceneNotifyPrefRequest]) (*connect.Response[v1.SetSceneNotifyPrefResponse], error)
 	// UpdateScene applies an owner's partial edit to mutable scene metadata. The
 	// facade resolves the acting character from the player session (INV-SCENE-63),
 	// rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
@@ -281,6 +300,18 @@ func NewSceneAccessServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(sceneAccessServiceMethods.ByName("ResumeScene")),
 			connect.WithClientOptions(opts...),
 		),
+		muteScene: connect.NewClient[v1.MuteSceneRequest, v1.MuteSceneResponse](
+			httpClient,
+			baseURL+SceneAccessServiceMuteSceneProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("MuteScene")),
+			connect.WithClientOptions(opts...),
+		),
+		setSceneNotifyPref: connect.NewClient[v1.SetSceneNotifyPrefRequest, v1.SetSceneNotifyPrefResponse](
+			httpClient,
+			baseURL+SceneAccessServiceSetSceneNotifyPrefProcedure,
+			connect.WithSchema(sceneAccessServiceMethods.ByName("SetSceneNotifyPref")),
+			connect.WithClientOptions(opts...),
+		),
 		updateScene: connect.NewClient[v1.UpdateSceneRequest, v1.UpdateSceneResponse](
 			httpClient,
 			baseURL+SceneAccessServiceUpdateSceneProcedure,
@@ -378,6 +409,8 @@ type sceneAccessServiceClient struct {
 	endScene                   *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
 	pauseScene                 *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
 	resumeScene                *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
+	muteScene                  *connect.Client[v1.MuteSceneRequest, v1.MuteSceneResponse]
+	setSceneNotifyPref         *connect.Client[v1.SetSceneNotifyPrefRequest, v1.SetSceneNotifyPrefResponse]
 	updateScene                *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
 	inviteToScene              *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
 	kickFromScene              *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
@@ -432,6 +465,16 @@ func (c *sceneAccessServiceClient) PauseScene(ctx context.Context, req *connect.
 // ResumeScene calls holomush.sceneaccess.v1.SceneAccessService.ResumeScene.
 func (c *sceneAccessServiceClient) ResumeScene(ctx context.Context, req *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
 	return c.resumeScene.CallUnary(ctx, req)
+}
+
+// MuteScene calls holomush.sceneaccess.v1.SceneAccessService.MuteScene.
+func (c *sceneAccessServiceClient) MuteScene(ctx context.Context, req *connect.Request[v1.MuteSceneRequest]) (*connect.Response[v1.MuteSceneResponse], error) {
+	return c.muteScene.CallUnary(ctx, req)
+}
+
+// SetSceneNotifyPref calls holomush.sceneaccess.v1.SceneAccessService.SetSceneNotifyPref.
+func (c *sceneAccessServiceClient) SetSceneNotifyPref(ctx context.Context, req *connect.Request[v1.SetSceneNotifyPrefRequest]) (*connect.Response[v1.SetSceneNotifyPrefResponse], error) {
+	return c.setSceneNotifyPref.CallUnary(ctx, req)
 }
 
 // UpdateScene calls holomush.sceneaccess.v1.SceneAccessService.UpdateScene.
@@ -557,6 +600,19 @@ type SceneAccessServiceHandler interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// MuteScene toggles the verified character's per-scene notification mute. The
+	// facade resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.MuteScene with
+	// the server-verified character_id; the plugin cross-checks that id against the
+	// host-vouched actor metadata and participant-gates on the scene's `mute` ABAC
+	// policy before persisting via SceneStore.SetSceneMute.
+	MuteScene(context.Context, *connect.Request[v1.MuteSceneRequest]) (*connect.Response[v1.MuteSceneResponse], error)
+	// SetSceneNotifyPref writes the verified character's global scene-notification
+	// preference (character-self scope, no scene). Same identity/guest gating as
+	// MuteScene; forwards to SceneService.SetSceneNotifyPref with the server-
+	// verified character_id, which the plugin cross-checks against the host-vouched
+	// actor metadata before persisting the NULL-scene_id global row.
+	SetSceneNotifyPref(context.Context, *connect.Request[v1.SetSceneNotifyPrefRequest]) (*connect.Response[v1.SetSceneNotifyPrefResponse], error)
 	// UpdateScene applies an owner's partial edit to mutable scene metadata. The
 	// facade resolves the acting character from the player session (INV-SCENE-63),
 	// rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
@@ -679,6 +735,18 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 		connect.WithSchema(sceneAccessServiceMethods.ByName("ResumeScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneAccessServiceMuteSceneHandler := connect.NewUnaryHandler(
+		SceneAccessServiceMuteSceneProcedure,
+		svc.MuteScene,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("MuteScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneAccessServiceSetSceneNotifyPrefHandler := connect.NewUnaryHandler(
+		SceneAccessServiceSetSceneNotifyPrefProcedure,
+		svc.SetSceneNotifyPref,
+		connect.WithSchema(sceneAccessServiceMethods.ByName("SetSceneNotifyPref")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sceneAccessServiceUpdateSceneHandler := connect.NewUnaryHandler(
 		SceneAccessServiceUpdateSceneProcedure,
 		svc.UpdateScene,
@@ -781,6 +849,10 @@ func NewSceneAccessServiceHandler(svc SceneAccessServiceHandler, opts ...connect
 			sceneAccessServicePauseSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceResumeSceneProcedure:
 			sceneAccessServiceResumeSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceMuteSceneProcedure:
+			sceneAccessServiceMuteSceneHandler.ServeHTTP(w, r)
+		case SceneAccessServiceSetSceneNotifyPrefProcedure:
+			sceneAccessServiceSetSceneNotifyPrefHandler.ServeHTTP(w, r)
 		case SceneAccessServiceUpdateSceneProcedure:
 			sceneAccessServiceUpdateSceneHandler.ServeHTTP(w, r)
 		case SceneAccessServiceInviteToSceneProcedure:
@@ -848,6 +920,14 @@ func (UnimplementedSceneAccessServiceHandler) PauseScene(context.Context, *conne
 
 func (UnimplementedSceneAccessServiceHandler) ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.ResumeScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) MuteScene(context.Context, *connect.Request[v1.MuteSceneRequest]) (*connect.Response[v1.MuteSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.MuteScene is not implemented"))
+}
+
+func (UnimplementedSceneAccessServiceHandler) SetSceneNotifyPref(context.Context, *connect.Request[v1.SetSceneNotifyPrefRequest]) (*connect.Response[v1.SetSceneNotifyPrefResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.sceneaccess.v1.SceneAccessService.SetSceneNotifyPref is not implemented"))
 }
 
 func (UnimplementedSceneAccessServiceHandler) UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error) {

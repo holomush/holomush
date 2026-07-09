@@ -23,6 +23,7 @@ import (
 
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
 
 // closeWithCheck is a helper that closes an io.Closer and logs any error.
@@ -710,4 +711,63 @@ type fakeCoreClient struct {
 
 func (f *fakeCoreClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest, _ ...grpc.CallOption) (corev1.CoreService_SubscribeClient, error) {
 	return nil, f.subscribeErr
+}
+
+// fakeSceneAccessClient embeds the generated SceneAccessServiceClient (nil) and
+// overrides only the two methods the mute/notify client stubs call. Un-overridden
+// methods panic if invoked — these tests never call them.
+type fakeSceneAccessClient struct {
+	sceneaccessv1.SceneAccessServiceClient
+	muteResp   *sceneaccessv1.MuteSceneResponse
+	muteErr    error
+	notifyResp *sceneaccessv1.SetSceneNotifyPrefResponse
+	notifyErr  error
+}
+
+func (f *fakeSceneAccessClient) MuteScene(_ context.Context, _ *sceneaccessv1.MuteSceneRequest, _ ...grpc.CallOption) (*sceneaccessv1.MuteSceneResponse, error) {
+	return f.muteResp, f.muteErr
+}
+
+func (f *fakeSceneAccessClient) SetSceneNotifyPref(_ context.Context, _ *sceneaccessv1.SetSceneNotifyPrefRequest, _ ...grpc.CallOption) (*sceneaccessv1.SetSceneNotifyPrefResponse, error) {
+	return f.notifyResp, f.notifyErr
+}
+
+// TestClientMuteSceneForwardsAndWrapsError proves the BFF client stub forwards
+// a MuteScene call to the facade and wraps a facade error with oops.Code("RPC_FAILED").
+func TestClientMuteSceneForwardsAndWrapsError(t *testing.T) {
+	t.Run("forwards to facade and returns response on success", func(t *testing.T) {
+		c := &Client{sceneAccessClient: &fakeSceneAccessClient{muteResp: &sceneaccessv1.MuteSceneResponse{}}}
+		resp, err := c.MuteScene(context.Background(), &sceneaccessv1.MuteSceneRequest{SceneId: "s1", Muted: true})
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	t.Run("wraps facade error as RPC_FAILED", func(t *testing.T) {
+		c := &Client{sceneAccessClient: &fakeSceneAccessClient{muteErr: status.Error(codes.PermissionDenied, "not a participant")}}
+		_, err := c.MuteScene(context.Background(), &sceneaccessv1.MuteSceneRequest{SceneId: "s1", Muted: true})
+		require.Error(t, err)
+		oopsErr, ok := oops.AsOops(err)
+		require.True(t, ok)
+		assert.Equal(t, "RPC_FAILED", oopsErr.Code())
+	})
+}
+
+// TestClientSetSceneNotifyPrefForwardsAndWrapsError proves the notify-pref client
+// stub forwards to the facade and wraps a facade error with oops.Code("RPC_FAILED").
+func TestClientSetSceneNotifyPrefForwardsAndWrapsError(t *testing.T) {
+	t.Run("forwards to facade and returns response on success", func(t *testing.T) {
+		c := &Client{sceneAccessClient: &fakeSceneAccessClient{notifyResp: &sceneaccessv1.SetSceneNotifyPrefResponse{}}}
+		resp, err := c.SetSceneNotifyPref(context.Background(), &sceneaccessv1.SetSceneNotifyPrefRequest{Enabled: false})
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	t.Run("wraps facade error as RPC_FAILED", func(t *testing.T) {
+		c := &Client{sceneAccessClient: &fakeSceneAccessClient{notifyErr: status.Error(codes.Internal, "boom")}}
+		_, err := c.SetSceneNotifyPref(context.Background(), &sceneaccessv1.SetSceneNotifyPrefRequest{Enabled: false})
+		require.Error(t, err)
+		oopsErr, ok := oops.AsOops(err)
+		require.True(t, ok)
+		assert.Equal(t, "RPC_FAILED", oopsErr.Code())
+	})
 }
