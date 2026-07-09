@@ -5,12 +5,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/pkg/errutil"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // sceneIdleStore is the narrow persistence interface the idle scheduler needs.
@@ -36,10 +38,19 @@ type sceneIdleStore interface {
 // config (main.go applyConfig) and passed EXPLICITLY into the store query
 // (review Finding 1) — the store holds only a pool and cannot see config; the
 // per-scene idle_timeout_secs column overrides this default via COALESCE.
+//
+// nudgeEnabled gates the OPTIONAL idle nudge (spec §4.4, OFF by default): when
+// true, a scene_idle_nudge is emitted through sink after each active→paused
+// transition. sink and gameID are the plugin's binary emit path (the same sink
+// the publish emitters use) — the idle nudge is emitted via EventSink.Emit, not
+// host-core core.NewEvent() (review Concern 3).
 type idleScheduler struct {
 	store                  sceneIdleStore
 	interval               time.Duration
 	defaultIdleTimeoutSecs int
+	nudgeEnabled           bool
+	sink                   pluginsdk.EventSink
+	gameID                 string
 	now                    func() time.Time
 }
 
@@ -82,6 +93,41 @@ func (s *idleScheduler) sweep(ctx context.Context) error {
 			// Continue to the next scene; one failure MUST NOT abort the sweep.
 			continue
 		}
+		// Optional idle nudge (spec §4.4, OFF by default). Emit failures are
+		// WARN-logged and never abort the sweep — the transition already landed.
+		if s.nudgeEnabled {
+			if emitErr := s.emitIdleNudge(ctx, sc.ID); emitErr != nil {
+				slog.WarnContext(ctx, "idle scheduler: idle-nudge emit failed",
+					"scene_id", sc.ID, "err", emitErr)
+			}
+		}
 	}
 	return nil
+}
+
+// emitIdleNudge emits a scene_idle_nudge for the freshly-paused scene through
+// the plugin's binary emit path (EventSink.Emit + EmitIntent), mirroring the
+// publish emitters (publish_events.go). The wire type core-scenes:scene_idle_nudge
+// and its emit-registry entry are already declared (main.go phase4EmitTypes +
+// plugin.yaml crypto.emits) — this only calls the emitter (INV-PLUGIN-32).
+//
+// The payload carries only the scene_id; the telnet gateway reads it from the
+// frame payload to render gamenotice.Idle (no DB lookup — gateway-boundary).
+// sensitivity is never (plaintext by design): the notice leaks no scene content.
+func (s *idleScheduler) emitIdleNudge(ctx context.Context, sceneID string) error {
+	if s.sink == nil {
+		return nil
+	}
+	payload, err := json.Marshal(struct {
+		SceneID string `json:"scene_id"`
+	}{SceneID: sceneID})
+	if err != nil {
+		return oops.Code("SCENE_IDLE_NUDGE_MARSHAL_FAILED").With("scene_id", sceneID).Wrap(err)
+	}
+	return s.sink.Emit(ctx, pluginsdk.EmitIntent{ //nolint:wrapcheck // EventSink error passes through as-is; the sweep logs it
+		Subject:   dotStyleSceneSubjectIC(s.gameID, sceneID),
+		Type:      pluginsdk.EventType("core-scenes:scene_idle_nudge"),
+		Payload:   string(payload),
+		Sensitive: false,
+	})
 }

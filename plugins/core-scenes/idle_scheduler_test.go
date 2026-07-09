@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/pkg/errutil"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // fakeIdleStore is a hand-rolled sceneIdleStore double for sweep unit tests.
@@ -42,6 +44,58 @@ func (f *fakeIdleStore) Pause(_ context.Context, id string) (*SceneRow, error) {
 }
 
 func fixedNow(t time.Time) func() time.Time { return func() time.Time { return t } }
+
+// fakeEmitSink captures EmitIntents so idle-nudge emission can be asserted.
+type fakeEmitSink struct {
+	intents []pluginsdk.EmitIntent
+}
+
+func (f *fakeEmitSink) Emit(_ context.Context, intent pluginsdk.EmitIntent) error {
+	f.intents = append(f.intents, intent)
+	return nil
+}
+
+func TestIdleSweepDoesNotEmitNudgeWhenDisabled(t *testing.T) {
+	t.Parallel()
+	store := &fakeIdleStore{listResult: []idleScene{
+		{ID: "01SCENE_IDLE_NOEMIT", State: string(SceneStateActive)},
+	}}
+	sink := &fakeEmitSink{}
+	sched := &idleScheduler{
+		store: store, defaultIdleTimeoutSecs: 1800, now: fixedNow(time.Unix(0, 1)),
+		nudgeEnabled: false, sink: sink, gameID: "main",
+	}
+
+	require.NoError(t, sched.sweep(context.Background()))
+	assert.Equal(t, []string{"01SCENE_IDLE_NOEMIT"}, store.paused,
+		"the scene is still transitioned when the nudge is off")
+	assert.Empty(t, sink.intents, "no idle nudge is emitted when the flag is OFF (default)")
+}
+
+func TestIdleSweepEmitsNudgeWithScenePayloadWhenEnabled(t *testing.T) {
+	t.Parallel()
+	store := &fakeIdleStore{listResult: []idleScene{
+		{ID: "01SCENE_IDLE_EMIT", State: string(SceneStateActive)},
+	}}
+	sink := &fakeEmitSink{}
+	sched := &idleScheduler{
+		store: store, defaultIdleTimeoutSecs: 1800, now: fixedNow(time.Unix(0, 1)),
+		nudgeEnabled: true, sink: sink, gameID: "main",
+	}
+
+	require.NoError(t, sched.sweep(context.Background()))
+	require.Len(t, sink.intents, 1, "exactly one idle nudge is emitted when the flag is ON")
+	got := sink.intents[0]
+	assert.Equal(t, pluginsdk.EventType("core-scenes:scene_idle_nudge"), got.Type)
+	assert.False(t, got.Sensitive, "the idle nudge is sensitivity: never (plaintext by design)")
+
+	var payload struct {
+		SceneID string `json:"scene_id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(got.Payload), &payload))
+	assert.Equal(t, "01SCENE_IDLE_EMIT", payload.SceneID,
+		"the idle-nudge payload carries the scene_id the telnet render reads")
+}
 
 func TestIdleSweepPausesEveryActiveSceneReturned(t *testing.T) {
 	t.Parallel()

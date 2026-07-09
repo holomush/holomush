@@ -38,15 +38,21 @@ type scenePlugin struct {
 	evaluator     pluginsdk.HostEvaluator
 	emitRegistry  *pluginsdk.EmitRegistry
 	schedInterval time.Duration // decoded from manifest scheduler_interval
+
+	// Idle-timeout lifecycle (D-06), decoded from manifest config.
+	idleTimeoutDefault time.Duration // game-wide default before an idle scene auto-pauses
+	idleNudgeEnabled   bool          // OFF by default (spec §4.4): emit scene_idle_nudge on idle
 }
 
 // sceneConfig is the mapstructure target for the plugin_config block declared
 // in plugin.yaml. Keys match the manifest config: section; mapstructure tags
 // map snake_case config keys to typed Go fields.
 type sceneConfig struct {
-	VoteWindow        time.Duration `mapstructure:"vote_window"`
-	CoolOffWindow     time.Duration `mapstructure:"cooloff_window"`
-	SchedulerInterval time.Duration `mapstructure:"scheduler_interval"`
+	VoteWindow         time.Duration `mapstructure:"vote_window"`
+	CoolOffWindow      time.Duration `mapstructure:"cooloff_window"`
+	SchedulerInterval  time.Duration `mapstructure:"scheduler_interval"`
+	IdleTimeoutDefault time.Duration `mapstructure:"idle_timeout_default"`
+	IdleNudgeEnabled   bool          `mapstructure:"idle_nudge_enabled"`
 }
 
 // applyConfig decodes the host-delivered plugin_config into service.cfg and
@@ -66,11 +72,21 @@ func (p *scenePlugin) applyConfig(config *pluginv1.ServiceConfig) error {
 			With("scheduler_interval", decoded.SchedulerInterval.String()).
 			Errorf("scheduler_interval must be positive")
 	}
+	// A non-positive idle default would flag every active scene as idle
+	// immediately (last_activity + 0 ≤ now), so reject it fail-loud like the
+	// scheduler_interval check above.
+	if decoded.IdleTimeoutDefault <= 0 {
+		return oops.Code("SCENE_INIT_FAILED").
+			With("idle_timeout_default", decoded.IdleTimeoutDefault.String()).
+			Errorf("idle_timeout_default must be positive")
+	}
 	p.service.cfg = SceneServiceConfig{
 		DefaultVoteWindow:    decoded.VoteWindow,
 		DefaultCoolOffWindow: decoded.CoolOffWindow,
 	}
 	p.schedInterval = decoded.SchedulerInterval
+	p.idleTimeoutDefault = decoded.IdleTimeoutDefault
+	p.idleNudgeEnabled = decoded.IdleNudgeEnabled
 	return nil
 }
 
@@ -263,6 +279,23 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 		now:      time.Now,
 	}
 	go sched.Run(schedCtx)
+
+	// Idle-timeout sweep (D-06): transitions active→paused past the effective
+	// idle threshold (game-wide default, decoded from config and passed
+	// EXPLICITLY into the store query — review Finding 1 — or per-scene
+	// idle_timeout_secs override). Shares the daemon-lifetime schedCtx with the
+	// publish scheduler. The optional idle nudge is emitted through the same
+	// event sink only when idle_nudge_enabled is true (OFF by default).
+	idleSched := &idleScheduler{
+		store:                  store,
+		interval:               p.schedInterval,
+		defaultIdleTimeoutSecs: int(p.idleTimeoutDefault.Seconds()),
+		nudgeEnabled:           p.idleNudgeEnabled,
+		sink:                   p.service.eventSink,
+		gameID:                 p.service.gameID,
+		now:                    time.Now,
+	}
+	go idleSched.Run(schedCtx)
 
 	slog.InfoContext(
 		ctx, "core-scenes plugin initialised",
