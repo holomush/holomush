@@ -675,16 +675,45 @@ func (s *SceneServiceImpl) ListCharacterScenes(ctx context.Context, req *scenev1
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}
 
+	// Read-back of the character's OWN persisted mute/notify state (round-3
+	// Concern 1). This is the same host-trusted self-scoped read the scene list
+	// already is (the facade stamps req.character_id from the verified owned
+	// character), so it needs no new ABAC action. The prefs reads fail-OPEN for
+	// display as a unit: if EITHER read errors, the handler WARN-logs and
+	// defaults (muted=false on every row, global_notify_enabled=true) but STILL
+	// returns the full scene list — a prefs-read failure MUST NOT fail the whole
+	// list.
+	mutedSet := make(map[string]struct{})
+	globalNotifyEnabled := true
+	mutedIDs, mErr := s.store.ListMutedScenes(ctx, req.GetCharacterId())
+	enabled, _, gErr := s.store.GetSceneNotifyPref(ctx, req.GetCharacterId())
+	switch {
+	case mErr != nil || gErr != nil:
+		slog.WarnContext(ctx, "scene.service.list_character_scenes prefs read failed (fail-open)",
+			"character_id", req.GetCharacterId(),
+			"muted_err", mErr, "notify_pref_err", gErr)
+	default:
+		for _, id := range mutedIDs {
+			mutedSet[id] = struct{}{}
+		}
+		globalNotifyEnabled = enabled
+	}
+
 	out := make([]*scenev1.CharacterSceneInfo, 0, len(results))
 	for _, r := range results {
+		_, muted := mutedSet[r.Scene.ID]
 		out = append(out, &scenev1.CharacterSceneInfo{
 			Scene:          rowToProto(r.Scene, r.Scene.CreatedAt.Time()),
 			Role:           r.Role,
 			LastActivityMs: r.LastActivityMS,
 			EntryCount:     r.EntryCount,
+			Muted:          muted,
 		})
 	}
-	return &scenev1.ListCharacterScenesResponse{Scenes: out}, nil
+	return &scenev1.ListCharacterScenesResponse{
+		Scenes:              out,
+		GlobalNotifyEnabled: globalNotifyEnabled,
+	}, nil
 }
 
 // EndScene transitions a scene to the ended state. Only the scene owner is
