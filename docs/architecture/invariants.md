@@ -36,6 +36,7 @@ The prose outside the regions is hand-authored. CI runs `inv-render -check`
 | `INV-DOCS` | Proto doc comments, doc IA, contributor onboarding surface | Documentation quality invariants. |
 | `INV-COMMAND` | Command surfacing: the single command-visibility/ABAC filter, runtime parity across the Lua hostfunc + binary host.v1 CommandRegistryService + CoreService RPC surfaces, and self-scoped enumeration. | Backend command-surfacing contract (origin 2026-05-29-recognized-command-chip-design.md, §INV-1/2/5). Does NOT include: web-composer chip presentation — INV-3 gateway boundary (→ .claude/rules/gateway-boundary.md), INV-4 server-sourced recognition, INV-6 graceful incompleteness, INV-7 speech-mode chips — those are web-frontend per-feature local numbering, exempt (.14.27), living in web/src TS (composerChip.ts/CommandInput.svelte/commandListStore.ts). Also does NOT include whole-system plugin load/census (wholesystem INV-5, distinct local numbering — co-located foreign in census_test.go, residual-skipped via shared_files). |
 | `INV-COMM` | Canonical communication-content payload contract (CommunicationContent), its emit-time validation, and dual-runtime builders. | The conversational-content payload body and its enforcement. Does NOT include: rendering metadata (→ INV-EVENTBUS), event payload encryption (→ INV-CRYPTO), focus-routing (holomush-g1qcw). |
+| `INV-CHANNEL` | Channel subsystem guarantees: membership-gated history CONTENT (for every channel type) and channel error uniformity (a hidden channel is indistinguishable from an absent one). | Channel-domain behavior owned by the core-channels plugin (01-channels-subsystem). Does NOT include: session-stream live-delivery substrate (→ INV-EVENTBUS / INV-PLUGIN), history-scope privacy semantics (→ INV-PRIVACY), plugin manifest/capability fail-closed load (→ INV-PLUGIN). |
 
 <!-- END GENERATED: scope-index -->
 
@@ -184,7 +185,7 @@ invariants.
 | `INV-PRIVACY-4` | Idle status change and transport/SelectCharacter reattach MUST NOT advance LocationArrivedAt. | `I-PRIV-4` | bound |
 | `INV-PRIVACY-5` | All denial paths (hard-gate, I-17, ABAC, expired/missing session) return the same wire code STREAM_ACCESS_DENIED; the internal denial_reason is slog-only and never crosses the wire. | `I-PRIV-5` | bound |
 | `INV-PRIVACY-6` | ABAC staff override bypasses the hard-gate location-match only, NOT the temporal floor. | `I-PRIV-6` | pending |
-| `INV-PRIVACY-7` | Plugin-owned subjects with divergent history-replay semantics MUST declare history_scope in the manifest and be exercised by a test; silent inheritance of permissive semantics is forbidden. | `I-PRIV-7` | pending |
+| `INV-PRIVACY-7` | Plugin-owned subjects with divergent history-replay semantics MUST declare history_scope in the manifest and be exercised by a test; silent inheritance of permissive semantics is forbidden. | `I-PRIV-7` | bound |
 | `INV-PRIVACY-8` | OpenSession (incl. reattach) and SetFilters query the existing durable before CreateOrUpdateConsumer; an existing durable's DeliverPolicy/OptStartTime/OptStartSeq are copied verbatim (only FilterSubjects mutates); NATS is the source of truth. | `I-PRIV-8` | bound |
 
 ### `INV-PRESENCE`
@@ -446,5 +447,12 @@ invariants.
 |----|---------|--------|---------|
 | `INV-COMM-1` | Every category:communication event carries a wire payload that validates as holomush.comm.v1.CommunicationContent. | — | pending |
 | `INV-COMM-2` | The Go and Lua communication-content builders produce payloads that decode to an equal CommunicationContent proto for the same inputs. | — | bound |
+
+### `INV-CHANNEL`
+
+| ID | Summary | Legacy | Binding |
+|----|---------|--------|---------|
+| `INV-CHANNEL-1` | A character that is not a member of a channel MUST NOT read that channel's HISTORY CONTENT (the channel history / QueryChannelHistory path), for EVERY channel type including public. A public channel's openness governs VISIBILITY / join-eligibility (the read action, plan 01-04), NOT history-content access — history content is membership-gated for all types by the 01-06 QueryHistory fence, and a non-member read presents a uniform not-found (never the content, never an existence oracle). | — | bound |
+| `INV-CHANNEL-2` | An operation on a channel the caller cannot see (a hidden/private channel of which they are not a member) MUST return a not-found IDENTICAL to that of a truly-absent channel — no absent-vs-hidden distinction, so a channel operation cannot be used as an existence oracle. | — | bound |
 
 <!-- END GENERATED: invariant-tables -->

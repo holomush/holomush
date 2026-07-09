@@ -156,6 +156,15 @@ var _ = Describe("core-channels e2e: live delivery + membership-gated history", 
 			"the =alias-routed post MUST reach core-channels and land in channel_log")
 	})
 
+	// Verifies: INV-CHANNEL-1
+	// Verifies: INV-PRIVACY-7
+	//
+	// INV-CHANNEL-1: history CONTENT is membership-gated for EVERY channel type
+	// (public included) — a non-member's QueryChannelHistory is denied a uniform
+	// not-found while a member reads the content back.
+	// INV-PRIVACY-7: core-channels is the first history_scope: custom adopter;
+	// this exercises its divergent, membership-gated custom-scope history
+	// semantics (the placeholder the history-scope spec left open).
 	It("reads posted content back to a member and denies a non-member (CHAN-03 emit→audit / INV-CHANNEL-1)", func() {
 		// Member: the earlier `channel say hello-there` round-trips emit→audit
 		// (host consumer → PluginAuditService.AuditEvent → channel_log) and is
@@ -210,6 +219,10 @@ var _ = Describe("core-channels e2e: error uniformity + admin override (INV-CHAN
 		}
 	})
 
+	// Verifies: INV-CHANNEL-2
+	//
+	// A hidden (private, non-invitee) channel and a truly-absent channel present
+	// the IDENTICAL uniform not-found — no absent-vs-hidden existence oracle.
 	It("presents a hidden (private, non-invitee) channel and an absent channel as the SAME uniform not-found (INV-CHANNEL-2)", func() {
 		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()

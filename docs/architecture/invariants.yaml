@@ -748,6 +748,19 @@ scopes:
       - "internal/eventbus/content_publisher.go"
       - "internal/plugin/hostfunc/stdlib_comm.go"
 
+  - name: INV-CHANNEL
+    description: "Channel subsystem guarantees: membership-gated history CONTENT (for every channel type) and channel error
+      uniformity (a hidden channel is indistinguishable from an absent one)."
+    boundary: "Channel-domain behavior owned by the core-channels plugin (01-channels-subsystem). Does NOT include: session-stream
+      live-delivery substrate (→ INV-EVENTBUS / INV-PLUGIN), history-scope privacy semantics (→ INV-PRIVACY), plugin manifest/capability
+      fail-closed load (→ INV-PLUGIN)."
+    status: migrated
+    origin_specs:
+      - "docs/specs/2026-04-03-channels-architecture.md"
+    owned_paths:
+      - "plugins/core-channels/**"
+      - "test/integration/channels/**"
+
 invariants:
   # ── INV-CRYPTO ── migrated (holomush-hz0v4.14.15). Origins: 2026-04-25 master
   # crypto, 2026-05-25 plugin-readback (RB), 2026-05-13 phase-7 (P7 crypto half),
@@ -2034,13 +2047,17 @@ invariants:
     legacy: ["I-PRIV-7@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
     summary: "Plugin-owned subjects with divergent history-replay semantics MUST declare history_scope in the manifest and
       be exercised by a test; silent inheritance of permissive semantics is forbidden."
-    # binding: pending — the only annotated test is a Skip() placeholder
-    # (no plugin currently declares history_scope: custom). Re-bind when a
-    # custom-scope plugin lands and the test replaces Skip with a real assertion.
-    binding: pending
+    # Bound by 01-09: core-channels is the FIRST history_scope: custom adopter
+    # (plan 01-03) and the channels e2e genuinely exercises its divergent,
+    # membership-gated custom-scope QueryChannelHistory semantics (a non-member is
+    # denied; a member reads content back). The former Skip() placeholder in
+    # privacy_test.go — which could not exercise a custom-scope plugin — was
+    # removed in the same change.
+    binding: bound
+    asserted_by:
+      - "test/integration/channels/channels_e2e_test.go"
     refs:
       - {file: "internal/plugin/manifest.go", token: "I-PRIV-7"}
-      - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-7"}
   - id: INV-PRIVACY-8
     scope: INV-PRIVACY
     origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
@@ -4782,3 +4799,28 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/plugin/hostfunc/comm_parity_test.go"
+
+  # ── INV-CHANNEL ── channel subsystem (01-channels-subsystem, origin
+  # docs/specs/2026-04-03-channels-architecture.md). Registered by 01-09.
+  - id: INV-CHANNEL-1
+    scope: INV-CHANNEL
+    origin_spec: "docs/specs/2026-04-03-channels-architecture.md"
+    legacy: []
+    summary: "A character that is not a member of a channel MUST NOT read that channel's HISTORY CONTENT (the channel history
+      / QueryChannelHistory path), for EVERY channel type including public. A public channel's openness governs VISIBILITY
+      / join-eligibility (the read action, plan 01-04), NOT history-content access — history content is membership-gated for
+      all types by the 01-06 QueryHistory fence, and a non-member read presents a uniform not-found (never the content, never
+      an existence oracle)."
+    binding: bound
+    asserted_by:
+      - "test/integration/channels/channels_e2e_test.go"
+  - id: INV-CHANNEL-2
+    scope: INV-CHANNEL
+    origin_spec: "docs/specs/2026-04-03-channels-architecture.md"
+    legacy: []
+    summary: "An operation on a channel the caller cannot see (a hidden/private channel of which they are not a member) MUST
+      return a not-found IDENTICAL to that of a truly-absent channel — no absent-vs-hidden distinction, so a channel operation
+      cannot be used as an existence oracle."
+    binding: bound
+    asserted_by:
+      - "test/integration/channels/channels_e2e_test.go"

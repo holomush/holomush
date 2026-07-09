@@ -18,9 +18,9 @@
 //   - the manifest-seeded `=` prefix alias routes `=Public hello` to core-channels
 //     (MED-6).
 //
-// These specs close CHAN-01..05 and validate INV-S7 (N=2 second substrate
-// consumer: core-channels + core-scenes both consume the store/audit/resolver/
-// emit substrate seams).
+// These specs close CHAN-01..05 and validate the N=2 second-substrate-consumer
+// rule (core-channels + core-scenes both consume the store/audit/resolver/emit
+// substrate seams; the whole-system census loading both is the structural proof).
 package channels_test
 
 import (

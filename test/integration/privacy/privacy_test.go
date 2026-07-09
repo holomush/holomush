@@ -22,18 +22,12 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
-// Verifies: INV-PRIVACY-7
-//
-// INV-PRIVACY-7 placeholder: no plugin currently declares history_scope: custom.
-// The full scenario will exercise a plugin whose history_scope semantics
-// diverge from grid/scene; until that plugin lands, the test is skipped
-// to record the invariant requirement explicitly. Replace Skip with the
-// real assertion when a custom-scope plugin adopts the field.
-var _ = Describe("INV-PRIVACY-7: plugin-owned history_scope semantics", func() {
-	It("exercises a plugin that declared custom history_scope (placeholder)", func() {
-		Skip("no plugin currently declares history_scope: custom — re-enable when a plugin adopts this field")
-	})
-})
+// INV-PRIVACY-7 is now GENUINELY bound in test/integration/channels/channels_e2e_test.go:
+// core-channels is the first history_scope: custom adopter, and the channels e2e
+// exercises its divergent, membership-gated custom-scope QueryChannelHistory
+// semantics (a non-member is denied; a member reads content back). The former
+// Skip placeholder here (which could not exercise a custom-scope plugin from the
+// privacy package) has been removed now that a real assertion exists (01-09).
 
 // Verifies: INV-PRIVACY-6
 //

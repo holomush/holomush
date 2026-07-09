@@ -307,16 +307,16 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 	// resolver.RegisterProvider per plugin that declares resource_types and panics
 	// on a nil resolver (subsystem.go:319).
 	cfg := pluginsetup.PluginSubsystemConfig{
-		DataDir:               dataDir,
-		DatabaseConnStr:       d.connStr,
-		ABAC:                  engineProvider{eng: d.engine, resolver: d.resolver, auditor: d.auditor},
-		PolicyInst:            policyInstallerProvider{inst: policyInst},
-		PluginProv:            pluginProviderSetter{pp: d.pluginProvider},
-		World:                 worldProvider{svc: worldSvc},
-		Sessions:              sessionProvider{store: d.sessionStore},
-		AdminDeps:             adminDepsProvider{deps: adminDeps},
-		Registry:              lifecycle.NewReadinessRegistry(),
-		VerbRegistry:          d.verbReg,
+		DataDir:         dataDir,
+		DatabaseConnStr: d.connStr,
+		ABAC:            engineProvider{eng: d.engine, resolver: d.resolver, auditor: d.auditor},
+		PolicyInst:      policyInstallerProvider{inst: policyInst},
+		PluginProv:      pluginProviderSetter{pp: d.pluginProvider},
+		World:           worldProvider{svc: worldSvc},
+		Sessions:        sessionProvider{store: d.sessionStore},
+		AdminDeps:       adminDepsProvider{deps: adminDeps},
+		Registry:        lifecycle.NewReadinessRegistry(),
+		VerbRegistry:    d.verbReg,
 		// GameID feeds the host capability qualifiers (hostfunc.WithGameID /
 		// goplugin.WithGameID) so a plugin's stream.subscription / stream.history
 		// host calls can qualify a domain-RELATIVE ref (channel.<id>) to the full
