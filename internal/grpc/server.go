@@ -911,6 +911,31 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			s.streamRegistry.RegisterConnection(info.ID, connID, ctrlCh)
 			defer s.streamRegistry.DeregisterConnection(info.ID, connID, ctrlCh)
 		}
+
+		// RestoreConnectionFocus (D-08): a reconnecting telnet member whose
+		// session PresentingFocus was a scene has its fresh per-connection
+		// FocusKey repopulated so it receives live scene content rather than a
+		// badge downgrade. Gated on PresentingFocus != nil (Assumption A2 /
+		// Pitfall 5): an unconditional restore would clobber a web tab's
+		// per-tab focus, and PresentingFocus is the telnet single-pane
+		// reconnect signal. The primitive itself validates FocusMemberships
+		// (INV-SCENE-18) and grid-falls-back when membership was revoked mid-
+		// disconnect — which also blocks a swapped-in character (D-09) from
+		// inheriting a prior character's scene focus. Best-effort: a restore
+		// failure is logged but MUST NOT fail the Subscribe.
+		if s.focusCoordinator != nil && info.PresentingFocus != nil {
+			rcfCtx, rcfSpan := tracer.Start(ctx, "subscribe.restore_connection_focus",
+				trace.WithAttributes(attribute.String("connection.id", connID.String())))
+			if rcfErr := s.focusCoordinator.RestoreConnectionFocus(rcfCtx, req.GetSessionId(), connID); rcfErr != nil {
+				recordSpanError(rcfSpan, rcfErr)
+				slog.WarnContext(ctx, "subscribe: restore connection focus failed (non-fatal)",
+					"session_id", req.GetSessionId(),
+					"connection_id", connID.String(),
+					"error", rcfErr,
+				)
+			}
+			rcfSpan.End()
+		}
 	}
 
 	// Reattach if detached.

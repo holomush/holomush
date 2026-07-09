@@ -325,3 +325,91 @@ var _ = Describe("INV-SCENE-18 + INV-SCENE-25 + INV-SCENE-26: reconnect focus re
 			"INV-SCENE-26: restored FocusKey.TargetID MUST be scene #A")
 	})
 })
+
+// D-08 (Subscribe wiring) + D-09 (multi-character no-leak):
+//
+// D-08: internal/grpc/server.go calls RestoreConnectionFocus after AddConnection
+// on Subscribe, GATED on Info.PresentingFocus != nil (Assumption A2 / Pitfall 5).
+// The gate keeps a web tab's per-tab FocusKey from being clobbered: web sessions
+// do not set PresentingFocus (it is the telnet single-pane reconnect signal), so
+// a resubscribe with PresentingFocus nil is a documented no-op (branch 1) and the
+// tab's chosen focus survives.
+//
+// D-09: a telnet connection swapping characters (SEQUENTIAL swap per connection —
+// QUIT → picker → re-pick) MUST NOT let a swapped-in character B inherit the
+// prior character A's scene focus. INV-SCENE-18 membership validation blocks the
+// leak (B non-member → grid fallback), and RestoreConnectionFocus defensively
+// clears any stale non-entitled FocusKey to nil so no prior character's scene
+// focus survives on the connection.
+//
+// Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §8.
+var _ = Describe("D-08 + D-09: Subscribe-wiring web-tab safety and multi-character focus no-leak", func() {
+	type harness struct {
+		store session.Store
+		coord focus.Coordinator
+	}
+
+	newHarness := func() harness {
+		store := sessiontest.NewStore(suiteT)
+		coord, err := focus.NewCoordinator(
+			focus.WithSessionStore(store),
+			focus.WithKindPolicy(focus.NewNullPolicy(session.FocusKindScene)),
+		)
+		Expect(err).NotTo(HaveOccurred(), "Coordinator construction must succeed")
+		return harness{store: store, coord: coord}
+	}
+
+	newULID := func() ulid.ULID {
+		return ulid.MustNew(ulid.Timestamp(time.Now()), crand.Reader)
+	}
+
+	// D-08 web-tab safety: PresentingFocus nil → RestoreConnectionFocus is a
+	// no-op → a web tab's already-chosen per-tab FocusKey is preserved. This is
+	// the guarantee the server.go gate (PresentingFocus != nil) protects.
+	It("does NOT clobber a web tab's per-tab focus when PresentingFocus is nil (D-08 gate / Assumption A2)", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+
+		h := newHarness()
+
+		charID := newULID()
+		webSceneID := newULID()
+		sessionID := "sess-web-d08-" + newULID().String()
+		connID := newULID()
+
+		// Web session: PresentingFocus is nil (web tabs manage per-tab focus,
+		// they do not set the session-scoped PresentingFocus). Character holds a
+		// membership so the per-tab focus is legitimate.
+		Expect(h.store.Set(ctx, sessionID, &session.Info{
+			ID:              sessionID,
+			CharacterID:     charID,
+			LocationID:      newULID(),
+			Status:          session.StatusActive,
+			PresentingFocus: nil,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: webSceneID, JoinedAt: time.Now()},
+			},
+		})).To(Succeed())
+
+		// The web tab has already chosen its own per-tab focus on scene #W.
+		tabFocus := &session.FocusKey{Kind: session.FocusKindScene, TargetID: webSceneID}
+		Expect(h.store.AddConnection(ctx, &session.Connection{
+			ID:         connID,
+			SessionID:  sessionID,
+			ClientType: "terminal",
+			FocusKey:   tabFocus,
+		})).To(Succeed())
+
+		// Even if RestoreConnectionFocus is invoked, PresentingFocus == nil makes
+		// it a no-op (branch 1) — the tab's chosen focus MUST be preserved.
+		Expect(h.coord.RestoreConnectionFocus(ctx, sessionID, connID)).
+			To(Succeed(), "D-08: RestoreConnectionFocus MUST be a no-op when PresentingFocus is nil")
+
+		conn, err := h.store.GetConnection(ctx, connID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(conn.FocusKey).NotTo(BeNil(),
+			"D-08: web tab's per-tab FocusKey MUST survive a PresentingFocus-nil restore")
+		Expect(conn.FocusKey.TargetID).To(Equal(webSceneID),
+			"D-08: web tab's per-tab FocusKey MUST remain its chosen scene, not be clobbered")
+	})
+})
