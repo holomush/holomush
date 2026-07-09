@@ -54,6 +54,16 @@ type fakeStore struct {
 	// ListCharacterScenes control fields.
 	listCharacterScenesRows []CharacterSceneResult
 	listCharacterScenesErr  error
+	// Plan 03 notify-pref / mute control fields.
+	setSceneMuteCalls       []muteCall       // records SetSceneMute invocations
+	setSceneMuteErr         error            // forces SetSceneMute to fail
+	setSceneNotifyPrefCalls []notifyPrefCall // records SetSceneNotifyPref invocations
+	setSceneNotifyPrefErr   error            // forces SetSceneNotifyPref to fail
+	notifyPrefEnabled       bool             // GetSceneNotifyPref returns this enabled value
+	notifyPrefMode          string           // GetSceneNotifyPref returns this mode ("" → "realtime")
+	getSceneNotifyPrefErr   error            // forces GetSceneNotifyPref to fail
+	mutedScenes             []string         // ListMutedScenes returns these
+	listMutedScenesErr      error            // forces ListMutedScenes to fail
 	// ListPublishedScenes control fields.
 	listPublishedScenesRows []PublishedSceneArchiveSummary
 	listPublishedScenesErr  error
@@ -697,6 +707,52 @@ func (f *fakeStore) ListCharacterScenes(_ context.Context, _ string, _ string) (
 		return nil, f.listCharacterScenesErr
 	}
 	return f.listCharacterScenesRows, nil
+}
+
+// muteCall records the arguments of one SetSceneMute invocation.
+type muteCall struct {
+	characterID string
+	sceneID     string
+	muted       bool
+}
+
+// notifyPrefCall records the arguments of one SetSceneNotifyPref invocation.
+type notifyPrefCall struct {
+	characterID string
+	enabled     bool
+}
+
+// SetSceneMute records the call and returns the injected error (Plan 03).
+func (f *fakeStore) SetSceneMute(_ context.Context, characterID, sceneID string, muted bool) error {
+	f.setSceneMuteCalls = append(f.setSceneMuteCalls, muteCall{characterID: characterID, sceneID: sceneID, muted: muted})
+	return f.setSceneMuteErr
+}
+
+// SetSceneNotifyPref records the call and returns the injected error (Plan 03).
+func (f *fakeStore) SetSceneNotifyPref(_ context.Context, characterID string, enabled bool) error {
+	f.setSceneNotifyPrefCalls = append(f.setSceneNotifyPrefCalls, notifyPrefCall{characterID: characterID, enabled: enabled})
+	return f.setSceneNotifyPrefErr
+}
+
+// GetSceneNotifyPref returns the injected enabled/mode, defaulting mode to
+// "realtime" when unset (mirrors the store's pgx.ErrNoRows default) (Plan 03).
+func (f *fakeStore) GetSceneNotifyPref(_ context.Context, _ string) (bool, string, error) {
+	if f.getSceneNotifyPrefErr != nil {
+		return false, "", f.getSceneNotifyPrefErr
+	}
+	mode := f.notifyPrefMode
+	if mode == "" {
+		mode = "realtime"
+	}
+	return f.notifyPrefEnabled, mode, nil
+}
+
+// ListMutedScenes returns the injected muted scene ids (Plan 03).
+func (f *fakeStore) ListMutedScenes(_ context.Context, _ string) ([]string, error) {
+	if f.listMutedScenesErr != nil {
+		return nil, f.listMutedScenesErr
+	}
+	return f.mutedScenes, nil
 }
 
 // ListPublishedScenes returns a fixed slice injected via

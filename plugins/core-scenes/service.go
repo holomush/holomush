@@ -121,6 +121,21 @@ type sceneStorer interface {
 	// icSubjectPrefix is "events.<gameID>.scene." — supplied by the service.
 	// Ordered by last_activity_ms DESC.
 	ListCharacterScenes(ctx context.Context, characterID, icSubjectPrefix string) ([]CharacterSceneResult, error)
+
+	// SetSceneMute sets or clears the per-scene mute flag for a character
+	// (idempotent upsert). Backs MuteScene and the `scene mute`/`unmute`
+	// subcommands (Plan 03).
+	SetSceneMute(ctx context.Context, characterID, sceneID string, muted bool) error
+	// SetSceneNotifyPref writes the character's global (NULL-scene_id) notify
+	// preference. Backs SetSceneNotifyPref (Plan 03).
+	SetSceneNotifyPref(ctx context.Context, characterID string, enabled bool) error
+	// GetSceneNotifyPref reads the character's global notify preference,
+	// defaulting (true, "realtime") when no row exists. Backs GetSceneNotifyPref
+	// and the ListCharacterScenes read-back (Plan 03).
+	GetSceneNotifyPref(ctx context.Context, characterID string) (enabled bool, mode string, err error)
+	// ListMutedScenes returns the scene ids the character has muted. Backs
+	// ListMutedScenes and the ListCharacterScenes read-back (Plan 03).
+	ListMutedScenes(ctx context.Context, characterID string) ([]string, error)
 	// ListPublishedScenes returns PUBLISHED archive summaries newest first,
 	// with optional tag filtering and LIMIT/OFFSET paging.
 	ListPublishedScenes(ctx context.Context, q ListPublishedScenesQuery) ([]PublishedSceneArchiveSummary, error)
@@ -877,6 +892,145 @@ func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeS
 	)
 
 	return &scenev1.ResumeSceneResponse{Scene: rowToProto(row, row.CreatedAt.Time())}, nil
+}
+
+// mismatchedActingCharacter reports whether the advisory actor metadata on ctx
+// identifies a character whose id contradicts the request's acting
+// character_id. It is the shared self-scope / anti-forgery guard for the mute
+// and notify-pref handlers, mirroring EndScene's inline check (service.go
+// EndScene): a caller may only act as, and for the notify-pref RPCs read/write
+// the prefs of, the character it is vouched to be.
+func mismatchedActingCharacter(ctx context.Context, requestCharacterID string) bool {
+	kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx)
+	return ok && kind == pluginsdk.ActorCharacter && id != requestCharacterID
+}
+
+// MuteScene sets or clears the calling character's per-scene mute flag. It is
+// SCENE-scoped and participant-gated: after the actor-metadata self-scope
+// guard, it evaluates the "mute" action against "scene:"+scene_id and fails
+// closed (PermissionDenied) for a non-participant or (Internal) for an
+// evaluator error or unconfigured evaluator. The same "mute" action authorizes
+// both mute and unmute — the muted flag only selects the persisted value.
+func (s *SceneServiceImpl) MuteScene(ctx context.Context, req *scenev1.MuteSceneRequest) (*scenev1.MuteSceneResponse, error) {
+	ctx, span := startSpan(
+		ctx, "scene.mute.set",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+		attribute.Bool("muted", req.GetMuted()),
+	)
+	defer span.End()
+
+	if mismatchedActingCharacter(ctx, req.GetCharacterId()) {
+		slog.WarnContext(ctx, "scene.mute.set actor metadata mismatch",
+			"request_character_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
+		return nil, status.Error(codes.PermissionDenied, "not permitted to mute for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
+	if s.evaluator == nil {
+		slog.WarnContext(ctx, "scene.mute.set evaluator not configured",
+			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
+		return nil, status.Error(codes.Internal, "permission check unavailable") //nolint:wrapcheck // gRPC status is the wire contract; fail-closed opaque error
+	}
+	dec, evalErr := s.evaluator.Evaluate(ctx, "mute", "scene:"+req.GetSceneId())
+	if evalErr != nil {
+		recordError(span, evalErr)
+		errutil.LogErrorContext(ctx, "scene.mute.set evaluation failed", evalErr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+	if !dec.Allowed {
+		return nil, status.Error(codes.PermissionDenied, "not permitted to mute this scene") //nolint:wrapcheck // gRPC status is the wire contract
+	}
+
+	if err := s.store.SetSceneMute(ctx, req.GetCharacterId(), req.GetSceneId(), req.GetMuted()); err != nil {
+		recordError(span, err)
+		errutil.LogErrorContext(ctx, "scene.mute.set store error", err,
+			"subject_id", req.GetCharacterId(), "scene_id", req.GetSceneId())
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+
+	return &scenev1.MuteSceneResponse{}, nil
+}
+
+// SetSceneNotifyPref writes the calling character's global (all-scenes) notify
+// preference. It is CHARACTER-SELF-scoped: the only authorization is the
+// actor-metadata self-scope guard (a caller may write only its own pref). It
+// carries no scene id and performs no scene ABAC evaluation.
+func (s *SceneServiceImpl) SetSceneNotifyPref(ctx context.Context, req *scenev1.SetSceneNotifyPrefRequest) (*scenev1.SetSceneNotifyPrefResponse, error) {
+	ctx, span := startSpan(
+		ctx, "scene.notify_pref.set",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.Bool("enabled", req.GetEnabled()),
+	)
+	defer span.End()
+
+	if mismatchedActingCharacter(ctx, req.GetCharacterId()) {
+		slog.WarnContext(ctx, "scene.notify_pref.set actor metadata mismatch",
+			"request_character_id", req.GetCharacterId())
+		return nil, status.Error(codes.PermissionDenied, "not permitted to set prefs for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
+	if err := s.store.SetSceneNotifyPref(ctx, req.GetCharacterId(), req.GetEnabled()); err != nil {
+		recordError(span, err)
+		errutil.LogErrorContext(ctx, "scene.notify_pref.set store error", err,
+			"subject_id", req.GetCharacterId())
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+
+	return &scenev1.SetSceneNotifyPrefResponse{}, nil
+}
+
+// GetSceneNotifyPref reads the calling character's persisted global notify
+// preference (default enabled=true, mode="realtime" when no row exists). It is
+// CHARACTER-SELF-scoped by the actor-metadata guard; no scene ABAC evaluation.
+// This is the read the core mute-suppression checker consults.
+func (s *SceneServiceImpl) GetSceneNotifyPref(ctx context.Context, req *scenev1.GetSceneNotifyPrefRequest) (*scenev1.GetSceneNotifyPrefResponse, error) {
+	ctx, span := startSpan(
+		ctx, "scene.notify_pref.get",
+		attribute.String("subject_id", req.GetCharacterId()),
+	)
+	defer span.End()
+
+	if mismatchedActingCharacter(ctx, req.GetCharacterId()) {
+		slog.WarnContext(ctx, "scene.notify_pref.get actor metadata mismatch",
+			"request_character_id", req.GetCharacterId())
+		return nil, status.Error(codes.PermissionDenied, "not permitted to read prefs for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
+	enabled, mode, err := s.store.GetSceneNotifyPref(ctx, req.GetCharacterId())
+	if err != nil {
+		recordError(span, err)
+		errutil.LogErrorContext(ctx, "scene.notify_pref.get store error", err,
+			"subject_id", req.GetCharacterId())
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+
+	return &scenev1.GetSceneNotifyPrefResponse{Enabled: enabled, Mode: mode}, nil
+}
+
+// ListMutedScenes returns the scene ids the calling character has muted. It is
+// CHARACTER-SELF-scoped by the actor-metadata guard; no scene ABAC evaluation.
+func (s *SceneServiceImpl) ListMutedScenes(ctx context.Context, req *scenev1.ListMutedScenesRequest) (*scenev1.ListMutedScenesResponse, error) {
+	ctx, span := startSpan(
+		ctx, "scene.muted.list",
+		attribute.String("subject_id", req.GetCharacterId()),
+	)
+	defer span.End()
+
+	if mismatchedActingCharacter(ctx, req.GetCharacterId()) {
+		slog.WarnContext(ctx, "scene.muted.list actor metadata mismatch",
+			"request_character_id", req.GetCharacterId())
+		return nil, status.Error(codes.PermissionDenied, "not permitted to list muted scenes for this character") //nolint:wrapcheck // gRPC status is the wire contract; opaque per grpc-errors.md
+	}
+
+	ids, err := s.store.ListMutedScenes(ctx, req.GetCharacterId())
+	if err != nil {
+		recordError(span, err)
+		errutil.LogErrorContext(ctx, "scene.muted.list store error", err,
+			"subject_id", req.GetCharacterId())
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // opaque Internal per grpc-errors.md
+	}
+
+	return &scenev1.ListMutedScenesResponse{SceneIds: ids}, nil
 }
 
 // UpdateScene applies a partial update to mutable scene metadata. Owner-only.

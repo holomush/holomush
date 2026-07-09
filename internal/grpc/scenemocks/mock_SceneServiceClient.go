@@ -916,6 +916,80 @@ func (_c *MockSceneServiceClient_GetScene_Call) RunAndReturn(run func(context.Co
 	return _c
 }
 
+// GetSceneNotifyPref provides a mock function with given fields: ctx, in, opts
+func (_m *MockSceneServiceClient) GetSceneNotifyPref(ctx context.Context, in *scenev1.GetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*scenev1.GetSceneNotifyPrefResponse, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSceneNotifyPref")
+	}
+
+	var r0 *scenev1.GetSceneNotifyPrefResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *scenev1.GetSceneNotifyPrefRequest, ...grpc.CallOption) (*scenev1.GetSceneNotifyPrefResponse, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *scenev1.GetSceneNotifyPrefRequest, ...grpc.CallOption) *scenev1.GetSceneNotifyPrefResponse); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*scenev1.GetSceneNotifyPrefResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *scenev1.GetSceneNotifyPrefRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockSceneServiceClient_GetSceneNotifyPref_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSceneNotifyPref'
+type MockSceneServiceClient_GetSceneNotifyPref_Call struct {
+	*mock.Call
+}
+
+// GetSceneNotifyPref is a helper method to define mock.On call
+//   - ctx context.Context
+//   - in *scenev1.GetSceneNotifyPrefRequest
+//   - opts ...grpc.CallOption
+func (_e *MockSceneServiceClient_Expecter) GetSceneNotifyPref(ctx interface{}, in interface{}, opts ...interface{}) *MockSceneServiceClient_GetSceneNotifyPref_Call {
+	return &MockSceneServiceClient_GetSceneNotifyPref_Call{Call: _e.mock.On("GetSceneNotifyPref",
+		append([]interface{}{ctx, in}, opts...)...)}
+}
+
+func (_c *MockSceneServiceClient_GetSceneNotifyPref_Call) Run(run func(ctx context.Context, in *scenev1.GetSceneNotifyPrefRequest, opts ...grpc.CallOption)) *MockSceneServiceClient_GetSceneNotifyPref_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]grpc.CallOption, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(grpc.CallOption)
+			}
+		}
+		run(args[0].(context.Context), args[1].(*scenev1.GetSceneNotifyPrefRequest), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *MockSceneServiceClient_GetSceneNotifyPref_Call) Return(_a0 *scenev1.GetSceneNotifyPrefResponse, _a1 error) *MockSceneServiceClient_GetSceneNotifyPref_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockSceneServiceClient_GetSceneNotifyPref_Call) RunAndReturn(run func(context.Context, *scenev1.GetSceneNotifyPrefRequest, ...grpc.CallOption) (*scenev1.GetSceneNotifyPrefResponse, error)) *MockSceneServiceClient_GetSceneNotifyPref_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InviteToScene provides a mock function with given fields: ctx, in, opts
 func (_m *MockSceneServiceClient) InviteToScene(ctx context.Context, in *scenev1.InviteToSceneRequest, opts ...grpc.CallOption) (*scenev1.InviteToSceneResponse, error) {
 	_va := make([]interface{}, len(opts))
@@ -1286,6 +1360,80 @@ func (_c *MockSceneServiceClient_ListCharacterScenes_Call) RunAndReturn(run func
 	return _c
 }
 
+// ListMutedScenes provides a mock function with given fields: ctx, in, opts
+func (_m *MockSceneServiceClient) ListMutedScenes(ctx context.Context, in *scenev1.ListMutedScenesRequest, opts ...grpc.CallOption) (*scenev1.ListMutedScenesResponse, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListMutedScenes")
+	}
+
+	var r0 *scenev1.ListMutedScenesResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *scenev1.ListMutedScenesRequest, ...grpc.CallOption) (*scenev1.ListMutedScenesResponse, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *scenev1.ListMutedScenesRequest, ...grpc.CallOption) *scenev1.ListMutedScenesResponse); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*scenev1.ListMutedScenesResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *scenev1.ListMutedScenesRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockSceneServiceClient_ListMutedScenes_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListMutedScenes'
+type MockSceneServiceClient_ListMutedScenes_Call struct {
+	*mock.Call
+}
+
+// ListMutedScenes is a helper method to define mock.On call
+//   - ctx context.Context
+//   - in *scenev1.ListMutedScenesRequest
+//   - opts ...grpc.CallOption
+func (_e *MockSceneServiceClient_Expecter) ListMutedScenes(ctx interface{}, in interface{}, opts ...interface{}) *MockSceneServiceClient_ListMutedScenes_Call {
+	return &MockSceneServiceClient_ListMutedScenes_Call{Call: _e.mock.On("ListMutedScenes",
+		append([]interface{}{ctx, in}, opts...)...)}
+}
+
+func (_c *MockSceneServiceClient_ListMutedScenes_Call) Run(run func(ctx context.Context, in *scenev1.ListMutedScenesRequest, opts ...grpc.CallOption)) *MockSceneServiceClient_ListMutedScenes_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]grpc.CallOption, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(grpc.CallOption)
+			}
+		}
+		run(args[0].(context.Context), args[1].(*scenev1.ListMutedScenesRequest), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *MockSceneServiceClient_ListMutedScenes_Call) Return(_a0 *scenev1.ListMutedScenesResponse, _a1 error) *MockSceneServiceClient_ListMutedScenes_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockSceneServiceClient_ListMutedScenes_Call) RunAndReturn(run func(context.Context, *scenev1.ListMutedScenesRequest, ...grpc.CallOption) (*scenev1.ListMutedScenesResponse, error)) *MockSceneServiceClient_ListMutedScenes_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListPublishedScenes provides a mock function with given fields: ctx, in, opts
 func (_m *MockSceneServiceClient) ListPublishedScenes(ctx context.Context, in *scenev1.ListPublishedScenesRequest, opts ...grpc.CallOption) (*scenev1.ListPublishedScenesResponse, error) {
 	_va := make([]interface{}, len(opts))
@@ -1508,6 +1656,80 @@ func (_c *MockSceneServiceClient_ListScenes_Call) RunAndReturn(run func(context.
 	return _c
 }
 
+// MuteScene provides a mock function with given fields: ctx, in, opts
+func (_m *MockSceneServiceClient) MuteScene(ctx context.Context, in *scenev1.MuteSceneRequest, opts ...grpc.CallOption) (*scenev1.MuteSceneResponse, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MuteScene")
+	}
+
+	var r0 *scenev1.MuteSceneResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *scenev1.MuteSceneRequest, ...grpc.CallOption) (*scenev1.MuteSceneResponse, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *scenev1.MuteSceneRequest, ...grpc.CallOption) *scenev1.MuteSceneResponse); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*scenev1.MuteSceneResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *scenev1.MuteSceneRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockSceneServiceClient_MuteScene_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MuteScene'
+type MockSceneServiceClient_MuteScene_Call struct {
+	*mock.Call
+}
+
+// MuteScene is a helper method to define mock.On call
+//   - ctx context.Context
+//   - in *scenev1.MuteSceneRequest
+//   - opts ...grpc.CallOption
+func (_e *MockSceneServiceClient_Expecter) MuteScene(ctx interface{}, in interface{}, opts ...interface{}) *MockSceneServiceClient_MuteScene_Call {
+	return &MockSceneServiceClient_MuteScene_Call{Call: _e.mock.On("MuteScene",
+		append([]interface{}{ctx, in}, opts...)...)}
+}
+
+func (_c *MockSceneServiceClient_MuteScene_Call) Run(run func(ctx context.Context, in *scenev1.MuteSceneRequest, opts ...grpc.CallOption)) *MockSceneServiceClient_MuteScene_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]grpc.CallOption, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(grpc.CallOption)
+			}
+		}
+		run(args[0].(context.Context), args[1].(*scenev1.MuteSceneRequest), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *MockSceneServiceClient_MuteScene_Call) Return(_a0 *scenev1.MuteSceneResponse, _a1 error) *MockSceneServiceClient_MuteScene_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockSceneServiceClient_MuteScene_Call) RunAndReturn(run func(context.Context, *scenev1.MuteSceneRequest, ...grpc.CallOption) (*scenev1.MuteSceneResponse, error)) *MockSceneServiceClient_MuteScene_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // PauseScene provides a mock function with given fields: ctx, in, opts
 func (_m *MockSceneServiceClient) PauseScene(ctx context.Context, in *scenev1.PauseSceneRequest, opts ...grpc.CallOption) (*scenev1.PauseSceneResponse, error) {
 	_va := make([]interface{}, len(opts))
@@ -1652,6 +1874,80 @@ func (_c *MockSceneServiceClient_ResumeScene_Call) Return(_a0 *scenev1.ResumeSce
 }
 
 func (_c *MockSceneServiceClient_ResumeScene_Call) RunAndReturn(run func(context.Context, *scenev1.ResumeSceneRequest, ...grpc.CallOption) (*scenev1.ResumeSceneResponse, error)) *MockSceneServiceClient_ResumeScene_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetSceneNotifyPref provides a mock function with given fields: ctx, in, opts
+func (_m *MockSceneServiceClient) SetSceneNotifyPref(ctx context.Context, in *scenev1.SetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*scenev1.SetSceneNotifyPrefResponse, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetSceneNotifyPref")
+	}
+
+	var r0 *scenev1.SetSceneNotifyPrefResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *scenev1.SetSceneNotifyPrefRequest, ...grpc.CallOption) (*scenev1.SetSceneNotifyPrefResponse, error)); ok {
+		return rf(ctx, in, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *scenev1.SetSceneNotifyPrefRequest, ...grpc.CallOption) *scenev1.SetSceneNotifyPrefResponse); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*scenev1.SetSceneNotifyPrefResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *scenev1.SetSceneNotifyPrefRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockSceneServiceClient_SetSceneNotifyPref_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetSceneNotifyPref'
+type MockSceneServiceClient_SetSceneNotifyPref_Call struct {
+	*mock.Call
+}
+
+// SetSceneNotifyPref is a helper method to define mock.On call
+//   - ctx context.Context
+//   - in *scenev1.SetSceneNotifyPrefRequest
+//   - opts ...grpc.CallOption
+func (_e *MockSceneServiceClient_Expecter) SetSceneNotifyPref(ctx interface{}, in interface{}, opts ...interface{}) *MockSceneServiceClient_SetSceneNotifyPref_Call {
+	return &MockSceneServiceClient_SetSceneNotifyPref_Call{Call: _e.mock.On("SetSceneNotifyPref",
+		append([]interface{}{ctx, in}, opts...)...)}
+}
+
+func (_c *MockSceneServiceClient_SetSceneNotifyPref_Call) Run(run func(ctx context.Context, in *scenev1.SetSceneNotifyPrefRequest, opts ...grpc.CallOption)) *MockSceneServiceClient_SetSceneNotifyPref_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]grpc.CallOption, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(grpc.CallOption)
+			}
+		}
+		run(args[0].(context.Context), args[1].(*scenev1.SetSceneNotifyPrefRequest), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *MockSceneServiceClient_SetSceneNotifyPref_Call) Return(_a0 *scenev1.SetSceneNotifyPrefResponse, _a1 error) *MockSceneServiceClient_SetSceneNotifyPref_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockSceneServiceClient_SetSceneNotifyPref_Call) RunAndReturn(run func(context.Context, *scenev1.SetSceneNotifyPrefRequest, ...grpc.CallOption) (*scenev1.SetSceneNotifyPrefResponse, error)) *MockSceneServiceClient_SetSceneNotifyPref_Call {
 	_c.Call.Return(run)
 	return _c
 }

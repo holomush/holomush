@@ -28,6 +28,10 @@ const (
 	SceneService_EndScene_FullMethodName                       = "/holomush.scene.v1.SceneService/EndScene"
 	SceneService_PauseScene_FullMethodName                     = "/holomush.scene.v1.SceneService/PauseScene"
 	SceneService_ResumeScene_FullMethodName                    = "/holomush.scene.v1.SceneService/ResumeScene"
+	SceneService_MuteScene_FullMethodName                      = "/holomush.scene.v1.SceneService/MuteScene"
+	SceneService_SetSceneNotifyPref_FullMethodName             = "/holomush.scene.v1.SceneService/SetSceneNotifyPref"
+	SceneService_GetSceneNotifyPref_FullMethodName             = "/holomush.scene.v1.SceneService/GetSceneNotifyPref"
+	SceneService_ListMutedScenes_FullMethodName                = "/holomush.scene.v1.SceneService/ListMutedScenes"
 	SceneService_UpdateScene_FullMethodName                    = "/holomush.scene.v1.SceneService/UpdateScene"
 	SceneService_JoinScene_FullMethodName                      = "/holomush.scene.v1.SceneService/JoinScene"
 	SceneService_WatchScene_FullMethodName                     = "/holomush.scene.v1.SceneService/WatchScene"
@@ -63,14 +67,22 @@ const (
 // events on events.<game_id>.scene.<scene_id>.ic and audits lifecycle
 // operations to its plugin-owned audit table.
 //
-// Authorization model: every mutating RPC trusts that the host's ABAC engine
-// has already authorized the command-execute action at dispatch time
-// (owner-only for end/pause/resume/update/invite/kick/transfer, admin-only for
-// the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
-// (SceneServiceImpl holds no policy engine). The sole exceptions are the
-// participant-gate reads (GetPoseOrder and the publish reads), which enforce a
-// direct plugin-code participation check (INV-SCENE-60) precisely because it is a
-// hard privacy boundary that must not be delegable.
+// Authorization model: the host's ABAC engine authorizes the command-execute
+// action at dispatch time, and the plugin additionally runs a host-injected
+// ABAC evaluator (SceneServiceImpl.evaluator, wired via SetHostEvaluator) that
+// gates several transitions in-handler by calling evaluator.Evaluate(action,
+// "scene:"+scene_id) and failing closed on an evaluator error: EndScene and
+// PauseScene evaluate the owner-only end/pause actions, ResumeScene the
+// participant-wide resume, and MuteScene the participant-gated mute action.
+// Owner-only membership operations (update/invite/kick/transfer) and the
+// admin-only publish-attempt-budget extension rely on the dispatch-time
+// command gate alone. The participant-gate reads (GetPoseOrder and the publish
+// reads) enforce a direct plugin-code participation check (INV-SCENE-60)
+// because that is a hard privacy boundary that must not be delegable. The
+// character-self notify-pref RPCs (SetSceneNotifyPref/GetSceneNotifyPref/
+// ListMutedScenes) carry no scene id; they are scoped by a request
+// character_id cross-checked against the host-vouched actor metadata rather
+// than a scene ABAC policy.
 //
 // Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
 // plugins/core-scenes/publish_service.go.
@@ -107,6 +119,34 @@ type SceneServiceClient interface {
 	// Rejected with codes.FailedPrecondition from any non-paused state.
 	// See service.go::ResumeScene.
 	ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error)
+	// MuteScene sets or clears the calling character's per-scene mute flag,
+	// persisting it via SceneStore.SetSceneMute. Participant-gated: the handler
+	// evaluates the "mute" action against "scene:"+scene_id and fails closed
+	// (PermissionDenied) for a non-participant or an evaluator error, after
+	// cross-checking the request character_id against the host-vouched actor
+	// metadata. Both the `scene mute` and `scene unmute` telnet subcommands and
+	// the web mute control drive this RPC; the muted flag selects mute vs unmute.
+	// See service.go::MuteScene.
+	MuteScene(ctx context.Context, in *MuteSceneRequest, opts ...grpc.CallOption) (*MuteSceneResponse, error)
+	// SetSceneNotifyPref writes the calling character's global (all-scenes)
+	// notify preference via SceneStore.SetSceneNotifyPref. Character-self-scoped:
+	// the only authorization is the request character_id matching the
+	// host-vouched actor metadata (a caller may write only its own pref); there
+	// is no scene id and no scene ABAC evaluation. See
+	// service.go::SetSceneNotifyPref.
+	SetSceneNotifyPref(ctx context.Context, in *SetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*SetSceneNotifyPrefResponse, error)
+	// GetSceneNotifyPref reads the calling character's persisted global notify
+	// preference (default enabled=true when no row exists) via
+	// SceneStore.GetSceneNotifyPref. This is the read the core mute-suppression
+	// checker consults to honor a character's notifications-off preference.
+	// Character-self-scoped by the request character_id / actor-metadata match.
+	// See service.go::GetSceneNotifyPref.
+	GetSceneNotifyPref(ctx context.Context, in *GetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*GetSceneNotifyPrefResponse, error)
+	// ListMutedScenes returns the scene ids the calling character has muted via
+	// SceneStore.ListMutedScenes. Character-self-scoped by the request
+	// character_id / actor-metadata match; no scene ABAC evaluation. See
+	// service.go::ListMutedScenes.
+	ListMutedScenes(ctx context.Context, in *ListMutedScenesRequest, opts ...grpc.CallOption) (*ListMutedScenesResponse, error)
 	// UpdateScene applies a partial update to mutable scene metadata, driven by
 	// the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
 	// success. A pose-order-mode change auto-emits a pose-order-changed IC
@@ -298,6 +338,46 @@ func (c *sceneServiceClient) ResumeScene(ctx context.Context, in *ResumeSceneReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResumeSceneResponse)
 	err := c.cc.Invoke(ctx, SceneService_ResumeScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) MuteScene(ctx context.Context, in *MuteSceneRequest, opts ...grpc.CallOption) (*MuteSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MuteSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_MuteScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) SetSceneNotifyPref(ctx context.Context, in *SetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*SetSceneNotifyPrefResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetSceneNotifyPrefResponse)
+	err := c.cc.Invoke(ctx, SceneService_SetSceneNotifyPref_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) GetSceneNotifyPref(ctx context.Context, in *GetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*GetSceneNotifyPrefResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSceneNotifyPrefResponse)
+	err := c.cc.Invoke(ctx, SceneService_GetSceneNotifyPref_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) ListMutedScenes(ctx context.Context, in *ListMutedScenesRequest, opts ...grpc.CallOption) (*ListMutedScenesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMutedScenesResponse)
+	err := c.cc.Invoke(ctx, SceneService_ListMutedScenes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -526,14 +606,22 @@ func (c *sceneServiceClient) ExportSceneLog(ctx context.Context, in *ExportScene
 // events on events.<game_id>.scene.<scene_id>.ic and audits lifecycle
 // operations to its plugin-owned audit table.
 //
-// Authorization model: every mutating RPC trusts that the host's ABAC engine
-// has already authorized the command-execute action at dispatch time
-// (owner-only for end/pause/resume/update/invite/kick/transfer, admin-only for
-// the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
-// (SceneServiceImpl holds no policy engine). The sole exceptions are the
-// participant-gate reads (GetPoseOrder and the publish reads), which enforce a
-// direct plugin-code participation check (INV-SCENE-60) precisely because it is a
-// hard privacy boundary that must not be delegable.
+// Authorization model: the host's ABAC engine authorizes the command-execute
+// action at dispatch time, and the plugin additionally runs a host-injected
+// ABAC evaluator (SceneServiceImpl.evaluator, wired via SetHostEvaluator) that
+// gates several transitions in-handler by calling evaluator.Evaluate(action,
+// "scene:"+scene_id) and failing closed on an evaluator error: EndScene and
+// PauseScene evaluate the owner-only end/pause actions, ResumeScene the
+// participant-wide resume, and MuteScene the participant-gated mute action.
+// Owner-only membership operations (update/invite/kick/transfer) and the
+// admin-only publish-attempt-budget extension rely on the dispatch-time
+// command gate alone. The participant-gate reads (GetPoseOrder and the publish
+// reads) enforce a direct plugin-code participation check (INV-SCENE-60)
+// because that is a hard privacy boundary that must not be delegable. The
+// character-self notify-pref RPCs (SetSceneNotifyPref/GetSceneNotifyPref/
+// ListMutedScenes) carry no scene id; they are scoped by a request
+// character_id cross-checked against the host-vouched actor metadata rather
+// than a scene ABAC policy.
 //
 // Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
 // plugins/core-scenes/publish_service.go.
@@ -570,6 +658,34 @@ type SceneServiceServer interface {
 	// Rejected with codes.FailedPrecondition from any non-paused state.
 	// See service.go::ResumeScene.
 	ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error)
+	// MuteScene sets or clears the calling character's per-scene mute flag,
+	// persisting it via SceneStore.SetSceneMute. Participant-gated: the handler
+	// evaluates the "mute" action against "scene:"+scene_id and fails closed
+	// (PermissionDenied) for a non-participant or an evaluator error, after
+	// cross-checking the request character_id against the host-vouched actor
+	// metadata. Both the `scene mute` and `scene unmute` telnet subcommands and
+	// the web mute control drive this RPC; the muted flag selects mute vs unmute.
+	// See service.go::MuteScene.
+	MuteScene(context.Context, *MuteSceneRequest) (*MuteSceneResponse, error)
+	// SetSceneNotifyPref writes the calling character's global (all-scenes)
+	// notify preference via SceneStore.SetSceneNotifyPref. Character-self-scoped:
+	// the only authorization is the request character_id matching the
+	// host-vouched actor metadata (a caller may write only its own pref); there
+	// is no scene id and no scene ABAC evaluation. See
+	// service.go::SetSceneNotifyPref.
+	SetSceneNotifyPref(context.Context, *SetSceneNotifyPrefRequest) (*SetSceneNotifyPrefResponse, error)
+	// GetSceneNotifyPref reads the calling character's persisted global notify
+	// preference (default enabled=true when no row exists) via
+	// SceneStore.GetSceneNotifyPref. This is the read the core mute-suppression
+	// checker consults to honor a character's notifications-off preference.
+	// Character-self-scoped by the request character_id / actor-metadata match.
+	// See service.go::GetSceneNotifyPref.
+	GetSceneNotifyPref(context.Context, *GetSceneNotifyPrefRequest) (*GetSceneNotifyPrefResponse, error)
+	// ListMutedScenes returns the scene ids the calling character has muted via
+	// SceneStore.ListMutedScenes. Character-self-scoped by the request
+	// character_id / actor-metadata match; no scene ABAC evaluation. See
+	// service.go::ListMutedScenes.
+	ListMutedScenes(context.Context, *ListMutedScenesRequest) (*ListMutedScenesResponse, error)
 	// UpdateScene applies a partial update to mutable scene metadata, driven by
 	// the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
 	// success. A pose-order-mode change auto-emits a pose-order-changed IC
@@ -724,6 +840,18 @@ func (UnimplementedSceneServiceServer) PauseScene(context.Context, *PauseSceneRe
 }
 func (UnimplementedSceneServiceServer) ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeScene not implemented")
+}
+func (UnimplementedSceneServiceServer) MuteScene(context.Context, *MuteSceneRequest) (*MuteSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MuteScene not implemented")
+}
+func (UnimplementedSceneServiceServer) SetSceneNotifyPref(context.Context, *SetSceneNotifyPrefRequest) (*SetSceneNotifyPrefResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSceneNotifyPref not implemented")
+}
+func (UnimplementedSceneServiceServer) GetSceneNotifyPref(context.Context, *GetSceneNotifyPrefRequest) (*GetSceneNotifyPrefResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSceneNotifyPref not implemented")
+}
+func (UnimplementedSceneServiceServer) ListMutedScenes(context.Context, *ListMutedScenesRequest) (*ListMutedScenesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMutedScenes not implemented")
 }
 func (UnimplementedSceneServiceServer) UpdateScene(context.Context, *UpdateSceneRequest) (*UpdateSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateScene not implemented")
@@ -913,6 +1041,78 @@ func _SceneService_ResumeScene_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SceneServiceServer).ResumeScene(ctx, req.(*ResumeSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_MuteScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MuteSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).MuteScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_MuteScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).MuteScene(ctx, req.(*MuteSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_SetSceneNotifyPref_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetSceneNotifyPrefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).SetSceneNotifyPref(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_SetSceneNotifyPref_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).SetSceneNotifyPref(ctx, req.(*SetSceneNotifyPrefRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_GetSceneNotifyPref_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSceneNotifyPrefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).GetSceneNotifyPref(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_GetSceneNotifyPref_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).GetSceneNotifyPref(ctx, req.(*GetSceneNotifyPrefRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_ListMutedScenes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMutedScenesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ListMutedScenes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ListMutedScenes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ListMutedScenes(ctx, req.(*ListMutedScenesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1325,6 +1525,22 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResumeScene",
 			Handler:    _SceneService_ResumeScene_Handler,
+		},
+		{
+			MethodName: "MuteScene",
+			Handler:    _SceneService_MuteScene_Handler,
+		},
+		{
+			MethodName: "SetSceneNotifyPref",
+			Handler:    _SceneService_SetSceneNotifyPref_Handler,
+		},
+		{
+			MethodName: "GetSceneNotifyPref",
+			Handler:    _SceneService_GetSceneNotifyPref_Handler,
+		},
+		{
+			MethodName: "ListMutedScenes",
+			Handler:    _SceneService_ListMutedScenes_Handler,
 		},
 		{
 			MethodName: "UpdateScene",
