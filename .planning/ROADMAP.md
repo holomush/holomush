@@ -125,13 +125,13 @@ backlog on 2026-07-08 — bd `holomush-x4n1r`, P4 — as not actively pursued at
 
 2. Telnet scene commands handle previously-identified edge cases (mixed focused/skipped render branches,
    reconnection membership+focus restore, multi-character-per-connection) without silent failure
-**Plans**: 1/7 plans executed
+**Plans**: 2/7 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Telnet activity nudge + shared `[>GAME: …]` primitive + INV-SCENE-70 (SCENEFWD-02)
-- [ ] 02-02-PLAN.md — Scene notify-prefs store + migration (mute + notify pref + `mode` digest seam) (SCENEFWD-02)
+- [x] 02-02-PLAN.md — Scene notify-prefs store + migration (mute + notify pref + `mode` digest seam) (SCENEFWD-02)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -180,7 +180,7 @@ completion, and platform hardening can proceed in parallel if desired)
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
-| 2. Scenes Lineage Completion | 1/7 | In Progress|  |
+| 2. Scenes Lineage Completion | 2/7 | In Progress|  |
 | 3. Platform Hardening & Deployment Scaling | 0/TBD | Not started | - |
 
 ## Deferred (Not in This Roadmap)

@@ -6,14 +6,14 @@ current_phase: 02
 current_phase_name: Scenes Lineage Completion
 status: executing
 stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-09T17:23:25.545Z"
+last_updated: "2026-07-09T17:33:26.172Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
   percent: 33
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 02 (Scenes Lineage Completion) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-07-09 — Phase 02 execution started
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
@@ -70,6 +70,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P08 | 55min | 2 tasks | 6 files |
 | Phase 01 P09 | 150min | 3 tasks | 11 files |
 | Phase 02 P01 | 20m | 3 tasks | 6 files |
+| Phase 02 P02 | ~15m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,7 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: 01-08: guest auto-join served by unioning ListDefaultChannels into QuerySessionStreams (resource-side, no membership-row write, D-01)
 - [Phase ?]: 01-08: mid-session live-subscribe failure logged not propagated — degrades to next session-establishment delivery (holomush-l6std), never silently dropped
 - [Phase ?]: Telnet scene-activity nudge debounce = 45s; reusable [>GAME] gamenotice primitive; INV-SCENE-70 bound (telnet privacy parity).
+- [Phase ?]: Scene notify prefs stored in one plugin table: NULL scene_id = per-character global pref (muted=NOT enabled), non-NULL = per-scene mute; mode column is the D-05 digest seam defaulting realtime.
 
 ### Pending Todos
 
@@ -122,7 +124,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-09T17:23:25.541Z
+Last session: 2026-07-09T17:33:10.764Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
 Stopped at: Completed 02-01-PLAN.md
