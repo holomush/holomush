@@ -945,6 +945,152 @@ func TestDispatchDeliveryDowngradesSceneEventForNonFocusedMemberConnection(t *te
 	assert.Equal(t, sceneID.String(), ctrl.GetSceneId())
 }
 
+// fakeSceneMuteChecker is a controllable SceneMuteChecker recording its calls.
+type fakeSceneMuteChecker struct {
+	suppress   bool
+	err        error
+	calls      int
+	lastChar   string
+	lastPlayer string
+	lastScene  string
+}
+
+func (f *fakeSceneMuteChecker) ShouldSuppress(_ context.Context, characterID, playerID, sceneID string) (bool, error) {
+	f.calls++
+	f.lastChar = characterID
+	f.lastPlayer = playerID
+	f.lastScene = sceneID
+	return f.suppress, f.err
+}
+
+// newNonFocusedSceneMember builds a session + non-focused connection carrying
+// the given character/player ids, plus a scene delivery — the shared fixture for
+// the mute-suppression tests below.
+func newNonFocusedSceneMember(t *testing.T, characterID, playerID ulid.ULID, sceneID ulid.ULID) (*session.Info, session.Store, ulid.ULID) {
+	t.Helper()
+	connID := ulid.Make()
+	info := &session.Info{
+		ID:          "s1",
+		CharacterID: characterID,
+		PlayerID:    playerID,
+		FocusMemberships: []session.FocusMembership{
+			{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now().Add(-time.Hour)},
+		},
+	}
+	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	require.NoError(t, store.AddConnection(context.Background(), &session.Connection{
+		ID:         connID,
+		SessionID:  "s1",
+		ClientType: "terminal",
+		Streams:    []string{},
+		FocusKey:   nil, // not focused on any scene
+	}))
+	return info, store, connID
+}
+
+// TestDispatchDeliverySuppressesBadgeWhenCheckerSuppresses verifies that a
+// suppressing checker drops the SCENE_ACTIVITY badge (no frame) and still acks.
+func TestDispatchDeliverySuppressesBadgeWhenCheckerSuppresses(t *testing.T) {
+	t.Parallel()
+	sceneID := ulid.Make()
+	charID := ulid.Make()
+	playerID := ulid.Make()
+	info, store, connID := newNonFocusedSceneMember(t, charID, playerID, sceneID)
+
+	checker := &fakeSceneMuteChecker{suppress: true}
+	s := &CoreServer{sessionStore: store, sceneMute: checker}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
+	require.NoError(t, err)
+	assert.Empty(t, stream.sent, "suppressed badge must not send any frame")
+	assert.Equal(t, 1, d.acks(), "suppression must ack the delivery — JS must not redeliver")
+	assert.Equal(t, 0, d.nacks())
+	assert.Equal(t, 1, checker.calls, "checker consulted exactly once on the non-focused path")
+	assert.Equal(t, charID.String(), checker.lastChar)
+	assert.Equal(t, playerID.String(), checker.lastPlayer)
+	assert.Equal(t, sceneID.String(), checker.lastScene)
+}
+
+// TestDispatchDeliveryDeliversBadgeWhenCheckerAllows verifies that a
+// non-suppressing checker leaves the badge downgrade unchanged.
+func TestDispatchDeliveryDeliversBadgeWhenCheckerAllows(t *testing.T) {
+	t.Parallel()
+	sceneID := ulid.Make()
+	info, store, connID := newNonFocusedSceneMember(t, ulid.Make(), ulid.Make(), sceneID)
+
+	checker := &fakeSceneMuteChecker{suppress: false}
+	s := &CoreServer{sessionStore: store, sceneMute: checker}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
+	require.NoError(t, err)
+	require.Len(t, stream.sent, 1, "unmuted+notify-on must send the badge as today")
+	ctrl := stream.sent[0].GetControl()
+	require.NotNil(t, ctrl)
+	assert.Equal(t, corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY, ctrl.GetSignal())
+	assert.Equal(t, 1, d.acks())
+}
+
+// TestDispatchDeliveryDeliversBadgeOnCheckerError verifies fail-open: a checker
+// error delivers the badge (mute/notify-pref are preferences, not access control).
+func TestDispatchDeliveryDeliversBadgeOnCheckerError(t *testing.T) {
+	t.Parallel()
+	sceneID := ulid.Make()
+	info, store, connID := newNonFocusedSceneMember(t, ulid.Make(), ulid.Make(), sceneID)
+
+	// suppress=true is deliberately paired with err != nil: the error MUST
+	// dominate and the badge is delivered anyway (fail-open).
+	checker := &fakeSceneMuteChecker{suppress: true, err: errors.New("plugin dispatch boom")}
+	s := &CoreServer{sessionStore: store, sceneMute: checker}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
+	require.NoError(t, err)
+	require.Len(t, stream.sent, 1, "a checker error must fail open and deliver the badge")
+	assert.NotNil(t, stream.sent[0].GetControl())
+	assert.Equal(t, 1, d.acks())
+}
+
+// TestDispatchDeliveryDoesNotConsultCheckerOnFocusedPath verifies the
+// suppression check never runs on the focused delivery path.
+func TestDispatchDeliveryDoesNotConsultCheckerOnFocusedPath(t *testing.T) {
+	t.Parallel()
+	sceneID := ulid.Make()
+	connID := ulid.Make()
+	info := &session.Info{
+		ID:          "s1",
+		CharacterID: ulid.Make(),
+		PlayerID:    ulid.Make(),
+		FocusMemberships: []session.FocusMembership{
+			{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now().Add(-time.Hour)},
+		},
+	}
+	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
+	fk := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+	require.NoError(t, store.AddConnection(context.Background(), &session.Connection{
+		ID:         connID,
+		SessionID:  "s1",
+		ClientType: "terminal",
+		Streams:    []string{},
+		FocusKey:   &fk, // focused on this scene
+	}))
+
+	checker := &fakeSceneMuteChecker{suppress: true}
+	s := &CoreServer{sessionStore: store, sceneMute: checker}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, checker.calls, "the mute checker MUST NOT run on the focused path")
+	require.Len(t, stream.sent, 1, "focused connection still receives the EventFrame")
+	assert.NotNil(t, stream.sent[0].GetEvent())
+}
+
 // TestDispatchDeliveryForwardsFocusedSceneEventNormally verifies that when the
 // connection IS focused on the scene from which the event arrives, the event
 // frame is forwarded normally (no downgrade).
