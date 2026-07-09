@@ -85,6 +85,7 @@ status: complete
 ### Auto-fixed Issues
 
 **1. [Rule 1 + Rule 3 — Blocking] Removed `holomush.plugin.v1.PluginAuditService` from the channels manifest `provides`**
+
 - **Found during:** Task 2 whole-system census verification.
 - **Issue:** The plan's artifact list and Task 2 action both instruct "add `PluginAuditService` to `provides`" (mirroring core-scenes). core-scenes **already** declares it. The dependency DAG resolver treats a `provides` name as a globally-unique provided service, so two declarations hard-fail with `DUPLICATE_SERVICE_PROVIDER` at `internal/plugin/dependency.go:112` → `Manager.LoadAll` errors → the `test/integration/wholesystem` census `BeforeAll` panics. core-channels could not load at all.
 - **Fix:** Dropped the `PluginAuditService` line from `provides` (kept `ChannelService`) with an explanatory comment. The audit RPC needs no `provides` entry: `RegisterServices` registers `PluginAuditService` on the plugin's own gRPC transport, the `audit:` block declares subject ownership (`events.*.channel.>`), and the host resolves the client per-plugin via `Manager.PluginAuditClient(pluginName)` (host-walk over `pluginHosts`), never via the singleton `ServiceRegistry`. This is the same reason `AttributeResolverService` must not be in `provides`.
@@ -103,6 +104,7 @@ status: complete
 ## TDD Gate Compliance
 
 Plan `type: tdd`; both tasks `tdd="true"`.
+
 - **Task 1:** RED `a9763a0b0` (`test(...)`) — full-assertion `publish_events_test.go` + no-op emitter stub; 9 assertions fail (`task test -- ./plugins/core-channels/` exit 1). GREEN `7fb6d6ddf` (`feat(...)`) — real emitter; all green.
 - **Task 2:** RED `0f234c1e3` (`test(...)`) — full-assertion `audit_test.go` + permissive stub; 31 assertions fail. GREEN `53867a212` (`feat(...)`) — real audit server + store method + wiring; all green.
 
@@ -149,5 +151,6 @@ None.
 - Channels unit + integration + whole-system census green after the deviation fix.
 
 ---
+
 *Phase: 01-channels-subsystem*
 *Completed: 2026-07-08*
