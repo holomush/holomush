@@ -127,6 +127,13 @@ type grpcSubsystem struct {
 	sessionReaper *session.Reaper
 }
 
+// sceneMuteNotifyCacheTTL bounds how long a character's {globalNotifyEnabled,
+// mutedSet} is memoized in the SceneMuteChecker before a refresh. Short enough
+// that a mute/unmute or SetSceneNotifyPref takes effect within a window, long
+// enough that the badge-downgrade branch makes at most one plugin round-trip per
+// character per window (never a per-event RPC in the hot delivery loop).
+const sceneMuteNotifyCacheTTL = 45 * time.Second
+
 // newGRPCSubsystem returns a configured grpcSubsystem for the provided configuration.
 // It does not allocate or start any runtime resources; Start must be called to initialize and run the subsystem.
 func newGRPCSubsystem(cfg grpcSubsystemConfig) *grpcSubsystem {
@@ -568,6 +575,43 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		historyAuditEm,
 	))
 
+	// Wire the SceneMuteChecker consulted at the SCENE_ACTIVITY badge downgrade
+	// (D-04): a non-focused member's badge is suppressed when their GLOBAL notify
+	// preference is off (Finding 2) or the scene is muted. The checker's loader
+	// dispatches to the plugin SceneService with the SAME host-vouched
+	// actor+ownerPlayerID the SceneAccessService facade uses (BeginServiceDispatch,
+	// Finding 3), reading BOTH GetSceneNotifyPref and ListMutedScenes on the
+	// vouched ctx — NOT the SceneAccessService facade, which exposes neither RPC.
+	// The plugin guards each request's character_id against the vouched actor
+	// metadata (mirroring the facade). When the plugin is absent the checker stays
+	// unset and CoreServer fails OPEN (delivers every badge).
+	const sceneServiceName = "holomush.scene.v1.SceneService"
+	if sceneSvc, resolveErr := serviceRegistry.Resolve(sceneServiceName); resolveErr == nil {
+		sceneMuteClient := scenev1.NewSceneServiceClient(sceneSvc.Conn)
+		loader := func(loaderCtx context.Context, characterID, playerID string) (bool, []string, error) {
+			actor := core.Actor{Kind: core.ActorCharacter, ID: characterID}
+			dctx, release, dispErr := pluginManager.BeginServiceDispatch(loaderCtx, "core-scenes", actor, playerID)
+			if dispErr != nil {
+				return false, nil, oops.Wrap(dispErr)
+			}
+			defer release()
+			pref, prefErr := sceneMuteClient.GetSceneNotifyPref(dctx, &scenev1.GetSceneNotifyPrefRequest{CharacterId: characterID})
+			if prefErr != nil {
+				return false, nil, oops.Wrap(prefErr)
+			}
+			muted, mutedErr := sceneMuteClient.ListMutedScenes(dctx, &scenev1.ListMutedScenesRequest{CharacterId: characterID})
+			if mutedErr != nil {
+				return false, nil, oops.Wrap(mutedErr)
+			}
+			return pref.GetEnabled(), muted.GetSceneIds(), nil
+		}
+		coreServerOpts = append(coreServerOpts,
+			holoGRPC.WithSceneMuteChecker(holoGRPC.NewSceneMuteChecker(loader, sceneMuteNotifyCacheTTL, time.Now)))
+	} else {
+		slog.WarnContext(ctx, "sceneMuteChecker unavailable: plugin absent — badge suppression disabled (fail-open)",
+			"service", sceneServiceName)
+	}
+
 	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)
 
@@ -581,7 +625,8 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	// (INV-SCENE-64). The SceneService client is resolved from the plugin
 	// service registry; if the plugin is absent the facade falls back to its
 	// embedded UnimplementedSceneAccessServiceServer (Unimplemented for all RPCs).
-	const sceneServiceName = "holomush.scene.v1.SceneService"
+	// sceneServiceName is declared above where the SceneMuteChecker resolves the
+	// same plugin SceneService.
 	var sceneAccessSrv sceneaccessv1.SceneAccessServiceServer
 	if sceneSvc, resolveErr := serviceRegistry.Resolve(sceneServiceName); resolveErr == nil {
 		saSrv := holoGRPC.NewSceneAccessServer(

@@ -892,14 +892,14 @@ func TestDispatchDeliveryDoesNotStampMetadataOnlyWhenFalse(t *testing.T) {
 
 // makeSceneDelivery builds a fakeDelivery carrying an event on the given
 // scene IC subject (events.main.scene.<sceneID>.ic).
-func makeSceneDelivery(t *testing.T, evType, sceneID string) *fakeDelivery {
+func makeSceneDelivery(t *testing.T, sceneID string) *fakeDelivery {
 	t.Helper()
 	id := core.NewULID()
 	return &fakeDelivery{
 		ev: eventbus.Event{
 			ID:        id,
 			Subject:   eventbus.Subject("events.main.scene." + sceneID + ".ic"),
-			Type:      eventbus.Type(evType),
+			Type:      eventbus.Type("core-scenes:scene_pose"),
 			Timestamp: time.Now(),
 			Payload:   []byte("{}"),
 		},
@@ -932,7 +932,7 @@ func TestDispatchDeliveryDowngradesSceneEventForNonFocusedMemberConnection(t *te
 
 	s := &CoreServer{sessionStore: store}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+	d := makeSceneDelivery(t, sceneID.String())
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
 	require.NoError(t, err)
@@ -1000,7 +1000,7 @@ func TestDispatchDeliverySuppressesBadgeWhenCheckerSuppresses(t *testing.T) {
 	checker := &fakeSceneMuteChecker{suppress: true}
 	s := &CoreServer{sessionStore: store, sceneMute: checker}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+	d := makeSceneDelivery(t, sceneID.String())
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
 	require.NoError(t, err)
@@ -1023,7 +1023,7 @@ func TestDispatchDeliveryDeliversBadgeWhenCheckerAllows(t *testing.T) {
 	checker := &fakeSceneMuteChecker{suppress: false}
 	s := &CoreServer{sessionStore: store, sceneMute: checker}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+	d := makeSceneDelivery(t, sceneID.String())
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
 	require.NoError(t, err)
@@ -1046,7 +1046,7 @@ func TestDispatchDeliveryDeliversBadgeOnCheckerError(t *testing.T) {
 	checker := &fakeSceneMuteChecker{suppress: true, err: errors.New("plugin dispatch boom")}
 	s := &CoreServer{sessionStore: store, sceneMute: checker}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+	d := makeSceneDelivery(t, sceneID.String())
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
 	require.NoError(t, err)
@@ -1082,7 +1082,7 @@ func TestDispatchDeliveryDoesNotConsultCheckerOnFocusedPath(t *testing.T) {
 	checker := &fakeSceneMuteChecker{suppress: true}
 	s := &CoreServer{sessionStore: store, sceneMute: checker}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+	d := makeSceneDelivery(t, sceneID.String())
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
 	require.NoError(t, err)
@@ -1116,7 +1116,7 @@ func TestDispatchDeliveryForwardsFocusedSceneEventNormally(t *testing.T) {
 
 	s := &CoreServer{sessionStore: store}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	d := makeSceneDelivery(t, "core-scenes:scene_pose", sceneID.String())
+	d := makeSceneDelivery(t, sceneID.String())
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, &connID)
 	require.NoError(t, err)

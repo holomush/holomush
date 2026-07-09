@@ -121,6 +121,30 @@ func TestSceneMuteCacheFailsOpenOnLoaderErrorWithoutPoisoning(t *testing.T) {
 	assert.Equal(t, int64(2), loader.calls.Load(), "the error path must not poison the cache")
 }
 
+// TestWithSceneMuteCheckerWiresConstructedChecker proves the cross-package
+// construction seam cmd/holomush uses: the EXPORTED NewSceneMuteChecker
+// constructor and the WithSceneMuteChecker option compose to place a live,
+// loader-backed checker onto CoreServer (the unexported cache cannot be built
+// across the package boundary — this is the only seam).
+func TestWithSceneMuteCheckerWiresConstructedChecker(t *testing.T) {
+	var gotChar, gotPlayer string
+	loader := func(_ context.Context, characterID, playerID string) (bool, []string, error) {
+		gotChar, gotPlayer = characterID, playerID
+		return true, []string{"scene-A"}, nil
+	}
+	checker := NewSceneMuteChecker(loader, time.Minute, time.Now)
+
+	s := &CoreServer{}
+	WithSceneMuteChecker(checker)(s)
+	require.NotNil(t, s.sceneMute, "the exported option must wire the checker onto CoreServer")
+
+	suppress, err := s.sceneMute.ShouldSuppress(context.Background(), "char-1", "player-1", "scene-A")
+	require.NoError(t, err)
+	assert.True(t, suppress, "global-off from the loader must suppress")
+	assert.Equal(t, "char-1", gotChar, "loader receives the character id from ShouldSuppress")
+	assert.Equal(t, "player-1", gotPlayer, "loader receives the player id (host-vouched dispatch identity)")
+}
+
 func TestSceneMuteCacheIsolatesStatePerCharacter(t *testing.T) {
 	loader := &muteLoaderStub{perChar: map[string]struct {
 		enabled bool
