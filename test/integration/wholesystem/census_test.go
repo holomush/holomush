@@ -23,8 +23,8 @@ import (
 // warning), so setting plugins do NOT appear in ListPlugins(). Only Lua and Binary
 // plugins are registered in Manager.loaded.
 var expectedPlugins = []string{
-	"core-aliases", "core-building", "core-communication", "core-help",
-	"core-objects", "core-scenes", "echo-bot",
+	"core-aliases", "core-building", "core-channels", "core-communication",
+	"core-help", "core-objects", "core-scenes", "echo-bot",
 	"test-abac-widget",
 }
 
