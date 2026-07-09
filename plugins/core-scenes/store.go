@@ -1825,6 +1825,74 @@ func (s *SceneStore) ListCharacterScenes(ctx context.Context, characterID, icSub
 	return out, nil
 }
 
+// idleScene is the minimal projection of a scene returned by the idle sweep:
+// the scene id plus its current state (for the scheduler's defensive
+// IsValidTransition gate). The idle scheduler never needs the full SceneRow to
+// transition an idle scene to paused, so the query returns only these columns.
+type idleScene struct {
+	ID    string
+	State string
+}
+
+// ListScenesIdlePastThreshold returns active scenes whose most recent IC
+// activity (or creation time, when the scene has no IC log yet) plus their
+// effective idle timeout is at or before nowNs (epoch-nanoseconds, Go-clock
+// supplied by the scheduler). The effective timeout is the per-scene
+// idle_timeout_secs column when set, else the game-wide defaultIdleTimeoutSecs.
+//
+// defaultIdleTimeoutSecs is an EXPLICIT parameter, never a store-held value:
+// SceneStore carries only a pool and cannot read the game-wide default from
+// plugin config (review Finding 1). The per-scene idle_timeout_secs column
+// overrides the default via COALESCE. Paused scenes are never returned, so a
+// paused scene is never re-transitioned (INV-SCENE-71).
+//
+// The scene_log subject is matched by suffix (`%scene.<id>.ic`) so the store
+// stays game-id-agnostic — it needs no "events.<game>.scene." prefix parameter,
+// mirroring the board's .ic activity semantics without the prefix arg.
+//
+// nowNs is a Go-clock nanosecond value passed as a query parameter, never
+// compared against a remote clock (the pgnanos-exempt scheduler-clock seam).
+func (s *SceneStore) ListScenesIdlePastThreshold(ctx context.Context, nowNs int64, defaultIdleTimeoutSecs int) ([]idleScene, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_scenes_idle_past_threshold")
+	defer span.End()
+
+	const q = `
+		SELECT s.id, s.state
+		FROM scenes s
+		WHERE s.state = 'active'
+		  AND (
+		        COALESCE(
+		          (SELECT MAX(l.timestamp) FROM scene_log l
+		             WHERE l.subject LIKE '%scene.' || s.id || '.ic'),
+		          s.created_at
+		        )
+		        + COALESCE(s.idle_timeout_secs, $2)::bigint * 1000000000
+		      ) <= $1
+		ORDER BY s.id ASC
+	`
+	rows, err := s.pool.Query(ctx, q, nowNs, defaultIdleTimeoutSecs)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_IDLE_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []idleScene
+	for rows.Next() {
+		var sc idleScene
+		if err := rows.Scan(&sc.ID, &sc.State); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_IDLE_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, sc)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_IDLE_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
 // notifyPrefTimestampExpr is the SQL expression for the current time in
 // epoch-nanoseconds, matching the created_at/updated_at column domain of
 // scene_notify_prefs (migration 000011) and the wider plugin schema (000007).
