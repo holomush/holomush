@@ -185,6 +185,18 @@ func (p *channelPlugin) SetEventSink(sink pluginsdk.EventSink) {
 	}
 }
 
+// SetStreamSubscription is called by the SDK adapter during Init when the plugin
+// declares StreamSubscriptionAware. It forwards the host stream.subscription
+// client to the channel service so JoinChannel/LeaveChannel can add/remove the
+// live session's channel stream mid-session (LIVE_ONLY, 01-08). The manifest MUST
+// declare `requires: capability: stream.subscription` — otherwise the plugin
+// fails closed at load (validateDeclaredCapabilities, INV-PLUGIN-54).
+func (p *channelPlugin) SetStreamSubscription(sub pluginsdk.StreamSubscription) {
+	if p.service != nil {
+		p.service.SetStreamSubscription(sub)
+	}
+}
+
 // RegisterAttributeResolver registers the ChannelResolver on the go-plugin gRPC
 // transport so the host's ABAC engine can resolve channel attributes during
 // policy evaluation. The host auto-registers

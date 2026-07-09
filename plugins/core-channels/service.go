@@ -192,6 +192,54 @@ type channelService struct {
 	// delegates to (01-06 ChannelAuditServer). Wired in Init; nil until then, so
 	// QueryChannelHistory fails closed with Internal.
 	history channelHistoryFetcher
+	// streamSub is the host stream.subscription client used to add/remove a live
+	// session's channel subscription mid-session (01-08). Wired via
+	// channelPlugin.SetStreamSubscription (StreamSubscriptionAware) at Init. Nil
+	// until then, and nil in out-of-session contexts — join/leave degrade
+	// gracefully (delivery falls back to the next session-establishment refresh)
+	// rather than failing the structural mutation.
+	streamSub pluginsdk.StreamSubscription
+}
+
+// SetStreamSubscription installs the host stream.subscription client used for
+// mid-session join/leave live delivery (LIVE_ONLY). Wired via
+// channelPlugin.SetStreamSubscription (StreamSubscriptionAware) at Init.
+func (s *channelService) SetStreamSubscription(sub pluginsdk.StreamSubscription) {
+	s.streamSub = sub
+}
+
+// subscribeLive starts live delivery of channelID's stream to sessionID with
+// LIVE_ONLY (no history flood, T-01-09) after a join commits. The stream arg is
+// the domain-RELATIVE channel.<id> (R2-A) — a pre-qualified events. subject is
+// rejected by 01-02's AuthorizeStreamSubscribe (STREAM_NOT_RELATIVE); the shared
+// fence permits core-channels' own `channel` domain. A missing session id
+// (out-of-session action) or an unwired client is skipped. A subscription error
+// is LOGGED but NOT propagated: the membership is already committed, so failing
+// the join would be misleading; delivery degrades to the next
+// session-establishment refresh (QuerySessionStreams) — never silently dropped
+// (graceful-degradation floor, holomush-l6std).
+func (s *channelService) subscribeLive(ctx context.Context, sessionID, channelID string) {
+	if sessionID == "" || s.streamSub == nil {
+		return
+	}
+	if err := s.streamSub.AddStream(ctx, sessionID, relativeChannelStream(channelID), pluginsdk.ReplayModeLiveOnly); err != nil {
+		errutil.LogErrorContext(ctx, "channel.service.join_channel live subscribe degraded; delivery falls back to next session establishment", err,
+			"channel_id", channelID, "session_id", sessionID)
+	}
+}
+
+// unsubscribeLive stops live delivery of channelID's stream to sessionID after a
+// leave commits, using the same domain-RELATIVE channel.<id> form (R2-A). Skips
+// a missing session id or unwired client; logs (does not propagate) an error so
+// a stale subscription surfaces without failing the leave.
+func (s *channelService) unsubscribeLive(ctx context.Context, sessionID, channelID string) {
+	if sessionID == "" || s.streamSub == nil {
+		return
+	}
+	if err := s.streamSub.RemoveStream(ctx, sessionID, relativeChannelStream(channelID)); err != nil {
+		errutil.LogErrorContext(ctx, "channel.service.leave_channel live unsubscribe degraded", err,
+			"channel_id", channelID, "session_id", sessionID)
+	}
 }
 
 // NewChannelService builds a service backed by store with the given per-player
@@ -370,6 +418,9 @@ func (s *channelService) JoinChannel(ctx context.Context, req *channelv1.JoinCha
 		return nil, mapStoreError(ctx, span, err, "channel.service.join_channel")
 	}
 
+	// Start live delivery mid-session (LIVE_ONLY) after the membership commits.
+	s.subscribeLive(ctx, req.GetSessionId(), req.GetChannelId())
+
 	slog.InfoContext(ctx, "channel.service.join_channel ok",
 		"subject_id", req.GetCharacterId(), "channel_id", req.GetChannelId())
 	return &channelv1.JoinChannelResponse{}, nil
@@ -398,6 +449,9 @@ func (s *channelService) LeaveChannel(ctx context.Context, req *channelv1.LeaveC
 	if err := s.store.LeaveChannel(ctx, req.GetChannelId(), req.GetCharacterId()); err != nil {
 		return nil, mapStoreError(ctx, span, err, "channel.service.leave_channel")
 	}
+
+	// Stop live delivery mid-session after the membership is removed.
+	s.unsubscribeLive(ctx, req.GetSessionId(), req.GetChannelId())
 
 	slog.InfoContext(ctx, "channel.service.leave_channel ok",
 		"subject_id", req.GetCharacterId(), "channel_id", req.GetChannelId())

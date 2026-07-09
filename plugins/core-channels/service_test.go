@@ -838,3 +838,145 @@ func TestQueryChannelHistoryNilFetcherFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, codes.Internal, status.Code(err))
 }
+
+// ── Mid-session join/leave stream subscription (01-08) ──────────────────────
+
+// streamSubCall records one AddStream/RemoveStream invocation for assertions.
+type streamSubCall struct {
+	sessionID string
+	stream    string
+	mode      pluginsdk.ReplayMode
+}
+
+// fakeStreamSub is a controllable pluginsdk.StreamSubscription recording calls.
+type fakeStreamSub struct {
+	added     []streamSubCall
+	removed   []streamSubCall
+	addErr    error
+	removeErr error
+}
+
+func (f *fakeStreamSub) AddStream(_ context.Context, sessionID, stream string, mode pluginsdk.ReplayMode) error {
+	f.added = append(f.added, streamSubCall{sessionID: sessionID, stream: stream, mode: mode})
+	return f.addErr
+}
+
+func (f *fakeStreamSub) RemoveStream(_ context.Context, sessionID, stream string) error {
+	f.removed = append(f.removed, streamSubCall{sessionID: sessionID, stream: stream})
+	return f.removeErr
+}
+
+func newServiceWithStreamSub(store channelServiceStorer, ev pluginsdk.HostEvaluator, sub pluginsdk.StreamSubscription) *channelService {
+	s := newServiceForTest(store, 5, nil, ev)
+	s.SetStreamSubscription(sub)
+	return s
+}
+
+func TestJoinChannelAddsLiveOnlySubscriptionForRelativeStream(t *testing.T) {
+	store := &fakeServiceStore{}
+	sub := &fakeStreamSub{}
+	svc := newServiceWithStreamSub(store, allowEvaluator, sub)
+	_, err := svc.JoinChannel(context.Background(), &channelv1.JoinChannelRequest{
+		CharacterId: testCharID,
+		ChannelId:   "ch-general",
+		SessionId:   "sess-01",
+	})
+	require.NoError(t, err)
+	require.Len(t, sub.added, 1)
+	assert.Equal(t, "sess-01", sub.added[0].sessionID)
+	assert.Equal(t, "channel.ch-general", sub.added[0].stream,
+		"the RELATIVE channel.<id> form is passed (R2-A), not the full events. subject")
+	assert.Equal(t, pluginsdk.ReplayModeLiveOnly, sub.added[0].mode,
+		"LIVE_ONLY: mid-session join must not flood history (T-01-09)")
+}
+
+func TestJoinChannelPassesRelativeNotQualifiedSubject(t *testing.T) {
+	store := &fakeServiceStore{}
+	sub := &fakeStreamSub{}
+	svc := newServiceWithStreamSub(store, allowEvaluator, sub)
+	_, err := svc.JoinChannel(context.Background(), &channelv1.JoinChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-general", SessionId: "sess-01",
+	})
+	require.NoError(t, err)
+	require.Len(t, sub.added, 1)
+	assert.NotContains(t, sub.added[0].stream, "events.",
+		"a pre-qualified events. subject would be rejected by 01-02 AuthorizeStreamSubscribe (STREAM_NOT_RELATIVE)")
+}
+
+func TestLeaveChannelRemovesSubscriptionForRelativeStream(t *testing.T) {
+	store := &fakeServiceStore{}
+	sub := &fakeStreamSub{}
+	svc := newServiceWithStreamSub(store, allowEvaluator, sub)
+	_, err := svc.LeaveChannel(context.Background(), &channelv1.LeaveChannelRequest{
+		CharacterId: testCharID,
+		ChannelId:   "ch-general",
+		SessionId:   "sess-01",
+	})
+	require.NoError(t, err)
+	require.Len(t, sub.removed, 1)
+	assert.Equal(t, "sess-01", sub.removed[0].sessionID)
+	assert.Equal(t, "channel.ch-general", sub.removed[0].stream)
+}
+
+func TestJoinChannelNoSessionIdSkipsSubscription(t *testing.T) {
+	store := &fakeServiceStore{}
+	sub := &fakeStreamSub{}
+	svc := newServiceWithStreamSub(store, allowEvaluator, sub)
+	_, err := svc.JoinChannel(context.Background(), &channelv1.JoinChannelRequest{
+		CharacterId: testCharID,
+		ChannelId:   "ch-general",
+		// no SessionId (out-of-session action)
+	})
+	require.NoError(t, err)
+	require.Len(t, store.joined, 1, "membership still committed without a session id")
+	assert.Empty(t, sub.added, "no session id → the mid-session mutation is skipped, no crash")
+}
+
+func TestLeaveChannelNoSessionIdSkipsSubscription(t *testing.T) {
+	store := &fakeServiceStore{}
+	sub := &fakeStreamSub{}
+	svc := newServiceWithStreamSub(store, allowEvaluator, sub)
+	_, err := svc.LeaveChannel(context.Background(), &channelv1.LeaveChannelRequest{
+		CharacterId: testCharID,
+		ChannelId:   "ch-general",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, sub.removed)
+}
+
+func TestJoinChannelNilStreamSubSkipsCleanly(t *testing.T) {
+	store := &fakeServiceStore{}
+	svc := newServiceForTest(store, 5, nil, allowEvaluator) // no SetStreamSubscription
+	_, err := svc.JoinChannel(context.Background(), &channelv1.JoinChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-general", SessionId: "sess-01",
+	})
+	require.NoError(t, err, "an unwired stream-subscription client degrades gracefully, no crash")
+	require.Len(t, store.joined, 1)
+}
+
+func TestJoinChannelSubscriptionErrorDoesNotFailJoin(t *testing.T) {
+	// Graceful-degradation floor: a live-subscribe failure is logged but does NOT
+	// fail the join — membership is committed; delivery degrades to the next
+	// session-establishment refresh (never silently dropped). holomush-l6std.
+	store := &fakeServiceStore{}
+	sub := &fakeStreamSub{addErr: oops.Errorf("host stream registry down")}
+	svc := newServiceWithStreamSub(store, allowEvaluator, sub)
+	_, err := svc.JoinChannel(context.Background(), &channelv1.JoinChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-general", SessionId: "sess-01",
+	})
+	require.NoError(t, err, "subscription failure degrades; the join itself still succeeds")
+	require.Len(t, store.joined, 1, "membership remains committed")
+	require.Len(t, sub.added, 1, "the subscription was attempted (not silently skipped)")
+}
+
+func TestLeaveChannelSubscriptionErrorDoesNotFailLeave(t *testing.T) {
+	store := &fakeServiceStore{}
+	sub := &fakeStreamSub{removeErr: oops.Errorf("host stream registry down")}
+	svc := newServiceWithStreamSub(store, allowEvaluator, sub)
+	_, err := svc.LeaveChannel(context.Background(), &channelv1.LeaveChannelRequest{
+		CharacterId: testCharID, ChannelId: "ch-general", SessionId: "sess-01",
+	})
+	require.NoError(t, err)
+	require.Len(t, store.left, 1)
+	require.Len(t, sub.removed, 1)
+}

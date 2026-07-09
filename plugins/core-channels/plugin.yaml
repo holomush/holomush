@@ -71,6 +71,15 @@ provides:
 requires:
   - capability: eval
     access: read
+  # stream.subscription (host AddSessionStream/RemoveSessionStream) drives
+  # mid-session join/leave live delivery (01-08): JoinChannel adds the relative
+  # channel.<id> stream with LIVE_ONLY, LeaveChannel removes it. StreamSubscription
+  # is injected via the SDK's StreamSubscriptionAware at Init; declaring the
+  # capability is MANDATORY — an undeclared consumer fails closed at load
+  # (validateDeclaredCapabilities, INV-PLUGIN-54). `access: write` matches the
+  # host's write-class enforcement of the registry mutation.
+  - capability: stream.subscription
+    access: write
 
 storage: postgres
 
