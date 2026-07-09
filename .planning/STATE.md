@@ -6,14 +6,14 @@ current_phase: 02
 current_phase_name: Scenes Lineage Completion
 status: executing
 stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-07-09T18:44:07.665Z"
+last_updated: "2026-07-09T19:11:57.405Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
   percent: 33
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 02 (Scenes Lineage Completion) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-07-09 — Phase 02 execution started
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
@@ -74,6 +74,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P03 | 20m | 4 tasks | 11 files |
 | Phase 02 P06 | ~40m | 4 tasks | 11 files |
 | Phase 02 P04 | ~35m | 3 tasks | 5 files |
+| Phase 02 P05 | 55m | 3 tasks | 28 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: Scene notify prefs stored in one plugin table: NULL scene_id = per-character global pref (muted=NOT enabled), non-NULL = per-scene mute; mode column is the D-05 digest seam defaulting realtime.
 - [Phase 02]: 02-06: idle sweep transitions active→paused past effective threshold (explicit game-default param into a pool-only store — store never reads config; per-scene idle_timeout_secs overrides via COALESCE); idle nudge OFF by default, emitted via EventSink.Emit and rendered on telnet through gamenotice.Idle; idle math is epoch-nanos (plan's *1000/ms shorthand was a unit bug); INV-SCENE-71 bound.
 - [Phase 02]: 02-04: mute/notify-pref suppression at the SCENE_ACTIVITY badge downgrade via a dependency-inverted SceneMuteChecker (interface in server.go, concrete wired at sub_grpc.go); order global-notify-off then per-scene-muted then deliver; per-character 45s TTL cache, loader off-lock; fail-OPEN on nil/error (preferences, not access control); loader dials plugin SceneService with host-vouched actor+ownerPlayerID via BeginServiceDispatch.
+- [Phase ?]: 02-05: Web mute/notify shipped as a 4-layer typed slice (proto->facade->BFF->client); facade stamps CharacterId from the verified owned character so the plugin guard passes; never the command path (gateway-boundary).
+- [Phase ?]: 02-05: Tasks 1+2 merged into one commit — monolithic proto regen couples the WebServiceHandler interface, so facade + BFF impls land together (Plan 03 precedent).
 
 ### Pending Todos
 
@@ -129,7 +132,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-09T18:44:07.660Z
+Last session: 2026-07-09T19:11:27.684Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
 Stopped at: Completed 02-04-PLAN.md
