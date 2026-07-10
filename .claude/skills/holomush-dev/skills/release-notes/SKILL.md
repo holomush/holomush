@@ -14,7 +14,7 @@ holomush-jfb9x).
 1. **Gather context.** Run
    `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/release_notes_collect.py" $ARGUMENTS`
    (or `task release:notes:collect -- $ARGUMENTS`). Read the structured block:
-   filtered commits, referenced GitHub issues (with theme labels), coverage
+   filtered commits, referenced issue ids (legacy bead ids on pre-migration commits), coverage
    gaps, and the roadmap theme pointer.
 
 2. **Read `docs/roadmap.md`** theme sections matching the referenced GitHub

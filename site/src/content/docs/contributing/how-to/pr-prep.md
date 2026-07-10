@@ -158,7 +158,7 @@ Without that env var, `pr-prep:run` exits non-zero with a message pointing at th
 ## Related
 
 - Spec: `docs/superpowers/specs/2026-04-26-pr-prep-concurrency-safety-design.md`
-- Tracking bead: `holomush-71zq`
+- Tracking record: `holomush-71zq` (archived bead)
 
 ## Docs-only fast lane
 

@@ -103,10 +103,10 @@ stacktrace-at-WARN noise" is a *better* triage than a manufactured P1.
   `decision` label, or `task` + `design-needed` labels, when the resolution
   needs a design call, not just code.
 - **Priority** = severity × likelihood × blast radius, *with justification in
-  the issue*, expressed as a `priority:P0`..`priority:P4` label (P0 =
+  the issue*, expressed as a `priority::critical`..`priority::none` label (critical =
   critical, P4 = backlog). A 100%-reproducible defect that silently voids a
-  correctness guarantee can be `priority:P1` even if today's user-visible
-  impact is nil. A scary log that's benign is `priority:P3`.
+  correctness guarantee can be `priority::high` even if today's user-visible
+  impact is nil. A scary log that's benign is `priority::low`.
 - **Labels:** topical/category labels that match how sibling issues are
   tagged (`plugin`, `web`, `observability`, `handler`, `crypto`, …). Do
   **not** attach a `theme:*` label unless an *active* theme in
@@ -137,7 +137,7 @@ stacktrace-at-WARN noise" is a *better* triage than a manufactured P1.
 ```bash
 gh issue create -R holomush/holomush \
   --title "<symptom-first title naming the actual defect>" \
-  --label "bug,priority:P<0-4>,<topical-labels>" \
+  --label "bug,priority::<critical|high|medium|low|none>,<topical-labels>" \
   --body '<narrative — see template>'
 ```
 

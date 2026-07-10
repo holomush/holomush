@@ -35,7 +35,7 @@ reminders=()
 # Detect handoff-intent verbs (push/ship/close/PR creation). Cached so multiple
 # downstream gates can reuse it without re-running grep.
 handoff_intent=0
-if printf '%s' "$lower" | grep -qE '(\bpush\b|git[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create|bd[[:space:]]+close|open[[:space:]]+(a[[:space:]]+)?pr|create[[:space:]]+(a[[:space:]]+)?pr|\bmerge\b|\bship\b|\bland\b|ready[[:space:]]+to[[:space:]]+(push|merge|ship)|close[[:space:]]+(the[[:space:]]+)?bead|mark[[:space:]]+(done|complete)|wrap[[:space:]]+up|finalize)'; then
+if printf '%s' "$lower" | grep -qE '(\bpush\b|git[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create|open[[:space:]]+(a[[:space:]]+)?pr|create[[:space:]]+(a[[:space:]]+)?pr|\bmerge\b|\bship\b|\bland\b|ready[[:space:]]+to[[:space:]]+(push|merge|ship)|mark[[:space:]]+(done|complete)|wrap[[:space:]]+up|finalize)'; then
   handoff_intent=1
 fi
 

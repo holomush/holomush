@@ -43,7 +43,7 @@ real=$(find "$ADR_DIR" -maxdepth 1 -type f -name '*.md' \
   | grep -vE '/[0-9]{4}-' \
   | wc -l | tr -d ' ')
 if [ "$real" -lt "17" ]; then
-  check_fail "expected at least 17 <bd-id>-<slug>.md files after migration; got $real"
+  check_fail "expected at least 17 <adr-id>-<slug>.md files after migration; got $real"
 fi
 
 # --- count_stubs (INV-A12) ---
@@ -101,7 +101,7 @@ for f in "$ADR_DIR"/*-*.md; do
   esac
   bn=$(basename "$f")
   bd_id_from_filename="${bn%-*.md}"  # naive: take everything before the last '-<slug>.md'
-  # Tighten: bd-id format is 'holomush-XXXX'; pull the first 'holomush-XXXX' substring.
+  # Tighten: adr-id format is 'holomush-XXXX'; pull the first 'holomush-XXXX' substring.
   bd_id_from_filename=$(echo "$bn" | grep -oE '^holomush-[a-z0-9]+' || true)
   decision_line=$(grep -E '^\*\*Decision:\*\*\s+holomush-' "$f" | head -1)
   if [ -z "$decision_line" ]; then
@@ -110,7 +110,7 @@ for f in "$ADR_DIR"/*-*.md; do
   fi
   decision_id=$(echo "$decision_line" | grep -oE 'holomush-[a-z0-9]+')
   if [ "$decision_id" != "$bd_id_from_filename" ]; then
-    check_fail "$f: **Decision:** $decision_id does not match filename bd-id $bd_id_from_filename"
+    check_fail "$f: **Decision:** $decision_id does not match filename adr-id $bd_id_from_filename"
     continue
   fi
 done

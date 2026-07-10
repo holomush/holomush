@@ -16,6 +16,16 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 rc=0
+
+# Every entry must carry an `issue:` field — a row without one would escape
+# the audit forever. Compare entry count (id: lines) to issue: count.
+ids=$(grep -cE '^[[:space:]]*-[[:space:]]*id:' "$REG" || true)
+issues=$(grep -cE '^[[:space:]]*issue:[[:space:]]*[0-9]+' "$REG" || true)
+if [ "$ids" != "$issues" ]; then
+  echo "QUARANTINE AUDIT: $ids entries but $issues issue: fields — every row MUST cite a GitHub issue." >&2
+  rc=1
+fi
+
 # Process substitution (not a pipe) keeps the loop in the MAIN shell so that
 # rc mutations survive — a `... | while read` loop runs in a subshell and
 # `exit "$rc"` would always be 0 (the audit would be a silent no-op).

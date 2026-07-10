@@ -191,7 +191,7 @@ core-scenes' `scene extend` (intended to bump a scene's publish-attempt limit)
 is admin-only. The **authorization gate** is fully implemented and used as the
 canonical example here. The business logic behind the gate (the actual
 publish-attempt bump) is not yet implemented and is tracked in
-holomush-5rh.20.35; until that bead ships, the command returns a
+holomush-5rh.20.35; until that work ships, the command returns a
 "not yet implemented" error to all callers, including admins.
 
 The plugin declares the action and an admin policy in its manifest:

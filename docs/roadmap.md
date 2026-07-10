@@ -396,11 +396,12 @@ annotation, at which point it flips to `bound` (per the `binding: pending`
 tolerance decision `holomush-hz0v4.10`). The meta-test tolerates `pending`, so
 this lands incrementally rather than as a mega-PR.
 
-INV-PRIVACY is fully bound; the rest backfill incrementally per scope under the
-still-open epic — `hz0v4.11` (CRYPTO), `hz0v4.16` (SCENE), `hz0v4.17` (PLUGIN),
-`hz0v4.18` (EVENTBUS), `hz0v4.19` (long-tail). Pick-from-`bd`-ready gardening,
-like the repo audit above — not a strategic theme. Live counts come from the
-registry itself, not from prose:
+INV-PRIVACY is fully bound; the rest backfill incrementally per scope under
+GSD backlog entry 999.11 (Invariant registry backfill program; historical
+sub-epics `hz0v4.11` CRYPTO, `hz0v4.16` SCENE, `hz0v4.17` PLUGIN, `hz0v4.18`
+EVENTBUS, `hz0v4.19` long-tail). Opportunistic gardening, like the repo audit
+above — not a strategic theme. Live counts come from the registry itself, not
+from prose:
 
 ```bash
 rg -c 'binding: pending' docs/architecture/invariants.yaml   # remaining
@@ -413,4 +414,4 @@ rg -c 'binding: bound'   docs/architecture/invariants.yaml   # done
 - **Adding a theme**: when 2+ epics or a 5+ issue cluster share a strategic frame, capture an ADR in `docs/adr/` recording the framing and add the section to this doc.
 - **Retiring a theme**: when the underlying work is done or the framing no longer fits, move the section to "Completed themes" with a brief retrospective and a date.
 - **Altitude**: active sections stay at why + pointers + an issue query (see "How this works"); don't hand-maintain status. Completed retrospectives may keep frozen specifics.
-- **GitHub Projects**: not used today. The break-even cost of double-entry (bd ↔ GH) exceeds the benefit of a visual board for a solo-developer workflow. Revisit if team grows or external roadmap visibility becomes a real need.
+- **GitHub Projects**: not used today. The break-even cost of double-entry (issues ↔ board) exceeds the benefit of a visual board for a solo-developer workflow. Revisit if team grows or external roadmap visibility becomes a real need.
