@@ -311,7 +311,8 @@ func (p *projection) persist(msg jetstream.Msg) error {
 	}
 	ctx, cancel := context.WithTimeout(parent, persistTimeout)
 	defer cancel()
-	return writeAuditRow(ctx, p.pool, msg)
+	// On the live path msg.Subject() IS the original event subject.
+	return writeAuditRow(ctx, p.pool, msg.Subject(), msg)
 }
 
 // writeAuditRow parses a JetStream message's audit headers and writes the
@@ -321,13 +322,20 @@ func (p *projection) persist(msg jetstream.Msg) error {
 // stay byte-identical across both — a replayed dead letter reconstructs
 // the exact row the live path would have written (CLUSTER-04, D-11).
 //
+// subject is the ORIGINAL event subject to store. On the live path it is
+// msg.Subject() verbatim; on replay it is the original subject recovered
+// from the DLQ subject suffix (DLQ capture wraps the original subject as
+// <dlq-prefix>.<orig-subject>), so the recovered row's subject column
+// matches what the live path would have written.
+//
 // Note: timestamp and js_seq derive from msg.Metadata(). On the live path
 // that is the EVENTS stream's metadata; on replay it is the
 // EVENTS_AUDIT_DLQ message's metadata (the original event's stream
-// sequence/timestamp are not preserved by DLQ capture). The dedup key is
-// the header-carried Nats-Msg-Id (id column), which IS preserved, so
+// sequence/timestamp are not preserved by DLQ capture — only headers,
+// data, and the subject-suffix survive). The dedup key is the
+// header-carried Nats-Msg-Id (id column), which IS preserved, so
 // idempotency holds regardless of which stream the message is read from.
-func writeAuditRow(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg) error {
+func writeAuditRow(ctx context.Context, pool *pgxpool.Pool, subject string, msg jetstream.Msg) error {
 	h := msg.Headers()
 
 	msgID := h.Get(headerMsgID)
@@ -397,7 +405,7 @@ func writeAuditRow(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg) e
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (id) DO NOTHING`,
 		idBytes,
-		msg.Subject(),
+		subject,
 		eventType,
 		pgnanos.From(meta.Timestamp),
 		actorKind,

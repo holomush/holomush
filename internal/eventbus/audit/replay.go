@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -142,7 +143,7 @@ func ReplayDLQ(
 		for msg := range batch.Messages() {
 			got++
 			result.Scanned++
-			replayOne(ctx, pool, msg, opts.MsgID, &result)
+			replayOne(ctx, pool, msg, opts.MsgID, cfg.Subject, &result)
 		}
 		if err := batch.Error(); err != nil && !errors.Is(err, nats.ErrTimeout) {
 			return result, oops.Code("AUDIT_DLQ_REPLAY_FETCH_FAILED").
@@ -173,13 +174,18 @@ func ReplayDLQ(
 // message is acked to advance the ephemeral consumer; acking a
 // LimitsPolicy stream does not delete the message, so a failed persist
 // still leaves the dead letter in the DLQ.
-func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantMsgID string, result *ReplayResult) {
+//
+// dlqSubjectPrefix is the DLQ subject prefix (cfg.Subject) used to recover
+// the original event subject from the DLQ subject suffix, so the restored
+// events_audit row carries the same subject the live path would have.
+func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantMsgID, dlqSubjectPrefix string, result *ReplayResult) {
 	if wantMsgID != "" && msg.Headers().Get(headerMsgID) != wantMsgID {
 		result.Skipped++
 		_ = msg.Ack() //nolint:errcheck // ack advances the ephemeral cursor; LimitsPolicy retains the message
 		return
 	}
-	if err := writeAuditRow(ctx, pool, msg); err != nil {
+	subject := originalSubject(msg.Subject(), dlqSubjectPrefix)
+	if err := writeAuditRow(ctx, pool, subject, msg); err != nil {
 		result.Failed++
 		slog.WarnContext(
 			ctx, "audit DLQ replay: message could not be persisted; retained in DLQ",
@@ -192,4 +198,19 @@ func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantM
 	}
 	result.Replayed++
 	_ = msg.Ack() //nolint:errcheck // ack advances the cursor; ON CONFLICT DO NOTHING already made the write idempotent
+}
+
+// originalSubject recovers the original event subject from a DLQ message's
+// subject. DLQ capture publishes to "<prefix>.<orig-subject>" (dlq.go
+// Capture), so stripping "<prefix>." yields the original. When the prefix
+// does not match (defensive — e.g. a hand-seeded subject), the DLQ subject
+// is returned unchanged.
+func originalSubject(dlqSubject, prefix string) string {
+	if prefix == "" {
+		return dlqSubject
+	}
+	if stripped, ok := strings.CutPrefix(dlqSubject, prefix+"."); ok {
+		return stripped
+	}
+	return dlqSubject
 }

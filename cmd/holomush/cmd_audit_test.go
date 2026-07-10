@@ -58,3 +58,13 @@ func TestReplayOptsFromFlagsMapsMsgIDAndLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, audit.ReplayOptions{MsgID: "01ABC", Limit: 5}, opts)
 }
+
+func TestDLQConfigForGameScopesSubject(t *testing.T) {
+	cfg := dlqConfigForGame("holo42")
+	assert.Equal(t, "internal.holo42.audit.dlq", cfg.Subject)
+}
+
+func TestDLQConfigForGameLeavesSubjectDefaultWhenNoGameID(t *testing.T) {
+	cfg := dlqConfigForGame("")
+	assert.Empty(t, cfg.Subject, "empty game id must leave Subject for DLQConfig.Defaults()")
+}

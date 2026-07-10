@@ -65,7 +65,11 @@ func newAuditDLQListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "Summarize the audit dead-letter stream",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			conn, js, err := dialAuditJetStream(cmd)
+			cfg, err := loadEventBusConfig(cmd)
+			if err != nil {
+				return err
+			}
+			conn, js, err := dialAuditJetStream(cfg)
 			if err != nil {
 				return err
 			}
@@ -83,7 +87,11 @@ func newAuditDLQShowCmd() *cobra.Command {
 		Short: "Show a single dead letter's headers and metadata by Nats-Msg-Id",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, js, err := dialAuditJetStream(cmd)
+			cfg, err := loadEventBusConfig(cmd)
+			if err != nil {
+				return err
+			}
+			conn, js, err := dialAuditJetStream(cfg)
 			if err != nil {
 				return err
 			}
@@ -110,14 +118,10 @@ func newAuditDLQReplayCmd() *cobra.Command {
 	return cmd
 }
 
-// dialAuditJetStream loads the event_bus config, dials the external NATS
-// cluster via the shared eventbus dial path, and returns a JetStream
-// handle. The caller owns the returned *nats.Conn and MUST Close it.
-func dialAuditJetStream(cmd *cobra.Command) (*nats.Conn, jetstream.JetStream, error) {
-	cfg, err := loadEventBusConfig(cmd)
-	if err != nil {
-		return nil, nil, err
-	}
+// dialAuditJetStream dials the external NATS cluster described by cfg via
+// the shared eventbus dial path and returns a JetStream handle. The caller
+// owns the returned *nats.Conn and MUST Close it.
+func dialAuditJetStream(cfg eventbus.Config) (*nats.Conn, jetstream.JetStream, error) {
 	if cfg.URL == "" {
 		return nil, nil, oops.Code("AUDIT_DLQ_NATS_URL_MISSING").
 			Errorf("event_bus.url is required (external NATS URL) for audit dlq commands")
@@ -289,7 +293,12 @@ func runAuditDLQReplay(cmd *cobra.Command) error {
 		return err
 	}
 
-	conn, js, err := dialAuditJetStream(cmd)
+	cfg, err := loadEventBusConfig(cmd)
+	if err != nil {
+		return err
+	}
+
+	conn, js, err := dialAuditJetStream(cfg)
 	if err != nil {
 		return err
 	}
@@ -301,12 +310,24 @@ func runAuditDLQReplay(cmd *cobra.Command) error {
 	}
 	defer pool.Close()
 
-	res, err := audit.ReplayDLQ(cmd.Context(), js, pool, audit.DLQConfig{}, opts)
+	res, err := audit.ReplayDLQ(cmd.Context(), js, pool, dlqConfigForGame(cfg.GameID), opts)
 	if err != nil {
 		return oops.Code("AUDIT_DLQ_REPLAY_FAILED").Wrap(err)
 	}
 	renderReplayResult(cmd.OutOrStdout(), res)
 	return nil
+}
+
+// dlqConfigForGame builds the DLQConfig ReplayDLQ needs. The stream name is
+// the fixed EVENTS_AUDIT_DLQ (via Defaults); the subject is game-scoped
+// (internal.<game_id>.audit.dlq, mirroring core.go) so replay can recover
+// each dead letter's original event subject from its DLQ subject suffix.
+func dlqConfigForGame(gameID string) audit.DLQConfig {
+	cfg := audit.DLQConfig{}
+	if gameID != "" {
+		cfg.Subject = fmt.Sprintf("internal.%s.audit.dlq", gameID)
+	}
+	return cfg
 }
 
 // replayOptsFromFlags validates the replay flag combination and maps it to

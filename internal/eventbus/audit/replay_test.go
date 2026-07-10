@@ -30,7 +30,7 @@ func TestReplayOneSkipsOnMsgIDMismatch(t *testing.T) {
 
 	var result ReplayResult
 	// pool is nil: the mismatch path must return before any DB access.
-	replayOne(context.Background(), nil, msg, ulid.Make().String(), &result)
+	replayOne(context.Background(), nil, msg, ulid.Make().String(), "internal.main.audit.dlq", &result)
 
 	assert.Equal(t, 1, result.Skipped, "non-matching message must be counted skipped")
 	assert.Equal(t, 0, result.Replayed)
@@ -46,13 +46,31 @@ func TestReplayOneCountsPoisonAsFailedAndRetains(t *testing.T) {
 	msg := &ackCountingMsg{stubMsg: stubMsg{headers: nats.Header{}, subject: "events.main.poison"}}
 
 	var result ReplayResult
-	replayOne(context.Background(), nil, msg, "", &result)
+	replayOne(context.Background(), nil, msg, "", "internal.main.audit.dlq", &result)
 
 	assert.Equal(t, 1, result.Failed, "poison message must be counted failed")
 	assert.Equal(t, 0, result.Replayed)
 	assert.Equal(t, 0, result.Skipped)
 	assert.Equal(t, 1, msg.ackCalls,
 		"failed message is acked to advance the cursor; LimitsPolicy retention keeps it in the DLQ")
+}
+
+func TestOriginalSubjectStripsDLQPrefix(t *testing.T) {
+	t.Parallel()
+	got := originalSubject("internal.main.audit.dlq.events.main.thing", "internal.main.audit.dlq")
+	assert.Equal(t, "events.main.thing", got)
+}
+
+func TestOriginalSubjectReturnsUnchangedOnPrefixMismatch(t *testing.T) {
+	t.Parallel()
+	got := originalSubject("events.main.thing", "internal.main.audit.dlq")
+	assert.Equal(t, "events.main.thing", got)
+}
+
+func TestOriginalSubjectReturnsUnchangedOnEmptyPrefix(t *testing.T) {
+	t.Parallel()
+	got := originalSubject("internal.main.audit.dlq.events.main.thing", "")
+	assert.Equal(t, "internal.main.audit.dlq.events.main.thing", got)
 }
 
 func TestReplayResultZeroValueIsEmpty(t *testing.T) {
