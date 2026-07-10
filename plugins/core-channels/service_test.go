@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
 )
@@ -769,8 +770,8 @@ func TestWhoInChannelMemberReturnsRoster(t *testing.T) {
 	store := &fakeServiceStore{
 		memberMap: map[string]time.Time{"ch-1|" + testCharID: now},
 		members: map[string][]channelMemberRow{"ch-1": {
-			{CharacterID: testCharID, Role: "owner", JoinedAt: now},
-			{CharacterID: testTargetID, Role: "member", Muted: true, JoinedAt: now},
+			{CharacterID: testCharID, Role: "owner", JoinedAt: pgnanos.From(now)},
+			{CharacterID: testTargetID, Role: "member", Muted: true, JoinedAt: pgnanos.From(now)},
 		}},
 	}
 	svc, _ := newFullServiceForTest(store, allowEvaluator)
@@ -798,7 +799,7 @@ func TestQueryChannelHistoryMemberReturnsEntries(t *testing.T) {
 	hist := &fakeHistory{rows: []channelLogRow{{
 		id:        make([]byte, 16),
 		eventType: string(channelSayType),
-		timestamp: time.Now(),
+		timestamp: pgnanos.From(time.Now()),
 		payload:   []byte(`{"actor_id":"char-01","actor_display_name":"Alice","text":"hi"}`),
 	}}}
 	svc, _ := newFullServiceForTest(&fakeServiceStore{}, allowEvaluator)

@@ -17,6 +17,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/plugin/storage"
 )
 
@@ -45,7 +46,7 @@ type channelRow struct {
 	Archived      bool
 	IsDefault     bool
 	RetentionDays *int
-	CreatedAt     time.Time
+	CreatedAt     pgnanos.Time
 }
 
 // scanChannelRow scans a single row into dst. Column order MUST match
@@ -362,7 +363,7 @@ func (s *channelStore) ListForCharacter(ctx context.Context, characterID string)
 // makes joined_at single-valued; a leave+rejoin writes a fresh row, so joined_at
 // always reflects the most-recent join.
 func (s *channelStore) MembershipForHistory(ctx context.Context, channelID, characterID string) (bool, time.Time, error) {
-	var joinedAt time.Time
+	var joinedAt pgnanos.Time
 	err := s.pool.QueryRow(
 		ctx, `
 		SELECT joined_at FROM channel_memberships
@@ -378,7 +379,7 @@ func (s *channelStore) MembershipForHistory(ctx context.Context, channelID, char
 		return false, time.Time{}, oops.Code("CHANNEL_MEMBERSHIP_LOOKUP_FAILED").
 			With("channel_id", channelID).With("character_id", characterID).Wrap(err)
 	}
-	return true, joinedAt, nil
+	return true, joinedAt.Time(), nil
 }
 
 // GetWithMembership returns the channel row plus its members / banned / muted
@@ -517,7 +518,7 @@ type channelMemberRow struct {
 	Role        string
 	Muted       bool
 	Banned      bool
-	JoinedAt    time.Time
+	JoinedAt    pgnanos.Time
 }
 
 // ListMembers returns the active (non-banned) roster of channelID ordered owner
@@ -846,7 +847,7 @@ func (s *channelStore) ListChannelsForPrune(ctx context.Context) ([]channelPrune
 func (s *channelStore) DeleteChannelLogOlderThan(ctx context.Context, subject string, cutoff time.Time) (int64, error) {
 	tag, err := s.pool.Exec(
 		ctx, `DELETE FROM channel_log WHERE subject = $1 AND timestamp < $2`,
-		subject, cutoff,
+		subject, pgnanos.From(cutoff),
 	)
 	if err != nil {
 		return 0, oops.Code("CHANNEL_PRUNE_DELETE_FAILED").With("subject", subject).Wrap(err)

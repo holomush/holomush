@@ -331,7 +331,7 @@ func (s *channelService) WhoInChannel(ctx context.Context, req *channelv1.WhoInC
 			Role:          r.Role,
 			Muted:         r.Muted,
 			Banned:        r.Banned,
-			JoinedAt:      timestamppb.New(r.JoinedAt),
+			JoinedAt:      timestamppb.New(r.JoinedAt.Time()),
 		})
 	}
 	return &channelv1.WhoInChannelResponse{Members: members}, nil
@@ -420,6 +420,6 @@ func channelLogRowToHistoryEntry(r *channelLogRow) *channelv1.ChannelHistoryEntr
 		ActorId:   actorID,
 		ActorName: actorName,
 		Content:   cp.Text,
-		CreatedAt: timestamppb.New(r.timestamp),
+		CreatedAt: timestamppb.New(r.timestamp.Time()),
 	}
 }

@@ -13,19 +13,22 @@
 -- responses reuse the same proto wire format — MINUS dek_ref / dek_version:
 -- channel events are PLAINTEXT (D-04, sensitivity: never). There are no
 -- per-event DEK columns because channels declare no crypto.emits.
+--
+-- Timestamps are BIGINT epoch-nanoseconds (INV-STORE-1); the Go layer bridges
+-- via the pgnanos scan/insert seam.
 
 CREATE TABLE IF NOT EXISTS channel_log (
     id          BYTEA PRIMARY KEY,
     subject     TEXT NOT NULL,
     type        TEXT NOT NULL,
-    timestamp   TIMESTAMPTZ NOT NULL,
+    timestamp   BIGINT NOT NULL,
     actor_kind  TEXT NOT NULL,
     actor_id    BYTEA,
     payload     BYTEA NOT NULL,
     schema_ver  SMALLINT NOT NULL,
     codec       TEXT NOT NULL,
     js_seq      BIGINT,
-    inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    inserted_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 );
 
 -- Composite (subject, id) index drives QueryHistory's cursor paging. The ULID

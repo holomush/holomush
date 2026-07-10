@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -202,7 +203,7 @@ func TestHandleCommandWhoRendersRoster(t *testing.T) {
 	res.byName["public"] = &channelRow{ID: "ch-pub", Name: "Public", Type: "public"}
 	store.memberMap["ch-pub|"+testCharID] = time.Now()
 	store.members["ch-pub"] = []channelMemberRow{
-		{CharacterID: testCharID, Role: "owner", JoinedAt: time.Now()},
+		{CharacterID: testCharID, Role: "owner", JoinedAt: pgnanos.From(time.Now())},
 	}
 	resp, err := p.HandleCommand(context.Background(), cmd("channel", "who Public"))
 	require.NoError(t, err)

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -47,7 +48,7 @@ type channelLogRow struct {
 	id        []byte
 	subject   string
 	eventType string
-	timestamp time.Time
+	timestamp pgnanos.Time
 	actorKind string
 	actorID   []byte
 	payload   []byte
@@ -129,7 +130,7 @@ func (s *ChannelAuditStore) Insert(
 ) error {
 	var ts any
 	if timestamp != nil {
-		ts = timestamp.AsTime()
+		ts = pgnanos.From(timestamp.AsTime())
 	}
 	_, err := s.pool.Exec(
 		ctx, `
@@ -172,12 +173,12 @@ func (s *ChannelAuditStore) queryLog(
 	}
 	if notBefore != nil {
 		conds = append(conds, "timestamp >= $"+strconv.Itoa(idx))
-		args = append(args, notBefore.AsTime())
+		args = append(args, pgnanos.From(notBefore.AsTime()))
 		idx++
 	}
 	if notAfter != nil {
 		conds = append(conds, "timestamp <= $"+strconv.Itoa(idx))
-		args = append(args, notAfter.AsTime())
+		args = append(args, pgnanos.From(notAfter.AsTime()))
 		idx++
 	}
 	order := "ASC"
@@ -240,8 +241,9 @@ func (s *ChannelAuditServer) AuditEvent(ctx context.Context, req *pluginv1.Audit
 	if len(row.GetId()) != 16 {
 		return nil, oops.Code("CHANNEL_AUDIT_MISSING_ID").Errorf("row.id required (16-byte ULID)")
 	}
-	// channel_log.timestamp is a non-null TIMESTAMPTZ; reject nil at ingest so a
-	// row can never persist as SQL NULL and break every subsequent page scan.
+	// channel_log.timestamp is a non-null BIGINT epoch-ns column; reject nil at
+	// ingest so a row can never persist as SQL NULL and break every subsequent
+	// page scan.
 	if row.GetTimestamp() == nil {
 		return nil, oops.Code("CHANNEL_AUDIT_MISSING_FIELD").With("field", "timestamp").Errorf("missing field")
 	}
@@ -358,7 +360,7 @@ func (s *ChannelAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, str
 				Id:        r.id,
 				Subject:   r.subject,
 				Type:      r.eventType,
-				Timestamp: timestamppb.New(r.timestamp),
+				Timestamp: timestamppb.New(r.timestamp.Time()),
 				Actor:     channelActorProtoFromRow(r.actorKind, r.actorID),
 				Codec:     r.codec,
 				Payload:   r.payload,

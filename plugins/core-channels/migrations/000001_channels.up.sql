@@ -9,6 +9,10 @@
 --
 -- Schema lives in the plugin's isolated search_path (plugin_core_channels),
 -- so the unqualified table names resolve correctly.
+--
+-- Timestamps are BIGINT epoch-nanoseconds (INV-STORE-1), matching the rest of
+-- the platform's storage convention (holomush-gfo6); the Go layer bridges via
+-- the pgnanos scan/insert seam.
 
 CREATE TABLE IF NOT EXISTS channels (
     id             TEXT        PRIMARY KEY,
@@ -26,7 +30,7 @@ CREATE TABLE IF NOT EXISTS channels (
     -- Per-channel retention override in days (D-07); NULL = use the plugin
     -- config default (retention_window). Admin channels MAY be unlimited.
     retention_days INTEGER,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at     BIGINT      NOT NULL DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 );
 
 -- Case-insensitive uniqueness (T-01-10): "Public" and "public" collide. The
@@ -49,7 +53,7 @@ CREATE TABLE IF NOT EXISTS channel_memberships (
     banned       BOOLEAN     NOT NULL DEFAULT false,
     -- joined_at is the history-floor boundary (D-07): history reads never cross
     -- a member's most-recent joined_at.
-    joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    joined_at    BIGINT      NOT NULL DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
     PRIMARY KEY (channel_id, character_id)
 );
 
@@ -73,7 +77,7 @@ CREATE TABLE IF NOT EXISTS channel_ops_events (
     actor_id    TEXT        NOT NULL,
     target_id   TEXT,
     payload     JSONB       NOT NULL DEFAULT '{}',
-    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    occurred_at BIGINT      NOT NULL DEFAULT (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 );
 
 CREATE INDEX IF NOT EXISTS idx_channel_ops_events_channel

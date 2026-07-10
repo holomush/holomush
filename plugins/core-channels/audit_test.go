@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -177,7 +178,7 @@ func TestQueryHistoryAllowsMemberAndReturnsRows(t *testing.T) {
 		id:        chanULIDBytes(t, "01EVENT0000000000000000000"),
 		subject:   testChannelSubject(),
 		eventType: "core-channels:channel_say",
-		timestamp: time.Unix(100, 0),
+		timestamp: pgnanos.From(time.Unix(100, 0)),
 	}}}
 	memberStore := &fakeChannelAuditStore{members: map[string]time.Time{testAuditChannelID + "|" + testAuditCharID: time.Unix(50, 0)}}
 	srv := &ChannelAuditServer{store: logStore, memberLookup: memberStore, scrollbackCap: 500}

@@ -490,7 +490,7 @@ func (s *channelService) ListChannels(ctx context.Context, req *channelv1.ListCh
 
 	out := make([]*channelv1.ChannelInfo, 0, len(rows))
 	for i := range rows {
-		out = append(out, rowToChannelInfo(&rows[i], nil, rows[i].CreatedAt))
+		out = append(out, rowToChannelInfo(&rows[i], nil, rows[i].CreatedAt.Time()))
 	}
 	return &channelv1.ListChannelsResponse{Channels: out}, nil
 }
@@ -502,7 +502,7 @@ func (s *channelService) ListChannels(ctx context.Context, req *channelv1.ListCh
 func rowToChannelInfo(row *channelRow, members []*channelv1.MemberInfo, created time.Time) *channelv1.ChannelInfo {
 	ts := created
 	if !row.CreatedAt.IsZero() {
-		ts = row.CreatedAt
+		ts = row.CreatedAt.Time()
 	}
 	retention := int32(0)
 	if row.RetentionDays != nil {
