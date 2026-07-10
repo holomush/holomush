@@ -911,16 +911,110 @@ func (s *streamHistoryServer) QueryStreamHistory(ctx context.Context, req *hostv
 	}, nil
 }
 
-// --- streamSubscriptionServer (StreamSubscriptionService: Unimplemented) ----
+// --- streamSubscriptionServer (StreamSubscriptionService) -------------------
 //
-// No implementation in this sub-spec (holomush-l6std): session-stream add/remove
-// is deferred. Registering the Unimplemented base keeps the service addressable
-// on the broker so a later sub-spec can fill it in without re-touching the broker
-// registration.
+// Serves the stream.subscription capability (holomush-l6std): a plugin mutates
+// an active session's stream subscriptions mid-session. Both RPCs run the
+// instance-level concrete-stream authorization guard (AuthorizeStreamSubscribe,
+// HIGH-3) BEFORE touching the host StreamRegistry — the same shared
+// AuthorizePluginStreamContribution fence the session-establishment merge uses
+// (R3-A), fencing a plugin to its own declared emit domains and rejecting
+// system/audit/crypto namespaces IN-HANDLER (R2-B, not via the read-only seed
+// forbids). The relative req.GetStream() is forwarded to the registry as-is (the
+// ctrl path applyFilterCtrl qualifies it, R2-A), exactly as stream.history
+// forwards req.GetStream() to ReplayTail.
 
 type streamSubscriptionServer struct {
 	hostv1.UnimplementedStreamSubscriptionServiceServer
 	hostCapabilityBase
+}
+
+// authorizeSubscribe runs the shared concrete-stream guard for both RPCs. It
+// maps guard errors to gRPC codes (relative/wildcard → InvalidArgument;
+// forbidden/not-owned/deny → PermissionDenied; infra → Internal) without leaking
+// inner error text past the boundary (.claude/rules/grpc-errors.md).
+func (s *streamSubscriptionServer) authorizeSubscribe(ctx context.Context, stream string) error {
+	if s.host == nil {
+		return status.Errorf(codes.Internal, "internal error")
+	}
+	dec, decErr := pluginauthz.AuthorizeStreamSubscribe(ctx, pluginauthz.StreamSubscribeInput{
+		Engine:           s.host.AccessEngine(),
+		Auditor:          s.host.Auditor(),
+		PluginName:       s.pluginName,
+		Subject:          access.PluginSubject(s.pluginName),
+		GameID:           s.host.GameID(),
+		Stream:           stream,
+		OwnedEmitDomains: s.host.OwnedEmitDomains(s.pluginName),
+	})
+	if decErr != nil {
+		var code string
+		if oopsErr, ok := oops.AsOops(decErr); ok {
+			if c, isStr := oopsErr.Code().(string); isStr {
+				code = c
+			}
+		}
+		switch code {
+		case "STREAM_NOT_RELATIVE", "STREAM_WILDCARD_FORBIDDEN":
+			return status.Errorf(codes.InvalidArgument, "invalid stream reference")
+		case "STREAM_FORBIDDEN_NAMESPACE", "STREAM_NAMESPACE_NOT_OWNED":
+			return status.Errorf(codes.PermissionDenied, "not authorized to subscribe stream")
+		default:
+			errutil.LogErrorContext(ctx, "plugin stream.subscription capability check failed", decErr,
+				"plugin", s.pluginName, "stream", stream)
+			return status.Errorf(codes.Internal, "internal error")
+		}
+	}
+	if !dec.Allowed {
+		return status.Errorf(codes.PermissionDenied, "not authorized to subscribe stream")
+	}
+	return nil
+}
+
+// AddSessionStream subscribes an active session to a stream mid-session.
+func (s *streamSubscriptionServer) AddSessionStream(ctx context.Context, req *hostv1.AddSessionStreamRequest) (*hostv1.AddSessionStreamResponse, error) {
+	if err := s.authorizeSubscribe(ctx, req.GetStream()); err != nil {
+		return nil, err
+	}
+	reg := s.host.StreamRegistry()
+	if reg == nil {
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	mode := protoReplayModeToSession(req.GetReplayMode())
+	if err := reg.AddStreamWithMode(ctx, req.GetSessionId(), req.GetStream(), mode); err != nil {
+		errutil.LogErrorContext(ctx, "plugin AddSessionStream failed", err,
+			"plugin", s.pluginName, "session_id", req.GetSessionId(), "stream", req.GetStream())
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	return &hostv1.AddSessionStreamResponse{}, nil
+}
+
+// RemoveSessionStream unsubscribes an active session from a stream. Idempotent.
+func (s *streamSubscriptionServer) RemoveSessionStream(ctx context.Context, req *hostv1.RemoveSessionStreamRequest) (*hostv1.RemoveSessionStreamResponse, error) {
+	if err := s.authorizeSubscribe(ctx, req.GetStream()); err != nil {
+		return nil, err
+	}
+	reg := s.host.StreamRegistry()
+	if reg == nil {
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	if err := reg.RemoveStream(ctx, req.GetSessionId(), req.GetStream()); err != nil {
+		errutil.LogErrorContext(ctx, "plugin RemoveSessionStream failed", err,
+			"plugin", s.pluginName, "session_id", req.GetSessionId(), "stream", req.GetStream())
+		return nil, status.Errorf(codes.Internal, "internal error")
+	}
+	return &hostv1.RemoveSessionStreamResponse{}, nil
+}
+
+// protoReplayModeToSession maps the proto StreamReplayMode to session.ReplayMode.
+// UNSPECIFIED defaults to FROM_CURSOR (backward compatibility per the proto);
+// LIVE_ONLY maps to ReplayModeLiveOnly (channels' mid-session join, HIGH-2).
+func protoReplayModeToSession(m hostv1.StreamReplayMode) session.ReplayMode {
+	switch m {
+	case hostv1.StreamReplayMode_STREAM_REPLAY_MODE_LIVE_ONLY:
+		return session.ReplayModeLiveOnly
+	default:
+		return session.ReplayModeFromCursor
+	}
 }
 
 // --- auditServer (AuditService: DecryptOwnAuditRows) ------------------------

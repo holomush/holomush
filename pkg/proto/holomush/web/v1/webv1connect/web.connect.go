@@ -126,6 +126,11 @@ const (
 	// WebServiceWebResumeSceneProcedure is the fully-qualified name of the WebService's WebResumeScene
 	// RPC.
 	WebServiceWebResumeSceneProcedure = "/holomush.web.v1.WebService/WebResumeScene"
+	// WebServiceWebMuteSceneProcedure is the fully-qualified name of the WebService's WebMuteScene RPC.
+	WebServiceWebMuteSceneProcedure = "/holomush.web.v1.WebService/WebMuteScene"
+	// WebServiceWebSetSceneNotifyPrefProcedure is the fully-qualified name of the WebService's
+	// WebSetSceneNotifyPref RPC.
+	WebServiceWebSetSceneNotifyPrefProcedure = "/holomush.web.v1.WebService/WebSetSceneNotifyPref"
 	// WebServiceWebUpdateSceneProcedure is the fully-qualified name of the WebService's WebUpdateScene
 	// RPC.
 	WebServiceWebUpdateSceneProcedure = "/holomush.web.v1.WebService/WebUpdateScene"
@@ -315,6 +320,16 @@ type WebServiceClient interface {
 	WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error)
+	// WebMuteScene toggles the verified character's per-scene notification mute.
+	// Proxies to SceneAccessService.MuteScene; the gateway reads
+	// player_session_token from the X-Session-Token cookie and the facade owns
+	// authorization. A structural GUI write — the typed RPC, never the command
+	// path (gateway-boundary).
+	WebMuteScene(context.Context, *connect.Request[v1.WebMuteSceneRequest]) (*connect.Response[v1.WebMuteSceneResponse], error)
+	// WebSetSceneNotifyPref writes the verified character's global scene-notify
+	// preference (character-self, no scene). Proxies to
+	// SceneAccessService.SetSceneNotifyPref (see WebMuteScene).
+	WebSetSceneNotifyPref(context.Context, *connect.Request[v1.WebSetSceneNotifyPrefRequest]) (*connect.Response[v1.WebSetSceneNotifyPrefResponse], error)
 	// WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads
 	// player_session_token from the X-Session-Token cookie; the facade owns
 	// authorization. Returns the post-update scene.
@@ -562,6 +577,18 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebResumeScene")),
 			connect.WithClientOptions(opts...),
 		),
+		webMuteScene: connect.NewClient[v1.WebMuteSceneRequest, v1.WebMuteSceneResponse](
+			httpClient,
+			baseURL+WebServiceWebMuteSceneProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebMuteScene")),
+			connect.WithClientOptions(opts...),
+		),
+		webSetSceneNotifyPref: connect.NewClient[v1.WebSetSceneNotifyPrefRequest, v1.WebSetSceneNotifyPrefResponse](
+			httpClient,
+			baseURL+WebServiceWebSetSceneNotifyPrefProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebSetSceneNotifyPref")),
+			connect.WithClientOptions(opts...),
+		),
 		webUpdateScene: connect.NewClient[v1.WebUpdateSceneRequest, v1.WebUpdateSceneResponse](
 			httpClient,
 			baseURL+WebServiceWebUpdateSceneProcedure,
@@ -683,6 +710,8 @@ type webServiceClient struct {
 	webEndScene                   *connect.Client[v1.WebEndSceneRequest, v1.WebEndSceneResponse]
 	webPauseScene                 *connect.Client[v1.WebPauseSceneRequest, v1.WebPauseSceneResponse]
 	webResumeScene                *connect.Client[v1.WebResumeSceneRequest, v1.WebResumeSceneResponse]
+	webMuteScene                  *connect.Client[v1.WebMuteSceneRequest, v1.WebMuteSceneResponse]
+	webSetSceneNotifyPref         *connect.Client[v1.WebSetSceneNotifyPrefRequest, v1.WebSetSceneNotifyPrefResponse]
 	webUpdateScene                *connect.Client[v1.WebUpdateSceneRequest, v1.WebUpdateSceneResponse]
 	webInviteToScene              *connect.Client[v1.WebInviteToSceneRequest, v1.WebInviteToSceneResponse]
 	webKickFromScene              *connect.Client[v1.WebKickFromSceneRequest, v1.WebKickFromSceneResponse]
@@ -857,6 +886,16 @@ func (c *webServiceClient) WebPauseScene(ctx context.Context, req *connect.Reque
 // WebResumeScene calls holomush.web.v1.WebService.WebResumeScene.
 func (c *webServiceClient) WebResumeScene(ctx context.Context, req *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error) {
 	return c.webResumeScene.CallUnary(ctx, req)
+}
+
+// WebMuteScene calls holomush.web.v1.WebService.WebMuteScene.
+func (c *webServiceClient) WebMuteScene(ctx context.Context, req *connect.Request[v1.WebMuteSceneRequest]) (*connect.Response[v1.WebMuteSceneResponse], error) {
+	return c.webMuteScene.CallUnary(ctx, req)
+}
+
+// WebSetSceneNotifyPref calls holomush.web.v1.WebService.WebSetSceneNotifyPref.
+func (c *webServiceClient) WebSetSceneNotifyPref(ctx context.Context, req *connect.Request[v1.WebSetSceneNotifyPrefRequest]) (*connect.Response[v1.WebSetSceneNotifyPrefResponse], error) {
+	return c.webSetSceneNotifyPref.CallUnary(ctx, req)
 }
 
 // WebUpdateScene calls holomush.web.v1.WebService.WebUpdateScene.
@@ -1074,6 +1113,16 @@ type WebServiceHandler interface {
 	WebPauseScene(context.Context, *connect.Request[v1.WebPauseSceneRequest]) (*connect.Response[v1.WebPauseSceneResponse], error)
 	// WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene).
 	WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error)
+	// WebMuteScene toggles the verified character's per-scene notification mute.
+	// Proxies to SceneAccessService.MuteScene; the gateway reads
+	// player_session_token from the X-Session-Token cookie and the facade owns
+	// authorization. A structural GUI write — the typed RPC, never the command
+	// path (gateway-boundary).
+	WebMuteScene(context.Context, *connect.Request[v1.WebMuteSceneRequest]) (*connect.Response[v1.WebMuteSceneResponse], error)
+	// WebSetSceneNotifyPref writes the verified character's global scene-notify
+	// preference (character-self, no scene). Proxies to
+	// SceneAccessService.SetSceneNotifyPref (see WebMuteScene).
+	WebSetSceneNotifyPref(context.Context, *connect.Request[v1.WebSetSceneNotifyPrefRequest]) (*connect.Response[v1.WebSetSceneNotifyPrefResponse], error)
 	// WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads
 	// player_session_token from the X-Session-Token cookie; the facade owns
 	// authorization. Returns the post-update scene.
@@ -1317,6 +1366,18 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebResumeScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebMuteSceneHandler := connect.NewUnaryHandler(
+		WebServiceWebMuteSceneProcedure,
+		svc.WebMuteScene,
+		connect.WithSchema(webServiceMethods.ByName("WebMuteScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebSetSceneNotifyPrefHandler := connect.NewUnaryHandler(
+		WebServiceWebSetSceneNotifyPrefProcedure,
+		svc.WebSetSceneNotifyPref,
+		connect.WithSchema(webServiceMethods.ByName("WebSetSceneNotifyPref")),
+		connect.WithHandlerOptions(opts...),
+	)
 	webServiceWebUpdateSceneHandler := connect.NewUnaryHandler(
 		WebServiceWebUpdateSceneProcedure,
 		svc.WebUpdateScene,
@@ -1467,6 +1528,10 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebPauseSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebResumeSceneProcedure:
 			webServiceWebResumeSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebMuteSceneProcedure:
+			webServiceWebMuteSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebSetSceneNotifyPrefProcedure:
+			webServiceWebSetSceneNotifyPrefHandler.ServeHTTP(w, r)
 		case WebServiceWebUpdateSceneProcedure:
 			webServiceWebUpdateSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebInviteToSceneProcedure:
@@ -1630,6 +1695,14 @@ func (UnimplementedWebServiceHandler) WebPauseScene(context.Context, *connect.Re
 
 func (UnimplementedWebServiceHandler) WebResumeScene(context.Context, *connect.Request[v1.WebResumeSceneRequest]) (*connect.Response[v1.WebResumeSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebResumeScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebMuteScene(context.Context, *connect.Request[v1.WebMuteSceneRequest]) (*connect.Response[v1.WebMuteSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebMuteScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebSetSceneNotifyPref(context.Context, *connect.Request[v1.WebSetSceneNotifyPrefRequest]) (*connect.Response[v1.WebSetSceneNotifyPrefResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebSetSceneNotifyPref is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebUpdateScene(context.Context, *connect.Request[v1.WebUpdateSceneRequest]) (*connect.Response[v1.WebUpdateSceneResponse], error) {

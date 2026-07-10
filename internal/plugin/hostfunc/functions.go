@@ -183,6 +183,10 @@ func (f *Functions) GetCommandQuerier() *commandquery.Querier { return f.command
 // Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.SessionAccess.
 func (f *Functions) GetSessionAccess() session.Access { return f.sessionAccess }
 
+// GetStreamRegistry returns the session stream registry, or nil when unconfigured.
+// Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.StreamRegistry.
+func (f *Functions) GetStreamRegistry() plugins.StreamRegistry { return f.streamRegistry }
+
 // GetWorldMutator returns the world write surface, or nil when unconfigured.
 // Used by the hostcap_adapter to satisfy hostcap.HostCapabilities.WorldMutator.
 func (f *Functions) GetWorldMutator() WorldMutator { return f.worldMutator }

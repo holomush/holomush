@@ -54,6 +54,16 @@ type fakeStore struct {
 	// ListCharacterScenes control fields.
 	listCharacterScenesRows []CharacterSceneResult
 	listCharacterScenesErr  error
+	// Plan 03 notify-pref / mute control fields.
+	setSceneMuteCalls       []muteCall       // records SetSceneMute invocations
+	setSceneMuteErr         error            // forces SetSceneMute to fail
+	setSceneNotifyPrefCalls []notifyPrefCall // records SetSceneNotifyPref invocations
+	setSceneNotifyPrefErr   error            // forces SetSceneNotifyPref to fail
+	notifyPrefEnabled       bool             // GetSceneNotifyPref returns this enabled value
+	notifyPrefMode          string           // GetSceneNotifyPref returns this mode ("" → "realtime")
+	getSceneNotifyPrefErr   error            // forces GetSceneNotifyPref to fail
+	mutedScenes             []string         // ListMutedScenes returns these
+	listMutedScenesErr      error            // forces ListMutedScenes to fail
 	// ListPublishedScenes control fields.
 	listPublishedScenesRows []PublishedSceneArchiveSummary
 	listPublishedScenesErr  error
@@ -697,6 +707,52 @@ func (f *fakeStore) ListCharacterScenes(_ context.Context, _ string, _ string) (
 		return nil, f.listCharacterScenesErr
 	}
 	return f.listCharacterScenesRows, nil
+}
+
+// muteCall records the arguments of one SetSceneMute invocation.
+type muteCall struct {
+	characterID string
+	sceneID     string
+	muted       bool
+}
+
+// notifyPrefCall records the arguments of one SetSceneNotifyPref invocation.
+type notifyPrefCall struct {
+	characterID string
+	enabled     bool
+}
+
+// SetSceneMute records the call and returns the injected error (Plan 03).
+func (f *fakeStore) SetSceneMute(_ context.Context, characterID, sceneID string, muted bool) error {
+	f.setSceneMuteCalls = append(f.setSceneMuteCalls, muteCall{characterID: characterID, sceneID: sceneID, muted: muted})
+	return f.setSceneMuteErr
+}
+
+// SetSceneNotifyPref records the call and returns the injected error (Plan 03).
+func (f *fakeStore) SetSceneNotifyPref(_ context.Context, characterID string, enabled bool) error {
+	f.setSceneNotifyPrefCalls = append(f.setSceneNotifyPrefCalls, notifyPrefCall{characterID: characterID, enabled: enabled})
+	return f.setSceneNotifyPrefErr
+}
+
+// GetSceneNotifyPref returns the injected enabled/mode, defaulting mode to
+// "realtime" when unset (mirrors the store's pgx.ErrNoRows default) (Plan 03).
+func (f *fakeStore) GetSceneNotifyPref(_ context.Context, _ string) (bool, string, error) {
+	if f.getSceneNotifyPrefErr != nil {
+		return false, "", f.getSceneNotifyPrefErr
+	}
+	mode := f.notifyPrefMode
+	if mode == "" {
+		mode = "realtime"
+	}
+	return f.notifyPrefEnabled, mode, nil
+}
+
+// ListMutedScenes returns the injected muted scene ids (Plan 03).
+func (f *fakeStore) ListMutedScenes(_ context.Context, _ string) ([]string, error) {
+	if f.listMutedScenesErr != nil {
+		return nil, f.listMutedScenesErr
+	}
+	return f.mutedScenes, nil
 }
 
 // ListPublishedScenes returns a fixed slice injected via
@@ -2697,6 +2753,123 @@ func TestListCharacterScenesStoreErrorMapsToInternal(t *testing.T) {
 	st := status.Convert(err)
 	assert.Equal(t, codes.Internal, st.Code())
 	assert.Equal(t, "internal error", st.Message(), "store error MUST NOT leak through the wire message")
+}
+
+// ── ListCharacterScenes mute/notify read-back (round-3 Concern 1) ─────────────
+
+// lcsTwoRows seeds two open scenes for the read-back tests.
+func lcsTwoRows() []CharacterSceneResult {
+	return []CharacterSceneResult{
+		{
+			Scene: &SceneRow{
+				ID: "scene-a", Title: "A", OwnerID: "char-owner",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility: string(SceneVisibilityOpen), ContentWarnings: []string{}, Tags: []string{},
+			},
+			Role: "member", LastActivityMS: 2, EntryCount: 1,
+		},
+		{
+			Scene: &SceneRow{
+				ID: "scene-b", Title: "B", OwnerID: "char-owner",
+				State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+				Visibility: string(SceneVisibilityOpen), ContentWarnings: []string{}, Tags: []string{},
+			},
+			Role: "member", LastActivityMS: 1, EntryCount: 1,
+		},
+	}
+}
+
+// TestListCharacterScenesStampsMutedOnMutedRowsOnly asserts muted=true is set on
+// exactly the rows whose scene id is in store.ListMutedScenes.
+func TestListCharacterScenesStampsMutedOnMutedRowsOnly(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesRows = lcsTwoRows()
+	store.mutedScenes = []string{"scene-b"}
+	store.notifyPrefEnabled = true
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetScenes(), 2)
+	byID := map[string]bool{}
+	for _, s := range resp.GetScenes() {
+		byID[s.GetScene().GetId()] = s.GetMuted()
+	}
+	assert.False(t, byID["scene-a"], "scene-a is not muted")
+	assert.True(t, byID["scene-b"], "scene-b is muted")
+}
+
+// TestListCharacterScenesReflectsGlobalNotifyPref asserts the top-level
+// global_notify_enabled reflects store.GetSceneNotifyPref.
+func TestListCharacterScenesReflectsGlobalNotifyPref(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesRows = lcsTwoRows()
+	store.notifyPrefEnabled = false // character turned notifications off
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.False(t, resp.GetGlobalNotifyEnabled())
+}
+
+// TestListCharacterScenesDefaultsGlobalNotifyEnabledTrue asserts the notify-on
+// default surfaces when the character has no prefs row (store returns true).
+func TestListCharacterScenesDefaultsGlobalNotifyEnabledTrue(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesRows = lcsTwoRows()
+	store.notifyPrefEnabled = true // store default on pgx.ErrNoRows
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.GetGlobalNotifyEnabled())
+}
+
+// TestListCharacterScenesFailsOpenOnMutedReadError asserts a ListMutedScenes
+// error degrades to muted=false on every row + global_notify_enabled=true, but
+// STILL returns the full scene list (fail-OPEN for display).
+func TestListCharacterScenesFailsOpenOnMutedReadError(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesRows = lcsTwoRows()
+	store.listMutedScenesErr = oops.Code("SCENE_LIST_MUTED_FAILED").Errorf("db error")
+	store.notifyPrefEnabled = false // even a real "off" pref is ignored on the fail-open path
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err, "a prefs-read error MUST NOT fail the whole list")
+	require.Len(t, resp.GetScenes(), 2)
+	for _, s := range resp.GetScenes() {
+		assert.False(t, s.GetMuted(), "fail-open defaults muted=false")
+	}
+	assert.True(t, resp.GetGlobalNotifyEnabled(), "fail-open defaults global_notify_enabled=true")
+}
+
+// TestListCharacterScenesFailsOpenOnNotifyPrefReadError asserts a
+// GetSceneNotifyPref error degrades to defaults + full list (fail-OPEN).
+func TestListCharacterScenesFailsOpenOnNotifyPrefReadError(t *testing.T) {
+	store := newFakeStore()
+	store.listCharacterScenesRows = lcsTwoRows()
+	store.mutedScenes = []string{"scene-b"}
+	store.getSceneNotifyPrefErr = oops.Code("SCENE_GET_NOTIFY_PREF_FAILED").Errorf("db error")
+
+	svc := newTestService(t, store)
+	resp, err := svc.ListCharacterScenes(context.Background(), &scenev1.ListCharacterScenesRequest{
+		CharacterId: "char-alice",
+	})
+	require.NoError(t, err, "a prefs-read error MUST NOT fail the whole list")
+	require.Len(t, resp.GetScenes(), 2)
+	for _, s := range resp.GetScenes() {
+		assert.False(t, s.GetMuted(), "fail-open defaults muted=false on both reads")
+	}
+	assert.True(t, resp.GetGlobalNotifyEnabled(), "fail-open defaults global_notify_enabled=true")
 }
 
 // ── ListPublishedScenes unit tests ───────────────────────────────────────────

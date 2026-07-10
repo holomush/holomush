@@ -30,8 +30,11 @@ import (
 //     session-scoped PresentingFocus pointer (caller mutation through
 //     either side would corrupt the other).
 //  3. PresentingFocus != nil but no matching membership (revoked while
-//     disconnected) → no-op + structured warning log. In-band signal to
-//     the client is deferred to holomush-3d9o.
+//     disconnected, OR a different character swapped onto the connection and
+//     is not entitled to the prior character's scene) → grid fallback: the
+//     per-connection FocusKey is CLEARED to nil so no stale, non-entitled
+//     scene focus survives (D-09 cross-character no-leak), plus a structured
+//     warning log. In-band signal to the client is deferred to holomush-3d9o.
 func (c *defaultCoordinator) RestoreConnectionFocus(
 	ctx context.Context,
 	sessionID string,
@@ -44,14 +47,19 @@ func (c *defaultCoordinator) RestoreConnectionFocus(
 			}
 			pf := info.PresentingFocus
 			if !hasMembership(info.FocusMemberships, pf.Kind, pf.TargetID) {
-				// Membership revoked while disconnected; log warning, fall
-				// back to grid. In-band UX signal deferred to holomush-3d9o.
+				// Membership revoked while disconnected, or a swapped-in
+				// character that is not a member of the prior character's
+				// scene (D-09). Fall back to grid AND defensively clear any
+				// stale per-connection FocusKey so character A's focus can
+				// never leak onto character B's connection. In-band UX signal
+				// deferred to holomush-3d9o.
 				slog.WarnContext(
 					ctx, "scene.focus.restore_fallback_to_grid",
 					"session_id", sessionID,
 					"character_id", info.CharacterID.String(),
 					"prior_presenting_focus", pf,
 				)
+				conn.FocusKey = nil
 				return info, conn, nil
 			}
 			cpy := *pf

@@ -453,6 +453,24 @@ func (c *Client) ResumeScene(ctx context.Context, req *sceneaccessv1.ResumeScene
 	return resp, nil
 }
 
+// MuteScene delegates to SceneAccessService.MuteScene (identity-resolving facade).
+func (c *Client) MuteScene(ctx context.Context, req *sceneaccessv1.MuteSceneRequest) (*sceneaccessv1.MuteSceneResponse, error) {
+	resp, err := c.sceneAccessClient.MuteScene(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "MuteScene").Wrap(err)
+	}
+	return resp, nil
+}
+
+// SetSceneNotifyPref delegates to SceneAccessService.SetSceneNotifyPref (identity-resolving facade).
+func (c *Client) SetSceneNotifyPref(ctx context.Context, req *sceneaccessv1.SetSceneNotifyPrefRequest) (*sceneaccessv1.SetSceneNotifyPrefResponse, error) {
+	resp, err := c.sceneAccessClient.SetSceneNotifyPref(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "SetSceneNotifyPref").Wrap(err)
+	}
+	return resp, nil
+}
+
 // UpdateScene delegates to SceneAccessService.UpdateScene (identity-resolving facade).
 func (c *Client) UpdateScene(ctx context.Context, req *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error) {
 	resp, err := c.sceneAccessClient.UpdateScene(ctx, req)

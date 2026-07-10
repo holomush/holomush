@@ -325,3 +325,187 @@ var _ = Describe("INV-SCENE-18 + INV-SCENE-25 + INV-SCENE-26: reconnect focus re
 			"INV-SCENE-26: restored FocusKey.TargetID MUST be scene #A")
 	})
 })
+
+// D-08 (Subscribe wiring) + D-09 (multi-character no-leak):
+//
+// D-08: internal/grpc/server.go calls RestoreConnectionFocus after AddConnection
+// on Subscribe, GATED on Info.PresentingFocus != nil (Assumption A2 / Pitfall 5).
+// The gate keeps a web tab's per-tab FocusKey from being clobbered: web sessions
+// do not set PresentingFocus (it is the telnet single-pane reconnect signal), so
+// a resubscribe with PresentingFocus nil is a documented no-op (branch 1) and the
+// tab's chosen focus survives.
+//
+// D-09: a telnet connection swapping characters (SEQUENTIAL swap per connection —
+// QUIT → picker → re-pick) MUST NOT let a swapped-in character B inherit the
+// prior character A's scene focus. INV-SCENE-18 membership validation blocks the
+// leak (B non-member → grid fallback), and RestoreConnectionFocus defensively
+// clears any stale non-entitled FocusKey to nil so no prior character's scene
+// focus survives on the connection.
+//
+// Spec: docs/superpowers/specs/2026-05-21-scenes-phase-5-focus-model-and-multi-connection-visibility-design.md §8.
+var _ = Describe("D-08 + D-09: Subscribe-wiring web-tab safety and multi-character focus no-leak", func() {
+	type harness struct {
+		store session.Store
+		coord focus.Coordinator
+	}
+
+	newHarness := func() harness {
+		store := sessiontest.NewStore(suiteT)
+		coord, err := focus.NewCoordinator(
+			focus.WithSessionStore(store),
+			focus.WithKindPolicy(focus.NewNullPolicy(session.FocusKindScene)),
+		)
+		Expect(err).NotTo(HaveOccurred(), "Coordinator construction must succeed")
+		return harness{store: store, coord: coord}
+	}
+
+	newULID := func() ulid.ULID {
+		return ulid.MustNew(ulid.Timestamp(time.Now()), crand.Reader)
+	}
+
+	// D-08 web-tab safety: PresentingFocus nil → RestoreConnectionFocus is a
+	// no-op → a web tab's already-chosen per-tab FocusKey is preserved. This is
+	// the guarantee the server.go gate (PresentingFocus != nil) protects.
+	It("does NOT clobber a web tab's per-tab focus when PresentingFocus is nil (D-08 gate / Assumption A2)", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+
+		h := newHarness()
+
+		charID := newULID()
+		webSceneID := newULID()
+		sessionID := "sess-web-d08-" + newULID().String()
+		connID := newULID()
+
+		// Web session: PresentingFocus is nil (web tabs manage per-tab focus,
+		// they do not set the session-scoped PresentingFocus). Character holds a
+		// membership so the per-tab focus is legitimate.
+		Expect(h.store.Set(ctx, sessionID, &session.Info{
+			ID:              sessionID,
+			CharacterID:     charID,
+			LocationID:      newULID(),
+			Status:          session.StatusActive,
+			PresentingFocus: nil,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: webSceneID, JoinedAt: time.Now()},
+			},
+		})).To(Succeed())
+
+		// The web tab has already chosen its own per-tab focus on scene #W.
+		tabFocus := &session.FocusKey{Kind: session.FocusKindScene, TargetID: webSceneID}
+		Expect(h.store.AddConnection(ctx, &session.Connection{
+			ID:         connID,
+			SessionID:  sessionID,
+			ClientType: "terminal",
+			FocusKey:   tabFocus,
+		})).To(Succeed())
+
+		// Even if RestoreConnectionFocus is invoked, PresentingFocus == nil makes
+		// it a no-op (branch 1) — the tab's chosen focus MUST be preserved.
+		Expect(h.coord.RestoreConnectionFocus(ctx, sessionID, connID)).
+			To(Succeed(), "D-08: RestoreConnectionFocus MUST be a no-op when PresentingFocus is nil")
+
+		conn, err := h.store.GetConnection(ctx, connID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(conn.FocusKey).NotTo(BeNil(),
+			"D-08: web tab's per-tab FocusKey MUST survive a PresentingFocus-nil restore")
+		Expect(conn.FocusKey.TargetID).To(Equal(webSceneID),
+			"D-08: web tab's per-tab FocusKey MUST remain its chosen scene, not be clobbered")
+	})
+
+	// D-09 no-leak: a telnet connection that was focused on scene #7 as
+	// character A, after a SEQUENTIAL swap to character B (not a member of #7),
+	// MUST NOT inherit #7. INV-SCENE-18 membership validation forces the grid
+	// fallback, and RestoreConnectionFocus clears any stale non-entitled
+	// FocusKey so B's connection lands on grid, never on A's scene.
+	It("does not leak character A's scene focus to a swapped-in character B (D-09)", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+
+		h := newHarness()
+
+		charBID := newULID()
+		sceneAID := newULID() // scene #7 — character A's scene, B is NOT a member
+		sessionID := "sess-swap-d09-" + newULID().String()
+		connID := newULID()
+
+		staleAFocus := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneAID}
+
+		// After the swap the connection now serves character B. Worst case: the
+		// session still carries A's PresentingFocus (#7) but B holds NO
+		// membership in #7.
+		Expect(h.store.Set(ctx, sessionID, &session.Info{
+			ID:               sessionID,
+			CharacterID:      charBID,
+			LocationID:       newULID(),
+			Status:           session.StatusActive,
+			PresentingFocus:  &staleAFocus, // stale — belonged to character A
+			FocusMemberships: nil,          // B is not a member of #7
+		})).To(Succeed())
+
+		// The connection still carries A's stale per-connection FocusKey (#7).
+		Expect(h.store.AddConnection(ctx, &session.Connection{
+			ID:         connID,
+			SessionID:  sessionID,
+			ClientType: "terminal",
+			FocusKey:   &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneAID},
+		})).To(Succeed())
+
+		Expect(h.coord.RestoreConnectionFocus(ctx, sessionID, connID)).
+			To(Succeed(), "D-09: RestoreConnectionFocus MUST NOT error on a cross-character swap")
+
+		conn, err := h.store.GetConnection(ctx, connID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(conn.FocusKey).To(BeNil(),
+			"D-09: character B MUST fall back to grid — no stale FocusKey from character A may survive the swap")
+	})
+
+	// D-09 positive: when character B IS a member of a scene with its own
+	// PresentingFocus, B restores B's own focus — never character A's stale key.
+	It("restores character B's own scene focus, never character A's (D-09)", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		DeferCleanup(cancel)
+
+		h := newHarness()
+
+		charBID := newULID()
+		sceneAID := newULID() // #7 — A's scene (stale on the connection)
+		sceneBID := newULID() // #9 — B's own scene
+		sessionID := "sess-swap-member-d09-" + newULID().String()
+		connID := newULID()
+
+		bFocus := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneBID}
+
+		// Session now serves B: PresentingFocus + membership on B's own scene #9.
+		Expect(h.store.Set(ctx, sessionID, &session.Info{
+			ID:              sessionID,
+			CharacterID:     charBID,
+			LocationID:      newULID(),
+			Status:          session.StatusActive,
+			PresentingFocus: &bFocus,
+			FocusMemberships: []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: sceneBID, JoinedAt: time.Now()},
+			},
+		})).To(Succeed())
+
+		// The connection still carries A's stale FocusKey (#7).
+		Expect(h.store.AddConnection(ctx, &session.Connection{
+			ID:         connID,
+			SessionID:  sessionID,
+			ClientType: "terminal",
+			FocusKey:   &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneAID},
+		})).To(Succeed())
+
+		Expect(h.coord.RestoreConnectionFocus(ctx, sessionID, connID)).
+			To(Succeed(), "D-09: RestoreConnectionFocus MUST succeed restoring B's own focus")
+
+		conn, err := h.store.GetConnection(ctx, connID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(conn.FocusKey).NotTo(BeNil(),
+			"D-09: B's own scene focus MUST be restored")
+		Expect(conn.FocusKey.TargetID).To(Equal(sceneBID),
+			"D-09: restored focus MUST be B's scene #9, never character A's stale scene #7")
+		Expect(conn.FocusKey.TargetID).NotTo(Equal(sceneAID),
+			"D-09: character A's stale FocusKey MUST NOT survive the swap")
+	})
+})

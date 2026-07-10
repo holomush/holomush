@@ -19,14 +19,22 @@ option go_package = "github.com/holomush/holomush/pkg/proto/holomush/scene/v1;sc
 // events on events.<game_id>.scene.<scene_id>.ic and audits lifecycle
 // operations to its plugin-owned audit table.
 //
-// Authorization model: every mutating RPC trusts that the host's ABAC engine
-// has already authorized the command-execute action at dispatch time
-// (owner-only for end/pause/resume/update/invite/kick/transfer, admin-only for
-// the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
-// (SceneServiceImpl holds no policy engine). The sole exceptions are the
-// participant-gate reads (GetPoseOrder and the publish reads), which enforce a
-// direct plugin-code participation check (INV-SCENE-60) precisely because it is a
-// hard privacy boundary that must not be delegable.
+// Authorization model: the host's ABAC engine authorizes the command-execute
+// action at dispatch time, and the plugin additionally runs a host-injected
+// ABAC evaluator (SceneServiceImpl.evaluator, wired via SetHostEvaluator) that
+// gates several transitions in-handler by calling evaluator.Evaluate(action,
+// "scene:"+scene_id) and failing closed on an evaluator error: EndScene and
+// PauseScene evaluate the owner-only end/pause actions, ResumeScene the
+// participant-wide resume, and MuteScene the participant-gated mute action.
+// Owner-only membership operations (update/invite/kick/transfer) and the
+// admin-only publish-attempt-budget extension rely on the dispatch-time
+// command gate alone. The participant-gate reads (GetPoseOrder and the publish
+// reads) enforce a direct plugin-code participation check (INV-SCENE-60)
+// because that is a hard privacy boundary that must not be delegable. The
+// character-self notify-pref RPCs (SetSceneNotifyPref/GetSceneNotifyPref/
+// ListMutedScenes) carry no scene id; they are scoped by a request
+// character_id cross-checked against the host-vouched actor metadata rather
+// than a scene ABAC policy.
 //
 // Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
 // plugins/core-scenes/publish_service.go.
@@ -68,6 +76,38 @@ service SceneService {
   // Rejected with codes.FailedPrecondition from any non-paused state.
   // See service.go::ResumeScene.
   rpc ResumeScene(ResumeSceneRequest) returns (ResumeSceneResponse);
+
+  // MuteScene sets or clears the calling character's per-scene mute flag,
+  // persisting it via SceneStore.SetSceneMute. Participant-gated: the handler
+  // evaluates the "mute" action against "scene:"+scene_id and fails closed
+  // (PermissionDenied) for a non-participant or an evaluator error, after
+  // cross-checking the request character_id against the host-vouched actor
+  // metadata. Both the `scene mute` and `scene unmute` telnet subcommands and
+  // the web mute control drive this RPC; the muted flag selects mute vs unmute.
+  // See service.go::MuteScene.
+  rpc MuteScene(MuteSceneRequest) returns (MuteSceneResponse);
+
+  // SetSceneNotifyPref writes the calling character's global (all-scenes)
+  // notify preference via SceneStore.SetSceneNotifyPref. Character-self-scoped:
+  // the only authorization is the request character_id matching the
+  // host-vouched actor metadata (a caller may write only its own pref); there
+  // is no scene id and no scene ABAC evaluation. See
+  // service.go::SetSceneNotifyPref.
+  rpc SetSceneNotifyPref(SetSceneNotifyPrefRequest) returns (SetSceneNotifyPrefResponse);
+
+  // GetSceneNotifyPref reads the calling character's persisted global notify
+  // preference (default enabled=true when no row exists) via
+  // SceneStore.GetSceneNotifyPref. This is the read the core mute-suppression
+  // checker consults to honor a character's notifications-off preference.
+  // Character-self-scoped by the request character_id / actor-metadata match.
+  // See service.go::GetSceneNotifyPref.
+  rpc GetSceneNotifyPref(GetSceneNotifyPrefRequest) returns (GetSceneNotifyPrefResponse);
+
+  // ListMutedScenes returns the scene ids the calling character has muted via
+  // SceneStore.ListMutedScenes. Character-self-scoped by the request
+  // character_id / actor-metadata match; no scene ABAC evaluation. See
+  // service.go::ListMutedScenes.
+  rpc ListMutedScenes(ListMutedScenesRequest) returns (ListMutedScenesResponse);
 
   // UpdateScene applies a partial update to mutable scene metadata, driven by
   // the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
@@ -122,7 +162,8 @@ service SceneService {
 
   // GetPoseOrder returns the computed pose-order roster for a scene. Enforces
   // the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member,
-  // NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+  // NOT merely invited; the host ABAC evaluator is not consulted for this read).
+  // The PermissionDenied gate
   // fires before any existence check so a non-participant cannot distinguish a
   // missing scene from one they may not see. See service.go::GetPoseOrder.
   rpc GetPoseOrder(GetPoseOrderRequest) returns (GetPoseOrderResponse);
@@ -442,6 +483,76 @@ message ResumeSceneRequest {
 message ResumeSceneResponse {
   // The post-transition scene row (state == "active").
   SceneInfo scene = 1;
+}
+
+// MuteSceneRequest names the acting character, the scene whose mute flag to
+// change, and the target flag value. service.go::MuteScene cross-checks
+// character_id against the host-vouched actor metadata, then participant-gates
+// on "scene:"+scene_id before persisting via SceneStore.SetSceneMute.
+message MuteSceneRequest {
+  // The acting character's ID; required (cross-checked against actor metadata).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The scene to mute or unmute for this character; required.
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  // true persists a mute (scene notifications suppressed for this character),
+  // false clears it; drives the `scene mute` vs `scene unmute` subcommands.
+  bool muted = 3;
+}
+
+// MuteSceneResponse is the empty acknowledgement of a persisted mute change;
+// SceneStore.SetSceneMute is idempotent so no post-state row is returned.
+message MuteSceneResponse {}
+
+// SetSceneNotifyPrefRequest names the acting character and the desired global
+// notify state. service.go::SetSceneNotifyPref cross-checks character_id
+// against the actor metadata (character-self scope) then persists via
+// SceneStore.SetSceneNotifyPref; it carries no scene id.
+message SetSceneNotifyPrefRequest {
+  // The acting character's ID; required (cross-checked against actor metadata).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // true keeps scene notifications on globally, false turns them off; persisted
+  // as the NULL-scene_id global row's inverse-muted flag by the store.
+  bool enabled = 2;
+}
+
+// SetSceneNotifyPrefResponse is the empty acknowledgement of a persisted global
+// notify-pref write.
+message SetSceneNotifyPrefResponse {}
+
+// GetSceneNotifyPrefRequest names the acting character whose global notify
+// preference to read. service.go::GetSceneNotifyPref cross-checks character_id
+// against the actor metadata (character-self scope); it carries no scene id.
+message GetSceneNotifyPrefRequest {
+  // The acting character's ID; required (cross-checked against actor metadata).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetSceneNotifyPrefResponse carries the character's persisted global notify
+// preference as read by SceneStore.GetSceneNotifyPref (default enabled=true,
+// mode="realtime" when the character has no row). The core mute-suppression
+// checker consults enabled to honor a notifications-off preference.
+message GetSceneNotifyPrefResponse {
+  // true when scene notifications are on globally for this character; false
+  // when the character has turned them off.
+  bool enabled = 1;
+  // The delivery mode for the global pref (the D-05 digest seam); "realtime"
+  // by default until digest delivery lands.
+  string mode = 2;
+}
+
+// ListMutedScenesRequest names the acting character whose muted scene ids to
+// list. service.go::ListMutedScenes cross-checks character_id against the actor
+// metadata (character-self scope); it carries no scene id.
+message ListMutedScenesRequest {
+  // The acting character's ID; required (cross-checked against actor metadata).
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ListMutedScenesResponse carries the scene ids the character has muted, as
+// read by SceneStore.ListMutedScenes.
+message ListMutedScenesResponse {
+  // The muted scene ids for the calling character; empty when none are muted.
+  repeated string scene_ids = 1;
 }
 
 // UpdateSceneRequest applies a partial update to mutable scene metadata using
@@ -910,6 +1021,10 @@ message CharacterSceneInfo {
   int64 last_activity_ms = 3;
   // Total scene_log rows on the IC subject (workspace activity panel).
   int64 entry_count = 4;
+  // true when this character has muted this scene (a scene_notify_prefs row
+  // read via SceneStore.ListMutedScenes); false otherwise. The persisted
+  // per-scene mute the workspace re-renders on reload/reconnect.
+  bool muted = 5;
 }
 
 // ListCharacterScenesResponse carries the character's scene participations,
@@ -917,6 +1032,11 @@ message CharacterSceneInfo {
 message ListCharacterScenesResponse {
   // The character's scenes, most recently active first.
   repeated CharacterSceneInfo scenes = 1;
+  // The character's persisted global notify preference read via
+  // SceneStore.GetSceneNotifyPref (default true); false when the character
+  // turned scene notifications off. Lets the workspace render the global
+  // notify toggle state on reload.
+  bool global_notify_enabled = 2;
 }
 
 // PublicSceneArchive is the public-safe view of a published scene archive,

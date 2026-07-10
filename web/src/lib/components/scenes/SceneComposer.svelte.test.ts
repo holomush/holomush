@@ -42,6 +42,7 @@ function scene(overrides: Partial<WorkspaceScene> = {}): WorkspaceScene {
 		lastActivityMs: 0n,
 		entryCount: 0n,
 		unread: 0,
+		muted: false,
 		...overrides,
 	};
 }

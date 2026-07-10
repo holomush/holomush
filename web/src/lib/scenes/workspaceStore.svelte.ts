@@ -60,6 +60,13 @@ let unreadBySceneId = $state<Record<string, number>>({});
 // server-side focus write (holomush-g1qcw).
 let focusReadyBySceneId = $state<Record<string, boolean>>({});
 
+// The character's persisted global scene-notify preference, captured from the
+// ListMyScenes read-back so the prefs UI renders the global-notify toggle on
+// reload (round-3 Concern 1). Defaults true (notifications on). Multi-alt: the
+// last-refreshed alt's value wins — the global preference is per-character and
+// the prefs UI reads it for the acting alt.
+let globalNotifyEnabled = $state(true);
+
 // ── actions ──────────────────────────────────────────────────────────────────
 
 /**
@@ -86,18 +93,26 @@ async function refresh(
 			// (layout data CharacterSummary from webCheckSession).
 			const characterName = char.characterName ?? char.name ?? characterId;
 			const sessionId = await ensureSession(characterId);
-			const scenes = await listMyScenes(sessionId, characterId);
-			return { characterId, characterName, scenes };
+			const { scenes, globalNotifyEnabled: altGlobalNotify } = await listMyScenes(
+				sessionId,
+				characterId,
+			);
+			return { characterId, characterName, scenes, altGlobalNotify };
 		}),
 	);
 
 	const next: WorkspaceScene[] = [];
+	// Capture the persisted global-notify preference from the last successful
+	// alt fetch (round-3 Concern 1 read-back). The preference is per-character;
+	// the prefs UI reads it for the acting alt.
+	let nextGlobalNotify = globalNotifyEnabled;
 	for (const result of results) {
 		if (result.status === 'rejected') {
 			console.warn('[workspaceStore] refresh: alt fetch failed', result.reason);
 			continue;
 		}
-		const { characterId, characterName, scenes } = result.value;
+		const { characterId, characterName, scenes, altGlobalNotify } = result.value;
+		nextGlobalNotify = altGlobalNotify;
 		for (const csi of scenes) {
 			const si = csi.scene;
 			const sceneId = si?.id ?? '';
@@ -114,12 +129,34 @@ async function refresh(
 				lastActivityMs: csi.lastActivityMs,
 				entryCount: csi.entryCount,
 				unread: unreadBySceneId[sceneId] ?? 0,
+				muted: csi.muted ?? false,
 			});
 		}
 	}
 
 	myScenes = next;
 	watching = next.filter((s) => s.role === 'observer');
+	globalNotifyEnabled = nextGlobalNotify;
+}
+
+/**
+ * Optimistically updates the local per-scene mute flag after a successful
+ * MuteScene RPC, so the toggle reflects immediately. The persisted state is
+ * authoritative on the next refresh() (round-3 Concern 1 read-back).
+ */
+function setMuted(sceneId: string, characterId: string, muted: boolean): void {
+	myScenes = myScenes.map((s) =>
+		s.sceneId === sceneId && s.asCharacterId === characterId ? { ...s, muted } : s,
+	);
+	watching = myScenes.filter((s) => s.role === 'observer');
+}
+
+/**
+ * Optimistically updates the local global-notify preference after a successful
+ * SetSceneNotifyPref RPC. Authoritative value is re-read on the next refresh().
+ */
+function setGlobalNotifyEnabled(enabled: boolean): void {
+	globalNotifyEnabled = enabled;
 }
 
 /**
@@ -350,13 +387,27 @@ export const workspaceStore = {
 	get unreadBySceneId() {
 		return unreadBySceneId;
 	},
+	get globalNotifyEnabled() {
+		return globalNotifyEnabled;
+	},
 	refresh,
 	select,
 	ingestEvent,
 	bumpUnread,
 	applySceneInfo,
 	isFocusReady,
+	setMuted,
+	setGlobalNotifyEnabled,
 };
 
 // Named exports for direct import in tests.
-export { refresh, select, ingestEvent, bumpUnread, applySceneInfo, isFocusReady };
+export {
+	refresh,
+	select,
+	ingestEvent,
+	bumpUnread,
+	applySceneInfo,
+	isFocusReady,
+	setMuted,
+	setGlobalNotifyEnabled,
+};

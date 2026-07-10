@@ -219,6 +219,14 @@ type CoreServer struct {
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
 	verbRegistry *core.VerbRegistry
+
+	// sceneMute optionally suppresses the SCENE_ACTIVITY badge downgrade for a
+	// non-focused member whose GLOBAL notify preference is off or who has muted
+	// the scene. Nil (unwired) or any returned error fails OPEN — the badge is
+	// delivered, since mute/notify-pref are preferences, not access control, and
+	// the downgraded frame is already content-free (INV-SCENE-62). Set via
+	// WithSceneMuteChecker.
+	sceneMute SceneMuteChecker
 }
 
 // CoreServerOption configures a CoreServer.
@@ -322,6 +330,13 @@ func WithHistoryReader(r eventbus.HistoryReader) CoreServerOption {
 // Unset defaults to "main" (eventbus.Config default).
 func WithGameID(p GameIDProvider) CoreServerOption {
 	return func(s *CoreServer) { s.gameID = p }
+}
+
+// WithSceneMuteChecker wires the mute/notify-pref suppression checker consulted
+// at the SCENE_ACTIVITY badge downgrade. Nil (the default) fails open — every
+// badge is delivered.
+func WithSceneMuteChecker(c SceneMuteChecker) CoreServerOption {
+	return func(s *CoreServer) { s.sceneMute = c }
 }
 
 // NewCoreServer creates a new Core gRPC server.
@@ -896,6 +911,32 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			s.streamRegistry.RegisterConnection(info.ID, connID, ctrlCh)
 			defer s.streamRegistry.DeregisterConnection(info.ID, connID, ctrlCh)
 		}
+
+		// RestoreConnectionFocus (D-08): a reconnecting telnet member whose
+		// session PresentingFocus was a scene has its fresh per-connection
+		// FocusKey repopulated so it receives live scene content rather than a
+		// badge downgrade. Gated on PresentingFocus != nil (Assumption A2 /
+		// Pitfall 5): an unconditional restore would clobber a web tab's
+		// per-tab focus, and PresentingFocus is the telnet single-pane
+		// reconnect signal. The primitive itself validates FocusMemberships
+		// (INV-SCENE-18) and grid-falls-back when membership was revoked mid-
+		// disconnect — which also blocks a swapped-in character (D-09) from
+		// inheriting a prior character's scene focus. Best-effort: a restore
+		// failure is logged but MUST NOT fail the Subscribe.
+		if s.focusCoordinator != nil && info.PresentingFocus != nil {
+			rcfCtx, rcfSpan := tracer.Start(ctx, "subscribe.restore_connection_focus",
+				trace.WithAttributes(attribute.String("connection.id", connID.String())))
+			if rcfErr := s.focusCoordinator.RestoreConnectionFocus(rcfCtx, req.GetSessionId(), connID); rcfErr != nil {
+				recordSpanError(rcfSpan, rcfErr)
+				slog.WarnContext(
+					ctx, "subscribe: restore connection focus failed (non-fatal)",
+					"session_id", req.GetSessionId(),
+					"connection_id", connID.String(),
+					"error", rcfErr,
+				)
+			}
+			rcfSpan.End()
+		}
 	}
 
 	// Reattach if detached.
@@ -1294,6 +1335,31 @@ func (s *CoreServer) dispatchDelivery(
 				currentFocus.Kind == session.FocusKindScene &&
 				currentFocus.TargetID.String() == sid
 			if !focusedOn {
+				// Mute / global-notify-off suppression (D-04). Consult the
+				// injected checker BEFORE building the badge: if the member has
+				// global notifications off or has muted this scene, drop the
+				// already-content-free frame for BOTH surfaces (web badge +
+				// telnet nudge). Fail-OPEN — a nil checker or any error delivers
+				// the badge, because mute/notify-pref are preferences, not
+				// access control (INV-SCENE-62 privacy is unaffected: the frame
+				// carries no content either way).
+				if s.sceneMute != nil {
+					suppress, muteErr := s.sceneMute.ShouldSuppress(ctx,
+						currentInfo.CharacterID.String(), currentInfo.PlayerID.String(), sid)
+					switch {
+					case muteErr != nil:
+						slog.DebugContext(ctx, "subscribe: scene-mute check failed; delivering badge (fail-open)",
+							"session_id", info.ID, "event_id", event.ID.String(), "scene_id", sid, "error", muteErr)
+					case suppress:
+						// Drop paths MUST ack — JetStream redelivers unacked
+						// events indefinitely (mirrors the badge-send ack below).
+						if ackErr := delivery.Ack(); ackErr != nil {
+							slog.WarnContext(ctx, "subscribe: ack failed on scene-mute suppression; will redeliver",
+								"session_id", info.ID, "event_id", event.ID.String(), "error", ackErr)
+						}
+						return nil
+					}
+				}
 				badge := &corev1.SubscribeResponse{Frame: &corev1.SubscribeResponse_Control{
 					Control: &corev1.ControlFrame{
 						Signal:  corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY,

@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -1490,9 +1491,18 @@ func (m *Manager) TestLoadPlugin(name string, manifest *Manifest) {
 	}
 }
 
-// isValidStreamName returns true if name is a valid HoloMUSH stream name.
-// Stream names must be non-empty, contain at least one colon, have no whitespace,
-// and be at most 256 characters long.
+// isValidStreamName returns true if name is a valid RELATIVE plugin session
+// stream reference. Plugin contributions are domain-RELATIVE dot references
+// (e.g. "channel.<id>"): non-empty, no whitespace, at most 256 characters, NOT
+// pre-qualified with an "events." prefix, and containing no colon.
+//
+// HIGH-1 fixed the prior contract, which required a colon and therefore DROPPED
+// the dot-relative refs core-channels returns (the colon form was eradicated by
+// holomush-rops). R3-A then tightened it to RELATIVE-ONLY: a pre-qualified
+// "events." subject or a colon-style ref from a plugin is rejected so an
+// arbitrary session_streams plugin cannot inject a pre-qualified FOREIGN subject
+// (Qualify would pass it through unscoped). The accepted relative ref is
+// qualified idempotently downstream (computeInitialFilters→toSubject→Qualify).
 func isValidStreamName(name string) bool {
 	if name == "" || len(name) > 256 {
 		return false
@@ -1502,7 +1512,10 @@ func isValidStreamName(name string) bool {
 			return false
 		}
 	}
-	return strings.Contains(name, ":")
+	if strings.HasPrefix(name, "events.") || strings.Contains(name, ":") {
+		return false
+	}
+	return true
 }
 
 // QuerySessionStreams collects plugin-contributed stream names for a session.
@@ -1512,14 +1525,18 @@ func isValidStreamName(name string) bool {
 func (m *Manager) QuerySessionStreams(ctx context.Context, req SessionStreamsRequest) []string {
 	m.mu.RLock()
 	type pluginEntry struct {
-		name string
-		host Host
+		name        string
+		host        Host
+		emitDomains []string // manifest.Emits — the owned-namespace fence input (R3-A)
 	}
 	var opted []pluginEntry
 	for name, dp := range m.loaded {
 		if dp.Manifest.SessionStreams {
 			if host, ok := m.pluginHosts[name]; ok {
-				opted = append(opted, pluginEntry{name, host})
+				// Copy the manifest's emit domains under the lock so the fence
+				// reads a stable snapshot outside it.
+				emits := append([]string(nil), dp.Manifest.Emits...)
+				opted = append(opted, pluginEntry{name: name, host: host, emitDomains: emits})
 			}
 		}
 	}
@@ -1530,9 +1547,10 @@ func (m *Manager) QuerySessionStreams(ctx context.Context, req SessionStreamsReq
 	}
 
 	type result struct {
-		name    string
-		streams []string
-		err     error
+		name        string
+		emitDomains []string
+		streams     []string
+		err         error
 	}
 	results := make(chan result, len(opted))
 	for _, p := range opted {
@@ -1540,7 +1558,7 @@ func (m *Manager) QuerySessionStreams(ctx context.Context, req SessionStreamsReq
 		go func() {
 			streams, err := p.host.QuerySessionStreams(ctx, p.name, req)
 			select {
-			case results <- result{name: p.name, streams: streams, err: err}:
+			case results <- result{name: p.name, emitDomains: p.emitDomains, streams: streams, err: err}:
 			case <-ctx.Done():
 			}
 		}()
@@ -1568,6 +1586,19 @@ func (m *Manager) QuerySessionStreams(ctx context.Context, req SessionStreamsReq
 				slog.WarnContext(ctx, "plugin returned invalid stream name — dropping",
 					"plugin", r.name,
 					"stream", s)
+				continue
+			}
+			// R3-A establishment-path namespace fence: run the SAME
+			// pluginauthz.AuthorizePluginStreamContribution the mid-session
+			// stream.subscription guard uses, so the two contribution paths
+			// cannot diverge. A ref outside the plugin's owned emit domains
+			// (a forbidden system/audit/crypto or a foreign/cross-game domain)
+			// is DROPPED + logged before it can reach the Subscribe filter plan.
+			if fenceErr := pluginauthz.AuthorizePluginStreamContribution(r.name, r.emitDomains, s); fenceErr != nil {
+				slog.WarnContext(ctx, "plugin stream contribution failed namespace fence — dropping",
+					"plugin", r.name,
+					"stream", s,
+					"error", fenceErr)
 				continue
 			}
 			if !seen[s] {

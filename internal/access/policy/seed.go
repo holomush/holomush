@@ -440,12 +440,35 @@ func SeedPolicies() []SeedPolicy {
 		// concrete stream against this permit; the audit/crypto_totp/crypto_policy/
 		// system forbids (deny-overrides) carve out the forbidden namespaces. This is
 		// the plugin analogue of seed:player-location-stream-read, minus the
-		// co-location condition (plugins have no location). Read-only: stream writes
-		// (stream.subscription) remain gated solely by the type-level capability.
+		// co-location condition (plugins have no location). Read-only.
+		//
+		// Stream WRITES (stream.subscription: AddSessionStream/RemoveSessionStream)
+		// are permitted at the instance level by seed:plugin-stream-subscribe below.
+		// The forbidden-namespace + owned-namespace protection on the write path is
+		// NOT these read-only forbids (they are all action in ["read"] and do NOT
+		// carve back a write permit) — it is the IN-HANDLER pluginauthz.
+		// AuthorizeStreamSubscribe rejection (review R2-B), which fences a plugin to
+		// its own declared emit domains and rejects system/audit/crypto directly.
 		{
 			Name:        "seed:plugin-stream-read",
 			Description: "Permit a declared plugin to read a concrete stream's history; audit/crypto/system forbids override forbidden namespaces (INV-PLUGIN-50; holomush-xakba)",
 			DSLText:     `permit(principal is plugin, action in ["read"], resource is stream);`,
+			SeedVersion: 1,
+		},
+
+		// Instance-level plugin stream write (stream.subscription; HIGH-3). Type-match
+		// (resource is stream) so it matches a CONCRETE stream:<name>. This is the
+		// write analogue of seed:plugin-stream-read and is the type/instance capability
+		// grant ONLY. It is INTENTIONALLY broad: the existing audit/system/crypto
+		// forbids are all action in ["read"] and do NOT restrict it. The load-bearing
+		// forbidden/owned-namespace control is the in-handler
+		// pluginauthz.AuthorizeStreamSubscribe fence (review R2-B / R3-A), which is
+		// independently tested and denies cross-namespace subscription EVEN WITH this
+		// permit active. Operators MAY add write-specific forbids as defense-in-depth.
+		{
+			Name:        "seed:plugin-stream-subscribe",
+			Description: "Permit a declared plugin to mutate a session's stream subscriptions (stream.subscription); the in-handler AuthorizeStreamSubscribe fence, not read-only forbids, bounds it to owned namespaces (INV-PLUGIN-50; HIGH-3)",
+			DSLText:     `permit(principal is plugin, action in ["write"], resource is stream);`,
 			SeedVersion: 1,
 		},
 

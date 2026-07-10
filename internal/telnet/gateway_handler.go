@@ -28,6 +28,7 @@ import (
 	"github.com/holomush/holomush/internal/gatewaymetrics"
 	grpcclient "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/telemetry"
+	"github.com/holomush/holomush/internal/telnet/gamenotice"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -105,7 +106,17 @@ type GatewayHandler struct {
 	characters         []*corev1.CharacterSummary // available characters while in selectMode
 	selectMode         bool                       // true when waiting for PLAY/CREATE
 	loggingOut         bool                       // true when LOGOUT initiated (close connection after quit)
+
+	// sceneNudgeLast records the last time a SCENE_ACTIVITY nudge rendered for a
+	// scene id, gating the per-scene debounce (D-02 throttle). Accessed only from
+	// the single-consumer Handle event loop, so no lock is needed.
+	sceneNudgeLast map[string]time.Time
 }
+
+// sceneNudgeWindow bounds how often a single scene's SCENE_ACTIVITY nudge
+// renders on telnet: at most one [>GAME: …] line per window per scene id, so a
+// busy scene cannot spam one line per pose (T-02-03).
+const sceneNudgeWindow = 45 * time.Second
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
 // limits bounds per-connection resource usage; callers SHOULD pass
@@ -115,11 +126,29 @@ type GatewayHandler struct {
 func NewGatewayHandler(conn net.Conn, client CoreClient, limits Limits) *GatewayHandler {
 	dr := &deadlineReader{conn: conn, timeout: limits.IdleReadTimeout}
 	return &GatewayHandler{
-		conn:   conn,
-		reader: bufio.NewReader(dr),
-		client: client,
-		limits: limits,
+		conn:           conn,
+		reader:         bufio.NewReader(dr),
+		client:         client,
+		limits:         limits,
+		sceneNudgeLast: make(map[string]time.Time),
 	}
+}
+
+// sceneActivityLine returns the throttled [>GAME: …] leader for a
+// SCENE_ACTIVITY control frame, or "" when the scene was nudged within
+// sceneNudgeWindow (per-scene debounce, D-02). It consumes only the scene id
+// and reaches no scene service/store — the leader is structurally content-free
+// (INV-SCENE-70). The event loop is single-consumer, so the debounce map needs
+// no lock.
+func (h *GatewayHandler) sceneActivityLine(sceneID string, now time.Time) string {
+	if h.sceneNudgeLast == nil {
+		h.sceneNudgeLast = make(map[string]time.Time)
+	}
+	if last, ok := h.sceneNudgeLast[sceneID]; ok && now.Sub(last) < sceneNudgeWindow {
+		return ""
+	}
+	h.sceneNudgeLast[sceneID] = now
+	return gamenotice.Activity(sceneID)
 }
 
 // Handle processes the connection until it is closed or the context is done.
@@ -322,7 +351,8 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 				}
 				h.sendProtoEvent(frame.Event)
 			case *corev1.SubscribeResponse_Control:
-				if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
+				switch frame.Control.GetSignal() {
+				case corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED:
 					if msg := frame.Control.GetMessage(); msg != "" {
 						h.send(msg)
 					}
@@ -339,9 +369,18 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 						continue
 					}
 					return
+				case corev1.ControlSignal_CONTROL_SIGNAL_SCENE_ACTIVITY:
+					// A non-focused member's scene has activity. Render a
+					// throttled, content-free nudge — consume only the scene id;
+					// never call a scene service/store or decrypt a payload
+					// (INV-SCENE-70; T-02-01).
+					if line := h.sceneActivityLine(frame.Control.GetSceneId(), time.Now()); line != "" {
+						h.send(line)
+					}
+				default:
+					// REPLAY_COMPLETE: no-op for telnet — replay renders the same as live.
+					slog.DebugContext(childCtx, "gateway: replay complete", "session_id", h.sessionID)
 				}
-				// REPLAY_COMPLETE: no-op for telnet — replay renders the same as live.
-				slog.DebugContext(childCtx, "gateway: replay complete", "session_id", h.sessionID)
 			}
 		}
 	}
@@ -1127,6 +1166,16 @@ func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
 		return ""
 	}
 
+	// The idle nudge (review Finding 4) renders through the shared gamenotice.Idle
+	// leader, NOT the generic system-notification path (which reads a "text"
+	// payload the idle nudge does not carry) and NOT the SCENE_ACTIVITY "has new
+	// activity" leader. Routed by event type before the category dispatch so the
+	// dedicated `[>GAME: … is now idle]` phrasing is used. The scene_id is read
+	// from the frame payload only — no scene service/store lookup (gateway-boundary).
+	if ev.GetType() == sceneIdleNudgeType {
+		return h.formatSceneIdleNudge(ev)
+	}
+
 	switch rendering.GetCategory() {
 	case "communication":
 		return h.formatCommunication(ev, rendering)
@@ -1221,6 +1270,28 @@ func (h *GatewayHandler) formatCommand(ev *corev1.EventFrame, rendering *corev1.
 		return fmt.Sprintf("[ERROR] %s", text)
 	}
 	return text
+}
+
+// sceneIdleNudgeType is the wire event type core-scenes emits when a scene goes
+// idle (plugins/core-scenes/idle_scheduler.go). Rendered via gamenotice.Idle.
+const sceneIdleNudgeType = "core-scenes:scene_idle_nudge"
+
+// formatSceneIdleNudge renders a scene_idle_nudge EventFrame as the shared
+// `[>GAME: Scene #<id> is now idle]` leader (gamenotice.Idle). It reads the
+// scene_id from the frame payload only — the gateway performs no scene
+// service/store lookup (gateway-boundary; the payload scene_id is authoritative).
+func (h *GatewayHandler) formatSceneIdleNudge(ev *corev1.EventFrame) string {
+	payload := make(map[string]any)
+	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+		slog.Error("gateway: failed to unmarshal scene_idle_nudge payload", "type", ev.GetType(), "error", err)
+		return ""
+	}
+	sceneID := stringFromPayload(payload, "scene_id")
+	if sceneID == "" {
+		slog.Warn("gateway: scene_idle_nudge missing scene_id", "type", ev.GetType())
+		return ""
+	}
+	return gamenotice.Idle(sceneID)
 }
 
 // formatSystem formats system notification text.

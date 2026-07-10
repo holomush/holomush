@@ -134,7 +134,7 @@ vi.mock('./altSessions.svelte', () => ({
 
 vi.mock('./client', () => ({
 	client: {},
-	listMyScenes: vi.fn().mockResolvedValue([]),
+	listMyScenes: vi.fn().mockResolvedValue({ scenes: [], globalNotifyEnabled: true }),
 	getScene: vi.fn().mockResolvedValue(undefined),
 	listScenes: vi.fn().mockResolvedValue([]),
 	watchScene: vi.fn().mockResolvedValue(undefined),
@@ -342,8 +342,8 @@ describe('refresh fan-out', () => {
 
 		// Each alt returns one scene.
 		vi.mocked(clientMod.listMyScenes)
-			.mockResolvedValueOnce([makeCharacterSceneInfo('SCENE_FROM_A')])
-			.mockResolvedValueOnce([makeCharacterSceneInfo('SCENE_FROM_B')]);
+			.mockResolvedValueOnce({ scenes: [makeCharacterSceneInfo('SCENE_FROM_A')], globalNotifyEnabled: true })
+			.mockResolvedValueOnce({ scenes: [makeCharacterSceneInfo('SCENE_FROM_B')], globalNotifyEnabled: true });
 
 		await workspaceStore.refresh([
 			{ characterId: 'CHAR_A', characterName: 'Alice' },
@@ -367,7 +367,7 @@ describe('refresh fan-out', () => {
 		const { workspaceStore } = await import('./workspaceStore.svelte');
 
 		vi.mocked(altSessions.ensureSession).mockResolvedValue('ALT_SESSION_XYZ');
-		vi.mocked(clientMod.listMyScenes).mockResolvedValue([]);
+		vi.mocked(clientMod.listMyScenes).mockResolvedValue({ scenes: [], globalNotifyEnabled: true });
 
 		await workspaceStore.refresh([{ characterId: 'CHAR_Z', characterName: 'Zara' }]);
 
@@ -384,9 +384,10 @@ describe('refresh fan-out', () => {
 			.mockRejectedValueOnce(new Error('auth expired for CHAR_BAD'))
 			.mockResolvedValueOnce('SESSION_CHAR_GOOD');
 
-		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce([
-			makeCharacterSceneInfo('SCENE_GOOD'),
-		]);
+		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce({
+			scenes: [makeCharacterSceneInfo('SCENE_GOOD')],
+			globalNotifyEnabled: true,
+		});
 
 		await workspaceStore.refresh([
 			{ characterId: 'CHAR_BAD', characterName: 'BadAlt' },
@@ -403,9 +404,10 @@ describe('refresh fan-out', () => {
 		const clientMod = await import('./client');
 		const { workspaceStore } = await import('./workspaceStore.svelte');
 
-		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce([
-			makeCharacterSceneInfo('SCENE_REFRESH_1'),
-		]);
+		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce({
+			scenes: [makeCharacterSceneInfo('SCENE_REFRESH_1')],
+			globalNotifyEnabled: true,
+		});
 
 		await workspaceStore.refresh([{ characterId: 'CHAR_X', characterName: 'Xeno' }]);
 
@@ -414,6 +416,40 @@ describe('refresh fan-out', () => {
 		expect(workspaceStore.myScenes[0]?.title).toBe('Scene SCENE_REFRESH_1');
 		expect(workspaceStore.myScenes[0]?.role).toBe('member');
 		expect(workspaceStore.myScenes[0]?.entryCount).toBe(5n);
+	});
+
+	it('seeds WorkspaceScene.muted and globalNotifyEnabled from the read-back (round-3 Concern 1)', async () => {
+		const clientMod = await import('./client');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		const mutedRow = makeCharacterSceneInfo('SCENE_MUTED') as { muted?: boolean };
+		mutedRow.muted = true;
+		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce({
+			scenes: [mutedRow as never],
+			globalNotifyEnabled: false,
+		});
+
+		await workspaceStore.refresh([{ characterId: 'CHAR_MUTE', characterName: 'Mira' }]);
+
+		const scene = workspaceStore.myScenes.find((s) => s.sceneId === 'SCENE_MUTED');
+		expect(scene?.muted).toBe(true);
+		expect(workspaceStore.globalNotifyEnabled).toBe(false);
+	});
+
+	it('defaults WorkspaceScene.muted to false when the read-back row omits muted', async () => {
+		const clientMod = await import('./client');
+		const { workspaceStore } = await import('./workspaceStore.svelte');
+
+		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce({
+			scenes: [makeCharacterSceneInfo('SCENE_UNMUTED')],
+			globalNotifyEnabled: true,
+		});
+
+		await workspaceStore.refresh([{ characterId: 'CHAR_U', characterName: 'Uma' }]);
+
+		const scene = workspaceStore.myScenes.find((s) => s.sceneId === 'SCENE_UNMUTED');
+		expect(scene?.muted).toBe(false);
+		expect(workspaceStore.globalNotifyEnabled).toBe(true);
 	});
 });
 
@@ -452,29 +488,32 @@ describe('select roster enrichment', () => {
 		} as never);
 
 		// Seed myScenes with a scene for CHAR_P1.
-		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce([
-			{
-				$typeName: 'holomush.scene.v1.CharacterSceneInfo',
-				role: 'owner',
-				lastActivityMs: 0n,
-				entryCount: 0n,
-				scene: {
-					$typeName: 'holomush.scene.v1.SceneInfo',
-					id: 'SCENE_ENRICH',
-					title: 'The Lab',
-					locationId: 'LOC2',
-					state: 'active',
-					tags: [],
-					description: '',
-					poseOrderMode: 'free',
-					contentWarnings: [],
-					visibility: 'open',
-					ownerId: 'CHAR_P1',
-					participants: [],
-					observers: [],
+		vi.mocked(clientMod.listMyScenes).mockResolvedValueOnce({
+			scenes: [
+				{
+					$typeName: 'holomush.scene.v1.CharacterSceneInfo',
+					role: 'owner',
+					lastActivityMs: 0n,
+					entryCount: 0n,
+					scene: {
+						$typeName: 'holomush.scene.v1.SceneInfo',
+						id: 'SCENE_ENRICH',
+						title: 'The Lab',
+						locationId: 'LOC2',
+						state: 'active',
+						tags: [],
+						description: '',
+						poseOrderMode: 'free',
+						contentWarnings: [],
+						visibility: 'open',
+						ownerId: 'CHAR_P1',
+						participants: [],
+						observers: [],
+					},
 				},
-			} as never,
-		]);
+			],
+			globalNotifyEnabled: true,
+		} as never);
 		await workspaceStore.refresh([{ characterId: 'CHAR_P1', characterName: 'Petra' }]);
 
 		await workspaceStore.select('SCENE_ENRICH', '', 'CHAR_P1');

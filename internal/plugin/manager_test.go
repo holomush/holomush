@@ -1560,14 +1560,17 @@ func newTestManager(t *testing.T) *plugins.Manager {
 }
 
 // loadPlugin registers a fake plugin manifest with the manager.
-// sessionStreams controls whether Manifest.SessionStreams is true.
-func loadPlugin(t *testing.T, m *plugins.Manager, name string, plugType plugins.Type, sessionStreams bool) {
+// sessionStreams controls whether Manifest.SessionStreams is true. Optional
+// emits declare the plugin's owned emit domains — the input to the R3-A
+// establishment namespace fence (AuthorizePluginStreamContribution).
+func loadPlugin(t *testing.T, m *plugins.Manager, name string, plugType plugins.Type, sessionStreams bool, emits ...string) {
 	t.Helper()
 	manifest := &plugins.Manifest{
 		Name:           name,
 		Version:        "1.0.0",
 		Type:           plugType,
 		SessionStreams: sessionStreams,
+		Emits:          emits,
 	}
 	if plugType == plugins.TypeLua {
 		manifest.LuaPlugin = &plugins.LuaConfig{Entry: "main.lua"}
@@ -1594,23 +1597,23 @@ func TestManagerQuerySessionStreamsMergesContributionsFromMultiplePlugins(t *tes
 	hostA := mocks.NewMockHost(t)
 	hostA.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	hostA.EXPECT().QuerySessionStreams(mock.Anything, "plugin-a", mock.Anything).
-		Return([]string{"channel:abc", "channel:shared"}, nil)
+		Return([]string{"channel.abc", "channel.shared"}, nil)
 	m.RegisterHost(plugins.TypeLua, hostA)
 
 	hostB := mocks.NewMockHost(t)
 	hostB.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	hostB.EXPECT().QuerySessionStreams(mock.Anything, "plugin-b", mock.Anything).
-		Return([]string{"channel:shared", "channel:def"}, nil) // channel:shared is a duplicate
+		Return([]string{"channel.shared", "channel.def"}, nil) // channel.shared is a duplicate
 	m.RegisterHost(plugins.TypeBinary, hostB)
 
-	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true) // session_streams: true
-	loadPlugin(t, m, "plugin-b", plugins.TypeBinary, true)
+	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true, "channel") // session_streams: true, owns channel
+	loadPlugin(t, m, "plugin-b", plugins.TypeBinary, true, "channel")
 
 	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
 		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
 	})
 
-	assert.ElementsMatch(t, []string{"channel:abc", "channel:shared", "channel:def"}, result)
+	assert.ElementsMatch(t, []string{"channel.abc", "channel.shared", "channel.def"}, result)
 }
 
 func TestManagerQuerySessionStreamsDegradeOnSinglePluginError(t *testing.T) {
@@ -1625,17 +1628,17 @@ func TestManagerQuerySessionStreamsDegradeOnSinglePluginError(t *testing.T) {
 	hostB := mocks.NewMockHost(t)
 	hostB.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	hostB.EXPECT().QuerySessionStreams(mock.Anything, "plugin-b", mock.Anything).
-		Return([]string{"channel:abc"}, nil)
+		Return([]string{"channel.abc"}, nil)
 	m.RegisterHost(plugins.TypeBinary, hostB)
 
-	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true)
-	loadPlugin(t, m, "plugin-b", plugins.TypeBinary, true)
+	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true, "channel")
+	loadPlugin(t, m, "plugin-b", plugins.TypeBinary, true, "channel")
 
 	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
 		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
 	})
 
-	assert.Equal(t, []string{"channel:abc"}, result)
+	assert.Equal(t, []string{"channel.abc"}, result)
 }
 
 func TestManagerQuerySessionStreamsSkipsOptedOutPlugins(t *testing.T) {
@@ -1660,18 +1663,47 @@ func TestManagerQuerySessionStreamsDropsInvalidStreamNames(t *testing.T) {
 	host.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	host.EXPECT().QuerySessionStreams(mock.Anything, "plugin-a", mock.Anything).
 		Return([]string{
-			"",              // empty — invalid
-			"nocolon",       // no colon — invalid
-			"has space:abc", // whitespace — invalid
-			"channel:valid", // valid
+			"",                      // empty — invalid
+			"has space.abc",         // whitespace — invalid
+			"events.main.channel.x", // pre-qualified — invalid (R3-A relative-only)
+			"channel:legacy",        // colon-style — invalid (R3-A relative-only)
+			"channel.valid",         // valid relative own-domain ref
 		}, nil)
 	m.RegisterHost(plugins.TypeLua, host)
-	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true)
+	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true, "channel")
 
 	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
 		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
 	})
-	assert.Equal(t, []string{"channel:valid"}, result)
+	assert.Equal(t, []string{"channel.valid"}, result)
+}
+
+// TestManagerQuerySessionStreamsFencesForeignAndForbiddenContributions proves
+// the R3-A establishment fence: a session_streams plugin's cross-game / system /
+// audit / foreign-domain / wildcard refs are DROPPED (not merged), while a
+// relative own-domain ref is KEPT (HIGH-1 delivery preserved). Asserted against
+// the SAME AuthorizePluginStreamContribution the mid-session guard uses.
+func TestManagerQuerySessionStreamsFencesForeignAndForbiddenContributions(t *testing.T) {
+	m := newTestManager(t)
+	host := mocks.NewMockHost(t)
+	host.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	host.EXPECT().QuerySessionStreams(mock.Anything, "core-channels", mock.Anything).
+		Return([]string{
+			"events.otherg.system.rekey.x",      // pre-qualified foreign+system — dropped
+			"system.rekey.ct.cid",               // forbidden namespace — dropped
+			"audit.log.x",                       // forbidden namespace — dropped
+			"scene.01SCENE00000000000000000000", // foreign domain (not owned) — dropped
+			"channel.>",                         // wildcard — dropped
+			"channel.c1",                        // own-domain relative — KEPT
+			"channel.c2",                        // own-domain relative — KEPT
+		}, nil)
+	m.RegisterHost(plugins.TypeBinary, host)
+	loadPlugin(t, m, "core-channels", plugins.TypeBinary, true, "channel") // owns only "channel"
+
+	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
+		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
+	})
+	assert.Equal(t, []string{"channel.c1", "channel.c2"}, result)
 }
 
 func TestManagerQuerySessionStreamsReturnsEarlyOnContextCancellation(t *testing.T) {

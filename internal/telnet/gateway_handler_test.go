@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/telnet/gamenotice"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -1101,6 +1102,33 @@ func TestGatewayHandler_TwoPhase_AuthFailure(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+// TestFormatEvent_SceneIdleNudge_RendersViaGamenoticeIdle verifies that a
+// focused member's core-scenes:scene_idle_nudge EventFrame renders through the
+// shared gamenotice.Idle primitive as `[>GAME: Scene #<id> is now idle]` (review
+// Finding 4), reading the scene_id from the frame payload only — NOT the generic
+// SCENE_ACTIVITY "has new activity" leader and NOT raw formatSystem text.
+func TestFormatEvent_SceneIdleNudge_RendersViaGamenoticeIdle(t *testing.T) {
+	h := &GatewayHandler{}
+
+	ev := &corev1.EventFrame{
+		Type:    "core-scenes:scene_idle_nudge",
+		Payload: []byte(`{"scene_id":"01SCENE_IDLE_TELNET_A"}`),
+		Rendering: &corev1.RenderingMetadata{
+			Category:      "system",
+			Format:        "notification",
+			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			SourcePlugin:  "core-scenes",
+		},
+	}
+
+	got := h.formatEvent(ev)
+	assert.Equal(t, gamenotice.Idle("01SCENE_IDLE_TELNET_A"), got,
+		"the idle EventFrame renders the gamenotice.Idle leader")
+	assert.Equal(t, "[>GAME: Scene #01SCENE_IDLE_TELNET_A is now idle]", got)
+	assert.NotEqual(t, gamenotice.Activity("01SCENE_IDLE_TELNET_A"), got,
+		"the idle nudge is distinct from the SCENE_ACTIVITY activity leader")
 }
 
 func TestFormatEvent_Communication_Speech(t *testing.T) {
@@ -3036,4 +3064,52 @@ func TestGatewayHandlerTreatsWireSessionNotFoundAsTerminalAndDisconnects(t *test
 	// (2 total Subscribe calls: initial + the one terminal resubscribe).
 	assert.Equal(t, int32(2), subCalls.Load(),
 		"terminal SESSION_NOT_FOUND must not retry; exactly one resubscribe attempt")
+}
+
+// TestSceneActivityLineCoalescesPerScenePerWindow drives the SCENE_ACTIVITY
+// render decision directly: N frames for the same scene within one debounce
+// window render exactly one leader; a frame after the window renders a second;
+// distinct scenes debounce independently.
+func TestSceneActivityLineCoalescesPerScenePerWindow(t *testing.T) {
+	h := &GatewayHandler{}
+	base := time.Now()
+
+	// First frame for scene A renders.
+	if got := h.sceneActivityLine("sceneA", base); got == "" {
+		t.Fatal("first SCENE_ACTIVITY frame for a scene must render a leader")
+	}
+	// N more frames within the window coalesce to nothing.
+	for i := 1; i <= 5; i++ {
+		within := base.Add(sceneNudgeWindow - time.Second)
+		if got := h.sceneActivityLine("sceneA", within); got != "" {
+			t.Errorf("frame %d within window rendered %q, want coalesced (empty)", i, got)
+		}
+	}
+	// A frame at/after the window boundary renders again.
+	if got := h.sceneActivityLine("sceneA", base.Add(sceneNudgeWindow)); got == "" {
+		t.Error("SCENE_ACTIVITY frame after the debounce window must render a second leader")
+	}
+	// A different scene in the same window renders its own leader (per-scene).
+	if got := h.sceneActivityLine("sceneB", base); got == "" {
+		t.Error("debounce is per scene_id: a distinct scene must render its own leader")
+	}
+}
+
+// Verifies: INV-SCENE-70
+//
+// TestSceneActivityLineCarriesOnlySceneID asserts the telnet SCENE_ACTIVITY
+// render path emits exactly the content-free gamenotice leader for the frame's
+// scene id and carries no scene title or pose/content text — telnet privacy
+// parity with INV-SCENE-62. The render function's only input is the scene id,
+// so it is structurally incapable of leaking scene content.
+func TestSceneActivityLineCarriesOnlySceneID(t *testing.T) {
+	h := &GatewayHandler{}
+	sceneID := "01SCENEXYZ"
+
+	got := h.sceneActivityLine(sceneID, time.Now())
+
+	require.Equal(t, gamenotice.Activity(sceneID), got,
+		"rendered line must equal the content-free gamenotice leader")
+	assert.Equal(t, "[>GAME: Scene #01SCENEXYZ has new activity]", got,
+		"the nudge carries only the scene id, no title or pose content")
 }

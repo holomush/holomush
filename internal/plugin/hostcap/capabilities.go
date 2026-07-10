@@ -121,6 +121,20 @@ type HostCapabilities interface {
 	// ReadbackDecryptor backs DecryptOwnAuditRows (nil ⇒ not configured).
 	ReadbackDecryptor() plugins.ReadbackDecryptor
 
+	// StreamRegistry backs the AddSessionStream / RemoveSessionStream
+	// (stream.subscription) capability RPCs (nil ⇒ not configured ⇒ the served
+	// handler fails closed with Internal). Both runtimes reach the same host
+	// SessionStreamRegistry through this accessor (plugin-runtime-symmetry).
+	StreamRegistry() plugins.StreamRegistry
+	// OwnedEmitDomains returns the manifest-declared emit domains of the named
+	// plugin — the owned-namespace fence input for AuthorizeStreamSubscribe
+	// (nil/empty ⇒ the plugin owns no emit namespaces ⇒ the fence rejects every
+	// stream contribution, fail closed). Host-derived; NOT trusted from the
+	// request. The binary host reads its loaded manifest; the Lua adapter has no
+	// per-plugin manifest emit surface and returns nil (Lua session-stream
+	// contribution via the served capability is not wired — see the adapter doc).
+	OwnedEmitDomains(pluginName string) []string
+
 	// PropertyDefinition resolves a registry property by name (property server).
 	// The binary host has no property registry and returns (nil, false).
 	PropertyDefinition(name string) (PropertyDefinition, bool)

@@ -91,6 +91,7 @@ import (
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/pgnanos"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
@@ -98,6 +99,7 @@ import (
 	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
+	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	"github.com/holomush/holomush/test/testutil"
@@ -199,11 +201,12 @@ type StartOption func(*startConfig)
 
 // startConfig holds resolved Start options.
 type startConfig struct {
-	accessEngine      types.AccessPolicyEngine
-	withPlugins       bool
-	withRealABAC      bool
-	withPluginCrypto  bool
-	withFocusDelivery bool
+	accessEngine              types.AccessPolicyEngine
+	withPlugins               bool
+	withRealABAC              bool
+	withPluginCrypto          bool
+	withFocusDelivery         bool
+	withSessionStreamDelivery bool
 	// pluginConfigOverrides is the per-plugin opaque config override
 	// (plugin name → key → value) threaded into PluginSubsystemConfig.
 	pluginConfigOverrides map[string]map[string]string
@@ -248,6 +251,30 @@ func WithRealABAC() StartOption {
 // wiring — zero blast radius (holomush-y5inx.9).
 func WithFocusDelivery() StartOption {
 	return func(c *startConfig) { c.withFocusDelivery = true }
+}
+
+// WithSessionStreamDelivery wires the plugin session-stream delivery substrate
+// so a plugin that opts into session_streams (e.g. core-channels) delivers live
+// events end-to-end. It mirrors production (cmd/holomush/core.go) by threading a
+// single SessionStreamRegistry into BOTH the plugin subsystem
+// (PluginSubsystemConfig.StreamRegistry — the plugin's stream.subscription
+// capability AddSessionStream target) and the CoreServer
+// (WithStreamRegistry + WithStreamContributor), and — when WithPluginCrypto is
+// NOT set — wires a plaintext rendering publisher into the plugin event emitter
+// plus the plugin audit-projection consumer so plugin service emits reach the
+// bus and project into their plugin-owned audit table.
+//
+// Concretely this makes the two contribution paths live:
+//   - session establishment: CoreServer.Subscribe consults the plugin
+//     StreamContributor (Manager.QuerySessionStreams) so memberships ∪ default
+//     channels join the live filter set (01-08 CHAN-01);
+//   - mid-session: the plugin's stream.subscription AddSessionStream mutates the
+//     live filter set via the shared registry (01-08 CHAN-02).
+//
+// REQUIRES WithInTreePlugins. Gated exactly like WithFocusDelivery so non-channel
+// suites keep the WithSubscriber-only wiring — zero blast radius (01-09 CHAN-05).
+func WithSessionStreamDelivery() StartOption {
+	return func(c *startConfig) { c.withSessionStreamDelivery = true }
 }
 
 // Start bootstraps a full in-process holomush stack and returns a Server.
@@ -353,6 +380,9 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	if cfg.withFocusDelivery && !cfg.withPlugins {
 		panic("integrationtest: WithFocusDelivery() requires WithInTreePlugins()")
 	}
+	if cfg.withSessionStreamDelivery && !cfg.withPlugins {
+		panic("integrationtest: WithSessionStreamDelivery() requires WithInTreePlugins()")
+	}
 	pe := cfg.accessEngine
 
 	// Real seeded ABAC engine (opt-in). Overrides the allow-all default and is
@@ -390,7 +420,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// connection's control channel on it).
 	// nil under non-focus suites — zero blast radius (holomush-y5inx.9).
 	var streamRegistry *holoGRPC.SessionStreamRegistry
-	if cfg.withFocusDelivery {
+	if cfg.withFocusDelivery || cfg.withSessionStreamDelivery {
 		streamRegistry = holoGRPC.NewSessionStreamRegistry()
 	}
 
@@ -423,8 +453,24 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			gameID:                bus.Bus.GameID(),
 			pluginConfigOverrides: cfg.pluginConfigOverrides,
 			extraPluginDirs:       cfg.extraPluginDirs,
+			streamRegistry:        streamRegistry,
 		})
 		cmdRegistry = pluginSub.CommandRegistry()
+
+		// Under WithSessionStreamDelivery WITHOUT WithPluginCrypto, the plugin
+		// event emitter would otherwise be unwired (cryptoPublisherOf(pc) is nil),
+		// so a plugin service emit (e.g. core-channels PostToChannel → channel_say)
+		// would reach no publisher and never hit the bus. Wire a PLAINTEXT
+		// rendering publisher on the embedded bus so plugin-owned emits are
+		// delivered + auditable end-to-end. The RenderingPublisher stamps rendering
+		// metadata from the shared verbRegistry (the manifest verbs loaded above).
+		if cfg.withSessionStreamDelivery && pc == nil {
+			gameID := bus.Bus.GameID()
+			pluginSub.Manager().ConfigureEventEmitter(
+				eventbus.NewRenderingPublisher(bus.Bus.Publisher(), verbRegistry),
+				plugins.WithGameID(func() string { return gameID }),
+			)
+		}
 	}
 
 	// When plugins are loaded, route plugin-backed commands through the
@@ -598,6 +644,17 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			holoGRPC.WithFocusCoordinator(focusCoord),
 		)
 	}
+	// Session-stream delivery (channels, 01-08/01-09): register each Subscribe
+	// connection on the shared stream registry (so mid-session AddSessionStream
+	// reaches the live loop) and consult the plugin StreamContributor at
+	// establishment (memberships ∪ default channels). WithStreamRegistry is added
+	// here only when focus did not already add it (they share one registry).
+	if cfg.withSessionStreamDelivery {
+		if !cfg.withFocusDelivery {
+			coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(streamRegistry))
+		}
+		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamContributor(pluginSub.Manager()))
+	}
 	coreServer := holoGRPC.NewCoreServer(
 		engine,
 		sessionStoreInst,
@@ -653,6 +710,19 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		t.Cleanup(func() { _ = srv.pluginConsumers.Stop(context.Background()) })
 		srv.configureReadback(pc)
 		t.Cleanup(func() { _ = srv.readbackAuditEm.Shutdown(context.Background()) })
+	}
+
+	// Session-stream delivery WITHOUT crypto: wire the plugin audit-projection
+	// consumer so plaintext plugin-owned emits (events.*.channel.>) project into
+	// their plugin-owned audit table (plugin_core_channels.channel_log) — the
+	// emit→audit round-trip QueryChannelHistory reads back (CHAN-03). The
+	// identity KeySelector suffices because the projection path writes the raw
+	// payload without invoking the codec's Decode (plugin_consumer.go), and
+	// channel events are plaintext (D-04). Skipped when WithPluginCrypto already
+	// wired the consumer above.
+	if cfg.withSessionStreamDelivery && srv.pluginConsumers == nil {
+		srv.pluginConsumers = startPluginConsumers(t, ctx, bus, pluginSub.Manager(), cryptowiring.KeySelector())
+		t.Cleanup(func() { _ = srv.pluginConsumers.Stop(context.Background()) })
 	}
 
 	return srv
@@ -718,6 +788,21 @@ func (s *Server) SceneServiceClient() scenev1.SceneServiceClient {
 	require.NoError(s.t, err, "integrationtest.Server.SceneServiceClient: resolve SceneService")
 	require.NotNil(s.t, svc.Conn, "integrationtest.Server.SceneServiceClient: nil conn")
 	return scenev1.NewSceneServiceClient(svc.Conn)
+}
+
+// ChannelServiceClient returns a ChannelService client backed by the loaded
+// core-channels plugin, resolved from the plugin ServiceRegistry. Test-only;
+// requires WithInTreePlugins (panics otherwise via requirePlugins). Used by the
+// channels e2e to assert the membership-gated QueryChannelHistory fence
+// directly (member reads back posted content; a non-member is denied) — the
+// request carries the acting CharacterId, which the RPC's store membership gate
+// evaluates without needing a command-dispatch actor context.
+func (s *Server) ChannelServiceClient() channelv1.ChannelServiceClient {
+	s.requirePlugins("ChannelServiceClient")
+	svc, err := s.ServiceRegistry().Resolve("holomush.channel.v1.ChannelService")
+	require.NoError(s.t, err, "integrationtest.Server.ChannelServiceClient: resolve ChannelService")
+	require.NotNil(s.t, svc.Conn, "integrationtest.Server.ChannelServiceClient: nil conn")
+	return channelv1.NewChannelServiceClient(svc.Conn)
 }
 
 // NewSceneAccessServer constructs a SceneAccessServer wired with the harness's

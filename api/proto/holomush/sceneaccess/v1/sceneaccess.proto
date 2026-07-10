@@ -79,6 +79,21 @@ service SceneAccessService {
   // which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
   rpc ResumeScene(ResumeSceneRequest) returns (ResumeSceneResponse);
 
+  // MuteScene toggles the verified character's per-scene notification mute. The
+  // facade resolves the acting character from the player session (INV-SCENE-63),
+  // rejects guests (INV-SCENE-64), then forwards to SceneService.MuteScene with
+  // the server-verified character_id; the plugin cross-checks that id against the
+  // host-vouched actor metadata and participant-gates on the scene's `mute` ABAC
+  // policy before persisting via SceneStore.SetSceneMute.
+  rpc MuteScene(MuteSceneRequest) returns (MuteSceneResponse);
+
+  // SetSceneNotifyPref writes the verified character's global scene-notification
+  // preference (character-self scope, no scene). Same identity/guest gating as
+  // MuteScene; forwards to SceneService.SetSceneNotifyPref with the server-
+  // verified character_id, which the plugin cross-checks against the host-vouched
+  // actor metadata before persisting the NULL-scene_id global row.
+  rpc SetSceneNotifyPref(SetSceneNotifyPrefRequest) returns (SetSceneNotifyPrefResponse);
+
   // UpdateScene applies an owner's partial edit to mutable scene metadata. The
   // facade resolves the acting character from the player session (INV-SCENE-63),
   // rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
@@ -260,7 +275,16 @@ message ListMyScenesRequest {
 // ListMyScenesResponse wraps the plugin's character-scene participations list.
 message ListMyScenesResponse {
   // scenes is the character's scene participations, most recently active first.
+  // Each CharacterSceneInfo carries the per-scene `muted` flag read from the
+  // plugin's ListCharacterScenes (SceneStore.ListMutedScenes), so the workspace
+  // renders persisted mute state on reload.
   repeated holomush.scene.v1.CharacterSceneInfo scenes = 1;
+  // global_notify_enabled is the character's persisted global notify preference,
+  // forwarded verbatim from the plugin ListCharacterScenes read
+  // (SceneStore.GetSceneNotifyPref); default true, false when the character
+  // turned scene notifications off. Lets the workspace render the global notify
+  // toggle state on reload.
+  bool global_notify_enabled = 2;
 }
 
 // WatchSceneRequest is the facade request for observer auto-join. session_id
@@ -571,6 +595,49 @@ message ResumeSceneResponse {
   // scene is the post-transition scene row (state == "active").
   holomush.scene.v1.SceneInfo scene = 1;
 }
+
+// MuteSceneRequest is the facade request to toggle a per-scene mute; fields
+// mirror ResumeSceneRequest plus the target mute flag. The facade verifies
+// ownership of character_id server-side (INV-SCENE-63) and stamps the verified
+// id on the forwarded plugin SceneService.MuteScene call.
+message MuteSceneRequest {
+  // session_id is the client-declared player-session ULID (hint only).
+  string session_id = 1;
+  // player_session_token authenticates the caller (see EndSceneRequest).
+  string player_session_token = 2;
+  // character_id selects the acting owned alt (ownership verified server-side).
+  string character_id = 3;
+  // scene_id identifies the scene whose mute flag to change; required.
+  string scene_id = 4;
+  // muted is the target flag: true suppresses this character's scene
+  // notifications, false clears the mute.
+  bool muted = 5;
+}
+
+// MuteSceneResponse is the empty acknowledgement of a persisted mute change;
+// the plugin's SetSceneMute is idempotent so no post-state row is returned.
+message MuteSceneResponse {}
+
+// SetSceneNotifyPrefRequest is the facade request to write the character's
+// global notify preference (character-self scope, NO scene_id). Fields mirror
+// EndSceneRequest minus scene_id, plus the desired enabled flag. The facade
+// verifies ownership of character_id server-side (INV-SCENE-63) and stamps the
+// verified id on the forwarded plugin SceneService.SetSceneNotifyPref call.
+message SetSceneNotifyPrefRequest {
+  // session_id is the client-declared player-session ULID (hint only).
+  string session_id = 1;
+  // player_session_token authenticates the caller (see EndSceneRequest).
+  string player_session_token = 2;
+  // character_id selects the acting owned alt (ownership verified server-side).
+  string character_id = 3;
+  // enabled is the target global preference: true keeps scene notifications on,
+  // false turns them off for this character.
+  bool enabled = 4;
+}
+
+// SetSceneNotifyPrefResponse is the empty acknowledgement of a persisted global
+// notify-pref write.
+message SetSceneNotifyPrefResponse {}
 
 // InviteToSceneRequest authenticates the inviter and names the invitee.
 message InviteToSceneRequest {

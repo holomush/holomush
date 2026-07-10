@@ -50,6 +50,17 @@ const (
 	// SceneServiceResumeSceneProcedure is the fully-qualified name of the SceneService's ResumeScene
 	// RPC.
 	SceneServiceResumeSceneProcedure = "/holomush.scene.v1.SceneService/ResumeScene"
+	// SceneServiceMuteSceneProcedure is the fully-qualified name of the SceneService's MuteScene RPC.
+	SceneServiceMuteSceneProcedure = "/holomush.scene.v1.SceneService/MuteScene"
+	// SceneServiceSetSceneNotifyPrefProcedure is the fully-qualified name of the SceneService's
+	// SetSceneNotifyPref RPC.
+	SceneServiceSetSceneNotifyPrefProcedure = "/holomush.scene.v1.SceneService/SetSceneNotifyPref"
+	// SceneServiceGetSceneNotifyPrefProcedure is the fully-qualified name of the SceneService's
+	// GetSceneNotifyPref RPC.
+	SceneServiceGetSceneNotifyPrefProcedure = "/holomush.scene.v1.SceneService/GetSceneNotifyPref"
+	// SceneServiceListMutedScenesProcedure is the fully-qualified name of the SceneService's
+	// ListMutedScenes RPC.
+	SceneServiceListMutedScenesProcedure = "/holomush.scene.v1.SceneService/ListMutedScenes"
 	// SceneServiceUpdateSceneProcedure is the fully-qualified name of the SceneService's UpdateScene
 	// RPC.
 	SceneServiceUpdateSceneProcedure = "/holomush.scene.v1.SceneService/UpdateScene"
@@ -146,6 +157,34 @@ type SceneServiceClient interface {
 	// Rejected with codes.FailedPrecondition from any non-paused state.
 	// See service.go::ResumeScene.
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// MuteScene sets or clears the calling character's per-scene mute flag,
+	// persisting it via SceneStore.SetSceneMute. Participant-gated: the handler
+	// evaluates the "mute" action against "scene:"+scene_id and fails closed
+	// (PermissionDenied) for a non-participant or an evaluator error, after
+	// cross-checking the request character_id against the host-vouched actor
+	// metadata. Both the `scene mute` and `scene unmute` telnet subcommands and
+	// the web mute control drive this RPC; the muted flag selects mute vs unmute.
+	// See service.go::MuteScene.
+	MuteScene(context.Context, *connect.Request[v1.MuteSceneRequest]) (*connect.Response[v1.MuteSceneResponse], error)
+	// SetSceneNotifyPref writes the calling character's global (all-scenes)
+	// notify preference via SceneStore.SetSceneNotifyPref. Character-self-scoped:
+	// the only authorization is the request character_id matching the
+	// host-vouched actor metadata (a caller may write only its own pref); there
+	// is no scene id and no scene ABAC evaluation. See
+	// service.go::SetSceneNotifyPref.
+	SetSceneNotifyPref(context.Context, *connect.Request[v1.SetSceneNotifyPrefRequest]) (*connect.Response[v1.SetSceneNotifyPrefResponse], error)
+	// GetSceneNotifyPref reads the calling character's persisted global notify
+	// preference (default enabled=true when no row exists) via
+	// SceneStore.GetSceneNotifyPref. This is the read the core mute-suppression
+	// checker consults to honor a character's notifications-off preference.
+	// Character-self-scoped by the request character_id / actor-metadata match.
+	// See service.go::GetSceneNotifyPref.
+	GetSceneNotifyPref(context.Context, *connect.Request[v1.GetSceneNotifyPrefRequest]) (*connect.Response[v1.GetSceneNotifyPrefResponse], error)
+	// ListMutedScenes returns the scene ids the calling character has muted via
+	// SceneStore.ListMutedScenes. Character-self-scoped by the request
+	// character_id / actor-metadata match; no scene ABAC evaluation. See
+	// service.go::ListMutedScenes.
+	ListMutedScenes(context.Context, *connect.Request[v1.ListMutedScenesRequest]) (*connect.Response[v1.ListMutedScenesResponse], error)
 	// UpdateScene applies a partial update to mutable scene metadata, driven by
 	// the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
 	// success. A pose-order-mode change auto-emits a pose-order-changed IC
@@ -191,7 +230,8 @@ type SceneServiceClient interface {
 	CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error)
 	// GetPoseOrder returns the computed pose-order roster for a scene. Enforces
 	// the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member,
-	// NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+	// NOT merely invited; the host ABAC evaluator is not consulted for this read).
+	// The PermissionDenied gate
 	// fires before any existence check so a non-participant cannot distinguish a
 	// missing scene from one they may not see. See service.go::GetPoseOrder.
 	GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error)
@@ -320,6 +360,30 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+SceneServiceResumeSceneProcedure,
 			connect.WithSchema(sceneServiceMethods.ByName("ResumeScene")),
+			connect.WithClientOptions(opts...),
+		),
+		muteScene: connect.NewClient[v1.MuteSceneRequest, v1.MuteSceneResponse](
+			httpClient,
+			baseURL+SceneServiceMuteSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("MuteScene")),
+			connect.WithClientOptions(opts...),
+		),
+		setSceneNotifyPref: connect.NewClient[v1.SetSceneNotifyPrefRequest, v1.SetSceneNotifyPrefResponse](
+			httpClient,
+			baseURL+SceneServiceSetSceneNotifyPrefProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("SetSceneNotifyPref")),
+			connect.WithClientOptions(opts...),
+		),
+		getSceneNotifyPref: connect.NewClient[v1.GetSceneNotifyPrefRequest, v1.GetSceneNotifyPrefResponse](
+			httpClient,
+			baseURL+SceneServiceGetSceneNotifyPrefProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("GetSceneNotifyPref")),
+			connect.WithClientOptions(opts...),
+		),
+		listMutedScenes: connect.NewClient[v1.ListMutedScenesRequest, v1.ListMutedScenesResponse](
+			httpClient,
+			baseURL+SceneServiceListMutedScenesProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ListMutedScenes")),
 			connect.WithClientOptions(opts...),
 		),
 		updateScene: connect.NewClient[v1.UpdateSceneRequest, v1.UpdateSceneResponse](
@@ -459,6 +523,10 @@ type sceneServiceClient struct {
 	endScene                       *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
 	pauseScene                     *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
 	resumeScene                    *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
+	muteScene                      *connect.Client[v1.MuteSceneRequest, v1.MuteSceneResponse]
+	setSceneNotifyPref             *connect.Client[v1.SetSceneNotifyPrefRequest, v1.SetSceneNotifyPrefResponse]
+	getSceneNotifyPref             *connect.Client[v1.GetSceneNotifyPrefRequest, v1.GetSceneNotifyPrefResponse]
+	listMutedScenes                *connect.Client[v1.ListMutedScenesRequest, v1.ListMutedScenesResponse]
 	updateScene                    *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
 	joinScene                      *connect.Client[v1.JoinSceneRequest, v1.JoinSceneResponse]
 	watchScene                     *connect.Client[v1.WatchSceneRequest, v1.WatchSceneResponse]
@@ -510,6 +578,26 @@ func (c *sceneServiceClient) PauseScene(ctx context.Context, req *connect.Reques
 // ResumeScene calls holomush.scene.v1.SceneService.ResumeScene.
 func (c *sceneServiceClient) ResumeScene(ctx context.Context, req *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
 	return c.resumeScene.CallUnary(ctx, req)
+}
+
+// MuteScene calls holomush.scene.v1.SceneService.MuteScene.
+func (c *sceneServiceClient) MuteScene(ctx context.Context, req *connect.Request[v1.MuteSceneRequest]) (*connect.Response[v1.MuteSceneResponse], error) {
+	return c.muteScene.CallUnary(ctx, req)
+}
+
+// SetSceneNotifyPref calls holomush.scene.v1.SceneService.SetSceneNotifyPref.
+func (c *sceneServiceClient) SetSceneNotifyPref(ctx context.Context, req *connect.Request[v1.SetSceneNotifyPrefRequest]) (*connect.Response[v1.SetSceneNotifyPrefResponse], error) {
+	return c.setSceneNotifyPref.CallUnary(ctx, req)
+}
+
+// GetSceneNotifyPref calls holomush.scene.v1.SceneService.GetSceneNotifyPref.
+func (c *sceneServiceClient) GetSceneNotifyPref(ctx context.Context, req *connect.Request[v1.GetSceneNotifyPrefRequest]) (*connect.Response[v1.GetSceneNotifyPrefResponse], error) {
+	return c.getSceneNotifyPref.CallUnary(ctx, req)
+}
+
+// ListMutedScenes calls holomush.scene.v1.SceneService.ListMutedScenes.
+func (c *sceneServiceClient) ListMutedScenes(ctx context.Context, req *connect.Request[v1.ListMutedScenesRequest]) (*connect.Response[v1.ListMutedScenesResponse], error) {
+	return c.listMutedScenes.CallUnary(ctx, req)
 }
 
 // UpdateScene calls holomush.scene.v1.SceneService.UpdateScene.
@@ -652,6 +740,34 @@ type SceneServiceHandler interface {
 	// Rejected with codes.FailedPrecondition from any non-paused state.
 	// See service.go::ResumeScene.
 	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	// MuteScene sets or clears the calling character's per-scene mute flag,
+	// persisting it via SceneStore.SetSceneMute. Participant-gated: the handler
+	// evaluates the "mute" action against "scene:"+scene_id and fails closed
+	// (PermissionDenied) for a non-participant or an evaluator error, after
+	// cross-checking the request character_id against the host-vouched actor
+	// metadata. Both the `scene mute` and `scene unmute` telnet subcommands and
+	// the web mute control drive this RPC; the muted flag selects mute vs unmute.
+	// See service.go::MuteScene.
+	MuteScene(context.Context, *connect.Request[v1.MuteSceneRequest]) (*connect.Response[v1.MuteSceneResponse], error)
+	// SetSceneNotifyPref writes the calling character's global (all-scenes)
+	// notify preference via SceneStore.SetSceneNotifyPref. Character-self-scoped:
+	// the only authorization is the request character_id matching the
+	// host-vouched actor metadata (a caller may write only its own pref); there
+	// is no scene id and no scene ABAC evaluation. See
+	// service.go::SetSceneNotifyPref.
+	SetSceneNotifyPref(context.Context, *connect.Request[v1.SetSceneNotifyPrefRequest]) (*connect.Response[v1.SetSceneNotifyPrefResponse], error)
+	// GetSceneNotifyPref reads the calling character's persisted global notify
+	// preference (default enabled=true when no row exists) via
+	// SceneStore.GetSceneNotifyPref. This is the read the core mute-suppression
+	// checker consults to honor a character's notifications-off preference.
+	// Character-self-scoped by the request character_id / actor-metadata match.
+	// See service.go::GetSceneNotifyPref.
+	GetSceneNotifyPref(context.Context, *connect.Request[v1.GetSceneNotifyPrefRequest]) (*connect.Response[v1.GetSceneNotifyPrefResponse], error)
+	// ListMutedScenes returns the scene ids the calling character has muted via
+	// SceneStore.ListMutedScenes. Character-self-scoped by the request
+	// character_id / actor-metadata match; no scene ABAC evaluation. See
+	// service.go::ListMutedScenes.
+	ListMutedScenes(context.Context, *connect.Request[v1.ListMutedScenesRequest]) (*connect.Response[v1.ListMutedScenesResponse], error)
 	// UpdateScene applies a partial update to mutable scene metadata, driven by
 	// the request's FieldMask (owner-only via ABAC). An empty mask is a no-op
 	// success. A pose-order-mode change auto-emits a pose-order-changed IC
@@ -697,7 +813,8 @@ type SceneServiceHandler interface {
 	CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error)
 	// GetPoseOrder returns the computed pose-order roster for a scene. Enforces
 	// the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member,
-	// NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate
+	// NOT merely invited; the host ABAC evaluator is not consulted for this read).
+	// The PermissionDenied gate
 	// fires before any existence check so a non-participant cannot distinguish a
 	// missing scene from one they may not see. See service.go::GetPoseOrder.
 	GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error)
@@ -822,6 +939,30 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		SceneServiceResumeSceneProcedure,
 		svc.ResumeScene,
 		connect.WithSchema(sceneServiceMethods.ByName("ResumeScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceMuteSceneHandler := connect.NewUnaryHandler(
+		SceneServiceMuteSceneProcedure,
+		svc.MuteScene,
+		connect.WithSchema(sceneServiceMethods.ByName("MuteScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceSetSceneNotifyPrefHandler := connect.NewUnaryHandler(
+		SceneServiceSetSceneNotifyPrefProcedure,
+		svc.SetSceneNotifyPref,
+		connect.WithSchema(sceneServiceMethods.ByName("SetSceneNotifyPref")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceGetSceneNotifyPrefHandler := connect.NewUnaryHandler(
+		SceneServiceGetSceneNotifyPrefProcedure,
+		svc.GetSceneNotifyPref,
+		connect.WithSchema(sceneServiceMethods.ByName("GetSceneNotifyPref")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceListMutedScenesHandler := connect.NewUnaryHandler(
+		SceneServiceListMutedScenesProcedure,
+		svc.ListMutedScenes,
+		connect.WithSchema(sceneServiceMethods.ByName("ListMutedScenes")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sceneServiceUpdateSceneHandler := connect.NewUnaryHandler(
@@ -964,6 +1105,14 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServicePauseSceneHandler.ServeHTTP(w, r)
 		case SceneServiceResumeSceneProcedure:
 			sceneServiceResumeSceneHandler.ServeHTTP(w, r)
+		case SceneServiceMuteSceneProcedure:
+			sceneServiceMuteSceneHandler.ServeHTTP(w, r)
+		case SceneServiceSetSceneNotifyPrefProcedure:
+			sceneServiceSetSceneNotifyPrefHandler.ServeHTTP(w, r)
+		case SceneServiceGetSceneNotifyPrefProcedure:
+			sceneServiceGetSceneNotifyPrefHandler.ServeHTTP(w, r)
+		case SceneServiceListMutedScenesProcedure:
+			sceneServiceListMutedScenesHandler.ServeHTTP(w, r)
 		case SceneServiceUpdateSceneProcedure:
 			sceneServiceUpdateSceneHandler.ServeHTTP(w, r)
 		case SceneServiceJoinSceneProcedure:
@@ -1037,6 +1186,22 @@ func (UnimplementedSceneServiceHandler) PauseScene(context.Context, *connect.Req
 
 func (UnimplementedSceneServiceHandler) ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ResumeScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) MuteScene(context.Context, *connect.Request[v1.MuteSceneRequest]) (*connect.Response[v1.MuteSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.MuteScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) SetSceneNotifyPref(context.Context, *connect.Request[v1.SetSceneNotifyPrefRequest]) (*connect.Response[v1.SetSceneNotifyPrefResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.SetSceneNotifyPref is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) GetSceneNotifyPref(context.Context, *connect.Request[v1.GetSceneNotifyPrefRequest]) (*connect.Response[v1.GetSceneNotifyPrefResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.GetSceneNotifyPref is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ListMutedScenes(context.Context, *connect.Request[v1.ListMutedScenesRequest]) (*connect.Response[v1.ListMutedScenesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ListMutedScenes is not implemented"))
 }
 
 func (UnimplementedSceneServiceHandler) UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error) {

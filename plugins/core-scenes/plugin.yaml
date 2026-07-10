@@ -47,6 +47,15 @@ config:
     type: duration
     default: 30s
     description: "How often the publish scheduler sweeps for expired attempts."
+  idle_timeout_default:
+    type: duration
+    default: 30m
+    description: "Game-wide default before an idle active scene auto-transitions to paused; the per-scene idle_timeout_secs
+      column overrides it."
+  idle_nudge_enabled:
+    type: bool
+    default: "false"
+    description: "When true, emit scene_idle_nudge as a scene goes idle (OFF by default per spec §4.4)."
 
 # Audit ownership (F5): core-scenes owns all events.*.scene.> subjects.
 # The host audit projection ack-and-skips these; deliveries are forwarded
@@ -176,8 +185,8 @@ crypto:
       description: "Notice that the scene owner changed the pose-order mode; mode strings + actor, no content."
     - event_type: scene_idle_nudge
       sensitivity: never
-      description: "Notice that the next-up character has been idle past the configured threshold; name + duration, no content.
-        Trigger implementation deferred to follow-up bead holomush-fux3."
+      description: "Notice that a scene went idle past its configured threshold and auto-transitioned to paused; carries only
+        the scene_id (no character name, duration, or content)."
 
     # Publish-vote notice events (sensitivity: never) — Phase 6 operational
     # metadata for the publication state machine; no IC content. See spec §7.
@@ -312,6 +321,17 @@ policies:
   - name: resume-scene-as-participant
     dsl: >-
       permit(principal is character, action in ["resume"], resource is scene) when { principal.id in resource.scene.participants
+      };
+  # mute/unmute are per-participant notification controls (D-04): any participant
+  # may mute or unmute the scene for themselves, gated on MEMBERSHIP not ownership
+  # (mirrors resume/leave). The single "mute" action authorizes both directions.
+  # The character-self notify-pref RPCs (SetSceneNotifyPref/GetSceneNotifyPref/
+  # ListMutedScenes) are NOT scene-scoped and intentionally have no policy here —
+  # their authorization is the request character_id ↔ host-vouched actor-metadata
+  # guard in the service handler.
+  - name: mute-scene-as-participant
+    dsl: >-
+      permit(principal is character, action in ["mute","unmute"], resource is scene) when { principal.id in resource.scene.participants
       };
 
   # ─── Membership operations ────────────────────────────────────────────

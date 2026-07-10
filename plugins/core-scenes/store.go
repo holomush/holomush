@@ -1825,6 +1825,203 @@ func (s *SceneStore) ListCharacterScenes(ctx context.Context, characterID, icSub
 	return out, nil
 }
 
+// idleScene is the minimal projection of a scene returned by the idle sweep:
+// the scene id plus its current state (for the scheduler's defensive
+// IsValidTransition gate). The idle scheduler never needs the full SceneRow to
+// transition an idle scene to paused, so the query returns only these columns.
+type idleScene struct {
+	ID    string
+	State string
+}
+
+// ListScenesIdlePastThreshold returns active scenes whose most recent IC
+// activity (or creation time, when the scene has no IC log yet) plus their
+// effective idle timeout is at or before nowNs (epoch-nanoseconds, Go-clock
+// supplied by the scheduler). The effective timeout is the per-scene
+// idle_timeout_secs column when set, else the game-wide defaultIdleTimeoutSecs.
+//
+// defaultIdleTimeoutSecs is an EXPLICIT parameter, never a store-held value:
+// SceneStore carries only a pool and cannot read the game-wide default from
+// plugin config (review Finding 1). The per-scene idle_timeout_secs column
+// overrides the default via COALESCE. Paused scenes are never returned, so a
+// paused scene is never re-transitioned (INV-SCENE-71).
+//
+// The scene_log subject is matched by suffix (`%scene.<id>.ic`) so the store
+// stays game-id-agnostic — it needs no "events.<game>.scene." prefix parameter,
+// mirroring the board's .ic activity semantics without the prefix arg.
+//
+// nowNs is a Go-clock nanosecond value passed as a query parameter, never
+// compared against a remote clock (the pgnanos-exempt scheduler-clock seam).
+func (s *SceneStore) ListScenesIdlePastThreshold(ctx context.Context, nowNs int64, defaultIdleTimeoutSecs int) ([]idleScene, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_scenes_idle_past_threshold")
+	defer span.End()
+
+	const q = `
+		SELECT s.id, s.state
+		FROM scenes s
+		WHERE s.state = 'active'
+		  AND (
+		        COALESCE(
+		          (SELECT MAX(l.timestamp) FROM scene_log l
+		             WHERE l.subject LIKE '%scene.' || s.id || '.ic'),
+		          s.created_at
+		        )
+		        + COALESCE(s.idle_timeout_secs, $2)::bigint * 1000000000
+		      ) <= $1
+		ORDER BY s.id ASC
+	`
+	rows, err := s.pool.Query(ctx, q, nowNs, defaultIdleTimeoutSecs)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_IDLE_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []idleScene
+	for rows.Next() {
+		var sc idleScene
+		if err := rows.Scan(&sc.ID, &sc.State); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_IDLE_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, sc)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_IDLE_ITER_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
+// notifyPrefTimestampExpr is the SQL expression for the current time in
+// epoch-nanoseconds, matching the created_at/updated_at column domain of
+// scene_notify_prefs (migration 000011) and the wider plugin schema (000007).
+const notifyPrefTimestampExpr = `(EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT`
+
+// SetSceneMute upserts the per-scene mute flag for (characterID, sceneID).
+// muted=true mutes the scene for that character; muted=false unmutes it.
+// The write is idempotent: repeated calls with the same arguments touch a
+// single row (partial unique index scene_notify_prefs_scene).
+func (s *SceneStore) SetSceneMute(ctx context.Context, characterID, sceneID string, muted bool) error {
+	ctx, span := startSpan(
+		ctx, "scene.store.set_scene_mute",
+		attribute.String("character_id", characterID),
+		attribute.String("scene_id", sceneID),
+		attribute.Bool("muted", muted),
+	)
+	defer span.End()
+
+	const q = `
+		INSERT INTO scene_notify_prefs (character_id, scene_id, muted)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (character_id, scene_id) WHERE scene_id IS NOT NULL
+		DO UPDATE SET muted = EXCLUDED.muted,
+		              updated_at = ` + notifyPrefTimestampExpr
+	if _, err := s.pool.Exec(ctx, q, characterID, sceneID, muted); err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_SET_MUTE_FAILED").
+			With("character_id", characterID).With("scene_id", sceneID).Wrap(err)
+	}
+	return nil
+}
+
+// SetSceneNotifyPref upserts the per-character GLOBAL notify preference,
+// stored as the NULL-scene_id row. enabled=true means notifications are on;
+// it persists as muted = NOT enabled on the global row. Idempotent via the
+// partial unique index scene_notify_prefs_global.
+func (s *SceneStore) SetSceneNotifyPref(ctx context.Context, characterID string, enabled bool) error {
+	ctx, span := startSpan(
+		ctx, "scene.store.set_scene_notify_pref",
+		attribute.String("character_id", characterID),
+		attribute.Bool("enabled", enabled),
+	)
+	defer span.End()
+
+	// The global row records notify-OFF as muted=true, so store the inverse of
+	// enabled. The mode column keeps its 'realtime' default (D-05 digest seam).
+	const q = `
+		INSERT INTO scene_notify_prefs (character_id, scene_id, muted)
+		VALUES ($1, NULL, $2)
+		ON CONFLICT (character_id) WHERE scene_id IS NULL
+		DO UPDATE SET muted = EXCLUDED.muted,
+		              updated_at = ` + notifyPrefTimestampExpr
+	if _, err := s.pool.Exec(ctx, q, characterID, !enabled); err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_SET_NOTIFY_PREF_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	return nil
+}
+
+// GetSceneNotifyPref returns the per-character global notify preference and
+// its delivery mode. When no global row exists the character defaults to
+// notify ON (enabled=true) with mode "realtime" (the D-05 digest seam ships
+// defaulting realtime). enabled is the inverse of the stored global muted flag.
+func (s *SceneStore) GetSceneNotifyPref(ctx context.Context, characterID string) (enabled bool, mode string, err error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.get_scene_notify_pref",
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT muted, mode FROM scene_notify_prefs
+		WHERE character_id = $1 AND scene_id IS NULL
+	`
+	var muted bool
+	if scanErr := s.pool.QueryRow(ctx, q, characterID).Scan(&muted, &mode); scanErr != nil {
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			// No global row: notify ON by default, realtime delivery.
+			return true, "realtime", nil
+		}
+		recordError(span, scanErr)
+		return false, "", oops.Code("SCENE_GET_NOTIFY_PREF_FAILED").
+			With("character_id", characterID).Wrap(scanErr)
+	}
+	return !muted, mode, nil
+}
+
+// ListMutedScenes returns the scene IDs the character has muted — the
+// non-NULL-scene_id rows with muted=true. Results are scoped strictly to the
+// queried character; another character's mutes are never returned.
+func (s *SceneStore) ListMutedScenes(ctx context.Context, characterID string) ([]string, error) {
+	ctx, span := startSpan(
+		ctx, "scene.store.list_muted_scenes",
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT scene_id FROM scene_notify_prefs
+		WHERE character_id = $1 AND scene_id IS NOT NULL AND muted = true
+		ORDER BY scene_id ASC
+	`
+	rows, err := s.pool.Query(ctx, q, characterID)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_MUTED_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_MUTED_SCAN_FAILED").
+				With("character_id", characterID).Wrap(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_MUTED_ITER_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	return ids, nil
+}
+
 // dotStyleSceneSubject returns the NATS dot-style entity-level subject
 // for a scene per substrate INV-EVENTBUS-28: events.<gameID>.scene.<sceneID>.
 // Used for lifecycle/system events that target the scene itself, not

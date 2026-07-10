@@ -12,6 +12,8 @@ import {
 	type WebEndSceneRequest,
 	type WebPauseSceneRequest,
 	type WebResumeSceneRequest,
+	type WebMuteSceneRequest,
+	type WebSetSceneNotifyPrefRequest,
 	type WebInviteToSceneRequest,
 	type WebKickFromSceneRequest,
 	type WebTransferOwnershipRequest,
@@ -30,11 +32,13 @@ export const client = createClient(WebService, transport);
  * Lists the scenes the given character participates in (owned, member,
  * observer). characterId identifies which alt to query; sessionId is the
  * per-alt comms_hub session from ensureSession().
- * Returns the raw CharacterSceneInfo array from the response.
+ * Returns the CharacterSceneInfo array plus the character's persisted global
+ * notify preference (default true) so the workspace renders both the per-scene
+ * mute state (CharacterSceneInfo.muted) and the global-notify toggle on reload.
  */
 export async function listMyScenes(sessionId: string, characterId: string) {
 	const res = await client.webListMyScenes({ sessionId, characterId });
-	return res.scenes;
+	return { scenes: res.scenes, globalNotifyEnabled: res.globalNotifyEnabled };
 }
 
 /**
@@ -192,6 +196,30 @@ export async function resumeScene(
 ) {
 	const res = await client.webResumeScene({ sessionId, ...opts });
 	return res.scene;
+}
+
+/**
+ * Toggles the character's per-scene notification mute. Structural write → typed
+ * RPC, never the command path (gateway-boundary). Returns void — the response
+ * is empty (SceneAccessService.MuteScene).
+ */
+export async function muteScene(
+	sessionId: string,
+	opts: Pick<WebMuteSceneRequest, 'characterId' | 'sceneId' | 'muted'>,
+): Promise<void> {
+	await client.webMuteScene({ sessionId, ...opts });
+}
+
+/**
+ * Writes the character's global scene-notify preference (character-self scope,
+ * no scene). Structural write → typed RPC. Returns void — the response is empty
+ * (SceneAccessService.SetSceneNotifyPref).
+ */
+export async function setSceneNotifyPref(
+	sessionId: string,
+	opts: Pick<WebSetSceneNotifyPrefRequest, 'characterId' | 'enabled'>,
+): Promise<void> {
+	await client.webSetSceneNotifyPref({ sessionId, ...opts });
 }
 
 /** Applies a masked partial update to scene settings; returns the post-update SceneInfo. */

@@ -30,6 +30,8 @@ const (
 	SceneAccessService_EndScene_FullMethodName                   = "/holomush.sceneaccess.v1.SceneAccessService/EndScene"
 	SceneAccessService_PauseScene_FullMethodName                 = "/holomush.sceneaccess.v1.SceneAccessService/PauseScene"
 	SceneAccessService_ResumeScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/ResumeScene"
+	SceneAccessService_MuteScene_FullMethodName                  = "/holomush.sceneaccess.v1.SceneAccessService/MuteScene"
+	SceneAccessService_SetSceneNotifyPref_FullMethodName         = "/holomush.sceneaccess.v1.SceneAccessService/SetSceneNotifyPref"
 	SceneAccessService_UpdateScene_FullMethodName                = "/holomush.sceneaccess.v1.SceneAccessService/UpdateScene"
 	SceneAccessService_InviteToScene_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/InviteToScene"
 	SceneAccessService_KickFromScene_FullMethodName              = "/holomush.sceneaccess.v1.SceneAccessService/KickFromScene"
@@ -110,6 +112,19 @@ type SceneAccessServiceClient interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error)
+	// MuteScene toggles the verified character's per-scene notification mute. The
+	// facade resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.MuteScene with
+	// the server-verified character_id; the plugin cross-checks that id against the
+	// host-vouched actor metadata and participant-gates on the scene's `mute` ABAC
+	// policy before persisting via SceneStore.SetSceneMute.
+	MuteScene(ctx context.Context, in *MuteSceneRequest, opts ...grpc.CallOption) (*MuteSceneResponse, error)
+	// SetSceneNotifyPref writes the verified character's global scene-notification
+	// preference (character-self scope, no scene). Same identity/guest gating as
+	// MuteScene; forwards to SceneService.SetSceneNotifyPref with the server-
+	// verified character_id, which the plugin cross-checks against the host-vouched
+	// actor metadata before persisting the NULL-scene_id global row.
+	SetSceneNotifyPref(ctx context.Context, in *SetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*SetSceneNotifyPrefResponse, error)
 	// UpdateScene applies an owner's partial edit to mutable scene metadata. The
 	// facade resolves the acting character from the player session (INV-SCENE-63),
 	// rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
@@ -259,6 +274,26 @@ func (c *sceneAccessServiceClient) ResumeScene(ctx context.Context, in *ResumeSc
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResumeSceneResponse)
 	err := c.cc.Invoke(ctx, SceneAccessService_ResumeScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) MuteScene(ctx context.Context, in *MuteSceneRequest, opts ...grpc.CallOption) (*MuteSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MuteSceneResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_MuteScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneAccessServiceClient) SetSceneNotifyPref(ctx context.Context, in *SetSceneNotifyPrefRequest, opts ...grpc.CallOption) (*SetSceneNotifyPrefResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetSceneNotifyPrefResponse)
+	err := c.cc.Invoke(ctx, SceneAccessService_SetSceneNotifyPref_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -469,6 +504,19 @@ type SceneAccessServiceServer interface {
 	// Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene
 	// which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65).
 	ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error)
+	// MuteScene toggles the verified character's per-scene notification mute. The
+	// facade resolves the acting character from the player session (INV-SCENE-63),
+	// rejects guests (INV-SCENE-64), then forwards to SceneService.MuteScene with
+	// the server-verified character_id; the plugin cross-checks that id against the
+	// host-vouched actor metadata and participant-gates on the scene's `mute` ABAC
+	// policy before persisting via SceneStore.SetSceneMute.
+	MuteScene(context.Context, *MuteSceneRequest) (*MuteSceneResponse, error)
+	// SetSceneNotifyPref writes the verified character's global scene-notification
+	// preference (character-self scope, no scene). Same identity/guest gating as
+	// MuteScene; forwards to SceneService.SetSceneNotifyPref with the server-
+	// verified character_id, which the plugin cross-checks against the host-vouched
+	// actor metadata before persisting the NULL-scene_id global row.
+	SetSceneNotifyPref(context.Context, *SetSceneNotifyPrefRequest) (*SetSceneNotifyPrefResponse, error)
 	// UpdateScene applies an owner's partial edit to mutable scene metadata. The
 	// facade resolves the acting character from the player session (INV-SCENE-63),
 	// rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene,
@@ -567,6 +615,12 @@ func (UnimplementedSceneAccessServiceServer) PauseScene(context.Context, *PauseS
 }
 func (UnimplementedSceneAccessServiceServer) ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) MuteScene(context.Context, *MuteSceneRequest) (*MuteSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MuteScene not implemented")
+}
+func (UnimplementedSceneAccessServiceServer) SetSceneNotifyPref(context.Context, *SetSceneNotifyPrefRequest) (*SetSceneNotifyPrefResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSceneNotifyPref not implemented")
 }
 func (UnimplementedSceneAccessServiceServer) UpdateScene(context.Context, *UpdateSceneRequest) (*UpdateSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateScene not implemented")
@@ -771,6 +825,42 @@ func _SceneAccessService_ResumeScene_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SceneAccessServiceServer).ResumeScene(ctx, req.(*ResumeSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_MuteScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MuteSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).MuteScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_MuteScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).MuteScene(ctx, req.(*MuteSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneAccessService_SetSceneNotifyPref_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetSceneNotifyPrefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneAccessServiceServer).SetSceneNotifyPref(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneAccessService_SetSceneNotifyPref_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneAccessServiceServer).SetSceneNotifyPref(ctx, req.(*SetSceneNotifyPrefRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1065,6 +1155,14 @@ var SceneAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResumeScene",
 			Handler:    _SceneAccessService_ResumeScene_Handler,
+		},
+		{
+			MethodName: "MuteScene",
+			Handler:    _SceneAccessService_MuteScene_Handler,
+		},
+		{
+			MethodName: "SetSceneNotifyPref",
+			Handler:    _SceneAccessService_SetSceneNotifyPref_Handler,
 		},
 		{
 			MethodName: "UpdateScene",

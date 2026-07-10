@@ -275,6 +275,7 @@ type Host struct {
 	eventEmitter      plugins.PluginIntentEmitter
 	focusCoordinator  focus.Coordinator
 	historyReader     plugins.HistoryReader
+	streamRegistry    plugins.StreamRegistry
 	readbackDecryptor plugins.ReadbackDecryptor
 	identityRegistry  plugins.IdentityRegistry
 	engine            types.AccessPolicyEngine
@@ -484,6 +485,40 @@ func (h *Host) HistoryReader() plugins.HistoryReader {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.historyReader
+}
+
+// SetStreamRegistry injects the session stream registry after construction.
+// Same late-binding rationale as SetHistoryReader: the registry is assembled in
+// the gRPC subsystem after the plugin host is constructed. Backs the served
+// stream.subscription capability.
+func (h *Host) SetStreamRegistry(r plugins.StreamRegistry) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.streamRegistry = r
+}
+
+// StreamRegistry returns the current session stream registry, or nil if not set.
+// Satisfies hostcap.HostCapabilities.
+func (h *Host) StreamRegistry() plugins.StreamRegistry {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.streamRegistry
+}
+
+// OwnedEmitDomains returns the manifest-declared emit domains of the named
+// plugin (from its manifest's Emits field), guarded by RLock. Returns nil when
+// the plugin is not loaded. This is the owned-namespace fence input for the
+// served stream.subscription capability's AuthorizeStreamSubscribe guard (HIGH-3):
+// host-derived, never trusted from the request. Exported to satisfy the
+// hostcap.HostCapabilities port.
+func (h *Host) OwnedEmitDomains(pluginName string) []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	lp, ok := h.plugins[pluginName]
+	if !ok || lp.manifest == nil {
+		return nil
+	}
+	return append([]string(nil), lp.manifest.Emits...)
 }
 
 // SetCommandQuerier late-binds the shared command querier into the host after

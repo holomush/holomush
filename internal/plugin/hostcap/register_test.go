@@ -52,6 +52,8 @@ func (stubHostCaps) CharacterSettings() settings.CharacterSettingsStore { return
 func (stubHostCaps) FocusCoordinator() focus.Coordinator                { return nil }
 func (stubHostCaps) GameID() string                                     { return "" }
 func (stubHostCaps) HistoryReader() plugins.HistoryReader               { return nil }
+func (stubHostCaps) StreamRegistry() plugins.StreamRegistry             { return nil }
+func (stubHostCaps) OwnedEmitDomains(string) []string                   { return nil }
 func (stubHostCaps) ReadbackDecryptor() plugins.ReadbackDecryptor       { return nil }
 
 func (stubHostCaps) PropertyDefinition(string) (hostcap.PropertyDefinition, bool) {

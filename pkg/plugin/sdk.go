@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -118,6 +119,9 @@ func (p *grpcPlugin) GRPCServer(_ *hashiplug.GRPCBroker, s *grpc.Server) error {
 	if ch, ok := p.handler.(CommandHandler); ok {
 		adapter.cmdHandler = ch
 	}
+	if sh, ok := p.handler.(SessionStreamsHandler); ok {
+		adapter.streamsHandler = sh
+	}
 	pluginv1.RegisterPluginServiceServer(s, adapter)
 	return nil
 }
@@ -132,8 +136,9 @@ func (p *grpcPlugin) GRPCClient(_ context.Context, _ *hashiplug.GRPCBroker, _ *g
 type pluginServerAdapter struct {
 	pluginv1.UnimplementedPluginServiceServer
 	handler         Handler
-	cmdHandler      CommandHandler  // nil if handler does not implement CommandHandler
-	serviceProvider ServiceProvider // nil if plugin does not provide services
+	cmdHandler      CommandHandler        // nil if handler does not implement CommandHandler
+	streamsHandler  SessionStreamsHandler // nil if handler does not implement SessionStreamsHandler
+	serviceProvider ServiceProvider       // nil if plugin does not provide services
 	brokerDialer    brokerDialer
 }
 
@@ -176,12 +181,13 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	_, wantsSettings := a.serviceProvider.(SettingsClientAware)
 	_, wantsDecryptor := a.serviceProvider.(SnapshotDecryptorAware)
 	_, wantsCommandLister := a.serviceProvider.(CommandListerAware)
+	_, wantsStreamSub := a.serviceProvider.(StreamSubscriptionAware)
 
 	// Lazily dial a single plugin-host gRPC connection shared by every
 	// host-facing SDK facade the provider opts into. If the provider opts
 	// into none, we never dial.
 	var hostConn *grpc.ClientConn
-	if wantsSink || wantsFocus || wantsEvaluator || wantsSettings || wantsDecryptor || wantsCommandLister {
+	if wantsSink || wantsFocus || wantsEvaluator || wantsSettings || wantsDecryptor || wantsCommandLister || wantsStreamSub {
 		requiredServices := map[string]string(nil)
 		if config != nil {
 			requiredServices = config.GetRequiredServices()
@@ -210,6 +216,9 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 	}
 	if clAware, ok := a.serviceProvider.(CommandListerAware); ok {
 		clAware.SetCommandLister(newHostCommandClient(hostConn))
+	}
+	if streamSubAware, ok := a.serviceProvider.(StreamSubscriptionAware); ok {
+		streamSubAware.SetStreamSubscription(newPluginHostStreamSubscriptionClient(hostConn))
 	}
 
 	if a.serviceProvider == nil {
@@ -325,6 +334,34 @@ func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.H
 			AuditHints: protoHints,
 		},
 	}, nil
+}
+
+// QuerySessionStreams implements pluginv1.PluginServiceServer. It routes to the
+// plugin's SessionStreamsHandler when the handler implements it; an event-only
+// (or command-only) plugin returns an empty, non-error response so it does not
+// break session establishment. A handler error is reported via the response
+// Error field (the host degrades: logs and skips this plugin's contribution per
+// plugin.proto) — the inner error text is NOT leaked past the boundary
+// (.claude/rules/grpc-errors.md); it is logged locally and the wire carries a
+// generic message.
+func (a *pluginServerAdapter) QuerySessionStreams(ctx context.Context, req *pluginv1.QuerySessionStreamsRequest) (*pluginv1.QuerySessionStreamsResponse, error) {
+	if a.streamsHandler == nil {
+		return &pluginv1.QuerySessionStreamsResponse{}, nil
+	}
+	ctx = contextWithIncomingActorMetadata(ctx)
+	streams, err := a.streamsHandler.QuerySessionStreams(ctx, SessionStreamsRequest{
+		CharacterID: req.GetCharacterId(),
+		PlayerID:    req.GetPlayerId(),
+		SessionID:   req.GetSessionId(),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "plugin QuerySessionStreams handler failed",
+			"character_id", req.GetCharacterId(),
+			"session_id", req.GetSessionId(),
+			"error", err)
+		return &pluginv1.QuerySessionStreamsResponse{Error: "session stream contribution failed"}, nil
+	}
+	return &pluginv1.QuerySessionStreamsResponse{Streams: streams}, nil
 }
 
 // sdkAuditEffectToProto converts an SDK AuditEffect string to the closed

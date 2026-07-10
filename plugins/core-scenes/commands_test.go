@@ -143,6 +143,74 @@ func TestHandleCommandEndCallsEndScene(t *testing.T) {
 	assert.Contains(t, endResp.Output, "ended")
 }
 
+// newMutePlugin builds a scenePlugin whose service is backed by an inspectable
+// fakeStore, wired with the given evaluator on both the command dispatch gate
+// and the service-level MuteScene gate.
+func newMutePlugin(t *testing.T, ev pluginsdk.HostEvaluator) (*scenePlugin, *fakeStore) {
+	t.Helper()
+	store := newFakeStore()
+	svc := newTestService(t, store)
+	svc.SetEventSink(&recordingEventSink{})
+	svc.SetHostEvaluator(ev)
+	return &scenePlugin{service: svc, evaluator: ev}, store
+}
+
+func TestHandleCommandMutePersistsMuteForParticipant(t *testing.T) {
+	p, store := newMutePlugin(t, allowEvaluator{})
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "mute #scene-1",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "muted")
+	require.Len(t, store.setSceneMuteCalls, 1)
+	assert.Equal(t, muteCall{characterID: "char-alice", sceneID: "scene-1", muted: true}, store.setSceneMuteCalls[0])
+}
+
+func TestHandleCommandUnmuteClearsMuteForParticipant(t *testing.T) {
+	p, store := newMutePlugin(t, allowEvaluator{})
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "unmute #scene-1",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "unmuted")
+	require.Len(t, store.setSceneMuteCalls, 1)
+	assert.False(t, store.setSceneMuteCalls[0].muted)
+}
+
+func TestHandleCommandMuteDeniedForNonParticipant(t *testing.T) {
+	p, store := newMutePlugin(t, denyEvaluator{})
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "mute #scene-1",
+		CharacterID: "char-mallory",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Empty(t, store.setSceneMuteCalls, "denied mute MUST NOT write the store")
+}
+
+func TestHandleCommandMuteReturnsUsageWhenSceneIDIsMissing(t *testing.T) {
+	p, _ := newMutePlugin(t, allowEvaluator{})
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "mute",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "scene id")
+}
+
 func TestHandleCommandEndReturnsErrorWhenSceneIDIsMissing(t *testing.T) {
 	p := newTestPlugin(t)
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{

@@ -510,6 +510,47 @@ func TestHandleJoin_AutoFocus_FailedConnections(t *testing.T) {
 	assert.Contains(t, resp.Output, sceneID)
 }
 
+// TestHandleJoin_AutoFocus_MixedFocusedSkipped verifies the mixed-render branch
+// (D-07): when AutoFocusOnJoin returns BOTH focused and skipped connections
+// (and no failures), the render surfaces an explicit informative line rather
+// than falling to the least-informative default "Joined scene #X." — closing
+// the SCENEFWD-03 silent-failure edge case.
+func TestHandleJoin_AutoFocus_MixedFocusedSkipped(t *testing.T) {
+	p, fc := newTestPluginWithFocus(t)
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	// One terminal connection auto-focused, another skipped (explicitly
+	// focused elsewhere), no failures.
+	fc.autoFocusOnJoinResult = pluginsdk.AutoFocusOnJoinResult{
+		FocusedConnectionIDs: []ulid.ULID{ulid.Make()},
+		SkippedConnectionIDs: []ulid.ULID{ulid.Make()},
+		TotalConnectionCount: 2,
+	}
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "join " + sceneID,
+		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, sceneID)
+	// The mixed-outcome message informs about both outcomes and points at
+	// 'scene focus' — distinct from the bare "Joined scene #X." default.
+	assert.Contains(t, resp.Output, "focused some connection(s)")
+	assert.Contains(t, resp.Output, "stay on their current focus")
+	assert.Contains(t, resp.Output, "scene focus")
+	assert.NotEqual(t, fmt.Sprintf("Joined scene #%s.", sceneID), resp.Output,
+		"mixed outcome MUST NOT render the bare default")
+}
+
 // TestHandleJoin_AutoFocus_RPCError_NonFatal verifies that AutoFocusOnJoin RPC
 // errors are non-fatal: the join succeeds (CommandOK), the error is included in
 // the output as a warning, and no Go error is returned to the host.

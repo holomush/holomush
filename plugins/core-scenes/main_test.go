@@ -25,12 +25,28 @@ func TestInitAppliesManifestConfig(t *testing.T) {
 	p := &scenePlugin{service: &SceneServiceImpl{}}
 	cfg := &pluginv1.ServiceConfig{PluginConfig: map[string]string{
 		"vote_window": "168h", "cooloff_window": "30m", "scheduler_interval": "30s",
+		"idle_timeout_default": "30m", "idle_nudge_enabled": "true",
 	}}
 	require.NoError(t, p.applyConfig(cfg))
 	require.Equal(t, 168*time.Hour, p.service.cfg.DefaultVoteWindow)
 	require.Equal(t, 30*time.Minute, p.service.cfg.DefaultCoolOffWindow)
 	require.Equal(t, 30*time.Second, p.schedInterval)
+	require.Equal(t, 30*time.Minute, p.idleTimeoutDefault)
+	require.True(t, p.idleNudgeEnabled)
 	require.NotZero(t, p.service.cfg.DefaultVoteWindow)
+}
+
+func TestApplyConfigRejectsNonPositiveIdleTimeoutDefault(t *testing.T) {
+	t.Parallel()
+	// idle_timeout_default is type-valid as a duration but 0s would flag every
+	// active scene as idle immediately; applyConfig MUST reject it fail-loud.
+	p := &scenePlugin{service: &SceneServiceImpl{}}
+	cfg := &pluginv1.ServiceConfig{PluginConfig: map[string]string{
+		"vote_window": "168h", "cooloff_window": "30m", "scheduler_interval": "30s",
+		"idle_timeout_default": "0s",
+	}}
+	err := p.applyConfig(cfg)
+	errutil.AssertErrorCode(t, err, "SCENE_INIT_FAILED")
 }
 
 func TestApplyConfigRejectsNonPositiveSchedulerInterval(t *testing.T) {

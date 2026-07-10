@@ -10,6 +10,7 @@ title: "gRPC API Reference"
     - [AuthenticatePlayerRequest](#holomush-core-v1-AuthenticatePlayerRequest)
     - [AuthenticatePlayerResponse](#holomush-core-v1-AuthenticatePlayerResponse)
     - [AvailableCommand](#holomush-core-v1-AvailableCommand)
+    - [CharacterDirectoryEntry](#holomush-core-v1-CharacterDirectoryEntry)
     - [CharacterSummary](#holomush-core-v1-CharacterSummary)
     - [CheckPlayerSessionRequest](#holomush-core-v1-CheckPlayerSessionRequest)
     - [CheckPlayerSessionResponse](#holomush-core-v1-CheckPlayerSessionResponse)
@@ -29,6 +30,8 @@ title: "gRPC API Reference"
     - [GetCommandHistoryResponse](#holomush-core-v1-GetCommandHistoryResponse)
     - [HandleCommandRequest](#holomush-core-v1-HandleCommandRequest)
     - [HandleCommandResponse](#holomush-core-v1-HandleCommandResponse)
+    - [ListAllCharactersRequest](#holomush-core-v1-ListAllCharactersRequest)
+    - [ListAllCharactersResponse](#holomush-core-v1-ListAllCharactersResponse)
     - [ListAvailableCommandsRequest](#holomush-core-v1-ListAvailableCommandsRequest)
     - [ListAvailableCommandsResponse](#holomush-core-v1-ListAvailableCommandsResponse)
     - [ListAvailableCommandsResponse.AliasesEntry](#holomush-core-v1-ListAvailableCommandsResponse-AliasesEntry)
@@ -107,6 +110,40 @@ title: "gRPC API Reference"
     - [StatusResponse](#holomush-admin-v1-StatusResponse)
   
     - [AdminService](#holomush-admin-v1-AdminService)
+  
+- [holomush/channel/v1/channel.proto](#holomush_channel_v1_channel-proto)
+    - [BanMemberRequest](#holomush-channel-v1-BanMemberRequest)
+    - [BanMemberResponse](#holomush-channel-v1-BanMemberResponse)
+    - [ChannelHistoryEntry](#holomush-channel-v1-ChannelHistoryEntry)
+    - [ChannelInfo](#holomush-channel-v1-ChannelInfo)
+    - [CreateChannelRequest](#holomush-channel-v1-CreateChannelRequest)
+    - [CreateChannelResponse](#holomush-channel-v1-CreateChannelResponse)
+    - [InviteToChannelRequest](#holomush-channel-v1-InviteToChannelRequest)
+    - [InviteToChannelResponse](#holomush-channel-v1-InviteToChannelResponse)
+    - [JoinChannelRequest](#holomush-channel-v1-JoinChannelRequest)
+    - [JoinChannelResponse](#holomush-channel-v1-JoinChannelResponse)
+    - [KickMemberRequest](#holomush-channel-v1-KickMemberRequest)
+    - [KickMemberResponse](#holomush-channel-v1-KickMemberResponse)
+    - [LeaveChannelRequest](#holomush-channel-v1-LeaveChannelRequest)
+    - [LeaveChannelResponse](#holomush-channel-v1-LeaveChannelResponse)
+    - [ListChannelsRequest](#holomush-channel-v1-ListChannelsRequest)
+    - [ListChannelsResponse](#holomush-channel-v1-ListChannelsResponse)
+    - [MemberInfo](#holomush-channel-v1-MemberInfo)
+    - [MuteMemberRequest](#holomush-channel-v1-MuteMemberRequest)
+    - [MuteMemberResponse](#holomush-channel-v1-MuteMemberResponse)
+    - [PostToChannelRequest](#holomush-channel-v1-PostToChannelRequest)
+    - [PostToChannelResponse](#holomush-channel-v1-PostToChannelResponse)
+    - [QueryChannelHistoryRequest](#holomush-channel-v1-QueryChannelHistoryRequest)
+    - [QueryChannelHistoryResponse](#holomush-channel-v1-QueryChannelHistoryResponse)
+    - [TransferOwnershipRequest](#holomush-channel-v1-TransferOwnershipRequest)
+    - [TransferOwnershipResponse](#holomush-channel-v1-TransferOwnershipResponse)
+    - [WhoInChannelRequest](#holomush-channel-v1-WhoInChannelRequest)
+    - [WhoInChannelResponse](#holomush-channel-v1-WhoInChannelResponse)
+  
+    - [ChannelService](#holomush-channel-v1-ChannelService)
+  
+- [holomush/comm/v1/comm.proto](#holomush_comm_v1_comm-proto)
+    - [CommunicationContent](#holomush-comm-v1-CommunicationContent)
   
 - [holomush/content/v1/content.proto](#holomush_content_v1_content-proto)
     - [ContentItem](#holomush-content-v1-ContentItem)
@@ -394,24 +431,50 @@ title: "gRPC API Reference"
     - [SceneService](#holomush-scene-v1-SceneService)
   
 - [holomush/sceneaccess/v1/sceneaccess.proto](#holomush_sceneaccess_v1_sceneaccess-proto)
+    - [CastPublishSceneVoteRequest](#holomush-sceneaccess-v1-CastPublishSceneVoteRequest)
+    - [CastPublishSceneVoteResponse](#holomush-sceneaccess-v1-CastPublishSceneVoteResponse)
+    - [CreateSceneRequest](#holomush-sceneaccess-v1-CreateSceneRequest)
+    - [CreateSceneResponse](#holomush-sceneaccess-v1-CreateSceneResponse)
     - [DownloadPublicSceneArchiveRequest](#holomush-sceneaccess-v1-DownloadPublicSceneArchiveRequest)
     - [DownloadPublicSceneArchiveResponse](#holomush-sceneaccess-v1-DownloadPublicSceneArchiveResponse)
+    - [EndSceneRequest](#holomush-sceneaccess-v1-EndSceneRequest)
+    - [EndSceneResponse](#holomush-sceneaccess-v1-EndSceneResponse)
     - [ExportSceneRequest](#holomush-sceneaccess-v1-ExportSceneRequest)
     - [ExportSceneResponse](#holomush-sceneaccess-v1-ExportSceneResponse)
     - [GetPublicSceneArchiveRequest](#holomush-sceneaccess-v1-GetPublicSceneArchiveRequest)
     - [GetPublicSceneArchiveResponse](#holomush-sceneaccess-v1-GetPublicSceneArchiveResponse)
+    - [GetPublishedSceneRequest](#holomush-sceneaccess-v1-GetPublishedSceneRequest)
+    - [GetPublishedSceneResponse](#holomush-sceneaccess-v1-GetPublishedSceneResponse)
     - [GetSceneForViewerRequest](#holomush-sceneaccess-v1-GetSceneForViewerRequest)
     - [GetSceneForViewerResponse](#holomush-sceneaccess-v1-GetSceneForViewerResponse)
+    - [InviteToSceneRequest](#holomush-sceneaccess-v1-InviteToSceneRequest)
+    - [InviteToSceneResponse](#holomush-sceneaccess-v1-InviteToSceneResponse)
+    - [KickFromSceneRequest](#holomush-sceneaccess-v1-KickFromSceneRequest)
+    - [KickFromSceneResponse](#holomush-sceneaccess-v1-KickFromSceneResponse)
+    - [LeaveSceneRequest](#holomush-sceneaccess-v1-LeaveSceneRequest)
+    - [LeaveSceneResponse](#holomush-sceneaccess-v1-LeaveSceneResponse)
     - [ListMyScenesRequest](#holomush-sceneaccess-v1-ListMyScenesRequest)
     - [ListMyScenesResponse](#holomush-sceneaccess-v1-ListMyScenesResponse)
     - [ListPublishedScenesRequest](#holomush-sceneaccess-v1-ListPublishedScenesRequest)
     - [ListPublishedScenesResponse](#holomush-sceneaccess-v1-ListPublishedScenesResponse)
     - [ListScenesForViewerRequest](#holomush-sceneaccess-v1-ListScenesForViewerRequest)
     - [ListScenesForViewerResponse](#holomush-sceneaccess-v1-ListScenesForViewerResponse)
+    - [PauseSceneRequest](#holomush-sceneaccess-v1-PauseSceneRequest)
+    - [PauseSceneResponse](#holomush-sceneaccess-v1-PauseSceneResponse)
+    - [ResumeSceneRequest](#holomush-sceneaccess-v1-ResumeSceneRequest)
+    - [ResumeSceneResponse](#holomush-sceneaccess-v1-ResumeSceneResponse)
     - [SetSceneFocusRequest](#holomush-sceneaccess-v1-SetSceneFocusRequest)
     - [SetSceneFocusResponse](#holomush-sceneaccess-v1-SetSceneFocusResponse)
+    - [StartScenePublishRequest](#holomush-sceneaccess-v1-StartScenePublishRequest)
+    - [StartScenePublishResponse](#holomush-sceneaccess-v1-StartScenePublishResponse)
+    - [TransferOwnershipRequest](#holomush-sceneaccess-v1-TransferOwnershipRequest)
+    - [TransferOwnershipResponse](#holomush-sceneaccess-v1-TransferOwnershipResponse)
+    - [UpdateSceneRequest](#holomush-sceneaccess-v1-UpdateSceneRequest)
+    - [UpdateSceneResponse](#holomush-sceneaccess-v1-UpdateSceneResponse)
     - [WatchSceneRequest](#holomush-sceneaccess-v1-WatchSceneRequest)
     - [WatchSceneResponse](#holomush-sceneaccess-v1-WatchSceneResponse)
+    - [WithdrawScenePublishRequest](#holomush-sceneaccess-v1-WithdrawScenePublishRequest)
+    - [WithdrawScenePublishResponse](#holomush-sceneaccess-v1-WithdrawScenePublishResponse)
   
     - [SceneAccessService](#holomush-sceneaccess-v1-SceneAccessService)
   
@@ -430,6 +493,8 @@ title: "gRPC API Reference"
     - [WebAuthenticatePlayerRequest](#holomush-web-v1-WebAuthenticatePlayerRequest)
     - [WebAuthenticatePlayerResponse](#holomush-web-v1-WebAuthenticatePlayerResponse)
     - [WebAvailableCommand](#holomush-web-v1-WebAvailableCommand)
+    - [WebCastPublishSceneVoteRequest](#holomush-web-v1-WebCastPublishSceneVoteRequest)
+    - [WebCastPublishSceneVoteResponse](#holomush-web-v1-WebCastPublishSceneVoteResponse)
     - [WebCheckSessionRequest](#holomush-web-v1-WebCheckSessionRequest)
     - [WebCheckSessionResponse](#holomush-web-v1-WebCheckSessionResponse)
     - [WebConfirmPasswordResetRequest](#holomush-web-v1-WebConfirmPasswordResetRequest)
@@ -442,16 +507,30 @@ title: "gRPC API Reference"
     - [WebCreateGuestResponse](#holomush-web-v1-WebCreateGuestResponse)
     - [WebCreatePlayerRequest](#holomush-web-v1-WebCreatePlayerRequest)
     - [WebCreatePlayerResponse](#holomush-web-v1-WebCreatePlayerResponse)
+    - [WebCreateSceneRequest](#holomush-web-v1-WebCreateSceneRequest)
+    - [WebCreateSceneResponse](#holomush-web-v1-WebCreateSceneResponse)
     - [WebDownloadPublicSceneArchiveRequest](#holomush-web-v1-WebDownloadPublicSceneArchiveRequest)
     - [WebDownloadPublicSceneArchiveResponse](#holomush-web-v1-WebDownloadPublicSceneArchiveResponse)
+    - [WebEndSceneRequest](#holomush-web-v1-WebEndSceneRequest)
+    - [WebEndSceneResponse](#holomush-web-v1-WebEndSceneResponse)
     - [WebExportSceneRequest](#holomush-web-v1-WebExportSceneRequest)
     - [WebExportSceneResponse](#holomush-web-v1-WebExportSceneResponse)
     - [WebGetContentRequest](#holomush-web-v1-WebGetContentRequest)
     - [WebGetContentResponse](#holomush-web-v1-WebGetContentResponse)
     - [WebGetPublicSceneArchiveRequest](#holomush-web-v1-WebGetPublicSceneArchiveRequest)
     - [WebGetPublicSceneArchiveResponse](#holomush-web-v1-WebGetPublicSceneArchiveResponse)
+    - [WebGetPublishedSceneRequest](#holomush-web-v1-WebGetPublishedSceneRequest)
+    - [WebGetPublishedSceneResponse](#holomush-web-v1-WebGetPublishedSceneResponse)
     - [WebGetSceneRequest](#holomush-web-v1-WebGetSceneRequest)
     - [WebGetSceneResponse](#holomush-web-v1-WebGetSceneResponse)
+    - [WebInviteToSceneRequest](#holomush-web-v1-WebInviteToSceneRequest)
+    - [WebInviteToSceneResponse](#holomush-web-v1-WebInviteToSceneResponse)
+    - [WebKickFromSceneRequest](#holomush-web-v1-WebKickFromSceneRequest)
+    - [WebKickFromSceneResponse](#holomush-web-v1-WebKickFromSceneResponse)
+    - [WebLeaveSceneRequest](#holomush-web-v1-WebLeaveSceneRequest)
+    - [WebLeaveSceneResponse](#holomush-web-v1-WebLeaveSceneResponse)
+    - [WebListAllCharactersRequest](#holomush-web-v1-WebListAllCharactersRequest)
+    - [WebListAllCharactersResponse](#holomush-web-v1-WebListAllCharactersResponse)
     - [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest)
     - [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse)
     - [WebListCommandsRequest](#holomush-web-v1-WebListCommandsRequest)
@@ -473,12 +552,16 @@ title: "gRPC API Reference"
     - [WebListSessionStreamsResponse](#holomush-web-v1-WebListSessionStreamsResponse)
     - [WebLogoutRequest](#holomush-web-v1-WebLogoutRequest)
     - [WebLogoutResponse](#holomush-web-v1-WebLogoutResponse)
+    - [WebPauseSceneRequest](#holomush-web-v1-WebPauseSceneRequest)
+    - [WebPauseSceneResponse](#holomush-web-v1-WebPauseSceneResponse)
     - [WebPlayerSessionInfo](#holomush-web-v1-WebPlayerSessionInfo)
     - [WebPresenceEntry](#holomush-web-v1-WebPresenceEntry)
     - [WebQueryStreamHistoryRequest](#holomush-web-v1-WebQueryStreamHistoryRequest)
     - [WebQueryStreamHistoryResponse](#holomush-web-v1-WebQueryStreamHistoryResponse)
     - [WebRequestPasswordResetRequest](#holomush-web-v1-WebRequestPasswordResetRequest)
     - [WebRequestPasswordResetResponse](#holomush-web-v1-WebRequestPasswordResetResponse)
+    - [WebResumeSceneRequest](#holomush-web-v1-WebResumeSceneRequest)
+    - [WebResumeSceneResponse](#holomush-web-v1-WebResumeSceneResponse)
     - [WebRevokeOtherPlayerSessionsRequest](#holomush-web-v1-WebRevokeOtherPlayerSessionsRequest)
     - [WebRevokeOtherPlayerSessionsResponse](#holomush-web-v1-WebRevokeOtherPlayerSessionsResponse)
     - [WebRevokePlayerSessionRequest](#holomush-web-v1-WebRevokePlayerSessionRequest)
@@ -487,8 +570,16 @@ title: "gRPC API Reference"
     - [WebSelectCharacterResponse](#holomush-web-v1-WebSelectCharacterResponse)
     - [WebSetSceneFocusRequest](#holomush-web-v1-WebSetSceneFocusRequest)
     - [WebSetSceneFocusResponse](#holomush-web-v1-WebSetSceneFocusResponse)
+    - [WebStartScenePublishRequest](#holomush-web-v1-WebStartScenePublishRequest)
+    - [WebStartScenePublishResponse](#holomush-web-v1-WebStartScenePublishResponse)
+    - [WebTransferOwnershipRequest](#holomush-web-v1-WebTransferOwnershipRequest)
+    - [WebTransferOwnershipResponse](#holomush-web-v1-WebTransferOwnershipResponse)
+    - [WebUpdateSceneRequest](#holomush-web-v1-WebUpdateSceneRequest)
+    - [WebUpdateSceneResponse](#holomush-web-v1-WebUpdateSceneResponse)
     - [WebWatchSceneRequest](#holomush-web-v1-WebWatchSceneRequest)
     - [WebWatchSceneResponse](#holomush-web-v1-WebWatchSceneResponse)
+    - [WebWithdrawScenePublishRequest](#holomush-web-v1-WebWithdrawScenePublishRequest)
+    - [WebWithdrawScenePublishResponse](#holomush-web-v1-WebWithdrawScenePublishResponse)
   
     - [ControlSignal](#holomush-web-v1-ControlSignal)
     - [EventChannel](#holomush-web-v1-EventChannel)
@@ -574,6 +665,22 @@ AvailableCommand is one command&#39;s metadata in a ListAvailableCommands result
 | help | [string](#string) |  | help is the one-line description. |
 | usage | [string](#string) |  | usage is the usage pattern. |
 | source | [string](#string) |  | source is &#34;core&#34; or the owning plugin name. |
+
+
+
+
+
+
+<a name="holomush-core-v1-CharacterDirectoryEntry"></a>
+
+### CharacterDirectoryEntry
+CharacterDirectoryEntry is one directory row: identity &#43; display name only.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character&#39;s ULID. |
+| name | [string](#string) |  | name is the character&#39;s display name. |
 
 
 
@@ -921,6 +1028,38 @@ the character&#39;s stream, not in this reply.
 | meta | [ResponseMeta](#holomush-core-v1-ResponseMeta) |  | meta echoes request correlation data back to the caller. |
 | success | [bool](#bool) |  | success is true when the command dispatched without a transport/ownership error. User-facing command errors are still reported via command_response events with success=true here. |
 | error | [string](#string) |  | error carries a transport/ownership failure message when success is false. |
+
+
+
+
+
+
+<a name="holomush-core-v1-ListAllCharactersRequest"></a>
+
+### ListAllCharactersRequest
+ListAllCharactersRequest authenticates the caller and names the acting alt
+(the ABAC subject). No pagination — the directory is returned in full.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller; any valid session (guest or registered) is accepted. Required. |
+| character_id | [string](#string) |  | character_id is the acting alt; the handler verifies the session owns it and uses it as the ABAC subject for the list_character_directory action. Required. |
+
+
+
+
+
+
+<a name="holomush-core-v1-ListAllCharactersResponse"></a>
+
+### ListAllCharactersResponse
+ListAllCharactersResponse carries the directory page.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [CharacterDirectoryEntry](#holomush-core-v1-CharacterDirectoryEntry) | repeated | characters is the id&#43;name list, name-ascending. No connection state. |
 
 
 
@@ -1589,6 +1728,7 @@ state and business logic lives behind these RPCs.
 | CreateGuest | [CreateGuestRequest](#holomush-core-v1-CreateGuestRequest) | [CreateGuestResponse](#holomush-core-v1-CreateGuestResponse) | CreateGuest provisions an ephemeral guest player plus one starter character and returns a short-lived (guest TTL) player session token. Used by the &#34;play as guest&#34; entry path; no credentials are required. |
 | CreateCharacter | [CreateCharacterRequest](#holomush-core-v1-CreateCharacterRequest) | [CreateCharacterResponse](#holomush-core-v1-CreateCharacterResponse) | CreateCharacter adds a character to the authenticated player&#39;s roster. When a transactor and bindings service are configured, the character row and its ownership binding are created atomically in one transaction. |
 | ListCharacters | [ListCharactersRequest](#holomush-core-v1-ListCharactersRequest) | [ListCharactersResponse](#holomush-core-v1-ListCharactersResponse) | ListCharacters returns the authenticated player&#39;s character roster enriched with per-character session status and last-known location. |
+| ListAllCharacters | [ListAllCharactersRequest](#holomush-core-v1-ListAllCharactersRequest) | [ListAllCharactersResponse](#holomush-core-v1-ListAllCharactersResponse) | ListAllCharacters returns the id&#43;name of every character in the game for the directory picker (fetch-all, no pagination). The handler verifies the acting character is owned by the session, then ABAC-gates on action list_character_directory (resource character_directory), seeded default-permit for any authenticated character (registered OR guest). Connection/online state is NOT included; that is a separately-permissioned attribute. |
 | RequestPasswordReset | [RequestPasswordResetRequest](#holomush-core-v1-RequestPasswordResetRequest) | [RequestPasswordResetResponse](#holomush-core-v1-RequestPasswordResetResponse) | RequestPasswordReset begins a password-reset flow for the given email. The reply is ALWAYS success regardless of whether the email exists — this is an intentional enumeration-prevention measure; delivery is stubbed (logged). |
 | ConfirmPasswordReset | [ConfirmPasswordResetRequest](#holomush-core-v1-ConfirmPasswordResetRequest) | [ConfirmPasswordResetResponse](#holomush-core-v1-ConfirmPasswordResetResponse) | ConfirmPasswordReset completes the flow by validating the reset token and setting the new password. Failure messages are sanitized so token/internal detail does not leak to the client. |
 | Logout | [LogoutRequest](#holomush-core-v1-LogoutRequest) | [LogoutResponse](#holomush-core-v1-LogoutResponse) | Logout deletes the caller&#39;s PlayerSession and, before doing so, fans out disconnect &#43; session_ended &#43; delete &#43; hooks to every child game session so no Subscribe stream is left orphaned. Per-session signals complete before the PlayerSession row is deleted to avoid ownership-validation flapping. |
@@ -2268,6 +2408,543 @@ allowing incremental feature deployment without breaking callers.
 | RekeyStatus | [RekeyStatusRequest](#holomush-admin-v1-RekeyStatusRequest) | [RekeyStatusResponse](#holomush-admin-v1-RekeyStatusResponse) | RekeyStatus returns the current state of a single rekey operation identified by request_id. Requires the crypto.operator capability; no admin role re-check. Reads from the crypto_rekey_checkpoints table via CheckpointStatusReader.GetCheckpoint. Handler: internal/admin/socket/rekey_handler.go. |
 | RekeyList | [RekeyListRequest](#holomush-admin-v1-RekeyListRequest) | [RekeyStatusResponse](#holomush-admin-v1-RekeyStatusResponse) stream | RekeyList streams status records for rekey operations. By default only non-terminal checkpoints are returned; set include_terminal to include completed and aborted rows. Results are capped at 100 rows (any limit above 100 or zero is silently clamped to 100). Requires the crypto.operator capability; no admin role re-check. Handler: internal/admin/socket/rekey_handler.go. |
 | AdminReadStream | [AdminReadStreamRequest](#holomush-admin-v1-AdminReadStreamRequest) | [AdminReadStreamResponse](#holomush-admin-v1-AdminReadStreamResponse) stream | AdminReadStream is the operator break-glass streaming read RPC. Streams EventFrame payloads for the requested context(s) and time bounds, with typed metadata_only and no_plaintext_reason redaction fields for destroyed-DEK and plaintext-suppressed events. When dual_control is set in the request, the handler blocks until a second operator approves via the admin_approvals table before emitting any event frames (INV-CRYPTO-61/INV-CRYPTO-67). Handler: internal/admin/socket/handlers.go (delegated to ReadStreamRPCHandler). |
+
+ 
+
+
+
+<a name="holomush_channel_v1_channel-proto"></a>
+<p align="right"><a href="#top">Top</a></p>
+
+## holomush/channel/v1/channel.proto
+
+
+
+<a name="holomush-channel-v1-BanMemberRequest"></a>
+
+### BanMemberRequest
+BanMemberRequest identifies the acting owner-or-admin, the channel, and the
+member to ban.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character (owner or admin per ABAC); required. |
+| channel_id | [string](#string) |  | The channel the target is banned from; required. |
+| target_character_id | [string](#string) |  | The member to ban (must not be the owner); required. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-BanMemberResponse"></a>
+
+### BanMemberResponse
+BanMemberResponse is intentionally empty — a successful ban carries no body.
+
+
+
+
+
+
+<a name="holomush-channel-v1-ChannelHistoryEntry"></a>
+
+### ChannelHistoryEntry
+ChannelHistoryEntry is one rendered line of channel history, projected from a
+channel_log audit row. Only content and membership-notice events are
+surfaced; the payload is plaintext.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | The event&#39;s ULID identity/dedup key (never an ordering key — ordering is the audit store&#39;s sequence). |
+| type | [string](#string) |  | The qualified wire type of the source event (for example &#34;core-channels:channel_say&#34;), letting a renderer pick the display grammar. |
+| actor_id | [string](#string) |  | The acting character&#39;s ID; empty for host-originated notices. |
+| actor_name | [string](#string) |  | The acting character&#39;s display name (best-effort; falls back to the actor ID when no name resolver is wired). |
+| content | [string](#string) |  | The rendered line content. |
+| created_at | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | The wall-clock time the event was recorded. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-ChannelInfo"></a>
+
+### ChannelInfo
+ChannelInfo is the wire projection of a channel row plus its member roster,
+returned by the create, join, and list RPCs. The type field is the plugin&#39;s
+lowercase string enum, not a proto enum, matching the SceneInfo convention.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | Channel primary key (&#34;channel-&lt;ULID&gt;&#34;), stable for the channel&#39;s lifetime. |
+| name | [string](#string) |  | Human-facing channel name, unique case-insensitively across all channels; matches ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$ and is the token players type in the &#34;=name message&#34; shorthand. |
+| type | [string](#string) |  | Visibility type: &#34;public&#34; (listed, open join), &#34;private&#34; (invitation-only), or &#34;admin&#34; (invitation-only, operator-scoped). Governs join eligibility and read/post policy evaluation. |
+| owner_id | [string](#string) |  | Character ID of the current owner — the sole authority for moderation and transfer, and the only member who cannot leave, be kicked, or be banned. |
+| archived | [bool](#bool) |  | True once the channel has been soft-deleted (archived); archived channels are hidden from listings and reject new posts but retain their history for the retention window. |
+| retention_days | [int32](#int32) |  | Per-channel retention window in days; 0 means the plugin&#39;s configured default applies. Admin channels may carry an unlimited (never-pruned) window. Governs the background prune sweep. |
+| created_at | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | Wall-clock creation time, the host clock at create for CreateChannel responses and the persisted row timestamp elsewhere. |
+| members | [MemberInfo](#holomush-channel-v1-MemberInfo) | repeated | The current member roster (owner and members), excluding invitation records that have not yet been accepted. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-CreateChannelRequest"></a>
+
+### CreateChannelRequest
+CreateChannelRequest is the new-channel definition. The calling character
+becomes the owner. An empty type defaults to &#34;public&#34; at the handler.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The creating character, who becomes the channel owner; required. |
+| name | [string](#string) |  | Channel name; required, 1-32 chars, must start alphanumeric and contain only letters, digits, underscore, or hyphen. Rejected with codes.AlreadyExists if a channel with the same name (case-insensitive) already exists. |
+| type | [string](#string) |  | Visibility type; empty selects the &#34;public&#34; default. Constrained to &#34;&#34;|&#34;public&#34;|&#34;private&#34;|&#34;admin&#34;. |
+| retention_days | [int32](#int32) |  | Optional per-channel retention window in days; 0 selects the plugin&#39;s configured default. Must be non-negative. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-CreateChannelResponse"></a>
+
+### CreateChannelResponse
+CreateChannelResponse carries the freshly created channel (active, owner
+seeded).
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| channel | [ChannelInfo](#holomush-channel-v1-ChannelInfo) |  | The new channel&#39;s projection. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-InviteToChannelRequest"></a>
+
+### InviteToChannelRequest
+InviteToChannelRequest identifies the inviting owner-or-admin, the channel,
+and the character being granted an invitation.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The inviting character (owner or admin per ABAC); required. |
+| channel_id | [string](#string) |  | The channel to invite into; required. |
+| target_character_id | [string](#string) |  | The character receiving the invitation; required. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-InviteToChannelResponse"></a>
+
+### InviteToChannelResponse
+InviteToChannelResponse is intentionally empty — a successful invite carries
+no body.
+
+
+
+
+
+
+<a name="holomush-channel-v1-JoinChannelRequest"></a>
+
+### JoinChannelRequest
+JoinChannelRequest identifies the channel to join and the joining character,
+plus the session receiving live delivery.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The joining character&#39;s ID; required. |
+| channel_id | [string](#string) |  | The channel to join; required. |
+| session_id | [string](#string) |  | The joining character&#39;s game session ULID; required — the host subscribes this session&#39;s live stream to the channel subject on a successful join. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-JoinChannelResponse"></a>
+
+### JoinChannelResponse
+JoinChannelResponse is intentionally empty — a successful join carries no
+body; the caller refetches roster or history if needed.
+
+
+
+
+
+
+<a name="holomush-channel-v1-KickMemberRequest"></a>
+
+### KickMemberRequest
+KickMemberRequest identifies the acting owner-or-admin, the channel, and the
+member to remove.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character (owner or admin per ABAC); required. |
+| channel_id | [string](#string) |  | The channel to remove the target from; required. |
+| target_character_id | [string](#string) |  | The member to remove (must not be the owner); required. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-KickMemberResponse"></a>
+
+### KickMemberResponse
+KickMemberResponse is intentionally empty — a successful kick carries no body.
+
+
+
+
+
+
+<a name="holomush-channel-v1-LeaveChannelRequest"></a>
+
+### LeaveChannelRequest
+LeaveChannelRequest identifies the channel to leave, the leaving character,
+and the session to unsubscribe.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The leaving character&#39;s ID; required (must not be the owner). |
+| channel_id | [string](#string) |  | The channel to leave; required. |
+| session_id | [string](#string) |  | The leaving character&#39;s game session ULID; required — the host unsubscribes this session&#39;s live stream from the channel subject. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-LeaveChannelResponse"></a>
+
+### LeaveChannelResponse
+LeaveChannelResponse is intentionally empty — a successful leave carries no
+body.
+
+
+
+
+
+
+<a name="holomush-channel-v1-ListChannelsRequest"></a>
+
+### ListChannelsRequest
+ListChannelsRequest is the channel-discovery query, scoped to the calling
+character&#39;s visibility, with pagination.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The listing character&#39;s ID; required. The result includes public channels plus the private and admin channels this character is a member of. |
+| limit | [int32](#int32) |  | Maximum channels to return; 0 means server default, capped at 200. |
+| offset | [int32](#int32) |  | Number of leading results to skip for pagination. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-ListChannelsResponse"></a>
+
+### ListChannelsResponse
+ListChannelsResponse is the channel-discovery result page.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| channels | [ChannelInfo](#holomush-channel-v1-ChannelInfo) | repeated | The channels visible to the caller for this page. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-MemberInfo"></a>
+
+### MemberInfo
+MemberInfo is one entry in a channel&#39;s roster — a character&#39;s membership
+relationship to the channel at read time.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | Character ID of the member. |
+| character_name | [string](#string) |  | Display name of the character (best-effort; falls back to the ID when no name resolver is wired). |
+| role | [string](#string) |  | Membership role: &#34;owner&#34; or &#34;member&#34;. The owner holds moderation authority and is protected from leave, kick, and ban. |
+| muted | [bool](#bool) |  | True when the member is muted: their posts are suppressed while their read access and roster membership remain intact. |
+| banned | [bool](#bool) |  | True when the member is banned: removed from the channel and blocked from rejoining until unbanned. |
+| joined_at | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | When the character joined the channel; also the floor below which QueryChannelHistory will not return rows for this member. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-MuteMemberRequest"></a>
+
+### MuteMemberRequest
+MuteMemberRequest identifies the acting owner-or-admin, the channel, and the
+member to mute.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character (owner or admin per ABAC); required. |
+| channel_id | [string](#string) |  | The channel the target is muted in; required. |
+| target_character_id | [string](#string) |  | The member to mute; required. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-MuteMemberResponse"></a>
+
+### MuteMemberResponse
+MuteMemberResponse is intentionally empty — a successful mute carries no body.
+
+
+
+
+
+
+<a name="holomush-channel-v1-PostToChannelRequest"></a>
+
+### PostToChannelRequest
+PostToChannelRequest carries one line of member-authored content to publish
+to a channel. It intentionally has no channel-name field: identity is the
+channel ID plus a live name lookup, so a rename cannot alter authorization.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The posting character, who MUST be a non-muted member; required. |
+| channel_id | [string](#string) |  | The channel to post to; required. |
+| kind | [string](#string) |  | Content kind; empty selects the &#34;say&#34; default. Constrained to &#34;&#34;|&#34;say&#34;|&#34;pose&#34;|&#34;ooc&#34;, matching the comm grammar the handler renders with. |
+| text | [string](#string) |  | The raw message text; required, size-capped to bound a single event payload. The handler sanitizes untrusted UTF-8 and renders it through the comm builder for the selected kind. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-PostToChannelResponse"></a>
+
+### PostToChannelResponse
+PostToChannelResponse is intentionally empty — the durable effect is the
+emitted, audited content event; live members receive it via their subscribed
+stream and history readers see it through QueryChannelHistory.
+
+
+
+
+
+
+<a name="holomush-channel-v1-QueryChannelHistoryRequest"></a>
+
+### QueryChannelHistoryRequest
+QueryChannelHistoryRequest asks for recent channel content as a member,
+bounded by a scrollback limit and the caller&#39;s join floor.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The reading character, who MUST be a member; required. |
+| channel_id | [string](#string) |  | The channel whose history to read; required. |
+| limit | [int32](#int32) |  | Maximum content entries to return; 0 means server default, capped at the 500-row scrollback ceiling. Entries older than the caller&#39;s most-recent join are never returned regardless of this value. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-QueryChannelHistoryResponse"></a>
+
+### QueryChannelHistoryResponse
+QueryChannelHistoryResponse carries the requested content entries, oldest
+first.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| entries | [ChannelHistoryEntry](#holomush-channel-v1-ChannelHistoryEntry) | repeated | The channel content entries for this read, oldest first. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-TransferOwnershipRequest"></a>
+
+### TransferOwnershipRequest
+TransferOwnershipRequest identifies the current owner, the channel, and the
+member who will become the new owner.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The current owner; required. |
+| channel_id | [string](#string) |  | The channel whose ownership transfers; required. |
+| new_owner_character_id | [string](#string) |  | The new owner, who MUST already be a member of the channel; required. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-TransferOwnershipResponse"></a>
+
+### TransferOwnershipResponse
+TransferOwnershipResponse is intentionally empty — a successful transfer
+carries no body.
+
+
+
+
+
+
+<a name="holomush-channel-v1-WhoInChannelRequest"></a>
+
+### WhoInChannelRequest
+WhoInChannelRequest identifies the channel whose roster is requested and the
+requesting character (who MUST be a member; the gate is plugin-code, not
+ABAC).
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The requesting character; MUST be a member of the channel. |
+| channel_id | [string](#string) |  | The channel to read the roster of; required. |
+
+
+
+
+
+
+<a name="holomush-channel-v1-WhoInChannelResponse"></a>
+
+### WhoInChannelResponse
+WhoInChannelResponse carries the channel&#39;s current member roster.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| members | [MemberInfo](#holomush-channel-v1-MemberInfo) | repeated | The channel&#39;s members (owner and members). |
+
+
+
+
+
+ 
+
+ 
+
+ 
+
+
+<a name="holomush-channel-v1-ChannelService"></a>
+
+### ChannelService
+ChannelService is the gRPC contract for the core-channels binary plugin
+(plugins/core-channels/). A channel is a persistent, location-independent
+named conversation space with an owner, a member roster, a visibility type
+(public, private, or admin), and a retention window. The plugin owns the
+`channel` ABAC resource type and persists to its own `plugin_core_channels`
+schema; it emits content and membership-notice events on
+events.&lt;game_id&gt;.channel.&lt;channel_id&gt; and audits them to its plugin-owned
+channel_log table.
+
+Authorization model mirrors SceneService: every mutating RPC trusts that the
+host&#39;s ABAC engine has already authorized the command-execute action at
+dispatch time (owner-or-admin for create/moderation, member for post). The
+plugin performs no implicit allow. The membership-gated reads
+(WhoInChannel, QueryChannelHistory) additionally enforce a direct plugin-code
+membership check before any content is read, precisely because channel
+visibility is a privacy boundary that must not be delegable; a caller who is
+not a member of a private or admin channel receives an opaque not-found so
+existence cannot be inferred.
+
+All payloads are plaintext: channels declare no crypto.emits and carry no
+sensitive fields. Channel identity flows by ID and a live name lookup, never
+by a channel-name field on any content message, so a rename cannot leak stale
+authorization context.
+
+Implemented by the channel service in plugins/core-channels/service.go
+(create/join/leave/list in 01-05; post/who/history and the moderation RPCs
+invite/mute/ban/kick/transfer in 01-05b), before the 01-07 command layer
+delegates to any of these methods.
+
+| Method Name | Request Type | Response Type | Description |
+| ----------- | ------------ | ------------- | ------------|
+| CreateChannel | [CreateChannelRequest](#holomush-channel-v1-CreateChannelRequest) | [CreateChannelResponse](#holomush-channel-v1-CreateChannelResponse) | CreateChannel allocates a new channel owned by the calling character, seeded active with the supplied name, visibility type, and retention window. The creating character becomes the `owner` member in the same transaction, a create ops-journal entry is recorded, and a channel-created notice is emitted. Creation authority is admin-gated by the host&#39;s ABAC policy at dispatch; the handler enforces case-insensitive name uniqueness and rejects a duplicate with codes.AlreadyExists. |
+| JoinChannel | [JoinChannelRequest](#holomush-channel-v1-JoinChannelRequest) | [JoinChannelResponse](#holomush-channel-v1-JoinChannelResponse) | JoinChannel adds the calling character to a channel as a `member`. Public channels accept any join; private and admin channels require a pre-existing invitation. A banned character is refused. Idempotent: a repeat join by an existing member succeeds without re-emitting a join notice. On success the host subscribes the joining session&#39;s live stream for the channel subject. |
+| LeaveChannel | [LeaveChannelRequest](#holomush-channel-v1-LeaveChannelRequest) | [LeaveChannelResponse](#holomush-channel-v1-LeaveChannelResponse) | LeaveChannel removes the calling character&#39;s membership from a channel and unsubscribes their session&#39;s live stream. The channel owner cannot leave (codes.FailedPrecondition) — they must transfer ownership first. Emits a leave notice. |
+| ListChannels | [ListChannelsRequest](#holomush-channel-v1-ListChannelsRequest) | [ListChannelsResponse](#holomush-channel-v1-ListChannelsResponse) | ListChannels returns the channels visible to the calling character: all public channels plus any private or admin channels the character is a member of, paginated. Channels the caller cannot see are omitted rather than surfaced as hidden, so the listing cannot be used to probe for the existence of restricted channels. |
+| PostToChannel | [PostToChannelRequest](#holomush-channel-v1-PostToChannelRequest) | [PostToChannelResponse](#holomush-channel-v1-PostToChannelResponse) | PostToChannel publishes one line of member-authored content (say, pose, or ooc) to a channel. The handler self-enforces that the caller is a non-muted member before building the CommunicationContent payload and emitting it on the channel subject; a muted member&#39;s post is suppressed and a non-member&#39;s post is refused. The durable effect is the emitted event, which the host audits to channel_log for history. |
+| WhoInChannel | [WhoInChannelRequest](#holomush-channel-v1-WhoInChannelRequest) | [WhoInChannelResponse](#holomush-channel-v1-WhoInChannelResponse) | WhoInChannel returns the current member roster of a channel to a member. The plugin-code membership gate runs before any roster read, so a non-member of a private or admin channel is denied before the channel&#39;s existence is confirmed. |
+| QueryChannelHistory | [QueryChannelHistoryRequest](#holomush-channel-v1-QueryChannelHistoryRequest) | [QueryChannelHistoryResponse](#holomush-channel-v1-QueryChannelHistoryResponse) | QueryChannelHistory returns recent content for a channel to a member, newest last, capped at the server-side scrollback ceiling. The handler enforces the membership gate as its first step (before any store read) and never returns rows older than the caller&#39;s most-recent join, so leaving and rejoining does not expose messages sent while the caller was absent. |
+| InviteToChannel | [InviteToChannelRequest](#holomush-channel-v1-InviteToChannelRequest) | [InviteToChannelResponse](#holomush-channel-v1-InviteToChannelResponse) | InviteToChannel records an invitation permitting a target character to join a private or admin channel (owner-or-admin only via ABAC). Rejected with codes.AlreadyExists when the target is already a member. |
+| MuteMember | [MuteMemberRequest](#holomush-channel-v1-MuteMemberRequest) | [MuteMemberResponse](#holomush-channel-v1-MuteMemberResponse) | MuteMember marks a target member as muted, suppressing their subsequent posts to the channel while leaving their membership and read access intact (owner-or-admin only via ABAC). Emits a mute notice. |
+| BanMember | [BanMemberRequest](#holomush-channel-v1-BanMemberRequest) | [BanMemberResponse](#holomush-channel-v1-BanMemberResponse) | BanMember marks a target member as banned, removing them from the channel and preventing any future rejoin until unbanned (owner-or-admin only via ABAC). The channel owner cannot be banned (codes.FailedPrecondition). |
+| KickMember | [KickMemberRequest](#holomush-channel-v1-KickMemberRequest) | [KickMemberResponse](#holomush-channel-v1-KickMemberResponse) | KickMember removes a target member from the channel and unsubscribes their live stream, without the permanent block a ban imposes (owner-or-admin only via ABAC). The channel owner cannot be kicked (codes.FailedPrecondition). Emits a leave notice recording the removal. |
+| TransferOwnership | [TransferOwnershipRequest](#holomush-channel-v1-TransferOwnershipRequest) | [TransferOwnershipResponse](#holomush-channel-v1-TransferOwnershipResponse) | TransferOwnership reassigns channel ownership from the calling owner to a target who MUST already be a member (owner-only via ABAC). The former owner is demoted to member in the same transaction. |
+
+ 
+
+
+
+<a name="holomush_comm_v1_comm-proto"></a>
+<p align="right"><a href="#top">Top</a></p>
+
+## holomush/comm/v1/comm.proto
+
+
+
+<a name="holomush-comm-v1-CommunicationContent"></a>
+
+### CommunicationContent
+CommunicationContent is the canonical instance-level payload body for every
+real-time conversational-content event (say/pose/ooc/emit; page/whisper/pemit
+arrive in Slice 2). It is the per-emit body the type-level rendering hints
+stamped by RenderingPublisher (kind via Format, label) render over. Producers
+build it via pkg/plugin/comm; the ContentValidationPublisher validates it.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| actor_id | [string](#string) |  | actor_id is the stable character ULID of the author. Scene replay/export/ publish-snapshot decoders read it self-contained from the payload to populate PublishedSceneEntry.Speaker (plugins/core-scenes/commands.go decodeReplayEntries; publish_snapshot.go decodeSnapshotEntry). Empty only for the actorless `emit` verb; never validated as required (emit). |
+| actor_display_name | [string](#string) |  | actor_display_name is the resolved author name for rendering. Empty when name resolution is deferred (scenes today) or for actorless `emit`; the renderer then falls back to actor_id. |
+| text | [string](#string) |  | text is the raw, unrendered content (&#34;waves&#34;, &#34;Hello there.&#34;). Required non-empty. The renderer produces the surface form; producers MUST NOT pre-render (e.g. no &#34;Alaric waves&#34; here). |
+| no_space | [bool](#bool) |  | no_space renders the actor and text with no separating space (the &#34;;&#34; semipose form -&gt; &#34;Alaric&#39;s eyes narrow&#34;). Default false. |
+| ooc_style | [string](#string) |  | ooc_style selects the OOC surface form for ooc events: &#34;&#34; (default, treated as &#34;say&#34;) / &#34;say&#34; / &#34;pose&#34; / &#34;semipose&#34;. Empty for non-ooc kinds. |
+
+
+
+
+
+ 
+
+ 
+
+ 
 
  
 
@@ -3473,13 +4150,13 @@ internal/plugin/goplugin/host_capability_servers.go.
 
 ### DeleteRequest
 DeleteRequest is the (currently unserved, holomush-l6std) request to delete a
-key from a plugin&#39;s KV namespace.
+key from the calling plugin&#39;s KV namespace. The namespace is bound host-side
+from the authenticated plugin identity, never carried on the wire.
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| plugin_name | [string](#string) |  | Owning plugin&#39;s name — the KV namespace key. |
-| key | [string](#string) |  | Key to delete within that namespace. |
+| key | [string](#string) |  | Key to delete within the caller&#39;s namespace. |
 
 
 
@@ -3500,13 +4177,13 @@ DeleteResponse is the empty ack for Delete (unserved, holomush-l6std).
 
 ### GetRequest
 GetRequest is the (currently unserved, holomush-l6std) request to read a key
-from a plugin&#39;s KV namespace.
+from the calling plugin&#39;s KV namespace. The namespace is bound host-side from
+the authenticated plugin identity, never carried on the wire.
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| plugin_name | [string](#string) |  | Owning plugin&#39;s name — the KV namespace key. |
-| key | [string](#string) |  | Key to read within that namespace. |
+| key | [string](#string) |  | Key to read within the caller&#39;s namespace. |
 
 
 
@@ -3533,13 +4210,13 @@ GetResponse returns a KV lookup result (unserved, holomush-l6std).
 
 ### SetRequest
 SetRequest is the (currently unserved, holomush-l6std) request to write a key
-in a plugin&#39;s KV namespace.
+in the calling plugin&#39;s KV namespace. The namespace is bound host-side from
+the authenticated plugin identity, never carried on the wire.
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| plugin_name | [string](#string) |  | Owning plugin&#39;s name — the KV namespace key. |
-| key | [string](#string) |  | Key to write within that namespace. |
+| key | [string](#string) |  | Key to write within the caller&#39;s namespace. |
 | value | [string](#string) |  | Value to store under the key. |
 
 
@@ -3567,7 +4244,10 @@ SetResponse is the empty ack for Set (unserved, holomush-l6std).
 
 ### KVService
 KVService is the host-brokered `kv` capability: a plugin reads, writes, and
-deletes keys in its own namespaced key-value store. Carved from the former
+deletes keys in its own namespaced key-value store. The namespace is the
+CALLING plugin&#39;s identity, bound host-side from the authenticated transport
+(mirroring the sibling host services) — it is NOT a request field, so one
+plugin can never target another plugin&#39;s KV partition. Carved from the former
 PluginHostService (holomush-eykuh.1). All three RPCs are DECLARED BUT UNSERVED
 today (holomush-l6std): no server impl, no production client; they return
 codes.Unimplemented.
@@ -4267,8 +4947,9 @@ CreateLocationResponse returns the created location&#39;s id and name.
 
 ### CreateObjectRequest
 CreateObjectRequest carries the name, containment placement, and optional
-description for a new object. Exactly one of location_id / character_id /
-container_id MUST be set, matching the Lua handler&#39;s containment validation.
+description for a new object. The placement oneof enforces at the wire
+boundary that exactly one of location_id / character_id / container_id is set,
+matching the Lua handler&#39;s containment validation.
 
 
 | Field | Type | Label | Description |
@@ -5042,6 +5723,7 @@ Init.
 | connection_string | [string](#string) |  | PostgreSQL DSN the plugin uses for its own storage. Populated only when the plugin declares storage: postgres in its manifest; empty otherwise. |
 | required_services | [ServiceConfig.RequiredServicesEntry](#holomush-plugin-v1-ServiceConfig-RequiredServicesEntry) | repeated | Network addresses of the proto services the plugin declared in requires, keyed by service name, for the plugin to dial. (Reserved for future service-to-service wiring.) |
 | plugin_config | [ServiceConfig.PluginConfigEntry](#holomush-plugin-v1-ServiceConfig-PluginConfigEntry) | repeated | Opaque plugin-owned runtime config: the effective (manifest-default &lt; server-override) map the host delivers at init. The host does NOT interpret keys/values; the plugin decodes them per its own schema. |
+| declared_capabilities | [string](#string) | repeated | Capability tokens the plugin declared in its manifest `requires:` (manifest.RequiredCapabilities()). The plugin SDK validates, at Init, that every non-exempt host capability its code can consume (via an implemented *Aware interface) appears here, failing load otherwise (INV-PLUGIN-54). |
 
 
 
@@ -6064,6 +6746,8 @@ enums, not proto enums.
 | participants | [ParticipantInfo](#holomush-scene-v1-ParticipantInfo) | repeated | The current participant roster (owners and members; invited rows are not surfaced as participants here). |
 | observers | [ParticipantInfo](#holomush-scene-v1-ParticipantInfo) | repeated | The watching (role=observer) participants, listed separately from the acting roster and excluded from pose order and publish votes (INV-SCENE-61). Not yet populated by any RPC; the scene-watch read path (E9.5 Task 3&#43;) fills it from the store&#39;s observers query. |
 | last_activity_ms | [int64](#int64) |  | Epoch-milliseconds of the newest scene_log row on the scene&#39;s IC subject (events.&lt;gameID&gt;.scene.&lt;sceneID&gt;.ic). 0 when the log is empty or the read path does not compute the value (e.g. GetScene). Mirrors CharacterSceneInfo.last_activity_ms. |
+| active_publish_attempt_id | [string](#string) |  | The in-flight publication attempt&#39;s ID, or empty when no attempt is active. Populated by GetScene from activeAttemptID (commands.go) over the scene&#39;s published_scenes rows. Active-only: reflects an attempt in COLLECTING or COOLOFF and clears once the attempt resolves. The portal uses it to gate the publish panel&#39;s Start-vs-in-progress affordance and to key the participant-gated tally read (GetPublishedScene). Carries NO tally (SceneInfo is broadly readable; INV-SCENE-60/61). |
+| publish_status | [string](#string) |  | The active attempt&#39;s state-machine phase (&#34;COLLECTING&#34; or &#34;COOLOFF&#34;), or empty when no attempt is active. Non-sensitive phase signal; the counts stay behind GetPublishedScene&#39;s participant gate. |
 
 
 
@@ -6396,7 +7080,7 @@ plugins/core-scenes/publish_service.go.
 | CreateScene | [CreateSceneRequest](#holomush-scene-v1-CreateSceneRequest) | [CreateSceneResponse](#holomush-scene-v1-CreateSceneResponse) | CreateScene allocates a new scene owned by the calling character, seeded active with the supplied title/description/visibility/pose-order/tags. The creating character becomes the `owner` participant in the same transaction, a lifecycle.created audit event is recorded, and a scene-created event is emitted. See service.go::CreateScene. |
 | EndScene | [EndSceneRequest](#holomush-scene-v1-EndSceneRequest) | [EndSceneResponse](#holomush-scene-v1-EndSceneResponse) | EndScene transitions a scene to the terminal `ended` state (owner-only via ABAC). Rejected with codes.FailedPrecondition when the scene is already ended or archived. Returns the post-transition scene row. See service.go::EndScene. |
 | PauseScene | [PauseSceneRequest](#holomush-scene-v1-PauseSceneRequest) | [PauseSceneResponse](#holomush-scene-v1-PauseSceneResponse) | PauseScene transitions an `active` scene to `paused` (owner-only via ABAC). Rejected with codes.FailedPrecondition from any non-active state. See service.go::PauseScene. |
-| ResumeScene | [ResumeSceneRequest](#holomush-scene-v1-ResumeSceneRequest) | [ResumeSceneResponse](#holomush-scene-v1-ResumeSceneResponse) | ResumeScene transitions a `paused` scene back to `active` (owner-only via ABAC). Rejected with codes.FailedPrecondition from any non-paused state. See service.go::ResumeScene. |
+| ResumeScene | [ResumeSceneRequest](#holomush-scene-v1-ResumeSceneRequest) | [ResumeSceneResponse](#holomush-scene-v1-ResumeSceneResponse) | ResumeScene transitions a `paused` scene back to `active` (participant-wide via ABAC — any participant may resume (spec D6)). Rejected with codes.FailedPrecondition from any non-paused state. See service.go::ResumeScene. |
 | UpdateScene | [UpdateSceneRequest](#holomush-scene-v1-UpdateSceneRequest) | [UpdateSceneResponse](#holomush-scene-v1-UpdateSceneResponse) | UpdateScene applies a partial update to mutable scene metadata, driven by the request&#39;s FieldMask (owner-only via ABAC). An empty mask is a no-op success. A pose-order-mode change auto-emits a pose-order-changed IC notice. See service.go::UpdateScene. |
 | JoinScene | [JoinSceneRequest](#holomush-scene-v1-JoinSceneRequest) | [JoinSceneResponse](#holomush-scene-v1-JoinSceneResponse) | JoinScene adds the calling character to a scene as a `member`. Open scenes accept any join; private scenes require a pre-existing invitation (the invited row is promoted to member). Idempotent: a repeat join by an existing member succeeds without re-emitting a join notice. See service.go::JoinScene. |
 | WatchScene | [WatchSceneRequest](#holomush-scene-v1-WatchSceneRequest) | [WatchSceneResponse](#holomush-scene-v1-WatchSceneResponse) | WatchScene auto-joins the requesting character into an OPEN scene as a role=observer participant and registers the focus membership for the supplied session, so focus/Subscribe/history gates admit the watcher. Gate order is fail-closed per INV-SCENE-61: the plugin-code visibility==open and state checks run BEFORE the ABAC spectate action is evaluated; non-open scenes are rejected without consulting ABAC. See service.go::WatchScene. |
@@ -6427,6 +7111,77 @@ plugins/core-scenes/publish_service.go.
 <p align="right"><a href="#top">Top</a></p>
 
 ## holomush/sceneaccess/v1/sceneaccess.proto
+
+
+
+<a name="holomush-sceneaccess-v1-CastPublishSceneVoteRequest"></a>
+
+### CastPublishSceneVoteRequest
+CastPublishSceneVoteRequest carries the attempt id &#43; the Yes/No choice.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only; authentication is solely via player_session_token). |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; the facade rejects unauthenticated callers and verifies character ownership. |
+| character_id | [string](#string) |  | character_id is the acting alt; ownership verified by ownedCharacter. |
+| published_scene_id | [string](#string) |  | The publication attempt to vote on. |
+| vote | [bool](#bool) |  | The vote: true = yes, false = no. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-CastPublishSceneVoteResponse"></a>
+
+### CastPublishSceneVoteResponse
+CastPublishSceneVoteResponse reports whether this changed an existing vote.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| is_change | [bool](#bool) |  | True when the caller had already voted and this flipped the choice. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-CreateSceneRequest"></a>
+
+### CreateSceneRequest
+CreateSceneRequest is the facade request to create a scene. player_session_token
+authenticates the calling player (session_id is a reserved client hint, not
+consulted); the facade resolves the acting character SERVER-SIDE from the
+player&#39;s owned-character set (INV-SCENE-63) and overrides any client identity.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID, retained as a forward-looking hint; authentication is performed SOLELY against player_session_token (holomush-5rh.8.23 decision). |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; the facade looks up the session by token hash and rejects unauthenticated callers (codes.Unauthenticated) and guests (codes.PermissionDenied, INV-SCENE-64). |
+| character_id | [string](#string) |  | character_id selects which owned alt becomes the scene owner; the facade verifies ownership before passing the server-verified ID downstream (codes.NotFound when not owned, INV-SCENE-63). |
+| title | [string](#string) |  | title is the scene title; required. The plugin handler rejects empty or whitespace-only titles after trim. |
+| description | [string](#string) |  | description is an optional scene synopsis; empty omits it. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-CreateSceneResponse"></a>
+
+### CreateSceneResponse
+CreateSceneResponse wraps the created scene&#39;s full metadata projection.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the newly created scene; the verified character is its owner and first participant. |
+
+
+
 
 
 
@@ -6463,6 +7218,41 @@ bytes and their MIME type.
 | ----- | ---- | ----- | ----------- |
 | content | [bytes](#bytes) |  | content is the rendered file content. |
 | mime_type | [string](#string) |  | mime_type is the content&#39;s MIME type (text/markdown, text/plain, or application/jsonl). |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-EndSceneRequest"></a>
+
+### EndSceneRequest
+EndSceneRequest is the facade request to end a scene. player_session_token
+authenticates the caller; the facade resolves the acting character SERVER-SIDE
+(INV-SCENE-63) and forwards the verified id to SceneService.EndScene.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (forward-looking hint; authentication is solely via player_session_token). |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; the facade rejects unauthenticated callers (Unauthenticated) and guests (PermissionDenied). |
+| character_id | [string](#string) |  | character_id selects which owned alt acts; the facade verifies ownership (NotFound when not owned). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to end; required. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-EndSceneResponse"></a>
+
+### EndSceneResponse
+EndSceneResponse wraps the scene as of the ended transition.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the post-transition scene row (state == &#34;ended&#34;). |
 
 
 
@@ -6549,6 +7339,45 @@ GetPublicSceneArchiveResponse wraps the plugin&#39;s public archive view.
 
 
 
+<a name="holomush-sceneaccess-v1-GetPublishedSceneRequest"></a>
+
+### GetPublishedSceneRequest
+GetPublishedSceneRequest reads the attempt&#39;s status &#43; tally (participant-gated).
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only; authentication is solely via player_session_token). |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; the facade rejects unauthenticated callers and verifies character ownership. |
+| character_id | [string](#string) |  | character_id is the acting alt; ownership verified by ownedCharacter. |
+| published_scene_id | [string](#string) |  | published_scene_id identifies the attempt whose status &#43; tally to read. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-GetPublishedSceneResponse"></a>
+
+### GetPublishedSceneResponse
+GetPublishedSceneResponse is the trimmed participant view of an attempt:
+status &#43; tally, no frozen content (that is GetPublicSceneArchive).
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | The attempt id. |
+| scene_id | [string](#string) |  | The scene the attempt belongs to. |
+| attempt_number | [int32](#int32) |  | The attempt&#39;s 1-based ordinal. |
+| status | [string](#string) |  | State-machine status: COLLECTING / COOLOFF / PUBLISHED / ATTEMPT_FAILED. |
+| failure_reason | [string](#string) |  | Failure cause when status is ATTEMPT_FAILED; empty otherwise. |
+| vote_summary | [holomush.scene.v1.PublishedSceneVoteSummary](#holomush-scene-v1-PublishedSceneVoteSummary) |  | The current yes/no/pending tally. |
+
+
+
+
+
+
 <a name="holomush-sceneaccess-v1-GetSceneForViewerRequest"></a>
 
 ### GetSceneForViewerRequest
@@ -6580,6 +7409,92 @@ GetSceneForViewerResponse wraps the plugin&#39;s single-scene response.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the loaded scene&#39;s full metadata projection. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-InviteToSceneRequest"></a>
+
+### InviteToSceneRequest
+InviteToSceneRequest authenticates the inviter and names the invitee.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller; guests are rejected. |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (ownership verified server-side). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to invite into; required. |
+| target_character_id | [string](#string) |  | target_character_id is the invitee (from the directory picker); required. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-InviteToSceneResponse"></a>
+
+### InviteToSceneResponse
+InviteToSceneResponse is empty; success is signaled by the absence of error.
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-KickFromSceneRequest"></a>
+
+### KickFromSceneRequest
+KickFromSceneRequest authenticates the acting owner and names the target.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller; guests are rejected. |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (ownership verified server-side). |
+| scene_id | [string](#string) |  | scene_id identifies the scene; required. |
+| target_character_id | [string](#string) |  | target_character_id is the member to remove (not the owner); required. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-KickFromSceneResponse"></a>
+
+### KickFromSceneResponse
+KickFromSceneResponse is empty.
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-LeaveSceneRequest"></a>
+
+### LeaveSceneRequest
+LeaveSceneRequest authenticates the leaving participant.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller; guests are rejected. |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (the leaver); verified. |
+| scene_id | [string](#string) |  | scene_id identifies the scene to leave; required. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-LeaveSceneResponse"></a>
+
+### LeaveSceneResponse
+LeaveSceneResponse is empty.
 
 
 
@@ -6697,6 +7612,74 @@ ListScenesForViewerResponse wraps the plugin&#39;s scene-board result page.
 
 
 
+<a name="holomush-sceneaccess-v1-PauseSceneRequest"></a>
+
+### PauseSceneRequest
+PauseSceneRequest is the facade request to pause a scene; fields mirror
+EndSceneRequest.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller (see EndSceneRequest). |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (ownership verified server-side). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to pause; required. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-PauseSceneResponse"></a>
+
+### PauseSceneResponse
+PauseSceneResponse wraps the scene as of the paused transition.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the post-transition scene row (state == &#34;paused&#34;). |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-ResumeSceneRequest"></a>
+
+### ResumeSceneRequest
+ResumeSceneRequest is the facade request to resume a scene; fields mirror
+EndSceneRequest.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller (see EndSceneRequest). |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (ownership verified server-side). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to resume; required. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-ResumeSceneResponse"></a>
+
+### ResumeSceneResponse
+ResumeSceneResponse wraps the scene as of the resumed transition.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the post-transition scene row (state == &#34;active&#34;). |
+
+
+
+
+
+
 <a name="holomush-sceneaccess-v1-SetSceneFocusRequest"></a>
 
 ### SetSceneFocusRequest
@@ -6724,6 +7707,114 @@ SetConnectionFocus (INV-SCENE-63).
 ### SetSceneFocusResponse
 SetSceneFocusResponse is intentionally empty — a successful focus set
 carries no body; the client may update its local focus state optimistically.
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-StartScenePublishRequest"></a>
+
+### StartScenePublishRequest
+StartScenePublishRequest carries the resolved session &#43; acting character and
+the scene to publish.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only; authentication is solely via player_session_token). |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; the facade rejects unauthenticated callers and verifies character ownership. |
+| character_id | [string](#string) |  | character_id is the acting alt; ownership verified by ownedCharacter. |
+| scene_id | [string](#string) |  | The scene to start a publish vote on; MUST be ended. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-StartScenePublishResponse"></a>
+
+### StartScenePublishResponse
+StartScenePublishResponse returns the new attempt&#39;s id &#43; ordinal.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| published_scene_id | [string](#string) |  | The publication attempt id (published_scenes.id). |
+| attempt_number | [int32](#int32) |  | The attempt&#39;s 1-based ordinal within the scene&#39;s budget. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-TransferOwnershipRequest"></a>
+
+### TransferOwnershipRequest
+TransferOwnershipRequest authenticates the current owner and names the heir.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller; guests are rejected. |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (the current owner); verified. |
+| scene_id | [string](#string) |  | scene_id identifies the scene; required. |
+| new_owner_character_id | [string](#string) |  | new_owner_character_id is the existing member who becomes owner; required. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-TransferOwnershipResponse"></a>
+
+### TransferOwnershipResponse
+TransferOwnershipResponse is empty.
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-UpdateSceneRequest"></a>
+
+### UpdateSceneRequest
+UpdateSceneRequest is the facade request to edit scene settings.
+player_session_token authenticates the caller; the facade resolves the acting
+character SERVER-SIDE (INV-SCENE-63) and forwards the verified id, the six
+editable fields, and update_mask to SceneService.UpdateScene. Fields absent
+from update_mask are ignored by the handler (their values here are immaterial).
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only; authentication is solely via player_session_token). |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; the facade rejects unauthenticated callers (Unauthenticated) and guests (PermissionDenied). |
+| character_id | [string](#string) |  | character_id selects which owned alt acts; ownership verified (NotFound). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to update; required. |
+| title | [string](#string) |  | New title (applied only when &#34;title&#34; is in the mask). Max 200 chars. |
+| description | [string](#string) |  | New description (applied only when &#34;description&#34; is in the mask; empty clears it). Max 4096 chars. |
+| visibility | [string](#string) |  | New visibility (applied only when &#34;visibility&#34; is in the mask). Constrained to &#34;&#34;|&#34;open&#34;|&#34;private&#34;. |
+| pose_order_mode | [string](#string) |  | New pose-order mode (applied only when &#34;pose_order_mode&#34; is in the mask). Constrained to &#34;&#34;|&#34;free&#34;|&#34;strict&#34;|&#34;3pr&#34;|&#34;5pr&#34;. |
+| tags | [string](#string) | repeated | Replacement tags (applied only when &#34;tags&#34; is in the mask). Max 32. |
+| content_warnings | [string](#string) | repeated | Replacement content warnings (applied only when &#34;content_warnings&#34; is in the mask). Max 32. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | The set of field paths to apply (snake_case proto names). An empty mask is a no-op success at the handler; the web client avoids the round-trip entirely. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-UpdateSceneResponse"></a>
+
+### UpdateSceneResponse
+UpdateSceneResponse wraps the scene after the partial update.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the post-update scene row. |
 
 
 
@@ -6767,6 +7858,34 @@ WatchSceneResponse wraps the plugin&#39;s observer-join confirmation.
 
 
 
+
+<a name="holomush-sceneaccess-v1-WithdrawScenePublishRequest"></a>
+
+### WithdrawScenePublishRequest
+WithdrawScenePublishRequest aborts the attempt (owner-gated in the plugin).
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only; authentication is solely via player_session_token). |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; the facade rejects unauthenticated callers and verifies character ownership. |
+| character_id | [string](#string) |  | character_id is the acting alt; ownership verified by ownedCharacter. |
+| published_scene_id | [string](#string) |  | published_scene_id identifies the attempt to abort. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-WithdrawScenePublishResponse"></a>
+
+### WithdrawScenePublishResponse
+WithdrawScenePublishResponse is empty.
+
+
+
+
+
  
 
  
@@ -6794,6 +7913,19 @@ cmd/holomush/sub_grpc.go.
 | GetSceneForViewer | [GetSceneForViewerRequest](#holomush-sceneaccess-v1-GetSceneForViewerRequest) | [GetSceneForViewerResponse](#holomush-sceneaccess-v1-GetSceneForViewerResponse) | GetSceneForViewer loads one scene&#39;s metadata for the verified player&#39;s owned character. The facade resolves the acting character from the player session (INV-SCENE-63) and forwards a GetScene call to the plugin SceneService with the server-verified character_id. |
 | ListMyScenes | [ListMyScenesRequest](#holomush-sceneaccess-v1-ListMyScenesRequest) | [ListMyScenesResponse](#holomush-sceneaccess-v1-ListMyScenesResponse) | ListMyScenes returns every non-archived scene the verified player&#39;s owned character participates in (any role), with activity metadata for workspace badge rendering. The facade resolves the acting character from the player session (INV-SCENE-63) and forwards a ListCharacterScenes call to the plugin SceneService with the server-verified character_id. |
 | WatchScene | [WatchSceneRequest](#holomush-sceneaccess-v1-WatchSceneRequest) | [WatchSceneResponse](#holomush-sceneaccess-v1-WatchSceneResponse) | WatchScene auto-joins the verified player&#39;s owned character into an OPEN, active scene as a role=observer participant and registers a FocusMembership on the character&#39;s existing game session (which must already exist — use SelectCharacter first). The facade resolves the acting character from the player session (INV-SCENE-63), looks up the character&#39;s game session via FindByCharacter, and forwards a WatchScene call to the plugin SceneService with the server-verified character_id and session_id. Returns FailedPrecondition when no game session exists for the character (select the character first). |
+| CreateScene | [CreateSceneRequest](#holomush-sceneaccess-v1-CreateSceneRequest) | [CreateSceneResponse](#holomush-sceneaccess-v1-CreateSceneResponse) | CreateScene creates a new scene owned by the verified player&#39;s owned character and returns its full metadata. The facade resolves the acting character from the player session (INV-SCENE-63) and rejects guests (INV-SCENE-64), then forwards a CreateScene call to the plugin SceneService with the server-verified character_id. Unlike WatchScene it requires no existing game session — creation does not touch focus. |
+| EndScene | [EndSceneRequest](#holomush-sceneaccess-v1-EndSceneRequest) | [EndSceneResponse](#holomush-sceneaccess-v1-EndSceneResponse) | EndScene transitions the verified owner&#39;s scene to `ended`. The facade resolves the acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.EndScene, which self-enforces the ABAC `end` policy (INV-SCENE-65). Returns the post-transition scene row. |
+| PauseScene | [PauseSceneRequest](#holomush-sceneaccess-v1-PauseSceneRequest) | [PauseSceneResponse](#holomush-sceneaccess-v1-PauseSceneResponse) | PauseScene transitions the verified owner&#39;s active scene to `paused`. Same identity/guest gating as EndScene; forwards to SceneService.PauseScene which self-enforces the ABAC `pause` policy (INV-SCENE-65). |
+| ResumeScene | [ResumeSceneRequest](#holomush-sceneaccess-v1-ResumeSceneRequest) | [ResumeSceneResponse](#holomush-sceneaccess-v1-ResumeSceneResponse) | ResumeScene transitions the verified participant&#39;s paused scene to `active`. Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65). |
+| UpdateScene | [UpdateSceneRequest](#holomush-sceneaccess-v1-UpdateSceneRequest) | [UpdateSceneResponse](#holomush-sceneaccess-v1-UpdateSceneResponse) | UpdateScene applies an owner&#39;s partial edit to mutable scene metadata. The facade resolves the acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene, which self-enforces the ABAC `update` policy (owner-only, INV-SCENE-65) and applies only the fields named in update_mask (AIP-134). Returns the post-update scene row. |
+| InviteToScene | [InviteToSceneRequest](#holomush-sceneaccess-v1-InviteToSceneRequest) | [InviteToSceneResponse](#holomush-sceneaccess-v1-InviteToSceneResponse) | InviteToScene resolves the verified acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.InviteToScene, which self-enforces the ABAC `invite` policy (participant-wide per the relaxation, INV-SCENE-65). |
+| KickFromScene | [KickFromSceneRequest](#holomush-sceneaccess-v1-KickFromSceneRequest) | [KickFromSceneResponse](#holomush-sceneaccess-v1-KickFromSceneResponse) | KickFromScene forwards to SceneService.KickFromScene, which self-enforces the owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above. |
+| TransferOwnership | [TransferOwnershipRequest](#holomush-sceneaccess-v1-TransferOwnershipRequest) | [TransferOwnershipResponse](#holomush-sceneaccess-v1-TransferOwnershipResponse) | TransferOwnership forwards to SceneService.TransferOwnership, which self-enforces the owner-only `transfer-ownership` policy (INV-SCENE-65). |
+| LeaveScene | [LeaveSceneRequest](#holomush-sceneaccess-v1-LeaveSceneRequest) | [LeaveSceneResponse](#holomush-sceneaccess-v1-LeaveSceneResponse) | LeaveScene forwards to SceneService.LeaveScene, which self-enforces the participant `leave` policy (INV-SCENE-65). The owner cannot leave. |
+| StartScenePublish | [StartScenePublishRequest](#holomush-sceneaccess-v1-StartScenePublishRequest) | [StartScenePublishResponse](#holomush-sceneaccess-v1-StartScenePublishResponse) | StartScenePublish starts a publication vote on an ended scene. Participant- gated inside the plugin (INV-SCENE-33: no ABAC engine on this path); the facade resolves session/character and dispatches without an engine call. |
+| CastPublishSceneVote | [CastPublishSceneVoteRequest](#holomush-sceneaccess-v1-CastPublishSceneVoteRequest) | [CastPublishSceneVoteResponse](#holomush-sceneaccess-v1-CastPublishSceneVoteResponse) | CastPublishSceneVote casts or changes the caller&#39;s Yes/No vote on the active attempt. Frozen-roster participant gate enforced in the plugin store. |
+| WithdrawScenePublish | [WithdrawScenePublishRequest](#holomush-sceneaccess-v1-WithdrawScenePublishRequest) | [WithdrawScenePublishResponse](#holomush-sceneaccess-v1-WithdrawScenePublishResponse) | WithdrawScenePublish aborts the active attempt (scene owner only; gate in the plugin handler). |
+| GetPublishedScene | [GetPublishedSceneRequest](#holomush-sceneaccess-v1-GetPublishedSceneRequest) | [GetPublishedSceneResponse](#holomush-sceneaccess-v1-GetPublishedSceneResponse) | GetPublishedScene reads the active attempt&#39;s status &#43; vote tally for a participant cold-start snapshot. Participant-gated (INV-SCENE-60); the facade passes the plugin&#39;s status; the response is trimmed (no frozen content — that is GetPublicSceneArchive&#39;s job). |
 | ExportScene | [ExportSceneRequest](#holomush-sceneaccess-v1-ExportSceneRequest) | [ExportSceneResponse](#holomush-sceneaccess-v1-ExportSceneResponse) | ExportScene renders the verified player&#39;s owned character&#39;s scene IC log to a downloadable document. The facade resolves the acting character from the player session (INV-SCENE-63) and forwards an ExportSceneLog call to the plugin SceneService with the server-verified character_id. |
 | SetSceneFocus | [SetSceneFocusRequest](#holomush-sceneaccess-v1-SetSceneFocusRequest) | [SetSceneFocusResponse](#holomush-sceneaccess-v1-SetSceneFocusResponse) | SetSceneFocus sets the per-connection focus for a web portal connection belonging to the verified player&#39;s character. The facade verifies that the connection belongs to a session owned by one of the player&#39;s characters (INV-SCENE-63) before calling the focus coordinator&#39;s SetConnectionFocus. |
 | ListPublishedScenes | [ListPublishedScenesRequest](#holomush-sceneaccess-v1-ListPublishedScenesRequest) | [ListPublishedScenesResponse](#holomush-sceneaccess-v1-ListPublishedScenesResponse) | ListPublishedScenes pages through publicly visible PUBLISHED scene archives, newest first, with optional tag filtering. No character identity is required for the underlying query, but the player session token &#43; guest gate are still enforced (INV-SCENE-64). The facade forwards a ListPublishedScenes call to the plugin SceneService. |
@@ -7069,6 +8201,39 @@ WebAvailableCommand is one command&#39;s metadata for the web composer.
 
 
 
+<a name="holomush-web-v1-WebCastPublishSceneVoteRequest"></a>
+
+### WebCastPublishSceneVoteRequest
+WebCastPublishSceneVoteRequest casts/changes a vote from the web portal.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| published_scene_id | [string](#string) |  | published_scene_id identifies the attempt to vote on. |
+| vote | [bool](#bool) |  | vote is the ballot choice: true = yes, false = no. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebCastPublishSceneVoteResponse"></a>
+
+### WebCastPublishSceneVoteResponse
+WebCastPublishSceneVoteResponse mirrors the facade response.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| is_change | [bool](#bool) |  | is_change is true when the caller had already voted and this flipped the choice. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebCheckSessionRequest"></a>
 
 ### WebCheckSessionRequest
@@ -7274,6 +8439,40 @@ Set-Cookie, not in this body.
 
 
 
+<a name="holomush-web-v1-WebCreateSceneRequest"></a>
+
+### WebCreateSceneRequest
+WebCreateSceneRequest proxies to SceneAccessService.CreateScene.
+player_session_token is injected from the X-Session-Token cookie.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt becomes the scene owner, forwarded to the facade for server-side ownership verification. |
+| title | [string](#string) |  | title is the scene title; required. |
+| description | [string](#string) |  | description is an optional scene synopsis; empty omits it. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebCreateSceneResponse"></a>
+
+### WebCreateSceneResponse
+WebCreateSceneResponse re-exports the created scene&#39;s metadata from the facade.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the newly created scene&#39;s full metadata projection. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebDownloadPublicSceneArchiveRequest"></a>
 
 ### WebDownloadPublicSceneArchiveRequest
@@ -7304,6 +8503,39 @@ bytes from the facade.
 | ----- | ---- | ----- | ----------- |
 | content | [bytes](#bytes) |  | content is the rendered file content. |
 | mime_type | [string](#string) |  | mime_type is the content&#39;s MIME type. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebEndSceneRequest"></a>
+
+### WebEndSceneRequest
+WebEndSceneRequest proxies to SceneAccessService.EndScene.
+player_session_token is injected from the X-Session-Token cookie.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to end; required. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebEndSceneResponse"></a>
+
+### WebEndSceneResponse
+WebEndSceneResponse re-exports the post-transition scene from the facade.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the scene row after the ended transition. |
 
 
 
@@ -7414,6 +8646,43 @@ WebGetPublicSceneArchiveResponse re-exports the public archive view from the fac
 
 
 
+<a name="holomush-web-v1-WebGetPublishedSceneRequest"></a>
+
+### WebGetPublishedSceneRequest
+WebGetPublishedSceneRequest reads the cold-start tally snapshot.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| published_scene_id | [string](#string) |  | published_scene_id identifies the attempt whose status &#43; tally to read. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebGetPublishedSceneResponse"></a>
+
+### WebGetPublishedSceneResponse
+WebGetPublishedSceneResponse is the trimmed status &#43; tally view.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the publication attempt id. |
+| scene_id | [string](#string) |  | scene_id is the scene the attempt belongs to. |
+| attempt_number | [int32](#int32) |  | attempt_number is the attempt&#39;s 1-based ordinal. |
+| status | [string](#string) |  | status is the state-machine phase: COLLECTING / COOLOFF / PUBLISHED / ATTEMPT_FAILED. |
+| failure_reason | [string](#string) |  | failure_reason is the cause when status is ATTEMPT_FAILED; empty otherwise. |
+| vote_summary | [holomush.scene.v1.PublishedSceneVoteSummary](#holomush-scene-v1-PublishedSceneVoteSummary) |  | vote_summary is the current yes/no/pending tally. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebGetSceneRequest"></a>
 
 ### WebGetSceneRequest
@@ -7441,6 +8710,120 @@ WebGetSceneResponse re-exports the single-scene metadata from the facade.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the loaded scene&#39;s full metadata projection. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebInviteToSceneRequest"></a>
+
+### WebInviteToSceneRequest
+WebInviteToSceneRequest proxies to SceneAccessService.InviteToScene.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (the inviter). |
+| scene_id | [string](#string) |  | scene_id identifies the scene; required. |
+| target_character_id | [string](#string) |  | target_character_id is the invitee from the directory picker; required. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebInviteToSceneResponse"></a>
+
+### WebInviteToSceneResponse
+WebInviteToSceneResponse is empty.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebKickFromSceneRequest"></a>
+
+### WebKickFromSceneRequest
+WebKickFromSceneRequest proxies to SceneAccessService.KickFromScene.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (the owner). |
+| scene_id | [string](#string) |  | scene_id identifies the scene; required. |
+| target_character_id | [string](#string) |  | target_character_id is the member to remove; required. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebKickFromSceneResponse"></a>
+
+### WebKickFromSceneResponse
+WebKickFromSceneResponse is empty.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebLeaveSceneRequest"></a>
+
+### WebLeaveSceneRequest
+WebLeaveSceneRequest proxies to SceneAccessService.LeaveScene.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (the leaver). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to leave; required. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebLeaveSceneResponse"></a>
+
+### WebLeaveSceneResponse
+WebLeaveSceneResponse is empty.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListAllCharactersRequest"></a>
+
+### WebListAllCharactersRequest
+WebListAllCharactersRequest proxies to CoreService.ListAllCharacters; token
+is injected from the X-Session-Token cookie.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the acting alt (forwarded as the ABAC subject). Required. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListAllCharactersResponse"></a>
+
+### WebListAllCharactersResponse
+WebListAllCharactersResponse re-exports the directory page from core.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [holomush.core.v1.CharacterDirectoryEntry](#holomush-core-v1-CharacterDirectoryEntry) | repeated | characters is the id&#43;name list from CoreService.ListAllCharacters. |
 
 
 
@@ -7777,6 +9160,38 @@ the gateway, so this body carries no fields.
 
 
 
+<a name="holomush-web-v1-WebPauseSceneRequest"></a>
+
+### WebPauseSceneRequest
+WebPauseSceneRequest proxies to SceneAccessService.PauseScene.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to pause; required. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebPauseSceneResponse"></a>
+
+### WebPauseSceneResponse
+WebPauseSceneResponse re-exports the post-transition scene from the facade.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the scene row after the paused transition. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebPlayerSessionInfo"></a>
 
 ### WebPlayerSessionInfo
@@ -7883,6 +9298,38 @@ leaking account existence.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | success | [bool](#bool) |  | success is true when the request was accepted; it does NOT confirm the email exists (existence is deliberately not disclosed). |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebResumeSceneRequest"></a>
+
+### WebResumeSceneRequest
+WebResumeSceneRequest proxies to SceneAccessService.ResumeScene.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to resume; required. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebResumeSceneResponse"></a>
+
+### WebResumeSceneResponse
+WebResumeSceneResponse re-exports the post-transition scene from the facade.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the scene row after the resumed transition. |
 
 
 
@@ -8016,6 +9463,107 @@ carries no body; the client may update its local focus state optimistically.
 
 
 
+<a name="holomush-web-v1-WebStartScenePublishRequest"></a>
+
+### WebStartScenePublishRequest
+WebStartScenePublishRequest starts a publish vote from the web portal.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to start a publish vote on; MUST be ended. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebStartScenePublishResponse"></a>
+
+### WebStartScenePublishResponse
+WebStartScenePublishResponse mirrors the facade response.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| published_scene_id | [string](#string) |  | published_scene_id is the new publication attempt&#39;s id. |
+| attempt_number | [int32](#int32) |  | attempt_number is the attempt&#39;s 1-based ordinal within the scene&#39;s budget. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebTransferOwnershipRequest"></a>
+
+### WebTransferOwnershipRequest
+WebTransferOwnershipRequest proxies to SceneAccessService.TransferOwnership.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (the current owner). |
+| scene_id | [string](#string) |  | scene_id identifies the scene; required. |
+| new_owner_character_id | [string](#string) |  | new_owner_character_id is the existing member who becomes owner; required. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebTransferOwnershipResponse"></a>
+
+### WebTransferOwnershipResponse
+WebTransferOwnershipResponse is empty.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateSceneRequest"></a>
+
+### WebUpdateSceneRequest
+WebUpdateSceneRequest proxies to SceneAccessService.UpdateScene.
+player_session_token is injected from the X-Session-Token cookie.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| scene_id | [string](#string) |  | scene_id identifies the scene to update; required. |
+| title | [string](#string) |  | New title (applied only when &#34;title&#34; is in the mask). Max 200 chars. |
+| description | [string](#string) |  | New description (applied only when &#34;description&#34; is in the mask). Max 4096. |
+| visibility | [string](#string) |  | New visibility (applied only when &#34;visibility&#34; is in the mask). |
+| pose_order_mode | [string](#string) |  | New pose-order mode (applied only when &#34;pose_order_mode&#34; is in the mask). |
+| tags | [string](#string) | repeated | Replacement tags (applied only when &#34;tags&#34; is in the mask). Max 32. |
+| content_warnings | [string](#string) | repeated | Replacement content warnings (applied only when &#34;content_warnings&#34; is in the mask). Max 32. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | The set of field paths to apply (snake_case proto names). |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateSceneResponse"></a>
+
+### WebUpdateSceneResponse
+WebUpdateSceneResponse re-exports the post-update scene from the facade.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) |  | scene is the scene row after the partial update. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebWatchSceneRequest"></a>
 
 ### WebWatchSceneRequest
@@ -8043,6 +9591,33 @@ WebWatchSceneResponse re-exports the observer-join confirmation from the facade.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | participant | [holomush.scene.v1.ParticipantInfo](#holomush-scene-v1-ParticipantInfo) |  | participant is the resulting participant entry (role=observer), or the pre-existing row when the character was already a participant. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebWithdrawScenePublishRequest"></a>
+
+### WebWithdrawScenePublishRequest
+WebWithdrawScenePublishRequest withdraws an attempt from the web portal.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| published_scene_id | [string](#string) |  | published_scene_id identifies the attempt to abort. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebWithdrawScenePublishResponse"></a>
+
+### WebWithdrawScenePublishResponse
+WebWithdrawScenePublishResponse is empty.
 
 
 
@@ -8151,6 +9726,7 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebCreateGuest | [WebCreateGuestRequest](#holomush-web-v1-WebCreateGuestRequest) | [WebCreateGuestResponse](#holomush-web-v1-WebCreateGuestResponse) | WebCreateGuest provisions an ephemeral guest player and character. Proxies to CoreService.CreateGuest; on success the gateway sets a session cookie whose MaxAge matches the guest session&#39;s shorter TTL. Runs the cookie-collision gate first. |
 | WebCreateCharacter | [WebCreateCharacterRequest](#holomush-web-v1-WebCreateCharacterRequest) | [WebCreateCharacterResponse](#holomush-web-v1-WebCreateCharacterResponse) | WebCreateCharacter adds a character to the authenticated player. Proxies to CoreService.CreateCharacter using the cookie-derived session token. |
 | WebListCharacters | [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest) | [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse) | WebListCharacters returns the authenticated player&#39;s character roster. Proxies to CoreService.ListCharacters; an RPC failure is surfaced as CodeUnauthenticated (session expired or invalid). |
+| WebListAllCharacters | [WebListAllCharactersRequest](#holomush-web-v1-WebListAllCharactersRequest) | [WebListAllCharactersResponse](#holomush-web-v1-WebListAllCharactersResponse) | WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway reads player_session_token from the X-Session-Token cookie; any authenticated caller (guest included) may list character names. |
 | WebLogout | [WebLogoutRequest](#holomush-web-v1-WebLogoutRequest) | [WebLogoutResponse](#holomush-web-v1-WebLogoutResponse) | WebLogout ends the player session and clears the session cookie. Proxies to CoreService.Logout (best-effort) when a token is present, then always emits the cookie-clear signal regardless of the RPC outcome. |
 | WebRequestPasswordReset | [WebRequestPasswordResetRequest](#holomush-web-v1-WebRequestPasswordResetRequest) | [WebRequestPasswordResetResponse](#holomush-web-v1-WebRequestPasswordResetResponse) | WebRequestPasswordReset initiates the email-based reset flow. Proxies to CoreService.RequestPasswordReset; to avoid leaking account existence the gateway reports success=true even when the underlying RPC errors. |
 | WebConfirmPasswordReset | [WebConfirmPasswordResetRequest](#holomush-web-v1-WebConfirmPasswordResetRequest) | [WebConfirmPasswordResetResponse](#holomush-web-v1-WebConfirmPasswordResetResponse) | WebConfirmPasswordReset completes a reset using the emailed token and a new password. Proxies to CoreService.ConfirmPasswordReset. |
@@ -8168,11 +9744,24 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebGetScene | [WebGetSceneRequest](#holomush-web-v1-WebGetSceneRequest) | [WebGetSceneResponse](#holomush-web-v1-WebGetSceneResponse) | WebGetScene loads one scene&#39;s metadata for the verified player&#39;s owned character. Proxies to SceneAccessService.GetSceneForViewer; player_session_token is read from the HTTP cookie by gateway middleware. |
 | WebListMyScenes | [WebListMyScenesRequest](#holomush-web-v1-WebListMyScenesRequest) | [WebListMyScenesResponse](#holomush-web-v1-WebListMyScenesResponse) | WebListMyScenes returns every non-archived scene the verified player&#39;s owned character participates in. Proxies to SceneAccessService.ListMyScenes; player_session_token is read from the HTTP cookie by gateway middleware. |
 | WebWatchScene | [WebWatchSceneRequest](#holomush-web-v1-WebWatchSceneRequest) | [WebWatchSceneResponse](#holomush-web-v1-WebWatchSceneResponse) | WebWatchScene auto-joins the verified player&#39;s owned character into an open active scene as an observer. Proxies to SceneAccessService.WatchScene; player_session_token is read from the HTTP cookie by gateway middleware. |
+| WebCreateScene | [WebCreateSceneRequest](#holomush-web-v1-WebCreateSceneRequest) | [WebCreateSceneResponse](#holomush-web-v1-WebCreateSceneResponse) | WebCreateScene creates a new scene owned by the verified player&#39;s owned character and returns its metadata. Proxies to SceneAccessService.CreateScene; player_session_token is read from the HTTP cookie by gateway middleware. |
+| WebEndScene | [WebEndSceneRequest](#holomush-web-v1-WebEndSceneRequest) | [WebEndSceneResponse](#holomush-web-v1-WebEndSceneResponse) | WebEndScene proxies to SceneAccessService.EndScene. The gateway reads player_session_token from the X-Session-Token cookie; the facade owns authorization. Returns the post-transition scene. |
+| WebPauseScene | [WebPauseSceneRequest](#holomush-web-v1-WebPauseSceneRequest) | [WebPauseSceneResponse](#holomush-web-v1-WebPauseSceneResponse) | WebPauseScene proxies to SceneAccessService.PauseScene (see WebEndScene). |
+| WebResumeScene | [WebResumeSceneRequest](#holomush-web-v1-WebResumeSceneRequest) | [WebResumeSceneResponse](#holomush-web-v1-WebResumeSceneResponse) | WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene). |
+| WebUpdateScene | [WebUpdateSceneRequest](#holomush-web-v1-WebUpdateSceneRequest) | [WebUpdateSceneResponse](#holomush-web-v1-WebUpdateSceneResponse) | WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads player_session_token from the X-Session-Token cookie; the facade owns authorization. Returns the post-update scene. |
+| WebInviteToScene | [WebInviteToSceneRequest](#holomush-web-v1-WebInviteToSceneRequest) | [WebInviteToSceneResponse](#holomush-web-v1-WebInviteToSceneResponse) | WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token). |
+| WebKickFromScene | [WebKickFromSceneRequest](#holomush-web-v1-WebKickFromSceneRequest) | [WebKickFromSceneResponse](#holomush-web-v1-WebKickFromSceneResponse) | WebKickFromScene proxies to SceneAccessService.KickFromScene. |
+| WebTransferOwnership | [WebTransferOwnershipRequest](#holomush-web-v1-WebTransferOwnershipRequest) | [WebTransferOwnershipResponse](#holomush-web-v1-WebTransferOwnershipResponse) | WebTransferOwnership proxies to SceneAccessService.TransferOwnership. |
+| WebLeaveScene | [WebLeaveSceneRequest](#holomush-web-v1-WebLeaveSceneRequest) | [WebLeaveSceneResponse](#holomush-web-v1-WebLeaveSceneResponse) | WebLeaveScene proxies to SceneAccessService.LeaveScene. |
 | WebExportScene | [WebExportSceneRequest](#holomush-web-v1-WebExportSceneRequest) | [WebExportSceneResponse](#holomush-web-v1-WebExportSceneResponse) | WebExportScene renders the verified player&#39;s owned character&#39;s scene IC log to a downloadable document. Proxies to SceneAccessService.ExportScene; player_session_token is read from the HTTP cookie by gateway middleware. |
 | WebSetSceneFocus | [WebSetSceneFocusRequest](#holomush-web-v1-WebSetSceneFocusRequest) | [WebSetSceneFocusResponse](#holomush-web-v1-WebSetSceneFocusResponse) | WebSetSceneFocus sets the per-connection focus for a web portal connection. Proxies to SceneAccessService.SetSceneFocus; player_session_token is read from the HTTP cookie by gateway middleware. |
 | WebListPublishedScenes | [WebListPublishedScenesRequest](#holomush-web-v1-WebListPublishedScenesRequest) | [WebListPublishedScenesResponse](#holomush-web-v1-WebListPublishedScenesResponse) | WebListPublishedScenes pages through publicly visible PUBLISHED scene archives. Proxies to SceneAccessService.ListPublishedScenes; player_session_token is read from the HTTP cookie by gateway middleware. |
 | WebGetPublicSceneArchive | [WebGetPublicSceneArchiveRequest](#holomush-web-v1-WebGetPublicSceneArchiveRequest) | [WebGetPublicSceneArchiveResponse](#holomush-web-v1-WebGetPublicSceneArchiveResponse) | WebGetPublicSceneArchive reads a published scene archive without participant authentication. Proxies to SceneAccessService.GetPublicSceneArchive; player_session_token is read from the HTTP cookie by gateway middleware. |
 | WebDownloadPublicSceneArchive | [WebDownloadPublicSceneArchiveRequest](#holomush-web-v1-WebDownloadPublicSceneArchiveRequest) | [WebDownloadPublicSceneArchiveResponse](#holomush-web-v1-WebDownloadPublicSceneArchiveResponse) | WebDownloadPublicSceneArchive returns a PUBLISHED scene archive rendered in the requested format. Proxies to SceneAccessService.DownloadPublicSceneArchive; player_session_token is read from the HTTP cookie by gateway middleware. |
+| WebStartScenePublish | [WebStartScenePublishRequest](#holomush-web-v1-WebStartScenePublishRequest) | [WebStartScenePublishResponse](#holomush-web-v1-WebStartScenePublishResponse) | WebStartScenePublish proxies StartScenePublish to the facade. |
+| WebCastPublishSceneVote | [WebCastPublishSceneVoteRequest](#holomush-web-v1-WebCastPublishSceneVoteRequest) | [WebCastPublishSceneVoteResponse](#holomush-web-v1-WebCastPublishSceneVoteResponse) | WebCastPublishSceneVote proxies CastPublishSceneVote to the facade. |
+| WebWithdrawScenePublish | [WebWithdrawScenePublishRequest](#holomush-web-v1-WebWithdrawScenePublishRequest) | [WebWithdrawScenePublishResponse](#holomush-web-v1-WebWithdrawScenePublishResponse) | WebWithdrawScenePublish proxies WithdrawScenePublish to the facade. |
+| WebGetPublishedScene | [WebGetPublishedSceneRequest](#holomush-web-v1-WebGetPublishedSceneRequest) | [WebGetPublishedSceneResponse](#holomush-web-v1-WebGetPublishedSceneResponse) | WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot). |
 
  
 

@@ -227,6 +227,14 @@ func (m *mockGRPCClient) ResumeScene(_ context.Context, _ *sceneaccessv1.ResumeS
 	return nil, nil
 }
 
+func (m *mockGRPCClient) MuteScene(_ context.Context, _ *sceneaccessv1.MuteSceneRequest) (*sceneaccessv1.MuteSceneResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) SetSceneNotifyPref(_ context.Context, _ *sceneaccessv1.SetSceneNotifyPrefRequest) (*sceneaccessv1.SetSceneNotifyPrefResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) UpdateScene(_ context.Context, _ *sceneaccessv1.UpdateSceneRequest) (*sceneaccessv1.UpdateSceneResponse, error) {
 	return nil, nil
 }

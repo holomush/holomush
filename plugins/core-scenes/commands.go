@@ -457,7 +457,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, log, mute, ooc, order, pause, pose, publish, resume, say, set, switch, transfer, unmute"), nil
 	}
 
 	// gated dispatches through the ABAC evaluator; fails closed when evaluator is nil.
@@ -487,6 +487,11 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return gated("pause", "pause", sceneResourceRef, p.handlePause)
 	case "resume":
 		return gated("resume", "resume", sceneResourceRef, p.handleResume)
+	case "mute":
+		return gated("mute", "mute", sceneResourceRef, p.handleMute)
+	case "unmute":
+		// Same "mute" ABAC action authorizes both directions (one policy family).
+		return gated("unmute", "mute", sceneResourceRef, p.handleUnmute)
 	case "set":
 		return gated("set", "update", sceneResourceRefFirstField, p.handleSet)
 	case "join":
@@ -533,7 +538,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	case "list":
 		return p.handleSceneList(ctx, req)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, log, ooc, order, pause, pose, publish, resume, say, set, switch, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, emit, end, focus, grid, info, invite, join, kick, leave, list, log, mute, ooc, order, pause, pose, publish, resume, say, set, switch, transfer, unmute.", sub), nil
 	}
 }
 
@@ -704,6 +709,44 @@ func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandReq
 	return &pluginsdk.CommandResponse{
 		Status: pluginsdk.CommandOK,
 		Output: fmt.Sprintf("Scene %s resumed.", sceneID),
+	}, nil
+}
+
+// handleMute mutes a scene's notifications for the acting character. The ABAC
+// participant gate has already been evaluated by the dispatch `gated` wrapper
+// (action "mute" on the scene resource); this handler resolves the `#<scene id>`
+// argument and forwards to MuteScene, which re-checks participation and
+// persists via SceneStore.SetSceneMute.
+func (p *scenePlugin) handleMute(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	return p.setSceneMute(ctx, req, args, true, "muted", "Usage: scene mute #<scene id>")
+}
+
+// handleUnmute clears a scene's mute for the acting character, the symmetric
+// counterpart to handleMute. Both are authorized by the same "mute" ABAC action.
+func (p *scenePlugin) handleUnmute(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	return p.setSceneMute(ctx, req, args, false, "unmuted", "Usage: scene unmute #<scene id>")
+}
+
+// setSceneMute is the shared body of handleMute/handleUnmute. It normalizes the
+// scene ref, forwards to MuteScene with the given flag, and renders a
+// direction-specific confirmation.
+func (p *scenePlugin) setSceneMute(ctx context.Context, req pluginsdk.CommandRequest, args string, muted bool, verb, usage string) (*pluginsdk.CommandResponse, error) {
+	sceneID := normalizeSceneID(args)
+	if sceneID == "" {
+		return pluginsdk.Errorf("%s", usage), nil
+	}
+
+	if _, err := p.service.MuteScene(ctx, &scenev1.MuteSceneRequest{
+		CharacterId: req.CharacterID,
+		SceneId:     sceneID,
+		Muted:       muted,
+	}); err != nil {
+		return pluginsdk.Errorf("Failed to %s scene: %v", verb, err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Scene %s %s.", sceneID, verb),
 	}, nil
 }
 
@@ -884,10 +927,11 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 		)
 	}
 
-	// 5-branch render based on substrate outcome. Failure check runs FIRST
+	// 6-branch render based on substrate outcome. Failure check runs FIRST
 	// so per-connection auto-focus failures aren't hidden under success or
-	// skipped messaging (CodeRabbit PR #4191).
-	// TODO(Phase 6 §7.4): add mixed-render branch when both focused and skipped are non-empty.
+	// skipped messaging (CodeRabbit PR #4191). The mixed focused/skipped case
+	// (D-07) renders an explicit informative line rather than falling to the
+	// least-informative default — no silent failure.
 	var msg string
 	switch {
 	case len(afResult.FailedConnectionIDs) > 0:
@@ -899,6 +943,12 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 	case len(afResult.SkippedConnectionIDs) > 0 && len(afResult.FocusedConnectionIDs) == 0:
 		// Explicitly-focused-elsewhere: terminal stays on its current focus (INV-SCENE-24).
 		msg = fmt.Sprintf("Joined scene #%s. Your terminal stays on its current focus; use 'scene focus #%s' to switch.", sceneID, sceneID)
+	case len(afResult.FocusedConnectionIDs) > 0 && len(afResult.SkippedConnectionIDs) > 0:
+		// Mixed outcome (D-07): some connections were auto-focused, others kept
+		// their current focus (INV-SCENE-24). No failures reached here (the
+		// failure-first case above is checked first).
+		msg = fmt.Sprintf("Joined scene #%s and focused some connection(s); "+
+			"others stay on their current focus (use 'scene focus #%s').", sceneID, sceneID)
 	case afResult.TotalConnectionCount > 0 && len(afResult.FocusedConnectionIDs) == 0 && len(afResult.SkippedConnectionIDs) == 0:
 		// Comms-hub-only: only non-terminal connections exist (INV-SCENE-17 filtered them out).
 		msg = fmt.Sprintf("Joined scene #%s. Use 'scene focus #%s' to enter.", sceneID, sceneID)

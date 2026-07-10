@@ -21,6 +21,12 @@ export interface WorkspaceScene {
 	/** Character ID the alt session is acting as for this scene. */
 	asCharacterId: string;
 	asCharacterName: string;
+	/**
+	 * Whether this character has muted this scene's notifications. Seeded from
+	 * CharacterSceneInfo.muted by refresh() so the mute toggle renders persisted
+	 * state on reload (round-3 Concern 1), not just in-session state.
+	 */
+	muted: boolean;
 	/** Epoch-ms of most-recent IC activity; 0 when log is empty. */
 	lastActivityMs: bigint;
 	/** Total IC log entries (workspace activity panel). */
