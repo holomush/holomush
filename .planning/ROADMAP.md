@@ -184,7 +184,7 @@ Plans:
 
 **Wave 3** *(verification + operator assets)*
 
-- [ ] 03-05-PLAN.md — Multi-node crypto invalidation + hung-replica probe-pill + invariant capstone (CLUSTER-03)
+- [x] 03-05-PLAN.md — Multi-node crypto invalidation + hung-replica probe-pill + invariant capstone (CLUSTER-03)
 - [x] 03-06-PLAN.md — Single-principal account scoping: deploy/nats templates + verify script + boot self-check (CLUSTER-02)
 - [ ] 03-07-PLAN.md — DLQ replay CLI (`holomush audit dlq {list,show,replay}`) (CLUSTER-04)
 - [ ] 03-08-PLAN.md — compose.cluster.yaml overlay + multi-process cluster smoke (CLUSTER-03/05)

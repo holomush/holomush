@@ -6,7 +6,7 @@ current_phase: 03
 current_phase_name: platform-hardening-deployment-scaling
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-07-10T20:56:21.192Z"
+last_updated: "2026-07-10T21:24:05.986Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 03 execution started
 progress:
@@ -80,6 +80,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P01 | ~35m | 2 tasks | 4 files |
 | Phase 03 P02 | 20m | 2 tasks | 5 files |
 | Phase 03 P03 | 40m | 2 tasks | 4 files |
+| Phase 03 P05 | ~70m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,8 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase ?]: 02-05: Web mute/notify shipped as a 4-layer typed slice (proto->facade->BFF->client); facade stamps CharacterId from the verified owned character so the plugin guard passes; never the command path (gateway-boundary).
 - [Phase ?]: 02-05: Tasks 1+2 merged into one commit — monolithic proto regen couples the WebServiceHandler interface, so facade + BFF impls land together (Plan 03 precedent).
 - [Phase ?]: Provision uses *bool + IsProvision() (mirrors CryptoConfig) so provision:false survives Defaults() — D-03 opt-out seam
+- [Phase 03]: CLUSTER-03 multi-node proof runs each replica on its own *nats.Conn to one external NATS testcontainer via new clustertest.ExternalHarness (D-05a); shared embedded conn removed
+- [Phase 03]: Invariant registry consolidated in one change (D-07): INV-CLUSTER-1 bound; INV-EVENTBUS-29/30 minted+bound; INV-CLUSTER-8 left pending with coverage issue #4777; no fabricated bindings
 
 ### Pending Todos
 
@@ -144,7 +147,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-10T20:56:21.187Z
+Last session: 2026-07-10T21:23:27.594Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
 Stopped at: Phase 3 context gathered
