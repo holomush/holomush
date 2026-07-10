@@ -464,6 +464,20 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			With("operation", "start_event_bus").
 			Wrap(startErr)
 	}
+	// CLUSTER-02 (D-13c): in external mode the server authenticates as the
+	// single `holomush-server` account scoped to events.>/audit.>/internal.>/
+	// _INBOX.>. Self-verify that our own account is not over-scoped and refuse
+	// to boot if it can reach beyond the granted prefixes (fail closed). Skipped
+	// in embedded mode, which has no account model (its default-open permissions
+	// would always look over-scoped). The complementary external proof that
+	// other principals are locked out is deploy/nats/verify-scoping.sh.
+	if eventBusConfig.Mode == eventbus.ModeExternal {
+		if scopeErr := eventbus.VerifyAccountScoping(ctx, eventBusSub.Conn()); scopeErr != nil {
+			return oops.Code("EVENTBUS_SCOPE_CHECK_FAILED").
+				With("operation", "verify_account_scoping").
+				Wrap(scopeErr)
+		}
+	}
 	// Ownership: cleanup eventBusSub on early-return paths until the
 	// orchestrator takes over via orch.StopAll below. The flag flips to
 	// true after orch.StartAll succeeds.
