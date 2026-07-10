@@ -127,7 +127,7 @@ func TestDLQCapturePreservesSubjectHeadersDataAndIncrementsCounter(t *testing.T)
 	require.NotNil(t, fake.lastMsg)
 	assert.Equal(t, "internal.main.audit.dlq.events.main.test", fake.lastMsg.Subject,
 		"the original subject is encoded in the DLQ subject suffix for replay")
-	assert.Equal(t, nats.Header(origHeaders), fake.lastMsg.Header,
+	assert.Equal(t, origHeaders, fake.lastMsg.Header,
 		"headers (incl. Nats-Msg-Id) must be preserved unchanged")
 	assert.Equal(t, []byte(`{"hello":"world"}`), fake.lastMsg.Data)
 
