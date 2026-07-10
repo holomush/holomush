@@ -128,6 +128,11 @@ assert_two_members() {
 teardown() {
   log "tearing down stack (down -v)"
   compose down -v --remove-orphans >/dev/null 2>&1 || true
+  # Remove the throwaway postgres bind dir the smoke created (never a
+  # caller-supplied SMOKE_DATA_DIR we did not mint).
+  if [ -n "${SMOKE_DATA_DIR:-}" ] && [ -d "${SMOKE_DATA_DIR}" ]; then
+    rm -rf "${SMOKE_DATA_DIR}" >/dev/null 2>&1 || true
+  fi
 }
 
 main() {
@@ -155,6 +160,14 @@ main() {
   export BACKUP_S3_ACCESS_KEY="${BACKUP_S3_ACCESS_KEY:-unused}"
   export BACKUP_S3_SECRET_KEY="${BACKUP_S3_SECRET_KEY:-unused}"
   export KOPIA_PASSWORD="${KOPIA_PASSWORD:-unused}"
+
+  # compose.prod.yaml bind-mounts postgres data at ${DATA_DIR}/postgres. The
+  # prod default (/opt/holomush/data) does not exist on a dev/CI host, so point
+  # it at a throwaway temp dir under /tmp (shared with Docker Desktop by
+  # default) and remove it on teardown. Only postgres uses a host bind here; the
+  # core replicas' KEK lives on the kek-shared named volume.
+  SMOKE_DATA_DIR="${SMOKE_DATA_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/holomush-cluster-smoke.XXXXXX")}"
+  export DATA_DIR="${SMOKE_DATA_DIR}"
 
   ensure_image
   trap teardown EXIT
