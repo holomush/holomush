@@ -13,10 +13,15 @@
 # (only the seed *migration* bootstrap must not race — that is handled by the
 # second replica's --skip-seed-migrations flag, RESEARCH Open Question 2).
 #
+# Each replica authenticates as the single-principal `holomush-server` account
+# defined in deploy/nats/cluster-server.conf. The user:pass is a smoke/dev
+# PLACEHOLDER (matches the conf); a real deploy uses a NATS .creds file via the
+# `credentials` key (see deploy/nats/README.md) instead of user:pass in the URL.
+#
 # For a locked-down cluster whose server account lacks $JS.API stream-admin
 # permissions, set provision: false and pre-declare the stream out of band;
 # the server then verifies-or-fails instead of creating (see deploy/nats/).
 event_bus:
   mode: external
-  url: nats://nats:4222
+  url: nats://holomush-server:holomush-server-smoke@nats:4222
   provision: true

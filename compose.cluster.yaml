@@ -27,16 +27,18 @@ services:
     image: nats:2-alpine@sha256:c11af972c99ae542de8925e6a7d9c533aa1eb039660420d2074beed6089b3bf0
     restart: unless-stopped
     command:
-      # -js: enable JetStream. -sd /data: file store dir on the persistent
-      # volume. -m 8222: HTTP monitoring endpoint (/healthz) for the
-      # healthcheck below — bound inside the container only, never published.
-      - "-js"
-      - "-sd"
-      - "/data"
+      # -c: load the JetStream + single-principal scoped-account config so each
+      # core replica's boot-time over-scope self-check (CLUSTER-02) passes.
+      # -m 8222: HTTP monitoring endpoint (/healthz) for the healthcheck below —
+      # bound inside the container only, never published. JetStream store_dir is
+      # set in the config (/data), so no -js/-sd flags are needed here.
+      - "-c"
+      - "/etc/nats/cluster-server.conf"
       - "-m"
       - "8222"
     volumes:
       - nats-data:/data
+      - ./deploy/nats/cluster-server.conf:/etc/nats/cluster-server.conf:ro
     networks:
       - backend
     healthcheck:
