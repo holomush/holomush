@@ -148,6 +148,6 @@ These terms are enforced in both code and docs. A terminology violation is a rub
 
 ## Next steps
 
-- **Docs audit** (bead `holomush-ivwij.6`) — applies this rubric to every page in `site/src/content/docs/` and files P1 revision beads for pages below threshold.
+- **Docs audit** — applies this rubric to every page in `site/src/content/docs/` and files `priority:P1` revision issues for pages below threshold.
 - **[Coding Standards](/contributing/reference/coding-standards/)** — the equivalent reference for Go code conventions.
 - **Source files**: [`site/CLAUDE.md`](https://github.com/holomush/holomush/blob/main/site/CLAUDE.md) (voice and tone) · [`.claude/rules/terminology.md`](https://github.com/holomush/holomush/blob/main/.claude/rules/terminology.md) (canonical terms).

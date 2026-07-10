@@ -41,7 +41,7 @@ fi
 
 # Review-gate trigger: anything that implies the work is leaving the session.
 if [ "$handoff_intent" = "1" ]; then
-  reminders+=("**Pre-hand-off gate:** Before you run \`git push\`, \`gh pr create\`, or \`bd close\` for this work, run \`/gsd-code-review\` over the branch's changed files if it has not already run for the current branch tip. To skip, the user must explicitly say so (e.g. \"skip review\").")
+  reminders+=("**Pre-hand-off gate:** Before you run \`git push\` or \`gh pr create\` for this work, run \`/gsd-code-review\` over the branch's changed files if it has not already run for the current branch tip. To skip, the user must explicitly say so (e.g. \"skip review\").")
 fi
 
 # crypto-reviewer triggers: handoff intent AND (crypto-domain mention in prompt

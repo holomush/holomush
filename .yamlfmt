@@ -12,7 +12,6 @@ formatter:
   pad_line_comments: 1
 
 exclude:
-  - .beads/
   - .serena/
   - dist/
   - .worktrees/

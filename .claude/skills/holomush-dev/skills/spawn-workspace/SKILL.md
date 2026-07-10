@@ -12,7 +12,7 @@ wins on the filesystem).
 
 **Name:** $ARGUMENTS
 
-If no name was given, ask the user (or pick a slug from the bead/branch
+If no name was given, ask the user (or pick a slug from the issue/branch
 context). Names must match `[A-Za-z0-9._-]+` (no slashes, no `..`).
 
 ## Procedure
@@ -25,9 +25,6 @@ context). Names must match `[A-Za-z0-9._-]+` (no slashes, no `..`).
    - Validates the name
    - `git fetch origin` first (so the new worktree is current)
    - `git worktree add -b $ARGUMENTS ../.worktrees/$ARGUMENTS origin/main`
-   - Writes `.beads/redirect` so `bd` works. Each git worktree gets a fresh
-     checkout with an empty `.beads/`; the redirect points back to the main
-     repo's Dolt DB.
    - Prints the absolute worktree path
 
 2. `cd` into the printed path.

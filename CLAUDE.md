@@ -63,7 +63,7 @@ Work MUST NOT start without a spec/design/plan. Specs live in `docs/specs/` or `
 
 ## Workflow
 
-Planning and execution run on **GSD** (`/gsd-*` commands; artifacts in `.planning/`). Issue tracking stays in **bd** (see `.claude/rules/beads-project.md` and `bd prime`). The two are complementary: GSD owns the phase loop and its artifacts; bd owns issues, dependencies, and cross-session memory. Do **not** duplicate bd's dependency graph into `.planning/`.
+Planning and execution run on **GSD** (`/gsd-*` commands; artifacts in `.planning/`). Issue tracking lives in **GitHub Issues** (`gh issue`; always pass `-R holomush/holomush` from a worktree). The two are complementary: GSD owns the phase loop, its artifacts, and the strategic backlog (`.planning/ROADMAP.md` → `## Backlog`, 999.x entries); GitHub Issues own discrete work items, bugs, and their labels.
 
 ### GSD-native loop (multi-task work)
 
@@ -76,7 +76,7 @@ Planning and execution run on **GSD** (`/gsd-*` commands; artifacts in `.plannin
 | 5     | domain gates (when applicable)             | `crypto-reviewer` / `abac-reviewer` — READY before push |
 | 6     | `/gsd-ship` → `gh pr create`               | `task pr-prep` green; `/autofix <PR#>` for CodeRabbit |
 
-Settings: `/gsd-config` (`--advanced`, `--integrations`, `--profile <name>`); toggles via `/gsd-settings`. **Skip the loop** for small fixes (typo, dependency bump, single-file bug) — `/gsd-quick` (atomic-commit guarantees) or `/gsd-fast` (trivial), or a direct bead → implementation → review → PR.
+Settings: `/gsd-config` (`--advanced`, `--integrations`, `--profile <name>`); toggles via `/gsd-settings`. **Skip the loop** for small fixes (typo, dependency bump, single-file bug) — `/gsd-quick` (atomic-commit guarantees) or `/gsd-fast` (trivial), or a direct issue → implementation → review → PR.
 
 ### Code review
 
@@ -89,24 +89,24 @@ Primary code review is **`/gsd-code-review`** (GSD's `gsd-code-reviewer`). Two d
 | **MUST** address all findings   | Fix issues or document why not applicable                    |
 | **MUST NOT** skip review        | Even for "simple" changes                                    |
 
-**Responding to PR review comments:** address **every** thread, not just CodeRabbit's; after `/autofix`, check other reviewers (`octopus-fzymgc` bot, humans). Reply to **each thread individually** (fixed / won't-fix / deferred-bead-id) so each resolves — a summary comment does **not** resolve individual threads.
+**Responding to PR review comments:** address **every** thread, not just CodeRabbit's; after `/autofix`, check other reviewers (`octopus-fzymgc` bot, humans). Reply to **each thread individually** (fixed / won't-fix / deferred-issue link) so each resolves — a summary comment does **not** resolve individual threads.
 
-### Issue tracking (bd)
+### Issue tracking (GitHub Issues)
 
-bd tracks issues, dependencies, and cross-session memory independently of GSD's phase artifacts. Create beads for discovered work with `bd create`; `bd ready` surfaces unblocked work; `bd dolt push` syncs. GSD phases MAY reference bead IDs, but bd owns the graph topology — never mirror dependency structure into `.planning/`.
+GitHub Issues track discrete work items independently of GSD's phase artifacts. File discovered work with `gh issue create -R holomush/holomush` (labels: `bug`/`enhancement`, `priority::critical|high|medium|low`, topical + `theme:*`). Strategic not-yet-scheduled clusters live in the ROADMAP `## Backlog` (promote with `/gsd-review-backlog`), not as issues. The **beads (bd) tracker was retired 2026-07-09**: the full export, triage verdicts, and bead-id → issue mapping live in `.planning/archive/beads/`; historical `holomush-xxxx` ids in docs/commits resolve there.
 
 ## Strategic Themes
 
-Multi-epic clusters use `theme:<slug>` bd labels + a narrative section in [`docs/roadmap.md`](docs/roadmap.md) (the **why**: substrate-and-uses framing, sequencing, risks; the `in_progress`-inclusive query snippet lives in roadmap → How this works).
+Multi-epic clusters use `theme:<slug>` GitHub issue labels + a narrative section in [`docs/roadmap.md`](docs/roadmap.md) (the **why**: substrate-and-uses framing, sequencing, risks).
 
 | Requirement                       | Description                                                                                                                                  |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SHOULD** add a theme            | When 2+ epics or a 5+ bead cluster share a strategic frame (e.g., `theme:social-spaces` covers scenes + channels + forums + discord)         |
-| **MUST** keep `docs/roadmap.md` current | When adding a `theme:*` label to any bead, also add or update the section in `docs/roadmap.md`; when a theme's work completes, move the section to "Completed themes" with a date |
+| **SHOULD** add a theme            | When 2+ epics or a 5+ issue cluster share a strategic frame (e.g., `theme:social-spaces` covers scenes + channels + forums + discord)        |
+| **MUST** keep `docs/roadmap.md` current | When adding a `theme:*` label to any issue, also add or update the section in `docs/roadmap.md`; when a theme's work completes, move the section to "Completed themes" with a date |
 | **MUST NOT** orphan labels        | If a `theme:*` label exists with no narrative section in `docs/roadmap.md`, either add the section or drop the label                         |
-| **SHOULD** file a decision bead   | Use `bd create -t decision -l theme:<slug>` to record the framing alongside the roadmap edit; the bead carries enduring rationale            |
+| **SHOULD** capture an ADR         | Record the theme framing as an ADR in `docs/adr/` alongside the roadmap edit; the ADR carries enduring rationale                             |
 | **SHOULD** refresh after pivots   | After major architectural pivots or audit cleanups, re-read active themes and verify they still match reality; demote/retire stale ones      |
-| **MUST NOT** use GitHub Projects   | Until team size or external visibility makes the double-entry cost worthwhile; bd labels + roadmap doc is the project-management surface     |
+| **MUST NOT** use GitHub Projects   | Until team size or external visibility makes the double-entry cost worthwhile; issue labels + roadmap doc is the project-management surface  |
 
 ## Pre-Push Review Gates
 
@@ -247,7 +247,7 @@ Concurrent AI sessions MUST work in separate **git worktrees** so uncommitted ed
 
 | Requirement | Description |
 |---|---|
-| **MUST** isolate per session | `task workspace:new -- <name>` creates a git worktree at `<repo-parent>/.worktrees/<name>` (branched off `main@origin`, bd redirect wired) and prints its path; then `cd <printed-path>`. Raw equivalent: `git worktree add -b <branch> ../.worktrees/<name> origin/main`. |
+| **MUST** isolate per session | `task workspace:new -- <name>` creates a git worktree at `<repo-parent>/.worktrees/<name>` (branched off `main@origin`) and prints its path; then `cd <printed-path>`. Raw equivalent: `git worktree add -b <branch> ../.worktrees/<name> origin/main`. |
 | **MUST NOT** edit files in the primary worktree | The main checkout is for **read-only inspection only** (search, reads, answering questions). A `SessionStart` hook flags any session that starts there. If you intend to edit, isolate **first** (row above) before touching any file. |
 | **MUST** clean up post-merge | After landing: `cd <repo-root> && git worktree remove <repo-parent>/.worktrees/<name>` (add `--force` if it holds throwaway artifacts), then `git branch -d <branch>`. The `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. |
 
@@ -258,12 +258,6 @@ Sub-agents inherit the parent's worktree; the parent MUST NOT dispatch parallel 
 `dev-flow:grepping` MUST be loaded via the `Skill` tool **before your first response** in any session (enforced by a `SessionStart` hook): the search-tool ladder (`mcp__probe__*` Go symbol/AST → `rg` text → `ast-grep` structural) prevents defaulting to bare `grep`/full-file reads. Pairs with `.claude/rules/search-tools.md`.
 
 VCS is **native git** (no jj): use `git` directly — no VCS skill is required.
-
-### Beads
-
-`bd` commands: see `.claude/rules/beads-project.md` and `bd prime`.
-
-**`.beads/interactions.jsonl` is git-tracked** (bd's interaction log), distinct from the Dolt DB (live bead state, synced via `bd dolt push`). It accumulates as you run `bd`; **include any pending change when committing/pushing other work** — `bd dolt push` does NOT commit it.
 
 ## Reference
 

@@ -133,11 +133,6 @@ tasks:
     cmds:
       - scripts/adr-doctor.sh
 
-  adr:migrate:
-    desc: "One-shot migration of legacy ADRs to bd-id filename convention. Use -- --apply to mutate."
-    cmds:
-      - python3 scripts/adr-migrate.py {{.CLI_ARGS}}
-
   fmt:
     desc: Format all files and apply license headers
     cmds:
@@ -254,7 +249,7 @@ tasks:
           exit $E2E_EXIT
 
   quarantine:audit:
-    desc: Fail if any quarantined spec's bead is closed (needs bd; run locally / pre-bd-close). INV-3.
+    desc: Fail if any quarantined spec's tracking GitHub issue is closed (needs gh). INV-3.
     cmds:
       - bash scripts/quarantine-audit.sh
 
@@ -577,7 +572,7 @@ tasks:
   lint:markdown:
     desc: Lint Markdown files
     cmds:
-      - rumdl check --exclude 'site,.git,.beads,.serena,.claude,.planning' .
+      - rumdl check --exclude 'site,.git,.serena,.claude,.planning' .
       - rumdl check --config site/.rumdl.toml site/
 
   lint:yaml:
@@ -775,7 +770,7 @@ tasks:
   fmt:markdown:
     desc: Format Markdown files
     cmds:
-      - rumdl fmt --exclude 'site,.git,.beads,.serena,.claude,.planning' .
+      - rumdl fmt --exclude 'site,.git,.serena,.claude,.planning' .
       - rumdl fmt --config site/.rumdl.toml site/
 
   fmt:yaml:
@@ -792,7 +787,7 @@ tasks:
     desc: Check formatting without modifying
     cmds:
       - dprint check
-      - rumdl fmt --check --exclude 'site,.git,.beads,.serena,.claude,.planning' .
+      - rumdl fmt --check --exclude 'site,.git,.serena,.claude,.planning' .
       - rumdl fmt --check --config site/.rumdl.toml site/
       # gofumpt is run via the same pinned go-tool version as fmt:go, so this
       # gate can never disagree with `task fmt` (no local-vs-CI skew). Lists
@@ -1063,10 +1058,8 @@ tasks:
       # the go.tool*.mod modules and run via `go tool` (see GO_TOOL vars) — no
       # brew install needed. yq stays: shell scripts call it on PATH directly.
       - brew install go-task goreleaser dprint cocogitto rumdl binaryen flock bats-core yq
-      - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
       - go install github.com/apache/skywalking-eyes/cmd/license-eye@{{.LICENSE_EYE_VERSION}}
-      - bd hooks install --chain
       - echo "✓ Dev environment ready. Run 'task dev' to start."
 
   deps:
@@ -1113,19 +1106,6 @@ tasks:
           else
             git -C "$MAIN_REPO" worktree add -b "$NAME" "$TARGET" origin/main >&2
           fi
-        fi
-
-        # Point bd at the main repo's .beads/. Each git worktree gets a fresh
-        # checkout whose .beads/ has only tracked config + .gitignore (the Dolt
-        # DB lives in the main repo's .beads/dolt/), so bd run from the worktree
-        # would fail with "no beads database found". `.beads/redirect` is bd's
-        # documented per-worktree override and is already in .beads/.gitignore,
-        # so it never gets committed (holomush-k98d). Don't overwrite an
-        # existing redirect — a user may have repointed it at a federation peer
-        # or alternate DB.
-        mkdir -p "$TARGET/.beads"
-        if [ ! -f "$TARGET/.beads/redirect" ]; then
-          printf '%s\n' "$MAIN_REPO/.beads" > "$TARGET/.beads/redirect"
         fi
 
         echo "$TARGET"

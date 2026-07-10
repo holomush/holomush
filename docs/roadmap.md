@@ -5,26 +5,28 @@
 
 # HoloMUSH Roadmap
 
-Strategic work clusters that span multiple epics. Complements `bd` (which
-tracks individual work items) by explaining the **why** behind multi-epic
-sequencing.
+Strategic work clusters that span multiple epics. Complements GitHub Issues
+(which track individual work items) and the GSD backlog
+(`.planning/ROADMAP.md` → `## Backlog`) by explaining the **why** behind
+multi-epic sequencing.
+
+> Historical note: work items were tracked in beads (bd) until 2026-07-09;
+> `holomush-xxxx` ids cited below resolve via `.planning/archive/beads/`.
 
 ## How this works
 
-- **Single source of truth: `bd`.** This file never duplicates bead state —
-  query `bd list` for current status.
+- **Single source of truth: GitHub Issues.** This file never duplicates
+  issue state — query `gh issue list` for current status.
 - **Themes are labels.** Each theme is a `theme:<slug>` label applied to
-  relevant beads. Query (includes `in_progress`, not just `open`):
-  `bd list -l theme:<slug> --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.title)"'`.
-  `bd list --status open` does NOT include `in_progress` beads, so use the
-  json filter when you want active work surfaced.
+  relevant issues. Query:
+  `gh issue list -R holomush/holomush -l theme:<slug> --state open --limit 200 --json number,title,labels --jq '.[] | "#\(.number) \(.title)"'`.
 - **The narrative lives here.** Strategic framing, sequencing rationale,
   and substrate-vs-use distinctions belong in this file; status / dates /
-  dependencies are looked up from `bd`.
+  dependencies are looked up from GitHub Issues.
 - **Altitude discipline.** *Active* theme sections carry only durable
   content — framing, sequencing logic, risks, and pointers (theme label,
-  epic / spec IDs) — plus a `bd` query for live status. Do NOT hand-record PR
-  numbers, per-bead status, counts, or shipment dates in active sections;
+  epic / spec IDs) — plus an issue query for live status. Do NOT hand-record
+  PR numbers, per-issue status, counts, or shipment dates in active sections;
   that is exactly the detail that goes stale and forces grooming passes.
   *Completed* theme retrospectives MAY keep frozen specifics (PR numbers,
   dates) — they no longer change, and the specifics are the record.
@@ -102,7 +104,7 @@ Spec: [communication-content contract](superpowers/specs/2026-07-03-communicatio
 Live status:
 
 ```bash
-bd list -l theme:social-spaces --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.status) \(.title)"'
+gh issue list -R holomush/holomush -l theme:social-spaces --state open --limit 200 --json number,title --jq '.[] | "#\(.number) \(.title)"'
 ```
 
 #### Sequencing rationale
@@ -170,7 +172,7 @@ grounds against
 Remaining P3 tail:
 
 ```bash
-bd list -l theme:plugin-capability-architecture --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.title)"'
+gh issue list -R holomush/holomush -l theme:plugin-capability-architecture --state open --limit 200 --json number,title --jq '.[] | "#\(.number) \(.title)"'
 ```
 
 ### `theme:web-portals` — The web as a complete gaming surface
@@ -230,7 +232,7 @@ surface is genuinely telnet-free.
 Live status (which surfaces are shipped vs still open):
 
 ```bash
-bd list -l theme:web-portals --limit 0 --json | jq -r '.[] | select(.status != "closed") | "\(.id) [P\(.priority)] \(.title)"'
+gh issue list -R holomush/holomush -l theme:web-portals --state open --limit 200 --json number,title --jq '.[] | "#\(.number) \(.title)"'
 ```
 
 ## Completed themes
@@ -269,8 +271,8 @@ and the feature-gated content beads in the SP5 row above. The program anchor
 `holomush-rkwyb` and the two P1s the doc work surfaced (`holomush-8cxo6`
 fail-open ABAC sentinel, `holomush-rkwyb.1` proto enum omission) are all
 **closed** — the framing record is preserved in this Completed-themes section
-and in the closed anchor's notes. Live set: `bd list -l theme:docs-platform
---limit 0 --json | jq -r '.[] | select(.status != "closed")'`.
+and in the closed anchor's notes. Live set:
+`gh issue list -R holomush/holomush -l theme:docs-platform --state open`.
 
 ### v0.1 Initial Release — closed 2026-05-16
 
@@ -336,7 +338,7 @@ Lands organically as developers pick from the cohort. Might become its
 own theme if a "hardening sprint" becomes the strategy; today it's
 opportunistic backfill.
 
-Query: `bd list -l audit-finding --limit 0 --json | jq -r '.[] | select(.status != "closed")'`
+Query: `gh issue list -R holomush/holomush -l audit-finding --state open`
 
 ### Web portals → now `theme:web-portals` (active, 2026-06-19)
 
@@ -370,18 +372,17 @@ Four read-only audit reports live at `docs/repository-audit/2026-05-13/`:
 
 The reports' own framing (esp. humanization): **"rolling-cleanup territory,
 not a mega-PR — treat as gardening: do a little, regularly."** A handful of
-high-leverage findings have been re-filed as top-level beads carrying the
+high-leverage findings have been re-filed as work items carrying the
 `repo-audit` label plus `mechanical`/`design-needed` so they surface in
-`bd ready`. The tracking epics remain as containers for the rest of the
+issue triage. The tracking epics remain as containers for the rest of the
 findings if/when someone decides to drive the cleanup more aggressively.
 
 Query the high-leverage cohort:
 
 ```bash
-bd list -l repo-audit --limit 0 --json | \
-  jq -r '.[] | select(.status != "closed") |
-         select((.labels // []) | any(. == "mechanical" or . == "design-needed")) |
-         "P\(.priority) \(.id) \(.title)"' | sort
+gh issue list -R holomush/holomush -l repo-audit --state open --limit 200 \
+  --json number,title,labels \
+  --jq '.[] | select([.labels[].name] | any(. == "mechanical" or . == "design-needed")) | "#\(.number) \(.title)"'
 ```
 
 ### Invariant registry binding-backfill (epic `holomush-hz0v4`)
@@ -409,7 +410,7 @@ rg -c 'binding: bound'   docs/architecture/invariants.yaml   # done
 ## Conventions
 
 - **Theme label format**: `theme:<kebab-case-slug>`. Examples: `theme:social-spaces`, `theme:hardening`. No nesting (flat namespace).
-- **Adding a theme**: when 2+ epics or a 5+ bead cluster share a strategic frame, file a `bd create -t decision` recording the framing and add the section to this doc.
+- **Adding a theme**: when 2+ epics or a 5+ issue cluster share a strategic frame, capture an ADR in `docs/adr/` recording the framing and add the section to this doc.
 - **Retiring a theme**: when the underlying work is done or the framing no longer fits, move the section to "Completed themes" with a brief retrospective and a date.
-- **Altitude**: active sections stay at why + pointers + a `bd` query (see "How this works"); don't hand-maintain status. Completed retrospectives may keep frozen specifics.
+- **Altitude**: active sections stay at why + pointers + an issue query (see "How this works"); don't hand-maintain status. Completed retrospectives may keep frozen specifics.
 - **GitHub Projects**: not used today. The break-even cost of double-entry (bd ↔ GH) exceeds the benefit of a visual board for a solo-developer workflow. Revisit if team grows or external roadmap visibility becomes a real need.

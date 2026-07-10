@@ -16,8 +16,7 @@
     "**/node_modules",
     "**/vendor",
     "**/dist",
-    "**/.git",
-    "**/.beads"
+    "**/.git"
   ],
   "plugins": [
     "https://plugins.dprint.dev/json-0.19.3.wasm",

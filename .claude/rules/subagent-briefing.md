@@ -27,14 +27,13 @@ context, skills, or tool habits from the parent session.
 | TDD | run `task test -- ./<package>` per change; use Ginkgo for integration tests (build tag `//go:build integration`) |
 | Sub-agent dispatch | Default model floor `sonnet`. `haiku` ONLY for agents whose output is schema-constrained AND independently verified downstream (e.g. a mechanical distiller in a fan-out that a sonnet+ verifier checks); NEVER `haiku` for judgment the caller acts on unverified (test triage, review, flake-vs-real). Prefer `effort: low` on a sonnet agent over haiku — `effort` errors on haiku 4.5, and haiku's $ win on a short agent is tiny. Repo-owned reviewer agents (code/crypto/abac-reviewer) stay `opus` — never downgrade for cost (design/plan-reviewer: see the tiering note below) |
 | Git worktree work | sub-agents share the parent's worktree and branch — verify `git status` before they commit; NEVER let parallel agents commit or run `git worktree add` concurrently (they collide on the shared index/working tree). `git reflog` recovers commits after a bad reset/rebase |
-| Closing beads | grounded evidence required; in-bead "Closed:"/"Fixed:" comments are NOT proof — verify the cited fix in current code (the `bead-auditor` agent caught false-fix cases on `wfza.21`, `wfza.62`) |
+| Closing GitHub issues | grounded evidence required; in-issue "Closed:"/"Fixed:" comments are NOT proof — verify the cited fix in current code before running `gh issue close` |
 
-> **Repo-agent model tiers (verified 2026-07-03):** reviewers (`code`/`crypto`/`abac`-reviewer) = `opus`; investigators/runners (`bead-auditor`, `branch-readiness-check`, `adr-extractor`, `local-check`, `local-pr-prep`) = `sonnet`. Plugin agents (design/plan-reviewer, fix-worker, Explore, …) are plugin-owned — the repo cannot set their model here.
+> **Repo-agent model tiers (verified 2026-07-03):** reviewers (`code`/`crypto`/`abac`-reviewer) = `opus`; investigators/runners (`branch-readiness-check`, `adr-extractor`, `local-check`, `local-pr-prep`) = `sonnet`. Plugin agents (design/plan-reviewer, fix-worker, Explore, …) are plugin-owned — the repo cannot set their model here.
 
 ## Anti-patterns
 
 - DO NOT dispatch parallel `Agent` calls that edit the same files — they share the parent's working copy and will collide
-- DO NOT dispatch parallel `bd create` — there's an ID-allocation race; parallel calls all report the same ID with their respective titles but only ONE actually commits
 - DO NOT trust a sub-agent's claim that `task pr-prep` passed — always run it yourself in the parent before pushing. Sub-agents can't catch schema-regeneration side-effects (e.g., `go generate` updating `schemas/plugin.schema.json`) that must be committed before the PR is current
 - DO NOT delegate UNDERSTANDING to the sub-agent ("based on your findings, fix the bug"). Synthesize first; give them concrete actions.
 - DO NOT dispatch a `local-*` offload agent (`local-check`/`local-pr-prep`) in the same parallel tool batch as another maybe-failing call — a `local-*` failure alongside a sibling failure risks a cancel-storm (ADR holomush-cr3gq)

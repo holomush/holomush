@@ -17,7 +17,6 @@ disable = [
 exclude = [
   ".git",
   ".worktrees",
-  ".beads",
   ".claude",
   ".serena",
   "dist",

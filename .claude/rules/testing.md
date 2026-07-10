@@ -98,9 +98,9 @@ Production code MUST NOT import `eventbustest` or `internal/core/coretest` — e
 
 ### Quarantine
 
-Known-flaky integration and E2E specs are quarantined so they self-skip in gating CI and in `task pr-prep:full`, running only nightly or locally with `HOLOMUSH_RUN_QUARANTINED=1`. Quarantine is for **flakiness with an open bead** — never for a real failure.
+Known-flaky integration and E2E specs are quarantined so they self-skip in gating CI and in `task pr-prep:full`, running only nightly or locally with `HOLOMUSH_RUN_QUARANTINED=1`. Quarantine is for **flakiness with an open GitHub issue** — never for a real failure.
 
-Quarantine is for flakiness with an open bead and no reproducible cause; if the root cause is known, fix it — do NOT quarantine it.
+Quarantine is for flakiness with an open GitHub issue and no reproducible cause; if the root cause is known, fix it — do NOT quarantine it.
 
 **Three marker idioms:**
 
@@ -110,7 +110,7 @@ Quarantine is for flakiness with an open bead and no reproducible cause; if the 
 | Ginkgo | `if !quarantinetest.Enabled() { Skip("quarantined: holomush-xxxx") }` |
 | Playwright | `{ tag: ['@quarantine', '@holomush-xxxx'] }` |
 
-Every marker MUST have a corresponding row in `test/quarantine.yaml` citing an open bead (enforced by the bijection meta-test INV-2 at `test/meta/quarantine_registry_test.go`). `task quarantine:audit` flags rows whose cited bead is closed.
+Every marker MUST have a corresponding row in `test/quarantine.yaml` with an `issue:` field citing an open GitHub issue; the marker token (`holomush-xxxx` for legacy rows, `holomush-i<issue#>` for new ones) is the bijection key (meta-test INV-2 at `test/meta/quarantine_registry_test.go`). `task quarantine:audit` flags rows whose cited issue is closed.
 
 Production code MUST NOT import `quarantinetest` — enforced by depguard.
 

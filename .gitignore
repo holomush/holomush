@@ -20,9 +20,6 @@ coverage.html
 .full-review/
 .full-review-*/
 
-# Stray beads export in worktree root (belongs under .beads/ only)
-/issues.jsonl
-
 # Go workspace
 go.work
 go.work.sum
@@ -90,9 +87,6 @@ dist/
 # MCP server state
 .serena/
 
-# Beads local state
-.beads/metadata.json
-
 # Documentation site
 site/build/
 site/.venv/
@@ -112,12 +106,9 @@ scripts/.venv/
 *.db
 web/test-results/
 
-# Beads / Dolt files (added by bd init)
-.beads-credential-key
-
 # Claude Code local-scope agent memory (never committed; project-scope memory
 # lives in .claude/agent-memory/ and IS committed).
 .claude/agent-memory-local/
 
-# Beads / Dolt files (added by bd init)
-.beads/proxieddb/
+# Beads issue tracker (retired 2026-07; export archived in .planning/archive/beads/)
+.beads/

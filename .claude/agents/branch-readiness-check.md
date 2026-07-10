@@ -3,9 +3,9 @@ name: branch-readiness-check
 description: |
   Read-only diagnostic that returns a binary verdict (READY / NOT READY) on
   whether the current branch is ready to push. Checks: working copy clean,
-  rebase status, commits coherent, beads updated, pr-prep evidence, code
-  review run, branch pushed. Use before `gh pr create`, before `git push`,
-  or any time the user asks "is this branch ready?".
+  rebase status, commits coherent, related GitHub issues updated, pr-prep
+  evidence, code review run, branch pushed. Use before `gh pr create`, before
+  `git push`, or any time the user asks "is this branch ready?".
 model: sonnet
 permissionMode: plan
 color: green
@@ -16,8 +16,6 @@ tools:
   - Bash
   - mcp__probe__search_code
   - mcp__probe__extract_code
-skills:
-  - beads:beads
 memory: project
 maxTurns: 30
 ---
@@ -42,9 +40,9 @@ You are the HoloMUSH branch-readiness checker. Your one job is to inspect the cu
 - Each commit message MUST follow Conventional Commits (`type(scope): subject`).
 - Check the branch is current with `origin/main` (read-only): `git log --oneline HEAD..origin/main` should be empty. If non-empty, `main` has moved past the branch's base — orchestrator must rebase (`git rebase origin/main`) before push. NOT READY until rebased.
 
-### 3. Beads
-- `bd list --status in_progress --assignee $(git config user.email)` — any stranded claims unrelated to this branch?
-- For the bead this branch implements (if any): `bd show <id>` — is it open or done? Description's TDD acceptance criteria all met?
+### 3. GitHub Issues
+- `gh issue list -R holomush/holomush --assignee @me --state open --json number,title,labels` — any stranded in-progress issues unrelated to this branch?
+- For the GitHub issue this branch implements (if any): `gh issue view <number> -R holomush/holomush` — is it open or closed? Acceptance criteria all met?
 
 ### 4. pr-prep evidence
 

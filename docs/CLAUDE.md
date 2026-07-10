@@ -120,7 +120,7 @@ Naming: `YYYY-MM-DD-<feature-name>.md`
 
 ### Roadmap (`docs/roadmap.md`)
 
-Single file (not per-theme docs) tracking strategic themes that span multiple epics. Paired with `theme:<slug>` bd labels for cross-epic queryability. The doc carries the **why** (substrate-and-uses framing, sequencing rationale, risks); `bd` carries the **what** (individual beads).
+Single file (not per-theme docs) tracking strategic themes that span multiple epics. Paired with `theme:<slug>` GitHub issue labels for cross-epic queryability. The doc carries the **why** (substrate-and-uses framing, sequencing rationale, risks); GitHub Issues carry the **what** (individual work items).
 
 Maintenance rules live in the root `CLAUDE.md` "Strategic Themes" section. Key directives:
 
@@ -128,7 +128,7 @@ Maintenance rules live in the root `CLAUDE.md` "Strategic Themes" section. Key d
 - **MUST NOT** create per-theme markdown files (single roadmap, sectioned)
 - **SHOULD** move completed themes to a "Completed themes" section with a date rather than deleting
 
-When editing `docs/roadmap.md`, also file or update a `bd create -t decision` recording the framing.
+When editing `docs/roadmap.md`, also capture or update an ADR in `docs/adr/` recording the framing.
 
 ## Nested Code Blocks
 

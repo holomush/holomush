@@ -14,11 +14,12 @@ holomush-jfb9x).
 1. **Gather context.** Run
    `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/release_notes_collect.py" $ARGUMENTS`
    (or `task release:notes:collect -- $ARGUMENTS`). Read the structured block:
-   filtered commits, referenced beads (with theme labels), coverage gaps, and
-   the roadmap theme pointer.
+   filtered commits, referenced GitHub issues (with theme labels), coverage
+   gaps, and the roadmap theme pointer.
 
-2. **Read `docs/roadmap.md`** theme sections matching the referenced beads'
-   `theme:*` labels — these carry the *why* and become the narrative headlines.
+2. **Read `docs/roadmap.md`** theme sections matching the referenced GitHub
+   issues' `theme:*` labels — these carry the *why* and become the narrative
+   headlines.
 
 3. **Draft the narrative** to a temp file. Structure: a 2–3 sentence TLDR, then
    theme-grouped Features, then Fixes, then an "Other changes" catch-all that
