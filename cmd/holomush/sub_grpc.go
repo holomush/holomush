@@ -134,6 +134,13 @@ type grpcSubsystem struct {
 // character per window (never a per-event RPC in the hot delivery loop).
 const sceneMuteNotifyCacheTTL = 45 * time.Second
 
+// sceneMuteLoaderTimeout bounds a single SceneMuteChecker refresh (dispatch +
+// GetSceneNotifyPref + ListMutedScenes) so a hung core-scenes plugin cannot block
+// badge delivery on the subscribe loop indefinitely. The checker fails OPEN on a
+// returned error (delivers the content-free frame), but a HANG produces no error —
+// only a deadline does. Well under the cache TTL.
+const sceneMuteLoaderTimeout = 3 * time.Second
+
 // newGRPCSubsystem returns a configured grpcSubsystem for the provided configuration.
 // It does not allocate or start any runtime resources; Start must be called to initialize and run the subsystem.
 func newGRPCSubsystem(cfg grpcSubsystemConfig) *grpcSubsystem {
@@ -589,8 +596,12 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	if sceneSvc, resolveErr := serviceRegistry.Resolve(sceneServiceName); resolveErr == nil {
 		sceneMuteClient := scenev1.NewSceneServiceClient(sceneSvc.Conn)
 		loader := func(loaderCtx context.Context, characterID, playerID string) (bool, []string, error) {
+			// Bound the plugin round-trip so a hung core-scenes plugin cannot block
+			// badge delivery indefinitely (fail-open covers errors, not hangs).
+			bctx, cancel := context.WithTimeout(loaderCtx, sceneMuteLoaderTimeout)
+			defer cancel()
 			actor := core.Actor{Kind: core.ActorCharacter, ID: characterID}
-			dctx, release, dispErr := pluginManager.BeginServiceDispatch(loaderCtx, "core-scenes", actor, playerID)
+			dctx, release, dispErr := pluginManager.BeginServiceDispatch(bctx, "core-scenes", actor, playerID)
 			if dispErr != nil {
 				return false, nil, oops.Wrap(dispErr)
 			}

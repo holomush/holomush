@@ -103,6 +103,41 @@ func TestSceneMuteCacheRefreshesAfterTTLExpiry(t *testing.T) {
 	assert.Equal(t, int64(2), loader.calls.Load(), "a call past TTL must refresh from the loader")
 }
 
+func TestSceneMuteCacheEvictsExpiredEntriesOnRefresh(t *testing.T) {
+	// The cache must stay bounded to characters seen within one TTL window rather
+	// than retaining every distinct character ever served for the process lifetime.
+	loader := &muteLoaderStub{enabled: true, muted: nil}
+	now := time.Unix(0, 0)
+	clock := func() time.Time { return now }
+	c := NewSceneMuteChecker(loader.load, 30*time.Second, clock)
+	cache, ok := c.(*sceneMuteCache)
+	require.True(t, ok)
+
+	// Seed char-1 at t=0.
+	_, err := c.ShouldSuppress(context.Background(), "char-1", "player-1", "scene-A")
+	require.NoError(t, err)
+	cache.mu.Lock()
+	_, has1 := cache.entries["char-1"]
+	cache.mu.Unlock()
+	require.True(t, has1, "char-1 must be cached after its first lookup")
+
+	// Advance past the TTL, then refresh a DIFFERENT character. char-1's stale
+	// entry must be swept, not left resident forever.
+	now = now.Add(31 * time.Second)
+	_, err = c.ShouldSuppress(context.Background(), "char-2", "player-2", "scene-B")
+	require.NoError(t, err)
+
+	cache.mu.Lock()
+	_, stillHas1 := cache.entries["char-1"]
+	_, has2 := cache.entries["char-2"]
+	size := len(cache.entries)
+	cache.mu.Unlock()
+
+	assert.False(t, stillHas1, "an expired entry must be evicted, not retained for the process lifetime")
+	assert.True(t, has2, "the freshly-refreshed character must remain cached")
+	assert.Equal(t, 1, size, "cache stays bounded to characters seen within the TTL window")
+}
+
 func TestSceneMuteCacheFailsOpenOnLoaderErrorWithoutPoisoning(t *testing.T) {
 	loader := &muteLoaderStub{err: assert.AnError}
 	c := NewSceneMuteChecker(loader.load, time.Minute, time.Now)

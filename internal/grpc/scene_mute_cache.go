@@ -67,8 +67,9 @@ type sceneMuteCache struct {
 	ttl    time.Duration
 	now    func() time.Time
 
-	mu      sync.Mutex
-	entries map[string]muteEntry
+	mu        sync.Mutex
+	entries   map[string]muteEntry
+	lastSweep time.Time
 }
 
 // ShouldSuppress answers from the memoized entry when it is fresh, otherwise
@@ -104,9 +105,29 @@ func (c *sceneMuteCache) ShouldSuppress(ctx context.Context, characterID, player
 
 	c.mu.Lock()
 	c.entries[characterID] = refreshed
+	c.evictExpiredLocked(refreshed.fetchedAt)
 	c.mu.Unlock()
 
 	return decideSuppress(refreshed, sceneID), nil
+}
+
+// evictExpiredLocked prunes entries older than the TTL so the cache stays bounded
+// to characters seen within one TTL window, rather than growing for the process
+// lifetime with every distinct character that ever hit ShouldSuppress. It is
+// rate-limited to at most one sweep per TTL window (the refresh path already
+// holds the lock, and expired entries are re-fetched anyway). Any character's
+// refresh cleans up ALL expired entries, so a one-shot character's stale entry is
+// reclaimed by the next refresh of any character. Caller MUST hold c.mu.
+func (c *sceneMuteCache) evictExpiredLocked(now time.Time) {
+	if now.Sub(c.lastSweep) < c.ttl {
+		return
+	}
+	for id, e := range c.entries {
+		if now.Sub(e.fetchedAt) >= c.ttl {
+			delete(c.entries, id)
+		}
+	}
+	c.lastSweep = now
 }
 
 // decideSuppress composes the two suppression signals in the pinned order:

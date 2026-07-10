@@ -115,6 +115,26 @@ func TestStreamSenderAdapterSendRejectsUnsupportedModeOnAdd(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "REPLAY_MODE_NOT_SUPPORTED")
 }
 
+func TestStreamSenderAdapterSendPassesLiveOnlyToRegistry(t *testing.T) {
+	// A scene-focus OOC stream joins mid-session with ReplayModeLiveOnly
+	// (scenepolicy). The adapter must accept it — the same set AddStreamWithMode
+	// honours — not reject it as REPLAY_MODE_NOT_SUPPORTED (JoinFocus discards the
+	// Send error, so a rejection here silently drops the subscription).
+	reg := NewSessionStreamRegistry()
+	ch := make(chan sessionStreamUpdate, 1)
+	reg.Register("sess-1", ch)
+	defer reg.Deregister("sess-1", ch)
+
+	adapter := NewStreamSenderAdapter(reg)
+	err := adapter.Send("sess-1", "scene:abc:ooc", true, focus.ReplayModeLiveOnly)
+	require.NoError(t, err)
+
+	update := <-ch
+	assert.Equal(t, "scene:abc:ooc", update.stream)
+	assert.True(t, update.add)
+	assert.Equal(t, focus.ReplayModeLiveOnly, update.replayMode)
+}
+
 func TestStreamSenderAdapterSendReturnsErrorForMissingSession(t *testing.T) {
 	reg := NewSessionStreamRegistry()
 	adapter := NewStreamSenderAdapter(reg)

@@ -234,16 +234,21 @@ func NewStreamSenderAdapter(r *SessionStreamRegistry) *StreamSenderAdapter {
 
 // Send implements focus.StreamSender.
 //
-// Post-F3 only ReplayModeFromCursor is honoured; see AddStreamWithMode for
-// the rationale. Add-requests with other modes are rejected here too so
-// callers see the mismatch instead of getting silent cursor replay.
+// Post-F3 both ReplayModeFromCursor and ReplayModeLiveOnly are honoured — the
+// same set AddStreamWithMode accepts (see its rationale); for an already-live
+// consumer both resolve to a live tail with no history re-read. LiveOnly is the
+// mode a scene-focus OOC stream carries on a mid-session JoinFocus (scenepolicy),
+// so rejecting it here silently dropped that subscription (JoinFocus discards the
+// Send error as best-effort). BoundedTail remains unsupported post-F3
+// (TODO holomush-6uvc) and is still rejected eagerly so callers see the mismatch
+// instead of getting silent cursor replay.
 func (a *StreamSenderAdapter) Send(sessionID, stream string, add bool, mode focus.ReplayMode) error {
-	if add && mode != focus.ReplayModeFromCursor {
+	if add && mode != focus.ReplayModeFromCursor && mode != focus.ReplayModeLiveOnly {
 		return oops.Code("REPLAY_MODE_NOT_SUPPORTED").
 			With("session_id", sessionID).
 			With("stream", stream).
 			With("mode", mode).
-			Errorf("replay mode %v is not supported post-F3; only ReplayModeFromCursor is honored", mode)
+			Errorf("replay mode %v is not supported post-F3; only ReplayModeFromCursor and ReplayModeLiveOnly are honored", mode)
 	}
 	return a.registry.Send(sessionID, sessionStreamUpdate{
 		stream:     stream,
