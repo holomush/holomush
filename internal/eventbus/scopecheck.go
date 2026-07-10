@@ -82,7 +82,7 @@ func VerifyAccountScoping(ctx context.Context, conn *nats.Conn) error {
 				Wrap(subErr)
 		}
 		// Best-effort teardown; a denied sub is auto-removed server-side.
-		defer func() { _ = sub.Unsubscribe() }()
+		defer sub.Unsubscribe() //nolint:errcheck // best-effort teardown of the probe subscription
 		return conn.Flush()
 	})
 	if err != nil {
@@ -153,7 +153,7 @@ func probeDenied(
 				Wrap(ctxErr)
 		}
 		// Probe window elapsed with no violation: the operation was PERMITTED.
-		_ = conn.Flush()
+		conn.Flush() //nolint:errcheck // best-effort flush; the probe window already elapsed
 		return false, nil
 	}
 }
