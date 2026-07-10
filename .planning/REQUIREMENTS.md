@@ -195,7 +195,7 @@ Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
 - [ ] **CLUSTER-02**: Server-account subject scoping enforces single-principal publish/subscribe on
   game-topic subjects (`events.>`, `audit.>`, `internal.>`) in external mode
 
-- [ ] **CLUSTER-03**: Crypto key-invalidation coordinator propagates rotation events correctly across real
+- [x] **CLUSTER-03**: Crypto key-invalidation coordinator propagates rotation events correctly across real
   multi-node replicas, not just the embedded single-node path
 
 - [ ] **CLUSTER-04**: Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being
@@ -262,7 +262,7 @@ this GSD roadmap and are recorded as context (see above), not phase-mapped.
 | SCENEFWD-03 | Phase 2 | Complete |
 | CLUSTER-01 | Phase 3 | Complete |
 | CLUSTER-02 | Phase 3 | Pending |
-| CLUSTER-03 | Phase 3 | Pending |
+| CLUSTER-03 | Phase 3 | Complete |
 | CLUSTER-04 | Phase 3 | Pending |
 | CLUSTER-05 | Phase 3 | Pending |
 
