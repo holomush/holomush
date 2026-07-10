@@ -203,7 +203,7 @@ completion, and platform hardening can proceed in parallel if desired)
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
 | 2. Scenes Lineage Completion | 7/7 | Complete    | 2026-07-09 |
-| 3. Platform Hardening & Deployment Scaling | 9/9 | Complete   | 2026-07-10 |
+| 3. Platform Hardening & Deployment Scaling | 9/9 | Complete    | 2026-07-10 |
 
 ## Deferred (Not in This Roadmap)
 
@@ -224,7 +224,7 @@ Promote an entry with `/gsd-review-backlog` when ready.
 **Goal:** Round out the web portal beyond scenes: offline support, wiki/help pages, character profiles + creation/management UI, admin portal, and a web surface for 1:1 direct messages.
 **Source:** beads migration — 7 item(s) incl. epic(s) `holomush-qve`; member list in TRIAGE.md
 **Requirements:** TBD
-**Plans:** 0 plans
+**Plans:** 9/9 plans complete
 
 Plans:
 
