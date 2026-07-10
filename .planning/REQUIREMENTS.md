@@ -198,7 +198,7 @@ Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
 - [x] **CLUSTER-03**: Crypto key-invalidation coordinator propagates rotation events correctly across real
   multi-node replicas, not just the embedded single-node path
 
-- [ ] **CLUSTER-04**: Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being
+- [x] **CLUSTER-04**: Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being
   silently dropped (`internal/eventbus/audit/subsystem.go:59`)
 
 - [ ] **CLUSTER-05**: Operator has a documented runbook for external-NATS deployment
@@ -263,7 +263,7 @@ this GSD roadmap and are recorded as context (see above), not phase-mapped.
 | CLUSTER-01 | Phase 3 | Complete |
 | CLUSTER-02 | Phase 3 | Pending |
 | CLUSTER-03 | Phase 3 | Complete |
-| CLUSTER-04 | Phase 3 | Pending |
+| CLUSTER-04 | Phase 3 | Complete |
 | CLUSTER-05 | Phase 3 | Pending |
 
 **Coverage:**
