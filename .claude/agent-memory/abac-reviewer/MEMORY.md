@@ -673,3 +673,29 @@ actor metadata ABSENT (`ok==false`) → req.CharacterId trusted for the store
 EFFECT (owner/target); ABAC subject itself is host-vouched (spoof-proof). Latent-
 not-live: all current dispatch paths pair token+metadata. Fail-closed fix
 (require `ok`) is right for the future BFF/typed-RPC path. CONCUR latent.
+
+## Scenes Phase-2 scene-mute (Plan 03, 2026-07-09) — READY
+Two-tier self-scope split verified sound. TRIO (SetSceneNotifyPref/Get/
+ListMutedScenes, service.go:988-1088) has NO ABAC (plugin evaluator rejects
+character:<id> outside owned types) so SOLE gate = `callerNotVouchedAsCharacter`
+(service.go:1064) fail-CLOSED: `!ok || kind!=ActorCharacter || id!=req` → deny on
+absent/non-char/mismatched metadata (WR-02). MuteScene (service.go:946) uses the
+ADVISORY `mismatchedActingCharacter` (fail-OPEN on absent: `ok && kind==Char &&
+id!=req`) but is backstopped by (a) ABAC `Evaluate("mute","scene:"+id)` on the
+HOST-DERIVED dispatch subject (NOT req.character_id), fail-closed nil-eval/err/deny;
+(b) host-trusted req.character_id. Advisory fail-open only bites if metadata absent
+AND req.character_id != dispatch actor — impossible in prod (DeliverCommand
+host.go:1268-69 pairs token+WithOutgoingActorMetadata(storedActor); facade
+BeginServiceDispatch as verified char; both set req.character_id=dispatch actor).
+Latent-not-live, same accepted WR-01 posture. mute policy (plugin.yaml
+mute-scene-as-participant) `principal.id in resource.scene.participants` EXCLUDES
+observers/invitees (INV-SCENE-61, role IN owner/member). commands.go both
+mute+unmute → `gated(_, "mute", ...)` (unmute ABAC action string in policy is dead
+surplus, harmless). Store (store.go SetSceneMute/notify/list) ALL `WHERE
+character_id=$1` — no cross-char read/write. Trust anchor = ActorMetadataFrom
+INCOMINGContext (host-stamped, not forgeable-outgoing; actor_metadata.go:47).
+ListCharacterScenes muted read-back (service.go:678) has NO self-scope guard —
+relies on host-trusted req.character_id, SAME trust as pre-existing scene-list, no
+new surface (Low). Idle scheduler (idle_scheduler.go) = pure system sweep, no authz,
+context.Background()+timeout correct. Phase-1 channels seed:plugin-stream-subscribe
++ AuthorizePluginStreamContribution fence unchanged from CHAN-01..05 READY.
