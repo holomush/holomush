@@ -524,7 +524,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// Depends on DB (target table), EventBus (JetStream source), and
 	// Plugins (F5: per-plugin consumers need plugin manifests + gRPC
 	// clients); the orchestrator enforces that ordering via DependsOn.
-	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{})
+	// DLQ retention/subject come from the event_bus section (D-12). The
+	// dead-letter subject nests under the CLUSTER-02 `internal.>` granted
+	// prefix so it stays within the holomush-server account's permissions.
+	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{
+		DLQ: audit.DLQConfig{
+			Subject:  fmt.Sprintf("internal.%s.audit.dlq", eventBusConfig.GameID),
+			MaxAge:   eventBusConfig.DLQ.MaxAge,
+			MaxBytes: eventBusConfig.DLQ.MaxBytes,
+		},
+	})
 
 	// Phase 7 INV-CRYPTO-45: build the codec.KeySelector ONCE at boot. The
 	// SAME pointer-identity instance is threaded into BOTH the

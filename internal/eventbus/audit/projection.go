@@ -52,7 +52,10 @@ type projection struct {
 	pool   *pgxpool.Pool
 	cfg    Config
 	owners *OwnerMap // may be nil: nil ⇒ host owns every subject
-	cc     jetstream.ConsumeContext
+	// dlq captures poison messages on the final delivery attempt so a
+	// message exhausting MaxDeliver is never silently dropped (D-09).
+	dlq dlqCapturer
+	cc  jetstream.ConsumeContext
 	// workerCtx is stored at start() time so persist() can derive its
 	// Exec context from it. Subsystem.Stop cancels workerCtx; any
 	// pending INSERT then cancels as well, so drain() cannot return
@@ -119,7 +122,14 @@ func newProjection(ctx context.Context, js jetstream.JetStream, pool *pgxpool.Po
 	if err != nil {
 		return nil, wrapConsumerCreateError(err, eventbus.StreamName, cfg.ConsumerName)
 	}
-	return &projection{consumer: cons, js: js, pool: pool, cfg: cfg, owners: cfg.Owners}, nil
+	// Provision the bounded dead-letter stream once at construction so the
+	// final-attempt capture path (handle) can publish without a per-message
+	// ensure. EnsureStream is idempotent (D-12).
+	dlq := newDLQPublisher(js, cfg.DLQ)
+	if err := dlq.EnsureStream(ctx); err != nil {
+		return nil, oops.Code("AUDIT_DLQ_STREAM_INIT_FAILED").Wrap(err)
+	}
+	return &projection{consumer: cons, js: js, pool: pool, cfg: cfg, owners: cfg.Owners, dlq: dlq}, nil
 }
 
 // wrapConsumerCreateError applies the canonical AUDIT_CONSUMER_CREATE_FAILED
@@ -235,10 +245,40 @@ func (p *projection) handle(msg jetstream.Msg) {
 		}
 	}
 	if err := p.persist(msg); err != nil {
-		// Deliberate no-ack: JetStream will redeliver after AckWait.
-		// We do not Nak() because Nak triggers INSTANT redelivery,
-		// which would storm the database on persistent errors (e.g.
-		// DB down). AckWait-based redelivery gives natural backoff.
+		// Final-attempt DLQ capture (CLUSTER-04, D-09): once a message has
+		// been delivered MaxDeliver times, JetStream will stop redelivering
+		// it. Rather than let it drop on max-deliver expiry, capture it to
+		// the bounded EVENTS_AUDIT_DLQ stream and Term the original. If the
+		// DLQ publish itself fails, Nak instead so redelivery continues —
+		// nothing is ever silently dropped. The DLQ's failure domain is
+		// independent of Postgres (the most likely cause of dead letters).
+		meta, mErr := msg.Metadata()
+		if mErr == nil && p.cfg.MaxDeliver > 0 && meta.NumDelivered >= uint64(p.cfg.MaxDeliver) {
+			if dlqErr := p.dlq.Capture(p.workerCtx, msg); dlqErr != nil {
+				slog.ErrorContext(
+					p.workerCtx,
+					"audit DLQ capture failed; keeping message for redelivery",
+					"subject", msg.Subject(),
+					"num_delivered", meta.NumDelivered,
+					"error", dlqErr.Error(),
+				)
+				_ = msg.Nak() //nolint:errcheck // Nak failures are absorbed by continued redelivery
+				return
+			}
+			slog.WarnContext(
+				p.workerCtx,
+				"audit message exhausted MaxDeliver; captured to dead-letter stream",
+				"subject", msg.Subject(),
+				"num_delivered", meta.NumDelivered,
+			)
+			_ = msg.Term() //nolint:errcheck // Term failures are absorbed by max-deliver expiry
+			return
+		}
+		// Below the cap (or metadata unavailable): deliberate no-ack.
+		// JetStream will redeliver after AckWait. We do not Nak() because
+		// Nak triggers INSTANT redelivery, which would storm the database
+		// on persistent errors (e.g. DB down). AckWait-based redelivery
+		// gives natural backoff.
 		return
 	}
 	// Ack errors here are transient network/protocol errors; the server
