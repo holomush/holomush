@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
@@ -241,12 +242,37 @@ func (s *Subsystem) rollbackStart(conn *nats.Conn) {
 	}
 }
 
-// EnsureStream creates or updates the EVENTS stream idempotently.
+// EnsureStream reconciles the EVENTS stream per the provision policy (D-03).
+//
+// When provision is enabled (the default), it idempotently creates or updates
+// the stream — the same code path in embedded and external mode. When an
+// operator sets provision:false (a locked-down cluster whose server account
+// lacks $JS.API stream-admin permissions), it instead VERIFIES the stream
+// exists with the expected config and fails closed on mismatch via
+// EVENTBUS_STREAM_CONFIG_MISMATCH — the server MUST NOT attempt stream admin.
 func (s *Subsystem) EnsureStream(ctx context.Context) error {
 	if s.js == nil {
 		return oops.Code("EVENTBUS_NOT_STARTED").Errorf("EnsureStream called before Start")
 	}
-	_, err := s.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+
+	desired := s.desiredStreamConfig()
+
+	if !s.cfg.IsProvision() {
+		return s.verifyStream(ctx, desired)
+	}
+
+	_, err := s.js.CreateOrUpdateStream(ctx, desired)
+	if err != nil {
+		return oops.Code("EVENTBUS_STREAM_DECLARE_FAILED").With("stream", StreamName).Wrap(err)
+	}
+	return nil
+}
+
+// desiredStreamConfig is the EVENTS stream config this subsystem owns. It is the
+// single source of truth for both the provision (create/update) and the
+// provision:false (verify) paths, so the two can never drift.
+func (s *Subsystem) desiredStreamConfig() jetstream.StreamConfig {
+	return jetstream.StreamConfig{
 		Name:        StreamName,
 		Subjects:    []string{SubjectFilter},
 		Retention:   jetstream.LimitsPolicy,
@@ -255,11 +281,57 @@ func (s *Subsystem) EnsureStream(ctx context.Context) error {
 		MaxAge:      s.cfg.StreamMaxAge,
 		Duplicates:  s.cfg.DupeWindow,
 		AllowDirect: true,
-	})
+	}
+}
+
+// verifyStream implements the provision:false path (D-03): it looks the stream
+// up and compares the config fields this subsystem owns against desired,
+// failing closed with EVENTBUS_STREAM_CONFIG_MISMATCH if the stream is absent
+// or its config drifts. It never creates or mutates the stream.
+func (s *Subsystem) verifyStream(ctx context.Context, desired jetstream.StreamConfig) error {
+	stream, err := s.js.Stream(ctx, StreamName)
 	if err != nil {
-		return oops.Code("EVENTBUS_STREAM_DECLARE_FAILED").With("stream", StreamName).Wrap(err)
+		// Absent (ErrStreamNotFound) or unreadable in provision:false mode: the
+		// server MUST NOT create it — fail closed rather than provision (D-03).
+		return oops.Code("EVENTBUS_STREAM_CONFIG_MISMATCH").
+			With("stream", StreamName).
+			With("reason", "stream not found").
+			Wrap(err)
+	}
+	info, err := stream.Info(ctx)
+	if err != nil {
+		return oops.Code("EVENTBUS_STREAM_CONFIG_MISMATCH").
+			With("stream", StreamName).
+			With("reason", "stream info unavailable").
+			Wrap(err)
+	}
+	if field := streamConfigMismatch(desired, info.Config); field != "" {
+		return oops.Code("EVENTBUS_STREAM_CONFIG_MISMATCH").
+			With("stream", StreamName).
+			With("field", field).
+			Errorf("existing EVENTS stream config differs from desired (provision:false)")
 	}
 	return nil
+}
+
+// streamConfigMismatch returns the name of the first owned config field that
+// differs between desired and got, or "" if they match. It compares only the
+// fields this subsystem declares (Subjects, Retention, MaxAge, Duplicates) —
+// server-managed fields (e.g. Replicas on a real cluster, placement) are not
+// this subsystem's contract to enforce.
+func streamConfigMismatch(desired, got jetstream.StreamConfig) string {
+	switch {
+	case !slices.Equal(desired.Subjects, got.Subjects):
+		return "subjects"
+	case desired.Retention != got.Retention:
+		return "retention"
+	case desired.MaxAge != got.MaxAge:
+		return "max_age"
+	case desired.Duplicates != got.Duplicates:
+		return "duplicates"
+	default:
+		return ""
+	}
 }
 
 // Stop drains the in-process connection and shuts the server down.
