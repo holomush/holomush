@@ -13,6 +13,16 @@ import (
 // can attribute the connection to the HoloMUSH server account.
 const externalClientName = "holomush-server"
 
+// Dial opens a NATS connection to the external cluster described by cfg
+// (Mode == ModeExternal), applying the same creds-file / TLS options the
+// server uses at boot (D-04). It is exported for operator-host CLIs (e.g.
+// the audit DLQ replay tool) that need a broker handle without standing up
+// the full EventBus subsystem. Callers own the returned *nats.Conn and MUST
+// Close it.
+func Dial(cfg Config) (*nats.Conn, error) {
+	return dialExternal(cfg)
+}
+
 // dialExternal opens a connection to an external NATS cluster addressed by
 // cfg.URL (Mode == ModeExternal). Authentication follows D-04: a NATS .creds
 // file (JWT/NKey decentralized auth) when cfg.Credentials is set, plus an

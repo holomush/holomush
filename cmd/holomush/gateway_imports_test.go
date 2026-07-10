@@ -75,6 +75,13 @@ var coreOnlyFiles = map[string]struct{}{
 	// core-only (matches cmd_admin_totp_deps.go precedent).
 	"kek_provision.go":      {},
 	"kek_provision_test.go": {},
+	// `holomush audit dlq` CLI is a host-shell operator tool (like
+	// cmd_admin.go / migrate.go), not the gateway. It reads the
+	// EVENTS_AUDIT_DLQ JetStream stream and writes events_audit directly to
+	// replay dead letters (CLUSTER-04); imports internal/eventbus +
+	// internal/eventbus/audit by design. No admin UDS.
+	"cmd_audit.go":      {},
+	"cmd_audit_test.go": {},
 }
 
 var forbidden = []string{
