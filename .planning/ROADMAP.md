@@ -51,7 +51,7 @@ tools should treat this as historical context, not phase-parseable roadmap conte
 
 - [x] **Phase 1: Channels Subsystem** - Stand up `core-channels` as the social-spaces substrate's second consumer (completed 2026-07-09)
 - [x] **Phase 2: Scenes Lineage Completion** - Notifications and telnet polish for the shipped Scenes subsystem (templates descoped to backlog) (completed 2026-07-09)
-- [ ] **Phase 3: Platform Hardening & Deployment Scaling** - External/clustered NATS, multi-node crypto invalidation, audit durability
+- [x] **Phase 3: Platform Hardening & Deployment Scaling** - External/clustered NATS, multi-node crypto invalidation, audit durability (completed 2026-07-10)
 
 ## Phase Details
 
@@ -169,7 +169,7 @@ closing the single-node ceiling flagged in `.planning/codebase/CONCERNS.md`.
 4. Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being silently dropped
 5. Operator has a documented runbook for external-NATS deployment
 
-**Plans**: 8/9 plans executed
+**Plans**: 9/9 plans complete
 
 Plans:
 **Wave 1** *(foundation — no deps)*
@@ -191,7 +191,7 @@ Plans:
 
 **Wave 4** *(capstone)*
 
-- [ ] 03-09-PLAN.md — External-NATS operator runbook (CLUSTER-05)
+- [x] 03-09-PLAN.md — External-NATS operator runbook (CLUSTER-05)
 
 ## Progress
 
@@ -203,7 +203,7 @@ completion, and platform hardening can proceed in parallel if desired)
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
 | 2. Scenes Lineage Completion | 7/7 | Complete    | 2026-07-09 |
-| 3. Platform Hardening & Deployment Scaling | 8/9 | In Progress|  |
+| 3. Platform Hardening & Deployment Scaling | 9/9 | Complete   | 2026-07-10 |
 
 ## Deferred (Not in This Roadmap)
 
