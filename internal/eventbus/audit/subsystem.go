@@ -55,9 +55,9 @@ const (
 	// DefaultMaxDeliver caps consumer redelivery attempts for poison
 	// messages (e.g., missing/malformed required headers). Without a
 	// cap the default is unlimited, and a handful of permanently-bad
-	// events would permanently occupy MaxAckPending slots.
-	// TODO (Phase B): wire a DLQ so messages that exhaust MaxDeliver
-	// are preserved for operator inspection.
+	// events would permanently occupy MaxAckPending slots. On the final
+	// attempt the projection captures the message to the bounded
+	// EVENTS_AUDIT_DLQ stream (see dlq.go) rather than dropping it.
 	DefaultMaxDeliver = 10
 )
 
@@ -89,6 +89,11 @@ type Config struct {
 	// Nil means "no plugins declared ownership; host owns everything",
 	// preserving Phase A behavior.
 	Owners *OwnerMap
+
+	// DLQ bounds and locates the dead-letter stream that captures
+	// messages exhausting MaxDeliver (CLUSTER-04, D-09/D-12). Zero-valued
+	// fields resolve via DLQConfig.Defaults().
+	DLQ DLQConfig
 }
 
 // Defaults fills any zero-valued fields with defaults.
@@ -108,6 +113,7 @@ func (c Config) Defaults() Config {
 	if c.MaxDeliver == 0 {
 		c.MaxDeliver = DefaultMaxDeliver
 	}
+	c.DLQ = c.DLQ.Defaults()
 	return c
 }
 

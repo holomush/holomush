@@ -109,10 +109,10 @@ func newProjection(ctx context.Context, js jetstream.JetStream, pool *pgxpool.Po
 			// persist failure (AUDIT_MISSING_HEADER, AUDIT_BAD_SCHEMA_VERSION,
 			// AUDIT_BAD_MSG_ID, BYTEA-incompatible DB row) would redeliver
 			// forever and permanently consume a MaxAckPending slot — a
-			// handful of poison messages could stall the projection.
-			// Phase A TODO: wire a DLQ (e.g., stream 'EVENTS_AUDIT_DLQ') so
-			// messages that exhaust MaxDeliver are preserved for operator
-			// inspection rather than dropped on max-deliver expiry.
+			// handful of poison messages could stall the projection. On the
+			// final attempt handle() captures the message to EVENTS_AUDIT_DLQ
+			// (see dlq.go) so it is preserved for operator inspection/replay
+			// rather than dropped on max-deliver expiry (CLUSTER-04, D-09).
 			MaxDeliver: cfg.MaxDeliver,
 		})
 	})
