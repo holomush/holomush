@@ -296,7 +296,38 @@ func (p *projection) handle(msg jetstream.Msg) {
 // Phase A note: only system-actor events flow through here. Phase B
 // will emit a real ULID in App-Actor-ID for user-initiated events; the
 // code below decodes that header if present but tolerates its absence.
+//
+// The header-parse + INSERT body lives in writeAuditRow so the DLQ
+// replay path (replay.go) drives the SAME idempotent write; persist owns
+// only the workerCtx-derived timeout so Subsystem.Stop can cancel
+// in-flight INSERTs.
 func (p *projection) persist(msg jetstream.Msg) error {
+	// Derive persist ctx from workerCtx so Subsystem.Stop can cancel
+	// in-flight INSERTs. Falls back to Background if persist runs before
+	// start (defensive — shouldn't happen in normal lifecycle).
+	parent := p.workerCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, persistTimeout)
+	defer cancel()
+	return writeAuditRow(ctx, p.pool, msg)
+}
+
+// writeAuditRow parses a JetStream message's audit headers and writes the
+// corresponding events_audit row with ON CONFLICT (id) DO NOTHING. It is
+// the single durable-write body shared by the live projection (persist)
+// and the DLQ replay path (ReplayDLQ) so header parsing and idempotency
+// stay byte-identical across both — a replayed dead letter reconstructs
+// the exact row the live path would have written (CLUSTER-04, D-11).
+//
+// Note: timestamp and js_seq derive from msg.Metadata(). On the live path
+// that is the EVENTS stream's metadata; on replay it is the
+// EVENTS_AUDIT_DLQ message's metadata (the original event's stream
+// sequence/timestamp are not preserved by DLQ capture). The dedup key is
+// the header-carried Nats-Msg-Id (id column), which IS preserved, so
+// idempotency holds regardless of which stream the message is read from.
+func writeAuditRow(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg) error {
 	h := msg.Headers()
 
 	msgID := h.Get(headerMsgID)
@@ -357,17 +388,7 @@ func (p *projection) persist(msg jetstream.Msg) error {
 		return oops.Code("AUDIT_BAD_MSG_ID").With("msg_id", msgID).Wrap(err)
 	}
 
-	// Derive persist ctx from workerCtx so Subsystem.Stop can cancel
-	// in-flight INSERTs. Falls back to Background if persist runs before
-	// start (defensive — shouldn't happen in normal lifecycle).
-	parent := p.workerCtx
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, cancel := context.WithTimeout(parent, persistTimeout)
-	defer cancel()
-
-	_, err = p.pool.Exec(
+	_, err = pool.Exec(
 		ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
