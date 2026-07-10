@@ -370,12 +370,14 @@ invariants.
 | `INV-EVENTBUS-26` | Plugin SDK Layer 2: pluginsdk.AuditRow Go struct fields MUST be 1:1 with pluginauditpb.AuditRow proto fields (id, subject, type, timestamp, actor, codec, payload, dek_ref, dek_version). | `INV-P7-4` | pending |
 | `INV-EVENTBUS-27` | Plugin migrations MAY run before or after Phase 7's host migration (no host-side schema change beyond Phases 2–5); the two crypto columns added to plugin tables are nullable and require no new host-side support. | `INV-P7-10` | pending |
 | `INV-EVENTBUS-28` | New event subjects MUST use the NATS dot-style form events.<game_id>.<domain>.<entity-id>[.<facet>...]; colon-style is legacy and translated at the EventSink boundary. | `INV-S4` | pending |
+| `INV-EVENTBUS-29` | External-mode boot fails closed: mode:external with an unreachable NATS server, or a provision:false stream-config mismatch, refuses to Start and leaves conn/js nil — no embedded fallback (CLUSTER-01, D-02/D-03). | — | bound |
+| `INV-EVENTBUS-30` | DLQ capture never drops: an audit message exhausting MaxDeliver is Term'd only after a successful DLQ publish; a failed DLQ publish Naks instead, so redelivery continues and nothing is silently dropped (CLUSTER-04, D-09). | — | bound |
 
 ### `INV-CLUSTER`
 
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
-| `INV-CLUSTER-1` | KEK rotation issues a cluster-prefixed NATS request-reply cache-invalidate ping and MUST receive N-of-N replica acks (30s timeout; rollback on timeout). | `INV-28` | pending |
+| `INV-CLUSTER-1` | KEK rotation issues a cluster-prefixed NATS request-reply cache-invalidate ping and MUST receive N-of-N replica acks (30s timeout; rollback on timeout). | `INV-28` | bound |
 | `INV-CLUSTER-2` | Rotate/Rekey(context) issues a cluster-prefixed cache-invalidate ping and MUST receive N-of-N replica acks before returning (5s timeout; N=1 degenerates to local self-ack; rollback on timeout). | `INV-29` | bound |
 | `INV-CLUSTER-3` | Every cluster.Registry member has a unique MemberID; colliding concurrent registration is rejected with CLUSTER_MEMBER_DUPLICATE_ID. | `INV-53` | bound |
 | `INV-CLUSTER-4` | All Phase-3c internal coordination subjects are cluster_id-prefixed; members drop messages whose payload cluster_id disagrees with their configured cluster_id. | `INV-54` | bound |
