@@ -79,9 +79,9 @@ surface changes.
   (protocol proof, binds invariants); (b) one compose-based multi-process
   smoke (2 core replicas + NATS container) as the deployment-shaped capstone
   (topology proof).
-- **D-06 (fold into `task test:int`):** External-NATS tests join the existing
-  `//go:build integration` tier (Postgres testcontainers are precedent for
-  container-backed int tests). The standing "embedded NATS is correct at every
+- **D-06 (fold into the integration test tier):** External-NATS tests join the
+  existing `//go:build integration` tier, run by `task test:int` (Postgres
+  testcontainers are precedent for container-backed int tests). The standing "embedded NATS is correct at every
   test tier" rule is **amended in the same change** (CLAUDE.md / testing
   rules): embedded remains correct for everything EXCEPT external-mode-specific
   behavior, which MUST use a real NATS container. One runner, CI-required.
@@ -126,8 +126,8 @@ surface changes.
 
 ### Operator deployment story (CLUSTER-02 + CLUSTER-05)
 
-- **D-13 (scoping assets — templates + script + boot self-check, ALL of
-  them):** Ship (a) NATS account config templates under `deploy/nats/`
+- **D-13 (scoping assets — templates + script + boot self-check, ALL of them):** Ship
+  (a) NATS account config templates under `deploy/nats/`
   (accounts block / nsc walkthrough granting `holomush-server`
   publish+subscribe on `events.>`, `audit.>`, `internal.>` and nothing else);
   (b) a runbook-documented **verification script** that connects with a
