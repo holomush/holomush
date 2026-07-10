@@ -2616,7 +2616,7 @@ invariants:
     binding: pending
     refs:
       - {file: "plugins/core-scenes/service.go", token: "INV-S4"}
-      - {file: "plugins/core-scenes/store.go", token: "INV-S4",}
+      - {file: "plugins/core-scenes/store.go", token: "INV-S4"}
   - id: INV-EVENTBUS-29
     scope: INV-EVENTBUS
     origin_spec: "docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md"
@@ -2628,8 +2628,8 @@ invariants:
   - id: INV-EVENTBUS-30
     scope: INV-EVENTBUS
     origin_spec: "docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md"
-    summary: "DLQ capture never drops: an audit message exhausting MaxDeliver is Term'd only after a successful DLQ publish; a
-      failed DLQ publish Naks instead, so redelivery continues and nothing is silently dropped (CLUSTER-04, D-09)."
+    summary: "DLQ capture never drops: an audit message exhausting MaxDeliver is Term'd only after a successful DLQ publish;
+      a failed DLQ publish Naks instead, so redelivery continues and nothing is silently dropped (CLUSTER-04, D-09)."
     asserted_by:
       - "internal/eventbus/audit/dlq_capture_integration_test.go"
       - "internal/eventbus/audit/dlq_neverdrop_integration_test.go"
