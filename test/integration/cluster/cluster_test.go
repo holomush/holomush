@@ -25,6 +25,7 @@ import (
 
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/cluster/clustertest"
+	"github.com/holomush/holomush/internal/testsupport/natstest"
 )
 
 var _ = Describe("Cluster Registry", func() {
@@ -144,6 +145,49 @@ var _ = Describe("Cluster Registry", func() {
 			oopsErr, ok := oops.AsOops(err)
 			Expect(ok).To(BeTrue(), "err = %v; want oops.OopsError", err)
 			Expect(oopsErr.Code()).To(Equal("CLUSTER_CANNOT_PILL_SELF"))
+		})
+	})
+})
+
+// Multi-node cluster_id namespace isolation over REAL per-replica connections
+// to a single external NATS container (CLUSTER-03, D-05a). The embedded
+// "Cluster Registry" specs above share one in-process connection; these prove
+// the cluster_id-prefix drop still holds when each replica dials its own conn.
+var _ = Describe("Cluster Registry (multi-node external NATS)", Ordered, func() {
+	var env *natstest.NATSEnv
+
+	BeforeAll(func() {
+		var err error
+		env, err = natstest.StartNATS(context.Background())
+		Expect(err).NotTo(HaveOccurred(), "natstest.StartNATS")
+	})
+
+	AfterAll(func() {
+		if env != nil {
+			Expect(env.Terminate(context.Background())).To(Succeed(), "natstest env.Terminate")
+		}
+	})
+
+	// Verifies: INV-CLUSTER-4
+	Describe("cluster_id namespace isolation across independent connections", func() {
+		It("never observes a foreign-cluster heartbeat in either local replica", func(ctx SpecContext) {
+			h := clustertest.NewExternal(GinkgoT(), env, "test-game", 2)
+			h.AwaitConverged(GinkgoT(), 5*time.Second)
+
+			// A member configured with a DIFFERENT cluster_id publishes a
+			// heartbeat carrying that foreign cluster_id. Every real member
+			// (all on cluster_id=test-game, each on its OWN conn) MUST drop it
+			// (INV-CLUSTER-4). Consistently catches a regression that would
+			// let it through eventually.
+			foreignID := cluster.MemberID("01HFOREIGN_PEER_MULTINODE")
+			h.PublishSyntheticHeartbeat(GinkgoT(), "OTHER-CLUSTER", foreignID, "")
+
+			Consistently(ctx, func() bool {
+				_, ok0 := h.Members[0].Registry.Member(foreignID)
+				_, ok1 := h.Members[1].Registry.Member(foreignID)
+				return ok0 || ok1
+			}).WithTimeout(500*time.Millisecond).Should(BeFalse(),
+				"a foreign cluster_id heartbeat must be dropped by every replica")
 		})
 	})
 })
