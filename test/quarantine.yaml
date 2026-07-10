@@ -1,31 +1,39 @@
 # Quarantine registry — known-flaky integration/E2E specs.
 #
-# Each entry MUST reference an open/in-progress bead and have a matching
+# Each entry MUST reference an OPEN GitHub issue (`issue:`) and have a matching
 # in-code marker (quarantinetest.Skip / Ginkgo Skip / Playwright @quarantine
-# tag). The bijection meta-test (test/meta/quarantine_registry_test.go)
-# fails the build if a marker lacks a row or a row lacks a marker.
-# `task quarantine:audit` (run where bd is reachable) flags rows whose bead
-# is closed. See docs/superpowers/specs/2026-05-25-tier-split-quality-gates-design.md.
+# tag). The marker token (`bead:`) is an opaque id shared by the row and the
+# in-code marker; the bijection meta-test (test/meta/quarantine_registry_test.go)
+# fails the build if a marker lacks a row or a row lacks a marker. Tokens for
+# pre-2026-07 entries are historical beads-tracker ids; NEW entries mint
+# `holomush-i<issue-number>` (same grammar, no tracker needed).
+# `task quarantine:audit` (run where gh is reachable) flags rows whose GitHub
+# issue is closed. See docs/superpowers/specs/2026-05-25-tier-split-quality-gates-design.md.
 #
-# entries: list of { id, kind (go|ginkgo|playwright), bead, since, reason }
+# entries: list of { id, kind (go|ginkgo|playwright), bead (marker token),
+#                    issue (GitHub issue number), since, reason }
 entries:
   - id: TestProjectionResumesAfterRestart
     kind: go
     bead: holomush-q55b
+    issue: 4613
     since: 2026-05-25
     reason: consumer-info eventual-consistency race on restart (5zpf closed as dup)
   - id: TestProjectionDrainsPublishedMessageToAuditTable
     kind: go
     bead: holomush-1nl7
+    issue: 4598
     since: 2026-05-25
     reason: AwaitDrained cold-start race
   - id: ConcurrentUp allows at least one concurrent Up to succeed
     kind: ginkgo
     bead: holomush-pqzv
+    issue: 4698
     since: 2026-05-25
     reason: testcontainers docker port-map timeout under load
   - id: admin_read_stream F-E12 chain verification (surgical step skip)
     kind: ginkgo
     bead: holomush-7b9n
+    issue: 4605
     since: 2026-05-25
     reason: operator_read_completed audit row times out under load; only the F-E12 step is gated

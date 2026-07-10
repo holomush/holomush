@@ -34,7 +34,7 @@ HoloMUSH is open-source (Apache-2.0) and welcomes contributions of all kinds —
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally
 3. **Run `task setup`** to install dependencies and configure hooks
-4. **Find an issue** — look for `good-first-issue` labels, or run `bd ready` to see unblocked tasks
+4. **Find an issue** — look for `good-first-issue` labels, or browse [open issues](https://github.com/holomush/holomush/issues) for unblocked tasks
 5. **Create a feature branch**, make your changes, and open a pull request
 
 <CardGrid>
@@ -51,14 +51,14 @@ HoloMUSH uses a spec-driven, test-first development approach:
 
 ```mermaid
 flowchart TB
-    A["Spec (docs/specs/)"] --> B["Epic (tracked in beads)"]
+    A["Spec (docs/specs/)"] --> B["Epic (tracked in GitHub Issues)"]
     B --> C["Implementation Plan (docs/plans/)"]
     C --> D["Tasks with Tests"]
 ```
 
 The typical cycle looks like this:
 
-1. Pick a task from `bd ready`
+1. Pick a task from [open issues](https://github.com/holomush/holomush/issues)
 2. Write failing tests
 3. Implement until tests pass
 4. Run `task test && task lint`

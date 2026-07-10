@@ -15,8 +15,8 @@ the stack is composed and why, see
 
 ## Test packages currently using the harness
 
-| Package                      | Bead epic | What it asserts                                                 |
-| ---------------------------- | --------- | --------------------------------------------------------------- |
+| Package                      | Origin epic | What it asserts                                                 |
+| ---------------------------- | ----------- | --------------------------------------------------------------- |
 | `test/integration/privacy/`  | iwzt      | I-PRIV-1..7 history-scope privacy invariants                    |
 | `test/integration/presence/` | 5b2j      | AC4 (joiner sees prior presence), AC3 / I-PRES-2 (floor bypass) |
 
@@ -89,8 +89,8 @@ panics with a clear message.
 
 ### Suite and test packages
 
-| Package                         | Bead epic | What it asserts                                            |
-| ------------------------------- | --------- | --------------------------------------------------------- |
+| Package                         | Origin epic | What it asserts                                            |
+| ------------------------------- | ----------- | --------------------------------------------------------- |
 | `test/integration/wholesystem/` | 0f0f4     | INV-5: all in-tree plugins load; `help` command registered |
 
 When you add a test package that uses `WithInTreePlugins`, append it to this

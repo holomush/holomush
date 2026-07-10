@@ -34,9 +34,9 @@ A candidate is ADR-worthy iff ALL of the following are true:
    from now someone asking "why is X this way" should be able to find
    the answer here.
 4. **Not already captured** in `docs/adr/` — you MUST grep / probe the
-   directory and run `bd list --type decision` before proposing a new
-   candidate. If a related ADR exists, propose `supersedes` rather than
-   "new."
+   directory (`docs/adr/` filenames + `**Decision:**` headers are the
+   canonical decision record) before proposing a new candidate. If a
+   related ADR exists, propose `supersedes` rather than "new."
 
 Score each candidate 0–4 by how many criteria it passes. Score < 4 is
 borderline — surface it anyway, but flag in your output.
@@ -90,7 +90,7 @@ The schema:
       "end_line": 147,
       "transcript_quotes": ["..."],
       "worthiness_score": 0..4,
-      "supersedes": null | "<bd-id>"
+      "supersedes": null | "<existing-adr-id, e.g. holomush-ti1b>"
     }
   ],
   "dropped": [

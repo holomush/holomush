@@ -90,7 +90,7 @@ See [Architecture](https://holomush.dev/contributing/explanation/architecture/) 
 
 ## Development
 
-This project uses [beads](https://github.com/steveyegge/beads) for task tracking and follows TDD principles.
+This project tracks work in [GitHub Issues](https://github.com/holomush/holomush/issues) and follows TDD principles.
 
 ```bash
 # Run tests

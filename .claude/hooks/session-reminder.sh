@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
-# Stop hook: remind about unsynced beads and uncommitted changes
+# Stop hook: remind about uncommitted/unpushed changes
 # Fires when the agent finishes responding (Stop event). Only outputs
 # when there's actually unsynced work to avoid noise.
 # Does not fire on user interrupts (Ctrl+C) — only when Claude finishes responding.
@@ -27,23 +27,6 @@ GIT_STATUS=$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null) || {
 if [[ -n "$GIT_STATUS" ]]; then
   CHANGED_COUNT=$(echo "$GIT_STATUS" | grep -c .)
   REMINDERS+=("$CHANGED_COUNT uncommitted file(s) in working tree")
-fi
-
-# `bd dolt status` is intentionally NOT checked here: uncommitted Dolt
-# working-set state is a session-close concern (handled by the landing
-# checklist), not a per-turn one, and its server round-trip dominated this
-# Stop hook's latency. Only the in-progress-claim check below remains.
-if command -v bd >/dev/null 2>&1; then
-  # Stranded in-progress claims: beads still open and in_progress for the
-  # current actor. Catches "claimed but never closed" patterns when a
-  # session ends mid-task without a handoff. Best-effort — silent on errors.
-  ACTOR=$(git -C "$REPO_ROOT" config user.email 2>/dev/null) || ACTOR=""
-  if [[ -n "$ACTOR" ]]; then
-    IN_PROG=$(bd list --status in_progress --assignee "$ACTOR" --json 2>/dev/null | jq -r 'length' 2>/dev/null) || IN_PROG=0
-    if [[ "$IN_PROG" -gt 0 ]] 2>/dev/null; then
-      REMINDERS+=("$IN_PROG bead(s) in_progress under your assignee — close, hand off, or note current state")
-    fi
-  fi
 fi
 
 # Check for unpushed commits (may fail if no upstream tracking)

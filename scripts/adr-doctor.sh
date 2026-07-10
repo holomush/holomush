@@ -31,19 +31,10 @@ check_fail() {
   fail_count=$((fail_count + 1))
 }
 
-# Prerequisites.
-# `bd` is OPTIONAL in CI — Linux runners don't have it installed. When
-# absent, the bd-dependent checks (file_has_decision_header / agent's
-# bd show, supersession_edges) are skipped with a notice; the other
-# checks (file counts, validator headers, frontmatter, hook executable,
-# forbid_skill_commits) still run and gate the build.
-have_bd=1
-command -v bd >/dev/null || have_bd=0
+# Prerequisites. (ADR ids are self-minted since the 2026-07-09 beads-tracker
+# retirement; all checks are file-level and run everywhere, including CI.)
 [ -d "$ADR_DIR" ] || { echo "missing $ADR_DIR" >&2; exit 2; }
 [ -f "$SPEC" ] || { echo "missing $SPEC (invariant_coverage meta-test cannot run)" >&2; exit 2; }
-if [ "$have_bd" = "0" ]; then
-  note "bd not on PATH — bd-dependent checks (decision-header bd-show, supersession edges) will be skipped"
-fi
 
 # --- count_real_files (INV-A12) ---
 note "count_real_files (INV-A12)"
@@ -52,7 +43,7 @@ real=$(find "$ADR_DIR" -maxdepth 1 -type f -name '*.md' \
   | grep -vE '/[0-9]{4}-' \
   | wc -l | tr -d ' ')
 if [ "$real" -lt "17" ]; then
-  check_fail "expected at least 17 <bd-id>-<slug>.md files after migration; got $real"
+  check_fail "expected at least 17 <adr-id>-<slug>.md files after migration; got $real"
 fi
 
 # --- count_stubs (INV-A12) ---
@@ -110,7 +101,7 @@ for f in "$ADR_DIR"/*-*.md; do
   esac
   bn=$(basename "$f")
   bd_id_from_filename="${bn%-*.md}"  # naive: take everything before the last '-<slug>.md'
-  # Tighten: bd-id format is 'holomush-XXXX'; pull the first 'holomush-XXXX' substring.
+  # Tighten: adr-id format is 'holomush-XXXX'; pull the first 'holomush-XXXX' substring.
   bd_id_from_filename=$(echo "$bn" | grep -oE '^holomush-[a-z0-9]+' || true)
   decision_line=$(grep -E '^\*\*Decision:\*\*\s+holomush-' "$f" | head -1)
   if [ -z "$decision_line" ]; then
@@ -119,13 +110,8 @@ for f in "$ADR_DIR"/*-*.md; do
   fi
   decision_id=$(echo "$decision_line" | grep -oE 'holomush-[a-z0-9]+')
   if [ "$decision_id" != "$bd_id_from_filename" ]; then
-    check_fail "$f: **Decision:** $decision_id does not match filename bd-id $bd_id_from_filename"
+    check_fail "$f: **Decision:** $decision_id does not match filename adr-id $bd_id_from_filename"
     continue
-  fi
-  if [ "$have_bd" = "1" ]; then
-    if ! bd show "$decision_id" >/dev/null 2>&1; then
-      check_fail "$f: bd show $decision_id failed (record missing)"
-    fi
   fi
 done
 
@@ -184,24 +170,18 @@ if [ -f "$SKILL" ]; then
 fi
 
 # --- supersession_edges (INV-A13) ---
+# File-level since the beads-tracker retirement: a "Superseded by X" status
+# must point at an ADR file that actually exists.
 note "supersession_edges (INV-A13)"
-if [ "$have_bd" = "0" ]; then
-  note "  skipped — bd not on PATH"
-else
 for f in "$ADR_DIR"/holomush-*-*.md; do
   [ -f "$f" ] || continue
   status=$(grep -E '^\*\*Status:\*\*\s+Superseded by\s+holomush-' "$f" | head -1 || true)
   [ -n "$status" ] || continue
-  this_id=$(grep -oE '^\*\*Decision:\*\*\s+holomush-[a-z0-9]+' "$f" | grep -oE 'holomush-[a-z0-9]+')
   superseder=$(echo "$status" | grep -oE 'holomush-[a-z0-9]+')
-  # Confirm bd dep list shows the edge. bd renders deps as:
-  #   "  <dep-id>: <title> [P<n>] (<status>) via <dep-type>"
-  # so the superseded id appears BEFORE the literal 'supersedes'.
-  if ! bd dep list "$superseder" 2>/dev/null | grep -q "$this_id.*via supersedes"; then
-    check_fail "$f: Status says superseded by $superseder, but bd dep edge missing"
+  if ! ls "$ADR_DIR/$superseder"-*.md >/dev/null 2>&1; then
+    check_fail "$f: Status says superseded by $superseder, but no $superseder-*.md file exists"
   fi
 done
-fi
 
 # --- invariant_coverage (meta-test) ---
 note "invariant_coverage"

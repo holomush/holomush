@@ -2,18 +2,21 @@
 name: capture-adrs
 description: |
   Use when the user has finalized a spec or plan and wants to extract
-  ADR-worthy decisions into both `docs/adr/<bd-id>-<slug>.md` files
-  AND `bd create -t decision` records. Triggered by `/capture-adrs
-  <path>` or by the nudge-adr-capture hook's reminder. NOT for general
-  ADR audit — use the adr-extractor agent directly for that.
+  ADR-worthy decisions into `docs/adr/<adr-id>-<slug>.md` files.
+  Triggered by `/capture-adrs <path>` or by the nudge-adr-capture
+  hook's reminder. NOT for general ADR audit — use the adr-extractor
+  agent directly for that.
 ---
 
 # /capture-adrs
 
 Extract ADR-worthy decisions from a finalized spec or plan, get
-per-candidate user approval, file `bd` decision records, and write
-ADR files under `docs/adr/`. Stamp the spec with a content-hash marker
-when done.
+per-candidate user approval, and write ADR files under `docs/adr/`.
+Stamp the spec with a content-hash marker when done.
+
+> ADR ids keep the historical `holomush-<suffix>` shape (the format
+> `adr-doctor.sh` validates) but are self-minted — the beads tracker
+> that used to allocate them was retired 2026-07-09.
 
 Full design: `docs/superpowers/specs/2026-05-13-adr-capture-skill-design.md`.
 
@@ -64,7 +67,7 @@ Decide in this order (first match wins):
    with message naming the reason. `--re-run` does NOT override
    opt-out. Exit.
 2. **Fresh:** marker has `sha256=<hex>` matching current AND no
-   `--re-run` → print "Already captured." + listed bd-ids from
+   `--re-run` → print "Already captured." + listed ADR ids from
    `adrs=...`. Exit.
 3. **Proceed:** marker missing, malformed, or SHA mismatched.
 
@@ -115,7 +118,7 @@ Present `AskUserQuestion` with:
 - `question`: `"ADR candidate <i>/<n>: <title>"`
 - `header`: `"ADR <i>/<n>"` (truncate to 12 chars)
 - `options`:
-  - **Accept** — "Write this ADR + file bd decision record"
+  - **Accept** — "Write this ADR"
   - **Skip** — "Drop this candidate (logged in report)"
   - **Edit** — "Refine fields before accepting"
   - **Show full context** — "Display spec excerpt + transcript quotes"
@@ -138,32 +141,32 @@ For each accepted candidate, in order:
    the spec — Context, Decision, Rationale, Alternatives Considered,
    Consequences, References — with the `**Date:**`, `**Status:**`,
    `**Deciders:**` header.
-2. Run, piping the body via stdin (avoids shell-quoting fragility for
-   titles containing apostrophes, double-quotes, or other characters):
+2. Mint the ADR id — `holomush-` + 5 random base36 chars, collision-checked
+   against existing files:
 
    ```bash
-   printf '%s' "$body" | bd create -t decision --validate --title "<title>" --stdin
+   while :; do
+     id="holomush-$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 5)"
+     ls docs/adr/"$id"-* >/dev/null 2>&1 || break
+   done
+   touch "docs/adr/$id-.reserved.md"   # claim the id now; replaced in step 5
    ```
 
-   Capture the `holomush-XXXX` ID from stdout. On validate failure,
-   abort this candidate (other candidates continue); report at end.
+   (Cross-worktree uniqueness relies on the random suffix — the collision
+   check only sees the current worktree.)
+
 3. Compute slug: kebab-case of title, drop stop-words (a, an, the,
    for, of, to, in, on, with), cap 60 chars.
-4. Prepend `**Decision:** <bd-id>` line below the `**Status:**` line
+4. Prepend `**Decision:** <adr-id>` line below the `**Status:**` line
    in the body.
-5. Write `docs/adr/<bd-id>-<slug>.md` with the full body.
-6. If candidate has `supersedes: <existing-bd-id>`:
-
-   ```bash
-   bd dep add <new-bd-id> <existing-bd-id> --type supersedes
-   bd close <existing-bd-id> --reason "Superseded by <new-bd-id>"
-   ```
-
-   Rewrite the superseded file's `**Status:**` to `Superseded by <new-bd-id>`.
+5. Write `docs/adr/<adr-id>-<slug>.md` with the full body and delete the
+   `<adr-id>-.reserved.md` placeholder.
+6. If candidate has `supersedes: <existing-adr-id>`: rewrite the
+   superseded file's `**Status:**` to `Superseded by <new-adr-id>`.
 
 ### 8. Regenerate `docs/adr/README.md`
 
-Walk `docs/adr/`. For each non-stub file (`<bd-id>-<slug>.md`), parse
+Walk `docs/adr/`. For each non-stub file (`<adr-id>-<slug>.md`), parse
 `**Date:**`, title, `**Status:**`. Sort by date desc. Rewrite the
 index table between `## Index` and the next `##` header. Preserve the
 migration map between `<!-- BEGIN MIGRATION MAP -->` and `<!-- END
@@ -190,7 +193,7 @@ Print:
 
 ```text
 Captured <N> ADRs:
-  - <bd-id> <title> → docs/adr/<bd-id>-<slug>.md
+  - <adr-id> <title> → docs/adr/<adr-id>-<slug>.md
   ...
 
 Spec marker written. Run `task fmt` then commit when ready.
@@ -200,8 +203,9 @@ Skill MUST NOT commit. User does that.
 
 ## Failure modes
 
-- bd write fails: roll back any file writes for that candidate;
-  continue; report partial.
+- ADR file write fails: roll back any partial writes for that
+  candidate (including its `-.reserved.md` placeholder); continue;
+  report partial.
 - Sub-agent JSON malformed twice: fall back to heuristic-only
   candidates with a warning.
 - Spec modified mid-flow (e.g., user edits during review): abort
@@ -213,5 +217,4 @@ Skill MUST NOT commit. User does that.
 - DO NOT write files before all triage decisions are collected.
   (INV-A1)
 - DO NOT overwrite opt-out markers. (INV-A10)
-- DO NOT call `bd create` without `--validate`. (INV-A3 + INV-A4)
 - DO NOT use a model floor below sonnet for the adr-extractor dispatch.

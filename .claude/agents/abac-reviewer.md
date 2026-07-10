@@ -129,8 +129,9 @@ Before exiting:
 1. Run `Bash` with `date +%Y-%m-%d-%H%M` to get a timestamp. Do NOT guess.
 2. `Write` the full report to
    `.claude/agent-memory/abac-reviewer/reports/<timestamp>-<slug>.md`,
-   where `<slug>` is a short kebab-cased identifier (the beads issue id, PR
-   number, or branch name is fine). `Write` MUST NOT touch any path under
+   where `<slug>` is a short kebab-cased identifier (the GitHub issue number, PR
+   number, or branch name is fine — sanitize to `[a-z0-9-]` first, e.g.
+   `feat/foo` → `feat-foo`). `Write` MUST NOT touch any path under
    review — only the report file.
 3. Your **final message** MUST contain the full output format verbatim —
    every section, every finding with evidence and fix, the verdict block —

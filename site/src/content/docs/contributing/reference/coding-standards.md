@@ -5,7 +5,7 @@ title: "Coding Standards"
 This reference is for contributors writing or reviewing HoloMUSH code. It covers
 Go conventions, testing requirements, build commands, and code style — the rules
 that `task lint` enforces and that reviewers check. For the broader development
-workflow (spec-first, PR process, bead tracking), see the
+workflow (spec-first, PR process, issue tracking), see the
 [Pull Request Guide](/contributing/how-to/pr-guide/).
 
 ## Development Principles

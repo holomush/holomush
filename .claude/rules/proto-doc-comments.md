@@ -35,8 +35,9 @@ plugin/audit→`plugins/core-scenes/audit.go`, hostfunc→`internal/plugin`.
 ## Proto ↔ handler mismatch protocol
 
 If the proto and its handler disagree (ignored field, unimplemented RPC,
-overridden default), file `bd create -t bug` capturing the mismatch and document
-the CURRENT behavior. Do NOT change the schema as part of SP0.
+overridden default), file a GitHub issue (`gh issue create -R holomush/holomush
+--label bug`) capturing the mismatch and document the CURRENT behavior. Do NOT
+change the schema as part of SP0.
 
 ## Adding a new proto
 

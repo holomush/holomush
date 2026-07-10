@@ -21,7 +21,6 @@ To prevent collisions, every Claude Code session runs in its own git worktree un
 - Resolves the main repo from any cwd (via `git rev-parse`)
 - Runs `git fetch origin` first so `origin/main` is fresh
 - Creates the worktree at `<parent>/.worktrees/<name>` on a new branch `<name>` off `origin/main` — or, if a branch `<name>` already exists, attaches the worktree to that existing branch (so a reused name resumes its work rather than resetting)
-- Writes `.beads/redirect` pointing at the main repo's `.beads/` so `bd` works
 - Is idempotent on re-invocation (just prints the existing path)
 
 ```bash
@@ -102,8 +101,6 @@ git branch -d <name>
 ```
 
 ## Troubleshooting
-
-**`bd` fails with "no beads database found"** — the worktree's `.beads/redirect` is missing or stale. Re-run `task workspace:new -- <name>` to self-heal it.
 
 **Stale `origin/main`** — `task workspace:new` always runs `git fetch origin` first, so creating a fresh worktree is the easiest way to get a fresh starting point.
 

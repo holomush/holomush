@@ -57,7 +57,7 @@ handler, then confirm `task lint:proto` passes.
 If you discover that a proto field or RPC and its Go handler disagree (an
 ignored field, an unimplemented RPC, an undocumented default), do the following:
 
-1. File `bd create -t bug` capturing the mismatch.
+1. File a GitHub issue (`gh issue create -R holomush/holomush --label bug`) capturing the mismatch.
 2. Document the CURRENT behavior in the proto comment (not the intended behavior).
 3. Do NOT change the proto schema as part of a documentation PR.
 

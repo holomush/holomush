@@ -28,26 +28,11 @@
         "matcher": "Bash"
       }
     ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "command": "bd prime",
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ],
     "PreToolUse": [
       {
         "hooks": [
           {
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-task-runner.sh",
-            "type": "command"
-          },
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-bd-beads-dir.sh",
             "type": "command"
           },
           {
@@ -59,15 +44,6 @@
       }
     ],
     "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "bd prime",
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      },
       {
         "hooks": [
           {
@@ -143,13 +119,8 @@
       "Edit(~/go/pkg/**)",
       "Edit(.git/**)",
       "Edit(../.worktrees/**)",
-      "Bash(bd prime)",
-      "Bash(bd ready:*)",
-      "Bash(bd show:*)",
-      "Bash(bd list:*)",
-      "Bash(bd dep:*)",
-      "Bash(bd memories:*)",
-      "Bash(bd decision list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
       "Bash(gh pr diff:*)",
@@ -165,8 +136,7 @@
     "excludedCommands": [
       "docker",
       "git",
-      "gh",
-      "bd"
+      "gh"
     ],
     "network": {
       "allowAllUnixSockets": true,

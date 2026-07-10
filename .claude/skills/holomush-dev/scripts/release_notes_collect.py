@@ -75,13 +75,19 @@ def main() -> int:
             out.append(f"- {s}")
     out.append("")
 
-    out.append("## Referenced beads")
+    out.append("## Referenced legacy issue IDs")
     out.append("")
     ids: set[str] = set()
     for s in subjects:
         if EXCLUDE.search(s):
             continue
         ids.update(BEAD.findall(s))
+    # `bd` (the former beads issue tracker) is retired; this project now
+    # tracks work in GitHub Issues. Older commits may still carry legacy
+    # holomush-xxxx ids in their subject line, so the id is still surfaced —
+    # just without enrichment. If a maintainer happens to have `bd` installed
+    # locally (e.g. reading an old Dolt export), enrichment is attempted
+    # best-effort; otherwise this degrades to the bare id.
     have_bd = shutil.which("bd") is not None
     for bead_id in sorted(ids):
         line = bead_id
@@ -98,7 +104,7 @@ def main() -> int:
         out.append(f"- {line}")
     out.append("")
 
-    out.append("## Coverage gaps (no bead ref)")
+    out.append("## Coverage gaps (no legacy issue ref)")
     out.append("")
     for s in subjects:
         if EXCLUDE.search(s):
@@ -110,7 +116,7 @@ def main() -> int:
     out.append("## Roadmap theme sections")
     out.append("")
     out.append("Consult docs/roadmap.md for theme:* sections; the model maps referenced")
-    out.append("beads' theme labels to the relevant narrative headings.")
+    out.append("legacy issue ids' theme labels to the relevant narrative headings.")
 
     print("\n".join(out))
     return 0

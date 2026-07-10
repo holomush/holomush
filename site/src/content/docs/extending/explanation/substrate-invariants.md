@@ -17,7 +17,7 @@ approved substrate-facing packages (`pkg/plugin/*`, generated proto under
 `pkg/proto/`). That is the complete permitted footprint.
 
 If your plugin needs a substrate capability that does not yet exist, that
-substrate change is **separate work**: its own bead, its own PR, its own review
+substrate change is **separate work**: its own issue, its own PR, its own review
 gate. Bundling a substrate change inside a plugin PR is forbidden — it bypasses
 the substrate review gates (`crypto-reviewer`, `abac-reviewer`, `code-reviewer`).
 

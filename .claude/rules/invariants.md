@@ -77,7 +77,7 @@ An invariant is only *proven* when a test asserts it. The mechanism:
 
 | Requirement | Rule |
 | --- | --- |
-| **MUST NOT** fabricate a binding | If no test genuinely asserts the invariant, that is a real coverage gap — file `bd create -t bug` and leave it `binding: pending`. A `// Verifies:` on a test that doesn't actually prove the invariant is a false-green (this is precisely what bug `holomush-0sh1k`/INV-RB-3 was, and INV-PRIVACY-7 bound to a `Skip()` placeholder). |
+| **MUST NOT** fabricate a binding | If no test genuinely asserts the invariant, that is a real coverage gap — file a coverage bug via `gh issue create -R holomush/holomush --title "coverage gap: INV-<SCOPE>-N unbound" --body "<details>" --label bug` and leave it `binding: pending`. A `// Verifies:` on a test that doesn't actually prove the invariant is a false-green (this is precisely what bug `holomush-0sh1k`/INV-RB-3 was, and INV-PRIVACY-7 bound to a `Skip()` placeholder). |
 | **MUST NOT** bind a `Skip`/placeholder test | `TestBoundInvariantsAreGenuinelyAsserted` fails CI if a `bound` entry's every `// Verifies:` site is a Skip-only placeholder with no assertion. Note its limit: it cannot detect a *partial* binding (a test that asserts only one clause of a multi-clause invariant — that needs human review, as INV-PRIVACY-6 did). |
 | **MUST NOT** carry `asserted_by` while pending | The meta-test rejects a `binding: pending` entry that lists `asserted_by` — no fabricated provenance. |
 | **MAY** stay pending | `pending` is a tolerated state (decision `holomush-hz0v4.10`); backfill is a ratchet, not a blocker. Per-scope backfill is tracked under epic `holomush-hz0v4`. |
