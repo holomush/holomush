@@ -169,7 +169,7 @@ closing the single-node ceiling flagged in `.planning/codebase/CONCERNS.md`.
 4. Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being silently dropped
 5. Operator has a documented runbook for external-NATS deployment
 
-**Plans**: 4/9 plans executed
+**Plans**: 5/9 plans executed
 
 Plans:
 **Wave 1** *(foundation — no deps)*
@@ -185,7 +185,7 @@ Plans:
 **Wave 3** *(verification + operator assets)*
 
 - [ ] 03-05-PLAN.md — Multi-node crypto invalidation + hung-replica probe-pill + invariant capstone (CLUSTER-03)
-- [ ] 03-06-PLAN.md — Single-principal account scoping: deploy/nats templates + verify script + boot self-check (CLUSTER-02)
+- [x] 03-06-PLAN.md — Single-principal account scoping: deploy/nats templates + verify script + boot self-check (CLUSTER-02)
 - [ ] 03-07-PLAN.md — DLQ replay CLI (`holomush audit dlq {list,show,replay}`) (CLUSTER-04)
 - [ ] 03-08-PLAN.md — compose.cluster.yaml overlay + multi-process cluster smoke (CLUSTER-03/05)
 
@@ -203,7 +203,7 @@ completion, and platform hardening can proceed in parallel if desired)
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
 | 2. Scenes Lineage Completion | 7/7 | Complete    | 2026-07-09 |
-| 3. Platform Hardening & Deployment Scaling | 4/9 | In Progress|  |
+| 3. Platform Hardening & Deployment Scaling | 5/9 | In Progress|  |
 
 ## Deferred (Not in This Roadmap)
 
