@@ -83,6 +83,12 @@ func (m *mockObservabilityServer) MustRegister(_ ...prometheus.Collector) {
 	// No-op for testing - metrics registration is not needed in unit tests
 }
 
+func (m *mockObservabilityServer) Registerer() prometheus.Registerer {
+	// A fresh registry per call keeps unit tests free of duplicate-registration
+	// panics; the production server returns its own /metrics-served registry.
+	return prometheus.NewRegistry()
+}
+
 // mockGRPCClient implements GRPCClient for testing.
 type mockGRPCClient struct {
 	closeFunc func() error

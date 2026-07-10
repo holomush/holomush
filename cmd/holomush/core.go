@@ -506,11 +506,21 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// MUST run under a supervisor that interprets exit code 125 as
 	// restart-eligible (systemd Restart=on-failure, k8s restartPolicy=Always,
 	// docker restart=on-failure).
-	clusterPillMetrics := cluster.NewPillMetrics(prometheus.DefaultRegisterer)
-	clusterSkewMetrics := cluster.NewSkewMetrics(prometheus.DefaultRegisterer)
-	clusterSelfTimeoutMetrics := cluster.NewSelfTimeoutMetrics(prometheus.DefaultRegisterer)
-	clusterHeartbeatMetrics := cluster.NewHeartbeatMetrics(prometheus.DefaultRegisterer)
-	clusterDuplicateIDMetrics := cluster.NewDuplicateMemberIDMetrics(prometheus.DefaultRegisterer)
+	// Register cluster metrics on the observability server's own registry (the
+	// one /metrics serves) rather than prometheus.DefaultRegisterer, which the
+	// endpoint does NOT serve — otherwise these metrics are silently unscraped
+	// (holomush-cluster-smoke relies on cluster_member_skew_seconds appearing on
+	// /metrics to prove two-member convergence). Falls back to the default
+	// registry when metrics are disabled (obsServer == nil).
+	metricsReg := prometheus.DefaultRegisterer
+	if obsServer != nil {
+		metricsReg = obsServer.Registerer()
+	}
+	clusterPillMetrics := cluster.NewPillMetrics(metricsReg)
+	clusterSkewMetrics := cluster.NewSkewMetrics(metricsReg)
+	clusterSelfTimeoutMetrics := cluster.NewSelfTimeoutMetrics(metricsReg)
+	clusterHeartbeatMetrics := cluster.NewHeartbeatMetrics(metricsReg)
+	clusterDuplicateIDMetrics := cluster.NewDuplicateMemberIDMetrics(metricsReg)
 	clusterSelfID := cluster.MemberID(idgen.New().String())
 	clusterPill := cluster.NewProductionPill(clusterSelfID, slog.Default(), clusterPillMetrics)
 	clusterSub, clusterErr := cluster.NewSubsystem(cluster.Config{
@@ -924,7 +934,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("CRYPTO_DEK_MANAGER_CACHE_ACCESSOR_NOT_SATISFIED").
 				Errorf("dek.NewManager return value does not satisfy dek.CacheAccessor — required for invalidation.Coordinator wiring per Phase 3c grounding Decision 5")
 		}
-		invMetrics := invalidation.NewMetrics(prometheus.DefaultRegisterer)
+		// Same scraped-registry rationale as the cluster metrics above.
+		invMetrics := invalidation.NewMetrics(metricsReg)
 		c, invErr := invalidation.New(invalidation.Config{ClusterID: gameID}, invalidation.Deps{
 			Conn:      eventBusSub.Conn(),
 			Registry:  clusterSub,

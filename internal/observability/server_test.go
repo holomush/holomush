@@ -13,9 +13,45 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestServerRegistererExposesRegisteredMetricsOnMetricsEndpoint verifies that a
+// collector registered through Server.Registerer() is served by the same
+// server's /metrics endpoint — the seam cluster metrics MUST use instead of
+// prometheus.DefaultRegisterer (which /metrics does not serve).
+func TestServerRegistererExposesRegisteredMetricsOnMetricsEndpoint(t *testing.T) {
+	server := NewServer("127.0.0.1:0", func() bool { return true })
+
+	reg := server.Registerer()
+	require.NotNil(t, reg, "Registerer must not be nil")
+
+	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "holomush_registerer_probe",
+		Help: "probe metric registered via Server.Registerer().",
+	})
+	reg.MustRegister(gauge)
+	gauge.Set(1)
+
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Stop(ctx)
+	}()
+
+	resp, err := http.Get("http://" + server.Addr() + "/metrics")
+	require.NoError(t, err, "failed to GET /metrics")
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err, "failed to read response body")
+	assert.Contains(t, string(body), "holomush_registerer_probe",
+		"metric registered via Registerer() must be served by /metrics")
+}
 
 func TestServerMetricsEndpointReturnsPrometheusOutput(t *testing.T) {
 	// Create server with always-ready checker
