@@ -62,9 +62,10 @@ contradictions; neither doc is down-weighted otherwise.
 ## Topic: HoloMUSH strategic roadmap (themes)
 
 - **source:** `docs/roadmap.md`
-- **role:** Narrative doc framing strategic multi-epic work clusters ("themes") as `bd`
-  label complements. Explicitly does NOT duplicate live bead status — that's queried
-  from `bd` directly; this doc captures the *why* and sequencing rationale only.
+- **role:** Narrative doc framing strategic multi-epic work clusters ("themes") as
+  GitHub-issue label complements. Explicitly does NOT duplicate live issue status —
+  that's queried from `gh issue list` directly; this doc captures the *why* and
+  sequencing rationale only. (Was `bd`-backed until the 2026-07-09 tracker migration.)
 - **Active theme: `theme:social-spaces`** — Scenes, Channels, Forums, Discord share one
   substrate (persistent groups with membership, history replay, presence routing,
   subscribed clients). Substrate layers: JetStream event bus (`internal/eventbus/`),
@@ -110,3 +111,24 @@ contradictions; neither doc is down-weighted otherwise.
 - **Maintenance notes (not strategic themes):** repo audit 2026-05-13 (4 read-only
   reports, tracking epics materialized/in-flight); invariant registry binding-backfill
   (epic `holomush-hz0v4`) — cataloging complete, binding is an incremental ratchet.
+
+## Topic: Issue-tracking migration (beads → GitHub Issues + GSD backlog)
+
+- **source:** `.planning/archive/beads/` (README.md, TRIAGE.md, exports) — added by the
+  2026-07-09 migration, merged into this intel set per the ingest-docs merge shape.
+- **role:** On 2026-07-09 the beads (bd) issue tracker was retired. Its 5,894-record
+  export is archived (gzipped full export + plain live-508 subset). Every non-closed
+  bead was triaged — code-grounded audit for bugs/P1/in_progress (140), metadata triage
+  for the rest (368) — and routed: **179 GitHub issues** (discrete actionable work,
+  labeled `migrated-from-beads`, body carries `Migrated from bead <id>`), **95 backlog
+  items** consolidated into **17 ROADMAP `## Backlog` 999.x entries** (strategic
+  clusters: web portal, channels/scenes remainders, forums, discord, architecture
+  decomposition, invariant backfill, code health, ops resilience, design seeds, docs,
+  features, iOS), **1 item** mapped to existing Phase 3 (external NATS, `holomush-s5ts`),
+  and **234 archive-only** (verified-done, stale, duplicate, deferred, or aged-out —
+  recoverable from the export).
+- **downstream implications:** discovered work is filed with `gh issue create -R
+  holomush/holomush`; strategic clusters go to ROADMAP `## Backlog`; `theme:<slug>`
+  labels now live on GitHub issues; ADRs are self-minted `holomush-<suffix>` ids (bd no
+  longer allocates them); historical `holomush-xxxx` citations in specs/plans/commits
+  resolve via the archive.

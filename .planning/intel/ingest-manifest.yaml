@@ -101,3 +101,8 @@ docs:
     type: SPEC
   - path: docs/superpowers/specs/2026-05-19-presence-snapshot-design.md
     type: SPEC
+  # beads → GitHub Issues migration (2026-07-09), merged post-ingest
+  - path: .planning/archive/beads/README.md
+    type: DOC
+  - path: .planning/archive/beads/TRIAGE.md
+    type: DOC
