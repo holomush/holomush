@@ -169,13 +169,13 @@ closing the single-node ceiling flagged in `.planning/codebase/CONCERNS.md`.
 4. Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being silently dropped
 5. Operator has a documented runbook for external-NATS deployment
 
-**Plans**: 1/9 plans executed
+**Plans**: 2/9 plans executed
 
 Plans:
 **Wave 1** *(foundation — no deps)*
 
 - [x] 03-01-PLAN.md — EventBus config reconciliation (ModeExternal/URL/Credentials/TLS/Provision/DLQ) + fail-closed `Validate()` (CLUSTER-01)
-- [ ] 03-02-PLAN.md — External-NATS testcontainer harness (per-replica conns) + test-tier rule amendment (CLUSTER-03 substrate)
+- [x] 03-02-PLAN.md — External-NATS testcontainer harness (per-replica conns) + test-tier rule amendment (CLUSTER-03 substrate)
 
 **Wave 2** *(build on config + harness)*
 
@@ -203,7 +203,7 @@ completion, and platform hardening can proceed in parallel if desired)
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
 | 2. Scenes Lineage Completion | 7/7 | Complete    | 2026-07-09 |
-| 3. Platform Hardening & Deployment Scaling | 1/9 | In Progress|  |
+| 3. Platform Hardening & Deployment Scaling | 2/9 | In Progress|  |
 
 ## Deferred (Not in This Roadmap)
 
