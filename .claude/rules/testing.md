@@ -10,6 +10,7 @@ paths:
   - "**/testutil/**/*.go"
   - "**/policytest/**/*.go"
   - "**/eventbustest/**/*.go"
+  - "**/natstest/**/*.go"
   - "**/mocks/**/*.go"
 ---
 
@@ -87,6 +88,7 @@ Test engines: policytest.GrantEngine / AllowAll / DenyAll / ErrorEngine — exam
 | bus-integration | embedded NATS (`eventbustest`) | `task test:int` | `//go:build integration` |
 | audit-integration | embedded NATS + Postgres testcontainer | `task test:int` | `//go:build integration` |
 | full-stack integration | embedded NATS + Postgres + `CoreServer` (+ optional in-tree plugins via `WithInTreePlugins()`) | `task test:int` | `//go:build integration` |
+| external-NATS integration | a **real** single-node NATS JetStream container + per-replica `*nats.Conn` (`internal/testsupport/natstest`), + Postgres/`CoreServer` as needed | `task test:int` | `//go:build integration` |
 | **E2E** | full Docker stack driven through a real client (browser) | `task test:e2e` | (Playwright) |
 
 "E2E" means the Playwright browser suite — a test that crosses the real user
@@ -94,7 +96,17 @@ boundary. The Ginkgo `test:int` suite is **integration** (it calls Go/gRPC APIs
 in-process), regardless of how much of the stack it stands up. Use "E2E" only
 for the Playwright suite; Go Ginkgo suites are "integration".
 
-Production code MUST NOT import `eventbustest` or `internal/core/coretest` — enforced by the depguard rule in `.golangci.yaml`.
+**Embedded NATS (`eventbustest`) is the correct harness at every tier EXCEPT
+external-mode-specific behavior** — external dial / fail-closed boot, single-
+principal account scoping, multi-node per-replica crypto invalidation, and DLQ
+against a real broker. That behavior MUST be verified against a **real** NATS
+container via `internal/testsupport/natstest`, because it needs N HoloMUSH
+replicas each with an INDEPENDENT connection to one external broker — a shape
+the shared in-process `eventbustest` connection cannot express. Embedded stays
+correct for everything else.
+
+Production code MUST NOT import `eventbustest`, `internal/core/coretest`, or
+`internal/testsupport/natstest` — enforced by the depguard rule in `.golangci.yaml`.
 
 ### Quarantine
 

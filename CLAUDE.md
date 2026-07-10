@@ -187,7 +187,7 @@ Detail in `.claude/rules/testing.md` (auto-loads on test files): coverage, ACE n
 | **MUST** maintain >80% coverage                   | Per-package; verify with `task test:cover`                                                                               |
 | **MUST** use Ginkgo/Gomega for full-stack integration tests | Build tag `//go:build integration`; runs via `task test:int`                                               |
 | **MUST** run `task test:int` on refactors         | `task test` does NOT compile integration files — refactors of shared types break silently otherwise                      |
-| **MUST NOT** import `eventbustest`/`coretest` in production code | Production code MUST NOT import `eventbustest`/`coretest` (depguard-enforced); embedded NATS is correct at every test tier |
+| **MUST NOT** import `eventbustest`/`coretest`/`natstest` in production code | Production code MUST NOT import `eventbustest`/`coretest`/`natstest` (depguard-enforced); embedded NATS is correct at every test tier EXCEPT external-mode-specific behavior (external dial/fail-closed boot, single-principal scoping, multi-node per-replica invalidation, DLQ against a real broker), which MUST use a real NATS container via `internal/testsupport/natstest` |
 
 Session-store tests need Docker even under `task test` — MUST use `sessiontest.NewStore(t)`; the deliberate SharedPostgres exception. Details: [integration-tests how-to](site/src/content/docs/contributing/how-to/integration-tests.md).
 
