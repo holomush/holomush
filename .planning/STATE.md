@@ -4,11 +4,10 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 3
 current_phase_name: Platform Hardening & Deployment Scaling
-status: completed
+status: "Phase 1+2 shipped — PR #4595 (v1.0 milestone; Phase 3 pending)"
 stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-07-09T19:48:47.944Z"
-last_activity: 2026-07-09
-last_activity_desc: Phase 02 complete, transitioned to Phase 3
+last_updated: "2026-07-10T01:24:41.938Z"
+last_activity: 2026-07-10
 progress:
   total_phases: 3
   completed_phases: 2
@@ -32,8 +31,8 @@ trusted identically.
 
 Phase: 3 — Platform Hardening & Deployment Scaling
 Plan: Not started
-Status: 02-07 complete
-Last activity: 2026-07-10 — Completed quick task 260709-sqg: core-channels TIMESTAMPTZ→BIGINT (holomush-9hygy)
+Status: Phase 1+2 shipped — PR #4595 (v1.0 milestone; Phase 3 pending)
+Last activity: 2026-07-10
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
 `/gsd-map-codebase` static analysis and live `bd`/codebase verification of shipped vs. forward scope.
 
