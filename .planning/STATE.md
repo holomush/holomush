@@ -33,7 +33,7 @@ trusted identically.
 Phase: 3 — Platform Hardening & Deployment Scaling
 Plan: Not started
 Status: 02-07 complete
-Last activity: 2026-07-09 — Phase 02 complete, transitioned to Phase 3
+Last activity: 2026-07-10 — Completed quick task 260709-sqg: core-channels TIMESTAMPTZ→BIGINT (holomush-9hygy)
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
 `/gsd-map-codebase` static analysis and live `bd`/codebase verification of shipped vs. forward scope.
 
@@ -121,6 +121,12 @@ None yet.
 - 259/334 registered invariants are `binding: pending` (concentrated in INV-CRYPTO and INV-SCENE) — tracked
   epic `holomush-hz0v4`, not a blocker, but phases touching crypto/scenes should bind relevant invariants as
   part of their own definition of done
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260709-sqg | Fix holomush-9hygy — convert core-channels migrations TIMESTAMPTZ→BIGINT epoch-ns (lint:no-timestamptz ship blocker) | 2026-07-10 | 1284ba341 | [260709-sqg-…](./quick/260709-sqg-fix-bead-holomush-9hygy-convert-core-cha/) |
 
 ## Deferred Items
 
