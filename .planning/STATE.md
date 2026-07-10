@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 3
-current_phase_name: Platform Hardening & Deployment Scaling
-status: "Phase 1+2 shipped — PR #4595 (v1.0 milestone; Phase 3 pending)"
+current_phase: 03
+current_phase_name: platform-hardening-deployment-scaling
+status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-07-10T19:26:53.926Z"
+last_updated: "2026-07-10T19:47:12.964Z"
 last_activity: 2026-07-10
-last_activity_desc: Phase 03 planning complete
+last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 17
+  total_plans: 26
   completed_plans: 17
-  percent: 67
+  percent: 65
 ---
 
 # Project State
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 02 — Scenes Lineage Completion
+**Current focus:** Phase 03 — platform-hardening-deployment-scaling
 
 ## Current Position
 
-Phase: 3 — Platform Hardening & Deployment Scaling
-Plan: Not started
-Status: Phase 1+2 shipped — PR #4595 (v1.0 milestone; Phase 3 pending)
-Last activity: 2026-07-10 — Phase 03 planning complete
+Phase: 03 (platform-hardening-deployment-scaling) — EXECUTING
+Plan: 2 of 9
+Status: Ready to execute
+Last activity: 2026-07-10 — Phase 03 execution started
 narratives) synthesized into PROJECT.md/REQUIREMENTS.md/ROADMAP.md, grounded against a prior
 `/gsd-map-codebase` static analysis and live `bd`/codebase verification of shipped vs. forward scope.
 
@@ -77,6 +77,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P04 | ~35m | 3 tasks | 5 files |
 | Phase 02 P05 | 55m | 3 tasks | 28 files |
 | Phase 02 P07 | ~35m | 3 tasks | 5 files |
+| Phase 03 P01 | ~35m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,7 @@ Full decision log lives in PROJECT.md "Key Decisions". Recent decisions affectin
 - [Phase 02]: 02-04: mute/notify-pref suppression at the SCENE_ACTIVITY badge downgrade via a dependency-inverted SceneMuteChecker (interface in server.go, concrete wired at sub_grpc.go); order global-notify-off then per-scene-muted then deliver; per-character 45s TTL cache, loader off-lock; fail-OPEN on nil/error (preferences, not access control); loader dials plugin SceneService with host-vouched actor+ownerPlayerID via BeginServiceDispatch.
 - [Phase ?]: 02-05: Web mute/notify shipped as a 4-layer typed slice (proto->facade->BFF->client); facade stamps CharacterId from the verified owned character so the plugin guard passes; never the command path (gateway-boundary).
 - [Phase ?]: 02-05: Tasks 1+2 merged into one commit — monolithic proto regen couples the WebServiceHandler interface, so facade + BFF impls land together (Plan 03 precedent).
+- [Phase ?]: Provision uses *bool + IsProvision() (mirrors CryptoConfig) so provision:false survives Defaults() — D-03 opt-out seam
 
 ### Pending Todos
 
@@ -140,9 +142,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-10T17:38:47.071Z
+Last session: 2026-07-10T19:47:12.959Z
 prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
 review/approval.
 Stopped at: Phase 3 context gathered
 Hardening & Deployment Scaling); awaiting user approval before `/gsd-plan-phase 1`.
-Resume file: .planning/phases/03-platform-hardening-deployment-scaling/03-CONTEXT.md
+Resume file: None

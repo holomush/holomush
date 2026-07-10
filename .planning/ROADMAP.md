@@ -169,7 +169,7 @@ closing the single-node ceiling flagged in `.planning/codebase/CONCERNS.md`.
 4. Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being silently dropped
 5. Operator has a documented runbook for external-NATS deployment
 
-**Plans**: 9 plans
+**Plans**: 0/9 plans executed
 
 Plans:
 **Wave 1** *(foundation — no deps)*
@@ -203,7 +203,7 @@ completion, and platform hardening can proceed in parallel if desired)
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
 | 2. Scenes Lineage Completion | 7/7 | Complete    | 2026-07-09 |
-| 3. Platform Hardening & Deployment Scaling | 0/9 | Planned | - |
+| 3. Platform Hardening & Deployment Scaling | 0/9 | Planned    |  |
 
 ## Deferred (Not in This Roadmap)
 
