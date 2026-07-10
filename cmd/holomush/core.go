@@ -137,6 +137,10 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, &eventBusConfig, "event_bus"); err != nil {
 				return err
 			}
+			eventBusConfig = eventBusConfig.Defaults()
+			if err := eventBusConfig.Validate(); err != nil {
+				return err
+			}
 			cryptoConfig := config.DefaultCryptoConfig()
 			if err := config.Load(configFile, cmd, &cryptoConfig, "crypto"); err != nil {
 				return err

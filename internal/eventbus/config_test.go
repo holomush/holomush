@@ -16,7 +16,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/pkg/errutil"
 )
+
+func TestConfigValidateExternalModeEmptyURLFailsClosed(t *testing.T) {
+	cfg := eventbus.Config{Mode: eventbus.ModeExternal, URL: ""}
+	errutil.AssertErrorCode(t, cfg.Validate(), "EVENTBUS_CONFIG_INVALID")
+}
+
+func TestConfigValidateExternalModeWithURLIsValid(t *testing.T) {
+	cfg := eventbus.Config{Mode: eventbus.ModeExternal, URL: "nats://x:4222"}
+	assert.NoError(t, cfg.Validate())
+}
+
+func TestConfigValidateEmbeddedModeIgnoresURL(t *testing.T) {
+	cfg := eventbus.Config{Mode: eventbus.ModeEmbedded}
+	assert.NoError(t, cfg.Validate(),
+		"embedded mode validates regardless of URL")
+}
 
 func TestConfigDefaultsUnsetModeResolvesToEmbedded(t *testing.T) {
 	cfg := eventbus.Config{}.Defaults()
