@@ -93,14 +93,14 @@ def test_keeps_scoped_docs_commits(repo):
 
 def test_reports_coverage_gaps(repo):
     p = run_collect(repo, "v0.2.0")
-    assert "## Coverage gaps (no bead ref)" in p.stdout
+    assert "## Coverage gaps (no legacy issue ref)" in p.stdout
     assert "feat(session): liveness leases" in p.stdout
 
 
 def test_emits_all_sections_when_no_bead_refs(repo):
     p = run_collect(repo, "v0.3.0")
     assert p.returncode == 0
-    assert "## Coverage gaps (no bead ref)" in p.stdout
+    assert "## Coverage gaps (no legacy issue ref)" in p.stdout
     assert "## Roadmap theme sections" in p.stdout
     assert "feat(telnet): keepalive pings" in p.stdout
 
