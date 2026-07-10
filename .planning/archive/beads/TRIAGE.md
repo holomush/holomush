@@ -28,7 +28,7 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4602 | `holomush-3y6l` | P1 | engine.Evaluate audit-log failures downgraded to Warn with no signal to callers |
 | #4603 | `holomush-4m7x` | P1 | ABAC integration test fixtures missing engine wiring |
 | #4604 | `holomush-71zq.12` | P1 | Design issue: SIGKILL of holder PID does not release lock if descendants survive |
-| #4605 | `holomush-7b9n` | P1 | F-E12 chain-verification E2E flake: operator_read_completed audit row times out under load (10s Eventually too |
+| #4605 | `holomush-7b9n` | P1 | F-E12 chain-verification E2E flake: operator_read_completed audit row times out under load (10s Eventually too tight) |
 | #4606 | `holomush-brlb` | P1 | No IP-based rate limiting on authentication endpoints |
 | #4607 | `holomush-dqd1` | P1 | iwzt amended-spec privacy tests: ReattachWithinTTL + TTLExpiryFreshFloor |
 | #4608 | `holomush-eii4` | P1 | Observability server: failed Shutdown restores running=true with HTTP server in undefined state |
@@ -41,7 +41,7 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4615 | `holomush-tnxo` | P1 | GRPCServer concurrent lifecycle race tests (Start + Stop) |
 | #4616 | `holomush-ub4o` | P1 | ABAC Phase 7.7 production bug cluster (resolver re-entrance, circuit breaker, schema validation) |
 | #4617 | `holomush-vakk` | P1 | Move plugin-domain payload structs out of internal/core/event.go |
-| #4618 | `holomush-w4mf4` | P1 | web: authed terminal route not responsive on mobile — TopBar header overflows, disconnect-screen text clips, t |
+| #4618 | `holomush-w4mf4` | P1 | web: authed terminal route not responsive on mobile — TopBar header overflows, disconnect-screen text clips, terminal pane collapses to a narrow strip |
 | #4619 | `holomush-wm0fi.1` | P1 | ConnectionFocusCache: generation-guarded focus cache with FIFO size cap |
 | #4620 | `holomush-wm0fi.2` | P1 | Cache-first FocusReader + focus_cache hit/miss metrics |
 | #4621 | `holomush-wm0fi.3` | P1 | Caching session.Store decorator evicting at the write chokepoint |
@@ -59,7 +59,7 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4633 | `holomush-16y9p` | P2 | Audit non-Internal gRPC error leaks in core-scenes (FailedPrecondition %v on oops) |
 | #4634 | `holomush-1rcjo` | P2 | Add parse-only mermaid lint to the docs lane (catch broken diagrams pre-merge) |
 | #4635 | `holomush-201s9` | P2 | render-adr emits YAML frontmatter title that fails repo markdown lint |
-| #4636 | `holomush-23q2w` | P2 | Bring service-kind capability injection under the resolver grant set (consistency with brokered RequiredCapabi |
+| #4636 | `holomush-23q2w` | P2 | Bring service-kind capability injection under the resolver grant set (consistency with brokered RequiredCapabilities) |
 | #4637 | `holomush-2p1bx` | P2 | CI: cache e2e web toolchain (pnpm) + verify Namespace profile cache toggles |
 | #4638 | `holomush-3d9o` | P2 | Scenes: in-band signal when reconnect drops focus due to revoked membership |
 | #4639 | `holomush-44n9` | P2 | Policy attribute validation at compile time |
@@ -69,7 +69,7 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4643 | `holomush-5rh.32` | P2 | scene composer ignores leading pose/say/OOC sigils — sends raw text, leaking ':' / '"' into content |
 | #4644 | `holomush-61jl` | P2 | Drop HTTP/1.1: gateway requires HTTP/2 for all connections |
 | #4645 | `holomush-62gy` | P2 | Review polymorphic command capability declarations |
-| #4646 | `holomush-6m9rr` | P2 | Flaky E2E recurrence: scenes.spec.ts 'second tab does not disturb terminal stream' — CI-budget branch may not  |
+| #4646 | `holomush-6m9rr` | P2 | Flaky E2E recurrence: scenes.spec.ts 'second tab does not disturb terminal stream' — CI-budget branch may not apply |
 | #4647 | `holomush-6ofl` | P2 | Startup coverage for cmd/holomush/{core,sub_grpc}.go |
 | #4648 | `holomush-6uvc` | P2 | stream_registry honors explicit ReplayMode instead of silently downgrading |
 | #4649 | `holomush-7kl40` | P2 | cryptoActive can be false despite provisioned KEK when rekey wiring deps incomplete |
@@ -84,7 +84,7 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4658 | `holomush-bpir8.3` | P2 | CommunicationLine.svelte channel-prefix branches for say and pose have no test coverage |
 | #4659 | `holomush-cv1qh` | P2 | Acquire a project-tuned Svelte + shadcn UI dev skill (encode web/CLAUDE.md design-system conventions) |
 | #4660 | `holomush-dj95.10` | P2 | Document permitted Lua/binary asymmetries in plugin-runtime-symmetry.md |
-| #4661 | `holomush-e77ti.1` | P2 | TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient asserts non-nil injection only — no end-to-end s |
+| #4661 | `holomush-e77ti.1` | P2 | TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient asserts non-nil injection only — no end-to-end sink exercised |
 | #4662 | `holomush-ec22.10` | P2 | Code quality: standardize on oops at boundaries — three packages still use bare fmt.Errorf |
 | #4663 | `holomush-ec22.11` | P2 | Code quality: hostfunc context-fallback duplicated 13+ sites — apply existing helpers |
 | #4664 | `holomush-ec22.12` | P2 | Code quality: magic values + silent cursor-encode failures |
@@ -112,9 +112,9 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4686 | `holomush-jb1ec` | P2 | Meta-test walker descends into .claude/worktrees, causing spurious INV-FS-4 failures |
 | #4687 | `holomush-k2hbr` | P2 | Extend INV-ROPS-3 colon-stream scan to web/e2e Playwright specs (*.ts) |
 | #4688 | `holomush-knnrj` | P2 | Wire scene creation + core-scenes command path into the integrationtest harness |
-| #4689 | `holomush-kriap` | P2 | rumdl tooling drift: brew installs 0.2.4 but CI pins v0.1.62 — local fast lane can't catch CI docs-lint failur |
+| #4689 | `holomush-kriap` | P2 | rumdl tooling drift: brew installs 0.2.4 but CI pins v0.1.62 — local fast lane can't catch CI docs-lint failures |
 | #4690 | `holomush-ksf12` | P2 | describe me / describe here broken: no host-side 'character' entity mutator |
-| #4691 | `holomush-l6std` | P2 | plugin.proto: PluginHostService Log/KVGet/KVSet/KVDelete/AddSessionStream/RemoveSessionStream RPCs are declare |
+| #4691 | `holomush-l6std` | P2 | plugin.proto: PluginHostService Log/KVGet/KVSet/KVDelete/AddSessionStream/RemoveSessionStream RPCs are declared but unserved |
 | #4692 | `holomush-mcqs9` | P2 | Remove inner-error leaks from non-Internal gRPC status returns in core-scenes |
 | #4693 | `holomush-mlko` | P2 | Review pgx pool and PostgreSQL connection settings for plugin architecture |
 | #4694 | `holomush-nmvf` | P2 | KV hostfunc: log decision reason on denial (currently silently dropped) |
@@ -126,15 +126,15 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4700 | `holomush-q825` | P2 | Wire KEK provider into production core.go (mirror admin CLI's file-source pattern) |
 | #4701 | `holomush-qg1v5` | P2 | Integration test: real core-communication page/whisper/pemit emit Sensitive=true & encrypt with crypto enabled |
 | #4702 | `holomush-qik8d` | P2 | Migrate test/integration/crypto/readback_test.go to Ginkgo/Gomega |
-| #4703 | `holomush-qyrbn` | P2 | ADR beads diverge from render-adr output — /adr update/supersede/render would corrupt legacy & retroactively-c |
+| #4703 | `holomush-qyrbn` | P2 | ADR beads diverge from render-adr output — /adr update/supersede/render would corrupt legacy & retroactively-captured ADRs |
 | #4704 | `holomush-rooy` | P2 | Plugin-installed policies bypass seed-coverage validator (holomush-xxel scope gap) |
 | #4705 | `holomush-s7zi` | P2 | Add integration tests for transactional cascade deletion |
 | #4706 | `holomush-sh6x` | P2 | Remove unused Functions.RegisterWithEmitCapture API + tests (post jg9b.3 capture-pass narrowing) |
 | #4707 | `holomush-tmfi` | P2 | Plugin developer docs for commands[].aliases field |
-| #4708 | `holomush-tn3cv` | P2 | core-channels: banned/kicked member keeps receiving live channel events until reconnect (no stream eviction on |
+| #4708 | `holomush-tn3cv` | P2 | core-channels: banned/kicked member keeps receiving live channel events until reconnect (no stream eviction on moderation) |
 | #4709 | `holomush-tu3s` | P2 | Audit logger: differentiate ModeMinimal from ModeDenialsOnly (identical implementations) |
 | #4710 | `holomush-vfje` | P2 | PluginProvider.SetRegistry race — use atomic.Pointer for plugin registry |
-| #4711 | `holomush-vr6yo` | P2 | proto comment: MUST NOT declare AttributeResolverService in provides — contradicted by test-abac-widget/plugin |
+| #4711 | `holomush-vr6yo` | P2 | proto comment: MUST NOT declare AttributeResolverService in provides — contradicted by test-abac-widget/plugin.yaml |
 | #4712 | `holomush-w6bue` | P2 | E2E: scene extend command-path via integrationtest (Ginkgo/Gomega) |
 | #4713 | `holomush-w7u5` | P2 | Unify plugin alias pgxpool with shared database pool |
 | #4714 | `holomush-wfjxh` | P2 | Add real-store test for workspaceStore.isFocusReady flip-after-await ordering (T7 race fix) |
@@ -150,7 +150,7 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4724 | `holomush-2py0c` | P3 | Bind INV-PLUGIN-43 cycle sub-clause with a boot-level cycle test |
 | #4725 | `holomush-431pp` | P3 | CI: cache build/plugins artifacts across jobs |
 | #4726 | `holomush-44gqn` | P3 | INV-TS lint guards fail-open when rg is missing/errors |
-| #4727 | `holomush-4g0gt` | P3 | Web unary RPC handlers log benign client cancellation (context.Canceled) at ERROR; streaming path already down |
+| #4727 | `holomush-4g0gt` | P3 | Web unary RPC handlers log benign client cancellation (context.Canceled) at ERROR; streaming path already downgrades |
 | #4728 | `holomush-5rh.28` | P3 | Scenes web theme: light mode lacks the pop/brightness of dark mode |
 | #4729 | `holomush-71xyn` | P3 | Web-BFF/typed-RPC channel create: trusted owner-player-id for per-player rate limiting |
 | #4730 | `holomush-72ti5` | P3 | Meta-test: every in-tree sensitivity:always Lua plugin must claim sensitive=true at emit sites |
@@ -161,9 +161,9 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4735 | `holomush-ci23e` | P3 | Add wholesystem census negative arm: under-declaring fixture binary plugin must fail load (INV-PLUGIN-54) |
 | #4736 | `holomush-djhor` | P3 | Stale Status headers on implemented specs mislead readers/analyzers — refresh with completion pointers |
 | #4737 | `holomush-dokzt` | P3 | policy CreateBatch emits no oops code on constraint failure |
-| #4738 | `holomush-dt60a` | P3 | Plugin dependency model polish: typed UnsatisfiedDep.Reason, RequiresDisplay zero-Kind format, VERSION optiona |
+| #4738 | `holomush-dt60a` | P3 | Plugin dependency model polish: typed UnsatisfiedDep.Reason, RequiresDisplay zero-Kind format, VERSION optional consistency, fail-fast CHANGELOG/upgrade-guide |
 | #4739 | `holomush-e0lbe` | P3 | commit-lint PR-title check doesn't re-run on title edit (missing 'edited' trigger) |
-| #4740 | `holomush-e77ti.2` | P3 | host_capability_servers_test.go: broker registration test checks 9 services but omits WorldService, PropertySe |
+| #4740 | `holomush-e77ti.2` | P3 | host_capability_servers_test.go: broker registration test checks 9 services but omits WorldService, PropertyService, SessionService which are in proto but not registered |
 | #4741 | `holomush-ec22.28` | P3 | CI: nightly soak has no failure notification — failures invisible |
 | #4742 | `holomush-fb5i0` | P3 | Harden luabridge.pushBridgeError against fmt-wrapped status errors (latent opacity leak) |
 | #4743 | `holomush-fdu2b` | P3 | Register terminal scene-command guest-deny as a named invariant |
@@ -171,14 +171,14 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4745 | `holomush-fycpp` | P3 | Binary forged-dispatch-rejection: whole-system e2e once a scope-eligible binary capability exists |
 | #4746 | `holomush-hhysa` | P3 | Reject cross-gameID qualified stream subjects at read/subscribe entry (defense-in-depth) |
 | #4747 | `holomush-hqzc3` | P3 | jj amend force-push to a PR branch does not re-trigger path-filtered ci.yaml (close+reopen to re-fire) |
-| #4748 | `holomush-jq34t` | P3 | page/whisper/pemit: sender echo is direct command output, recipient is an event — unify so both flow through t |
+| #4748 | `holomush-jq34t` | P3 | page/whisper/pemit: sender echo is direct command output, recipient is an event — unify so both flow through the event stream |
 | #4749 | `holomush-jtl99` | P3 | Integration-tier PG fault-injection coverage for dek Store/CheckpointRepo + core-scenes DB-error branches |
 | #4750 | `holomush-k5gk0` | P3 | Validate FocusRedirect.FocusKind against known kinds in CollectFocusRedirects (defense-in-depth) |
 | #4751 | `holomush-kcy5c` | P3 | Bump @bufbuild/protoc-gen-es + bufbuild/es codegen plugin to 2.12.1, regenerate web stubs |
 | #4752 | `holomush-lfy04` | P3 | Route stub service-method @param/@return refs through the collision-aware classNamer |
-| #4753 | `holomush-logk1` | P3 | Flaky: session_store_integration_test.go context-deadline (10s ctx too tight for testcontainer under -race/par |
+| #4753 | `holomush-logk1` | P3 | Flaky: session_store_integration_test.go context-deadline (10s ctx too tight for testcontainer under -race/parallel CI load) |
 | #4754 | `holomush-lvirs` | P3 | Scenes web: unify SceneBoardRow status dot onto sceneStateDotClass helper |
-| #4755 | `holomush-mnm2a` | P3 | render-adr YAML frontmatter output breaks task lint (license-eye header lands above frontmatter; repo ADRs use |
+| #4755 | `holomush-mnm2a` | P3 | render-adr YAML frontmatter output breaks task lint (license-eye header lands above frontmatter; repo ADRs use H1 style) |
 | #4756 | `holomush-obo44` | P3 | Forcible session disconnect: gateway-observed eviction backing for SessionAdmin.DisconnectSession |
 | #4757 | `holomush-oik33` | P3 | Scene mute/notify defense-in-depth: tighten MuteScene + ListCharacterScenes to require vouched metadata |
 | #4758 | `holomush-p0wjp` | P3 | Guard fetchCommandList against stale-session clobber in CommandInput |
@@ -186,10 +186,10 @@ state, label heuristics, judgment pass) for the rest (368).
 | #4760 | `holomush-qd80a` | P3 | web: move restoreSession from +layout.svelte onMount to root +layout.ts load() |
 | #4761 | `holomush-rhnd` | P3 | Graceful degradation can silently mask ABAC policy failures |
 | #4762 | `holomush-seuz` | P3 | RenderingPublisher.Publish rewraps inner error, masking EVENTBUS_PUBLISH_EXPIRED |
-| #4763 | `holomush-tkctt` | P3 | integrationtest.Session.SendCommand omits connection_id — focus-dependent specs must use SendCommandOnConnecti |
+| #4763 | `holomush-tkctt` | P3 | integrationtest.Session.SendCommand omits connection_id — focus-dependent specs must use SendCommandOnConnection |
 | #4764 | `holomush-tlilq` | P3 | Flaky E2E: session-security.spec.ts '11th login evicts the oldest session' (timing) |
 | #4765 | `holomush-uvkks` | P3 | world/grpc_server.go: 4 InvalidArgument returns %v a ULID parse error |
-| #4766 | `holomush-v6sz8` | P3 | Focus-redirect polish: dedup storeFocusReader, typed FocusRedirectTable key, blank-verb test + error-code asse |
+| #4766 | `holomush-v6sz8` | P3 | Focus-redirect polish: dedup storeFocusReader, typed FocusRedirectTable key, blank-verb test + error-code assertions |
 | #4767 | `holomush-w7t5` | P3 | Server-side player preferences |
 | #4768 | `holomush-xtkj2` | P3 | Add unit test: multi-*Aware provider with partial capability declaration (INV-PLUGIN-54) |
 | #4769 | `holomush-y684z` | P3 | Extract shared actorBinding helper for the ~10 duplicated SceneService guard blocks |
@@ -295,7 +295,7 @@ state, label heuristics, judgment pass) for the rest (368).
 - `holomush-hz0v4.16` P3 — Backfill INV-SCENE verification bindings (60 pending)
 - `holomush-hz0v4.17` P3 — Backfill INV-PLUGIN verification bindings (39 pending)
 - `holomush-hz0v4.18` P3 — Backfill INV-EVENTBUS verification bindings (28 pending)
-- `holomush-hz0v4.19` P3 — Backfill non-crypto long-tail verification bindings (STORE/TELEMETRY/ACCESS/SESSION/COMMAND/CLUSTER/PRESENCE, 
+- `holomush-hz0v4.19` P3 — Backfill non-crypto long-tail verification bindings (STORE/TELEMETRY/ACCESS/SESSION/COMMAND/CLUSTER/PRESENCE, 34 pending)
 - `holomush-hz0v4.20` P3 — Re-bind INV-PRIVACY-6 (floor-preservation arm) + INV-PRIVACY-7 (custom history_scope) when test gaps close
 - `holomush-hz0v4.21` P3 — Audit cleanup: reclassify/remove registry entries that fail the invariant bar
 - `holomush-yyn59` P3 — Migrate INV-BRANDING scope (site brand-token invariants)
@@ -360,42 +360,42 @@ Code-grounded evidence cited per bead.
 | `holomush-0sc.10` | Guest auto-join to seeded channels on session creation | plugins/core-channels/main.go:96-143 QuerySessionStreams unions ListDefaultChannels for every session at establishment; guest auto-join implemented via default- |
 | `holomush-0sc.12` | Channel plugin rework on new plugin ABAC architecture | plugins/core-channels/ fully shipped (service.go, store.go, main.go, commands.go, audit.go); blocking deps 275o/6l7l/jg9b.3 all CLOSED. |
 | `holomush-0sc.9` | Channel session subscription wiring | main.go QuerySessionStreams (establish) + service.go:462 unsubscribeLive (leave) implement subscribe/unsubscribe; gag/ungag superseded by mute design (member st |
-| `holomush-2uogn` | Gateway OTLP relay endpoint for browser OpenTelemetry (same-origin, mirrors /api | internal/web/otlp_relay.go (148 lines, NewOTLPRelayHandler) implemented and wired at server.go:106-112 on /api/otlp/v1/traces; otlp_relay_test.go has 9 Test fun |
+| `holomush-2uogn` | Gateway OTLP relay endpoint for browser OpenTelemetry (same-origin, mirrors /api/sentry-relay) | internal/web/otlp_relay.go (148 lines, NewOTLPRelayHandler) implemented and wired at server.go:106-112 on /api/otlp/v1/traces; otlp_relay_test.go has 9 Test fun |
 | `holomush-5rh.19` | Scenes Phase 10: Notifications + telnet edge cases + polish | shipped as GSD Phase 2 Scenes Lineage Completion (ROADMAP.md:53, completed 2026-07-09) |
 | `holomush-685f` | Fix resolver/provider entity ID format mismatch (blocks ABAC integration tests) | internal/access/policy/attribute/resolver.go:365-375 passes full unstripped entityRef to providers; helpers.go:50-61 parseEntityResource expects 'type:id'. No p |
-| `holomush-7uyus` | cog-release.bats setup() depends on developer git signing config — fails non-int | scripts/tests/cog-release.bats:20-21 sets `git config commit.gpgsign false`/`tag.gpgsign false` with hermetic comment; fixed in commit f0812b4e0 (#4542, 2026-06 |
-| `holomush-8daku` | cog-release.bats setup git commit fails under global commit.gpgsign=true (op-ssh | Same underlying bug as holomush-7uyus; fixed by same commit f0812b4e0 (2026-06-29) adding commit.gpgsign false to cog-release.bats setup(), postdates this bead' |
-| `holomush-9s4wv` | bootstrap_seed_secrets.py: multi-line paste corrupts SSH key via terminal bracke | Commit 84a595bce (PR #4211) merged; scripts/bootstrap_seed_secrets.py:150-180 has _ANSI_CSI regex stripping bracketed-paste escapes exactly as the fix plan desc |
-| `holomush-bf5fu` | pnpm check: input-group-addon.svelte type error (Property 'focus' does not exist | web/.../input-group-addon.svelte:47 fixed in commit 8bbdffb8e (2026-07-01): added querySelector<HTMLElement> generic; postdates bead's 2026-06-28 filing. |
-| `holomush-bpy6p` | fix(compose): dev otel-collector unreachable from gateway under dev:obs — add co | compose.yaml:91-101 otel-collector networks now list both `backend` and `frontend`, comment verbatim matches bead's fix ('Mirrors compose.prod.yaml'). |
+| `holomush-7uyus` | cog-release.bats setup() depends on developer git signing config — fails non-interactive pr-prep | scripts/tests/cog-release.bats:20-21 sets `git config commit.gpgsign false`/`tag.gpgsign false` with hermetic comment; fixed in commit f0812b4e0 (#4542, 2026-06 |
+| `holomush-8daku` | cog-release.bats setup git commit fails under global commit.gpgsign=true (op-ssh-sign/1Password unreachable in non-interactive runs) | Same underlying bug as holomush-7uyus; fixed by same commit f0812b4e0 (2026-06-29) adding commit.gpgsign false to cog-release.bats setup(), postdates this bead' |
+| `holomush-9s4wv` | bootstrap_seed_secrets.py: multi-line paste corrupts SSH key via terminal bracketed-paste escapes | Commit 84a595bce (PR #4211) merged; scripts/bootstrap_seed_secrets.py:150-180 has _ANSI_CSI regex stripping bracketed-paste escapes exactly as the fix plan desc |
+| `holomush-bf5fu` | pnpm check: input-group-addon.svelte type error (Property 'focus' does not exist on type 'Element') | web/.../input-group-addon.svelte:47 fixed in commit 8bbdffb8e (2026-07-01): added querySelector<HTMLElement> generic; postdates bead's 2026-06-28 filing. |
+| `holomush-bpy6p` | fix(compose): dev otel-collector unreachable from gateway under dev:obs — add collector to frontend network | compose.yaml:91-101 otel-collector networks now list both `backend` and `frontend`, comment verbatim matches bead's fix ('Mirrors compose.prod.yaml'). |
 | `holomush-buph` | Plugin architecture documentation and test coverage audit | All cited godoc gaps filled (registry.go:12, registered_service.go:17, grpc_proxy.go:18, schema_provisioner.go:25, pkg/plugin/service.go:39, inprocess_conn.go:1 |
-| `holomush-cicf0` | docs-only PRs skip adr-doctor (lint:adr) — ADR-template violations reach main un | Taskfile.yaml pr-prep:docs now runs `task: lint:adr`; ci-docs-skip.yaml comment confirms real lint lane. Fixed by commit 5aaeadcb8 (PR #4283, holomush-3zrvh, 20 |
+| `holomush-cicf0` | docs-only PRs skip adr-doctor (lint:adr) — ADR-template violations reach main unguarded | Taskfile.yaml pr-prep:docs now runs `task: lint:adr`; ci-docs-skip.yaml comment confirms real lint lane. Fixed by commit 5aaeadcb8 (PR #4283, holomush-3zrvh, 20 |
 | `holomush-ec22.4` | Architecture: domain core imports transport types (pkg/proto/holomush/web/v1) | internal/core/registry.go:9,20 now imports corev1 (pkg/proto/holomush/core/v1), not web/v1; commit 'feat(proto): add corev1.RenderingMetadata and EventChannel'  |
-| `holomush-f7kc` | [E5.8.1] Align auth spec with implementation — schema/expiry/migration-number dr | docs/specs/2026-01-25-auth-identity-design.md now shows character_id nullable, token_hash (not token_signature), last_seen_at, 24hr expiry, and migration 000009 |
-| `holomush-kgxh` | NewPlayerToken returns error that can never fail — misleading API (verify if sig | internal/auth/player_token.go does not exist; no NewPlayerToken function anywhere in internal/auth/*.go (only player_session.go). Bead's own acceptance criteria |
+| `holomush-f7kc` | [E5.8.1] Align auth spec with implementation — schema/expiry/migration-number drift | docs/specs/2026-01-25-auth-identity-design.md now shows character_id nullable, token_hash (not token_signature), last_seen_at, 24hr expiry, and migration 000009 |
+| `holomush-kgxh` | NewPlayerToken returns error that can never fail — misleading API (verify if signature still exists) | internal/auth/player_token.go does not exist; no NewPlayerToken function anywhere in internal/auth/*.go (only player_session.go). Bead's own acceptance criteria |
 | `holomush-l2l1` | New arrivals see entire prior history of public locations they join | internal/grpc/scope_floor.go:34-38 streamScopeFloor enforces server-side floor at info.LocationArrivedAt for location streams (holomush-iwzt privacy epic), inde |
 | `holomush-ndbz0` | GetScene/EndScene leak inner error into gRPC status (grpc-errors.md) | plugins/core-scenes/service.go:470 (GetScene) and :778 (EndScene) already use opaque status.Error(codes.Internal,"internal error"), no %v leak |
-| `holomush-nv83` | ABAC resolver: principal.id and resource.id injection (discovered during scenes  | resolver.go:197-215 id-injection fix in place; resolver_test.go has 20+ tests covering it; stable in prod 3 months, no regression reported |
+| `holomush-nv83` | ABAC resolver: principal.id and resource.id injection (discovered during scenes Phase 1) | resolver.go:197-215 id-injection fix in place; resolver_test.go has 20+ tests covering it; stable in prod 3 months, no regression reported |
 | `holomush-p305` | ABAC engine: process-level degradedCount couples independent Engine instances | engine.go:29,66-68,128,414: degraded is per-instance atomic.Bool; IsDegraded/Evaluate unaffected by other engines. Only the Prometheus gauge is process-wide, by |
 | `holomush-qve.5.8` | [E8.3] Terminal UI: render command responses in scrollback | command_response is now a first-class stream event (core/event.go:52, builtins.go:67 DisplayTarget=TERMINAL); terminal +page.svelte routeEvent->appendLine rende |
-| `holomush-tt77` | mergeCallerHeaders reserved-key check is case-sensitive; nats-msg-id bypasses gu | internal/eventbus/publisher.go:365-366 mergeCallerHeaders already canonicalizes via textproto.CanonicalMIMEHeaderKey before reserved-key check; comment :354-359 |
+| `holomush-tt77` | mergeCallerHeaders reserved-key check is case-sensitive; nats-msg-id bypasses guard | internal/eventbus/publisher.go:365-366 mergeCallerHeaders already canonicalizes via textproto.CanonicalMIMEHeaderKey before reserved-key check; comment :354-359 |
 | `holomush-up7h` | [E5.8.2] Document HMAC token design decision (implementation diverged from spec) | docs/adr/holomush-ydti-use-opaque-session-tokens-instead-signed-jwts.md fully documents HMAC-vs-opaque decision; committed 2026-02-02, predates bead (filed 2026 |
-| `holomush-xrdjw` | Enable sloglint (context: scope) + migrate bare slog/logger calls to *Context va | .golangci.yaml:39,160-171 sloglint enabled w/ context:scope. Remaining ~113 bare slog.X( calls are confined to cmd/holomush main/init/bootstrap (exempt carve-ou |
-| `holomush-yjed` | Flaky test: TestCoordinatorRequestInvalidationReturnsRateLimitedWhenProbeAndPill | Commits 899fc44ff (holomush-kz7tb, 2026-06-19) + 7baa11577 (holomush-o7k0p, 2026-06-21) de-flake this exact test; extensive fix comments now in coordinator_send |
+| `holomush-xrdjw` | Enable sloglint (context: scope) + migrate bare slog/logger calls to *Context variants | .golangci.yaml:39,160-171 sloglint enabled w/ context:scope. Remaining ~113 bare slog.X( calls are confined to cmd/holomush main/init/bootstrap (exempt carve-ou |
+| `holomush-yjed` | Flaky test: TestCoordinatorRequestInvalidationReturnsRateLimitedWhenProbeAndPillRefuses | Commits 899fc44ff (holomush-kz7tb, 2026-06-19) + 7baa11577 (holomush-o7k0p, 2026-06-21) de-flake this exact test; extensive fix comments now in coordinator_send |
 
 ## Stale (premise no longer true)
 
 | Bead | Title | Evidence |
 | --- | --- | --- |
-| `holomush-0h8m` | Fix FindByCharacterName not-found semantics: MemStore returns SESSION_NOT_FOUND  | MemStore type no longer exists (rg 'MemStore' --type go -> 0 hits); only PostgresSessionStore remains in internal/store/session_store.go. Premise gone. |
-| `holomush-eawl` | QueryStreamHistory has same off-by-precision bug as Subscribe (iwzt.15); fixing  | Nanosecond-timestamps epic (gfo6) removed ALL Truncate(time.Microsecond) truncation end-to-end; query_stream_history.go:273 and server.go:1306 have no truncate  |
-| `holomush-ec22.23` | Build/CI: silently broken gates — ebnf-sync hook path + missing EventIDMustBeMon | lefthook fully retired (git-tracked lefthook.yaml gone); EBNF check now task generate:ebnf:check using correct site/public/reference paths. EventIDMustBeMonoton |
+| `holomush-0h8m` | Fix FindByCharacterName not-found semantics: MemStore returns SESSION_NOT_FOUND error, Postgres returns nil,nil — align to nil,nil and add interface doc | MemStore type no longer exists (rg 'MemStore' --type go -> 0 hits); only PostgresSessionStore remains in internal/store/session_store.go. Premise gone. |
+| `holomush-eawl` | QueryStreamHistory has same off-by-precision bug as Subscribe (iwzt.15); fixing it surfaces +page.svelte snapshot-apply-after-backfill UI race | Nanosecond-timestamps epic (gfo6) removed ALL Truncate(time.Microsecond) truncation end-to-end; query_stream_history.go:273 and server.go:1306 have no truncate  |
+| `holomush-ec22.23` | Build/CI: silently broken gates — ebnf-sync hook path + missing EventIDMustBeMonotonic ruleguard rule | lefthook fully retired (git-tracked lefthook.yaml gone); EBNF check now task generate:ebnf:check using correct site/public/reference paths. EventIDMustBeMonoton |
 | `holomush-h8xj` | task gowork produces go.work Go rejects as 'module appears multiple times' | jj retired for native git worktrees (commit c80eaf742); no go.work file exists, no 'gowork' task in Taskfile.yaml. GOWORK=off is now permanent for an unrelated  |
-| `holomush-iw804` | Missing KEK env vars logs full oops stacktrace at WARN every dev boot; message l | cmd/holomush/core.go:744-754: KEK is now mandatory at boot (fail-closed BOOT_KEK_REQUIRED, 'no degraded KEK-less mode') per PR #4411 (KEK-mandatory boot). The f |
+| `holomush-iw804` | Missing KEK env vars logs full oops stacktrace at WARN every dev boot; message lacks setup-doc reference | cmd/holomush/core.go:744-754: KEK is now mandatory at boot (fail-closed BOOT_KEK_REQUIRED, 'no degraded KEK-less mode') per PR #4411 (KEK-mandatory boot). The f |
 | `holomush-jh4l` | Fix admin capability entity ref format in plugin YAMLs | No admin.boot/admin.wall/admin.alias dotted capability refs exist anywhere; plugin.yaml schema uniformly uses {action,resource,scope} triples (plugins/core-comm |
 | `holomush-jo0a` | Flaky test: auth deletes expired sessions in bulk (clock-skew race on 1ms TTL) | test/integration/auth/player_session_test.go no longer exists (dir has auth_suite_test.go, core_client_shim_test.go, multi_tab_test.go). DeleteExpired now teste |
 | `holomush-tvvp` | gRPC control server: Stop() doesn't close listener — leak on early-stop race | grpc-go v1.82.0 server.go:888-896: Serve() self-closes lis whether called before or after Stop/GracefulStop. No actual leak; bead premise is factually wrong. |
-| `holomush-uvu9` | MockSessionAccess.Sessions public field — verify and fix potential data race in  | internal/command/handlers/testutil/ dir does not exist (handlers/ has no testutil subdir). Only mockSessionAccess in stdlib_session_test.go, a different unexpor |
+| `holomush-uvu9` | MockSessionAccess.Sessions public field — verify and fix potential data race in parallel tests | internal/command/handlers/testutil/ dir does not exist (handlers/ has no testutil subdir). Only mockSessionAccess in stdlib_session_test.go, a different unexpor |
 | `holomush-uyrd` | Sidebar collapsed icons: add tooltips and hover highlight | web/src/lib/components/sidebar/Sidebar.svelte:49-52 — sidebar redesigned to binary hide/show (width:0), no collapsed icon-strip w/ location-pin/door/people icon |
 | `holomush-x1tnm` | [BACKLOG] Command events without character_id should error | plugins/core-communication/main.lua: 'character_name = character_name or "Someone"' pattern is gone; current code uses ctx.character_id or "" (different, smalle |
 
@@ -404,7 +404,7 @@ Code-grounded evidence cited per bead.
 | Bead | Title | Evidence |
 | --- | --- | --- |
 | `holomush-0sc.15` | Lua add_session_stream hostfunc bypasses AuthorizePluginStreamContribution fence | Identical finding to holomush-16rt5: internal/plugin/hostfunc/stdlib_streams.go AddStream bypasses AuthorizePluginStreamContribution; both filed 2026-07-09 from |
-| `holomush-gdr6w` | test/meta INV-SCENE-41 (TestFocusAdapterPairAssembledOnlyInHelper) scans sibling | Same root cause as jb1ec: test/meta/focus_delta_gate_test.go:15,18 nonTestGoFilesContaining does bare filepath.WalkDir with no .claude/worktrees exclusion. jb1e |
+| `holomush-gdr6w` | test/meta INV-SCENE-41 (TestFocusAdapterPairAssembledOnlyInHelper) scans sibling .claude/worktrees checkouts | Same root cause as jb1ec: test/meta/focus_delta_gate_test.go:15,18 nonTestGoFilesContaining does bare filepath.WalkDir with no .claude/worktrees exclusion. jb1e |
 
 ## Archive only
 
@@ -415,17 +415,17 @@ recoverable from `2026-07-09-beads-export-full.jsonl.gz`.
 | Bead | P | Title | Reason |
 | --- | --- | --- | --- |
 | `holomush-wagqb` | P1 | Token/cost/latency optimization — Claude Code dev workflow (Phase 1+2) | Bead's own note: PR #4569 merged 2026-07-03, epic 7/8 (87%) done; only .5 (operator-side ~/.claude d |
-| `holomush-095g.7` | P2 | Plugin-as-caller identity for PluginHostService.QueryStreamHistory against plugi | child of closed epic holomush-095g, untouched since 2026-05-16 |
+| `holomush-095g.7` | P2 | Plugin-as-caller identity for PluginHostService.QueryStreamHistory against plugin-owned subjects | child of closed epic holomush-095g, untouched since 2026-05-16 |
 | `holomush-1qp5` | P2 | Implement look command (core navigation) | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-32v8` | P2 | Missing TestGuestAuthenticator_ReturnsIsGuest unit test specified in plan | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-6pmp` | P2 | Implement move command (core navigation — go through exits) | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-72sj` | P2 | Create core-channels plugin — use AddSessionStream(LIVE_ONLY) + QueryStreamHisto | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-72sj` | P2 | Create core-channels plugin — use AddSessionStream(LIVE_ONLY) + QueryStreamHistory | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-7gdh` | P2 | Phase 2 follow-up: keyring-backed KEKSource (go-keyring) | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-7zot` | P2 | CI static-analysis guard to prevent AccessControl.Check reintroduction | stale audit/review finding (last touch 2026-05-15) |
-| `holomush-8hff` | P2 | Strategic theme: social-spaces — substrate-and-uses cluster (scenes → channels → | decision record (ADR-captured) |
+| `holomush-8hff` | P2 | Strategic theme: social-spaces — substrate-and-uses cluster (scenes → channels → forums → discord) | decision record (ADR-captured) |
 | `holomush-8j8q` | P2 | Command State Management for Multi-Turn Interactions | decision record (ADR-captured) |
 | `holomush-9mxr.21.3` | P2 | INV-P5-7 pin is a happy-path test; atomicity observer-isolation is not verified | child of closed epic holomush-9mxr.21, untouched since 2026-05-24 |
-| `holomush-afs9` | P2 | arrive event log lacks session_id correlation field + uses raw slog instead of e | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-afs9` | P2 | arrive event log lacks session_id correlation field + uses raw slog instead of errutil.LogError | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-b5cn` | P2 | Implement boot command (admin: boot player/guest with reason) | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-b8n5` | P2 | ABAC Phase 7.7 cleanup + design followups | stale audit/review finding (last touch 2026-05-15) |
 | `holomush-cb4x` | P2 | Scenes: scene log + scene export commands + export renderers | stale audit/review finding (last touch 2026-05-16) |
@@ -436,30 +436,30 @@ recoverable from `2026-07-09-beads-export-full.jsonl.gz`.
 | `holomush-dj95.8` | P2 | Rename PostgresEventStore → SystemInfoStore + switch InitGameID to idgen.New() | stale audit/review finding (last touch 2026-05-15) |
 | `holomush-dj95.9` | P2 | Reclassify internal/admin/policy/ under auditchain or eventbus/crypto/policy | stale audit/review finding (last touch 2026-05-15) |
 | `holomush-eo5z0` | P2 | Add unit coverage for grpc Client.UpdateScene wrapper | explicitly deferred |
-| `holomush-h9jr` | P2 | Create test/integration/access/location_equivalence_test.go — Phase 7.7 migratio | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-h9jr` | P2 | Create test/integration/access/location_equivalence_test.go — Phase 7.7 migration validation | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-imiq` | P2 | Wire EVENTS_AUDIT_DLQ for audit projection MaxDeliver exhaustion | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-kday` | P2 | Focus substrate architecture documentation — concept doc + plugin API guides | stale audit/review finding (last touch 2026-05-30) |
 | `holomush-ln1ab` | P2 | Polish: type-design + comment suggestions from PR #4266 review | explicitly deferred |
-| `holomush-m8n6` | P2 | T28.5 migration-equivalence gate: file ADR waiver or write seed-policy integrati | stale audit/review finding (last touch 2026-05-15) |
-| `holomush-mjy3` | P2 | Reconsider object_examine sensitivity: 'never' will silently reject future sensi | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-p1tq2.12` | P2 | Input struct free-string fields allow subject/action/resource misassignment at c | explicitly deferred |
-| `holomush-p1tq2.13` | P2 | Decision struct permits allowed=true with denial-flavoured Reason (no coherence  | explicitly deferred |
-| `holomush-p1tq2.15` | P2 | EngineProvider.AttributeResolver() leaks concrete *attribute.Resolver through a  | explicitly deferred |
-| `holomush-p1tq2.17` | P2 | EvaluateDecision and pluginauthz.Decision have no way to distinguish 'denied by  | explicitly deferred |
-| `holomush-p1tq2.20` | P2 | handleResume doc-comment says 'Owner-only in Phase 2' but resume policy already  | explicitly deferred |
-| `holomush-p1tq2.22` | P2 | splitResourceRef doc-comment says 'single colon' but rejects multi-colon IDs sil | explicitly deferred |
+| `holomush-m8n6` | P2 | T28.5 migration-equivalence gate: file ADR waiver or write seed-policy integration tests | stale audit/review finding (last touch 2026-05-15) |
+| `holomush-mjy3` | P2 | Reconsider object_examine sensitivity: 'never' will silently reject future sensitive emits (security implication) | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-p1tq2.12` | P2 | Input struct free-string fields allow subject/action/resource misassignment at construction | explicitly deferred |
+| `holomush-p1tq2.13` | P2 | Decision struct permits allowed=true with denial-flavoured Reason (no coherence invariant) | explicitly deferred |
+| `holomush-p1tq2.15` | P2 | EngineProvider.AttributeResolver() leaks concrete *attribute.Resolver through a public interface | explicitly deferred |
+| `holomush-p1tq2.17` | P2 | EvaluateDecision and pluginauthz.Decision have no way to distinguish 'denied by engine' from 'no engine consulted' | explicitly deferred |
+| `holomush-p1tq2.20` | P2 | handleResume doc-comment says 'Owner-only in Phase 2' but resume policy already admits any participant | explicitly deferred |
+| `holomush-p1tq2.22` | P2 | splitResourceRef doc-comment says 'single colon' but rejects multi-colon IDs silently | explicitly deferred |
 | `holomush-p1tq2.23` | P2 | host_service.go Evaluate: engine-nil and host-nil paths return error without log | explicitly deferred |
 | `holomush-pojo` | P2 | Implement who command (list online characters) | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-q0n0` | P2 | Add Reason field to DisconnectRequest — leave events currently hardcoded to 'qui | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-q0n0` | P2 | Add Reason field to DisconnectRequest — leave events currently hardcoded to 'quit' | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-rs0j` | P2 | Phase 7.6 ABAC + KV polish (test gaps, dead code, design comments) | stale audit/review finding (last touch 2026-05-15) |
-| `holomush-sdzd` | P2 | Auth: Add test for password reset token_hash collision (UNIQUE constraint violat | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-setx` | P2 | HandleCommand returns generic 'session not found' for all store errors — masks D | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-sz0h3` | P2 | Principle: the web is a superset of telnet — every gameplay subsystem has a web  | decision record (ADR-captured) |
-| `holomush-t2udp` | P2 | Meta-test outOfScope check is a tautology — tests author-controlled list, not ac | stale audit/review finding (last touch 2026-05-25) |
-| `holomush-vitqu` | P2 | TestReadbackWithoutReadbackFlagDenied inlines 100+ lines of setup duplicating bu | stale audit/review finding (last touch 2026-05-25) |
+| `holomush-sdzd` | P2 | Auth: Add test for password reset token_hash collision (UNIQUE constraint violation) | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-setx` | P2 | HandleCommand returns generic 'session not found' for all store errors — masks DB failures | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-sz0h3` | P2 | Principle: the web is a superset of telnet — every gameplay subsystem has a web control expression | decision record (ADR-captured) |
+| `holomush-t2udp` | P2 | Meta-test outOfScope check is a tautology — tests author-controlled list, not actual file content | stale audit/review finding (last touch 2026-05-25) |
+| `holomush-vitqu` | P2 | TestReadbackWithoutReadbackFlagDenied inlines 100+ lines of setup duplicating buildReadbackEnv | stale audit/review finding (last touch 2026-05-25) |
 | `holomush-wagqb.5` | P2 | Document bd prime operator-side de-dup (T1a, RD4) | explicitly deferred |
-| `holomush-x5d7` | P2 | Test ErrSessionEnded teardown failure paths (HandleDisconnect/sessionStore.Delet | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-xlty` | P2 | AccessPolicyEngine call-site observability gaps (metric labels + span attributes | stale audit/review finding (last touch 2026-05-15) |
+| `holomush-x5d7` | P2 | Test ErrSessionEnded teardown failure paths (HandleDisconnect/sessionStore.Delete errors) | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-xlty` | P2 | AccessPolicyEngine call-site observability gaps (metric labels + span attributes) | stale audit/review finding (last touch 2026-05-15) |
 | `holomush-xpn2` | P2 | Phase 2 follow-up: systemd-credential KEKSource | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-xq7iq` | P2 | Add per-item max_len to tags repeated field in UpdateScene/WebUpdateScene protos | explicitly deferred |
 | `holomush-ysuxw` | P2 | Publish-vote web: optional polish deferred from PR #4564 review | explicitly deferred |
@@ -467,109 +467,109 @@ recoverable from `2026-07-09-beads-export-full.jsonl.gz`.
 | `holomush-zluv` | P2 | Add strict audit mode to EngineConfig for compliance deployments | explicitly deferred |
 | `holomush-0s2h` | P3 | Centralize localStorage access via safeStorage helper | P3 orphan task, last touch 2026-04-26 |
 | `holomush-11u0` | P3 | @cluster status and @evict-member admin commands | P3 orphan task, last touch 2026-05-15 |
-| `holomush-12irb` | P3 | Add gitignore for web/.claude/agent-memory so reviewer reports don't get committ | P3 orphan task, last touch 2026-05-30 |
+| `holomush-12irb` | P3 | Add gitignore for web/.claude/agent-memory so reviewer reports don't get committed | P3 orphan task, last touch 2026-05-30 |
 | `holomush-12j7` | P3 | Plumb user_agent and ip_address through auth RPCs to ListPlayerSessions | P3 orphan task, last touch 2026-04-26 |
 | `holomush-17xh` | P3 | Integration test: alias commands through plugin dispatch | P3 orphan task, last touch 2026-05-01 |
 | `holomush-186q` | P3 | CI hygiene: bead-existence smoke check for dek.Manager stubAllowSet | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-19uc` | P3 | Playwright E2E test: session TTL expiration behavior | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-1xhx` | P3 | echo-bot: design re-emit semantics for cross-plugin event types (crypto.emits in | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-3skv5` | P3 | docs(guide): rewrite building.md as a goal->steps->verify how-to once in-game bu | P3 orphan task, last touch 2026-05-29 |
+| `holomush-1xhx` | P3 | echo-bot: design re-emit semantics for cross-plugin event types (crypto.emits interaction) | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-3skv5` | P3 | docs(guide): rewrite building.md as a goal->steps->verify how-to once in-game building commands ship | P3 orphan task, last touch 2026-05-29 |
 | `holomush-3soe` | P3 | CoreClient vs GRPCClient dual-interface drift | P3 orphan task, last touch 2026-04-26 |
-| `holomush-3ucc` | P3 | Host-side guard: enforce MetadataOnly+NoPlaintextReason coherence at EventFrame  | P3 orphan task, last touch 2026-05-13 |
+| `holomush-3ucc` | P3 | Host-side guard: enforce MetadataOnly+NoPlaintextReason coherence at EventFrame conversion | P3 orphan task, last touch 2026-05-13 |
 | `holomush-4dm1` | P3 | localStorage scrollback persistence | P3 orphan task, last touch 2026-04-26 |
 | `holomush-4ibz` | P3 | Add integration test for resolver fail-closed behavior end-to-end | explicitly deferred |
 | `holomush-4icb` | P3 | Pill message signing (deferred from ojw1.3.18, Decision 7) | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-50hl` | P3 | Struct parameter for SetSystemAlias to prevent positional confusion | P3 orphan task, last touch 2026-04-26 |
-| `holomush-5e0s` | P3 | Type-check entityPrefix in world.checkAccess — prevent silent unmapped-prefix bu | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-5e0s` | P3 | Type-check entityPrefix in world.checkAccess — prevent silent unmapped-prefix bugs | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-5o1d` | P3 | Deferred review findings from PR #88 (ABAC Phase 7.6 migration) | explicitly deferred |
-| `holomush-5yl5u` | P3 | Audience-based IA restructure of site contributing/ docs (maintainer vs contribu | P3 orphan task, last touch 2026-05-29 |
+| `holomush-5yl5u` | P3 | Audience-based IA restructure of site contributing/ docs (maintainer vs contributor) | P3 orphan task, last touch 2026-05-29 |
 | `holomush-61en` | P3 | Re-enable Benchmark Regression Check workflow with cost/scope fixes | P3 orphan task, last touch 2026-05-19 |
 | `holomush-61sa` | P3 | Subscribe + replay subscribe tests use time.Sleep — flaky under slow CI | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-6n1j3` | P3 | Pin protoc-gen-doc version in Taskfile tools install (currently @latest) | P3 orphan task, last touch 2026-05-29 |
 | `holomush-6nds` | P3 | JS storage rebuild from PG audit: restore tool | P3 orphan task, last touch 2026-04-26 |
 | `holomush-6ra22` | P3 | Surface build version in UI + command palette + in-game command | P3 orphan task, last touch 2026-05-29 |
-| `holomush-71zq.9` | P3 | Optimize bats collision-test wall time (kill propagation through holder process  | child of closed epic holomush-71zq, untouched since 2026-05-01 |
-| `holomush-742pn` | P3 | Bring coreEventToProto under a reflection parity guard (5th host→plugin event ma | P3 orphan task, last touch 2026-05-30 |
+| `holomush-71zq.9` | P3 | Optimize bats collision-test wall time (kill propagation through holder process tree) | child of closed epic holomush-71zq, untouched since 2026-05-01 |
+| `holomush-742pn` | P3 | Bring coreEventToProto under a reflection parity guard (5th host→plugin event marshal site) | P3 orphan task, last touch 2026-05-30 |
 | `holomush-7kyy` | P3 | Add errutil.AssertErrorCode tests for config error code propagation | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-7lp86` | P3 | Lua decrypt_own_audit_rows flattens decrypted-to-empty plaintext to nil | P3 orphan task, last touch 2026-05-26 |
 | `holomush-7m4j` | P3 | RevokeOtherPlayerSessions: best-effort + per-ID failure reporting | P3 orphan task, last touch 2026-04-26 |
-| `holomush-7nty` | P3 | Test gap: subscriber.go decodeAndAuthorize NoPlaintextReason stamps have no cove | P3 orphan task, last touch 2026-05-13 |
+| `holomush-7nty` | P3 | Test gap: subscriber.go decodeAndAuthorize NoPlaintextReason stamps have no coverage | P3 orphan task, last touch 2026-05-13 |
 | `holomush-7retn` | P3 | license:check (addlicense) scans local scripts/.venv — add .venv to -ignore | P3 orphan task, last touch 2026-05-24 |
 | `holomush-7ssv` | P3 | Expand TypeScript unit test coverage for web client | P3 orphan task, last touch 2026-04-26 |
-| `holomush-82u8` | P3 | Assess pgxpool leakage across internal/world/postgres repos; centralize if warra | P3 orphan task, last touch 2026-05-09 |
-| `holomush-88bcy` | P3 | Test/annotation: I-LIVE-5 single-source-of-liveness has only positive-path cover | P3 orphan task, last touch 2026-05-31 |
+| `holomush-82u8` | P3 | Assess pgxpool leakage across internal/world/postgres repos; centralize if warranted | P3 orphan task, last touch 2026-05-09 |
+| `holomush-88bcy` | P3 | Test/annotation: I-LIVE-5 single-source-of-liveness has only positive-path coverage | P3 orphan task, last touch 2026-05-31 |
 | `holomush-8l20j` | P3 | Go comment on decodePolicyHashOrEmpty inaccurately cites 'genesis' empty case | P3 orphan task, last touch 2026-05-28 |
 | `holomush-97d54` | P3 | core-scenes: explicit id-ordering assertion in ReadSceneLogForSnapshot test | P3 orphan task, last touch 2026-05-29 |
 | `holomush-9cfv` | P3 | [E7] CI lint rule for char: prefix elimination | P3 orphan task, last touch 2026-04-26 |
 | `holomush-9twm` | P3 | Extract detectMode to pure function for unit testing | P3 orphan task, last touch 2026-04-26 |
 | `holomush-anoe` | P3 | cleanup: convert internal/store testing-style integration tests to Ginkgo | P3 orphan task, last touch 2026-05-23 |
-| `holomush-awb3` | P3 | Apply ADR ti1b omission pattern to remaining optional attrs (owner_id, held_by,  | P3 orphan task, last touch 2026-05-22 |
+| `holomush-awb3` | P3 | Apply ADR ti1b omission pattern to remaining optional attrs (owner_id, held_by, contained_in, shadows_id, property value/owner) | P3 orphan task, last touch 2026-05-22 |
 | `holomush-b4tj` | P3 | chore(web): make SvelteKit dist regeneration deterministic or gitignore it | P3 orphan task, last touch 2026-04-26 |
 | `holomush-bbcz` | P3 | Client-visible stale-DEK signaling via typed Event field | P3 orphan task, last touch 2026-05-15 |
 | `holomush-bmpkb` | P3 | Update claude-code-hooks-design.md: file utilities are nudges, not blocks | P3 orphan task, last touch 2026-05-30 |
 | `holomush-c8egn` | P3 | Web gateway: bound the per-stream 'seen' event-dedup set (slow leak) | P3 orphan task, last touch 2026-05-31 |
 | `holomush-cfpd` | P3 | Service registry lacks protected service name blocklist | P3 orphan task, last touch 2026-05-30 |
 | `holomush-dfmv` | P3 | Reaper tests are time-dependent (2-second WithTimeout) — flaky under slow CI | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-dgeyp` | P3 | Capture attach_moment_ms inside Subscriber.OpenSession at actual consumer-attach | P3 orphan task, last touch 2026-05-24 |
+| `holomush-dgeyp` | P3 | Capture attach_moment_ms inside Subscriber.OpenSession at actual consumer-attach commit (iu8j hygiene) | P3 orphan task, last touch 2026-05-24 |
 | `holomush-dixj` | P3 | Add ErrAccessEvaluationFailed tests for remaining service methods | explicitly deferred |
-| `holomush-dq99` | P3 | Production KeySelector: replace identityProductionKeySelector placeholder with K | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-dq99` | P3 | Production KeySelector: replace identityProductionKeySelector placeholder with KEK-backed impl | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-dqc8e` | P3 | Polish: telnet ceiling wiring + 2 doc-comment precision fixes (rsoe6 review) | P3 orphan task, last touch 2026-05-31 |
-| `holomush-dzz5` | P3 | Four web/handler.go stub RPC methods repeat identical CodeUnimplemented error (v | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-e6kvc` | P3 | hostfunc-audit-table.md drifts from RegisteredFunctionsForAudit() — auto-sync or | P3 orphan task, last touch 2026-05-28 |
+| `holomush-dzz5` | P3 | Four web/handler.go stub RPC methods repeat identical CodeUnimplemented error (verify still applies) | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-e6kvc` | P3 | hostfunc-audit-table.md drifts from RegisteredFunctionsForAudit() — auto-sync or remove | P3 orphan task, last touch 2026-05-28 |
 | `holomush-eifx` | P3 | Control plane shares CA with data plane | P3 orphan task, last touch 2026-04-26 |
 | `holomush-ewxr` | P3 | Add composite index on player_sessions(player_id, expires_at) | P3 orphan task, last touch 2026-04-26 |
 | `holomush-fbct9` | P3 | Test gap: telnet I-SURV-4 ceiling-exceed exit (transport-symmetry vs web) | P3 orphan task, last touch 2026-05-31 |
-| `holomush-fl17b` | P3 | Test gap: I-LIVE-3 grid_present=false with a live non-grid (comms_hub) connectio | P3 orphan task, last touch 2026-05-31 |
-| `holomush-fnld3` | P3 | Wire publish/withdraw_publish per-action ABAC at the command leaf (or document i | P3 orphan task, last touch 2026-05-26 |
-| `holomush-fvxlv` | P3 | docs(reference/events): make the generated events.md index orienting (generator  | P3 orphan task, last touch 2026-05-29 |
-| `holomush-g9vf` | P3 | Add MaxJustificationLength cap to RekeyRequest.Justification + admin handler val | P3 orphan task, last touch 2026-05-13 |
+| `holomush-fl17b` | P3 | Test gap: I-LIVE-3 grid_present=false with a live non-grid (comms_hub) connection | P3 orphan task, last touch 2026-05-31 |
+| `holomush-fnld3` | P3 | Wire publish/withdraw_publish per-action ABAC at the command leaf (or document inert policies) | P3 orphan task, last touch 2026-05-26 |
+| `holomush-fvxlv` | P3 | docs(reference/events): make the generated events.md index orienting (generator change) | P3 orphan task, last touch 2026-05-29 |
+| `holomush-g9vf` | P3 | Add MaxJustificationLength cap to RekeyRequest.Justification + admin handler validation | P3 orphan task, last touch 2026-05-13 |
 | `holomush-gh6hv` | P3 | SDK DecryptOwnAuditRows helper panics on nil PluginHostServiceClient | P3 orphan task, last touch 2026-05-26 |
 | `holomush-ghm` | P3 | Add comprehensive Prometheus metrics across system | P3 orphan task, last touch 2026-05-01 |
-| `holomush-gmfk` | P3 | AccessPolicyEngine call-site ergonomics: AccessRequest type encap + shared eval  | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-gmfk` | P3 | AccessPolicyEngine call-site ergonomics: AccessRequest type encap + shared eval helper | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-h33u` | P3 | Rail.svelte: expose class prop for shadcn-convention parity | P3 orphan task, last touch 2026-04-26 |
 | `holomush-hfb3` | P3 | Optimize filter-at-delivery: cache session floor in per-Subscribe goroutine | P3 orphan task, last touch 2026-05-19 |
-| `holomush-hkftf` | P3 | E2E: presence ghost-clear (kill-transport) + core-restart reconnect (rsoe6 T15 c | P3 orphan task, last touch 2026-05-31 |
+| `holomush-hkftf` | P3 | E2E: presence ghost-clear (kill-transport) + core-restart reconnect (rsoe6 T15 c/d follow-up) | P3 orphan task, last touch 2026-05-31 |
 | `holomush-hvcs` | P3 | Add integration test for S1 system-subject injection via external ingress | explicitly deferred |
 | `holomush-i767` | P3 | ⌘R reverse-i-search overlay for command history | P3 orphan task, last touch 2026-04-26 |
-| `holomush-ih96` | P3 | ABAC: distinguish critical vs non-critical attribute providers for fail-closed b | explicitly deferred |
+| `holomush-ih96` | P3 | ABAC: distinguish critical vs non-critical attribute providers for fail-closed behavior | explicitly deferred |
 | `holomush-ir5q` | P3 | Optimize plugin build: dynamic Taskfile tasks, caching, parallel builds | explicitly deferred |
 | `holomush-jaqp` | P3 | Verifier INV-E27 per-entry subject-derived scope cross-check (defensive) | P3 orphan task, last touch 2026-05-13 |
 | `holomush-jqrk` | P3 | Investigate moving guest authentication into a plugin | P3 orphan task, last touch 2026-05-01 |
-| `holomush-k0r5o` | P3 | docs(reference/grpc-api): add orientation + api-guide link to generated grpc-api | P3 orphan task, last touch 2026-05-29 |
+| `holomush-k0r5o` | P3 | docs(reference/grpc-api): add orientation + api-guide link to generated grpc-api.md (generator/SP0-SP4) | P3 orphan task, last touch 2026-05-29 |
 | `holomush-k30c` | P3 | In-game admin command to grant/revoke crypto.operator capability | P3 orphan task, last touch 2026-05-15 |
 | `holomush-k72a` | P3 | A11y: ARIA-live announcement for backfill loading | P3 orphan task, last touch 2026-04-26 |
 | `holomush-kb1f` | P3 | Backfill scroll-up pagination (older history via before_id) | P3 orphan task, last touch 2026-04-26 |
 | `holomush-kl9w` | P3 | Plugin manifest hot-reload callback infrastructure | P3 orphan task, last touch 2026-05-15 |
-| `holomush-ktxch` | P3 | Ginkgo AfterEach nil-env teardown can mask setup failure (scene_history_readback | P3 orphan task, last touch 2026-05-26 |
-| `holomush-l3an` | P3 | Add ListActive error injection to handler mocks — cover who/wall/boot error path | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-ktxch` | P3 | Ginkgo AfterEach nil-env teardown can mask setup failure (scene_history_readback_test) | P3 orphan task, last touch 2026-05-26 |
+| `holomush-l3an` | P3 | Add ListActive error injection to handler mocks — cover who/wall/boot error paths | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-l60y` | P3 | Refactor QueryStreamHistory tests into table-driven cases | P3 orphan task, last touch 2026-04-26 |
 | `holomush-lw0o` | P3 | Memoize getBufferSize() in terminalStore.ts | P3 orphan task, last touch 2026-04-26 |
 | `holomush-lyw1` | P3 | reorder Subscribe nil-subscriber guard vs ownership validation | P3 orphan task, last touch 2026-05-01 |
 | `holomush-lzow` | P3 | Implement scope-aware CanPerformAction evaluation | P3 orphan task, last touch 2026-04-26 |
 | `holomush-m88d` | P3 | Cache-resident plaintext DEK material: bound lifetime in dek.Cache LRU | P3 orphan task, last touch 2026-05-15 |
 | `holomush-ma2n` | P3 | Add role column to characters table | P3 orphan task, last touch 2026-04-26 |
-| `holomush-n9pd` | P3 | Disconnect makes two CountConnectionsByType round-trips — combine into single qu | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-n9pd` | P3 | Disconnect makes two CountConnectionsByType round-trips — combine into single query | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-nkac` | P3 | Delete dead HandleSay/HandlePose methods in internal/core/engine.go | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-nko7` | P3 | multi-protocol fan-out e2e: telnet + web see same pose | P3 orphan task, last touch 2026-04-26 |
 | `holomush-omy8` | P3 | Add SetGuestMetadata store method for safe guest-fields backfill on reattach | P3 orphan task, last touch 2026-05-17 |
-| `holomush-otc3v` | P3 | obs(sentry): wire CaptureException -> grouped Sentry Issues + broaden error capt | P3 orphan task, last touch 2026-05-28 |
-| `holomush-p0wc` | P3 | Subscribe: return nil for clean context.Canceled instead of SUBSCRIPTION_CANCELL | stale audit/review finding (last touch 2026-05-16) |
-| `holomush-pfo7q` | P3 | core-scenes: trim over-explained ULID-ordering comment in ReadSceneLogForSnapsho | P3 orphan task, last touch 2026-05-29 |
-| `holomush-ph1l` | P3 | admin_authenticate_e2e_test.go: refactor T25+T26+T27 to Ginkgo Ordered container | P3 orphan task, last touch 2026-05-13 |
+| `holomush-otc3v` | P3 | obs(sentry): wire CaptureException -> grouped Sentry Issues + broaden error capture | P3 orphan task, last touch 2026-05-28 |
+| `holomush-p0wc` | P3 | Subscribe: return nil for clean context.Canceled instead of SUBSCRIPTION_CANCELLED error | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-pfo7q` | P3 | core-scenes: trim over-explained ULID-ordering comment in ReadSceneLogForSnapshot test | P3 orphan task, last touch 2026-05-29 |
+| `holomush-ph1l` | P3 | admin_authenticate_e2e_test.go: refactor T25+T26+T27 to Ginkgo Ordered containers | P3 orphan task, last touch 2026-05-13 |
 | `holomush-qhitt` | P3 | Add favicon.ico to web client (currently 404s) | P3 orphan task, last touch 2026-05-23 |
 | `holomush-qp0a` | P3 | crypto: background GC sweep for orphan DEK rows from aborted Rekey checkpoints | P3 orphan task, last touch 2026-05-13 |
 | `holomush-qybt` | P3 | Task test:int should use glob-based discovery | P3 orphan task, last touch 2026-04-26 |
 | `holomush-r2tv` | P3 | Make disconnect connection-remove + count atomic | P3 orphan task, last touch 2026-04-26 |
 | `holomush-rcr2` | P3 | Consider scenes.updated_at column for sort/display in Phase 8/9 | P3 orphan task, last touch 2026-04-26 |
-| `holomush-rr3p8` | P3 | Composer command chip: tier-3 player-alias resolution (deferred from holomush-2z | P3 orphan task, last touch 2026-05-30 |
-| `holomush-s54y` | P3 | Plugin Phase 4 cleanup: auto-generate hostfunc bindings from proto + dynamic rel | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-rr3p8` | P3 | Composer command chip: tier-3 player-alias resolution (deferred from holomush-2zjio) | P3 orphan task, last touch 2026-05-30 |
+| `holomush-s54y` | P3 | Plugin Phase 4 cleanup: auto-generate hostfunc bindings from proto + dynamic reload | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-sjd6` | P3 | Add pprof HTTP endpoints to server for runtime profiling | P3 orphan task, last touch 2026-04-26 |
-| `holomush-ton17` | P3 | docs(operating/crypto): write master-key bootstrap runbook in crypto-setup once  | P3 orphan task, last touch 2026-05-28 |
+| `holomush-ton17` | P3 | docs(operating/crypto): write master-key bootstrap runbook in crypto-setup once Phase 8 lands | P3 orphan task, last touch 2026-05-28 |
 | `holomush-u3o9` | P3 | Control plane RPC: AdminResetPassword | P3 orphan task, last touch 2026-04-26 |
 | `holomush-uhiz` | P3 | Server-side population of optional sidebar fields (mood, lastMode, isIdle) | P3 orphan task, last touch 2026-04-26 |
 | `holomush-wtmn` | P3 | ABACStack.Close drops sqlDB.Close error when AuditLogger.Close already failed | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-wyr3` | P3 | cleanup: convert auto_focus_on_join_test.go TestAutoFocus* suite to table-driven | P3 orphan task, last touch 2026-05-29 |
-| `holomush-wzhr` | P3 | Catch-up replay protocol via last_invalidation_seq (deferred from ojw1.3.19, Dec | stale audit/review finding (last touch 2026-05-16) |
+| `holomush-wzhr` | P3 | Catch-up replay protocol via last_invalidation_seq (deferred from ojw1.3.19, Decision 6) | stale audit/review finding (last touch 2026-05-16) |
 | `holomush-x8v4i` | P3 | docs(extending): add grounded client-connection walkthrough to api-guide.md | P3 orphan task, last touch 2026-05-28 |
 | `holomush-xe62` | P3 | events_audit composite index on (dek_ref, dek_version) — profile-then-decide | P3 orphan task, last touch 2026-05-13 |
 | `holomush-xqub` | P3 | Backlog: Full ExitProvider and SceneProvider attributes (Phase 7.7+ expansion) | P3 orphan task, last touch 2026-05-16 |
@@ -580,7 +580,7 @@ recoverable from `2026-07-09-beads-export-full.jsonl.gz`.
 | `holomush-z51u` | P3 | INV-E meta-test enforcing INV-E[N] ↔ test-name binding (Phase 3c pattern) | P3 orphan task, last touch 2026-05-13 |
 | `holomush-1k13` | P4 | MOTD on session start with appropriate commands | P4 backlog-tier |
 | `holomush-255` | P4 | Gateway <-> Core ping/pong health checking | P4 backlog-tier |
-| `holomush-2e57` | P4 | Web StreamEvents sets ClientType='terminal' — should it be 'comms_hub'? Design c | P4 backlog-tier |
+| `holomush-2e57` | P4 | Web StreamEvents sets ClientType='terminal' — should it be 'comms_hub'? Design clarification needed | P4 backlog-tier |
 | `holomush-3xfs` | P4 | Audit zero CharacterID handling in Subscribe | P4 backlog-tier |
 | `holomush-4cet` | P4 | chore(dev): fix gopls workspace path confusion in jj worktree symlinks | P4 backlog-tier |
 | `holomush-5g6.1` | P4 | [E13] Design: iOS Client Architecture | P4 backlog-tier |
@@ -591,8 +591,8 @@ recoverable from `2026-07-09-beads-export-full.jsonl.gz`.
 | `holomush-5g6.6` | P4 | [E13] Phase 13.4: Push Notifications - Event Alerts | P4 backlog-tier |
 | `holomush-5g6.7` | P4 | [E13] Phase 13.5: App Store Submission - Published | P4 backlog-tier |
 | `holomush-7t20` | P4 | Add concurrent dispatch engine failure test for metric consistency | explicitly deferred |
-| `holomush-8lhd` | P4 | holomushlint: forbid errors.Is(err, oopsSentinel) — tautological under samber/oo | P4 backlog-tier |
-| `holomush-9w8r` | P4 | Cleanup: drop unused oops.Code('SESSION_ENDED') wrap in quit.go and dispatcher.g | P4 backlog-tier |
+| `holomush-8lhd` | P4 | holomushlint: forbid errors.Is(err, oopsSentinel) — tautological under samber/oops | P4 backlog-tier |
+| `holomush-9w8r` | P4 | Cleanup: drop unused oops.Code('SESSION_ENDED') wrap in quit.go and dispatcher.go | P4 backlog-tier |
 | `holomush-ay5l` | P4 | Fix broken relative links in markdown docs (MD057) | P4 backlog-tier |
 | `holomush-box9` | P4 | Document Lua state limitations for multi-turn commands | P4 backlog-tier |
 | `holomush-ce8a` | P4 | Pre-production: Migration 30 bootstrap_metadata backfill (trigger-deferred) | P4 backlog-tier |
@@ -604,7 +604,7 @@ recoverable from `2026-07-09-beads-export-full.jsonl.gz`.
 | `holomush-out` | P4 | Plugin self-describing manifests for dynamic loading | P4 backlog-tier |
 | `holomush-p4un` | P4 | [E7] Performance benchmark for AccessPolicyEngine vs AccessControl | P4 backlog-tier |
 | `holomush-qalj` | P4 | Force-destroy slog severity: Warn → Error for monitoring escalation | P4 backlog-tier |
-| `holomush-ujbs7` | P4 | Add forced-tie regression lock for SceneStore ListParticipants / pose-order dete | P4 backlog-tier |
+| `holomush-ujbs7` | P4 | Add forced-tie regression lock for SceneStore ListParticipants / pose-order determinism | P4 backlog-tier |
 | `holomush-ujuv` | P4 | crypto rekey: --purge-hot flag (master spec §6.3 Phase 4.4) | P4 backlog-tier |
 | `holomush-wdoo` | P4 | [Needs human review] Investigate orphan wr9.127 with blank title | P4 backlog-tier |
 | `holomush-x4n1r` | P4 | Scenes Phase 7: Templates | P4 backlog-tier |

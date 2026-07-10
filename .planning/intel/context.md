@@ -125,8 +125,8 @@ contradictions; neither doc is down-weighted otherwise.
   clusters: web portal, channels/scenes remainders, forums, discord, architecture
   decomposition, invariant backfill, code health, ops resilience, design seeds, docs,
   features, iOS), **1 item** mapped to existing Phase 3 (external NATS, `holomush-s5ts`),
-  and **234 archive-only** (verified-done, stale, duplicate, deferred, or aged-out —
-  recoverable from the export).
+  and **234 not migrated** (26 verified already-done, 11 stale, 2 duplicates,
+  195 archive-only — deferred or aged-out; all recoverable from the export).
 - **downstream implications:** discovered work is filed with `gh issue create -R
   holomush/holomush`; strategic clusters go to ROADMAP `## Backlog`; `theme:<slug>`
   labels now live on GitHub issues; ADRs are self-minted `holomush-<suffix>` ids (bd no

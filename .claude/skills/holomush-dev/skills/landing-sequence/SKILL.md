@@ -19,7 +19,7 @@ otherwise infer from the current git branch).
    - `git log --oneline origin/main..HEAD` — show the commits that will be pushed
 
 2. **GitHub issue hygiene**
-   - `gh issue list -R holomush/holomush --assignee @me --state open` — anything still claimed but unfinished?
+   - `gh issue list -R holomush/holomush --assignee @me --state open --limit 100` — anything still claimed but unfinished?
    - For each: either `gh issue close <number> -R holomush/holomush` (if done) or `gh issue comment <number> -R holomush/holomush --body "<state at end of session>"` (if continuing)
 
 3. **pr-prep gate**
@@ -55,5 +55,5 @@ otherwise infer from the current git branch).
 
 - Work is NOT complete until `git push` succeeds.
 - Never claim "ready to push" — push.
-- If anything blocks (an unresolved GitHub issue, pr-prep red, push rejected): fix it, don't ignore it.
+- If anything blocks (an issue you claimed this session left unresolved, pr-prep red, push rejected): fix it, don't ignore it.
 - For an undeployed codebase: skip prod-shape discipline (no migration backfills, no reserved proto fields, no deprecation windows, no fallback paths) — when no consumers exist, those tools protect nothing and add complexity.

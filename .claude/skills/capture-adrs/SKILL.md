@@ -149,13 +149,18 @@ For each accepted candidate, in order:
      id="holomush-$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 5)"
      ls docs/adr/"$id"-* >/dev/null 2>&1 || break
    done
+   touch "docs/adr/$id-.reserved.md"   # claim the id now; replaced in step 5
    ```
+
+   (Cross-worktree uniqueness relies on the random suffix — the collision
+   check only sees the current worktree.)
 
 3. Compute slug: kebab-case of title, drop stop-words (a, an, the,
    for, of, to, in, on, with), cap 60 chars.
 4. Prepend `**Decision:** <adr-id>` line below the `**Status:**` line
    in the body.
-5. Write `docs/adr/<adr-id>-<slug>.md` with the full body.
+5. Write `docs/adr/<adr-id>-<slug>.md` with the full body and delete the
+   `<adr-id>-.reserved.md` placeholder.
 6. If candidate has `supersedes: <existing-adr-id>`: rewrite the
    superseded file's `**Status:**` to `Superseded by <new-adr-id>`.
 
@@ -199,7 +204,8 @@ Skill MUST NOT commit. User does that.
 ## Failure modes
 
 - ADR file write fails: roll back any partial writes for that
-  candidate; continue; report partial.
+  candidate (including its `-.reserved.md` placeholder); continue;
+  report partial.
 - Sub-agent JSON malformed twice: fall back to heuristic-only
   candidates with a warning.
 - Spec modified mid-flow (e.g., user edits during review): abort

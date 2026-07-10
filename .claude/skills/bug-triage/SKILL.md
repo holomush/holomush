@@ -50,7 +50,7 @@ out: level (ERROR/WARN/…), `msg`, `error.code`, `error.context.*`, the
 An issue that duplicates an existing one is worse than no issue — it splinters
 the record. Search GitHub Issues *before* the deep dive:
 
-- Use `gh issue list -R holomush/holomush --search "<tokens>" --state all`
+- Use `gh issue list -R holomush/holomush --search "<tokens>" --state all --limit 100`
   with **single broad tokens first** (`KEK`, `cancel`, `alias`, `dependency`),
   then narrow — GitHub's search matches title/body full-text, but multi-word
   queries can miss issues that only literally contain one of the words.

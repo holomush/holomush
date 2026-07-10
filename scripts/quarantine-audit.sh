@@ -31,8 +31,10 @@ fi
 # `exit "$rc"` would always be 0 (the audit would be a silent no-op).
 while read -r issue; do
   [ -n "$issue" ] || continue
-  state=$(gh issue view "$issue" -R holomush/holomush --json state --jq .state 2>/dev/null || echo "UNKNOWN")
-  if [ "$state" = "CLOSED" ]; then
+  if ! state=$(gh issue view "$issue" -R holomush/holomush --json state --jq .state 2>/dev/null); then
+    echo "QUARANTINE AUDIT: cannot resolve issue #$issue (bad number or gh auth)." >&2
+    rc=1
+  elif [ "$state" = "CLOSED" ]; then
     echo "QUARANTINE AUDIT: issue #$issue is closed but still quarantined — un-quarantine it." >&2
     rc=1
   fi

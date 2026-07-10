@@ -16,7 +16,7 @@ here.
 ## Provenance conventions preserved elsewhere
 
 - **Decision beads** (`-t decision`) were captured as ADRs in `docs/adr/<bd-id>-<slug>.md` — those files remain canonical.
-- Migrated GitHub issues carry a `Migrated-from: <bead-id>` line in their body.
+- Migrated GitHub issues carry a ``**Migrated from bead `<bead-id>`**`` provenance line in their body (search GitHub for "Migrated from bead").
 - Historic `bd github sync` mirror issues (bulk-closed as NOT_PLANNED) are referenced by `external_ref` in the export records.
 
 ## Recovery
