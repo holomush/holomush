@@ -117,13 +117,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-10T22:43:10.188Z
-prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
-review/approval.
-Stopped at: Phase 3 context gathered
-Hardening & Deployment Scaling); awaiting user approval before `/gsd-plan-phase 1`.
+Last session: 2026-07-11 — milestone v0.12 (Foundation Hardening) defined via `/gsd-new-milestone`;
+PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
+Stopped at: Roadmap approved (F1-first reorder) — milestone initialized; Phase 4 not yet planned.
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Merge PR #4811 (milestone-init planning docs).
+- Ship the F2 gateway DoS cap (#4785) as a `/gsd-quick` fix — the immediate opener.
+- Then `/gsd-plan-phase 4` (or `/gsd-discuss-phase 4`) — the F1 resilience pass + event-sourcing-vs-CRUD ADR.
