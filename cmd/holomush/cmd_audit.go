@@ -239,11 +239,17 @@ func runAuditDLQShow(ctx context.Context, js jetstream.JetStream, msgID string, 
 		if ferr != nil && !isFetchTimeout(ferr) {
 			return oops.Code("AUDIT_DLQ_FETCH_FAILED").Wrap(ferr)
 		}
+		// Defensive: a timeout error is expected to come with a non-nil batch
+		// (jetstream's current behavior), but guard against a nil batch so a
+		// future client change cannot turn this into a nil-deref panic.
+		if batch == nil {
+			break
+		}
 		got := 0
 		for msg := range batch.Messages() {
 			got++
 			scanned++
-			if msg.Headers().Get("Nats-Msg-Id") == msgID {
+			if msg.Headers().Get(audit.HeaderMsgID) == msgID {
 				renderDLQMessage(w, msg)
 				return nil
 			}

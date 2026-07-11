@@ -18,10 +18,16 @@ import (
 	"github.com/holomush/holomush/internal/pgnanos"
 )
 
+// HeaderMsgID is the Nats-Msg-Id header carrying the event ULID — the
+// JetStream dedup key and the events_audit primary key. Exported so operator
+// CLIs (e.g. `holomush audit dlq show`) match the exact header the projection
+// writes instead of duplicating the literal, which could drift on a rename.
+const HeaderMsgID = "Nats-Msg-Id"
+
 // Header names copied from the spec (§5). Keep in sync with the publisher
 // side; mismatches cause the projection to reject messages.
 const (
-	headerMsgID         = "Nats-Msg-Id"
+	headerMsgID         = HeaderMsgID
 	headerCodec         = "App-Codec"
 	headerEventType     = "App-Event-Type"
 	headerSchemaVersion = "App-Schema-Version"

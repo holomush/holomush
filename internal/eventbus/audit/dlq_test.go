@@ -84,15 +84,19 @@ func TestDLQEnsureStreamMapsZeroMaxBytesToUnlimited(t *testing.T) {
 		"zero MaxBytes must map to the JetStream -1 unbounded sentinel, not literal 0")
 }
 
-func TestDLQEnsureStreamIsIdempotent(t *testing.T) {
+func TestDLQEnsureStreamDelegatesEachCallToCreateOrUpdate(t *testing.T) {
 	t.Parallel()
 	fake := &fakeDLQJetStream{}
 	d := newDLQPublisher(fake, testDLQConfig())
 
 	require.NoError(t, d.EnsureStream(context.Background()))
 	require.NoError(t, d.EnsureStream(context.Background()))
+	// EnsureStream delegates unconditionally to CreateOrUpdateStream on every
+	// call (no local caching), so two calls produce two create invocations.
+	// Real idempotency is the server's CreateOrUpdateStream contract, which the
+	// fake does not model — this test verifies the delegation, not idempotency.
 	assert.Equal(t, 2, fake.createCalls,
-		"CreateOrUpdateStream is idempotent; a second call is a no-op success")
+		"EnsureStream delegates to CreateOrUpdateStream on each call")
 }
 
 func TestDLQEnsureStreamSurfacesDeclareError(t *testing.T) {
