@@ -63,7 +63,7 @@ trusted identically by the host.
 
 <!-- Current GSD roadmap scope — genuine forward work not yet built. See ROADMAP.md for phase breakdown. -->
 
-_All v1.0-milestone roadmap phases (1–3) are complete. Remaining strategic work lives in the ROADMAP
+_All v0.11-milestone roadmap phases (1–3) are complete. Remaining strategic work lives in the ROADMAP
 `## Backlog` (999.x) — promote with `/gsd-review-backlog`._
 
 ### Out of Scope
