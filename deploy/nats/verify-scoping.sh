@@ -117,6 +117,20 @@ assert_subscribe_denied() {
   fi
 }
 
+# Connectivity precondition (soundness gate): the denial probes below treat any
+# non-zero `nats` exit as "denied → ok", so a wrong password, unreachable broker,
+# or TLS failure would make ALL six probes vacuously "pass" and print PASSED
+# without proving anything. Before probing, publish on the credential's OWN
+# permitted subject (_INBOX.>) — this MUST succeed. If it does not, the
+# credential never connected/authenticated and we CANNOT distinguish "denied by
+# scoping" from "never connected", so abort with a distinct exit code (4).
+connectivity_subject="_INBOX.scopecheck.$$.connectivity"
+if ! nats_rc pub "$connectivity_subject" "ping"; then
+  echo "verify-scoping: credential could not connect/authenticate (publish to its own permitted '$connectivity_subject' failed); cannot prove scoping" >&2
+  exit 4
+fi
+echo "ok: connectivity precondition met (publish to permitted '$connectivity_subject' succeeded)"
+
 echo "verify-scoping: probing non-server denial on ${NATS_URL}"
 for prefix in "${PREFIXES[@]}"; do
   probe="${prefix}.scopecheck.probe"
