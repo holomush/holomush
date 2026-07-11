@@ -62,13 +62,24 @@ Event-model collapse in Phase 7. Operational hardening + CI gates (Phase 6) and 
 2. The harness produces a documented, reproducible verdict on whether last-write-wins (M12) actually corrupts world state under concurrency
 3. A committed ADR records the world-model decision (build a real projection/outbox **vs.** adopt CRUD-canonical + optimistic-concurrency/transactional-outbox), grounded in F1 (`docs/reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md`) and the resilience evidence — #4784
 4. The ADR names the concrete mechanism Phase 5 (MODEL-03/MODEL-04) will implement
+
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 04-01-PLAN.md — Two-replica harness substrate: WithExternalNATS/WithSharedDatabase StartOptions, gated resilience suite skeleton, boot smoke (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 04-02-PLAN.md — M12 lost-update verdict specs + replica-restart/client-reconnect chaos specs (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 04-03-PLAN.md — M2 dual-write window specs + f1-resilience-verdict.md evidence doc (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 04-04-PLAN.md — MODEL-01 ADR: draft, blocking human decision checkpoint, finalize + index + cross-link (wave 4)
 
 ### Phase 5: World-Model Integrity Fixes (M2 / M12)
@@ -82,6 +93,7 @@ Plans:
 2. A world mutation and its event emission are atomic or reconciled: a NATS blip after commit cannot lose the notification (closes M2)
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
+
 **Plans**: 0 plans
 
 Plans:
@@ -99,6 +111,7 @@ Plans:
 2. A build pinning a known-vulnerable `nats-server` fails the new govulncheck / vuln-scan CI gate; the dependency is ≥ v2.14.3 — F8 #4790
 3. The audit-DLQ replay CLI recovers messages for an external-NATS deployment (game_id bridge), proven by a non-tautological test — F3 #4787
 4. Coverage policy and CI enforcement agree — the >80% gate blocks merges, or the doc MUST is corrected to the enforced reality — F7 #4804
+
 **Plans**: 0 plans
 
 Plans:
