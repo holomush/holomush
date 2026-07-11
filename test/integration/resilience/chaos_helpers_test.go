@@ -135,8 +135,10 @@ func pauseBroker(ctx context.Context, env *natstest.NATSEnv) {
 	GinkgoHelper()
 	cli, err := testcontainers.NewDockerClientWithOpts(ctx)
 	Expect(err).NotTo(HaveOccurred(), "pauseBroker: docker client")
-	Expect(cli.ContainerPause(ctx, env.Container.GetContainerID(), dockerclient.ContainerPauseOptions{})).
-		To(Succeed(), "pauseBroker: ContainerPause")
+	// ContainerPause returns (ContainerPauseResult, error) in the pinned
+	// moby/moby client — the result value is discarded; only the error matters.
+	_, err = cli.ContainerPause(ctx, env.Container.GetContainerID(), dockerclient.ContainerPauseOptions{})
+	Expect(err).NotTo(HaveOccurred(), "pauseBroker: ContainerPause")
 }
 
 // unpauseBroker resumes a container frozen by pauseBroker (`docker unpause` —
@@ -145,6 +147,8 @@ func unpauseBroker(ctx context.Context, env *natstest.NATSEnv) {
 	GinkgoHelper()
 	cli, err := testcontainers.NewDockerClientWithOpts(ctx)
 	Expect(err).NotTo(HaveOccurred(), "unpauseBroker: docker client")
-	Expect(cli.ContainerUnpause(ctx, env.Container.GetContainerID(), dockerclient.ContainerUnpauseOptions{})).
-		To(Succeed(), "unpauseBroker: ContainerUnpause")
+	// ContainerUnpause returns (ContainerUnpauseResult, error) in the pinned
+	// moby/moby client — the result value is discarded; only the error matters.
+	_, err = cli.ContainerUnpause(ctx, env.Container.GetContainerID(), dockerclient.ContainerUnpauseOptions{})
+	Expect(err).NotTo(HaveOccurred(), "unpauseBroker: ContainerUnpause")
 }
