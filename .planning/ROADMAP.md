@@ -35,65 +35,77 @@ Phase execution artifacts: `milestones/v0.11-phases/`.
 
 **v0.12 Foundation Hardening** — phase numbering continues across milestones (v0.11 ended at Phase 3):
 
-- [ ] **Phase 4: Operational Quick Wins & Assurance Gates** — gateway body cap, `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage gate
-- [ ] **Phase 5: World-Model Resilience Investigation & Decision (F1)** — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR
-- [ ] **Phase 6: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction
+> **Immediate opener (before Phase 4):** ship the **F2 gateway DoS cap** (OPS-01, #4785) as a fast `/gsd-quick` fix — a one-line `connect.WithReadMaxBytes(4<<20)` + read timeout + a rejection test. It closes a **live unauthenticated OOM DoS**, so it lands first, ahead of the multi-step F1 investigation; too small to warrant the full phase loop.
+
+- [ ] **Phase 4: World-Model Resilience Investigation & Decision (F1)** — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR (decision gate)
+- [ ] **Phase 5: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction
+- [ ] **Phase 6: Operational Hardening & Assurance Gates** — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage gate
 - [ ] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports
 - [ ] **Phase 8: God-Object Decomposition** — CoreServer + plugin/manager decomposition (behavior-preserving)
 - [ ] **Phase 9: Test-Quality & Code-Health Sweep** — coverage backfill, weak-test/ACE remediation, session-lifecycle matrix, code-health batch
 
 ## Phase Details
 
-**Dependency spine:** the resilience pass + F1 ADR (Phase 5) gate the world-model fixes (Phase 6) and the
-Event-model collapse in Phase 7. Operational quick wins (Phase 4) and god-object decomposition (Phase 8) are
-independent; the code-health sweep (Phase 9) depends on the coverage gate landed in Phase 4.
+**Dependency spine:** the milestone opens by closing the live DoS (F2, a `/gsd-quick` fix), then leads with the
+**decision gate** — the resilience pass + F1 ADR (Phase 4) — which gates the world-model fixes (Phase 5) and the
+Event-model collapse in Phase 7. Operational hardening + CI gates (Phase 6) and god-object decomposition
+(Phase 8) are independent; the code-health sweep (Phase 9) depends on the coverage gate landed in Phase 6.
 
-### Phase 4: Operational Quick Wins & Assurance Gates
-
-**Goal**: Close the cheap, high-value operational Highs and stand up the CI assurance gates every later phase relies on.
-**Depends on**: — (independent; ship first)
-**Requirements**: OPS-01, OPS-02, OPS-03, OPS-04, QUAL-01
-**Success Criteria** (what must be TRUE):
-
-1. An unauthenticated oversized request to the public gateway is rejected without OOM (bounded request body + read timeout) — F2 #4785
-2. `events_audit` rows past the retention window are pruned by the extended RetentionWorker; the table no longer grows unbounded — F4 #4786
-3. A build pinning a known-vulnerable `nats-server` fails the new govulncheck / vuln-scan CI gate; the dependency is ≥ v2.14.3 — F8 #4790
-4. The audit-DLQ replay CLI recovers messages for an external-NATS deployment (game_id bridge), proven by a non-tautological test — F3 #4787
-5. Coverage policy and CI enforcement agree — the >80% gate blocks merges, or the doc MUST is corrected to the enforced reality — F7 #4804
-**Plans**: 0 plans
-
-Plans:
-
-- [ ] TBD (created by /gsd-plan-phase 4)
-
-### Phase 5: World-Model Resilience Investigation & Decision (F1)
+### Phase 4: World-Model Resilience Investigation & Decision (F1)
 
 **Goal**: Empirically characterize the concurrency/dual-write risk, then decide the world-state model via ADR — the decision gate the rest of the event-model work depends on.
-**Depends on**: — (exercises Phase-4 gates but is not blocked by them)
+**Depends on**: — (the discrete opening decision; the F2 gateway DoS cap ships first as a `/gsd-quick` fix)
 **Requirements**: OPS-05, MODEL-01
 **Success Criteria** (what must be TRUE):
 
 1. A reproducible harness exercises concurrent commands + a NATS broker flap + a replica restart + client reconnect under the two-replica deployment — #4791
 2. The harness produces a documented, reproducible verdict on whether last-write-wins (M12) actually corrupts world state under concurrency
 3. A committed ADR records the world-model decision (build a real projection/outbox **vs.** adopt CRUD-canonical + optimistic-concurrency/transactional-outbox), grounded in F1 (`docs/reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md`) and the resilience evidence — #4784
-4. The ADR names the concrete mechanism Phase 6 (MODEL-03/MODEL-04) will implement
+4. The ADR names the concrete mechanism Phase 5 (MODEL-03/MODEL-04) will implement
+**Plans**: 0 plans
 
-### Phase 6: World-Model Integrity Fixes (M2 / M12)
+Plans:
+
+- [ ] TBD (created by /gsd-plan-phase 4)
+
+### Phase 5: World-Model Integrity Fixes (M2 / M12)
 
 **Goal**: Implement the ADR's chosen mechanism to close last-write-wins and dual-write non-atomicity, and correct the event-sourcing docs.
-**Depends on**: Phase 5 (the MODEL-01 ADR)
+**Depends on**: Phase 4 (the MODEL-01 ADR)
 **Requirements**: MODEL-02, MODEL-03, MODEL-04
 **Success Criteria** (what must be TRUE):
 
-1. Concurrent writers to the same world entity cannot silently lose an update — a version-guard conflict is detected and surfaced (the Phase-5 harness now passes) — #4798
+1. Concurrent writers to the same world entity cannot silently lose an update — a version-guard conflict is detected and surfaced (the Phase-4 harness now passes) — #4798
 2. A world mutation and its event emission are atomic or reconciled: a NATS blip after commit cannot lose the notification (closes M2)
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (created by /gsd-plan-phase 5)
+
+### Phase 6: Operational Hardening & Assurance Gates
+
+**Goal**: Close the remaining operational Highs and stand up the CI assurance gates the later phases rely on.
+**Depends on**: — (independent of the model work)
+**Requirements**: OPS-02, OPS-03, OPS-04, QUAL-01
+**Success Criteria** (what must be TRUE):
+
+1. `events_audit` rows past the retention window are pruned by the extended RetentionWorker; the table no longer grows unbounded — F4 #4786
+2. A build pinning a known-vulnerable `nats-server` fails the new govulncheck / vuln-scan CI gate; the dependency is ≥ v2.14.3 — F8 #4790
+3. The audit-DLQ replay CLI recovers messages for an external-NATS deployment (game_id bridge), proven by a non-tautological test — F3 #4787
+4. Coverage policy and CI enforcement agree — the >80% gate blocks merges, or the doc MUST is corrected to the enforced reality — F7 #4804
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (created by /gsd-plan-phase 6)
 
 ### Phase 7: Event-Model & Bootstrap Decomposition
 
 **Goal**: Collapse the parallel Event models (coordinated with the ADR) and unify process bootstrap on `lifecycle.Orchestrator`.
-**Depends on**: Phase 5/6 (ARCH-04 needs the MODEL-01 outcome); ARCH-03/05 are independent
+**Depends on**: Phase 4/5 (ARCH-04 needs the MODEL-01 outcome); ARCH-03/05 are independent
 **Requirements**: ARCH-03, ARCH-04, ARCH-05
 **Success Criteria** (what must be TRUE):
 
@@ -115,7 +127,7 @@ Plans:
 ### Phase 9: Test-Quality & Code-Health Sweep
 
 **Goal**: Backfill coverage and remediate test/code-health debt to the reconciled bar.
-**Depends on**: Phase 4 (QUAL-01 sets the coverage bar)
+**Depends on**: Phase 6 (QUAL-01 sets the coverage bar)
 **Requirements**: QUAL-02, QUAL-03, QUAL-04, QUAL-05
 **Success Criteria** (what must be TRUE):
 
@@ -131,9 +143,9 @@ Plans:
 | 1. Channels Subsystem | v0.11 | 10/10 | Complete | 2026-07-09 |
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
-| 4. Operational Quick Wins & Assurance Gates | v0.12 | 0 | Pending | — |
-| 5. World-Model Resilience Investigation & Decision | v0.12 | 0 | Pending | — |
-| 6. World-Model Integrity Fixes | v0.12 | 0 | Pending | — |
+| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 0 | Pending | — |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 0 | Pending | — |
+| 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |

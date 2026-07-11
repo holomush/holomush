@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 4
-current_phase_name: Operational Quick Wins & Assurance Gates
+current_phase_name: World-Model Resilience Investigation & Decision (F1)
 status: planning
 last_updated: "2026-07-11T15:05:56.943Z"
 last_activity: 2026-07-11
@@ -28,10 +28,10 @@ trusted identically.
 
 ## Current Position
 
-Phase: 4 — Operational Quick Wins & Assurance Gates (not started)
-Plan: — (run /gsd-plan-phase 4)
-Status: Roadmap created — ready to plan Phase 4
-Last activity: 2026-07-11 — Milestone v0.12 roadmap created (6 phases, 19 requirements)
+Phase: 4 — World-Model Resilience Investigation & Decision (F1) (not started)
+Plan: — (immediate: /gsd-quick the F2 gateway DoS cap #4785; then /gsd-plan-phase 4)
+Status: Roadmap created — ready to plan Phase 4 (F1 decision gate)
+Last activity: 2026-07-11 — Milestone v0.12 roadmap created (6 phases, 19 requirements); F1-first reorder + F2 pulled forward
 
 ## Performance Metrics
 
