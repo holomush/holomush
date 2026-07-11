@@ -128,9 +128,11 @@ assert_two_members() {
 teardown() {
   log "tearing down stack (down -v)"
   compose down -v --remove-orphans >/dev/null 2>&1 || true
-  # Remove the throwaway postgres bind dir the smoke created (never a
-  # caller-supplied SMOKE_DATA_DIR we did not mint).
-  if [ -n "${SMOKE_DATA_DIR:-}" ] && [ -d "${SMOKE_DATA_DIR}" ]; then
+  # Remove the throwaway postgres bind dir ONLY when the smoke minted it
+  # itself (MINTED_DATA_DIR=1). A caller-supplied SMOKE_DATA_DIR is adopted
+  # verbatim and MUST NOT be recursively deleted — that would be a data-loss
+  # trap for an operator who exported a real directory.
+  if [ "${MINTED_DATA_DIR:-0}" = 1 ] && [ -n "${SMOKE_DATA_DIR:-}" ] && [ -d "${SMOKE_DATA_DIR}" ]; then
     rm -rf "${SMOKE_DATA_DIR}" >/dev/null 2>&1 || true
   fi
 }
@@ -166,7 +168,13 @@ main() {
   # it at a throwaway temp dir under /tmp (shared with Docker Desktop by
   # default) and remove it on teardown. Only postgres uses a host bind here; the
   # core replicas' KEK lives on the kek-shared named volume.
-  SMOKE_DATA_DIR="${SMOKE_DATA_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/holomush-cluster-smoke.XXXXXX")}"
+  #
+  # Track provenance: only a dir this script minted is safe to rm -rf in
+  # teardown. A caller-supplied SMOKE_DATA_DIR is adopted but never deleted.
+  if [ -z "${SMOKE_DATA_DIR:-}" ]; then
+    SMOKE_DATA_DIR="$(mktemp -d "${TMPDIR:-/tmp}/holomush-cluster-smoke.XXXXXX")"
+    MINTED_DATA_DIR=1
+  fi
   export DATA_DIR="${SMOKE_DATA_DIR}"
 
   ensure_image
