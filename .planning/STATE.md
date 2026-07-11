@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 04
-current_phase_name: world-model-resilience-investigation-decision-f1
+current_phase: 5
+current_phase_name: M2 / M12
 status: verifying
 stopped_at: Completed 04-04-PLAN.md — phase 04 ready for verification
-last_updated: "2026-07-11T21:32:14.333Z"
+last_updated: "2026-07-11T21:54:31.812Z"
 last_activity: 2026-07-11
-last_activity_desc: Phase 04 execution started
+last_activity_desc: Phase 04 complete, transitioned to Phase 5
 progress:
   total_phases: 6
   completed_phases: 1
@@ -30,16 +30,16 @@ trusted identically.
 
 ## Current Position
 
-Phase: 04 (world-model-resilience-investigation-decision-f1) — EXECUTING
-Plan: 4 of 4
+Phase: 5 — World-Model Integrity Fixes (M2 / M12)
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-11 — Phase 04 execution started
+Last activity: 2026-07-11 — Phase 04 complete, transitioned to Phase 5
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 26
+- Total plans completed: 30
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -50,6 +50,7 @@ Last activity: 2026-07-11 — Phase 04 execution started
 | 01 | 10 | - | - |
 | 02 | 7 | - | - |
 | 03 | 9 | - | - |
+| 04 | 4 | - | - |
 
 **Recent Trend:**
 
