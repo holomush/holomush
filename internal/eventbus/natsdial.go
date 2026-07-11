@@ -4,6 +4,8 @@
 package eventbus
 
 import (
+	"net/url"
+
 	"github.com/nats-io/nats.go"
 	"github.com/samber/oops"
 )
@@ -54,8 +56,24 @@ func dialExternal(cfg Config) (*nats.Conn, error) {
 	conn, err := nats.Connect(cfg.URL, opts...)
 	if err != nil {
 		return nil, oops.Code("EVENTBUS_EXTERNAL_CONNECT_FAILED").
-			With("url", cfg.URL).
+			With("url", redactURL(cfg.URL)).
 			Wrap(err)
 	}
 	return conn, nil
+}
+
+// redactURL strips any userinfo (user:pass) from a NATS URL so a boot-time
+// dial failure does not leak the URL-embedded password into structured
+// errors/logs. Dev clusters may carry user:pass in cfg.URL (config.go);
+// this keeps that credential out of EVENTBUS_EXTERNAL_CONNECT_FAILED. If the
+// URL cannot be parsed it is dropped entirely rather than risking a leak.
+func redactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "<unparseable url redacted>"
+	}
+	if u.User != nil {
+		u.User = nil
+	}
+	return u.Redacted()
 }
