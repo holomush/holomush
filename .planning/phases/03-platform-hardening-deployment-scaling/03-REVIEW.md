@@ -1,50 +1,48 @@
 ---
 phase: 03-platform-hardening-deployment-scaling
 reviewed: 2026-07-10T00:00:00Z
-depth: standard
+depth: deep
 files_reviewed: 49
 files_reviewed_list:
-  - .golangci.yaml
-  - CLAUDE.md
   - .claude/rules/testing.md
-  - cmd/holomush/cmd_audit.go
   - cmd/holomush/cmd_audit_test.go
+  - cmd/holomush/cmd_audit.go
   - cmd/holomush/core.go
-  - cmd/holomush/deps.go
   - cmd/holomush/deps_test.go
+  - cmd/holomush/deps.go
   - cmd/holomush/gateway_imports_test.go
   - cmd/holomush/root.go
-  - compose.cluster.yaml
-  - deploy/nats/README.md
   - deploy/nats/cluster-config.yaml
   - deploy/nats/cluster-server.conf
   - deploy/nats/holomush-server.account.conf
+  - deploy/nats/README.md
   - deploy/nats/verify-scoping.sh
+  - docs/architecture/invariants.md
   - docs/architecture/invariants.yaml
   - internal/cluster/clustertest/external.go
-  - internal/eventbus/audit/dlq.go
   - internal/eventbus/audit/dlq_capture_integration_test.go
   - internal/eventbus/audit/dlq_neverdrop_integration_test.go
   - internal/eventbus/audit/dlq_replay_integration_test.go
   - internal/eventbus/audit/dlq_test.go
+  - internal/eventbus/audit/dlq.go
   - internal/eventbus/audit/lag_metric.go
-  - internal/eventbus/audit/projection.go
   - internal/eventbus/audit/projection_dlq_unit_test.go
-  - internal/eventbus/audit/replay.go
+  - internal/eventbus/audit/projection.go
   - internal/eventbus/audit/replay_test.go
+  - internal/eventbus/audit/replay.go
   - internal/eventbus/audit/subsystem.go
-  - internal/eventbus/config.go
   - internal/eventbus/config_test.go
+  - internal/eventbus/config.go
   - internal/eventbus/natsdial.go
-  - internal/eventbus/scopecheck.go
   - internal/eventbus/scopecheck_test.go
-  - internal/eventbus/subsystem.go
+  - internal/eventbus/scopecheck.go
   - internal/eventbus/subsystem_external_test.go
   - internal/eventbus/subsystem_test.go
-  - internal/observability/server.go
+  - internal/eventbus/subsystem.go
   - internal/observability/server_test.go
-  - internal/testsupport/natstest/nats.go
+  - internal/observability/server.go
   - internal/testsupport/natstest/nats_test.go
+  - internal/testsupport/natstest/nats.go
   - scripts/smoke/cluster-smoke.bats
   - scripts/smoke/cluster-smoke.sh
   - site/src/content/docs/operating/how-to/external-nats-deployment.md
@@ -54,224 +52,167 @@ files_reviewed_list:
   - test/integration/eventbus_external/scopecheck_test.go
 findings:
   critical: 0
-  warning: 6
-  info: 4
-  total: 10
-status: fixed
+  warning: 2
+  info: 2
+  total: 4
+status: issues
 ---
 
-# Phase 3: Code Review Report
+# Phase 3: Code Review Report (DEEP re-review)
 
 **Reviewed:** 2026-07-10
-**Depth:** standard
+**Depth:** deep (cross-file: eventbus/audit/cluster/crypto boundaries, external-NATS dial + fail-closed boot, single-principal scoping, multi-node crypto invalidation, audit DLQ capture/replay)
 **Files Reviewed:** 49
-**Status:** fixed — all 6 warnings + 4 info resolved 2026-07-10 (see Fix Log)
+**Status:** issues_found
 
 ## Summary
 
-Phase 3 (platform hardening: external NATS mode, single-principal subject scoping,
-audit DLQ + replay, multi-node crypto-invalidation verification, operator runbook)
-is generally well-engineered. Error handling is fail-closed, resource ownership is
-disciplined (nats conns/pools/goroutines are consistently closed and rollback paths
-unwind cleanly), the shell scripts quote defensively and decide pass/fail by exit
-code, the NATS account templates grant exactly the three game-topic prefixes plus
-`_INBOX`/`$JS.API` (no over-grant), and the test suites carry real assertions with
-no Skip-only stubs. The crypto-invariant surface was intentionally out of scope
-(already adjudicated READY by crypto-reviewer).
+This is a deep re-review at HEAD `46b21e171`, after all 10 findings of the prior
+standard-depth review were fixed. I re-verified the fixed state (WR-01..06,
+IN-01..04 are all genuinely resolved in the current code — the redaction helper,
+minted-dir teardown guard, connectivity precondition, full-drain, prefix-mismatch
+fail-loud, header-constant dedup, and nil-batch guards are all present and
+correct) and then traced the call chains the standard pass could not: the
+`projection.handle → dlq.Capture` Term/Nak decision under real NATS MaxDeliver
+semantics, the `ReplayDLQ` original-subject recovery vs the capture-time subject,
+the `VerifyAccountScoping` shared-connection async handler, the boot metric
+registry wiring, and every `// Verifies:` binding minted in `invariants.yaml`.
 
-No BLOCKER-class defects were found (no injection, no data-loss on the normal path,
-no crash). The findings are one operability gap (the new DLQ counter is never wired
-onto the scraped Prometheus registry — the same class of bug the phase's own
-`core.go` change fixed for cluster metrics), a credential-leak risk in the external
-dial error, a destructive `rm -rf` in the smoke teardown, and two soundness gaps in
-the security-verification paths (a scoping self-check that can be fooled by queued
-violations, and a runbook script that reports PASS on a connection failure).
+Overall the phase is well-engineered: fail-closed boot is correct
+(`external_boot_test` proves conn/js stay nil on unreachable/mismatch), the
+scoping self-check both fails-closed on default-open and passes the shipped scoped
+account (`scopecheck_test` Case A/B), the multi-node invalidation bindings
+(INV-CLUSTER-1/2/9) genuinely assert N-of-N ack collection over independent
+per-replica connections, the boot metric-registry fix now routes audit + cluster
++ invalidation collectors onto the served registry, and the operator CLIs decide
+success by exit code.
+
+No BLOCKER-class defect was found (no injection, no normal-path data loss, no
+crash, no credential leak on the primary single-URL path). The two Warnings both
+concern the audit DLQ never-drop guarantee (D-09): a real gap at the exact
+`MaxDeliver` boundary when DLQ capture fails, and an invariant binding
+(INV-EVENTBUS-30) that asserts a clause ("redelivery continues") which no bound
+test proves and which is false under standard JetStream semantics.
 
 ## Warnings
 
-### WR-01: New audit DLQ metric (and lag/skip metrics) is never registered on the scraped registry
+### WR-01: DLQ never-drop has a gap at the MaxDeliver boundary — a Nak on the final delivery attempt does not redeliver
 
-**File:** `internal/eventbus/audit/lag_metric.go:58` (and its non-call in `cmd/holomush/`)
-**Issue:** This phase adds `DLQMessagesTotal` to `audit.RegisterMetrics`, and its
-doc comment states operators "alert on this counter long before bounded DLQ
-retention (D-12) would age anything out." But `audit.RegisterMetrics` is called
-**only from `internal/eventbus/audit/subsystem_test.go`** — never from production
-wiring in `cmd/holomush`. So `holomush_audit_dlq_messages_total` (and the
-pre-existing `projection_lag_seconds` / `projection_plugin_owned_skipped_total`)
-increment in-process but are never exposed on `/metrics`. This is the exact
-"silently unscraped" defect the phase deliberately fixed in `core.go:508-517` for
-`cluster_*` and `invalidation_*` metrics (routing them to `obsServer.Registerer()`),
-but the audit metrics were left unwired — so the DLQ alerting story (D-11) does not
-actually function.
-**Fix:** Register the audit collectors on the served registry during boot, mirroring
-the cluster-metrics change:
-```go
-// in runCoreWithDeps, after metricsReg is resolved
-audit.RegisterMetrics(metricsReg)
-```
-Confirm `holomush_audit_dlq_messages_total` appears on a live `/metrics` scrape.
+**File:** `internal/eventbus/audit/projection.go:261-282`
+**Issue:** The final-attempt capture branch fires exactly when
+`meta.NumDelivered >= uint64(p.cfg.MaxDeliver)` — i.e. on the *last* permitted
+delivery. If `p.dlq.Capture(...)` fails there, the code `msg.Nak()`s with the
+comment "so redelivery continues — nothing is ever silently dropped." Under
+standard JetStream semantics MaxDeliver is a hard ceiling: once a message has been
+delivered `MaxDeliver` times, the server will **not** redeliver it even on an
+explicit `-NAK` — it emits a `MAX_DELIVERIES` advisory and stops. So on the final
+attempt a failed capture yields **no further delivery and no further capture
+attempt**. The poison message is then neither persisted, nor in the DLQ, nor
+redeliverable; it survives only in the source EVENTS stream (LimitsPolicy) until
+`StreamMaxAge` (default 30 days), after which it ages out permanently. The
+`dlq_neverdrop_integration_test` (MaxDeliver:2) is consistent with this — its
+`failing.Calls()` reaches exactly 1 and the test never asserts a second delivery,
+because none occurs.
 
-### WR-02: External dial error leaks URL-embedded credentials into the oops context
+This is not normal-path loss (the DLQ's independent failure domain makes capture
+reliable when Postgres — not the DLQ — is the outage), and it is ERROR-logged, so
+it is a robustness/guarantee-accuracy defect rather than a blocker. But the code's
+own claim ("redelivery continues") is false, so the D-09 never-drop guarantee is
+weaker than documented: a sustained DLQ-domain outage coinciding with a poison
+message's final attempt drops the audit record after MaxAge with no automatic
+retry.
+**Fix:** Make the fallback actually preserve the message rather than rely on a
+non-existent redelivery. Options: (a) do NOT Term on the success side until the
+capture is durable AND move the capture attempt one delivery *earlier*
+(`NumDelivered >= MaxDeliver-1`) so a failed capture still has one real redelivery
+left; or (b) on capture failure, leave the message un-acked (no Nak/Term) so it
+stays owned by the consumer and re-attempt capture on a subsequent boot / manual
+re-consume, and correct the comment to state the guarantee is "retained in EVENTS
+until MaxAge; capture is not auto-retried past MaxDeliver." At minimum, fix the
+comment so it does not assert redelivery that JetStream will not perform.
 
-**File:** `internal/eventbus/natsdial.go:56-58`
-**Issue:** `dialExternal` wraps a connect failure with `With("url", cfg.URL)`. In the
-shipped compose cluster overlay `cfg.URL` is `nats://holomush-server:holomush-server-smoke@nats:4222`
-(`deploy/nats/cluster-config.yaml:26`), and the docs explicitly allow `user:pass` in
-the URL for dev clusters (`config.go:68`). On any boot-time dial failure this password
-is placed in the structured error and propagated up through `EVENTBUS_EXTERNAL_CONNECT_FAILED`
-→ `AUDIT_DLQ_NATS_DIAL_FAILED` (cmd_audit.go:131) → stderr / `errutil.LogErrorContext`,
-writing the secret to logs. Same leak surface as the grpc-errors rule ("never leak
-inner errors past trust boundaries").
-**Fix:** Redact userinfo before attaching. Parse with `net/url` and strip
-`u.User`, or attach only host:port:
-```go
-safe := cfg.URL
-if u, perr := url.Parse(cfg.URL); perr == nil && u.User != nil {
-    u.User = nil
-    safe = u.Redacted() // or u.String()
-}
-return nil, oops.Code("EVENTBUS_EXTERNAL_CONNECT_FAILED").With("url", safe).Wrap(err)
-```
+### WR-02: INV-EVENTBUS-30 is a partial/misleading binding — the "redelivery continues" clause is asserted by no bound test and is false
 
-### WR-03: cluster-smoke teardown `rm -rf`s a caller-supplied SMOKE_DATA_DIR despite the comment claiming it never does
-
-**File:** `scripts/smoke/cluster-smoke.sh:128-136` (with `:169`)
-**Issue:** `teardown()` runs `rm -rf "${SMOKE_DATA_DIR}"` and the inline comment
-asserts it removes "never a caller-supplied SMOKE_DATA_DIR we did not mint." But
-line 169 reads `SMOKE_DATA_DIR="${SMOKE_DATA_DIR:-$(mktemp -d ...)}"` — an operator
-who exports `SMOKE_DATA_DIR=/some/real/dir` has that directory adopted verbatim and
-then recursively deleted on exit. The documented safety contract is not enforced by
-the code, creating a data-loss trap.
-**Fix:** Only delete a directory the script actually minted. Track provenance:
-```go
-if [ -z "${SMOKE_DATA_DIR:-}" ]; then
-  SMOKE_DATA_DIR="$(mktemp -d "${TMPDIR:-/tmp}/holomush-cluster-smoke.XXXXXX")"
-  MINTED_DATA_DIR=1
-fi
-# teardown:
-[ "${MINTED_DATA_DIR:-0}" = 1 ] && [ -d "${SMOKE_DATA_DIR}" ] && rm -rf "${SMOKE_DATA_DIR}"
-```
-
-### WR-04: verify-scoping.sh reports PASSED when the verify credential cannot connect at all
-
-**File:** `deploy/nats/verify-scoping.sh:90-118`
-**Issue:** Both `assert_publish_denied` and `assert_subscribe_denied` treat *any*
-non-zero (and non-124) `nats` exit as "denied → ok". A wrong password, unreachable
-broker, or TLS failure makes `nats pub`/`nats sub` exit non-zero for reasons
-unrelated to subject scoping, so all six probes "pass" and the script prints
-`PASSED` — a vacuous proof. A security-verification tool must distinguish
-"denied by scoping" from "never connected."
-**Fix:** Add a connectivity precondition before the probes — e.g. a request/reply or
-publish on the credential's own permitted `_INBOX.>`/allowed subject that MUST
-succeed, and abort with a distinct exit code if it fails:
-```bash
-if ! nats_rc pub "_INBOX.scopecheck.$$.connectivity" "ping"; then
-  echo "verify-scoping: credential could not connect/authenticate; cannot prove scoping" >&2
-  exit 4
-fi
-```
-
-### WR-05: scope self-check drains only one stale violation; a queued subscribe-violation can pre-satisfy the publish probe
-
-**File:** `internal/eventbus/scopecheck.go:124-159`
-**Issue:** `probeDenied` drains "any stale violation" with a single non-blocking
-`select` receive (lines 132-135). The async error handler feeds an 8-deep buffered
-channel shared across both probes. If the subscribe probe generates more than one
-`ErrPermissionViolation` (flush + teardown), a leftover violation remains queued;
-the subsequent publish probe drains only one, then — even if the publish were
-actually *permitted* (a publish-only over-scope) — immediately reads the leftover
-violation and concludes `pubDenied = true`, missing the over-scope. This weakens the
-fail-closed guarantee of a security self-check.
-**Fix:** Drain the channel fully before each probe:
-```go
-for {
-    select {
-    case <-violations:
-    default:
-        goto drained
-    }
-}
-drained:
-```
-(or use a fresh per-probe channel / handler).
-
-### WR-06: replay silently returns an un-stripped subject on prefix mismatch, corrupting the restored subject column
-
-**File:** `internal/eventbus/audit/replay.go:208-216` (with `cmd/holomush/cmd_audit.go:325-331`)
-**Issue:** `originalSubject` returns the DLQ subject **unchanged** when the configured
-prefix doesn't match. The replay CLI derives the prefix from the invocation's
-`event_bus.game_id` (`dlqConfigForGame`), while capture wrote it from the running
-core's game id. If an operator replays with a config whose `game_id` differs from (or
-omits, falling back to `main`) the capture-time game id, every recovered
-`events_audit.subject` is stored with the `internal.<game>.audit.dlq.` prefix still
-prepended — silent data corruption of the restored subject column, masked as success.
-**Fix:** Fail loud on prefix mismatch instead of silently passing through, e.g. count
-it as `Failed` with a coded reason, or validate that every scanned DLQ subject carries
-the expected prefix before replay begins.
+**File:** `docs/architecture/invariants.yaml` (INV-EVENTBUS-30) with
+`internal/eventbus/audit/dlq_neverdrop_integration_test.go:64` and
+`internal/eventbus/audit/dlq_capture_integration_test.go:67`
+**Issue:** The invariant summary reads: *"a failed DLQ publish Naks instead, so
+redelivery continues and nothing is silently dropped."* Its two `// Verifies:`
+tests prove only: (1) capture-success → message in DLQ + counter increments + not
+persisted (`dlq_capture`), and (2) capture-failure → DLQ empty + not persisted +
+Nak attempted at least once (`dlq_neverdrop`). Neither test asserts that
+**redelivery continues** after the Nak — and per WR-01 it does not, because the
+Nak lands at `NumDelivered == MaxDeliver`. Per `.claude/rules/invariants.md`,
+`TestBoundInvariantsAreGenuinelyAsserted` cannot detect a partial binding (a test
+proving only one clause of a multi-clause invariant), which "needs human review"
+— this is exactly that case, and the un-proven clause is not merely unproven but
+counterfactual.
+**Fix:** Either (after WR-01 is fixed to make redelivery/retention real) add an
+assertion that the message is re-delivered / recoverable after a failed capture,
+or reword the invariant summary to state the guarantee the code actually provides
+(e.g. "a failed DLQ publish leaves the message un-acked and retained in the source
+stream; it is never Term'd without a durable capture"). Do not leave the summary
+claiming redelivery the bound tests never exercise.
 
 ## Info
 
-### IN-01: VerifyAccountScoping installs an error handler on the shared long-lived connection and never restores it
+### IN-01: scope self-check shares one violation channel across probes — the WR-05 full-drain does not close the in-flight window (fail-open risk in a fail-closed check)
 
-**File:** `internal/eventbus/scopecheck.go:62-69`
-**Issue:** The scope check calls `conn.SetErrorHandler` on `eventBusSub.Conn()` — the
-long-lived connection shared by the event bus, audit projection, cluster, and
-invalidation coordinator — and never restores the prior handler. After boot the
-connection's async error callback is an orphaned closure forwarding permission
-violations to a channel no one reads (which fills and then drops). Benign today
-(the connection had no handler), but a latent trap if any component later relies on
-connection-level async error surfacing.
-**Fix:** Save and restore the previous handler around the check, or run the probe on
-a dedicated short-lived connection.
+**File:** `internal/eventbus/scopecheck.go:127-169` (with `:64-72`)
+**Issue:** `probeDenied` now fully drains the shared `violations` channel before
+each probe (the WR-05 fix). That closes the *enqueued*-stale-violation window but
+not the *in-flight* one: a permission violation generated by the subscribe probe
+(flush/teardown) is dispatched on nats.go's async callback goroutine and may be
+enqueued *after* the publish probe's drain completes but *during* its 3s wait. If
+the account were actually publish-over-scoped (publish permitted → no publish
+violation of its own), that late subscribe-violation would be read as the publish
+probe's result and yield `pubDenied = true` — a false "denied" that lets an
+over-scoped account boot, defeating the fail-closed intent. Probability is low
+(this runs once at boot before any other subsystem uses the shared connection, so
+the only violation source is the immediately-prior subscribe probe), but the
+structural cure is a fresh per-probe channel + handler (or a dedicated short-lived
+probe connection) rather than a shared 8-deep buffer plus a drain.
+**Fix:** Give each probe its own `violations` channel and error handler installed
+for the duration of that single probe, so a subscribe-probe violation can never be
+mis-attributed to the publish probe.
 
-### IN-02: Near-tautological / low-value tests
+### IN-02: redactURL only strips userinfo from the FIRST URL of a comma-separated NATS seed list
 
-**File:** `internal/eventbus/audit/replay_test.go:76-84`, `internal/eventbus/audit/dlq_test.go:87-96`
-**Issue:** `TestReplayResultZeroValueIsEmpty` asserts a zero-value struct equals its
-zero value (no behavior under test). `TestDLQEnsureStreamIsIdempotent` only asserts
-the fake was invoked twice — it does not exercise real idempotency (the fake always
-succeeds), so the test name overstates what is proven.
-**Fix:** Drop the zero-value test; reword/strengthen the idempotency test (or note it
-verifies delegation, not idempotency).
-
-### IN-03: Header-name constant drift between show and projection
-
-**File:** `cmd/holomush/cmd_audit.go:246`
-**Issue:** `runAuditDLQShow` matches the literal `"Nats-Msg-Id"` while the projection
-uses the `headerMsgID` constant (`projection.go:24`). Same value today, but the
-duplicated literal can drift if the header is ever renamed.
-**Fix:** Export and reuse the `headerMsgID` constant from the audit package.
-
-### IN-04: Fetch loops assume a non-nil batch on a timeout error
-
-**File:** `internal/eventbus/audit/replay.go:135-147`, `cmd/holomush/cmd_audit.go:238-251`
-**Issue:** Both loops proceed to `for msg := range batch.Messages()` when `fetchErr`
-is a `nats.ErrTimeout`, relying on `batch` being non-nil in that case. This matches
-the jetstream client's current behavior, but a nil batch alongside a timeout error
-would panic. Consider a defensive `if batch == nil { break }` guard.
-**Fix:** Add a nil-batch guard before iterating, or assert the invariant with a comment.
+**File:** `internal/eventbus/natsdial.go:70-79`
+**Issue:** `nats.Connect` accepts a comma-separated seed list in one string
+(`nats://a:pw@h1:4222,nats://b:pw2@h2:4222`). `url.Parse` treats the whole string
+as a single URL whose `User` is only the first credential; setting `u.User = nil`
++ `u.Redacted()` strips `a:pw` but leaves `pw2` embedded in the parsed host/path,
+so a multi-URL with credentials in the 2nd+ seed still leaks a password into
+`EVENTBUS_EXTERNAL_CONNECT_FAILED` (the exact leak WR-02's single-URL fix closed).
+Dev-cluster multi-URL-with-embedded-creds is unusual, so this is Info, but the
+redaction is incomplete for that shape.
+**Fix:** Split `raw` on `,` and redact each element (or reject/redact wholesale
+when more than one credential-bearing seed is present) before attaching to the
+error.
 
 ---
 
-## Fix Log — all 10 findings resolved 2026-07-10
+## Verification of prior-round fixes (re-checked at HEAD)
 
-| Finding | Fix | Commit |
-|---------|-----|--------|
-| WR-01 | `audit.RegisterMetrics(metricsReg)` wired into `core.go` boot (served registry) — DLQ counter now on `/metrics` | `20ca18bc0` |
-| WR-02 | `redactURL()` strips URL userinfo before attaching to the dial error — no credential leak | `f141b478d` |
-| WR-03 | `MINTED_DATA_DIR` guard — teardown only `rm`s a script-minted dir, never caller-supplied | `df4cb5dd7` |
-| WR-04 | connectivity precondition (exit 4) distinguishes "denied by scoping" from "never connected" | `3329974cc` |
-| WR-05 | `probeDenied` fully drains the violations channel before each probe | `91f2b0bad` |
-| WR-06 | `originalSubject` returns `(string, bool)`; prefix mismatch → `Failed`, never persists a corrupted subject (crypto-neutral) | `0ca71b310` |
-| IN-01 | save/restore the prior NATS error handler around the scope check | `4427cdb35` |
-| IN-02 | dropped tautological zero-value test; reworded the delegation test | `0ca71b310`, `7d71a22b9` |
-| IN-03 | exported `audit.HeaderMsgID`; CLI reuses it instead of a duplicated literal | `7d71a22b9` |
-| IN-04 | nil-batch guard before iterating fetch results | `0ca71b310`, `7d71a22b9` |
+All 10 prior findings remain correctly fixed; spot-checks:
+- WR-01 (audit metrics unscraped): `audit.RegisterMetrics(metricsReg)` present at `core.go:525`, routed to `obsServer.Registerer()`.
+- WR-02 (credential leak): `redactURL` at `natsdial.go:70` strips userinfo on the single-URL path (see IN-02 for the multi-URL residual).
+- WR-04 (vacuous PASS): connectivity precondition (`exit 4`) at `verify-scoping.sh:127-132`, sound against the shipped `HOLOMUSH_VERIFY` `_INBOX.>` grant.
+- WR-05 (single-drain): `probeDenied` now loops to fully drain (`scopecheck.go:138-145`) — see IN-01 for the residual in-flight window.
+- WR-06 (silent subject corruption): `originalSubject` returns `(string, bool)`; prefix mismatch → `result.Failed++`, never persisted (`replay.go:193-211`, `235-243`).
+- IN-01 (orphaned handler): prior handler saved/restored (`scopecheck.go:62-63`).
+- IN-03 (header constant): `audit.HeaderMsgID` exported and reused by the CLI (`cmd_audit.go:252`).
+- IN-04 (nil batch): guards present at `replay.go:144` and `cmd_audit.go:245`.
 
-Verified: `task test` green (10212), `task lint` exit 0, `task test:int` green (audit + external-scope surfaces).
+Cross-file checks that came back clean:
+- No new bare-`slog.*` logging-rule violations in changed hunks (all new call sites in `projection.go`/`replay.go`/`scopecheck.go`/`core.go` use `*Context` variants with a reachable ctx).
+- Boot metric-registry fix is consistent: audit, cluster, and invalidation collectors all land on `metricsReg` (served registry).
+- DLQ subject game-id is internally consistent: capture (`core.go:563`) and replay (`cmd_audit.go:331`) both derive from `eventBusConfig.GameID`, and any divergence now fails loud (WR-06).
+- INV-CLUSTER-1/2/9 and INV-EVENTBUS-29 bindings genuinely assert their guarantees (N-of-N acks / fail-closed boot). Only INV-EVENTBUS-30 is a partial binding (WR-02).
 
 ---
 
 _Reviewed: 2026-07-10_
 _Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+_Depth: deep_
