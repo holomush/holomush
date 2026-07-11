@@ -127,7 +127,9 @@
       "Bash(gh api repos/*/pulls/*)",
       "Bash(gh api repos/*/issues/*)",
       "Bash(gh run list:*)",
-      "Bash(gh run view:*)"
+      "Bash(gh run view:*)",
+      "Bash(git pull:*)",
+      "Bash(git merge --ff-only:*)"
     ]
   },
   "sandbox": {
