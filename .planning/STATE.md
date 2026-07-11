@@ -1,20 +1,18 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.11
-milestone_name: milestone
-current_phase: 11
-status: Awaiting next milestone
-stopped_at: Phase 3 context gathered
-last_updated: "2026-07-11T12:52:19.761Z"
+milestone: v0.12
+milestone_name: Foundation Hardening
+current_phase: 4
+current_phase_name: World-Model Resilience Investigation & Decision (F1)
+status: planning
+last_updated: "2026-07-11T15:05:56.943Z"
 last_activity: 2026-07-11
-last_activity_desc: Milestone v0.11 completed and archived
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 26
-  completed_plans: 26
-  percent: 100
-current_phase_name: BACKLOG
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -26,14 +24,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Milestone v0.11 (Social Spaces & Platform Hardening) shipped 2026-07-11 and archived. No active milestone — next: /gsd-new-milestone (promote 999.x backlog candidates via /gsd-review-backlog).
+**Current focus:** Milestone v0.12 (Foundation Hardening) — defining requirements. Pay down the highest-severity architecture & operational risks from the 2026-07-11 L7 review: event-model decision + fixes (F1 #4784, #4798), operational hardening (arch-review Highs), architecture decomposition (999.9), code health & test quality (999.10).
 
 ## Current Position
 
-Phase: Milestone v0.11 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-11 — Milestone v0.11 completed and archived
+Phase: 4 — World-Model Resilience Investigation & Decision (F1) (not started)
+Plan: — (immediate: /gsd-quick the F2 gateway DoS cap #4785; then /gsd-plan-phase 4)
+Status: Roadmap created — ready to plan Phase 4 (F1 decision gate)
+Last activity: 2026-07-11 — Milestone v0.12 roadmap created (6 phases, 19 requirements); F1-first reorder + F2 pulled forward
 
 ## Performance Metrics
 
@@ -119,13 +117,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-10T22:43:10.188Z
-prior `/gsd-map-codebase` run; PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written and awaiting user
-review/approval.
-Stopped at: Phase 3 context gathered
-Hardening & Deployment Scaling); awaiting user approval before `/gsd-plan-phase 1`.
+Last session: 2026-07-11 — milestone v0.12 (Foundation Hardening) defined via `/gsd-new-milestone`;
+PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
+Stopped at: Roadmap approved (F1-first reorder) — milestone initialized; Phase 4 not yet planned.
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Merge PR #4811 (milestone-init planning docs).
+- Ship the F2 gateway DoS cap (#4785) as a `/gsd-quick` fix — the immediate opener.
+- Then `/gsd-plan-phase 4` (or `/gsd-discuss-phase 4`) — the F1 resilience pass + event-sourcing-vs-CRUD ADR.

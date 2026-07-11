@@ -20,6 +20,39 @@ roleplay in scenes — through either telnet or the web client, with every
 access-control decision default-deny and every plugin (Lua or binary)
 trusted identically by the host.
 
+## Current Milestone: v0.12 Foundation Hardening
+
+**Goal:** Make the freshly-shipped v0.11 foundation durable — resolve the
+event-sourcing-vs-CRUD world-model gap (ADR + version guards + dual-write fix),
+eliminate the top operational failure modes surfaced by the 2026-07-11 L7
+architecture review, decompose the CoreServer/plugin-manager god objects, and
+raise test/coverage/code health.
+
+**Target features:**
+
+- **Event-model decision & symptom fixes** — investigate + ADR (build real
+  event sourcing vs. formally adopt CRUD-with-version-guards); correct the false
+  event-sourcing docs (root `CLAUDE.md`, `contributing/explanation/architecture.md`,
+  public site `index.mdx`); add version guards for last-write-wins (#4798);
+  address dual-write non-atomicity (events emit AFTER db commit) — F1 #4784.
+  **Decision gate — sequenced early; the model-collapse and last-write-wins
+  fixes depend on the ADR's outcome.**
+- **Operational hardening** — gateway OOM/survival (F2 #4785), events_audit
+  unbounded-growth retention (F4 #4786), audit DLQ hardening (F3 #4787), NATS
+  CVE bump (F8 #4790), resilience investigation (#4791).
+- **Architecture decomposition (999.9)** — decompose CoreServer + plugin/manager
+  god objects, migrate bootstrap to `lifecycle.Orchestrator`, collapse the
+  parallel `core.Event`/`eventbus.Event` models, fix gateway-boundary import
+  violations (epics `holomush-1bft`/`dj95`/`wm0fi`/`yvdm`).
+- **Code health & test quality (999.10)** — coverage backfill (F7 #4804),
+  weak/skeleton-test remediation, ACE naming violations, de-slop/humanization,
+  session-lifecycle test matrix, security-polish batch (epics
+  `holomush-ec22`/`89o9`).
+
+**Deferred (explicitly out of this milestone):** Ops & DR resilience (999.13 —
+backup/restore, object-storage DB sync, remote KMS/Vault, Tailscale admin);
+feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
+
 ## Requirements
 
 ### Validated
@@ -61,11 +94,12 @@ trusted identically by the host.
 
 ### Active
 
-<!-- Current GSD roadmap scope — genuine forward work not yet built. See ROADMAP.md for phase breakdown. -->
+<!-- Current GSD roadmap scope — milestone v0.12 Foundation Hardening. Detailed REQ-IDs + phase mapping: REQUIREMENTS.md / ROADMAP.md. -->
 
-_Milestone v0.11 (Social Spaces & Platform Hardening) shipped 2026-07-11 — see `.planning/MILESTONES.md`.
-No active milestone: define the next one with `/gsd-new-milestone`, promoting candidates from the ROADMAP
-`## Backlog` (999.x) via `/gsd-review-backlog`._
+- [ ] Event-model direction decided (ADR: event sourcing vs. CRUD-with-guards), false event-sourcing docs corrected, last-write-wins version guards added, and dual-write non-atomicity addressed (F1 #4784, #4798)
+- [ ] Top operational failure modes reduced — gateway survival (#4785), events_audit retention (#4786), audit DLQ hardening (#4787), NATS CVE (#4790), resilience investigation (#4791)
+- [ ] CoreServer + plugin/manager god objects decomposed; bootstrap on `lifecycle.Orchestrator`; `core.Event`/`eventbus.Event` collapsed; gateway-boundary imports fixed (999.9)
+- [ ] Test/coverage/code health raised — coverage backfill (#4804), weak/skeleton tests remediated, ACE naming, de-slop, session-lifecycle matrix (999.10)
 
 ### Out of Scope
 
@@ -187,6 +221,23 @@ scenes should bind relevant invariants as part of its own definition of done rat
 | Plugin-owned audit has no DLQ capture (host-audit-only) | DLQ scope deliberately limited to host `events_audit` projection in Phase 3; plugin consumers rely on AckWait+MaxDeliver | — Pending — revisit via issue #4776 before treating plugin audit as never-drop |
 | GSD milestone labels track cog-computed semver; GSD never mints v* tags | cog + release.yaml own the v* tag namespace; a GSD tag would corrupt cog's latest-tag version derivation | ✓ Good — `git.create_tag: false`; milestone relabeled v1.0→v0.11 (PR #4783) |
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
 
-*Last updated: 2026-07-11 after v0.11 milestone (Social Spaces & Platform Hardening) — Channels subsystem, scenes lineage completion, and platform hardening shipped; milestone archived to `.planning/milestones/`. Next: `/gsd-new-milestone`.*
+*Last updated: 2026-07-11 — milestone v0.12 (Foundation Hardening) started via `/gsd-new-milestone`. Scope: event-model decision + symptom fixes (F1 #4784, #4798), operational hardening (arch-review Highs), architecture decomposition (999.9), code health & test quality (999.10). Next: `/gsd-plan-phase 4` (or `/gsd-discuss-phase 4`).*
