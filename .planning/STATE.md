@@ -3,10 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 4
-current_phase_name: World-Model Resilience Investigation & Decision (F1)
+current_phase_name: F1
 status: planning
-last_updated: "2026-07-11T15:05:56.943Z"
+stopped_at: Phase 4 context gathered
+last_updated: "2026-07-11T17:34:15.701Z"
 last_activity: 2026-07-11
+last_activity_desc: "Completed quick task 260711-hg1 (F2): capped gateway ConnectRPC request-body size (#4785, unauthenticated OOM)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -118,10 +120,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-11 — milestone v0.12 (Foundation Hardening) defined via `/gsd-new-milestone`;
+Last session: 2026-07-11T17:34:15.695Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Roadmap approved (F1-first reorder) — milestone initialized; Phase 4 not yet planned.
-Resume file: None
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-world-model-resilience-investigation-decision-f1/04-CONTEXT.md
 
 ## Operator Next Steps
 
