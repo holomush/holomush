@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 4
-current_phase_name: F1
-status: planning
+current_phase: 04
+current_phase_name: world-model-resilience-investigation-decision-f1
+status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-11T17:34:15.701Z"
+last_updated: "2026-07-11T19:05:45.185Z"
 last_activity: 2026-07-11
-last_activity_desc: "Completed quick task 260711-hg1 (F2): capped gateway ConnectRPC request-body size (#4785, unauthenticated OOM)"
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
   percent: 0
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Milestone v0.12 (Foundation Hardening) — defining requirements. Pay down the highest-severity architecture & operational risks from the 2026-07-11 L7 review: event-model decision + fixes (F1 #4784, #4798), operational hardening (arch-review Highs), architecture decomposition (999.9), code health & test quality (999.10).
+**Current focus:** Phase 04 — world-model-resilience-investigation-decision-f1
 
 ## Current Position
 
-Phase: 4 — World-Model Resilience Investigation & Decision (F1) (not started)
-Plan: — (immediate: /gsd-quick the F2 gateway DoS cap #4785; then /gsd-plan-phase 4)
-Status: Roadmap created — ready to plan Phase 4 (F1 decision gate)
-Last activity: 2026-07-11 — Completed quick task 260711-hg1 (F2): capped gateway ConnectRPC request-body size (#4785, unauthenticated OOM)
+Phase: 04 (world-model-resilience-investigation-decision-f1) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-07-11 — Phase 04 execution started
 
 ## Performance Metrics
 
@@ -80,6 +80,7 @@ Last activity: 2026-07-11 — Completed quick task 260711-hg1 (F2): capped gatew
 | Phase 03 P05 | ~70m | 3 tasks | 5 files |
 | Phase 03 P07 | 50m | 3 tasks | 9 files |
 | Phase 03 P09 | 20min | 2 tasks | 1 files |
+| Phase 04 P01 | 40min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -120,7 +121,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-11T17:34:15.695Z
+Last session: 2026-07-11T19:05:38.723Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Phase 4 context gathered
 Resume file: .planning/phases/04-world-model-resilience-investigation-decision-f1/04-CONTEXT.md
