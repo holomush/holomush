@@ -63,7 +63,7 @@ Event-model collapse in Phase 7. Operational hardening + CI gates (Phase 6) and 
 3. A committed ADR records the world-model decision (build a real projection/outbox **vs.** adopt CRUD-canonical + optimistic-concurrency/transactional-outbox), grounded in F1 (`docs/reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md`) and the resilience evidence — #4784
 4. The ADR names the concrete mechanism Phase 5 (MODEL-03/MODEL-04) will implement
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -72,7 +72,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-02-PLAN.md — M12 lost-update verdict specs + replica-restart/client-reconnect chaos specs (wave 2)
+- [x] 04-02-PLAN.md — M12 lost-update verdict specs + replica-restart/client-reconnect chaos specs (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -159,7 +159,7 @@ Plans:
 | 1. Channels Subsystem | v0.11 | 10/10 | Complete | 2026-07-09 |
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
-| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 1/4 | In Progress|  |
+| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 2/4 | In Progress|  |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 0 | Pending | — |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |

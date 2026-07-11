@@ -6,14 +6,14 @@ current_phase: 04
 current_phase_name: world-model-resilience-investigation-decision-f1
 status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-11T19:05:45.185Z"
+last_updated: "2026-07-11T19:26:48.054Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 04 (world-model-resilience-investigation-decision-f1) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 04 execution started
 
@@ -81,6 +81,7 @@ Last activity: 2026-07-11 — Phase 04 execution started
 | Phase 03 P07 | 50m | 3 tasks | 9 files |
 | Phase 03 P09 | 20min | 2 tasks | 1 files |
 | Phase 04 P01 | 40min | 2 tasks | 7 files |
+| Phase 04 P02 | 35min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Last activity: 2026-07-11 — Phase 04 execution started
 Full decision log lives in PROJECT.md "Key Decisions" (v0.11 phase-level decisions were folded in at
 milestone close; per-plan detail is archived in `milestones/v0.11-phases/`). No decisions accumulated for
 the next milestone yet.
+
+- [Phase ?]: M12 last-write-wins world corruption REPRODUCED deterministically (D-06): a stale full-row UPDATE silently reverts a committed rename, both writers returning nil (04-02)
+- [Phase ?]: Success-criterion #1 four chaos dimensions all green; replica restart recovers canonical state from the DB, not event replay (04-02)
 
 ### Pending Todos
 
@@ -121,7 +125,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-11T19:05:38.723Z
+Last session: 2026-07-11T19:26:35.272Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Phase 4 context gathered
 Resume file: .planning/phases/04-world-model-resilience-investigation-decision-f1/04-CONTEXT.md
