@@ -236,3 +236,36 @@ Plans:
 Plans:
 
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.18: Release process coherence (BACKLOG)
+
+**Goal:** Review release procedures end-to-end and make them coherent: consider restoring
+release-please (or keeping cog — evaluate, don't assume), align the release flow with GSD
+practices/idioms (milestone close ↔ release cut, labels tracking cog-computed semver per
+PROJECT.md Key Decisions), and produce better release notes than the current
+GoReleaser-generated ones. Not necessarily all one tool, but something coherent.
+**Source:** captured 2026-07-11 at v0.11 milestone close (milestone-relabel session — the
+v1.0/v0.11 label drift and the GSD-tagging/cog collision motivated this review)
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.19: Restore lefthook + speed up the inner loop (BACKLOG)
+
+**Goal:** Now that the repo is back on native git only (jj retired), restore lefthook git
+hooks (worktree creation currently warns "no lefthook config found") and look for further
+inner-loop speedups. Investigate: reinstate a lefthook config so `task workspace:new`
+worktrees auto-install hooks (pre-commit fmt/lint, commit-msg conventional-commit check to
+match CI's PR-title gate), and profile the `task pr-prep` fast lane / `task lint` / `task
+test` cycle for wins (caching, scoping, parallelism). Aim: tighter edit→check feedback.
+**Source:** captured 2026-07-11 at v0.11 milestone close (multiple worktree sessions this
+day emitted "No lefthook config" warnings on every commit)
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)

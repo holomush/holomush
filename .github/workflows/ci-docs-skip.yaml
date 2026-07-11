@@ -24,6 +24,7 @@ on:
     paths:
       - site/**
       - docs/**
+      - .planning/**
       - "**/*.md"
       - .claude/agents/**
       - .claude/commands/**
@@ -36,6 +37,7 @@ on:
     paths:
       - site/**
       - docs/**
+      - .planning/**
       - "**/*.md"
       - .claude/agents/**
       - .claude/commands/**
