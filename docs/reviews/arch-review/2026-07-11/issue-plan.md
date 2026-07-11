@@ -80,12 +80,19 @@ AnsiRenderer XSS #4600 · restoreSession/onMount #4760 · mobile terminal #4618 
 - **Total: ~22 new issues.** F8/I10 conditional on the Renovate PR state.
 - **Of the 8 verified Highs:** I1 (F1 architecture-integrity) + I5 (F2) + I6 (F4) + I7 (F3) + I8 (F5) + I10 (F8) are High-priority; I2 (F6) + I3 (F7) sit under epic E1 at medium.
 
-## Approval gate
+## FILED ✅ (2026-07-11, maintainer-approved: file all + theme label GH-only)
 
-**I will not run any `gh issue create` until you approve.** Options:
-1. **File all** as above.
-2. **File High-only** (E1 + I1–I11), defer Mediums.
-3. **File a curated subset** — tell me which IDs.
-4. **Adjust** labels/priorities/grouping first.
+All 23 issues created. `theme:assurance-integrity` label created and applied in GitHub only — the `docs/roadmap.md` section obligation was **waived by the maintainer** (roadmap.md is deprecated under GSD adoption). Full map: `evidence/issue-numbers.txt`.
 
-Tell me which, and whether to create the `theme:assurance-integrity` label + roadmap section (E1) or drop the theme and keep the issues flat.
+| Plan ID | Issue | Plan ID | Issue |
+|---------|-------|---------|-------|
+| I1 (F1 architecture) | **#4784** | I12 | #4792 |
+| I5 (F2 gateway OOM) | **#4785** | I13 | #4793 |
+| I6 (F4 events_audit) | **#4786** | I14 | #4794 |
+| I7 (F3 DLQ bridge) | **#4787** | I15 | #4795 |
+| I8 (F5 movement) | **#4788** | I16 | #4796 |
+| I9 (movement RPC) | #4789 | I17 | #4797 |
+| I10 (F8 nats) | **#4790** | I18 (last-write-wins) | #4798 |
+| I11 (resilience) | #4791 | I19–I22 | #4799–#4802 |
+| I2 (F6 PWA) | #4803 | I3 (F7 coverage) | #4804 |
+| I4 (DLQ test) | #4805 | **E1 epic** | **#4806** |

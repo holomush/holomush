@@ -1,0 +1,23 @@
+I1 #4784 architecture: event sourcing was never built for the world model — investigate divergence, decide (ADR)
+I5 #4785 security: gateway ConnectRPC handler has no request-body cap → unauthenticated OOM
+I6 #4786 data: events_audit grows forever — extend the existing RetentionWorker to it
+I7 #4787 bug: audit-DLQ replay CLI cannot recover external-NATS deployments (game_id split)
+I8 #4788 bug: no player-facing movement command — characters cannot walk between locations
+I9 #4789 refactor: exit navigation dispatches a raw string via sendCommand — add a typed Move RPC
+I10 #4790 deps: bump nats-server to v2.14.3 (2 GHSA 2026-06-29; govulncheck-blind)
+I11 #4791 investigate: resilience under concurrent play + NATS broker flap + replica restart
+I12 #4792 perf: DEK caches bypassed on the encrypted read path (~P+1 crypto_keys reads/event)
+I13 #4793 security: attribute providers emit empty-string sentinel — latent fail-open (ADR ti1b)
+I14 #4794 security: secure-cookie/HSTS/CSP gated on a default-false flag — insecure behind a proxy
+I15 #4795 ci: no automated vuln-scanning gate (govulncheck / pnpm-audit absent from CI)
+I16 #4796 data: sessions.location_id is unindexed — presence / who's-here query
+I17 #4797 reliability: plugin-decrypt audit emitter silently drops records (no log/metric)
+I18 #4798 bug: world writes are last-write-wins, no version guard (two-replica lost-update)
+I19 #4799 docs: architecture.md self-contradicts on event ordering; mislabels transport as WebSocket
+I20 #4800 docs: roadmap has an orphaned theme:plugin-trust label (violates the theme rule)
+I21 #4801 bug: boot-order guarantee (verifier before EventBus) is unenforced by the dependency graph
+I22 #4802 enhancement: Channels subsystem has a full backend but no GUI
+I2 #4803
+I3 #4804
+I4 #4805
+E1 #4806
