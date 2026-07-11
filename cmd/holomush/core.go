@@ -516,6 +516,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if obsServer != nil {
 		metricsReg = obsServer.Registerer()
 	}
+	// Register the audit collectors (projection_lag_seconds,
+	// projection_plugin_owned_skipped_total, dlq_messages_total) on the SAME
+	// served registry so the DLQ alerting story (D-11) actually reaches
+	// /metrics. Without this the counters increment in-process but are never
+	// scraped — the same "silently unscraped" defect the cluster_*/invalidation_*
+	// metrics above avoid by routing to obsServer.Registerer().
+	audit.RegisterMetrics(metricsReg)
 	clusterPillMetrics := cluster.NewPillMetrics(metricsReg)
 	clusterSkewMetrics := cluster.NewSkewMetrics(metricsReg)
 	clusterSelfTimeoutMetrics := cluster.NewSelfTimeoutMetrics(metricsReg)
