@@ -62,11 +62,14 @@ Event-model collapse in Phase 7. Operational hardening + CI gates (Phase 6) and 
 2. The harness produces a documented, reproducible verdict on whether last-write-wins (M12) actually corrupts world state under concurrency
 3. A committed ADR records the world-model decision (build a real projection/outbox **vs.** adopt CRUD-canonical + optimistic-concurrency/transactional-outbox), grounded in F1 (`docs/reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md`) and the resilience evidence — #4784
 4. The ADR names the concrete mechanism Phase 5 (MODEL-03/MODEL-04) will implement
-**Plans**: 0 plans
+**Plans**: 4 plans
 
 Plans:
 
-- [ ] TBD (created by /gsd-plan-phase 4)
+- [ ] 04-01-PLAN.md — Two-replica harness substrate: WithExternalNATS/WithSharedDatabase StartOptions, gated resilience suite skeleton, boot smoke (wave 1)
+- [ ] 04-02-PLAN.md — M12 lost-update verdict specs + replica-restart/client-reconnect chaos specs (wave 2)
+- [ ] 04-03-PLAN.md — M2 dual-write window specs + f1-resilience-verdict.md evidence doc (wave 3)
+- [ ] 04-04-PLAN.md — MODEL-01 ADR: draft, blocking human decision checkpoint, finalize + index + cross-link (wave 4)
 
 ### Phase 5: World-Model Integrity Fixes (M2 / M12)
 
