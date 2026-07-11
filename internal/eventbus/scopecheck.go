@@ -130,11 +130,18 @@ func probeDenied(
 	violations <-chan error,
 	op func() error,
 ) (bool, error) {
-	// Drain any stale violation from a prior probe so this phase only observes
-	// its own.
-	select {
-	case <-violations:
-	default:
+	// Fully drain any stale violations from a prior probe so this phase only
+	// observes its own. A single non-blocking receive is not enough: the
+	// subscribe probe can enqueue MORE than one ErrPermissionViolation (flush +
+	// teardown), and a leftover queued violation would pre-satisfy this probe —
+	// masking a publish-only over-scope and weakening the fail-closed guarantee.
+	for {
+		select {
+		case <-violations:
+			continue
+		default:
+		}
+		break
 	}
 
 	if err := op(); err != nil {
