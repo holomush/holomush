@@ -24,7 +24,7 @@ trusted identically by the host.
 
 ### Validated
 
-<!-- Shipped and confirmed running. Full detail with source citations: REQUIREMENTS.md "Shipped Foundation". -->
+<!-- Shipped and confirmed running. Full detail with source citations: milestones/v0.11-REQUIREMENTS.md "Shipped Foundation". -->
 
 - ✓ Event-sourced Go core (immutable ordered events, JetStream-owned ordering, ULID identity) — foundational
 - ✓ Two-tier plugin runtime (Lua + binary) with enforced trust/capability symmetry — foundational
@@ -63,8 +63,9 @@ trusted identically by the host.
 
 <!-- Current GSD roadmap scope — genuine forward work not yet built. See ROADMAP.md for phase breakdown. -->
 
-_All v1.0-milestone roadmap phases (1–3) are complete. Remaining strategic work lives in the ROADMAP
-`## Backlog` (999.x) — promote with `/gsd-review-backlog`._
+_Milestone v0.11 (Social Spaces & Platform Hardening) shipped 2026-07-11 — see `.planning/MILESTONES.md`.
+No active milestone: define the next one with `/gsd-new-milestone`, promoting candidates from the ROADMAP
+`## Backlog` (999.x) via `/gsd-review-backlog`._
 
 ### Out of Scope
 
@@ -89,15 +90,21 @@ _All v1.0-milestone roadmap phases (1–3) are complete. Remaining strategic wor
 HoloMUSH's `.planning/` directory is a **complementary** planning surface layered on an existing, mature
 project-management stack:
 
-- `bd` (beads) is the live issue tracker — epics, tasks, dependencies (`.claude/rules/beads-project.md`).
+- GitHub Issues (`gh issue -R holomush/holomush`) is the live issue tracker — bugs, follow-ups, labels
+  (beads/`bd` was retired 2026-07-09; the export + id mapping live in `.planning/archive/beads/`).
 - `docs/roadmap.md` carries strategic theme narratives (`theme:social-spaces`, `theme:plugin-capability-architecture`,
-  `theme:web-portals`) as a complement to `bd` labels.
-- `docs/architecture/invariants.yaml`/`.md` is the canonical registry of 334 named system invariants
+  `theme:web-portals`) as a complement to `theme:*` issue labels.
+- `docs/architecture/invariants.yaml`/`.md` is the canonical registry of 334+ named system invariants
   (`INV-<SCOPE>-N`), each `binding: pending` or `binding: bound` to a test.
 
 This GSD roadmap does not replace any of the above — it derives forward-looking phases from the same source
 material (48 ingested SPECs + the invariant registry + roadmap theme narratives) and should be read alongside
-`bd ready` / `docs/roadmap.md` for live status, not in place of them.
+open GitHub issues / `docs/roadmap.md` for live status, not in place of them.
+
+**Shipped v0.11 (2026-07-11):** Channels subsystem (`core-channels`, second substrate consumer), scenes
+lineage completion (notifications + telnet polish), and platform hardening (external/clustered NATS,
+multi-node crypto invalidation, audit DLQ + replay CLI) — ~42k lines across PRs #4595/#4782 in 5 days.
+Closes the single-node deployment ceiling formerly flagged in CONCERNS.md.
 
 **Ingest provenance:** this PROJECT.md was generated from a 50-document curated ingest (48 SPEC + 2 DOC,
 zero ADR/PRD in the batch — see `.planning/intel/SYNTHESIS.md`) plus a prior `/gsd-map-codebase` static
@@ -176,7 +183,10 @@ scenes should bind relevant invariants as part of its own definition of done rat
 | Scenes are plugin-owned (`core-scenes`), not `locations` rows | 68 INV-SCENE-* invariants + INV-S6 per-plugin schema isolation assume plugin ownership | ✓ Good — supersedes 2026-01-22 world-model-design's scene section (historical) |
 | Web structural writes use typed RPCs, not the command path | GUI-driven mutations must not route through the human/CLI text-command parser (ADR `holomush-v4qmu`) | ✓ Good — supersedes E9.5 D4; conversational verbs still use the command path |
 | External/clustered NATS — embedded default, external mode shipped Phase 3 | Built & verified: external dial + fail-closed boot, single-principal account scoping, multi-node crypto invalidation (INV-CLUSTER-1/2/4/9), audit DLQ + replay CLI | ✅ Built in Phase 3 (2026-07-10) — epic `holomush-s5ts` |
+| Plugins self-enforce ABAC per RPC (channels adopts the INV-SCENE-65 pattern) | Service-level authz can't be bypassed by new callers (command layer, BFF, future surfaces); uniform NotFound hides denied/hidden resources | ✓ Good — `core-channels` channelService, all 12 RPCs (v0.11) |
+| Plugin-owned audit has no DLQ capture (host-audit-only) | DLQ scope deliberately limited to host `events_audit` projection in Phase 3; plugin consumers rely on AckWait+MaxDeliver | — Pending — revisit via issue #4776 before treating plugin audit as never-drop |
+| GSD milestone labels track cog-computed semver; GSD never mints v* tags | cog + release.yaml own the v* tag namespace; a GSD tag would corrupt cog's latest-tag version derivation | ✓ Good — `git.create_tag: false`; milestone relabeled v1.0→v0.11 (PR #4783) |
 
 ---
 
-*Last updated: 2026-07-10 — Phase 3 (Platform Hardening & Deployment Scaling) complete: CLUSTER-01..05 validated (external/clustered NATS mode, single-principal account scoping, multi-node crypto-invalidation binding INV-CLUSTER-1/2/4/9, audit dead-letter queue + replay CLI, external-NATS operator runbook). Closes the single-node ceiling flagged in CONCERNS.md.*
+*Last updated: 2026-07-11 after v0.11 milestone (Social Spaces & Platform Hardening) — Channels subsystem, scenes lineage completion, and platform hardening shipped; milestone archived to `.planning/milestones/`. Next: `/gsd-new-milestone`.*
