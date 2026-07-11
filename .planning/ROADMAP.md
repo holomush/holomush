@@ -50,10 +50,17 @@ Strategic clusters consolidated from the beads → GitHub Issues migration
 (2026-07-09). Member-level detail: [`.planning/archive/beads/TRIAGE.md`](archive/beads/TRIAGE.md).
 Promote an entry with `/gsd-review-backlog` when ready.
 
+The 2026-07-11 L7 architecture review (PR #4807) filed 23 discrete issues #4784–#4806
+(epic E1 #4806) that overlap the foundation clusters below; per-cluster `**Related
+issues:**` lines cross-link them. The issues track the discrete work; these clusters carry
+the strategic frame. Reviewed 2026-07-11 (`/gsd-review-backlog`): all 19 entries kept —
+none stale; no active milestone, so prioritization is deferred to `/gsd-new-milestone`.
+
 ### Phase 999.1: Web Client Portal completion (BACKLOG)
 
 **Goal:** Round out the web portal beyond scenes: offline support, wiki/help pages, character profiles + creation/management UI, admin portal, and a web surface for 1:1 direct messages.
 **Source:** beads migration — 7 item(s) incl. epic(s) `holomush-qve`; member list in TRIAGE.md
+**Related issues:** arch-review F6 PWA/offline #4803 (overlaps the offline-support + web-surface goals).
 **Requirements:** TBD
 **Plans:** TBD (promote with /gsd-review-backlog when ready)
 
@@ -142,6 +149,7 @@ Plans:
 
 **Goal:** Repo-audit architecture follow-ups: decompose CoreServer + plugin/manager god objects, migrate bootstrap to lifecycle.Orchestrator, collapse parallel core.Event/eventbus.Event models, fix gateway-boundary imports, focus-redirect hot-path cache.
 **Source:** beads migration — 9 item(s) incl. epic(s) `holomush-1bft`, `holomush-dj95`, `holomush-wm0fi`, `holomush-yvdm`; member list in TRIAGE.md
+**Related issues:** arch-review F1 event-sourcing-never-built #4784 (event-sourcing-vs-CRUD ADR decision; overlaps the parallel core.Event/eventbus.Event model-collapse goal).
 **Requirements:** TBD
 **Plans:** 0 plans
 
@@ -153,6 +161,7 @@ Plans:
 
 **Goal:** Codebase humanization/de-slop, ACE naming violations, weak/skeleton tests, security polish batch, coverage backfill on Phase-1.5 infra packages, session-lifecycle test matrix.
 **Source:** beads migration — 8 item(s) incl. epic(s) `holomush-ec22`, `holomush-89o9`; member list in TRIAGE.md
+**Related issues:** arch-review F7 coverage #4804 (overlaps the coverage-backfill goal).
 **Requirements:** TBD
 **Plans:** 0 plans
 
@@ -186,6 +195,7 @@ Plans:
 
 **Goal:** Disaster recovery + backup/restore guides, background DB sync to object storage, gateway-survival deploy strategy, Tailscale admin access, remote KMS substrate (VaultTransitProvider + rotation CLIs).
 **Source:** beads migration — 6 item(s) incl. epic(s) `holomush-aub5`; member list in TRIAGE.md
+**Related issues:** arch-review F2 gateway OOM #4785, F3 DLQ #4787, F4 events_audit unbounded #4786, F8 nats CVE #4790 (overlap the gateway-survival + backup/DR goals).
 **Requirements:** TBD
 **Plans:** 0 plans
 
