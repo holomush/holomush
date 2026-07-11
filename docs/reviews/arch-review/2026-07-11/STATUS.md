@@ -15,7 +15,7 @@ Recovery point for the 2026-07-11 arch review. Re-orient after context loss by r
 | P0.1 | Read arch docs + invariant registry | persisted | — | arch.md read; 341 invariants |
 | P0.2 | CodeGraph/probe system map | persisted | `01-system-map.md` | publish flow verified from source |
 | P0.3 | Open-issues snapshot for dedup | persisted | `evidence/open-issues.json` | 186 open; 63 bug/32 high |
-| P0.4 | Stand up app (`task dev:obs`, background) | dispatched | bg task `b6yrhejzs` | docker compose building |
+| P0.4 | Stand up app (`task dev:obs`, background) | done (torn down) | — | stack ran during live UI pass, then `docker compose down` |
 | P0.5 | Briefing pack written | persisted | `01-system-map.md` | given to all agents |
 
 ## Phase 1 — Evidence fan-out
@@ -41,9 +41,9 @@ Recovery point for the 2026-07-11 arch review. Re-orient after context loss by r
 
 | ID | Task | State | Output | Outcome |
 |----|------|-------|--------|---------|
-| V1 | Skeptic wave over High findings | in_progress | `verification/skeptic-*.md` | 3 skeptics running: D1 event-sourcing, D6 DLQ, D8 movement+PWA |
+| V1 | Skeptic wave over High findings | done | `verification/skeptic-*.md` | D1/D6/D8 skeptics complete — all UPHELD |
 | V2 | Main-loop citation spot-checks | 4/8 done | `verification/spot-checks.md` | UPHELD by me: D4-OOM (connect-go src), D7-events_audit, D9c-nats, D9a-coverage-enforcement. D4 two-pass disagreement adjudicated. |
-| V3 | Codex second opinion | pending | `verification/codex-opinion.md` | after skeptics + on report draft |
+| V3 | Codex second opinion | done | `verification/codex-opinion.md` | dual-rubric + blind-spot adopted |
 
 ### High-findings verification matrix (8 High, 0 Blocker)
 
@@ -58,7 +58,7 @@ Recovery point for the 2026-07-11 arch review. Re-orient after context loss by r
 | D9a-H1 coverage MUST unenforced | ME (rulesets api) | UPHELD |
 | D9c-H1 nats-server v2.14.2 vuln | ME (go.mod + ops docs) | UPHELD |
 
-**Verification scorecard so far: 7/8 High UPHELD (2 strengthened, 1 self-correction applied), 1 running. Zero refuted.**
+**Verification scorecard: 8/8 High UPHELD (2 strengthened, 2 self-corrections applied). Zero refuted.**
 
 ## Phase 3–4 — Synthesis & issue plan
 
@@ -74,5 +74,5 @@ Recovery point for the 2026-07-11 arch review. Re-orient after context loss by r
 | What | Value |
 |------|-------|
 | `task dev:obs` task ID | — |
-| Web URL | — |
-| Telnet | — |
+| Web URL | http://localhost:8080 (during live pass; stack since torn down) |
+| Telnet | :4201 (during live pass; stack since torn down) |

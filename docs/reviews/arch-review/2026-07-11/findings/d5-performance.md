@@ -47,7 +47,7 @@ Counts: **Medium 2 · Low 3 · Info 1** (0 Blocker, 0 High). Several adjacent it
 - **Evidence:** query at `internal/store/session_store.go:745-753`; `sessions` indexes are `idx_sessions_active_character` (character_id, partial), `idx_sessions_status` (status='detached', partial), and `idx_sessions_player_session_id` — none on `location_id` (migration 000001 lines 221-223; migration 000008). The correlated `EXISTS` on `session_connections` is covered by `idx_session_connections_session` (000001), so only the outer scan is unindexed.
 - **Impact:** `ListFocusPresence` (`internal/grpc/list_focus_presence.go:140`) runs on every "who's here"/location render. At hundreds–low-thousands of sessions a seq-scan is sub-ms, so no real pain at target scale; it degrades linearly as the sessions table grows.
 - **Recommendation:** Add a partial index `CREATE INDEX idx_sessions_location_active ON sessions (location_id) WHERE status='active' AND grid_present=true;` (mirrors the partial-index style already used for `idx_sessions_status`). Cheap insurance; matches the query exactly.
-- **Dedup:** none
+- **Dedup:** same underlying gap as the **canonical D7 data-layer finding** (`findings/d7-data.md` MEDIUM-1); this is the perf lens. Both feed the single issue I16 (#4796); D7 carries the chosen severity.
 
 ### LOW-2 pgx pool left at library defaults (max(4, NumCPU)); one shared pool fronts all subsystems
 

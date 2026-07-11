@@ -10,7 +10,7 @@
 
 ## What HoloMUSH is
 
-A modern MUSH (multi-user shared hallucination — text-based multiplayer roleplay) platform: Go core with event-sourced architecture over NATS JetStream, dual protocol (telnet + web), plugin system (Lua via gopher-lua, binary via hashicorp/go-plugin, setting-only), PostgreSQL for all durable data, SvelteKit PWA web client. **Calibration: hobbyist/community scale, NOT five-nines.** Judge findings against the project's own goals: reliability, correctness, usability.
+A modern MUSH (multi-user shared hallucination — text-based multiplayer roleplay) platform: Go core with an **event-driven** architecture over NATS JetStream, dual protocol (telnet + web), plugin system (Lua via gopher-lua, binary via hashicorp/go-plugin, setting-only), PostgreSQL for all durable data, SvelteKit PWA web client. (Note: the event bus is event-*driven*; durable world state is currently **CRUD-canonical, not event-sourced** — see finding F1. The docs' "event sourcing" claim is itself a finding, so this briefing avoids repeating it.) **Calibration: hobbyist/community scale, NOT five-nines.** Judge findings against the project's own goals: reliability, correctness, usability.
 
 ## Container view
 

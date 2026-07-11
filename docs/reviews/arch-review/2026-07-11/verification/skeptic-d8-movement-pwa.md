@@ -7,7 +7,7 @@
 
 Adversarial re-derivation, independent of the review's own findings/spot-checks
 docs (which were read only to locate the original citations, not trusted).
-Working dir: `/Volumes/Code/github.com/holomush/.worktrees/arch-review`.
+Working dir: `<repo>`.
 
 ---
 

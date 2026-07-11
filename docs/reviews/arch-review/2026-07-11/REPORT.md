@@ -243,7 +243,7 @@ Findings that duplicate open issues, credited for completeness: AnsiRenderer XSS
 - No backup/restore or upgrade/migration-path exercise.
 - Crypto rekey orchestrator internals and the cluster invalidation FSM were confirmed wired but not exhaustively audited.
 
-**Why "0 Blocker, 8 High" is honest, not inflated:** the Highs are not padded — each is independently verified — but §3's thesis is explicit that F1/F5/F6/F7 share one root cause. A reader who prefers to count themes rather than findings should read that as **one systemic trust-gap plus two runtime guardrail gaps (F2, F4) plus one dependency bump (F8) plus one broken new tool (F3).** Both framings are in the report so neither over- nor under-states the state of the system.
+**Why "0 Blocker, 8 High" is honest, not inflated:** the Highs are not padded — each is independently verified — and §3 keeps their *rubrics* distinct: **F1** is a standalone architecture-integrity finding (the root cause of M2/M12), while **F3/F6/F7** (plus F5's product-readiness cousin) share the one assurance-gap root. A reader who prefers to count themes rather than findings should read the eight as **one architecture decision (F1) + three runtime/operational Highs (F2 body-cap, F4 retention, F8 dependency) + one product-readiness gap (F5) + one assurance-gap theme (F3/F6/F7).** Both framings are in the report so neither over- nor under-states the state of the system.
 
 ---
 

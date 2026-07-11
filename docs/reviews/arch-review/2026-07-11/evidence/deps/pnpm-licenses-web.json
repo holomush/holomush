@@ -6,7 +6,7 @@
         "5.1.11"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@asamuzakjp+css-color@5.1.11/node_modules/@asamuzakjp/css-color"
+        "<repo>/web/node_modules/.pnpm/@asamuzakjp+css-color@5.1.11/node_modules/@asamuzakjp/css-color"
       ],
       "license": "MIT",
       "author": "asamuzaK",
@@ -19,7 +19,7 @@
         "7.1.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@asamuzakjp+dom-selector@7.1.1/node_modules/@asamuzakjp/dom-selector"
+        "<repo>/web/node_modules/.pnpm/@asamuzakjp+dom-selector@7.1.1/node_modules/@asamuzakjp/dom-selector"
       ],
       "license": "MIT",
       "author": "asamuzaK",
@@ -32,7 +32,7 @@
         "1.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@asamuzakjp+generational-cache@1.0.1/node_modules/@asamuzakjp/generational-cache"
+        "<repo>/web/node_modules/.pnpm/@asamuzakjp+generational-cache@1.0.1/node_modules/@asamuzakjp/generational-cache"
       ],
       "license": "MIT",
       "author": "asamuzaK",
@@ -45,7 +45,7 @@
         "2.3.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@asamuzakjp+nwsapi@2.3.9/node_modules/@asamuzakjp/nwsapi"
+        "<repo>/web/node_modules/.pnpm/@asamuzakjp+nwsapi@2.3.9/node_modules/@asamuzakjp/nwsapi"
       ],
       "license": "MIT",
       "author": "Diego Perini",
@@ -58,7 +58,7 @@
         "2.4.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@bramus+specificity@2.4.2/node_modules/@bramus/specificity"
+        "<repo>/web/node_modules/.pnpm/@bramus+specificity@2.4.2/node_modules/@bramus/specificity"
       ],
       "license": "MIT",
       "author": "Bramus Van Damme",
@@ -71,7 +71,7 @@
         "3.2.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@csstools+css-calc@3.2.1_@csstools+css-parser-algorithms@4.0.0_@csstools+css-tokenizer@_3b33f237655dfa7a35d4b0433ee15cf1/node_modules/@csstools/css-calc"
+        "<repo>/web/node_modules/.pnpm/@csstools+css-calc@3.2.1_@csstools+css-parser-algorithms@4.0.0_@csstools+css-tokenizer@_3b33f237655dfa7a35d4b0433ee15cf1/node_modules/@csstools/css-calc"
       ],
       "license": "MIT",
       "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-calc#readme",
@@ -83,7 +83,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@csstools+css-color-parser@4.1.9_@csstools+css-parser-algorithms@4.0.0_@csstools+css-to_c6dc0ff88668e614025a4cbfb943c01a/node_modules/@csstools/css-color-parser"
+        "<repo>/web/node_modules/.pnpm/@csstools+css-color-parser@4.1.9_@csstools+css-parser-algorithms@4.0.0_@csstools+css-to_c6dc0ff88668e614025a4cbfb943c01a/node_modules/@csstools/css-color-parser"
       ],
       "license": "MIT",
       "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-color-parser#readme",
@@ -95,7 +95,7 @@
         "4.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@csstools+css-parser-algorithms@4.0.0_@csstools+css-tokenizer@4.0.0/node_modules/@csstools/css-parser-algorithms"
+        "<repo>/web/node_modules/.pnpm/@csstools+css-parser-algorithms@4.0.0_@csstools+css-tokenizer@4.0.0/node_modules/@csstools/css-parser-algorithms"
       ],
       "license": "MIT",
       "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-parser-algorithms#readme",
@@ -107,7 +107,7 @@
         "4.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@csstools+css-tokenizer@4.0.0/node_modules/@csstools/css-tokenizer"
+        "<repo>/web/node_modules/.pnpm/@csstools+css-tokenizer@4.0.0/node_modules/@csstools/css-tokenizer"
       ],
       "license": "MIT",
       "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-tokenizer#readme",
@@ -119,7 +119,7 @@
         "1.15.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@exodus+bytes@1.15.1/node_modules/@exodus/bytes"
+        "<repo>/web/node_modules/.pnpm/@exodus+bytes@1.15.1/node_modules/@exodus/bytes"
       ],
       "license": "MIT",
       "author": "Exodus Movement, Inc.",
@@ -132,7 +132,7 @@
         "1.7.5"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@floating-ui+core@1.7.5/node_modules/@floating-ui/core"
+        "<repo>/web/node_modules/.pnpm/@floating-ui+core@1.7.5/node_modules/@floating-ui/core"
       ],
       "license": "MIT",
       "author": "atomiks",
@@ -145,7 +145,7 @@
         "1.7.6"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@floating-ui+dom@1.7.6/node_modules/@floating-ui/dom"
+        "<repo>/web/node_modules/.pnpm/@floating-ui+dom@1.7.6/node_modules/@floating-ui/dom"
       ],
       "license": "MIT",
       "author": "atomiks",
@@ -158,7 +158,7 @@
         "0.2.11"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@floating-ui+utils@0.2.11/node_modules/@floating-ui/utils"
+        "<repo>/web/node_modules/.pnpm/@floating-ui+utils@0.2.11/node_modules/@floating-ui/utils"
       ],
       "license": "MIT",
       "author": "atomiks",
@@ -171,7 +171,7 @@
         "0.3.13"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@jridgewell+gen-mapping@0.3.13/node_modules/@jridgewell/gen-mapping"
+        "<repo>/web/node_modules/.pnpm/@jridgewell+gen-mapping@0.3.13/node_modules/@jridgewell/gen-mapping"
       ],
       "license": "MIT",
       "author": "Justin Ridgewell",
@@ -184,7 +184,7 @@
         "2.3.5"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@jridgewell+remapping@2.3.5/node_modules/@jridgewell/remapping"
+        "<repo>/web/node_modules/.pnpm/@jridgewell+remapping@2.3.5/node_modules/@jridgewell/remapping"
       ],
       "license": "MIT",
       "author": "Justin Ridgewell",
@@ -197,7 +197,7 @@
         "3.1.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@jridgewell+resolve-uri@3.1.2/node_modules/@jridgewell/resolve-uri"
+        "<repo>/web/node_modules/.pnpm/@jridgewell+resolve-uri@3.1.2/node_modules/@jridgewell/resolve-uri"
       ],
       "license": "MIT",
       "author": "Justin Ridgewell",
@@ -210,7 +210,7 @@
         "1.5.5"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@jridgewell+sourcemap-codec@1.5.5/node_modules/@jridgewell/sourcemap-codec"
+        "<repo>/web/node_modules/.pnpm/@jridgewell+sourcemap-codec@1.5.5/node_modules/@jridgewell/sourcemap-codec"
       ],
       "license": "MIT",
       "author": "Justin Ridgewell",
@@ -223,7 +223,7 @@
         "0.3.31"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@jridgewell+trace-mapping@0.3.31/node_modules/@jridgewell/trace-mapping"
+        "<repo>/web/node_modules/.pnpm/@jridgewell+trace-mapping@0.3.31/node_modules/@jridgewell/trace-mapping"
       ],
       "license": "MIT",
       "author": "Justin Ridgewell",
@@ -236,7 +236,7 @@
         "0.138.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@oxc-project+types@0.138.0/node_modules/@oxc-project/types"
+        "<repo>/web/node_modules/.pnpm/@oxc-project+types@0.138.0/node_modules/@oxc-project/types"
       ],
       "license": "MIT",
       "author": "Boshen and oxc contributors",
@@ -249,7 +249,7 @@
         "1.0.0-next.29"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@polka+url@1.0.0-next.29/node_modules/@polka/url"
+        "<repo>/web/node_modules/.pnpm/@polka+url@1.0.0-next.29/node_modules/@polka/url"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -262,7 +262,7 @@
         "1.1.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@rolldown+binding-darwin-arm64@1.1.4/node_modules/@rolldown/binding-darwin-arm64"
+        "<repo>/web/node_modules/.pnpm/@rolldown+binding-darwin-arm64@1.1.4/node_modules/@rolldown/binding-darwin-arm64"
       ],
       "license": "MIT",
       "homepage": "https://rolldown.rs/",
@@ -274,7 +274,7 @@
         "1.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@rolldown+pluginutils@1.0.1/node_modules/@rolldown/pluginutils"
+        "<repo>/web/node_modules/.pnpm/@rolldown+pluginutils@1.0.1/node_modules/@rolldown/pluginutils"
       ],
       "license": "MIT",
       "homepage": "https://github.com/rolldown/plugins/tree/main/packages/pluginutils#readme",
@@ -286,7 +286,7 @@
         "10.63.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sentry+browser@10.63.0/node_modules/@sentry/browser"
+        "<repo>/web/node_modules/.pnpm/@sentry+browser@10.63.0/node_modules/@sentry/browser"
       ],
       "license": "MIT",
       "author": "Sentry",
@@ -299,7 +299,7 @@
         "10.63.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sentry+browser-utils@10.63.0/node_modules/@sentry/browser-utils"
+        "<repo>/web/node_modules/.pnpm/@sentry+browser-utils@10.63.0/node_modules/@sentry/browser-utils"
       ],
       "license": "MIT",
       "author": "Sentry",
@@ -312,7 +312,7 @@
         "10.63.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sentry+core@10.63.0/node_modules/@sentry/core"
+        "<repo>/web/node_modules/.pnpm/@sentry+core@10.63.0/node_modules/@sentry/core"
       ],
       "license": "MIT",
       "author": "Sentry",
@@ -325,7 +325,7 @@
         "10.63.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sentry+feedback@10.63.0/node_modules/@sentry/feedback"
+        "<repo>/web/node_modules/.pnpm/@sentry+feedback@10.63.0/node_modules/@sentry/feedback"
       ],
       "license": "MIT",
       "author": "Sentry",
@@ -338,7 +338,7 @@
         "10.63.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sentry+replay@10.63.0/node_modules/@sentry/replay"
+        "<repo>/web/node_modules/.pnpm/@sentry+replay@10.63.0/node_modules/@sentry/replay"
       ],
       "license": "MIT",
       "author": "Sentry",
@@ -351,7 +351,7 @@
         "10.63.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sentry+replay-canvas@10.63.0/node_modules/@sentry/replay-canvas"
+        "<repo>/web/node_modules/.pnpm/@sentry+replay-canvas@10.63.0/node_modules/@sentry/replay-canvas"
       ],
       "license": "MIT",
       "author": "Sentry",
@@ -364,7 +364,7 @@
         "10.63.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sentry+svelte@10.63.0_svelte@5.56.4/node_modules/@sentry/svelte"
+        "<repo>/web/node_modules/.pnpm/@sentry+svelte@10.63.0_svelte@5.56.4/node_modules/@sentry/svelte"
       ],
       "license": "MIT",
       "author": "Sentry",
@@ -377,7 +377,7 @@
         "1.1.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@standard-schema+spec@1.1.0/node_modules/@standard-schema/spec"
+        "<repo>/web/node_modules/.pnpm/@standard-schema+spec@1.1.0/node_modules/@standard-schema/spec"
       ],
       "license": "MIT",
       "author": "Colin McDonnell",
@@ -390,7 +390,7 @@
         "1.0.10"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sveltejs+acorn-typescript@1.0.10_acorn@8.17.0/node_modules/@sveltejs/acorn-typescript"
+        "<repo>/web/node_modules/.pnpm/@sveltejs+acorn-typescript@1.0.10_acorn@8.17.0/node_modules/@sveltejs/acorn-typescript"
       ],
       "license": "MIT",
       "author": "tyrealhu and the Svelte team",
@@ -403,7 +403,7 @@
         "3.0.10"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sveltejs+adapter-static@3.0.10_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs_dd2519bedb5f4e9e2a794071b83356aa/node_modules/@sveltejs/adapter-static"
+        "<repo>/web/node_modules/.pnpm/@sveltejs+adapter-static@3.0.10_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs_dd2519bedb5f4e9e2a794071b83356aa/node_modules/@sveltejs/adapter-static"
       ],
       "license": "MIT",
       "homepage": "https://svelte.dev/docs/kit/adapter-static",
@@ -415,7 +415,7 @@
         "2.69.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plugin-svelte@7.1.2_svelte_c8e15c2b63343859a77adec6a029aab3/node_modules/@sveltejs/kit"
+        "<repo>/web/node_modules/.pnpm/@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plugin-svelte@7.1.2_svelte_c8e15c2b63343859a77adec6a029aab3/node_modules/@sveltejs/kit"
       ],
       "license": "MIT",
       "homepage": "https://svelte.dev",
@@ -427,7 +427,7 @@
         "0.2.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sveltejs+load-config@0.2.0/node_modules/@sveltejs/load-config"
+        "<repo>/web/node_modules/.pnpm/@sveltejs+load-config@0.2.0/node_modules/@sveltejs/load-config"
       ],
       "license": "MIT",
       "homepage": "https://github.com/sveltejs/language-tools#readme",
@@ -439,7 +439,7 @@
         "7.1.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@sveltejs+vite-plugin-svelte@7.1.2_svelte@5.56.4_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@sveltejs/vite-plugin-svelte"
+        "<repo>/web/node_modules/.pnpm/@sveltejs+vite-plugin-svelte@7.1.2_svelte@5.56.4_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@sveltejs/vite-plugin-svelte"
       ],
       "license": "MIT",
       "homepage": "https://github.com/sveltejs/vite-plugin-svelte#readme"
@@ -450,7 +450,7 @@
         "4.3.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@tailwindcss+node@4.3.2/node_modules/@tailwindcss/node"
+        "<repo>/web/node_modules/.pnpm/@tailwindcss+node@4.3.2/node_modules/@tailwindcss/node"
       ],
       "license": "MIT",
       "homepage": "https://tailwindcss.com",
@@ -462,7 +462,7 @@
         "4.3.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@tailwindcss+oxide@4.3.2/node_modules/@tailwindcss/oxide"
+        "<repo>/web/node_modules/.pnpm/@tailwindcss+oxide@4.3.2/node_modules/@tailwindcss/oxide"
       ],
       "license": "MIT",
       "homepage": "https://github.com/tailwindlabs/tailwindcss#readme"
@@ -473,7 +473,7 @@
         "4.3.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@tailwindcss+oxide-darwin-arm64@4.3.2/node_modules/@tailwindcss/oxide-darwin-arm64"
+        "<repo>/web/node_modules/.pnpm/@tailwindcss+oxide-darwin-arm64@4.3.2/node_modules/@tailwindcss/oxide-darwin-arm64"
       ],
       "license": "MIT",
       "homepage": "https://github.com/tailwindlabs/tailwindcss#readme"
@@ -484,7 +484,7 @@
         "4.3.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@tailwindcss+vite@4.3.2_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@tailwindcss/vite"
+        "<repo>/web/node_modules/.pnpm/@tailwindcss+vite@4.3.2_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@tailwindcss/vite"
       ],
       "license": "MIT",
       "homepage": "https://tailwindcss.com",
@@ -496,7 +496,7 @@
         "5.2.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@types+chai@5.2.3/node_modules/@types/chai"
+        "<repo>/web/node_modules/.pnpm/@types+chai@5.2.3/node_modules/@types/chai"
       ],
       "license": "MIT",
       "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/chai",
@@ -508,7 +508,7 @@
         "0.6.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@types+cookie@0.6.0/node_modules/@types/cookie"
+        "<repo>/web/node_modules/.pnpm/@types+cookie@0.6.0/node_modules/@types/cookie"
       ],
       "license": "MIT",
       "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/cookie",
@@ -520,7 +520,7 @@
         "4.0.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@types+deep-eql@4.0.2/node_modules/@types/deep-eql"
+        "<repo>/web/node_modules/.pnpm/@types+deep-eql@4.0.2/node_modules/@types/deep-eql"
       ],
       "license": "MIT",
       "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/deep-eql",
@@ -532,7 +532,7 @@
         "1.0.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@types+estree@1.0.9/node_modules/@types/estree"
+        "<repo>/web/node_modules/.pnpm/@types+estree@1.0.9/node_modules/@types/estree"
       ],
       "license": "MIT",
       "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree",
@@ -544,7 +544,7 @@
         "25.9.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@types+node@25.9.4/node_modules/@types/node"
+        "<repo>/web/node_modules/.pnpm/@types+node@25.9.4/node_modules/@types/node"
       ],
       "license": "MIT",
       "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node",
@@ -556,7 +556,7 @@
         "8.20.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@types+pg@8.20.0/node_modules/@types/pg"
+        "<repo>/web/node_modules/.pnpm/@types+pg@8.20.0/node_modules/@types/pg"
       ],
       "license": "MIT",
       "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/pg",
@@ -568,7 +568,7 @@
         "2.0.7"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@types+trusted-types@2.0.7/node_modules/@types/trusted-types"
+        "<repo>/web/node_modules/.pnpm/@types+trusted-types@2.0.7/node_modules/@types/trusted-types"
       ],
       "license": "MIT",
       "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/trusted-types",
@@ -580,7 +580,7 @@
         "1.6.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@typescript+vfs@1.6.4_typescript@5.4.5/node_modules/@typescript/vfs"
+        "<repo>/web/node_modules/.pnpm/@typescript+vfs@1.6.4_typescript@5.4.5/node_modules/@typescript/vfs"
       ],
       "license": "MIT",
       "author": "TypeScript team",
@@ -592,7 +592,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@vitest+expect@4.1.9/node_modules/@vitest/expect"
+        "<repo>/web/node_modules/.pnpm/@vitest+expect@4.1.9/node_modules/@vitest/expect"
       ],
       "license": "MIT",
       "homepage": "https://vitest.dev/api/expect",
@@ -604,7 +604,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@vitest+mocker@4.1.9_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@vitest/mocker"
+        "<repo>/web/node_modules/.pnpm/@vitest+mocker@4.1.9_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@vitest/mocker"
       ],
       "license": "MIT",
       "homepage": "https://github.com/vitest-dev/vitest/tree/main/packages/mocker",
@@ -616,7 +616,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@vitest+pretty-format@4.1.9/node_modules/@vitest/pretty-format"
+        "<repo>/web/node_modules/.pnpm/@vitest+pretty-format@4.1.9/node_modules/@vitest/pretty-format"
       ],
       "license": "MIT",
       "homepage": "https://github.com/vitest-dev/vitest/tree/main/packages/pretty-format",
@@ -628,7 +628,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner"
+        "<repo>/web/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner"
       ],
       "license": "MIT",
       "homepage": "https://vitest.dev/api/advanced/runner",
@@ -640,7 +640,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@vitest+snapshot@4.1.9/node_modules/@vitest/snapshot"
+        "<repo>/web/node_modules/.pnpm/@vitest+snapshot@4.1.9/node_modules/@vitest/snapshot"
       ],
       "license": "MIT",
       "homepage": "https://vitest.dev/guide/snapshot",
@@ -652,7 +652,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@vitest+spy@4.1.9/node_modules/@vitest/spy"
+        "<repo>/web/node_modules/.pnpm/@vitest+spy@4.1.9/node_modules/@vitest/spy"
       ],
       "license": "MIT",
       "homepage": "https://vitest.dev/api/mock",
@@ -664,7 +664,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@vitest+ui@4.1.9_vitest@4.1.9/node_modules/@vitest/ui"
+        "<repo>/web/node_modules/.pnpm/@vitest+ui@4.1.9_vitest@4.1.9/node_modules/@vitest/ui"
       ],
       "license": "MIT",
       "homepage": "https://vitest.dev/guide/ui",
@@ -676,7 +676,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@vitest+utils@4.1.9/node_modules/@vitest/utils"
+        "<repo>/web/node_modules/.pnpm/@vitest+utils@4.1.9/node_modules/@vitest/utils"
       ],
       "license": "MIT",
       "homepage": "https://github.com/vitest-dev/vitest/tree/main/packages/utils",
@@ -688,7 +688,7 @@
         "8.17.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/acorn@8.17.0/node_modules/acorn"
+        "<repo>/web/node_modules/.pnpm/acorn@8.17.0/node_modules/acorn"
       ],
       "license": "MIT",
       "homepage": "https://github.com/acornjs/acorn",
@@ -700,7 +700,7 @@
         "6.0.6"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/ansi_up@6.0.6/node_modules/ansi_up"
+        "<repo>/web/node_modules/.pnpm/ansi_up@6.0.6/node_modules/ansi_up"
       ],
       "license": "MIT",
       "author": "drudru",
@@ -713,7 +713,7 @@
         "2.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/assertion-error@2.0.1/node_modules/assertion-error"
+        "<repo>/web/node_modules/.pnpm/assertion-error@2.0.1/node_modules/assertion-error"
       ],
       "license": "MIT",
       "author": "Jake Luer",
@@ -726,7 +726,7 @@
         "1.0.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/bidi-js@1.0.3/node_modules/bidi-js"
+        "<repo>/web/node_modules/.pnpm/bidi-js@1.0.3/node_modules/bidi-js"
       ],
       "license": "MIT",
       "author": "Jason Johnston",
@@ -739,7 +739,7 @@
         "2.18.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/bits-ui@2.18.1_@internationalized+date@3.12.2_@sveltejs+kit@2.69.1_@opentelemetry+api@1_bdacdc457c8e49988a6e370b52d5bb9b/node_modules/bits-ui"
+        "<repo>/web/node_modules/.pnpm/bits-ui@2.18.1_@internationalized+date@3.12.2_@sveltejs+kit@2.69.1_@opentelemetry+api@1_bdacdc457c8e49988a6e370b52d5bb9b/node_modules/bits-ui"
       ],
       "license": "MIT",
       "author": "Hunter Johnston",
@@ -752,7 +752,7 @@
         "6.2.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/chai@6.2.2/node_modules/chai"
+        "<repo>/web/node_modules/.pnpm/chai@6.2.2/node_modules/chai"
       ],
       "license": "MIT",
       "author": "Jake Luer",
@@ -765,7 +765,7 @@
         "4.0.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/chokidar@4.0.3/node_modules/chokidar"
+        "<repo>/web/node_modules/.pnpm/chokidar@4.0.3/node_modules/chokidar"
       ],
       "license": "MIT",
       "author": "Paul Miller",
@@ -778,7 +778,7 @@
         "2.2.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/cjs-module-lexer@2.2.0/node_modules/cjs-module-lexer"
+        "<repo>/web/node_modules/.pnpm/cjs-module-lexer@2.2.0/node_modules/cjs-module-lexer"
       ],
       "license": "MIT",
       "author": "Guy Bedford",
@@ -791,7 +791,7 @@
         "2.1.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/clsx@2.1.1/node_modules/clsx"
+        "<repo>/web/node_modules/.pnpm/clsx@2.1.1/node_modules/clsx"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -804,7 +804,7 @@
         "2.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/convert-source-map@2.0.0/node_modules/convert-source-map"
+        "<repo>/web/node_modules/.pnpm/convert-source-map@2.0.0/node_modules/convert-source-map"
       ],
       "license": "MIT",
       "author": "Thorsten Lorenz",
@@ -817,7 +817,7 @@
         "0.6.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/cookie@0.6.0/node_modules/cookie"
+        "<repo>/web/node_modules/.pnpm/cookie@0.6.0/node_modules/cookie"
       ],
       "license": "MIT",
       "author": "Roman Shtylman",
@@ -830,7 +830,7 @@
         "3.2.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/css-tree@3.2.1/node_modules/css-tree"
+        "<repo>/web/node_modules/.pnpm/css-tree@3.2.1/node_modules/css-tree"
       ],
       "license": "MIT",
       "author": "Roman Dvornov",
@@ -843,7 +843,7 @@
         "7.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/data-urls@7.0.0/node_modules/data-urls"
+        "<repo>/web/node_modules/.pnpm/data-urls@7.0.0/node_modules/data-urls"
       ],
       "license": "MIT",
       "author": "Domenic Denicola",
@@ -856,7 +856,7 @@
         "4.4.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/debug@4.4.3/node_modules/debug"
+        "<repo>/web/node_modules/.pnpm/debug@4.4.3/node_modules/debug"
       ],
       "license": "MIT",
       "author": "Josh Junon",
@@ -869,7 +869,7 @@
         "10.6.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/decimal.js@10.6.0/node_modules/decimal.js"
+        "<repo>/web/node_modules/.pnpm/decimal.js@10.6.0/node_modules/decimal.js"
       ],
       "license": "MIT",
       "author": "Michael Mclaughlin",
@@ -882,7 +882,7 @@
         "4.3.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/deepmerge@4.3.1/node_modules/deepmerge"
+        "<repo>/web/node_modules/.pnpm/deepmerge@4.3.1/node_modules/deepmerge"
       ],
       "license": "MIT",
       "homepage": "https://github.com/TehShrike/deepmerge",
@@ -894,7 +894,7 @@
         "2.0.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/dequal@2.0.3/node_modules/dequal"
+        "<repo>/web/node_modules/.pnpm/dequal@2.0.3/node_modules/dequal"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -907,7 +907,7 @@
         "5.8.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/devalue@5.8.1/node_modules/devalue"
+        "<repo>/web/node_modules/.pnpm/devalue@5.8.1/node_modules/devalue"
       ],
       "license": "MIT",
       "homepage": "https://github.com/sveltejs/devalue#readme",
@@ -919,7 +919,7 @@
         "5.21.6"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/enhanced-resolve@5.21.6/node_modules/enhanced-resolve"
+        "<repo>/web/node_modules/.pnpm/enhanced-resolve@5.21.6/node_modules/enhanced-resolve"
       ],
       "license": "MIT",
       "author": "Tobias Koppers @sokra",
@@ -932,7 +932,7 @@
         "2.3.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/es-module-lexer@2.3.0/node_modules/es-module-lexer"
+        "<repo>/web/node_modules/.pnpm/es-module-lexer@2.3.0/node_modules/es-module-lexer"
       ],
       "license": "MIT",
       "author": "Guy Bedford",
@@ -945,7 +945,7 @@
         "1.2.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/esm-env@1.2.2/node_modules/esm-env"
+        "<repo>/web/node_modules/.pnpm/esm-env@1.2.2/node_modules/esm-env"
       ],
       "license": "MIT",
       "author": "Ben McCann",
@@ -957,7 +957,7 @@
         "2.2.13"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/esrap@2.2.13/node_modules/esrap"
+        "<repo>/web/node_modules/.pnpm/esrap@2.2.13/node_modules/esrap"
       ],
       "license": "MIT",
       "homepage": "https://github.com/sveltejs/esrap#readme",
@@ -969,7 +969,7 @@
         "3.0.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/estree-walker@3.0.3/node_modules/estree-walker"
+        "<repo>/web/node_modules/.pnpm/estree-walker@3.0.3/node_modules/estree-walker"
       ],
       "license": "MIT",
       "author": "Rich Harris",
@@ -982,7 +982,7 @@
         "6.5.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/fdir@6.5.0_picomatch@4.0.5/node_modules/fdir"
+        "<repo>/web/node_modules/.pnpm/fdir@6.5.0_picomatch@4.0.5/node_modules/fdir"
       ],
       "license": "MIT",
       "author": "thecodrr",
@@ -995,7 +995,7 @@
         "0.8.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/fflate@0.8.3/node_modules/fflate"
+        "<repo>/web/node_modules/.pnpm/fflate@0.8.3/node_modules/fflate"
       ],
       "license": "MIT",
       "author": "Arjun Barrett",
@@ -1009,8 +1009,8 @@
         "2.3.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/fsevents@2.3.2/node_modules/fsevents",
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/fsevents@2.3.3/node_modules/fsevents"
+        "<repo>/web/node_modules/.pnpm/fsevents@2.3.2/node_modules/fsevents",
+        "<repo>/web/node_modules/.pnpm/fsevents@2.3.3/node_modules/fsevents"
       ],
       "license": "MIT",
       "homepage": "https://github.com/fsevents/fsevents",
@@ -1022,7 +1022,7 @@
         "6.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/html-encoding-sniffer@6.0.0/node_modules/html-encoding-sniffer"
+        "<repo>/web/node_modules/.pnpm/html-encoding-sniffer@6.0.0/node_modules/html-encoding-sniffer"
       ],
       "license": "MIT",
       "author": "Domenic Denicola",
@@ -1035,7 +1035,7 @@
         "0.2.7"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/inline-style-parser@0.2.7/node_modules/inline-style-parser"
+        "<repo>/web/node_modules/.pnpm/inline-style-parser@0.2.7/node_modules/inline-style-parser"
       ],
       "license": "MIT",
       "homepage": "https://github.com/remarkablemark/inline-style-parser#readme",
@@ -1047,7 +1047,7 @@
         "1.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/is-potential-custom-element-name@1.0.1/node_modules/is-potential-custom-element-name"
+        "<repo>/web/node_modules/.pnpm/is-potential-custom-element-name@1.0.1/node_modules/is-potential-custom-element-name"
       ],
       "license": "MIT",
       "author": "Mathias Bynens",
@@ -1060,7 +1060,7 @@
         "3.0.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/is-reference@3.0.3/node_modules/is-reference"
+        "<repo>/web/node_modules/.pnpm/is-reference@3.0.3/node_modules/is-reference"
       ],
       "license": "MIT",
       "author": "Rich Harris",
@@ -1073,7 +1073,7 @@
         "2.7.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/jiti@2.7.0/node_modules/jiti"
+        "<repo>/web/node_modules/.pnpm/jiti@2.7.0/node_modules/jiti"
       ],
       "license": "MIT",
       "homepage": "https://github.com/unjs/jiti#readme",
@@ -1085,7 +1085,7 @@
         "29.1.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/jsdom@29.1.1/node_modules/jsdom"
+        "<repo>/web/node_modules/.pnpm/jsdom@29.1.1/node_modules/jsdom"
       ],
       "license": "MIT",
       "homepage": "https://github.com/jsdom/jsdom#readme",
@@ -1097,7 +1097,7 @@
         "4.1.5"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/kleur@4.1.5/node_modules/kleur"
+        "<repo>/web/node_modules/.pnpm/kleur@4.1.5/node_modules/kleur"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -1110,7 +1110,7 @@
         "3.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/locate-character@3.0.0/node_modules/locate-character"
+        "<repo>/web/node_modules/.pnpm/locate-character@3.0.0/node_modules/locate-character"
       ],
       "license": "MIT",
       "author": "Rich Harris",
@@ -1123,7 +1123,7 @@
         "1.5.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/lz-string@1.5.0/node_modules/lz-string"
+        "<repo>/web/node_modules/.pnpm/lz-string@1.5.0/node_modules/lz-string"
       ],
       "license": "MIT",
       "author": "pieroxy",
@@ -1136,7 +1136,7 @@
         "0.30.21"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/magic-string@0.30.21/node_modules/magic-string"
+        "<repo>/web/node_modules/.pnpm/magic-string@0.30.21/node_modules/magic-string"
       ],
       "license": "MIT",
       "author": "Rich Harris",
@@ -1149,7 +1149,7 @@
         "18.0.5"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/marked@18.0.5/node_modules/marked"
+        "<repo>/web/node_modules/.pnpm/marked@18.0.5/node_modules/marked"
       ],
       "license": "MIT",
       "author": "Christopher Jeffrey",
@@ -1162,7 +1162,7 @@
         "1.0.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/module-details-from-path@1.0.4/node_modules/module-details-from-path"
+        "<repo>/web/node_modules/.pnpm/module-details-from-path@1.0.4/node_modules/module-details-from-path"
       ],
       "license": "MIT",
       "author": "Thomas Watson",
@@ -1175,7 +1175,7 @@
         "1.2.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/mri@1.2.0/node_modules/mri"
+        "<repo>/web/node_modules/.pnpm/mri@1.2.0/node_modules/mri"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -1188,7 +1188,7 @@
         "2.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/mrmime@2.0.1/node_modules/mrmime"
+        "<repo>/web/node_modules/.pnpm/mrmime@2.0.1/node_modules/mrmime"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -1201,7 +1201,7 @@
         "2.1.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/ms@2.1.3/node_modules/ms"
+        "<repo>/web/node_modules/.pnpm/ms@2.1.3/node_modules/ms"
       ],
       "license": "MIT",
       "homepage": "https://github.com/vercel/ms#readme",
@@ -1213,7 +1213,7 @@
         "3.3.15"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/nanoid@3.3.15/node_modules/nanoid"
+        "<repo>/web/node_modules/.pnpm/nanoid@3.3.15/node_modules/nanoid"
       ],
       "license": "MIT",
       "author": "Andrey Sitnik",
@@ -1226,7 +1226,7 @@
         "2.1.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/obug@2.1.3/node_modules/obug"
+        "<repo>/web/node_modules/.pnpm/obug@2.1.3/node_modules/obug"
       ],
       "license": "MIT",
       "author": "Kevin Deng",
@@ -1239,7 +1239,7 @@
         "1.0.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/paneforge@1.0.2_svelte@5.56.4/node_modules/paneforge"
+        "<repo>/web/node_modules/.pnpm/paneforge@1.0.2_svelte@5.56.4/node_modules/paneforge"
       ],
       "license": "MIT",
       "author": "Hunter Johnston",
@@ -1251,7 +1251,7 @@
         "8.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/parse5@8.0.1/node_modules/parse5"
+        "<repo>/web/node_modules/.pnpm/parse5@8.0.1/node_modules/parse5"
       ],
       "license": "MIT",
       "author": "Ivan Nikulin",
@@ -1264,7 +1264,7 @@
         "2.0.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pathe@2.0.3/node_modules/pathe"
+        "<repo>/web/node_modules/.pnpm/pathe@2.0.3/node_modules/pathe"
       ],
       "license": "MIT",
       "homepage": "https://github.com/unjs/pathe#readme",
@@ -1276,7 +1276,7 @@
         "8.22.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pg@8.22.0/node_modules/pg"
+        "<repo>/web/node_modules/.pnpm/pg@8.22.0/node_modules/pg"
       ],
       "license": "MIT",
       "author": "Brian Carlson",
@@ -1289,7 +1289,7 @@
         "1.4.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pg-cloudflare@1.4.0/node_modules/pg-cloudflare"
+        "<repo>/web/node_modules/.pnpm/pg-cloudflare@1.4.0/node_modules/pg-cloudflare"
       ],
       "license": "MIT",
       "homepage": "https://github.com/brianc/node-postgres#readme",
@@ -1301,7 +1301,7 @@
         "2.14.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pg-connection-string@2.14.0/node_modules/pg-connection-string"
+        "<repo>/web/node_modules/.pnpm/pg-connection-string@2.14.0/node_modules/pg-connection-string"
       ],
       "license": "MIT",
       "author": "Blaine Bublitz",
@@ -1314,7 +1314,7 @@
         "3.14.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pg-pool@3.14.0_pg@8.22.0/node_modules/pg-pool"
+        "<repo>/web/node_modules/.pnpm/pg-pool@3.14.0_pg@8.22.0/node_modules/pg-pool"
       ],
       "license": "MIT",
       "author": "Brian M. Carlson",
@@ -1327,7 +1327,7 @@
         "1.15.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pg-protocol@1.15.0/node_modules/pg-protocol"
+        "<repo>/web/node_modules/.pnpm/pg-protocol@1.15.0/node_modules/pg-protocol"
       ],
       "license": "MIT",
       "homepage": "https://github.com/brianc/node-postgres#readme",
@@ -1339,7 +1339,7 @@
         "2.2.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pg-types@2.2.0/node_modules/pg-types"
+        "<repo>/web/node_modules/.pnpm/pg-types@2.2.0/node_modules/pg-types"
       ],
       "license": "MIT",
       "author": "Brian M. Carlson",
@@ -1352,7 +1352,7 @@
         "1.0.5"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pgpass@1.0.5/node_modules/pgpass"
+        "<repo>/web/node_modules/.pnpm/pgpass@1.0.5/node_modules/pgpass"
       ],
       "license": "MIT",
       "author": "Hannes Hörl",
@@ -1365,7 +1365,7 @@
         "4.0.5"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/picomatch@4.0.5/node_modules/picomatch"
+        "<repo>/web/node_modules/.pnpm/picomatch@4.0.5/node_modules/picomatch"
       ],
       "license": "MIT",
       "author": "Jon Schlinkert",
@@ -1378,7 +1378,7 @@
         "8.5.16"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/postcss@8.5.16/node_modules/postcss"
+        "<repo>/web/node_modules/.pnpm/postcss@8.5.16/node_modules/postcss"
       ],
       "license": "MIT",
       "author": "Andrey Sitnik",
@@ -1391,7 +1391,7 @@
         "2.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/postgres-array@2.0.0/node_modules/postgres-array"
+        "<repo>/web/node_modules/.pnpm/postgres-array@2.0.0/node_modules/postgres-array"
       ],
       "license": "MIT",
       "author": "Ben Drucker",
@@ -1404,7 +1404,7 @@
         "1.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/postgres-bytea@1.0.1/node_modules/postgres-bytea"
+        "<repo>/web/node_modules/.pnpm/postgres-bytea@1.0.1/node_modules/postgres-bytea"
       ],
       "license": "MIT",
       "author": "Ben Drucker",
@@ -1417,7 +1417,7 @@
         "1.0.7"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/postgres-date@1.0.7/node_modules/postgres-date"
+        "<repo>/web/node_modules/.pnpm/postgres-date@1.0.7/node_modules/postgres-date"
       ],
       "license": "MIT",
       "author": "Ben Drucker",
@@ -1430,7 +1430,7 @@
         "1.2.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/postgres-interval@1.2.0/node_modules/postgres-interval"
+        "<repo>/web/node_modules/.pnpm/postgres-interval@1.2.0/node_modules/postgres-interval"
       ],
       "license": "MIT",
       "author": "Ben Drucker",
@@ -1443,7 +1443,7 @@
         "2.3.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/punycode@2.3.1/node_modules/punycode"
+        "<repo>/web/node_modules/.pnpm/punycode@2.3.1/node_modules/punycode"
       ],
       "license": "MIT",
       "author": "Mathias Bynens",
@@ -1456,7 +1456,7 @@
         "4.1.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/readdirp@4.1.2/node_modules/readdirp"
+        "<repo>/web/node_modules/.pnpm/readdirp@4.1.2/node_modules/readdirp"
       ],
       "license": "MIT",
       "author": "Thorsten Lorenz",
@@ -1469,7 +1469,7 @@
         "2.0.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/require-from-string@2.0.2/node_modules/require-from-string"
+        "<repo>/web/node_modules/.pnpm/require-from-string@2.0.2/node_modules/require-from-string"
       ],
       "license": "MIT",
       "author": "Vsevolod Strukchinsky",
@@ -1482,7 +1482,7 @@
         "8.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/require-in-the-middle@8.0.1/node_modules/require-in-the-middle"
+        "<repo>/web/node_modules/.pnpm/require-in-the-middle@8.0.1/node_modules/require-in-the-middle"
       ],
       "license": "MIT",
       "author": "Thomas Watson Steen",
@@ -1495,7 +1495,7 @@
         "1.1.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/rolldown@1.1.4/node_modules/rolldown"
+        "<repo>/web/node_modules/.pnpm/rolldown@1.1.4/node_modules/rolldown"
       ],
       "license": "MIT",
       "homepage": "https://rolldown.rs/",
@@ -1509,9 +1509,9 @@
         "0.35.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/runed@0.23.4_svelte@5.56.4/node_modules/runed",
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/runed@0.29.2_svelte@5.56.4/node_modules/runed",
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/runed@0.35.1_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plugin-svelte_4fc084f79175d1664da6bf129abf11cc/node_modules/runed"
+        "<repo>/web/node_modules/.pnpm/runed@0.23.4_svelte@5.56.4/node_modules/runed",
+        "<repo>/web/node_modules/.pnpm/runed@0.29.2_svelte@5.56.4/node_modules/runed",
+        "<repo>/web/node_modules/.pnpm/runed@0.35.1_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plugin-svelte_4fc084f79175d1664da6bf129abf11cc/node_modules/runed"
       ],
       "license": "MIT",
       "homepage": "https://github.com/svecosystem/runed#readme"
@@ -1522,7 +1522,7 @@
         "1.8.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/sade@1.8.1/node_modules/sade"
+        "<repo>/web/node_modules/.pnpm/sade@1.8.1/node_modules/sade"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -1535,7 +1535,7 @@
         "3.1.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/set-cookie-parser@3.1.1/node_modules/set-cookie-parser"
+        "<repo>/web/node_modules/.pnpm/set-cookie-parser@3.1.1/node_modules/set-cookie-parser"
       ],
       "license": "MIT",
       "author": "Nathan Friedly",
@@ -1548,7 +1548,7 @@
         "3.0.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/sirv@3.0.2/node_modules/sirv"
+        "<repo>/web/node_modules/.pnpm/sirv@3.0.2/node_modules/sirv"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -1561,7 +1561,7 @@
         "0.0.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/stackback@0.0.2/node_modules/stackback"
+        "<repo>/web/node_modules/.pnpm/stackback@0.0.2/node_modules/stackback"
       ],
       "license": "MIT",
       "author": "Roman Shtylman",
@@ -1574,7 +1574,7 @@
         "4.1.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/std-env@4.1.0/node_modules/std-env"
+        "<repo>/web/node_modules/.pnpm/std-env@4.1.0/node_modules/std-env"
       ],
       "license": "MIT",
       "homepage": "https://github.com/unjs/std-env#readme",
@@ -1586,7 +1586,7 @@
         "1.0.14"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/style-to-object@1.0.14/node_modules/style-to-object"
+        "<repo>/web/node_modules/.pnpm/style-to-object@1.0.14/node_modules/style-to-object"
       ],
       "license": "MIT",
       "author": "Mark",
@@ -1599,7 +1599,7 @@
         "5.56.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/svelte@5.56.4/node_modules/svelte"
+        "<repo>/web/node_modules/.pnpm/svelte@5.56.4/node_modules/svelte"
       ],
       "license": "MIT",
       "homepage": "https://svelte.dev",
@@ -1611,7 +1611,7 @@
         "4.7.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/svelte-check@4.7.1_picomatch@4.0.5_svelte@5.56.4_typescript@6.0.3/node_modules/svelte-check"
+        "<repo>/web/node_modules/.pnpm/svelte-check@4.7.1_picomatch@4.0.5_svelte@5.56.4_typescript@6.0.3/node_modules/svelte-check"
       ],
       "license": "MIT",
       "author": "The Svelte Community",
@@ -1625,8 +1625,8 @@
         "0.10.6"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/svelte-toolbelt@0.9.3_svelte@5.56.4/node_modules/svelte-toolbelt",
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/svelte-toolbelt@0.10.6_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plu_e51770a5a8302fbb811e4c4c4aa85a5d/node_modules/svelte-toolbelt"
+        "<repo>/web/node_modules/.pnpm/svelte-toolbelt@0.9.3_svelte@5.56.4/node_modules/svelte-toolbelt",
+        "<repo>/web/node_modules/.pnpm/svelte-toolbelt@0.10.6_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plu_e51770a5a8302fbb811e4c4c4aa85a5d/node_modules/svelte-toolbelt"
       ],
       "license": "MIT"
     },
@@ -1636,7 +1636,7 @@
         "3.2.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/symbol-tree@3.2.4/node_modules/symbol-tree"
+        "<repo>/web/node_modules/.pnpm/symbol-tree@3.2.4/node_modules/symbol-tree"
       ],
       "license": "MIT",
       "author": "Joris van der Wel",
@@ -1649,7 +1649,7 @@
         "6.5.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tabbable@6.5.0/node_modules/tabbable"
+        "<repo>/web/node_modules/.pnpm/tabbable@6.5.0/node_modules/tabbable"
       ],
       "license": "MIT",
       "author": "David Clark",
@@ -1662,7 +1662,7 @@
         "3.6.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tailwind-merge@3.6.0/node_modules/tailwind-merge"
+        "<repo>/web/node_modules/.pnpm/tailwind-merge@3.6.0/node_modules/tailwind-merge"
       ],
       "license": "MIT",
       "author": "Dany Castillo",
@@ -1675,7 +1675,7 @@
         "3.2.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tailwind-variants@3.2.2_tailwind-merge@3.6.0_tailwindcss@4.3.2/node_modules/tailwind-variants"
+        "<repo>/web/node_modules/.pnpm/tailwind-variants@3.2.2_tailwind-merge@3.6.0_tailwindcss@4.3.2/node_modules/tailwind-variants"
       ],
       "license": "MIT",
       "author": "Junior Garcia",
@@ -1688,7 +1688,7 @@
         "4.3.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tailwindcss@4.3.2/node_modules/tailwindcss"
+        "<repo>/web/node_modules/.pnpm/tailwindcss@4.3.2/node_modules/tailwindcss"
       ],
       "license": "MIT",
       "homepage": "https://tailwindcss.com",
@@ -1700,7 +1700,7 @@
         "2.3.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tapable@2.3.3/node_modules/tapable"
+        "<repo>/web/node_modules/.pnpm/tapable@2.3.3/node_modules/tapable"
       ],
       "license": "MIT",
       "author": "Tobias Koppers @sokra",
@@ -1713,7 +1713,7 @@
         "2.9.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tinybench@2.9.0/node_modules/tinybench"
+        "<repo>/web/node_modules/.pnpm/tinybench@2.9.0/node_modules/tinybench"
       ],
       "license": "MIT",
       "homepage": "https://github.com/tinylibs/tinybench#readme"
@@ -1724,7 +1724,7 @@
         "1.2.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tinyexec@1.2.4/node_modules/tinyexec"
+        "<repo>/web/node_modules/.pnpm/tinyexec@1.2.4/node_modules/tinyexec"
       ],
       "license": "MIT",
       "author": "James Garbutt",
@@ -1737,7 +1737,7 @@
         "0.2.17"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby"
+        "<repo>/web/node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby"
       ],
       "license": "MIT",
       "author": "Superchupu",
@@ -1750,7 +1750,7 @@
         "3.1.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tinyrainbow@3.1.0/node_modules/tinyrainbow"
+        "<repo>/web/node_modules/.pnpm/tinyrainbow@3.1.0/node_modules/tinyrainbow"
       ],
       "license": "MIT",
       "homepage": "https://github.com/tinylibs/tinyrainbow#readme",
@@ -1762,7 +1762,7 @@
         "7.4.6"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tldts@7.4.6/node_modules/tldts"
+        "<repo>/web/node_modules/.pnpm/tldts@7.4.6/node_modules/tldts"
       ],
       "license": "MIT",
       "author": "Rémi Berson",
@@ -1775,7 +1775,7 @@
         "7.4.6"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tldts-core@7.4.6/node_modules/tldts-core"
+        "<repo>/web/node_modules/.pnpm/tldts-core@7.4.6/node_modules/tldts-core"
       ],
       "license": "MIT",
       "author": "Rémi Berson",
@@ -1788,7 +1788,7 @@
         "3.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/totalist@3.0.1/node_modules/totalist"
+        "<repo>/web/node_modules/.pnpm/totalist@3.0.1/node_modules/totalist"
       ],
       "license": "MIT",
       "author": "Luke Edwards",
@@ -1801,7 +1801,7 @@
         "6.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tr46@6.0.0/node_modules/tr46"
+        "<repo>/web/node_modules/.pnpm/tr46@6.0.0/node_modules/tr46"
       ],
       "license": "MIT",
       "author": "Sebastian Mayr",
@@ -1814,7 +1814,7 @@
         "7.28.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/undici@7.28.0/node_modules/undici"
+        "<repo>/web/node_modules/.pnpm/undici@7.28.0/node_modules/undici"
       ],
       "license": "MIT",
       "homepage": "https://undici.nodejs.org",
@@ -1826,7 +1826,7 @@
         "7.24.6"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/undici-types@7.24.6/node_modules/undici-types"
+        "<repo>/web/node_modules/.pnpm/undici-types@7.24.6/node_modules/undici-types"
       ],
       "license": "MIT",
       "homepage": "https://undici.nodejs.org",
@@ -1838,7 +1838,7 @@
         "8.1.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/vite@8.1.3_@types+node@25.9.4_jiti@2.7.0/node_modules/vite"
+        "<repo>/web/node_modules/.pnpm/vite@8.1.3_@types+node@25.9.4_jiti@2.7.0/node_modules/vite"
       ],
       "license": "MIT",
       "author": "Evan You",
@@ -1851,7 +1851,7 @@
         "1.1.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/vitefu@1.1.3_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/vitefu"
+        "<repo>/web/node_modules/.pnpm/vitefu@1.1.3_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/vitefu"
       ],
       "license": "MIT",
       "homepage": "https://github.com/svitejs/vitefu#readme",
@@ -1863,7 +1863,7 @@
         "4.1.9"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/vitest@4.1.9_@opentelemetry+api@1.9.1_@types+node@25.9.4_@vitest+ui@4.1.9_jsdom@29.1.1__1c6cc233f50dca84ab17b0def1bdae83/node_modules/vitest"
+        "<repo>/web/node_modules/.pnpm/vitest@4.1.9_@opentelemetry+api@1.9.1_@types+node@25.9.4_@vitest+ui@4.1.9_jsdom@29.1.1__1c6cc233f50dca84ab17b0def1bdae83/node_modules/vitest"
       ],
       "license": "MIT",
       "author": "Anthony Fu",
@@ -1876,7 +1876,7 @@
         "5.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/w3c-xmlserializer@5.0.0/node_modules/w3c-xmlserializer"
+        "<repo>/web/node_modules/.pnpm/w3c-xmlserializer@5.0.0/node_modules/w3c-xmlserializer"
       ],
       "license": "MIT",
       "homepage": "https://github.com/jsdom/w3c-xmlserializer#readme",
@@ -1888,7 +1888,7 @@
         "5.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/whatwg-mimetype@5.0.0/node_modules/whatwg-mimetype"
+        "<repo>/web/node_modules/.pnpm/whatwg-mimetype@5.0.0/node_modules/whatwg-mimetype"
       ],
       "license": "MIT",
       "author": "Domenic Denicola",
@@ -1901,7 +1901,7 @@
         "16.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/whatwg-url@16.0.1/node_modules/whatwg-url"
+        "<repo>/web/node_modules/.pnpm/whatwg-url@16.0.1/node_modules/whatwg-url"
       ],
       "license": "MIT",
       "author": "Sebastian Mayr",
@@ -1914,7 +1914,7 @@
         "2.3.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/why-is-node-running@2.3.0/node_modules/why-is-node-running"
+        "<repo>/web/node_modules/.pnpm/why-is-node-running@2.3.0/node_modules/why-is-node-running"
       ],
       "license": "MIT",
       "author": "Mathias Buus",
@@ -1927,7 +1927,7 @@
         "2.2.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/xmlchars@2.2.0/node_modules/xmlchars"
+        "<repo>/web/node_modules/.pnpm/xmlchars@2.2.0/node_modules/xmlchars"
       ],
       "license": "MIT",
       "author": "Louis-Dominique Dubeau",
@@ -1940,7 +1940,7 @@
         "4.0.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/xtend@4.0.2/node_modules/xtend"
+        "<repo>/web/node_modules/.pnpm/xtend@4.0.2/node_modules/xtend"
       ],
       "license": "MIT",
       "author": "Raynos",
@@ -1953,7 +1953,7 @@
         "1.1.4"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/zimmerframe@1.1.4/node_modules/zimmerframe"
+        "<repo>/web/node_modules/.pnpm/zimmerframe@1.1.4/node_modules/zimmerframe"
       ],
       "license": "MIT",
       "homepage": "https://github.com/sveltejs/zimmerframe#readme",
@@ -1967,7 +1967,7 @@
         "2.12.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf"
+        "<repo>/web/node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf"
       ],
       "license": "(Apache-2.0 AND BSD-3-Clause)",
       "homepage": "https://protobufes.com/",
@@ -1981,7 +1981,7 @@
         "2.12.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@bufbuild+protoc-gen-es@2.12.1_@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protoc-gen-es"
+        "<repo>/web/node_modules/.pnpm/@bufbuild+protoc-gen-es@2.12.1_@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protoc-gen-es"
       ],
       "license": "Apache-2.0",
       "homepage": "https://protobufes.com/",
@@ -1993,7 +1993,7 @@
         "2.12.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@bufbuild+protoplugin@2.12.1/node_modules/@bufbuild/protoplugin"
+        "<repo>/web/node_modules/.pnpm/@bufbuild+protoplugin@2.12.1/node_modules/@bufbuild/protoplugin"
       ],
       "license": "Apache-2.0",
       "homepage": "https://protobufes.com/",
@@ -2005,7 +2005,7 @@
         "2.1.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect"
+        "<repo>/web/node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect"
       ],
       "license": "Apache-2.0",
       "homepage": "https://github.com/connectrpc/connect-es#readme",
@@ -2017,7 +2017,7 @@
         "2.1.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@connectrpc+connect-web@2.1.2_@bufbuild+protobuf@2.12.1_@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1_/node_modules/@connectrpc/connect-web"
+        "<repo>/web/node_modules/.pnpm/@connectrpc+connect-web@2.1.2_@bufbuild+protobuf@2.12.1_@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1_/node_modules/@connectrpc/connect-web"
       ],
       "license": "Apache-2.0",
       "homepage": "https://github.com/connectrpc/connect-es#readme"
@@ -2028,7 +2028,7 @@
         "3.12.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@internationalized+date@3.12.2/node_modules/@internationalized/date"
+        "<repo>/web/node_modules/.pnpm/@internationalized+date@3.12.2/node_modules/@internationalized/date"
       ],
       "license": "Apache-2.0",
       "homepage": "https://github.com/adobe/react-spectrum/tree/main#readme",
@@ -2040,7 +2040,7 @@
         "1.9.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+api@1.9.1/node_modules/@opentelemetry/api"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+api@1.9.1/node_modules/@opentelemetry/api"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2053,7 +2053,7 @@
         "0.220.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+api-logs@0.220.0/node_modules/@opentelemetry/api-logs"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+api-logs@0.220.0/node_modules/@opentelemetry/api-logs"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2066,7 +2066,7 @@
         "2.9.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+core@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/core"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+core@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/core"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2079,7 +2079,7 @@
         "0.220.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+exporter-trace-otlp-http@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/exporter-trace-otlp-http"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+exporter-trace-otlp-http@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/exporter-trace-otlp-http"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2092,7 +2092,7 @@
         "0.220.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+instrumentation@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/instrumentation"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+instrumentation@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/instrumentation"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2105,7 +2105,7 @@
         "0.220.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+instrumentation-fetch@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/instrumentation-fetch"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+instrumentation-fetch@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/instrumentation-fetch"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2118,7 +2118,7 @@
         "0.220.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+otlp-exporter-base@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/otlp-exporter-base"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+otlp-exporter-base@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/otlp-exporter-base"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2131,7 +2131,7 @@
         "0.220.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+otlp-transformer@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/otlp-transformer"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+otlp-transformer@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/otlp-transformer"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2144,7 +2144,7 @@
         "2.9.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+resources@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/resources"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+resources@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/resources"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2157,7 +2157,7 @@
         "0.220.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+sdk-logs@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-logs"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-logs@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-logs"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2170,7 +2170,7 @@
         "2.9.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+sdk-metrics@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-metrics"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-metrics@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-metrics"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2183,7 +2183,7 @@
         "2.9.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+sdk-trace@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-trace@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2196,7 +2196,7 @@
         "2.9.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+sdk-trace-base@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace-base"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-trace-base@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace-base"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2209,7 +2209,7 @@
         "2.9.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+sdk-trace-web@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace-web"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-trace-web@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace-web"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2222,7 +2222,7 @@
         "1.41.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@opentelemetry+semantic-conventions@1.41.1/node_modules/@opentelemetry/semantic-conventions"
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+semantic-conventions@1.41.1/node_modules/@opentelemetry/semantic-conventions"
       ],
       "license": "Apache-2.0",
       "author": "OpenTelemetry Authors",
@@ -2235,7 +2235,7 @@
         "1.61.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@playwright+test@1.61.1/node_modules/@playwright/test"
+        "<repo>/web/node_modules/.pnpm/@playwright+test@1.61.1/node_modules/@playwright/test"
       ],
       "license": "Apache-2.0",
       "author": "Microsoft Corporation",
@@ -2248,7 +2248,7 @@
         "0.5.23"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@swc+helpers@0.5.23/node_modules/@swc/helpers"
+        "<repo>/web/node_modules/.pnpm/@swc+helpers@0.5.23/node_modules/@swc/helpers"
       ],
       "license": "Apache-2.0",
       "author": "강동윤",
@@ -2261,7 +2261,7 @@
         "5.3.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/aria-query@5.3.1/node_modules/aria-query"
+        "<repo>/web/node_modules/.pnpm/aria-query@5.3.1/node_modules/aria-query"
       ],
       "license": "Apache-2.0",
       "author": "Jesse Beach",
@@ -2274,7 +2274,7 @@
         "4.1.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/axobject-query@4.1.0/node_modules/axobject-query"
+        "<repo>/web/node_modules/.pnpm/axobject-query@4.1.0/node_modules/axobject-query"
       ],
       "license": "Apache-2.0",
       "author": "Jesse Beach",
@@ -2287,7 +2287,7 @@
         "2.1.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/detect-libc@2.1.2/node_modules/detect-libc"
+        "<repo>/web/node_modules/.pnpm/detect-libc@2.1.2/node_modules/detect-libc"
       ],
       "license": "Apache-2.0",
       "author": "Lovell Fuller",
@@ -2300,7 +2300,7 @@
         "1.4.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/expect-type@1.4.0/node_modules/expect-type"
+        "<repo>/web/node_modules/.pnpm/expect-type@1.4.0/node_modules/expect-type"
       ],
       "license": "Apache-2.0",
       "homepage": "https://github.com/mmkal/expect-type#readme"
@@ -2311,7 +2311,7 @@
         "3.3.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/import-in-the-middle@3.3.0/node_modules/import-in-the-middle"
+        "<repo>/web/node_modules/.pnpm/import-in-the-middle@3.3.0/node_modules/import-in-the-middle"
       ],
       "license": "Apache-2.0",
       "author": "Bryan English",
@@ -2324,7 +2324,7 @@
         "1.61.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/playwright@1.61.1/node_modules/playwright"
+        "<repo>/web/node_modules/.pnpm/playwright@1.61.1/node_modules/playwright"
       ],
       "license": "Apache-2.0",
       "author": "Microsoft Corporation",
@@ -2337,7 +2337,7 @@
         "1.61.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/playwright-core@1.61.1/node_modules/playwright-core"
+        "<repo>/web/node_modules/.pnpm/playwright-core@1.61.1/node_modules/playwright-core"
       ],
       "license": "Apache-2.0",
       "author": "Microsoft Corporation",
@@ -2351,8 +2351,8 @@
         "6.0.3"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/typescript@5.4.5/node_modules/typescript",
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/typescript@6.0.3/node_modules/typescript"
+        "<repo>/web/node_modules/.pnpm/typescript@5.4.5/node_modules/typescript",
+        "<repo>/web/node_modules/.pnpm/typescript@6.0.3/node_modules/typescript"
       ],
       "license": "Apache-2.0",
       "author": "Microsoft Corp.",
@@ -2365,7 +2365,7 @@
         "5.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/xml-name-validator@5.0.0/node_modules/xml-name-validator"
+        "<repo>/web/node_modules/.pnpm/xml-name-validator@5.0.0/node_modules/xml-name-validator"
       ],
       "license": "Apache-2.0",
       "author": "Domenic Denicola",
@@ -2380,7 +2380,7 @@
         "6.1.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@csstools+color-helpers@6.1.0/node_modules/@csstools/color-helpers"
+        "<repo>/web/node_modules/.pnpm/@csstools+color-helpers@6.1.0/node_modules/@csstools/color-helpers"
       ],
       "license": "MIT-0",
       "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/color-helpers#readme",
@@ -2392,7 +2392,7 @@
         "1.1.6"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@csstools+css-syntax-patches-for-csstree@1.1.6_css-tree@3.2.1/node_modules/@csstools/css-syntax-patches-for-csstree"
+        "<repo>/web/node_modules/.pnpm/@csstools+css-syntax-patches-for-csstree@1.1.6_css-tree@3.2.1/node_modules/@csstools/css-syntax-patches-for-csstree"
       ],
       "license": "MIT-0",
       "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-syntax-patches-for-csstree#readme",
@@ -2406,7 +2406,7 @@
         "1.23.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/@lucide+svelte@1.23.0_svelte@5.56.4/node_modules/@lucide/svelte"
+        "<repo>/web/node_modules/.pnpm/@lucide+svelte@1.23.0_svelte@5.56.4/node_modules/@lucide/svelte"
       ],
       "license": "ISC",
       "author": "Eric Fennis",
@@ -2419,7 +2419,7 @@
         "3.4.2"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/flatted@3.4.2/node_modules/flatted"
+        "<repo>/web/node_modules/.pnpm/flatted@3.4.2/node_modules/flatted"
       ],
       "license": "ISC",
       "author": "Andrea Giammarchi",
@@ -2432,7 +2432,7 @@
         "4.2.11"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/graceful-fs@4.2.11/node_modules/graceful-fs"
+        "<repo>/web/node_modules/.pnpm/graceful-fs@4.2.11/node_modules/graceful-fs"
       ],
       "license": "ISC",
       "homepage": "https://github.com/isaacs/node-graceful-fs#readme",
@@ -2444,7 +2444,7 @@
         "1.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/pg-int8@1.0.1/node_modules/pg-int8"
+        "<repo>/web/node_modules/.pnpm/pg-int8@1.0.1/node_modules/pg-int8"
       ],
       "license": "ISC",
       "homepage": "https://github.com/charmander/pg-int8#readme",
@@ -2456,7 +2456,7 @@
         "1.1.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/picocolors@1.1.1/node_modules/picocolors"
+        "<repo>/web/node_modules/.pnpm/picocolors@1.1.1/node_modules/picocolors"
       ],
       "license": "ISC",
       "author": "Alexey Raspopov",
@@ -2469,7 +2469,7 @@
         "6.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/saxes@6.0.0/node_modules/saxes"
+        "<repo>/web/node_modules/.pnpm/saxes@6.0.0/node_modules/saxes"
       ],
       "license": "ISC",
       "author": "Louis-Dominique Dubeau",
@@ -2482,7 +2482,7 @@
         "2.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/siginfo@2.0.0/node_modules/siginfo"
+        "<repo>/web/node_modules/.pnpm/siginfo@2.0.0/node_modules/siginfo"
       ],
       "license": "ISC",
       "author": "Emil Bay",
@@ -2495,7 +2495,7 @@
         "4.2.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/split2@4.2.0/node_modules/split2"
+        "<repo>/web/node_modules/.pnpm/split2@4.2.0/node_modules/split2"
       ],
       "license": "ISC",
       "author": "Matteo Collina",
@@ -2510,7 +2510,7 @@
         "3.4.11"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/dompurify@3.4.11/node_modules/dompurify"
+        "<repo>/web/node_modules/.pnpm/dompurify@3.4.11/node_modules/dompurify"
       ],
       "license": "(MPL-2.0 OR Apache-2.0)",
       "author": "Dr.-Ing. Mario Heiderich, Cure53",
@@ -2525,7 +2525,7 @@
         "8.0.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/entities@8.0.0/node_modules/entities"
+        "<repo>/web/node_modules/.pnpm/entities@8.0.0/node_modules/entities"
       ],
       "license": "BSD-2-Clause",
       "author": "Felix Boehm",
@@ -2538,7 +2538,7 @@
         "8.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/webidl-conversions@8.0.1/node_modules/webidl-conversions"
+        "<repo>/web/node_modules/.pnpm/webidl-conversions@8.0.1/node_modules/webidl-conversions"
       ],
       "license": "BSD-2-Clause",
       "author": "Domenic Denicola",
@@ -2553,7 +2553,7 @@
         "1.32.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/lightningcss@1.32.0/node_modules/lightningcss"
+        "<repo>/web/node_modules/.pnpm/lightningcss@1.32.0/node_modules/lightningcss"
       ],
       "license": "MPL-2.0",
       "homepage": "https://github.com/parcel-bundler/lightningcss#readme",
@@ -2565,7 +2565,7 @@
         "1.32.0"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/lightningcss-darwin-arm64@1.32.0/node_modules/lightningcss-darwin-arm64"
+        "<repo>/web/node_modules/.pnpm/lightningcss-darwin-arm64@1.32.0/node_modules/lightningcss-darwin-arm64"
       ],
       "license": "MPL-2.0",
       "homepage": "https://github.com/parcel-bundler/lightningcss#readme",
@@ -2579,7 +2579,7 @@
         "11.5.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/lru-cache@11.5.1/node_modules/lru-cache"
+        "<repo>/web/node_modules/.pnpm/lru-cache@11.5.1/node_modules/lru-cache"
       ],
       "license": "BlueOak-1.0.0",
       "author": "Isaac Z. Schlueter",
@@ -2594,7 +2594,7 @@
         "2.27.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/mdn-data@2.27.1/node_modules/mdn-data"
+        "<repo>/web/node_modules/.pnpm/mdn-data@2.27.1/node_modules/mdn-data"
       ],
       "license": "CC0-1.0",
       "author": "Mozilla Developer Network",
@@ -2609,7 +2609,7 @@
         "1.2.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/source-map-js@1.2.1/node_modules/source-map-js"
+        "<repo>/web/node_modules/.pnpm/source-map-js@1.2.1/node_modules/source-map-js"
       ],
       "license": "BSD-3-Clause",
       "author": "Valentin 7rulnik Semirulnik",
@@ -2622,7 +2622,7 @@
         "6.0.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tough-cookie@6.0.1/node_modules/tough-cookie"
+        "<repo>/web/node_modules/.pnpm/tough-cookie@6.0.1/node_modules/tough-cookie"
       ],
       "license": "BSD-3-Clause",
       "author": "Jeremy Stashewsky",
@@ -2637,7 +2637,7 @@
         "2.8.1"
       ],
       "paths": [
-        "/Volumes/Code/github.com/holomush/.worktrees/arch-review/web/node_modules/.pnpm/tslib@2.8.1/node_modules/tslib"
+        "<repo>/web/node_modules/.pnpm/tslib@2.8.1/node_modules/tslib"
       ],
       "license": "0BSD",
       "author": "Microsoft Corp.",

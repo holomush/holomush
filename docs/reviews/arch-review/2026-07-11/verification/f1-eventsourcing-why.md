@@ -43,8 +43,8 @@ So "which architecture is real" is not a doc question — it determines whether 
 
 1. Establish intent: was world-state event sourcing ever meant to be real (interview/roadmap archaeology), or was "event sourcing" always shorthand for "event-driven with an audit log"?
 2. Decide (ADR) between:
-   - **(A) Build it** — introduce a real projection/rebuild path (or a transactional outbox + event-first writes) if replayability, auditable state reconstruction, or the two-replica correctness guarantees are actually wanted. Larger effort; fixes M2 + M12 at the root.
-   - **(B) Formally adopt CRUD-canonical** — event log is notification/audit only; add optimistic-concurrency + a transactional outbox for M2/M12; and **downgrade the "event sourcing" principle everywhere** (6 doc sites incl. the public marketing page) to "event-driven with an append-only audit log."
+   - **(A) Build event sourcing** — introduce a real projection/rebuild path (event-first writes, state derived by replay) if replayability or auditable state reconstruction is actually wanted. This is the only option that makes current state derivable from events. Larger effort.
+   - **(B) Formally adopt CRUD-canonical** — event log is notification/audit only; add optimistic-concurrency for M12 and a **transactional outbox** for M2 (the outbox makes the DB write and the event publish durable *together* — it does NOT make state replay-derivable, so it belongs here under CRUD, not under (A)); and **downgrade the "event sourcing" principle everywhere** (6 doc sites incl. the public marketing page) to "event-driven with an append-only audit log."
 3. Whichever is chosen, capture the ADR (the artifact whose absence *is* the drift) and correct the docs to match.
 
 Recommended severity: **High (architecture integrity)** — not because docs are wrong, but because a foundational principle is unimplemented and undecided, and that gap is the root of real correctness findings.
