@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Reusable Prompt — HoloMUSH L7 Architecture & Quality Review
 
 Paste the block below into a fresh session (ideally in a dedicated worktree — `task workspace:new -- arch-review-<date>`) to re-run the full multi-agent review. It reproduces the 2026-07-11 review's method, roster, fairness contract, and hard-won gotchas. Replace `<DATE>` with today's (`date +%Y-%m-%d`).

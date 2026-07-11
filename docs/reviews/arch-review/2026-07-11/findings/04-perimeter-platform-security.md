@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Perimeter & Platform Security (D4) — Findings
 
 **Agent:** security-auditor/opus · **Date:** 2026-07-11 · **Scope examined:** telnet ingress (`internal/telnet/`), Web/BFF (`internal/web/`, `cmd/holomush/gateway.go`), session cookies / CORS / security headers, OTLP + Sentry relays, ConnectRPC status interceptor, TLS/mTLS cert layer (`internal/tls/certs.go`), admin UDS socket + peer-cred (`internal/admin/socket/`), auth rate-limiting & credential validation (`internal/auth/`, `internal/grpc/auth_handlers.go`), NATS external-mode scoping (`deploy/nats/`). Excluded ABAC engine internals (D2) and event-payload crypto internals (D3) per assignment.

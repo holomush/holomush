@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D2 ABAC — Findings
 
 **Agent:** abac-reviewer / Opus 4.8 · **Date:** 2026-07-11 · **Scope examined:** `internal/access/` (engine, DSL evaluator, all attribute providers, resolver, circuit breaker, seed/bootstrap, policy store), `internal/command/` two-layer dispatch + dispatcher, `internal/world/service.go` instance-level chokepoint, `internal/plugin/hostcap/` capability interceptor + descriptors, `internal/plugin/policy_installer.go`, `internal/store/role_resolver.go`, `docs/architecture/invariants.yaml` (INV-ACCESS scope).

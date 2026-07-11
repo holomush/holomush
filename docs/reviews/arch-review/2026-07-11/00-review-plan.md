@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH Architecture & Quality Review — Plan
 
 **Date:** 2026-07-11 · **Reviewer:** L7-style multi-agent review (Claude Fable 5 orchestrating specialized agents) · **Workspace:** `docs/reviews/arch-review/2026-07-11/`

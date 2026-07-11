@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D9c — Dependencies & Supply Chain — Findings
 
 **Agent:** general-purpose/claude-sonnet-5 · **Date:** 2026-07-11 · **Scope examined:** `go.mod`/`go.sum` (govulncheck + `go list -m -u`), `web/package.json`+`pnpm-lock.yaml` (`pnpm audit`/`pnpm outdated`/`pnpm licenses`), `site/package.json`+`bun.lock` (`bun audit`), `.github/workflows/*.yaml` + `.github/actions/*` (Action pinning, tool-install hygiene), `compose*.yaml` + `Dockerfile` (image pinning), `.github/renovate.json` (bot config + Dependency Dashboard #4450), `internal/plugin/lua/state.go` (Lua sandbox library allowlist), targeted CVE lookups for nats-server/pgx/grpc-go/x-net/gopher-lua/go-plugin against GitHub Security Advisories and NVD.

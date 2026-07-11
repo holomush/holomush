@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Skeptic verification — D1-HIGH-1 (event-sourcing claim/reality gap)
 
 **Verdict: CONFIRMED** (and the doc-count sub-claim is actually an *undercount* — I found a 5th and 6th instance, including live public marketing copy).

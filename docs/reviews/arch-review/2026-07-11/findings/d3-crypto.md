@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D3 Event Payload Crypto — Findings
 
 **Agent:** crypto-reviewer/opus · **Date:** 2026-07-11 · **Scope examined:** `internal/eventbus/{publisher.go, subscriber.go}`, `internal/eventbus/crypto/{aad,dek,kek}/`, `internal/eventbus/codec/xchacha20poly1305.go`, `internal/eventbus/authguard/guard.go`, `internal/eventbus/history/{cold_postgres.go,dispatcher.go,hot_jetstream.go,readback.go,plugin_aad_adapter.go}`, `internal/eventbus/audit/{dlq.go,projection.go}`, `internal/eventbus/crypto/dek/audit_chain.go`, `internal/plugin/event_emitter.go`, `plugins/core-communication/plugin.yaml`, `cmd/holomush/{core.go,sub_grpc.go,crypto_rekey_wiring.go}`, migrations 000013/000014/000017/000038, master spec + Phase 3a/3d groundings, `evidence/open-issues.json`.

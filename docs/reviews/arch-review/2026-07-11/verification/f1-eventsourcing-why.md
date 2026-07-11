@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # F1 deep-dive — WHY event sourcing isn't in place (archaeology)
 
 Prompted by the reviewer's (user's) challenge: F1 is bigger than "correct the docs" — the real question is *why* the architecture diverges from its stated principle, and whether that was a decision or drift. This note records the archaeology that answers it.

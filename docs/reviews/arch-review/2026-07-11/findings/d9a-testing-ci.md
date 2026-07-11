@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D9a — Testing & CI — Findings
 
 **Agent:** general-purpose/claude-sonnet-5 · **Date:** 2026-07-11 · **Scope examined:** `.github/workflows/{ci,ci-docs-skip,nightly-soak,buf,scripts-tests,benchmark-check}.{yaml,yml}`, `Taskfile.yaml` (test/lint/quarantine tasks), `codecov.yml`, live GitHub repo config (`gh api repos/holomush/holomush/rulesets`), a merged PR's Codecov comment (`gh pr view 4782`), `test/quarantine.yaml` + `scripts/quarantine-audit.sh` + `test/meta/quarantine_registry_test.go`, `docs/architecture/invariants.yaml` (341 entries) + `test/meta/invariant_registry_test.go`, `.golangci.yaml` + `.custom-gcl.yml` + `gorules/analyzers/*`, and a manual+scripted spot-check of ~130 candidate zero-assertion test functions across `internal/plugin`, `internal/eventbus`, `internal/access/policy/attribute`, `gorules/analyzers`, `internal/cluster`, `plugins/core-communication`. One live coverage measurement (`go test -cover ./cmd/holomush/...`, `./internal/eventbus/`).

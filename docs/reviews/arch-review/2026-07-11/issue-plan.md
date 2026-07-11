@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Issue Plan — Arch Review 2026-07-11
 
 Proposed GitHub issues/epics derived from the review. **Nothing is filed until you approve this plan** (§ Approval gate at the bottom). All target `holomush/holomush`. Dedup verified against the 186-issue open snapshot (`evidence/open-issues.json`) — every item below is untracked unless it says otherwise.

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D8a — Web Client Static Audit — Findings
 
 **Agent:** claude-opus-4.6 (sonnet-5 session) · **Date:** 2026-07-11 · **Scope examined:** `web/src/routes/**`, `web/src/lib/{stores,scenes,comm,presence,components,hooks,theme}/**`, `web/src/lib/transport.ts`, `web/src/app.html`, `web/src/app.css`, `web/package.json`, `web/CLAUDE.md`, `.claude/rules/branding.md`, `.claude/rules/gateway-boundary.md`. Read-only, no dev server driven (static code review only — the parallel live-browser pass owns runtime behavior).

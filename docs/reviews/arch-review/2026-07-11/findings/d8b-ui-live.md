@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D8b — UI Live Verification — Findings
 
 **Agent:** main-loop + agent-browser 0.31.1 (Chromium) · **Date:** 2026-07-11 · **Baseline:** `30d55a162`

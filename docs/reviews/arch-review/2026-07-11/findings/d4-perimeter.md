@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D4 Perimeter & Platform Security — Findings
 
 **Agent:** security-auditor (Opus 4.8) · **Date:** 2026-07-11 · **Scope examined:** `internal/auth/` (argon2id, session-ownership, credential validation, rate-limit, reset, guest), `internal/totp/`, `internal/session/` (spot), `internal/telnet/` (gateway_handler, sanitize, limits, guest), `internal/web/` (cookie, cors, security_headers, server, auth_handlers, sentry_relay, otlp_relay), `internal/admin/` (socket/peercred, socket/server, approval handler+repo), `internal/plugin/goplugin/` (emit_token_store, host mTLS), `internal/plugin/event_emitter.go`, `internal/plugin/lua/state.go`, `internal/plugin/schema_provisioner.go`, `internal/eventbus/natsdial.go` + `deploy/nats/`, gRPC error hygiene, SQL parameterization.

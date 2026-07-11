@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D7 — Data Layer — Findings
 
 **Agent:** general-purpose/claude-sonnet-5 · **Date:** 2026-07-11 · **Scope examined:** `internal/store/migrations/` (all 39 pairs), `internal/store/*.go`, `internal/eventbus/history/cold_postgres.go`, `internal/admin/readstream/cold_reader.go`, `internal/audit/{retention,partition_creator}.go`, `internal/eventbus/crypto/dek/{rekey_phase3,sweep}.go`, `internal/admin/approval/repo.go`, `internal/settings/character_store.go` + `internal/store/character_settings_repo.go`, `internal/world/postgres/character_repo.go`, `internal/access/policy/store/postgres.go`, `internal/store/postgres.go` + `internal/store/subsystem.go`, `plugins/core-scenes/migrations/`, `docs/architecture/invariants.yaml` (STORE scope), `internal/store/events_immutable_test.go`.

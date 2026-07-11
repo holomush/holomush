@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH System Map — Review Briefing Pack
 
 **Baseline:** `30d55a162` (origin/main, v1.0 milestone complete) · **Date:** 2026-07-11

@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Skeptic verification — D8b-HIGH-1 (movement) and D8a-HIGH-1 (PWA offline claim)
 
 Adversarial re-derivation, independent of the review's own findings/spot-checks

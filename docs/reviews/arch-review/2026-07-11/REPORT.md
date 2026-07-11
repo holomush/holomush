@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # HoloMUSH — Architecture & Quality Review
 
 **Date:** 2026-07-11 · **Baseline:** `30d55a162` (origin/main, v1.0 milestone complete) · **Reviewer:** multi-agent L7 review (Claude Fable 5 orchestrating 11 specialized evidence agents + adversarial verification + a cross-model second opinion)

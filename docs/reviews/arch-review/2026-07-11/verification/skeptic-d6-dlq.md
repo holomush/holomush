@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Skeptic verification — D6-HIGH-1 (audit-DLQ replay CLI `game_id` split)
 
 **Verdict: CONFIRMED** (core mechanism), with one factual correction to the

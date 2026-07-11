@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Review Task Ledger
 
 Recovery point for the 2026-07-11 arch review. Re-orient after context loss by reading

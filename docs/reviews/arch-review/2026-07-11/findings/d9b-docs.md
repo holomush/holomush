@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D9b — Documentation (accuracy, completeness, usability) — Findings
 
 **Agent:** general-purpose/claude-sonnet-5 · **Date:** 2026-07-11 · **Scope examined:** `site/src/content/docs/` (all 5 audiences, ~87 pages, spot-checked against source), `docs/roadmap.md`, `docs/adr/` (sampled citations), `docs/architecture/invariants.{yaml,md}` (regeneration check), `.claude/rules/plugin-manifest.md`, reference-doc generation (`scripts/gen-event-docs.sh`, `task docs:proto`, `task docs:linkcheck`), internal link integrity (static + live crawl).

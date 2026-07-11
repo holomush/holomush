@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D6 — Reliability, Error Handling & Observability — Findings
 
 **Agent:** golang-pro/Sonnet 5 · **Date:** 2026-07-11 · **Scope examined:** `internal/eventbus/audit/**` (DLQ, projection, replay, plugin consumer), `internal/lifecycle/**`, `cmd/holomush/core.go` (boot path, fail-closed KEK/NATS-scope checks), `internal/eventbus/{subsystem,natsdial,publisher,subscriber,subscriber_auth,config}.go`, `internal/eventbus/authguard/audit/emitter.go`, `internal/plugin/{subscriber,manager}.go`, `internal/world/grpc_server.go`, `internal/audit/{logger,postgres}.go`, `internal/access/{setup,policy}/*.go`, `internal/telemetry/*.go`, `internal/observability/server.go`, `cmd/holomush/cmd_audit.go`, `docs/architecture/invariants.yaml` (EVENTBUS/TELEMETRY scopes), operator docs under `site/src/content/docs/operating/`.

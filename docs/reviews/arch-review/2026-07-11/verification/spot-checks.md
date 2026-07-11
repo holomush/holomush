@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Phase 2 — Main-loop citation spot-checks & adjudications
 
 Reviewer (me) independently re-derives load-bearing Blocker/High claims from source before they feed the report/issues. Each entry: claim → what I checked → verdict.

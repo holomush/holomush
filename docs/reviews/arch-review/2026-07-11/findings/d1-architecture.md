@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Architecture (D1) — Findings
 
 **Agent:** architect / Opus 4.8 · **Date:** 2026-07-11 · **Scope examined:** `internal/world` write paths + event emission, `cmd/holomush/{core,gateway,sub_grpc}.go`, `internal/lifecycle`, `internal/cluster`, `internal/eventbus` subscriber + audit projection, `internal/plugin` (manager/event_emitter/cryptowiring), `internal/command/alias.go`, `internal/web/handler.go` + `gateway_imports_test.go`, `pkg/plugin` SDK surface + in-tree plugin imports, `docs/adr/` + `docs/superpowers/specs/` coverage, architecture explanation doc + CLAUDE.md claims.

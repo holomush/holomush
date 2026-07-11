@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # Cross-model second opinion (codex) — verbatim + adjudication
 
 Codex (GPT-family, via codex-rescue) was asked to pressure-test the review's severity calls, framing honesty, and blind spots. Its critique, and how I resolved each point, below.

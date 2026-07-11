@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
 # D5 Performance & Scalability — Findings
 
 **Agent:** performance-engineer / Opus 4.8 · **Date:** 2026-07-11 · **Scope examined:** event publish hot path (`internal/eventbus/publisher.go`, `rendering_publisher.go`), subscriber fan-out + per-message decode/AuthGuard (`internal/eventbus/subscriber.go`, `authguard/guard.go`, `adapter_dek.go`), DEK/participant caches (`internal/eventbus/crypto/dek/{cache,participants_cache,manager,store}.go`), KEK provider (`kek/local_aead.go`), history query (`internal/eventbus/history/cold_postgres.go` + `events_audit` indexes), presence (`internal/grpc/list_focus_presence.go`, `internal/store/session_store.go`), session indexes (migrations 000001/000009/000011/000013/000016), Lua host state lifecycle (`internal/plugin/lua/{host,state}.go`), audit projection (`internal/eventbus/audit/projection.go`), pool config (`internal/store/postgres.go`). Cross-referenced `evidence/open-issues.json` (186 issues) and verb-registry/pool wiring in `cmd/holomush/sub_grpc.go`, `core.go`.
