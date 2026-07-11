@@ -5,10 +5,10 @@
 
 <!-- markdownlint-disable MD013 -->
 
-# World-State Model: Event Sourcing vs CRUD-Canonical
+# World-State Model: CRUD-Canonical with Version Guard and Ordered Atomic Feed
 
 **Date:** 2026-07-11
-**Status:** Proposed
+**Status:** Accepted
 **Decision:** holomush-i4784
 **Deciders:** Sean Brandt
 
@@ -33,11 +33,26 @@ Was world-state event sourcing ever meant to be real? The F1 archaeology's concl
 
 ## Decision
 
-PENDING — resolved by decision checkpoint (Task 2).
+HoloMUSH adopts **Option B — CRUD-canonical + optimistic concurrency + transactional outbox — in the panel-ratified strengthened shape** defined by [`model-01-consensus-onepager.md`](../reviews/arch-review/2026-07-11/verification/model-01-consensus-onepager.md), which is **NORMATIVE** for the mechanism. World state (locations, exits, characters, objects) stays canonical in PostgreSQL; every world mutation is version-guarded and atomically commits **exactly one semantic envelope** to an **ordered, complete, schema-governed world-change feed** via a transactional outbox — the feed, not the rows, is the platform's extensibility contract. Event sourcing is NOT adopted for world state; the per-aggregate dial stays open for genuinely log-native future domains (economy ledger, NPC memory).
+
+Phase 5 implements, per the one-pager's four-step slice ordering:
+
+- **MODEL-03 — the version guard.** `version INTEGER NOT NULL DEFAULT 1` on all four world tables; version-predicated CAS **writes AND deletes** (`UPDATE`/`DELETE … WHERE id = $1 AND version = $2`); any zero-row result classified by a **locked follow-up read in the same transaction** (conflict vs concurrent-delete vs not-found — deterministic, no diagnosis race); conflicts surfaced strictly as typed `WORLD_CONCURRENT_EDIT` with **no automatic retry in the first slice**.
+- **MODEL-04 — the transactional outbox / ordered atomic feed.** One envelope per successful, externally visible world command, committed **in the same transaction** as the state change; **intent-level, new-values-only payloads**; commit-ordered gap-free `feed_position` allocated from a locked per-game counter; a **single leased relay** publishing strictly in position order (`Nats-Msg-Id` = event ULID dedup) with `LISTEN/NOTIFY` wakeup and a halt-and-alert poison posture; a **compile-time write-requires-envelope seam** (`mutate(ctx, entity, expectedVersion, envelope)` — an envelope-less write is a type error) backed by a census meta-test and a lint fence; snapshot + watermark bootstrap, genesis emission at cutover, and a feed epoch/reset procedure.
 
 ## Rationale
 
-PENDING — resolved by decision checkpoint (Task 2).
+The decision was made **genuinely open per D-01**: the F1 doc's original lean toward B was overridden during discuss-phase, and Option A received a fully costed, equal-weight hearing — the Postgres-journal variant of A (proposed in panel round 1 by Codex) was the strongest A shape considered. The decider, Sean Brandt, chose under an explicitly **future-state-first framing**: blast radius of change was deliberately NOT a driver; the drivers were future state, the best solution for the problem space, extensibility, flexibility, and evolvability.
+
+The decision was informed by a three-model architecture panel — Antigravity (Gemini 3.1 Pro High), Codex (gpt-5.6-sol max), and Fable (Fable 5) — which ran two rounds and **unanimously ratified** the strengthened B shape: [round-1 opinions](../reviews/arch-review/2026-07-11/verification/model-01-panel-opinions.md), [round-2 ratification](../reviews/arch-review/2026-07-11/verification/model-01-panel-round2.md), [consensus one-pager](../reviews/arch-review/2026-07-11/verification/model-01-consensus-onepager.md). The panel's reasoning, adopted here:
+
+- **The complete ordered world-change feed — not row-vs-event canonicality — is the platform's real extensibility contract.** Consumers get an ordered, complete, schema-governed feed either way; the chosen mechanism delivers it without making event schemas state-load-bearing.
+- **Evolvability inverts under event sourcing pre-1.0.** Event schemas become replay-load-bearing forever; for a young world model still churning its shapes, event sourcing makes change harder, not easier.
+- **The narrative domain already provides the platform's event-sourced timeline.** Scenes are the log-native domain; world state is not.
+- **Coverage rot is countered structurally, not by discipline.** The empirically proven drift that caused this ADR — a stated principle silently unrealized — is made non-recurrable by the compile-time write-requires-envelope seam, the census meta-test, and the delta-parity invariant: enforcement the original principle never had.
+- **Option A's unique payoffs were consciously forgone** as low-value for the world-state domain: byte-derivable state, time-travel debugging, and world-forking (recorded under Consequences).
+
+Antigravity's round-1 JetStream-canonical variant of A was rejected by the rest of the panel. Empirically, the choice is grounded in the linked [resilience verdict](../reviews/arch-review/2026-07-11/verification/f1-resilience-verdict.md): M12 reproduced deterministically, the M2 window characterized, and no production emitter wired — B's two controls target exactly the proven failure classes.
 
 ## Alternatives Considered
 
@@ -82,7 +97,12 @@ Both options scored against evidence-backed criteria. Scores are observations fr
 
 ## Consequences
 
-PENDING — resolved by decision checkpoint (Task 2). The finalized ADR will record the Phase 5 input contract (MODEL-02 doc corrections; MODEL-03/MODEL-04 implementation), the authorization-placement guarantee (`world.Service` `checkAccess` stays pre-write under both options; no outbox relay or projection consumer bypasses it), the ARCH-04 (Phase 7) coordination note, that the resilience suite stands as the regression check for the Phase 5 guard (D-05), and the explicit deferral of INV-* registration/binding to Phase 5's spec per `.claude/rules/invariants.md` (this ADR names the mechanism; Phase 5 mints and binds any invariants).
+- **Phase 5 input contract.** MODEL-02 downgrades the "event sourcing" claim at its ~6 documentation sites (including the public marketing page) to "event-driven with an append-only audit log," in the same phase the mechanism lands. MODEL-03 and MODEL-04 implement the mechanism named in the Decision, in the one-pager's slice order: (1) version columns + guarded repos + strict conflict surfacing, with the resilience M12 specs flipped to assert surfaced conflicts; (2) outbox + envelope + positioned relay, `MoveCharacter` end-to-end (the empirically characterized window), a reference idempotent consumer and bootstrap harness, and relay lag/halt alerting in this same slice — zero product projections in Phase 5; (3) the taxonomy schema registry + census meta-test + invariant registration, then the mechanical emission rollout and genesis emission at cutover; (4) the MODEL-02 doc downgrade. The post-commit emit path (`EmitMoveEvent`, `EVENT_EMITTER_MISSING`) is deleted outright.
+- **Authorization placement is unchanged.** `world.Service` `checkAccess` remains pre-write: ABAC evaluation happens before any guarded write, and no outbox relay or feed consumer bypasses it — the relay publishes already-authorized, already-committed facts.
+- **ARCH-04 (Phase 7) coordination.** The versioned, CI-validated taxonomy schema registry is designated the **ARCH-04 input**: the unified event model adopts these per-type payload schemas rather than inventing a parallel vocabulary, and remains a notification/audit concern — not state-load-bearing.
+- **The resilience suite stands as the permanent regression gate (D-05).** The two-replica M12/M2 reproductions stay in-tree; Phase 5 extends them with fault injection (relay crash around PubAck, dual relay, duplicate delivery, broker downtime) and per-aggregate race tests.
+- **Honestly forgone.** Byte-derivable canonical state, true time-travel/world-forking of the canonical world, and proof that history derives state. Reconstruction claims are bounded by retention — OPS-02 bounds the feed; there is no infinite-replay assumption. Relay lag makes the feed temporally secondary to the DB, bounded by the wakeup contract plus lag alerting.
+- **Invariant deferral.** This ADR names the invariants the mechanism carries — `INV-WORLD-ATOMIC-FEED`, `INV-WORLD-DELTA-PARITY`, `INV-WORLD-FEED-ORDER`, `INV-WORLD-WRITER-BOUNDARY` — but does NOT register them. Registration and binding belong to Phase 5's spec per `.claude/rules/invariants.md`; they MUST NOT be added to `docs/architecture/invariants.yaml` before that spec mints them.
 
 ## Cross-references
 
@@ -91,3 +111,6 @@ PENDING — resolved by decision checkpoint (Task 2). The finalized ADR will rec
 - **Issue #4798** — M12 last-write-wins finding.
 - [`f1-eventsourcing-why.md`](../reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md) — the archaeology of *why* the world model is CRUD-not-event-sourced.
 - [`f1-resilience-verdict.md`](../reviews/arch-review/2026-07-11/verification/f1-resilience-verdict.md) — the empirical M12/M2 verdict this ADR is grounded in.
+- [`model-01-panel-opinions.md`](../reviews/arch-review/2026-07-11/verification/model-01-panel-opinions.md) — round-1 opinions from the three-model architecture panel.
+- [`model-01-panel-round2.md`](../reviews/arch-review/2026-07-11/verification/model-01-panel-round2.md) — round-2 cross-examination and unanimous ratification.
+- [`model-01-consensus-onepager.md`](../reviews/arch-review/2026-07-11/verification/model-01-consensus-onepager.md) — the NORMATIVE mechanism shape (panel-ratified strengthened Option B).
