@@ -177,8 +177,11 @@ main() {
   fi
   export DATA_DIR="${SMOKE_DATA_DIR}"
 
-  ensure_image
+  # Install teardown BEFORE ensure_image: SMOKE_DATA_DIR is already minted, and a
+  # failure inside ensure_image (e.g. task docker:build) would exit via set -e
+  # before the trap exists, leaking the freshly minted temp dir under /tmp.
   trap teardown EXIT
+  ensure_image
 
   log "bringing up postgres + nats + 2 core replicas"
   compose up -d postgres nats core core2

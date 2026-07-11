@@ -560,7 +560,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// prefix so it stays within the holomush-server account's permissions.
 	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{
 		DLQ: audit.DLQConfig{
-			Subject:  fmt.Sprintf("internal.%s.audit.dlq", eventBusConfig.GameID),
+			// Use the resolved gameID (cfg.GameID, else dbSub.GameID()) so the DLQ
+			// subject matches the rest of the process; eventBusConfig.GameID can
+			// still be the unresolved default. The replay CLI must target the same
+			// game_id — a mismatch fails loud (WR-06), never silently.
+			Subject:  fmt.Sprintf("internal.%s.audit.dlq", gameID),
 			MaxAge:   eventBusConfig.DLQ.MaxAge,
 			MaxBytes: eventBusConfig.DLQ.MaxBytes,
 		},

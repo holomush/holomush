@@ -255,6 +255,12 @@ func runAuditDLQShow(ctx context.Context, js jetstream.JetStream, msgID string, 
 			}
 			_ = msg.Ack() //nolint:errcheck // ack advances the cursor; LimitsPolicy retains the message
 		}
+		// A delivery/fetch error surfaces via batch.Error() after the range,
+		// not from Fetch. Without this check an error is swallowed and the
+		// command falls through to a misleading AUDIT_DLQ_MESSAGE_NOT_FOUND.
+		if err := batch.Error(); err != nil && !isFetchTimeout(err) {
+			return oops.Code("AUDIT_DLQ_FETCH_FAILED").Wrap(err)
+		}
 		if got == 0 {
 			break
 		}

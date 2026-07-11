@@ -149,7 +149,9 @@ func ReplayDLQ(
 		for msg := range batch.Messages() {
 			got++
 			result.Scanned++
-			replayOne(ctx, pool, msg, opts.MsgID, cfg.Subject, &result)
+			if !replayOne(ctx, pool, msg, opts.MsgID, cfg.Subject, &result) {
+				return result, oops.Code("AUDIT_DLQ_REPLAY_CANCELLED").Wrap(ctx.Err())
+			}
 		}
 		if err := batch.Error(); err != nil && !errors.Is(err, nats.ErrTimeout) {
 			return result, oops.Code("AUDIT_DLQ_REPLAY_FETCH_FAILED").
@@ -184,11 +186,14 @@ func ReplayDLQ(
 // dlqSubjectPrefix is the DLQ subject prefix (cfg.Subject) used to recover
 // the original event subject from the DLQ subject suffix, so the restored
 // events_audit row carries the same subject the live path would have.
-func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantMsgID, dlqSubjectPrefix string, result *ReplayResult) {
+//
+// Returns false when it observes ctx cancellation mid-write, signaling the
+// caller to stop without counting the message as a DLQ failure; true otherwise.
+func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantMsgID, dlqSubjectPrefix string, result *ReplayResult) bool {
 	if wantMsgID != "" && msg.Headers().Get(headerMsgID) != wantMsgID {
 		result.Skipped++
 		_ = msg.Ack() //nolint:errcheck // ack advances the ephemeral cursor; LimitsPolicy retains the message
-		return
+		return true
 	}
 	subject, ok := originalSubject(msg.Subject(), dlqSubjectPrefix)
 	if !ok {
@@ -209,9 +214,15 @@ func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantM
 			"msg_id", msg.Headers().Get(headerMsgID),
 		)
 		_ = msg.Ack() //nolint:errcheck // ack advances the cursor; the message stays in the LimitsPolicy DLQ for a corrected re-run
-		return
+		return true
 	}
 	if err := writeAuditRow(ctx, pool, subject, msg); err != nil {
+		if ctx.Err() != nil {
+			// Cancellation/deadline mid-write is not a DLQ persist failure:
+			// leave the message un-acked so a re-run reprocesses it, and signal
+			// the caller to stop rather than counting it as Failed and acking it.
+			return false
+		}
 		result.Failed++
 		slog.WarnContext(
 			ctx, "audit DLQ replay: message could not be persisted; retained in DLQ",
@@ -220,10 +231,11 @@ func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantM
 			"error", err.Error(),
 		)
 		_ = msg.Ack() //nolint:errcheck // ack advances the cursor; the poison message stays in the LimitsPolicy DLQ
-		return
+		return true
 	}
 	result.Replayed++
 	_ = msg.Ack() //nolint:errcheck // ack advances the cursor; ON CONFLICT DO NOTHING already made the write idempotent
+	return true
 }
 
 // originalSubject recovers the original event subject from a DLQ message's
@@ -238,7 +250,10 @@ func originalSubject(dlqSubject, prefix string) (string, bool) {
 	if prefix == "" {
 		return dlqSubject, false
 	}
-	if stripped, ok := strings.CutPrefix(dlqSubject, prefix+"."); ok {
+	// CutPrefix returns ("", true) for an exact "<prefix>." input, which would
+	// let an empty original subject reach writeAuditRow. Require a non-empty
+	// stripped subject so a malformed DLQ entry fails closed instead.
+	if stripped, ok := strings.CutPrefix(dlqSubject, prefix+"."); ok && stripped != "" {
 		return stripped, true
 	}
 	return dlqSubject, false

@@ -224,7 +224,7 @@ Promote an entry with `/gsd-review-backlog` when ready.
 **Goal:** Round out the web portal beyond scenes: offline support, wiki/help pages, character profiles + creation/management UI, admin portal, and a web surface for 1:1 direct messages.
 **Source:** beads migration — 7 item(s) incl. epic(s) `holomush-qve`; member list in TRIAGE.md
 **Requirements:** TBD
-**Plans:** 9/9 plans complete
+**Plans:** TBD (promote with /gsd-review-backlog when ready)
 
 Plans:
 

@@ -131,6 +131,16 @@ if ! nats_rc pub "$connectivity_subject" "ping"; then
 fi
 echo "ok: connectivity precondition met (publish to permitted '$connectivity_subject' succeeded)"
 
+# Preflight `timeout` (soundness gate): assert_subscribe_denied relies on
+# `timeout` to bound the SUB probe, and treats any non-zero exit as "denied".
+# A missing `timeout` binary exits 127 — which the assert would read as a
+# denial and print PASSED without ever running the subscribe probe. Fail
+# closed with a distinct exit code rather than probe vacuously.
+if ! command -v timeout >/dev/null 2>&1; then
+  echo "verify-scoping: 'timeout' not found on PATH; cannot bound the subscribe-denial probes — refusing to prove scoping" >&2
+  exit 5
+fi
+
 echo "verify-scoping: probing non-server denial on ${NATS_URL}"
 for prefix in "${PREFIXES[@]}"; do
   probe="${prefix}.scopecheck.probe"

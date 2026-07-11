@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 03 — platform-hardening-deployment-scaling
+**Current focus:** Phase 3 (platform-hardening-deployment-scaling) shipped — PR #4782; v1.0 milestone phases complete (3/3). Next position: 999.1 backlog.
 
 ## Current Position
 

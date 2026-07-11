@@ -54,10 +54,13 @@ nsc add account HOLOMUSH_SERVER
 nsc edit account HOLOMUSH_SERVER \
   --js-mem-storage -1 --js-disk-storage -1
 
-# 4. The server user, scoped to the game-topic prefixes + reply inboxes.
+# 4. The server user: game-topic prefixes + reply inboxes, PLUS the JetStream
+#    API/ACK subjects the server needs to declare and drain the EVENTS stream
+#    under provision:true (matching cluster-server.conf). Drop $JS.API.>/$JS.ACK.>
+#    for a locked-down provision:false deploy where the stream is pre-declared.
 nsc add user --account HOLOMUSH_SERVER holomush-server \
-  --allow-pub 'events.>,audit.>,internal.>,_INBOX.>' \
-  --allow-sub 'events.>,audit.>,internal.>,_INBOX.>'
+  --allow-pub 'events.>,audit.>,internal.>,_INBOX.>,$JS.API.>,$JS.ACK.>' \
+  --allow-sub 'events.>,audit.>,internal.>,_INBOX.>,$JS.API.>,$JS.ACK.>'
 
 # 5. Mint the .creds file HoloMUSH loads via event_bus.credentials.
 nsc generate creds --account HOLOMUSH_SERVER --name holomush-server \

@@ -315,20 +315,27 @@ func (s *Subsystem) verifyStream(ctx context.Context, desired jetstream.StreamCo
 }
 
 // streamConfigMismatch returns the name of the first owned config field that
-// differs between desired and got, or "" if they match. It compares only the
-// fields this subsystem declares (Subjects, Retention, MaxAge, Duplicates) —
-// server-managed fields (e.g. Replicas on a real cluster, placement) are not
-// this subsystem's contract to enforce.
+// differs between desired and got, or "" if they match. It compares every field
+// this subsystem declares as its contract in desiredStreamConfig (Subjects,
+// Retention, Storage, MaxAge, Duplicates, AllowDirect) — server-managed fields
+// (e.g. Replicas on a real cluster, placement) are not this subsystem's contract
+// to enforce. Storage is durability-critical: a stream provisioned with Memory
+// storage instead of File would silently pass provision:false verification and
+// lose the audit event stream on restart, so it MUST fail closed (D-03).
 func streamConfigMismatch(desired, got jetstream.StreamConfig) string {
 	switch {
 	case !slices.Equal(desired.Subjects, got.Subjects):
 		return "subjects"
 	case desired.Retention != got.Retention:
 		return "retention"
+	case desired.Storage != got.Storage:
+		return "storage"
 	case desired.MaxAge != got.MaxAge:
 		return "max_age"
 	case desired.Duplicates != got.Duplicates:
 		return "duplicates"
+	case desired.AllowDirect != got.AllowDirect:
+		return "allow_direct"
 	default:
 		return ""
 	}

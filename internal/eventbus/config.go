@@ -170,6 +170,17 @@ func (c Config) Defaults() Config {
 // no URL is rejected so the server refuses to boot rather than silently
 // falling back to embedded. Validate is pure: it performs no I/O.
 func (c Config) Validate() error {
+	// Reject any mode that is not a recognized value so a typo (e.g. "externl")
+	// fails closed at config time instead of silently booting embedded via
+	// Subsystem.connect(). "" is accepted here because Defaults() normalizes it
+	// to ModeEmbedded — keeping Validate order-independent w.r.t. Defaults().
+	switch c.Mode {
+	case "", ModeEmbedded, ModeExternal:
+	default:
+		return oops.Code("EVENTBUS_CONFIG_INVALID").
+			With("mode", string(c.Mode)).
+			Errorf("event_bus mode %q is not recognized (embedded|external)", c.Mode)
+	}
 	if c.Mode == ModeExternal && c.URL == "" {
 		return oops.Code("EVENTBUS_CONFIG_INVALID").
 			With("mode", string(c.Mode)).

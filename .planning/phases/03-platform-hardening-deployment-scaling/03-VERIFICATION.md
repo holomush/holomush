@@ -82,7 +82,7 @@ Goal-backward result: a real operator, given this branch, can (1) deploy the eve
 | No fabricated bindings / genuine assertions | `task test -- -run 'TestBoundInvariantsAreGenuinelyAsserted\|TestProvenanceGuard\|TestRegistryBindingChecks\|TestEveryRegistryInvariantHasBinding' ./test/meta/` | 17 tests PASS (9.3s) | ✓ PASS |
 | invariants.md regenerated (no drift) | `go run ./cmd/inv-render` + `git diff --stat` | empty diff | ✓ PASS |
 | Coverage issue for pending INV-CLUSTER-8 | `gh issue view 4777` | OPEN "coverage gap: INV-CLUSTER-8 unbound" | ✓ PASS |
-| Multi-node rotation / DLQ end-to-end | `task test:int` (Docker required) | not executed here | ? SKIP (int tier; assertions read & confirmed genuine, meta-test binds them) |
+| Multi-node rotation / DLQ end-to-end | `task test:int` (Docker required) | executed as the CI-required `Integration Test` check (green on PR #4782); not run in the local verifier pass | ✓ PASS (CI) |
 
 ### Requirements Coverage
 
@@ -113,7 +113,7 @@ None blocking. No debt markers (TBD/FIXME/XXX) in phase-modified files; no stubs
 
 ### Gaps Summary
 
-No gaps. Every must-have across all 9 plans is real, substantive, wired, and — for behavior-dependent truths — backed by genuine integration-tagged assertions whose registry bindings are proven authentic by the passing unit-tier meta-tests. Requirement traceability is complete (CLUSTER-01..05, 0 orphaned). The only non-executed item is the Docker-gated `task test:int` suite, whose assertion bodies were read and confirmed genuine and whose invariant bindings the meta-test validates.
+No gaps. Every must-have across all 9 plans is real, substantive, wired, and — for behavior-dependent truths — backed by genuine integration-tagged assertions whose registry bindings are proven authentic by the passing unit-tier meta-tests. Requirement traceability is complete (CLUSTER-01..05, 0 orphaned). The only item not run in the local verifier pass is the Docker-gated `task test:int` suite, whose assertion bodies were read and confirmed genuine and whose invariant bindings the meta-test validates locally — and which subsequently ran green as the CI-required `Integration Test` check on PR #4782.
 
 ---
 

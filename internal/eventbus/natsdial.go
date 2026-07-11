@@ -84,8 +84,19 @@ func redactURL(raw string) string {
 }
 
 // redactOneURL redacts a single NATS URL (no comma-separated seed list).
+//
+// url.Parse only recognizes userinfo (and lets Redacted() strip the password)
+// when the seed carries a scheme. A scheme-less seed like "user:pass@host:4222"
+// parses as Scheme="user"/Opaque="pass@host:4222" with User=nil, so Redacted()
+// would leave the password intact. Config.Validate only rejects an empty URL,
+// so such a malformed seed can reach here — prepend the default NATS scheme
+// before parsing so the userinfo is recognized and redacted.
 func redactOneURL(raw string) string {
-	u, err := url.Parse(raw)
+	toParse := strings.TrimSpace(raw)
+	if toParse != "" && !strings.Contains(toParse, "://") {
+		toParse = "nats://" + toParse
+	}
+	u, err := url.Parse(toParse)
 	if err != nil {
 		return "<unparseable url redacted>"
 	}
