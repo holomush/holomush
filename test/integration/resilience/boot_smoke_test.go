@@ -89,9 +89,11 @@ var _ = Describe("Two-replica substrate", Ordered, func() {
 		// replica A's publish landed on the broker both replicas share.
 		Eventually(func() uint64 {
 			i, infoErr := stream.Info(ctx)
-			if infoErr != nil {
-				return 0
-			}
+			// Surface a persistent stream.Info failure as the real error instead
+			// of masking it as an opaque "0 not > baseline" timeout — Gomega
+			// recovers this panic and retries inside Eventually (matches the
+			// lastSeq sibling in restart_reconnect_test.go).
+			Expect(infoErr).NotTo(HaveOccurred(), "read EVENTS stream info")
 			return i.State.LastSeq
 		}, smokeSpecTimeout, 50*time.Millisecond).
 			Should(BeNumerically(">", baseline),

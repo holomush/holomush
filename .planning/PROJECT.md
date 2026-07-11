@@ -248,4 +248,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-07-11 — Phase 4 (World-Model Resilience Investigation & Decision) complete: harness + M12/M2 verdicts landed, MODEL-01 ADR accepted (Option B, panel-ratified). Next: ship the phase branch, then `/gsd-discuss-phase 5` / `/gsd-plan-phase 5` (world-model integrity fixes — MODEL-02/03/04).*
+*Last updated: 2026-07-11 — Phase 4 (World-Model Resilience Investigation & Decision) complete and shipped as PR #4814: harness + M12/M2 verdicts landed, MODEL-01 ADR accepted (Option B, panel-ratified). Next: merge #4814 when CI is green, then `/gsd-discuss-phase 5` / `/gsd-plan-phase 5` (world-model integrity fixes — MODEL-02/03/04). The milestone-level Active checklist items below stay unchecked because they span Phase 5/6 work (version guard, dual-write elimination, ops hardening) not yet done.*

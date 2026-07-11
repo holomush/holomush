@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 04 — world-model-resilience-investigation-decision-f1
+**Current focus:** Phase 5 — World-Model Integrity Fixes (M2 / M12)
 
 ## Current Position
 
@@ -83,7 +83,6 @@ Last activity: 2026-07-11
 | Phase 04 P01 | 40min | 2 tasks | 7 files |
 | Phase 04 P02 | 35min | 2 tasks | 3 files |
 | Phase 04 P03 | ~55min | 2 tasks | 3 files |
-| Phase 04 P03 | ~55min | 2 tasks | 3 files |
 | Phase 04 P04 | ~90min | 3 tasks | 2 files |
 
 ## Accumulated Context
@@ -94,10 +93,10 @@ Full decision log lives in PROJECT.md "Key Decisions" (v0.11 phase-level decisio
 milestone close; per-plan detail is archived in `milestones/v0.11-phases/`). No decisions accumulated for
 the next milestone yet.
 
-- [Phase ?]: M12 last-write-wins world corruption REPRODUCED deterministically (D-06): a stale full-row UPDATE silently reverts a committed rename, both writers returning nil (04-02)
-- [Phase ?]: Success-criterion #1 four chaos dimensions all green; replica restart recovers canonical state from the DB, not event replay (04-02)
-- [Phase ?]: M2 dual-write window characterized (D-07): MoveCharacter commits then emits post-commit; on broker flap the caller sees move_succeeded=true while notification delivery is decoupled from the result
-- [Phase ?]: Production world.Service wires NO EventEmitter — the move-notification leg is dead code today (pinned by a spec)
+- [Phase 04]: M12 last-write-wins world corruption REPRODUCED deterministically (D-06): a stale full-row UPDATE silently reverts a committed rename, both writers returning nil (04-02)
+- [Phase 04]: Success-criterion #1 four chaos dimensions all green; replica restart recovers canonical state from the DB, not event replay (04-02)
+- [Phase 04]: M2 dual-write window characterized (D-07): MoveCharacter commits then emits post-commit; on broker flap the caller sees move_succeeded=true while notification delivery is decoupled from the result
+- [Phase 04]: Production world.Service wires NO EventEmitter — the move-notification leg is dead code today (pinned by a spec)
 - [Phase 04]: MODEL-01 decided: Option B — CRUD-canonical + optimistic concurrency + transactional outbox in the panel-ratified strengthened shape (consensus one-pager NORMATIVE); Phase 5 implements MODEL-03 version guard + MODEL-04 ordered atomic feed — Human decider (Sean Brandt) chose under future-state-first framing after a two-round three-model panel unanimously ratified the strengthened B shape; the ordered complete world-change feed is the platform's extensibility contract; evolvability inverts under event sourcing pre-1.0; coverage rot countered structurally (compile-time seam + census meta-test + delta-parity)
 - [Phase 04]: INV-WORLD-ATOMIC-FEED/-DELTA-PARITY/-FEED-ORDER/-WRITER-BOUNDARY named in the ADR; registration/binding deferred to Phase 5's spec per .claude/rules/invariants.md
 

@@ -236,6 +236,9 @@ func pauseBroker(ctx context.Context, env *natstest.NATSEnv) {
 	GinkgoHelper()
 	cli, err := testcontainers.NewDockerClientWithOpts(ctx)
 	Expect(err).NotTo(HaveOccurred(), "pauseBroker: docker client")
+	// Close the client each call — NewDockerClientWithOpts leaks the underlying
+	// net/http persistConn goroutines otherwise, across repeated flap windows.
+	defer func() { _ = cli.Close() }()
 	// ContainerPause returns (ContainerPauseResult, error) in the pinned
 	// moby/moby client — the result value is discarded; only the error matters.
 	_, err = cli.ContainerPause(ctx, env.Container.GetContainerID(), dockerclient.ContainerPauseOptions{})
@@ -248,6 +251,9 @@ func unpauseBroker(ctx context.Context, env *natstest.NATSEnv) {
 	GinkgoHelper()
 	cli, err := testcontainers.NewDockerClientWithOpts(ctx)
 	Expect(err).NotTo(HaveOccurred(), "unpauseBroker: docker client")
+	// Close the client each call — NewDockerClientWithOpts leaks the underlying
+	// net/http persistConn goroutines otherwise, across repeated flap windows.
+	defer func() { _ = cli.Close() }()
 	// ContainerUnpause returns (ContainerUnpauseResult, error) in the pinned
 	// moby/moby client — the result value is discarded; only the error matters.
 	_, err = cli.ContainerUnpause(ctx, env.Container.GetContainerID(), dockerclient.ContainerUnpauseOptions{})
