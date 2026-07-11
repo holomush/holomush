@@ -29,7 +29,7 @@ spec is where invariants are *born*, and the registry is where they must land.
 | `internal/invregistry/` | The single Go schema definition shared by the tooling. |
 
 The full design is `docs/superpowers/specs/2026-05-31-invariant-registry-design.md`.
-The live binding-backfill status lives in `docs/roadmap.md` → Maintenance.
+The binding-backfill program is tracked in GSD (`.planning/ROADMAP.md` → `## Backlog`, Phase 999.11; epic `holomush-hz0v4`).
 
 ## What rises to a registry invariant
 

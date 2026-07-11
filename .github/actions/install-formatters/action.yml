@@ -23,10 +23,10 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        RUMDL_VERSION="v0.1.62"
+        RUMDL_VERSION="v0.2.30"
         RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
         RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"
-        RUMDL_SHA256="a25d9bab27ac9f17589e25cde32ce580c81dfd7bcc4a21e6dbfcd65bc7c1353c"
+        RUMDL_SHA256="eb51e28ef9dff2b2d29b4527bc40123e840bb997dc8bae39d99496b898ee9f72"
         curl -LsSfO "${RUMDL_URL}"
         echo "${RUMDL_SHA256}  ${RUMDL_TARBALL}" | sha256sum -c -
         sudo tar xzf "${RUMDL_TARBALL}" --overwrite -C /usr/local/bin

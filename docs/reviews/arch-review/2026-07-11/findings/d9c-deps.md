@@ -1,0 +1,117 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
+# D9c — Dependencies & Supply Chain — Findings
+
+**Agent:** general-purpose/claude-sonnet-5 · **Date:** 2026-07-11 · **Scope examined:** `go.mod`/`go.sum` (govulncheck + `go list -m -u`), `web/package.json`+`pnpm-lock.yaml` (`pnpm audit`/`pnpm outdated`/`pnpm licenses`), `site/package.json`+`bun.lock` (`bun audit`), `.github/workflows/*.yaml` + `.github/actions/*` (Action pinning, tool-install hygiene), `compose*.yaml` + `Dockerfile` (image pinning), `.github/renovate.json` (bot config + Dependency Dashboard #4450), `internal/plugin/lua/state.go` (Lua sandbox library allowlist), targeted CVE lookups for nats-server/pgx/grpc-go/x-net/gopher-lua/go-plugin against GitHub Security Advisories and NVD.
+
+## Summary
+
+Dependency hygiene here is genuinely strong for a hobbyist-scale project: `govulncheck` reports zero reachable vulnerabilities across 136 scanned modules, essentially every direct security-relevant Go dependency (nats.go, gopher-lua, hashicorp/go-plugin, connectrpc, pgx, oklog/ulid, protobuf, grpc) is pinned at its current latest release, `go.mod` has no `replace` directives, GitHub Actions and container images are SHA-pinned almost universally, and the release pipeline produces SBOMs + SLSA provenance + cosign signatures. Renovate is configured sensibly (scoped automerge, grouping, a deliberate 14-day NATS stabilization window) and actively running.
+
+The one real gap this review's own manual CVE search surfaced that automation missed: **`nats-server` is pinned to v2.14.2**, and two GitHub Security Advisories against exactly that version (CVE-2026-58208 / GHSA-p957-7v2w-g93g and GHSA-q59r-vq66-pxc2) were published 2026-06-29 — fixed in v2.14.3, which Renovate has already queued as a pending PR but which is not yet merged. `govulncheck`'s clean report does **not** cover this, because neither advisory has a Go vulnerability-database (`GO-####-####`) entry yet — a real blind spot in relying on govulncheck alone for a server-mode dependency. There is also no automated vuln-scanning gate in CI at all (govulncheck/pnpm-audit/trivy) — currency via Renovate is necessary but not sufficient, as this finding itself demonstrates.
+
+**Counts:** High 1, Medium 2, Low 5, Strengths 10.
+
+## Findings
+
+### HIGH-1 nats-server pinned to a version with two published, patched CVEs
+
+- **Severity:** High
+- **Claim:** `go.mod:22` pins `github.com/nats-io/nats-server/v2 v2.14.2`, which is the last vulnerable version for two advisories published 2026-06-29 and fixed in v2.14.3 (released 2026-06-29 per GitHub Releases); `govulncheck` does not flag either because neither has a `GO-####-####` entry in the Go vulnerability database as of the 2026-07-08 DB snapshot used by this scan.
+- **Evidence:**
+  - `go.mod:22`: `github.com/nats-io/nats-server/v2 v2.14.2`
+  - GHSA-q59r-vq66-pxc2 ("Remote crash via integer overflow in Connz pagination"), published 2026-06-29, affected `<= 2.14.2, <= 2.12.11`, fixed `2.14.3` — https://github.com/nats-io/nats-server/security/advisories/GHSA-q59r-vq66-pxc2 (retrieved 2026-07-11)
+  - GHSA-p957-7v2w-g93g / CVE-2026-58208 ("MQTT-over-WebSocket Path Can Crash WebSocket-Only JetStream Servers"), published 2026-06-29, affected `<= 2.14.2, <= 2.12.11`, fixed `2.14.3` — https://github.com/nats-io/nats-server/security/advisories/GHSA-p957-7v2w-g93g (retrieved 2026-07-11)
+  - `docs/reviews/arch-review/2026-07-11/evidence/deps/govulncheck-verbose.txt` scanned `github.com/nats-io/nats-server/v2@v2.14.2` as one of 136 modules against the vuln.go.dev DB ("DB updated: 2026-07-08") and reported it in neither Symbol, Package, nor Module Results — the only Module Result was the unrelated `golang.org/x/crypto` openpgp advisory. This confirms the two June-29 advisories are not yet in the Go vulndb govulncheck consults.
+  - Reachability: `internal/eventbus/subsystem.go:156` sets `HTTPPort: s.cfg.MonitorPort` on the embedded server's `server.Options{}`; `internal/eventbus/config.go:52` documents `MonitorPort` (`0 = disabled`) and `internal/eventbus/config.go:149-155`'s `Defaults()` does not set it non-zero, so the monitoring HTTP endpoint (which serves `/connz`, the vulnerable pagination endpoint) is **off by default**. It is, however, an explicitly documented operator opt-in: `site/src/content/docs/operating/how-to/operations.md:163-167` tells operators to set `event_bus.monitor_port` to use `nats stream info` against the monitor endpoint. MQTT/WebSocket are not configured anywhere in `deploy/nats/*.conf` or the Go server options, so GHSA-p957-7v2w-g93g does not apply to HoloMUSH's deployment shape.
+  - The fix is already in motion: `gh issue view 4450` (Dependency Dashboard) lists `deps: bump module github.com/nats-io/nats-server/v2 to v2.14.3` under "Pending Status Checks" — Renovate has already opened the PR, it just hasn't landed.
+- **Impact:** Any operator who follows the documented ops guide and enables `event_bus.monitor_port` (needed for `nats stream info`/Prometheus scraping) exposes a remote-crash DoS against the JetStream event bus — the single most load-bearing subsystem in the architecture, now cluster-wide since Phase 3's external/clustered NATS work. No exploit code is confirmed public yet, but the advisory is >10 days old and the fix is a no-code one-line bump.
+- **Recommendation:** Merge the already-open Renovate PR bumping `nats-server` to v2.14.3 (or run `go get github.com/nats-io/nats-server/v2@v2.14.3 && go mod tidy` directly — trivial, non-breaking patch). Given the govulncheck blind spot demonstrated here, consider subscribing to `nats-io/nats-server` GitHub Security Advisories directly (watch releases, or add a `gh api` polling step) rather than relying solely on govulncheck for this one dependency, since it's a network-facing server binary whose vulnerabilities are often reachability-gated in ways govulncheck's call-graph analysis can't model.
+- **Dedup:** none
+
+### MEDIUM-1 `bufbuild/buf-setup-action` pinned to a floating major tag, inconsistent with repo's own SHA-pinning discipline
+
+- **Severity:** Medium
+- **Claim:** Every other third-party GitHub Action in the repo is pinned to a full commit SHA with a version comment; `bufbuild/buf-setup-action` alone is pinned to the floating tag `@v1`, at three call sites.
+- **Evidence:** `.github/workflows/ci.yaml:238`, `.github/workflows/ci.yaml:301`, `.github/workflows/release.yaml:164` all read `uses: bufbuild/buf-setup-action@v1`. Contrast with e.g. `.github/workflows/buf.yml:32` (`uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0`) or any of the 15+ other third-party actions in the repo, all pinned `@<40-hex-sha> # v<tag>`. Confirmed via `rg -n "uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+@" .github/workflows/*.yaml | grep -vE "@[0-9a-f]{40}"` — this is the only match.
+- **Impact:** A compromised `bufbuild/buf-setup-action` release (tag re-point, or an upstream account takeover) would silently execute in CI on the next run touching `ci.yaml`/`release.yaml`, including the release pipeline that produces signed binaries/containers. Low likelihood, but it's the one action in the repo not benefiting from the SHA-pin discipline everywhere else, and `release.yaml` is a supply-chain-sensitive workflow.
+- **Recommendation:** Pin `bufbuild/buf-setup-action` to a commit SHA with a version comment, matching the pattern used for every other action in the repo (Renovate will keep the SHA current via its existing `github-actions` package rule).
+- **Dedup:** none
+
+### MEDIUM-2 No automated dependency-vulnerability scanning gate in CI
+
+- **Severity:** Medium
+- **Claim:** Neither `Taskfile.yaml` nor any workflow under `.github/workflows/` runs `govulncheck`, `pnpm audit`/`npm audit`, `bun audit`, CodeQL, or any other vulnerability scanner; the only automated dependency mechanism is Renovate's version-currency bumps.
+- **Evidence:** `rg -n "govulncheck|vulncheck|npm audit|pnpm audit|trivy|grype|osv-scanner|dependency-check" Taskfile.yaml .github/workflows/*.yaml .github/workflows/*.yml` returns no matches. `rg -ln "security|audit|scan" .github/workflows/*.yaml .github/workflows/*.yml` matches only unrelated hits (`ssh-keyscan`, a comment mentioning "scans"). No `.github/workflows/codeql*.yml` exists.
+- **Impact:** Version currency (what Renovate provides) is necessary but not sufficient — HIGH-1 above is direct proof: the pinned `nats-server` version has been vulnerable for 12 days and nothing in CI would have caught it (Renovate did open a bump PR, but nothing *forces* attention to it as a security fix specifically vs. routine noise in the Dependency Dashboard). A recurring `govulncheck ./...` job (and `pnpm audit --audit-level=high` / `bun audit` for the two JS trees) would close this gap for the reachable-vulnerability class government DB knows about, cheaply.
+- **Recommendation:** Add a scheduled (e.g. nightly, alongside `nightly-soak.yml`) or PR-gated CI step running `govulncheck ./...`, `pnpm audit` (web), and `bun audit` (site); fail or annotate on new high/critical findings. This is a small addition given the tool-install patterns (checksum-pinned binary fetch) already established in `.github/actions/`.
+- **Dedup:** none
+
+### LOW-1 `golang.org/x/crypto` openpgp package flagged unmaintained/unsafe (GO-2026-5932) — not reachable
+
+- **Severity:** Low
+- **Claim:** `golang.org/x/crypto@v0.53.0` (`go.mod:50`) is affected by GO-2026-5932, a package-quality advisory ("unmaintained... unsafe by design") against the `openpgp` subpackage, which HoloMUSH's code does not import.
+- **Evidence:** `docs/reviews/arch-review/2026-07-11/evidence/deps/govulncheck-verbose.txt`: "Vulnerability #1: GO-2026-5932 ... Your code is affected by 0 vulnerabilities. This scan also found 0 vulnerabilities in packages you import and 1 vulnerability in modules you require, but your code doesn't appear to call these vulnerabilities." Confirmed HoloMUSH's actual x/crypto usage is `argon2` (`internal/auth/hasher.go:14`, `internal/eventbus/crypto/kek/source_file.go:15`) — not `openpgp`. `x/crypto` is also one minor version behind latest (`v0.53.0` → `v0.54.0` per `go list -m -versions`), pure hygiene, no known vuln in the current pin.
+- **Impact:** None currently — dead code path, informational only.
+- **Recommendation:** No action required beyond routine Renovate bump (already tracked in the "golang.org/x" grouped package rule).
+- **Dedup:** none
+
+### LOW-2 `web/` transitive `cookie@0.6.0` accepts out-of-bounds characters (GHSA-pxg6-pf52-xh8x)
+
+- **Severity:** Low
+- **Claim:** `web/pnpm-lock.yaml` resolves `cookie@0.6.0` (pulled in transitively via `@sveltejs/kit`), which is vulnerable to GHSA-pxg6-pf52-xh8x (accepts cookie name/path/domain with out-of-bounds characters), fixed in `cookie@0.7.0`.
+- **Evidence:** `docs/reviews/arch-review/2026-07-11/evidence/deps/pnpm-audit-web.json` — 1 low advisory, `"module_name": "cookie"`, `"vulnerable_versions": "<0.7.0"`, paths all route through `@sveltejs/kit`/`@sveltejs/adapter-static`/`bits-ui`. `pnpm-lock.yaml:742,1954` pin `cookie@0.6.0`; not directly overridable without a `pnpm.overrides` entry (not present in `web/package.json`).
+- **Impact:** npm-audit itself rates this low severity; requires an upstream `@sveltejs/kit` bump to move past the transitive pin. `@sveltejs/kit` is already at `2.69.1` with only a patch (`2.69.2`) pending per `pnpm outdated` — worth confirming the cookie bump lands in a near-term SvelteKit patch.
+- **Recommendation:** No urgent action; optionally add a `pnpm.overrides` pin for `cookie@^0.7.0` in `web/package.json` if the SvelteKit patch doesn't pick it up soon.
+- **Dedup:** none
+
+### LOW-3 `site/` (docs) `esbuild` dev-server arbitrary file read on Windows (GHSA-g7r4-m6w7-qqqr)
+
+- **Severity:** Low
+- **Claim:** `bun audit` in `site/` flags `esbuild >=0.27.3 <0.28.1` (pulled in via `astro` and `starlight-llm-actions` → `vite`) for a low-severity dev-server arbitrary file read on Windows.
+- **Evidence:** `docs/reviews/arch-review/2026-07-11/evidence/deps/bun-audit-site.txt`: "1 vulnerabilities (1 low) — esbuild allows arbitrary file read when running the development server on Windows - https://github.com/advisories/GHSA-g7r4-m6w7-qqqr".
+- **Impact:** Dev-tooling only (Astro/Vite dev server), Windows-specific, docs-site build chain — never shipped to end users. Negligible for this project's deploy shape.
+- **Recommendation:** No action required; will resolve via routine `astro`/`vite` bumps already visible in the Dependency Dashboard.
+- **Dedup:** none
+
+### LOW-4 gopher-lua context-timeout has a known granularity gap that a heavy single Lua operation can exceed
+
+- **Severity:** Low
+- **Claim:** HoloMUSH's Lua plugin host relies on `L.SetContext(ctx)` for per-invocation cancellation/timeout, but upstream gopher-lua issue #521 (open, unresolved as of the latest pinned `v1.1.2`) documents that the context deadline is checked per-VM-instruction, not mid-operation — a single heavy call into the `string` library (which HoloMUSH's sandbox loads) can stall the VM past its configured timeout.
+- **Evidence:** `internal/plugin/lua/host.go:511,616,738` and `internal/plugin/lua/invoke.go:24` all call `L.SetContext(ctx)`; `internal/plugin/lua/invoke.go:37` has an existing comment acknowledging "pure Lua: gopher-lua's per-instruction ctx check fires" (i.e., the team is aware of the per-instruction granularity). `internal/plugin/lua/state.go:20-30`'s `defaultSafeLibraries()` loads `string` (`lua.OpenString`) alongside `base`/`table`/`math`. Upstream: https://github.com/yuin/gopher-lua/issues/521 (reported against v1.1.1, still open, no maintainer response per linked discussion #507) — retrieved 2026-07-11.
+- **Impact:** Low, given HoloMUSH's in-tree Lua plugins are first-party/trusted code, not arbitrary third-party uploads (per `.claude/rules/plugin-runtime-symmetry.md` framing) — this is a residual DoS risk if plugin authorship ever expands to less-trusted authors, or if a first-party plugin has an accidental pathological string operation.
+- **Recommendation:** No urgent action for the current trust model. If third-party/less-trusted Lua plugin authorship is ever considered, revisit whether gopher-lua's timeout is sufficient defense-in-depth or whether a wrapping goroutine-level hard deadline (kill the whole state) is needed.
+- **Dedup:** none
+
+### LOW-5 `#4670` (repo-hygiene: dual renovate.json / tracked lock file / stray issues.jsonl) appears already resolved
+
+- **Severity:** Low
+- **Claim:** Issue #4670 (open, P2/`priority::medium`) describes a stale root `/renovate.json` diverging from `.github/renovate.json`, a tracked `.claude/scheduled_tasks.lock`, and a stray `/issues.jsonl` — none of which are present on this branch.
+- **Evidence:** `git log --oneline --all -- renovate.json` shows the root file was removed by commit `ca4707cd1` ("chore(renovate,ci): broaden automerge, drop concurrency tighteners, consolidate config (#4124)"); `git show HEAD:renovate.json` fails with "does not exist". `git ls-files .claude/scheduled_tasks.lock` returns nothing (untracked/absent). `ls issues.jsonl` fails with "No such file or directory" in this worktree.
+- **Impact:** None — the issue is stale and should be closed, not a live finding.
+- **Recommendation:** Close #4670 with a comment noting it was resolved by #4124 and general repo cleanup; re-verify the two sub-items independently if reopening.
+- **Dedup:** already-tracked:#4670 (flagging as resolved-on-main, not a new finding)
+
+## Strengths
+
+- **`govulncheck` clean.** Zero reachable vulnerabilities across all 136 scanned modules + stdlib (`docs/reviews/arch-review/2026-07-11/evidence/deps/govulncheck-verbose.txt`), run against a DB updated 2026-07-08 (3 days before this review).
+- **Direct security-relevant deps are current.** `hashicorp/go-plugin@v1.8.0`, `yuin/gopher-lua@v1.1.2`, `nats-io/nats.go@v1.52.0`, `connectrpc.com/connect@v1.20.0`, `jackc/pgx/v5@v5.10.0`, `oklog/ulid/v2@v2.1.1`, `google.golang.org/protobuf@v1.36.11`, `google.golang.org/grpc@v1.82.0` are all at the latest published release per `go list -m -versions` (`docs/reviews/arch-review/2026-07-11/evidence/deps/key-deps-version-check.txt`). `pgx` is well past both CVE-2026-33815 (fixed <5.9.0) and CVE-2026-41889 (fixed 5.9.2); `grpc-go` is well past CVE-2026-33186 (fixed 1.79.3); `x/net` is well past CVE-2026-27141/CVE-2026-33814/GO-2026-5028 (fixed ≤0.53.0-0.55.0, current 0.56.0).
+- **No `replace` directives** in `go.mod`; the one deliberate commit-pinned dependency (`github.com/cyberphone/json-canonicalization`) is explicitly justified inline (`go.mod:63-66`) as load-bearing for crypto chain-hash stability (INV-CRYPTO-80) rather than an accidental pin.
+- **Lua plugin sandbox neutralizes a known gopher-lua CVE class.** `internal/plugin/lua/state.go:20-30` explicitly allowlists only `base`/`table`/`string`/`math` and blocks `os`/`io`/`debug`/`package` — this means CVE-2025-47906 (`os/exec` `LookPath` path confusion in gopher-lua) has no reachable code path in HoloMUSH regardless of the upstream fix status.
+- **GitHub Actions are almost universally SHA-pinned with version comments** (`rg` across all 10 workflow files) — the sole exception is `bufbuild/buf-setup-action@v1` (MEDIUM-1).
+- **All container images are SHA-pinned**, including `:latest` tags (`amir20/dozzle:latest@sha256:...`, `otel/opentelemetry-collector-contrib:latest@sha256:...`, `jaegertracing/jaeger:latest@sha256:...`, `prom/prometheus:latest@sha256:...`, `grafana/grafana:latest@sha256:...`), confirmed across `compose.yaml`, `compose.prod.yaml`, `compose.cluster.yaml`, `compose.e2e.yaml`. `Dockerfile:3` pins `alpine:3.24.1@sha256:...` and runs as non-root (`Dockerfile:10-12`).
+- **CI tool installation avoids third-party marketplace actions for security-sensitive fetches.** `.github/actions/install-cog/action.yml` and `.github/actions/install-formatters/action.yml` download release tarballs and verify SHA256 checksums inline before use; `.github/actions/install-task/action.yml` builds the `task` binary from a pinned `go.tool.mod` via the Go module proxy rather than fetching a prebuilt binary — the action's own comment cites this as a deliberate fix for "the CDN-flake class that broke arduino/setup-task@v2 and the taskfile.dev/install.sh shim."
+- **Release pipeline has real supply-chain controls.** `.github/workflows/release.yaml` generates an SBOM (`anchore/sbom-action/download-syft`), produces SLSA provenance attestations for both binaries and container images (`actions/attest-build-provenance`), and signs + verifies artifacts with cosign (`sigstore/cosign-installer` + `cosign verify-blob`/`cosign verify` at lines 406-422).
+- **Renovate config (`.github/renovate.json`) is well-designed for the project's risk profile**: minor/patch auto-merge is scoped per-manager (gomod/actions/docker/npm), majors always require manual review (`matchUpdateTypes: ["major"], automerge: false`), sensible grouping (OpenTelemetry, pgx, testify, `golang.org/x`, Google Go), and a deliberate extra-caution rule for NATS (`minimumReleaseAge: 14 days`, grouped, weekly schedule) — appropriate for the single most load-bearing dependency. Codegen-affecting pins (`google.golang.org/protobuf`, `connectrpc.com/connect`, the buf codegen plugin pins) are deliberately excluded from automerge because a bump needs a `task proto`/`task web:generate` regen in the same PR — a correct call given the project's committed-generated-code convention. The Dependency Dashboard (#4450) is live and current, confirming the bot is actually running (open PRs for `actions/checkout` v7, `astro` v7, minor bumps, etc., all visible and current as of this review).
+- **No license-incompatible dependencies found in the web/pnpm tree.** `pnpm licenses list --json` (`docs/reviews/arch-review/2026-07-11/evidence/deps/pnpm-licenses-web.json`) shows only permissive licenses (Apache-2.0, MIT, BSD-2/3-Clause, ISC, 0BSD, MIT-0, BlueOak-1.0.0, CC0-1.0) plus one dual-licensed and one pure-MPL-2.0 package (`lightningcss`) — MPL-2.0 is file-level weak copyleft, broadly compatible with an Apache-2.0 combined work. Spot-checked `hashicorp/go-plugin` on the Go side: also MPL-2.0, same compatibility profile.
+
+## Not examined
+
+- Full recursive license audit of all 136 Go transitive dependencies (spot-checked `hashicorp/go-plugin` only; the bulk are stdlib-adjacent Google/OpenTelemetry/testcontainers packages with well-known permissive licenses).
+- Alpine base image's internal `apk` package CVE surface (distro-level, not a Go/npm dependency-tree concern; `Dockerfile` does `apk add --no-cache` at build time so packages are whatever's current in the pinned Alpine release's repo at build time, not baked into the base image digest).
+- `scripts/uv.lock` (Python, via `uv`) — spot-checked `scripts/pyproject.toml`: zero runtime dependencies, dev-only `pytest`/`ruff`; not a supply-chain concern worth deeper audit at hobbyist scale.
+- Did not attempt to reproduce or weaponize either nats-server advisory (HIGH-1) — assessed via advisory text and HoloMUSH's own config/code for reachability, not a live PoC.
+- Did not audit `buf.lock` (BSR plugin pins) beyond confirming Renovate has custom managers tracking it (`.github/renovate.json:15-38`).

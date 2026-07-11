@@ -1,0 +1,2648 @@
+{
+  "MIT": [
+    {
+      "name": "@asamuzakjp/css-color",
+      "versions": [
+        "5.1.11"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@asamuzakjp+css-color@5.1.11/node_modules/@asamuzakjp/css-color"
+      ],
+      "license": "MIT",
+      "author": "asamuzaK",
+      "homepage": "https://github.com/asamuzaK/cssColor#readme",
+      "description": "CSS color - Resolve and convert CSS colors."
+    },
+    {
+      "name": "@asamuzakjp/dom-selector",
+      "versions": [
+        "7.1.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@asamuzakjp+dom-selector@7.1.1/node_modules/@asamuzakjp/dom-selector"
+      ],
+      "license": "MIT",
+      "author": "asamuzaK",
+      "homepage": "https://github.com/asamuzaK/domSelector#readme",
+      "description": "A CSS selector engine."
+    },
+    {
+      "name": "@asamuzakjp/generational-cache",
+      "versions": [
+        "1.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@asamuzakjp+generational-cache@1.0.1/node_modules/@asamuzakjp/generational-cache"
+      ],
+      "license": "MIT",
+      "author": "asamuzaK",
+      "homepage": "https://github.com/asamuzaK/generationalCache",
+      "description": "A generational pseudo-LRU cache with strict maximum size limits."
+    },
+    {
+      "name": "@asamuzakjp/nwsapi",
+      "versions": [
+        "2.3.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@asamuzakjp+nwsapi@2.3.9/node_modules/@asamuzakjp/nwsapi"
+      ],
+      "license": "MIT",
+      "author": "Diego Perini",
+      "homepage": "http://javascript.nwbox.com/nwsapi/",
+      "description": "Fast CSS Selectors API Engine"
+    },
+    {
+      "name": "@bramus/specificity",
+      "versions": [
+        "2.4.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@bramus+specificity@2.4.2/node_modules/@bramus/specificity"
+      ],
+      "license": "MIT",
+      "author": "Bramus Van Damme",
+      "homepage": "https://github.com/bramus/specificity#readme",
+      "description": "Calculate specificity of a CSS Selector"
+    },
+    {
+      "name": "@csstools/css-calc",
+      "versions": [
+        "3.2.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@csstools+css-calc@3.2.1_@csstools+css-parser-algorithms@4.0.0_@csstools+css-tokenizer@_3b33f237655dfa7a35d4b0433ee15cf1/node_modules/@csstools/css-calc"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-calc#readme",
+      "description": "Solve CSS math expressions"
+    },
+    {
+      "name": "@csstools/css-color-parser",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@csstools+css-color-parser@4.1.9_@csstools+css-parser-algorithms@4.0.0_@csstools+css-to_c6dc0ff88668e614025a4cbfb943c01a/node_modules/@csstools/css-color-parser"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-color-parser#readme",
+      "description": "Parse CSS color values"
+    },
+    {
+      "name": "@csstools/css-parser-algorithms",
+      "versions": [
+        "4.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@csstools+css-parser-algorithms@4.0.0_@csstools+css-tokenizer@4.0.0/node_modules/@csstools/css-parser-algorithms"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-parser-algorithms#readme",
+      "description": "Algorithms to help you parse CSS from an array of tokens."
+    },
+    {
+      "name": "@csstools/css-tokenizer",
+      "versions": [
+        "4.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@csstools+css-tokenizer@4.0.0/node_modules/@csstools/css-tokenizer"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-tokenizer#readme",
+      "description": "Tokenize CSS"
+    },
+    {
+      "name": "@exodus/bytes",
+      "versions": [
+        "1.15.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@exodus+bytes@1.15.1/node_modules/@exodus/bytes"
+      ],
+      "license": "MIT",
+      "author": "Exodus Movement, Inc.",
+      "homepage": "https://github.com/ExodusOSS/bytes",
+      "description": "Various operations on Uint8Array data"
+    },
+    {
+      "name": "@floating-ui/core",
+      "versions": [
+        "1.7.5"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@floating-ui+core@1.7.5/node_modules/@floating-ui/core"
+      ],
+      "license": "MIT",
+      "author": "atomiks",
+      "homepage": "https://floating-ui.com",
+      "description": "Positioning library for floating elements: tooltips, popovers, dropdowns, and more"
+    },
+    {
+      "name": "@floating-ui/dom",
+      "versions": [
+        "1.7.6"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@floating-ui+dom@1.7.6/node_modules/@floating-ui/dom"
+      ],
+      "license": "MIT",
+      "author": "atomiks",
+      "homepage": "https://floating-ui.com",
+      "description": "Floating UI for the web"
+    },
+    {
+      "name": "@floating-ui/utils",
+      "versions": [
+        "0.2.11"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@floating-ui+utils@0.2.11/node_modules/@floating-ui/utils"
+      ],
+      "license": "MIT",
+      "author": "atomiks",
+      "homepage": "https://floating-ui.com",
+      "description": "Utilities for Floating UI"
+    },
+    {
+      "name": "@jridgewell/gen-mapping",
+      "versions": [
+        "0.3.13"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@jridgewell+gen-mapping@0.3.13/node_modules/@jridgewell/gen-mapping"
+      ],
+      "license": "MIT",
+      "author": "Justin Ridgewell",
+      "homepage": "https://github.com/jridgewell/sourcemaps/tree/main/packages/gen-mapping",
+      "description": "Generate source maps"
+    },
+    {
+      "name": "@jridgewell/remapping",
+      "versions": [
+        "2.3.5"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@jridgewell+remapping@2.3.5/node_modules/@jridgewell/remapping"
+      ],
+      "license": "MIT",
+      "author": "Justin Ridgewell",
+      "homepage": "https://github.com/jridgewell/sourcemaps/tree/main/packages/remapping",
+      "description": "Remap sequential sourcemaps through transformations to point at the original source code"
+    },
+    {
+      "name": "@jridgewell/resolve-uri",
+      "versions": [
+        "3.1.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@jridgewell+resolve-uri@3.1.2/node_modules/@jridgewell/resolve-uri"
+      ],
+      "license": "MIT",
+      "author": "Justin Ridgewell",
+      "homepage": "https://github.com/jridgewell/resolve-uri#readme",
+      "description": "Resolve a URI relative to an optional base URI"
+    },
+    {
+      "name": "@jridgewell/sourcemap-codec",
+      "versions": [
+        "1.5.5"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@jridgewell+sourcemap-codec@1.5.5/node_modules/@jridgewell/sourcemap-codec"
+      ],
+      "license": "MIT",
+      "author": "Justin Ridgewell",
+      "homepage": "https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec",
+      "description": "Encode/decode sourcemap mappings"
+    },
+    {
+      "name": "@jridgewell/trace-mapping",
+      "versions": [
+        "0.3.31"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@jridgewell+trace-mapping@0.3.31/node_modules/@jridgewell/trace-mapping"
+      ],
+      "license": "MIT",
+      "author": "Justin Ridgewell",
+      "homepage": "https://github.com/jridgewell/sourcemaps/tree/main/packages/trace-mapping",
+      "description": "Trace the original position through a source map"
+    },
+    {
+      "name": "@oxc-project/types",
+      "versions": [
+        "0.138.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@oxc-project+types@0.138.0/node_modules/@oxc-project/types"
+      ],
+      "license": "MIT",
+      "author": "Boshen and oxc contributors",
+      "homepage": "https://oxc.rs",
+      "description": "Types for Oxc AST nodes"
+    },
+    {
+      "name": "@polka/url",
+      "versions": [
+        "1.0.0-next.29"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@polka+url@1.0.0-next.29/node_modules/@polka/url"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/polka#readme",
+      "description": "Super fast, memoized `req.url` parser"
+    },
+    {
+      "name": "@rolldown/binding-darwin-arm64",
+      "versions": [
+        "1.1.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@rolldown+binding-darwin-arm64@1.1.4/node_modules/@rolldown/binding-darwin-arm64"
+      ],
+      "license": "MIT",
+      "homepage": "https://rolldown.rs/",
+      "description": "Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API."
+    },
+    {
+      "name": "@rolldown/pluginutils",
+      "versions": [
+        "1.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@rolldown+pluginutils@1.0.1/node_modules/@rolldown/pluginutils"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/rolldown/plugins/tree/main/packages/pluginutils#readme",
+      "description": "Plugin utilities for Rolldown"
+    },
+    {
+      "name": "@sentry/browser",
+      "versions": [
+        "10.63.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sentry+browser@10.63.0/node_modules/@sentry/browser"
+      ],
+      "license": "MIT",
+      "author": "Sentry",
+      "homepage": "https://github.com/getsentry/sentry-javascript/tree/master/packages/browser",
+      "description": "Official Sentry SDK for browsers"
+    },
+    {
+      "name": "@sentry/browser-utils",
+      "versions": [
+        "10.63.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sentry+browser-utils@10.63.0/node_modules/@sentry/browser-utils"
+      ],
+      "license": "MIT",
+      "author": "Sentry",
+      "homepage": "https://github.com/getsentry/sentry-javascript/tree/master/packages/browser-utils",
+      "description": "Browser Utilities for all Sentry JavaScript SDKs"
+    },
+    {
+      "name": "@sentry/core",
+      "versions": [
+        "10.63.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sentry+core@10.63.0/node_modules/@sentry/core"
+      ],
+      "license": "MIT",
+      "author": "Sentry",
+      "homepage": "https://github.com/getsentry/sentry-javascript/tree/master/packages/core",
+      "description": "Base implementation for all Sentry JavaScript SDKs"
+    },
+    {
+      "name": "@sentry/feedback",
+      "versions": [
+        "10.63.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sentry+feedback@10.63.0/node_modules/@sentry/feedback"
+      ],
+      "license": "MIT",
+      "author": "Sentry",
+      "homepage": "https://github.com/getsentry/sentry-javascript/tree/master/packages/feedback",
+      "description": "Sentry SDK integration for user feedback"
+    },
+    {
+      "name": "@sentry/replay",
+      "versions": [
+        "10.63.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sentry+replay@10.63.0/node_modules/@sentry/replay"
+      ],
+      "license": "MIT",
+      "author": "Sentry",
+      "homepage": "https://docs.sentry.io/platforms/javascript/session-replay/",
+      "description": "User replays for Sentry"
+    },
+    {
+      "name": "@sentry/replay-canvas",
+      "versions": [
+        "10.63.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sentry+replay-canvas@10.63.0/node_modules/@sentry/replay-canvas"
+      ],
+      "license": "MIT",
+      "author": "Sentry",
+      "homepage": "https://docs.sentry.io/platforms/javascript/session-replay/",
+      "description": "Replay canvas integration"
+    },
+    {
+      "name": "@sentry/svelte",
+      "versions": [
+        "10.63.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sentry+svelte@10.63.0_svelte@5.56.4/node_modules/@sentry/svelte"
+      ],
+      "license": "MIT",
+      "author": "Sentry",
+      "homepage": "https://github.com/getsentry/sentry-javascript/tree/master/packages/svelte",
+      "description": "Official Sentry SDK for Svelte"
+    },
+    {
+      "name": "@standard-schema/spec",
+      "versions": [
+        "1.1.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@standard-schema+spec@1.1.0/node_modules/@standard-schema/spec"
+      ],
+      "license": "MIT",
+      "author": "Colin McDonnell",
+      "homepage": "https://standardschema.dev",
+      "description": "A family of specs for interoperable TypeScript"
+    },
+    {
+      "name": "@sveltejs/acorn-typescript",
+      "versions": [
+        "1.0.10"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sveltejs+acorn-typescript@1.0.10_acorn@8.17.0/node_modules/@sveltejs/acorn-typescript"
+      ],
+      "license": "MIT",
+      "author": "tyrealhu and the Svelte team",
+      "homepage": "https://github.com/sveltejs/acorn-typescript#readme",
+      "description": "Acorn plugin that parses TypeScript"
+    },
+    {
+      "name": "@sveltejs/adapter-static",
+      "versions": [
+        "3.0.10"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sveltejs+adapter-static@3.0.10_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs_dd2519bedb5f4e9e2a794071b83356aa/node_modules/@sveltejs/adapter-static"
+      ],
+      "license": "MIT",
+      "homepage": "https://svelte.dev/docs/kit/adapter-static",
+      "description": "Adapter for SvelteKit apps that prerenders your entire site as a collection of static files"
+    },
+    {
+      "name": "@sveltejs/kit",
+      "versions": [
+        "2.69.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plugin-svelte@7.1.2_svelte_c8e15c2b63343859a77adec6a029aab3/node_modules/@sveltejs/kit"
+      ],
+      "license": "MIT",
+      "homepage": "https://svelte.dev",
+      "description": "SvelteKit is the fastest way to build Svelte apps"
+    },
+    {
+      "name": "@sveltejs/load-config",
+      "versions": [
+        "0.2.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sveltejs+load-config@0.2.0/node_modules/@sveltejs/load-config"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/sveltejs/language-tools#readme",
+      "description": "Load Svelte config via vite.config or svelte.config"
+    },
+    {
+      "name": "@sveltejs/vite-plugin-svelte",
+      "versions": [
+        "7.1.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@sveltejs+vite-plugin-svelte@7.1.2_svelte@5.56.4_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@sveltejs/vite-plugin-svelte"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/sveltejs/vite-plugin-svelte#readme"
+    },
+    {
+      "name": "@tailwindcss/node",
+      "versions": [
+        "4.3.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@tailwindcss+node@4.3.2/node_modules/@tailwindcss/node"
+      ],
+      "license": "MIT",
+      "homepage": "https://tailwindcss.com",
+      "description": "A utility-first CSS framework for rapidly building custom user interfaces."
+    },
+    {
+      "name": "@tailwindcss/oxide",
+      "versions": [
+        "4.3.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@tailwindcss+oxide@4.3.2/node_modules/@tailwindcss/oxide"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tailwindlabs/tailwindcss#readme"
+    },
+    {
+      "name": "@tailwindcss/oxide-darwin-arm64",
+      "versions": [
+        "4.3.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@tailwindcss+oxide-darwin-arm64@4.3.2/node_modules/@tailwindcss/oxide-darwin-arm64"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tailwindlabs/tailwindcss#readme"
+    },
+    {
+      "name": "@tailwindcss/vite",
+      "versions": [
+        "4.3.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@tailwindcss+vite@4.3.2_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@tailwindcss/vite"
+      ],
+      "license": "MIT",
+      "homepage": "https://tailwindcss.com",
+      "description": "A utility-first CSS framework for rapidly building custom user interfaces."
+    },
+    {
+      "name": "@types/chai",
+      "versions": [
+        "5.2.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@types+chai@5.2.3/node_modules/@types/chai"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/chai",
+      "description": "TypeScript definitions for chai"
+    },
+    {
+      "name": "@types/cookie",
+      "versions": [
+        "0.6.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@types+cookie@0.6.0/node_modules/@types/cookie"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/cookie",
+      "description": "TypeScript definitions for cookie"
+    },
+    {
+      "name": "@types/deep-eql",
+      "versions": [
+        "4.0.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@types+deep-eql@4.0.2/node_modules/@types/deep-eql"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/deep-eql",
+      "description": "TypeScript definitions for deep-eql"
+    },
+    {
+      "name": "@types/estree",
+      "versions": [
+        "1.0.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@types+estree@1.0.9/node_modules/@types/estree"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree",
+      "description": "TypeScript definitions for estree"
+    },
+    {
+      "name": "@types/node",
+      "versions": [
+        "25.9.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@types+node@25.9.4/node_modules/@types/node"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node",
+      "description": "TypeScript definitions for node"
+    },
+    {
+      "name": "@types/pg",
+      "versions": [
+        "8.20.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@types+pg@8.20.0/node_modules/@types/pg"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/pg",
+      "description": "TypeScript definitions for pg"
+    },
+    {
+      "name": "@types/trusted-types",
+      "versions": [
+        "2.0.7"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@types+trusted-types@2.0.7/node_modules/@types/trusted-types"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/trusted-types",
+      "description": "TypeScript definitions for trusted-types"
+    },
+    {
+      "name": "@typescript/vfs",
+      "versions": [
+        "1.6.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@typescript+vfs@1.6.4_typescript@5.4.5/node_modules/@typescript/vfs"
+      ],
+      "license": "MIT",
+      "author": "TypeScript team",
+      "homepage": "https://github.com/microsoft/TypeScript-Website"
+    },
+    {
+      "name": "@vitest/expect",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@vitest+expect@4.1.9/node_modules/@vitest/expect"
+      ],
+      "license": "MIT",
+      "homepage": "https://vitest.dev/api/expect",
+      "description": "Jest's expect matchers as a Chai plugin"
+    },
+    {
+      "name": "@vitest/mocker",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@vitest+mocker@4.1.9_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/@vitest/mocker"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/vitest-dev/vitest/tree/main/packages/mocker",
+      "description": "Vitest module mocker implementation"
+    },
+    {
+      "name": "@vitest/pretty-format",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@vitest+pretty-format@4.1.9/node_modules/@vitest/pretty-format"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/vitest-dev/vitest/tree/main/packages/pretty-format",
+      "description": "Fork of pretty-format with support for ESM"
+    },
+    {
+      "name": "@vitest/runner",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@vitest+runner@4.1.9/node_modules/@vitest/runner"
+      ],
+      "license": "MIT",
+      "homepage": "https://vitest.dev/api/advanced/runner",
+      "description": "Vitest test runner"
+    },
+    {
+      "name": "@vitest/snapshot",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@vitest+snapshot@4.1.9/node_modules/@vitest/snapshot"
+      ],
+      "license": "MIT",
+      "homepage": "https://vitest.dev/guide/snapshot",
+      "description": "Vitest snapshot manager"
+    },
+    {
+      "name": "@vitest/spy",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@vitest+spy@4.1.9/node_modules/@vitest/spy"
+      ],
+      "license": "MIT",
+      "homepage": "https://vitest.dev/api/mock",
+      "description": "Lightweight Jest compatible spy implementation"
+    },
+    {
+      "name": "@vitest/ui",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@vitest+ui@4.1.9_vitest@4.1.9/node_modules/@vitest/ui"
+      ],
+      "license": "MIT",
+      "homepage": "https://vitest.dev/guide/ui",
+      "description": "UI for Vitest"
+    },
+    {
+      "name": "@vitest/utils",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@vitest+utils@4.1.9/node_modules/@vitest/utils"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/vitest-dev/vitest/tree/main/packages/utils",
+      "description": "Shared Vitest utility functions"
+    },
+    {
+      "name": "acorn",
+      "versions": [
+        "8.17.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/acorn@8.17.0/node_modules/acorn"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/acornjs/acorn",
+      "description": "ECMAScript parser"
+    },
+    {
+      "name": "ansi_up",
+      "versions": [
+        "6.0.6"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/ansi_up@6.0.6/node_modules/ansi_up"
+      ],
+      "license": "MIT",
+      "author": "drudru",
+      "homepage": "https://github.com/drudru/ansi_up#readme",
+      "description": "Convert ansi sequences in strings to colorful HTML"
+    },
+    {
+      "name": "assertion-error",
+      "versions": [
+        "2.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/assertion-error@2.0.1/node_modules/assertion-error"
+      ],
+      "license": "MIT",
+      "author": "Jake Luer",
+      "homepage": "https://github.com/chaijs/assertion-error#readme",
+      "description": "Error constructor for test and validation frameworks that implements standardized AssertionError specification."
+    },
+    {
+      "name": "bidi-js",
+      "versions": [
+        "1.0.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/bidi-js@1.0.3/node_modules/bidi-js"
+      ],
+      "license": "MIT",
+      "author": "Jason Johnston",
+      "homepage": "https://github.com/lojjic/bidi-js#readme",
+      "description": "A JavaScript implementation of the Unicode Bidirectional Algorithm"
+    },
+    {
+      "name": "bits-ui",
+      "versions": [
+        "2.18.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/bits-ui@2.18.1_@internationalized+date@3.12.2_@sveltejs+kit@2.69.1_@opentelemetry+api@1_bdacdc457c8e49988a6e370b52d5bb9b/node_modules/bits-ui"
+      ],
+      "license": "MIT",
+      "author": "Hunter Johnston",
+      "homepage": "https://github.com/huntabyte/bits-ui#readme",
+      "description": "The headless components for Svelte."
+    },
+    {
+      "name": "chai",
+      "versions": [
+        "6.2.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/chai@6.2.2/node_modules/chai"
+      ],
+      "license": "MIT",
+      "author": "Jake Luer",
+      "homepage": "http://chaijs.com",
+      "description": "BDD/TDD assertion library for node.js and the browser. Test framework agnostic."
+    },
+    {
+      "name": "chokidar",
+      "versions": [
+        "4.0.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/chokidar@4.0.3/node_modules/chokidar"
+      ],
+      "license": "MIT",
+      "author": "Paul Miller",
+      "homepage": "https://github.com/paulmillr/chokidar",
+      "description": "Minimal and efficient cross-platform file watching library"
+    },
+    {
+      "name": "cjs-module-lexer",
+      "versions": [
+        "2.2.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/cjs-module-lexer@2.2.0/node_modules/cjs-module-lexer"
+      ],
+      "license": "MIT",
+      "author": "Guy Bedford",
+      "homepage": "https://github.com/nodejs/cjs-module-lexer#readme",
+      "description": "Lexes CommonJS modules, returning their named exports metadata"
+    },
+    {
+      "name": "clsx",
+      "versions": [
+        "2.1.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/clsx@2.1.1/node_modules/clsx"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/clsx#readme",
+      "description": "A tiny (239B) utility for constructing className strings conditionally."
+    },
+    {
+      "name": "convert-source-map",
+      "versions": [
+        "2.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/convert-source-map@2.0.0/node_modules/convert-source-map"
+      ],
+      "license": "MIT",
+      "author": "Thorsten Lorenz",
+      "homepage": "https://github.com/thlorenz/convert-source-map",
+      "description": "Converts a source-map from/to  different formats and allows adding/changing properties."
+    },
+    {
+      "name": "cookie",
+      "versions": [
+        "0.6.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/cookie@0.6.0/node_modules/cookie"
+      ],
+      "license": "MIT",
+      "author": "Roman Shtylman",
+      "homepage": "https://github.com/jshttp/cookie#readme",
+      "description": "HTTP server cookie parsing and serialization"
+    },
+    {
+      "name": "css-tree",
+      "versions": [
+        "3.2.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/css-tree@3.2.1/node_modules/css-tree"
+      ],
+      "license": "MIT",
+      "author": "Roman Dvornov",
+      "homepage": "https://github.com/csstree/csstree#readme",
+      "description": "A tool set for CSS: fast detailed parser (CSS → AST), walker (AST traversal), generator (AST → CSS) and lexer (validation and matching) based on specs and browser implementations"
+    },
+    {
+      "name": "data-urls",
+      "versions": [
+        "7.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/data-urls@7.0.0/node_modules/data-urls"
+      ],
+      "license": "MIT",
+      "author": "Domenic Denicola",
+      "homepage": "https://github.com/jsdom/data-urls#readme",
+      "description": "Parses data: URLs"
+    },
+    {
+      "name": "debug",
+      "versions": [
+        "4.4.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/debug@4.4.3/node_modules/debug"
+      ],
+      "license": "MIT",
+      "author": "Josh Junon",
+      "homepage": "https://github.com/debug-js/debug#readme",
+      "description": "Lightweight debugging utility for Node.js and the browser"
+    },
+    {
+      "name": "decimal.js",
+      "versions": [
+        "10.6.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/decimal.js@10.6.0/node_modules/decimal.js"
+      ],
+      "license": "MIT",
+      "author": "Michael Mclaughlin",
+      "homepage": "https://github.com/MikeMcl/decimal.js#readme",
+      "description": "An arbitrary-precision Decimal type for JavaScript."
+    },
+    {
+      "name": "deepmerge",
+      "versions": [
+        "4.3.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/deepmerge@4.3.1/node_modules/deepmerge"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/TehShrike/deepmerge",
+      "description": "A library for deep (recursive) merging of Javascript objects"
+    },
+    {
+      "name": "dequal",
+      "versions": [
+        "2.0.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/dequal@2.0.3/node_modules/dequal"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/dequal#readme",
+      "description": "A tiny (304B to 489B) utility for check for deep equality"
+    },
+    {
+      "name": "devalue",
+      "versions": [
+        "5.8.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/devalue@5.8.1/node_modules/devalue"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/sveltejs/devalue#readme",
+      "description": "Gets the job done when JSON.stringify can't"
+    },
+    {
+      "name": "enhanced-resolve",
+      "versions": [
+        "5.21.6"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/enhanced-resolve@5.21.6/node_modules/enhanced-resolve"
+      ],
+      "license": "MIT",
+      "author": "Tobias Koppers @sokra",
+      "homepage": "http://github.com/webpack/enhanced-resolve",
+      "description": "Offers a async require.resolve function. It's highly configurable."
+    },
+    {
+      "name": "es-module-lexer",
+      "versions": [
+        "2.3.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/es-module-lexer@2.3.0/node_modules/es-module-lexer"
+      ],
+      "license": "MIT",
+      "author": "Guy Bedford",
+      "homepage": "https://github.com/guybedford/es-module-lexer#readme",
+      "description": "Lexes ES modules returning their import/export metadata"
+    },
+    {
+      "name": "esm-env",
+      "versions": [
+        "1.2.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/esm-env@1.2.2/node_modules/esm-env"
+      ],
+      "license": "MIT",
+      "author": "Ben McCann",
+      "homepage": "https://github.com/benmccann/esm-env"
+    },
+    {
+      "name": "esrap",
+      "versions": [
+        "2.2.13"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/esrap@2.2.13/node_modules/esrap"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/sveltejs/esrap#readme",
+      "description": "Parse in reverse"
+    },
+    {
+      "name": "estree-walker",
+      "versions": [
+        "3.0.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/estree-walker@3.0.3/node_modules/estree-walker"
+      ],
+      "license": "MIT",
+      "author": "Rich Harris",
+      "homepage": "https://github.com/Rich-Harris/estree-walker#readme",
+      "description": "Traverse an ESTree-compliant AST"
+    },
+    {
+      "name": "fdir",
+      "versions": [
+        "6.5.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/fdir@6.5.0_picomatch@4.0.5/node_modules/fdir"
+      ],
+      "license": "MIT",
+      "author": "thecodrr",
+      "homepage": "https://github.com/thecodrr/fdir#readme",
+      "description": "The fastest directory crawler & globbing alternative to glob, fast-glob, & tiny-glob. Crawls 1m files in < 1s"
+    },
+    {
+      "name": "fflate",
+      "versions": [
+        "0.8.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/fflate@0.8.3/node_modules/fflate"
+      ],
+      "license": "MIT",
+      "author": "Arjun Barrett",
+      "homepage": "https://101arrowz.github.io/fflate",
+      "description": "High performance (de)compression in an 8kB package"
+    },
+    {
+      "name": "fsevents",
+      "versions": [
+        "2.3.2",
+        "2.3.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/fsevents@2.3.2/node_modules/fsevents",
+        "<repo>/web/node_modules/.pnpm/fsevents@2.3.3/node_modules/fsevents"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/fsevents/fsevents",
+      "description": "Native Access to MacOS FSEvents"
+    },
+    {
+      "name": "html-encoding-sniffer",
+      "versions": [
+        "6.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/html-encoding-sniffer@6.0.0/node_modules/html-encoding-sniffer"
+      ],
+      "license": "MIT",
+      "author": "Domenic Denicola",
+      "homepage": "https://github.com/jsdom/html-encoding-sniffer#readme",
+      "description": "Sniff the encoding from a HTML byte stream"
+    },
+    {
+      "name": "inline-style-parser",
+      "versions": [
+        "0.2.7"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/inline-style-parser@0.2.7/node_modules/inline-style-parser"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/remarkablemark/inline-style-parser#readme",
+      "description": "An inline style parser."
+    },
+    {
+      "name": "is-potential-custom-element-name",
+      "versions": [
+        "1.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/is-potential-custom-element-name@1.0.1/node_modules/is-potential-custom-element-name"
+      ],
+      "license": "MIT",
+      "author": "Mathias Bynens",
+      "homepage": "https://github.com/mathiasbynens/is-potential-custom-element-name",
+      "description": "Check whether a given string matches the `PotentialCustomElementName` production as defined in the HTML Standard."
+    },
+    {
+      "name": "is-reference",
+      "versions": [
+        "3.0.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/is-reference@3.0.3/node_modules/is-reference"
+      ],
+      "license": "MIT",
+      "author": "Rich Harris",
+      "homepage": "https://github.com/Rich-Harris/is-reference#readme",
+      "description": "Determine whether an AST node is a reference"
+    },
+    {
+      "name": "jiti",
+      "versions": [
+        "2.7.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/jiti@2.7.0/node_modules/jiti"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/unjs/jiti#readme",
+      "description": "Runtime typescript and ESM support for Node.js"
+    },
+    {
+      "name": "jsdom",
+      "versions": [
+        "29.1.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/jsdom@29.1.1/node_modules/jsdom"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/jsdom/jsdom#readme",
+      "description": "A JavaScript implementation of many web standards"
+    },
+    {
+      "name": "kleur",
+      "versions": [
+        "4.1.5"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/kleur@4.1.5/node_modules/kleur"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/kleur#readme",
+      "description": "The fastest Node.js library for formatting terminal text with ANSI colors~!"
+    },
+    {
+      "name": "locate-character",
+      "versions": [
+        "3.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/locate-character@3.0.0/node_modules/locate-character"
+      ],
+      "license": "MIT",
+      "author": "Rich Harris",
+      "homepage": "https://gitlab.com/Rich-Harris/locate-character#README",
+      "description": "Get the line and column number of a specific character in a string"
+    },
+    {
+      "name": "lz-string",
+      "versions": [
+        "1.5.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/lz-string@1.5.0/node_modules/lz-string"
+      ],
+      "license": "MIT",
+      "author": "pieroxy",
+      "homepage": "http://pieroxy.net/blog/pages/lz-string/index.html",
+      "description": "LZ-based compression algorithm"
+    },
+    {
+      "name": "magic-string",
+      "versions": [
+        "0.30.21"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/magic-string@0.30.21/node_modules/magic-string"
+      ],
+      "license": "MIT",
+      "author": "Rich Harris",
+      "homepage": "https://github.com/Rich-Harris/magic-string#readme",
+      "description": "Modify strings, generate sourcemaps"
+    },
+    {
+      "name": "marked",
+      "versions": [
+        "18.0.5"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/marked@18.0.5/node_modules/marked"
+      ],
+      "license": "MIT",
+      "author": "Christopher Jeffrey",
+      "homepage": "https://marked.js.org",
+      "description": "A markdown parser built for speed"
+    },
+    {
+      "name": "module-details-from-path",
+      "versions": [
+        "1.0.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/module-details-from-path@1.0.4/node_modules/module-details-from-path"
+      ],
+      "license": "MIT",
+      "author": "Thomas Watson",
+      "homepage": "https://github.com/watson/module-details-from-path#readme",
+      "description": "Resolve npm package details, like name and base path, given an absolute path to a file inside a package"
+    },
+    {
+      "name": "mri",
+      "versions": [
+        "1.2.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/mri@1.2.0/node_modules/mri"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/mri#readme",
+      "description": "Quickly scan for CLI flags and arguments"
+    },
+    {
+      "name": "mrmime",
+      "versions": [
+        "2.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/mrmime@2.0.1/node_modules/mrmime"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/mrmime#readme",
+      "description": "A tiny (2.8kB) and fast utility for getting a MIME type from an extension or filename"
+    },
+    {
+      "name": "ms",
+      "versions": [
+        "2.1.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/ms@2.1.3/node_modules/ms"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/vercel/ms#readme",
+      "description": "Tiny millisecond conversion utility"
+    },
+    {
+      "name": "nanoid",
+      "versions": [
+        "3.3.15"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/nanoid@3.3.15/node_modules/nanoid"
+      ],
+      "license": "MIT",
+      "author": "Andrey Sitnik",
+      "homepage": "https://github.com/ai/nanoid#readme",
+      "description": "A tiny (116 bytes), secure URL-friendly unique string ID generator"
+    },
+    {
+      "name": "obug",
+      "versions": [
+        "2.1.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/obug@2.1.3/node_modules/obug"
+      ],
+      "license": "MIT",
+      "author": "Kevin Deng",
+      "homepage": "https://github.com/sxzz/obug#readme",
+      "description": "A lightweight JavaScript debugging utility, forked from debug, featuring TypeScript and ESM support."
+    },
+    {
+      "name": "paneforge",
+      "versions": [
+        "1.0.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/paneforge@1.0.2_svelte@5.56.4/node_modules/paneforge"
+      ],
+      "license": "MIT",
+      "author": "Hunter Johnston",
+      "homepage": "https://github.com/svecosystem/paneforge#readme"
+    },
+    {
+      "name": "parse5",
+      "versions": [
+        "8.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/parse5@8.0.1/node_modules/parse5"
+      ],
+      "license": "MIT",
+      "author": "Ivan Nikulin",
+      "homepage": "https://parse5.js.org",
+      "description": "HTML parser and serializer."
+    },
+    {
+      "name": "pathe",
+      "versions": [
+        "2.0.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pathe@2.0.3/node_modules/pathe"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/unjs/pathe#readme",
+      "description": "Universal filesystem path utils"
+    },
+    {
+      "name": "pg",
+      "versions": [
+        "8.22.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pg@8.22.0/node_modules/pg"
+      ],
+      "license": "MIT",
+      "author": "Brian Carlson",
+      "homepage": "https://github.com/brianc/node-postgres",
+      "description": "PostgreSQL client - pure javascript & libpq with the same API"
+    },
+    {
+      "name": "pg-cloudflare",
+      "versions": [
+        "1.4.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pg-cloudflare@1.4.0/node_modules/pg-cloudflare"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/brianc/node-postgres#readme",
+      "description": "A socket implementation that can run on Cloudflare Workers using native TCP connections."
+    },
+    {
+      "name": "pg-connection-string",
+      "versions": [
+        "2.14.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pg-connection-string@2.14.0/node_modules/pg-connection-string"
+      ],
+      "license": "MIT",
+      "author": "Blaine Bublitz",
+      "homepage": "https://github.com/brianc/node-postgres/tree/master/packages/pg-connection-string",
+      "description": "Functions for dealing with a PostgreSQL connection string"
+    },
+    {
+      "name": "pg-pool",
+      "versions": [
+        "3.14.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pg-pool@3.14.0_pg@8.22.0/node_modules/pg-pool"
+      ],
+      "license": "MIT",
+      "author": "Brian M. Carlson",
+      "homepage": "https://github.com/brianc/node-postgres/tree/master/packages/pg-pool#readme",
+      "description": "Connection pool for node-postgres"
+    },
+    {
+      "name": "pg-protocol",
+      "versions": [
+        "1.15.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pg-protocol@1.15.0/node_modules/pg-protocol"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/brianc/node-postgres#readme",
+      "description": "The postgres client/server binary protocol, implemented in TypeScript"
+    },
+    {
+      "name": "pg-types",
+      "versions": [
+        "2.2.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pg-types@2.2.0/node_modules/pg-types"
+      ],
+      "license": "MIT",
+      "author": "Brian M. Carlson",
+      "homepage": "https://github.com/brianc/node-pg-types",
+      "description": "Query result type converters for node-postgres"
+    },
+    {
+      "name": "pgpass",
+      "versions": [
+        "1.0.5"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pgpass@1.0.5/node_modules/pgpass"
+      ],
+      "license": "MIT",
+      "author": "Hannes Hörl",
+      "homepage": "https://github.com/hoegaarden/pgpass#readme",
+      "description": "Module for reading .pgpass"
+    },
+    {
+      "name": "picomatch",
+      "versions": [
+        "4.0.5"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/picomatch@4.0.5/node_modules/picomatch"
+      ],
+      "license": "MIT",
+      "author": "Jon Schlinkert",
+      "homepage": "https://github.com/micromatch/picomatch",
+      "description": "Blazing fast and accurate glob matcher written in JavaScript, with no dependencies and full support for standard and extended Bash glob features, including braces, extglobs, POSIX brackets, and regular expressions."
+    },
+    {
+      "name": "postcss",
+      "versions": [
+        "8.5.16"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/postcss@8.5.16/node_modules/postcss"
+      ],
+      "license": "MIT",
+      "author": "Andrey Sitnik",
+      "homepage": "https://postcss.org/",
+      "description": "Tool for transforming styles with JS plugins"
+    },
+    {
+      "name": "postgres-array",
+      "versions": [
+        "2.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/postgres-array@2.0.0/node_modules/postgres-array"
+      ],
+      "license": "MIT",
+      "author": "Ben Drucker",
+      "homepage": "https://github.com/bendrucker/postgres-array#readme",
+      "description": "Parse postgres array columns"
+    },
+    {
+      "name": "postgres-bytea",
+      "versions": [
+        "1.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/postgres-bytea@1.0.1/node_modules/postgres-bytea"
+      ],
+      "license": "MIT",
+      "author": "Ben Drucker",
+      "homepage": "https://github.com/bendrucker/postgres-bytea#readme",
+      "description": "Postgres bytea parser"
+    },
+    {
+      "name": "postgres-date",
+      "versions": [
+        "1.0.7"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/postgres-date@1.0.7/node_modules/postgres-date"
+      ],
+      "license": "MIT",
+      "author": "Ben Drucker",
+      "homepage": "https://github.com/bendrucker/postgres-date#readme",
+      "description": "Postgres date column parser"
+    },
+    {
+      "name": "postgres-interval",
+      "versions": [
+        "1.2.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/postgres-interval@1.2.0/node_modules/postgres-interval"
+      ],
+      "license": "MIT",
+      "author": "Ben Drucker",
+      "homepage": "https://github.com/bendrucker/postgres-interval#readme",
+      "description": "Parse Postgres interval columns"
+    },
+    {
+      "name": "punycode",
+      "versions": [
+        "2.3.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/punycode@2.3.1/node_modules/punycode"
+      ],
+      "license": "MIT",
+      "author": "Mathias Bynens",
+      "homepage": "https://mths.be/punycode",
+      "description": "A robust Punycode converter that fully complies to RFC 3492 and RFC 5891, and works on nearly all JavaScript platforms."
+    },
+    {
+      "name": "readdirp",
+      "versions": [
+        "4.1.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/readdirp@4.1.2/node_modules/readdirp"
+      ],
+      "license": "MIT",
+      "author": "Thorsten Lorenz",
+      "homepage": "https://github.com/paulmillr/readdirp",
+      "description": "Recursive version of fs.readdir with small RAM & CPU footprint."
+    },
+    {
+      "name": "require-from-string",
+      "versions": [
+        "2.0.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/require-from-string@2.0.2/node_modules/require-from-string"
+      ],
+      "license": "MIT",
+      "author": "Vsevolod Strukchinsky",
+      "homepage": "https://github.com/floatdrop/require-from-string#readme",
+      "description": "Require module from string"
+    },
+    {
+      "name": "require-in-the-middle",
+      "versions": [
+        "8.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/require-in-the-middle@8.0.1/node_modules/require-in-the-middle"
+      ],
+      "license": "MIT",
+      "author": "Thomas Watson Steen",
+      "homepage": "https://github.com/nodejs/require-in-the-middle#readme",
+      "description": "Module to hook into the Node.js require function"
+    },
+    {
+      "name": "rolldown",
+      "versions": [
+        "1.1.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/rolldown@1.1.4/node_modules/rolldown"
+      ],
+      "license": "MIT",
+      "homepage": "https://rolldown.rs/",
+      "description": "Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API."
+    },
+    {
+      "name": "runed",
+      "versions": [
+        "0.23.4",
+        "0.29.2",
+        "0.35.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/runed@0.23.4_svelte@5.56.4/node_modules/runed",
+        "<repo>/web/node_modules/.pnpm/runed@0.29.2_svelte@5.56.4/node_modules/runed",
+        "<repo>/web/node_modules/.pnpm/runed@0.35.1_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plugin-svelte_4fc084f79175d1664da6bf129abf11cc/node_modules/runed"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/svecosystem/runed#readme"
+    },
+    {
+      "name": "sade",
+      "versions": [
+        "1.8.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/sade@1.8.1/node_modules/sade"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/sade#readme",
+      "description": "Smooth (CLI) operator 🎶"
+    },
+    {
+      "name": "set-cookie-parser",
+      "versions": [
+        "3.1.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/set-cookie-parser@3.1.1/node_modules/set-cookie-parser"
+      ],
+      "license": "MIT",
+      "author": "Nathan Friedly",
+      "homepage": "https://github.com/nfriedly/set-cookie-parser",
+      "description": "Parses set-cookie headers into objects"
+    },
+    {
+      "name": "sirv",
+      "versions": [
+        "3.0.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/sirv@3.0.2/node_modules/sirv"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/sirv#readme",
+      "description": "The optimized & lightweight middleware for serving requests to static assets"
+    },
+    {
+      "name": "stackback",
+      "versions": [
+        "0.0.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/stackback@0.0.2/node_modules/stackback"
+      ],
+      "license": "MIT",
+      "author": "Roman Shtylman",
+      "homepage": "https://github.com/shtylman/node-stackback#readme",
+      "description": "return list of CallSite objects from a captured stacktrace"
+    },
+    {
+      "name": "std-env",
+      "versions": [
+        "4.1.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/std-env@4.1.0/node_modules/std-env"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/unjs/std-env#readme",
+      "description": "Runtime agnostic JS utils"
+    },
+    {
+      "name": "style-to-object",
+      "versions": [
+        "1.0.14"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/style-to-object@1.0.14/node_modules/style-to-object"
+      ],
+      "license": "MIT",
+      "author": "Mark",
+      "homepage": "https://github.com/remarkablemark/style-to-object#readme",
+      "description": "Parse CSS inline style to JavaScript object."
+    },
+    {
+      "name": "svelte",
+      "versions": [
+        "5.56.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/svelte@5.56.4/node_modules/svelte"
+      ],
+      "license": "MIT",
+      "homepage": "https://svelte.dev",
+      "description": "Cybernetically enhanced web apps"
+    },
+    {
+      "name": "svelte-check",
+      "versions": [
+        "4.7.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/svelte-check@4.7.1_picomatch@4.0.5_svelte@5.56.4_typescript@6.0.3/node_modules/svelte-check"
+      ],
+      "license": "MIT",
+      "author": "The Svelte Community",
+      "homepage": "https://github.com/sveltejs/language-tools#readme",
+      "description": "Svelte Code Checker Terminal Interface"
+    },
+    {
+      "name": "svelte-toolbelt",
+      "versions": [
+        "0.9.3",
+        "0.10.6"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/svelte-toolbelt@0.9.3_svelte@5.56.4/node_modules/svelte-toolbelt",
+        "<repo>/web/node_modules/.pnpm/svelte-toolbelt@0.10.6_@sveltejs+kit@2.69.1_@opentelemetry+api@1.9.1_@sveltejs+vite-plu_e51770a5a8302fbb811e4c4c4aa85a5d/node_modules/svelte-toolbelt"
+      ],
+      "license": "MIT"
+    },
+    {
+      "name": "symbol-tree",
+      "versions": [
+        "3.2.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/symbol-tree@3.2.4/node_modules/symbol-tree"
+      ],
+      "license": "MIT",
+      "author": "Joris van der Wel",
+      "homepage": "https://github.com/jsdom/js-symbol-tree#symbol-tree",
+      "description": "Turn any collection of objects into its own efficient tree or linked list using Symbol"
+    },
+    {
+      "name": "tabbable",
+      "versions": [
+        "6.5.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tabbable@6.5.0/node_modules/tabbable"
+      ],
+      "license": "MIT",
+      "author": "David Clark",
+      "homepage": "https://github.com/focus-trap/tabbable#readme",
+      "description": "Returns an array of all tabbable DOM nodes within a containing node."
+    },
+    {
+      "name": "tailwind-merge",
+      "versions": [
+        "3.6.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tailwind-merge@3.6.0/node_modules/tailwind-merge"
+      ],
+      "license": "MIT",
+      "author": "Dany Castillo",
+      "homepage": "https://github.com/dcastil/tailwind-merge",
+      "description": "Merge Tailwind CSS classes without style conflicts"
+    },
+    {
+      "name": "tailwind-variants",
+      "versions": [
+        "3.2.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tailwind-variants@3.2.2_tailwind-merge@3.6.0_tailwindcss@4.3.2/node_modules/tailwind-variants"
+      ],
+      "license": "MIT",
+      "author": "Junior Garcia",
+      "homepage": "https://github.com/heroui-inc/tailwind-variants#readme",
+      "description": "🦄 Tailwindcss first-class variant API"
+    },
+    {
+      "name": "tailwindcss",
+      "versions": [
+        "4.3.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tailwindcss@4.3.2/node_modules/tailwindcss"
+      ],
+      "license": "MIT",
+      "homepage": "https://tailwindcss.com",
+      "description": "A utility-first CSS framework for rapidly building custom user interfaces."
+    },
+    {
+      "name": "tapable",
+      "versions": [
+        "2.3.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tapable@2.3.3/node_modules/tapable"
+      ],
+      "license": "MIT",
+      "author": "Tobias Koppers @sokra",
+      "homepage": "https://github.com/webpack/tapable",
+      "description": "Just a little module for plugins."
+    },
+    {
+      "name": "tinybench",
+      "versions": [
+        "2.9.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tinybench@2.9.0/node_modules/tinybench"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tinylibs/tinybench#readme"
+    },
+    {
+      "name": "tinyexec",
+      "versions": [
+        "1.2.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tinyexec@1.2.4/node_modules/tinyexec"
+      ],
+      "license": "MIT",
+      "author": "James Garbutt",
+      "homepage": "https://github.com/tinylibs/tinyexec#readme",
+      "description": "A minimal library for executing processes in Node"
+    },
+    {
+      "name": "tinyglobby",
+      "versions": [
+        "0.2.17"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tinyglobby@0.2.17/node_modules/tinyglobby"
+      ],
+      "license": "MIT",
+      "author": "Superchupu",
+      "homepage": "https://superchupu.dev/tinyglobby",
+      "description": "A fast and minimal alternative to globby and fast-glob"
+    },
+    {
+      "name": "tinyrainbow",
+      "versions": [
+        "3.1.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tinyrainbow@3.1.0/node_modules/tinyrainbow"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/tinylibs/tinyrainbow#readme",
+      "description": "A small library to print colourful messages."
+    },
+    {
+      "name": "tldts",
+      "versions": [
+        "7.4.6"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tldts@7.4.6/node_modules/tldts"
+      ],
+      "license": "MIT",
+      "author": "Rémi Berson",
+      "homepage": "https://github.com/remusao/tldts#readme",
+      "description": "Library to work against complex domain names, subdomains and URIs."
+    },
+    {
+      "name": "tldts-core",
+      "versions": [
+        "7.4.6"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tldts-core@7.4.6/node_modules/tldts-core"
+      ],
+      "license": "MIT",
+      "author": "Rémi Berson",
+      "homepage": "https://github.com/remusao/tldts#readme",
+      "description": "tldts core primitives (internal module)"
+    },
+    {
+      "name": "totalist",
+      "versions": [
+        "3.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/totalist@3.0.1/node_modules/totalist"
+      ],
+      "license": "MIT",
+      "author": "Luke Edwards",
+      "homepage": "https://github.com/lukeed/totalist#readme",
+      "description": "A tiny (195B to 220B) utility to recursively list all (total) files in a directory"
+    },
+    {
+      "name": "tr46",
+      "versions": [
+        "6.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tr46@6.0.0/node_modules/tr46"
+      ],
+      "license": "MIT",
+      "author": "Sebastian Mayr",
+      "homepage": "https://github.com/jsdom/tr46#readme",
+      "description": "An implementation of the Unicode UTS #46: Unicode IDNA Compatibility Processing"
+    },
+    {
+      "name": "undici",
+      "versions": [
+        "7.28.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/undici@7.28.0/node_modules/undici"
+      ],
+      "license": "MIT",
+      "homepage": "https://undici.nodejs.org",
+      "description": "An HTTP/1.1 client, written from scratch for Node.js"
+    },
+    {
+      "name": "undici-types",
+      "versions": [
+        "7.24.6"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/undici-types@7.24.6/node_modules/undici-types"
+      ],
+      "license": "MIT",
+      "homepage": "https://undici.nodejs.org",
+      "description": "A stand-alone types package for Undici"
+    },
+    {
+      "name": "vite",
+      "versions": [
+        "8.1.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/vite@8.1.3_@types+node@25.9.4_jiti@2.7.0/node_modules/vite"
+      ],
+      "license": "MIT",
+      "author": "Evan You",
+      "homepage": "https://vite.dev",
+      "description": "Native-ESM powered web dev build tool"
+    },
+    {
+      "name": "vitefu",
+      "versions": [
+        "1.1.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/vitefu@1.1.3_vite@8.1.3_@types+node@25.9.4_jiti@2.7.0_/node_modules/vitefu"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/svitejs/vitefu#readme",
+      "description": "Utilities for building frameworks with Vite"
+    },
+    {
+      "name": "vitest",
+      "versions": [
+        "4.1.9"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/vitest@4.1.9_@opentelemetry+api@1.9.1_@types+node@25.9.4_@vitest+ui@4.1.9_jsdom@29.1.1__1c6cc233f50dca84ab17b0def1bdae83/node_modules/vitest"
+      ],
+      "license": "MIT",
+      "author": "Anthony Fu",
+      "homepage": "https://vitest.dev",
+      "description": "Next generation testing framework powered by Vite"
+    },
+    {
+      "name": "w3c-xmlserializer",
+      "versions": [
+        "5.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/w3c-xmlserializer@5.0.0/node_modules/w3c-xmlserializer"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/jsdom/w3c-xmlserializer#readme",
+      "description": "A per-spec XML serializer implementation"
+    },
+    {
+      "name": "whatwg-mimetype",
+      "versions": [
+        "5.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/whatwg-mimetype@5.0.0/node_modules/whatwg-mimetype"
+      ],
+      "license": "MIT",
+      "author": "Domenic Denicola",
+      "homepage": "https://github.com/jsdom/whatwg-mimetype#readme",
+      "description": "Parses, serializes, and manipulates MIME types, according to the WHATWG MIME Sniffing Standard"
+    },
+    {
+      "name": "whatwg-url",
+      "versions": [
+        "16.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/whatwg-url@16.0.1/node_modules/whatwg-url"
+      ],
+      "license": "MIT",
+      "author": "Sebastian Mayr",
+      "homepage": "https://github.com/jsdom/whatwg-url#readme",
+      "description": "An implementation of the WHATWG URL Standard's URL API and parsing machinery"
+    },
+    {
+      "name": "why-is-node-running",
+      "versions": [
+        "2.3.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/why-is-node-running@2.3.0/node_modules/why-is-node-running"
+      ],
+      "license": "MIT",
+      "author": "Mathias Buus",
+      "homepage": "https://github.com/mafintosh/why-is-node-running",
+      "description": "Node is running but you don't know why? why-is-node-running is here to help you."
+    },
+    {
+      "name": "xmlchars",
+      "versions": [
+        "2.2.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/xmlchars@2.2.0/node_modules/xmlchars"
+      ],
+      "license": "MIT",
+      "author": "Louis-Dominique Dubeau",
+      "homepage": "https://github.com/lddubeau/xmlchars#readme",
+      "description": "Utilities for determining if characters belong to character classes defined by the XML specs."
+    },
+    {
+      "name": "xtend",
+      "versions": [
+        "4.0.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/xtend@4.0.2/node_modules/xtend"
+      ],
+      "license": "MIT",
+      "author": "Raynos",
+      "homepage": "https://github.com/Raynos/xtend",
+      "description": "extend like a boss"
+    },
+    {
+      "name": "zimmerframe",
+      "versions": [
+        "1.1.4"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/zimmerframe@1.1.4/node_modules/zimmerframe"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/sveltejs/zimmerframe#readme",
+      "description": "A tool for walking ASTs"
+    }
+  ],
+  "(Apache-2.0 AND BSD-3-Clause)": [
+    {
+      "name": "@bufbuild/protobuf",
+      "versions": [
+        "2.12.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf"
+      ],
+      "license": "(Apache-2.0 AND BSD-3-Clause)",
+      "homepage": "https://protobufes.com/",
+      "description": "Protocol Buffers for ECMAScript. The only JavaScript Protobuf library that is fully-compliant with Protobuf conformance tests."
+    }
+  ],
+  "Apache-2.0": [
+    {
+      "name": "@bufbuild/protoc-gen-es",
+      "versions": [
+        "2.12.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@bufbuild+protoc-gen-es@2.12.1_@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protoc-gen-es"
+      ],
+      "license": "Apache-2.0",
+      "homepage": "https://protobufes.com/",
+      "description": "Protocol Buffers code generator for ECMAScript"
+    },
+    {
+      "name": "@bufbuild/protoplugin",
+      "versions": [
+        "2.12.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@bufbuild+protoplugin@2.12.1/node_modules/@bufbuild/protoplugin"
+      ],
+      "license": "Apache-2.0",
+      "homepage": "https://protobufes.com/",
+      "description": "Helps to create your own Protocol Buffers code generators."
+    },
+    {
+      "name": "@connectrpc/connect",
+      "versions": [
+        "2.1.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect"
+      ],
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/connectrpc/connect-es#readme",
+      "description": "Type-safe APIs with Protobuf and TypeScript."
+    },
+    {
+      "name": "@connectrpc/connect-web",
+      "versions": [
+        "2.1.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@connectrpc+connect-web@2.1.2_@bufbuild+protobuf@2.12.1_@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1_/node_modules/@connectrpc/connect-web"
+      ],
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/connectrpc/connect-es#readme"
+    },
+    {
+      "name": "@internationalized/date",
+      "versions": [
+        "3.12.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@internationalized+date@3.12.2/node_modules/@internationalized/date"
+      ],
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/adobe/react-spectrum/tree/main#readme",
+      "description": "Internationalized calendar, date, and time manipulation utilities"
+    },
+    {
+      "name": "@opentelemetry/api",
+      "versions": [
+        "1.9.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+api@1.9.1/node_modules/@opentelemetry/api"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/api",
+      "description": "Public API for OpenTelemetry"
+    },
+    {
+      "name": "@opentelemetry/api-logs",
+      "versions": [
+        "0.220.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+api-logs@0.220.0/node_modules/@opentelemetry/api-logs"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/experimental/packages/api-logs",
+      "description": "Public logs API for OpenTelemetry"
+    },
+    {
+      "name": "@opentelemetry/core",
+      "versions": [
+        "2.9.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+core@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/core"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-core",
+      "description": "OpenTelemetry Core provides constants and utilities shared by all OpenTelemetry SDK packages."
+    },
+    {
+      "name": "@opentelemetry/exporter-trace-otlp-http",
+      "versions": [
+        "0.220.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+exporter-trace-otlp-http@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/exporter-trace-otlp-http"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/experimental/packages/exporter-trace-otlp-http",
+      "description": "OpenTelemetry Collector Trace Exporter allows user to send collected traces to the OpenTelemetry Collector"
+    },
+    {
+      "name": "@opentelemetry/instrumentation",
+      "versions": [
+        "0.220.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+instrumentation@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/instrumentation"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/experimental/packages/opentelemetry-instrumentation",
+      "description": "Base class for node which OpenTelemetry instrumentation modules extend"
+    },
+    {
+      "name": "@opentelemetry/instrumentation-fetch",
+      "versions": [
+        "0.220.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+instrumentation-fetch@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/instrumentation-fetch"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/experimental/packages/opentelemetry-instrumentation-fetch",
+      "description": "OpenTelemetry instrumentation for fetch http client in web browsers"
+    },
+    {
+      "name": "@opentelemetry/otlp-exporter-base",
+      "versions": [
+        "0.220.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+otlp-exporter-base@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/otlp-exporter-base"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/experimental/packages/otlp-exporter-base",
+      "description": "OpenTelemetry OTLP Exporter base (for internal use only)"
+    },
+    {
+      "name": "@opentelemetry/otlp-transformer",
+      "versions": [
+        "0.220.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+otlp-transformer@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/otlp-transformer"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/experimental/packages/otlp-transformer",
+      "description": "Transform OpenTelemetry SDK data into OTLP"
+    },
+    {
+      "name": "@opentelemetry/resources",
+      "versions": [
+        "2.9.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+resources@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/resources"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-resources",
+      "description": "OpenTelemetry SDK resources"
+    },
+    {
+      "name": "@opentelemetry/sdk-logs",
+      "versions": [
+        "0.220.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-logs@0.220.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-logs"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/experimental/packages/sdk-logs",
+      "description": "OpenTelemetry logs SDK"
+    },
+    {
+      "name": "@opentelemetry/sdk-metrics",
+      "versions": [
+        "2.9.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-metrics@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-metrics"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/sdk-metrics",
+      "description": "OpenTelemetry metrics SDK"
+    },
+    {
+      "name": "@opentelemetry/sdk-trace",
+      "versions": [
+        "2.9.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-trace@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/sdk-trace",
+      "description": "OpenTelemetry Tracing"
+    },
+    {
+      "name": "@opentelemetry/sdk-trace-base",
+      "versions": [
+        "2.9.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-trace-base@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace-base"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-sdk-trace-base",
+      "description": "OpenTelemetry Tracing"
+    },
+    {
+      "name": "@opentelemetry/sdk-trace-web",
+      "versions": [
+        "2.9.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+sdk-trace-web@2.9.0_@opentelemetry+api@1.9.1/node_modules/@opentelemetry/sdk-trace-web"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-sdk-trace-web",
+      "description": "OpenTelemetry Web Tracer"
+    },
+    {
+      "name": "@opentelemetry/semantic-conventions",
+      "versions": [
+        "1.41.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@opentelemetry+semantic-conventions@1.41.1/node_modules/@opentelemetry/semantic-conventions"
+      ],
+      "license": "Apache-2.0",
+      "author": "OpenTelemetry Authors",
+      "homepage": "https://github.com/open-telemetry/opentelemetry-js/tree/main/semantic-conventions",
+      "description": "OpenTelemetry semantic conventions"
+    },
+    {
+      "name": "@playwright/test",
+      "versions": [
+        "1.61.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@playwright+test@1.61.1/node_modules/@playwright/test"
+      ],
+      "license": "Apache-2.0",
+      "author": "Microsoft Corporation",
+      "homepage": "https://playwright.dev",
+      "description": "A high-level API to automate web browsers"
+    },
+    {
+      "name": "@swc/helpers",
+      "versions": [
+        "0.5.23"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@swc+helpers@0.5.23/node_modules/@swc/helpers"
+      ],
+      "license": "Apache-2.0",
+      "author": "강동윤",
+      "homepage": "https://swc.rs",
+      "description": "External helpers for the swc project."
+    },
+    {
+      "name": "aria-query",
+      "versions": [
+        "5.3.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/aria-query@5.3.1/node_modules/aria-query"
+      ],
+      "license": "Apache-2.0",
+      "author": "Jesse Beach",
+      "homepage": "https://github.com/A11yance/aria-query#readme",
+      "description": "Programmatic access to the ARIA specification"
+    },
+    {
+      "name": "axobject-query",
+      "versions": [
+        "4.1.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/axobject-query@4.1.0/node_modules/axobject-query"
+      ],
+      "license": "Apache-2.0",
+      "author": "Jesse Beach",
+      "homepage": "https://github.com/A11yance/axobject-query#readme",
+      "description": "Programmatic access to information about the AXObject Model"
+    },
+    {
+      "name": "detect-libc",
+      "versions": [
+        "2.1.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/detect-libc@2.1.2/node_modules/detect-libc"
+      ],
+      "license": "Apache-2.0",
+      "author": "Lovell Fuller",
+      "homepage": "https://github.com/lovell/detect-libc#readme",
+      "description": "Node.js module to detect the C standard library (libc) implementation family and version"
+    },
+    {
+      "name": "expect-type",
+      "versions": [
+        "1.4.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/expect-type@1.4.0/node_modules/expect-type"
+      ],
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/mmkal/expect-type#readme"
+    },
+    {
+      "name": "import-in-the-middle",
+      "versions": [
+        "3.3.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/import-in-the-middle@3.3.0/node_modules/import-in-the-middle"
+      ],
+      "license": "Apache-2.0",
+      "author": "Bryan English",
+      "homepage": "https://github.com/nodejs/import-in-the-middle#readme",
+      "description": "Intercept imports in Node.js"
+    },
+    {
+      "name": "playwright",
+      "versions": [
+        "1.61.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/playwright@1.61.1/node_modules/playwright"
+      ],
+      "license": "Apache-2.0",
+      "author": "Microsoft Corporation",
+      "homepage": "https://playwright.dev",
+      "description": "A high-level API to automate web browsers"
+    },
+    {
+      "name": "playwright-core",
+      "versions": [
+        "1.61.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/playwright-core@1.61.1/node_modules/playwright-core"
+      ],
+      "license": "Apache-2.0",
+      "author": "Microsoft Corporation",
+      "homepage": "https://playwright.dev",
+      "description": "A high-level API to automate web browsers"
+    },
+    {
+      "name": "typescript",
+      "versions": [
+        "5.4.5",
+        "6.0.3"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/typescript@5.4.5/node_modules/typescript",
+        "<repo>/web/node_modules/.pnpm/typescript@6.0.3/node_modules/typescript"
+      ],
+      "license": "Apache-2.0",
+      "author": "Microsoft Corp.",
+      "homepage": "https://www.typescriptlang.org/",
+      "description": "TypeScript is a language for application scale JavaScript development"
+    },
+    {
+      "name": "xml-name-validator",
+      "versions": [
+        "5.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/xml-name-validator@5.0.0/node_modules/xml-name-validator"
+      ],
+      "license": "Apache-2.0",
+      "author": "Domenic Denicola",
+      "homepage": "https://github.com/jsdom/xml-name-validator#readme",
+      "description": "Validates whether a string matches the production for an XML name or qualified name"
+    }
+  ],
+  "MIT-0": [
+    {
+      "name": "@csstools/color-helpers",
+      "versions": [
+        "6.1.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@csstools+color-helpers@6.1.0/node_modules/@csstools/color-helpers"
+      ],
+      "license": "MIT-0",
+      "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/color-helpers#readme",
+      "description": "Color helpers to ease transformation between formats, gamut, etc"
+    },
+    {
+      "name": "@csstools/css-syntax-patches-for-csstree",
+      "versions": [
+        "1.1.6"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@csstools+css-syntax-patches-for-csstree@1.1.6_css-tree@3.2.1/node_modules/@csstools/css-syntax-patches-for-csstree"
+      ],
+      "license": "MIT-0",
+      "homepage": "https://github.com/csstools/postcss-plugins/tree/main/packages/css-syntax-patches-for-csstree#readme",
+      "description": "CSS syntax patches for CSS tree"
+    }
+  ],
+  "ISC": [
+    {
+      "name": "@lucide/svelte",
+      "versions": [
+        "1.23.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/@lucide+svelte@1.23.0_svelte@5.56.4/node_modules/@lucide/svelte"
+      ],
+      "license": "ISC",
+      "author": "Eric Fennis",
+      "homepage": "https://lucide.dev",
+      "description": "A Lucide icon library package for Svelte applications."
+    },
+    {
+      "name": "flatted",
+      "versions": [
+        "3.4.2"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/flatted@3.4.2/node_modules/flatted"
+      ],
+      "license": "ISC",
+      "author": "Andrea Giammarchi",
+      "homepage": "https://github.com/WebReflection/flatted#readme",
+      "description": "A super light and fast circular JSON parser."
+    },
+    {
+      "name": "graceful-fs",
+      "versions": [
+        "4.2.11"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/graceful-fs@4.2.11/node_modules/graceful-fs"
+      ],
+      "license": "ISC",
+      "homepage": "https://github.com/isaacs/node-graceful-fs#readme",
+      "description": "A drop-in replacement for fs, making various improvements."
+    },
+    {
+      "name": "pg-int8",
+      "versions": [
+        "1.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/pg-int8@1.0.1/node_modules/pg-int8"
+      ],
+      "license": "ISC",
+      "homepage": "https://github.com/charmander/pg-int8#readme",
+      "description": "64-bit big-endian signed integer-to-string conversion"
+    },
+    {
+      "name": "picocolors",
+      "versions": [
+        "1.1.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/picocolors@1.1.1/node_modules/picocolors"
+      ],
+      "license": "ISC",
+      "author": "Alexey Raspopov",
+      "homepage": "https://github.com/alexeyraspopov/picocolors#readme",
+      "description": "The tiniest and the fastest library for terminal output formatting with ANSI colors"
+    },
+    {
+      "name": "saxes",
+      "versions": [
+        "6.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/saxes@6.0.0/node_modules/saxes"
+      ],
+      "license": "ISC",
+      "author": "Louis-Dominique Dubeau",
+      "homepage": "https://github.com/lddubeau/saxes#readme",
+      "description": "An evented streaming XML parser in JavaScript"
+    },
+    {
+      "name": "siginfo",
+      "versions": [
+        "2.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/siginfo@2.0.0/node_modules/siginfo"
+      ],
+      "license": "ISC",
+      "author": "Emil Bay",
+      "homepage": "https://github.com/emilbayes/siginfo#readme",
+      "description": "Utility module to print pretty messages on SIGINFO/SIGUSR1"
+    },
+    {
+      "name": "split2",
+      "versions": [
+        "4.2.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/split2@4.2.0/node_modules/split2"
+      ],
+      "license": "ISC",
+      "author": "Matteo Collina",
+      "homepage": "https://github.com/mcollina/split2#readme",
+      "description": "split a Text Stream into a Line Stream, using Stream 3"
+    }
+  ],
+  "(MPL-2.0 OR Apache-2.0)": [
+    {
+      "name": "dompurify",
+      "versions": [
+        "3.4.11"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/dompurify@3.4.11/node_modules/dompurify"
+      ],
+      "license": "(MPL-2.0 OR Apache-2.0)",
+      "author": "Dr.-Ing. Mario Heiderich, Cure53",
+      "homepage": "https://github.com/cure53/DOMPurify",
+      "description": "DOMPurify is a DOM-only, super-fast, uber-tolerant XSS sanitizer for HTML, MathML and SVG. It runs as JavaScript and works in all modern browsers, as well as in Node.js (via jsdom). DOMPurify is written by security people who have vast background in web attacks and XSS. Fear not."
+    }
+  ],
+  "BSD-2-Clause": [
+    {
+      "name": "entities",
+      "versions": [
+        "8.0.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/entities@8.0.0/node_modules/entities"
+      ],
+      "license": "BSD-2-Clause",
+      "author": "Felix Boehm",
+      "homepage": "https://github.com/fb55/entities#readme",
+      "description": "Encode & decode XML and HTML entities with ease & speed"
+    },
+    {
+      "name": "webidl-conversions",
+      "versions": [
+        "8.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/webidl-conversions@8.0.1/node_modules/webidl-conversions"
+      ],
+      "license": "BSD-2-Clause",
+      "author": "Domenic Denicola",
+      "homepage": "https://github.com/jsdom/webidl-conversions#readme",
+      "description": "Implements the WebIDL algorithms for converting to and from JavaScript values"
+    }
+  ],
+  "MPL-2.0": [
+    {
+      "name": "lightningcss",
+      "versions": [
+        "1.32.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/lightningcss@1.32.0/node_modules/lightningcss"
+      ],
+      "license": "MPL-2.0",
+      "homepage": "https://github.com/parcel-bundler/lightningcss#readme",
+      "description": "A CSS parser, transformer, and minifier written in Rust"
+    },
+    {
+      "name": "lightningcss-darwin-arm64",
+      "versions": [
+        "1.32.0"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/lightningcss-darwin-arm64@1.32.0/node_modules/lightningcss-darwin-arm64"
+      ],
+      "license": "MPL-2.0",
+      "homepage": "https://github.com/parcel-bundler/lightningcss#readme",
+      "description": "A CSS parser, transformer, and minifier written in Rust"
+    }
+  ],
+  "BlueOak-1.0.0": [
+    {
+      "name": "lru-cache",
+      "versions": [
+        "11.5.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/lru-cache@11.5.1/node_modules/lru-cache"
+      ],
+      "license": "BlueOak-1.0.0",
+      "author": "Isaac Z. Schlueter",
+      "homepage": "https://github.com/isaacs/node-lru-cache#readme",
+      "description": "A cache object that deletes the least-recently-used items."
+    }
+  ],
+  "CC0-1.0": [
+    {
+      "name": "mdn-data",
+      "versions": [
+        "2.27.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/mdn-data@2.27.1/node_modules/mdn-data"
+      ],
+      "license": "CC0-1.0",
+      "author": "Mozilla Developer Network",
+      "homepage": "https://developer.mozilla.org",
+      "description": "Open Web data by the Mozilla Developer Network"
+    }
+  ],
+  "BSD-3-Clause": [
+    {
+      "name": "source-map-js",
+      "versions": [
+        "1.2.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/source-map-js@1.2.1/node_modules/source-map-js"
+      ],
+      "license": "BSD-3-Clause",
+      "author": "Valentin 7rulnik Semirulnik",
+      "homepage": "https://github.com/7rulnik/source-map-js",
+      "description": "Generates and consumes source maps"
+    },
+    {
+      "name": "tough-cookie",
+      "versions": [
+        "6.0.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tough-cookie@6.0.1/node_modules/tough-cookie"
+      ],
+      "license": "BSD-3-Clause",
+      "author": "Jeremy Stashewsky",
+      "homepage": "https://github.com/salesforce/tough-cookie",
+      "description": "RFC6265 Cookies and Cookie Jar for node.js"
+    }
+  ],
+  "0BSD": [
+    {
+      "name": "tslib",
+      "versions": [
+        "2.8.1"
+      ],
+      "paths": [
+        "<repo>/web/node_modules/.pnpm/tslib@2.8.1/node_modules/tslib"
+      ],
+      "license": "0BSD",
+      "author": "Microsoft Corp.",
+      "homepage": "https://www.typescriptlang.org/",
+      "description": "Runtime library for TypeScript helper functions"
+    }
+  ]
+}

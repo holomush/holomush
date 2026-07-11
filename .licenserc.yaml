@@ -46,6 +46,10 @@ header:
     # commentable source format — license-eye v0.8.0 errors "unsupported file".
     # Same rationale as *.golden above.
     - "**/*.tsv"
+    # Architecture-review evidence artifacts (raw tool dumps: gh/govulncheck/
+    # pnpm-audit JSON, JSONL streams, plaintext captures) are non-commentable
+    # data, not source — same "unsupported file" rationale as *.golden/*.tsv.
+    - "docs/reviews/**/evidence/**"
   language:
     Markdown:
       extensions: [".md"]

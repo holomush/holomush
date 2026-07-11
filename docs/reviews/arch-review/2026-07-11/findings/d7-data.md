@@ -1,0 +1,116 @@
+<!--
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ Copyright 2026 HoloMUSH Contributors
+-->
+
+# D7 — Data Layer — Findings
+
+**Agent:** general-purpose/claude-sonnet-5 · **Date:** 2026-07-11 · **Scope examined:** `internal/store/migrations/` (all 39 pairs), `internal/store/*.go`, `internal/eventbus/history/cold_postgres.go`, `internal/admin/readstream/cold_reader.go`, `internal/audit/{retention,partition_creator}.go`, `internal/eventbus/crypto/dek/{rekey_phase3,sweep}.go`, `internal/admin/approval/repo.go`, `internal/settings/character_store.go` + `internal/store/character_settings_repo.go`, `internal/world/postgres/character_repo.go`, `internal/access/policy/store/postgres.go`, `internal/store/postgres.go` + `internal/store/subsystem.go`, `plugins/core-scenes/migrations/`, `docs/architecture/invariants.yaml` (STORE scope), `internal/store/events_immutable_test.go`.
+
+## Summary
+
+Migration discipline is genuinely strong: all 39 `internal/store/migrations/` pairs are present, idempotent (`IF NOT EXISTS`/`DO $$` guards or `ON CONFLICT`/precise-`WHERE` no-op patterns), no triggers/functions, no `NOT NULL` `ADD COLUMN` without a `DEFAULT`, and the nanosecond-timestamp conversion migration (000038) is overflow-safe with a regression test (INV-STORE-9). World-model tables (locations/exits/characters/objects) are well indexed and constrained. Query safety is solid — no `SELECT *`, no string-built SQL with interpolated values, batched lookups (`WHERE id = ANY($1)`) avoid N+1.
+
+The standout gap is `events_audit`: the durable event log has **no retention, partitioning, or archival mechanism** — it grows forever, in stark contrast to the ABAC `access_audit_log` table which has monthly partitions + a `RetentionWorker` that purges/detaches on a schedule. At hobbyist scale this is not urgent today, but it compounds (a full-table-rewrite migration already touched this table once) and there's no forward plan.
+
+Counts: **1 High, 3 Medium, 3 Low**, 5 Strengths noted.
+
+## Findings
+
+### HIGH-1 `events_audit` has no retention, partition, or archival mechanism — unbounded growth
+
+- **Severity:** High
+- **Claim:** `events_audit` (the durable, permanent fallback source for all event history beyond JetStream retention) is written to by every non-ephemeral event in the system and has no DELETE, TRUNCATE, partition, or retention worker anywhere in production code — it grows without bound for the lifetime of the deployment, unlike the sibling ABAC `access_audit_log` table which has both.
+- **Evidence:**
+  - `internal/store/migrations/000009_create_events_audit.up.sql:4-20` — `CREATE TABLE events_audit` with no partitioning clause.
+  - `internal/store/events_immutable_test.go:49-98` — a meta-test statically forbids `UPDATE`/`DELETE`/`TRUNCATE` on a table named `events`, enforcing append-only-forever semantics (see LOW-1: this guard doesn't actually cover `events_audit`, but the *design intent* — audit rows are permanent — is confirmed by `internal/eventbus/crypto/dek/rekey_phase3.go:371-378`, which only ever `UPDATE`s in place for rekey, never deletes).
+  - Contrast: `internal/audit/retention.go:31-38` (`PartitionManager` interface: `EnsurePartitions`/`PurgeExpiredAllows`/`DetachExpiredPartitions`/`DropDetachedPartitions`) and `internal/audit/partition_creator.go:26-49` (`EnsurePartitions` creates monthly `access_audit_log_YYYY_MM` partitions) — this retention machinery exists and runs (`internal/access/policy/bootstrap.go:38-43`), but it is wired **only** to `access_audit_log` (`internal/store/migrations/000001_baseline.up.sql:287`), not `events_audit`.
+  - `grep -rn "DELETE FROM events_audit\|TRUNCATE events_audit" --type go` (excluding tests) returns only `cmd/holomush-cutover/main.go:49` — a standalone one-shot cutover CLI tool, not part of the running server.
+- **Impact:** Every operator who runs HoloMUSH for months/years accumulates an ever-growing `events_audit` table with no built-in way to shrink it. Combined with the fact that a `TIMESTAMPTZ`→`BIGINT` type-change migration already touched this exact table once (000038) — and per PostgreSQL 18 docs, "changing a column's data type typically necessitates a full table and index rewrite" under an `ACCESS EXCLUSIVE` lock (verified: <https://www.postgresql.org/docs/18/sql-altertable.html>, "Notes" section, fetched via context7 `/websites/postgresql_18` this session) — any future schema change to this table becomes progressively more expensive and more disruptive (full lock, up to 2x disk space) the longer a deployment runs without a retention story. Plugin-owned audit tables built to mirror this design (e.g. `plugins/core-scenes/migrations/000004_create_scene_log.up.sql:16-28`) inherit the same unbounded-growth pattern.
+- **Recommendation:** Give `events_audit` (and plugin audit tables that follow its pattern) an explicit growth story proportionate to hobbyist scale: either (a) adopt the same monthly-partition + age-based-detach pattern already built for `access_audit_log` (the `PartitionManager` abstraction in `internal/audit/retention.go` could plausibly be generalized), or (b) document an explicit "operator-managed archival" runbook (e.g., `pg_dump` + delete-older-than-N-months script) if automatic partitioning is out of scope for now. At minimum, file a tracking issue so this isn't silently forgotten — dedup check found no existing issue on this exact gap.
+- **Dedup:** none found (checked `events_audit`, `retention`, `partition`, `unbounded` keywords against open-issues.json).
+
+### MEDIUM-1 `sessions` table has no index on `location_id` — presence query does a sequential scan
+
+- **Severity:** Medium
+- **Claim:** `ListActiveByLocation`, the query backing `CoreService.ListFocusPresence` (the canonical "who's here" presence RPC per `.claude/rules/event-interfaces.md`) and `internal/grpc/location_follow.go`, filters `sessions` on `location_id`, but `sessions` has no index on that column — every other `location_id`-bearing world table (`characters`, `exits`, `objects`) is indexed on it, making this an inconsistency rather than a deliberate choice.
+- **Evidence:**
+  - `internal/store/session_store.go:745-753`:
+
+    ```go
+    rows, err := s.pool.Query(ctx,
+        `SELECT `+sessionSelectColumns+` FROM sessions `+
+            `WHERE location_id = $1 AND status = 'active' AND grid_present = true `+
+            ...
+    ```
+
+  - `internal/store/migrations/000001_baseline.up.sql:202-223` — `CREATE TABLE sessions (...)` followed only by `idx_sessions_active_character` (on `character_id`, partial) and `idx_sessions_status` (on `status`, partial WHERE `status = 'detached'`). No index touches `location_id`. Confirmed via `rg -n "CREATE (UNIQUE )?INDEX" internal/store/migrations/*.up.sql | rg -i sessions` across all 39 migrations — no later migration adds one.
+  - Compare: `idx_characters_location` (`internal/store/migrations/000001_baseline.up.sql:75`), `idx_exits_from`/`idx_exits_to` (`:126-127`), `idx_objects_location` (`:151`) — every other table with a `location_id` FK is indexed on it.
+  - `internal/grpc/list_focus_presence.go:140` and `internal/grpc/location_follow.go:223` both call `ListActiveByLocation` on the request path.
+- **Impact:** At current hobbyist-scale session counts (the codebase's own comment at `internal/store/session_store.go:771-772` says "hundreds to low thousands of concurrent sessions" for a comparable query) a sequential scan is cheap in absolute terms. But this is a hot, repeatedly-invoked query (every "look"/presence check at a location), and the gap is inconsistent with the indexing discipline applied everywhere else `location_id` appears — it will degrade linearly as session count grows, silently, with no query-plan warning until an operator notices latency.
+- **Recommendation:** Add a partial index mirroring the query shape: `CREATE INDEX IF NOT EXISTS idx_sessions_location_active ON sessions (location_id) WHERE status = 'active' AND grid_present = true;` (paired down migration: `DROP INDEX IF EXISTS idx_sessions_location_active;`). Cheap, proportionate, matches existing migration idioms in this codebase (partial indexes are used throughout, e.g. `idx_objects_location`).
+- **Dedup:** none in open-issues.json (checked `ListActiveByLocation`, `location_id index`, `presence` — no hit). **Canonical here:** the D5 performance pass also surfaces this (as its LOW-1, perf lens); this D7 entry (data lens) is the canonical statement and carries the chosen severity (Medium). Both feed the single issue I16 (#4796).
+
+### MEDIUM-2 Character/player settings read-modify-write has no concurrency guard — lost-update race
+
+- **Severity:** Medium
+- **Claim:** `CharacterSettingsRepository` (and the mirrored player-settings path) implements a whole-bag read-modify-write over a JSONB column with no transaction, optimistic-concurrency version column, or `SELECT ... FOR UPDATE` — two concurrent writers to the same character's settings can silently lose one writer's update.
+- **Evidence:** `internal/store/character_settings_repo.go:38-64` (`GetPreferences`: plain `SELECT preferences FROM characters WHERE id = $1`) and `:66-90` (`SetPreferences`: plain `UPDATE characters SET preferences = $1 WHERE id = $2`, blind overwrite) — no `pool.Begin`, no `xmin`/version check, no locking clause between the two calls. The application-level `settings.Scoped` dirty-tracking (`internal/settings/character_store.go:84-93`, "overwrite ONLY the partitions this view mutated") only protects against clobbering a **different** partition read in the same in-memory view; it does nothing for two concurrent requests that both read-then-write the **same** partition of the **same** character.
+- **Impact:** In practice this needs two near-simultaneous preference writes for the same character (e.g., two devices/sessions for one player writing settings back-to-back) to manifest — a real but low-frequency trigger at hobbyist scale. When it happens, one write is silently dropped with no error surfaced to either caller.
+- **Recommendation:** Either wrap read+write in a single transaction with `SELECT ... FOR UPDATE`, or move the merge into SQL via `UPDATE characters SET preferences = preferences || $1 WHERE id = $2` (JSONB `||` merge, still lossy for deep-nested overwrite semantics but avoids the full read-then-blind-write round trip), or add an optimistic version column. Given usage is low-frequency, a `FOR UPDATE` transaction is the simplest correct fix.
+- **Dedup:** "Server-side player preferences" (title-only match, no body available) may be related design work in flight — not a confirmed dedup, noting for cross-check.
+
+### MEDIUM-3 Primary `pgxpool` has no explicit tuning; multiple independently-sized pools coexist
+
+- **Severity:** Medium
+- **Claim:** The main production database pool (serving world state, sessions, ABAC, `events_audit` cold tier, `crypto_keys`, admin approvals — effectively every store in the system) is constructed with zero explicit `MaxConns`/`MinConns`/`MaxConnLifetime`/`MaxConnIdleTime`/`HealthCheckPeriod`, relying entirely on pgx's built-in default of `MaxConns = max(4, NumCPU)` (verified via context7 `/jackc/pgx`, `_autodocs/pgxpool.md`, fetched this session) — and at least two *additional*, separately-sized pools are opened for plugin schema work, each also defaulting independently.
+- **Evidence:**
+  - `internal/store/postgres.go:40-51` (`NewPostgresEventStore`): `cfg, err := pgxpool.ParseConfig(dsn)` → `pgxpool.NewWithConfig(ctx, cfg)` with only `cfg.ConnConfig.Tracer` set — no pool-sizing fields touched.
+  - `internal/store/subsystem.go:56-65` — production wiring (`cmd/holomush/core.go:284`, `store.NewSubsystem` → `Start` → this factory) confirms this is the one pool backing the entire core server's stores.
+  - `internal/plugin/setup/subsystem.go:339` (`aliasPool, aliasPoolErr := pgxpool.New(ctx, s.cfg.DatabaseConnStr)`) and `internal/plugin/schema_provisioner.go:50` (`pool, err := pgxpool.New(ctx, sp.baseConnString)`) each open a **second** and **third** independent pool against the same database, each also unconfigured and thus each independently capped at `max(4, NumCPU)`.
+- **Impact:** On a small deployment (e.g., a 1-2 vCPU hobbyist VPS) `NumCPU` is small, so `MaxConns` per pool defaults to 4 — with 3 uncoordinated pools that's up to 12 connections with no shared budget, no `MinConns` (so cold-start latency on first burst), and pgx v5.10.0 defaults — `MaxConnLifetime` 1h, `MaxConnIdleTime` 30m, `HealthCheckPeriod` 1m — that may not suit deployment patterns. This is a real gap but the immediate blast radius is limited (defaults are reasonable-ish, not misconfigured-badly).
+- **Dedup:** **already-tracked:#4693** ("Review pgx pool and PostgreSQL connection settings for plugin architecture") and **already-tracked:#4713** ("Unify plugin alias pgxpool with shared database pool") cover the plugin-pool duplication angle. This finding adds the observation that the **main store pool itself** (`internal/store/postgres.go`) — not just the plugin pools — also has zero explicit tuning, which #4693's title ("for plugin architecture") may not fully scope. Recommend folding this observation into #4693 or #4713 rather than filing a new issue.
+
+### LOW-1 `events_immutable_test.go` guards a table that no longer exists, not the live `events_audit`
+
+- **Severity:** Low
+- **Claim:** The meta-test `TestEventsTableCannotBeUpdatedOrDeletedByApplicationCode` (`internal/store/events_immutable_test.go:49-98`) uses word-boundary regexes matching the literal table name `events` — but that table was dropped in `internal/store/migrations/000010_drop_events_and_cursors.up.sql:11` (`DROP TABLE IF EXISTS events;`) when the system moved to JetStream + `events_audit`. Because `\bevents\b` does not match `events_audit` (no word boundary between `s` and `_`), this test provides **zero** coverage against an accidental `DELETE`/`TRUNCATE` on the actual live, permanent audit table.
+- **Evidence:** `internal/store/events_immutable_test.go:62-64` (`updateRE`/`deleteRE`/`truncateRE` all anchor on `\bevents\b`); `internal/store/migrations/000001_baseline.up.sql:240` (original `CREATE TABLE events`, now dropped); `internal/store/migrations/000010_drop_events_and_cursors.up.sql:4-11` (drop, with comment "All event publication now flows through JetStream; audit projection to events_audit").
+- **Impact:** Low — no production code currently deletes from `events_audit` (confirmed via repo-wide grep), and the one legitimate in-place `UPDATE` (rekey, `internal/eventbus/crypto/dek/rekey_phase3.go:371-378`) means a blanket UPDATE-ban would be a false positive anyway. But the test's own doc comment ("A stray mutation would silently corrupt derived state... this test trips that before merge") implies protection that doesn't actually exist for the table that matters today.
+- **Recommendation:** Either retire the vestigial test (the table it guards is gone) or extend/add a sibling test scoped to `events_audit` that forbids `DELETE`/`TRUNCATE` specifically (not `UPDATE`, since rekey legitimately needs it) via an explicit allowlist for `rekey_phase3.go`.
+- **Dedup:** none found.
+
+### LOW-2 Admin break-glass cold reader has no fully-supporting index for its query shape
+
+- **Severity:** Low
+- **Claim:** `ColdReader.Read` (`internal/admin/readstream/cold_reader.go:89-100`, `buildSQL` at `:191-235`) builds a query with N `subject LIKE $i` clauses OR'd together, `AND dek_ref IS NOT NULL`, `ORDER BY timestamp ASC, js_seq ASC` against `events_audit` — no existing index covers this combination (the closest are `events_audit_subject_pat (subject text_pattern_ops)` for individual LIKE arms and `events_audit_dek_ref (dek_ref) WHERE dek_ref IS NOT NULL`, but nothing supports the cross-subject `ORDER BY timestamp`).
+- **Evidence:** `internal/admin/readstream/cold_reader.go:200-232` (query construction); `internal/store/migrations/000009_create_events_audit.up.sql:18-20` and `000014_events_audit_dek_columns.up.sql:13-15` (existing indexes, none matching this access pattern).
+- **Impact:** This is an operator-only, dual-control-approval-gated (`internal/admin/approval/`) break-glass tool per the package doc comment — rare invocation, human-in-the-loop. A broad, unindexed scan here is tolerable today but compounds with HIGH-1 (unbounded `events_audit` growth) over a long-lived deployment.
+- **Recommendation:** No action needed now; revisit if/when HIGH-1's retention story lands, or if operators report slow break-glass reads.
+- **Dedup:** none found.
+
+### LOW-3 `admin_approvals.MarkApproved` differentiator-SELECT has a narrow benign race
+
+- **Severity:** Low
+- **Claim:** `PostgresRepo.MarkApproved` (`internal/admin/approval/repo.go:195-210`) performs the actual state transition via a single atomic `UPDATE ... WHERE request_id = $1 AND approved_at IS NULL AND expires_at > now() AND primary_player_id != $2` (correct, race-free CAS), but on `RowsAffected() == 0` runs a separate follow-up `SELECT` (`:212-216`) to determine *why* it failed for the error message. Between the failed UPDATE and the differentiator SELECT, a concurrent process could change the row's state, so the returned error reason (self-approval vs. already-approved vs. expired) can be stale/wrong in a narrow window.
+- **Evidence:** `internal/admin/approval/repo.go:196-235` (full CAS + differentiator sequence).
+- **Impact:** Diagnostic-only — the security-relevant property (no double-approval, no self-approval) is enforced by the atomic UPDATE's WHERE clause regardless of what the differentiator SELECT reports. Worst case is a misleading error message to an admin operator, not a policy bypass.
+- **Recommendation:** No urgent fix; if precision matters, use `UPDATE ... RETURNING` with a `CASE`-based reason column computed in the same statement instead of a follow-up read. This exact pattern is a documented, previously-reviewed tradeoff (see `.claude/rules/references/plan-review-learnings.md` "Repository differentiator-SELECT race").
+- **Dedup:** already-known pattern per repo's own review-learnings notes; not filing separately.
+
+## Strengths
+
+- **Migration discipline is excellent.** All 39 `internal/store/migrations/` pairs present (verified via directory diff, zero missing up/down), every `ALTER ... ADD COLUMN ... NOT NULL` carries a `DEFAULT` (e.g. `internal/store/migrations/000006_session_focus.up.sql:10`, `000045_character_preferences.up.sql:5`), no triggers/functions anywhere, and idempotency guards are used consistently (`IF NOT EXISTS`, `DO $$ ... information_schema.columns` checks, or precise `WHERE`-guarded `UPDATE`/`ON CONFLICT DO NOTHING` for non-DDL migrations like `000007_seed_scene_defaults.up.sql:7-9` and `000047_disable_unconditional_scene_write_seed.up.sql:28-34`).
+- **The nanosecond-timestamp migration (000038) is a model of defensive migration engineering**: idempotent via `information_schema` guards, overflow-safe via `GREATEST`/`LEAST` clamping in `numeric` arithmetic to avoid `bigint out of range` errors, with a dedicated regression test (INV-STORE-9, `internal/store/migrate_clamp_integration_test.go` per `docs/architecture/invariants.yaml:1863-1864`).
+- **World-model schema is well normalized and indexed**: `locations`/`exits`/`objects`/`characters` all carry appropriate FK indexes on their `location_id`-family columns (`internal/store/migrations/000001_baseline.up.sql:75,126-127,151-153`), CHECK constraints enforce structural invariants (`chk_exactly_one_containment`, `chk_not_self_contained`, `chk_not_self_referential`), and trigram GIN indexes support name search.
+- **`events_audit`'s actual query pattern (cold-tier history fallback, `internal/eventbus/history/cold_postgres.go:140-198`) is well indexed** — `(subject, js_seq)`, `(subject, timestamp)`, and `(subject text_pattern_ops)` (`internal/store/migrations/000009_create_events_audit.up.sql:18-20`, `000011_events_audit_js_seq_index.up.sql:9-10`) directly match the WHERE/ORDER BY shape of the primary read path used by every live session's history query — this is the one query pattern the review brief flagged as a likely gap, and it turned out to be solid.
+- **Query safety is clean across the sampled surface**: no `SELECT *` in production code, no string-concatenated SQL with interpolated values (dynamic builders like `cold_postgres.go` and `cold_reader.go` only interpolate `$N` placeholder positions, never data), and N+1 is proactively avoided via batched lookups (`internal/world/postgres/character_repo.go:222`, `WHERE id = ANY($1)`, used by `ListFocusPresence` and scene roster resolution).
+- **Plugin-owned storage is schema-isolated**: per `internal/store/events_immutable_test.go:28-30`, plugins run under Postgres roles with `REVOKE ALL ON SCHEMA public`, so even a compromised/malicious plugin cannot see or mutate the host's `events_audit` table directly — a real defense-in-depth layer for the data the append-only guarantee is trying to protect.
+
+## Not examined
+
+- **Full transactional-boundary audit across `internal/world/`**: I did not find direct `pool.Exec` calls in `internal/world/*.go` (it appears to route through a repo/store layer I did not fully trace) and did not exhaustively verify every multi-statement world mutation for atomicity. Open issue **#4705** ("Add integration tests for transactional cascade deletion") and **#4599** (session-connection lock-ordering deadlock test flakiness) suggest the team is already tracking gaps in this area; I did not duplicate that investigation.
+- **`crypto_keys`/`crypto_rekey_checkpoints` growth over very long deployment lifetimes**: these grow more slowly than `events_audit` (bounded by rekey frequency, not per-event), and a sweep subsystem exists for checkpoints (`internal/eventbus/crypto/dek/sweep.go`); I did not verify whether destroyed `crypto_keys` rows (post `000016_crypto_keys_destroyed_at`) are ever physically purged, since this is lower urgency than HIGH-1.
+- **Full plugin-storage migration audit**: I sampled `plugins/core-scenes/migrations/` only; did not review migrations for the other 10 in-tree plugins for the same discipline (idempotency, paired down, NOT NULL safety).
+- **pgxpool behavior under actual load/benchmarks**: MEDIUM-3 is a static-configuration finding; I did not run load tests to confirm connection-pool exhaustion is a real bottleneck at any tested concurrency.
+- **PostgreSQL 18-specific feature adoption** (e.g., virtual generated columns, `uuidv7()`, async I/O) — out of scope; the schema doesn't rely on anything version-specific enough to warrant a compatibility check beyond the `ALTER TABLE` rewrite-cost claim in HIGH-1, which I verified against the PG18 docs.
