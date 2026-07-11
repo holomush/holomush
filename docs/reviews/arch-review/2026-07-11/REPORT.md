@@ -11,15 +11,18 @@ HoloMUSH is a **genuinely well-engineered codebase** for its scale and stage. Th
 
 The review found **0 Blockers, 8 High, ~24 Medium** across nine dimensions. Every High finding was independently re-derived from source in an adversarial verification pass; **all 8 were upheld** (two were strengthened, two required scope/detail corrections that are recorded honestly below). No High finding was refuted.
 
-The single most important **theme** — and the honest headline — is not any one bug. It is a recurring **"claims exceed delivery" gap** between what the documentation, tests, and UI *assert* and what the code *does*:
+Two things stand out above the individual findings.
 
-- The platform documents **event sourcing** ("state derives from replay… nothing gets lost," including on the public marketing site) while world state is direct-write CRUD with no rebuild path (F1).
+**First — one architecture finding with a real root cause (F1).** The design docs state **event sourcing** as a foundational principle ("current state is derived from event replay… nothing gets lost," including on the public marketing site), but the world model was **never built that way**: world state is CRUD-canonical, events are a one-way post-commit notification/audit log, no rebuild-from-events path has ever existed, and — the decisive tell — **no ADR records the divergence** (archaeology in `verification/f1-eventsourcing-why.md`). This is not a documentation error; it is a stated foundation that was never implemented and never decided against. It matters because it is the **root cause** of two other findings — the dual-write non-atomicity (M2) and last-write-wins concurrency (M12) — which under real event sourcing could not occur. The right response is an *investigation and decision* (build it, or formally adopt CRUD with the right guardrails and downgrade the principle), captured in the ADR whose absence is itself the problem.
+
+**Second — a recurring "claims exceed delivery" pattern** in the assurance artifacts around the code:
+
 - The UI **renders a walkable world** — clickable exits, a room panel — but **no command actually moves a character** between locations (F5).
 - The docs advertise an **"offline-capable PWA"** with no service worker or manifest anywhere (F6).
 - CI is documented to enforce **">80% per-package coverage"** but does not, and `main` merged at 54.6% patch coverage (F7).
 - A **DLQ replay tool** shipped in the most recent release to make audit failures recoverable **does not work** for the deployment it targets, and its "covering" test is tautological (F3).
 
-Individually these are moderate. Together they say: **the code is better than the claims are honest.** For a hobbyist platform that explicitly courts reliability and correctness, closing that gap — mostly by correcting docs, wiring one missing command, adding two guardrails, and bumping a dependency — would materially raise trust with little code.
+Individually these are moderate. Together they say: **the code is often better than the claims are honest** — and in F1's case, a claimed foundation was never built at all. For a hobbyist platform that explicitly courts reliability and correctness, closing these gaps — one architecture decision, wiring one missing command, two guardrails, a dependency bump, and honest docs — would materially raise trust with little code.
 
 Nothing here is a five-nines emergency, consistent with the project's own framing.
 
@@ -31,17 +34,19 @@ All 8 High findings are independently verified facts. But — a point the cross-
 |--------|----------|---------------|
 | **Operational-High** (runtime teeth) | **F2** gateway OOM · **F4** `events_audit` unbounded · **F8** nats-server CVE | Real runtime/DoS/degradation risk. These are the "true Highs." |
 | **Product-readiness High** | **F5** no movement command | Not an architecture *defect*, but the UI presents a walkable world that silently no-ops — a broken affordance, and for a game the readiness rubric is primary. |
-| **Assurance-gap theme** (governance) | **F1** event-sourcing docs · **F3** DLQ tool + tautological test · **F6** PWA claim · **F7** coverage unenforced | One root pattern: *assurance artifacts (docs, tests, UI copy) overstate what the code delivers.* Medium-High as a cluster; each fixable, mostly without runtime code. |
+| **Architecture-integrity High** | **F1** event sourcing was never built for the world model | Re-scoped after reviewer challenge + archaeology (`verification/f1-eventsourcing-why.md`): not a doc error but a *foundational principle stated in the design docs and never implemented, with no ADR recording the divergence.* It is the **root cause** of M2 (dual-write) and M12 (last-write-wins). Needs an investigation + decision, not a doc patch. |
+| **Assurance-gap theme** (governance) | **F3** DLQ tool + tautological test · **F6** PWA claim · **F7** coverage unenforced | One root pattern: *assurance artifacts (docs, tests, UI copy) overstate what the code delivers.* Medium-High as a cluster; each fixable, mostly without runtime code. |
 
-**Two honest headlines, both true:** the literal count is *0 Blocker · 8 High · ~24 Medium* (every High verified); the prioritization-sharpened read is **0 Blocker · 3 operational Highs (F2/F4/F8) · 1 product-readiness High (F5) · a Medium-High assurance-gap theme (F1/F3/F6/F7).** Neither over- nor under-states; use the second to plan.
+**Two honest headlines, both true:** the literal count is *0 Blocker · 8 High · ~24 Medium* (every High verified); the prioritization-sharpened read is **0 Blocker · 3 operational Highs (F2/F4/F8) · 1 architecture-integrity High (F1, root of M2/M12) · 1 product-readiness High (F5) · a Medium-High assurance-gap theme (F3/F6/F7).** Neither over- nor under-states; use the second to plan.
 
 ```mermaid
 flowchart LR
     B["Blocker: 0"]:::b
     subgraph H["High (8 verified)"]
       OP["Operational: F2 F4 F8"]:::h
+      AR["Architecture-integrity: F1"]:::p
       PR["Product-readiness: F5"]:::p
-      AG["Assurance-gap theme: F1 F3 F6 F7"]:::a
+      AG["Assurance-gap theme: F3 F6 F7"]:::a
     end
     M["Medium: ~24"]:::m
     S["Strengths credited: 60+"]:::s
@@ -166,16 +171,17 @@ Each was adversarially re-derived from source. "Verified by" names who confirmed
 | F4 | Data | `events_audit` grows forever — no retention/partition; sibling ABAC audit table already has a RetentionWorker | **Operational-High** | UPHELD by me (migrations) |
 | F8 | Dependencies | nats-server v2.14.2 vulnerable (2 GHSA 2026-06-29, fix v2.14.3), govulncheck-blind; monitor port opt-in per ops docs | **Operational-High** | UPHELD by me (go.mod + ops docs); Renovate PR open |
 | F5 | UI (live) | No player-facing movement command — cannot walk between locations; exits render + click but no-op; `look`/`who` unknown | **Product-readiness High** | UPHELD — 0 prod callers of `MoveCharacter`; my "integration-tested" claim **corrected** (unit-only) |
-| F1 | Architecture | "Event sourcing" documented (incl. public marketing) but world state is CRUD with no replay/rebuild path; no ADR | Assurance-gap (Med-High) | UPHELD, **strengthened** — 6 doc claims (2 new incl. public site); CRUD emits *zero* events on C/U/D |
+| F1 | Architecture | Event sourcing was **never built for the world model** — a stated foundational principle the code never realized; CRUD-canonical with a one-way notification log; no ADR records the divergence. Root cause of M2 + M12. | **Architecture-integrity High** (re-scoped) | UPHELD + **deep-dived** (`verification/f1-eventsourcing-why.md`): world state always CRUD; no rebuild path ever existed; the removed "replay" was client-catch-up, not state derivation |
 | F3 | Reliability | Phase-3 audit-DLQ replay CLI can't recover for external-NATS runbook deployments (game_id split); "covering" test is tautological | Assurance-gap (Med-High) | UPHELD, **scope corrected** — external-NATS only, not zero-config; no data loss |
 | F6 | UI (static) | "Offline-capable PWA" documented; no service worker / manifest / PWA dep exists | Assurance-gap (Med-High) | UPHELD (adapter-static, docs verbatim) |
 | F7 | Testing | ">80% per-package coverage" MUST not CI-enforced; `main` merged at 54.6% patch | Assurance-gap (Med-High) | UPHELD by me (branch-protection rulesets) |
 
 *(Numbering F1–F8 is stable across the report; the table is ordered by rubric, not number.)*
 
-### The unifying thesis
+### Two theses
 
-F1, F5, F6, F7 are four faces of one pattern: **an artifact (docs, UI, tests) asserts a capability the code does not deliver.** They should be understood — and communicated to the team — as a single *trust-gap* theme even though each gets its own fix. F3's tautological test is the same shape one layer down (a test that asserts success it cannot actually observe). This framing is deliberate and defended in §6.
+1. **F1 is an architecture-integrity finding, not a doc bug.** A foundational principle (event sourcing) was stated and never built for the world model, with no ADR recording the choice — and it is the root cause of M2 (dual-write) and M12 (last-write-wins). It needs an investigation + decision (build it, or formally adopt CRUD with guardrails), not a doc patch. Deep-dive: `verification/f1-eventsourcing-why.md`. *(This was originally filed under the assurance-gap theme and re-scoped up after a reviewer challenge — see §7.)*
+2. **F5, F6, F7 (+ F3's tautological test) are one assurance-gap pattern:** an artifact (UI, docs, tests) asserts a capability the code does not deliver. Each gets its own fix but shares a root: the assurance layer overstates reality. F3's test is the same shape one layer down — a test asserting success it cannot observe.
 
 ### Notable Medium findings (sample; full lists in `findings/`)
 
@@ -257,8 +263,9 @@ Proportionate to hobbyist scale and stated reliability/correctness goals:
 2. **Bump nats-server to v2.14.3 (F8)** — merge the open Renovate PR.
 3. **Extend the existing RetentionWorker to `events_audit` (F4)** — the machinery already exists.
 4. **Wire the movement command (F5)** + register `look`/`who` — restores the core gameplay loop. Highest *user-visible* payoff.
-5. **Fix the DLQ replay game_id bridge (F3)** + de-tautologize its test — the recovery tool must work for its target deployment.
-6. **Close the assurance-gap theme (F1, F6, F7)** — correct the "event sourcing" and "offline PWA" claims (docs-only), capture an ADR for the real CRUD decision, and either enforce coverage in CI or soften the doc MUST. Low code, high trust.
-7. Medium cluster: DEK read-cache, empty-string sentinels, secure-cookie default, `sessions.location_id` index, silent audit-emitter drop, boot-order/last-write-wins guard, vuln-scan CI gate.
+5. **Run the F1 architecture decision.** Investigate whether world-state event sourcing was ever meant to be real, then decide (ADR): build a real projection/outbox, or formally adopt CRUD-canonical + optimistic-concurrency/transactional-outbox (which also closes M2/M12) and downgrade the "event sourcing" principle in all 6 doc sites. This is the root-cause fix behind the concurrency risk — do it before, or together with, the resilience pass (#0).
+6. **Fix the DLQ replay game_id bridge (F3)** + de-tautologize its test — the recovery tool must work for its target deployment.
+7. **Close the assurance-gap docs (F6, F7)** — correct the "offline PWA" claim; enforce coverage in CI or soften the doc MUST. Low code, high trust.
+8. Medium cluster: DEK read-cache, empty-string sentinels, secure-cookie default, `sessions.location_id` index, silent audit-emitter drop, boot-order/last-write-wins guard, vuln-scan CI gate.
 
 Detailed issue/epic mapping with acceptance criteria: [`issue-plan.md`](issue-plan.md).

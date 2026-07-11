@@ -11,22 +11,24 @@ Bodies will carry the AI-authorship byline and link to the evidence file (`docs/
 ## Epic E1 — "Assurance artifacts overstate reality" (the trust-gap theme)
 
 > **Epic issue.** Title: `epic: close the assurance-gap — docs/tests/UI claims exceed what the code delivers`
-> Labels: `enhancement`, `priority::high`, `theme:assurance-integrity` (new theme — will also add a `docs/roadmap.md` narrative section per the CLAUDE.md theme rule), `review-finding`, `docs`
-> Body: links the four child issues below; frames the pattern (F1/F3-test/F6/F7); notes the fix is mostly docs + one ADR + CI config, little runtime code. **Because this adds a `theme:*` label, the same PR MUST add a `docs/roadmap.md` section (MUST-NOT-orphan-labels rule) and SHOULD capture an ADR.**
+> Labels: `enhancement`, `priority::medium`, `theme:assurance-integrity` (new theme — will also add a `docs/roadmap.md` narrative section per the CLAUDE.md theme rule), `review-finding`, `docs`
+> Body: links the three child issues below (I2 PWA / I3 coverage / I4 DLQ-test); frames the pattern (F3-test/F6/F7 + the product-readiness cousin F5/I8); notes the fix is mostly docs + CI config, little runtime code. **Because this adds a `theme:*` label, the same PR MUST add a `docs/roadmap.md` section (MUST-NOT-orphan-labels rule).** *(F1 was originally the fourth child but is re-scoped to a standalone architecture High — see I1.)*
+
+> **Note:** I1 (event sourcing) was **re-scoped OUT of this epic and promoted to a standalone High** (see below) after the reviewer challenged it — it is an architecture-decision investigation, not a doc fix. The epic now covers F3-test/F6/F7 only.
 
 | ID | Title | Labels | Priority | Evidence |
 |----|-------|--------|----------|----------|
-| I1 (F1) | `docs: "event sourcing" claim is false — world state is CRUD; correct docs + capture ADR` | `bug`,`docs`,`architecture`,`review-finding` | high | `findings/d1-architecture.md` (H1), `verification/skeptic-d1-eventsourcing.md`. Cites CLAUDE.md:274, architecture.md:79/305-309, coding-standards.md:344-347, **index.mdx:40-42 (public site)**. AC: (a) correct the 6 claims to describe CRUD-canonical + best-effort event *notification*; (b) new ADR in `docs/adr/` recording the CRUD-vs-event-sourcing decision; (c) no `MoveCharacter`/replay language implying rebuildability. |
 | I2 (F6) | `docs: web client is not an offline PWA — no service worker/manifest exists` | `bug`,`docs`,`review-finding` | medium | `findings/d8a-ui-static.md` (H1), `verification/skeptic-d8-movement-pwa.md`. AC: either correct architecture.md:298/19 + operating/index.mdx:25 to drop "offline-capable PWA", OR ship a minimal `web/src/service-worker.ts` + manifest. Recommend correcting docs now, tracking real PWA separately. |
 | I3 (F7) | `ci: ">80% per-package coverage" MUST is unenforced; main merged at 54.6% patch` | `bug`,`ci`,`test-coverage`,`review-finding` | high | `findings/d9a-testing-ci.md` (H1), `verification/spot-checks.md`. AC: either (a) add a per-package/per-flag Codecov gate to `codecov.yml` + branch-protection required check, OR (b) soften CLAUDE.md:187/testing.md:25 to the enforced reality + a ratchet plan. Related (not dup): #4631 (codecov backfill debt). |
 | I4 (F3-test) | `test: DLQ replay "coverage" is tautological — hardcodes matching game_id both sides` | `bug`,`aspect:tests`,`review-finding` | medium | `verification/skeptic-d6-dlq.md`. `dlq_replay_integration_test.go:25-27` uses game "main" on server AND CLI, so it can't catch the F3 mismatch. AC: parameterize the test with divergent server/CLI game_id (reproduces F3), then make it pass via I7's fix. Pairs with I7. |
 
 ---
 
-## Standalone High issues (operational + product readiness)
+## Standalone High issues (architecture + operational + product readiness)
 
 | ID | Title | Labels | Priority | Evidence & acceptance |
 |----|-------|--------|----------|------------------------|
+| **I1 (F1)** | `architecture: event sourcing was never built for the world model — investigate the divergence, decide (ADR)` | `bug`,`architecture`,`priority::high`,`review-finding`,`design-needed` | **high** | `findings/d1-architecture.md` (H1), `verification/skeptic-d1-eventsourcing.md`, **`verification/f1-eventsourcing-why.md`** (archaeology). **NOT a doc fix.** World state is CRUD-canonical (`world/service.go`), events are a one-way notification log (`event_store_adapter.go:33`); no rebuild-from-events path ever existed; the removed "replay" (F7) was client-catch-up, not state derivation; **no ADR** in 197 files. It is the root cause of I18 (last-write-wins) and the dual-write gap. AC: (1) establish intent — was world-state event sourcing ever meant to be real, or was "event sourcing" always shorthand for "event-driven + audit log"? (2) DECIDE via ADR: **(A)** build a real projection/rebuild or transactional-outbox path, OR **(B)** formally adopt CRUD-canonical + optimistic-concurrency + transactional outbox (closes I18 + dual-write) and **downgrade the "event sourcing" principle in all 6 doc sites** (CLAUDE.md:274, architecture.md:79/305-309, coding-standards.md:344-347, index.mdx:40-42 public site). (3) capture the ADR — its absence *is* the finding. Pairs with I11 (resilience) and I18. |
 | I5 (F2) | `security: gateway ConnectRPC handler has no request-body cap → unauthenticated OOM` | `bug`,`priority::high`,`review-finding` (+ security) | high | `findings/04-perimeter-platform-security.md` (H1), `verification/spot-checks.md`. `internal/web/server.go:68-76` sets no `WithReadMaxBytes`; connect-go v1.20.0 buffers unbounded when unset; core gRPC caps 4 MiB (`grpc/server.go:56`). AC: add `connect.WithReadMaxBytes(4<<20)` (match gRPC) + `http.Server.ReadTimeout`; regression test posting an oversized body → `resource_exhausted`. |
 | I6 (F4) | `data: events_audit grows forever — extend RetentionWorker to it` | `bug`,`priority::high`,`review-finding` (+ data/observability) | high | `findings/d7-data.md` (H1), `verification/spot-checks.md`. `events_audit` (migration 000009) has no retention/partition; `internal/audit/retention.go` RetentionWorker+PartitionManager already serve the ABAC audit table. AC: extend retention/partition to events_audit (or document explicit unbounded-by-design + operator prune runbook); config for retention window; test. |
 | I7 (F3) | `bug: audit-DLQ replay CLI can't recover external-NATS deployments (game_id split)` | `bug`,`priority::high`,`review-finding` | high | `findings/d6-reliability.md` (H1), `verification/skeptic-d6-dlq.md`. Server DLQ subject uses `core.game_id`/ULID (`core.go:300-304,567`); CLI reads `event_bus.game_id`→"main" (`cmd_audit.go:143-149,337-343`), no bridging flag. AC: CLI falls back to `holomush_system_info.game_id` via its open PG pool, OR add `--game-id`; scope note: external-NATS only, no data loss. Pairs with I4. |
@@ -72,10 +74,11 @@ AnsiRenderer XSS #4600 · restoreSession/onMount #4760 · mobile terminal #4618 
 
 ## Proposed filing summary
 
-- **1 epic** (E1) + **4 epic children** (I1–I4)
-- **6 standalone High** (I5–I10) + **1 investigation** (I11)
+- **1 epic** (E1) + **3 epic children** (I2–I4)
+- **7 standalone High** (I1 architecture + I5–I10) + **1 investigation** (I11)
 - **11 Medium/Low** (I12–I22)
 - **Total: ~22 new issues.** F8/I10 conditional on the Renovate PR state.
+- **Of the 8 verified Highs:** I1 (F1 architecture-integrity) + I5 (F2) + I6 (F4) + I7 (F3) + I8 (F5) + I10 (F8) are High-priority; I2 (F6) + I3 (F7) sit under epic E1 at medium.
 
 ## Approval gate
 
