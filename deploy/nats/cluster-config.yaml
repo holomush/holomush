@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# External-mode event_bus config fragment mounted into the core replicas by
+# compose.cluster.yaml (D-14). It selects the external NATS transport (D-01)
+# instead of the in-process embedded server, addressing the in-stack `nats`
+# service over the backend network. Both replicas load this same file via
+# `--config`, so they share one JetStream domain and one EVENTS stream.
+#
+# provision: true lets the primary replica idempotently declare the EVENTS
+# stream on first boot (D-03). The second replica reaches the already-declared
+# stream; CreateOrUpdateStream is idempotent, so a concurrent declare is safe
+# (only the seed *migration* bootstrap must not race — that is handled by the
+# second replica's --skip-seed-migrations flag, RESEARCH Open Question 2).
+#
+# Each replica authenticates as the single-principal `holomush-server` account
+# defined in deploy/nats/cluster-server.conf. The user:pass is a smoke/dev
+# PLACEHOLDER (matches the conf); a real deploy uses a NATS .creds file via the
+# `credentials` key (see deploy/nats/README.md) instead of user:pass in the URL.
+#
+# For a locked-down cluster whose server account lacks $JS.API stream-admin
+# permissions, set provision: false and pre-declare the stream out of band;
+# the server then verifies-or-fails instead of creating (see deploy/nats/).
+event_bus:
+  mode: external
+  url: nats://holomush-server:holomush-server-smoke@nats:4222
+  provision: true

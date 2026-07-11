@@ -37,11 +37,26 @@ var SkippedPluginOwnedTotal = prometheus.NewCounterVec(
 	[]string{"plugin"},
 )
 
+// DLQMessagesTotal counts audit messages captured to the dead-letter
+// stream (EVENTS_AUDIT_DLQ) after exhausting MaxDeliver. It increments
+// exactly once per message the projection successfully publishes to the
+// DLQ (D-11). Operators alert on this counter long before bounded DLQ
+// retention (D-12) would age anything out — a rising count means poison
+// messages (typically a Postgres outage) are accumulating dead letters.
+var DLQMessagesTotal = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Namespace: "holomush",
+		Subsystem: "audit",
+		Name:      "dlq_messages_total",
+		Help:      "Audit messages captured to the dead-letter stream after exhausting MaxDeliver.",
+	},
+)
+
 // RegisterMetrics registers audit Prometheus collectors with reg.
 // Duplicate registrations are silently ignored; other registration
 // errors panic. Matches the pattern used by internal/lifecycle/metrics.go.
 func RegisterMetrics(reg prometheus.Registerer) {
-	for _, c := range []prometheus.Collector{LagSeconds, SkippedPluginOwnedTotal} {
+	for _, c := range []prometheus.Collector{LagSeconds, SkippedPluginOwnedTotal, DLQMessagesTotal} {
 		if err := reg.Register(c); err != nil {
 			var are prometheus.AlreadyRegisteredError
 			if errors.As(err, &are) {

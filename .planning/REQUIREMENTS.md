@@ -189,19 +189,19 @@ Genuine forward work. Each maps to exactly one `ROADMAP.md` phase.
 
 ### Platform Hardening & Deployment Scaling (CLUSTER)
 
-- [ ] **CLUSTER-01**: Operator can deploy HoloMUSH's event bus against external/clustered NATS JetStream
+- [x] **CLUSTER-01**: Operator can deploy HoloMUSH's event bus against external/clustered NATS JetStream
   instead of only embedded in-process mode (epic `holomush-s5ts`)
 
-- [ ] **CLUSTER-02**: Server-account subject scoping enforces single-principal publish/subscribe on
+- [x] **CLUSTER-02**: Server-account subject scoping enforces single-principal publish/subscribe on
   game-topic subjects (`events.>`, `audit.>`, `internal.>`) in external mode
 
-- [ ] **CLUSTER-03**: Crypto key-invalidation coordinator propagates rotation events correctly across real
+- [x] **CLUSTER-03**: Crypto key-invalidation coordinator propagates rotation events correctly across real
   multi-node replicas, not just the embedded single-node path
 
-- [ ] **CLUSTER-04**: Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being
+- [x] **CLUSTER-04**: Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being
   silently dropped (`internal/eventbus/audit/subsystem.go:59`)
 
-- [ ] **CLUSTER-05**: Operator has a documented runbook for external-NATS deployment
+- [x] **CLUSTER-05**: Operator has a documented runbook for external-NATS deployment
 
 ## v2 Requirements (Deferred)
 
@@ -260,11 +260,11 @@ this GSD roadmap and are recorded as context (see above), not phase-mapped.
 | SCENEFWD-01 | Backlog | Descoped 2026-07-08 |
 | SCENEFWD-02 | Phase 2 | Complete |
 | SCENEFWD-03 | Phase 2 | Complete |
-| CLUSTER-01 | Phase 3 | Pending |
-| CLUSTER-02 | Phase 3 | Pending |
-| CLUSTER-03 | Phase 3 | Pending |
-| CLUSTER-04 | Phase 3 | Pending |
-| CLUSTER-05 | Phase 3 | Pending |
+| CLUSTER-01 | Phase 3 | Complete |
+| CLUSTER-02 | Phase 3 | Complete |
+| CLUSTER-03 | Phase 3 | Complete |
+| CLUSTER-04 | Phase 3 | Complete |
+| CLUSTER-05 | Phase 3 | Complete |
 
 **Coverage:**
 

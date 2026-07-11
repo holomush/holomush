@@ -141,6 +141,10 @@ type ObservabilityServer interface {
 	Stop(ctx context.Context) error
 	Addr() string
 	MustRegister(cs ...prometheus.Collector)
+	// Registerer returns the registry the /metrics endpoint serves, so
+	// self-registering metric constructors land on the scraped registry rather
+	// than prometheus.DefaultRegisterer (which /metrics does not serve).
+	Registerer() prometheus.Registerer
 }
 
 // GRPCClient interface wraps the methods used from holoGRPC.Client.

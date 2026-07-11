@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# Multi-replica cluster overlay (D-14). Layers on top of compose.prod.yaml:
+#
+#   docker compose -f compose.prod.yaml -f compose.cluster.yaml <cmd>
+#
+# It adds (a) a standalone NATS JetStream service (file storage, backend-only)
+# and (b) a second core replica, and switches both core replicas from the
+# embedded in-process NATS to external mode against the `nats` service. This is
+# both the runbook's working example (CLUSTER-05) and the substrate for the
+# multi-process cluster smoke (scripts/smoke/cluster-smoke.sh, D-05b topology
+# proof): two real core processes sharing one Postgres and one external NATS
+# converge to a two-member cluster.
+#
+# Concurrent-bootstrap safety (RESEARCH Open Question 2): only the primary
+# `core` runs the seed migration bootstrap; the `core2` replica carries
+# --skip-seed-migrations so the two processes never race the seed upgrade.
+# core2 depends on core being healthy, so the shared KEK keyfile the primary
+# auto-generates on the shared volume already exists when core2 boots.
+#
+# NATS stays on the backend network with no host port mapping (T-03-22): the
+# prod intra-stack posture — nothing external can reach the event bus.
+
+services:
+  nats:
+    image: nats:2-alpine@sha256:c11af972c99ae542de8925e6a7d9c533aa1eb039660420d2074beed6089b3bf0
+    restart: unless-stopped
+    command:
+      # -c: load the JetStream + single-principal scoped-account config so each
+      # core replica's boot-time over-scope self-check (CLUSTER-02) passes.
+      # -m 8222: HTTP monitoring endpoint (/healthz) for the healthcheck below —
+      # bound inside the container only, never published. JetStream store_dir is
+      # set in the config (/data), so no -js/-sd flags are needed here.
+      - "-c"
+      - "/etc/nats/cluster-server.conf"
+      - "-m"
+      - "8222"
+    volumes:
+      - nats-data:/data
+      - ./deploy/nats/cluster-server.conf:/etc/nats/cluster-server.conf:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
+  core:
+    # Primary replica: runs the seed migration bootstrap (no --skip-seed-migrations)
+    # and auto-generates the shared KEK keyfile on the kek-shared volume on first
+    # boot. External mode via the mounted cluster-config.yaml.
+    command:
+      - core
+      - --config=/etc/holomush/cluster-config.yaml
+      - --grpc-addr=0.0.0.0:9000
+      - --metrics-addr=0.0.0.0:9100
+      - --log-format=json
+      - --auto-gen-kek
+    environment:
+      # KEK is mandatory to boot (D-02). The primary mints it once on the shared
+      # volume; a fixed smoke passphrase is sufficient because the keyfile never
+      # leaves the backend network.
+      HOLOMUSH_KEK_FILE: /home/holomush/.config/holomush/certs/master.key.enc
+      HOLOMUSH_KEK_PASSPHRASE: ${HOLOMUSH_KEK_PASSPHRASE:-cluster-smoke-passphrase}
+    volumes:
+      # Replace the prod certs bind-mount (same container path) with a named
+      # volume shared with core2, so both replicas resolve the identical KEK.
+      - kek-shared:/home/holomush/.config/holomush/certs
+      - ./deploy/nats/cluster-config.yaml:/etc/holomush/cluster-config.yaml:ro
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  core2:
+    # Second replica: external mode, same config, but --skip-seed-migrations so
+    # it never races the primary's seed bootstrap (RESEARCH Open Question 2). It
+    # reads (read-only) the KEK the primary generated on the shared volume.
+    image: ghcr.io/holomush/holomush:${HOLOMUSH_VERSION:?Set HOLOMUSH_VERSION in .env}
+    restart: unless-stopped
+    command:
+      - core
+      - --config=/etc/holomush/cluster-config.yaml
+      - --grpc-addr=0.0.0.0:9000
+      - --metrics-addr=0.0.0.0:9100
+      - --log-format=json
+      - --skip-seed-migrations
+    environment:
+      DATABASE_URL: postgres://holomush:${POSTGRES_PASSWORD}@postgres:5432/holomush?sslmode=require
+      HOLOMUSH_KEK_FILE: /home/holomush/.config/holomush/certs/master.key.enc
+      HOLOMUSH_KEK_PASSPHRASE: ${HOLOMUSH_KEK_PASSPHRASE:-cluster-smoke-passphrase}
+    volumes:
+      - kek-shared:/home/holomush/.config/holomush/certs:ro
+      - ./deploy/nats/cluster-config.yaml:/etc/holomush/cluster-config.yaml:ro
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9100/healthz/readiness || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+volumes:
+  nats-data:
+  kek-shared:

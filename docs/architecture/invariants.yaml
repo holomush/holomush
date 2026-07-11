@@ -2179,10 +2179,13 @@ invariants:
     legacy: ["INV-28@docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"]
     summary: "KEK rotation issues a cluster-prefixed NATS request-reply cache-invalidate ping and MUST receive N-of-N replica
       acks (30s timeout; rollback on timeout)."
-    binding: pending
+    asserted_by:
+      - "test/integration/crypto/cache_invalidation_test.go"
+    binding: bound
     refs:
       - {file: "internal/eventbus/crypto/invalidation/coordinator.go", token: "INV-28"}
       - {file: "internal/eventbus/crypto/invalidation/coordinator_internal_test.go", token: "INV-28"}
+      - {file: "test/integration/crypto/cache_invalidation_test.go", token: "INV-CLUSTER-1"}
   - id: INV-CLUSTER-2
     scope: INV-CLUSTER
     origin_spec: "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
@@ -2613,7 +2616,25 @@ invariants:
     binding: pending
     refs:
       - {file: "plugins/core-scenes/service.go", token: "INV-S4"}
-      - {file: "plugins/core-scenes/store.go", token: "INV-S4",}
+      - {file: "plugins/core-scenes/store.go", token: "INV-S4"}
+  - id: INV-EVENTBUS-29
+    scope: INV-EVENTBUS
+    origin_spec: "docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md"
+    summary: "External-mode boot fails closed: mode:external with an unreachable NATS server, or a provision:false stream-config
+      mismatch, refuses to Start and leaves conn/js nil — no embedded fallback (CLUSTER-01, D-02/D-03)."
+    asserted_by:
+      - "test/integration/eventbus_external/external_boot_test.go"
+    binding: bound
+  - id: INV-EVENTBUS-30
+    scope: INV-EVENTBUS
+    origin_spec: "docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md"
+    summary: "DLQ capture never drops: an audit message exhausting MaxDeliver is Term'd only after a successful DLQ publish;
+      a failed DLQ publish leaves the message un-acked and retained in the source EVENTS stream until StreamMaxAge (not redelivered
+      or auto-retried past the MaxDeliver ceiling), so no audit record is Term'd without a durable capture (CLUSTER-04, D-09)."
+    asserted_by:
+      - "internal/eventbus/audit/dlq_capture_integration_test.go"
+      - "internal/eventbus/audit/dlq_neverdrop_integration_test.go"
+    binding: bound
 
   # -- INV-SCENE -- migrated from families P4/P5/P6/FS(+FW)/Y5INX/SH + phase-8 bare INV-N (holomush-hz0v4.14.13).
   # Dense by family: P4-1..13->1..13, P5-1..14->14..27, P6-1..10->28..37, FS-1..8->38..45,

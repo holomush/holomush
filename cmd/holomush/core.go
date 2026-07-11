@@ -137,6 +137,10 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, &eventBusConfig, "event_bus"); err != nil {
 				return err
 			}
+			eventBusConfig = eventBusConfig.Defaults()
+			if err := eventBusConfig.Validate(); err != nil {
+				return err
+			}
 			cryptoConfig := config.DefaultCryptoConfig()
 			if err := config.Load(configFile, cmd, &cryptoConfig, "crypto"); err != nil {
 				return err
@@ -460,6 +464,20 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			With("operation", "start_event_bus").
 			Wrap(startErr)
 	}
+	// CLUSTER-02 (D-13c): in external mode the server authenticates as the
+	// single `holomush-server` account scoped to events.>/audit.>/internal.>/
+	// _INBOX.>. Self-verify that our own account is not over-scoped and refuse
+	// to boot if it can reach beyond the granted prefixes (fail closed). Skipped
+	// in embedded mode, which has no account model (its default-open permissions
+	// would always look over-scoped). The complementary external proof that
+	// other principals are locked out is deploy/nats/verify-scoping.sh.
+	if eventBusConfig.Mode == eventbus.ModeExternal {
+		if scopeErr := eventbus.VerifyAccountScoping(ctx, eventBusSub.Conn()); scopeErr != nil {
+			return oops.Code("EVENTBUS_SCOPE_CHECK_FAILED").
+				With("operation", "verify_account_scoping").
+				Wrap(scopeErr)
+		}
+	}
 	// Ownership: cleanup eventBusSub on early-return paths until the
 	// orchestrator takes over via orch.StopAll below. The flag flips to
 	// true after orch.StartAll succeeds.
@@ -488,11 +506,28 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// MUST run under a supervisor that interprets exit code 125 as
 	// restart-eligible (systemd Restart=on-failure, k8s restartPolicy=Always,
 	// docker restart=on-failure).
-	clusterPillMetrics := cluster.NewPillMetrics(prometheus.DefaultRegisterer)
-	clusterSkewMetrics := cluster.NewSkewMetrics(prometheus.DefaultRegisterer)
-	clusterSelfTimeoutMetrics := cluster.NewSelfTimeoutMetrics(prometheus.DefaultRegisterer)
-	clusterHeartbeatMetrics := cluster.NewHeartbeatMetrics(prometheus.DefaultRegisterer)
-	clusterDuplicateIDMetrics := cluster.NewDuplicateMemberIDMetrics(prometheus.DefaultRegisterer)
+	// Register cluster metrics on the observability server's own registry (the
+	// one /metrics serves) rather than prometheus.DefaultRegisterer, which the
+	// endpoint does NOT serve — otherwise these metrics are silently unscraped
+	// (holomush-cluster-smoke relies on cluster_member_skew_seconds appearing on
+	// /metrics to prove two-member convergence). Falls back to the default
+	// registry when metrics are disabled (obsServer == nil).
+	metricsReg := prometheus.DefaultRegisterer
+	if obsServer != nil {
+		metricsReg = obsServer.Registerer()
+	}
+	// Register the audit collectors (projection_lag_seconds,
+	// projection_plugin_owned_skipped_total, dlq_messages_total) on the SAME
+	// served registry so the DLQ alerting story (D-11) actually reaches
+	// /metrics. Without this the counters increment in-process but are never
+	// scraped — the same "silently unscraped" defect the cluster_*/invalidation_*
+	// metrics above avoid by routing to obsServer.Registerer().
+	audit.RegisterMetrics(metricsReg)
+	clusterPillMetrics := cluster.NewPillMetrics(metricsReg)
+	clusterSkewMetrics := cluster.NewSkewMetrics(metricsReg)
+	clusterSelfTimeoutMetrics := cluster.NewSelfTimeoutMetrics(metricsReg)
+	clusterHeartbeatMetrics := cluster.NewHeartbeatMetrics(metricsReg)
+	clusterDuplicateIDMetrics := cluster.NewDuplicateMemberIDMetrics(metricsReg)
 	clusterSelfID := cluster.MemberID(idgen.New().String())
 	clusterPill := cluster.NewProductionPill(clusterSelfID, slog.Default(), clusterPillMetrics)
 	clusterSub, clusterErr := cluster.NewSubsystem(cluster.Config{
@@ -520,7 +555,20 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// Depends on DB (target table), EventBus (JetStream source), and
 	// Plugins (F5: per-plugin consumers need plugin manifests + gRPC
 	// clients); the orchestrator enforces that ordering via DependsOn.
-	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{})
+	// DLQ retention/subject come from the event_bus section (D-12). The
+	// dead-letter subject nests under the CLUSTER-02 `internal.>` granted
+	// prefix so it stays within the holomush-server account's permissions.
+	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{
+		DLQ: audit.DLQConfig{
+			// Use the resolved gameID (cfg.GameID, else dbSub.GameID()) so the DLQ
+			// subject matches the rest of the process; eventBusConfig.GameID can
+			// still be the unresolved default. The replay CLI must target the same
+			// game_id — a mismatch fails loud (WR-06), never silently.
+			Subject:  fmt.Sprintf("internal.%s.audit.dlq", gameID),
+			MaxAge:   eventBusConfig.DLQ.MaxAge,
+			MaxBytes: eventBusConfig.DLQ.MaxBytes,
+		},
+	})
 
 	// Phase 7 INV-CRYPTO-45: build the codec.KeySelector ONCE at boot. The
 	// SAME pointer-identity instance is threaded into BOTH the
@@ -897,7 +945,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("CRYPTO_DEK_MANAGER_CACHE_ACCESSOR_NOT_SATISFIED").
 				Errorf("dek.NewManager return value does not satisfy dek.CacheAccessor — required for invalidation.Coordinator wiring per Phase 3c grounding Decision 5")
 		}
-		invMetrics := invalidation.NewMetrics(prometheus.DefaultRegisterer)
+		// Same scraped-registry rationale as the cluster metrics above.
+		invMetrics := invalidation.NewMetrics(metricsReg)
 		c, invErr := invalidation.New(invalidation.Config{ClusterID: gameID}, invalidation.Deps{
 			Conn:      eventBusSub.Conn(),
 			Registry:  clusterSub,

@@ -5,18 +5,18 @@
 
 # SP5 Documentation Quality Audit
 
-Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/docs/`). Scored against the 8-dimension rubric in [`contributing/reference/docs-style-guide.md`](/contributing/reference/docs-style-guide.md). Covers exactly 78 content pages (excludes root `index.mdx` splash and auto-generated `reference/events/*` sub-pages). Date: 2026-05-28.
+Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/docs/`). Scored against the 8-dimension rubric in [`contributing/reference/docs-style-guide.md`](/contributing/reference/docs-style-guide.md). Covers exactly 81 content pages (excludes root `index.mdx` splash and auto-generated `reference/events/*` sub-pages). Date: 2026-05-28.
 
 ## Summary
 
 | Section        | Pages | P1 | P2 | OK |
 | -------------- | ----- | -- | -- | -- |
 | guide          | 5     | 1  | 1  | 3  |
-| operating      | 23    | 1  | 6  | 16 |
+| operating      | 24    | 1  | 6  | 17 |
 | extending      | 25    | 1  | 5  | 19 |
 | contributing   | 22    | 1  | 3  | 18 |
 | reference      | 5     | 1  | 2  | 2  |
-| **Total**      | **80**| **5**  | **17** | **58** |
+| **Total**      | **81**| **5**  | **17** | **59** |
 
 ---
 
@@ -32,7 +32,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 ---
 
-## operating (23 pages)
+## operating (24 pages)
 
 | Page (slug/path)                                        | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ------------------------------------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
@@ -48,6 +48,7 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 | `operating/how-to/deploy/deployment.md`                 | 2      | 2   | 2    | 2       | 2  | 2    | 2     | 2       | 16    | OK       | None material |
 | `operating/how-to/deploy/installation.md`               | 1      | 2   | 2    | 2       | 2  | 2    | 2     | 1       | 14    | OK       | Opener "This guide covers installing…" is flat; minor verbosity in the Custom Docker Compose section |
 | `operating/how-to/deploy/verifying-releases.md`         | 2      | 2   | 2    | 2       | 2  | 2    | 1     | 2       | 15    | OK       | No link to installation or deployment pages as logical next steps |
+| `operating/how-to/external-nats-deployment.md`          | 2      | 2   | 2    | 2       | 2  | 2    | 1     | 2       | 15    | OK       | Related lists only database + sandbox — missing natural cross-links (deploy/deployment it builds on, ca-rotation for the mTLS block, crypto-runbook for the invalidation acks); also cites the internal tracker id holomush-s5ts in operator-facing prose |
 | `operating/how-to/operations.md`                        | 2      | 2   | 2    | 1       | 2  | 2    | 2     | 1       | 14    | OK       | Sections on backup/restore duplicate content in database.md and deployment.md; minor redundancy |
 | `operating/how-to/plugin-reloads.md`                    | 1      | 1   | 1    | 1       | 1  | 2    | 0     | 1       | 8     | P1       | No orientation opener; audience not stated; no links to any other page; mode unclear (reference table posing as how-to) |
 | `operating/how-to/sandbox/sandbox-operations.md`        | 2      | 1   | 2    | 1       | 2  | 2    | 2     | 1       | 13    | P2       | Audience is narrowly the project's own sandbox operators but not stated; several bash snippets are dense without explanatory context |

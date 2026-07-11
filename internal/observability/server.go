@@ -193,6 +193,16 @@ func (s *Server) MustRegister(cs ...prometheus.Collector) {
 	s.registry.MustRegister(cs...)
 }
 
+// Registerer returns the server's private Prometheus registry as a
+// prometheus.Registerer. Metrics registered through it are served by this
+// server's /metrics endpoint. Constructors that self-register on a
+// prometheus.Registerer (e.g. cluster.NewSkewMetrics) MUST be given this rather
+// than prometheus.DefaultRegisterer — the default registry is NOT the one
+// /metrics serves, so metrics registered there are silently unscraped.
+func (s *Server) Registerer() prometheus.Registerer {
+	return s.registry
+}
+
 // Start begins serving observability endpoints.
 // It returns an error channel that will receive any errors from the HTTP server
 // after it starts. The channel is closed when the server stops gracefully.

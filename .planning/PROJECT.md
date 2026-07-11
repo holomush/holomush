@@ -51,13 +51,20 @@ trusted identically by the host.
   idle-timeout active→paused lifecycle (INV-SCENE-71), and telnet edge-case hardening (mixed focused/skipped
   render, reconnect focus restore, multi-character no-leak). SCENEFWD-02/03 shipped 2026-07-09 (Phase 2);
   templates (SCENEFWD-01) descoped to backlog (`holomush-x4n1r`)
+- ✓ Platform hardening & deployment scaling (`theme:social-spaces` Phase 3) — external/clustered NATS mode
+  (`eventbus: mode: external` + fail-closed boot + provision opt-out; embedded stays the zero-config default),
+  single-principal account scoping (`deploy/nats` templates + `verify-scoping.sh` + boot self-check),
+  multi-node crypto-invalidation verification (per-replica conns, N-of-N + hung-replica probe-pill; binds
+  INV-CLUSTER-1/2/4/9, INV-CLUSTER-8 pending w/ coverage issue), audit dead-letter queue + `holomush audit dlq`
+  replay CLI (INV-EVENTBUS-29/30 never-drop/fail-closed), and the external-NATS operator runbook. CLUSTER-01..05
+  shipped 2026-07-10 (Phase 3); closes the single-node ceiling
 
 ### Active
 
 <!-- Current GSD roadmap scope — genuine forward work not yet built. See ROADMAP.md for phase breakdown. -->
 
-- [ ] Platform hardening & deployment scaling — external/clustered NATS (`holomush-s5ts`), multi-node crypto
-  invalidation verification, audit dead-letter queue
+_All v1.0-milestone roadmap phases (1–3) are complete. Remaining strategic work lives in the ROADMAP
+`## Backlog` (999.x) — promote with `/gsd-review-backlog`._
 
 ### Out of Scope
 
@@ -105,14 +112,15 @@ scenes should bind relevant invariants as part of its own definition of done rat
 
 ## Constraints
 
-- **Tech stack**: Go 1.26.4 core/plugins; SvelteKit 2.69/Svelte 5 web PWA; PostgreSQL 18; embedded NATS
-  JetStream (external/clustered mode not yet built — see Active requirements above) — see
+- **Tech stack**: Go 1.26.4 core/plugins; SvelteKit 2.69/Svelte 5 web PWA; PostgreSQL 18; NATS JetStream —
+  embedded (zero-config default) or external/clustered (`eventbus: mode: external`, shipped Phase 3) — see
   `.planning/codebase/STACK.md`.
 - **Build/process**: `task` is the mandatory entry point for build/test/lint/fmt (never raw `go`/lint
   commands); TDD required; spec-driven development with RFC2119 keywords; pre-push adversarial review gates
   (design/plan/code/crypto/abac reviewers) per root `CLAUDE.md`.
-- **Deployment ceiling**: embedded-only NATS JetStream means HoloMUSH cannot today horizontally scale the
-  event bus across multiple server processes/nodes (tracked epic `holomush-s5ts`, Active above).
+- **Deployment scaling**: the event bus runs embedded (single-node default) OR against external/clustered
+  NATS JetStream for horizontal multi-node scaling (shipped Phase 3, `holomush-s5ts`; see the external-NATS
+  operator runbook under `site/src/content/docs/operating/how-to/`).
 - **Gateway boundary**: `internal/web/` and `internal/telnet/` are protocol-translation only — no direct DB
   or domain-service access (`.claude/rules/gateway-boundary.md`).
 - **Plugin runtime symmetry**: any new host-side trust/gate/manifest check must apply identically to Lua and
@@ -167,8 +175,8 @@ scenes should bind relevant invariants as part of its own definition of done rat
 | Event-sourcing, JetStream-owned ordering, ULID = identity only | Ordering correctness must not depend on ID lexicographic drift | ✓ Good — `internal/eventbus/` |
 | Scenes are plugin-owned (`core-scenes`), not `locations` rows | 68 INV-SCENE-* invariants + INV-S6 per-plugin schema isolation assume plugin ownership | ✓ Good — supersedes 2026-01-22 world-model-design's scene section (historical) |
 | Web structural writes use typed RPCs, not the command path | GUI-driven mutations must not route through the human/CLI text-command parser (ADR `holomush-v4qmu`) | ✓ Good — supersedes E9.5 D4; conversational verbs still use the command path |
-| External/clustered NATS deferred, embedded-only for now | Clean seam designed (per-cluster subject prefixing, N-of-N replica ack) but not yet built | ⚠️ Revisit — tracked epic `holomush-s5ts`, roadmap Phase 3 |
+| External/clustered NATS — embedded default, external mode shipped Phase 3 | Built & verified: external dial + fail-closed boot, single-principal account scoping, multi-node crypto invalidation (INV-CLUSTER-1/2/4/9), audit DLQ + replay CLI | ✅ Built in Phase 3 (2026-07-10) — epic `holomush-s5ts` |
 
 ---
 
-*Last updated: 2026-07-09 — Phase 2 (Scenes Lineage Completion) complete: SCENEFWD-02/03 validated (scene-activity notifications + telnet edge-case hardening), moved to Validated Requirements; templates (SCENEFWD-01) descoped to backlog.*
+*Last updated: 2026-07-10 — Phase 3 (Platform Hardening & Deployment Scaling) complete: CLUSTER-01..05 validated (external/clustered NATS mode, single-principal account scoping, multi-node crypto-invalidation binding INV-CLUSTER-1/2/4/9, audit dead-letter queue + replay CLI, external-NATS operator runbook). Closes the single-node ceiling flagged in CONCERNS.md.*

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
@@ -75,18 +76,74 @@ func (s *Subsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemEvent
 // DependsOn returns nil — the event bus has no subsystem dependencies.
 func (s *Subsystem) DependsOn() []lifecycle.SubsystemID { return nil }
 
-// Start brings the embedded NATS server up, opens an in-process connection,
-// obtains a JetStream context, and declares the EVENTS stream idempotently.
-// Any failure mid-way rolls back earlier state (shutdown server, close conn).
+// Start establishes the NATS transport for the configured mode, obtains a
+// JetStream context, and declares the EVENTS stream (D-03 provision policy).
+// In embedded mode it brings the in-process NATS server up; in external mode
+// (CLUSTER-01) it dials the configured cluster with creds/TLS and fails closed
+// at boot if unreachable (D-02). Any failure mid-way rolls back earlier state
+// (shutdown server if any, close conn).
 // codecov:ignore — rollback branches exercised by integration and E2E tests
 func (s *Subsystem) Start(ctx context.Context) error {
-	if s.server != nil {
-		return nil // already started
+	if s.conn != nil {
+		return nil // already started (embedded or external)
 	}
 
-	storeDir, err := s.resolveStoreDir()
+	conn, js, err := s.connect()
 	if err != nil {
 		return err
+	}
+	s.conn = conn
+	s.js = js
+
+	if err := s.EnsureStream(ctx); err != nil {
+		s.rollbackStart(conn)
+		return err
+	}
+
+	// Optional Prometheus exporter. Embedded-only (OQ-7): it scrapes the
+	// embedded NATS server's HTTP monitor endpoint via server.MonitorAddr(),
+	// which does not exist in external mode (s.server is nil — the external
+	// cluster exposes its own /varz that the runbook points at). Guarded by
+	// exporterEnabled so an external deployment with PrometheusExporter=true
+	// never dereferences the nil server.
+	if s.exporterEnabled() {
+		monitorAddr := s.server.MonitorAddr()
+		if monitorAddr == nil || monitorAddr.Port <= 0 {
+			s.rollbackStart(conn)
+			return oops.Code("EVENTBUS_EXPORTER_MONITOR_UNBOUND").
+				Errorf("PrometheusExporter requires MonitorPort > 0 to bind the NATS HTTP monitor")
+		}
+		exp, expErr := startExporterFn(monitorAddr.Port, s.cfg.ExporterPort)
+		if expErr != nil {
+			s.rollbackStart(conn)
+			return oops.Code("EVENTBUS_EXPORTER_START_FAILED").
+				With("monitor_port", monitorAddr.Port).
+				Wrap(expErr)
+		}
+		s.exporter = exp
+	}
+	return nil
+}
+
+// connect establishes the mode-dependent NATS transport and returns a
+// connection plus JetStream context. The embedded case (default) brings up the
+// in-process server as a side effect (s.server); the external case (CLUSTER-01)
+// dials the configured cluster. Each case owns its own rollback on failure so a
+// half-built transport never leaks. s.conn/s.js are set by Start, not here.
+func (s *Subsystem) connect() (*nats.Conn, jetstream.JetStream, error) {
+	if s.cfg.Mode == ModeExternal {
+		return s.connectExternal()
+	}
+	return s.connectEmbedded()
+}
+
+// connectEmbedded brings up the in-process NATS server and opens an in-process
+// connection. It sets and rolls back s.server internally; on success s.server
+// is live and the returned conn/js are attached to it.
+func (s *Subsystem) connectEmbedded() (*nats.Conn, jetstream.JetStream, error) {
+	storeDir, err := s.resolveStoreDir()
+	if err != nil {
+		return nil, nil, err
 	}
 
 	opts := &server.Options{
@@ -101,7 +158,7 @@ func (s *Subsystem) Start(ctx context.Context) error {
 
 	srv, err := server.NewServer(opts)
 	if err != nil {
-		return oops.Code("EVENTBUS_SERVER_NEW_FAILED").Wrap(err)
+		return nil, nil, oops.Code("EVENTBUS_SERVER_NEW_FAILED").Wrap(err)
 	}
 	s.server = srv
 	go s.server.Start()
@@ -112,7 +169,7 @@ func (s *Subsystem) Start(ctx context.Context) error {
 		// cannot race the previous server's filestore teardown.
 		s.server.WaitForShutdown()
 		s.server = nil
-		return oops.Code("EVENTBUS_SERVER_NOT_READY").
+		return nil, nil, oops.Code("EVENTBUS_SERVER_NOT_READY").
 			With("timeout", readyTimeout.String()).
 			Errorf("embedded NATS server did not become ready")
 	}
@@ -130,71 +187,92 @@ func (s *Subsystem) Start(ctx context.Context) error {
 		s.server.Shutdown()
 		s.server.WaitForShutdown()
 		s.server = nil
-		return oops.Code("EVENTBUS_CONNECT_FAILED").Wrap(err)
+		return nil, nil, oops.Code("EVENTBUS_CONNECT_FAILED").Wrap(err)
 	}
-	s.conn = conn
 
 	js, err := jetstream.New(conn)
 	if err != nil {
 		conn.Close()
-		s.conn = nil
 		s.server.Shutdown()
 		s.server.WaitForShutdown()
 		s.server = nil
-		return oops.Code("EVENTBUS_JETSTREAM_CTX_FAILED").Wrap(err)
+		return nil, nil, oops.Code("EVENTBUS_JETSTREAM_CTX_FAILED").Wrap(err)
 	}
-	s.js = js
-
-	if err := s.EnsureStream(ctx); err != nil {
-		conn.Close()
-		s.conn = nil
-		s.js = nil
-		s.server.Shutdown()
-		s.server.WaitForShutdown()
-		s.server = nil
-		return err
-	}
-
-	// Optional Prometheus exporter. Requires the embedded NATS server's HTTP
-	// monitoring listener to be bound (MonitorPort > 0 on config). Read the
-	// actual bound port via server.MonitorAddr() — callers who set -1 for a
-	// random port would otherwise have no way to learn what the exporter
-	// scrapes.
-	if s.cfg.PrometheusExporter {
-		monitorAddr := s.server.MonitorAddr()
-		if monitorAddr == nil || monitorAddr.Port <= 0 {
-			conn.Close()
-			s.conn = nil
-			s.js = nil
-			s.server.Shutdown()
-			s.server.WaitForShutdown()
-			s.server = nil
-			return oops.Code("EVENTBUS_EXPORTER_MONITOR_UNBOUND").
-				Errorf("PrometheusExporter requires MonitorPort > 0 to bind the NATS HTTP monitor")
-		}
-		exp, expErr := startExporterFn(monitorAddr.Port, s.cfg.ExporterPort)
-		if expErr != nil {
-			conn.Close()
-			s.conn = nil
-			s.js = nil
-			s.server.Shutdown()
-			s.server.WaitForShutdown()
-			s.server = nil
-			return oops.Code("EVENTBUS_EXPORTER_START_FAILED").
-				With("monitor_port", monitorAddr.Port).
-				Wrap(expErr)
-		}
-		s.exporter = exp
-	}
-	return nil
+	return conn, js, nil
 }
 
-// EnsureStream creates or updates the EVENTS stream idempotently.
+// connectExternal dials the external NATS cluster (CLUSTER-01) with creds/TLS
+// and obtains a JetStream context. There is no embedded server in this mode:
+// s.server stays nil and the exporter block is skipped (OQ-7). A dial failure
+// is already coded EVENTBUS_EXTERNAL_CONNECT_FAILED by dialExternal (D-02).
+func (s *Subsystem) connectExternal() (*nats.Conn, jetstream.JetStream, error) {
+	conn, err := dialExternal(s.cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	js, err := jetstream.New(conn)
+	if err != nil {
+		conn.Close()
+		return nil, nil, oops.Code("EVENTBUS_JETSTREAM_CTX_FAILED").Wrap(err)
+	}
+	return conn, js, nil
+}
+
+// exporterEnabled reports whether the embedded-only Prometheus exporter should
+// start. External mode has no embedded server to scrape (OQ-7), so the exporter
+// is embedded-only regardless of the PrometheusExporter flag — the external
+// cluster exposes its own monitoring endpoint (runbook, D-16).
+func (s *Subsystem) exporterEnabled() bool {
+	return s.cfg.Mode == ModeEmbedded && s.cfg.PrometheusExporter
+}
+
+// rollbackStart unwinds a partially-started subsystem after a mid-Start
+// failure: it closes the connection, nils the conn/js seams, and — in embedded
+// mode — shuts the in-process server down so a retry cannot race the previous
+// server's filestore teardown. In external mode s.server is nil, so only the
+// connection is closed (the external cluster is not ours to shut down).
+func (s *Subsystem) rollbackStart(conn *nats.Conn) {
+	conn.Close()
+	s.conn = nil
+	s.js = nil
+	if s.server != nil {
+		s.server.Shutdown()
+		s.server.WaitForShutdown()
+		s.server = nil
+	}
+}
+
+// EnsureStream reconciles the EVENTS stream per the provision policy (D-03).
+//
+// When provision is enabled (the default), it idempotently creates or updates
+// the stream — the same code path in embedded and external mode. When an
+// operator sets provision:false (a locked-down cluster whose server account
+// lacks $JS.API stream-admin permissions), it instead VERIFIES the stream
+// exists with the expected config and fails closed on mismatch via
+// EVENTBUS_STREAM_CONFIG_MISMATCH — the server MUST NOT attempt stream admin.
 func (s *Subsystem) EnsureStream(ctx context.Context) error {
 	if s.js == nil {
 		return oops.Code("EVENTBUS_NOT_STARTED").Errorf("EnsureStream called before Start")
 	}
-	_, err := s.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+
+	desired := s.desiredStreamConfig()
+
+	if !s.cfg.IsProvision() {
+		return s.verifyStream(ctx, desired)
+	}
+
+	_, err := s.js.CreateOrUpdateStream(ctx, desired)
+	if err != nil {
+		return oops.Code("EVENTBUS_STREAM_DECLARE_FAILED").With("stream", StreamName).Wrap(err)
+	}
+	return nil
+}
+
+// desiredStreamConfig is the EVENTS stream config this subsystem owns. It is the
+// single source of truth for both the provision (create/update) and the
+// provision:false (verify) paths, so the two can never drift.
+func (s *Subsystem) desiredStreamConfig() jetstream.StreamConfig {
+	return jetstream.StreamConfig{
 		Name:        StreamName,
 		Subjects:    []string{SubjectFilter},
 		Retention:   jetstream.LimitsPolicy,
@@ -203,11 +281,64 @@ func (s *Subsystem) EnsureStream(ctx context.Context) error {
 		MaxAge:      s.cfg.StreamMaxAge,
 		Duplicates:  s.cfg.DupeWindow,
 		AllowDirect: true,
-	})
+	}
+}
+
+// verifyStream implements the provision:false path (D-03): it looks the stream
+// up and compares the config fields this subsystem owns against desired,
+// failing closed with EVENTBUS_STREAM_CONFIG_MISMATCH if the stream is absent
+// or its config drifts. It never creates or mutates the stream.
+func (s *Subsystem) verifyStream(ctx context.Context, desired jetstream.StreamConfig) error {
+	stream, err := s.js.Stream(ctx, StreamName)
 	if err != nil {
-		return oops.Code("EVENTBUS_STREAM_DECLARE_FAILED").With("stream", StreamName).Wrap(err)
+		// Absent (ErrStreamNotFound) or unreadable in provision:false mode: the
+		// server MUST NOT create it — fail closed rather than provision (D-03).
+		return oops.Code("EVENTBUS_STREAM_CONFIG_MISMATCH").
+			With("stream", StreamName).
+			With("reason", "stream not found").
+			Wrap(err)
+	}
+	info, err := stream.Info(ctx)
+	if err != nil {
+		return oops.Code("EVENTBUS_STREAM_CONFIG_MISMATCH").
+			With("stream", StreamName).
+			With("reason", "stream info unavailable").
+			Wrap(err)
+	}
+	if field := streamConfigMismatch(desired, info.Config); field != "" {
+		return oops.Code("EVENTBUS_STREAM_CONFIG_MISMATCH").
+			With("stream", StreamName).
+			With("field", field).
+			Errorf("existing EVENTS stream config differs from desired (provision:false)")
 	}
 	return nil
+}
+
+// streamConfigMismatch returns the name of the first owned config field that
+// differs between desired and got, or "" if they match. It compares every field
+// this subsystem declares as its contract in desiredStreamConfig (Subjects,
+// Retention, Storage, MaxAge, Duplicates, AllowDirect) — server-managed fields
+// (e.g. Replicas on a real cluster, placement) are not this subsystem's contract
+// to enforce. Storage is durability-critical: a stream provisioned with Memory
+// storage instead of File would silently pass provision:false verification and
+// lose the audit event stream on restart, so it MUST fail closed (D-03).
+func streamConfigMismatch(desired, got jetstream.StreamConfig) string {
+	switch {
+	case !slices.Equal(desired.Subjects, got.Subjects):
+		return "subjects"
+	case desired.Retention != got.Retention:
+		return "retention"
+	case desired.Storage != got.Storage:
+		return "storage"
+	case desired.MaxAge != got.MaxAge:
+		return "max_age"
+	case desired.Duplicates != got.Duplicates:
+		return "duplicates"
+	case desired.AllowDirect != got.AllowDirect:
+		return "allow_direct"
+	default:
+		return ""
+	}
 }
 
 // Stop drains the in-process connection and shuts the server down.

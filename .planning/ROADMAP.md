@@ -51,7 +51,7 @@ tools should treat this as historical context, not phase-parseable roadmap conte
 
 - [x] **Phase 1: Channels Subsystem** - Stand up `core-channels` as the social-spaces substrate's second consumer (completed 2026-07-09)
 - [x] **Phase 2: Scenes Lineage Completion** - Notifications and telnet polish for the shipped Scenes subsystem (templates descoped to backlog) (completed 2026-07-09)
-- [ ] **Phase 3: Platform Hardening & Deployment Scaling** - External/clustered NATS, multi-node crypto invalidation, audit durability
+- [x] **Phase 3: Platform Hardening & Deployment Scaling** - External/clustered NATS, multi-node crypto invalidation, audit durability (completed 2026-07-10)
 
 ## Phase Details
 
@@ -169,7 +169,29 @@ closing the single-node ceiling flagged in `.planning/codebase/CONCERNS.md`.
 4. Audit messages that exhaust `MaxDeliver` land in a dead-letter queue instead of being silently dropped
 5. Operator has a documented runbook for external-NATS deployment
 
-**Plans**: TBD
+**Plans**: 9/9 plans complete
+
+Plans:
+**Wave 1** *(foundation — no deps)*
+
+- [x] 03-01-PLAN.md — EventBus config reconciliation (ModeExternal/URL/Credentials/TLS/Provision/DLQ) + fail-closed `Validate()` (CLUSTER-01)
+- [x] 03-02-PLAN.md — External-NATS testcontainer harness (per-replica conns) + test-tier rule amendment (CLUSTER-03 substrate)
+
+**Wave 2** *(build on config + harness)*
+
+- [x] 03-03-PLAN.md — External mode connect branch + provision opt-out + fail-closed boot (CLUSTER-01)
+- [x] 03-04-PLAN.md — Audit DLQ capture helper + projection Term/Nak hook + metric (CLUSTER-04)
+
+**Wave 3** *(verification + operator assets)*
+
+- [x] 03-05-PLAN.md — Multi-node crypto invalidation + hung-replica probe-pill + invariant capstone (CLUSTER-03)
+- [x] 03-06-PLAN.md — Single-principal account scoping: deploy/nats templates + verify script + boot self-check (CLUSTER-02)
+- [x] 03-07-PLAN.md — DLQ replay CLI (`holomush audit dlq {list,show,replay}`) (CLUSTER-04)
+- [x] 03-08-PLAN.md — compose.cluster.yaml overlay + multi-process cluster smoke (CLUSTER-03/05)
+
+**Wave 4** *(capstone)*
+
+- [x] 03-09-PLAN.md — External-NATS operator runbook (CLUSTER-05)
 
 ## Progress
 
@@ -181,7 +203,7 @@ completion, and platform hardening can proceed in parallel if desired)
 |-------|----------------|--------|-----------|
 | 1. Channels Subsystem | 10/10 | Complete    | 2026-07-09 |
 | 2. Scenes Lineage Completion | 7/7 | Complete    | 2026-07-09 |
-| 3. Platform Hardening & Deployment Scaling | 0/TBD | Not started | - |
+| 3. Platform Hardening & Deployment Scaling | 9/9 | Complete    | 2026-07-10 |
 
 ## Deferred (Not in This Roadmap)
 
@@ -202,7 +224,7 @@ Promote an entry with `/gsd-review-backlog` when ready.
 **Goal:** Round out the web portal beyond scenes: offline support, wiki/help pages, character profiles + creation/management UI, admin portal, and a web surface for 1:1 direct messages.
 **Source:** beads migration — 7 item(s) incl. epic(s) `holomush-qve`; member list in TRIAGE.md
 **Requirements:** TBD
-**Plans:** 0 plans
+**Plans:** TBD (promote with /gsd-review-backlog when ready)
 
 Plans:
 

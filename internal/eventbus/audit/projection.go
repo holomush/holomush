@@ -18,10 +18,16 @@ import (
 	"github.com/holomush/holomush/internal/pgnanos"
 )
 
+// HeaderMsgID is the Nats-Msg-Id header carrying the event ULID — the
+// JetStream dedup key and the events_audit primary key. Exported so operator
+// CLIs (e.g. `holomush audit dlq show`) match the exact header the projection
+// writes instead of duplicating the literal, which could drift on a rename.
+const HeaderMsgID = "Nats-Msg-Id"
+
 // Header names copied from the spec (§5). Keep in sync with the publisher
 // side; mismatches cause the projection to reject messages.
 const (
-	headerMsgID         = "Nats-Msg-Id"
+	headerMsgID         = HeaderMsgID
 	headerCodec         = "App-Codec"
 	headerEventType     = "App-Event-Type"
 	headerSchemaVersion = "App-Schema-Version"
@@ -52,7 +58,10 @@ type projection struct {
 	pool   *pgxpool.Pool
 	cfg    Config
 	owners *OwnerMap // may be nil: nil ⇒ host owns every subject
-	cc     jetstream.ConsumeContext
+	// dlq captures poison messages on the final delivery attempt so a
+	// message exhausting MaxDeliver is never silently dropped (D-09).
+	dlq dlqCapturer
+	cc  jetstream.ConsumeContext
 	// workerCtx is stored at start() time so persist() can derive its
 	// Exec context from it. Subsystem.Stop cancels workerCtx; any
 	// pending INSERT then cancels as well, so drain() cannot return
@@ -109,17 +118,24 @@ func newProjection(ctx context.Context, js jetstream.JetStream, pool *pgxpool.Po
 			// persist failure (AUDIT_MISSING_HEADER, AUDIT_BAD_SCHEMA_VERSION,
 			// AUDIT_BAD_MSG_ID, BYTEA-incompatible DB row) would redeliver
 			// forever and permanently consume a MaxAckPending slot — a
-			// handful of poison messages could stall the projection.
-			// Phase A TODO: wire a DLQ (e.g., stream 'EVENTS_AUDIT_DLQ') so
-			// messages that exhaust MaxDeliver are preserved for operator
-			// inspection rather than dropped on max-deliver expiry.
+			// handful of poison messages could stall the projection. On the
+			// final attempt handle() captures the message to EVENTS_AUDIT_DLQ
+			// (see dlq.go) so it is preserved for operator inspection/replay
+			// rather than dropped on max-deliver expiry (CLUSTER-04, D-09).
 			MaxDeliver: cfg.MaxDeliver,
 		})
 	})
 	if err != nil {
 		return nil, wrapConsumerCreateError(err, eventbus.StreamName, cfg.ConsumerName)
 	}
-	return &projection{consumer: cons, js: js, pool: pool, cfg: cfg, owners: cfg.Owners}, nil
+	// Provision the bounded dead-letter stream once at construction so the
+	// final-attempt capture path (handle) can publish without a per-message
+	// ensure. EnsureStream is idempotent (D-12).
+	dlq := newDLQPublisher(js, cfg.DLQ)
+	if err := dlq.EnsureStream(ctx); err != nil {
+		return nil, oops.Code("AUDIT_DLQ_STREAM_INIT_FAILED").Wrap(err)
+	}
+	return &projection{consumer: cons, js: js, pool: pool, cfg: cfg, owners: cfg.Owners, dlq: dlq}, nil
 }
 
 // wrapConsumerCreateError applies the canonical AUDIT_CONSUMER_CREATE_FAILED
@@ -224,7 +240,8 @@ func (p *projection) handle(msg jetstream.Msg) {
 			// Low-signal per-message event; debug-only to keep log volume
 			// bounded. Plugin-owned audit coverage is observable via the
 			// SkippedPluginOwnedTotal counter instead.
-			slog.Default().Debug(
+			slog.DebugContext(
+				p.workerCtx,
 				"audit projection skipping plugin-owned subject",
 				"subject", msg.Subject(),
 				"plugin", owner.PluginName,
@@ -235,10 +252,48 @@ func (p *projection) handle(msg jetstream.Msg) {
 		}
 	}
 	if err := p.persist(msg); err != nil {
-		// Deliberate no-ack: JetStream will redeliver after AckWait.
-		// We do not Nak() because Nak triggers INSTANT redelivery,
-		// which would storm the database on persistent errors (e.g.
-		// DB down). AckWait-based redelivery gives natural backoff.
+		// Final-attempt DLQ capture (CLUSTER-04, D-09): once a message has
+		// been delivered MaxDeliver times, JetStream will stop redelivering
+		// it. MaxDeliver is a hard ceiling — an explicit Nak past it produces a
+		// MAX_DELIVERIES advisory, NOT another delivery. Rather than let the
+		// message drop on max-deliver expiry, capture it to the bounded
+		// EVENTS_AUDIT_DLQ stream and Term the original. If the DLQ publish
+		// itself fails we do NOT Term (Term would discard the only surviving
+		// copy without a durable capture) and we do NOT Nak (a Nak here cannot
+		// buy a redelivery — the cap is already reached). Leaving the message
+		// un-acked keeps it in the source EVENTS stream (LimitsPolicy) until
+		// StreamMaxAge: it is never Term'd without a durable capture, so no
+		// audit record is silently dropped before MaxAge. Capture is not
+		// auto-retried past MaxDeliver. The DLQ's failure domain is independent
+		// of Postgres (the most likely cause of dead letters).
+		meta, mErr := msg.Metadata()
+		if mErr == nil && p.cfg.MaxDeliver > 0 && meta.NumDelivered >= uint64(p.cfg.MaxDeliver) {
+			if dlqErr := p.dlq.Capture(p.workerCtx, msg); dlqErr != nil {
+				slog.ErrorContext(
+					p.workerCtx,
+					"audit DLQ capture failed; leaving message un-acked and retained in source stream until MaxAge (not auto-retried past MaxDeliver)",
+					"subject", msg.Subject(),
+					"num_delivered", meta.NumDelivered,
+					"error", dlqErr.Error(),
+				)
+				// Deliberate no-ack: not Term'd (never discard without a durable
+				// capture) and not Nak'd (redelivery is impossible past the cap).
+				return
+			}
+			slog.WarnContext(
+				p.workerCtx,
+				"audit message exhausted MaxDeliver; captured to dead-letter stream",
+				"subject", msg.Subject(),
+				"num_delivered", meta.NumDelivered,
+			)
+			_ = msg.Term() //nolint:errcheck // Term failures are absorbed by max-deliver expiry
+			return
+		}
+		// Below the cap (or metadata unavailable): deliberate no-ack.
+		// JetStream will redeliver after AckWait. We do not Nak() because
+		// Nak triggers INSTANT redelivery, which would storm the database
+		// on persistent errors (e.g. DB down). AckWait-based redelivery
+		// gives natural backoff.
 		return
 	}
 	// Ack errors here are transient network/protocol errors; the server
@@ -256,7 +311,46 @@ func (p *projection) handle(msg jetstream.Msg) {
 // Phase A note: only system-actor events flow through here. Phase B
 // will emit a real ULID in App-Actor-ID for user-initiated events; the
 // code below decodes that header if present but tolerates its absence.
+//
+// The header-parse + INSERT body lives in writeAuditRow so the DLQ
+// replay path (replay.go) drives the SAME idempotent write; persist owns
+// only the workerCtx-derived timeout so Subsystem.Stop can cancel
+// in-flight INSERTs.
 func (p *projection) persist(msg jetstream.Msg) error {
+	// Derive persist ctx from workerCtx so Subsystem.Stop can cancel
+	// in-flight INSERTs. Falls back to Background if persist runs before
+	// start (defensive — shouldn't happen in normal lifecycle).
+	parent := p.workerCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, persistTimeout)
+	defer cancel()
+	// On the live path msg.Subject() IS the original event subject.
+	return writeAuditRow(ctx, p.pool, msg.Subject(), msg)
+}
+
+// writeAuditRow parses a JetStream message's audit headers and writes the
+// corresponding events_audit row with ON CONFLICT (id) DO NOTHING. It is
+// the single durable-write body shared by the live projection (persist)
+// and the DLQ replay path (ReplayDLQ) so header parsing and idempotency
+// stay byte-identical across both — a replayed dead letter reconstructs
+// the exact row the live path would have written (CLUSTER-04, D-11).
+//
+// subject is the ORIGINAL event subject to store. On the live path it is
+// msg.Subject() verbatim; on replay it is the original subject recovered
+// from the DLQ subject suffix (DLQ capture wraps the original subject as
+// <dlq-prefix>.<orig-subject>), so the recovered row's subject column
+// matches what the live path would have written.
+//
+// Note: timestamp and js_seq derive from msg.Metadata(). On the live path
+// that is the EVENTS stream's metadata; on replay it is the
+// EVENTS_AUDIT_DLQ message's metadata (the original event's stream
+// sequence/timestamp are not preserved by DLQ capture — only headers,
+// data, and the subject-suffix survive). The dedup key is the
+// header-carried Nats-Msg-Id (id column), which IS preserved, so
+// idempotency holds regardless of which stream the message is read from.
+func writeAuditRow(ctx context.Context, pool *pgxpool.Pool, subject string, msg jetstream.Msg) error {
 	h := msg.Headers()
 
 	msgID := h.Get(headerMsgID)
@@ -317,17 +411,7 @@ func (p *projection) persist(msg jetstream.Msg) error {
 		return oops.Code("AUDIT_BAD_MSG_ID").With("msg_id", msgID).Wrap(err)
 	}
 
-	// Derive persist ctx from workerCtx so Subsystem.Stop can cancel
-	// in-flight INSERTs. Falls back to Background if persist runs before
-	// start (defensive — shouldn't happen in normal lifecycle).
-	parent := p.workerCtx
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, cancel := context.WithTimeout(parent, persistTimeout)
-	defer cancel()
-
-	_, err = p.pool.Exec(
+	_, err = pool.Exec(
 		ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
@@ -336,7 +420,7 @@ func (p *projection) persist(msg jetstream.Msg) error {
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (id) DO NOTHING`,
 		idBytes,
-		msg.Subject(),
+		subject,
 		eventType,
 		pgnanos.From(meta.Timestamp),
 		actorKind,

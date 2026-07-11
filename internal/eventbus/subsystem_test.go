@@ -149,13 +149,13 @@ func TestSubsystemPrometheusExporterRequiresMonitorPort(t *testing.T) {
 func TestConfigDefaultsPreserveExplicitValues(t *testing.T) {
 	t.Parallel()
 	c := eventbus.Config{
-		Mode:         eventbus.ModeCluster,
+		Mode:         eventbus.ModeExternal,
 		GameID:       "custom",
 		StoreDir:     "/tmp/custom",
 		StreamMaxAge: 1 * time.Hour,
 		DupeWindow:   5 * time.Minute,
 	}.Defaults()
-	assert.Equal(t, eventbus.ModeCluster, c.Mode)
+	assert.Equal(t, eventbus.ModeExternal, c.Mode)
 	assert.Equal(t, "custom", c.GameID)
 	assert.Equal(t, "/tmp/custom", c.StoreDir)
 	assert.Equal(t, 1*time.Hour, c.StreamMaxAge)
