@@ -4,11 +4,10 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 5
 current_phase_name: M2 / M12
-status: verifying
+status: "Phase 4 shipped — PR #4814"
 stopped_at: Completed 04-04-PLAN.md — phase 04 ready for verification
-last_updated: "2026-07-11T21:54:31.812Z"
+last_updated: "2026-07-11T22:12:15.897Z"
 last_activity: 2026-07-11
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
 progress:
   total_phases: 6
   completed_phases: 1
@@ -32,8 +31,8 @@ trusted identically.
 
 Phase: 5 — World-Model Integrity Fixes (M2 / M12)
 Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-07-11 — Phase 04 complete, transitioned to Phase 5
+Status: Phase 4 shipped — PR #4814
+Last activity: 2026-07-11
 
 ## Performance Metrics
 
