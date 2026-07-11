@@ -15,11 +15,12 @@ holomush-jfb9x).
    `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/release_notes_collect.py" $ARGUMENTS`
    (or `task release:notes:collect -- $ARGUMENTS`). Read the structured block:
    filtered commits, referenced issue ids (legacy bead ids on pre-migration commits), coverage
-   gaps, and the roadmap theme pointer.
+   gaps, and the theme-context pointer.
 
-2. **Read `docs/roadmap.md`** theme sections matching the referenced GitHub
-   issues' `theme:*` labels — these carry the *why* and become the narrative
-   headlines.
+2. **Read the theme rationale** for the referenced issues' `theme:*` labels from
+   the matching ADRs (`docs/adr/`) and the GSD backlog (`.planning/ROADMAP.md`) —
+   these carry the *why* and become the narrative headlines. (`docs/roadmap.md`
+   was retired 2026-07-11; GSD owns planning.)
 
 3. **Draft the narrative** to a temp file. Structure: a 2–3 sentence TLDR, then
    theme-grouped Features, then Fixes, then an "Other changes" catch-all that

@@ -118,17 +118,9 @@ workflow. Do NOT mint ad-hoc invariant families in prose.
 
 Naming: `YYYY-MM-DD-<feature-name>.md`
 
-### Roadmap (`docs/roadmap.md`)
+### Strategic planning (GSD-owned)
 
-Single file (not per-theme docs) tracking strategic themes that span multiple epics. Paired with `theme:<slug>` GitHub issue labels for cross-epic queryability. The doc carries the **why** (substrate-and-uses framing, sequencing rationale, risks); GitHub Issues carry the **what** (individual work items).
-
-Maintenance rules live in the root `CLAUDE.md` "Strategic Themes" section. Key directives:
-
-- **MUST** keep current when adding/removing a `theme:*` label
-- **MUST NOT** create per-theme markdown files (single roadmap, sectioned)
-- **SHOULD** move completed themes to a "Completed themes" section with a date rather than deleting
-
-When editing `docs/roadmap.md`, also capture or update an ADR in `docs/adr/` recording the framing.
+Strategic planning lives in **GSD** (`.planning/ROADMAP.md` — the `## Backlog` `999.x` entries + per-phase docs), not a standalone roadmap file. The former `docs/roadmap.md` was retired 2026-07-11. `theme:<slug>` GitHub issue labels remain as lightweight grouping tags with no narrative-doc obligation; enduring theme/architecture rationale goes in ADRs (`docs/adr/`). Full rules: root `CLAUDE.md` "Strategic Themes" section.
 
 ## Nested Code Blocks
 

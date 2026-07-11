@@ -108,10 +108,10 @@ stacktrace-at-WARN noise" is a *better* triage than a manufactured P1.
   correctness guarantee can be `priority::high` even if today's user-visible
   impact is nil. A scary log that's benign is `priority::low`.
 - **Labels:** topical/category labels that match how sibling issues are
-  tagged (`plugin`, `web`, `observability`, `handler`, `crypto`, …). Do
-  **not** attach a `theme:*` label unless an *active* theme in
-  `docs/roadmap.md` genuinely covers the work — a mismatched or orphan theme
-  label is forbidden by the project's theme policy.
+  tagged (`plugin`, `web`, `observability`, `handler`, `crypto`, …). A
+  `theme:*` label is a lightweight grouping tag — attach one only if an
+  existing theme genuinely groups the work; don't invent a new theme for a
+  single issue. (Strategic planning lives in GSD, not a roadmap doc.)
 
 ### 6. Scope it — class, not site; leave decisions open
 

@@ -19,7 +19,7 @@ HoloMUSH is a modern MUSH platform: Go core with event-oriented architecture, du
 
 ## Documentation Structure
 
-`site/src/content/docs/` is the public Astro-Starlight website, by audience: `guide/` (players/designers), `operating/` (server operators), `extending/` (plugin devs), `contributing/` (codebase contributors), `reference/` (auto-generated API/event refs). Internal contributor docs: `docs/roadmap.md` (strategic themes), `docs/plans/` + `docs/superpowers/plans/` (plans), `docs/specs/` + `docs/superpowers/specs/` (specs); the `docs/superpowers/` subdirs are AI-tooling-generated and equally valid.
+`site/src/content/docs/` is the public Astro-Starlight website, by audience: `guide/` (players/designers), `operating/` (server operators), `extending/` (plugin devs), `contributing/` (codebase contributors), `reference/` (auto-generated API/event refs). Internal contributor docs: `.planning/ROADMAP.md` (GSD-owned strategic backlog + phases), `docs/plans/` + `docs/superpowers/plans/` (plans), `docs/specs/` + `docs/superpowers/specs/` (specs); the `docs/superpowers/` subdirs are AI-tooling-generated and equally valid.
 
 **Branding:** software brand (logo, favicon, palette) defined in `.claude/rules/branding.md` + `site/CLAUDE.md` — cyan tile + `>holomush_` wordmark, amber cursor only.
 
@@ -97,16 +97,16 @@ GitHub Issues track discrete work items independently of GSD's phase artifacts. 
 
 ## Strategic Themes
 
-Multi-epic clusters use `theme:<slug>` GitHub issue labels + a narrative section in [`docs/roadmap.md`](docs/roadmap.md) (the **why**: substrate-and-uses framing, sequencing, risks).
+**GSD owns strategic planning.** The strategic "why" — substrate-and-uses framing, sequencing, risks — lives in GSD artifacts: `.planning/ROADMAP.md` (`## Backlog`, the `999.x` parking-lot entries) and the per-phase `.planning/` docs. The standalone `docs/roadmap.md` was **retired 2026-07-11**; do not recreate it. Historic theme rationale is preserved in ADRs (`docs/adr/`).
+
+`theme:<slug>` GitHub issue labels remain as a lightweight **grouping/query tag** for multi-epic clusters (e.g. `theme:social-spaces`). They carry no narrative-doc obligation.
 
 | Requirement                       | Description                                                                                                                                  |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SHOULD** add a theme            | When 2+ epics or a 5+ issue cluster share a strategic frame (e.g., `theme:social-spaces` covers scenes + channels + forums + discord)        |
-| **MUST** keep `docs/roadmap.md` current | When adding a `theme:*` label to any issue, also add or update the section in `docs/roadmap.md`; when a theme's work completes, move the section to "Completed themes" with a date |
-| **MUST NOT** orphan labels        | If a `theme:*` label exists with no narrative section in `docs/roadmap.md`, either add the section or drop the label                         |
-| **SHOULD** capture an ADR         | Record the theme framing as an ADR in `docs/adr/` alongside the roadmap edit; the ADR carries enduring rationale                             |
-| **SHOULD** refresh after pivots   | After major architectural pivots or audit cleanups, re-read active themes and verify they still match reality; demote/retire stale ones      |
-| **MUST NOT** use GitHub Projects   | Until team size or external visibility makes the double-entry cost worthwhile; issue labels + roadmap doc is the project-management surface  |
+| **MAY** add a `theme:*` label     | When 2+ epics or a 5+ issue cluster share a strategic frame and grouping them for queries is useful. Purely a tag — no roadmap section required. |
+| **SHOULD** route strategy to GSD  | Not-yet-scheduled strategic clusters live in `.planning/ROADMAP.md` `## Backlog` (`999.x`); promote with `/gsd-review-backlog`. New milestones/phases go through the GSD loop, not a roadmap doc. |
+| **SHOULD** capture an ADR         | Record enduring theme/architecture framing as an ADR in `docs/adr/` — the ADR carries the durable rationale (there is no roadmap doc to carry it). |
+| **MUST NOT** use GitHub Projects   | Until team size or external visibility makes the double-entry cost worthwhile; issue labels + GSD (`.planning/`) is the project-management surface. |
 
 ## Pre-Push Review Gates
 

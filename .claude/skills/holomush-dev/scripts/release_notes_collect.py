@@ -113,10 +113,11 @@ def main() -> int:
             out.append(f"- {s}")
     out.append("")
 
-    out.append("## Roadmap theme sections")
+    out.append("## Theme context")
     out.append("")
-    out.append("Consult docs/roadmap.md for theme:* sections; the model maps referenced")
-    out.append("legacy issue ids' theme labels to the relevant narrative headings.")
+    out.append("Map referenced issues' theme:* labels to their narrative 'why' via the")
+    out.append("matching ADRs in docs/adr/ and the GSD backlog (.planning/ROADMAP.md).")
+    out.append("(docs/roadmap.md was retired 2026-07-11; GSD owns planning.)")
 
     print("\n".join(out))
     return 0
