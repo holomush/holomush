@@ -37,7 +37,7 @@ Phase execution artifacts: `milestones/v0.11-phases/`.
 
 > **Immediate opener (before Phase 4):** ship the **F2 gateway DoS cap** (OPS-01, #4785) as a fast `/gsd-quick` fix — a one-line `connect.WithReadMaxBytes(4<<20)` + read timeout + a rejection test. It closes a **live unauthenticated OOM DoS**, so it lands first, ahead of the multi-step F1 investigation; too small to warrant the full phase loop.
 
-- [ ] **Phase 4: World-Model Resilience Investigation & Decision (F1)** — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR (decision gate)
+- [x] **Phase 4: World-Model Resilience Investigation & Decision (F1)** — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR (decision gate) (completed 2026-07-11)
 - [ ] **Phase 5: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction
 - [ ] **Phase 6: Operational Hardening & Assurance Gates** — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage gate
 - [ ] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports
@@ -63,7 +63,7 @@ Event-model collapse in Phase 7. Operational hardening + CI gates (Phase 6) and 
 3. A committed ADR records the world-model decision (build a real projection/outbox **vs.** adopt CRUD-canonical + optimistic-concurrency/transactional-outbox), grounded in F1 (`docs/reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md`) and the resilience evidence — #4784
 4. The ADR names the concrete mechanism Phase 5 (MODEL-03/MODEL-04) will implement
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -80,7 +80,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 04-04-PLAN.md — MODEL-01 ADR: draft, blocking human decision checkpoint, finalize + index + cross-link (wave 4)
+- [x] 04-04-PLAN.md — MODEL-01 ADR: draft, blocking human decision checkpoint, finalize + index + cross-link (wave 4)
 
 ### Phase 5: World-Model Integrity Fixes (M2 / M12)
 
@@ -159,7 +159,7 @@ Plans:
 | 1. Channels Subsystem | v0.11 | 10/10 | Complete | 2026-07-09 |
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
-| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 3/4 | In Progress|  |
+| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete   | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 0 | Pending | — |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |

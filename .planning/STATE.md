@@ -4,17 +4,17 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 04
 current_phase_name: world-model-resilience-investigation-decision-f1
-status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-07-11T19:52:08.339Z"
+status: verifying
+stopped_at: Completed 04-04-PLAN.md — phase 04 ready for verification
+last_updated: "2026-07-11T21:32:14.333Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 17
 ---
 
 # Project State
@@ -32,7 +32,7 @@ trusted identically.
 
 Phase: 04 (world-model-resilience-investigation-decision-f1) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-11 — Phase 04 execution started
 
 ## Performance Metrics
@@ -84,6 +84,7 @@ Last activity: 2026-07-11 — Phase 04 execution started
 | Phase 04 P02 | 35min | 2 tasks | 3 files |
 | Phase 04 P03 | ~55min | 2 tasks | 3 files |
 | Phase 04 P03 | ~55min | 2 tasks | 3 files |
+| Phase 04 P04 | ~90min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,8 @@ the next milestone yet.
 - [Phase ?]: Success-criterion #1 four chaos dimensions all green; replica restart recovers canonical state from the DB, not event replay (04-02)
 - [Phase ?]: M2 dual-write window characterized (D-07): MoveCharacter commits then emits post-commit; on broker flap the caller sees move_succeeded=true while notification delivery is decoupled from the result
 - [Phase ?]: Production world.Service wires NO EventEmitter — the move-notification leg is dead code today (pinned by a spec)
+- [Phase 04]: MODEL-01 decided: Option B — CRUD-canonical + optimistic concurrency + transactional outbox in the panel-ratified strengthened shape (consensus one-pager NORMATIVE); Phase 5 implements MODEL-03 version guard + MODEL-04 ordered atomic feed — Human decider (Sean Brandt) chose under future-state-first framing after a two-round three-model panel unanimously ratified the strengthened B shape; the ordered complete world-change feed is the platform's extensibility contract; evolvability inverts under event sourcing pre-1.0; coverage rot countered structurally (compile-time seam + census meta-test + delta-parity)
+- [Phase 04]: INV-WORLD-ATOMIC-FEED/-DELTA-PARITY/-FEED-ORDER/-WRITER-BOUNDARY named in the ADR; registration/binding deferred to Phase 5's spec per .claude/rules/invariants.md
 
 ### Pending Todos
 
@@ -129,10 +132,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-11T19:51:44.871Z
+Last session: 2026-07-11T21:32:14.327Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-world-model-resilience-investigation-decision-f1/04-CONTEXT.md
+Stopped at: Completed 04-04-PLAN.md — phase 04 ready for verification
+Resume file: None
 
 ## Operator Next Steps
 
