@@ -371,7 +371,7 @@ invariants.
 | `INV-EVENTBUS-27` | Plugin migrations MAY run before or after Phase 7's host migration (no host-side schema change beyond Phases 2–5); the two crypto columns added to plugin tables are nullable and require no new host-side support. | `INV-P7-10` | pending |
 | `INV-EVENTBUS-28` | New event subjects MUST use the NATS dot-style form events.<game_id>.<domain>.<entity-id>[.<facet>...]; colon-style is legacy and translated at the EventSink boundary. | `INV-S4` | pending |
 | `INV-EVENTBUS-29` | External-mode boot fails closed: mode:external with an unreachable NATS server, or a provision:false stream-config mismatch, refuses to Start and leaves conn/js nil — no embedded fallback (CLUSTER-01, D-02/D-03). | — | bound |
-| `INV-EVENTBUS-30` | DLQ capture never drops: an audit message exhausting MaxDeliver is Term'd only after a successful DLQ publish; a failed DLQ publish Naks instead, so redelivery continues and nothing is silently dropped (CLUSTER-04, D-09). | — | bound |
+| `INV-EVENTBUS-30` | DLQ capture never drops: an audit message exhausting MaxDeliver is Term'd only after a successful DLQ publish; a failed DLQ publish leaves the message un-acked and retained in the source EVENTS stream until StreamMaxAge (not redelivered or auto-retried past the MaxDeliver ceiling), so no audit record is Term'd without a durable capture (CLUSTER-04, D-09). | — | bound |
 
 ### `INV-CLUSTER`
 

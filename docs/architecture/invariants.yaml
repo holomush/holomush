@@ -2629,7 +2629,8 @@ invariants:
     scope: INV-EVENTBUS
     origin_spec: "docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md"
     summary: "DLQ capture never drops: an audit message exhausting MaxDeliver is Term'd only after a successful DLQ publish;
-      a failed DLQ publish Naks instead, so redelivery continues and nothing is silently dropped (CLUSTER-04, D-09)."
+      a failed DLQ publish leaves the message un-acked and retained in the source EVENTS stream until StreamMaxAge (not redelivered
+      or auto-retried past the MaxDeliver ceiling), so no audit record is Term'd without a durable capture (CLUSTER-04, D-09)."
     asserted_by:
       - "internal/eventbus/audit/dlq_capture_integration_test.go"
       - "internal/eventbus/audit/dlq_neverdrop_integration_test.go"
