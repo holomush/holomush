@@ -57,7 +57,7 @@ findings:
   warning: 6
   info: 4
   total: 10
-status: issues_found
+status: fixed
 ---
 
 # Phase 3: Code Review Report
@@ -65,7 +65,7 @@ status: issues_found
 **Reviewed:** 2026-07-10
 **Depth:** standard
 **Files Reviewed:** 49
-**Status:** issues_found
+**Status:** fixed — all 6 warnings + 4 info resolved 2026-07-10 (see Fix Log)
 
 ## Summary
 
@@ -250,6 +250,25 @@ is a `nats.ErrTimeout`, relying on `batch` being non-nil in that case. This matc
 the jetstream client's current behavior, but a nil batch alongside a timeout error
 would panic. Consider a defensive `if batch == nil { break }` guard.
 **Fix:** Add a nil-batch guard before iterating, or assert the invariant with a comment.
+
+---
+
+## Fix Log — all 10 findings resolved 2026-07-10
+
+| Finding | Fix | Commit |
+|---------|-----|--------|
+| WR-01 | `audit.RegisterMetrics(metricsReg)` wired into `core.go` boot (served registry) — DLQ counter now on `/metrics` | `20ca18bc0` |
+| WR-02 | `redactURL()` strips URL userinfo before attaching to the dial error — no credential leak | `f141b478d` |
+| WR-03 | `MINTED_DATA_DIR` guard — teardown only `rm`s a script-minted dir, never caller-supplied | `df4cb5dd7` |
+| WR-04 | connectivity precondition (exit 4) distinguishes "denied by scoping" from "never connected" | `3329974cc` |
+| WR-05 | `probeDenied` fully drains the violations channel before each probe | `91f2b0bad` |
+| WR-06 | `originalSubject` returns `(string, bool)`; prefix mismatch → `Failed`, never persists a corrupted subject (crypto-neutral) | `0ca71b310` |
+| IN-01 | save/restore the prior NATS error handler around the scope check | `4427cdb35` |
+| IN-02 | dropped tautological zero-value test; reworded the delegation test | `0ca71b310`, `7d71a22b9` |
+| IN-03 | exported `audit.HeaderMsgID`; CLI reuses it instead of a duplicated literal | `7d71a22b9` |
+| IN-04 | nil-batch guard before iterating fetch results | `0ca71b310`, `7d71a22b9` |
+
+Verified: `task test` green (10212), `task lint` exit 0, `task test:int` green (audit + external-scope surfaces).
 
 ---
 
