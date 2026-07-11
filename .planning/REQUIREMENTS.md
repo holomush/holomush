@@ -79,30 +79,30 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MODEL-01 | TBD | Pending |
-| MODEL-02 | TBD | Pending |
-| MODEL-03 | TBD | Pending |
-| MODEL-04 | TBD | Pending |
-| OPS-01 | TBD | Pending |
-| OPS-02 | TBD | Pending |
-| OPS-03 | TBD | Pending |
-| OPS-04 | TBD | Pending |
-| OPS-05 | TBD | Pending |
-| ARCH-01 | TBD | Pending |
-| ARCH-02 | TBD | Pending |
-| ARCH-03 | TBD | Pending |
-| ARCH-04 | TBD | Pending |
-| ARCH-05 | TBD | Pending |
-| QUAL-01 | TBD | Pending |
-| QUAL-02 | TBD | Pending |
-| QUAL-03 | TBD | Pending |
-| QUAL-04 | TBD | Pending |
-| QUAL-05 | TBD | Pending |
+| MODEL-01 | Phase 5 | Pending |
+| MODEL-02 | Phase 6 | Pending |
+| MODEL-03 | Phase 6 | Pending |
+| MODEL-04 | Phase 6 | Pending |
+| OPS-01 | Phase 4 | Pending |
+| OPS-02 | Phase 4 | Pending |
+| OPS-03 | Phase 4 | Pending |
+| OPS-04 | Phase 4 | Pending |
+| OPS-05 | Phase 5 | Pending |
+| ARCH-01 | Phase 8 | Pending |
+| ARCH-02 | Phase 8 | Pending |
+| ARCH-03 | Phase 7 | Pending |
+| ARCH-04 | Phase 7 | Pending |
+| ARCH-05 | Phase 7 | Pending |
+| QUAL-01 | Phase 4 | Pending |
+| QUAL-02 | Phase 9 | Pending |
+| QUAL-03 | Phase 9 | Pending |
+| QUAL-04 | Phase 9 | Pending |
+| QUAL-05 | Phase 9 | Pending |
 
 **Coverage:**
 - v0.12 requirements: 19 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 19
+- Mapped to phases: 19 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-11 for milestone v0.12 (Foundation Hardening)*
