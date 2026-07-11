@@ -119,6 +119,11 @@ type Server struct {
 	// pool is the shared Postgres connection pool.
 	pool *pgxpool.Pool
 
+	// connStr is the Postgres connection string this replica booted against.
+	// Exposed via ConnStr() so a two-replica resilience suite can pass it to
+	// WithSharedDatabase for replica 2 (D-03, #4791).
+	connStr string
+
 	// stores / repos
 	playerSessionStore *store.PostgresPlayerSessionStore
 	playerRepo         *authpg.PlayerRepository
@@ -213,6 +218,14 @@ type startConfig struct {
 	// extraPluginDirs holds additional plugin directories (e.g. test-only Lua
 	// fixtures) staged into the plugin load path alongside the in-tree plugins.
 	extraPluginDirs []string
+	// externalNATSURL, when non-empty, swaps the embedded eventbustest bus for a
+	// production external-mode eventbus.Subsystem dialing this URL (WithExternalNATS).
+	// Used by the two-replica resilience suite so replicas share one real broker.
+	externalNATSURL string
+	// sharedConnStr, when non-empty, joins this existing per-test database instead
+	// of creating a fresh one (WithSharedDatabase). Used by the two-replica
+	// resilience suite so replica 2 boots against replica 1's database.
+	sharedConnStr string
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -293,6 +306,24 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 
 	ctx := context.Background()
 
+	// Resolve options FIRST so the DB and bus seams below can branch on
+	// WithSharedDatabase / WithExternalNATS. Default ABAC engine is allowAll
+	// (privacy tests focus on session/history gates, not role enforcement).
+	// Tests that need denial-path coverage override via WithPolicyEngine.
+	cfg := &startConfig{accessEngine: &allowAllPolicyEngine{}}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	if cfg.withPluginCrypto && !cfg.withPlugins {
+		panic("integrationtest: WithPluginCrypto() requires WithInTreePlugins()")
+	}
+	if cfg.withFocusDelivery && !cfg.withPlugins {
+		panic("integrationtest: WithFocusDelivery() requires WithInTreePlugins()")
+	}
+	if cfg.withSessionStreamDelivery && !cfg.withPlugins {
+		panic("integrationtest: WithSessionStreamDelivery() requires WithInTreePlugins()")
+	}
+
 	// Provision boot-KEK env vars so any code path that reads
 	// HOLOMUSH_KEK_FILE / HOLOMUSH_KEK_PASSPHRASE (e.g. future helpers that
 	// call through to the production provisioning path) finds a valid, per-test
@@ -318,9 +349,16 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	t.Setenv("HOLOMUSH_KEK_FILE", kekFile)
 	t.Setenv("HOLOMUSH_KEK_PASSPHRASE", "integration-test-passphrase")
 
-	// Postgres: shared container, fresh per-test database.
-	shared := testutil.SharedPostgres(t)
-	connStr := testutil.FreshDatabase(t, shared)
+	// Postgres: shared container, fresh per-test database — unless
+	// WithSharedDatabase joined an existing per-test database (two-replica
+	// resilience suite, D-03), in which case replica 2+ reuses replica 1's connStr.
+	var connStr string
+	if cfg.sharedConnStr != "" {
+		connStr = cfg.sharedConnStr
+	} else {
+		shared := testutil.SharedPostgres(t)
+		connStr = testutil.FreshDatabase(t, shared)
+	}
 
 	evStore, err := store.NewPostgresEventStore(ctx, connStr)
 	require.NoError(t, err, "integrationtest.Start: open event store")
@@ -364,25 +402,33 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	)
 	require.NoError(t, err, "integrationtest.Start: create guest service")
 
-	// Embedded NATS bus (in-memory, cleaned up via t.Cleanup).
-	bus := eventbustest.New(t)
+	// Embedded NATS bus (in-memory, cleaned up via t.Cleanup) — unless
+	// WithExternalNATS swapped in a production external-mode subsystem dialing a
+	// shared broker (two-replica resilience suite, D-03). The external subsystem
+	// is wrapped as an *eventbustest.Embedded so ALL downstream harness wiring
+	// (publisher, subscriber, historyReader, GameID) works unchanged. Both
+	// replicas build eventbus.Config from Mode+URL then Defaults(), so every
+	// replica presents an identical desiredStreamConfig and CreateOrUpdateStream
+	// is a no-op on the second boot (internal/eventbus/subsystem.go EnsureStream).
+	var bus *eventbustest.Embedded
+	if cfg.externalNATSURL != "" {
+		sub := eventbus.NewSubsystem(eventbus.Config{
+			Mode: eventbus.ModeExternal,
+			URL:  cfg.externalNATSURL,
+		}.Defaults())
+		require.NoError(t, sub.Start(ctx), "integrationtest.Start: start external NATS subsystem")
+		t.Cleanup(func() {
+			// Log (not fail) on Stop error: deliberate chaos in the resilience
+			// suite may have wedged the connection before teardown.
+			if err := sub.Stop(context.Background()); err != nil {
+				t.Logf("integrationtest.Start: external NATS subsystem Stop: %v", err)
+			}
+		})
+		bus = &eventbustest.Embedded{Bus: sub, JS: sub.JS(), Conn: sub.Conn()}
+	} else {
+		bus = eventbustest.New(t)
+	}
 
-	// Resolve options. Default ABAC engine is allowAll (privacy tests focus
-	// on session/history gates, not role enforcement). Tests that need
-	// denial-path coverage override via WithPolicyEngine.
-	cfg := &startConfig{accessEngine: &allowAllPolicyEngine{}}
-	for _, opt := range opts {
-		opt(cfg)
-	}
-	if cfg.withPluginCrypto && !cfg.withPlugins {
-		panic("integrationtest: WithPluginCrypto() requires WithInTreePlugins()")
-	}
-	if cfg.withFocusDelivery && !cfg.withPlugins {
-		panic("integrationtest: WithFocusDelivery() requires WithInTreePlugins()")
-	}
-	if cfg.withSessionStreamDelivery && !cfg.withPlugins {
-		panic("integrationtest: WithSessionStreamDelivery() requires WithInTreePlugins()")
-	}
 	pe := cfg.accessEngine
 
 	// Real seeded ABAC engine (opt-in). Overrides the allow-all default and is
@@ -678,6 +724,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	srv := &Server{
 		t:                    t,
 		pool:                 pool,
+		connStr:              connStr,
 		playerSessionStore:   playerSessionStore,
 		playerRepo:           playerRepo,
 		charRepo:             charRepo,
@@ -887,6 +934,21 @@ func (s *Server) NewSceneWithoutMember(_ context.Context) ulid.ULID {
 // `events.<gameID>.scene.<sceneID>.{ic,ooc}` (per INV-SCENE-1 / ADR holomush-s9nu).
 func (s *Server) GameID() string {
 	return s.bus.Bus.GameID()
+}
+
+// ConnStr returns the Postgres connection string this replica booted against.
+// The two-replica resilience suite (D-03, #4791) passes replica 1's ConnStr()
+// into WithSharedDatabase so replica 2 joins the SAME database.
+func (s *Server) ConnStr() string {
+	return s.connStr
+}
+
+// Bus returns the harness's bus wrapper (subsystem + JetStream context +
+// connection). Under WithExternalNATS this wraps the production external-mode
+// eventbus.Subsystem dialing the shared broker. Consumers: the resilience suite
+// (stream inspection over an independent connection) and M2 emitter wiring.
+func (s *Server) Bus() *eventbustest.Embedded {
+	return s.bus
 }
 
 // DeleteSession directly deletes a session row from Postgres. Used by
