@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.11
-milestone_name: milestone
-current_phase: 11
-status: Awaiting next milestone
-stopped_at: Phase 3 context gathered
-last_updated: "2026-07-11T12:52:19.761Z"
+milestone: v0.12
+milestone_name: Foundation Hardening
+status: planning
+last_updated: "2026-07-11T15:05:56.943Z"
 last_activity: 2026-07-11
-last_activity_desc: Milestone v0.11 completed and archived
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 26
-  completed_plans: 26
-  percent: 100
-current_phase_name: BACKLOG
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -26,14 +22,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Milestone v0.11 (Social Spaces & Platform Hardening) shipped 2026-07-11 and archived. No active milestone — next: /gsd-new-milestone (promote 999.x backlog candidates via /gsd-review-backlog).
+**Current focus:** Milestone v0.12 (Foundation Hardening) — defining requirements. Pay down the highest-severity architecture & operational risks from the 2026-07-11 L7 review: event-model decision + fixes (F1 #4784, #4798), operational hardening (arch-review Highs), architecture decomposition (999.9), code health & test quality (999.10).
 
 ## Current Position
 
-Phase: Milestone v0.11 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-11 — Milestone v0.11 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-11 — Milestone v0.12 started
 
 ## Performance Metrics
 
