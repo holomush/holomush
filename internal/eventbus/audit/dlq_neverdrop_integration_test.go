@@ -56,9 +56,12 @@ func openIntegPool(t *testing.T, connStr string) *pgxpool.Pool {
 
 // TestProjectionNeverDropsWhenDLQPublishFails proves the never-drop
 // guarantee against a real broker: when the DLQ publish itself fails on the
-// final delivery attempt, the projection Naks (not Terms) — the message is
-// never captured to the DLQ, never persisted, and never marked complete. It
-// is retained for redelivery, never silently dropped (D-09).
+// final delivery attempt, the projection leaves the message un-acked (it does
+// NOT Term) — the message is never captured to the DLQ, never persisted, and
+// never marked complete. Because it is never Term'd without a durable capture,
+// it is retained in the source EVENTS stream until StreamMaxAge, never silently
+// dropped (D-09). MaxDeliver is a hard ceiling, so it is not redelivered past
+// the cap.
 //
 // Verifies: INV-EVENTBUS-30
 func TestProjectionNeverDropsWhenDLQPublishFails(t *testing.T) {
@@ -78,8 +81,9 @@ func TestProjectionNeverDropsWhenDLQPublishFails(t *testing.T) {
 	}.Defaults()
 
 	// newProjection provisions the real (empty) EVENTS_AUDIT_DLQ stream; we
-	// then override the capturer with one that always fails so the Nak
-	// fallback path is exercised against a real consumer/redelivery loop.
+	// then override the capturer with one that always fails so the no-ack
+	// fallback path (capture failure ⇒ leave un-acked, never Term) is exercised
+	// against a real consumer/redelivery loop.
 	p, err := newProjection(t.Context(), bus.JS, pool, cfg)
 	require.NoError(t, err)
 
@@ -109,8 +113,9 @@ func TestProjectionNeverDropsWhenDLQPublishFails(t *testing.T) {
 		"DLQ capture must be attempted on the final delivery attempt")
 
 	// Never dropped into a false-success state: the failed publish left the
-	// DLQ stream empty and the message was never persisted. Because we Nak
-	// (not Term) on DLQ failure, the message is retained for redelivery.
+	// DLQ stream empty and the message was never persisted. Because we leave
+	// the message un-acked (never Term'd) on DLQ failure, it is retained in the
+	// source EVENTS stream until MaxAge (not redelivered past MaxDeliver).
 	dlqStream, err := bus.JS.Stream(t.Context(), DefaultDLQStreamName)
 	require.NoError(t, err)
 	dlqInfo, err := dlqStream.Info(t.Context())

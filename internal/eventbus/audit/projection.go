@@ -253,22 +253,30 @@ func (p *projection) handle(msg jetstream.Msg) {
 	if err := p.persist(msg); err != nil {
 		// Final-attempt DLQ capture (CLUSTER-04, D-09): once a message has
 		// been delivered MaxDeliver times, JetStream will stop redelivering
-		// it. Rather than let it drop on max-deliver expiry, capture it to
-		// the bounded EVENTS_AUDIT_DLQ stream and Term the original. If the
-		// DLQ publish itself fails, Nak instead so redelivery continues —
-		// nothing is ever silently dropped. The DLQ's failure domain is
-		// independent of Postgres (the most likely cause of dead letters).
+		// it. MaxDeliver is a hard ceiling — an explicit Nak past it produces a
+		// MAX_DELIVERIES advisory, NOT another delivery. Rather than let the
+		// message drop on max-deliver expiry, capture it to the bounded
+		// EVENTS_AUDIT_DLQ stream and Term the original. If the DLQ publish
+		// itself fails we do NOT Term (Term would discard the only surviving
+		// copy without a durable capture) and we do NOT Nak (a Nak here cannot
+		// buy a redelivery — the cap is already reached). Leaving the message
+		// un-acked keeps it in the source EVENTS stream (LimitsPolicy) until
+		// StreamMaxAge: it is never Term'd without a durable capture, so no
+		// audit record is silently dropped before MaxAge. Capture is not
+		// auto-retried past MaxDeliver. The DLQ's failure domain is independent
+		// of Postgres (the most likely cause of dead letters).
 		meta, mErr := msg.Metadata()
 		if mErr == nil && p.cfg.MaxDeliver > 0 && meta.NumDelivered >= uint64(p.cfg.MaxDeliver) {
 			if dlqErr := p.dlq.Capture(p.workerCtx, msg); dlqErr != nil {
 				slog.ErrorContext(
 					p.workerCtx,
-					"audit DLQ capture failed; keeping message for redelivery",
+					"audit DLQ capture failed; leaving message un-acked and retained in source stream until MaxAge (not auto-retried past MaxDeliver)",
 					"subject", msg.Subject(),
 					"num_delivered", meta.NumDelivered,
 					"error", dlqErr.Error(),
 				)
-				_ = msg.Nak() //nolint:errcheck // Nak failures are absorbed by continued redelivery
+				// Deliberate no-ack: not Term'd (never discard without a durable
+				// capture) and not Nak'd (redelivery is impossible past the cap).
 				return
 			}
 			slog.WarnContext(

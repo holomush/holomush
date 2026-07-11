@@ -74,7 +74,7 @@ func TestHandleCapturesAndTermsOnFinalAttempt(t *testing.T) {
 	assert.Equal(t, 0, msg.ackCalls, "poison messages are never Ack'd")
 }
 
-func TestHandleNaksWhenDLQPublishFails(t *testing.T) {
+func TestHandleLeavesMessageUnackedWhenDLQPublishFails(t *testing.T) {
 	t.Parallel()
 	dlq := &fakeDLQCapturer{err: errors.New("dlq publish failed")}
 	p := newDLQTestProjection(dlq, 3)
@@ -82,9 +82,14 @@ func TestHandleNaksWhenDLQPublishFails(t *testing.T) {
 	msg := poisonMsg(4) // past MaxDeliver
 	p.handle(msg)
 
+	// On a failed DLQ capture the message is left un-acked: never Term'd
+	// (Term would drop the only copy without a durable capture) and never
+	// Nak'd (past the MaxDeliver ceiling a Nak buys no redelivery). It stays
+	// in the source EVENTS stream until StreamMaxAge (never silently dropped).
 	require.Equal(t, 1, dlq.calls, "Capture is attempted on the final attempt")
 	assert.Equal(t, 0, msg.termCalls, "MUST NOT Term before a successful DLQ publish (would drop)")
-	assert.Equal(t, 1, msg.nakCalls, "failed DLQ publish must Nak so redelivery continues (never drop)")
+	assert.Equal(t, 0, msg.nakCalls, "MUST NOT Nak past MaxDeliver — redelivery is impossible there")
+	assert.Equal(t, 0, msg.ackCalls, "poison message stays un-acked, retained in source stream until MaxAge")
 }
 
 func TestHandleLeavesSubCapPoisonUnacked(t *testing.T) {
