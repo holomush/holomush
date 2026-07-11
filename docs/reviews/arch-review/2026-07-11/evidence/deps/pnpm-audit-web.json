@@ -1,0 +1,42 @@
+{
+  "advisories": {
+    "1103907": {
+      "findings": [
+        {
+          "version": "0.6.0",
+          "paths": [
+            ".>@sveltejs/adapter-static>@sveltejs/kit>cookie",
+            ".>@sveltejs/kit>cookie",
+            ".>bits-ui>runed>@sveltejs/kit>cookie",
+            ".>bits-ui>svelte-toolbelt>runed>@sveltejs/kit>cookie"
+          ],
+          "dev": true,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1103907,
+      "title": "cookie accepts cookie name, path, and domain with out of bounds characters",
+      "module_name": "cookie",
+      "vulnerable_versions": "<0.7.0",
+      "patched_versions": ">=0.7.0",
+      "severity": "low",
+      "cwe": "CWE-74",
+      "github_advisory_id": "GHSA-pxg6-pf52-xh8x",
+      "url": "https://github.com/advisories/GHSA-pxg6-pf52-xh8x"
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 1,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "dependencies": 11,
+    "devDependencies": 241,
+    "optionalDependencies": 46,
+    "totalDependencies": 252
+  }
+}

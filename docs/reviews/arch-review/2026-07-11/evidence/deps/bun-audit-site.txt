@@ -1,0 +1,14 @@
+[0m[1mbun audit [0m[2mv1.2.19 (aad3abea)[0m
+esbuild  >=0.27.3 <0.28.1
+  astro › esbuild
+  starlight-llm-actions › vite › esbuild
+  low: esbuild allows arbitrary file read when running the development server on Windows - https://github.com/advisories/GHSA-g7r4-m6w7-qqqr
+
+1 vulnerabilities (1 low)
+
+To update all dependencies to the latest compatible versions:
+  bun update
+
+To update all dependencies to the latest versions (including breaking changes):
+  bun update --latest
+
