@@ -138,6 +138,12 @@ func ReplayDLQ(
 				With("stream", cfg.StreamName).
 				Wrap(fetchErr)
 		}
+		// Defensive: a timeout error is expected to come with a non-nil batch
+		// (jetstream's current behavior), but guard against a nil batch so a
+		// future client change cannot turn this into a nil-deref panic.
+		if batch == nil {
+			break
+		}
 
 		got := 0
 		for msg := range batch.Messages() {
@@ -184,7 +190,25 @@ func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantM
 		_ = msg.Ack() //nolint:errcheck // ack advances the ephemeral cursor; LimitsPolicy retains the message
 		return
 	}
-	subject := originalSubject(msg.Subject(), dlqSubjectPrefix)
+	subject, ok := originalSubject(msg.Subject(), dlqSubjectPrefix)
+	if !ok {
+		// The DLQ subject does not carry the expected prefix — replaying it
+		// would persist a corrupted events_audit.subject (the DLQ prefix still
+		// prepended). This happens when the replay config's game_id differs
+		// from (or falls back to "main" instead of) the capture-time game_id.
+		// Fail loud: count Failed and retain the dead letter, never write a
+		// corrupted subject. (subject metadata is NOT an AAD input, so this is
+		// crypto-neutral.)
+		result.Failed++
+		slog.WarnContext(
+			ctx, "audit DLQ replay: DLQ subject does not carry the expected prefix; not persisted (replay game_id likely differs from capture-time game_id)",
+			"subject", msg.Subject(),
+			"expected_prefix", dlqSubjectPrefix,
+			"msg_id", msg.Headers().Get(headerMsgID),
+		)
+		_ = msg.Ack() //nolint:errcheck // ack advances the cursor; the message stays in the LimitsPolicy DLQ for a corrected re-run
+		return
+	}
 	if err := writeAuditRow(ctx, pool, subject, msg); err != nil {
 		result.Failed++
 		slog.WarnContext(
@@ -202,15 +226,18 @@ func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantM
 
 // originalSubject recovers the original event subject from a DLQ message's
 // subject. DLQ capture publishes to "<prefix>.<orig-subject>" (dlq.go
-// Capture), so stripping "<prefix>." yields the original. When the prefix
-// does not match (defensive — e.g. a hand-seeded subject), the DLQ subject
-// is returned unchanged.
-func originalSubject(dlqSubject, prefix string) string {
+// Capture), so stripping "<prefix>." yields the original. It returns
+// (stripped, true) on a clean prefix match. When the prefix does NOT match,
+// it returns (dlqSubject, false) so the caller can fail loud rather than
+// persist a subject with the DLQ prefix still prepended (silent corruption of
+// the restored events_audit.subject column). An empty prefix cannot happen in
+// replay (DLQConfig.Defaults resolves it), so it is treated as a mismatch.
+func originalSubject(dlqSubject, prefix string) (string, bool) {
 	if prefix == "" {
-		return dlqSubject
+		return dlqSubject, false
 	}
 	if stripped, ok := strings.CutPrefix(dlqSubject, prefix+"."); ok {
-		return stripped
+		return stripped, true
 	}
-	return dlqSubject
+	return dlqSubject, false
 }
