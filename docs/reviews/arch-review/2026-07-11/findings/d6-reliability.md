@@ -11,6 +11,7 @@ The `oops` structured-error discipline is applied consistently at every boundary
 ## Findings
 
 ### HIGH-1 Audit-DLQ replay CLI cannot recover dead letters in the documented default deployment
+
 - **Severity:** High
 - **Claim:** In the officially documented zero-config deployment (leave `game_id` unset so it auto-generates), the server publishes DLQ entries under a subject keyed by the auto-generated `core.game_id`, but `holomush audit dlq replay` defaults to an unrelated, independently-defaulted `event_bus.game_id="main"` with no flag or documented config key to reconcile them — so every replay attempt fails with "DLQ subject does not carry the expected prefix" instead of restoring the dead letters.
 - **Evidence:**
@@ -25,21 +26,25 @@ The `oops` structured-error discipline is applied consistently at every boundary
 - **Dedup:** none
 
 ### MEDIUM-1 Plugin-decrypt audit emitter drops records with zero log or metric, contradicting its own doc comment
+
 - **Severity:** Medium
 - **Claim:** `Emitter.drain` in `internal/eventbus/authguard/audit/emitter.go` silently discards a `PluginDecryptRecord` when the async `Publish` to the bus fails — no log line, no metric — even though the function's own comment says failures are "logged/metered."
 - **Evidence:** `internal/eventbus/authguard/audit/emitter.go:196-199` documents: *"Best-effort: drain failures are logged/metered but never retry-block the subscriber path."* The actual body at lines 210-218:
+
   ```go
   if err := q.pub.Publish(q.drainCtx, event); err != nil {
       // TODO(metrics): increment authguard_audit_drain_failed_total
       _ = err
   }
   ```
+
   No `slog` call anywhere in the file (confirmed by search); the promised metric is a TODO, never implemented. Once a record is dequeued from `pq.ch` (line 210) it cannot be recovered — a failed publish is a permanent, unrecorded loss of that plugin-decrypt audit entry.
 - **Impact:** `PluginDecryptRecord` is the audit trail of every time a plugin received decrypted (plaintext) sensitive payload — a compliance-relevant signal per INV-CRYPTO-28/19 (master spec §7.6). It is explicitly best-effort/fire-and-forget by design (spec §12 Q2), so occasional loss under backpressure is accepted — but *silent* loss (no operator signal at all) is a gap even within that design: an operator cannot tell the difference between "no plugin has decrypted anything" and "the decrypt-audit trail has been silently failing to publish for an hour."
 - **Recommendation:** Add the counter the comment already promises (`authguard_audit_drain_failed_total`, labeled by plugin) and a `slog.ErrorContext(q.drainCtx, "plugin decrypt audit publish failed", "plugin", pluginName, "error", err)` at the existing `_ = err` site — small, in-scope, and closes the gap between documented and actual behavior.
 - **Dedup:** none
 
 ### MEDIUM-2 EventBus connection health is invisible after boot — no reconnect/disconnect signal, no HealthReporter
+
 - **Severity:** Medium
 - **Claim:** Once the EventBus subsystem starts, nothing observes the underlying `*nats.Conn`'s connection state: no `DisconnectErrHandler`/`ReconnectHandler`/`ClosedHandler` is registered, nothing polls `conn.Status()`, `eventbus.Subsystem` does not implement `lifecycle.HealthReporter`, and the Prometheus NATS exporter is embedded-only (skipped entirely in external mode). An operator running Phase 3's new external/clustered NATS deployment gets zero HoloMUSH-side signal if the connection to the broker degrades or drops.
 - **Evidence:**
@@ -52,6 +57,7 @@ The `oops` structured-error discipline is applied consistently at every boundary
 - **Dedup:** none
 
 ### MEDIUM-3 EventBus core internals carry no OTel span instrumentation of their own
+
 - **Severity:** Medium
 - **Claim:** `internal/eventbus/{publisher,rendering_publisher,subscriber}.go`, `internal/eventbus/history/*.go`, `internal/eventbus/audit/{projection,plugin_consumer}.go`, and `internal/plugin/event_emitter.go` contain zero `tracer.Start(...)` calls — the only spans covering the EventBus's most important flows live at the outer gRPC boundary (`internal/grpc/server.go`'s `subscribe.*` spans) or in the command dispatcher; the actual publish/consume/history-query work inside the bus is an unbroken block in whichever parent span happens to be open.
 - **Evidence:** `rg -n "otel\.|trace\.|Span|tracer"` against those files returns zero hits (verified this session). `internal/eventbus/telemetry/otel.go` provides `InjectHeaders`/`ExtractContext` (W3C trace-context propagation across the JetStream hop, correctly implemented) but neither function — nor any caller in the eventbus package — starts a span; propagation without a corresponding local span just re-links the *next* span (usually inside plugin delivery) to the *previous* one, with the JetStream round trip itself invisible in the waterfall. By contrast, `internal/grpc/server.go:86,824-1107` and `internal/command/dispatcher.go:208` and `internal/plugin/otel_middleware.go:111,152` do instrument their own boundaries.
@@ -60,9 +66,11 @@ The `oops` structured-error discipline is applied consistently at every boundary
 - **Dedup:** none
 
 ### MEDIUM-4 Confirmed sloglint blind spot: bare slog calls inside a goroutine closure on the plugin-delivery hot path
+
 - **Severity:** Medium
 - **Claim:** `internal/plugin/subscriber.go::deliverAsync` (the dispatch path for every event delivered to every plugin) uses bare `slog.Warn`/`slog.Debug`/`slog.Error` at lines 123, 130, 134 inside a `go func(){}()` closure that captures `ctx`/`tctx` — losing `trace_id`/`span_id` correlation on every plugin-delivery timeout, cancellation, or failure — and I confirmed via a scoped `task lint` run (`./bin/custom-gcl run ./internal/plugin/... ./internal/eventbus/...` → `0 issues`) that the repo's `sloglint` (`context: scope`, `.golangci.yaml:162-165`) does **not** catch this: its lexical-scope analysis apparently doesn't follow `ctx` through a goroutine closure boundary, so this class of violation is currently unenforced.
 - **Evidence:**
+
   ```go
   // internal/plugin/subscriber.go:104-140
   func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event pluginsdk.Event) {
@@ -85,12 +93,14 @@ The `oops` structured-error discipline is applied consistently at every boundary
               return
           }
   ```
+
   `ctx`, `tctx`, and `dispatchCtx` are all live, in-scope `context.Context` values at every one of these call sites — trivially `WarnContext(tctx, ...)` etc. Confirmed clean lint pass via a scoped `local-check` dispatch this session (transcript: `0 issues` from `./bin/custom-gcl run ./internal/plugin/... ./internal/eventbus/...`).
 - **Impact:** Plugin event delivery is one of the highest-traffic flows in the system (per the container diagram: `PH --> EB`, every plugin subscription). Delivery timeouts/failures — exactly the events an operator most wants correlated to a trace — currently emit orphaned log lines with no `trace_id`/`span_id`, and the linter that's supposed to catch this class of bug (per `.claude/rules/logging.md`, a MUST) has a real, confirmed gap for goroutine-closure call sites.
 - **Recommendation:** Fix the three call sites (cheap, ~3 lines). Separately, file a tooling gap: consider whether `sloglint`'s `context: scope` needs a golangci-lint version bump or a supplementary custom analyzer (the repo already ships several in `gorules/`) to catch ctx-in-enclosing-closure cases — this is likely not the only occurrence repo-wide, just the one I verified.
 - **Dedup:** none
 
 ### LOW-1 Shared error-mapping helper drops ctx despite trivial availability at every call site
+
 - **Severity:** Low
 - **Claim:** `internal/world/grpc_server.go::mapWorldError(err error)` takes no `context.Context` and logs via bare `slog.Error` (lines 157, 163, 172), even though all four of its call sites (`GetLocation`, `GetCharacter`, `ListCharactersAtLocation`, and one more — `internal/world/grpc_server.go:37,55,73,+1`) are gRPC handlers with `ctx context.Context` as their first parameter, already threaded one line above into `s.svc.Get...(ctx, ...)`.
 - **Evidence:** `internal/world/grpc_server.go:37-46` (`GetLocation`) — `loc, err := s.svc.GetLocation(ctx, subjectID, locID); if err != nil { return nil, mapWorldError(err) }` — `ctx` is live but not passed to `mapWorldError`. Same shape at lines 55-64 and 73-82. `mapWorldError` itself (line 154) never leaks internal error text to the client (correctly follows `.claude/rules/grpc-errors.md` — `status.Errorf(codes.Internal, "internal error")`, a static string) — the only defect is the orphaned server-side log.
@@ -99,6 +109,7 @@ The `oops` structured-error discipline is applied consistently at every boundary
 - **Dedup:** none
 
 ### LOW-2 Read-modeled degrade-to-nil helpers mask transient infra errors as "unset"
+
 - **Severity:** Low
 - **Claim:** A few narrow, explicitly-documented helpers convert a lookup error into a bare `nil`/zero-value success rather than surfacing it, so a transient DB hiccup during a non-critical read is indistinguishable from "value was never set."
 - **Evidence:** `internal/grpc/focus/player_prefs_adapter.go:30-38` (`SceneFocusReplayTail`) — doc comment: *"returns the player's configured value, or nil if unset or on lookup error (degrades to 'unset')"* — a `PlayerRepoReader.GetByID` failure (e.g., DB blip) is treated identically to "player never set a preference." `internal/plugin/hostcap/servers.go:1279-1296` and `internal/grpc/query_stream_history.go:546-561,563-579` (`encodeHostEventCursor`/`encodeEventCursor`/`encodePluginEventCursor`) are the same shape for pagination-cursor encoding, already tracked (see Dedup).

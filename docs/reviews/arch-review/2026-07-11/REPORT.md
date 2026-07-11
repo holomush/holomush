@@ -225,11 +225,13 @@ Findings that duplicate open issues, credited for completeness: AnsiRenderer XSS
 **Process.** 11 read-only dimension agents (4 opus reviewers + 2 repo-pinned domain gates at opus + 5 sonnet specialists) produced cited findings; a live-app pass drove the running stack with a browser; every High finding was then re-derived by an independent adversarial verifier (or by me against source); a cross-model (codex) second opinion pressure-tested the severity calls and blind spots (§7). Full ledger in `STATUS.md`; every High traces to `path:line` evidence in `verification/`.
 
 **Where the process corrected itself (evidence it works):**
+
 1. The D4 security pass produced **two divergent reports** — one flagged the gateway OOM as High, one missed it. I adjudicated by reading connect-go's source directly: the OOM finding is real (F2). *A single-pass review would have shipped a false negative on a runtime DoS.*
 2. My own movement finding (F5) claimed `MoveCharacter` was "integration-tested"; the skeptic showed it is unit-tested with mocks only. Corrected in place.
 3. My DLQ finding (F3) claimed "zero-config default deployment"; the skeptic showed the CLI can't even connect under embedded NATS, narrowing the scope to external-NATS. Corrected.
 
 **Limitations (what this review did NOT do):**
+
 - **Lead gap — emergent cross-subsystem behavior under realistic operation was not exercised.** The 11 agents own *dimensions*; none owns the seam where gateway retries, command dispatch, ABAC, DB commit, event emit, and client reconnect interact. The concrete unanswered question (codex, §7): *two players act concurrently during a NATS broker flap while one replica restarts — what breaks?* **D1-M12 (world writes last-write-wins, no version guard under the two-replica deployment) is the code-level hint this class of bug is live** — inferred, not reproduced. A dedicated resilience pass is the top follow-up (§8).
 - No load/stress testing or profiling under real concurrency — performance findings are analytical.
 - Live UI verification covered the **guest** path only (auth, verbs, movement, palette); registered-player, scenes, channels, admin, and mobile flows were static-audited, not driven.

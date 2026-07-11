@@ -13,6 +13,7 @@ Top finding: **MEDIUM-1** — web `Secure`/HSTS/CSP are gated on a manually-set 
 ## Findings
 
 ### MEDIUM-1 Session-cookie `Secure`, HSTS, and CSP all gated on a fail-open flag defaulting false
+
 - **Severity:** Medium
 - **Claim:** The `Secure` cookie attribute, `Strict-Transport-Security`, and the header-half `Content-Security-Policy` are only emitted when `Config.Secure == true`, which is bound to `--secure-cookies` (default `false`) with no coupling to actual TLS; forgetting the flag in a TLS-terminated deployment ships session cookies without `Secure` and disables HSTS + CSP.
 - **Evidence:** `cmd/holomush/gateway.go:120` (`BoolVar(&cfg.SecureCookies, "secure-cookies", false, ...)`), `:314` (`Secure: cfg.SecureCookies`); `internal/web/security_headers.go:80-83` (HSTS + CSP set only `if secure`); `internal/web/cookie.go:45-59` (cookie built `Secure:true` then **downgraded** to `Secure:false`/`SameSite=Lax` when `!secure`); the only guardrail is a startup `slog.Warn` at `internal/web/server.go:55-66`.
@@ -21,6 +22,7 @@ Top finding: **MEDIUM-1** — web `Secure`/HSTS/CSP are gated on a manually-set 
 - **Dedup:** none
 
 ### MEDIUM-2 No Lua execution timeout / instruction watchdog — a runaway handler wedges event delivery
+
 - **Severity:** Medium
 - **Claim:** `StateFactory.NewState` takes a `context.Context` that is explicitly ignored ("reserved for future cancellation/timeout support"); there is no CPU/time/instruction bound on Lua handler execution, so a plugin containing `while true do end` blocks the delivering goroutine indefinitely.
 - **Evidence:** `internal/plugin/lua/state.go:72-77` (`NewState(_ context.Context)` — ctx unused; only `RegistryMaxSize` is set, which bounds the value registry, not CPU). Delivery paths create a fresh state and run plugin code with no deadline (`internal/plugin/lua/host.go:352,499,605,733`).
@@ -29,6 +31,7 @@ Top finding: **MEDIUM-1** — web `Secure`/HSTS/CSP are gated on a manually-set 
 - **Dedup:** already-tracked:#4675 (Plugin runtime hardening: proxy goroutine cleanup, **Lua ctx watchdog**, mTLS-by-default)
 
 ### LOW-1 Argon2id time cost `t=1` is below RFC 9106's `t=3` recommendation for the 64-MiB profile
+
 - **Severity:** Low
 - **Claim:** The hasher uses `m=64 MiB, t=1, p=4`. Memory (64 MiB) is generous and exceeds OWASP's 19-MiB minimum, but RFC 9106 §4's 64-MiB profile pairs that memory with **t=3** (its `t=1` profile is the 2-GiB one). The chosen `t=1` at 64 MiB is a defensible-but-under-recommended time cost.
 - **Evidence:** `internal/auth/hasher.go:30-36` (`argon2Time=1, argon2Memory=64*1024, argon2Threads=4`). RFC 9106 §4: first config `t=1,p=4,m=2 GiB`; second config `t=3,p=4,m=64 MiB` (https://www.rfc-editor.org/rfc/rfc9106.html §4). OWASP minimum `m=19 MiB,t=2,p=1` (https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
@@ -37,6 +40,7 @@ Top finding: **MEDIUM-1** — web `Secure`/HSTS/CSP are gated on a manually-set 
 - **Dedup:** none
 
 ### LOW-2 Username-enumeration timing side channel: failure path does an extra DB write only for existing users
+
 - **Severity:** Low
 - **Claim:** On an invalid password, `ValidateCredentials` calls `player.RecordFailure()` + `s.players.Update(ctx, player)` (a DB write) only when the player exists; a non-existent username skips it. The argon2 dummy-hash equalizes the *hashing* cost but not this extra DB round-trip, leaving a measurable "exists vs not" timing delta.
 - **Evidence:** `internal/auth/registration.go:86-101` — the `if playerExists { player.RecordFailure(); s.players.Update(...) }` block runs only for existing users; the non-existent branch returns immediately after the dummy-hash `Verify`.
@@ -45,6 +49,7 @@ Top finding: **MEDIUM-1** — web `Secure`/HSTS/CSP are gated on a manually-set 
 - **Dedup:** none
 
 ### LOW-3 Admin socket bind→chmod race leaves a sub-`0600` window; non-default socket paths lose the parent-dir gate
+
 - **Severity:** Low
 - **Claim:** `net.Listen("unix", …)` creates the socket with umask-default permissions and `os.Chmod(0600)` is applied *after*; a brief window exists where the socket is more permissive than 0600. The design relies on the parent directory (XDG runtime dir, 0700) as the primary gate, which holds for the default path but not for an operator-supplied `--socket` in a world-writable directory.
 - **Evidence:** `internal/admin/socket/server.go:78-92` (Listen then Chmod, with the comment naming the parent dir as the primary gate); `cmd/holomush/admin_client.go:29-45` (`--socket` override; default is `xdg.RuntimeDir()/admin.sock`). PeerCred is audit-only, not a defense factor (`internal/admin/socket/peercred.go:16-17`), so filesystem perms are the sole access control.
@@ -53,6 +58,7 @@ Top finding: **MEDIUM-1** — web `Secure`/HSTS/CSP are gated on a manually-set 
 - **Dedup:** none
 
 ### LOW-4 Progressive-delay + CAPTCHA rate-limit logic is dead code; only the 7-failure account lockout is wired
+
 - **Severity:** Low
 - **Claim:** `CheckFailures` (exponential backoff delay + CAPTCHA-required signalling) is never called by any production caller; the only enforced control is the hard account lockout at `LockoutThreshold=7` failures. There is no per-IP throttle, so cross-account password spraying from one IP is unthrottled.
 - **Evidence:** `internal/auth/ratelimit.go:39-69` (`CheckFailures`) — the only non-test reference to it is its own definition (verified `rg 'CheckFailures\(' internal/ | rg -v _test` returns only the declaration). Enforced lockout lives at `internal/auth/player.go:135-138` + `registration.go:104-108`.
@@ -61,6 +67,7 @@ Top finding: **MEDIUM-1** — web `Secure`/HSTS/CSP are gated on a manually-set 
 - **Dedup:** partially already-tracked:#4606 (No IP-based rate limiting on authentication endpoints); the dead-code aspect is not tracked.
 
 ### INFO Session `client_type` stored unsanitized
+
 - **Severity:** Low (informational — dedup)
 - **Claim:** Telnet passes the constant `"telnet"` for `ClientType` (`internal/telnet/gateway_handler.go:675`), but the web/BFF path threads a client-supplied value that reaches `session_connections.client_type` unsanitized.
 - **Evidence:** already characterized in the tracked issue; not re-verified end-to-end this session.

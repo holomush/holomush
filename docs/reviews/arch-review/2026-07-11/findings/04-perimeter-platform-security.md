@@ -18,13 +18,16 @@ Counts: **High 1 · Medium 2 · Low 3 · already-tracked 1** (+ strengths record
 - **Claim:** The public web ConnectRPC handler at `:8080` is created without `connect.WithReadMaxBytes(...)`, and connect-go v1.20.0 treats an unset `readMaxBytes` (0) as *unlimited* — reading the entire request body into a pooled buffer before the handler runs — so an unauthenticated client can drive gateway memory with one large POST. The internal gRPC core caps the same messages at 4 MiB, making the gap an asymmetry rather than a deliberate choice.
 - **Evidence:**
   - `internal/web/server.go:74` — handler built with only the status interceptor, no read cap:
+
     ```go
     path, connectHandler := webv1connect.NewWebServiceHandler(
         cfg.Handler,
         connect.WithInterceptors(statusTranslationInterceptor()),
     )
     ```
+
   - `connectrpc.com/connect@v1.20.0/protocol_connect.go:1118-1123` — with `readMaxBytes == 0` the LimitReader is skipped and the whole body is buffered:
+
     ```go
     reader := u.reader
     if u.readMaxBytes > 0 && int64(u.readMaxBytes) < math.MaxInt64 {
@@ -32,6 +35,7 @@ Counts: **High 1 · Medium 2 · Low 3 · already-tracked 1** (+ strengths record
     }
     bytesRead, err := data.ReadFrom(reader) // no cap when readMaxBytes==0
     ```
+
   - `internal/grpc/server.go:56` + `server.go:1850` — the core gRPC server *does* cap: `MaxRecvMsgSize = 4 * 1024 * 1024` via `grpc.MaxRecvMsgSize(MaxRecvMsgSize)`. The perimeter that faces the internet is the one without the cap.
   - Compounding: `internal/web/server.go:134-139` sets `ReadHeaderTimeout` and `IdleTimeout` but **no** `http.Server.ReadTimeout`, so a slow-drip body is also not time-bounded (the relays have their own `MaxBytesReader`; the ConnectRPC path does not).
 - **Impact:** Any unauthenticated client (the body is read before session validation) can POST a multi-GB body to any `/holomush.web.v1.WebService/*` unary method and force the gateway process to allocate it, risking OOM/crash. Trivially triggerable; one request suffices.

@@ -9,6 +9,7 @@ The ABAC surface is **SOUND with material-but-latent gaps**. The core is well-en
 ## Findings
 
 ### MED-1 Three attribute providers emit empty-string sentinels for optional attrs (ADR ti1b violation)
+
 - **Severity:** Medium
 - **Claim:** `LocationProvider`, `ObjectProvider`, and `PropertyProvider` emit `attrs["X"] = ""` + `attrs["has_X"] = false` for absent optional attributes — the exact forbidden form ADR holomush-ti1b (bug holomush-9gtl) mandates against — creating a latent fail-open `"" == ""` match.
 - **Evidence:** `internal/access/policy/attribute/location.go:72,80` (`owner_id`, `shadows_id`); `object.go:117,125,133` (`owner_id`, `held_by_character_id`, `contained_in_object_id`); `property.go:93,102` (`value`, `owner`). Sentinels ARE reachable by DSL: `mergeAttributes` writes `bagKey = "<namespace>.<key>"` (`resolver.go:503`), so e.g. `resource.property.owner` resolves the sentinel. Contrast the compliant path: `character.go:141-148` correctly OMITS `location` when absent, and `object.go:137-144` correctly omits `location`.
@@ -17,6 +18,7 @@ The ABAC surface is **SOUND with material-but-latent gaps**. The core is well-en
 - **Dedup:** related to #4773 (registers INV-ACCESS for omit-optional-attrs + scene resolver), but that issue does not cover these three providers' ID/string sentinels.
 
 ### MED-2 Open provider circuit breaker silently drops attributes with no error → fail-open for forbid policies
+
 - **Severity:** Medium
 - **Claim:** When a provider's circuit breaker is open, `resolveEntity` skips the provider via `continue` **without appending an error**, so `Resolve` returns partial bags with `nil` error; the engine then evaluates policies against missing attributes. Missing-attr→false is fail-closed for permits but **fail-open for any forbid whose condition references the skipped provider** (the forbid silently does not fire, letting a co-applicable permit through under deny-overrides).
 - **Evidence:** `internal/access/policy/attribute/resolver.go:360-362` (`if cb.ShouldSkip() { continue }`, no error path) vs. the engine's fail-closed-on-resolve-error contract at `engine.go:212-239`. Breaker trips on latency-budget utilization (`circuit_breaker.go:195-226`), independent of the request.
@@ -25,6 +27,7 @@ The ABAC surface is **SOUND with material-but-latent gaps**. The core is well-en
 - **Dedup:** possibly related to #4616 (ABAC Phase 7.7 bug cluster names "circuit breaker"); this specific forbid-fail-open framing is not confirmed covered.
 
 ### LOW-1 `CanPerformAction` ignores its scope parameter — Layer-2 capability preflight does not enforce Scope
+
 - **Severity:** Low
 - **Claim:** The engine's Layer-2 capability check discards the scope argument (`_`), so a command capability declaring `ScopeSelf` vs `ScopeGlobal` for the same action/resource-type receives identical Layer-2 treatment; scope fencing relies entirely on policy conditions plus the world-service instance-level `Evaluate`.
 - **Evidence:** `internal/access/policy/engine.go:406` (`CanPerformAction(ctx, subject, action, resourceType, _ string)`); callers pass `capability.EffectiveScope()` (`internal/command/access.go:72`) which is dropped.
@@ -33,6 +36,7 @@ The ABAC surface is **SOUND with material-but-latent gaps**. The core is well-en
 - **Dedup:** none.
 
 ### LOW-2 `RoleResolver.GetRoles` swallows store errors and defaults to `[player]`, bypassing engine fail-closed-on-provider-error
+
 - **Severity:** Low
 - **Claim:** On a role-store error `GetRoles` logs and returns `nil`; `CharacterProvider` then substitutes `[player]`. This does not propagate an error up the resolver, so the engine's fail-closed-on-provider-error protection never engages for role failures.
 - **Evidence:** `internal/store/role_resolver.go:33-36` (`return nil` on error); `internal/access/policy/attribute/character.go:119-121` (`if len(roles)==0 { roles = []string{RolePlayer} }`).
@@ -41,6 +45,7 @@ The ABAC surface is **SOUND with material-but-latent gaps**. The core is well-en
 - **Dedup:** none.
 
 ### LOW-3 INV-ACCESS-7 / INV-ACCESS-8 (deny char/plugin reads of system/audit/crypto streams) are `binding: pending`
+
 - **Severity:** Low (Info-adjacent per ground-rule 5)
 - **Claim:** Two load-bearing plaintext-leak guarantees — characters/plugins MUST NOT read `events.*.system.*`, `audit.*`, `crypto_totp.*`, `crypto_policy.*` streams — carry `binding: pending`, so the registry does not ratify a test as proving them.
 - **Evidence:** `docs/architecture/invariants.yaml:2137-2158` (INV-ACCESS-7/-8, `binding: pending`). Referencing (but unratified) tests exist: refs cite `internal/access/policy/seed_test.go`, `seed_smoke_test.go` tokens `INV-15`/`INV-A16`; the seeds themselves are present and correct (`seed.go:225-299`, including the broad `events.*.system.*` forbid that closes the prior rekey gap).

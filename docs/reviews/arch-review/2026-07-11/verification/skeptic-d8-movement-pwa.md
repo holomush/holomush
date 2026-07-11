@@ -138,7 +138,7 @@ CLAIM 1 is CONFIRMED, not refuted.
 
 ### Hunt 1 — SvelteKit service worker (`src/service-worker.{js,ts}` convention)
 
-```
+```text
 $ find web/src -iname "*service-worker*"
 (no results)
 $ ls web/src/
@@ -151,7 +151,7 @@ web/package.json web/svelte.config.js` → zero hits.
 
 ### Hunt 2 — Web app manifest
 
-```
+```text
 $ find web -iname "manifest.webmanifest" -o -iname "manifest.json"
 web/.svelte-kit/output/server/.vite/manifest.json   (Vite build artifact, not a web manifest)
 web/.svelte-kit/output/client/.vite/manifest.json   (Vite build artifact, not a web manifest)
@@ -189,10 +189,12 @@ SPA export adapter with a CSP config; no PWA plugin registered.
 ### Hunt 4 — the doc claims, read verbatim
 
 `site/src/content/docs/contributing/explanation/architecture.md`:
+
 - line 19 (mermaid diagram node): `WC[SvelteKit PWA]`
 - line 298 (capability table row): `| **Web Client**    | SvelteKit PWA         | Modern, offline-capable               |`
 
 `site/src/content/docs/operating/index.mdx`:
+
 - line 25: `- **WebSocket** (port 8080) — Modern web client with PWA support`
 
 Both citations from the original finding are verified verbatim at the stated

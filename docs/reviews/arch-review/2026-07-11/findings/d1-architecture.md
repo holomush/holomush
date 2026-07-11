@@ -12,7 +12,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 
 ## Findings
 
-### HIGH-1  "State derives from event replay" is false; world state is a CRUD store and no ADR records the real model
+### HIGH-1 "State derives from event replay" is false; world state is a CRUD store and no ADR records the real model
+
 - **Severity:** High
 - **Claim:** The documented architecture — "actions produce immutable ordered events; state derives from replay" — does not describe the implementation. World state (locations, exits, characters, objects) is written directly to dedicated PostgreSQL tables; events are emitted (when at all) *after* the DB write as a notification/audit side-channel, and nothing ever rebuilds world state from events. The gap is documented nowhere as a deliberate decision.
 - **Evidence:**
@@ -26,7 +27,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Write one ADR that states the actual model plainly ("world state is authoritative CRUD in PostgreSQL; the event log is a delivery + audit channel, not a source of truth; state is not reconstructable from events"). Correct the four doc claims to match. Keep the marketing copy honest ("audit log of what happened," not "replay to reconstruct state").
 - **Dedup:** none (issue #4674 touches `EventStoreAdapter` mechanics but not the model-claim gap)
 
-### MEDIUM-2  Event-emitting mutations are dual-writes with no outbox — a NATS hiccup silently loses the notification
+### MEDIUM-2 Event-emitting mutations are dual-writes with no outbox — a NATS hiccup silently loses the notification
+
 - **Severity:** Medium
 - **Claim:** Mutations that both write the DB and emit an event do so non-atomically and with no transactional outbox: the DB write commits first, then the event is published; if publish fails the row is already mutated and no retry exists, so subscribers never see the change.
 - **Evidence:** `internal/world/service.go:571` (`objectRepo.Move` commits) → `:587` (`EmitMoveEvent`) → `:590-593` returns `OBJECT_MOVE_EVENT_FAILED` while stamping `move_succeeded: true` — explicit acknowledgement that the state change persisted but the notification was lost. Same shape in `MoveCharacter` (`service.go:773`). Because the system is not event-sourced (HIGH-1), there is no outbox/relay pattern to make the pair atomic.
@@ -34,7 +36,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Either (a) document this as an accepted limitation of the notification model, or (b) if a move must be observable, adopt a transactional outbox (write an outbox row in the same tx as the state change; a relay publishes it) so the event survives a broker outage.
 - **Dedup:** none
 
-### MEDIUM-3  Multi-core substrate runs in every deployment but only crypto consumes it; other per-core caches have no cross-replica coherence
+### MEDIUM-3 Multi-core substrate runs in every deployment but only crypto consumes it; other per-core caches have no cross-replica coherence
+
 - **Severity:** Medium
 - **Claim:** Running >1 core process is architecturally *intended* (Phase 3 shipped external NATS + a cluster subsystem), but the story is partial: the cluster machinery's only real consumer is crypto DEK-cache invalidation, while other per-process in-memory caches go stale across replicas with no invalidation path, and no doc states whether multi-core core is a supported deployment.
 - **Evidence:**
@@ -47,7 +50,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Decide and document the supported deployment topology. If multi-core is a goal, generalize the cluster invalidation bus beyond crypto (or make alias/verb state read-through) and add an ADR; if single-core is the supported mode, say so and gate the cluster subsystem's full cost behind a multi-node flag.
 - **Dedup:** none (#4720 is a test-harness alias refresh, not cross-replica coherence)
 
-### MEDIUM-4  plugin ⇄ eventbus ⇄ grpc boundaries are muddy (bidirectional subpackage coupling) and the god-objects are still growing
+### MEDIUM-4 plugin ⇄ eventbus ⇄ grpc boundaries are muddy (bidirectional subpackage coupling) and the god-objects are still growing
+
 - **Severity:** Medium
 - **Claim:** The three largest subsystems reach into each other's subpackages in both directions, and the two god-objects flagged in #4674 have grown rather than shrunk — the "mid-refactor" feel is compounding, not settling.
 - **Evidence:**
@@ -59,7 +63,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Extract the shared seams (`grpc/focus` types, the authguard→plugin manifest adapter) into a neutral lower package so the arrows point one way. Split `manager.go` along the load-time-wiring vs runtime-delivery line already identified in #4674, and move `TestLoadPlugin` behind a test build tag.
 - **Dedup:** already-tracked:#4674 (god-objects + error-model); the bidirectional subpackage coupling and the growth-since-filing are new detail
 
-### MEDIUM-5  Stateful third-party plugins structurally require `internal/` — the "no internal/" extensibility claim holds only for stateless plugins
+### MEDIUM-5 Stateful third-party plugins structurally require `internal/` — the "no internal/" extensibility claim holds only for stateless plugins
+
 - **Severity:** Medium
 - **Claim:** A stateless plugin can be built from `pkg/plugin` + `pkg/proto` alone, but any plugin that persists to its own PostgreSQL tables the way the in-tree marquee plugins do must import Go-`internal/` packages that an external module cannot reach.
 - **Evidence:**
@@ -71,7 +76,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Promote `internal/pgnanos` and `internal/idgen` to `pkg/` (they are tiny: a pgx time codec and a ULID wrapper), and move `auditheader` out of the SDK's internal dependency. Then the in-tree stateful pattern is externally reproducible.
 - **Dedup:** none
 
-### LOW-6  Gateway import tripwire has a coverage gap; two literal INV-GW-1 violations pass unflagged
+### LOW-6 Gateway import tripwire has a coverage gap; two literal INV-GW-1 violations pass unflagged
+
 - **Severity:** Low
 - **Claim:** The gateway boundary tripwire's forbidden list omits `internal/core` and `internal/session`, so two literal INV-GW-1 ("no domain imports") violations in the gateway compile clean.
 - **Evidence:** `cmd/holomush/gateway_imports_test.go:87-95` `forbidden` lists world/access/store/plugin/eventbus/auth/service/command but not core, session, **or `internal/grpc`**. `internal/web/handler.go:21` imports `internal/core` (only for `core.NewULID()`), `:22` imports `internal/session` (only for a duration constant) — both DB-free, so no query path leaks. The more consequential omission is `internal/grpc`: `internal/telnet/gateway_handler.go:29` imports it (aliased `grpcclient`) for one helper used at `:718` (`grpcclient.TranslateSubscribeErr`), and `internal/grpc` is the CoreServer monolith that transitively imports `internal/{world,access,command}` (e.g. `internal/grpc/location_follow.go`). So a gateway-side file pulls the entire domain into its dependency closure while passing the tripwire. Separately, the test's own comment/name labels it `INV-EVENTBUS-1` while it enforces the gateway (INV-GW) boundary.
@@ -79,7 +85,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Add `internal/core`, `internal/session`, and `internal/grpc` to `forbidden`. Give core/session a narrow allow-list for the two constant uses (or inline the ULID + duration); for `internal/grpc`, extract `TranslateSubscribeErr` (and any similar wire-error helpers) into a neutral shared package (e.g. `internal/grpcerrors`/`pkg/`) so the gateway stops importing the server monolith. Fix the invariant label to INV-GW-1.
 - **Dedup:** none
 
-### LOW-7  Subsystem shutdown has no deadline — a hung Stop blocks process exit indefinitely
+### LOW-7 Subsystem shutdown has no deadline — a hung Stop blocks process exit indefinitely
+
 - **Severity:** Low
 - **Claim:** Graceful shutdown builds a 5s deadline but applies it only to the control server; the orchestrator's subsystem teardown runs on an unbounded `context.Background()`.
 - **Evidence:** `cmd/holomush/core.go:1158` creates `shutdownCtx` (5s) and `:1161` uses it for the control gRPC server; but subsystem teardown is the earlier `defer orch.StopAll(context.Background())` at `:1088` — no timeout. `internal/lifecycle/orchestrator.go:81-96` `StopAll` iterates Stops sequentially with no per-subsystem bound.
@@ -87,7 +94,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Pass a bounded shutdown context to `orch.StopAll` (reuse or extend the 5s `shutdownCtx`), and have subsystem Stops honor `ctx.Done()`.
 - **Dedup:** none
 
-### LOW-8  `productionSubsystems` takes 15 same-typed positional params — a call-site footgun
+### LOW-8 `productionSubsystems` takes 15 same-typed positional params — a call-site footgun
+
 - **Severity:** Low
 - **Claim:** The wiring entry point accepts 15 `lifecycle.Subsystem` arguments of identical type, so a mis-ordering at the call site compiles silently.
 - **Evidence:** `cmd/holomush/core.go:1445-1454` (15 positional `lifecycle.Subsystem` params). The blast radius is limited because `topoSort` re-derives real start order from `DependsOn` (`internal/lifecycle/orchestrator.go:99-149`), so a swap does not corrupt dependency ordering — the risk is readability plus surprising tie-break order among independent subsystems.
@@ -95,7 +103,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Replace positional params with registration calls (`orch.Register(sub)` per subsystem) or a named struct, so order is explicit and mis-wiring is impossible.
 - **Dedup:** none
 
-### LOW-9  Contributor rule doc still says external/clustered NATS is "unimplemented" — Phase 3 shipped it in this baseline
+### LOW-9 Contributor rule doc still says external/clustered NATS is "unimplemented" — Phase 3 shipped it in this baseline
+
 - **Severity:** Low
 - **Claim:** A load-bearing rules reference contradicts the shipped reality of the review baseline.
 - **Evidence:** `.claude/rules/references/testing-detail.md:105-106` states "external/clustered NATS is unimplemented (tracked in holomush-s5ts)", but the baseline (`30d55a162`, #4782, merged 2026-07-11) ships it: `internal/eventbus/subsystem_external_test.go`, `deploy/nats/cluster-server.conf`, and a full how-to at `site/src/content/docs/operating/how-to/external-nats-deployment.md`. (`holomush-s5ts` in that how-to now scopes only a *future* read-only operator account, not external NATS itself.)
@@ -103,7 +112,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Update the note to reflect that external NATS shipped in Phase 3; keep the `holomush-s5ts` reference scoped to the read-only-operator follow-up.
 - **Dedup:** none
 
-### LOW-10  ADR index is out of sync — 51 of 179 `holomush-*` ADRs are not listed
+### LOW-10 ADR index is out of sync — 51 of 179 `holomush-*` ADRs are not listed
+
 - **Severity:** Low
 - **Claim:** The `docs/adr/README.md` index omits roughly a quarter of the live ADRs, including load-bearing ones.
 - **Evidence:** ADR-coverage sweep found 179 `holomush-*` ADR files but 51 absent from the README index table (e.g. `holomush-qd3r5`, `holomush-nki4`, `holomush-f5h0`, `holomush-edqh1`). Supersession tracking itself works; drift is one-directional (files present, index stale).
@@ -111,7 +121,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Regenerate the index from the ADR files (or add an index-completeness check to the docs lint gate).
 - **Dedup:** none
 
-### MEDIUM-11  Documented boot-order guarantee ("crypto chain verifier runs before EventBus") is not enforced by the dependency graph — the real topo order starts EventBus first
+### MEDIUM-11 Documented boot-order guarantee ("crypto chain verifier runs before EventBus") is not enforced by the dependency graph — the real topo order starts EventBus first
+
 - **Severity:** Medium
 - **Claim:** `productionSubsystems` comments assert an ordering the orchestrator does not honor. `StartAll` ignores the slice order and re-derives boot order from `DependsOn()` edges; because `EventBus` declares no dependencies it is seeded in the first batch, while the chain verifier only becomes ready after `Database` and joins the queue tail — so `EventBus.Start` runs *before* the verifier, the opposite of the comment. Nothing except the final sweep declares a dependency on the verifier.
 - **Evidence:**
@@ -123,7 +134,8 @@ The engineering discipline is real and mostly well-directed: the lifecycle orche
 - **Recommendation:** Encode the intent as a real edge — have `EventBus` (or at minimum `AuditProjection`/`CryptoPolicy`) declare `DependsOn(SubsystemCryptoChainVerifier)` — or delete/rewrite the misleading comment and add a boot-order pin test asserting the actual `topoSort` sequence.
 - **Dedup:** none (related-to LOW-8, which observed topoSort re-derivation but not this contradiction)
 
-### MEDIUM-12  World writes are last-write-wins with no concurrency control — a lost-update path under the shipped two-replica deployment (fills the first pass's "Not examined")
+### MEDIUM-12 World writes are last-write-wins with no concurrency control — a lost-update path under the shipped two-replica deployment (fills the first pass's "Not examined")
+
 - **Severity:** Medium
 - **Claim:** World structural writes are read-modify-write against plain `UPDATE … WHERE id = $1` statements with no version/optimistic-concurrency guard, so concurrent writers (across the two documented core replicas, or concurrent commands on one replica) can silently clobber each other with no detection.
 - **Evidence:**

@@ -13,6 +13,7 @@ The one real gap this review's own manual CVE search surfaced that automation mi
 ## Findings
 
 ### HIGH-1 nats-server pinned to a version with two published, patched CVEs
+
 - **Severity:** High
 - **Claim:** `go.mod:22` pins `github.com/nats-io/nats-server/v2 v2.14.2`, which is the last vulnerable version for two advisories published 2026-06-29 and fixed in v2.14.3 (released 2026-06-29 per GitHub Releases); `govulncheck` does not flag either because neither has a `GO-####-####` entry in the Go vulnerability database as of the 2026-07-08 DB snapshot used by this scan.
 - **Evidence:**
@@ -27,6 +28,7 @@ The one real gap this review's own manual CVE search surfaced that automation mi
 - **Dedup:** none
 
 ### MEDIUM-1 `bufbuild/buf-setup-action` pinned to a floating major tag, inconsistent with repo's own SHA-pinning discipline
+
 - **Severity:** Medium
 - **Claim:** Every other third-party GitHub Action in the repo is pinned to a full commit SHA with a version comment; `bufbuild/buf-setup-action` alone is pinned to the floating tag `@v1`, at three call sites.
 - **Evidence:** `.github/workflows/ci.yaml:238`, `.github/workflows/ci.yaml:301`, `.github/workflows/release.yaml:164` all read `uses: bufbuild/buf-setup-action@v1`. Contrast with e.g. `.github/workflows/buf.yml:32` (`uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0`) or any of the 15+ other third-party actions in the repo, all pinned `@<40-hex-sha> # v<tag>`. Confirmed via `rg -n "uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+@" .github/workflows/*.yaml | grep -vE "@[0-9a-f]{40}"` — this is the only match.
@@ -35,6 +37,7 @@ The one real gap this review's own manual CVE search surfaced that automation mi
 - **Dedup:** none
 
 ### MEDIUM-2 No automated dependency-vulnerability scanning gate in CI
+
 - **Severity:** Medium
 - **Claim:** Neither `Taskfile.yaml` nor any workflow under `.github/workflows/` runs `govulncheck`, `pnpm audit`/`npm audit`, `bun audit`, CodeQL, or any other vulnerability scanner; the only automated dependency mechanism is Renovate's version-currency bumps.
 - **Evidence:** `rg -n "govulncheck|vulncheck|npm audit|pnpm audit|trivy|grype|osv-scanner|dependency-check" Taskfile.yaml .github/workflows/*.yaml .github/workflows/*.yml` returns no matches. `rg -ln "security|audit|scan" .github/workflows/*.yaml .github/workflows/*.yml` matches only unrelated hits (`ssh-keyscan`, a comment mentioning "scans"). No `.github/workflows/codeql*.yml` exists.
@@ -43,6 +46,7 @@ The one real gap this review's own manual CVE search surfaced that automation mi
 - **Dedup:** none
 
 ### LOW-1 `golang.org/x/crypto` openpgp package flagged unmaintained/unsafe (GO-2026-5932) — not reachable
+
 - **Severity:** Low
 - **Claim:** `golang.org/x/crypto@v0.53.0` (`go.mod:50`) is affected by GO-2026-5932, a package-quality advisory ("unmaintained... unsafe by design") against the `openpgp` subpackage, which HoloMUSH's code does not import.
 - **Evidence:** `docs/reviews/arch-review/2026-07-11/evidence/deps/govulncheck-verbose.txt`: "Vulnerability #1: GO-2026-5932 ... Your code is affected by 0 vulnerabilities. This scan also found 0 vulnerabilities in packages you import and 1 vulnerability in modules you require, but your code doesn't appear to call these vulnerabilities." Confirmed HoloMUSH's actual x/crypto usage is `argon2` (`internal/auth/hasher.go:14`, `internal/eventbus/crypto/kek/source_file.go:15`) — not `openpgp`. `x/crypto` is also one minor version behind latest (`v0.53.0` → `v0.54.0` per `go list -m -versions`), pure hygiene, no known vuln in the current pin.
@@ -51,6 +55,7 @@ The one real gap this review's own manual CVE search surfaced that automation mi
 - **Dedup:** none
 
 ### LOW-2 `web/` transitive `cookie@0.6.0` accepts out-of-bounds characters (GHSA-pxg6-pf52-xh8x)
+
 - **Severity:** Low
 - **Claim:** `web/pnpm-lock.yaml` resolves `cookie@0.6.0` (pulled in transitively via `@sveltejs/kit`), which is vulnerable to GHSA-pxg6-pf52-xh8x (accepts cookie name/path/domain with out-of-bounds characters), fixed in `cookie@0.7.0`.
 - **Evidence:** `docs/reviews/arch-review/2026-07-11/evidence/deps/pnpm-audit-web.json` — 1 low advisory, `"module_name": "cookie"`, `"vulnerable_versions": "<0.7.0"`, paths all route through `@sveltejs/kit`/`@sveltejs/adapter-static`/`bits-ui`. `pnpm-lock.yaml:742,1954` pin `cookie@0.6.0`; not directly overridable without a `pnpm.overrides` entry (not present in `web/package.json`).
@@ -59,6 +64,7 @@ The one real gap this review's own manual CVE search surfaced that automation mi
 - **Dedup:** none
 
 ### LOW-3 `site/` (docs) `esbuild` dev-server arbitrary file read on Windows (GHSA-g7r4-m6w7-qqqr)
+
 - **Severity:** Low
 - **Claim:** `bun audit` in `site/` flags `esbuild >=0.27.3 <0.28.1` (pulled in via `astro` and `starlight-llm-actions` → `vite`) for a low-severity dev-server arbitrary file read on Windows.
 - **Evidence:** `docs/reviews/arch-review/2026-07-11/evidence/deps/bun-audit-site.txt`: "1 vulnerabilities (1 low) — esbuild allows arbitrary file read when running the development server on Windows - https://github.com/advisories/GHSA-g7r4-m6w7-qqqr".
@@ -67,6 +73,7 @@ The one real gap this review's own manual CVE search surfaced that automation mi
 - **Dedup:** none
 
 ### LOW-4 gopher-lua context-timeout has a known granularity gap that a heavy single Lua operation can exceed
+
 - **Severity:** Low
 - **Claim:** HoloMUSH's Lua plugin host relies on `L.SetContext(ctx)` for per-invocation cancellation/timeout, but upstream gopher-lua issue #521 (open, unresolved as of the latest pinned `v1.1.2`) documents that the context deadline is checked per-VM-instruction, not mid-operation — a single heavy call into the `string` library (which HoloMUSH's sandbox loads) can stall the VM past its configured timeout.
 - **Evidence:** `internal/plugin/lua/host.go:511,616,738` and `internal/plugin/lua/invoke.go:24` all call `L.SetContext(ctx)`; `internal/plugin/lua/invoke.go:37` has an existing comment acknowledging "pure Lua: gopher-lua's per-instruction ctx check fires" (i.e., the team is aware of the per-instruction granularity). `internal/plugin/lua/state.go:20-30`'s `defaultSafeLibraries()` loads `string` (`lua.OpenString`) alongside `base`/`table`/`math`. Upstream: https://github.com/yuin/gopher-lua/issues/521 (reported against v1.1.1, still open, no maintainer response per linked discussion #507) — retrieved 2026-07-11.
@@ -75,6 +82,7 @@ The one real gap this review's own manual CVE search surfaced that automation mi
 - **Dedup:** none
 
 ### LOW-5 `#4670` (repo-hygiene: dual renovate.json / tracked lock file / stray issues.jsonl) appears already resolved
+
 - **Severity:** Low
 - **Claim:** Issue #4670 (open, P2/`priority::medium`) describes a stale root `/renovate.json` diverging from `.github/renovate.json`, a tracked `.claude/scheduled_tasks.lock`, and a stray `/issues.jsonl` — none of which are present on this branch.
 - **Evidence:** `git log --oneline --all -- renovate.json` shows the root file was removed by commit `ca4707cd1` ("chore(renovate,ci): broaden automerge, drop concurrency tighteners, consolidate config (#4124)"); `git show HEAD:renovate.json` fails with "does not exist". `git ls-files .claude/scheduled_tasks.lock` returns nothing (untracked/absent). `ls issues.jsonl` fails with "No such file or directory" in this worktree.

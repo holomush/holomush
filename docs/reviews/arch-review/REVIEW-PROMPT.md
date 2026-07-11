@@ -13,6 +13,7 @@ The first review's output — the gold-standard shape to match — lives at `doc
 > **Workspace & output:** `docs/reviews/arch-review/<DATE>/`. Subdirs: `findings/` (per-dimension), `verification/` (adversarial checks), `evidence/` (raw tool output + `ui/` screenshots). Deliverables: `00-review-plan.md`, `01-system-map.md` (briefing pack), `REPORT.md`, `issue-plan.md`, `STATUS.md` (task ledger — your recovery point across context loss; keep it current). **Present the plan and wait for approval before dispatching agents. File GitHub issues ONLY after a second explicit approval gate.**
 >
 > **Method (5 phases):**
+>
 > 1. **Ground truth (main loop):** read `site/src/content/docs/contributing/explanation/architecture.md`, `docs/architecture/invariants.yaml`, the EventBus + roadmap design docs; build a system map with `codegraph_explore`/`probe`; snapshot open issues for dedup (`gh issue list -R holomush/holomush --state open --limit 400 --json number,title,labels > evidence/open-issues.json`); stand up the app (`task dev:obs`, background — web :8080, telnet :4201; needs Docker); write `01-system-map.md` as a shared briefing pack (container diagram, load-bearing flows verified from source, size inventory, where-things-live table, the severity rubric + citation contract + dedup + findings-file format below). Give this pack to every agent.
 > 2. **Evidence fan-out (11 read-only agents, parallel, each writes its own `findings/dN-*.md`):**
 >    - D1 Architecture — `comprehensive-review:comprehensive-review-architect-review` (opus)

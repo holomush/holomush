@@ -41,6 +41,7 @@ Recovery point for the 2026-07-11 arch review. Re-orient after context loss by r
 | V3 | Codex second opinion | pending | `verification/codex-opinion.md` | after skeptics + on report draft |
 
 ### High-findings verification matrix (8 High, 0 Blocker)
+
 | Finding | Verified by | Status |
 |---|---|---|
 | D1-H1 event-sourcing claim false | skeptic a7db4d71 | **UPHELD+strengthened** (CRUD emits 0 events; +2 doc claims incl public marketing index.mdx:40-42; 1 orig citation weaker — swap jetstream-spec:144) |

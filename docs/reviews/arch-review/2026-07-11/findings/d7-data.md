@@ -13,6 +13,7 @@ Counts: **1 High, 3 Medium, 3 Low**, 5 Strengths noted.
 ## Findings
 
 ### HIGH-1 `events_audit` has no retention, partition, or archival mechanism — unbounded growth
+
 - **Severity:** High
 - **Claim:** `events_audit` (the durable, permanent fallback source for all event history beyond JetStream retention) is written to by every non-ephemeral event in the system and has no DELETE, TRUNCATE, partition, or retention worker anywhere in production code — it grows without bound for the lifetime of the deployment, unlike the sibling ABAC `access_audit_log` table which has both.
 - **Evidence:**
@@ -25,16 +26,19 @@ Counts: **1 High, 3 Medium, 3 Low**, 5 Strengths noted.
 - **Dedup:** none found (checked `events_audit`, `retention`, `partition`, `unbounded` keywords against open-issues.json).
 
 ### MEDIUM-1 `sessions` table has no index on `location_id` — presence query does a sequential scan
+
 - **Severity:** Medium
 - **Claim:** `ListActiveByLocation`, the query backing `CoreService.ListFocusPresence` (the canonical "who's here" presence RPC per `.claude/rules/event-interfaces.md`) and `internal/grpc/location_follow.go`, filters `sessions` on `location_id`, but `sessions` has no index on that column — every other `location_id`-bearing world table (`characters`, `exits`, `objects`) is indexed on it, making this an inconsistency rather than a deliberate choice.
 - **Evidence:**
   - `internal/store/session_store.go:745-753`:
+
     ```go
     rows, err := s.pool.Query(ctx,
         `SELECT `+sessionSelectColumns+` FROM sessions `+
             `WHERE location_id = $1 AND status = 'active' AND grid_present = true `+
             ...
     ```
+
   - `internal/store/migrations/000001_baseline.up.sql:202-223` — `CREATE TABLE sessions (...)` followed only by `idx_sessions_active_character` (on `character_id`, partial) and `idx_sessions_status` (on `status`, partial WHERE `status = 'detached'`). No index touches `location_id`. Confirmed via `rg -n "CREATE (UNIQUE )?INDEX" internal/store/migrations/*.up.sql | rg -i sessions` across all 39 migrations — no later migration adds one.
   - Compare: `idx_characters_location` (`internal/store/migrations/000001_baseline.up.sql:75`), `idx_exits_from`/`idx_exits_to` (`:126-127`), `idx_objects_location` (`:151`) — every other table with a `location_id` FK is indexed on it.
   - `internal/grpc/list_focus_presence.go:140` and `internal/grpc/location_follow.go:223` both call `ListActiveByLocation` on the request path.
@@ -43,6 +47,7 @@ Counts: **1 High, 3 Medium, 3 Low**, 5 Strengths noted.
 - **Dedup:** none found (checked `ListActiveByLocation`, `location_id index`, `presence` keywords against open-issues.json — no hit).
 
 ### MEDIUM-2 Character/player settings read-modify-write has no concurrency guard — lost-update race
+
 - **Severity:** Medium
 - **Claim:** `CharacterSettingsRepository` (and the mirrored player-settings path) implements a whole-bag read-modify-write over a JSONB column with no transaction, optimistic-concurrency version column, or `SELECT ... FOR UPDATE` — two concurrent writers to the same character's settings can silently lose one writer's update.
 - **Evidence:** `internal/store/character_settings_repo.go:38-64` (`GetPreferences`: plain `SELECT preferences FROM characters WHERE id = $1`) and `:66-90` (`SetPreferences`: plain `UPDATE characters SET preferences = $1 WHERE id = $2`, blind overwrite) — no `pool.Begin`, no `xmin`/version check, no locking clause between the two calls. The application-level `settings.Scoped` dirty-tracking (`internal/settings/character_store.go:84-93`, "overwrite ONLY the partitions this view mutated") only protects against clobbering a **different** partition read in the same in-memory view; it does nothing for two concurrent requests that both read-then-write the **same** partition of the **same** character.
@@ -51,6 +56,7 @@ Counts: **1 High, 3 Medium, 3 Low**, 5 Strengths noted.
 - **Dedup:** "Server-side player preferences" (title-only match, no body available) may be related design work in flight — not a confirmed dedup, noting for cross-check.
 
 ### MEDIUM-3 Primary `pgxpool` has no explicit tuning; multiple independently-sized pools coexist
+
 - **Severity:** Medium
 - **Claim:** The main production database pool (serving world state, sessions, ABAC, `events_audit` cold tier, `crypto_keys`, admin approvals — effectively every store in the system) is constructed with zero explicit `MaxConns`/`MinConns`/`MaxConnLifetime`/`MaxConnIdleTime`/`HealthCheckPeriod`, relying entirely on pgx's built-in default of `MaxConns = max(4, NumCPU)` (verified via context7 `/jackc/pgx`, `_autodocs/pgxpool.md`, fetched this session) — and at least two *additional*, separately-sized pools are opened for plugin schema work, each also defaulting independently.
 - **Evidence:**
@@ -61,6 +67,7 @@ Counts: **1 High, 3 Medium, 3 Low**, 5 Strengths noted.
 - **Dedup:** **already-tracked:#4693** ("Review pgx pool and PostgreSQL connection settings for plugin architecture") and **already-tracked:#4713** ("Unify plugin alias pgxpool with shared database pool") cover the plugin-pool duplication angle. This finding adds the observation that the **main store pool itself** (`internal/store/postgres.go`) — not just the plugin pools — also has zero explicit tuning, which #4693's title ("for plugin architecture") may not fully scope. Recommend folding this observation into #4693 or #4713 rather than filing a new issue.
 
 ### LOW-1 `events_immutable_test.go` guards a table that no longer exists, not the live `events_audit`
+
 - **Severity:** Low
 - **Claim:** The meta-test `TestEventsTableCannotBeUpdatedOrDeletedByApplicationCode` (`internal/store/events_immutable_test.go:49-98`) uses word-boundary regexes matching the literal table name `events` — but that table was dropped in `internal/store/migrations/000010_drop_events_and_cursors.up.sql:11` (`DROP TABLE IF EXISTS events;`) when the system moved to JetStream + `events_audit`. Because `\bevents\b` does not match `events_audit` (no word boundary between `s` and `_`), this test provides **zero** coverage against an accidental `DELETE`/`TRUNCATE` on the actual live, permanent audit table.
 - **Evidence:** `internal/store/events_immutable_test.go:62-64` (`updateRE`/`deleteRE`/`truncateRE` all anchor on `\bevents\b`); `internal/store/migrations/000001_baseline.up.sql:240` (original `CREATE TABLE events`, now dropped); `internal/store/migrations/000010_drop_events_and_cursors.up.sql:4-11` (drop, with comment "All event publication now flows through JetStream; audit projection to events_audit").
@@ -69,6 +76,7 @@ Counts: **1 High, 3 Medium, 3 Low**, 5 Strengths noted.
 - **Dedup:** none found.
 
 ### LOW-2 Admin break-glass cold reader has no fully-supporting index for its query shape
+
 - **Severity:** Low
 - **Claim:** `ColdReader.Read` (`internal/admin/readstream/cold_reader.go:89-100`, `buildSQL` at `:191-235`) builds a query with N `subject LIKE $i` clauses OR'd together, `AND dek_ref IS NOT NULL`, `ORDER BY timestamp ASC, js_seq ASC` against `events_audit` — no existing index covers this combination (the closest are `events_audit_subject_pat (subject text_pattern_ops)` for individual LIKE arms and `events_audit_dek_ref (dek_ref) WHERE dek_ref IS NOT NULL`, but nothing supports the cross-subject `ORDER BY timestamp`).
 - **Evidence:** `internal/admin/readstream/cold_reader.go:200-232` (query construction); `internal/store/migrations/000009_create_events_audit.up.sql:18-20` and `000014_events_audit_dek_columns.up.sql:13-15` (existing indexes, none matching this access pattern).
@@ -77,6 +85,7 @@ Counts: **1 High, 3 Medium, 3 Low**, 5 Strengths noted.
 - **Dedup:** none found.
 
 ### LOW-3 `admin_approvals.MarkApproved` differentiator-SELECT has a narrow benign race
+
 - **Severity:** Low
 - **Claim:** `PostgresRepo.MarkApproved` (`internal/admin/approval/repo.go:195-210`) performs the actual state transition via a single atomic `UPDATE ... WHERE request_id = $1 AND approved_at IS NULL AND expires_at > now() AND primary_player_id != $2` (correct, race-free CAS), but on `RowsAffected() == 0` runs a separate follow-up `SELECT` (`:212-216`) to determine *why* it failed for the error message. Between the failed UPDATE and the differentiator SELECT, a concurrent process could change the row's state, so the returned error reason (self-approval vs. already-approved vs. expired) can be stale/wrong in a narrow window.
 - **Evidence:** `internal/admin/approval/repo.go:196-235` (full CAS + differentiator sequence).

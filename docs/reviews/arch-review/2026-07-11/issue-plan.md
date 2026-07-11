@@ -11,9 +11,9 @@ Bodies will carry the AI-authorship byline and link to the evidence file (`docs/
 ## Epic E1 — "Assurance artifacts overstate reality" (the trust-gap theme)
 
 > **Epic issue.** Title: `epic: close the assurance-gap — docs/tests/UI claims exceed what the code delivers`
-> Labels: `enhancement`, `priority::medium`, `theme:assurance-integrity` (new theme — will also add a `docs/roadmap.md` narrative section per the CLAUDE.md theme rule), `review-finding`, `docs`
-> Body: links the three child issues below (I2 PWA / I3 coverage / I4 DLQ-test); frames the pattern (F3-test/F6/F7 + the product-readiness cousin F5/I8); notes the fix is mostly docs + CI config, little runtime code. **Because this adds a `theme:*` label, the same PR MUST add a `docs/roadmap.md` section (MUST-NOT-orphan-labels rule).** *(F1 was originally the fourth child but is re-scoped to a standalone architecture High — see I1.)*
-
+> Labels: `enhancement`, `priority::medium`, `theme:assurance-integrity` (new theme, GitHub-only), `review-finding`, `docs`
+> Body: links the three child issues below (I2 PWA / I3 coverage / I4 DLQ-test); frames the pattern (F3-test/F6/F7 + the product-readiness cousin F5/I8); notes the fix is mostly docs + CI config, little runtime code. **The `docs/roadmap.md` section obligation (MUST-NOT-orphan-labels rule) is WAIVED per maintainer** — roadmap.md is deprecated under GSD adoption. *(F1 was originally the fourth child but is re-scoped to a standalone architecture High — see I1.)*
+>
 > **Note:** I1 (event sourcing) was **re-scoped OUT of this epic and promoted to a standalone High** (see below) after the reviewer challenged it — it is an architecture-decision investigation, not a doc fix. The epic now covers F3-test/F6/F7 only.
 
 | ID | Title | Labels | Priority | Evidence |

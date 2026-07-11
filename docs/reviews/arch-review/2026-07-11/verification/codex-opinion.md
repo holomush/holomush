@@ -13,6 +13,7 @@ Codex (GPT-family, via codex-rescue) was asked to pressure-test the review's sev
 ## Adjudication (where I agree, where I hold)
 
 **AGREE — adopt a dual-rubric severity presentation.** Codex is right that flattening an unauthenticated OOM and a coverage-policy gap into one "High" bucket is misleading. The report now separates:
+
 - **Operational-High (runtime teeth):** F2, F4, F8 — the "true Highs."
 - **Product-readiness High:** F5 — see below.
 - **Assurance/governance theme (Medium-High as a cluster):** F1, F6, F7 + F3's tautological test → "assurance artifacts overstate reality."

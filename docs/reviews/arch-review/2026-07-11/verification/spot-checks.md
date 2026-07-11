@@ -5,10 +5,12 @@ Reviewer (me) independently re-derives load-bearing Blocker/High claims from sou
 ## D4 two-pass disagreement — ADJUDICATED (finding UPHELD as High)
 
 The D4 security-auditor produced **two divergent reports** (parent agent `d4-perimeter.md` + its internal worker `04-perimeter-platform-security.md`). They disagree on the top finding:
+
 - Worker: **HIGH — gateway ConnectRPC handler has no `WithReadMaxBytes` → unbounded body buffering → OOM.**
 - Parent: **0 High**; does not surface the OOM item; top finding is secure-cookies-default-false (Medium).
 
 **My independent adjudication → the OOM finding is REAL and High:**
+
 - `internal/web/server.go:68-76` constructs the public ConnectRPC mux with `connect.WithInterceptors(...)` only — **no `connect.WithReadMaxBytes`**. Verified this session.
 - `connectrpc.com/connect@v1.20.0/protocol_connect.go:1119`: `if u.readMaxBytes > 0 && int64(u.readMaxBytes) < math.MaxInt64 { reader = io.LimitReader(...) }` — the LimitReader is applied **only when readMaxBytes > 0**; the size check at `:1132` is likewise gated on `> 0`. Unset (0) ⇒ the entire request body is read into memory with no cap. Verified in the vendored module source this session (`go env GOMODCACHE`).
 - Contrast: core gRPC caps inbound at 4 MiB — `internal/grpc/server.go:56` `MaxRecvMsgSize = 4*1024*1024`, applied at `:1850/:1868`. So the gap is an asymmetry, not a deliberate uniform choice.

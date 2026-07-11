@@ -10,6 +10,7 @@ The client is **polished and the conversational loop works well live** — guest
 ## Findings
 
 ### HIGH-1 — No player-facing movement: characters cannot walk between locations
+
 - **Severity:** High
 - **Claim:** The world engine can move characters (`world.Service.MoveCharacter`) and the UI renders clickable exits, but no registered command or RPC lets a player traverse an exit. Clicking the "market" exit — or typing the direction — leaves the character in place with no feedback.
 - **Evidence:**
@@ -22,6 +23,7 @@ The client is **polished and the conversational loop works well live** — guest
 - **Dedup:** none found (no movement/walk/traverse issue in the 186 open issues). **Flag for verification:** confirm no built-in dispatcher handler or alias reaches `MoveCharacter` before filing.
 
 ### MEDIUM-1 — Exit navigation dispatched as a raw string command (gateway-boundary anti-pattern shape)
+
 - **Severity:** Medium
 - **Claim:** A GUI button click (machine-initiated navigation) is routed through the human text-command parser via `sendCommand(direction)`, and there is no typed movement RPC at all. Per `.claude/rules/gateway-boundary.md`, machine-initiated structural actions should use a typed facade RPC; movement (a location mutation) sits on the structural side.
 - **Evidence:** `web/src/routes/(authed)/terminal/+page.svelte:664-666` (`sendCommand(direction)`); no `Move`/`Traverse` RPC in `api/proto/**` (grep of proto services returns none). Contrast the codebase's own discipline: scene structural writes use typed facade RPCs per ADR `holomush-v4qmu`.
@@ -30,6 +32,7 @@ The client is **polished and the conversational loop works well live** — guest
 - **Dedup:** none.
 
 ### MEDIUM-2 — `look` and `who` return "Unknown command" with no pointer to the panels that hold that state
+
 - **Severity:** Medium
 - **Claim:** The two most-typed MUSH verbs are unhandled. A guest typing `look` gets `Unknown command. Try 'help'.`; `who` likewise. The room description, exits, and presence exist only in the sidebar, which a terminal-first user won't look at.
 - **Evidence:** Live transcript: `look` → `Unknown command. Try 'help'.` (`evidence/ui/03`, `04-help-output.png`); `help` lists only quit / communication verbs / help — no `look`/`who`. Room state is in the sidebar panels (`sidebar/*.svelte`, `eventRouter.ts` `location_state`/`exit_update`).
@@ -38,6 +41,7 @@ The client is **polished and the conversational loop works well live** — guest
 - **Dedup:** none.
 
 ### LOW-1 — Command palette (⌘K) is app-navigation only; may mislead a game-command expectation
+
 - **Severity:** Low
 - **Claim:** ⌘K opens a palette offering "Go to Room" and theme switches — UI navigation/settings, not game commands. Reasonable, but a new player may expect a game-command launcher.
 - **Evidence:** Live snapshot of the palette listbox (`Go to Room`, `Switch theme: …`).

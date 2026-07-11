@@ -26,6 +26,7 @@ The user's "lazy/poor AI-assisted coding" hypothesis is directionally right in s
 ## Why it's not cosmetic (severity)
 
 The CRUD-not-event-sourced reality is the **root cause** of two other findings:
+
 - **D1-M2 (dual-write non-atomicity):** because state is the source of truth and events are a *post-commit notification*, a NATS blip loses the notification while the DB change persists (`move_succeeded:true`). Under true event sourcing the event *is* the write, so this class can't occur.
 - **D1-M12 (last-write-wins, no version guard):** CRUD writes have no event-ordered concurrency control; under an event-sourced model the append sequence is the ordering. This is the concurrency-corruption risk the §7 blind-spot follow-up (I11) targets.
 
@@ -34,6 +35,7 @@ So "which architecture is real" is not a doc question — it determines whether 
 ## The reframed action (replaces "correct the docs")
 
 **Investigate + decide, then reconcile — an ADR-driving investigation, not a doc patch:**
+
 1. Establish intent: was world-state event sourcing ever meant to be real (interview/roadmap archaeology), or was "event sourcing" always shorthand for "event-driven with an audit log"?
 2. Decide (ADR) between:
    - **(A) Build it** — introduce a real projection/rebuild path (or a transactional outbox + event-first writes) if replayability, auditable state reconstruction, or the two-replica correctness guarantees are actually wanted. Larger effort; fixes M2 + M12 at the root.

@@ -1,4 +1,5 @@
 # D8a — Web Client Static Audit — Findings
+
 **Agent:** claude-opus-4.6 (sonnet-5 session) · **Date:** 2026-07-11 · **Scope examined:** `web/src/routes/**`, `web/src/lib/{stores,scenes,comm,presence,components,hooks,theme}/**`, `web/src/lib/transport.ts`, `web/src/app.html`, `web/src/app.css`, `web/package.json`, `web/CLAUDE.md`, `.claude/rules/branding.md`, `.claude/rules/gateway-boundary.md`. Read-only, no dev server driven (static code review only — the parallel live-browser pass owns runtime behavior).
 
 ## Summary
@@ -10,6 +11,7 @@ The web client is well-engineered for a hobbyist-scale project: disciplined Svel
 ## Findings
 
 ### HIGH-1 "Offline-capable PWA" claim is entirely aspirational — no manifest, no service worker
+
 - **Severity:** High
 - **Claim:** `site/src/content/docs/contributing/explanation/architecture.md:298` and `operating/index.mdx:25` describe the web client as a "SvelteKit PWA... offline-capable," but `web/src/app.html` has no `<link rel="manifest">`, no theme-color/icon meta, `web/package.json` has no PWA/service-worker/workbox dependency, and there is no `web/static/` directory or any `sw.js`/`service-worker.ts` anywhere in the tree.
 - **Evidence:** `web/src/app.html:1-9` (bare `<head>`, `%sveltekit.head%` only); `web/package.json:1-40` (no `vite-plugin-pwa`, no `workbox-*`); `find web -iname "*.webmanifest" -o -iname "sw.js"` → zero hits; `site/src/content/docs/contributing/explanation/architecture.md:298` (`| **Web Client** | SvelteKit PWA | Modern, offline-capable |`).
@@ -18,6 +20,7 @@ The web client is well-engineered for a hobbyist-scale project: disciplined Svel
 - **Dedup:** none
 
 ### MEDIUM-1 Channels subsystem has no dedicated web GUI (typed-RPC stubs exist, unused)
+
 - **Severity:** Medium
 - **Claim:** The Channels subsystem (merged as part of #4595, backend-complete with a full `ChannelService` — create/join/leave/list/post/who/history/invite/mute/ban/kick/transfer) has generated ConnectRPC stubs in the web client but zero consuming code — no route, no component, no store references any `channel` RPC.
 - **Evidence:** `web/src/lib/connect/holomush/channel/v1/channel_pb.ts` exists (generated stub only); `rg -rn "ChannelService" web/src` returns only the generated file itself; no hits for a channels route under `web/src/routes/` or component under `web/src/lib/components/`. Contrast with Scenes, which has a full typed-RPC surface (`web/src/lib/scenes/client.ts`) plus dedicated routes (`web/src/routes/(authed)/scenes/**`) and components (`web/src/lib/components/scenes/**`).
@@ -26,6 +29,7 @@ The web client is well-engineered for a hobbyist-scale project: disciplined Svel
 - **Dedup:** none
 
 ### MEDIUM-2 No `+error.svelte` error boundary anywhere in the route tree
+
 - **Severity:** Medium
 - **Claim:** There is no `web/src/routes/+error.svelte` (or nested `+error.svelte`) and no `<svelte:boundary>` usage anywhere in `web/src`, so any uncaught `load()`/rendering exception falls through to SvelteKit's default unstyled error page.
 - **Evidence:** `find web/src -iname "+error.svelte"` → zero hits; `grep -rl "svelte:boundary" web/src` → zero hits; `find web/src/routes -maxdepth 1 -type f` lists only `+layout.ts/svelte` and `+page.ts/svelte`, no `+error.svelte`.
@@ -34,6 +38,7 @@ The web client is well-engineered for a hobbyist-scale project: disciplined Svel
 - **Dedup:** none
 
 ### MEDIUM-3 Command textarea has no accessible name
+
 - **Severity:** Medium
 - **Claim:** The primary terminal command input is a bare `<textarea>` with only a `placeholder`, no `<label>`, `aria-label`, or `aria-labelledby` — placeholder text is not a reliable accessible name per WCAG 4.1.2 (many screen readers do not announce it, and it disappears once text is typed).
 - **Evidence:** `web/src/lib/components/terminal/CommandInput.svelte:177-188` — `<textarea bind:this={textarea} bind:value={text} onkeydown={handleKeydown} oninput={autoGrow} rows="1" placeholder="Enter command..." spellcheck="false" autocomplete="off" disabled={...} aria-disabled={...}></textarea>` — no `aria-label`/`id`+`<label>` pairing.
@@ -42,6 +47,7 @@ The web client is well-engineered for a hobbyist-scale project: disciplined Svel
 - **Dedup:** none
 
 ### MEDIUM-4 Stream drop requires a manual "Reconnect" click — no automatic retry/backoff
+
 - **Severity:** Medium
 - **Claim:** When the `StreamEvents` subscription throws (network blip, gateway restart), `hydrateAndStream`'s catch branch sets `error` and `connected = false`, showing a login-screen with a "Reconnect" button — there is no automatic reconnect-with-backoff attempt.
 - **Evidence:** `web/src/routes/(authed)/terminal/+page.svelte:406-419` (catch branch sets `error`/`connected=false`, no retry scheduling) and `:680-684` (`reconnect()` is user-click-only, `onclick={reconnect}` at `:692`).
@@ -50,6 +56,7 @@ The web client is well-engineered for a hobbyist-scale project: disciplined Svel
 - **Dedup:** none
 
 ### LOW-1 `restoreSession()` called from `onMount` instead of root `load()` — contradicts web/CLAUDE.md's own Auth Guards rule
+
 - **Severity:** Low (already tracked; reconfirmed present)
 - **Claim:** `web/CLAUDE.md:154-158` states session restoration "must happen in `load()`, not `onMount()`, or auth guards will redirect on page reload" — yet `restoreSession()` is still called inside `onMount()` in the root layout.
 - **Evidence:** `web/src/routes/+layout.svelte:98-105` — `onMount(() => { initTelemetry(); initSentry(); restoreSession(); hydrateUiPrefs(); window.addEventListener(...); ... })`.
@@ -58,12 +65,14 @@ The web client is well-engineered for a hobbyist-scale project: disciplined Svel
 - **Dedup:** already-tracked:#4760
 
 ### LOW-2 Authed terminal route not responsive on mobile
+
 - **Severity:** Low (already tracked; not independently re-driven — code inspection only)
 - **Claim:** TopBar/terminal layout uses fixed-width flex panes (`Resizable.PaneGroup`) with no mobile breakpoint collapse in `web/src/routes/(authed)/terminal/+page.svelte` styles.
 - **Evidence:** `web/src/routes/(authed)/terminal/+page.svelte:751-779` (`.terminal-layout`/`.main-area` — no `@media` query narrowing sidebar/pane behavior below `md`).
 - **Dedup:** already-tracked:#4618
 
 ### LOW-3 AnsiRenderer XSS: raw `ansi_up` HTML injected via `@html` without input pre-escaping
+
 - **Severity:** Low (already tracked; reconfirmed present)
 - **Claim:** Unlike every other `@html` site in the codebase (`urlLinker.ts` escapes first, then linkifies), `AnsiRenderer.svelte` feeds `text` straight into `ansiUp.ansi_to_html(text)` and injects the result via `{@html html}` with no pre-escape.
 - **Evidence:** `web/src/lib/components/terminal/AnsiRenderer.svelte:14-20`; contrast `web/src/lib/util/urlLinker.ts:11-13` (`escapeHtml(text)` called before regex linkify) used by every other renderer (`CommunicationLine.svelte:15-26`, `FallbackRenderer.svelte:30`, `CommandRenderer.svelte:32`, `SystemRenderer.svelte:24,26`, `MovementRenderer.svelte:27`).

@@ -138,7 +138,7 @@ called with only `dlqConfigForGame(cfg.GameID)`, never consulting
 `PostgresEventStore.GetSystemInfo(ctx, "game_id")`. That omission is exactly
 the finding's own suggested fix, which I confirm is unimplemented.
 
-## (d) Documented operator step to align them? No.
+## (d) Documented operator step to align them? No
 
 `site/src/content/docs/operating/how-to/external-nats-deployment.md` is the
 **only** documented runbook that exercises `holomush audit dlq replay`
