@@ -26,6 +26,46 @@ func TestDialExternalFailsClosedWhenUnreachable(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "EVENTBUS_EXTERNAL_CONNECT_FAILED")
 }
 
+// TestRedactURLStripsCredentialsFromEverySeed proves that redactURL removes
+// URL-embedded passwords from every seed in a comma-separated NATS seed list —
+// not just the first — so no credential leaks into
+// EVENTBUS_EXTERNAL_CONNECT_FAILED. A single url.Parse only sees the first
+// seed's userinfo, which is why redactURL splits on "," first.
+func TestRedactURLStripsCredentialsFromEverySeed(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		raw        string
+		mustAbsent []string
+	}{
+		{
+			"single url with credentials",
+			"nats://user:secret1@h1:4222",
+			[]string{"secret1"},
+		},
+		{
+			"multi url leaks second credential without per-seed redaction",
+			"nats://a:secret1@h1:4222,nats://b:secret2@h2:4222",
+			[]string{"secret1", "secret2"},
+		},
+		{
+			"multi url with three seeds",
+			"nats://a:pw1@h1:4222,nats://b:pw2@h2:4222,nats://c:pw3@h3:4222",
+			[]string{"pw1", "pw2", "pw3"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := redactURL(tt.raw)
+			for _, secret := range tt.mustAbsent {
+				assert.NotContains(t, got, secret,
+					"redacted URL must not leak any embedded password")
+			}
+		})
+	}
+}
+
 // TestExporterEnabledIsEmbeddedOnly locks OQ-7: the embedded-only Prometheus
 // exporter never runs in external mode, where s.server is nil and scraping
 // server.MonitorAddr() would nil-dereference. External mode with

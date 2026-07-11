@@ -5,6 +5,7 @@ package eventbus
 
 import (
 	"net/url"
+	"strings"
 
 	"github.com/nats-io/nats.go"
 	"github.com/samber/oops"
@@ -65,9 +66,25 @@ func dialExternal(cfg Config) (*nats.Conn, error) {
 // redactURL strips any userinfo (user:pass) from a NATS URL so a boot-time
 // dial failure does not leak the URL-embedded password into structured
 // errors/logs. Dev clusters may carry user:pass in cfg.URL (config.go);
-// this keeps that credential out of EVENTBUS_EXTERNAL_CONNECT_FAILED. If the
-// URL cannot be parsed it is dropped entirely rather than risking a leak.
+// this keeps that credential out of EVENTBUS_EXTERNAL_CONNECT_FAILED.
+//
+// nats.Connect accepts a comma-separated seed list in a single string
+// (nats://a:pw@h1,nats://b:pw2@h2), which url.Parse treats as ONE URL whose
+// User is only the first credential — leaving the 2nd+ embedded passwords in
+// the parsed host/path. Split on "," and redact each seed independently so no
+// credential in any seed survives. If a seed cannot be parsed it is dropped
+// entirely rather than risking a leak.
 func redactURL(raw string) string {
+	seeds := strings.Split(raw, ",")
+	redacted := make([]string, len(seeds))
+	for i, seed := range seeds {
+		redacted[i] = redactOneURL(seed)
+	}
+	return strings.Join(redacted, ",")
+}
+
+// redactOneURL redacts a single NATS URL (no comma-separated seed list).
+func redactOneURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "<unparseable url redacted>"
