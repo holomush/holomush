@@ -55,9 +55,12 @@ func VerifyAccountScoping(ctx context.Context, conn *nats.Conn) error {
 
 	// Capture permissions violations via the async error handler. A buffered
 	// channel absorbs the async dispatch without blocking nats.go's callback
-	// goroutine. Restoring the prior handler is unnecessary: this runs once at
-	// boot, immediately after Start, before any consumer attaches its own
-	// handler.
+	// goroutine. Save and restore the prior handler: this runs on the shared
+	// long-lived connection (event bus, audit projection, cluster, invalidation
+	// all share it), so leaving our probe closure installed would orphan any
+	// later component that relies on connection-level async error surfacing.
+	priorErrorHandler := conn.ErrorHandler()
+	defer conn.SetErrorHandler(priorErrorHandler)
 	violations := make(chan error, 8)
 	conn.SetErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
 		if errors.Is(err, nats.ErrPermissionViolation) {
