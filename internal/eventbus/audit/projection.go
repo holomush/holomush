@@ -240,7 +240,8 @@ func (p *projection) handle(msg jetstream.Msg) {
 			// Low-signal per-message event; debug-only to keep log volume
 			// bounded. Plugin-owned audit coverage is observable via the
 			// SkippedPluginOwnedTotal counter instead.
-			slog.Default().Debug(
+			slog.DebugContext(
+				p.workerCtx,
 				"audit projection skipping plugin-owned subject",
 				"subject", msg.Subject(),
 				"plugin", owner.PluginName,
