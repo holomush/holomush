@@ -197,8 +197,10 @@ func replayOne(ctx context.Context, pool *pgxpool.Pool, msg jetstream.Msg, wantM
 		// prepended). This happens when the replay config's game_id differs
 		// from (or falls back to "main" instead of) the capture-time game_id.
 		// Fail loud: count Failed and retain the dead letter, never write a
-		// corrupted subject. (subject metadata is NOT an AAD input, so this is
-		// crypto-neutral.)
+		// corrupted subject. This is crypto-neutral: the events_audit.subject
+		// *column* is not an AAD input — cold-read AAD reconstructs the subject
+		// from the marshaled envelope proto (§4.2), which DLQ capture preserves
+		// verbatim — so a wrong/omitted column value cannot affect decryption.
 		result.Failed++
 		slog.WarnContext(
 			ctx, "audit DLQ replay: DLQ subject does not carry the expected prefix; not persisted (replay game_id likely differs from capture-time game_id)",
