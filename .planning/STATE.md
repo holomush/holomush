@@ -31,7 +31,7 @@ trusted identically.
 Phase: 4 — World-Model Resilience Investigation & Decision (F1) (not started)
 Plan: — (immediate: /gsd-quick the F2 gateway DoS cap #4785; then /gsd-plan-phase 4)
 Status: Roadmap created — ready to plan Phase 4 (F1 decision gate)
-Last activity: 2026-07-11 — Milestone v0.12 roadmap created (6 phases, 19 requirements); F1-first reorder + F2 pulled forward
+Last activity: 2026-07-11 — Completed quick task 260711-hg1 (F2): capped gateway ConnectRPC request-body size (#4785, unauthenticated OOM)
 
 ## Performance Metrics
 
@@ -104,6 +104,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260709-sqg | Fix holomush-9hygy — convert core-channels migrations TIMESTAMPTZ→BIGINT epoch-ns (lint:no-timestamptz ship blocker) | 2026-07-10 | 1284ba341 | [260709-sqg-…](./quick/260709-sqg-fix-bead-holomush-9hygy-convert-core-cha/) |
+| 260711-hg1 | GH-4785 (F2): cap gateway ConnectRPC request-body size (`WithReadMaxBytes` 4 MiB + `ReadTimeout`) to prevent unauthenticated OOM | 2026-07-11 | 0e3806ebf | [260711-hg1-…](./quick/260711-hg1-gh-4785-cap-gateway-connectrpc-request-b/) |
 
 ## Deferred Items
 

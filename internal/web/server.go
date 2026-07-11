@@ -50,6 +50,15 @@ type Server struct {
 	errCh      chan error
 }
 
+// maxRequestBytes caps the decoded size of an inbound ConnectRPC request
+// message at 4 MiB. connect-go only applies its body LimitReader when
+// readMaxBytes > 0; left unset, it reads the entire request body into memory,
+// so a single unauthenticated POST with a large body can OOM the public
+// gateway. The value matches the core gRPC inbound cap
+// (internal/grpc.MaxRecvMsgSize) so both server surfaces bound request memory
+// identically (GH-4785).
+const maxRequestBytes = 4 * 1024 * 1024
+
 // NewServer creates a web server with ConnectRPC handler and static file server.
 func NewServer(cfg Config) (*Server, error) {
 	if !cfg.Secure {
@@ -73,6 +82,7 @@ func NewServer(cfg Config) (*Server, error) {
 	// NotFound, Unauthenticated) instead of the default CodeUnknown / HTTP 500.
 	path, connectHandler := webv1connect.NewWebServiceHandler(
 		cfg.Handler,
+		connect.WithReadMaxBytes(maxRequestBytes),
 		connect.WithInterceptors(statusTranslationInterceptor()),
 	)
 	mux.Handle(path, connectHandler)
@@ -135,7 +145,14 @@ func NewServer(cfg Config) (*Server, error) {
 		Addr:              cfg.Addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		// ReadTimeout bounds the total time to read a request (headers + body),
+		// closing the slow-body window ReadHeaderTimeout alone leaves open. Under
+		// HTTP/2 (x/net/http2) this is applied per-stream as a request-body-read
+		// deadline that is disarmed once the body is consumed, so it does not
+		// truncate long-lived server-streaming responses like StreamEvents
+		// (GH-4785).
+		ReadTimeout: 30 * time.Second,
+		IdleTimeout: 60 * time.Second,
 	}
 
 	// Configure HTTP/2 with keepalive pings to detect dead connections.
