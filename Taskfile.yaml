@@ -30,6 +30,7 @@ vars:
   DOCS_ONLY_PATHS: |
     site/**
     docs/**
+    .planning/**
     **/*.md
     .claude/agents/**
     .claude/commands/**

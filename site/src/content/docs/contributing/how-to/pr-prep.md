@@ -184,6 +184,7 @@ globs:
 
 - `site/**`
 - `docs/**`
+- `.planning/**` (GSD planning artifacts — plans, roadmap, state; inert markdown/JSON with no code coupling)
 - `**/*.md` (including `README.md`, `web/CLAUDE.md`, `.github/PULL_REQUEST_TEMPLATE.md`)
 - `.claude/agents/**`
 - `.claude/commands/**`
