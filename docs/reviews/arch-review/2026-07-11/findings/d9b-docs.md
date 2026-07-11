@@ -30,7 +30,7 @@ The weak spot is `contributing/explanation/architecture.md`, the single highest-
 
 - **Severity:** Medium
 - **Claim:** The Stream Types table lists the `channel.<name>` stream's content as "Channel messages (future)," but the Channels subsystem is a fully implemented, in-tree binary plugin.
-- **Evidence:** `site/src/content/docs/contributing/explanation/architecture.md:113` (`| \`channel.<name>\` | ... | Channel messages (future) | Channel members |`) vs. `plugins/core-channels/plugin.yaml` (real manifest, `emits: [channel]`, `history_scope: custom`) and `plugins/core-channels/main.go:95` ("Qualifies each to `events.<game>.channel.<id>` (the emit subject)"). Per the review's system map, Channels shipped as Phase 1 of PR #4595, merged before this baseline.
+- **Evidence:** `site/src/content/docs/contributing/explanation/architecture.md:113` — the stream table row for the `channel.<name>` domain is labelled "Channel messages (future)", but `plugins/core-channels/plugin.yaml` is a real shipped manifest (`emits: [channel]`, `history_scope: custom`) and `plugins/core-channels/main.go:95` qualifies each subject to `events.<game>.channel.<id>`. Per the review's system map, Channels shipped as Phase 1 of PR #4595, merged before this baseline.
 - **Impact:** A contributor reading the architecture doc to understand what streams exist is told a real, load-bearing subsystem doesn't exist yet.
 - **Recommendation:** Drop "(future)"; the row is otherwise accurate (subject shape matches).
 - **Dedup:** already-tracked:#4667.

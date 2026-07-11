@@ -101,7 +101,7 @@ def test_emits_all_sections_when_no_bead_refs(repo):
     p = run_collect(repo, "v0.3.0")
     assert p.returncode == 0
     assert "## Coverage gaps (no legacy issue ref)" in p.stdout
-    assert "## Roadmap theme sections" in p.stdout
+    assert "## Theme context" in p.stdout
     assert "feat(telnet): keepalive pings" in p.stdout
 
 
