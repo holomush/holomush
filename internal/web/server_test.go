@@ -121,40 +121,64 @@ func TestServer_ConnectRPCRouting(t *testing.T) {
 
 // Verifies GH-4785: the public ConnectRPC handler must cap inbound request
 // bodies so an unauthenticated POST cannot buffer an arbitrarily large body
-// into memory and OOM the gateway.
-func TestServerRejectsOversizedRequestBody(t *testing.T) {
+// into memory and OOM the gateway. The 4 MiB boundary is exercised directly —
+// at-limit is accepted, one byte over is refused — so the cap value is
+// protected against silent drift.
+func TestServerCapsRequestBodySize(t *testing.T) {
 	mock := &mockCoreClient{}
 	handler := NewHandler(mock)
 
-	srv, err := NewServer(Config{
-		Addr:    "127.0.0.1:0",
-		Handler: handler,
-	})
+	srv, err := NewServer(Config{Addr: "127.0.0.1:0", Handler: handler})
 	require.NoError(t, err)
 
 	errCh, err := srv.Start()
 	require.NoError(t, err)
 
-	// A body far larger than the 4 MiB cap. Without connect.WithReadMaxBytes
-	// the gateway would read the whole thing into memory (the OOM vector);
-	// with the cap connect rejects it as resource_exhausted before buffering.
-	oversized := strings.Repeat("A", 5*1024*1024)
-	resp, err := http.Post(
-		"http://"+srv.Addr()+"/holomush.web.v1.WebService/WebCreateGuest",
-		"application/json",
-		strings.NewReader(oversized),
-	)
-	require.NoError(t, err)
-	defer resp.Body.Close()
+	tests := []struct {
+		name                  string
+		bodyLen               int
+		wantResourceExhausted bool
+	}{
+		{"body under the cap is not size-rejected", maxRequestBytes / 2, false},
+		{"body exactly at the cap is not size-rejected", maxRequestBytes, false},
+		{"body one byte over the cap is rejected", maxRequestBytes + 1, true},
+		{"body far over the cap is rejected", maxRequestBytes + 1024*1024, true},
+	}
 
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Body of 'A's: correctly sized but invalid JSON. connect enforces the
+			// size cap while reading, before unmarshaling, so the size verdict is
+			// independent of the (invalid) content.
+			// URL is built inline (not hoisted to a variable) so gosec's G107
+			// variable-URL check stays quiet, matching the other server tests.
+			resp, err := http.Post(
+				"http://"+srv.Addr()+"/holomush.web.v1.WebService/WebCreateGuest",
+				"application/json",
+				strings.NewReader(strings.Repeat("A", tt.bodyLen)),
+			)
+			require.NoError(t, err)
+			defer resp.Body.Close()
 
-	// Connect maps CodeResourceExhausted to HTTP 429 and carries the code
-	// string in its JSON error envelope.
-	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode,
-		"oversized body should be rejected, not buffered; got body: %s", body)
-	assert.Contains(t, string(body), "resource_exhausted")
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			if tt.wantResourceExhausted {
+				// Connect maps CodeResourceExhausted to HTTP 429 and carries the
+				// code string in its JSON error envelope.
+				assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode,
+					"oversized body should be size-rejected, not buffered; got body: %s", body)
+				assert.Contains(t, string(body), "resource_exhausted")
+			} else {
+				// The cap must not fire: the body is read through to the handler
+				// (here it fails JSON unmarshaling → invalid_argument, never
+				// resource_exhausted).
+				assert.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode,
+					"legitimately-sized body must not be size-rejected; got body: %s", body)
+				assert.NotContains(t, string(body), "resource_exhausted")
+			}
+		})
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
