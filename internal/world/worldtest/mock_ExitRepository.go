@@ -11,6 +11,8 @@ import (
 	ulid "github.com/oklog/ulid/v2"
 	mock "github.com/stretchr/testify/mock"
 
+	wmodel "github.com/holomush/holomush/internal/world/wmodel"
+
 	world "github.com/holomush/holomush/internal/world"
 )
 
@@ -28,21 +30,33 @@ func (_m *MockExitRepository) EXPECT() *MockExitRepository_Expecter {
 }
 
 // Create provides a mock function with given fields: ctx, exit
-func (_m *MockExitRepository) Create(ctx context.Context, exit *world.Exit) error {
+func (_m *MockExitRepository) Create(ctx context.Context, exit *world.Exit) (*wmodel.MutationDelta, error) {
 	ret := _m.Called(ctx, exit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Exit) error); ok {
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Exit) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, exit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Exit) *wmodel.MutationDelta); ok {
 		r0 = rf(ctx, exit)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, *world.Exit) error); ok {
+		r1 = rf(ctx, exit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockExitRepository_Create_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Create'
@@ -64,32 +78,44 @@ func (_c *MockExitRepository_Create_Call) Run(run func(ctx context.Context, exit
 	return _c
 }
 
-func (_c *MockExitRepository_Create_Call) Return(_a0 error) *MockExitRepository_Create_Call {
-	_c.Call.Return(_a0)
+func (_c *MockExitRepository_Create_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockExitRepository_Create_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockExitRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Exit) error) *MockExitRepository_Create_Call {
+func (_c *MockExitRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Exit) (*wmodel.MutationDelta, error)) *MockExitRepository_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// Delete provides a mock function with given fields: ctx, id
-func (_m *MockExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	ret := _m.Called(ctx, id)
+// Delete provides a mock function with given fields: ctx, id, expectedVersion
+func (_m *MockExitRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	ret := _m.Called(ctx, id, expectedVersion)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) error); ok {
-		r0 = rf(ctx, id)
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, int) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, id, expectedVersion)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, int) *wmodel.MutationDelta); ok {
+		r0 = rf(ctx, id, expectedVersion)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, int) error); ok {
+		r1 = rf(ctx, id, expectedVersion)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockExitRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
@@ -100,23 +126,24 @@ type MockExitRepository_Delete_Call struct {
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id ulid.ULID
-func (_e *MockExitRepository_Expecter) Delete(ctx interface{}, id interface{}) *MockExitRepository_Delete_Call {
-	return &MockExitRepository_Delete_Call{Call: _e.mock.On("Delete", ctx, id)}
+//   - expectedVersion int
+func (_e *MockExitRepository_Expecter) Delete(ctx interface{}, id interface{}, expectedVersion interface{}) *MockExitRepository_Delete_Call {
+	return &MockExitRepository_Delete_Call{Call: _e.mock.On("Delete", ctx, id, expectedVersion)}
 }
 
-func (_c *MockExitRepository_Delete_Call) Run(run func(ctx context.Context, id ulid.ULID)) *MockExitRepository_Delete_Call {
+func (_c *MockExitRepository_Delete_Call) Run(run func(ctx context.Context, id ulid.ULID, expectedVersion int)) *MockExitRepository_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID))
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(int))
 	})
 	return _c
 }
 
-func (_c *MockExitRepository_Delete_Call) Return(_a0 error) *MockExitRepository_Delete_Call {
-	_c.Call.Return(_a0)
+func (_c *MockExitRepository_Delete_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockExitRepository_Delete_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockExitRepository_Delete_Call) RunAndReturn(run func(context.Context, ulid.ULID) error) *MockExitRepository_Delete_Call {
+func (_c *MockExitRepository_Delete_Call) RunAndReturn(run func(context.Context, ulid.ULID, int) (*wmodel.MutationDelta, error)) *MockExitRepository_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -421,21 +448,33 @@ func (_c *MockExitRepository_ListVisibleExits_Call) RunAndReturn(run func(contex
 }
 
 // Update provides a mock function with given fields: ctx, exit
-func (_m *MockExitRepository) Update(ctx context.Context, exit *world.Exit) error {
+func (_m *MockExitRepository) Update(ctx context.Context, exit *world.Exit) (*wmodel.MutationDelta, error) {
 	ret := _m.Called(ctx, exit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Update")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Exit) error); ok {
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Exit) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, exit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Exit) *wmodel.MutationDelta); ok {
 		r0 = rf(ctx, exit)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, *world.Exit) error); ok {
+		r1 = rf(ctx, exit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockExitRepository_Update_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Update'
@@ -457,12 +496,12 @@ func (_c *MockExitRepository_Update_Call) Run(run func(ctx context.Context, exit
 	return _c
 }
 
-func (_c *MockExitRepository_Update_Call) Return(_a0 error) *MockExitRepository_Update_Call {
-	_c.Call.Return(_a0)
+func (_c *MockExitRepository_Update_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockExitRepository_Update_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockExitRepository_Update_Call) RunAndReturn(run func(context.Context, *world.Exit) error) *MockExitRepository_Update_Call {
+func (_c *MockExitRepository_Update_Call) RunAndReturn(run func(context.Context, *world.Exit) (*wmodel.MutationDelta, error)) *MockExitRepository_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }

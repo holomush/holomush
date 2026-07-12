@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
 // querier is an interface that abstracts query execution for both *pgxpool.Pool and pgx.Tx.
@@ -82,6 +84,16 @@ func withTx(ctx context.Context, pool txBeginner, fn func(ctx context.Context) e
 		return oops.Code("TX_COMMIT_FAILED").Wrap(err)
 	}
 	return nil
+}
+
+// primaryDelta builds a primary-only MutationDelta for a write. 05-14 populates
+// only the primary aggregate id + tombstone flag; the version predicate and real
+// before/after population land in 05-02/05-03, and cascade Affected population in
+// 05-10/05-11.
+func primaryDelta(t wmodel.AggregateType, id ulid.ULID, tombstone bool) *wmodel.MutationDelta {
+	return &wmodel.MutationDelta{
+		Primary: wmodel.AffectedAggregate{Type: t, ID: id, Tombstone: tombstone},
+	}
 }
 
 // maxCTERecursionDepth limits recursion in CTEs to prevent infinite loops.

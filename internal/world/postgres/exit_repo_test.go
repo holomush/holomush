@@ -64,7 +64,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, exit.ID)
@@ -91,7 +91,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 
 		// Check that the return exit was created
@@ -116,12 +116,12 @@ func TestExitRepository_CRUD(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 
 		exit.Name = "southeast"
 		exit.Aliases = []string{"se"}
-		err = repo.Update(ctx, exit)
+		err = delErr(repo.Update(ctx, exit))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, exit.ID)
@@ -142,10 +142,10 @@ func TestExitRepository_CRUD(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 
-		err = repo.Delete(ctx, exit.ID)
+		err = delErr(repo.Delete(ctx, exit.ID, 0))
 		require.NoError(t, err)
 
 		_, err = repo.Get(ctx, exit.ID)
@@ -165,7 +165,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 
 		// Verify return exit exists
@@ -174,7 +174,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 		require.NotNil(t, returnExit)
 
 		// Delete the forward exit
-		err = repo.Delete(ctx, exit.ID)
+		err = delErr(repo.Delete(ctx, exit.ID, 0))
 		require.NoError(t, err)
 
 		// Both exits should be gone
@@ -198,7 +198,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
-		err := repo.Create(ctx, forwardExit)
+		err := delErr(repo.Create(ctx, forwardExit))
 		require.NoError(t, err)
 
 		// Verify return exit was created
@@ -219,7 +219,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 		// Now delete the forward exit - should handle gracefully even though
 		// the return exit is already gone. The Delete method returns a
 		// BidirectionalCleanupResult that is NOT severe (just informational).
-		err = repo.Delete(ctx, forwardExit.ID)
+		err = delErr(repo.Delete(ctx, forwardExit.ID, 0))
 
 		// Check that the returned error is a non-severe cleanup result
 		var cleanupResult *world.BidirectionalCleanupResult
@@ -249,14 +249,14 @@ func TestExitRepository_CRUD(t *testing.T) {
 			Name:           "nonexistent",
 			Visibility:     world.VisibilityAll,
 		}
-		err := repo.Update(ctx, exit)
+		err := delErr(repo.Update(ctx, exit))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
-		err := repo.Delete(ctx, ulid.Make())
+		err := delErr(repo.Delete(ctx, ulid.Make(), 0))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
@@ -289,7 +289,7 @@ func TestExitRepository_ListFromLocation(t *testing.T) {
 	}
 
 	for _, exit := range exits {
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 	}
 
@@ -318,7 +318,7 @@ func TestExitRepository_FindByName(t *testing.T) {
 		Visibility:     world.VisibilityAll,
 	}
 
-	err := repo.Create(ctx, exit)
+	err := delErr(repo.Create(ctx, exit))
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -367,7 +367,7 @@ func TestExitRepository_FindByName_EmptyAliasSlice(t *testing.T) {
 		Visibility:     world.VisibilityAll,
 	}
 
-	err := repo.Create(ctx, exit)
+	err := delErr(repo.Create(ctx, exit))
 	require.NoError(t, err)
 
 	t.Run("found by exact name", func(t *testing.T) {
@@ -418,7 +418,7 @@ func TestExitRepository_WithLockData(t *testing.T) {
 		},
 	}
 
-	err := repo.Create(ctx, exit)
+	err := delErr(repo.Create(ctx, exit))
 	require.NoError(t, err)
 
 	got, err := repo.Get(ctx, exit.ID)
@@ -447,7 +447,7 @@ func TestExitRepository_WithVisibleToList(t *testing.T) {
 		VisibleTo:      []ulid.ULID{charID1, charID2},
 	}
 
-	err := repo.Create(ctx, exit)
+	err := delErr(repo.Create(ctx, exit))
 	require.NoError(t, err)
 
 	got, err := repo.Get(ctx, exit.ID)
@@ -495,7 +495,7 @@ func TestExitRepository_FindBySimilarity(t *testing.T) {
 	}
 
 	for _, exit := range exits {
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 	}
 
@@ -626,7 +626,7 @@ func TestExitRepository_FindBySimilarity_BestMatch(t *testing.T) {
 	}
 
 	for _, exit := range exits {
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 	}
 
@@ -705,7 +705,7 @@ func TestExitRepository_ListVisibleExits(t *testing.T) {
 	}
 
 	for _, exit := range []*world.Exit{publicExit, ownerExit, listExit} {
-		err := repo.Create(ctx, exit)
+		err := delErr(repo.Create(ctx, exit))
 		require.NoError(t, err)
 	}
 
@@ -775,9 +775,9 @@ func TestExitRepository_ListVisibleExits_NoOwner(t *testing.T) {
 		Visibility:     world.VisibilityAll,
 	}
 
-	err := repo.Create(ctx, ownerExit)
+	err := delErr(repo.Create(ctx, ownerExit))
 	require.NoError(t, err)
-	err = repo.Create(ctx, publicExit)
+	err = delErr(repo.Create(ctx, publicExit))
 	require.NoError(t, err)
 
 	// When location has no owner, owner-only exits should be invisible to everyone

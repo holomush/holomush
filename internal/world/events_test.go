@@ -15,6 +15,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access"
@@ -694,7 +695,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		to := world.Containment{LocationID: &toLocID}
 
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to, mock.Anything).Return(nil, nil)
 
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.NoError(t, err)
@@ -730,7 +731,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		to := world.Containment{LocationID: &toLocID}
 
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to, mock.Anything).Return(nil, nil)
 
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.Error(t, err)
@@ -759,7 +760,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		to := world.Containment{LocationID: &toLocID}
 
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to, mock.Anything).Return(nil, nil)
 
 		// Event emission failure should fail the operation
 		// Note: oops preserves inner error code (EVENT_EMIT_FAILED from events.go)

@@ -48,7 +48,7 @@ var _ = Describe("Multi-tab session isolation — two-tab guest scenario", func(
 			Type:         world.LocationTypePersistent,
 			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 		}
-		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+		Expect(delErr(env.locRepo.Create(ctx, loc))).To(Succeed())
 
 		gw = env.webHandler
 	})
@@ -98,7 +98,7 @@ var _ = Describe("Multi-tab session isolation — same character in two tabs", f
 			Type:         world.LocationTypePersistent,
 			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 		}
-		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+		Expect(delErr(env.locRepo.Create(ctx, loc))).To(Succeed())
 
 		gw = env.webHandler
 	})
@@ -234,7 +234,7 @@ var _ = Describe("Multi-tab session isolation — browser cookie + concurrent te
 			Type:         world.LocationTypePersistent,
 			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 		}
-		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+		Expect(delErr(env.locRepo.Create(ctx, loc))).To(Succeed())
 
 		gw = env.webHandler
 	})
@@ -301,7 +301,7 @@ var _ = Describe("Multi-tab session isolation — two characters of one player",
 			Type:         world.LocationTypePersistent,
 			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 		}
-		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+		Expect(delErr(env.locRepo.Create(ctx, loc))).To(Succeed())
 
 		gw = env.webHandler
 
@@ -403,7 +403,7 @@ var _ = Describe("Multi-tab session isolation — logout in tab 1, action in tab
 			Type:         world.LocationTypePersistent,
 			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 		}
-		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+		Expect(delErr(env.locRepo.Create(ctx, loc))).To(Succeed())
 
 		gw = env.webHandler
 	})
@@ -525,7 +525,7 @@ var _ = Describe("Multi-tab session isolation — Subscribe-path post-logout (sp
 			Type:         world.LocationTypePersistent,
 			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 		}
-		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+		Expect(delErr(env.locRepo.Create(ctx, loc))).To(Succeed())
 	})
 
 	It("Subscribe rejects a stale token with SESSION_NOT_FOUND before sending any frame", func() {
@@ -642,7 +642,7 @@ var _ = Describe("Pre-deploy WebCheckSession contract", func() {
 			Type:         world.LocationTypePersistent,
 			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 		}
-		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+		Expect(delErr(env.locRepo.Create(ctx, loc))).To(Succeed())
 
 		gw = env.webHandler
 	})

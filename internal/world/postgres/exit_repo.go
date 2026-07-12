@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
 // ExitRepository implements world.ExitRepository using PostgreSQL.
@@ -47,7 +48,7 @@ func (r *ExitRepository) Get(ctx context.Context, id ulid.ULID) (*world.Exit, er
 
 // Create persists a new exit.
 // If bidirectional, also creates the return exit atomically within a transaction.
-func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
+func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) (*wmodel.MutationDelta, error) {
 	// Assign ID if not set
 	if exit.ID.Compare(ulid.ULID{}) == 0 {
 		exit.ID = idgen.New()
@@ -58,7 +59,7 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 
 	// Enroll in the ambient mutation transaction if present (re-entrant seam),
 	// else begin+commit a local one. Preserves atomic creation of the reverse exit.
-	return withTx(ctx, r.pool, func(txCtx context.Context) error {
+	err := withTx(ctx, r.pool, func(txCtx context.Context) error {
 		tx := txFromContext(txCtx)
 		if err := r.insertExitTx(txCtx, tx, exit); err != nil {
 			return err
@@ -82,6 +83,10 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return primaryDelta(wmodel.AggregateExit, exit.ID, false), nil
 }
 
 // insertExitTx inserts a single exit row within a transaction.
@@ -121,15 +126,15 @@ func (r *ExitRepository) insertExitTx(ctx context.Context, tx pgx.Tx, exit *worl
 }
 
 // Update modifies an existing exit.
-func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
+func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) (*wmodel.MutationDelta, error) {
 	lockDataJSON, err := marshalLockData(exit.LockData)
 	if err != nil {
-		return oops.With("operation", "marshal lock data").Wrap(err)
+		return nil, oops.With("operation", "marshal lock data").Wrap(err)
 	}
 
 	visibleToStrings := ulidsToStrings(exit.VisibleTo)
 
-	result, err := r.pool.Exec(
+	result, err := execerFromCtx(ctx, r.pool).Exec(
 		ctx, `
 		UPDATE exits SET from_location_id = $2, to_location_id = $3, name = $4, aliases = $5,
 		       bidirectional = $6, return_name = $7, visibility = $8, visible_to = $9,
@@ -150,12 +155,12 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 		lockDataJSON,
 	)
 	if err != nil {
-		return oops.With("operation", "update exit").With("id", exit.ID.String()).Wrap(err)
+		return nil, oops.With("operation", "update exit").With("id", exit.ID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.Code("EXIT_NOT_FOUND").With("id", exit.ID.String()).Wrap(world.ErrNotFound)
+		return nil, oops.Code("EXIT_NOT_FOUND").With("id", exit.ID.String()).Wrap(world.ErrNotFound)
 	}
-	return nil
+	return primaryDelta(wmodel.AggregateExit, exit.ID, false), nil
 }
 
 // Delete removes an exit by ID.
@@ -164,7 +169,8 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 // For severe issues (find error, delete error), the entire operation is rolled back
 // and the returned BidirectionalCleanupResult indicates the primary delete did NOT complete.
 // Callers can check IsSevere() to determine the severity of the issue.
-func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
+func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	_ = expectedVersion // accepted and ignored in 05-14; version predicate lands in 05-02/05-03
 	// infoResult carries a NON-severe cleanup notice (return exit already gone)
 	// that must be surfaced AFTER a successful commit — so it is captured here and
 	// returned only once withTx commits, rather than returned from the closure
@@ -238,15 +244,16 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		return nil
 	})
 	if txErr != nil {
-		return txErr
+		return nil, txErr
 	}
 
-	// Return informational cleanup result if return exit was not found
+	delta := primaryDelta(wmodel.AggregateExit, id, true)
+	// Return informational cleanup result if return exit was not found (non-severe).
 	if infoResult != nil && infoResult.Issue != nil {
-		return infoResult
+		return delta, infoResult
 	}
 
-	return nil
+	return delta, nil
 }
 
 // ListFromLocation returns all exits from a location.

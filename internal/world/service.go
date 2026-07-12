@@ -219,7 +219,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
 	}
-	if err := s.locationRepo.Create(ctx, loc); err != nil {
+	if _, err := s.locationRepo.Create(ctx, loc); err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "create location %s", loc.ID)
 	}
 	return nil
@@ -241,7 +241,7 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
 	}
-	if err := s.locationRepo.Update(ctx, loc); err != nil {
+	if _, err := s.locationRepo.Update(ctx, loc); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "update location %s", loc.ID)
 		}
@@ -273,7 +273,7 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 				With("operation", "delete_location_properties").
 				Wrapf(err, "delete properties for location %s", id)
 		}
-		if err := s.locationRepo.Delete(ctx, id); err != nil {
+		if _, err := s.locationRepo.Delete(ctx, id, 0); err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
 			}
@@ -329,7 +329,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
 	}
-	if err := s.exitRepo.Create(ctx, exit); err != nil {
+	if _, err := s.exitRepo.Create(ctx, exit); err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "create exit %s", exit.ID)
 	}
 	return nil
@@ -354,7 +354,7 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
 	}
-	if err := s.exitRepo.Update(ctx, exit); err != nil {
+	if _, err := s.exitRepo.Update(ctx, exit); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("EXIT_NOT_FOUND").Wrapf(err, "update exit %s", exit.ID)
 		}
@@ -375,7 +375,7 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixExit); err != nil {
 		return err
 	}
-	err := s.exitRepo.Delete(ctx, id)
+	_, err := s.exitRepo.Delete(ctx, id, 0)
 	if err != nil {
 		// Check if this is a cleanup result from bidirectional exit handling
 		var cleanupResult *BidirectionalCleanupResult
@@ -462,7 +462,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if err := obj.ValidateContainment(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
-	if err := s.objectRepo.Create(ctx, obj); err != nil {
+	if _, err := s.objectRepo.Create(ctx, obj); err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "create object %s", obj.ID)
 	}
 	return nil
@@ -487,7 +487,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	if err := obj.ValidateContainment(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
-	if err := s.objectRepo.Update(ctx, obj); err != nil {
+	if _, err := s.objectRepo.Update(ctx, obj); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "update object %s", obj.ID)
 		}
@@ -519,7 +519,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 				With("operation", "delete_object_properties").
 				Wrapf(err, "delete properties for object %s", id)
 		}
-		if err := s.objectRepo.Delete(ctx, id); err != nil {
+		if _, err := s.objectRepo.Delete(ctx, id, 0); err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
 			}
@@ -568,7 +568,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	}
 	from := obj.Containment()
 
-	if err := s.objectRepo.Move(ctx, id, to); err != nil {
+	if _, err := s.objectRepo.Move(ctx, id, to, 0); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
 		}
@@ -619,7 +619,7 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 				With("operation", "delete_character_properties").
 				Wrapf(err, "delete properties for character %s", id)
 		}
-		if err := s.characterRepo.Delete(ctx, id); err != nil {
+		if _, err := s.characterRepo.Delete(ctx, id, 0); err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
 			}
@@ -669,7 +669,7 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
 	}
 	char.Description = description
-	if err := s.characterRepo.Update(ctx, char); err != nil {
+	if _, err := s.characterRepo.Update(ctx, char); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update character %s", characterID)
 		}
@@ -698,45 +698,9 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 	return chars, nil
 }
 
-// AddSceneParticipant adds a character to a scene after checking write authorization.
-// Returns ErrInvalidParticipantRole if the role is not valid.
-func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID, role ParticipantRole) error {
-	if s.sceneRepo == nil {
-		return oops.Code("SCENE_ADD_PARTICIPANT_FAILED").Errorf("scene repository not configured")
-	}
-	resource := access.SceneResource(sceneID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixScene); err != nil {
-		return err
-	}
-	if err := role.Validate(); err != nil {
-		return oops.Code("SCENE_INVALID").Wrap(err)
-	}
-	if err := s.sceneRepo.AddParticipant(ctx, sceneID, characterID, role); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("SCENE_NOT_FOUND").Wrapf(err, "add participant %s to scene %s", characterID, sceneID)
-		}
-		return oops.Code("SCENE_ADD_PARTICIPANT_FAILED").Wrapf(err, "add participant %s to scene %s", characterID, sceneID)
-	}
-	return nil
-}
-
-// RemoveSceneParticipant removes a character from a scene after checking write authorization.
-func (s *Service) RemoveSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID) error {
-	if s.sceneRepo == nil {
-		return oops.Code("SCENE_REMOVE_PARTICIPANT_FAILED").Errorf("scene repository not configured")
-	}
-	resource := access.SceneResource(sceneID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixScene); err != nil {
-		return err
-	}
-	if err := s.sceneRepo.RemoveParticipant(ctx, sceneID, characterID); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("SCENE_NOT_FOUND").Wrapf(err, "remove participant %s from scene %s", characterID, sceneID)
-		}
-		return oops.Code("SCENE_REMOVE_PARTICIPANT_FAILED").Wrapf(err, "remove participant %s from scene %s", characterID, sceneID)
-	}
-	return nil
-}
+// Round-5 D-07: AddSceneParticipant/RemoveSceneParticipant were removed — the
+// vestigial world scene-participant write surface had no production caller. The
+// read surface (ListSceneParticipants) is KEPT.
 
 // ListSceneParticipants lists all participants in a scene after checking read authorization.
 func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, sceneID ulid.ULID) ([]SceneParticipant, error) {
@@ -800,7 +764,7 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 	}
 
 	// Update character location
-	if err := s.characterRepo.UpdateLocation(ctx, characterID, &toLocationID); err != nil {
+	if _, err := s.characterRepo.UpdateLocation(ctx, characterID, &toLocationID, 0); err != nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "update character %s location", characterID)
 	}
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
 // ObjectRepository implements world.ObjectRepository using PostgreSQL.
@@ -54,8 +55,8 @@ func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object
 
 // Create persists a new object.
 // Callers must validate the object before calling this method.
-func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error {
-	_, err := r.pool.Exec(ctx, `
+func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) (*wmodel.MutationDelta, error) {
+	_, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
 		INSERT INTO objects (id, name, description, location_id, held_by_character_id,
 		                     contained_in_object_id, is_container, owner_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -67,15 +68,15 @@ func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error 
 		ulidToStringPtr(obj.OwnerID),
 		pgnanos.From(obj.CreatedAt))
 	if err != nil {
-		return oops.With("operation", "create object").With("id", obj.ID.String()).Wrap(err)
+		return nil, oops.With("operation", "create object").With("id", obj.ID.String()).Wrap(err)
 	}
-	return nil
+	return primaryDelta(wmodel.AggregateObject, obj.ID, false), nil
 }
 
 // Update modifies an existing object.
 // Callers must validate the object before calling this method.
-func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error {
-	result, err := r.pool.Exec(ctx, `
+func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) (*wmodel.MutationDelta, error) {
+	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
 		UPDATE objects SET name = $2, description = $3, location_id = $4,
 		       held_by_character_id = $5, contained_in_object_id = $6,
 		       is_container = $7, owner_id = $8
@@ -87,24 +88,26 @@ func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error 
 		obj.IsContainer,
 		ulidToStringPtr(obj.OwnerID))
 	if err != nil {
-		return oops.With("operation", "update object").With("id", obj.ID.String()).Wrap(err)
+		return nil, oops.With("operation", "update object").With("id", obj.ID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.Code("OBJECT_NOT_FOUND").With("id", obj.ID.String()).Wrap(world.ErrNotFound)
+		return nil, oops.Code("OBJECT_NOT_FOUND").With("id", obj.ID.String()).Wrap(world.ErrNotFound)
 	}
-	return nil
+	return primaryDelta(wmodel.AggregateObject, obj.ID, false), nil
 }
 
 // Delete removes an object by ID.
-func (r *ObjectRepository) Delete(ctx context.Context, id ulid.ULID) error {
+// expectedVersion is accepted and ignored in 05-14 (version predicate lands later).
+func (r *ObjectRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	_ = expectedVersion
 	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `DELETE FROM objects WHERE id = $1`, id.String())
 	if err != nil {
-		return oops.With("operation", "delete object").With("id", id.String()).Wrap(err)
+		return nil, oops.With("operation", "delete object").With("id", id.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.Code("OBJECT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
+		return nil, oops.Code("OBJECT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
 	}
-	return nil
+	return primaryDelta(wmodel.AggregateObject, id, true), nil
 }
 
 // ListAtLocation returns all objects at a location.
@@ -162,16 +165,17 @@ const DefaultMaxNestingDepth = 3
 // - Circular containment is prevented
 // Uses a transaction with SELECT FOR UPDATE to ensure atomicity and prevent TOCTOU
 // vulnerabilities - both the object and container (if any) are locked for the duration.
-func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment) error {
+func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment, expectedVersion int) (*wmodel.MutationDelta, error) {
+	_ = expectedVersion // accepted and ignored in 05-14; move CAS lands in 05-03/05-11
 	// Validate containment
 	if err := to.Validate(); err != nil {
-		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
+		return nil, oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 	}
 
 	// Enroll in the ambient mutation transaction if present, else begin+commit a
 	// local one. Preserves FOR UPDATE locks on object + container and the
 	// nesting/circular-containment checks.
-	return withTx(ctx, r.pool, func(txCtx context.Context) error {
+	err := withTx(ctx, r.pool, func(txCtx context.Context) error {
 		tx := txFromContext(txCtx)
 
 		// Lock the object being moved to prevent concurrent move operations
@@ -241,6 +245,10 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return primaryDelta(wmodel.AggregateObject, objectID, false), nil
 }
 
 // checkCircularContainmentTx verifies that placing objectID into targetContainerID

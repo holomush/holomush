@@ -41,7 +41,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj.IsContainer = false
 		obj.CreatedAt = time.Now().UTC()
 
-		err = repo.Create(ctx, obj)
+		err = delErr(repo.Create(ctx, obj))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, obj.ID)
@@ -53,7 +53,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		assert.False(t, got.IsContainer)
 
 		// Cleanup
-		_ = repo.Delete(ctx, obj.ID)
+		_ = delErr(repo.Delete(ctx, obj.ID, 0))
 	})
 
 	// Note: "create with invalid containment - no location" test removed.
@@ -68,13 +68,13 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj.IsContainer = false
 		obj.CreatedAt = time.Now().UTC()
 
-		err = repo.Create(ctx, obj)
+		err = delErr(repo.Create(ctx, obj))
 		require.NoError(t, err)
 
 		obj.Name = "Updated Name"
 		obj.Description = "Updated description."
 		obj.IsContainer = true
-		err = repo.Update(ctx, obj)
+		err = delErr(repo.Update(ctx, obj))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, obj.ID)
@@ -84,7 +84,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		assert.True(t, got.IsContainer)
 
 		// Cleanup
-		_ = repo.Delete(ctx, obj.ID)
+		_ = delErr(repo.Delete(ctx, obj.ID, 0))
 	})
 
 	t.Run("update with owner_id", func(t *testing.T) {
@@ -108,12 +108,12 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj.IsContainer = false
 		obj.CreatedAt = time.Now().UTC()
 
-		err = repo.Create(ctx, obj)
+		err = delErr(repo.Create(ctx, obj))
 		require.NoError(t, err)
 
 		// Update to add owner
 		obj.OwnerID = &charID
-		err = repo.Update(ctx, obj)
+		err = delErr(repo.Update(ctx, obj))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, obj.ID)
@@ -122,7 +122,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		assert.Equal(t, charID, *got.OwnerID)
 
 		// Cleanup
-		_ = repo.Delete(ctx, obj.ID)
+		_ = delErr(repo.Delete(ctx, obj.ID, 0))
 		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charID.String())
 		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, playerID.String())
 	})
@@ -148,13 +148,13 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj.IsContainer = false
 		obj.CreatedAt = time.Now().UTC()
 
-		err = repo.Create(ctx, obj)
+		err = delErr(repo.Create(ctx, obj))
 		require.NoError(t, err)
 
 		// Update to be held by character (move from location to inventory)
 		err = obj.SetContainment(world.Containment{CharacterID: &charID})
 		require.NoError(t, err)
-		err = repo.Update(ctx, obj)
+		err = delErr(repo.Update(ctx, obj))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, obj.ID)
@@ -164,7 +164,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		assert.Equal(t, charID, *got.HeldByCharacterID())
 
 		// Cleanup
-		_ = repo.Delete(ctx, obj.ID)
+		_ = delErr(repo.Delete(ctx, obj.ID, 0))
 		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charID.String())
 		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, playerID.String())
 	})
@@ -176,7 +176,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		container.Description = "A container."
 		container.IsContainer = true
 		container.CreatedAt = time.Now().UTC()
-		err = repo.Create(ctx, container)
+		err = delErr(repo.Create(ctx, container))
 		require.NoError(t, err)
 
 		// Create an object to put in the container
@@ -185,13 +185,13 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj.Description = "An object."
 		obj.IsContainer = false
 		obj.CreatedAt = time.Now().UTC()
-		err = repo.Create(ctx, obj)
+		err = delErr(repo.Create(ctx, obj))
 		require.NoError(t, err)
 
 		// Update to be contained in container
 		err = obj.SetContainment(world.Containment{ObjectID: &container.ID})
 		require.NoError(t, err)
-		err = repo.Update(ctx, obj)
+		err = delErr(repo.Update(ctx, obj))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, obj.ID)
@@ -201,8 +201,8 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		assert.Equal(t, container.ID, *got.ContainedInObjectID())
 
 		// Cleanup
-		_ = repo.Delete(ctx, obj.ID)
-		_ = repo.Delete(ctx, container.ID)
+		_ = delErr(repo.Delete(ctx, obj.ID, 0))
+		_ = delErr(repo.Delete(ctx, container.ID, 0))
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -211,10 +211,10 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj.Description = "Will be deleted."
 		obj.CreatedAt = time.Now().UTC()
 
-		err = repo.Create(ctx, obj)
+		err = delErr(repo.Create(ctx, obj))
 		require.NoError(t, err)
 
-		err = repo.Delete(ctx, obj.ID)
+		err = delErr(repo.Delete(ctx, obj.ID, 0))
 		require.NoError(t, err)
 
 		_, err = repo.Get(ctx, obj.ID)
@@ -233,14 +233,14 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 		obj.Description = "Does not exist."
 		obj.CreatedAt = time.Now().UTC()
-		err = repo.Update(ctx, obj)
+		err = delErr(repo.Update(ctx, obj))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
-		err := repo.Delete(ctx, ulid.Make())
+		err := delErr(repo.Delete(ctx, ulid.Make(), 0))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
@@ -278,11 +278,11 @@ func TestObjectRepository_ListAtLocation(t *testing.T) {
 	obj2.Description = "Second object."
 	obj2.CreatedAt = time.Now().UTC()
 
-	require.NoError(t, repo.Create(ctx, obj1))
-	require.NoError(t, repo.Create(ctx, obj2))
+	require.NoError(t, delErr(repo.Create(ctx, obj1)))
+	require.NoError(t, delErr(repo.Create(ctx, obj2)))
 	defer func() {
-		_ = repo.Delete(ctx, obj1.ID)
-		_ = repo.Delete(ctx, obj2.ID)
+		_ = delErr(repo.Delete(ctx, obj1.ID, 0))
+		_ = delErr(repo.Delete(ctx, obj2.ID, 0))
 	}()
 
 	objects, err := repo.ListAtLocation(ctx, locationID)
@@ -363,9 +363,9 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	obj.Description = "Object held by character."
 	obj.CreatedAt = time.Now().UTC()
 
-	require.NoError(t, repo.Create(ctx, obj))
+	require.NoError(t, delErr(repo.Create(ctx, obj)))
 	defer func() {
-		_ = repo.Delete(ctx, obj.ID)
+		_ = delErr(repo.Delete(ctx, obj.ID, 0))
 	}()
 
 	objects, err := repo.ListHeldBy(ctx, characterID)
@@ -431,13 +431,13 @@ func TestObjectRepository_ListHeldBy_OrderingWithMultipleObjects(t *testing.T) {
 	obj3.CreatedAt = baseTime // newest
 
 	// Create in random order to ensure ORDER BY is doing the work
-	require.NoError(t, repo.Create(ctx, obj2))
-	require.NoError(t, repo.Create(ctx, obj1))
-	require.NoError(t, repo.Create(ctx, obj3))
+	require.NoError(t, delErr(repo.Create(ctx, obj2)))
+	require.NoError(t, delErr(repo.Create(ctx, obj1)))
+	require.NoError(t, delErr(repo.Create(ctx, obj3)))
 	defer func() {
-		_ = repo.Delete(ctx, obj1.ID)
-		_ = repo.Delete(ctx, obj2.ID)
-		_ = repo.Delete(ctx, obj3.ID)
+		_ = delErr(repo.Delete(ctx, obj1.ID, 0))
+		_ = delErr(repo.Delete(ctx, obj2.ID, 0))
+		_ = delErr(repo.Delete(ctx, obj3.ID, 0))
 	}()
 
 	objects, err := repo.ListHeldBy(ctx, characterID)
@@ -477,9 +477,9 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 	container.Description = "A wooden chest."
 	container.IsContainer = true
 	container.CreatedAt = time.Now().UTC()
-	require.NoError(t, repo.Create(ctx, container))
+	require.NoError(t, delErr(repo.Create(ctx, container)))
 	defer func() {
-		_ = repo.Delete(ctx, container.ID)
+		_ = delErr(repo.Delete(ctx, container.ID, 0))
 	}()
 
 	// Create object inside container
@@ -487,9 +487,9 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 	require.NoError(t, err)
 	item.Description = "A shiny gold coin."
 	item.CreatedAt = time.Now().UTC()
-	require.NoError(t, repo.Create(ctx, item))
+	require.NoError(t, delErr(repo.Create(ctx, item)))
 	defer func() {
-		_ = repo.Delete(ctx, item.ID)
+		_ = delErr(repo.Delete(ctx, item.ID, 0))
 	}()
 
 	objects, err := repo.ListContainedIn(ctx, container.ID)
@@ -520,13 +520,13 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		obj.Description = "Can be moved."
 		obj.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, obj))
+		require.NoError(t, delErr(repo.Create(ctx, obj)))
 		defer func() {
-			_ = repo.Delete(ctx, obj.ID)
+			_ = delErr(repo.Delete(ctx, obj.ID, 0))
 		}()
 
 		// Move to second location
-		err = repo.Move(ctx, obj.ID, world.Containment{LocationID: &loc2ID})
+		err = delErr(repo.Move(ctx, obj.ID, world.Containment{LocationID: &loc2ID}, 0))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, obj.ID)
@@ -543,22 +543,22 @@ func TestObjectRepository_Move(t *testing.T) {
 		container.Description = "A box."
 		container.IsContainer = true
 		container.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, container))
+		require.NoError(t, delErr(repo.Create(ctx, container)))
 		defer func() {
-			_ = repo.Delete(ctx, container.ID)
+			_ = delErr(repo.Delete(ctx, container.ID, 0))
 		}()
 
 		item, err := world.NewObjectWithID(ulid.Make(), "Key", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "A small key."
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
+		require.NoError(t, delErr(repo.Create(ctx, item)))
 		defer func() {
-			_ = repo.Delete(ctx, item.ID)
+			_ = delErr(repo.Delete(ctx, item.ID, 0))
 		}()
 
 		// Move key into box
-		err = repo.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID})
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID}, 0))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, item.ID)
@@ -575,22 +575,22 @@ func TestObjectRepository_Move(t *testing.T) {
 		nonContainer.Description = "A rock."
 		nonContainer.IsContainer = false
 		nonContainer.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, nonContainer))
+		require.NoError(t, delErr(repo.Create(ctx, nonContainer)))
 		defer func() {
-			_ = repo.Delete(ctx, nonContainer.ID)
+			_ = delErr(repo.Delete(ctx, nonContainer.ID, 0))
 		}()
 
 		item, err := world.NewObjectWithID(ulid.Make(), "Pebble", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "A small pebble."
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
+		require.NoError(t, delErr(repo.Create(ctx, item)))
 		defer func() {
-			_ = repo.Delete(ctx, item.ID)
+			_ = delErr(repo.Delete(ctx, item.ID, 0))
 		}()
 
 		// Try to move pebble into rock (should fail)
-		err = repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonContainer.ID})
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonContainer.ID}, 0))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment, "should wrap ErrInvalidContainment for non-container target")
 	})
@@ -600,13 +600,13 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		obj.Description = "Test."
 		obj.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, obj))
+		require.NoError(t, delErr(repo.Create(ctx, obj)))
 		defer func() {
-			_ = repo.Delete(ctx, obj.ID)
+			_ = delErr(repo.Delete(ctx, obj.ID, 0))
 		}()
 
 		// Empty containment should fail
-		err = repo.Move(ctx, obj.ID, world.Containment{})
+		err = delErr(repo.Move(ctx, obj.ID, world.Containment{}, 0))
 		assert.Error(t, err)
 	})
 
@@ -615,14 +615,14 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		item.Description = "Item looking for container."
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
+		require.NoError(t, delErr(repo.Create(ctx, item)))
 		defer func() {
-			_ = repo.Delete(ctx, item.ID)
+			_ = delErr(repo.Delete(ctx, item.ID, 0))
 		}()
 
 		// Try to move to a container that doesn't exist
 		nonExistentID := ulid.Make()
-		err = repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonExistentID})
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonExistentID}, 0))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound, "should wrap ErrNotFound for missing container")
 		errutil.AssertErrorCode(t, err, "CONTAINER_NOT_FOUND")
@@ -655,13 +655,13 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		item.Description = "Can be picked up."
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
+		require.NoError(t, delErr(repo.Create(ctx, item)))
 		defer func() {
-			_ = repo.Delete(ctx, item.ID)
+			_ = delErr(repo.Delete(ctx, item.ID, 0))
 		}()
 
 		// Move to character
-		err = repo.Move(ctx, item.ID, world.Containment{CharacterID: &characterID})
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{CharacterID: &characterID}, 0))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, item.ID)
@@ -681,34 +681,34 @@ func TestObjectRepository_Move(t *testing.T) {
 		level1.Description = "Top level container."
 		level1.IsContainer = true
 		level1.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, level1))
-		defer func() { _ = repo.Delete(ctx, level1.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, level1)))
+		defer func() { _ = delErr(repo.Delete(ctx, level1.ID, 0)) }()
 
 		level2, err := world.NewObjectWithID(ulid.Make(), "Level2 Container", world.InContainer(level1.ID))
 		require.NoError(t, err)
 		level2.Description = "Second level container."
 		level2.IsContainer = true
 		level2.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, level2))
-		defer func() { _ = repo.Delete(ctx, level2.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, level2)))
+		defer func() { _ = delErr(repo.Delete(ctx, level2.ID, 0)) }()
 
 		level3, err := world.NewObjectWithID(ulid.Make(), "Level3 Container", world.InContainer(level2.ID))
 		require.NoError(t, err)
 		level3.Description = "Third level container."
 		level3.IsContainer = true
 		level3.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, level3))
-		defer func() { _ = repo.Delete(ctx, level3.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, level3)))
+		defer func() { _ = delErr(repo.Delete(ctx, level3.ID, 0)) }()
 
 		// Try to add an item at level 4 - should fail (exceeds max depth of 3)
 		item, err := world.NewObjectWithID(ulid.Make(), "Deep Item", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "Too deep."
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
-		defer func() { _ = repo.Delete(ctx, item.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, item)))
+		defer func() { _ = delErr(repo.Delete(ctx, item.ID, 0)) }()
 
-		err = repo.Move(ctx, item.ID, world.Containment{ObjectID: &level3.ID})
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{ObjectID: &level3.ID}, 0))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "max nesting depth")
 		errutil.AssertErrorCode(t, err, "NESTING_DEPTH_EXCEEDED")
@@ -728,15 +728,15 @@ func TestObjectRepository_Move(t *testing.T) {
 		containerA.Description = "Has an item inside."
 		containerA.IsContainer = true
 		containerA.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, containerA))
-		defer func() { _ = repo.Delete(ctx, containerA.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, containerA)))
+		defer func() { _ = delErr(repo.Delete(ctx, containerA.ID, 0)) }()
 
 		itemA, err := world.NewObjectWithID(ulid.Make(), "Item in Container A", world.InContainer(containerA.ID))
 		require.NoError(t, err)
 		itemA.Description = "Nested item."
 		itemA.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, itemA))
-		defer func() { _ = repo.Delete(ctx, itemA.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, itemA)))
+		defer func() { _ = delErr(repo.Delete(ctx, itemA.ID, 0)) }()
 
 		// Container B in room containing Container C
 		containerB, err := world.NewObjectWithID(ulid.Make(), "Container B", world.InLocation(loc1ID))
@@ -744,20 +744,20 @@ func TestObjectRepository_Move(t *testing.T) {
 		containerB.Description = "Top level."
 		containerB.IsContainer = true
 		containerB.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, containerB))
-		defer func() { _ = repo.Delete(ctx, containerB.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, containerB)))
+		defer func() { _ = delErr(repo.Delete(ctx, containerB.ID, 0)) }()
 
 		containerC, err := world.NewObjectWithID(ulid.Make(), "Container C", world.InContainer(containerB.ID))
 		require.NoError(t, err)
 		containerC.Description = "Inside B."
 		containerC.IsContainer = true
 		containerC.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, containerC))
-		defer func() { _ = repo.Delete(ctx, containerC.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, containerC)))
+		defer func() { _ = delErr(repo.Delete(ctx, containerC.ID, 0)) }()
 
 		// Moving containerA (which has itemA inside) into containerC would create:
 		// B -> C -> A -> itemA (depth 4, exceeds max of 3)
-		err = repo.Move(ctx, containerA.ID, world.Containment{ObjectID: &containerC.ID})
+		err = delErr(repo.Move(ctx, containerA.ID, world.Containment{ObjectID: &containerC.ID}, 0))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "max nesting depth")
 		errutil.AssertErrorCode(t, err, "NESTING_DEPTH_EXCEEDED")
@@ -770,19 +770,19 @@ func TestObjectRepository_Move(t *testing.T) {
 		containerA.Description = "First container."
 		containerA.IsContainer = true
 		containerA.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, containerA))
-		defer func() { _ = repo.Delete(ctx, containerA.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, containerA)))
+		defer func() { _ = delErr(repo.Delete(ctx, containerA.ID, 0)) }()
 
 		containerB, err := world.NewObjectWithID(ulid.Make(), "Container B", world.InContainer(containerA.ID))
 		require.NoError(t, err)
 		containerB.Description = "Second container inside A."
 		containerB.IsContainer = true
 		containerB.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, containerB))
-		defer func() { _ = repo.Delete(ctx, containerB.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, containerB)))
+		defer func() { _ = delErr(repo.Delete(ctx, containerB.ID, 0)) }()
 
 		// Try to move A into B - should fail (circular)
-		err = repo.Move(ctx, containerA.ID, world.Containment{ObjectID: &containerB.ID})
+		err = delErr(repo.Move(ctx, containerA.ID, world.Containment{ObjectID: &containerB.ID}, 0))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "circular containment")
 		errutil.AssertErrorCode(t, err, "CIRCULAR_CONTAINMENT")
@@ -794,11 +794,11 @@ func TestObjectRepository_Move(t *testing.T) {
 		container.Description = "Cannot contain itself."
 		container.IsContainer = true
 		container.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, container))
-		defer func() { _ = repo.Delete(ctx, container.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, container)))
+		defer func() { _ = delErr(repo.Delete(ctx, container.ID, 0)) }()
 
 		// Try to move container into itself - should fail
-		err = repo.Move(ctx, container.ID, world.Containment{ObjectID: &container.ID})
+		err = delErr(repo.Move(ctx, container.ID, world.Containment{ObjectID: &container.ID}, 0))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "circular containment")
 		errutil.AssertErrorCode(t, err, "CIRCULAR_CONTAINMENT")
@@ -806,7 +806,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("move non-existent object fails", func(t *testing.T) {
 		nonExistentID := ulid.Make()
-		err := repo.Move(ctx, nonExistentID, world.Containment{LocationID: &loc1ID})
+		err := delErr(repo.Move(ctx, nonExistentID, world.Containment{LocationID: &loc1ID}, 0))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
@@ -835,14 +835,14 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, err)
 		item.Description = "Item for testing invalid containment."
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
-		defer func() { _ = repo.Delete(ctx, item.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, item)))
+		defer func() { _ = delErr(repo.Delete(ctx, item.ID, 0)) }()
 
 		// Try to move with both LocationID and CharacterID set - should fail
-		err = repo.Move(ctx, item.ID, world.Containment{
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{
 			LocationID:  &loc1ID,
 			CharacterID: &charID,
-		})
+		}, 0))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one")
 	})
@@ -856,15 +856,15 @@ func TestObjectRepository_Move(t *testing.T) {
 		container.Description = "Container for concurrent test."
 		container.IsContainer = true
 		container.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, container))
-		defer func() { _ = repo.Delete(ctx, container.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, container)))
+		defer func() { _ = delErr(repo.Delete(ctx, container.ID, 0)) }()
 
 		item, err := world.NewObjectWithID(ulid.Make(), "Concurrent Test Item", world.InLocation(loc1ID))
 		require.NoError(t, err)
 		item.Description = "Item for concurrent test."
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
-		defer func() { _ = repo.Delete(ctx, item.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, item)))
+		defer func() { _ = delErr(repo.Delete(ctx, item.ID, 0)) }()
 
 		// Start a transaction that locks the container
 		tx, err := testPool.Begin(ctx)
@@ -880,7 +880,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		shortCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
 
-		err = repo.Move(shortCtx, item.ID, world.Containment{ObjectID: &container.ID})
+		err = delErr(repo.Move(shortCtx, item.ID, world.Containment{ObjectID: &container.ID}, 0))
 		// The move should fail due to context deadline because the container is locked
 		require.Error(t, err)
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
@@ -889,7 +889,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		require.NoError(t, tx.Rollback(ctx))
 
 		// Now the move should succeed
-		err = repo.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID})
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID}, 0))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, item.ID)
@@ -922,42 +922,42 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		level1.Description = "Level 1"
 		level1.IsContainer = true
 		level1.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, level1))
-		defer func() { _ = repo.Delete(ctx, level1.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, level1)))
+		defer func() { _ = delErr(repo.Delete(ctx, level1.ID, 0)) }()
 
 		level2, err := world.NewObjectWithID(ulid.Make(), "Deep2", world.InContainer(level1.ID))
 		require.NoError(t, err)
 		level2.Description = "Level 2"
 		level2.IsContainer = true
 		level2.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, level2))
-		defer func() { _ = repo.Delete(ctx, level2.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, level2)))
+		defer func() { _ = delErr(repo.Delete(ctx, level2.ID, 0)) }()
 
 		level3, err := world.NewObjectWithID(ulid.Make(), "Deep3", world.InContainer(level2.ID))
 		require.NoError(t, err)
 		level3.Description = "Level 3"
 		level3.IsContainer = true
 		level3.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, level3))
-		defer func() { _ = repo.Delete(ctx, level3.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, level3)))
+		defer func() { _ = delErr(repo.Delete(ctx, level3.ID, 0)) }()
 
 		level4, err := world.NewObjectWithID(ulid.Make(), "Deep4", world.InContainer(level3.ID))
 		require.NoError(t, err)
 		level4.Description = "Level 4"
 		level4.IsContainer = true
 		level4.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, level4))
-		defer func() { _ = repo.Delete(ctx, level4.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, level4)))
+		defer func() { _ = delErr(repo.Delete(ctx, level4.ID, 0)) }()
 
 		// Move item to level4 (depth 5) - should succeed with custom depth
 		item, err := world.NewObjectWithID(ulid.Make(), "Deep Item", world.InLocation(locID))
 		require.NoError(t, err)
 		item.Description = "At depth 5"
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
-		defer func() { _ = repo.Delete(ctx, item.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, item)))
+		defer func() { _ = delErr(repo.Delete(ctx, item.ID, 0)) }()
 
-		err = repo.Move(ctx, item.ID, world.Containment{ObjectID: &level4.ID})
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{ObjectID: &level4.ID}, 0))
 		require.NoError(t, err) // Should succeed with depth 5
 
 		// Verify the item is at level4
@@ -976,18 +976,18 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		container.Description = "Top level only"
 		container.IsContainer = true
 		container.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, container))
-		defer func() { _ = repo.Delete(ctx, container.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, container)))
+		defer func() { _ = delErr(repo.Delete(ctx, container.ID, 0)) }()
 
 		item, err := world.NewObjectWithID(ulid.Make(), "Item", world.InLocation(locID))
 		require.NoError(t, err)
 		item.Description = "Goes in container"
 		item.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, item))
-		defer func() { _ = repo.Delete(ctx, item.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, item)))
+		defer func() { _ = delErr(repo.Delete(ctx, item.ID, 0)) }()
 
 		// Moving item to container (total depth 2) should succeed
-		err = repo.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID})
+		err = delErr(repo.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID}, 0))
 		require.NoError(t, err)
 
 		// But adding another layer would fail
@@ -996,18 +996,18 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		container2.Description = "Should fail to nest"
 		container2.IsContainer = true
 		container2.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, container2))
-		defer func() { _ = repo.Delete(ctx, container2.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, container2)))
+		defer func() { _ = delErr(repo.Delete(ctx, container2.ID, 0)) }()
 
 		anotherItem, err := world.NewObjectWithID(ulid.Make(), "Nested Item", world.InContainer(container2.ID))
 		require.NoError(t, err)
 		anotherItem.Description = "In container2"
 		anotherItem.CreatedAt = time.Now().UTC()
-		require.NoError(t, repo.Create(ctx, anotherItem))
-		defer func() { _ = repo.Delete(ctx, anotherItem.ID) }()
+		require.NoError(t, delErr(repo.Create(ctx, anotherItem)))
+		defer func() { _ = delErr(repo.Delete(ctx, anotherItem.ID, 0)) }()
 
 		// Move container2 (with item inside) into container - would create depth 3, should fail
-		err = repo.Move(ctx, container2.ID, world.Containment{ObjectID: &container.ID})
+		err = delErr(repo.Move(ctx, container2.ID, world.Containment{ObjectID: &container.ID}, 0))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "max nesting depth")
 		errutil.AssertErrorCode(t, err, "NESTING_DEPTH_EXCEEDED")

@@ -35,8 +35,12 @@ func NewCharRepoAdapter(pool *pgxpool.Pool, charRepo *worldpostgres.CharacterRep
 }
 
 // Create persists a new character using the underlying world repository.
+// The world repository now returns a *wmodel.MutationDelta; this adapter is a
+// documented wave-1 compatibility bridge (05-14) that discards the delta so the
+// auth.CharacterRepository interface (Create(...) error) stays unchanged. 05-15
+// removes Create from the auth-side interfaces entirely.
 func (a *CharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
-	if err := a.charRepo.Create(ctx, char); err != nil {
+	if _, err := a.charRepo.Create(ctx, char); err != nil {
 		return oops.Code("CHARACTER_CREATE_FAILED").Wrap(err)
 	}
 	return nil

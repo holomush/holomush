@@ -12,6 +12,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,16 +30,16 @@ func (m *mockLocationRepository) Get(ctx context.Context, id ulid.ULID) (*world.
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockLocationRepository) Create(_ context.Context, _ *world.Location) error {
-	return errors.New("not implemented")
+func (m *mockLocationRepository) Create(_ context.Context, _ *world.Location) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
-func (m *mockLocationRepository) Update(_ context.Context, _ *world.Location) error {
-	return errors.New("not implemented")
+func (m *mockLocationRepository) Update(_ context.Context, _ *world.Location) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
-func (m *mockLocationRepository) Delete(_ context.Context, _ ulid.ULID) error {
-	return errors.New("not implemented")
+func (m *mockLocationRepository) Delete(_ context.Context, _ ulid.ULID, _ int) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (m *mockLocationRepository) ListByType(_ context.Context, _ world.LocationType) ([]*world.Location, error) {

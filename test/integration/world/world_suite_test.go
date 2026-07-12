@@ -19,10 +19,27 @@ import (
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/test/testutil"
 )
 
 var suiteT *testing.T
+
+// delErr discards the *wmodel.MutationDelta a world repository write now returns,
+// yielding just the error — a mechanical 05-14 test bridge (behavior-preserving).
+func delErr(_ *wmodel.MutationDelta, err error) error { return err }
+
+// seedSceneParticipant inserts a scene_participants row directly. The world-layer
+// scene-participant write surface was removed in 05-14 (D-07); reads still
+// SELECT/JOIN the kept public.scene_participants table, so read specs seed via SQL.
+func seedSceneParticipant(ctx context.Context, pool *pgxpool.Pool, sceneID, characterID ulid.ULID, role world.ParticipantRole) error {
+	_, err := pool.Exec(ctx, `
+		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
+		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
+		ON CONFLICT (scene_id, character_id) DO UPDATE SET role = $3
+	`, sceneID.String(), characterID.String(), role.String())
+	return err
+}
 
 func TestWorld(t *testing.T) {
 	suiteT = t

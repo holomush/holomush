@@ -388,7 +388,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		Type:         world.LocationTypePersistent,
 		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 	}
-	err = locRepo.Create(ctx, guestLoc)
+	_, err = locRepo.Create(ctx, guestLoc)
 	require.NoError(t, err, "integrationtest.Start: create guest start location")
 
 	// GuestService wiring.
@@ -908,7 +908,7 @@ func (s *Server) NewLocation(ctx context.Context) ulid.ULID {
 		Type:         world.LocationTypePersistent,
 		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 	}
-	err := s.locRepo.Create(ctx, loc)
+	_, err := s.locRepo.Create(ctx, loc)
 	require.NoError(s.t, err, "integrationtest.Server.NewLocation: create location")
 	return loc.ID
 }
@@ -1371,7 +1371,9 @@ type authCharRepoAdapter struct {
 }
 
 func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
-	return a.charRepo.Create(ctx, char)
+	// Discards the *wmodel.MutationDelta return (05-14 wave-1 compatibility bridge).
+	_, err := a.charRepo.Create(ctx, char)
+	return err
 }
 
 func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {

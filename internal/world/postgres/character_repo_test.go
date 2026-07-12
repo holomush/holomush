@@ -77,11 +77,11 @@ func TestCharacterRepository_Get(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, char)
+		err := delErr(repo.Create(ctx, char))
 		require.NoError(t, err)
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		got, err := repo.Get(ctx, char.ID)
@@ -106,11 +106,11 @@ func TestCharacterRepository_Get(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, char)
+		err := delErr(repo.Create(ctx, char))
 		require.NoError(t, err)
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		got, err := repo.Get(ctx, char.ID)
@@ -150,12 +150,12 @@ func TestCharacterRepository_GetByLocation(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char1))
-		require.NoError(t, repo.Create(ctx, char2))
+		require.NoError(t, delErr(repo.Create(ctx, char1)))
+		require.NoError(t, delErr(repo.Create(ctx, char2)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char1.ID)
-			_ = repo.Delete(ctx, char2.ID)
+			_ = delErr(repo.Delete(ctx, char1.ID, 0))
+			_ = delErr(repo.Delete(ctx, char2.ID, 0))
 		})
 
 		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{})
@@ -192,12 +192,12 @@ func TestCharacterRepository_GetByLocation_Pagination(t *testing.T) {
 			LocationID:  &locationID,
 			CreatedAt:   time.Now().UTC(),
 		}
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 	}
 
 	t.Cleanup(func() {
 		for _, id := range charIDs {
-			_ = repo.Delete(ctx, id)
+			_ = delErr(repo.Delete(ctx, id, 0))
 		}
 	})
 
@@ -264,11 +264,11 @@ func TestCharacterRepository_Create(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, char)
+		err := delErr(repo.Create(ctx, char))
 		require.NoError(t, err)
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		// Verify creation
@@ -289,11 +289,11 @@ func TestCharacterRepository_Create(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, char)
+		err := delErr(repo.Create(ctx, char))
 		require.NoError(t, err)
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		got, err := repo.Get(ctx, char.ID)
@@ -319,15 +319,15 @@ func TestCharacterRepository_Update(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		char.Name = "UpdatedName"
 		char.Description = "Updated description."
-		err := repo.Update(ctx, char)
+		err := delErr(repo.Update(ctx, char))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, char.ID)
@@ -345,7 +345,7 @@ func TestCharacterRepository_Update(t *testing.T) {
 			Description: "Does not exist.",
 		}
 
-		err := repo.Update(ctx, char)
+		err := delErr(repo.Update(ctx, char))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
@@ -368,9 +368,9 @@ func TestCharacterRepository_Delete(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
-		err := repo.Delete(ctx, char.ID)
+		err := delErr(repo.Delete(ctx, char.ID, 0))
 		require.NoError(t, err)
 
 		_, err = repo.Get(ctx, char.ID)
@@ -378,7 +378,7 @@ func TestCharacterRepository_Delete(t *testing.T) {
 	})
 
 	t.Run("returns ErrNotFound for non-existent character", func(t *testing.T) {
-		err := repo.Delete(ctx, ulid.Make())
+		err := delErr(repo.Delete(ctx, ulid.Make(), 0))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
@@ -400,10 +400,10 @@ func TestCharacterRepository_IsOwnedByPlayer(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		owned, err := repo.IsOwnedByPlayer(ctx, char.ID, playerID)
@@ -423,10 +423,10 @@ func TestCharacterRepository_IsOwnedByPlayer(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		owned, err := repo.IsOwnedByPlayer(ctx, char.ID, otherPlayerID)
@@ -461,12 +461,12 @@ func TestCharacterRepository_GetNamesByIDs(t *testing.T) {
 		Name:      "bob",
 		CreatedAt: time.Now().UTC(),
 	}
-	require.NoError(t, repo.Create(ctx, char1))
-	require.NoError(t, repo.Create(ctx, char2))
+	require.NoError(t, delErr(repo.Create(ctx, char1)))
+	require.NoError(t, delErr(repo.Create(ctx, char2)))
 
 	t.Cleanup(func() {
-		_ = repo.Delete(ctx, char1.ID)
-		_ = repo.Delete(ctx, char2.ID)
+		_ = delErr(repo.Delete(ctx, char1.ID, 0))
+		_ = delErr(repo.Delete(ctx, char2.ID, 0))
 	})
 
 	t.Run("returns names for present IDs, omits missing IDs", func(t *testing.T) {
@@ -512,13 +512,13 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
-		err := repo.UpdateLocation(ctx, char.ID, &loc2)
+		err := delErr(repo.UpdateLocation(ctx, char.ID, &loc2, 0))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, char.ID)
@@ -540,13 +540,13 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
-		err := repo.UpdateLocation(ctx, char.ID, nil)
+		err := delErr(repo.UpdateLocation(ctx, char.ID, nil, 0))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, char.ID)
@@ -557,7 +557,7 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 	t.Run("returns ErrNotFound for non-existent character", func(t *testing.T) {
 		locationID := createTestLocation(ctx, t)
 
-		err := repo.UpdateLocation(ctx, ulid.Make(), &locationID)
+		err := delErr(repo.UpdateLocation(ctx, ulid.Make(), &locationID, 0))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
@@ -574,11 +574,11 @@ func TestCharacterRepository_ListAll(t *testing.T) {
 	// before "ZZZ-" under ORDER BY name ASC.
 	alice := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "AAA-" + ulid.Make().String()}
 	bob := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "ZZZ-" + ulid.Make().String()}
-	require.NoError(t, repo.Create(ctx, alice))
-	require.NoError(t, repo.Create(ctx, bob))
+	require.NoError(t, delErr(repo.Create(ctx, alice)))
+	require.NoError(t, delErr(repo.Create(ctx, bob)))
 	t.Cleanup(func() {
-		_ = repo.Delete(ctx, alice.ID)
-		_ = repo.Delete(ctx, bob.ID)
+		_ = delErr(repo.Delete(ctx, alice.ID, 0))
+		_ = delErr(repo.Delete(ctx, bob.ID, 0))
 	})
 
 	got, err := repo.ListAll(ctx)

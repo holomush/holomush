@@ -219,7 +219,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.MatchedBy(func(l *world.Location) bool {
 			return l.Name == "New Room" && !l.ID.IsZero()
-		})).Return(nil)
+		})).Return(nil, nil)
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.MatchedBy(func(l *world.Location) bool {
 			return l.ID == existingID
-		})).Return(nil)
+		})).Return(nil, nil)
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
@@ -287,7 +287,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
-		mockRepo.EXPECT().Update(ctx, loc).Return(nil)
+		mockRepo.EXPECT().Update(ctx, loc).Return(nil, nil)
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
@@ -321,7 +321,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
-		mockRepo.EXPECT().Update(ctx, loc).Return(world.ErrNotFound)
+		mockRepo.EXPECT().Update(ctx, loc).Return(nil, world.ErrNotFound)
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		require.Error(t, err)
@@ -350,7 +350,7 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
+		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, nil)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.NoError(t, err)
@@ -414,7 +414,7 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
+		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		assert.Error(t, err)
@@ -487,7 +487,7 @@ func TestWorldService_CreateExit(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.MatchedBy(func(e *world.Exit) bool {
 			return e.Name == "north" && !e.ID.IsZero()
-		})).Return(nil)
+		})).Return(nil, nil)
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.NoError(t, err)
@@ -528,7 +528,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		exit := &world.Exit{ID: exitID, Name: "north updated", Visibility: world.VisibilityAll}
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil)
+		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil, nil)
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.NoError(t, err)
@@ -562,7 +562,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Update(ctx, exit).Return(errors.New("db error"))
+		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil, errors.New("db error"))
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		assert.Error(t, err)
@@ -581,7 +581,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Update(ctx, exit).Return(world.ErrNotFound)
+		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil, world.ErrNotFound)
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.Error(t, err)
@@ -605,7 +605,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(nil)
+		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, nil)
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.NoError(t, err)
@@ -663,7 +663,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		}
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
+		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, cleanupResult)
 
 		// Should succeed since primary delete worked
 		err := svc.DeleteExit(ctx, subjectID, exitID)
@@ -731,7 +731,7 @@ func TestWorldService_CreateObject(t *testing.T) {
 		engine.Grant(subjectID, "write", "object:*")
 		mockObjRepo.EXPECT().Create(ctx, mock.MatchedBy(func(o *world.Object) bool {
 			return o.Name == "sword" && !o.ID.IsZero()
-		})).Return(nil)
+		})).Return(nil, nil)
 
 		err = svc.CreateObject(ctx, subjectID, obj)
 		require.NoError(t, err)
@@ -775,7 +775,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		require.NoError(t, err)
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
-		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil)
+		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil, nil)
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.NoError(t, err)
@@ -811,7 +811,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		require.NoError(t, err)
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
-		mockObjRepo.EXPECT().Update(ctx, obj).Return(errors.New("db error"))
+		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil, errors.New("db error"))
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		assert.Error(t, err)
@@ -831,7 +831,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		require.NoError(t, err)
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
-		mockObjRepo.EXPECT().Update(ctx, obj).Return(world.ErrNotFound)
+		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil, world.ErrNotFound)
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.Error(t, err)
@@ -860,7 +860,7 @@ func TestWorldService_DeleteObject(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
-		mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(nil)
+		mockObjRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, nil)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.NoError(t, err)
@@ -935,7 +935,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to, mock.Anything).Return(nil, nil)
 
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.NoError(t, err)
@@ -991,7 +991,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(errors.New("db error"))
+		mockObjRepo.EXPECT().Move(ctx, objID, to, mock.Anything).Return(nil, errors.New("db error"))
 
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		assert.Error(t, err)
@@ -1036,7 +1036,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to, mock.Anything).Return(nil, nil)
 
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.Error(t, err)
@@ -1044,188 +1044,6 @@ func TestWorldService_MoveObject(t *testing.T) {
 		// Service wrapper adds OBJECT_MOVE_EVENT_FAILED but inner code takes precedence
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		errutil.AssertErrorContext(t, err, "move_succeeded", true)
-	})
-}
-
-func TestWorldService_AddSceneParticipant(t *testing.T) {
-	ctx := context.Background()
-	sceneID := ulid.Make()
-	charID := ulid.Make()
-	subjectID := access.CharacterSubject(ulid.Make().String())
-
-	t.Run("adds participant when authorized", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-		mockSceneRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(nil)
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.NoError(t, err)
-	})
-
-	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockSceneRepo.AssertNotCalled(t, "AddParticipant")
-	})
-
-	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
-		engine := policytest.DenyAllEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrPermissionDenied,
-			"explicit policy deny should return ErrPermissionDenied")
-		mockSceneRepo.AssertNotCalled(t, "AddParticipant")
-		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
-			"explicit deny must not be reported as evaluation error")
-	})
-
-	t.Run("returns ErrAccessEvaluationFailed when engine errors", func(t *testing.T) {
-		engineErr := errors.New("policy store unavailable")
-		engine := policytest.NewErrorEngine(engineErr)
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
-		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
-			"engine error must not be reported as permission denied")
-		mockSceneRepo.AssertNotCalled(t, "AddParticipant")
-	})
-
-	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
-			"infrastructure failure should return ErrAccessEvaluationFailed")
-		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
-			"infrastructure failure must not be reported as permission denied")
-		mockSceneRepo.AssertNotCalled(t, "AddParticipant")
-	})
-}
-
-func TestWorldService_RemoveSceneParticipant(t *testing.T) {
-	ctx := context.Background()
-	sceneID := ulid.Make()
-	charID := ulid.Make()
-	subjectID := access.CharacterSubject(ulid.Make().String())
-
-	t.Run("removes participant when authorized", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-		mockSceneRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(nil)
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.NoError(t, err)
-	})
-
-	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
-	})
-
-	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
-		engine := policytest.DenyAllEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrPermissionDenied,
-			"explicit policy deny should return ErrPermissionDenied")
-		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
-		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
-			"explicit deny must not be reported as evaluation error")
-	})
-
-	t.Run("returns ErrAccessEvaluationFailed when engine errors", func(t *testing.T) {
-		engineErr := errors.New("policy store unavailable")
-		engine := policytest.NewErrorEngine(engineErr)
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
-		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
-			"engine error must not be reported as permission denied")
-		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
-	})
-
-	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
-			"infrastructure failure should return ErrAccessEvaluationFailed")
-		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
-			"infrastructure failure must not be reported as permission denied")
-		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
 	})
 }
 
@@ -1470,29 +1288,6 @@ func TestWorldService_CreateObjectValidation(t *testing.T) {
 	})
 }
 
-func TestWorldService_AddSceneParticipantValidation(t *testing.T) {
-	ctx := context.Background()
-	sceneID := ulid.Make()
-	charID := ulid.Make()
-	subjectID := access.CharacterSubject(ulid.Make().String())
-
-	t.Run("rejects invalid role", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.ParticipantRole("invalid"))
-		require.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrInvalidParticipantRole)
-	})
-}
-
 // --- Repository Error Propagation Tests ---
 
 func TestWorldService_GetLocationErrorPropagation(t *testing.T) {
@@ -1538,7 +1333,7 @@ func TestWorldService_CreateLocationErrorPropagation(t *testing.T) {
 		}
 
 		engine.Grant(subjectID, "write", "location:*")
-		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		assert.Error(t, err)
@@ -1593,7 +1388,7 @@ func TestWorldService_CreateExitErrorPropagation(t *testing.T) {
 		}
 
 		engine.Grant(subjectID, "write", "exit:*")
-		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		assert.Error(t, err)
@@ -1643,7 +1438,7 @@ func TestWorldService_CreateObjectErrorPropagation(t *testing.T) {
 		require.NoError(t, err)
 
 		engine.Grant(subjectID, "write", "object:*")
-		mockObjRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+		mockObjRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		err = svc.CreateObject(ctx, subjectID, obj)
 		assert.Error(t, err)
@@ -1652,54 +1447,6 @@ func TestWorldService_CreateObjectErrorPropagation(t *testing.T) {
 }
 
 // --- Scene Repository Error Propagation Tests ---
-
-func TestWorldService_AddSceneParticipantErrorPropagation(t *testing.T) {
-	ctx := context.Background()
-	sceneID := ulid.Make()
-	charID := ulid.Make()
-	subjectID := access.CharacterSubject(ulid.Make().String())
-
-	t.Run("propagates repository errors", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-		mockSceneRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(errors.New("db error"))
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "db error")
-	})
-}
-
-func TestWorldService_RemoveSceneParticipantErrorPropagation(t *testing.T) {
-	ctx := context.Background()
-	sceneID := ulid.Make()
-	charID := ulid.Make()
-	subjectID := access.CharacterSubject(ulid.Make().String())
-
-	t.Run("propagates repository errors", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockSceneRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockSceneRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-		mockSceneRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(errors.New("db error"))
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "db error")
-	})
-}
 
 func TestWorldService_ListSceneParticipantsErrorPropagation(t *testing.T) {
 	ctx := context.Background()
@@ -1753,7 +1500,7 @@ func TestWorldService_DeleteExitSevereCleanup(t *testing.T) {
 		}
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
+		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, cleanupResult)
 
 		// Severe error means the entire operation was rolled back - return error
 		err := svc.DeleteExit(ctx, subjectID, exitID)
@@ -1784,7 +1531,7 @@ func TestWorldService_DeleteExitSevereCleanup(t *testing.T) {
 		}
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
+		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, cleanupResult)
 
 		// Severe error means the entire operation was rolled back - return error
 		err := svc.DeleteExit(ctx, subjectID, exitID)
@@ -2313,7 +2060,7 @@ func TestWorldService_CreateExitValidationBypass(t *testing.T) {
 		}
 
 		engine.Grant(subjectID, "write", "exit:*")
-		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.NoError(t, err, "unlocked exit with invalid lock type should succeed")
@@ -2339,7 +2086,7 @@ func TestWorldService_CreateExitValidationBypass(t *testing.T) {
 		}
 
 		engine.Grant(subjectID, "write", "exit:*")
-		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.NoError(t, err, "non-list visibility with invalid visible_to should succeed")
@@ -2589,24 +2336,11 @@ func TestWorldService_NilSceneRepo(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 	sceneID := ulid.Make()
-	charID := ulid.Make()
 
 	engine := policytest.NewGrantEngine()
 	svc := world.NewService(world.ServiceConfig{
 		Engine: engine,
 		// SceneRepo intentionally nil
-	})
-
-	t.Run("AddSceneParticipant returns error", func(t *testing.T) {
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not configured")
-	})
-
-	t.Run("RemoveSceneParticipant returns error", func(t *testing.T) {
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("ListSceneParticipants returns error", func(t *testing.T) {
@@ -2715,7 +2449,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "write", "location:*")
-		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
@@ -2763,7 +2497,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
-		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
+		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
@@ -2805,7 +2539,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(world.ErrNotFound)
+		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, world.ErrNotFound)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -2827,7 +2561,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
+		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -3001,7 +2735,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "write", "exit:*")
-		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
 		require.Error(t, err)
@@ -3049,7 +2783,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
-		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
+		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
 		require.Error(t, err)
@@ -3081,7 +2815,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
-		mockRepo.EXPECT().Delete(ctx, exitID).Return(world.ErrNotFound)
+		mockRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, world.ErrNotFound)
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.Error(t, err)
@@ -3098,7 +2832,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
-		mockRepo.EXPECT().Delete(ctx, exitID).Return(errors.New("db error"))
+		mockRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.Error(t, err)
@@ -3257,7 +2991,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "write", "object:*")
-		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
@@ -3298,7 +3032,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		})
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
-		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
+		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
@@ -3342,7 +3076,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
-		mockRepo.EXPECT().Delete(mock.Anything, objID).Return(world.ErrNotFound)
+		mockRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, world.ErrNotFound)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -3364,7 +3098,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
-		mockRepo.EXPECT().Delete(mock.Anything, objID).Return(errors.New("db error"))
+		mockRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -3435,7 +3169,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(world.ErrNotFound)
+		mockRepo.EXPECT().Move(ctx, objID, mock.Anything, mock.Anything).Return(nil, world.ErrNotFound)
 
 		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
@@ -3457,7 +3191,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(errors.New("db error"))
+		mockRepo.EXPECT().Move(ctx, objID, mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
 
 		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
@@ -3482,7 +3216,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(nil)
+		mockRepo.EXPECT().Move(ctx, objID, mock.Anything, mock.Anything).Return(nil, nil)
 
 		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
@@ -3587,122 +3321,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 func TestService_ErrorCodes_Scene(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
-	charID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
-
-	t.Run("AddSceneParticipant returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
-		mockRepo.AssertNotCalled(t, "AddParticipant")
-	})
-
-	t.Run("AddSceneParticipant returns SCENE_INVALID for invalid role", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.ParticipantRole("invalid"))
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_INVALID")
-	})
-
-	t.Run("AddSceneParticipant returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-		mockRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(world.ErrNotFound)
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
-	})
-
-	t.Run("AddSceneParticipant returns SCENE_ADD_PARTICIPANT_FAILED for repo errors", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-		mockRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(errors.New("db error"))
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_ADD_PARTICIPANT_FAILED")
-	})
-
-	t.Run("RemoveSceneParticipant returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
-		mockRepo.AssertNotCalled(t, "RemoveParticipant")
-	})
-
-	t.Run("RemoveSceneParticipant returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-		mockRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(world.ErrNotFound)
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
-	})
-
-	t.Run("RemoveSceneParticipant returns SCENE_REMOVE_PARTICIPANT_FAILED for repo errors", func(t *testing.T) {
-		engine := policytest.NewGrantEngine()
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
-		mockRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(errors.New("db error"))
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_REMOVE_PARTICIPANT_FAILED")
-	})
 
 	t.Run("ListSceneParticipants returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -3751,38 +3370,6 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_LIST_PARTICIPANTS_FAILED")
-	})
-
-	t.Run("AddSceneParticipant returns SCENE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
-		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
-		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
-		mockRepo.AssertNotCalled(t, "AddParticipant")
-	})
-
-	t.Run("RemoveSceneParticipant returns SCENE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
-		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
-		mockRepo := worldtest.NewMockSceneRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			SceneRepo: mockRepo,
-			Engine:    engine,
-		})
-
-		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
-		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
-		mockRepo.AssertNotCalled(t, "RemoveParticipant")
 	})
 
 	t.Run("ListSceneParticipants returns SCENE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -4156,7 +3743,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
-		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
+		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(nil, nil)
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.NoError(t, err)
@@ -4288,7 +3875,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
-		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
+		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(nil, nil)
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
@@ -4321,7 +3908,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
-		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
+		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(nil, nil)
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.NoError(t, err)
@@ -4409,7 +3996,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
-		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
+		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(nil, nil)
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
@@ -4438,7 +4025,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
-		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(dbErr)
+		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(nil, dbErr)
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
@@ -4470,7 +4057,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(mock.Anything, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(mock.Anything, toLocID).Return(&world.Location{ID: toLocID}, nil)
-		mockCharRepo.EXPECT().UpdateLocation(mock.Anything, charID, &toLocID).Return(nil)
+		mockCharRepo.EXPECT().UpdateLocation(mock.Anything, charID, &toLocID, mock.Anything).Return(nil, nil)
 
 		err := svc.MoveCharacter(cancelCtx, subjectID, charID, toLocID)
 
@@ -5423,7 +5010,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
-		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(nil)
+		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, nil)
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.NoError(t, err)
@@ -5528,7 +5115,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
-		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(world.ErrNotFound)
+		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, world.ErrNotFound)
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.Error(t, err)
@@ -5550,7 +5137,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
-		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(errors.New("db error"))
+		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.Error(t, err)
@@ -5592,7 +5179,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
-		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(nil)
+		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, nil)
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.NoError(t, err)
@@ -5635,7 +5222,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
-		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(errors.New("db error"))
+		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.Error(t, err)
@@ -5663,7 +5250,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-		mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
+		mockLocRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, nil)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.NoError(t, err)
@@ -5706,7 +5293,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-		mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
+		mockLocRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -5734,7 +5321,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
-		mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(nil)
+		mockObjRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, nil)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.NoError(t, err)
@@ -5777,7 +5364,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
-		mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(errors.New("db error"))
+		mockObjRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, errors.New("db error"))
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -5951,7 +5538,7 @@ func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-	mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
+	mockLocRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, nil)
 
 	err := svc.DeleteLocation(ctx, subjectID, locID)
 	require.NoError(t, err)
@@ -5977,7 +5564,7 @@ func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
 
 	engine.Grant(subjectID, "delete", "object:"+objID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
-	mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(nil)
+	mockObjRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, nil)
 
 	err := svc.DeleteObject(ctx, subjectID, objID)
 	require.NoError(t, err)
@@ -6003,7 +5590,7 @@ func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 
 	engine.Grant(subjectID, "delete", "character:"+charID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
-	mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(nil)
+	mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, nil)
 
 	err := svc.DeleteCharacter(ctx, subjectID, charID)
 	require.NoError(t, err)
@@ -6029,7 +5616,7 @@ func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-	mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
+	mockLocRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, errors.New("db error"))
 
 	err := svc.DeleteLocation(ctx, subjectID, locID)
 	require.Error(t, err)
@@ -6098,7 +5685,7 @@ func TestWorldService_CreateLocation_VerifiesAccessRequest(t *testing.T) {
 		return true
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
-	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
 	err := svc.CreateLocation(ctx, subjectID, loc)
 	require.NoError(t, err)
@@ -6144,7 +5731,7 @@ func TestWorldService_MoveCharacter_VerifiesAccessRequest(t *testing.T) {
 
 	mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 	mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
-	mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
+	mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(nil, nil)
 
 	err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 	require.NoError(t, err)
@@ -6185,7 +5772,7 @@ func TestWorldService_CreateExit_VerifiesAccessRequest(t *testing.T) {
 		return true
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
-	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
 	err := svc.CreateExit(ctx, subjectID, exit)
 	require.NoError(t, err)
@@ -6217,7 +5804,7 @@ func TestWorldService_DeleteExit_VerifiesAccessRequest(t *testing.T) {
 		return true
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
-	mockRepo.EXPECT().Delete(ctx, exitID).Return(nil)
+	mockRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, nil)
 
 	err := svc.DeleteExit(ctx, subjectID, exitID)
 	require.NoError(t, err)
@@ -6254,7 +5841,7 @@ func TestWorldService_DeleteCharacter_VerifiesAccessRequest(t *testing.T) {
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
 	mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(nil)
-	mockCharRepo.EXPECT().Delete(ctx, charID).Return(nil)
+	mockCharRepo.EXPECT().Delete(ctx, charID, mock.Anything).Return(nil, nil)
 
 	err := svc.DeleteCharacter(ctx, subjectID, charID)
 	require.NoError(t, err)
@@ -6329,7 +5916,7 @@ func TestWorldService_UpdateExit_VerifiesAccessRequest(t *testing.T) {
 		return true
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
-	mockRepo.EXPECT().Update(ctx, exit).Return(nil)
+	mockRepo.EXPECT().Update(ctx, exit).Return(nil, nil)
 
 	err := svc.UpdateExit(ctx, subjectID, exit)
 	require.NoError(t, err)
@@ -6428,7 +6015,7 @@ func TestWorldService_CreateObject_VerifiesAccessRequest(t *testing.T) {
 		return true
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
-	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
 	err := svc.CreateObject(ctx, subjectID, obj)
 	require.NoError(t, err)
@@ -6462,7 +6049,7 @@ func TestWorldService_UpdateObject_VerifiesAccessRequest(t *testing.T) {
 		return true
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
-	mockRepo.EXPECT().Update(ctx, obj).Return(nil)
+	mockRepo.EXPECT().Update(ctx, obj).Return(nil, nil)
 
 	err := svc.UpdateObject(ctx, subjectID, obj)
 	require.NoError(t, err)
@@ -6497,7 +6084,7 @@ func TestWorldService_DeleteObject_VerifiesAccessRequest(t *testing.T) {
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
 	mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(nil)
-	mockObjRepo.EXPECT().Delete(ctx, objID).Return(nil)
+	mockObjRepo.EXPECT().Delete(ctx, objID, mock.Anything).Return(nil, nil)
 
 	err := svc.DeleteObject(ctx, subjectID, objID)
 	require.NoError(t, err)
@@ -6535,7 +6122,7 @@ func TestWorldService_MoveObject_VerifiesAccessRequest(t *testing.T) {
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
 	mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-	mockObjRepo.EXPECT().Move(ctx, objID, world.InLocation(toLocID)).Return(nil)
+	mockObjRepo.EXPECT().Move(ctx, objID, world.InLocation(toLocID), mock.Anything).Return(nil, nil)
 
 	err := svc.MoveObject(ctx, subjectID, objID, world.InLocation(toLocID))
 	require.NoError(t, err)
@@ -6546,68 +6133,6 @@ func TestWorldService_MoveObject_VerifiesAccessRequest(t *testing.T) {
 }
 
 // --- Scene VerifiesAccessRequest tests ---
-
-func TestWorldService_AddSceneParticipant_VerifiesAccessRequest(t *testing.T) {
-	ctx := context.Background()
-	sceneID := ulid.Make()
-	characterID := ulid.Make()
-	charID := ulid.Make()
-	subjectID := access.CharacterSubject(charID.String())
-
-	mockEngine := policytest.NewMockAccessPolicyEngine(t)
-	mockRepo := worldtest.NewMockSceneRepository(t)
-
-	svc := world.NewService(world.ServiceConfig{
-		SceneRepo: mockRepo,
-		Engine:    mockEngine,
-	})
-
-	var capturedRequest types.AccessRequest
-	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
-		capturedRequest = req
-		return true
-	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
-
-	mockRepo.EXPECT().AddParticipant(ctx, sceneID, characterID, world.RoleMember).Return(nil)
-
-	err := svc.AddSceneParticipant(ctx, subjectID, sceneID, characterID, world.RoleMember)
-	require.NoError(t, err)
-
-	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
-	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
-	assert.Equal(t, "scene:"+sceneID.String(), capturedRequest.Resource, "resource should be scene:<id>")
-}
-
-func TestWorldService_RemoveSceneParticipant_VerifiesAccessRequest(t *testing.T) {
-	ctx := context.Background()
-	sceneID := ulid.Make()
-	characterID := ulid.Make()
-	charID := ulid.Make()
-	subjectID := access.CharacterSubject(charID.String())
-
-	mockEngine := policytest.NewMockAccessPolicyEngine(t)
-	mockRepo := worldtest.NewMockSceneRepository(t)
-
-	svc := world.NewService(world.ServiceConfig{
-		SceneRepo: mockRepo,
-		Engine:    mockEngine,
-	})
-
-	var capturedRequest types.AccessRequest
-	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
-		capturedRequest = req
-		return true
-	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
-
-	mockRepo.EXPECT().RemoveParticipant(ctx, sceneID, characterID).Return(nil)
-
-	err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, characterID)
-	require.NoError(t, err)
-
-	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
-	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
-	assert.Equal(t, "scene:"+sceneID.String(), capturedRequest.Resource, "resource should be scene:<id>")
-}
 
 func TestWorldService_ListSceneParticipants_VerifiesAccessRequest(t *testing.T) {
 	ctx := context.Background()
@@ -6669,7 +6194,7 @@ func TestWorldService_UpdateLocation_VerifiesAccessRequest(t *testing.T) {
 		return true
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
-	mockRepo.EXPECT().Update(ctx, loc).Return(nil)
+	mockRepo.EXPECT().Update(ctx, loc).Return(nil, nil)
 
 	err := svc.UpdateLocation(ctx, subjectID, loc)
 	require.NoError(t, err)
@@ -6704,7 +6229,7 @@ func TestWorldService_DeleteLocation_VerifiesAccessRequest(t *testing.T) {
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
 	mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(nil)
-	mockLocRepo.EXPECT().Delete(ctx, locID).Return(nil)
+	mockLocRepo.EXPECT().Delete(ctx, locID, mock.Anything).Return(nil, nil)
 
 	err := svc.DeleteLocation(ctx, subjectID, locID)
 	require.NoError(t, err)
@@ -7324,46 +6849,6 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 		},
 
 		// Scene operations
-		{
-			name: "AddSceneParticipant - engine error produces SCENE_ACCESS_EVALUATION_FAILED",
-			setupService: func() (*world.Service, ulid.ULID) {
-				sceneID := ulid.Make()
-				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
-				mockRepo := worldtest.NewMockSceneRepository(t)
-				svc := world.NewService(world.ServiceConfig{
-					SceneRepo: mockRepo,
-					Engine:    engine,
-				})
-				return svc, sceneID
-			},
-			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				charID := ulid.Make()
-				return svc.AddSceneParticipant(ctx, subjectID, id, charID, world.RoleMember)
-			},
-			engineBehavior:    "error",
-			expectedErrorCode: "SCENE_ACCESS_EVALUATION_FAILED",
-			expectedSentinel:  world.ErrAccessEvaluationFailed,
-		},
-		{
-			name: "AddSceneParticipant - policy deny produces SCENE_ACCESS_DENIED",
-			setupService: func() (*world.Service, ulid.ULID) {
-				sceneID := ulid.Make()
-				engine := policytest.DenyAllEngine()
-				mockRepo := worldtest.NewMockSceneRepository(t)
-				svc := world.NewService(world.ServiceConfig{
-					SceneRepo: mockRepo,
-					Engine:    engine,
-				})
-				return svc, sceneID
-			},
-			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				charID := ulid.Make()
-				return svc.AddSceneParticipant(ctx, subjectID, id, charID, world.RoleMember)
-			},
-			engineBehavior:    "deny",
-			expectedErrorCode: "SCENE_ACCESS_DENIED",
-			expectedSentinel:  world.ErrPermissionDenied,
-		},
 	}
 
 	for _, tt := range tests {
@@ -7553,22 +7038,6 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 				return svc.DeleteLocation(ctx, "", locID) // Empty subject
 			},
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
-		},
-		{
-			name: "AddSceneParticipant with empty subject fails closed",
-			setupService: func() *world.Service {
-				engine := policytest.NewGrantEngine()
-				mockRepo := worldtest.NewMockSceneRepository(t)
-				return world.NewService(world.ServiceConfig{
-					SceneRepo: mockRepo,
-					Engine:    engine,
-				})
-			},
-			invokeOperation: func(svc *world.Service) error {
-				sceneID := ulid.Make()
-				return svc.AddSceneParticipant(ctx, "", sceneID, charID, world.RoleMember) // Empty subject
-			},
-			expectedErrorCode: "SCENE_ACCESS_EVALUATION_FAILED",
 		},
 		{
 			name: "GetCharactersByLocation - valid subject but tests access check boundary",

@@ -69,7 +69,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			CreatedAt:    time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, loc)
+		err := delErr(repo.Create(ctx, loc))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, loc.ID)
@@ -80,7 +80,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		assert.Equal(t, loc.ReplayPolicy, got.ReplayPolicy)
 
 		// Cleanup
-		_ = repo.Delete(ctx, loc.ID)
+		_ = delErr(repo.Delete(ctx, loc.ID, 0))
 	})
 
 	t.Run("create with optional fields", func(t *testing.T) {
@@ -96,7 +96,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			CreatedAt:    time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, loc)
+		err := delErr(repo.Create(ctx, loc))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, loc.ID)
@@ -105,7 +105,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		assert.Equal(t, ownerID, *got.OwnerID)
 
 		// Cleanup
-		_ = repo.Delete(ctx, loc.ID)
+		_ = delErr(repo.Delete(ctx, loc.ID, 0))
 	})
 
 	t.Run("update", func(t *testing.T) {
@@ -118,12 +118,12 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			CreatedAt:    time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, loc)
+		err := delErr(repo.Create(ctx, loc))
 		require.NoError(t, err)
 
 		loc.Name = "Updated Name"
 		loc.Description = "Updated description."
-		err = repo.Update(ctx, loc)
+		err = delErr(repo.Update(ctx, loc))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, loc.ID)
@@ -132,7 +132,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		assert.Equal(t, "Updated description.", got.Description)
 
 		// Cleanup
-		_ = repo.Delete(ctx, loc.ID)
+		_ = delErr(repo.Delete(ctx, loc.ID, 0))
 	})
 
 	t.Run("update with shadows_id", func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			ReplayPolicy: "last:0",
 			CreatedAt:    time.Now().UTC(),
 		}
-		err := repo.Create(ctx, parent)
+		err := delErr(repo.Create(ctx, parent))
 		require.NoError(t, err)
 
 		// Create a scene without shadows_id
@@ -157,12 +157,12 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			ReplayPolicy: "last:-1",
 			CreatedAt:    time.Now().UTC(),
 		}
-		err = repo.Create(ctx, scene)
+		err = delErr(repo.Create(ctx, scene))
 		require.NoError(t, err)
 
 		// Update to add shadows_id
 		scene.ShadowsID = &parent.ID
-		err = repo.Update(ctx, scene)
+		err = delErr(repo.Update(ctx, scene))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, scene.ID)
@@ -171,8 +171,8 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		assert.Equal(t, parent.ID, *got.ShadowsID)
 
 		// Cleanup
-		_ = repo.Delete(ctx, scene.ID)
-		_ = repo.Delete(ctx, parent.ID)
+		_ = delErr(repo.Delete(ctx, scene.ID, 0))
+		_ = delErr(repo.Delete(ctx, parent.ID, 0))
 	})
 
 	t.Run("update with owner_id", func(t *testing.T) {
@@ -187,12 +187,12 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			ReplayPolicy: "last:-1",
 			CreatedAt:    time.Now().UTC(),
 		}
-		err := repo.Create(ctx, loc)
+		err := delErr(repo.Create(ctx, loc))
 		require.NoError(t, err)
 
 		// Update to add owner
 		loc.OwnerID = &ownerID
-		err = repo.Update(ctx, loc)
+		err = delErr(repo.Update(ctx, loc))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, loc.ID)
@@ -201,7 +201,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		assert.Equal(t, ownerID, *got.OwnerID)
 
 		// Cleanup
-		_ = repo.Delete(ctx, loc.ID)
+		_ = delErr(repo.Delete(ctx, loc.ID, 0))
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -214,10 +214,10 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			CreatedAt:    time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, loc)
+		err := delErr(repo.Create(ctx, loc))
 		require.NoError(t, err)
 
-		err = repo.Delete(ctx, loc.ID)
+		err = delErr(repo.Delete(ctx, loc.ID, 0))
 		require.NoError(t, err)
 
 		_, err = repo.Get(ctx, loc.ID)
@@ -240,14 +240,14 @@ func TestLocationRepository_CRUD(t *testing.T) {
 			ReplayPolicy: "last:0",
 		}
 
-		err := repo.Update(ctx, loc)
+		err := delErr(repo.Update(ctx, loc))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
-		err := repo.Delete(ctx, ulid.Make())
+		err := delErr(repo.Delete(ctx, ulid.Make(), 0))
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
@@ -280,12 +280,12 @@ func TestLocationRepository_ListByType(t *testing.T) {
 		CreatedAt:    time.Now().UTC(),
 	}
 
-	require.NoError(t, repo.Create(ctx, persistent))
-	require.NoError(t, repo.Create(ctx, scene))
+	require.NoError(t, delErr(repo.Create(ctx, persistent)))
+	require.NoError(t, delErr(repo.Create(ctx, scene)))
 
 	t.Cleanup(func() {
-		_ = repo.Delete(ctx, persistent.ID)
-		_ = repo.Delete(ctx, scene.ID)
+		_ = delErr(repo.Delete(ctx, persistent.ID, 0))
+		_ = delErr(repo.Delete(ctx, scene.ID, 0))
 	})
 
 	t.Run("list scenes", func(t *testing.T) {
@@ -339,7 +339,7 @@ func TestLocationRepository_GetShadowedBy(t *testing.T) {
 		ReplayPolicy: "last:0",
 		CreatedAt:    time.Now().UTC(),
 	}
-	require.NoError(t, repo.Create(ctx, parent))
+	require.NoError(t, delErr(repo.Create(ctx, parent)))
 
 	// Create scene that shadows parent
 	scene := &world.Location{
@@ -351,11 +351,11 @@ func TestLocationRepository_GetShadowedBy(t *testing.T) {
 		ReplayPolicy: "last:-1",
 		CreatedAt:    time.Now().UTC(),
 	}
-	require.NoError(t, repo.Create(ctx, scene))
+	require.NoError(t, delErr(repo.Create(ctx, scene)))
 
 	t.Cleanup(func() {
-		_ = repo.Delete(ctx, scene.ID)
-		_ = repo.Delete(ctx, parent.ID)
+		_ = delErr(repo.Delete(ctx, scene.ID, 0))
+		_ = delErr(repo.Delete(ctx, parent.ID, 0))
 	})
 
 	t.Run("find scenes shadowing location", func(t *testing.T) {
@@ -395,10 +395,10 @@ func TestLocationRepository_FindByName(t *testing.T) {
 		ReplayPolicy: "last:-1",
 		CreatedAt:    time.Now().UTC(),
 	}
-	require.NoError(t, repo.Create(ctx, loc))
+	require.NoError(t, delErr(repo.Create(ctx, loc)))
 
 	t.Cleanup(func() {
-		_ = repo.Delete(ctx, loc.ID)
+		_ = delErr(repo.Delete(ctx, loc.ID, 0))
 	})
 
 	t.Run("finds location by exact name", func(t *testing.T) {

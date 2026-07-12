@@ -30,8 +30,13 @@ import (
 	"github.com/holomush/holomush/internal/web"
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/test/testutil"
 )
+
+// delErr discards the *wmodel.MutationDelta a world repository write now returns,
+// yielding just the error — a mechanical 05-14 test bridge (behavior-preserving).
+func delErr(_ *wmodel.MutationDelta, err error) error { return err }
 
 var suiteT *testing.T
 
@@ -233,7 +238,7 @@ func createTestLocation(ctx context.Context, name string) *world.Location {
 		Type:         world.LocationTypePersistent,
 		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
 	}
-	err := env.locRepo.Create(ctx, loc)
+	_, err := env.locRepo.Create(ctx, loc)
 	Expect(err).NotTo(HaveOccurred())
 	return loc
 }
@@ -273,7 +278,9 @@ type authCharRepoAdapter struct {
 }
 
 func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
-	return a.charRepo.Create(ctx, char)
+	// Discards the *wmodel.MutationDelta return (05-14 wave-1 compatibility bridge).
+	_, err := a.charRepo.Create(ctx, char)
+	return err
 }
 
 func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {

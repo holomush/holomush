@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
 // CharacterRepository implements world.CharacterRepository using PostgreSQL.
@@ -45,44 +46,46 @@ func (r *CharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world.Cha
 // Create persists a new character.
 // Callers must validate the character before calling this method.
 // Uses execerFromCtx so callers may compose this within a transaction.
-func (r *CharacterRepository) Create(ctx context.Context, char *world.Character) error {
+func (r *CharacterRepository) Create(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
 	_, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, description, location_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, char.ID.String(), char.PlayerID.String(), char.Name, char.Description,
 		ulidToStringPtr(char.LocationID), pgnanos.From(char.CreatedAt))
 	if err != nil {
-		return oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
+		return nil, oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
 	}
-	return nil
+	return primaryDelta(wmodel.AggregateCharacter, char.ID, false), nil
 }
 
 // Update modifies an existing character.
 // Callers must validate the character before calling this method.
-func (r *CharacterRepository) Update(ctx context.Context, char *world.Character) error {
-	result, err := r.pool.Exec(ctx, `
+func (r *CharacterRepository) Update(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
+	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
 		UPDATE characters SET name = $2, description = $3, location_id = $4
 		WHERE id = $1
 	`, char.ID.String(), char.Name, char.Description, ulidToStringPtr(char.LocationID))
 	if err != nil {
-		return oops.Code("CHARACTER_UPDATE_FAILED").With("id", char.ID.String()).Wrap(err)
+		return nil, oops.Code("CHARACTER_UPDATE_FAILED").With("id", char.ID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.Code("CHARACTER_NOT_FOUND").With("id", char.ID.String()).Wrap(world.ErrNotFound)
+		return nil, oops.Code("CHARACTER_NOT_FOUND").With("id", char.ID.String()).Wrap(world.ErrNotFound)
 	}
-	return nil
+	return primaryDelta(wmodel.AggregateCharacter, char.ID, false), nil
 }
 
 // Delete removes a character by ID.
-func (r *CharacterRepository) Delete(ctx context.Context, id ulid.ULID) error {
+// expectedVersion is accepted and ignored in 05-14 (version predicate lands later).
+func (r *CharacterRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	_ = expectedVersion
 	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `DELETE FROM characters WHERE id = $1`, id.String())
 	if err != nil {
-		return oops.Code("CHARACTER_DELETE_FAILED").With("id", id.String()).Wrap(err)
+		return nil, oops.Code("CHARACTER_DELETE_FAILED").With("id", id.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.Code("CHARACTER_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
+		return nil, oops.Code("CHARACTER_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
 	}
-	return nil
+	return primaryDelta(wmodel.AggregateCharacter, id, true), nil
 }
 
 // GetByLocation retrieves characters at a location with pagination.
@@ -106,17 +109,19 @@ func (r *CharacterRepository) GetByLocation(ctx context.Context, locationID ulid
 }
 
 // UpdateLocation moves a character to a new location.
-func (r *CharacterRepository) UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID) error {
-	result, err := r.pool.Exec(ctx, `
+// expectedVersion is accepted and ignored in 05-14 (move CAS lands in 05-03/05-11).
+func (r *CharacterRepository) UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	_ = expectedVersion
+	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
 		UPDATE characters SET location_id = $2 WHERE id = $1
 	`, characterID.String(), ulidToStringPtr(locationID))
 	if err != nil {
-		return oops.Code("CHARACTER_MOVE_FAILED").With("character_id", characterID.String()).Wrap(err)
+		return nil, oops.Code("CHARACTER_MOVE_FAILED").With("character_id", characterID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.Code("CHARACTER_NOT_FOUND").With("character_id", characterID.String()).Wrap(world.ErrNotFound)
+		return nil, oops.Code("CHARACTER_NOT_FOUND").With("character_id", characterID.String()).Wrap(world.ErrNotFound)
 	}
-	return nil
+	return primaryDelta(wmodel.AggregateCharacter, characterID, false), nil
 }
 
 // IsOwnedByPlayer checks if a character is owned by a specific player.

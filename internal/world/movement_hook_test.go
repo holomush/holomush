@@ -10,6 +10,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access"
@@ -74,7 +75,7 @@ func seedCharacterAndTwoLocations(
 
 	fix.charRepo.EXPECT().Get(context.Background(), charID).Return(existingChar, nil)
 	fix.locRepo.EXPECT().Get(context.Background(), toLocID).Return(&world.Location{ID: toLocID}, nil)
-	fix.charRepo.EXPECT().UpdateLocation(context.Background(), charID, &toLocID).Return(nil)
+	fix.charRepo.EXPECT().UpdateLocation(context.Background(), charID, &toLocID, mock.Anything).Return(nil, nil)
 
 	return charID, fromLocID, toLocID
 }

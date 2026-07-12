@@ -11,6 +11,8 @@ import (
 	ulid "github.com/oklog/ulid/v2"
 	mock "github.com/stretchr/testify/mock"
 
+	wmodel "github.com/holomush/holomush/internal/world/wmodel"
+
 	world "github.com/holomush/holomush/internal/world"
 )
 
@@ -28,21 +30,33 @@ func (_m *MockCharacterRepository) EXPECT() *MockCharacterRepository_Expecter {
 }
 
 // Create provides a mock function with given fields: ctx, char
-func (_m *MockCharacterRepository) Create(ctx context.Context, char *world.Character) error {
+func (_m *MockCharacterRepository) Create(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
 	ret := _m.Called(ctx, char)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) error); ok {
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, char)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) *wmodel.MutationDelta); ok {
 		r0 = rf(ctx, char)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, *world.Character) error); ok {
+		r1 = rf(ctx, char)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockCharacterRepository_Create_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Create'
@@ -64,32 +78,44 @@ func (_c *MockCharacterRepository_Create_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockCharacterRepository_Create_Call) Return(_a0 error) *MockCharacterRepository_Create_Call {
-	_c.Call.Return(_a0)
+func (_c *MockCharacterRepository_Create_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockCharacterRepository_Create_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCharacterRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Character) error) *MockCharacterRepository_Create_Call {
+func (_c *MockCharacterRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Character) (*wmodel.MutationDelta, error)) *MockCharacterRepository_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// Delete provides a mock function with given fields: ctx, id
-func (_m *MockCharacterRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	ret := _m.Called(ctx, id)
+// Delete provides a mock function with given fields: ctx, id, expectedVersion
+func (_m *MockCharacterRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	ret := _m.Called(ctx, id, expectedVersion)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) error); ok {
-		r0 = rf(ctx, id)
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, int) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, id, expectedVersion)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, int) *wmodel.MutationDelta); ok {
+		r0 = rf(ctx, id, expectedVersion)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, int) error); ok {
+		r1 = rf(ctx, id, expectedVersion)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockCharacterRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
@@ -100,23 +126,24 @@ type MockCharacterRepository_Delete_Call struct {
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id ulid.ULID
-func (_e *MockCharacterRepository_Expecter) Delete(ctx interface{}, id interface{}) *MockCharacterRepository_Delete_Call {
-	return &MockCharacterRepository_Delete_Call{Call: _e.mock.On("Delete", ctx, id)}
+//   - expectedVersion int
+func (_e *MockCharacterRepository_Expecter) Delete(ctx interface{}, id interface{}, expectedVersion interface{}) *MockCharacterRepository_Delete_Call {
+	return &MockCharacterRepository_Delete_Call{Call: _e.mock.On("Delete", ctx, id, expectedVersion)}
 }
 
-func (_c *MockCharacterRepository_Delete_Call) Run(run func(ctx context.Context, id ulid.ULID)) *MockCharacterRepository_Delete_Call {
+func (_c *MockCharacterRepository_Delete_Call) Run(run func(ctx context.Context, id ulid.ULID, expectedVersion int)) *MockCharacterRepository_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID))
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(int))
 	})
 	return _c
 }
 
-func (_c *MockCharacterRepository_Delete_Call) Return(_a0 error) *MockCharacterRepository_Delete_Call {
-	_c.Call.Return(_a0)
+func (_c *MockCharacterRepository_Delete_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockCharacterRepository_Delete_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCharacterRepository_Delete_Call) RunAndReturn(run func(context.Context, ulid.ULID) error) *MockCharacterRepository_Delete_Call {
+func (_c *MockCharacterRepository_Delete_Call) RunAndReturn(run func(context.Context, ulid.ULID, int) (*wmodel.MutationDelta, error)) *MockCharacterRepository_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -358,21 +385,33 @@ func (_c *MockCharacterRepository_IsOwnedByPlayer_Call) RunAndReturn(run func(co
 }
 
 // Update provides a mock function with given fields: ctx, char
-func (_m *MockCharacterRepository) Update(ctx context.Context, char *world.Character) error {
+func (_m *MockCharacterRepository) Update(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
 	ret := _m.Called(ctx, char)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Update")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) error); ok {
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, char)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) *wmodel.MutationDelta); ok {
 		r0 = rf(ctx, char)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, *world.Character) error); ok {
+		r1 = rf(ctx, char)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockCharacterRepository_Update_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Update'
@@ -394,32 +433,44 @@ func (_c *MockCharacterRepository_Update_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockCharacterRepository_Update_Call) Return(_a0 error) *MockCharacterRepository_Update_Call {
-	_c.Call.Return(_a0)
+func (_c *MockCharacterRepository_Update_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockCharacterRepository_Update_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCharacterRepository_Update_Call) RunAndReturn(run func(context.Context, *world.Character) error) *MockCharacterRepository_Update_Call {
+func (_c *MockCharacterRepository_Update_Call) RunAndReturn(run func(context.Context, *world.Character) (*wmodel.MutationDelta, error)) *MockCharacterRepository_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// UpdateLocation provides a mock function with given fields: ctx, characterID, locationID
-func (_m *MockCharacterRepository) UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID) error {
-	ret := _m.Called(ctx, characterID, locationID)
+// UpdateLocation provides a mock function with given fields: ctx, characterID, locationID, expectedVersion
+func (_m *MockCharacterRepository) UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	ret := _m.Called(ctx, characterID, locationID, expectedVersion)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateLocation")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, *ulid.ULID) error); ok {
-		r0 = rf(ctx, characterID, locationID)
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, *ulid.ULID, int) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, characterID, locationID, expectedVersion)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, *ulid.ULID, int) *wmodel.MutationDelta); ok {
+		r0 = rf(ctx, characterID, locationID, expectedVersion)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, *ulid.ULID, int) error); ok {
+		r1 = rf(ctx, characterID, locationID, expectedVersion)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockCharacterRepository_UpdateLocation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateLocation'
@@ -431,23 +482,24 @@ type MockCharacterRepository_UpdateLocation_Call struct {
 //   - ctx context.Context
 //   - characterID ulid.ULID
 //   - locationID *ulid.ULID
-func (_e *MockCharacterRepository_Expecter) UpdateLocation(ctx interface{}, characterID interface{}, locationID interface{}) *MockCharacterRepository_UpdateLocation_Call {
-	return &MockCharacterRepository_UpdateLocation_Call{Call: _e.mock.On("UpdateLocation", ctx, characterID, locationID)}
+//   - expectedVersion int
+func (_e *MockCharacterRepository_Expecter) UpdateLocation(ctx interface{}, characterID interface{}, locationID interface{}, expectedVersion interface{}) *MockCharacterRepository_UpdateLocation_Call {
+	return &MockCharacterRepository_UpdateLocation_Call{Call: _e.mock.On("UpdateLocation", ctx, characterID, locationID, expectedVersion)}
 }
 
-func (_c *MockCharacterRepository_UpdateLocation_Call) Run(run func(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID)) *MockCharacterRepository_UpdateLocation_Call {
+func (_c *MockCharacterRepository_UpdateLocation_Call) Run(run func(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID, expectedVersion int)) *MockCharacterRepository_UpdateLocation_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(*ulid.ULID))
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(*ulid.ULID), args[3].(int))
 	})
 	return _c
 }
 
-func (_c *MockCharacterRepository_UpdateLocation_Call) Return(_a0 error) *MockCharacterRepository_UpdateLocation_Call {
-	_c.Call.Return(_a0)
+func (_c *MockCharacterRepository_UpdateLocation_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockCharacterRepository_UpdateLocation_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCharacterRepository_UpdateLocation_Call) RunAndReturn(run func(context.Context, ulid.ULID, *ulid.ULID) error) *MockCharacterRepository_UpdateLocation_Call {
+func (_c *MockCharacterRepository_UpdateLocation_Call) RunAndReturn(run func(context.Context, ulid.ULID, *ulid.ULID, int) (*wmodel.MutationDelta, error)) *MockCharacterRepository_UpdateLocation_Call {
 	_c.Call.Return(run)
 	return _c
 }

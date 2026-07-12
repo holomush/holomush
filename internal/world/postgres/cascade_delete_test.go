@@ -101,7 +101,7 @@ func TestCascadeDelete_Location_DeletesPropertiesInSameTransaction(t *testing.T)
 		if err := propRepo.DeleteByParent(txCtx, "location", locID); err != nil {
 			return err
 		}
-		return locRepo.Delete(txCtx, locID)
+		return delErr(locRepo.Delete(txCtx, locID, 0))
 	}
 
 	err := tx.InTransaction(ctx, deleteFn)
@@ -136,7 +136,7 @@ func TestCascadeDelete_Location_RollsBackPropertiesOnParentDeleteFail(t *testing
 		if err := propRepo.DeleteByParent(txCtx, "location", locID); err != nil {
 			return err
 		}
-		_ = locRepo.Delete(txCtx, locID)
+		_ = delErr(locRepo.Delete(txCtx, locID, 0))
 		return errors.New("simulated failure after property delete")
 	}
 
@@ -175,7 +175,7 @@ func TestCascadeDelete_Object_DeletesPropertiesInSameTransaction(t *testing.T) {
 		if err := propRepo.DeleteByParent(txCtx, "object", objID); err != nil {
 			return err
 		}
-		return objRepo.Delete(txCtx, objID)
+		return delErr(objRepo.Delete(txCtx, objID, 0))
 	}
 
 	err := tx.InTransaction(ctx, deleteFn)
@@ -212,7 +212,7 @@ func TestCascadeDelete_Object_RollsBackPropertiesOnParentDeleteFail(t *testing.T
 		if err := propRepo.DeleteByParent(txCtx, "object", objID); err != nil {
 			return err
 		}
-		_ = objRepo.Delete(txCtx, objID)
+		_ = delErr(objRepo.Delete(txCtx, objID, 0))
 		return errors.New("simulated failure after property delete")
 	}
 
@@ -251,7 +251,7 @@ func TestCascadeDelete_Character_DeletesPropertiesInSameTransaction(t *testing.T
 		if err := propRepo.DeleteByParent(txCtx, "character", charID); err != nil {
 			return err
 		}
-		return charRepo.Delete(txCtx, charID)
+		return delErr(charRepo.Delete(txCtx, charID, 0))
 	}
 
 	err := tx.InTransaction(ctx, deleteFn)
@@ -288,7 +288,7 @@ func TestCascadeDelete_Character_RollsBackPropertiesOnParentDeleteFail(t *testin
 		if err := propRepo.DeleteByParent(txCtx, "character", charID); err != nil {
 			return err
 		}
-		_ = charRepo.Delete(txCtx, charID)
+		_ = delErr(charRepo.Delete(txCtx, charID, 0))
 		return errors.New("simulated failure after property delete")
 	}
 
