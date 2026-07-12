@@ -94,7 +94,7 @@ Plans:
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
 
-**Plans**: 7/16 plans executed
+**Plans**: 8/16 plans executed
 
 Plans:
 
@@ -110,7 +110,7 @@ Plans:
 
 - [x] 05-05-PLAN.md — Outbox + world_feed_counter schema (000050) + envelope domain type + same-tx outbox store + late-locked counter (SQL in internal/world/postgres) (wave 4)
 - [x] 05-06-PLAN.md — Genuine compile-time write fence (reader views + write executor) + MoveCharacter through outbox (delta-derived manifest) + delete emit path + examine audit + f1 doc fix (wave 5)
-- [ ] 05-07-PLAN.md — Single-lease relay (pg advisory lock + LISTEN/NOTIFY + sweep + halt/skip) + OutboxRelaySubsystem wired in core.go + reference consumer + D-04 gate confirm (wave 6)
+- [x] 05-07-PLAN.md — Single-lease relay (pg advisory lock + LISTEN/NOTIFY + sweep + halt/skip) + OutboxRelaySubsystem wired in core.go + reference consumer + D-04 gate confirm (wave 6)
 - [ ] 05-08-PLAN.md — Fault-injection resilience matrix (incl. lease fencing) + per-aggregate race + M2 end-to-end redelivery (wave 7)
 
 **Slice 3 — Taxonomy + census + invariants + rollout (MODEL-04)** — data-first / enforcement-last (deliberate deviation from the one-pager order, acknowledged in 05-09/05-10/05-12)
@@ -186,7 +186,7 @@ Plans:
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
-| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 7/16 | In Progress|  |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 8/16 | In Progress|  |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
