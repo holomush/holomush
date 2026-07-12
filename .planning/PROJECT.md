@@ -92,6 +92,14 @@ feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
   replay CLI (INV-EVENTBUS-29/30 never-drop/fail-closed), and the external-NATS operator runbook. CLUSTER-01..05
   shipped 2026-07-10 (Phase 3); closes the single-node ceiling
 
+- ✓ World-model resilience investigation & decision (v0.12 Phase 4) — two-replica resilience harness
+  (external-NATS + shared-DB seams, gated `test/integration/resilience/` suite; OPS-05 #4791), M12
+  last-write-wins **reproduced deterministically** + M2 dual-write window **characterized** + unwired-emitter
+  production finding (`f1-resilience-verdict.md`), and the MODEL-01 ADR **accepted** (#4784,
+  `holomush-i4784`): Option B — CRUD-canonical + optimistic version guard + ordered atomic outbox feed, in
+  the shape unanimously ratified by a three-model panel (`model-01-consensus-onepager.md` is normative).
+  Phase 5 implements MODEL-03 (version guard) + MODEL-04 (transactional outbox). Shipped 2026-07-11 (Phase 4)
+
 ### Active
 
 <!-- Current GSD roadmap scope — milestone v0.12 Foundation Hardening. Detailed REQ-IDs + phase mapping: REQUIREMENTS.md / ROADMAP.md. -->
@@ -240,4 +248,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-07-11 — milestone v0.12 (Foundation Hardening) started via `/gsd-new-milestone`. Scope: event-model decision + symptom fixes (F1 #4784, #4798), operational hardening (arch-review Highs), architecture decomposition (999.9), code health & test quality (999.10). Next: `/gsd-plan-phase 4` (or `/gsd-discuss-phase 4`).*
+*Last updated: 2026-07-11 — Phase 4 (World-Model Resilience Investigation & Decision) complete and shipped as PR #4814: harness + M12/M2 verdicts landed, MODEL-01 ADR accepted (Option B, panel-ratified). Next: merge #4814 when CI is green, then `/gsd-discuss-phase 5` / `/gsd-plan-phase 5` (world-model integrity fixes — MODEL-02/03/04). The milestone-level Active checklist items below stay unchecked because they span Phase 5/6 work (version guard, dual-write elimination, ops hardening) not yet done.*

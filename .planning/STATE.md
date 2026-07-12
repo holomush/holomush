@@ -2,17 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 4
-current_phase_name: World-Model Resilience Investigation & Decision (F1)
-status: planning
-last_updated: "2026-07-11T15:05:56.943Z"
+current_phase: 5
+current_phase_name: M2 / M12
+status: "Phase 4 shipped — PR #4814"
+stopped_at: Completed 04-04-PLAN.md — phase 04 ready for verification
+last_updated: "2026-07-11T22:12:15.897Z"
 last_activity: 2026-07-11
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
+  percent: 17
 ---
 
 # Project State
@@ -24,20 +25,20 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Milestone v0.12 (Foundation Hardening) — defining requirements. Pay down the highest-severity architecture & operational risks from the 2026-07-11 L7 review: event-model decision + fixes (F1 #4784, #4798), operational hardening (arch-review Highs), architecture decomposition (999.9), code health & test quality (999.10).
+**Current focus:** Phase 5 — World-Model Integrity Fixes (M2 / M12)
 
 ## Current Position
 
-Phase: 4 — World-Model Resilience Investigation & Decision (F1) (not started)
-Plan: — (immediate: /gsd-quick the F2 gateway DoS cap #4785; then /gsd-plan-phase 4)
-Status: Roadmap created — ready to plan Phase 4 (F1 decision gate)
-Last activity: 2026-07-11 — Completed quick task 260711-hg1 (F2): capped gateway ConnectRPC request-body size (#4785, unauthenticated OOM)
+Phase: 5 — World-Model Integrity Fixes (M2 / M12)
+Plan: Not started
+Status: Phase 4 shipped — PR #4814
+Last activity: 2026-07-11
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 26
+- Total plans completed: 30
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -48,6 +49,7 @@ Last activity: 2026-07-11 — Completed quick task 260711-hg1 (F2): capped gatew
 | 01 | 10 | - | - |
 | 02 | 7 | - | - |
 | 03 | 9 | - | - |
+| 04 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -78,6 +80,10 @@ Last activity: 2026-07-11 — Completed quick task 260711-hg1 (F2): capped gatew
 | Phase 03 P05 | ~70m | 3 tasks | 5 files |
 | Phase 03 P07 | 50m | 3 tasks | 9 files |
 | Phase 03 P09 | 20min | 2 tasks | 1 files |
+| Phase 04 P01 | 40min | 2 tasks | 7 files |
+| Phase 04 P02 | 35min | 2 tasks | 3 files |
+| Phase 04 P03 | ~55min | 2 tasks | 3 files |
+| Phase 04 P04 | ~90min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -86,6 +92,13 @@ Last activity: 2026-07-11 — Completed quick task 260711-hg1 (F2): capped gatew
 Full decision log lives in PROJECT.md "Key Decisions" (v0.11 phase-level decisions were folded in at
 milestone close; per-plan detail is archived in `milestones/v0.11-phases/`). No decisions accumulated for
 the next milestone yet.
+
+- [Phase 04]: M12 last-write-wins world corruption REPRODUCED deterministically (D-06): a stale full-row UPDATE silently reverts a committed rename, both writers returning nil (04-02)
+- [Phase 04]: Success-criterion #1 four chaos dimensions all green; replica restart recovers canonical state from the DB, not event replay (04-02)
+- [Phase 04]: M2 dual-write window characterized (D-07): MoveCharacter commits then emits post-commit; on broker flap the caller sees move_succeeded=true while notification delivery is decoupled from the result
+- [Phase 04]: Production world.Service wires NO EventEmitter — the move-notification leg is dead code today (pinned by a spec)
+- [Phase 04]: MODEL-01 decided: Option B — CRUD-canonical + optimistic concurrency + transactional outbox in the panel-ratified strengthened shape (consensus one-pager NORMATIVE); Phase 5 implements MODEL-03 version guard + MODEL-04 ordered atomic feed — Human decider (Sean Brandt) chose under future-state-first framing after a two-round three-model panel unanimously ratified the strengthened B shape; the ordered complete world-change feed is the platform's extensibility contract; evolvability inverts under event sourcing pre-1.0; coverage rot countered structurally (compile-time seam + census meta-test + delta-parity)
+- [Phase 04]: INV-WORLD-ATOMIC-FEED/-DELTA-PARITY/-FEED-ORDER/-WRITER-BOUNDARY named in the ADR; registration/binding deferred to Phase 5's spec per .claude/rules/invariants.md
 
 ### Pending Todos
 
@@ -118,9 +131,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-11 — milestone v0.12 (Foundation Hardening) defined via `/gsd-new-milestone`;
+Last session: 2026-07-11T21:32:14.327Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Roadmap approved (F1-first reorder) — milestone initialized; Phase 4 not yet planned.
+Stopped at: Completed 04-04-PLAN.md — phase 04 ready for verification
 Resume file: None
 
 ## Operator Next Steps

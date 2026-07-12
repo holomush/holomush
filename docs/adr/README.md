@@ -16,6 +16,7 @@ edge and the file's `**Status:**` reflects the supersession.
 
 | Title | Date | Status | bd decision |
 |-------|------|--------|-------------|
+| [World-State Model: CRUD-Canonical with Version Guard and Ordered Atomic Feed](holomush-i4784-world-state-model-decision.md) | 2026-07-11 | Accepted | `holomush-i4784` |
 | [Hook focus-cache invalidation at UpdateSessionConnection](holomush-sfxte-hook-focus-cache-invalidation-at-updatesessionconnection.md) | 2026-07-08 | Accepted | `holomush-sfxte` |
 | [Use a caching session.Store decorator for focus, not registry or session Info](holomush-cfqxp-use-caching-session-store-decorator-focus-not-registry-or-se.md) | 2026-07-08 | Accepted | `holomush-cfqxp` |
 | [Close the focus cache-aside race with a generation-guarded populate](holomush-sz877-close-focus-cache-aside-race-generation-guarded-populate.md) | 2026-07-08 | Accepted | `holomush-sz877` |

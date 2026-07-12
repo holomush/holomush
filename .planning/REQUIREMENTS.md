@@ -13,7 +13,7 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 
 <!-- F1 #4784 is a decision gate: sequence early; MODEL-03/04 and ARCH-04 depend on its outcome. -->
 
-- [ ] **MODEL-01**: The event-sourcing-vs-CRUD divergence is resolved by a committed ADR that investigates whether world-state event sourcing was ever meant to be real and formally decides the model — build a real projection/outbox, or adopt CRUD-canonical + optimistic-concurrency/transactional-outbox — grounded in F1 (`docs/reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md`, #4784)
+- [x] **MODEL-01**: The event-sourcing-vs-CRUD divergence is resolved by a committed ADR that investigates whether world-state event sourcing was ever meant to be real and formally decides the model — build a real projection/outbox, or adopt CRUD-canonical + optimistic-concurrency/transactional-outbox — grounded in F1 (`docs/reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md`, #4784)
 - [ ] **MODEL-02**: Every doc site stating the false "event sourcing / current state derives from replay" principle (the ~6 sites incl. root `CLAUDE.md`, `contributing/explanation/architecture.md`, `coding-standards.md`, and the public site `index.mdx`) is corrected to describe the decided model (MODEL-01)
 - [ ] **MODEL-03**: World-state writes (locations/exits/characters/objects) carry an optimistic-concurrency version guard so a concurrent writer cannot silently lose an update — closes last-write-wins M12 (#4798), verified to hold under the two-replica deployment
 - [ ] **MODEL-04**: The dual-write window (world event emitted after a non-atomic DB commit, `move_succeeded:true` while the notification is lost on a NATS blip) is eliminated per the MODEL-01 mechanism (transactional outbox or real projection) — closes M2
@@ -26,7 +26,7 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 - [ ] **OPS-02**: `events_audit` growth is bounded by extending the existing RetentionWorker (the sibling ABAC-audit table's machinery) to it, so the table cannot grow without limit — closes F4 (#4786)
 - [ ] **OPS-03**: The `nats-server` CVE is remediated (≥ v2.14.3) AND a govulncheck / vuln-scan CI gate is added so a vulnerable dependency is caught rather than merged blind — closes F8 (#4790)
 - [ ] **OPS-04**: The audit-DLQ replay CLI recovers for its target external-NATS deployment (the `game_id` split bridge is fixed) and its tautological coverage test is replaced with a genuine recovery assertion — closes F3 (#4787)
-- [ ] **OPS-05**: A resilience/concurrency pass reproduces concurrent commands + a NATS broker flap + a replica restart + client reconnect, empirically establishing whether M12 corrupts state under two-replica concurrency and confirming the MODEL-03 guard holds — the report's #1 recommended follow-up (#4791)
+- [x] **OPS-05**: A resilience/concurrency pass reproduces concurrent commands + a NATS broker flap + a replica restart + client reconnect, empirically establishing whether M12 corrupts state under two-replica concurrency and confirming the MODEL-03 guard holds — the report's #1 recommended follow-up (#4791)
 
 ### Architecture Decomposition (999.9)
 
@@ -80,8 +80,8 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | OPS-01 | Quick fix (pre-Phase 4) | Pending |
-| MODEL-01 | Phase 4 | Pending |
-| OPS-05 | Phase 4 | Pending |
+| MODEL-01 | Phase 4 | Complete |
+| OPS-05 | Phase 4 | Complete |
 | MODEL-02 | Phase 5 | Pending |
 | MODEL-03 | Phase 5 | Pending |
 | MODEL-04 | Phase 5 | Pending |
@@ -100,6 +100,7 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | QUAL-05 | Phase 9 | Pending |
 
 **Coverage:**
+
 - v0.12 requirements: 19 total
 - Mapped to phases: 19 ✓
 - Unmapped: 0
