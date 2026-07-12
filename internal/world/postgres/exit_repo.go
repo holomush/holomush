@@ -34,7 +34,7 @@ func NewExitRepository(pool *pgxpool.Pool) *ExitRepository {
 func (r *ExitRepository) Get(ctx context.Context, id ulid.ULID) (*world.Exit, error) {
 	exit, err := r.scanExit(ctx, `
 		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
-		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at, version
 		FROM exits WHERE id = $1
 	`, id.String())
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -57,6 +57,12 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) (*wmodel.
 		exit.CreatedAt = time.Now()
 	}
 
+	// reverseID captures the repository-generated reverse-exit id (finding 7) so a
+	// bidirectional Create's MutationDelta lists the reverse exit the outbox
+	// manifest must also cover. It is set inside the closure and read only after
+	// a successful commit.
+	var reverseID *ulid.ULID
+
 	// Enroll in the ambient mutation transaction if present (re-entrant seam),
 	// else begin+commit a local one. Preserves atomic creation of the reverse exit.
 	err := withTx(ctx, r.pool, func(txCtx context.Context) error {
@@ -78,6 +84,8 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) (*wmodel.
 				if err := r.insertExitTx(txCtx, tx, returnExit); err != nil {
 					return oops.With("operation", "create return exit").Wrap(err)
 				}
+				rid := returnExit.ID
+				reverseID = &rid
 			}
 		}
 
@@ -86,7 +94,18 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) (*wmodel.
 	if err != nil {
 		return nil, err
 	}
-	return primaryDelta(wmodel.AggregateExit, exit.ID, false), nil
+
+	// New rows take the DB default version 1; refresh the struct (finding 12).
+	exit.Version = 1
+	delta := primaryDeltaVersioned(wmodel.AggregateExit, exit.ID, false, 0, 1)
+	if reverseID != nil {
+		delta.Affected = append(delta.Affected, wmodel.AffectedAggregate{
+			Type:         wmodel.AggregateExit,
+			ID:           *reverseID,
+			AfterVersion: 1,
+		})
+	}
+	return delta, nil
 }
 
 // insertExitTx inserts a single exit row within a transaction.
@@ -125,7 +144,12 @@ func (r *ExitRepository) insertExitTx(ctx context.Context, tx pgx.Tx, exit *worl
 	return nil
 }
 
-// Update modifies an existing exit.
+// Update modifies an existing exit with a version-predicated CAS (MODEL-03),
+// mirroring the location repo: when exit.Version > 0 the WHERE clause matches
+// id + version and a zero-row result is classified by a locked follow-up read on
+// the same connection into WORLD_CONCURRENT_EDIT (existing row, version moved) or
+// EXIT_NOT_FOUND (absent row); when exit.Version == 0 the write is unversioned.
+// On success exit.Version is refreshed to the committed value (finding 12).
 func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) (*wmodel.MutationDelta, error) {
 	lockDataJSON, err := marshalLockData(exit.LockData)
 	if err != nil {
@@ -134,13 +158,12 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) (*wmodel.
 
 	visibleToStrings := ulidsToStrings(exit.VisibleTo)
 
-	result, err := execerFromCtx(ctx, r.pool).Exec(
-		ctx, `
+	query := `
 		UPDATE exits SET from_location_id = $2, to_location_id = $3, name = $4, aliases = $5,
 		       bidirectional = $6, return_name = $7, visibility = $8, visible_to = $9,
-		       locked = $10, lock_type = $11, lock_data = $12
-		WHERE id = $1
-	`,
+		       locked = $10, lock_type = $11, lock_data = $12, version = version + 1
+		WHERE id = $1`
+	args := []any{
 		exit.ID.String(),
 		exit.FromLocationID.String(),
 		exit.ToLocationID.String(),
@@ -153,29 +176,61 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) (*wmodel.
 		exit.Locked,
 		nullableLockType(exit.LockType),
 		lockDataJSON,
-	)
-	if err != nil {
-		return nil, oops.With("operation", "update exit").With("id", exit.ID.String()).Wrap(err)
 	}
-	if result.RowsAffected() == 0 {
-		return nil, oops.Code("EXIT_NOT_FOUND").With("id", exit.ID.String()).Wrap(world.ErrNotFound)
+	if exit.Version > 0 {
+		query += ` AND version = $13`
+		args = append(args, exit.Version)
 	}
-	return primaryDelta(wmodel.AggregateExit, exit.ID, false), nil
+	query += ` RETURNING version`
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		var newVersion int
+		scanErr := tx.QueryRow(txCtx, query, args...).Scan(&newVersion)
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			return classifyCASZeroRow(txCtx, tx,
+				`SELECT version FROM exits WHERE id = $1 FOR UPDATE`,
+				exit.ID,
+				oops.Code("EXIT_NOT_FOUND").With("id", exit.ID.String()).Wrap(world.ErrNotFound))
+		}
+		if scanErr != nil {
+			return oops.With("operation", "update exit").With("id", exit.ID.String()).Wrap(scanErr)
+		}
+		exit.Version = newVersion
+		delta = primaryDeltaVersioned(wmodel.AggregateExit, exit.ID, false, newVersion-1, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return delta, nil
 }
 
-// Delete removes an exit by ID.
+// Delete removes an exit by ID with a version-predicated CAS (MODEL-03).
 // If bidirectional, deletes the return exit atomically in a single transaction.
 // For non-severe issues (return exit not found), the primary delete proceeds.
 // For severe issues (find error, delete error), the entire operation is rolled back
 // and the returned BidirectionalCleanupResult indicates the primary delete did NOT complete.
 // Callers can check IsSevere() to determine the severity of the issue.
+//
+// The FOR UPDATE row read is the version read: when expectedVersion > 0 and the
+// locked row's version differs, the delete surfaces WORLD_CONCURRENT_EDIT; an
+// absent row is EXIT_NOT_FOUND (two outcomes only, round-5 Codex MEDIUM).
+// expectedVersion == 0 is an unversioned delete (existence-checked only). A
+// bidirectional Delete records the cascaded return exit as a tombstone in the
+// returned MutationDelta so delta-parity (05-12) can match the manifest
+// (finding 7).
 func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
-	_ = expectedVersion // accepted and ignored in 05-14; version predicate lands in 05-02/05-03
 	// infoResult carries a NON-severe cleanup notice (return exit already gone)
 	// that must be surfaced AFTER a successful commit — so it is captured here and
 	// returned only once withTx commits, rather than returned from the closure
 	// (which would trigger a rollback).
 	var infoResult *world.BidirectionalCleanupResult
+	// currentVersion is the locked primary-row version (delta BeforeVersion);
+	// reverseTombstone captures the cascaded return exit for the delta's Affected.
+	var currentVersion int
+	var reverseTombstone *wmodel.AffectedAggregate
 
 	// Enroll in the ambient mutation transaction if present, else begin+commit a
 	// local one. Preserves FOR UPDATE locking + atomic reverse-exit cascade.
@@ -186,7 +241,7 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersi
 		// Lock the row before checking bidirectional flag and deleting
 		exit, err := r.scanExitTx(txCtx, tx, `
 			SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
-			       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+			       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at, version
 			FROM exits WHERE id = $1 FOR UPDATE
 		`, id.String())
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -195,6 +250,14 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersi
 		if err != nil {
 			return oops.With("operation", "get exit for delete").With("id", id.String()).Wrap(err)
 		}
+		if expectedVersion > 0 && exit.Version != expectedVersion {
+			return oops.Code(world.CodeConcurrentEdit).
+				With("id", id.String()).
+				With("expected_version", expectedVersion).
+				With("current_version", exit.Version).
+				Wrap(world.ErrConcurrentEdit)
+		}
+		currentVersion = exit.Version
 
 		// Delete the primary exit
 		_, err = tx.Exec(txCtx, `DELETE FROM exits WHERE id = $1`, id.String())
@@ -238,6 +301,14 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersi
 					}
 					return cleanupResult
 				}
+				// The cascaded return exit is part of the write's footprint — record
+				// it as a tombstone so the outbox manifest covers it (finding 7).
+				reverseTombstone = &wmodel.AffectedAggregate{
+					Type:          wmodel.AggregateExit,
+					ID:            returnExit.ID,
+					Tombstone:     true,
+					BeforeVersion: returnExit.Version,
+				}
 			}
 		}
 
@@ -247,7 +318,10 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersi
 		return nil, txErr
 	}
 
-	delta := primaryDelta(wmodel.AggregateExit, id, true)
+	delta := primaryDeltaVersioned(wmodel.AggregateExit, id, true, currentVersion, 0)
+	if reverseTombstone != nil {
+		delta.Affected = append(delta.Affected, *reverseTombstone)
+	}
 	// Return informational cleanup result if return exit was not found (non-severe).
 	if infoResult != nil && infoResult.Issue != nil {
 		return delta, infoResult
@@ -260,7 +334,7 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersi
 func (r *ExitRepository) ListFromLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Exit, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
-		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at, version
 		FROM exits WHERE from_location_id = $1 ORDER BY name
 	`, locationID.String())
 	if err != nil {
@@ -281,7 +355,7 @@ func (r *ExitRepository) ListFromLocation(ctx context.Context, locationID ulid.U
 func (r *ExitRepository) ListVisibleExits(ctx context.Context, locationID, characterID ulid.ULID) ([]*world.Exit, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT e.id, e.from_location_id, e.to_location_id, e.name, e.aliases, e.bidirectional,
-		       e.return_name, e.visibility, e.visible_to, e.locked, e.lock_type, e.lock_data, e.created_at
+		       e.return_name, e.visibility, e.visible_to, e.locked, e.lock_type, e.lock_data, e.created_at, e.version
 		FROM exits e
 		JOIN locations l ON e.from_location_id = l.id
 		WHERE e.from_location_id = $1
@@ -310,7 +384,7 @@ func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, n
 	// For aliases, unnest and compare with LOWER() for consistent behavior
 	exit, err := r.scanExit(ctx, `
 		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
-		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at, version
 		FROM exits
 		WHERE from_location_id = $1
 		  AND (LOWER(name) = LOWER($2) OR EXISTS (
@@ -331,7 +405,7 @@ func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, n
 func (r *ExitRepository) findByNameTx(ctx context.Context, tx pgx.Tx, locationID ulid.ULID, name string) (*world.Exit, error) {
 	exit, err := r.scanExitTx(ctx, tx, `
 		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
-		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at, version
 		FROM exits
 		WHERE from_location_id = $1
 		  AND (LOWER(name) = LOWER($2) OR EXISTS (
@@ -362,7 +436,7 @@ func (r *ExitRepository) FindBySimilarity(ctx context.Context, locationID ulid.U
 	// Also check aliases using array unnest
 	exit, err := r.scanExit(ctx, `
 		SELECT e.id, e.from_location_id, e.to_location_id, e.name, e.aliases, e.bidirectional,
-		       e.return_name, e.visibility, e.visible_to, e.locked, e.lock_type, e.lock_data, e.created_at
+		       e.return_name, e.visibility, e.visible_to, e.locked, e.lock_type, e.lock_data, e.created_at, e.version
 		FROM exits e
 		WHERE e.from_location_id = $1
 		  AND (
@@ -453,7 +527,7 @@ func scanExitRow(row pgx.Row) (*world.Exit, error) {
 
 	err := row.Scan(
 		&f.idStr, &f.fromLocStr, &f.toLocStr, &exit.Name, &f.aliases, &exit.Bidirectional,
-		&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &f.createdAt,
+		&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &f.createdAt, &exit.Version,
 	)
 	if err != nil {
 		return nil, oops.With("operation", "scan exit").Wrap(err)
@@ -475,7 +549,7 @@ func (r *ExitRepository) scanExits(rows pgx.Rows) ([]*world.Exit, error) {
 
 		if err := rows.Scan(
 			&f.idStr, &f.fromLocStr, &f.toLocStr, &exit.Name, &f.aliases, &exit.Bidirectional,
-			&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &f.createdAt,
+			&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &f.createdAt, &exit.Version,
 		); err != nil {
 			return nil, oops.With("operation", "scan exit").Wrap(err)
 		}
