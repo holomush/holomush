@@ -13,6 +13,18 @@ import (
 // ErrNotFound is returned when a requested entity does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrConcurrentEdit is the single typed conflict signal for the world-model
+// optimistic-concurrency guard (MODEL-03). A version-predicated CAS write or
+// delete that finds the row's version has moved wraps this sentinel with
+// CodeConcurrentEdit. The world.Service boundary propagates it unchanged (D-02:
+// no UX mapping in this phase). It is deliberately distinct from ErrNotFound so
+// a lost update is never mistaken for a missing row.
+var ErrConcurrentEdit = errors.New("concurrent edit")
+
+// CodeConcurrentEdit is the oops code the guarded repos stamp on a conflict
+// wrapping ErrConcurrentEdit. Asserted with errutil.AssertErrorCode.
+const CodeConcurrentEdit = "WORLD_CONCURRENT_EDIT"
+
 // ErrNoEventEmitter is returned when an operation requires event emission but no emitter is configured.
 // This indicates a misconfiguration - production systems should always have an EventEmitter.
 var ErrNoEventEmitter = errors.New("event emitter not configured")
