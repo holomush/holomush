@@ -84,7 +84,7 @@ func (r *SceneRepository) ListParticipants(ctx context.Context, sceneID ulid.ULI
 // GetScenesFor returns all scenes a character is participating in.
 func (r *SceneRepository) GetScenesFor(ctx context.Context, characterID ulid.ULID) ([]*world.Location, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT l.id, l.type, l.shadows_id, l.name, l.description, l.owner_id, l.replay_policy, l.created_at, l.archived_at
+		SELECT l.id, l.type, l.shadows_id, l.name, l.description, l.owner_id, l.replay_policy, l.created_at, l.archived_at, l.version
 		FROM locations l
 		INNER JOIN scene_participants sp ON l.id = sp.scene_id
 		WHERE sp.character_id = $1
