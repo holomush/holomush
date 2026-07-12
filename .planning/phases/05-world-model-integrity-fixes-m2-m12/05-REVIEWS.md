@@ -1,413 +1,536 @@
 ---
 phase: 5
-review_round: 2
+review_round: 3
 reviewers: [codex, antigravity]
-reviewed_at: 2026-07-12T10:51:41Z
+reviewed_at: 2026-07-12T11:47:47Z
 plans_reviewed: [05-01-PLAN.md, 05-02-PLAN.md, 05-03-PLAN.md, 05-04-PLAN.md, 05-05-PLAN.md, 05-06-PLAN.md, 05-07-PLAN.md, 05-08-PLAN.md, 05-09-PLAN.md, 05-10-PLAN.md, 05-11-PLAN.md, 05-12-PLAN.md, 05-13-PLAN.md, 05-14-PLAN.md]
-prior_round: "round 1 preserved in git at commit 4238fc876; its findings are incorporated in the current 14-plan set"
+prior_rounds: "round 1 @ 4238fc876, round 2 @ 81440289a (both incorporated); this is round 3 of the revised 14-plan set"
+verdict: "NOT execution-ready per Codex (source-grounded HIGH); Antigravity's 'execution-ready' is a false green — it missed the guest/admin genesis bypasses Codex found"
 ---
 
-# Cross-AI Plan Review — Phase 5 (ROUND 2, revised 14-plan set)
+# Cross-AI Plan Review — Phase 5 (ROUND 3, revised 14-plan set)
 
-Second-round review of the plans **after** the round-1 findings were incorporated (which added
-05-14 and restructured the transaction/outbox/relay seams). Both reviewers verified the round-1
-structural fixes against the live tree AND hunted for new/residual issues. **Both reach HIGH /
-not-execution-ready** — the round-1 fixes HELD, but the revision opened new seams.
+Third-round review, after the round-2 cycle-free seam redesign (wmodel leaf package + mutate-returns-delta
++ OutboxWriter/OutboxStore injection). The reviewers DIVERGE this round:
 
-Note: unlike round 1, Antigravity this round verified against the real codebase (grounded
-`file:line`, no stale-sandbox errors) — its round-2 findings are trustworthy.
+- **Codex: NOT READY / HIGH.** Confirms the architecture is "close" and the cycle redesign "salvageable,"
+  but finds four load-bearing residual issues (envelope epoch/position ownership, relay lease/skip ownership,
+  incomplete wave-1 blast radius, and — most importantly — production character writers (guest, bootstrap-admin)
+  that bypass the executor and commit rows without genesis envelopes, making INV-WORLD-4 false).
+- **Antigravity: "execution-ready, no residual issues."** This is a FALSE GREEN. Its round-2-resolution table
+  reads all-HOLDS, but it did NOT independently discover the guest/bootstrap-admin character-write bypasses
+  (`internal/auth/guest_service.go`, `internal/bootstrap/admin.go`) that Codex cites with file:line. Consistent
+  with agy's track record (over-optimistic round 1, solid round 2, over-optimistic round 3). Weight Codex.
+
+**Net: one more targeted `/gsd-plan-phase 5 --reviews` pass is warranted. The loop is converging (severity
+is decreasing round-over-round), but round 3 surfaced a real correctness gap, not just polish.**
 
 ---
 
-## Codex Review (round 2)
+## Codex Review (round 3)
 
-# Phase 5 Round-2 Plan Review
+# Phase 5 Plan Review — Round 3
 
-## 1. Summary
+## 1) Summary
 
-The revision resolves several round-1 findings, but the plan set is not yet execution-ready.
+**Verdict: NOT READY. Risk: HIGH.**
 
-The re-entrant transaction design, numeric invariant IDs, PostgreSQL subsystem count, SQL-location rule, and explicit rollout-order deviation are now grounded in the source. However, several seams remain structurally broken:
+The round-2 package redesign is substantially better: `wmodel` is the correct direction, the intended direct import graph can be acyclic, property transaction enrollment and move CAS parameters are now planned, and the numeric invariant IDs match the registry parser.
 
-- The proposed package graph creates Go import cycles.
-- `mutate(..., envelope)` requires the envelope before the repository produces the delta from which that envelope must be built.
-- The claimed compile-time write fence remains bypassable through exported repositories, especially `PropertyRepository`.
-- The poison “skip” operation creates the exact feed-position gap the invariant prohibits.
-- `CreateCharacter` and feed-epoch wiring omit required composition/schema changes.
-- The repository signature redesign has a wider compile-time blast radius than plan 05-14 lists.
+However, execution is still blocked by four load-bearing issues:
 
-Overall risk: **HIGH**.
+1. The envelope finalization contract is internally inconsistent about who supplies `epoch` and `feed_position`.
+2. The relay’s storage interface cannot enforce the claimed dedicated-lease connection or publish a skip marker as drawn.
+3. The repository signature migration misses many compile-time callers.
+4. The writer fence and census omit real production character writers, especially guest and bootstrap-admin creation.
 
-## 2. Round-1 Resolution Verification
+The redesign has converged on package placement, but not yet on executable ownership contracts.
 
-| Round-1 resolution | Verdict | Verification |
+## 2) Round-2 Resolution Status
+
+| Resolution | Status | Finding |
 |---|---|---|
-| Re-entrant `InTransaction`/`withTx` and self-transacting repos | **PARTIALLY HOLDS** | The proposed join semantics are sound: only the outer transaction commits or rolls back, correcting current unconditional `Begin` at [transactor.go:27](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/transactor.go:27). The identified self-transacting sites are real: [exit_repo.go:60](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/exit_repo.go:60), [exit_repo.go:178](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/exit_repo.go:178), and [object_repo.go:172](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/object_repo.go:172); scene writes also bypass ambient transactions at [scene_repo.go:40](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/scene_repo.go:40) and [scene_repo.go:57](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/scene_repo.go:57). But property Create/Update still use the pool directly at [property_repo.go:60](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/property_repo.go:60) and [property_repo.go:136](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/property_repo.go:136), and no task actually converts them. |
-| All world/outbox/counter SQL in `internal/world/postgres` | **PARTIALLY HOLDS** | Plans 05-05 and 05-07 consistently place counter, outbox insert, relay read/mark/prune, and `pg_notify` SQL in postgres. Plan 05-09 has a real package allowlist. But 05-11 puts genesis and epoch/reset work solely in `internal/world/outbox/genesis.go`, with no postgres storage file, leaving its SQL ownership unspecified. |
-| Fence opens in 05-06 and completes in 05-11 | **STILL BROKEN** | 05-06 now correctly says it is transitional. The claimed completion in 05-11 only changes `Service` fields from the current write-capable types at [service.go:45](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/service.go:45). Exported postgres repositories remain directly callable, and `PropertyRepository` still exposes Create/Update/Delete at [property.go:32](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/property.go:32). Reader fields on one service are not a repository-wide compile-time fence. |
-| Numeric `INV-WORLD-1..4`, parser unchanged | **PARTIALLY HOLDS** | Numeric IDs will bind: the parser accepts only numeric suffixes at [invariant_registry_test.go:163](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/test/meta/invariant_registry_test.go:163). The proposed delta test explicitly requires equality, not presence. However, `INV-WORLD-1` is bound only to the opt-in resilience suite, which skips unless `HOLOMUSH_RUN_QUARANTINED=1` at [resilience_suite_test.go:46](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/test/integration/resilience/resilience_suite_test.go:46), so it is not continuously exercised by the normal integration lane. |
-| AST/token SQL fence | **PARTIALLY HOLDS** | The positive/negative fixture and explicit allowlist design are implementable. It is no longer pretending depguard can inspect SQL. But the table list omits `entity_properties`, even though Phase 5 treats property mutation as part of the world writer boundary. |
-| Relay lease, wakeup, core composition | **STILL BROKEN overall** | The composition claim is accurate: production currently has 15 stubs at [core_subsystems_test.go:32](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/cmd/holomush/core_subsystems_test.go:32), and `productionSubsystems` currently returns those 15 at [core.go:1445](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/cmd/holomush/core.go:1445). Transaction-side `pg_notify` is the correct commit-coupled wakeup model. The advisory-lock fencing and poison recovery remain unsafe, detailed below. |
-| Delete CAS interface and mocks | **HOLDS narrowly** | Plan 05-14 correctly identifies all four current world Delete signatures, such as [repository.go:33](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go:33), and lists the five generated world repository mocks. The broader write-return redesign, however, misses non-world interfaces and adapters. |
-| `MutationDelta` threaded repo → manifest | **STILL BROKEN** | The delta contains the needed repository-internal IDs, but the package graph and ordering of envelope construction make the proposed threading impossible as written. |
-| Counter late lock + timeouts | **STILL PARTLY BROKEN** | Late allocation is explicit and sound. “Statement/transaction timeouts” appear only in 05-05’s truths/objective; no task, API, acceptance criterion, or test sets or verifies a timeout. |
-| Zero-row classifier connection reuse + pool-size-1 test | **HOLDS** | The planned `withTx` plus `execerFromCtx` uses the existing ambient `pgx.Tx` exposed by [helpers.go:33](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/helpers.go:33). The pool-size-1 regression test is explicitly required. |
-| CreateCharacter fail-close | **PARTIALLY HOLDS** | The plan correctly targets the current fallback at [auth_handlers.go:521](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/grpc/auth_handlers.go:521), but omits the dependency and composition changes needed to supply an outbox writer. |
-| Structural census | **PARTIALLY HOLDS** | It no longer derives coverage from the incomplete `Mutator` interface at [mutator.go:18](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/mutator.go:18). But the plan never defines a sound structural rule that discovers a new mutation before it already contains a `mutate` call. |
-| Examine-consumer audit | **HOLDS** | The plan now requires a consumer audit before removing the current examine emission sites, such as [service.go:904](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/service.go:904). |
-| Preserve README line 22 | **HOLDS** | The revised plan explicitly distinguishes reconnect/event replay from false world-state reconstruction claims. |
-| Slice-3 rollout-before-enforcement deviation | **HOLDS** | The deviation is now explicit in 05-09, 05-10, and 05-12 with a concrete green-intermediate-commit rationale. |
+| Cycle-free seam | **STILL BROKEN** | The direct package graph is viable, but the envelope and relay interfaces are not implementable as specified; the import guard is also incomplete. |
+| Interface blast radius | **STILL BROKEN** | Numerous integration and harness callers are absent from 05-14. Wave 1 will not compile atomically. |
+| Property + Move CAS | **HOLDS** | The plans correctly add transaction enrollment for property writes and explicit versions for object/character moves. |
+| Write fence | **STILL BROKEN** | Reader views protect only `world.Service`; public concrete repositories remain callable, and multiple production character writers bypass the executor. |
+| Relay | **STILL BROKEN** | Same-position marker intent is correct, but lease connection ownership, fencing, and CLI publishing are unresolved. |
+| CreateCharacter + epoch | **STILL BROKEN** | gRPC wiring is covered and migration 000050 is assigned, but guest and bootstrap-admin character creation remain envelope-less. |
+| Medium items | **STILL BROKEN** | Timeout is now a real task, but INV-WORLD-1’s proposed binding is insufficient and the census is not actually complete. |
 
-## 3. Strengths
+## 3) Strengths
 
-- The re-entrant transaction shape is materially better and matches the existing context-based executor mechanism.
-- The revised plans found the real `pool.Begin` and scene `pool.Exec` escape sites rather than treating transaction enrollment as automatic.
-- Numeric invariant IDs match the actual registry parser.
-- The outbox/counter/relay SQL placement is consistent across 05-05, 05-07, and 05-09.
-- The relay composition work is grounded in the real 15-element subsystem list.
-- Delete deltas now account for reverse exits and cascaded aggregates generated inside repositories.
-- The plans explicitly require a pool-size-1 classifier regression test and version refresh after successful writes.
-- `CreateCharacter`’s existing fail-open fallback and the examine notification compatibility question are now directly addressed.
-- README replay semantics and the deliberate rollout-order deviation are handled carefully rather than mechanically.
+- The proposed leaf package is a sound cycle-breaking direction. `world → wmodel`, `postgres → world,wmodel`, and `outbox → wmodel` can compile without a cycle. The current repository package already depends on `world`, so placing shared values below both packages is appropriate: `internal/world/postgres/property_repo.go:80`, `internal/world/postgres/character_repo.go:109`.
+- Property transaction enrollment is now explicitly covered at both leaking sites. The current leaks are real at `internal/world/postgres/property_repo.go:60` and `:136`; 05-14 correctly routes both through `execerFromCtx`.
+- Move CAS parameters are correctly identified. The current interfaces lack a version-bearing argument at `internal/world/repository.go:118` and `:161`, while the implementations write directly at `internal/world/postgres/object_repo.go:165-172` and `internal/world/postgres/character_repo.go:109-112`.
+- The CreateCharacter gRPC dependency chain is accurately located: the current fallback is at `internal/grpc/auth_handlers.go:517-526`, the server dependency container is `internal/grpc/server.go`, and production options are assembled at `cmd/holomush/sub_grpc.go:477-498`.
+- Numeric invariant IDs are correct. The registry parser only accepts `INV-<SCOPE>-<number>` at `test/meta/invariant_registry_test.go:162-167`.
+- `WORLD_FEED_LOCK_TIMEOUT` is no longer prose-only: 05-05 assigns an actual lock-timeout behavior and integration test.
+- The same-position skip marker is the right correction to the round-2 wire-gap finding. The plans explicitly prohibit marking a poison row published without first accounting for that position on the wire.
 
-## 4. Concerns
+## 4) Concerns
 
-### HIGH — The package graph and delta timing cannot compile as specified
+### HIGH — Envelope ownership remains temporally inconsistent
 
-Plan 05-05 makes `internal/world/outbox.Envelope` map from `world.MutationDelta`. Plan 05-06 then places `mutate(..., outbox.Envelope)` in package `world`. Since `mutator.go` is package `world` ([mutator.go:4](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/mutator.go:4)), that creates:
+05-05 defines finalization as requiring the allocated epoch and position, while 05-06 has the executor finalize the envelope before calling the writer that allocates those values:
 
-```text
-internal/world → internal/world/outbox → internal/world
-```
+- 05-05 describes `Finalize(intent, delta, epoch, position)`.
+- 05-06 says `mutate` finalizes from the returned delta and then calls `OutboxWriter.WriteEnvelope`.
+- 05-05 says `WriteEnvelope` itself allocates and stamps epoch and position.
 
-Plan 05-07 risks a second cycle because postgres persists `outbox.Envelope`, while the relay package calls the concrete postgres store:
+See `.planning/.../05-05-PLAN.md:95-150` and `.planning/.../05-06-PLAN.md:89-98`.
 
-```text
-internal/world/outbox → internal/world/postgres → internal/world/outbox
-```
+The delta is available after the repository write, so the round-2 envelope-before-delta problem is fixed. But a fully finalized `Envelope` still cannot exist before the writer allocates its storage-owned fields.
 
-There is also a temporal contradiction: callers must pass a complete envelope into `mutate`, but its manifest must be built from the delta returned after the repository write.
-
-The design needs a cycle-free contract such as:
+**Required correction:** make the writer accept the pre-storage values:
 
 ```go
-mutate(ctx, command, envelopeIntent) (*MutationDelta, error)
+WriteIntent(ctx, intent, delta) (*wmodel.Envelope, error)
 ```
 
-where `envelopeIntent` excludes the manifest and the executor constructs the final persisted envelope after the write. Storage and relay should communicate through an interface owned by the consumer package, injected by setup.
+The Postgres implementation should allocate epoch/position, finalize, persist, and return the finalized envelope. Alternatively split `FinalizeManifest` from storage stamping, but assign each field to exactly one owner.
 
-### HIGH — Plan 05-14’s interface redesign misses real adapters and callers
+---
 
-Changing `CharacterRepository.Create` from `error` to `(*MutationDelta, error)` breaks the auth-side repository contract, which requires `Create(...) error` at [character_service.go:17](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/character_service.go:17). The production adapter also assumes one return value at [adapters.go:38](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/bootstrap/setup/adapters.go:38), and it is wired in production at [sub_grpc.go:326](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/cmd/holomush/sub_grpc.go:326).
+### HIGH — The relay interface cannot enforce the dedicated lease connection
 
-Plan 05-14 lists only `internal/world`, postgres implementations, and worldtest mocks. It omits at least the bootstrap adapter and any affected narrow interfaces/tests. This will not compile as an atomic wave-1 change.
+The proposed consumer-owned interface is:
 
-Prefer separate read/write interfaces or an adapter method that discards the delta, and enumerate all compile-time assertions before execution.
+```go
+NextUnpublished(ctx, gameID)
+MarkPublished(ctx, eventID)
+Prune(...)
+Skip(...)
+CurrentEpoch(...)
+```
 
-### HIGH — The completed write fence remains bypassable
+Yet the plan requires every operation to run through the particular dedicated connection holding the advisory lock. None of these methods receives a lease/connection handle or fencing token. See `.planning/.../05-07-PLAN.md:118-131`.
 
-Changing `world.Service` fields to reader interfaces prevents direct writes only inside that struct. It does not prevent other production code from constructing and invoking exported postgres repositories.
+The real database provider currently exposes a general pool (`internal/world/setup/subsystem.go:20-23`), and the event bus exposes NATS independently. Merely injecting a Postgres store does not prove that its methods use the relay’s lock-holding connection.
 
-The largest concrete hole is `PropertyRepository`: it publicly exposes writes ([property.go:32](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/property.go:32)), and Create/Update bypass ambient transactions today. Plan 05-11 merely says to “confirm” those writes remain in postgres; it neither routes them through `mutate` nor removes their public write capability.
+A process-local “generation” also cannot prevent an old holder from issuing a NATS publish after PostgreSQL has released its session lock. It can reject a later database acknowledgement, but the external publish may already have happened.
 
-The SQL fence also allowlists all of `internal/world/postgres`, so it cannot distinguish an approved mutation-executor call from an arbitrary direct repository call.
+**Required correction:** introduce an explicit leased-session abstraction, for example:
 
-### HIGH — Operator “skip” violates the feed-order invariant
+```go
+type Lease interface {
+    Generation() int64
+    NextUnpublished(ctx context.Context) (...)
+    MarkPublished(ctx context.Context, eventID ulid.ULID, generation int64) error
+    Prune(ctx context.Context, generation int64) error
+}
+type OutboxStore interface {
+    AcquireLease(ctx context.Context, gameID string) (Lease, error)
+}
+```
 
-Plan 05-07 says a poison row is marked `published_at` without publication and the relay resumes at the next position. That creates a missing `feed_position` on the wire, directly contradicting the same plan’s “gap-free” guarantee and `INV-WORLD-3`.
+Be precise that JetStream delivery remains at-least-once. A PostgreSQL lease cannot guarantee that duplicate publishes never occur across the external NATS boundary; stable `Nats-Msg-Id` and consumer idempotency are the correctness mechanism.
 
-Recovery must either:
+---
 
-- remain halted until the original envelope can be published, or
-- publish an explicit operator-authorized poison/skip marker at the same feed position before advancing.
+### HIGH — Skip ownership is contradictory and the CLI cannot publish the marker
 
-Simply marking the row published is not compatible with gap-free delivery.
+The plan puts `Skip` on the Postgres-backed `OutboxStore`, but also requires `Skip` to publish a NATS marker. Then the CLI is described as opening only a DB connection, constructing the Postgres store, and calling `Skip`:
 
-### HIGH — CreateCharacter and epoch/reset are not wired end-to-end
+- `.planning/.../05-07-PLAN.md:118-120`
+- `.planning/.../05-07-PLAN.md:193-210`
 
-`CoreServer` dependencies live in [server.go:152](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/grpc/server.go:152), while gRPC production options are assembled in [sub_grpc.go:477](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/cmd/holomush/sub_grpc.go:477). Plan 05-11 lists neither file and defines no outbox-writer field/option/provider. Editing only `auth_handlers.go` cannot obtain the store needed for same-transaction emission.
+A Postgres store behind the stated interface has no publisher. Giving it one would mix relay behavior into persistence and undermine the declared ownership split.
 
-Likewise, migration 000050 defines no epoch column or epoch table, yet 05-11 promises to “advance the feed epoch.” No migration or postgres-store task supplies persistent epoch state.
+**Required correction:** make skip a relay/admin service operation that owns both dependencies:
 
-### MEDIUM — Advisory-lock fencing overstates its guarantee
+1. Acquire the same fenced lease.
+2. Read and validate the halted row.
+3. Publish a same-position marker through JetStream.
+4. After PubAck, mark the poison row resolved through the leased store.
+5. Resume only after the acknowledgement succeeds.
 
-A session advisory lock on a dedicated PostgreSQL connection prevents two healthy lock holders. It does not by itself fence an old process from publishing to NATS after PostgreSQL has released its session lock but before the process observes the loss. “Re-acquire on observed connection loss” handles graceful detection, not every partition/timeout handoff.
+The CLI must construct or call that service with both DB and EventBus configuration, not call the raw store.
 
-At minimum, require every fetch/claim to occur through the lease connection and document at-least-once duplicate behavior during ambiguous handoff. If “split-brain publish impossible” is truly required, introduce a fencing generation that the publishing/acknowledgment protocol actually checks.
+---
 
-### MEDIUM — SQL fence coverage omits `entity_properties`
+### HIGH — Wave-1 interface blast radius is incomplete
 
-The 05-09 fence enumerates seven tables but excludes `entity_properties`, whose raw writes are visible at [property_repo.go:60](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/property_repo.go:60). That omission weakens both the property rollout and `INV-WORLD-4`.
+05-14 claims every caller is enumerated, but changing all repository writes from `error` to `(*MutationDelta, error)` and adding version arguments affects far more files than listed.
 
-### MEDIUM — Counter timeout hardening is asserted but unassigned
+Examples:
 
-No 05-05 or 05-06 task specifies `lock_timeout`, `statement_timeout`, a bounded context, expected error code, or timeout test. The operational resolution therefore remains prose-only.
+- Integration harness direct location create: `internal/testsupport/integrationtest/harness.go:899-913`
+- Harness direct character creates: `internal/testsupport/integrationtest/harness.go:1105-1112`, `:1191`
+- Harness auth adapter returning the old result directly: `internal/testsupport/integrationtest/harness.go:1366-1375`
+- Integration object calls using one return value and old Move arity: `test/integration/world/object_repo_test.go:38-39`, `:64-67`
+- Character repository tests using old Create/Delete signatures: `internal/world/postgres/character_repo_test.go:250-271`
+- Similar direct calls exist throughout `test/integration/world/exit_repo_test.go:30-40` and `test/integration/world/scene_repo_test.go:28-37`.
 
-### MEDIUM — Invariant bindings are not all durable regression gates
+05-14’s `files_modified` and action inventory do not include these files, while its verification runs integration compilation.
 
-`INV-WORLD-1` is assigned to the opt-in resilience suite rather than the always-run outbox transaction test. A syntactically bound invariant can therefore remain unexecuted in normal CI.
+**Required correction:** generate a complete mechanical caller inventory and explicitly include:
 
-The delta-parity task also says a normal `task test` file will “commit a mutation” and compare actual rows. If it genuinely uses PostgreSQL, it belongs in the integration lane; if it is a pure mapper test, it does not alone prove committed-row parity.
+- `internal/testsupport/integrationtest/harness.go`
+- `test/integration/world/**`
+- All `internal/world/postgres/*_test.go`
+- All world service tests and mock expectations
+- Any production adapters returning repository errors directly
 
-### MEDIUM — The structural census discovery rule is undefined
+A compatibility bridge for setup/test fixtures may reduce the wave size, but the current “atomic wave” claim does not hold.
 
-Parsing method declarations with `go/ast` does not inherently reveal whether a method mutates state. Detecting existing calls to `mutate` misses the exact failure case: a newly added direct write without `mutate`. Name-prefix classification is brittle and not stated.
+---
 
-The census needs an explicit structural marker or closed command interface whose membership is mechanically discoverable.
+### HIGH — The writer fence misses production character writers
 
-## 5. Suggestions
+The proposed boundary protects `world.Service` by giving it reader views, but concrete Postgres repositories remain public and callable. The current code has multiple production character creation paths outside `world.Service`:
 
-1. Revise the package boundaries before implementation:
-   - Put `MutationDelta`, envelope intent, and affected-aggregate value types in a cycle-neutral package.
-   - Let the executor finalize the envelope after receiving the delta.
-   - Inject a narrow outbox-store interface into the relay; do not import postgres from outbox.
+- Guest creation writes a character directly inside its transaction: `internal/auth/guest_service.go:32-35`, `:134-146`.
+- Bootstrap admin creation calls `CharService.Create` directly: `internal/bootstrap/admin.go:85-98`.
+- `CharRepoAdapter` delegates directly to the concrete Postgres repository: `internal/bootstrap/setup/adapters.go:25-43`.
 
-2. Split broad repository interfaces into reader and writer interfaces without changing unrelated auth-facing method signatures. Add adapters where a caller legitimately does not need the delta.
+05-11 only treats the gRPC `CreateCharacter` handler as the sanctioned out-of-world writer. Therefore guest creation and initial-admin creation would commit character rows without genesis envelopes.
 
-3. Make the writer executor the only production owner of writer repositories. Expose reader-only constructors/providers elsewhere, and either envelop `PropertyRepository` writes or explicitly remove them from production mutation surfaces.
+The AST SQL fence cannot catch these calls: the SQL remains inside `internal/world/postgres`, which is allowlisted. Reader views also do not help because these paths intentionally hold a concrete writer repository.
 
-4. Replace poison “skip” with same-position recovery-marker publication, or delete skip support and retain strict halt-until-repaired semantics.
+This contradicts “exactly one semantic envelope per successful externally-visible command” and makes INV-WORLD-4 false.
 
-5. Add persistent epoch schema/store work to migration 000050 or a new paired migration, and add the missing `CoreServer`/`sub_grpc.go` outbox dependency wiring.
+**Required correction:** route all production character creation through one atomic application service that owns character insert, binding, and outbox genesis. At minimum cover:
 
-6. Add `entity_properties` to the SQL fence and define timeout mechanics and tests in 05-05.
+- Registered character creation
+- Guest character creation
+- Bootstrap-admin character creation
 
-7. Bind `INV-WORLD-1` to the always-run transaction rollback test; retain the chaos test as supplemental evidence.
+Then constrain concrete writer construction to composition/test packages or require an intent on the repository write API itself.
 
-8. Define the census around an explicit command declaration/registration construct rather than inference from method names or already-correct calls.
+---
 
-## 6. Risk Assessment
+### MEDIUM — INV-WORLD-1’s planned binding does not prove state-plus-envelope atomicity
+
+05-05’s specified test opens a transaction, writes an envelope, rolls back, and verifies no outbox row survives. That only proves the outbox insert honors the ambient transaction; it does not prove a world row and envelope commit or roll back together. See `.planning/.../05-05-PLAN.md:145-152`.
+
+05-12 then binds `INV-WORLD-1` to that test.
+
+**Required correction:** the always-run test must perform both operations in one transaction:
+
+- Mutate an actual world row.
+- Write its envelope.
+- Force rollback and verify neither survives.
+- Commit another case and verify both survive.
+- Include a forced outbox failure after the state write and prove the state rolls back.
+
+---
+
+### MEDIUM — The import-graph guard is incomplete
+
+The declared final graph says:
+
+- `wmodel` imports none of `world`, `postgres`, or `outbox`.
+- `outbox` imports only `wmodel` among these packages.
+
+But the meta-test only forbids:
+
+- `world → outbox/postgres`
+- `outbox → postgres`
+- `postgres → outbox`
+
+See `.planning/.../05-07-PLAN.md:203-210`.
+
+It does not reject:
+
+- `wmodel → world`
+- `wmodel → postgres`
+- `wmodel → outbox`
+- `outbox → world`
+
+The first would immediately recreate a cycle because `world → wmodel`.
+
+**Required correction:** assert the full adjacency matrix promised by the design, not only three forbidden edges. Also test production imports, excluding `_test.go` imports that may legitimately use concrete fixtures.
+
+---
+
+### MEDIUM — Genesis idempotency lacks a schema-level mechanism
+
+Migration 000050 only specifies uniqueness on `event_id` and `(game_id, epoch, feed_position)`. Genesis events use fresh event ULIDs. Therefore rerunning genesis naturally produces different event IDs and positions.
+
+05-11 nevertheless requires genesis to be idempotent without defining a uniqueness key or checkpoint.
+
+**Required correction:** add a durable genesis identity, such as:
+
+- Unique `(game_id, epoch, kind, primary_aggregate_type, primary_aggregate_id, genesis=true)`, or
+- A dedicated genesis checkpoint table keyed by game/epoch/aggregate, inserted atomically with the envelope.
+
+A pre-insert existence query alone is race-prone.
+
+---
+
+### MEDIUM — Census completeness is overstated
+
+An explicit descriptor set is better than method-name inference. However, the census only covers the declared executor set plus the one manually added CreateCharacter descriptor. It cannot discover guest/bootstrap direct repository calls, and an AST comparison cannot reliably infer which arbitrary methods mutate state.
+
+The current production bypasses demonstrate the gap:
+
+- `internal/auth/guest_service.go:140`
+- `internal/bootstrap/admin.go:91`
+- `internal/bootstrap/setup/adapters.go:38-40`
+
+The census can prove consistency within the registry, but not completeness of all production world writes.
+
+**Required correction:** pair the descriptor bijection with a call-graph/import restriction forbidding production packages from invoking concrete world writer methods except approved atomic application services.
+
+## 5) Suggestions
+
+1. Revise `OutboxWriter` to own allocation and finalization from `(intent, delta)`.
+2. Add a consumer-owned `Lease` abstraction that binds all relay DB operations to one acquired session.
+3. Move operator skip into a service that owns both the leased store and JetStream publisher.
+4. Extend 05-14’s file inventory from a generated repo-wide caller scan.
+5. Centralize all character creation paths behind one atomic genesis-emitting service.
+6. Bind INV-WORLD-1 to a test that changes a real world row and writes an envelope.
+7. Expand the import guard to include every promised `wmodel` and `outbox` edge.
+8. Add a schema-backed genesis idempotency key/checkpoint.
+
+## 6) Risk Assessment
 
 **HIGH.**
 
-The remaining defects are architectural and compile-time, not polish issues. As written, implementation is likely to encounter import cycles, incomplete interface migrations, missing production dependency wiring, and a relay recovery path that violates its own ordering invariant. The transaction, parser, subsystem-count, documentation, and test-harness revisions are strong, but the package/executor/relay seams need one more planning revision before execution.
+The architecture is close, and the package-cycle redesign itself is salvageable. But the remaining issues affect compilation, transactional atomicity, relay ownership, split-brain semantics, and full emission coverage. Execution should pause for a fourth revision focused narrowly on these contracts.
 
 ---
 
-## Antigravity Review (round 2)
+## Antigravity Review (round 3)
 
-> Recovered from agy's brain disk (stdout carried only a summary). This round agy operated on the
-> real working tree and confirmed all 10 checked round-1 resolutions hold, then surfaced 5 residual
-> issues — all grounded in `file:line`. Reliable this round.
+> **FALSE-GREEN caveat (orchestrator):** agy verified the 7 listed round-2 resolutions as all-HOLDS and
+> declared the plans "execution-ready — no residual issues." But it only checked the write paths the plans
+> already named; it did NOT find the guest-service and bootstrap-admin character-creation bypasses Codex
+> cites (`guest_service.go:32-35/134-146`, `bootstrap/admin.go:85-98`), which commit characters without a
+> genesis envelope. So agy's completeness claim is unreliable this round — treat its "execution-ready"
+> verdict as NOT authoritative. (Its per-resolution verifications, where they overlap Codex's confirmed
+> items, are consistent.) Output below is agy's stdout (includes its exploration trace before the verdict).
 
-# HoloMUSH Phase 5 Plan Review (Round 2) — Verification & Audit Report
+I will list the files in `/Users/sean/.gemini/antigravity-cli/scratch` or the current project directory if there is one. Let's start by listing the root directory or searching for world-related Go files.
+I will list the contents of the App Data Directory to check if there is an active project or metadata.
+I will list the current permissions to see what directories or commands we are allowed to access.
+I will run a command to find any HoloMUSH-related repositories or directories on the system.
+I will wait for the search command to complete and check the output.
+I will list all running background tasks to see if the search has completed or is still active.
+I will check the status of the search task.
+I will view the log file of the background search task to check if it has found any directories.
+I will run a command to list directories in `/Volumes/Code/github.com/holomush` or check if `/Volumes/Code/github.com/holomush/holomush` exists.
+I will run a command to list the contents of the `holomush` directory and check for `.codegraph`.
+I will check the files inside the `.planning` directory in the `holomush` repository.
+I will check if there is a directory for Phase 5 under `.planning/phases/`.
+I will list all files/directories under `.planning/phases/` to see if phase 5 is there under a different name.
+I will run a command to check what worktrees exist under `/Volumes/Code/github.com/holomush` and look for the phase 5 active branch/worktree.
+I will run a command to check the git status of the phase-05 worktree.
+I will search for the Phase 5 plans in the phase-05 worktree.
+I will list all files in the Phase 5 planning directory to understand the plans and the context.
+I will read the reviews file in the phase 5 directory to see the previous feedback.
+I will search for `MutationDelta` in the `v0.12-phase5` worktree directory to see if it is already implemented or if we are reviewing the plan versus the current un-migrated codebase.
+I will list all git branches in the repository to see if there is a branch containing the implementation of Phase 5.
+I will run git log on the active worktree to see the recent commits.
+I will list the packages under `internal/` in the worktree to understand the existing package structure.
+I will check if there are any current imports of `postgres` inside the `internal/world` package.
+I will read the contents of `internal/world/setup/subsystem.go` to see what packages it currently imports.
+I will search for the definition of the `CharacterRepository` interface to check its `Create` method signature.
+I will inspect `internal/auth/character_service.go` to see the exact signature of `CharacterRepository` used by the auth service.
+I will view `internal/world/repository.go` around line 143 to see its definition of `CharacterRepository`.
+I will view `internal/bootstrap/setup/adapters.go` to see the CharRepoAdapter and other repository adapters.
+I will check if the plan covers the changes in `adapters.go` and `CharRepoAdapter.Create`.
+I will check `internal/testsupport/integrationtest/plugins.go` for references to `ServiceConfig` to see how the world service is constructed in integration tests.
+I will view `internal/testsupport/integrationtest/plugins.go` around line 267 to verify that all repository fields and wiring are accounted for.
+I will search for `.Create(`, `.Update(`, `.Delete(`, `.Move(`, `.UpdateLocation(` calls in `internal/world/service.go` to see the compile-time blast radius.
+I will run a search to see if any files outside of `service.go` call `.Create`, `.Update`, `.Delete` on world repositories.
+I will search for occurrences of these repository operations in test files to see if any tests need updates.
+I will check `internal/world/postgres/property_repo.go` at lines 60 and 136 to verify if they write directly using `pool` instead of `execerFromCtx`.
+I will search in the Phase 5 plans for references to `entity_properties` to see if it was added to the SQL fence.
+I will run a search in `property_repo.go` for occurrences of `pool` or database mutation calls to ensure no write methods were missed.
+I will view `internal/world/repository.go` at lines 110-125 and lines 155-170 to check the signatures of `Move` and `UpdateLocation`.
+I will check `.golangci.yaml` to see if there is an existing `depguard` configuration or if it's already in use.
+I will view more of the `.golangci.yaml` depguard settings to see if there are other import rules.
+I will search for the definition of `CoreServer` to check its dependency fields.
+I will view the definition of `CoreServer` in `internal/grpc/server.go`.
+I will search for `CreateCharacter` in `internal/grpc/auth_handlers.go` to see the registration/binding flow for characters.
+I will view `CreateCharacter` in `internal/grpc/auth_handlers.go`.
+I will view lines 526 to 555 in `internal/grpc/auth_handlers.go` to see the atomic transaction block of `createCharacterAtomic`.
+I will view `cmd/holomush/sub_grpc.go` around line 477 to see the production gRPC server construction.
+I will search for `census` or `writeCommands` in the Phase 5 plans to see how the census meta-test is specified.
+I will view `internal/world/postgres/binding_repo.go` to see if it mutates database tables and should be covered.
+I will find the table name for player-character bindings in the baseline schema.
+I will search for the word `binding` in the baseline migration to see if there is a binding table.
+I will list the migration files in the store directory to see where the bindings table was created.
+I will view the bindings migration to see the table name.
+I will run a search to see where `player_character_bindings` is referenced or written to in the codebase.
+I will locate `productionSubsystems` in `cmd/holomush/core.go` to confirm the wiring locations.
+I will view `cmd/holomush/core.go` around line 1445 to see the current list of production subsystems.
+I will view `cmd/holomush/core_subsystems_test.go` to see the count and ordering assertions for subsystems.
+I will view the `internal/world/mutator.go` file to see the current implementation of `Mutator`.
+I will run a search to see if any tests under `internal/world` currently import `internal/world/postgres`.
+I will view `internal/property/entity_mutator.go` to check how it performs writes to properties and parent aggregates.
+I will view the next lines of `internal/property/entity_mutator.go` to inspect the `WorldMutator` interface and its usages.
+I will view the rest of the `internal/property/entity_mutator.go` file.
+I will search for the definition of the `WorldMutator` and `WorldQuerier` interfaces to see how they are defined.
+I will view `internal/property/registry.go` around line 49 to see the `WorldMutator` interface definition.
+I will search for `examine` subscriptions or event routing in the `plugins` and `web` directories to verify if examine events can be safely deleted or if they need fallback handling.
+I will run a search for `object_examine` in the plugins directory to check if any script listens to or consumes these events.
+# HoloMUSH Phase 5 Plan Review (Round 3) — Verification Report
 
-This report provides the round-2 verification of the 14 revised implementation plans for **HoloMUSH Phase 5: World-Model Integrity Fixes (M2 / M12)**. The review has been conducted against the active codebase located at `/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5`.
+I have verified the revised Round-2 resolutions against the active HoloMUSH codebase in the `/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5` worktree. The seam redesign holds completely, the package boundaries are acyclic, and the planning is execution-ready.
 
----
-
-## 1. Executive Summary
-
-The round-2 review confirms that the revised plans successfully incorporate the structural feedback from the round-1 review. The transaction boundaries are properly aligned, package boundary violations have been corrected, event-sourcing claims have been downgraded while preserving client catch-up functionality, and the invariant bindings are structurally sound.
-
-However, a detailed analysis of the interfaces and seams has surfaced **five residual issues** that must be addressed in the plans before proceeding to execution. The most critical is the transaction leak in `PropertyRepository` and the missing `expectedVersion` parameter in `Move` / `UpdateLocation` repository signatures.
-
----
-
-## 2. Verification of Round-1 Resolutions
-
-Each of the round-1 resolutions has been checked against both the revised plans and the actual codebase:
-
-### 1. Re-entrancy & Self-transacting Repositories
-*   **Status**: **Verified Sound**
-*   **Reference Plans**: [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md)
-*   **Findings**: The plan to make `Transactor.InTransaction` and its internal `withTx` helper re-entrant is structurally correct. It checks `txFromContext(ctx) != nil` to join the ambient transaction rather than opening nested transactions. The self-transacting repository methods in [exit_repo.go](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/exit_repo.go#L60) and [object_repo.go](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/object_repo.go#L172) are correctly targeted to use the ambient transaction via `execerFromCtx(ctx, r.pool)`.
-
-### 2. Package Placement
-*   **Status**: **Verified Sound**
-*   **Reference Plans**: [05-05-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-05-PLAN.md), [05-07-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-07-PLAN.md)
-*   **Findings**: The package boundaries have been cleaned up. All SQL logic (including outbox writes, feed counter updates, and relay reads/writes) is placed inside `internal/world/postgres`. The `internal/world/outbox` package is strictly limited to domain types (like `Envelope`) and the logical publisher loop, resolving the package visibility conflict for `execerFromCtx`.
-
-### 3. Write Fence Rollout
-*   **Status**: **Verified Sound**
-*   **Reference Plans**: [05-06-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-06-PLAN.md), [05-11-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-11-PLAN.md)
-*   **Findings**: The transition plan is safe. [05-06-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-06-PLAN.md) opens the `mutate` seam and migrates only `MoveCharacter`. [05-11-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-11-PLAN.md) migrates the remaining commands and completes the compile-time fence by swapping `world.Service` repository fields to read-only views (`LocationReader`, etc.). This avoids intermediate build failures during the rollout.
-
-### 4. Invariant ID Syntax
-*   **Status**: **Verified Sound**
-*   **Reference Plans**: [05-12-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-12-PLAN.md)
-*   **Findings**: The plans successfully adopt the numeric invariant IDs `INV-WORLD-1` through `INV-WORLD-4` to match the parser regex `INV-[A-Z]+-\d+` in [invariant_registry_test.go:163](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/test/meta/invariant_registry_test.go#L163). The symbolic names (such as `ATOMIC-FEED`) are correctly downgraded to the summary/legacy metadata.
-
-### 5. AST-based SQL Fence
-*   **Status**: **Verified Sound**
-*   **Reference Plans**: [05-09-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-09-PLAN.md)
-*   **Findings**: The AST/token-based parser meta-test in `test/meta/world_sql_fence_test.go` is implementable and replaces the package-level `depguard` package matching. It walks the AST, inspects string literals for mutation keywords (`INSERT`, `UPDATE`, `DELETE`) targeting world tables, and allowlists `internal/world/postgres`.
-
-### 6. Relay Lease & Wakeup Mechanics
-*   **Status**: **Verified Sound**
-*   **Reference Plans**: [05-07-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-07-PLAN.md)
-*   **Findings**: The lease is now explicitly bound to a session-level PostgreSQL advisory lock on a dedicated connection. Wakeup is driven transactionally by `pg_notify` within the database transaction, backed by a periodic sweep fallback. The composition wiring in `cmd/holomush/core.go` and the `productionSubsystems` stub count cascade (from 15 to 16) are correctly updated.
-
-### 7. Delete-CAS Mechanics
-*   **Status**: **Verified Sound**
-*   **Reference Plans**: [05-02-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-02-PLAN.md), [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md)
-*   **Findings**: Delete signatures now accept `expectedVersion`. The repositories use a prior in-transaction read (`SELECT FOR UPDATE`) to distinguish between a row that never existed (returning `LOCATION_NOT_FOUND`, etc.) and a row that was concurrently deleted by another transaction (returning `WORLD_CONCURRENT_EDIT`).
-
-### 8. MutationDelta Propagation
-*   **Status**: **Verified Sound**
-*   **Reference Plans**: [05-10-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-10-PLAN.md), [05-11-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-11-PLAN.md), [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md)
-*   **Findings**: The `MutationDelta` returned from repo writes carries cascade IDs (like the reverse exit ID) and aggregate version transitions. This delta is correctly threaded to the outbox manifest builder inside `mutate()`, ensuring the outbox manifest is constructed from database facts rather than command inputs.
-
----
-
-## 3. Newly Discovered Residual Issues & Seams
-
-During this second-round verification, **five residual issues** have been identified. They must be resolved in the plans before execution:
-
-### ⚠️ Issue 1: PropertyRepository Transaction Leak
-*   **Location**: [property_repo.go:60](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/property_repo.go#L60) & [property_repo.go:136](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/property_repo.go#L136)
-*   **Impact**: High
-*   **Description**: While `PropertyRepository.Delete` and `DeleteByParent` use `execerFromCtx`, the `Create` and `Update` methods write directly using `r.pool.Exec` on the connection pool. Because these write methods escape the transaction context, property modifications during parental operations (such as character deletions or entity updates funneled through `world.Service`) will execute on separate connection sessions. This breaks atomicity and introduces database lock contention / deadlocks.
-*   **Required Fix**: Refactor `PropertyRepository.Create` and `PropertyRepository.Update` in [property_repo.go](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/property_repo.go) to use `execerFromCtx(ctx, r.pool)`. Update [05-11-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-11-PLAN.md) and [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md) to explicitly include these methods in the `execerFromCtx` refactor task.
-
-### ⚠️ Issue 2: Missing `expectedVersion` in `Move` / `UpdateLocation` Repo Signatures
-*   **Location**: [repository.go:118](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go#L118) & [repository.go:161](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go#L161)
-*   **Impact**: High
-*   **Description**: In [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md), the repository interfaces are updated to return `(*MutationDelta, error)`. However, the signatures for Object `Move` and Character `UpdateLocation` do not accept an `expectedVersion` parameter. Since these methods do not receive a struct containing a version field (unlike `Create`/`Update`), they cannot enforce optimistic concurrency checks (LWW / CAS) against the version read at the beginning of the command.
-*   **Required Fix**: Update [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md) and the corresponding repository files to include `expectedVersion int` in the `ObjectRepository.Move` and `CharacterRepository.UpdateLocation` signatures. The calling commands in `service.go` must pass the version read during the initial `Get` query.
-
-### ⚠️ Issue 3: SQL Fence Gap for `entity_properties`
-*   **Location**: [world_sql_fence_test.go](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/test/meta/world_sql_fence_test.go) (planned in 05-09)
-*   **Impact**: Medium
-*   **Description**: The AST/token-based SQL fence test introduced in [05-09-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-09-PLAN.md) checks for mutation SQL (`INSERT`, `UPDATE`, `DELETE`) targeting only `locations`, `exits`, `characters`, `objects`, `scene_participants`, `outbox`, and `world_feed_counter`. It does not include the `entity_properties` table. Consequently, a developer could bypass the repositories and write raw SQL mutations directly targeting entity properties outside of the `internal/world/postgres` package.
-*   **Required Fix**: Include `entity_properties` in the list of fenced tables inside `test/meta/world_sql_fence_test.go` and update the requirements in [05-09-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-09-PLAN.md).
-
-### ⚠️ Issue 4: Lack of Caller/Trigger for Relay Skip Affordance
-*   **Location**: [relay.go](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/outbox/relay.go) (planned in 05-07)
-*   **Impact**: Low/Medium
-*   **Description**: Although [05-07-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-07-PLAN.md) implements the database logic for skipping poison outbox positions, there is no command-line tool, gRPC administrative endpoint, or in-game command wired to invoke this method. As a result, when the relay halts due to a poison envelope, operators will still have to execute raw SQL updates against the `outbox` table to clear the halt, defeating the "clear the blockage without raw SQL" objective.
-*   **Required Fix**: Define an administrative command (e.g., in the `holomush` or `agy` CLI tools) that exposes this skip method, allowing operators to skip a specific position safely.
-
-### ⚠️ Issue 5: Relay Query Connection Fencing
-*   **Location**: [outbox_store.go](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/outbox_store.go) (planned in 05-07)
-*   **Impact**: High (Split-Brain Risk)
-*   **Description**: The relay uses the outbox store to fetch unpublished rows and mark them published. If the outbox store executes these queries on the general connection pool (`r.pool`) rather than the dedicated connection holding the advisory lock lease, a network partition that drops the dedicated lease connection might go unnoticed by the query runner. The partitioned instance could continue to fetch and publish events via the pool before realizing it has lost its lease, leading to a split-brain double-publish.
-*   **Required Fix**: Ensure the outbox store methods called by the relay are executed strictly on the same dedicated connection that holds the advisory lock, or tightly check lease validity inside the transaction block executing the queries. Update [05-07-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-07-PLAN.md) to explicitly require this connection routing.
+Here is the status of the Round-2 resolutions:
 
 ---
 
-## 4. Conclusion & Action Items
+## Verification of Round-2 Resolutions
 
-All 10 structural resolutions checked from Round 1 hold successfully. To achieve absolute integrity and compiler/concurrency safety, the implementation plan waves should be adjusted to incorporate the five residual fixes:
-1. Include `PropertyRepository.Create`/`Update` in the `execerFromCtx` refactor of [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md) and [05-11-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-11-PLAN.md).
-2. Add `expectedVersion int` parameters to `ObjectRepository.Move` and `CharacterRepository.UpdateLocation` signatures in [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md).
-3. Include `entity_properties` in the AST SQL fence of [05-09-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-09-PLAN.md).
-4. Wire the outbox skip method to an admin CLI or endpoint in [05-07-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-07-PLAN.md).
-5. Require the relay's DB methods to run on the dedicated lease connection in [05-07-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-07-PLAN.md).
+### 1. CYCLE-FREE SEAM
+* **Status**: **HOLDS**
+* **Verification & Rationale**: The new leaf package `internal/world/wmodel` effectively isolates the common mutation and envelope value types (`MutationDelta`, `AffectedAggregate`, `EnvelopeIntent`, `Envelope`). It imports no packages from `world`, `postgres`, or `outbox`. `internal/world` and `internal/world/outbox` import only `wmodel`, making them entirely decoupled from each other and `postgres`. `internal/world/postgres` implements `world.OutboxWriter` and `outbox.OutboxStore` without circularity by implementing interfaces declared by their consumers. The envelope is finalized after the repository write from the returned `MutationDelta` payload, resolving the temporal dependency.
+* **Citations**: 
+  - `internal/world/setup/subsystem.go:15-17` (existing setup imports both `world` and `world/postgres`)
+  - `internal/world/mutator.go` (where the `OutboxWriter` interface and `mutate()` executor will be declared)
+  - `test/meta/world_import_graph_test.go` (planned import graph validation test in plan `05-07-PLAN.md`)
+
+### 2. INTERFACE BLAST RADIUS
+* **Status**: **HOLDS**
+* **Verification & Rationale**: The auth-side `auth.CharacterRepository` interface remains unchanged at `character_service.go:17` as `Create(ctx, *world.Character) error`. The production adapter `CharRepoAdapter.Create` at `adapters.go:38` absorbs the change by discarding the new repository return value (`_, err := a.charRepo.Create(...)`). All other repository write invocations in `internal/world/service.go` and test constructs are fully enumerated and updated in plan `05-14-PLAN.md`.
+* **Citations**:
+  - [internal/auth/character_service.go:17](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/character_service.go#L17) (`CharacterRepository` narrow interface)
+  - [internal/bootstrap/setup/adapters.go:38](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/bootstrap/setup/adapters.go#L38) (`CharRepoAdapter.Create` delta discard)
+  - [internal/testsupport/integrationtest/plugins.go:286](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/testsupport/integrationtest/plugins.go#L286) (wiring adapter)
+  - `internal/world/service.go:222, 244, 276` (all Service-side repository write calls to update return signatures)
+
+### 3. PROPERTY + MOVE CAS
+* **Status**: **HOLDS**
+* **Verification & Rationale**: The property creation and update transaction leaks in `PropertyRepository` are resolved by replacing raw connection pool writes with transaction-enrolled `execerFromCtx(ctx, r.pool)` queries in plan `05-14-PLAN.md`. The `entity_properties` table has been successfully added to the SQL fence in `05-09-PLAN.md`. The `ObjectRepository.Move` and `CharacterRepository.UpdateLocation` signatures are updated in `repository.go:118` and `161` to accept `expectedVersion`, which is threaded directly from the initial entity read in `service.go`.
+* **Citations**:
+  - [internal/world/postgres/property_repo.go:60](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/property_repo.go#L60) (`PropertyRepository.Create` transaction leak to fix)
+  - [internal/world/postgres/property_repo.go:136](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/property_repo.go#L136) (`PropertyRepository.Update` transaction leak to fix)
+  - [internal/world/repository.go:118](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go#L118) (`ObjectRepository.Move` signature)
+  - [internal/world/repository.go:161](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go#L161) (`CharacterRepository.UpdateLocation` signature)
+
+### 4. WRITE FENCE
+* **Status**: **HOLDS**
+* **Verification & Rationale**: Swapping the `world.Service` repository fields to read-only views prevents direct writes inside the service layer. The AST token fence in `test/meta/world_sql_fence_test.go` acts as the mechanical backstop by verifying that raw SQL writes are confined strictly to `internal/world/postgres`. This creates a structurally sound and compile-time/static-checked write fence boundary (`INV-WORLD-4`).
+* **Citations**:
+  - `internal/world/service.go:45` (Service fields)
+  - `test/meta/world_sql_fence_test.go` (planned AST fence)
+
+### 5. RELAY
+* **Status**: **HOLDS**
+* **Verification & Rationale**: The relay skip recovery publishes an operator-authorized marker message to JetStream at the skipped sequence position, ensuring the feed remains sequential and gap-free (`INV-WORLD-3`). Database queries for the relay run entirely over the dedicated connection holding the session-level advisory lock, and a fencing generation is verified during JetStream PubAck to prevent network partition split-brain publishes. The skip CLI subcommand is wired in `cmd/holomush/outbox_admin.go`.
+* **Citations**:
+  - `internal/world/outbox/relay.go` (leased relay loop)
+  - `cmd/holomush/outbox_admin.go` (planned skip CLI command)
+
+### 6. CREATECHARACTER + EPOCH
+* **Status**: **HOLDS**
+* **Verification & Rationale**: `OutboxWriter` is threaded through `CoreServer` at `server.go:152` and instantiated through `WithOutboxWriter` in `sub_grpc.go:477`, enabling the registration-flow `createCharacterAtomic` wrapper to write its genesis snapshot in the same transaction. The `epoch` column is correctly added to `outbox` and `world_feed_counter` in migration `000050`, with a corresponding store implementation in postgres.
+* **Citations**:
+  - [internal/grpc/server.go:152](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/grpc/server.go#L152) (`CoreServer` struct)
+  - [internal/grpc/auth_handlers.go:521](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/grpc/auth_handlers.go#L521) (`createCharacterAtomic` fallback)
+  - [cmd/holomush/sub_grpc.go:477](file:///Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/cmd/holomush/sub_grpc.go#L477) (wiring option)
+
+### 7. MEDIUM
+* **Status**: **HOLDS**
+* **Verification & Rationale**: The counter timeout task in `05-05-PLAN.md` implements a concrete `lock_timeout` fallback returning `WORLD_FEED_LOCK_TIMEOUT`. `INV-WORLD-1` (ATOMIC-FEED) is bound to the always-run transaction-rollback integration test in `postgres/outbox_store_test.go`. The structural census meta-test uses AST parsing to assert a bijection over the explicit `writeCommands` descriptor set on the write executor.
+* **Citations**:
+  - `internal/world/postgres/outbox_store_test.go` (planned INV-WORLD-1 rollback test)
+  - `test/meta/world_envelope_census_test.go` (planned census bijection test)
 
 ---
 
-## Consensus Summary (round 2)
+## Summary & Residual Issues
 
-**Net verdict: the round-1 fixes HELD, but the revised set is still NOT execution-ready — both
-reviewers rate it HIGH.** The transaction re-entrancy, numeric invariant IDs, subsystem-count
-cascade, SQL-location rule, doc handling, and rollout-order deviation are all confirmed sound
-against source. The new blockers are seams the round-1 restructure introduced. Recommend one more
-`/gsd-plan-phase 5 --reviews` pass. The loop is converging (round-2 findings are strictly
-downstream of round-1's fixes), not thrashing.
+No new or residual issues were found during this round-3 verification. Deleting the `EmitExamineEvent` post-commit path was verified to be completely safe, as there are no active subscribers to `object_examine` in the plugins or PWA frontend (only registration/declarations exist, which can be safely pruned). 
 
-### Round-1 resolutions that HELD (both reviewers confirmed against source)
+The package graph and interface layout converge completely with the requirements. The plans are **execution-ready**.
 
-Re-entrant `InTransaction`/`withTx` join semantics (only outer commits); numeric `INV-WORLD-1..4`
-bind under the real parser regex `INV-[A-Z]+-\d+` (`invariant_registry_test.go:163`); the AST/token
-SQL fence is implementable (no longer pretends depguard can read SQL); relay composition is grounded
-in the real 15-stub `productionSubsystems` (→16); Delete-CAS `expectedVersion` + prior-in-tx-read
-classification; `MutationDelta` carries cascade/reverse-exit IDs; zero-row classifier reuses the
-ambient `pgx.Tx` + pool-size-1 test; examine-consumer audit; README:22 preserved; rollout-order
-deviation explicit. The self-transacting escape sites (`exit_repo.go:60/178`, `object_repo.go:172`,
-`scene_repo.go:40/57`) are correctly targeted.
+---
 
-### Agreed NEW concerns (both reviewers, HIGH priority)
+## Consensus Summary (round 3)
 
-1. **`PropertyRepository.Create`/`Update` transaction leak** — `property_repo.go:60/136` still write via
-   `r.pool.Exec` directly; the round-1 `execerFromCtx` sweep missed them, and no task converts them.
-   Property mutations funneled through a parent operation (character delete, entity update) escape the
-   mutation transaction → breaks atomicity + risks deadlocks. Add Property Create/Update to the
-   `execerFromCtx` refactor (05-14/05-11).
-2. **SQL fence omits `entity_properties`** — the 05-09 fence lists 7 tables but not `entity_properties`
-   (`property_repo.go:60`), so raw property writes outside the repo package are not caught; weakens
-   INV-WORLD-4. Add it to `world_sql_fence_test.go`.
-3. **Relay must run its DB queries on the dedicated lease connection, not the general pool** — if the
-   outbox store fetch/mark runs on `r.pool` rather than the advisory-lock connection, a partition that
-   drops the lease connection can still double-publish before the process notices (split-brain).
-   Route the relay's store methods through the lease connection (Codex frames this as: advisory lock
-   alone doesn't fence a NATS publish after PG releases the session lock — needs a fencing generation
-   checked in the publish/ack path, or documented at-least-once during ambiguous handoff).
+**Net verdict: NOT execution-ready — HIGH (Codex, source-grounded). Antigravity's "execution-ready" is a
+false green (missed the guest/admin genesis bypasses).** The round-2 cycle-free seam redesign is confirmed
+the right direction ("close," "salvageable"), but four load-bearing residual issues remain, plus four MEDIUM
+refinements. One more targeted `/gsd-plan-phase 5 --reviews` pass is warranted. **The loop is converging** —
+severity has fallen each round (round 1 = mechanism unimplementable → round 2 = import cycles → round 3 =
+contract-ownership precision + two under-modeled write paths). After this incorporation, execution is the
+likely next step.
 
-### Codex-only NEW findings (single reviewer, source-grounded — HIGH)
+### Round-2 fixes CONFIRMED holding (both reviewers)
 
-- **Go import cycles + envelope-before-delta contradiction.** `mutate(..., outbox.Envelope)` in package
-  `world` (`mutator.go:4`) importing `outbox` which maps from `world.MutationDelta` creates
-  `world → outbox → world`; and `outbox → postgres → outbox` (postgres persists `outbox.Envelope`, relay
-  calls the concrete postgres store). Plus a temporal impossibility: the caller must pass a complete
-  envelope into `mutate`, but the manifest can only be built from the delta returned *after* the write.
-  Fix: `mutate(ctx, command, envelopeIntent) (*MutationDelta, error)` — intent excludes the manifest,
-  executor finalizes the envelope post-write; put `MutationDelta`/intent/aggregate types in a
-  cycle-neutral package; inject a narrow outbox-store interface into the relay (don't import postgres
-  from outbox). **This is the biggest new blocker — it's a package/executor seam redesign.**
-- **05-14's interface redesign has a wider compile-time blast radius than listed.** Changing
-  `CharacterRepository.Create` to `(*MutationDelta, error)` breaks the auth-side contract
-  (`internal/auth/character_service.go:17` needs `Create(...) error`), the production adapter
-  (`internal/bootstrap/setup/adapters.go:38`), wired at `cmd/holomush/sub_grpc.go:326`. 05-14 lists only
-  `internal/world` + postgres + worldtest mocks → won't compile as an atomic wave-1 change. Fix: split
-  reader/writer interfaces or an adapter that discards the delta; enumerate ALL compile-time assertions.
-- **The completed write fence is still bypassable.** Reader fields on `world.Service` only stop direct
-  writes *inside that struct*; exported postgres repos (esp. `PropertyRepository`, `property.go:32`)
-  remain constructible and callable elsewhere. The SQL fence allowlists *all* of
-  `internal/world/postgres`, so it can't distinguish an approved executor call from an arbitrary repo
-  call. Make the writer executor the only production owner of writer repos; envelop or remove
-  `PropertyRepository` public writes.
-- **Operator "skip" violates INV-WORLD-3 (feed-order).** Marking a poison row `published_at` without
-  publishing leaves a missing `feed_position` on the wire — the exact gap the invariant forbids. Fix:
-  stay halted until publishable, OR publish an explicit operator-authorized poison/skip marker *at the
-  same position* before advancing. (This directly contradicts the round-1 skip affordance as drawn.)
-- **CreateCharacter + epoch/reset not wired end-to-end.** `CoreServer` deps (`server.go:152`) + gRPC
-  option assembly (`sub_grpc.go:477`) are unlisted in 05-11 and no outbox-writer field/option/provider
-  is defined — editing only `auth_handlers.go` can't obtain the store for same-tx emission. And
-  migration 000050 has no epoch column/table, yet 05-11 promises to "advance the feed epoch" — no
-  migration supplies persistent epoch state.
+Property transaction enrollment (`property_repo.go:60/136` → `execerFromCtx`); move CAS `expectedVersion` on
+`repository.go:118/161`; numeric `INV-WORLD-1..4` bind under the parser (`invariant_registry_test.go:162`);
+`WORLD_FEED_LOCK_TIMEOUT` is now a real task; the same-position skip *marker* is the right correction to the
+round-2 wire-gap; the `wmodel` leaf package is a sound cycle-breaking direction (`world→wmodel`,
+`postgres→world,wmodel`, `outbox→wmodel` can compile acyclic).
 
-### Codex-only MEDIUM
+### Round-3 blockers (Codex, HIGH — all source-grounded)
 
-- Counter timeout hardening asserted but unassigned (no task sets `lock_timeout`/`statement_timeout` or
-  a timeout test). — `INV-WORLD-1` bound only to the opt-in resilience suite (skips unless
-  `HOLOMUSH_RUN_QUARANTINED=1`, `resilience_suite_test.go:46`), so a "bound" invariant isn't
-  continuously exercised; bind it to the always-run outbox transaction-rollback test instead. — Census
-  discovery rule undefined: `go/ast` over method declarations doesn't reveal *mutation*, and detecting
-  existing `mutate` calls misses a *new* direct write; needs an explicit command marker / closed
-  registration construct.
+1. **Envelope epoch/position ownership is temporally inconsistent.** 05-05 has `Finalize(intent, delta, epoch,
+   position)` and says `WriteEnvelope` allocates epoch/position, but 05-06 has the executor finalize the
+   envelope *before* calling the writer that allocates those storage-owned fields — a fully-finalized
+   `Envelope` can't exist pre-write. Fix: `WriteIntent(ctx, intent, delta) (*wmodel.Envelope, error)` — the
+   postgres impl allocates epoch/position, finalizes, persists, returns; assign each field exactly one owner.
+2. **Relay `OutboxStore` can't enforce the dedicated lease connection.** `NextUnpublished`/`MarkPublished`/…
+   take no lease/connection handle or fencing token, and the DB provider exposes only a general pool
+   (`subsystem.go:20-23`); injecting a store doesn't prove its methods run on the lock-holding connection. A
+   process-local generation can't stop an old holder publishing to NATS after PG released the session lock.
+   Fix: an explicit `Lease` abstraction (`AcquireLease(ctx, gameID) → Lease` with `Generation()`), and state
+   plainly that JetStream is at-least-once — `Nats-Msg-Id` + consumer idempotency is the real dedup mechanism,
+   not the PG lease.
+3. **Skip ownership is contradictory; the CLI can't publish the marker.** `Skip` is on the postgres
+   `OutboxStore` yet must publish a NATS marker, and the CLI opens only a DB connection (05-07:118-120,
+   193-210) — a store has no publisher. Fix: skip = a relay/admin *service* owning both the leased store and
+   the JetStream publisher (acquire lease → validate halted row → publish same-position marker → mark resolved
+   → resume); the CLI constructs that service with DB + EventBus config.
+4. **Wave-1 blast radius still incomplete** (round-2 P2 partially missed). Changing repo writes to
+   `(*MutationDelta, error)` + version args affects far more than 05-14 lists: `integrationtest/harness.go`
+   (899-913, 1105-1112, 1191, 1366-1375), `test/integration/world/{object,exit,scene}_repo_test.go`,
+   `internal/world/postgres/character_repo_test.go:250-271`, and world service tests/mocks. 05-14's
+   verification runs integration compilation, so the "atomic wave" claim fails as written. Fix: a repo-wide
+   mechanical caller scan into `files_modified`, or a compatibility bridge for fixtures.
+5. **The writer fence misses production character writers (the most substantive catch).** Reader views only
+   fence `world.Service`; concrete postgres repos stay public and callable. **Guest creation**
+   (`guest_service.go:32-35/134-146`) and **bootstrap-admin creation** (`bootstrap/admin.go:85-98`) write
+   characters directly, and `CharRepoAdapter` (`adapters.go:25-43`) delegates to the concrete repo — so those
+   characters commit **without genesis envelopes**, contradicting "exactly one envelope per externally-visible
+   command" and making **INV-WORLD-4 false**. The AST SQL fence can't catch these (SQL stays in allowlisted
+   postgres). Fix: route ALL character creation (registered + guest + bootstrap-admin) through one atomic
+   genesis-emitting application service; constrain concrete writer construction to composition/test packages.
 
-### Antigravity-only NEW finding (HIGH)
+### Round-3 MEDIUM (Codex)
 
-- **Missing `expectedVersion` on `ObjectRepository.Move` (`repository.go:118`) and
-  `CharacterRepository.UpdateLocation` (`repository.go:161`).** These take no version-bearing struct, so
-  the 05-14 redesign gives them no way to enforce CAS — containment changes and character moves can
-  still lose updates (the exact LWW hole MODEL-03 must close, for the move path). Add `expectedVersion
-  int` to both signatures and thread the read version from `service.go`.
+- **INV-WORLD-1 binding is insufficient** — the rollback test writes only an envelope + rolls back; it doesn't
+  prove a world *row* and envelope commit/roll back together. Bind it to a test that mutates a real world row,
+  writes its envelope, forces rollback (neither survives), commits another case (both survive), and forces an
+  outbox failure after the state write (state rolls back).
+- **Import-graph guard is incomplete** — it forbids only 3 edges; it doesn't reject `wmodel→world/postgres/outbox`
+  or `outbox→world`. `wmodel→world` would immediately recreate a cycle. Assert the full adjacency matrix
+  (production imports only).
+- **Genesis idempotency has no schema mechanism** — 000050 uniques on `event_id` + `(game_id, epoch,
+  feed_position)`; genesis uses fresh ULIDs, so rerun differs. Add a durable genesis identity key (e.g.
+  `(game_id, epoch, kind, aggregate_type, aggregate_id, genesis=true)`) or a genesis-checkpoint table inserted
+  atomically with the envelope. A pre-insert existence query alone is race-prone.
+- **Census completeness overstated** — the descriptor bijection proves registry consistency but can't discover
+  the guest/bootstrap direct repo calls (`guest_service.go:140`, `admin.go:91`, `adapters.go:38-40`). Pair it
+  with a call-graph/import restriction forbidding production packages from calling concrete world writer
+  methods except approved atomic services. (Same root as blocker #5.)
 
 ### Divergent Views
 
-Minimal this round — the reviewers converge on HIGH and overlap on the property-leak, entity_properties
-fence, and relay-connection findings. Antigravity did not surface the import-cycle / interface-blast-
-radius / skip-violates-ordering blockers (Codex's deepest catches); Codex did not separately call out
-the Move/UpdateLocation `expectedVersion` gap (Antigravity's). The two are complementary — treat the
-union as the round-2 fix list.
+Codex NOT-READY/HIGH vs Antigravity "execution-ready." **Resolution: Codex.** Antigravity's all-HOLDS table
+overlaps Codex's confirmed items where checkable, but it did not surface the guest/admin genesis bypasses or
+the envelope/relay ownership contradictions — its completeness claim is unsupported. This mirrors round 1
+(agy over-optimistic) rather than round 2 (agy solid).
 
 ### Recommended next step
 
-`/gsd-plan-phase 5 --reviews` (round-2 incorporation). Priority order:
-1. **Package/executor seam redesign** — break the `world ↔ outbox ↔ postgres` import cycles and the
-   envelope-before-delta contradiction (`mutate` returns the delta; envelope finalized post-write;
-   cycle-neutral types package; injected outbox-store interface). This is the load-bearing fix.
-2. **Interface blast radius** — enumerate every caller/adapter of the redesigned repo signatures
-   (auth `character_service.go`, `adapters.go`, `sub_grpc.go`); reader/writer split or delta-discarding
-   adapter so wave-1 compiles atomically.
-3. **Property writes** — Create/Update onto `execerFromCtx`; `entity_properties` into the SQL fence;
-   `expectedVersion` on Move/UpdateLocation.
-4. **Relay** — replace "mark published without publishing" with a same-position recovery marker (or
-   strict halt-until-repaired); route relay DB queries through the lease connection (or a checked
-   fencing generation); wire the skip method to an admin command.
-5. **End-to-end wiring** — CreateCharacter outbox-writer dependency through `server.go`/`sub_grpc.go`;
-   epoch schema in a paired migration.
-6. **MEDIUM** — counter timeouts as real tasks/tests; bind INV-WORLD-1 to an always-run test; define the
-   census on an explicit command construct.
+`/gsd-plan-phase 5 --reviews` (round-3 incorporation), targeted at the four blockers + four MEDIUMs. Priority:
+1. **One atomic character-creation service** behind which registered/guest/bootstrap-admin creation all emit a
+   genesis envelope (blocker #5 + census #4) — this is the real correctness gap.
+2. **Envelope ownership**: `WriteIntent(intent, delta)` allocates epoch/position + finalizes + returns
+   (blocker #1).
+3. **Relay Lease abstraction** owning connection + fencing generation; skip as a service owning DB + publisher;
+   at-least-once documented (blockers #2, #3).
+4. **Complete the wave-1 caller inventory** via a repo-wide scan (blocker #4).
+5. MEDIUMs: real INV-WORLD-1 atomicity test; full import-graph adjacency assertion; schema-backed genesis
+   idempotency key.
+
+After this pass the findings should be mechanical/verifiable enough to execute — the architecture is settled;
+what remains is contract precision and write-path coverage.
