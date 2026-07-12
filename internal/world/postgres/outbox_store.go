@@ -97,5 +97,15 @@ func (s *OutboxStore) WriteIntent(
 			With("game_id", env.GameID).Wrap(err)
 	}
 
+	// Transaction-side wakeup for the relay (05-07): pg_notify fires with the row
+	// insert inside the SAME mutation transaction, so a live relay LISTEN
+	// connection is woken transactionally. A missed NOTIFY is covered by the
+	// relay's periodic sweep.
+	if _, err := e.Exec(ctx, `SELECT pg_notify($1, $2)`, OutboxNotifyChannel, env.GameID); err != nil {
+		return nil, oops.With("operation", "pg_notify outbox wakeup").
+			With("event_id", env.EventID.String()).
+			With("game_id", env.GameID).Wrap(err)
+	}
+
 	return env, nil
 }
