@@ -94,14 +94,14 @@ Plans:
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
 
-**Plans**: 1/16 plans executed
+**Plans**: 2/16 plans executed
 
 Plans:
 
 **Slice 1 — Version guard + repository foundation (MODEL-03)**
 
 - [x] 05-01-PLAN.md — Version-guard foundation: migration 000049 + Version struct fields + WORLD_CONCURRENT_EDIT error (wave 1)
-- [ ] 05-14-PLAN.md — Transaction & repository foundation: re-entrant tx + self-tx repo refactor + MutationDelta + Delete(expectedVersion)/reader interfaces + mock regen (wave 1)
+- [x] 05-14-PLAN.md — Transaction & repository foundation: re-entrant tx + self-tx repo refactor + MutationDelta + Delete(expectedVersion)/reader interfaces + mock regen (wave 1)
 - [ ] 05-02-PLAN.md — Location + exit repo version-predicated CAS + zero-row classifier + delta/version refresh (wave 2)
 - [ ] 05-03-PLAN.md — Character + object repo version-predicated CAS + zero-row classifier + delta/version refresh (wave 2)
 - [ ] 05-04-PLAN.md — RMW version threading + conflict surfacing + M12 resilience spec flip (wave 3)
@@ -186,7 +186,7 @@ Plans:
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
-| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 1/16 | In Progress|  |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 2/16 | In Progress|  |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
