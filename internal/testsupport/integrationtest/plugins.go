@@ -260,10 +260,10 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		require.NoError(t, copyTree(abs, dstSub), "startPlugins: stage extra plugin dir")
 	}
 
-	// WorldService — mirror internal/world/setup/subsystem.go. EventEmitter is
-	// intentionally omitted (production world/setup omits it too); world.NewService
-	// logs a benign slog.Warn. The census suite reads load state + registry only,
-	// so emit paths aren't exercised.
+	// WorldService — mirror internal/world/setup/subsystem.go. The OutboxWriter is
+	// injected (05-07) so whole-system tests that perform world writes routed
+	// through mutate() do not hit a nil OutboxWriter. The relay itself is a
+	// separate subsystem not started by this harness.
 	worldSvc := world.NewService(world.ServiceConfig{
 		LocationRepo:  worldpostgres.NewLocationRepository(d.pool),
 		ExitRepo:      worldpostgres.NewExitRepository(d.pool),
@@ -273,6 +273,7 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		PropertyRepo:  worldpostgres.NewPropertyRepository(d.pool),
 		Engine:        d.engine,
 		Transactor:    worldpostgres.NewTransactor(d.pool),
+		OutboxWriter:  worldpostgres.NewOutboxStore(d.pool),
 	})
 
 	// AdminDeps — all 5 caller-supplied fields required (handlers.RegisterAdmin
