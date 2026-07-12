@@ -13,14 +13,10 @@ import (
 	"testing"
 
 	dockerclient "github.com/moby/moby/client"
-	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/samber/oops"
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	"github.com/holomush/holomush/internal/testsupport/natstest"
 	"github.com/holomush/holomush/internal/world"
@@ -30,12 +26,13 @@ import (
 // newWorldService constructs a world.Service over one replica's shared pgxpool,
 // mirroring the production construction in
 // internal/testsupport/integrationtest/plugins.go:267 (which itself mirrors
-// internal/world/setup/subsystem.go). EventEmitter is intentionally omitted —
-// M2's emitter wiring is plan 03's concern, and production world/setup omits it
-// too (world.NewService logs a benign slog.Warn). The allow-all default engine
-// (no WithRealABAC on the resilience replicas) accepts any subjectID string, so
-// the deterministic-interleave spec can drive UpdateLocation directly without a
-// seeded policy.
+// internal/world/setup/subsystem.go). It wires the transactional-outbox writer
+// (05-06): MoveCharacter commits its state change and its ONE move envelope in the
+// SAME transaction via world.OutboxWriter — the post-commit emit path is deleted
+// (D-03), so there is no separate notification leg to lose on a broker flap. The
+// allow-all default engine (no WithRealABAC on the resilience replicas) accepts any
+// subjectID string, so the specs can drive MoveCharacter/UpdateLocation directly
+// without a seeded policy.
 //
 // Because both replicas share ONE database, newWorldService(replicaA) and
 // newWorldService(replicaB) are two independent write paths onto the identical
@@ -53,103 +50,8 @@ func newWorldService(s *integrationtest.Server) *world.Service {
 		PropertyRepo:  worldpostgres.NewPropertyRepository(pool),
 		Engine:        s.AccessEngine(),
 		Transactor:    worldpostgres.NewTransactor(pool),
-	})
-}
-
-// worldBusAppender implements world.EventAppender by translating a core.Event
-// into an eventbus.Event and publishing it through the RAW subsystem publisher
-// (s.Bus().Bus.Publisher()) — NOT the host's rendering publisher.
-//
-// This raw-publisher choice is deliberate and load-bearing for the M2 experiment:
-// the rendering publisher runs a verb-registry Lookup on every publish and
-// hard-fails EMIT_UNKNOWN_VERB for host-owned world event types (e.g. "move"),
-// which have no plugin-qualified verb registration. The M2 window is a
-// stream-PRESENCE question (did the post-commit move notification reach the
-// broker or not?), so rendering metadata is irrelevant and the verb-registry
-// lookup would only get in the way. The translation mirrors the harness's
-// busEventAppenderAdapter (Qualify → NewType → actor-kind mapping) verbatim.
-type worldBusAppender struct {
-	publisher eventbus.Publisher
-	gameID    func() string
-}
-
-var _ world.EventAppender = (*worldBusAppender)(nil)
-
-// Append translates event to an eventbus.Event and publishes it to the shared
-// broker via the raw publisher. Domain-relative stream references (e.g.
-// "location.01ABC") are qualified to full subjects via eventbus.Qualify.
-func (w *worldBusAppender) Append(ctx context.Context, event core.Event) error {
-	gid := w.gameID()
-	if gid == "" {
-		gid = "main"
-	}
-	sub, err := eventbus.Qualify(gid, event.Stream)
-	if err != nil {
-		return oops.With("stream", event.Stream).Wrap(err)
-	}
-	typ, err := eventbus.NewType(string(event.Type))
-	if err != nil {
-		return oops.With("type", string(event.Type)).Wrap(err)
-	}
-	return oops.Wrap(w.publisher.Publish(ctx, eventbus.Event{
-		ID:        event.ID,
-		Subject:   sub,
-		Type:      typ,
-		Timestamp: event.Timestamp,
-		Actor:     resilienceCoreToBusActor(event.Actor),
-		Payload:   event.Payload,
-	}))
-}
-
-// resilienceCoreToBusActor mirrors the harness's harnessCoreToBusActor: it maps
-// a core.Actor to an eventbus.Actor, parsing the ULID id when present. The
-// EventStoreAdapter stamps a system actor (core.WorldServiceActorULID), so this
-// resolves to ActorKindSystem with the parsed world-service ULID.
-func resilienceCoreToBusActor(a core.Actor) eventbus.Actor {
-	out := eventbus.Actor{Kind: resilienceCoreActorKindToBus(a.Kind)}
-	if a.ID == "" {
-		return out
-	}
-	if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
-		out.ID = parsed
-	}
-	return out
-}
-
-func resilienceCoreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
-	switch k {
-	case core.ActorCharacter:
-		return eventbus.ActorKindCharacter
-	case core.ActorPlugin:
-		return eventbus.ActorKindPlugin
-	default:
-		return eventbus.ActorKindSystem
-	}
-}
-
-// newEmittingWorldService constructs a world.Service identical to newWorldService
-// but WITH an EventEmitter wired: a world.EventStoreAdapter over a worldBusAppender
-// that publishes to the replica's shared broker via the raw publisher. This is the
-// deliberately-wired emitter the M2 dual-write experiment needs to make the
-// post-commit notification leg observable — production world/setup omits it
-// entirely (internal/world/setup/subsystem.go:66-77), which is itself the M2
-// production finding spec 3 pins.
-func newEmittingWorldService(s *integrationtest.Server) *world.Service {
-	pool := s.Pool()
-	appender := &worldBusAppender{
-		publisher: s.Bus().Bus.Publisher(),
-		gameID:    s.GameID,
-	}
-	return world.NewService(world.ServiceConfig{
-		LocationRepo:  worldpostgres.NewLocationRepository(pool),
-		ExitRepo:      worldpostgres.NewExitRepository(pool),
-		ObjectRepo:    worldpostgres.NewObjectRepository(pool),
-		SceneRepo:     worldpostgres.NewSceneRepository(pool),
-		CharacterRepo: worldpostgres.NewCharacterRepository(pool),
-		PropertyRepo:  worldpostgres.NewPropertyRepository(pool),
-		Engine:        s.AccessEngine(),
-		Transactor:    worldpostgres.NewTransactor(pool),
-		EventEmitter:  world.NewEventStoreAdapter(appender),
+		OutboxWriter:  worldpostgres.NewOutboxStore(pool),
+		GameID:        s.GameID(),
 	})
 }
 

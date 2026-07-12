@@ -27,21 +27,26 @@ between the ADR's options — the weighing belongs to the ADR/decision, not here
   of N=100 this run — which per design does **not** refute M12; it only bounds
   the *uncontrolled* window as narrow. The deterministic proof is the verdict.
 
-- **M2 — dual-write non-atomicity: window CHARACTERIZED.** `MoveCharacter`
-  commits the character row first and emits the move notification *post-commit*;
-  the two are not atomic. With a wired emitter and a broker frozen mid-move, the
-  DB commit persists, the caller receives an emit-failure error carrying
-  `move_succeeded=true`, and the notification's actual delivery is **decoupled**
-  from that error: this run it was delivered *late and out-of-band* after the
-  caller had already seen failure (the frozen broker buffered the publish in the
-  client TCP send buffer and flushed it on unpause); on other timings it can be
-  lost outright. Either way the caller cannot know whether the notification
-  landed — that ambiguity **is** the non-atomicity window (D-07 asks only that
-  the window be shown to exist, not that a deterministic loss be forced). A
-  further first-class finding: **production wires no emitter at all**
-  (`internal/world/setup/subsystem.go` omits `EventEmitter`), so today the entire
-  move-notification leg is dead code — every move reports `EVENT_EMITTER_MISSING`
-  with `move_succeeded=true` while the DB commits unconditionally.
+- **M2 — dual-write non-atomicity: window CHARACTERIZED, then CLOSED (05-06).**
+  *Historical finding (pre-05-06):* `MoveCharacter` committed the character row
+  first and emitted the move notification *post-commit*; the two were not atomic.
+  With a wired emitter and a broker frozen mid-move, the DB commit persisted, the
+  caller received an emit-failure error carrying `move_succeeded=true`, and the
+  notification's actual delivery was **decoupled** from that error (delivered late
+  and out-of-band on some timings, lost outright on others). A further finding:
+  production wired no emitter at all, so the entire move-notification leg was dead
+  code. *Resolution (D-03, slice 2):* the post-commit emit path
+  (`EmitMoveEvent` / `emitWithRetry` / `EVENT_EMITTER_MISSING` / the go-retry
+  window) was **deleted outright**, and `MoveCharacter` now commits its
+  character-location change AND exactly one move envelope to the `outbox` table in
+  the **same transaction** via `world.OutboxWriter`. The state change and its
+  envelope are atomic — there is no second write to lose on a broker blip — and a
+  single leased relay publishes the committed envelopes out-of-band. A frozen
+  broker no longer touches the mutation transaction: the move commits and returns
+  success, and the caller can no longer receive a `move_succeeded=true`
+  emit-failure. The M2-VERDICT lines below record the ORIGINAL characterized
+  window (historical evidence); the current mechanism is the transactional outbox
+  proven by `test/integration/resilience/m2_dualwrite_test.go`.
 
 - **Restart / reconnect: state recovers from the database, no replay.** A
   restarted replica boots cleanly against the already-existing EVENTS stream and
@@ -122,22 +127,29 @@ CHAOS-VERDICT: broker-flap: publishing recovered after a docker-pause flap (paus
   the identical `world.Service` rename path (both funnel into the same full-row
   `UPDATE`), not via `set`.
 
-**M2 (dual-write non-atomicity) citation chain:**
+**M2 (dual-write non-atomicity) citation chain — historical (pre-05-06), now closed:**
 
-- `internal/world/service.go` `MoveCharacter` commits the character row
-  (`UpdateLocation`) and only *then* calls `EmitMoveEvent` post-commit; on emit
-  failure it returns `CHARACTER_MOVE_EVENT_FAILED` with `move_succeeded=true` (the
-  row already persisted).
-- `internal/world/events.go` `emitWithRetry` retries the publish 3 times with
+The chain below describes the ORIGINAL mechanism that made the M2 window exist.
+Slice 2 (05-06, D-03) deleted this emit path; it is retained here only to ground
+the historical M2-VERDICT evidence lines above.
+
+- `internal/world/service.go` `MoveCharacter` committed the character row
+  (`UpdateLocation`) and only *then* called `EmitMoveEvent` post-commit; on emit
+  failure it returned `CHARACTER_MOVE_EVENT_FAILED` with `move_succeeded=true`.
+- `internal/world/events.go` `emitWithRetry` retried the publish 3 times with
   exponential backoff from 50ms (~350ms window) before surfacing
-  `EVENT_EMIT_FAILED`; with a nil emitter `EmitMoveEvent` returns
-  `EVENT_EMITTER_MISSING`. Per `samber/oops` the caller-visible `Code()` is the
-  deepest chain code (`EVENT_EMIT_FAILED` / `EVENT_EMITTER_MISSING`), wrapped by
-  the outer `CHARACTER_MOVE_EVENT_FAILED` categorization; `move_succeeded=true`
-  merges up through the chain context.
-- `internal/world/setup/subsystem.go` constructs the production `world.Service`
-  with **no `EventEmitter`** — so the notification leg is inert in production, and
-  the harness must deliberately wire an emitter to make the window observable.
+  `EVENT_EMIT_FAILED`; with a nil emitter `EmitMoveEvent` returned
+  `EVENT_EMITTER_MISSING`.
+- `internal/world/setup/subsystem.go` constructed the production `world.Service`
+  with **no `EventEmitter`** — so the notification leg was inert in production.
+
+**Current mechanism (05-06):** `internal/world/mutator.go` `mutate()` runs the
+guarded write closure and `world.OutboxWriter.WriteIntent` in ONE re-entrant
+transaction; `MoveCharacter` routes through it, committing state + exactly one
+move envelope atomically to the `outbox` table (`events.go` is deleted).
+`test/integration/resilience/m2_dualwrite_test.go` proves state+envelope
+atomicity under a healthy and a frozen broker; the relay (05-08) publishes the
+committed envelopes out-of-band.
 
 ## Implications for MODEL-01
 
