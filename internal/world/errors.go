@@ -25,6 +25,17 @@ var ErrConcurrentEdit = errors.New("concurrent edit")
 // wrapping ErrConcurrentEdit. Asserted with errutil.AssertErrorCode.
 const CodeConcurrentEdit = "WORLD_CONCURRENT_EDIT"
 
+// ErrFeedLockTimeout is returned when the per-game feed_position counter's
+// FOR UPDATE lock cannot be acquired within the allocator's bounded
+// lock/statement timeout (MODEL-04). The per-game counter serializes all
+// same-game writes; a stuck lock surfaces this typed error rather than blocking
+// the mutation transaction indefinitely.
+var ErrFeedLockTimeout = errors.New("world feed counter lock timeout")
+
+// CodeFeedLockTimeout is the oops code the feed-counter allocator stamps when the
+// FOR UPDATE lock acquisition times out. Asserted with errutil.AssertErrorCode.
+const CodeFeedLockTimeout = "WORLD_FEED_LOCK_TIMEOUT"
+
 // ErrNoEventEmitter is returned when an operation requires event emission but no emitter is configured.
 // This indicates a misconfiguration - production systems should always have an EventEmitter.
 var ErrNoEventEmitter = errors.New("event emitter not configured")
