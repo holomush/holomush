@@ -6241,3 +6241,78 @@ func alwaysAllow(_ string) (types.Decision, error) {
 func alwaysDeny(_ string) (types.Decision, error) {
 	return types.NewDecision(types.EffectDefaultDeny, "default deny", "seed:test"), nil
 }
+
+// TestWorldService_UpdateCharacterPreferences covers the folded-in
+// character-settings write (round-4 C5 / D-05): the preferences mutation routes
+// through the same-tx outbox seam, is version-guarded (MODEL-03), emits exactly
+// one character_preferences_update envelope, and surfaces the typed conflict.
+func TestWorldService_UpdateCharacterPreferences(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	prefs := []byte(`{"host":"eyJrIjoidiJ9"}`)
+
+	newSvc := func(t *testing.T) (*world.Service, *worldtest.MockCharacterRepository, *mockOutboxWriter, *mockTransactor) {
+		t.Helper()
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+		outbox := &mockOutboxWriter{}
+		tx := &mockTransactor{}
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			Engine:        policytest.AllowAllEngine(),
+			Transactor:    tx,
+			OutboxWriter:  outbox,
+			GameID:        "main",
+		})
+		return svc, mockRepo, outbox, tx
+	}
+
+	t.Run("version-guarded write emits exactly one character_preferences_update envelope", func(t *testing.T) {
+		svc, mockRepo, outbox, tx := newSvc(t)
+		mockRepo.EXPECT().Get(ctx, charID).Return(&world.Character{ID: charID, Version: 3}, nil)
+		delta := &wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateCharacter, ID: charID, BeforeVersion: 3, AfterVersion: 4}}
+		mockRepo.EXPECT().UpdatePreferences(mock.Anything, charID, prefs, 3).Return(delta, nil)
+
+		err := svc.UpdateCharacterPreferences(ctx, charID, prefs)
+		require.NoError(t, err)
+		assert.True(t, tx.called, "the write runs inside a transaction")
+		require.Equal(t, 1, outbox.calls, "exactly one envelope is written in the same tx")
+		assert.Equal(t, "character_preferences_update", outbox.lastIntent.Kind)
+		assert.Equal(t, wmodel.AggregateCharacter, outbox.lastIntent.AggregateType)
+		assert.Equal(t, charID, outbox.lastIntent.AggregateID)
+	})
+
+	t.Run("concurrent conflict surfaces WORLD_CONCURRENT_EDIT (no auto-retry)", func(t *testing.T) {
+		svc, mockRepo, outbox, _ := newSvc(t)
+		mockRepo.EXPECT().Get(ctx, charID).Return(&world.Character{ID: charID, Version: 2}, nil)
+		conflict := oops.Code(world.CodeConcurrentEdit).Wrap(world.ErrConcurrentEdit)
+		mockRepo.EXPECT().UpdatePreferences(mock.Anything, charID, prefs, 2).Return(nil, conflict)
+
+		err := svc.UpdateCharacterPreferences(ctx, charID, prefs)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+		assert.Equal(t, 0, outbox.calls, "a conflicting write emits no envelope")
+	})
+
+	t.Run("absent character surfaces CHARACTER_NOT_FOUND", func(t *testing.T) {
+		svc, mockRepo, _, _ := newSvc(t)
+		mockRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
+
+		err := svc.UpdateCharacterPreferences(ctx, charID, prefs)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
+	})
+
+	t.Run("missing write executor is a configuration error", func(t *testing.T) {
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			Engine:        policytest.AllowAllEngine(),
+			// no OutboxWriter / Transactor -> no mutator
+		})
+		err := svc.UpdateCharacterPreferences(ctx, charID, prefs)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_PREFERENCES_UPDATE_FAILED")
+	})
+}

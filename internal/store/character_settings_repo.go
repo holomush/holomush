@@ -16,20 +16,36 @@ import (
 	"github.com/holomush/holomush/internal/settings"
 )
 
-// CharacterSettingsRepository persists per-character preference bags in the
-// characters.preferences JSONB column. It is a narrow, whole-struct
-// read-modify-write surface dedicated to the settings subsystem: it reads and
-// writes only the preferences column, never the rest of the character row, so
-// it does not couple the settings store to the world.Character model. It
-// satisfies settings.CharacterRepository.
-type CharacterSettingsRepository struct {
-	pool *pgxpool.Pool
+// CharacterPreferencesUpdater is the world-boundary WRITE port the character
+// settings repository routes preference mutations through (round-4 C5 / D-05).
+// Its production implementation is *world.Service.UpdateCharacterPreferences,
+// which performs the version-guarded characters-table preferences write inside
+// the sanctioned internal/world/postgres writer boundary and emits exactly one
+// character_preferences_update envelope in the same transaction. A conflicting
+// concurrent write surfaces the typed WORLD_CONCURRENT_EDIT (MODEL-03; D-02 — no
+// auto-retry). Declared as a narrow port here so internal/store does NOT import
+// internal/world.
+type CharacterPreferencesUpdater interface {
+	UpdateCharacterPreferences(ctx context.Context, characterID ulid.ULID, prefs []byte) error
 }
 
-// NewCharacterSettingsRepository builds a character settings repository over
-// pool.
-func NewCharacterSettingsRepository(pool *pgxpool.Pool) *CharacterSettingsRepository {
-	return &CharacterSettingsRepository{pool: pool}
+// CharacterSettingsRepository persists per-character preference bags in the
+// characters.preferences JSONB column. It is a narrow, whole-struct surface
+// dedicated to the settings subsystem: it READS the preferences column directly,
+// and it ROUTES WRITES through the world boundary (round-4 C5 / D-05) so the
+// characters-table mutation is version-guarded and enveloped — it no longer
+// issues a raw UPDATE. It satisfies settings.CharacterRepository.
+type CharacterSettingsRepository struct {
+	pool   *pgxpool.Pool
+	writer CharacterPreferencesUpdater
+}
+
+// NewCharacterSettingsRepository builds a character settings repository. pool
+// backs the direct preferences READ; writer is the world-boundary write port the
+// preferences mutation routes through (round-4 C5 / D-05) — the raw store UPDATE
+// is gone.
+func NewCharacterSettingsRepository(pool *pgxpool.Pool, writer CharacterPreferencesUpdater) *CharacterSettingsRepository {
+	return &CharacterSettingsRepository{pool: pool, writer: writer}
 }
 
 // GetPreferences loads the whole preferences bag for a character. A missing
@@ -65,10 +81,15 @@ func (r *CharacterSettingsRepository) GetPreferences(
 	return prefs, nil
 }
 
-// SetPreferences writes the whole preferences bag for a character into the
-// preferences JSONB column, overwriting the prior value. The full struct is
-// marshaled so typed partitions round-trip alongside the plugin-partitioned
-// Plugins bag (no field cherry-picking, no clobber).
+// SetPreferences writes the whole preferences bag for a character, routing the
+// mutation through the world boundary (round-4 C5 / D-05) instead of a raw
+// characters-table write. The full struct is marshaled (so typed partitions
+// round-trip alongside the plugin-partitioned Plugins bag — no field
+// cherry-picking, no clobber) and handed to the world-boundary writer, which
+// version-guards the write and emits one character_preferences_update envelope in
+// the same transaction. A missing character surfaces CHARACTER_NOT_FOUND and a
+// conflicting concurrent write surfaces WORLD_CONCURRENT_EDIT (MODEL-03), both
+// propagated to the settings caller unchanged (D-02 — no auto-retry).
 func (r *CharacterSettingsRepository) SetPreferences(
 	ctx context.Context, characterID ulid.ULID, prefs settings.CharacterPreferences,
 ) error {
@@ -76,17 +97,8 @@ func (r *CharacterSettingsRepository) SetPreferences(
 	if err != nil {
 		return oops.With("character_id", characterID.String()).Wrapf(err, "encode character preferences")
 	}
-
-	const query = `UPDATE characters SET preferences = $1 WHERE id = $2`
-
-	result, err := r.pool.Exec(ctx, query, data, characterID.String())
-	if err != nil {
-		return oops.With("character_id", characterID.String()).Wrapf(err, "persist character preferences")
-	}
-	if result.RowsAffected() == 0 {
-		return oops.Code("CHARACTER_NOT_FOUND").
-			With("character_id", characterID.String()).
-			Errorf("character not found")
+	if err := r.writer.UpdateCharacterPreferences(ctx, characterID, data); err != nil {
+		return oops.With("character_id", characterID.String()).Wrap(err)
 	}
 	return nil
 }

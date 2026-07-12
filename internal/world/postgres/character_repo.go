@@ -229,6 +229,50 @@ func (r *CharacterRepository) UpdateLocation(ctx context.Context, characterID ul
 	return delta, nil
 }
 
+// UpdatePreferences writes a character's whole preferences bag with a
+// version-predicated CAS (MODEL-03) — the folded-in character-settings write
+// (round-4 C5 / D-05). The former raw UPDATE in internal/store is moved here, into
+// the sanctioned writer boundary, so the raw-world-SQL fence stays honestly green.
+//
+// prefs is the pre-marshaled JSONB preferences bag. When expectedVersion > 0 the
+// UPDATE matches id + version, so a stale writer affects zero rows and the locked
+// follow-up read classifies the zero-row result into WORLD_CONCURRENT_EDIT (the
+// row exists at a moved version) or CHARACTER_NOT_FOUND (the row is absent).
+// expectedVersion == 0 is an unversioned (id-only) write. Returns a
+// wmodel.MutationDelta so the caller's mutate() can persist exactly one
+// character_preferences_update envelope in the same transaction (INV-WORLD-4).
+func (r *CharacterRepository) UpdatePreferences(ctx context.Context, characterID ulid.ULID, prefs []byte, expectedVersion int) (*wmodel.MutationDelta, error) {
+	query := `UPDATE characters SET preferences = $2, version = version + 1 WHERE id = $1`
+	args := []any{characterID.String(), prefs}
+	if expectedVersion > 0 {
+		query += ` AND version = $3`
+		args = append(args, expectedVersion)
+	}
+	query += ` RETURNING version`
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		var newVersion int
+		err := tx.QueryRow(txCtx, query, args...).Scan(&newVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return classifyCASZeroRow(txCtx, tx,
+				`SELECT version FROM characters WHERE id = $1 FOR UPDATE`,
+				characterID,
+				oops.Code("CHARACTER_NOT_FOUND").With("character_id", characterID.String()).Wrap(world.ErrNotFound))
+		}
+		if err != nil {
+			return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").With("character_id", characterID.String()).Wrap(err)
+		}
+		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, characterID, false, newVersion-1, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return delta, nil
+}
+
 // IsOwnedByPlayer checks if a character is owned by a specific player.
 // Returns false (not an error) if the character does not exist.
 func (r *CharacterRepository) IsOwnedByPlayer(ctx context.Context, characterID, playerID ulid.ULID) (bool, error) {

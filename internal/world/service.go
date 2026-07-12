@@ -32,8 +32,9 @@ const defaultGameID = "main"
 // registry lands in 05-09; until then these literal kinds/version identify the
 // intent-level payload shape.
 const (
-	kindCharacterMoved = "character_moved"
-	worldSchemaVersion = 1
+	kindCharacterMoved             = "character_moved"
+	kindCharacterPreferencesUpdate = "character_preferences_update"
+	worldSchemaVersion             = 1
 )
 
 // ErrPermissionDenied is returned when an operation is not authorized.
@@ -686,6 +687,96 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "update character %s", characterID)
 	}
 	return nil
+}
+
+// UpdateCharacterPreferences persists a character's whole preferences bag
+// (pre-marshaled JSONB) through the guarded/versioned/envelope world path — the
+// folded-in character-settings write (round-4 C5 / D-05). The former raw
+// UPDATE characters in internal/store is replaced by this command so the write is
+// version-guarded (MODEL-03) and emits exactly one character_preferences_update
+// envelope in the SAME transaction (INV-WORLD-4 for the characters table).
+//
+// It is an RMW with NO caller-supplied version: it reads the current character
+// version internally and CASes on it, so two concurrent settings writes race the
+// read-then-CAS and exactly one wins — the other surfaces WORLD_CONCURRENT_EDIT
+// (D-02: no auto-retry; the settings caller surfaces the typed error rather than
+// silently clobbering).
+//
+// It deliberately runs NO checkAccess: this is the settings-subsystem persistence
+// primitive (the authorization decision is made at the settings command layer),
+// and the prior raw store path had no ABAC — gating it here would be an
+// out-of-scope behavior change (D-05). The envelope actor is the character
+// causing its own settings change.
+func (s *Service) UpdateCharacterPreferences(ctx context.Context, characterID ulid.ULID, prefs []byte) error {
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Errorf("character repository not configured")
+	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+
+	// Read the current character: its version is the CAS guard.
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update preferences for character %s", characterID)
+		}
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+
+	intent, err := s.buildPreferencesIntent(characterID, prefs)
+	if err != nil {
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Wrapf(err, "build preferences intent for character %s", characterID)
+	}
+
+	if _, err := s.mutator.updateCharacterPreferences(ctx, intent, characterID, prefs, char.Version); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			// Surface the typed conflict unchanged (D-02: no auto-retry).
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				Wrap(err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update preferences for character %s", characterID)
+		}
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Wrapf(err, "update preferences for character %s", characterID)
+	}
+	return nil
+}
+
+// preferencesIntentPayload is the new-values-only, erasure-safe preferences
+// payload persisted in the envelope intent: the character id and the whole
+// (pre-marshaled) preferences bag as opaque JSON. Settings bags are not secrets.
+type preferencesIntentPayload struct {
+	CharacterID string          `json:"character_id"`
+	Preferences json.RawMessage `json:"preferences"`
+}
+
+// buildPreferencesIntent constructs the character_preferences_update
+// EnvelopeIntent. The actor is the character causing its own settings change; the
+// payload is new-values-only. The intent omits epoch/feed_position/manifest — the
+// writer owns those.
+func (s *Service) buildPreferencesIntent(characterID ulid.ULID, prefs []byte) (wmodel.EnvelopeIntent, error) {
+	raw := json.RawMessage(prefs)
+	if len(raw) == 0 {
+		raw = json.RawMessage(`null`)
+	}
+	payload, err := json.Marshal(preferencesIntentPayload{
+		CharacterID: characterID.String(),
+		Preferences: raw,
+	})
+	if err != nil {
+		return wmodel.EnvelopeIntent{}, oops.Wrapf(err, "marshal preferences intent payload")
+	}
+	return wmodel.NewEnvelopeIntent(wmodel.IntentParams{
+		GameID:        s.gameID,
+		Kind:          kindCharacterPreferencesUpdate,
+		SchemaVersion: worldSchemaVersion,
+		Actor:         access.CharacterSubject(characterID.String()),
+		AggregateType: wmodel.AggregateCharacter,
+		AggregateID:   characterID,
+		Payload:       payload,
+	}), nil
 }
 
 // GetCharactersByLocation retrieves characters at a location with pagination after checking list_characters authorization.

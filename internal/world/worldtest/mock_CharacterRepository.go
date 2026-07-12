@@ -504,6 +504,67 @@ func (_c *MockCharacterRepository_UpdateLocation_Call) RunAndReturn(run func(con
 	return _c
 }
 
+// UpdatePreferences provides a mock function with given fields: ctx, characterID, prefs, expectedVersion
+func (_m *MockCharacterRepository) UpdatePreferences(ctx context.Context, characterID ulid.ULID, prefs []byte, expectedVersion int) (*wmodel.MutationDelta, error) {
+	ret := _m.Called(ctx, characterID, prefs, expectedVersion)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdatePreferences")
+	}
+
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, []byte, int) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, characterID, prefs, expectedVersion)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, []byte, int) *wmodel.MutationDelta); ok {
+		r0 = rf(ctx, characterID, prefs, expectedVersion)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, []byte, int) error); ok {
+		r1 = rf(ctx, characterID, prefs, expectedVersion)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockCharacterRepository_UpdatePreferences_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdatePreferences'
+type MockCharacterRepository_UpdatePreferences_Call struct {
+	*mock.Call
+}
+
+// UpdatePreferences is a helper method to define mock.On call
+//   - ctx context.Context
+//   - characterID ulid.ULID
+//   - prefs []byte
+//   - expectedVersion int
+func (_e *MockCharacterRepository_Expecter) UpdatePreferences(ctx interface{}, characterID interface{}, prefs interface{}, expectedVersion interface{}) *MockCharacterRepository_UpdatePreferences_Call {
+	return &MockCharacterRepository_UpdatePreferences_Call{Call: _e.mock.On("UpdatePreferences", ctx, characterID, prefs, expectedVersion)}
+}
+
+func (_c *MockCharacterRepository_UpdatePreferences_Call) Run(run func(ctx context.Context, characterID ulid.ULID, prefs []byte, expectedVersion int)) *MockCharacterRepository_UpdatePreferences_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].([]byte), args[3].(int))
+	})
+	return _c
+}
+
+func (_c *MockCharacterRepository_UpdatePreferences_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockCharacterRepository_UpdatePreferences_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockCharacterRepository_UpdatePreferences_Call) RunAndReturn(run func(context.Context, ulid.ULID, []byte, int) (*wmodel.MutationDelta, error)) *MockCharacterRepository_UpdatePreferences_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockCharacterRepository creates a new instance of MockCharacterRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockCharacterRepository(t interface {

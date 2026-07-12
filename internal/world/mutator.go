@@ -156,3 +156,24 @@ func (m *worldMutator) moveCharacter(
 		return m.characterWriter.UpdateLocation(txCtx, characterID, &toLocationID, expectedVersion)
 	})
 }
+
+// updateCharacterPreferences builds the character-preferences write closure —
+// capturing the PRIVATE character writer plus the pre-marshaled preferences bag —
+// and routes it through mutate() (round-4 C5 / D-05 — the folded-in
+// character-settings write). The closure IS the operation identity (a character
+// preferences update); there is no intent.Kind dispatch. expectedVersion is the
+// character's read version (the CAS guard) so a concurrent conflicting settings
+// write surfaces WORLD_CONCURRENT_EDIT rather than a silent last-write-wins. This
+// is the write-command descriptor the 05-11 census bijection includes for the
+// character_preferences_update kind.
+func (m *worldMutator) updateCharacterPreferences(
+	ctx context.Context,
+	intent wmodel.EnvelopeIntent,
+	characterID ulid.ULID,
+	prefs []byte,
+	expectedVersion int,
+) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.characterWriter.UpdatePreferences(txCtx, characterID, prefs, expectedVersion)
+	})
+}

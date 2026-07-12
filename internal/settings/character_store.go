@@ -36,6 +36,14 @@ type CharacterPreferences struct {
 // load the whole preferences bag (returning a zero bag, not an error, for an
 // unprovisioned character); writes persist the whole bag. It is satisfied by
 // *store.CharacterSettingsRepository.
+//
+// As of the round-4 C5 / D-05 fold-in, SetPreferences no longer performs a raw
+// characters-table write: the *store implementation routes the mutation through
+// the world boundary (world.Service.UpdateCharacterPreferences), which
+// version-guards the write (MODEL-03) and emits one character_preferences_update
+// envelope in the same transaction (INV-WORLD-4). A conflicting concurrent write
+// surfaces the typed WORLD_CONCURRENT_EDIT to the commit func below, which
+// propagates it to the caller unchanged (D-02 — no auto-retry).
 type CharacterRepository interface {
 	GetPreferences(ctx context.Context, characterID ulid.ULID) (CharacterPreferences, error)
 	SetPreferences(ctx context.Context, characterID ulid.ULID, prefs CharacterPreferences) error

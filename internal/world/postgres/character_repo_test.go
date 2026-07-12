@@ -612,6 +612,73 @@ func characterDBVersion(ctx context.Context, t *testing.T, id ulid.ULID) int {
 	return v
 }
 
+// characterDBPreferences reads the stored preferences JSONB directly (out-of-band
+// of the repo) so a test can assert the guarded write landed the bytes.
+func characterDBPreferences(ctx context.Context, t *testing.T, id ulid.ULID) []byte {
+	t.Helper()
+	var raw []byte
+	err := testPool.QueryRow(ctx, `SELECT preferences FROM characters WHERE id = $1`, id.String()).Scan(&raw)
+	require.NoError(t, err)
+	return raw
+}
+
+// TestCharacterRepository_UpdatePreferencesVersionGuard binds MODEL-03 for the
+// folded-in character-settings write (round-4 C5 / D-05): the preferences write
+// lives in the world boundary and is version-guarded, so a stale writer surfaces
+// WORLD_CONCURRENT_EDIT rather than a silent last-write-wins.
+func TestCharacterRepository_UpdatePreferencesVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	newChar := func(t *testing.T, name string) *world.Character {
+		t.Helper()
+		playerID := createTestPlayer(ctx, t)
+		return &world.Character{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			Name:      name,
+			CreatedAt: time.Now().UTC(),
+		}
+	}
+
+	t.Run("successful preferences update increments version and lands bytes", func(t *testing.T) {
+		char := newChar(t, "prefs-ok")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		require.Equal(t, 1, char.Version)
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+
+		prefs := []byte(`{"host":"eyJrIjoidiJ9"}`)
+		delta, err := repo.UpdatePreferences(ctx, char.ID, prefs, char.Version)
+		require.NoError(t, err)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+		assert.Equal(t, 2, delta.Primary.AfterVersion)
+		assert.Equal(t, 2, characterDBVersion(ctx, t, char.ID))
+		assert.JSONEq(t, string(prefs), string(characterDBPreferences(ctx, t, char.ID)))
+	})
+
+	t.Run("stale-version preferences update returns WORLD_CONCURRENT_EDIT", func(t *testing.T) {
+		char := newChar(t, "prefs-stale")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+
+		// A concurrent winner advances the row past the caller's read version.
+		_, err := testPool.Exec(ctx, `UPDATE characters SET version = version + 1 WHERE id = $1`, char.ID.String())
+		require.NoError(t, err)
+
+		_, err = repo.UpdatePreferences(ctx, char.ID, []byte(`{"host":"bG9zZXI="}`), 1)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+	})
+
+	t.Run("preferences update of an absent character returns CHARACTER_NOT_FOUND", func(t *testing.T) {
+		_, err := repo.UpdatePreferences(ctx, ulid.Make(), []byte(`{}`), 3)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
+	})
+}
+
 // TestCharacterRepository_UpdateVersionGuard binds MODEL-03 for character Update.
 func TestCharacterRepository_UpdateVersionGuard(t *testing.T) {
 	ctx := context.Background()

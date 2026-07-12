@@ -520,8 +520,11 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	})
 	// Character-scope settings: repo-backed over characters.preferences
 	// (iokti.5). Owner-partitioned, persisted via read-modify-write.
+	// The preferences WRITE routes through the world boundary
+	// (world.Service.UpdateCharacterPreferences — version-guarded + enveloped;
+	// round-4 C5 / D-05); the READ stays a direct pool read.
 	characterSettings := settings.NewRepoCharacterSettingsStore(
-		store.NewCharacterSettingsRepository(pool),
+		store.NewCharacterSettingsRepository(pool, worldService),
 	)
 	focusCoordOpts := []holoFocus.CoordinatorOption{
 		holoFocus.WithSessionStore(sessionStore),

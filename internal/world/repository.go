@@ -212,4 +212,11 @@ type CharacterRepository interface {
 	// expectedVersion is the move CAS guard (accepted and ignored in 05-14; the
 	// read version is threaded from service.go in 05-03/05-11).
 	UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error)
+
+	// UpdatePreferences writes a character's whole preferences bag (pre-marshaled
+	// JSONB) with a version-predicated CAS (MODEL-03). It is the folded-in
+	// character-settings write (round-4 C5 / D-05): the former raw store UPDATE
+	// moves into the sanctioned writer boundary and returns a MutationDelta so the
+	// caller emits one character_preferences_update envelope in the same tx.
+	UpdatePreferences(ctx context.Context, characterID ulid.ULID, prefs []byte, expectedVersion int) (*wmodel.MutationDelta, error)
 }
