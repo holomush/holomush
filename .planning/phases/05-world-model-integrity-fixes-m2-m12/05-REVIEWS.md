@@ -1,390 +1,600 @@
 ---
 phase: 5
-review_round: 5
-reviewers: [codex, antigravity]
-antigravity_status: "succeeded (GREEN / approved) — but false-green per loop history; not weighted over Codex"
-codex_verdict: "HIGH / NOT READY — one more revision (new lifecycle/cascade/consumer-durability edges)"
-reviewed_at: 2026-07-12T15:00:37Z
-plans_reviewed: [05-01-PLAN.md, 05-02-PLAN.md, 05-03-PLAN.md, 05-04-PLAN.md, 05-05-PLAN.md, 05-06-PLAN.md, 05-07-PLAN.md, 05-08-PLAN.md, 05-09-PLAN.md, 05-10-PLAN.md, 05-11-PLAN.md, 05-12-PLAN.md, 05-13-PLAN.md, 05-14-PLAN.md, 05-15-PLAN.md]
-prior_rounds: "r1 @4238fc876, r2 @81440289a, r3 @937b03910, r4 @ce8ac5d5e (all incorporated; round-4 fixes committed @1eab68ad9). Round-5 is a fresh review of the round-4-incorporated set."
-verdict: "NOT converged. Round-4 fixes confirmed landed by both reviewers, but Codex round-5 surfaced a new layer of real edges (character-lifecycle deletion, cascade-delta parity, consumer durability, mutate-seam operation identity, wire adapter, a D-05 outbox self-contradiction). Weight Codex; Antigravity GREEN is a false-green."
+round: 6
+reviewers: [codex, opencode, antigravity]
+reviewed_at: 2026-07-12T16:38:18Z
+plans_reviewed: [05-01-PLAN.md,05-02-PLAN.md,05-03-PLAN.md,05-04-PLAN.md,05-05-PLAN.md,05-06-PLAN.md,05-07-PLAN.md,05-08-PLAN.md,05-09-PLAN.md,05-10-PLAN.md,05-11-PLAN.md,05-12-PLAN.md,05-13-PLAN.md,05-14-PLAN.md,05-15-PLAN.md,05-16-PLAN.md]
+verdict: NOT READY (2/2 source-grounded reviewers; antigravity false-green)
 ---
 
-# Cross-AI Plan Review — Phase 5 (ROUND 5, round-4-incorporated 15-plan set)
+# Cross-AI Plan Review — Phase 5 (Round 6)
 
-Fifth-round review, run AFTER the round-4 incorporation (@1eab68ad9). Both reviewers produced output this round (Antigravity recovered from its round-4 failure). Reviewers were given the current plans + CONTEXT (incl. D-05) + RESEARCH + REQUIREMENTS and asked for a fresh source-grounded review — deliberately NOT primed with prior-round findings, so independent convergence would be a real signal. It was not: the two reviewers diverge sharply and the orchestrator independently confirmed four Codex findings against the plan text (see Consensus).
+> Round-6 adversarial check of the round-5 output (16 plans, incl. new 05-16). Reviewers ran source-grounded against the live tree at commit 4b8d873b1 on branch gsd/phase-05-world-model-integrity-fixes-m2-m12. Round-5 REVIEWS preserved in git at 7b4d3fad8.
 
 ---
 
-## Codex Review (round 5)
+## Codex Review (gpt-5.6-sol)
 
-# Cross-AI Plan Review
+# Round 6 Cross-AI Plan Review
 
-## Summary
+## 05-01–05-04 + 05-14 — Version guard and repository foundation
 
-The phase has a strong architectural core: versioned CAS writes, transaction enrollment, delta-derived envelopes, a locked feed counter, leased relay, lifecycle wiring, and invariant bindings are all materially better specified than a typical implementation plan. The plans also correctly discovered several brownfield hazards, including repository-owned transactions and character creation outside `world.Service`.
+### Summary
 
-However, I would not approve execution yet. Several cross-plan contradictions still make the claimed invariants unachievable:
+The two-outcome CAS classifier is sound, and the re-entrant transaction foundation addresses the actual repository topology. The main remaining defect is location-delete delta parity: preselecting exits with `FOR UPDATE` does not prevent a new referencing exit from appearing before the location delete.
 
-- guest cleanup/reaping can delete characters through an FK cascade without a tombstone;
-- scene-participant emission contradicts locked decision D-05;
-- the proposed generic `mutate(entity, version, intent)` contract cannot identify or execute the actual operation;
-- durable consumer idempotency beyond JetStream’s finite deduplication window has no persistence design;
-- `MoveCharacter` still contains a post-commit failure path;
-- location deletion deltas omit exits deleted by database cascade.
+### Strengths
 
-Overall assessment: **HIGH risk / NOT READY** until these blockers are resolved in the plans.
+- The migration targets the correct four aggregates. The current schema has no versions on `characters`, `locations`, `exits`, or `objects`, confirming the foundation is necessary (`internal/store/migrations/000001_baseline.up.sql:68`, `:93`, `:113`, `:135`).
 
-## Strengths
+- Re-entrant transactions are a real prerequisite. `Transactor.InTransaction` currently always begins a new transaction (`internal/world/postgres/transactor.go:27-34`), while repository operations use a context-held transaction through `execerFromCtx` (`internal/world/postgres/helpers.go:42-46`). Plan 05-14 correctly unifies these mechanisms.
 
-- The transaction-enrollment prerequisite is correctly grounded. `Transactor.InTransaction` currently always begins a new transaction, while only context-aware repository methods reuse it ([transactor.go:27](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/transactor.go:27), [helpers.go:31](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/helpers.go:31)). Plan 05-14’s reentrant transaction work is necessary.
+- Adding `expectedVersion` to move operations is necessary. Current character movement has no version argument (`internal/world/postgres/character_repo.go:108-112`), so the plan closes a genuine CAS gap.
 
-- The plans correctly identify repository-owned transactions as an atomicity blocker. Bidirectional exit creation currently begins and commits its own transaction ([exit_repo.go:59](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/exit_repo.go:59)), making the planned refactor essential.
+- The revised two-outcome classifier is correct. With only `(id, expectedVersion)`, an absent row cannot distinguish “never existed” from “another delete committed first.” Reporting both as not-found is honest; an extant row with another version remains `WORLD_CONCURRENT_EDIT`.
 
-- Adding versions to all four entities is well aligned with the current code: repository updates are presently unguarded and collapse zero affected rows into not-found ([location_repo.go:66](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/location_repo.go:66), [character_repo.go:62](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/character_repo.go:62)).
+- Removing the vestigial world scene-participant write surface appears safe at the production-call level. Current direct world-service calls are confined to tests; production core-scenes calls its own plugin store (`plugins/core-scenes/service.go:1289`, `:1666`). Retaining the read methods and physical table is necessary because `public.scene_participants` remains part of the world schema (`internal/store/migrations/000001_baseline.up.sql:157-165`).
 
-- The character-creation census is source-grounded. Registered creation currently persists directly through `auth.CharacterRepository.Create` ([character_service.go:108](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/character_service.go:108)), while guest creation holds a separate create-capable interface ([guest_service.go:32](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/guest_service.go:32)). Centralizing those paths in 05-15 is the right direction.
+### Concerns
 
-- Plan 05-15 correctly narrows its transaction claim. Player writes use their own pool ([player_repo.go:31](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/postgres/player_repo.go:31)), role writes likewise use a separate pool ([role_store.go:57](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/store/role_store.go:57)), while bindings explicitly recognize the world transaction context ([binding_repo.go:26](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/binding_repo.go:26)). The revised character + optional binding + envelope atomic unit is honest.
+- **HIGH — Location cascade delta parity remains racy.** Plan 05-02 preselects matching exits with `SELECT ... FOR UPDATE` before deleting the location, but that locks only already-existing exit rows. The foreign keys cascade from both `from_location_id` and `to_location_id` (`internal/store/migrations/000001_baseline.up.sql:113-116`). A concurrent transaction can insert a new exit after the preselect and before the location delete; that exit can then be cascade-deleted without appearing in `MutationDelta`. The proposed INV-WORLD-2 binding would be false under this interleave.
 
-- The relay’s at-least-once framing is correct. The existing JetStream stream has a finite duplicate window ([subsystem.go:274](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/eventbus/subsystem.go:274)), so avoiding an impossible “duplicates can never occur” claim is important.
+- **LOW — The scene-removal grep is too broad as written.** A repository-wide search for `AddParticipant|RemoveParticipant` finds many legitimate production plugin calls, such as `plugins/core-scenes/service.go:1289` and `:1666`. The plan understands the namespace distinction, but its pre-removal gate should search qualified world symbols or restrict paths, rather than treating a noisy broad grep as authoritative.
 
-- The distinction between the two `scene_participants` tables is real. The world repository writes the unqualified public table ([scene_repo.go:26](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/scene_repo.go:26)), while core-scenes receives a connection whose search path is `plugin_core_scenes` ([store.go:87](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/plugins/core-scenes/store.go:87)). Excluding the plugin tree from the public-world SQL fence is justified.
+### Suggestions
 
-## Concerns
+- In `LocationRepository.Delete`, first lock and classify the parent location row with `SELECT version ... FOR UPDATE`. Only then preselect the referring exits and issue the delete. The parent `FOR UPDATE` lock conflicts with foreign-key key-share acquisition and closes the child-insert phantom window.
 
-### HIGH — Guest deletion bypasses the outbox and invalidates INV-WORLD-4
+- Add an integration test with this exact interleave:
 
-The plans close character creation paths but miss an existing production character deletion path:
+  1. deletion transaction locks the location;
+  2. a second transaction attempts to create an exit referencing it;
+  3. deletion gathers children and commits;
+  4. creation must fail or wait and then fail;
+  5. the manifest must equal every deleted exit.
 
-- deleting a guest player cascades to its characters by schema design ([000002_player_is_guest.up.sql:9](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/store/migrations/000002_player_is_guest.up.sql:9));
-- the reaper invokes `DeleteGuestPlayer` directly ([guest_reaper.go:68](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/guest_reaper.go:68));
-- that method deletes only from `players`, relying on FK cascades for characters ([player_repo.go:326](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/postgres/player_repo.go:326)).
+- Replace the D-07 preflight with searches for `world.Service.AddSceneParticipant`, interface calls through the world repository, and callers outside `_test.go`, while explicitly ignoring `plugins/core-scenes`.
 
-This produces a character deletion without a character tombstone, bypassing the SQL fence because the Go source contains `DELETE FROM players`, not `DELETE FROM characters`.
+### Risk Assessment
 
-The same problem exists in `GuestService` cleanup after token or session failure: cleanup deletes the already-committed player after character genesis may have been emitted ([guest_service.go:165](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/guest_service.go:165), [guest_service.go:193](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/auth/guest_service.go:193)).
-
-This defeats the census, writer-boundary invariant, delta parity, and feed completeness.
-
-### HIGH — Plans 05-09 and 05-11 violate D-05
-
-D-05 explicitly excludes `scene_participants` from the guarded/outbox surface. Nevertheless:
-
-- 05-09 declares scene-participant envelope kinds;
-- 05-11 routes `AddSceneParticipant` and `RemoveSceneParticipant` through the outbox;
-- 05-11 describes these writes as part of the complete rollout.
-
-The source confirms these methods target the vestigial public table ([scene_repo.go:40](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/postgres/scene_repo.go:40)), and the production caller census finds only tests outside `world.Service`. The plugin uses its separate schema ([plugin migration:11](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/plugins/core-scenes/migrations/000003_scene_participants_and_ops_events.up.sql:11)).
-
-The plan must choose one position consistently. Under locked D-05, scene participant methods should be excluded from the taxonomy, outbox rollout, and census, with issue #4815 retaining ownership.
-
-### HIGH — The proposed `mutate` signature does not identify an operation
-
-The canonical seam is repeatedly stated as:
-
-```go
-mutate(ctx, entity, expectedVersion, intent)
-```
-
-That contains no operation or callback. The current repository contracts expose separate create, update, delete, move, and participant methods ([repository.go:21](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go:21), [repository.go:93](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go:93), [repository.go:121](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go:121)). An entity plus version cannot distinguish:
-
-- create from update;
-- update from delete;
-- object movement from ordinary object update;
-- multi-repository cascade deletion;
-- character preference updates;
-- participant changes.
-
-Dispatching from the envelope’s string `kind` would turn the claimed compile-time seam into runtime string dispatch. The plans never assign this responsibility precisely.
-
-### HIGH — Durable idempotency is missing from the reference consumer
-
-The plans repeatedly claim consumer deduplication beyond the JetStream duplicate window, including crash/retry tests. But 05-07 adds only `consumer.go` and tests; it adds no consumer checkpoint/idempotency table or injected durable store.
-
-The current publisher documents that the deduplication horizon is finite and that expiry changes retry safety ([publisher.go:64](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/eventbus/publisher.go:64), [publisher.go:109](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/eventbus/publisher.go:109)). The stream’s duplicate window is explicitly configured rather than permanent ([subsystem.go:281](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/eventbus/subsystem.go:281)).
-
-An in-memory ULID set does not survive consumer restart and cannot establish the claimed exactly-once visible effect after a retry outside the duplicate window.
-
-### HIGH — `MoveCharacter` retains a post-commit failure contradiction
-
-`MoveCharacter` currently:
-
-1. updates the character row;
-2. invokes a movement hook;
-3. may return an error after the row already committed.
-
-This is explicit in the source ([service.go:802](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/service.go:802), [service.go:807](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/service.go:807)). The hook contract says an error fails the move ([movement_hook.go:13](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/movement_hook.go:13)).
-
-After 05-06, the mutation and envelope will commit together before this hook unless the plan changes the ordering. A hook error would therefore produce:
-
-- a command reported as failed;
-- committed world state;
-- a committed world envelope.
-
-That conflicts with the plans’ rule that failed commands emit nothing. None of 05-06, 05-08, or 05-10 specifies the movement-hook disposition.
-
-### MEDIUM — Location delete cannot produce its claimed cascade delta
-
-Deleting a location cascades deletion of exits through both exit foreign keys ([000001_baseline.up.sql:113](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/store/migrations/000001_baseline.up.sql:113)). Yet:
-
-- 05-02 specifies the location delete delta as only the primary location tombstone;
-- 05-10 later claims the location delete manifest includes cascaded children;
-- 05-10 modifies only service/payload files, not the location repository.
-
-The service cannot reconstruct the IDs and versions of database-cascaded exits after deletion. That makes the planned INV-WORLD-2 binding fail for location deletion unless the repository preselects and reports those exits or the invariant explicitly excludes DB cascades.
-
-### MEDIUM — Concurrent-delete classification is overstated
-
-The plans require a locked prior read and claim it distinguishes stale version, concurrent deletion, and never-existent rows.
-
-A prior `SELECT ... FOR UPDATE` serializes the row against a competing delete. If the competing delete committed first, the read sees no row—the same observation as a never-existent ID. If the current transaction locks first, the competing delete waits and is not “concurrent deletion” for this operation.
-
-The existing API accepts only ID for deletes ([repository.go:32](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/world/repository.go:32)), so there is no separate caller-supplied existence token. The plan should either define “concurrent delete” as not-found or add the evidence needed to distinguish it.
-
-### MEDIUM — World envelope wire mapping is under-specified
-
-The proposed `wmodel.Envelope` has epoch, feed position, affected aggregates, and per-kind schema version. The existing `eventbus.Event` wire format has only the standard event metadata plus opaque payload ([types.go:136](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/eventbus/types.go:136)). Its publisher always stamps the global `App-Schema-Version` constant ([publisher.go:303](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/eventbus/publisher.go:303)), and callers are forbidden from overriding that reserved header ([types.go:162](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/internal/eventbus/types.go:162)).
-
-The plans need an explicit adapter defining:
-
-- whether `wmodel.Envelope` is serialized entirely into `eventbus.Event.Payload`;
-- how per-kind schema version relates to the global header;
-- how consumers read `epoch` and `feed_position`;
-- how skip markers use exactly the same wire shape.
-
-### MEDIUM — Plan 05-14’s verification violates repository commands policy
-
-Plan 05-14 requires raw `go build ./...`, but project instructions explicitly prohibit direct Go build/test commands ([CLAUDE.md:200](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/CLAUDE.md:200)). The existing `task test` and `task test:int` already compile `./...` by default ([Taskfile.yaml:85](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/Taskfile.yaml:85), [Taskfile.yaml:165](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase5/Taskfile.yaml:165)).
-
-If a separate all-package non-test build is genuinely required, add a Taskfile target rather than embedding a forbidden command in the execution plan.
-
-### MEDIUM — One phase PR is likely too large for reliable review
-
-This phase combines:
-
-- two migrations;
-- repository-interface redesign;
-- transaction semantics;
-- every world write;
-- new relay and operator commands;
-- lifecycle changes;
-- auth and bootstrap changes;
-- new meta-tests and invariants;
-- documentation corrections.
-
-The plan’s whole-tree gates reduce integration risk, but one PR makes semantic review and regression isolation difficult. Given the known review history and continuing cross-plan contradictions, the D-04 one-PR constraint materially increases landing risk.
-
-## Plan-by-Plan Assessment
-
-| Plan | Assessment | Principal issue |
-|---|---|---|
-| 05-01 | Sound foundation | Migration/fields/error are appropriately isolated. |
-| 05-02 | Needs revision | Delete classifier overclaims concurrent-delete distinction; location delete delta omits cascaded exits. |
-| 05-03 | Mostly sound | Same delete-classifier issue; movement expected-version threading must be explicit. |
-| 05-04 | Good but incomplete | Correctly covers RMW conflict paths, but not delete-version acquisition. |
-| 05-05 | Strong schema core | Add durable consumer idempotency/checkpoint schema or explicitly narrow guarantees. |
-| 05-06 | Blocked | `mutate` has no operation; movement-hook post-commit failure is unresolved. |
-| 05-07 | Blocked | Durable consumer design and world-envelope wire adapter are missing. |
-| 05-08 | Premature | Exactly-once consumer assertions cannot be met without durable idempotency. |
-| 05-09 | Contradictory | Taxonomy includes scene participant kinds despite D-05 exclusion. |
-| 05-10 | Needs revision | Location cascade manifest cannot be produced by the files this plan changes. |
-| 05-11 | Blocked | Violates D-05 and census cannot detect FK-cascade character deletion. |
-| 05-12 | Premature | INV-WORLD-2/4 would be falsely bound while cascade and guest-reaper gaps remain. |
-| 05-13 | Sound | Narrow doc correction and regression guard are well scoped. |
-| 05-14 | Strong prerequisite | Replace raw `go build`; clarify temporary expected-version behavior and delete semantics. |
-| 05-15 | Necessary but incomplete | Creation is covered, but cleanup/reaper deletion can still remove characters without tombstones. |
-
-## Suggestions
-
-- Add a new prerequisite plan for character lifecycle deletion:
-
-  - route guest reaping and failed-guest cleanup through a character-aware deletion service;
-  - emit one tombstone per deleted character in the same transaction;
-  - delete the player only after character tombstones and character deletion commit;
-  - add a regression test proving guest expiration cannot create genesis-without-tombstone history.
-
-- Remove `AddSceneParticipant` and `RemoveSceneParticipant` from:
-
-  - the Phase 5 taxonomy;
-  - outbox rollout;
-  - command census;
-  - delta/invariant claims.
-
-  Leave the existing public-world methods unchanged or formally deprecate them under #4815.
-
-- Replace the ambiguous mutation signature with a concrete executable contract, for example:
-
-```go
-mutate(
-    ctx context.Context,
-    intent wmodel.EnvelopeIntent,
-    write func(context.Context) (*wmodel.MutationDelta, error),
-) (*wmodel.MutationDelta, error)
-```
-
-  Keep writer repositories private to the executor so callers cannot supply arbitrary SQL. Alternatively, define typed command objects with one executor method per operation.
-
-- Add a durable reference-consumer store, such as a table keyed by `(consumer_name, event_id)` plus epoch/feed watermark. Apply the consumer effect and record the event ID atomically. Test restart and retry after the JetStream duplicate window expires.
-
-- Specify the relay wire adapter in 05-07:
-
-  - canonical serialization;
-  - subject mapping;
-  - event type;
-  - global versus per-kind schema versions;
-  - feed-position/epoch representation;
-  - skip-marker representation.
-
-- Resolve `MovementHook` explicitly. Options include:
-
-  - fold its durable session update into the same database transaction;
-  - derive the dependent state from the world envelope in a consumer;
-  - classify post-commit hook failure as operational degradation while returning command success.
-
-  Do not retain “return failure after state + envelope commit.”
-
-- Extend location deletion delta construction inside `location_repo.go` by selecting affected exits under lock before deletion, or explicitly define database-cascaded rows as outside the affected-aggregate manifest. The latter would require narrowing INV-WORLD-2.
-
-- Simplify delete classification to two observable outcomes unless caller evidence is added:
-
-  - existing row with mismatched version → `WORLD_CONCURRENT_EDIT`;
-  - absent row → not-found, including a delete that already won.
-
-- Add a Taskfile `build:all` target if required and use that from 05-14.
-
-- Even if D-04 requires one PR, preserve reviewable commits at the plan boundaries and require a phase-level integration matrix after every wave, not only at the end.
-
-## Risk Assessment
-
-**Overall risk: HIGH**
-
-The core mechanism is promising, and much of the repository analysis is excellent. The remaining issues are not cosmetic: they directly contradict D-05 or invalidate the proposed `INV-WORLD-ATOMIC-FEED`, `INV-WORLD-DELTA-PARITY`, and `INV-WORLD-WRITER-BOUNDARY` bindings. In particular, guest reaper FK cascades, the undefined mutation executor operation, and non-durable consumer deduplication prevent the phase from satisfying its own success criteria.
-
-Once those blockers are resolved in the plan—not deferred to implementation judgment—the phase should be reviewable at **MEDIUM** implementation risk.
+**HIGH** until the parent-lock ordering is added. Without it, the planned delta-parity invariant is bindable only by a non-adversarial test.
 
 ---
 
-## Antigravity Review (round 5)
+## 05-05–05-08 — Outbox, relay, consumer, and wire contract
 
-# Plan Review: HoloMUSH Phase 5 (World-Model Integrity Fixes)
+### Summary
 
-This document provides structured feedback on the plan quality, completeness, and risks for **Phase 5: World-Model Integrity Fixes (M2 / M12)** of the HoloMUSH project. This review covers the revised 15-plan set (`05-01-PLAN.md` through `05-15-PLAN.md`), integrating prior review feedback from Round 4.
+The envelope ownership, locked counter, lease abstraction, stable skip identity, and wire adapter are substantially improved. The durable consumer checkpoint addition is directionally correct but still lacks an implementable atomic-effect contract.
 
----
+### Strengths
 
-## 1. Executive Summary
+- The locked counter is the right ordering primitive. The plans correctly avoid `BIGSERIAL` and hold the per-game row lock until the outer transaction commits.
 
-- **Overall Verdict**: **APPROVED FOR EXECUTION (GREEN)**
-- **Risk Level**: **LOW** (down from **HIGH** in Round 4)
-- **Primary Finding**: The revised plans successfully incorporate all feedback from prior rounds. The core architecture is highly cohesive, Go import cycles are resolved by the introduction of the leaf package `wmodel`, and the boundary conditions for database transactions (including character settings, scene plugins, and guest/bootstrap-admin creation paths) have been correctly and honestly scoped.
+- Envelope ownership is now coherent: intent comes from the command, delta from the repository, and epoch/position from the PostgreSQL writer. This avoids constructing a finalized envelope before the committed delta exists.
 
----
+- The wire-adapter design now matches the event bus. `eventbus.Event.Payload` is raw application payload (`internal/eventbus/types.go:141-149`), while the publisher wraps and codec-encodes it (`internal/eventbus/publisher.go:184-190`, `:280-293`). The publisher itself owns `Nats-Msg-Id` and the global schema header (`internal/eventbus/publisher.go:303-306`), so carrying the per-kind schema version inside the world payload is correct.
 
-## 2. Codex Round-4 Concerns vs. Plan Resolutions
+- `eventbus.Qualify` accepts a relative reference or passes through an already-qualified subject (`internal/eventbus/qualify.go:12-33`), supporting the proposed subject adapter without another custom prefixing mechanism.
 
-The table below traces how the major concerns highlighted in the Round 4 review have been addressed in the latest plans:
+- The stable skip-marker ID and generation-fenced database acknowledgement correctly acknowledge at-least-once delivery instead of claiming a PostgreSQL lease can retract an already-published NATS message.
 
-| Concern (Round 4) | Plan Resolution | Status |
-| :--- | :--- | :--- |
-| **Unmodeled Writers Escaping SQL Fence** (settings & scene plugin writes) | Scoped the AST SQL fence in [05-09-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-09-PLAN.md) to exclude `scene_participants` and the `plugins/` directory (schema-blind false positive). Folded the genuine `UPDATE characters` settings write into the versioned/envelope world path in `internal/world/postgres` and rewired `character_settings_repo.go` to route through the world service. | **Resolved** |
-| **False Guest/Bootstrap Transaction Atomicity** (non-world repos ignoring txKey) | Corrected in [05-15-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-15-PLAN.md) by narrowing the transaction boundary to the sound unit (character + binding + envelope). Handled the foreign key (FK) hazard by ordering player/role creation (player committed first; roles assigned after character commit) and explicitly documenting compensation gaps. | **Resolved** |
-| **Non-Idempotent Skip Recovery** (fresh ULID on skips violating `INV-WORLD-3`) | Updated [05-07-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-07-PLAN.md) and [05-05-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-05-PLAN.md) to persist a stable `skip_marker_event_id` in the outbox table prior to publication, ensuring duplicate publishes are absorbed by JetStream and consumer deduplication. | **Resolved** |
-| **Underspecified Lease Generation** (missing generation argument/column) | Stamped `lease_generation` in the `world_feed_counter` table (migration `000050`) and verified the fencing token in `MarkPublished(..., generation)` via a database re-read comparison in [05-07-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-07-PLAN.md). | **Resolved** |
-| **Genesis Package-Contract Cycles** (outbox genesis importing postgres) | Added a consumer-owned `GenesisStore` interface declared in `internal/world/outbox` and implemented in `internal/world/postgres/genesis_store.go`, preserving the 05-07 eight-edge import guard. | **Resolved** |
-| **Genesis/Reset Lacked Operator Entry Point** (library-only code) | Added real operator entry points via Cobra CLI subcommands `holomush world genesis` and `holomush world epoch-reset` in [05-11-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-11-PLAN.md). | **Resolved** |
-| **Incomplete Caller/Mock Inventories** (missed test files in wave 1) | Replaced the fragile hand-maintained `files_modified` check with an unscoped whole-tree compile gate (`go build ./...`, `task test`, `task test:int`) in the wave-1 verification of [05-14-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-14-PLAN.md). | **Resolved** |
-| **Invariants Using Symbolic IDs** (parser rejects symbolic names) | Mapped the invariants to canonical numeric IDs `INV-WORLD-1` through `INV-WORLD-4` in [05-12-PLAN.md](file:///.planning/phases/05-world-model-integrity-fixes-m2-m12/05-12-PLAN.md), preserving symbolic names as legacy aliases. | **Resolved** |
+### Concerns
 
----
+- **HIGH — “Effect + checkpoint in one transaction” has no concrete transaction contract.** Plan 05-07 says the consumer applies an effect and records `world_consumer_checkpoint` atomically, but the proposed `ConsumerCheckpointStore` only describes checkpoint operations. Current transaction enrollment depends on a private PostgreSQL context value read by `execerFromCtx` (`internal/world/postgres/helpers.go:42-46`), and the current transactor is the component that installs it (`internal/world/postgres/transactor.go:27-35`). The plan does not give the consumer an injected transactor or a callback such as `ApplyOnce(ctx, event, effect func(txCtx) error)`. A generic consumer cannot guarantee that an arbitrary effect uses the same transaction merely because checkpoint SQL does.
 
-## 3. Plan Strengths
+- **MEDIUM — The checkpoint table conflates event receipts and the consumer watermark.** A primary key of `(consumer_name, event_id)` creates one row per event, while the “per-consumer watermark” is repeated on every row. The plan does not specify a monotonic conditional update, uniqueness per `(consumer_name, game_id)`, or how concurrent deliveries avoid moving the resume point backward.
 
-- **Dependency Graph Integrity**: The architecture cleanly avoids circular dependencies through the leaf package `wmodel` (`internal/world/wmodel`). Production packages follow a strict dependency order: `world -> wmodel`, `outbox -> wmodel`, and `postgres -> world, outbox, wmodel`. The composition roots inject concrete implementations behind consumer-owned interfaces (`OutboxStore`, `Lease`, `GenesisStore`).
-- **Storage-Owned Finalization**: The `WriteIntent` method owned by `postgres` allocates epoch/position, finalizes the envelope, and persists it in a single transaction. This prevents temporal anomalies where executors try to construct "finalized" envelopes before database storage has assigned positions.
-- **Durable Genesis Checkpoints**: Keying genesis snapshot idempotency to a persistent `world_genesis_checkpoint` table is highly robust. Checking and inserting the checkpoint row under the serializing per-game counter lock prevents double-emission races on parallel executions.
-- **Fail-Closed Execution**: The write executor requires a non-optional envelope intent at compile-time, and the delete methods require an explicit version parameter. Direct repository writes are blocked by reader-only interfaces on `world.Service`, making un-guarded writes compilation errors.
+- **MEDIUM — The reference-consumer bootstrap contract is underspecified.** “Read a snapshot + watermark, then tail” needs an explicit consistency boundary. Otherwise a mutation can commit between the snapshot and watermark read and be either missed or applied twice. The ordered feed provides the mechanism, but the plan needs the exact transaction/isolation sequence.
 
----
+### Suggestions
 
-## 4. Key Risks and Mitigations
+- Define an explicit consumer-owned transaction interface, for example:
 
-### Risk 1: Performance Impact of Serialized Write Locks
-- **Description**: Locking the `world_feed_counter` row using `SELECT ... FOR UPDATE` serializes all write operations for a given game.
-- **Impact**: Under high write load, this creates a throughput bottleneck.
-- **Mitigation**: The plans correctly acquire the counter lock as late as possible (just before committing the mutation transaction). Ensure that no slow/blocking operations (e.g., network calls, disk writes outside the database) occur within the transaction after the counter lock is acquired.
+  ```go
+  ApplyOnce(
+      ctx context.Context,
+      consumer string,
+      envelope wmodel.Envelope,
+      effect func(txCtx context.Context) error,
+  ) (applied bool, err error)
+  ```
 
-### Risk 2: AST SQL Fence Bypass via Dynamic Queries
-- **Description**: The AST SQL fence (`world_sql_fence_test.go`) scans production source code for string literals containing mutation SQL (e.g., `"UPDATE characters"`). It can be bypassed if queries are constructed dynamically (e.g., string concatenation or formatting).
-- **Impact**: An un-guarded write could bypass the SQL fence and leak to production undetected.
-- **Mitigation**: Enforce a strict coding guideline that all database queries targeting world tables must be static string literals. When implementing `world_sql_fence_test.go`, make the string scanning robust enough to check for substring matches or dynamic query patterns.
+  The PostgreSQL implementation should begin one transaction, claim the event ID, run the effect with the same transaction context, advance a monotonic watermark, and commit.
 
-### Risk 3: Connection Starvation in Zero-Row Classifiers
-- **Description**: When a write returns zero rows affected, a follow-up query checks the row's version. If this follow-up query attempts to acquire a new connection from the pool, it will deadlock if the connection pool is exhausted (e.g., constrained to a size of 1).
-- **Impact**: Deadlock/hang during write conflicts.
-- **Mitigation**: The plans mitigate this by executing the follow-up check using `withTx` and `execerFromCtx`, which reuse the caller's connection/transaction. During implementation, developers must be extremely careful not to use `r.pool` directly within any zero-row classification logic.
+- Split persistence into:
 
-### Risk 4: Operational Management of Orphaned Guest Players
-- **Description**: Because guest player creation commits prior to the character genesis transaction (to satisfy the character's `player_id` FK), a subsequent failure during character/binding creation will leave an orphaned player row in the database.
-- **Impact**: Database cruft over time.
-- **Mitigation**: This is an accepted and documented compensation gap. Ensure that a background cleanup worker or operational script exists to periodically prune guest players that have no associated character records.
+  - `world_consumer_receipts(consumer_name, event_id, ...)`
+  - `world_consumer_watermarks(consumer_name, game_id, epoch, feed_position)`
+
+  Advance the watermark only when the new `(epoch, position)` is greater than the stored value.
+
+- Specify bootstrap as one repeatable-read transaction: capture the feed watermark, read the snapshot consistent with that watermark, commit, then subscribe from the next position.
+
+- Add failure tests at all three boundaries: effect succeeds/checkpoint fails, checkpoint claim succeeds/effect fails, and process dies before commit. Every case must leave both or neither visible.
+
+### Risk Assessment
+
+**HIGH** because durable dedup is relied upon to make relay duplicates harmless beyond JetStream’s finite deduplication window, but the atomic visible-effect mechanism is not yet implementable from the described interfaces.
 
 ---
 
-## 5. Structured Recommendations
+## 05-06 — Mutation closure and movement-hook semantics
 
-1. **Verify `withTx` Re-Entrancy in Code Review**: During the PR review of `05-14-PLAN.md`, verify that the re-entrant logic in `Transactor.InTransaction` correctly prevents nested commits/rollbacks and propagates errors cleanly to the outermost transaction.
-2. **Review AST Fence Exclusions Periodically**: The AST SQL fence excludes the `plugins/` directory and `scene_participants` to avoid false positives. Ensure this exclusion does not lead to drift where core world tables are mutated from plugins. A future architecture phase should audit plugin table boundaries (tracked under issue `#4815`).
-3. **Assert Late Counter Locking in Tests**: Add a dedicated concurrent integration test in the outbox store tests to verify that the locked counter is held for a minimal duration, proving that concurrent writes serialize only during the final commit phase.
+### Summary
+
+The write-closure redesign resolves the operation-identity problem and correctly keeps writer repositories private. Treating the post-commit movement hook as command degradation is internally consistent with the locked decision, but the plan overstates eventual recovery.
+
+### Strengths
+
+- A closure built by a private executor method identifies the operation without string dispatch and supplies the actual `MutationDelta`.
+
+- The plan correctly removes the existing partial-failure API. Today `MoveCharacter` commits the character location first (`internal/world/service.go:802-805`) and then may return `CHARACTER_MOVE_FAILED` with `move_succeeded=true` when the hook fails (`internal/world/service.go:807-819`). That behavior invites an unsafe retry.
+
+- Moving the hook after state-plus-envelope commit gives the command result a single truth: the move happened.
+
+### Concerns
+
+- **MEDIUM — No source-grounded reconciliation mechanism exists for a failed movement hook.** The production hook writes derived location into the session store (`cmd/holomush/sub_grpc.go:840-849`). The current contract explicitly exists so session consumers observe the new location (`internal/world/movement_hook.go:13-17`). Logging and incrementing a metric do not reconcile that stale row, and Phase 5 explicitly ships no product projection. The plan’s assertion that the session state is eventually re-derived on a later authoritative read is not backed by a cited code path.
+
+### Suggestions
+
+- Keep command success after commit, but add a bounded durable retry/reconciliation record for the session update, or add a read-path repair proven by a test.
+
+- If remediation is deliberately deferred, remove the claim of eventual reconciliation and document the actual consequence: session-derived routing may remain stale until reconnect or another explicit repair mechanism.
+
+- Add a test proving the chosen recovery event, not merely that the command returns success and logs the hook error.
+
+### Risk Assessment
+
+**MEDIUM**. World state and feed correctness are preserved, but session-derived routing can diverge indefinitely.
 
 ---
 
-_Executive summary (agy stdout):_
+## 05-09–05-12 — Taxonomy, rollout, census, genesis, and invariants
 
-I have completed the review of the revised 15-plan set (`05-01-PLAN.md` through `05-15-PLAN.md`) for **HoloMUSH Phase 5 (World-Model Integrity Fixes)**. 
+### Summary
 
-The detailed structured feedback has been saved to the artifact file:
-👉 **[analysis_results.md](file:///Users/sean/.gemini/antigravity-cli/brain/bba20b08-fb16-4407-a33d-a723b5d69ef4/analysis_results.md)**
+The taxonomy/writer-boundary design is much stronger than earlier rounds, especially the import graph and numeric invariant IDs. Two boundary gaps remain: future SQL migrations are outside the fence, and epoch reset does not explicitly reset or serialize the position transition.
 
-### Key Highlights of the Review:
-1. **Overall Verdict**: **APPROVED FOR EXECUTION (GREEN)**. The plan set is robust, complete, and fully implements the normative mechanisms while addressing all 8 concerns raised during the Round 4 review.
-2. **Prior Gaps Resolved**:
-   - **Skip recovery retry-idempotency**: Persisting a stable `skip_marker_event_id` in the outbox table preserves `INV-WORLD-3` and prevents duplicate feed events on retries.
-   - **Lease generation fencing**: The use of a durable `lease_generation` column in the database provides a concrete fencing token checked inside `MarkPublished`.
-   - **Transaction boundaries**: The plans correctly narrow the guest/bootstrap atomic unit to character + binding + envelope, eliminating false claims about un-enrolled repositories (`player_repo`, `role_store`) while resolving the FK-blocking deadlock risk through ordering.
-   - **Scope Boundaries (D-05)**: The AST SQL fence and outbox scope correctly exclude the plugin's `scene_participants` table while folding the settings `UPDATE characters` write into the versioned world boundary.
-3. **Primary Risks Identified**:
-   - **Throughput Serialization**: Acquiring the locked counter as late as possible is critical to minimize transaction holding time.
-   - **AST SQL Fence limitations**: String scanners can be bypassed if queries are constructed dynamically. Developers should strictly use static string queries.
-   - **Guest cruft**: A background worker should eventually clean up orphaned guest players if character creation fails after a player is committed.
+### Strengths
+
+- The source-scanning SQL fence is the right mechanism; depguard cannot inspect SQL literals.
+
+- Numeric invariant IDs match the existing parser contract, avoiding symbolic IDs that would never bind.
+
+- Separating taxonomy consistency from writer completeness is honest. The census is paired with reader views, SQL scanning, import restrictions, and dedicated genesis/reaping services.
+
+- The genesis checkpoint key includes game, epoch, aggregate type, and aggregate ID, which remains durable after outbox pruning and supports legitimate replay after an epoch change.
+
+### Concerns
+
+- **MEDIUM — INV-WORLD-4 claims coverage over migrations/backfills that the fence does not enforce.** The planned AST/token fence scans production Go only. Existing migrations already contain world mutations (`internal/store/migrations/000001_baseline.up.sql:389`, `:393`), demonstrating that SQL migrations are a real writer channel. A future migration can update a world table without emitting an envelope or advancing the epoch and still pass the proposed Go-source fence.
+
+- **MEDIUM — Epoch reset semantics are incomplete.** Plan 05-11 says `AdvanceEpoch` updates `world_feed_counter.epoch`, while the schema also stores `next_position`. It does not explicitly require the same locked update to reset `next_position`, reject active unpublished rows, or coordinate relay state. An epoch increment with an inherited position is not the promised “restart cleanly,” and an epoch change while old rows remain can make relay ordering ambiguous.
+
+### Suggestions
+
+- Extend the SQL fence to migration files. Permit schema DDL, but reject world-table `INSERT`/`UPDATE`/`DELETE` unless the migration is explicitly paired with an epoch-reset marker or registered exception.
+
+- Define epoch reset as one locked operation:
+
+  - acquire the per-game counter row lock;
+  - verify no unresolved/unpublished old-epoch row remains, or explicitly quarantine it;
+  - increment epoch;
+  - reset `next_position` to the defined origin;
+  - record reset metadata;
+  - notify/restart the relay.
+
+- Add an integration test with a relay active during reset and old-epoch unpublished rows present.
+
+### Risk Assessment
+
+**MEDIUM**. The normal command boundary is strong, but the bound invariant currently claims more than its static enforcement proves.
 
 ---
 
-## Consensus Summary (round 5)
+## 05-15–05-16 — Character genesis and guest reaping
 
-**Verdict: NOT converged — divergent reviews.** Codex (source-grounded): **HIGH / NOT READY**, one more revision. Antigravity: **GREEN / approved for execution**. Per this project's established reviewer-reliability pattern (Codex has been source-grounded and reliable every round; Antigravity has a documented false-green history in this loop — false-green r1/r3, failed r4), and after **independently grounding the top findings against the actual plan text**, the Codex verdict is the one to weight. Round-4's targeted fixes landed correctly, but a fresh review reached a **new layer of real, previously-untested edges**.
+### Summary
 
-### What round-4 fixed (BOTH reviewers confirm)
+05-15 correctly closes the three known creation bypasses and narrows cross-pool atomicity claims. However, 05-16 is not ready: its proposed reader does not exist on the named concrete repository, and its snapshot-then-delete ordering still allows a concurrent character creation to be removed by the player FK cascade without a tombstone.
 
-A1 stable skip-marker id, A2 durable `lease_generation`, B4 narrowed guest/bootstrap atomicity + FK ordering, and the C5 D-05 disposition (fence schema-scoping + `character_settings` fold-in + the two-`scene_participants`-tables distinction / plugin rejection) are all confirmed landed and correct — by Codex (Strengths §, e.g. it agrees the two-table distinction is real and the plugin-tree fence exclusion is justified) and by Antigravity (GREEN). **The round-4 incorporation itself was sound; the write-path/envelope/atomicity core is settled.**
+### Strengths
 
-### New round-5 findings (Codex). ★ = independently confirmed against plan text this session
+- The current bypasses are real. `auth.CharacterRepository` exposes direct `Create` (`internal/auth/character_service.go:15-20`), and the service writes through it (`internal/auth/character_service.go:108-119`). Removing this method from production-facing narrow interfaces is a strong compile-time fence.
 
-- **HIGH — Guest-reaper character deletion escapes census + fence + outbox.** `guest_reaper.go:68` → `DeleteGuestPlayer` → `DELETE FROM players` → FK-cascades to `characters` (`000002_player_is_guest.up.sql:9`) with **no character tombstone**. Genesis-without-tombstone breaks INV-WORLD-4 / delta-parity / feed-completeness. Creation is fully covered (05-15 routes all 3 paths); **deletion is not** — no plan routes guest reaping (or failed-guest cleanup, `guest_service.go:165/193`) through a tombstone-emitting deletion. The `DELETE FROM players` also evades the SQL fence, which greps `DELETE FROM characters`.
-- **HIGH ★ — 05-11 contradicts locked D-05 on `scene_participants`.** 05-09 correctly excludes `scene_participants` from the SQL fence, but **05-11 (lines 24/92/99/105/159) still routes `world.Service.AddSceneParticipant`/`RemoveSceneParticipant` through `mutate()` + the outbox + the taxonomy + the census bijection.** D-05 defers the vestigial `public.scene_participants` entirely to #4815 → those methods must be excluded from the outbox rollout / taxonomy / census too, not just the fence. The plans hold two positions at once.
-- **HIGH ★ — `mutate(ctx, entity, expectedVersion, intent)` does not identify the operation.** 05-06:91's seam has no operation selector or write callback, so it cannot distinguish create/update/delete/move/preference/participant. It would collapse to runtime string-dispatch on `intent.kind` (undermining the compile-time-seam claim) unless it takes a write closure. Codex's fix: `mutate(ctx, intent, write func(ctx)(*MutationDelta, error))`, keeping writer repos private to the executor.
-- **HIGH — Durable consumer idempotency claimed but not designed.** The A1 stable-id fix relies on JetStream's **finite** dedup window (`publisher.go:64/109`, `subsystem.go:281`). The reference consumer (05-07) claims crash/retry exactly-once but adds no durable idempotency table — an in-memory ULID set does not survive restart. Needs a durable `(consumer_name, event_id)` + epoch/feed watermark store applied atomically with the consumer effect.
-- **HIGH/MED ★ — `MoveCharacter` movement-hook post-commit failure unresolved.** 05-06 deletes the post-commit *emit* path, but the movement *hook* (`movement_hook.go:13`, `service.go:802/807`) can still error **after** state+envelope commit → a "failed" command that already emitted an envelope, contradicting "failed commands emit nothing." Grep confirms 05-06/08/10 never address the hook disposition.
-- **MEDIUM — Location-delete cascade delta.** Deleting a location FK-cascades its exits (`000001_baseline.up.sql:113`), but 05-02's delta is only the location tombstone while 05-10 claims cascaded children yet modifies only service/payload (not `location_repo.go`). The repo must preselect cascaded exits under lock, or INV-WORLD-2 (delta-parity) must explicitly exclude DB cascades.
-- **MEDIUM ★ — 05-14's raw `go build ./...` violates CLAUDE.md's MUST-use-`task` rule.** 05-14:188 embeds `go build ./... && task test && task test:int`; CLAUDE.md (~line 200) forbids direct `go build`/`go test`. `task test`/`task test:int` already compile `./...`; a pure production all-package build should be a new `task build:all` target, not a raw command. **(This one originated in my round-4 directive — my error to own.)**
-- **MEDIUM — Envelope wire adapter under-specified** — `wmodel.Envelope` → `eventbus.Event.Payload` mapping: per-kind vs the global `App-Schema-Version` header (`publisher.go:303`, reserved per `types.go:162`), how consumers read `epoch`/`feed_position`, and the skip-marker wire shape.
-- **MEDIUM — Concurrent-delete classification overstated** — a locked `SELECT … FOR UPDATE` can't distinguish concurrent-delete from never-existed; simplify to two observable outcomes (mismatched-version → `WORLD_CONCURRENT_EDIT`; absent → not-found) unless a caller existence token is added.
-- **MEDIUM — One-PR (D-04) is large for reliable review** (advisory) — suggests reviewable per-plan commits + a per-wave integration matrix, not only an end-of-phase gate.
+- The current guest cleanup hole is exactly as described: failure cleanup directly deletes the player (`internal/auth/guest_service.go:193-199`), and the guest reaper calls `GuestCleaner.DeleteGuestPlayer` (`internal/auth/guest_reaper.go:90-98`). `DeleteGuestPlayer` performs a direct player delete (`internal/auth/postgres/player_repo.go:326-344`), while the character FK cascades on player deletion (`internal/store/migrations/000002_player_is_guest.up.sql:9-13`).
 
-### Divergent views
+- 05-15’s narrowed transaction claim is honest. Character, optional binding, and genesis can share the world transaction; player and role operations use other pool-based stores.
 
-Antigravity rated the identical plan set GREEN and surfaced **none** of the above — including the two findings ( D-05 outbox contradiction, `go build` policy violation ) that are plainly present in the plan text. Given its false-green history in this loop and that four Codex findings are directly confirmable, Antigravity's optimism does not override Codex.
+### Concerns
 
-### Bottom line
+- **HIGH — 05-16 names a reader implementation that does not exist.** The plan says concrete `worldpostgres.CharacterRepository` supplies `ListByPlayer`, but its current production API has `Get`, `Create`, `Update`, `Delete`, `GetByLocation`, `UpdateLocation`, and ownership checks—no `ListByPlayer` (`internal/world/postgres/character_repo.go:29-135`). The auth adapter has `ListByPlayer`, but its query does not select or scan `Version` (`internal/bootstrap/setup/adapters.go:73-92`). Therefore it cannot supply the expected version required by guarded delete. Plan 05-16 does not list either repository file for correction.
 
-Both reviewers agree the **core architecture is settled** and round-4's fixes were correct. But this is **not** convergence: Codex's fresh pass reached a real new layer — character-lifecycle **deletion** (guest reaper / cleanup), cascade-delta parity, consumer durability, the `mutate` executor contract, the wire adapter, and a D-05 self-contradiction in the outbox rollout. Codex frames all of them as resolvable to **MEDIUM** risk in-plan. The honest state is **"one more targeted `--reviews` incorporation pass,"** not "ready to execute." Several fixes are cheap (drop `scene_participants` from 05-11's outbox/census; `go build` → `task build:all`; simplify delete classification); a few need real design (guest-reaper tombstone deletion path; `mutate` write-closure; durable consumer store; movement-hook ordering; location cascade delta; wire adapter).
+- **HIGH — Snapshot-then-delete does not eliminate tombstone-less FK cascade under concurrency.** The plan lists characters, deletes each in separate transactions, and only afterward deletes the player on another connection. Character creation accepts an arbitrary player ID and performs no guest/reaping-state check (`internal/auth/character_service.go:64-69`, `:108-119`). A character can therefore be created after the reaper’s list—or after all tombstone transactions but before the player delete. The final `DELETE FROM players` then cascade-deletes that new character through the FK without a tombstone. INV-WORLD-4 remains false.
+
+- **MEDIUM — Per-character transactions create partial reaps.** If character one commits and character two conflicts, the service returns with some characters tombstoned/deleted and the player retained. This is feed-safe for completed characters, but contradicts portions of the plan that describe a single character-reaping operation. The retry and compensation state should be explicit.
+
+- **MEDIUM — A single create-then-reap test will not detect the race.** The planned regression test proves the serial path only. It cannot establish “genesis-without-tombstone is impossible” without an interleaving test against concurrent genesis creation.
+
+### Suggestions
+
+- Add a real version-bearing reader to `internal/world/postgres/character_repo.go`, or explicitly use and update the auth adapter to scan `version`. Include the changed file and tests in 05-16.
+
+- Close the reaper/create race structurally. Suitable options include:
+
+  1. move character enumeration, all guarded deletes, tombstone writes, and guarded guest-player deletion into one shared PostgreSQL transaction; or
+  2. mark/lock the player as `reaping` first and make `CharacterGenesisService` reject creation for a reaping player, then enumerate/delete/tombstone and finally delete the player.
+
+- Prefer one transaction for all of a player’s character tombstones, not one transaction per character. If batching is intentionally rejected, specify resumable state and exact partial-success semantics.
+
+- Add a deterministic race test that pauses reaping after enumeration, attempts a genesis creation for the same guest, resumes the player delete, and asserts either creation is rejected or the new character receives a tombstone.
+
+### Risk Assessment
+
+**HIGH**. The new plan does not yet make tombstone-less guest deletion impossible, which is the sole reason 05-16 was added.
+
+---
+
+## 05-13 — Documentation correction
+
+### Summary
+
+This plan is appropriately scoped and preserves genuine client replay while correcting false world-state reconstruction claims.
+
+### Strengths
+
+- It distinguishes world-state replay from real client catch-up instead of replacing every occurrence mechanically.
+
+- The guarded meta-test is scoped to false world/current-state claims, reducing false positives around legitimate event-history replay.
+
+### Concerns
+
+- **LOW — The test remains phrase-oriented.** A future semantically equivalent false claim may evade a narrow string check.
+
+### Suggestions
+
+- Guard the relevant document sections and a small set of semantic patterns, not only the exact old sentence.
+
+- Include the ADR link in each architectural correction so future editors see the authoritative model decision.
+
+### Risk Assessment
+
+**LOW**.
+
+---
+
+# Overall Assessment
+
+The plans have converged significantly: transaction ownership, package cycles, envelope finalization, relay leasing, stable skip identity, numeric invariants, and creation-path coverage are now well designed.
+
+Three correctness blockers remain:
+
+1. guest reaping can still race character creation and cascade-delete an un-tombstoned character;
+2. location-delete cascade preselection permits a child-insert phantom;
+3. durable consumer “effect + checkpoint” atomicity lacks a concrete shared-transaction API.
+
+**NOT READY** — most importantly, 05-16 still cannot guarantee the locked D-06 outcome: a concurrent character can be created after enumeration and then disappear through `ON DELETE CASCADE` without a tombstone.
+
+---
+
+## OpenCode Review (openrouter/x-ai/grok-4.5)
+
+Reviewing round-5 plan edges against live source — focusing on 05-16 reap/tombstone, D-07 removal, consumer checkpoint, cascade parity, and mutate/hook seams.
+Verifying the round-5 edges against live call sites and cascade/order facts.
+Digging into guest cleanup, character listing, Taskfile build targets, and remaining delete-path holes.
+# Phase 5 Plans — Round 6 Cross-AI Review
+
+Source-grounded against current tree (`internal/auth/**`, `internal/world/**`, migrations, `Taskfile.yaml`, eventbus config). Focus: round-5 deltas and residual implementability risks—not rehashing settled r1–r5 design locks.
+
+---
+
+## Cross-cutting (r5-shaped)
+
+| Area | Verdict | Evidence |
+|------|---------|----------|
+| D-06 guest delete hole is real | Confirmed | `guest_reaper.go:90` → `GuestCleaner.DeleteGuestPlayer`; `player_repo.go:331-334` `DELETE FROM players … is_guest=true` **documents** FK cascade to characters; `000002_player_is_guest.up.sql:9-13` `ON DELETE CASCADE`. Soft path: `guest_service.go:195-199` `cleanupGuestPlayer` → `players.Delete` (`player_repo.go:271-273`)—same cascade, **no** character tombstone. |
+| D-07 world scene write removal | Safe | `AddSceneParticipant` / `RemoveSceneParticipant` only at `service.go:703/724` + `scene_repo.go:27/56` + mocks/tests; prod plugins use **plugin** `SceneStore.AddParticipant` (`plugins/core-scenes/store.go:748`), not world. Reads (`ListParticipants`/`GetScenesFor`) still join `public.scene_participants`—table DROP deferral is correct. |
+| Location exit cascade preselect | Sound | `000001_baseline.up.sql:115-116` both `from_location_id` and `to_location_id` → `locations` `ON DELETE CASCADE`; 05-02 preselect matches DB. |
+| Two-outcome zero-row classifier | Sound | ID-only `Delete(ctx,id,expectedVersion)` carries no existence token; concurrent-delete ≡ absent after commit. |
+| Durable consumer checkpoint | Necessary | JetStream `DupeWindow` default **30m** (`eventbus/config.go:27,159-160`); finite dedup is real. Schema PK `(consumer_name,event_id)` + apply+record in one tx is the right shape. |
+| `task build:all` | Correct fix | `task build` builds main binary (`Taskfile.yaml` ~290/`MAIN_PKG`); whole-tree needs `go build ./...` under a Task target (CLAUDE.md). |
+| Movement hook post-commit degradation | Correct disposition | Hook is session-store I/O (`sub_grpc.go:847-848` → `sessions.UpdateLocationOnMove`); character row already committed `service.go:802-819` with `move_succeeded:true`. Failing hook as command failure was already the dual-write smell; operational degradation matches pool boundary. |
+
+---
+
+## 05-16 `CharacterReapingService` (NEW — highest residual risk)
+
+### Summary
+D-06 is correctly diagnosed and mostly well designed (order tombstone-then-player; reuse character delete kind; GuestCleaner seam). Two **implementation holes** remain: (1) the only production `ListByPlayer` path does not live on `worldpostgres.CharacterRepository` and will **not** populate `Version`; (2) reaping bypasses the property cascade that `world.Service.DeleteCharacter` always runs.
+
+### Strengths
+- Matches real call graph: reaper → `GuestCleaner` (`guest_reaper.go:20-21,90`); cleanup → `players.Delete` (`guest_service.go:195-199`) must both be rewired.
+- Ordering vs FK is right: delete characters first (with envelopes), then player so `characters.player_id ON DELETE CASCADE` is a no-op.
+- Kind reuse (same tombstone as `DeleteCharacter`) keeps taxonomy modest.
+- Fail-closed deps + concurrent-edit retry posture is appropriate for a background reaper.
+
+### Concerns
+1. **[HIGH] Reaper’s character list has no versioned read on the claimed type**  
+   - Plan injects “concrete `worldpostgres.CharacterRepository`” as reader with `ListByPlayer`.  
+   - `internal/world/postgres/character_repo.go` has **no** `ListByPlayer` (methods: Get/Create/Update/Delete/GetByLocation/UpdateLocation/IsOwnedByPlayer/GetNamesByIDs/ListAll only).  
+   - Production `ListByPlayer` is `CharRepoAdapter.ListByPlayer` (`adapters.go:74-118`):  
+     `SELECT id, player_id, name, description, location_id, created_at …` — **no `version` column**, never sets `Character.Version`.  
+   - After 05-03 CAS `Delete(…, expectedVersion)`, `char.Version == 0` against DB `version DEFAULT 1` → **every reap delete is permanent conflict/not-found**.  
+   - 05-03 `files_modified` does **not** include `adapters.go`; 05-16 assumes “05-03 scans populate Version” for a method that does not exist there.
+
+2. **[HIGH] Property cascade parity with `DeleteCharacter` missing**  
+   - Service delete: `propertyRepo.DeleteByParent("character", id)` **then** `characterRepo.Delete` in one tx (`service.go:602-657`).  
+   - `entity_properties` has **no** FK to `characters` (`000001_baseline.up.sql:350-364`)—delete character leaves orphan property rows.  
+   - 05-16 only calls `CharacterWriter.Delete`. Guests *may* have zero props, but feed integrity ≠ DB cleanliness; any reaped character with properties diverges from operator `DeleteCharacter` semantics and can break subsequent parent-scoped property APIs.
+
+3. **[MEDIUM] Per-character vs single-tx ambiguity**  
+   - Text says both “same transaction as the delete” and “tx(es)”. Must specify **one InTransaction per character**, then player delete after all succeed—otherwise one concurrent-edit rolls back already-proven tombstones.
+
+4. **[MEDIUM] `cleanupGuestPlayer` is `Delete`, not `DeleteGuestPlayer`**  
+   - Covered by rewiring, but player deleter handoff must still use `is_guest=true` guarded delete for the reaper path; cleanup’s current unguarded `Delete` is fine only while input is always a guest—document that.
+
+### Suggestions
+- Make `ListByPlayer` (version-scanning) a **canonical** method on `world/postgres.CharacterRepository` (or an injected reader that is *that* repo), update `CharRepoAdapter` to delegate + scan `version`, and put that in **05-03 and/or 05-16 tasks/files_modified** with a RED test: listed version equals stored version → reap CAS succeeds.
+- In reaping’s per-character tx: `DeleteByParent("character", id)` via a narrow property deleter + character `@expectedVersion` Delete + `WriteIntent` (mirror service cascade).
+- State explicit algorithm: list → for each char { InTx{ props + Delete + envelope } } → then `DeleteGuestPlayer`.
+
+### Risk Assessment
+**HIGH** until list+version and property cascade are in the plan.
+
+---
+
+## 05-14 foundation + D-07 + `build:all`
+
+### Summary
+Still the load-bearing wave-1 plan. D-07 deletion of vestigial scene writes is safe. Whole-tree gate via `task build:all` is the right CLAUDE.md fix. Residual risk is blast-radius etiquette (gate > hand list)—already framed correctly.
+
+### Strengths
+- Re-entrant `InTransaction` / `withTx` targets real bugs: `exit_repo.go:60,178` and `object_repo.go:172` own `pool.Begin`.
+- Property `r.pool.Exec` leak (`property_repo.go` create/update) stays in scope.
+- D-07 grep gate + keep reads/table is coherent with live callers.
+- Caller completeness proof is mechanical whole-tree compile—correct after r2–r4 miss streaks.
+
+### Concerns
+1. **[LOW] Vestigial read surface** — `ListSceneParticipants` remains prod code with no non-world external callers grepped; not phase-breaking, but leaves dead API surface until #4815.
+2. **[LOW] `CharRepoAdapter` still does raw `characters` SELECT outside `internal/world/postgres` after Create removal** — fence is mutation-only; OK. Note interaction with 05-16.
+
+### Suggestions
+- In D-07 task, also note `ListSceneParticipants` may have zero prod demand (optional follow-up).
+- Explicitly list `adapters.go` most-likely churn under whole-tree gate when writer signatures change.
+
+### Risk Assessment
+**LOW–MEDIUM** (execution risk mostly time/volume of breakage, not design).
+
+---
+
+## 05-01 … 05-04 (version guard)
+
+### Summary
+Still solid; rectangle of migration + struct + CAS + RMW + M12 flip matches the ADR.
+
+### Concerns
+1. **[MEDIUM] Adapter / auth scanners outside 05-02/05-03**  
+   Beyond reaping: `CharRepoAdapter.ListByPlayer` / ListAll, harness adapters, etc. will return `Version=0` until touched. Any path that RMW/deletes using those lists breaks. Census of **character** readers that must learn `version` is incomplete if limited to `internal/world/postgres/*_repo.go`.
+2. **[LOW] M12 quarantine still not the MODEL-03 must-ship gate alone** — fine; unit/int CAS tests carry weight.
+
+### Risk Assessment
+**MEDIUM** until version-scan inventory includes `CharRepoAdapter` (+ harness auth adapter).
+
+---
+
+## 05-05 outbox schema
+
+### Summary
+Schema package (outbox, counter epoch, genesis checkpoint, consumer checkpoint, skip_marker_event_id, lease_generation) is complete for r3–r5 mechanisms.
+
+### Strengths
+- WriteIntent owns finalize/position (no envelope-before-delta).
+- Always-run state+envelope atomicity tests for INV-WORLD-1.
+- Late counter + `WORLD_FEED_LOCK_TIMEOUT` is testable, not prose.
+
+### Concerns
+1. **[LOW] Watermark table shape** — ensure watermark updates don’t invent a second PK shape that races multi-game (plan has `game_id` on watermark—good).
+2. **[LOW] Four tables in one migration** — fine; down-order reverse explicit—good.
+
+### Risk Assessment
+**LOW**
+
+---
+
+## 05-06 mutate + MoveCharacter + emit delete
+
+### Summary
+Write-closure mutate + write ownership fix + post-commit hook degradation closes the last temporal/operation-identity holes. Emit-path delete packaged with harness rewrite remains load-bearing.
+
+### Strengths
+- Hook pouch at `service.go:807-819` truly cannot enroll in world tx (session pool)—classification is forced by architecture.
+- Deleting `move_succeeded=true` failure path is the right honesty fix for envelope semantics (“failed commands emit nothing”).
+
+### Concerns
+1. **[MEDIUM] Session location lag is accepted but not regression-tested** — add one non-quarantined test: after move + forced hook failure, character.location is updated, session location may lag, command err is nil. Prevents re-introducing fail-after-commit.
+2. **[LOW] Examine consumer audit** — still must run; residual product half-feature if something greps examine subjects.
+
+### Risk Assessment
+**LOW–MEDIUM**
+
+---
+
+## 05-07 relay + lease + skip + consumer
+
+### Summary
+Lease abstraction, durable generation, stable skip id, at-least-once honesty, full import-graph allowlist: strong.
+
+### Strengths
+- Session advisory lock on **dedicated** conn is required (pool-shaped methods cannot prove binding)—plan correctly forces Lease methods onto that conn.
+- Stable `skip_marker_event_id` before publish is the only way to keep INV-WORLD-3 under crash-after-PubAck.
+- Wire adapter: payload carries epoch/position; leave global `App-Schema-Version` alone (`publisher.go:304`, reserved header set)—matches code.
+
+### Concerns
+1. **[MEDIUM] Dedicated-conn lifecycle** under long LISTEN + advisory lock: plan needs `pool.Acquire` / `Conn()` hygiene, cancel-on-loss, and a SEAM test for “conn drops → AcquireLease new generation”. No existing world pattern taught session advisory locks (player sessions use **xact** locks in `player_session_store.go:79`).
+2. **[LOW] Reference consumer package path** must stay off crypto/abac greps—already tasked.
+
+### Risk Assessment
+**MEDIUM** (ops/implementation complexity, not conceptual defect).
+
+---
+
+## 05-08 resilience matrix
+
+### Summary
+Correct firepower for M2 end-to-end and lease handoff; at-least-once assertions are correctly framed.
+
+### Concerns
+- **[LOW]** ~quarantine-only coverage → keep 05-07 seam tests mandatory.
+
+### Risk Assessment
+**LOW**
+
+---
+
+## 05-09 taxonomy + character preferences fold + SQL fence
+
+### Summary
+D-05 fencing + real character_settings fold (`character_settings_repo.go:80` raw `UPDATE characters SET preferences`) is still required and correctly sequenced before green fence assertion.
+
+### Concerns
+1. **[MEDIUM] RMW preferences race** — service internal read-version then CAS: two concurrent SetPreferences → one WORLD_CONCURRENT_EDIT; settings callers may not handle it (D-02 ok, but integration test needed).
+2. **[LOW] SQL fence comment-text discipline** — already warned; keep executor guardrails.
+
+### Risk Assessment
+**LOW–MEDIUM**
+
+---
+
+## 05-10 / 05-11 rollout + genesis + census
+
+### Summary
+Data-first for census remains justified. Genesis via consumer-owned `GenesisStore` + CLI resolves r4 A3. Census honesty (bijection ≠ completeness) is right.
+
+### Concerns
+1. **[MEDIUM] Character reaping as second out-of-Service producer of the tombstone kind** — census multi-producer rule is stated; implementation must not force 1:1 kind↔command bijection that fails when both `DeleteCharacter` and reaping emit the same kind. Plan text allows multi-producer on the out-of-world set—**tests must match** that wording.
+2. **[LOW] Gen era + CharRepo listener Version gap** — genesis snapshot path will scan full world tables; ensure those SELECTs include `version` for any later CAS deletes of the same process (genesis itself is create-only).
+
+### Risk Assessment
+**MEDIUM** (census multi-producer + adapter version coupling).
+
+---
+
+## 05-12 invariants
+
+### Summary
+Numeric IDs + always-run ATOMIC-FEED binding + same-position skip in FEED-ORDER still correct.
+
+### Concerns
+- **[MEDIUM] INV-WORLD-4 asserted_by set** should list a genuine **guest reaping tombstone regression** (`guest_reaper_tombstone_test.go` from 05-16) after 05-16 lands—otherwise D-06 can regrow while the bound tests still pass (writer-boundary false-green for guest deletion).
+
+### Risk Assessment
+**MEDIUM** until 05-16 test is among WRITER-BOUNDARY asserted_by.
+
+---
+
+## 05-13 docs
+
+### Summary
+Still fine. Preserve reconnect “event replay”; rewrite only world-state reconstruction claims.
+
+### Risk Assessment
+**LOW**
+
+---
+
+## 05-15 character genesis
+
+### Summary
+Still the right creation fence. B4 narrow atomicity + ordered player/role remains honest vs `player_repo`/`role_store` own pools.
+
+### Concerns
+1. **[MEDIUM] After `Create` removal, reaper freeze** — depends on independent List/Delete path still assembling (see 05-16). Not reopening 05-15 scope, but phase readiness is joint.
+2. **[LOW] Guest CreateGuest currently claims “atomic player+character+binding” in comments (`guest_service.go:134-135`) while `players.Create` uses `r.pool`**—plan correctly rewrites; keep test that player *intentionally* commits first.
+
+### Risk Assessment
+**LOW–MEDIUM** (sound; coordination with 05-16 Version list).
+
+---
+
+# Round-6 net-new blockers (not settled restatements)
+
+| ID | Severity | Issue |
+|----|----------|--------|
+| R6-1 | **HIGH** | 05-16 / character list: `ListByPlayer` is only on `CharRepoAdapter` (`adapters.go:74-118`), without `version`; world postgres repo has no `ListByPlayer`. Versioned reaper Delete is unimplementable as written → permanent reap failure after 05-03. |
+| R6-2 | **HIGH** | 05-16 omits `entity_properties` `DeleteByParent` that `DeleteCharacter` always does (`service.go:617-622`); orphans possible; cascade parity with world delete broken. |
+| R6-3 | **MEDIUM** | Version-scan inventory incomplete: any auth/harness adapter listing characters for writes must scan `version` (not only `*_repo.go` Get/List). |
+| R6-4 | **MEDIUM** | INV-WORLD-4 binding should include D-06 regression test after 05-16 or guest FK-cascade can return without failing bound tests. |
+| R6-5 | **MEDIUM** | 05-07 session-level advisory lease needs explicit `pool.Acquire`/drop/re-acquire protocol (no in-tree session-lock precedent beyond xact locks). |
+| R6-6 | **LOW** | 05-06: add regression that hook failure does not flip command fail after envelope commit. |
+
+---
+
+# Overall verdict
+
+**NOT READY**
+
+**Single most important reason:** plan **05-16** routes tombstone-emitting deletes through a CAS that needs a real **stored version**, but the claimed reader (`worldpostgres.CharacterRepository.ListByPlayer`) does not exist, and the actual list path (`CharRepoAdapter.ListByPlayer`) never selects/scans `version`—after MODEL-03, guest reaping would systematically fail or regress to ungarded deletes, so D-06 would not close.
+
+**To flip READY:** patch 05-03/05-16 (and adapters) so a version-populated character list is authoritative; include property cascade in the reaping tx; bind INV-WORLD-4 to the tombstone regression; keep the rest of the r5 design.
+
+---
+
+## Antigravity Review (agy)
+
+> NOTE: 11-line GREEN with no HIGH findings — a shallow false-green (documented pattern, rounds 1/3/6). Contradicted by two source-grounded reviewers. Weight out of the plan-level verdict; incidental notes below are valid.
+
+I have completed a thorough, source-grounded architectural review of the HoloMUSH Phase 5 implementation plans (`05-01-PLAN.md` through `05-16-PLAN.md`).
+
+The findings and micro-architectural observations have been compiled into a markdown artifact:
+* [phase_5_plan_review.md](file:///Users/sean/.gemini/antigravity-cli/brain/07c174c3-705b-4435-9125-fb785ff48f6c/phase_5_plan_review.md)
+
+### Key Review Outcomes & Recommendations
+
+1. **Overall Verdict**: The plans are highly cohesive and successfully resolve the world-model integrity issues, outbox atomicity gaps, and import cycle constraints without introducing regression risks. The dependency ordering across waves is structurally sound.
+2. **Orphan Guest Players**: In [GuestService](file:///Users/sean/Code/github.com/holomush/holomush/internal/auth/guest_service.go), player creation is committed before the genesis transaction. While the plans accept the resulting orphan-player compensation gap, we recommend adding a best-effort call to `cleanupGuestPlayer` upon transaction failure to minimize immediate DB bloat.
+3. **Settings Store CAS Integration**: To support version-guarding for the folded-in preferences write, we note that the settings repository must return the character's `version` on load so it can be passed as `expectedVersion` to [Service.UpdateCharacterPreferences](file:///Users/sean/Code/github.com/holomush/holomush/internal/world/service.go) during write-back.
+4. **Deadlock Safety**: The zero-row CAS write classifier correctly reuses the caller's transaction connection from `execerFromCtx` rather than borrowing from the pool, preventing deadlocks on pool-size-1 configurations.
+
+---
+
+## Consensus Summary
+
+**Round 6 — NOT CONVERGED.** Both source-grounded reviewers returned **NOT READY** with `file:line`-cited HIGH blockers; the third (Antigravity) returned an 11-line GREEN with no HIGH findings.
+
+### Reviewer reliability note (weighting)
+
+- **Codex (gpt-5.6-sol)** and **OpenCode / openrouter x-ai/grok-4.5** are source-grounded — they traced the concrete adapters, migrations, and call graph and cite `path:line`. Both independently reach **NOT READY** and **agree on the load-bearing blocker** (05-16 version read). Weight these.
+- **Antigravity (`agy`)** returned ~11 lines: *"highly cohesive … without introducing regression risks"* — an implicit READY with **no** HIGH findings, directly contradicted by two independent source-grounded reviewers who found real HIGH blockers. This is the documented Antigravity false-green pattern (rounds 1/3/6). Treat its overall verdict as non-authoritative. (Its incidental notes are valid and echo the others: settings store must return `version` for the folded preferences CAS; best-effort `cleanupGuestPlayer` on genesis-tx failure to bound orphan-player bloat.)
+
+### Agreed Strengths (2+ reviewers)
+
+Round-5 architecture has largely converged and should be KEPT: two-outcome CAS zero-row classifier is sound; the re-entrant transaction foundation (05-14) targets real bugs (`exit_repo.go:60,178`, `object_repo.go:172`); envelope ownership is coherent (intent from command, delta from repo, epoch/position from PG writer); the wire adapter matches the eventbus (`publisher.go:184-190,280-306`); **D-07** world scene-participant write removal is safe (prod core-scenes uses the *plugin* `SceneStore.AddParticipant`, not the world service); `task build:all` is the correct CLAUDE.md fix; the durable consumer checkpoint is necessary (JetStream `DupeWindow` ~30m is finite); movement-hook post-commit degradation is the correct disposition.
+
+### Agreed Concerns — BLOCKERS (2+ reviewers)
+
+- **[HIGH] 05-16 versioned reaper `Delete` is unimplementable as written (Codex + grok agree).** The reaper needs each character's stored `version` to issue the MODEL-03 CAS `Delete(ctx,id,expectedVersion)`, but (a) `worldpostgres.CharacterRepository` has **no** `ListByPlayer` (`character_repo.go:29-135`), and (b) the actual production list path `CharRepoAdapter.ListByPlayer` (`internal/bootstrap/setup/adapters.go:74-118`) never selects/scans `version`. After 05-03's CAS delete, `char.Version==0` vs DB `version DEFAULT 1` → **every reap delete is a permanent conflict/not-found → guest reaping systematically fails and D-06 does NOT close.** Neither 05-03 nor 05-16 lists `adapters.go` in `files_modified`. **Fix:** add a version-scanning `ListByPlayer` on the world repo (or update the adapter to scan `version`), add `adapters.go` to 05-03/05-16, and add a RED test: listed version == stored version → reap CAS succeeds.
+- **[HIGH] INV-WORLD-4 must bind the D-06 guest-reaping tombstone regression (grok R6-4; Codex "serial test won't detect the race").** Otherwise the guest FK-cascade hole can regrow while the bound writer-boundary tests still pass (a writer-boundary false-green — the exact failure mode 05-16 exists to prevent).
+
+### Divergent / single-reviewer HIGH concerns (still fix)
+
+- **[HIGH — Codex only] 05-16 snapshot-then-delete TOCTOU.** Character create accepts an arbitrary player id with no reaping-state check (`character_service.go:64-69,108-119`); a character created after enumeration (or after the per-character tombstone txns but before `DELETE FROM players`) is cascade-deleted with **no tombstone** → D-06 reopens under concurrency, INV-WORLD-4 false. **Fix:** one shared PG tx for enumerate + all tombstones + guarded player delete, OR mark/lock the player `reaping` first and make `CharacterGenesisService` reject creation for a reaping player. grok did not raise the concurrency race (it focused on the version read + property cascade), so this is a real, additional gap.
+- **[HIGH — grok only] 05-16 omits the `entity_properties` property cascade.** `DeleteCharacter` runs `propertyRepo.DeleteByParent("character", id)` before the char delete (`service.go:617-622`); `entity_properties` has no FK to characters → reaping leaves orphan property rows and diverges from operator-delete semantics. **Fix:** mirror the cascade in the reaping per-character tx.
+- **[HIGH — Codex only] 05-02 location-cascade child-insert phantom.** The `SELECT … FOR UPDATE` preselect locks only *existing* exit rows; a concurrent exit insert after preselect and before the location delete is cascade-deleted without appearing in `MutationDelta` → INV-WORLD-2 bindable only by a non-adversarial test. **Fix:** lock the parent location row `FOR UPDATE` FIRST (conflicts with FK key-share acquisition, closing the child-insert phantom), then preselect + delete; add the exact interleave integration test.
+- **[HIGH — Codex only] 05-07 "effect + checkpoint in one transaction" has no concrete shared-transaction API.** `ConsumerCheckpointStore` describes only checkpoint ops; a generic consumer can't guarantee an arbitrary effect enrolls in the same tx as the checkpoint SQL (`execerFromCtx` reads a private ctx value the transactor installs). **Fix:** an injected transactor / `ApplyOnce(ctx, consumer, envelope, effect func(txCtx) error) (applied bool, err error)`. Related: the `(consumer_name,event_id)` table conflates per-event receipts with the per-consumer watermark (Codex MEDIUM — split into receipts + watermark, advance watermark only on monotonic `(epoch,position)`).
+
+### MEDIUMs to fold
+
+- **Version-scan inventory incomplete** beyond `internal/world/postgres/*_repo.go` — any auth/harness adapter that lists characters for a subsequent write/delete must scan `version` (both reviewers; grok R6-3).
+- **INV-WORLD-4 SQL-migration blind spot:** the fence scans Go only; existing migrations already mutate world tables (`000001_baseline.up.sql:389,393`), so a future migration can write a world table without an envelope and still pass the Go fence (Codex). Extend the fence to migration files or register explicit exceptions.
+- **Epoch reset incomplete:** `AdvanceEpoch` updates `epoch` but not `next_position`, and doesn't reject/quarantine unpublished old-epoch rows or coordinate the relay (Codex). Define epoch reset as one locked operation.
+- **Movement-hook (05-06):** no cited reconciliation path for the stale session-location row — either add a bounded durable retry / read-path repair proven by a test, or drop the "eventually re-derived" claim and document the actual consequence (Codex); add a non-quarantined regression that a hook failure does NOT flip the command to failure after envelope commit (grok R6-6).
+- **05-09 preferences RMW race:** two concurrent `SetPreferences` → one `WORLD_CONCURRENT_EDIT`; settings callers may not handle it — needs an integration test (grok).
+- **05-07 session advisory-lease lifecycle (grok R6-5):** no in-tree session-lock precedent beyond xact locks (`player_session_store.go:79`); needs explicit `pool.Acquire`/drop/re-acquire + cancel-on-loss + a seam test.
+
+### Net verdict
+
+**NOT READY / NOT CONVERGED.** 2/2 source-grounded reviewers independently NOT READY; the lone GREEN is a shallow false-green. The round-5 architecture otherwise held — the failures are concentrated in the **new deletion path (05-16, the D-06 addition)** plus two pre-existing parity/atomicity gaps that deeper source-grounding surfaced (05-02 cascade phantom, 05-07 consumer atomicity). The load-bearing blocker: 05-16's versioned reaper delete is unimplementable against the real character-list adapter (which never scans `version`), and — even once implementable — the snapshot-then-delete ordering + missing property cascade leave the D-06 tombstone guarantee incomplete under concurrency.
+
+**Loop status:** severity is concentrating, not thrashing — round 5 closed the architecture; round 6 narrowed the open surface to the 05-16 deletion path + 2 adjacent gaps, all with concrete, bounded fixes. Recommended next step: incorporate via `/gsd-plan-phase 5 --reviews` (round-7 incorporation) — do NOT execute yet. The 05-16 version-read blocker (R6-1) and the TOCTOU race are the must-fixes before execution.
