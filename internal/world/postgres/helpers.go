@@ -131,16 +131,6 @@ func withTx(ctx context.Context, pool txBeginner, fn func(ctx context.Context) e
 	return nil
 }
 
-// primaryDelta builds a primary-only MutationDelta for a write. 05-14 populates
-// only the primary aggregate id + tombstone flag; the version predicate and real
-// before/after population land in 05-02/05-03, and cascade Affected population in
-// 05-10/05-11.
-func primaryDelta(t wmodel.AggregateType, id ulid.ULID, tombstone bool) *wmodel.MutationDelta {
-	return &wmodel.MutationDelta{
-		Primary: wmodel.AffectedAggregate{Type: t, ID: id, Tombstone: tombstone},
-	}
-}
-
 // primaryDeltaVersioned builds a primary-only MutationDelta carrying the
 // before/after optimistic-concurrency versions of the row transition (MODEL-03,
 // finding 12). before is the version guard read before the write (0 for a
