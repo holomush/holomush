@@ -93,6 +93,8 @@ func hasCode(err error, code string) bool {
 // hands out a Lease; there is no pool-shaped method the relay could use to
 // bypass the lock-holding connection (round-3 blocker #2). The concrete impl
 // lives in internal/world/postgres and is injected by setup.
+//
+//nolint:revive // OutboxStore is the plan-mandated name (05-07 acceptance criteria reference outbox.OutboxStore)
 type OutboxStore interface {
 	// AcquireLease pins a DEDICATED connection, takes the session-level per-game
 	// advisory lock on it, durably bumps world_feed_counter.lease_generation, and

@@ -15,6 +15,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
@@ -81,7 +82,7 @@ func (s *OutboxStore) AcquireLease(ctx context.Context, gameID string) (*OutboxL
 		ON CONFLICT (game_id) DO UPDATE
 		SET lease_generation = world_feed_counter.lease_generation + 1
 		RETURNING lease_generation`, gameID).Scan(&generation); err != nil {
-		_, _ = conn.Exec(ctx, `SELECT pg_advisory_unlock($1)`, lockKey)
+		_, _ = conn.Exec(ctx, `SELECT pg_advisory_unlock($1)`, lockKey) //nolint:errcheck // best-effort unlock on a rollback path; the conn is released next
 		conn.Release()
 		return nil, oops.Code("WORLD_OUTBOX_LEASE_BUMP_GENERATION_FAILED").
 			With("game_id", gameID).Wrap(err)
@@ -114,9 +115,6 @@ func (l *OutboxLease) alive() error {
 	}
 	return nil
 }
-
-// nowNS returns the current time as epoch nanoseconds (INV-STORE-1 columns).
-func nowNS() int64 { return time.Now().UnixNano() }
 
 // NextUnpublished returns the lowest (epoch, feed_position) unpublished row for
 // the game, or (nil, nil) when the feed is fully drained.
@@ -208,7 +206,7 @@ func (l *OutboxLease) MarkPublished(ctx context.Context, eventID ulid.ULID, gene
 	}
 	tag, err := l.conn.Exec(ctx,
 		`UPDATE outbox SET published_at = $2 WHERE event_id = $1 AND published_at IS NULL`,
-		eventID.String(), nowNS())
+		eventID.String(), pgnanos.From(time.Now()))
 	if err != nil {
 		return oops.Code("WORLD_OUTBOX_MARK_PUBLISHED_UPDATE_FAILED").
 			With("event_id", eventID.String()).Wrap(err)
@@ -241,7 +239,7 @@ func (l *OutboxLease) MarkSkipResolved(ctx context.Context, position int64) erro
 			SELECT ctid FROM outbox
 			WHERE game_id = $1 AND feed_position = $2 AND published_at IS NULL
 			ORDER BY epoch LIMIT 1
-		)`, l.gameID, position, nowNS())
+		)`, l.gameID, position, pgnanos.From(time.Now()))
 	if err != nil {
 		return oops.Code("WORLD_OUTBOX_SKIP_RESOLVE_UPDATE_FAILED").
 			With("game_id", l.gameID).With("position", position).Wrap(err)

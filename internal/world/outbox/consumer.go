@@ -58,7 +58,7 @@ func (c *Consumer) Apply(ctx context.Context, env wmodel.Envelope) (bool, error)
 		// Preserve the out-of-order signal unwrapped so the caller can NAK the
 		// delivery for redelivery after the gap fills (round-9 R6-5 #2).
 		if IsOutOfOrder(err) {
-			return applied, err
+			return applied, err //nolint:wrapcheck // preserve the out-of-order signal unwrapped for caller NAK detection
 		}
 		return applied, oops.Code("WORLD_OUTBOX_CONSUMER_APPLY_FAILED").
 			With("consumer", c.name).

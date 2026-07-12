@@ -94,10 +94,16 @@ func (r *Relay) log() *slog.Logger {
 
 // Halted reports whether the relay is halted on a poison row and, if so, at what
 // feed_position — the halt-position health signal.
-func (r *Relay) Halted() (bool, int64) {
+func (r *Relay) Halted() (halted bool, position int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.halted, r.haltPosition
+}
+
+// cancelErr wraps a context cancellation sentinel so callers still match it with
+// errors.Is(err, context.Canceled) while satisfying wrapcheck.
+func cancelErr(ctx context.Context) error {
+	return oops.Code("WORLD_OUTBOX_CANCELLED").Wrap(ctx.Err())
 }
 
 // ensureLease acquires a fresh fenced lease if one is not currently held.
@@ -144,19 +150,19 @@ func (r *Relay) Run(ctx context.Context) error {
 			r.log().WarnContext(ctx, "outbox relay drain error", "err", err, "game_id", r.cfg.GameID)
 		}
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return cancelErr(ctx)
 		}
 		if r.cfg.Waker != nil {
 			wctx, cancel := context.WithTimeout(ctx, r.cfg.SweepInterval)
-			_ = r.cfg.Waker.Wait(wctx)
+			_ = r.cfg.Waker.Wait(wctx) //nolint:errcheck // wakeup/deadline signal; the relay re-drains regardless
 			cancel()
 			if ctx.Err() != nil {
-				return ctx.Err()
+				return cancelErr(ctx)
 			}
 		} else {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return cancelErr(ctx)
 			case <-ticker.C:
 			}
 		}
@@ -180,7 +186,7 @@ func (r *Relay) Drain(ctx context.Context) (int, error) {
 	published := 0
 	for {
 		if ctx.Err() != nil {
-			return published, ctx.Err()
+			return published, cancelErr(ctx)
 		}
 
 		env, err := r.lease.NextUnpublished(ctx)
@@ -251,7 +257,7 @@ func (r *Relay) publishOne(ctx context.Context, env wmodel.Envelope) error {
 	var lastErr error
 	for attempt := 1; attempt <= r.cfg.MaxPublishAttempts; attempt++ {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return cancelErr(ctx)
 		}
 		lastErr = r.cfg.Publisher.Publish(ctx, ev)
 		if lastErr == nil {

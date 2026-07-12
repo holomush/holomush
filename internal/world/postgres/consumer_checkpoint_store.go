@@ -6,12 +6,14 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
@@ -110,10 +112,10 @@ func (s *ConsumerCheckpointStore) ApplyOnce(
 	switch {
 	case env.Epoch < wmEpoch:
 		// Stale epoch — sub-watermark; record the receipt, no effect, no advance.
-		return commitNoOp(ctx, tx)
+		return false, commitNoOp(ctx, tx)
 	case env.Epoch == wmEpoch && env.FeedPosition <= wmPos:
 		// Sub-watermark duplicate — record the receipt, no effect, no advance.
-		return commitNoOp(ctx, tx)
+		return false, commitNoOp(ctx, tx)
 	case env.Epoch > wmEpoch:
 		// Strictly-greater epoch: the epoch boundary resets contiguity — apply.
 	case env.Epoch == wmEpoch && env.FeedPosition == wmPos+1:
@@ -145,7 +147,7 @@ func (s *ConsumerCheckpointStore) ApplyOnce(
 		SET epoch = EXCLUDED.epoch, feed_position = EXCLUDED.feed_position, updated_at = EXCLUDED.updated_at
 		WHERE world_consumer_watermarks.epoch < EXCLUDED.epoch
 		   OR (world_consumer_watermarks.epoch = EXCLUDED.epoch AND world_consumer_watermarks.feed_position < EXCLUDED.feed_position)`,
-		consumer, env.GameID, env.Epoch, env.FeedPosition, nowNS()); err != nil {
+		consumer, env.GameID, env.Epoch, env.FeedPosition, pgnanos.From(time.Now())); err != nil {
 		return false, oops.Code("WORLD_OUTBOX_WATERMARK_ADVANCE_FAILED").
 			With("consumer", consumer).With("game_id", env.GameID).Wrap(err)
 	}
@@ -158,11 +160,11 @@ func (s *ConsumerCheckpointStore) ApplyOnce(
 }
 
 // commitNoOp commits the receipt-only (sub-watermark discard) transaction.
-func commitNoOp(ctx context.Context, tx pgx.Tx) (bool, error) {
+func commitNoOp(ctx context.Context, tx pgx.Tx) error {
 	if err := tx.Commit(ctx); err != nil {
-		return false, oops.Code("WORLD_OUTBOX_APPLYONCE_COMMIT_FAILED").Wrap(err)
+		return oops.Code("WORLD_OUTBOX_APPLYONCE_COMMIT_FAILED").Wrap(err)
 	}
-	return false, nil
+	return nil
 }
 
 // InitWatermark seeds the (consumer, game) watermark to the given high-water
@@ -176,7 +178,7 @@ func (s *ConsumerCheckpointStore) InitWatermark(ctx context.Context, consumer, g
 		SET epoch = EXCLUDED.epoch, feed_position = EXCLUDED.feed_position, updated_at = EXCLUDED.updated_at
 		WHERE world_consumer_watermarks.epoch < EXCLUDED.epoch
 		   OR (world_consumer_watermarks.epoch = EXCLUDED.epoch AND world_consumer_watermarks.feed_position < EXCLUDED.feed_position)`,
-		consumer, gameID, epoch, position, nowNS()); err != nil {
+		consumer, gameID, epoch, position, pgnanos.From(time.Now())); err != nil {
 		return oops.Code("WORLD_OUTBOX_INIT_WATERMARK_FAILED").
 			With("consumer", consumer).With("game_id", gameID).Wrap(err)
 	}
@@ -185,17 +187,16 @@ func (s *ConsumerCheckpointStore) InitWatermark(ctx context.Context, consumer, g
 
 // Watermark reads the current (epoch, feed_position) watermark for
 // (consumer, game); ok=false when no watermark row exists yet.
-func (s *ConsumerCheckpointStore) Watermark(ctx context.Context, consumer, gameID string) (int64, int64, bool, error) {
-	var epoch, position int64
-	err := s.pool.QueryRow(ctx, `
+func (s *ConsumerCheckpointStore) Watermark(ctx context.Context, consumer, gameID string) (epoch, position int64, ok bool, err error) {
+	scanErr := s.pool.QueryRow(ctx, `
 		SELECT epoch, feed_position FROM world_consumer_watermarks
 		WHERE consumer_name = $1 AND game_id = $2`, consumer, gameID).Scan(&epoch, &position)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(scanErr, pgx.ErrNoRows) {
 		return 0, 0, false, nil
 	}
-	if err != nil {
+	if scanErr != nil {
 		return 0, 0, false, oops.Code("WORLD_OUTBOX_WATERMARK_QUERY_FAILED").
-			With("consumer", consumer).With("game_id", gameID).Wrap(err)
+			With("consumer", consumer).With("game_id", gameID).Wrap(scanErr)
 	}
 	return epoch, position, true, nil
 }

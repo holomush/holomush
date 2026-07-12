@@ -101,7 +101,7 @@ func (s *OutboxRelaySubsystem) Start(ctx context.Context) error {
 	s.done = make(chan struct{})
 	go func() {
 		defer close(s.done)
-		_ = s.relay.Run(runCtx)
+		_ = s.relay.Run(runCtx) //nolint:errcheck // Run returns only the ctx-cancellation reason on Stop
 	}()
 
 	slog.InfoContext(ctx, "outbox relay subsystem started", "game_id", s.cfg.GameID)
@@ -124,7 +124,7 @@ func (s *OutboxRelaySubsystem) Stop(ctx context.Context) error {
 		}
 	}
 	if s.relay != nil {
-		_ = s.relay.Stop(ctx)
+		_ = s.relay.Stop(ctx) //nolint:errcheck // Stop only releases the lease; a release warning is already logged
 	}
 	return nil
 }
@@ -170,6 +170,7 @@ func (a checkpointStoreAdapter) ApplyOnce(
 	envelope wmodel.Envelope,
 	effect func(effCtx context.Context, exec outbox.TxExecutor) error,
 ) (bool, error) {
+	//nolint:wrapcheck // adapter pass-through; the postgres impl already codes the error
 	return a.store.ApplyOnce(ctx, consumer, envelope, func(effCtx context.Context, exec worldpostgres.TxExecutor) error {
 		return effect(effCtx, exec)
 	})
@@ -179,7 +180,7 @@ func (a checkpointStoreAdapter) InitWatermark(ctx context.Context, consumer, gam
 	return a.store.InitWatermark(ctx, consumer, gameID, epoch, position) //nolint:wrapcheck // adapter pass-through
 }
 
-func (a checkpointStoreAdapter) Watermark(ctx context.Context, consumer, gameID string) (int64, int64, bool, error) {
+func (a checkpointStoreAdapter) Watermark(ctx context.Context, consumer, gameID string) (epoch, position int64, ok bool, err error) {
 	return a.store.Watermark(ctx, consumer, gameID) //nolint:wrapcheck // adapter pass-through
 }
 
