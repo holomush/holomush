@@ -5,14 +5,14 @@ milestone_name: Foundation Hardening
 current_phase: 5
 current_phase_name: M2 / M12
 status: "Phase 4 shipped — PR #4814"
-stopped_at: Phase 5 context gathered
-last_updated: "2026-07-12T01:17:29.319Z"
+stopped_at: Phase 5 round-5 scope decisions captured (D-06/D-07)
+last_updated: "2026-07-12T15:20:47.502Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 05 planning complete
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 4
+  total_plans: 19
   completed_plans: 4
   percent: 17
 ---
@@ -132,9 +132,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-12T00:31:21.752Z
+Last session: 2026-07-12T15:20:47.496Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Phase 5 context gathered
+Stopped at: Phase 5 round-5 scope decisions captured (D-06/D-07)
 Resume file: .planning/phases/05-world-model-integrity-fixes-m2-m12/05-CONTEXT.md
 
 ## Operator Next Steps
