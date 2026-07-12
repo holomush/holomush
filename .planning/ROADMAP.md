@@ -94,11 +94,34 @@ Plans:
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
 
-**Plans**: 0 plans
+**Plans**: 13 plans (4 fixed slices → 12 waves; one phase PR per D-04)
 
 Plans:
 
-- [ ] TBD (created by /gsd-plan-phase 5)
+**Slice 1 — Version guard (MODEL-03)**
+
+- [ ] 05-01-PLAN.md — Version-guard foundation: migration 000049 + Version struct fields + WORLD_CONCURRENT_EDIT error (wave 1)
+- [ ] 05-02-PLAN.md — Location + exit repo version-predicated CAS + zero-row classifier (wave 2)
+- [ ] 05-03-PLAN.md — Character + object repo version-predicated CAS + zero-row classifier (wave 2)
+- [ ] 05-04-PLAN.md — RMW version threading + conflict surfacing + M12 resilience spec flip (wave 3)
+
+**Slice 2 — Outbox + relay + MoveCharacter (MODEL-04, folds WR-01)**
+
+- [ ] 05-05-PLAN.md — Outbox + world_feed_counter schema (000050) + envelope type + same-tx writer + locked counter (wave 4)
+- [ ] 05-06-PLAN.md — mutate() write-requires-envelope seam + MoveCharacter through outbox + delete emit path + f1 doc fix (wave 5)
+- [ ] 05-07-PLAN.md — Leased relay (order/dedup/halt-and-alert) + reference consumer + subsystem wiring + D-04 gate confirm (wave 6)
+- [ ] 05-08-PLAN.md — Fault-injection resilience matrix + per-aggregate race + M2 end-to-end redelivery (wave 7)
+
+**Slice 3 — Taxonomy + census + invariants + rollout (MODEL-04)**
+
+- [ ] 05-09-PLAN.md — Versioned taxonomy schema registry (ARCH-04 input) + raw-world-SQL lint fence + drift-guard (wave 8)
+- [ ] 05-10-PLAN.md — Emission rollout: location/exit/object write commands through the outbox (wave 9)
+- [ ] 05-11-PLAN.md — Emission rollout: character/scene/property + CreateCharacter + genesis + census meta-test (wave 10)
+- [ ] 05-12-PLAN.md — Register + BIND the 4 INV-WORLD-* invariants (wave 11)
+
+**Slice 4 — Doc correction (MODEL-02)**
+
+- [ ] 05-13-PLAN.md — Downgrade the false event-sourcing world-state doc claims + doc-claim meta-test (wave 12)
 
 ### Phase 6: Operational Hardening & Assurance Gates
 
@@ -160,7 +183,7 @@ Plans:
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
-| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 0 | Pending | — |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 0/13 | Pending | — |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
