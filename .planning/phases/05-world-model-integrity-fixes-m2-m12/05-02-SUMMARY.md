@@ -206,6 +206,12 @@ None - no external service configuration required.
 - Plan 05-03 applies the identical guard to characters + objects (the shared `classifyCASZeroRow`/`querierFromCtx`/`primaryDeltaVersioned` helpers are ready to reuse).
 - Plan 05-04 threads the read version through the RMW service callers and flips the M12 resilience spec to assert the surfaced conflict.
 
+## Self-Check: PASSED
+
+- All 6 modified source files verified present on disk.
+- All 5 commits (4 task + 1 metadata) verified in git history.
+- Working tree clean.
+
 ---
 *Phase: 05-world-model-integrity-fixes-m2-m12*
 *Completed: 2026-07-12*
