@@ -92,12 +92,14 @@ func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) (*wmod
 		       held_by_character_id = $5, contained_in_object_id = $6,
 		       is_container = $7, owner_id = $8, version = version + 1
 		WHERE id = $1`
-	args := []any{obj.ID.String(), obj.Name, obj.Description,
+	args := []any{
+		obj.ID.String(), obj.Name, obj.Description,
 		ulidToStringPtr(obj.LocationID()),
 		ulidToStringPtr(obj.HeldByCharacterID()),
 		ulidToStringPtr(obj.ContainedInObjectID()),
 		obj.IsContainer,
-		ulidToStringPtr(obj.OwnerID)}
+		ulidToStringPtr(obj.OwnerID),
+	}
 	if obj.Version > 0 {
 		query += ` AND version = $9`
 		args = append(args, obj.Version)

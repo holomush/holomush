@@ -89,8 +89,10 @@ func (r *LocationRepository) Update(ctx context.Context, loc *world.Location) (*
 		UPDATE locations SET type = $2, shadows_id = $3, name = $4, description = $5,
 		owner_id = $6, replay_policy = $7, archived_at = $8, version = version + 1
 		WHERE id = $1`
-	args := []any{loc.ID.String(), loc.Type, ulidToStringPtr(loc.ShadowsID), loc.Name, loc.Description,
-		ulidToStringPtr(loc.OwnerID), loc.ReplayPolicy, archivedAt}
+	args := []any{
+		loc.ID.String(), loc.Type, ulidToStringPtr(loc.ShadowsID), loc.Name, loc.Description,
+		ulidToStringPtr(loc.OwnerID), loc.ReplayPolicy, archivedAt,
+	}
 	if loc.Version > 0 {
 		query += ` AND version = $9`
 		args = append(args, loc.Version)
