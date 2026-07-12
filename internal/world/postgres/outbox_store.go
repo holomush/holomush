@@ -72,7 +72,8 @@ func (s *OutboxStore) WriteIntent(
 	}
 
 	e := execerFromCtx(ctx, s.pool)
-	if _, err := e.Exec(ctx, `
+	if _, err := e.Exec(
+		ctx, `
 		INSERT INTO outbox (
 			event_id, game_id, feed_position, epoch, kind, schema_version,
 			actor, causation_id, correlation_id, aggregate_id, aggregate_type,

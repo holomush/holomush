@@ -3296,7 +3296,6 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "OBJECT_MOVE_FAILED")
 	})
 
-
 	t.Run("GetObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
 		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 		mockRepo := worldtest.NewMockObjectRepository(t)
