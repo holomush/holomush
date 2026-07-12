@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: world-model-integrity-fixes-m2-m12
 status: executing
 stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
-last_updated: "2026-07-12T22:47:23.623Z"
+last_updated: "2026-07-12T23:29:18.221Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 20
-  completed_plans: 12
+  completed_plans: 13
   percent: 17
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 05 (world-model-integrity-fixes-m2-m12) — EXECUTING
-Plan: 9 of 16
+Plan: 10 of 16
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 05 execution started
 
@@ -93,6 +93,7 @@ Last activity: 2026-07-12 — Phase 05 execution started
 | Phase 05 P05 | 55min | 3 tasks | 11 files |
 | Phase 05 P06 | 75min | 3 tasks | 18 files |
 | Phase 05 P07 | 150min | 4 tasks | 26 files |
+| Phase 05 P08 | 110 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,7 @@ the next milestone yet.
 - [Phase ?]: [Phase 05]: 05-06 mutate(ctx, intent, write-closure) compile-time write-requires-envelope seam — closure identifies+executes the operation (round-5 finding 1), writer repos private to executor, package world imports neither outbox nor postgres (round-2 cycle fix); injected world.OutboxWriter owns epoch/position+finalization (round-3 blocker #1).
 - [Phase ?]: [Phase 05]: 05-06 MoveCharacter is first through the same-tx outbox; post-commit emit path (events.go/EmitMoveEvent/go-retry) DELETED folding WR-01 (D-03); post-commit movement-hook failure = operational degradation (log+metric, command success), move_succeeded=true fail-after-commit path deleted (round-5 finding 3); M2 dual-write window CLOSED (proven by rewritten resilience spec).
 - [Phase ?]: [Phase 05]: 05-07 MODEL-04 relay slice — single leased relay (Lease abstraction, dedicated advisory-lock conn + durable generation fence), reference idempotent consumer (tx-bound ApplyOnce + contiguity-safe watermark UPSERT), SkipService (stable skip-marker id) wired as OutboxRelaySubsystem; production world.Service finally gets a real OutboxWriter; 8-edge import-graph guard + composition allowlist
+- [Phase ?]: 05-08: D-05 resilience specs construct the REAL relay/lease/reference-consumer over the shared stack via the production setup.NewOutboxStore adapter; relays release their lease via DeferCleanup so a pinned conn never blocks harness teardown.
 
 ### Pending Todos
 
@@ -152,7 +154,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-12T22:46:49.677Z
+Last session: 2026-07-12T23:28:30.252Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
 Resume file: None
