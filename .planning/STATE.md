@@ -5,8 +5,8 @@ milestone_name: Foundation Hardening
 current_phase: 05
 current_phase_name: world-model-integrity-fixes-m2-m12
 status: executing
-stopped_at: Phase 5 round-5 scope decisions captured (D-06/D-07)
-last_updated: "2026-07-12T19:43:48.926Z"
+stopped_at: Completed 05-02-PLAN.md (location+exit version-guard CAS)
+last_updated: "2026-07-12T20:09:37.831Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 05 execution started
 progress:
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 05 (world-model-integrity-fixes-m2-m12) — EXECUTING
-Plan: 3 of 16
+Plan: 4 of 16
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 05 execution started
 
@@ -87,6 +87,7 @@ Last activity: 2026-07-12 — Phase 05 execution started
 | Phase 04 P04 | ~90min | 3 tasks | 2 files |
 | Phase 05 P01 | 20m | 3 tasks | 9 files |
 | Phase 05 P14 | 45min | 3 tasks | 48 files |
+| Phase 05 P02 | 45m | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,9 @@ the next milestone yet.
 - [Phase 04]: MODEL-01 decided: Option B — CRUD-canonical + optimistic concurrency + transactional outbox in the panel-ratified strengthened shape (consensus one-pager NORMATIVE); Phase 5 implements MODEL-03 version guard + MODEL-04 ordered atomic feed — Human decider (Sean Brandt) chose under future-state-first framing after a two-round three-model panel unanimously ratified the strengthened B shape; the ordered complete world-change feed is the platform's extensibility contract; evolvability inverts under event sourcing pre-1.0; coverage rot countered structurally (compile-time seam + census meta-test + delta-parity)
 - [Phase 04]: INV-WORLD-ATOMIC-FEED/-DELTA-PARITY/-FEED-ORDER/-WRITER-BOUNDARY named in the ADR; registration/binding deferred to Phase 5's spec per .claude/rules/invariants.md
 - [Phase ?]: Phase 5 slice-1 foundation: version INTEGER NOT NULL DEFAULT 1 on locations/exits/characters/objects (migration 000049); Version int on the four world structs; WORLD_CONCURRENT_EDIT/ErrConcurrentEdit as the single typed conflict signal (D-02/MODEL-03).
+- [Phase ?]: [Phase 05]: MODEL-03 CAS mechanism for locations+exits (05-02): version-predicated Update/Delete + a locked follow-up read (same-connection via re-entrant withTx) classifying a zero-row result into TWO outcomes — existing-row-version-moved -> WORLD_CONCURRENT_EDIT, absent -> NOT_FOUND (a committed concurrent delete is correctly observed as not-found).
+- [Phase ?]: [Phase 05]: expectedVersion/Version==0 stays an unversioned (id-only) write so existing world.Service delete/update callers (which pass 0 today) remain green; the guard fires only when a caller threads a read version >0 (version-threading is plan 05-04).
+- [Phase ?]: [Phase 05]: location DELETE locks the parent row FOR UPDATE BEFORE preselecting FK-cascaded exits (round-6 R6-4) — the parent lock conflicts with the FK key-share lock a child-exit INSERT needs, fencing the child-insert phantom; an interleave integration test binds INV-WORLD-2 delta-parity adversarially.
 
 ### Pending Todos
 
@@ -135,10 +139,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-12T19:43:32.842Z
+Last session: 2026-07-12T20:09:37.824Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Phase 5 round-5 scope decisions captured (D-06/D-07)
-Resume file: .planning/phases/05-world-model-integrity-fixes-m2-m12/05-CONTEXT.md
+Stopped at: Completed 05-02-PLAN.md (location+exit version-guard CAS)
+Resume file: None
 
 ## Operator Next Steps
 
