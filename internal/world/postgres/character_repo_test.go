@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -841,5 +842,42 @@ func TestCharacterRepository_ListByPlayer(t *testing.T) {
 
 	// A guarded CAS delete keyed on the LISTED version succeeds (the reaper path).
 	_, err = repo.Delete(ctx, c1.ID, byID[c1.ID].Version)
+	require.NoError(t, err)
+}
+
+// TestCharRepoAdapter_ListByPlayerScansVersion binds round-6 R6-1/R6-3: the
+// production auth-facing list path (setup.CharRepoAdapter.ListByPlayer) — the
+// actual list a subsequent guarded write/delete consumes — must carry the stored
+// version, not 0, or the guest reaper's CAS Delete permanently conflicts.
+func TestCharRepoAdapter_ListByPlayerScansVersion(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+	adapter := setup.NewCharRepoAdapter(testPool, repo)
+
+	playerID := createTestPlayer(ctx, t)
+	locationID := createTestLocation(ctx, t)
+	c := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "adapter-ver-" + ulid.Make().String(), LocationID: &locationID}
+	require.NoError(t, delErr(repo.Create(ctx, c)))
+	t.Cleanup(func() { _ = delErr(repo.Delete(ctx, c.ID, 0)) })
+
+	// Advance the version so listed-vs-stored is a non-trivial check.
+	c.Name = "adapter-ver-updated"
+	require.NoError(t, delErr(repo.Update(ctx, c)))
+	require.Equal(t, 2, c.Version)
+
+	listed, err := adapter.ListByPlayer(ctx, playerID)
+	require.NoError(t, err)
+	var found *world.Character
+	for _, lc := range listed {
+		if lc.ID == c.ID {
+			found = lc
+		}
+	}
+	require.NotNil(t, found, "adapter ListByPlayer must return the seeded character")
+	assert.Equal(t, characterDBVersion(ctx, t, c.ID), found.Version, "adapter must scan version")
+	assert.Equal(t, 2, found.Version)
+
+	// The listed version drives a successful guarded CAS delete (reaper path).
+	_, err = repo.Delete(ctx, c.ID, found.Version)
 	require.NoError(t, err)
 }
