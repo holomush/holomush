@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 05
 current_phase_name: world-model-integrity-fixes-m2-m12
 status: executing
-stopped_at: Completed 05-02-PLAN.md (location+exit version-guard CAS)
-last_updated: "2026-07-12T20:27:31.949Z"
+stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
+last_updated: "2026-07-12T21:00:12.501Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 20
-  completed_plans: 7
+  completed_plans: 8
   percent: 17
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 05 (world-model-integrity-fixes-m2-m12) — EXECUTING
-Plan: 5 of 16
+Plan: 6 of 16
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 05 execution started
 
@@ -89,6 +89,7 @@ Last activity: 2026-07-12 — Phase 05 execution started
 | Phase 05 P14 | 45min | 3 tasks | 48 files |
 | Phase 05 P02 | 45m | 2 tasks | 6 files |
 | Phase 05 P03 | ~40m | 3 tasks | 5 files |
+| Phase 05 P04 | 45m | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,8 @@ the next milestone yet.
 - [Phase ?]: [Phase 05]: MODEL-03 CAS mechanism for locations+exits (05-02): version-predicated Update/Delete + a locked follow-up read (same-connection via re-entrant withTx) classifying a zero-row result into TWO outcomes — existing-row-version-moved -> WORLD_CONCURRENT_EDIT, absent -> NOT_FOUND (a committed concurrent delete is correctly observed as not-found).
 - [Phase ?]: [Phase 05]: expectedVersion/Version==0 stays an unversioned (id-only) write so existing world.Service delete/update callers (which pass 0 today) remain green; the guard fires only when a caller threads a read version >0 (version-threading is plan 05-04).
 - [Phase ?]: [Phase 05]: location DELETE locks the parent row FOR UPDATE BEFORE preselecting FK-cascaded exits (round-6 R6-4) — the parent lock conflicts with the FK key-share lock a child-exit INSERT needs, fencing the child-insert phantom; an interleave integration test binds INV-WORLD-2 delta-parity adversarially.
+- [Phase ?]: 05-04: RMW version threading was already end-to-end after 05-02/05-03 via struct.Version transport plus deepest-oops-code; Task 1 added pinning tests with no production change
+- [Phase ?]: 05-04: M12 command-race specs serialize through HandleCommand, so the surfaced conflict is proven deterministically at the service level (spec 1 location + new spec 4 object)
 
 ### Pending Todos
 
@@ -140,9 +143,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-12T20:27:22.617Z
+Last session: 2026-07-12T21:00:00.343Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 05-02-PLAN.md (location+exit version-guard CAS)
+Stopped at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
 Resume file: None
 
 ## Operator Next Steps
