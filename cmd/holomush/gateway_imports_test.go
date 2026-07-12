@@ -82,6 +82,13 @@ var coreOnlyFiles = map[string]struct{}{
 	// internal/eventbus/audit by design. No admin UDS.
 	"cmd_audit.go":      {},
 	"cmd_audit_test.go": {},
+	// `holomush outbox skip` CLI is a host-shell operator tool (like
+	// cmd_audit.go), not the gateway. It drives the world-change outbox
+	// SkipService, which owns BOTH a Postgres pool AND a JetStream publisher
+	// (05-07, MODEL-04); imports internal/world/{outbox,postgres,setup} +
+	// internal/eventbus by design. No admin UDS.
+	"outbox_admin.go":      {},
+	"outbox_admin_test.go": {},
 }
 
 var forbidden = []string{

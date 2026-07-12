@@ -136,6 +136,13 @@ func (s *OutboxRelaySubsystem) Consumer() *outbox.Consumer { return s.consumer }
 // consumer-owned outbox interfaces so package postgres never imports
 // internal/world/outbox and internal/world/outbox never imports postgres. ---
 
+// NewOutboxStore adapts the concrete postgres outbox store to the consumer-owned
+// outbox.OutboxStore interface. Used by the relay subsystem AND the `holomush
+// outbox skip` admin CLI so neither has to re-derive the interface binding.
+func NewOutboxStore(store *worldpostgres.OutboxStore) outbox.OutboxStore {
+	return leaseStoreAdapter{store: store}
+}
+
 // leaseStoreAdapter binds *worldpostgres.OutboxStore to outbox.OutboxStore. The
 // concrete *worldpostgres.OutboxLease structurally satisfies outbox.Lease.
 type leaseStoreAdapter struct {
