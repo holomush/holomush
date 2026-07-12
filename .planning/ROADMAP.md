@@ -115,7 +115,7 @@ Plans:
 
 **Slice 3 — Taxonomy + census + invariants + rollout (MODEL-04)** — data-first / enforcement-last (deliberate deviation from the one-pager order, acknowledged in 05-09/05-10/05-12)
 
-- [ ] 05-09-PLAN.md — Versioned taxonomy schema registry (ARCH-04 input) + raw-world-SQL AST/token fence meta-test (not depguard) (wave 8)
+- [ ] 05-09-PLAN.md — Versioned taxonomy registry (ARCH-04 input) + character_settings→guarded/versioned/envelope fold-in (round-4 C5/D-05) + raw-world-SQL AST/token fence (schema-scoped to core/world; scene_participants + plugins/ excluded, #4815) (wave 8)
 - [ ] 05-10-PLAN.md — Emission rollout: location/exit/object write commands through the outbox (delta-derived manifests) (wave 9)
 - [ ] 05-15-PLAN.md — Atomic character-genesis service: ALL character creation (registered/guest/bootstrap-admin) emits a genesis envelope in one tx; interface Create removal (round-3 blocker #5) (wave 9)
 - [ ] 05-11-PLAN.md — Emission rollout: character/scene/property + reader-view fence completion + genesis snapshot (checkpoint-idempotent) + census meta-test (wave 10)
