@@ -43,6 +43,7 @@ var expectedTables = []string{
 	"holomush_system_info",
 	"locations",
 	"objects",
+	"outbox",
 	"password_resets",
 	"player_aliases",
 	"player_character_bindings",
@@ -56,6 +57,10 @@ var expectedTables = []string{
 	"sessions",
 	"setting_bootstrap_state",
 	"system_aliases",
+	"world_consumer_receipts",
+	"world_consumer_watermarks",
+	"world_feed_counter",
+	"world_genesis_checkpoint",
 }
 
 // queryTableNames returns user-defined table names (excluding schema_migrations)
@@ -140,7 +145,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(49)))
+			Expect(version).To(Equal(uint(50)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)
@@ -163,7 +168,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(49)))
+			Expect(version).To(Equal(uint(50)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)
