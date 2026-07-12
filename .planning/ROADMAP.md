@@ -94,7 +94,7 @@ Plans:
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
 
-**Plans**: 14 plans (4 fixed slices → 12 waves; one phase PR per D-04). Plan 05-14 (transaction/repository foundation) was added by the 2026-07-12 cross-AI review (`05-REVIEWS.md`, Codex Agreed-Concern A) and runs in wave 1 alongside 05-01.
+**Plans**: 15 plans (4 fixed slices → 12 waves; one phase PR per D-04). Plan 05-14 (transaction/repository foundation) was added by the round-1 cross-AI review (`05-REVIEWS.md`, Codex Agreed-Concern A) and runs in wave 1 alongside 05-01. Plan 05-15 (atomic character-genesis service) was added by the round-3 review (Codex blocker #5: guest + bootstrap-admin creation bypassed the genesis envelope) and runs in wave 9 alongside 05-10.
 
 Plans:
 
@@ -117,7 +117,8 @@ Plans:
 
 - [ ] 05-09-PLAN.md — Versioned taxonomy schema registry (ARCH-04 input) + raw-world-SQL AST/token fence meta-test (not depguard) (wave 8)
 - [ ] 05-10-PLAN.md — Emission rollout: location/exit/object write commands through the outbox (delta-derived manifests) (wave 9)
-- [ ] 05-11-PLAN.md — Emission rollout: character/scene/property + CreateCharacter (fail-closed) + genesis + structural census meta-test (wave 10)
+- [ ] 05-15-PLAN.md — Atomic character-genesis service: ALL character creation (registered/guest/bootstrap-admin) emits a genesis envelope in one tx; interface Create removal (round-3 blocker #5) (wave 9)
+- [ ] 05-11-PLAN.md — Emission rollout: character/scene/property + reader-view fence completion + genesis snapshot (checkpoint-idempotent) + census meta-test (wave 10)
 - [ ] 05-12-PLAN.md — Register + BIND the 4 INV-WORLD-1..4 invariants (numeric ids; symbolic names as legacy) (wave 11)
 
 **Slice 4 — Doc correction (MODEL-02)**
