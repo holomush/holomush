@@ -36,10 +36,6 @@ var ErrFeedLockTimeout = errors.New("world feed counter lock timeout")
 // FOR UPDATE lock acquisition times out. Asserted with errutil.AssertErrorCode.
 const CodeFeedLockTimeout = "WORLD_FEED_LOCK_TIMEOUT"
 
-// ErrNoEventEmitter is returned when an operation requires event emission but no emitter is configured.
-// This indicates a misconfiguration - production systems should always have an EventEmitter.
-var ErrNoEventEmitter = errors.New("event emitter not configured")
-
 // ErrSelfReferentialExit is returned when an exit's from and to locations are the same.
 var ErrSelfReferentialExit = errors.New("self-referential exit: from and to locations cannot be the same")
 
