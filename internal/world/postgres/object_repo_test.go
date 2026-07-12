@@ -1013,3 +1013,205 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "NESTING_DEPTH_EXCEEDED")
 	})
 }
+
+// objectDBVersion reads the stored version column directly so a test can assert
+// the guard did/did not advance the row.
+func objectDBVersion(ctx context.Context, t *testing.T, id ulid.ULID) int {
+	t.Helper()
+	var v int
+	err := testPool.QueryRow(ctx, `SELECT version FROM objects WHERE id = $1`, id.String()).Scan(&v)
+	require.NoError(t, err)
+	return v
+}
+
+// createObjectTestLocation inserts a location for object containment and cleans it up.
+func createObjectTestLocation(ctx context.Context, t *testing.T) ulid.ULID {
+	t.Helper()
+	locID := ulid.Make()
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
+		VALUES ($1, 'Obj Guard Loc', 'x', 'persistent', 'last:0', (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
+	`, locID.String())
+	require.NoError(t, err)
+	t.Cleanup(func() { _, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locID.String()) })
+	return locID
+}
+
+// TestObjectRepository_UpdateVersionGuard binds MODEL-03 for object Update.
+func TestObjectRepository_UpdateVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewObjectRepository(testPool)
+	locID := createObjectTestLocation(ctx, t)
+
+	newObj := func(t *testing.T, name string) *world.Object {
+		t.Helper()
+		obj, err := world.NewObjectWithID(ulid.Make(), name, world.InLocation(locID))
+		require.NoError(t, err)
+		obj.CreatedAt = time.Now().UTC()
+		return obj
+	}
+
+	t.Run("create populates version 1 and Get reads it back", func(t *testing.T) {
+		obj := newObj(t, "guard-create")
+		delta, err := repo.Create(ctx, obj)
+		require.NoError(t, err)
+		assert.Equal(t, 1, obj.Version)
+		assert.Equal(t, 1, delta.Primary.AfterVersion)
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, obj.ID, 0)) })
+
+		got, err := repo.Get(ctx, obj.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 1, got.Version)
+	})
+
+	t.Run("successful update increments version by 1 and refreshes struct", func(t *testing.T) {
+		obj := newObj(t, "guard-update")
+		require.NoError(t, delErr(repo.Create(ctx, obj)))
+		require.Equal(t, 1, obj.Version)
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, obj.ID, 0)) })
+
+		obj.Name = "guard-update-v2"
+		delta, err := repo.Update(ctx, obj)
+		require.NoError(t, err)
+		assert.Equal(t, 2, obj.Version)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+		assert.Equal(t, 2, delta.Primary.AfterVersion)
+		assert.Equal(t, 2, objectDBVersion(ctx, t, obj.ID))
+	})
+
+	t.Run("stale-version update returns WORLD_CONCURRENT_EDIT and does not overwrite", func(t *testing.T) {
+		obj := newObj(t, "guard-stale")
+		require.NoError(t, delErr(repo.Create(ctx, obj)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, obj.ID, 0)) })
+
+		_, err := testPool.Exec(ctx, `UPDATE objects SET version = version + 1, name = $2 WHERE id = $1`,
+			obj.ID.String(), "winner")
+		require.NoError(t, err)
+
+		obj.Name = "loser"
+		_, err = repo.Update(ctx, obj)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+
+		got, err := repo.Get(ctx, obj.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "winner", got.Name)
+	})
+
+	t.Run("update of an absent object returns OBJECT_NOT_FOUND", func(t *testing.T) {
+		obj := newObj(t, "ghost")
+		obj.Version = 4
+		_, err := repo.Update(ctx, obj)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
+	})
+}
+
+// TestObjectRepository_MoveVersionGuard binds MODEL-03 for the object containment
+// write (Move), which now carries expectedVersion (05-14 enrollment).
+func TestObjectRepository_MoveVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewObjectRepository(testPool)
+	loc1 := createObjectTestLocation(ctx, t)
+	loc2 := createObjectTestLocation(ctx, t)
+
+	newObj := func(t *testing.T, name string) *world.Object {
+		t.Helper()
+		obj, err := world.NewObjectWithID(ulid.Make(), name, world.InLocation(loc1))
+		require.NoError(t, err)
+		obj.CreatedAt = time.Now().UTC()
+		return obj
+	}
+
+	t.Run("successful move increments version", func(t *testing.T) {
+		obj := newObj(t, "move-ok")
+		require.NoError(t, delErr(repo.Create(ctx, obj)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, obj.ID, 0)) })
+
+		delta, err := repo.Move(ctx, obj.ID, world.Containment{LocationID: &loc2}, obj.Version)
+		require.NoError(t, err)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+		assert.Equal(t, 2, delta.Primary.AfterVersion)
+		assert.Equal(t, 2, objectDBVersion(ctx, t, obj.ID))
+
+		got, err := repo.Get(ctx, obj.ID)
+		require.NoError(t, err)
+		assert.Equal(t, loc2, *got.LocationID())
+	})
+
+	t.Run("stale-version move returns WORLD_CONCURRENT_EDIT and does not move", func(t *testing.T) {
+		obj := newObj(t, "move-stale")
+		require.NoError(t, delErr(repo.Create(ctx, obj)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, obj.ID, 0)) })
+
+		_, err := testPool.Exec(ctx, `UPDATE objects SET version = version + 1 WHERE id = $1`, obj.ID.String())
+		require.NoError(t, err)
+
+		_, err = repo.Move(ctx, obj.ID, world.Containment{LocationID: &loc2}, 1) // stale
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+
+		got, err := repo.Get(ctx, obj.ID)
+		require.NoError(t, err)
+		assert.Equal(t, loc1, *got.LocationID(), "stale move must not relocate the object")
+	})
+
+	t.Run("move of an absent object returns OBJECT_NOT_FOUND", func(t *testing.T) {
+		_, err := repo.Move(ctx, ulid.Make(), world.Containment{LocationID: &loc2}, 3)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
+	})
+}
+
+// TestObjectRepository_DeleteVersionGuard binds MODEL-03 for object Delete.
+func TestObjectRepository_DeleteVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewObjectRepository(testPool)
+	locID := createObjectTestLocation(ctx, t)
+
+	newObj := func(t *testing.T, name string) *world.Object {
+		t.Helper()
+		obj, err := world.NewObjectWithID(ulid.Make(), name, world.InLocation(locID))
+		require.NoError(t, err)
+		obj.CreatedAt = time.Now().UTC()
+		return obj
+	}
+
+	t.Run("stale-version delete returns WORLD_CONCURRENT_EDIT", func(t *testing.T) {
+		obj := newObj(t, "del-stale")
+		require.NoError(t, delErr(repo.Create(ctx, obj)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, obj.ID, 0)) })
+
+		_, err := testPool.Exec(ctx, `UPDATE objects SET version = version + 1 WHERE id = $1`, obj.ID.String())
+		require.NoError(t, err)
+
+		_, err = repo.Delete(ctx, obj.ID, 1) // stale
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+	})
+
+	t.Run("delete of an absent object returns OBJECT_NOT_FOUND", func(t *testing.T) {
+		_, err := repo.Delete(ctx, ulid.Make(), 2)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
+	})
+
+	t.Run("version-matched delete succeeds and returns a tombstone delta", func(t *testing.T) {
+		obj := newObj(t, "del-ok")
+		require.NoError(t, delErr(repo.Create(ctx, obj)))
+
+		delta, err := repo.Delete(ctx, obj.ID, obj.Version)
+		require.NoError(t, err)
+		assert.True(t, delta.Primary.Tombstone)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+
+		_, err = repo.Get(ctx, obj.ID)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+	})
+}
