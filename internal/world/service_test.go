@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -327,6 +328,82 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+	})
+
+	t.Run("surfaces WORLD_CONCURRENT_EDIT unchanged on a stale write (D-02)", func(t *testing.T) {
+		engine := policytest.NewGrantEngine()
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		// Version 3 was read; a concurrent writer advanced it, so the guarded
+		// CAS rejects this stale write with the typed conflict.
+		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent, Version: 3}
+
+		engine.Grant(subjectID, "write", "location:"+locID.String())
+		conflict := oops.Code(world.CodeConcurrentEdit).Wrap(world.ErrConcurrentEdit)
+		mockRepo.EXPECT().Update(ctx, loc).Return(nil, conflict)
+
+		err := svc.UpdateLocation(ctx, subjectID, loc)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		// D-02: the conflict propagates unchanged — the top-level code stays
+		// WORLD_CONCURRENT_EDIT, not a generic LOCATION_UPDATE_FAILED mask.
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+	})
+}
+
+func TestWorldService_UpdateCharacterDescription(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(ulid.Make().String())
+
+	t.Run("threads the read version into the guarded write", func(t *testing.T) {
+		engine := policytest.NewGrantEngine()
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			Engine:        engine,
+		})
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 5}
+		engine.Grant(subjectID, "write", access.CharacterResource(charID.String()))
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+		// The RMW write MUST carry the version read at the start (5), never a
+		// re-read or a zeroed version — that is what arms the guard.
+		mockRepo.EXPECT().Update(ctx, mock.MatchedBy(func(c *world.Character) bool {
+			return c.Version == 5 && c.Description == "a new description"
+		})).Return(nil, nil)
+
+		err := svc.UpdateCharacterDescription(ctx, subjectID, charID, "a new description")
+		require.NoError(t, err)
+	})
+
+	t.Run("surfaces WORLD_CONCURRENT_EDIT unchanged on a stale write (D-02)", func(t *testing.T) {
+		engine := policytest.NewGrantEngine()
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			Engine:        engine,
+		})
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 5}
+		engine.Grant(subjectID, "write", access.CharacterResource(charID.String()))
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+		conflict := oops.Code(world.CodeConcurrentEdit).Wrap(world.ErrConcurrentEdit)
+		mockRepo.EXPECT().Update(ctx, mock.MatchedBy(func(c *world.Character) bool {
+			return c.Version == 5
+		})).Return(nil, conflict)
+
+		err := svc.UpdateCharacterDescription(ctx, subjectID, charID, "a new description")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
 	})
 }
 
@@ -796,6 +873,29 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockObjRepo.AssertNotCalled(t, "Update")
+	})
+
+	t.Run("surfaces WORLD_CONCURRENT_EDIT unchanged on a stale write (D-02)", func(t *testing.T) {
+		engine := policytest.NewGrantEngine()
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
+		})
+
+		obj, err := world.NewObjectWithID(objID, "sword updated", world.InLocation(locationID))
+		require.NoError(t, err)
+		obj.Version = 4 // read-time version threaded into the guarded write
+
+		engine.Grant(subjectID, "write", "object:"+objID.String())
+		conflict := oops.Code(world.CodeConcurrentEdit).Wrap(world.ErrConcurrentEdit)
+		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil, conflict)
+
+		err = svc.UpdateObject(ctx, subjectID, obj)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
