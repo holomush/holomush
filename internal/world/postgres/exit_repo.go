@@ -56,41 +56,32 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 		exit.CreatedAt = time.Now()
 	}
 
-	// Use a transaction to ensure atomic creation of bidirectional exits
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return oops.With("operation", "begin transaction").Wrap(err)
-	}
-	defer func() {
-		// Rollback is a no-op if tx was committed; error is safe to ignore
-		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
-	}()
-
-	if err := r.insertExitTx(ctx, tx, exit); err != nil {
-		return err
-	}
-
-	// Create return exit if bidirectional
-	if exit.Bidirectional && exit.ReturnName != "" {
-		returnExit, err := exit.ReverseExit()
-		if err != nil {
-			return oops.With("operation", "create reverse exit").Wrap(err)
+	// Enroll in the ambient mutation transaction if present (re-entrant seam),
+	// else begin+commit a local one. Preserves atomic creation of the reverse exit.
+	return withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		if err := r.insertExitTx(txCtx, tx, exit); err != nil {
+			return err
 		}
-		if returnExit != nil {
-			returnExit.ID = idgen.New()
-			returnExit.CreatedAt = exit.CreatedAt
 
-			if err := r.insertExitTx(ctx, tx, returnExit); err != nil {
-				return oops.With("operation", "create return exit").Wrap(err)
+		// Create return exit if bidirectional
+		if exit.Bidirectional && exit.ReturnName != "" {
+			returnExit, err := exit.ReverseExit()
+			if err != nil {
+				return oops.With("operation", "create reverse exit").Wrap(err)
+			}
+			if returnExit != nil {
+				returnExit.ID = idgen.New()
+				returnExit.CreatedAt = exit.CreatedAt
+
+				if err := r.insertExitTx(txCtx, tx, returnExit); err != nil {
+					return oops.With("operation", "create return exit").Wrap(err)
+				}
 			}
 		}
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return oops.With("operation", "commit transaction").Wrap(err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // insertExitTx inserts a single exit row within a transaction.
@@ -174,84 +165,85 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 // and the returned BidirectionalCleanupResult indicates the primary delete did NOT complete.
 // Callers can check IsSevere() to determine the severity of the issue.
 func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	// Use a transaction to ensure atomic deletion of bidirectional exits
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return oops.With("operation", "begin transaction").Wrap(err)
-	}
-	defer func() {
-		// Rollback is a no-op if tx was committed; error is safe to ignore
-		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
-	}()
+	// infoResult carries a NON-severe cleanup notice (return exit already gone)
+	// that must be surfaced AFTER a successful commit — so it is captured here and
+	// returned only once withTx commits, rather than returned from the closure
+	// (which would trigger a rollback).
+	var infoResult *world.BidirectionalCleanupResult
 
-	// Get the exit with FOR UPDATE to prevent TOCTOU issues
-	// Lock the row before checking bidirectional flag and deleting
-	exit, err := r.scanExitTx(ctx, tx, `
-		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
-		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
-		FROM exits WHERE id = $1 FOR UPDATE
-	`, id.String())
-	if errors.Is(err, pgx.ErrNoRows) {
-		return oops.Code("EXIT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
-	}
-	if err != nil {
-		return oops.With("operation", "get exit for delete").With("id", id.String()).Wrap(err)
-	}
+	// Enroll in the ambient mutation transaction if present, else begin+commit a
+	// local one. Preserves FOR UPDATE locking + atomic reverse-exit cascade.
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
 
-	// Delete the primary exit
-	_, err = tx.Exec(ctx, `DELETE FROM exits WHERE id = $1`, id.String())
-	if err != nil {
-		return oops.With("operation", "delete exit").With("id", id.String()).Wrap(err)
-	}
-
-	// If bidirectional, find and delete the return exit within the same transaction
-	var cleanupResult *world.BidirectionalCleanupResult
-	if exit.Bidirectional && exit.ReturnName != "" {
-		cleanupResult = &world.BidirectionalCleanupResult{
-			ExitID:       id,
-			ToLocationID: exit.ToLocationID,
-			ReturnName:   exit.ReturnName,
+		// Get the exit with FOR UPDATE to prevent TOCTOU issues
+		// Lock the row before checking bidirectional flag and deleting
+		exit, err := r.scanExitTx(txCtx, tx, `
+			SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
+			       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+			FROM exits WHERE id = $1 FOR UPDATE
+		`, id.String())
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("EXIT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
+		}
+		if err != nil {
+			return oops.With("operation", "get exit for delete").With("id", id.String()).Wrap(err)
 		}
 
-		returnExit, findErr := r.findByNameTx(ctx, tx, exit.ToLocationID, exit.ReturnName)
-		if findErr != nil {
-			// Distinguish between "not found" (acceptable) and actual errors
-			if errors.Is(findErr, world.ErrNotFound) {
-				// Return exit not found is not severe - may have been deleted already
-				cleanupResult.Issue = &world.CleanupIssue{
-					Type: world.CleanupReturnNotFound,
-				}
-				// Continue with commit - primary delete should still succeed
-			} else {
-				// Actual error - rollback
-				cleanupResult.Issue = &world.CleanupIssue{
-					Type: world.CleanupFindError,
-					Err:  findErr,
-				}
-				return cleanupResult
-			}
-		} else if returnExit != nil && returnExit.ToLocationID == exit.FromLocationID {
-			_, cleanupErr := tx.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
-			if cleanupErr != nil {
-				cleanupResult.Issue = &world.CleanupIssue{
-					Type:         world.CleanupDeleteError,
-					ReturnExitID: returnExit.ID,
-					Err:          cleanupErr,
-				}
-				return cleanupResult
-			}
-			// Clear cleanup result since return exit was successfully deleted
-			cleanupResult = nil
+		// Delete the primary exit
+		_, err = tx.Exec(txCtx, `DELETE FROM exits WHERE id = $1`, id.String())
+		if err != nil {
+			return oops.With("operation", "delete exit").With("id", id.String()).Wrap(err)
 		}
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return oops.With("operation", "commit transaction").Wrap(err)
+		// If bidirectional, find and delete the return exit within the same transaction
+		if exit.Bidirectional && exit.ReturnName != "" {
+			cleanupResult := &world.BidirectionalCleanupResult{
+				ExitID:       id,
+				ToLocationID: exit.ToLocationID,
+				ReturnName:   exit.ReturnName,
+			}
+
+			returnExit, findErr := r.findByNameTx(txCtx, tx, exit.ToLocationID, exit.ReturnName)
+			if findErr != nil {
+				// Distinguish between "not found" (acceptable) and actual errors
+				if errors.Is(findErr, world.ErrNotFound) {
+					// Return exit not found is not severe - may have been deleted already
+					cleanupResult.Issue = &world.CleanupIssue{
+						Type: world.CleanupReturnNotFound,
+					}
+					// Non-severe: commit the primary delete, surface the notice after.
+					infoResult = cleanupResult
+				} else {
+					// Actual error - rollback
+					cleanupResult.Issue = &world.CleanupIssue{
+						Type: world.CleanupFindError,
+						Err:  findErr,
+					}
+					return cleanupResult
+				}
+			} else if returnExit != nil && returnExit.ToLocationID == exit.FromLocationID {
+				_, cleanupErr := tx.Exec(txCtx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
+				if cleanupErr != nil {
+					cleanupResult.Issue = &world.CleanupIssue{
+						Type:         world.CleanupDeleteError,
+						ReturnExitID: returnExit.ID,
+						Err:          cleanupErr,
+					}
+					return cleanupResult
+				}
+			}
+		}
+
+		return nil
+	})
+	if txErr != nil {
+		return txErr
 	}
 
 	// Return informational cleanup result if return exit was not found
-	if cleanupResult != nil && cleanupResult.Issue != nil {
-		return cleanupResult
+	if infoResult != nil && infoResult.Issue != nil {
+		return infoResult
 	}
 
 	return nil

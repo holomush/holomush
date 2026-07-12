@@ -168,85 +168,79 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 	}
 
-	// Use a transaction to ensure validation and update are atomic
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return oops.With("operation", "begin transaction").Wrap(err)
-	}
-	defer func() {
-		// Rollback is a no-op if tx was committed
-		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
-	}()
+	// Enroll in the ambient mutation transaction if present, else begin+commit a
+	// local one. Preserves FOR UPDATE locks on object + container and the
+	// nesting/circular-containment checks.
+	return withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
 
-	// Lock the object being moved to prevent concurrent move operations
-	var exists bool
-	err = tx.QueryRow(ctx, `
-		SELECT EXISTS(SELECT 1 FROM objects WHERE id = $1 FOR UPDATE)
-	`, objectID.String()).Scan(&exists)
-	if err != nil {
-		return oops.With("operation", "lock object").With("object_id", objectID.String()).Wrap(err)
-	}
-	if !exists {
-		return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
-	}
-
-	// If moving to a container, verify the container exists and is actually a container
-	// FOR UPDATE locks the container row to prevent deletion/modification during this transaction
-	if to.ObjectID != nil {
-		var isContainer bool
-		err = tx.QueryRow(ctx, `
-			SELECT is_container FROM objects WHERE id = $1 FOR UPDATE
-		`, to.ObjectID.String()).Scan(&isContainer)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.
-				Code("CONTAINER_NOT_FOUND").
-				With("operation", "move object").
-				With("object_id", objectID.String()).
-				With("container_id", to.ObjectID.String()).
-				Wrap(world.ErrNotFound)
+		// Lock the object being moved to prevent concurrent move operations
+		var exists bool
+		err := tx.QueryRow(txCtx, `
+			SELECT EXISTS(SELECT 1 FROM objects WHERE id = $1 FOR UPDATE)
+		`, objectID.String()).Scan(&exists)
+		if err != nil {
+			return oops.With("operation", "lock object").With("object_id", objectID.String()).Wrap(err)
 		}
+		if !exists {
+			return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
+		}
+
+		// If moving to a container, verify the container exists and is actually a container
+		// FOR UPDATE locks the container row to prevent deletion/modification during this transaction
+		if to.ObjectID != nil {
+			var isContainer bool
+			err = tx.QueryRow(txCtx, `
+				SELECT is_container FROM objects WHERE id = $1 FOR UPDATE
+			`, to.ObjectID.String()).Scan(&isContainer)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.
+					Code("CONTAINER_NOT_FOUND").
+					With("operation", "move object").
+					With("object_id", objectID.String()).
+					With("container_id", to.ObjectID.String()).
+					Wrap(world.ErrNotFound)
+			}
+			if err != nil {
+				return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
+			}
+			if !isContainer {
+				return oops.
+					With("operation", "move object").
+					With("object_id", objectID.String()).
+					With("container_id", to.ObjectID.String()).
+					Wrap(world.ErrInvalidContainment)
+			}
+
+			// Check for circular containment: object cannot be placed inside itself
+			// or inside any object that is contained within it
+			err = r.checkCircularContainmentTx(txCtx, tx, objectID, *to.ObjectID)
+			if err != nil {
+				return err
+			}
+
+			// Check max nesting depth: verify that target container depth + object subtree depth
+			// won't exceed the maximum allowed depth
+			err = r.checkNestingDepthTx(txCtx, tx, objectID, *to.ObjectID)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Clear all containment fields and set the new one
+		result, err := tx.Exec(txCtx, `
+			UPDATE objects SET location_id = $2, held_by_character_id = $3, contained_in_object_id = $4
+			WHERE id = $1
+		`, objectID.String(), ulidToStringPtr(to.LocationID), ulidToStringPtr(to.CharacterID), ulidToStringPtr(to.ObjectID))
 		if err != nil {
 			return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 		}
-		if !isContainer {
-			return oops.
-				With("operation", "move object").
-				With("object_id", objectID.String()).
-				With("container_id", to.ObjectID.String()).
-				Wrap(world.ErrInvalidContainment)
+		if result.RowsAffected() == 0 {
+			return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
 		}
 
-		// Check for circular containment: object cannot be placed inside itself
-		// or inside any object that is contained within it
-		err = r.checkCircularContainmentTx(ctx, tx, objectID, *to.ObjectID)
-		if err != nil {
-			return err
-		}
-
-		// Check max nesting depth: verify that target container depth + object subtree depth
-		// won't exceed the maximum allowed depth
-		err = r.checkNestingDepthTx(ctx, tx, objectID, *to.ObjectID)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Clear all containment fields and set the new one
-	result, err := tx.Exec(ctx, `
-		UPDATE objects SET location_id = $2, held_by_character_id = $3, contained_in_object_id = $4
-		WHERE id = $1
-	`, objectID.String(), ulidToStringPtr(to.LocationID), ulidToStringPtr(to.CharacterID), ulidToStringPtr(to.ObjectID))
-	if err != nil {
-		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
-	}
-	if result.RowsAffected() == 0 {
-		return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return oops.With("operation", "commit transaction").Wrap(err)
-	}
-	return nil
+		return nil
+	})
 }
 
 // checkCircularContainmentTx verifies that placing objectID into targetContainerID
