@@ -13,9 +13,13 @@ import (
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	"github.com/holomush/holomush/internal/testsupport/natstest"
+	"github.com/holomush/holomush/internal/world"
+	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 )
 
 const (
@@ -48,7 +52,11 @@ const (
 //     outbox write is a DB write, not a broker publish, so a frozen broker cannot
 //     touch the mutation transaction; publish is decoupled to the relay;
 //  3. no orphan — every committed move has exactly one matching envelope and vice
-//     versa (no state-change-without-envelope, no envelope-without-state).
+//     versa (no state-change-without-envelope, no envelope-without-state);
+//  4. relay redelivery (M2 closed END-TO-END) — a move committed WHILE the broker
+//     is frozen stays committed-but-unpublished (the notification is PENDING, not
+//     lost); after the broker recovers the single leased relay (05-07) publishes
+//     the move envelope, so a NATS blip after commit cannot lose the notification.
 //
 // A single replica suffices: M2 is a write-vs-broker question, not a replica race.
 // No plugins are loaded — MoveCharacter has no in-tree command (F5/#4788); the
@@ -179,5 +187,213 @@ var _ = Describe("M2 dual-write window closed by the transactional outbox", Orde
 			"M2-VERDICT: no-orphan: %d committed move envelope(s) for the character, every one resolving to the real character row — state and envelope are 1:1 atomic",
 			moves,
 		))
+	})
+
+	It("relay redelivery: a move committed during a broker blip is published after the broker recovers (M2 closed end-to-end)", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), m2SpecTimeout)
+		DeferCleanup(cancel)
+
+		svc := newWorldService(replicaA)
+		dest := replicaA.NewLocation(ctx)
+
+		// The move envelope's wire subject: events.<game>.character.<id> (05-07 wire
+		// adapter). Its stored count corroborates the DB-side published_at proof.
+		charSubject, qerr := eventbus.Qualify(replicaA.GameID(), "character."+charID.String())
+		Expect(qerr).NotTo(HaveOccurred(), "qualify character subject")
+		beforeWire := streamSubjectCount(ctx, env, string(charSubject))
+
+		// Freeze the broker, then move: the character-location change AND the move
+		// envelope commit in one Postgres transaction (a DB write, immune to the
+		// broker). No relay has run in this suite, so the envelope is
+		// committed-but-UNPUBLISHED — precisely the post-commit blip window in which
+		// the deleted D-03 emit path would have LOST the notification.
+		pauseBroker(ctx, env)
+		moveCtx, moveCancel := context.WithTimeout(ctx, pausedMoveTimeout)
+		moveErr := svc.MoveCharacter(moveCtx, subj, charID, dest)
+		moveCancel()
+		Expect(moveErr).To(Succeed(), "the move commits despite the frozen broker (publish is decoupled to the relay)")
+
+		// Identify THIS move's envelope — the newest character_moved row for the char.
+		var eventIDStr string
+		Expect(replicaA.Pool().QueryRow(ctx, `
+			SELECT event_id FROM outbox
+			WHERE aggregate_id = $1 AND kind = 'character_moved'
+			ORDER BY epoch DESC, feed_position DESC LIMIT 1`, charID.String()).
+			Scan(&eventIDStr)).To(Succeed(), "find the frozen-window move envelope")
+		moveEventID := ulid.MustParse(eventIDStr)
+
+		// During the blip the notification is PENDING (committed, unpublished) — not lost.
+		Expect(outboxPublishedAt(ctx, replicaA, moveEventID)).To(BeFalse(),
+			"the move envelope is committed but unpublished while the broker is frozen — the notification is pending, not lost")
+
+		unpauseBroker(ctx, env)
+
+		// After recovery the single leased relay publishes every unpublished
+		// envelope (this move included). MarkPublished follows PubAck, so a set
+		// published_at is proof the envelope reached the broker.
+		relay := newOutboxRelay(outboxStoreFor(replicaA), busPublisher(replicaA), replicaA.GameID())
+		// Release the relay's advisory-lock lease at spec end — a leaked pinned
+		// connection would block the harness pool.Close() during suite teardown.
+		DeferCleanup(func() { _ = relay.Stop(context.Background()) })
+		_, err := relay.Drain(ctx)
+		Expect(err).NotTo(HaveOccurred(), "the relay drains cleanly after the broker recovers")
+
+		Expect(outboxPublishedAt(ctx, replicaA, moveEventID)).To(BeTrue(),
+			"the relay published the frozen-window move envelope after recovery — the notification survived the blip")
+		Expect(streamSubjectCount(ctx, env, string(charSubject))).To(BeNumerically(">", beforeWire),
+			"the move notification reached the shared broker after recovery")
+
+		reportVerdict(fmt.Sprintf(
+			"M2-VERDICT: relay-redelivery: a move committed while the broker was frozen (envelope %s, char at %s) was PUBLISHED by the relay after recovery — a NATS blip after commit cannot lose the notification (M2 closed end-to-end)",
+			moveEventID, dest,
+		))
+	})
+})
+
+// Per-aggregate concurrent-writer races: the version guard (plans 05-01..05-04)
+// must surface WORLD_CONCURRENT_EDIT on ALL FOUR world aggregates under two
+// replicas over one broker + one shared DB — not only the location/object pair
+// the M12 suite already pins. Each aggregate is raced DETERMINISTICALLY: both
+// replicas read the SAME version, one commits (advancing the stored version), and
+// the other's now-stale write is REJECTED rather than silently clobbering. This is
+// the guarded-CAS + zero-row classifier shared across every world repo, proven per
+// aggregate under the two-replica chaos substrate.
+var _ = Describe("Per-aggregate concurrent-writer races surface the conflict", Ordered, func() {
+	var (
+		env      *natstest.NATSEnv
+		replicaA *integrationtest.Server
+		replicaB *integrationtest.Server
+		svcA     *world.Service
+		svcB     *world.Service
+		subjA    string
+		subjB    string
+	)
+
+	BeforeAll(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		DeferCleanup(cancel)
+
+		env = startExternalNATS(ctx)
+		replicaA = startReplica(suiteT, env.URL, "")
+		replicaB = startReplica(suiteT, env.URL, replicaA.ConnStr())
+
+		// Two independent world.Service write paths over the ONE shared database,
+		// each funnelling into the same version-predicated guarded CAS.
+		svcA = newWorldService(replicaA)
+		svcB = newWorldService(replicaB)
+
+		// The allow-all default engine accepts any subject string, so no policy
+		// seeding is required.
+		sessA := replicaA.ConnectGuest(ctx)
+		sessB := replicaB.ConnectGuest(ctx)
+		subjA = "character:" + sessA.CharacterID.String()
+		subjB = "character:" + sessB.CharacterID.String()
+	})
+
+	// assertConflict asserts a stale write was rejected with the typed
+	// WORLD_CONCURRENT_EDIT (matched both by sentinel and by oops code — the same
+	// assertion shape the M12 suite uses).
+	assertConflict := func(err error) {
+		GinkgoHelper()
+		Expect(err).To(HaveOccurred(), "the stale writer MUST be rejected — this is the guard closing last-write-wins")
+		Expect(err).To(MatchError(world.ErrConcurrentEdit), "the conflict is the typed world.ErrConcurrentEdit")
+		oopsErr, ok := oops.AsOops(err)
+		Expect(ok).To(BeTrue(), "the conflict is an oops error")
+		Expect(oopsErr.Code()).To(Equal(world.CodeConcurrentEdit), "the surfaced code is WORLD_CONCURRENT_EDIT")
+	}
+
+	It("location: a stale writer is rejected with WORLD_CONCURRENT_EDIT", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), m2SpecTimeout)
+		DeferCleanup(cancel)
+
+		locID := replicaA.NewLocation(ctx)
+		locA, err := svcA.GetLocation(ctx, subjA, locID)
+		Expect(err).NotTo(HaveOccurred(), "svcA.GetLocation")
+		locB, err := svcB.GetLocation(ctx, subjB, locID)
+		Expect(err).NotTo(HaveOccurred(), "svcB.GetLocation")
+		Expect(locA.Version).To(Equal(locB.Version), "both copies hold the SAME read version")
+
+		locA.Name = "loc-A-committed"
+		Expect(svcA.UpdateLocation(ctx, subjA, locA)).To(Succeed(), "A's write commits")
+		locB.Description = "loc-B-rejected"
+		assertConflict(svcB.UpdateLocation(ctx, subjB, locB))
+
+		reportVerdict("M2-VERDICT: per-aggregate-location: two-replica stale write rejected with WORLD_CONCURRENT_EDIT")
+	})
+
+	It("exit: a stale writer is rejected with WORLD_CONCURRENT_EDIT", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), m2SpecTimeout)
+		DeferCleanup(cancel)
+
+		from := replicaA.NewLocation(ctx)
+		to := replicaA.NewLocation(ctx)
+		exit, err := world.NewExit(from, to, "north")
+		Expect(err).NotTo(HaveOccurred(), "construct exit")
+		Expect(svcA.CreateExit(ctx, subjA, exit)).To(Succeed(), "create shared exit")
+
+		exitA, err := svcA.GetExit(ctx, subjA, exit.ID)
+		Expect(err).NotTo(HaveOccurred(), "svcA.GetExit")
+		exitB, err := svcB.GetExit(ctx, subjB, exit.ID)
+		Expect(err).NotTo(HaveOccurred(), "svcB.GetExit")
+		Expect(exitA.Version).To(Equal(exitB.Version), "both copies hold the SAME read version")
+
+		exitA.Name = "south"
+		Expect(svcA.UpdateExit(ctx, subjA, exitA)).To(Succeed(), "A's exit write commits")
+		exitB.Name = "east"
+		assertConflict(svcB.UpdateExit(ctx, subjB, exitB))
+
+		reportVerdict("M2-VERDICT: per-aggregate-exit: two-replica stale write rejected with WORLD_CONCURRENT_EDIT")
+	})
+
+	It("character: a stale writer is rejected with WORLD_CONCURRENT_EDIT", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), m2SpecTimeout)
+		DeferCleanup(cancel)
+
+		// The world.Service exposes no full-object character update
+		// (UpdateCharacterDescription does its own internal read-modify-write, so a
+		// caller-controlled stale version cannot be injected through it). The guard
+		// is raced at the guarded character repo — the SAME CAS + zero-row classifier
+		// the service delegates to — one repo per replica pool over the shared DB.
+		repoA := worldpostgres.NewCharacterRepository(replicaA.Pool())
+		repoB := worldpostgres.NewCharacterRepository(replicaB.Pool())
+		target := replicaA.ConnectGuest(ctx).CharacterID
+
+		charA, err := repoA.Get(ctx, target)
+		Expect(err).NotTo(HaveOccurred(), "repoA.Get character")
+		charB, err := repoB.Get(ctx, target)
+		Expect(err).NotTo(HaveOccurred(), "repoB.Get character")
+		Expect(charA.Version).To(Equal(charB.Version), "both copies hold the SAME read version")
+
+		charA.Description = "char-A-committed"
+		_, err = repoA.Update(ctx, charA)
+		Expect(err).NotTo(HaveOccurred(), "A's character write commits")
+		charB.Description = "char-B-rejected"
+		_, errB := repoB.Update(ctx, charB)
+		assertConflict(errB)
+
+		reportVerdict("M2-VERDICT: per-aggregate-character: two-replica stale write rejected with WORLD_CONCURRENT_EDIT")
+	})
+
+	It("object: a stale writer is rejected with WORLD_CONCURRENT_EDIT", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), m2SpecTimeout)
+		DeferCleanup(cancel)
+
+		locID := replicaA.NewLocation(ctx)
+		obj, err := world.NewObjectWithID(ulid.Make(), "orb", world.InLocation(locID))
+		Expect(err).NotTo(HaveOccurred(), "construct object")
+		Expect(svcA.CreateObject(ctx, subjA, obj)).To(Succeed(), "create shared object")
+
+		objA, err := svcA.GetObject(ctx, subjA, obj.ID)
+		Expect(err).NotTo(HaveOccurred(), "svcA.GetObject")
+		objB, err := svcB.GetObject(ctx, subjB, obj.ID)
+		Expect(err).NotTo(HaveOccurred(), "svcB.GetObject")
+		Expect(objA.Version).To(Equal(objB.Version), "both copies hold the SAME read version")
+
+		objA.Name = "orb-A-renamed"
+		Expect(svcA.UpdateObject(ctx, subjA, objA)).To(Succeed(), "A's object write commits")
+		objB.Description = "obj-B-rejected"
+		assertConflict(svcB.UpdateObject(ctx, subjB, objB))
+
+		reportVerdict("M2-VERDICT: per-aggregate-object: two-replica stale write rejected with WORLD_CONCURRENT_EDIT")
 	})
 })
