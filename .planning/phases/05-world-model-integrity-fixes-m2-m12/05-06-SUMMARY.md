@@ -183,3 +183,10 @@ logs a benign warn until then). These are the plan's explicit forward boundary.
 
 None. No new network endpoint, auth path, or trust-boundary schema change was
 introduced beyond the plan's `<threat_model>` (T-05-16/17/18/58 are addressed).
+
+## Self-Check: PASSED
+
+- FOUND: internal/world/streams.go, internal/world/streams_test.go, internal/world/mutator.go
+- DELETED-OK: internal/world/events.go, event_store_adapter.go, worldtest/mock_EventEmitter.go
+- FOUND commits: b35061009 (Task 1), 86fb0c105 (Task 2), f28e83ab5 (Task 3), 905c3dee3 (summary)
+- `task build:all` + `task test -- ./internal/world/ ./internal/observability/` + `task lint` + integration compile (`./...`) + the M2 resilience suite all green.
