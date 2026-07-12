@@ -57,9 +57,10 @@ type IntentParams struct {
 
 // NewEnvelopeIntent constructs an EnvelopeIntent, stamping a fresh monotonic
 // event ULID via core.NewULID(). It MUST be the only mint site for the intent's
-// EventID — never hand-mint an id and never use idgen.New() (idgen is for entity
-// primary keys, not events; per .claude/rules/event-conventions.md the event
-// identity/dedup key comes from core.NewULID()).
+// EventID — never hand-mint an id and never use the entity id generator (that
+// path is for entity primary keys, not events; per
+// .claude/rules/event-conventions.md the event identity/dedup key comes from
+// core.NewULID()).
 func NewEnvelopeIntent(p IntentParams) EnvelopeIntent {
 	return EnvelopeIntent{
 		EventID:       core.NewULID(),

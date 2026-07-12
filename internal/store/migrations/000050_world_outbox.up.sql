@@ -38,8 +38,9 @@
 --                                  receipts; the watermark is per (consumer, game).
 --
 -- All timestamps are BIGINT epoch-ns (INV-STORE-1 / lint:no-timestamptz — NEW
--- tables must not use TIMESTAMPTZ). No triggers/functions/procedures — every bit
--- of logic (locked allocation, monotonic-contiguous advance) lives in Go.
+-- tables must use BIGINT epoch-ns, not the zoned timestamp type). No triggers/
+-- functions/procedures — every bit of logic (locked allocation,
+-- monotonic-contiguous advance) lives in Go.
 
 -- 1. outbox: one envelope per command, atomic with the state change.
 CREATE TABLE IF NOT EXISTS outbox (
