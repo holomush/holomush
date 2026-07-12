@@ -95,6 +95,28 @@ the scope-boundary calls the ADR explicitly deferred to "Phase 5's spec."
   world-model + migrations, not `internal/access/` or `internal/eventbus/crypto/`; the
   planner MUST confirm the outbox relay path doesn't touch a crypto-gated file).
 
+### World-write scope boundary (round-4 review resolution — `scene_participants` is OUT)
+- **D-05:** The world-integrity mechanism (version guard + outbox + SQL fence + INV-WORLD-4)
+  covers the **four core world tables ONLY** — `locations`, `exits`, `characters`, `objects` —
+  **plus** folding `internal/store/character_settings_repo.go`'s `UPDATE characters` (a genuine
+  envelope-less `public.characters` writer) into the guarded/versioned path. `scene_participants`
+  is **explicitly OUT of scope**, resolving the round-4 Codex "plugin escapes the fence" finding
+  as a schema-blind false positive: there are **two separate `scene_participants` tables** —
+  `plugin_core_scenes.scene_participants` (core-scenes plugin's own schema, migration
+  `plugins/core-scenes/migrations/000003`, plugin-owned, written only by the plugin's own store)
+  and `public.scene_participants` (core baseline `000001`, world layer) which has **no live
+  production write path outside `internal/world`** (the plugin manages scenes in its own schema;
+  `world.Service.AddSceneParticipant` has no prod callers outside `internal/world`). Consequences
+  the planner MUST honor:
+  - The AST SQL fence MUST be scoped to the **core/world schema + the four tables (+ `characters`)**
+    and MUST **exclude the `plugins/` tree and `scene_participants`** — do not flag the plugin's
+    own-schema writes, and do not add `scene_participants` to the guarded/version/outbox surface.
+  - A **follow-up GitHub issue** (NOT Phase 5) captures: verify whether the world-layer
+    `internal/world/postgres/scene_repo.go` / `public.scene_participants` is live or vestigial
+    legacy, and either model it or remove it; and any future "outbox for plugin-owned tables" work.
+  - This keeps Phase 5 at its original CONTEXT scope (four tables + zero product projections) — it
+    does NOT reach into a product plugin's storage.
+
 ### Claude's Discretion
 - Internal wave decomposition within each slice, migration numbering, exact Go
   package placement of the outbox relay + mutation wrapper, and the reference-consumer
