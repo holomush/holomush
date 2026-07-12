@@ -89,7 +89,7 @@ func TestWorldPostgresCompositionAllowlist(t *testing.T) {
 		return false
 	}
 
-	skipDirs := map[string]struct{}{
+	importGraphSkipDirs := map[string]struct{}{
 		".git": {}, "vendor": {}, "node_modules": {}, "web": {}, "site": {},
 		"gorules": {}, "testdata": {}, "dist": {}, ".planning": {},
 	}
@@ -104,7 +104,7 @@ func TestWorldPostgresCompositionAllowlist(t *testing.T) {
 		if !d.IsDir() {
 			return nil
 		}
-		if _, skip := skipDirs[d.Name()]; skip {
+		if _, skip := importGraphSkipDirs[d.Name()]; skip {
 			return filepath.SkipDir
 		}
 		pkg, ierr := bctx.ImportDir(path, 0)

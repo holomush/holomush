@@ -210,6 +210,7 @@ func TestNoRawWorldSQLOutsideWriterBoundary(t *testing.T) {
 		if isWriterBoundaryPath(rel) {
 			return nil // allowlisted writer boundary
 		}
+		//nolint:gosec // G122: this meta-test walks the trusted in-repo source tree; path is repo-derived, not untrusted input.
 		src, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return readErr
