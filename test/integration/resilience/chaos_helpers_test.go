@@ -39,8 +39,9 @@ import (
 //
 // Because both replicas share ONE database, newWorldService(replicaA) and
 // newWorldService(replicaB) are two independent write paths onto the identical
-// unguarded full-row UPDATE (location_repo.go:73) — exactly the two-replica
-// concurrency surface the M12 verdict characterizes.
+// version-predicated guarded CAS Update (location_repo.go) — exactly the
+// two-replica concurrency surface the M12 regression gate exercises now that the
+// guard (plans 05-01..05-04) closes last-write-wins.
 func newWorldService(s *integrationtest.Server) *world.Service {
 	pool := s.Pool()
 	return world.NewService(world.ServiceConfig{
