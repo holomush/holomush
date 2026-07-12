@@ -94,13 +94,13 @@ Plans:
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
 
-**Plans**: 16 plans (4 fixed slices → 12 waves; one phase PR per D-04). Plan 05-14 (transaction/repository foundation) was added by the round-1 cross-AI review (`05-REVIEWS.md`, Codex Agreed-Concern A) and runs in wave 1 alongside 05-01. Plan 05-15 (atomic character-genesis service) was added by the round-3 review (Codex blocker #5: guest + bootstrap-admin creation bypassed the genesis envelope) and runs in wave 9 alongside 05-10. Plan 05-16 (atomic guest character-reaping / tombstone-on-delete service) was added by the round-5 review (locked decision D-06: guest reaping + failed-guest cleanup deleted characters via an FK cascade with no tombstone) and runs in wave 10 alongside 05-11 — the deletion-side counterpart to 05-15. (Round-5 D-07 also REMOVES the vestigial world scene-participant write surface inside 05-14.)
+**Plans**: 1/16 plans executed
 
 Plans:
 
 **Slice 1 — Version guard + repository foundation (MODEL-03)**
 
-- [ ] 05-01-PLAN.md — Version-guard foundation: migration 000049 + Version struct fields + WORLD_CONCURRENT_EDIT error (wave 1)
+- [x] 05-01-PLAN.md — Version-guard foundation: migration 000049 + Version struct fields + WORLD_CONCURRENT_EDIT error (wave 1)
 - [ ] 05-14-PLAN.md — Transaction & repository foundation: re-entrant tx + self-tx repo refactor + MutationDelta + Delete(expectedVersion)/reader interfaces + mock regen (wave 1)
 - [ ] 05-02-PLAN.md — Location + exit repo version-predicated CAS + zero-row classifier + delta/version refresh (wave 2)
 - [ ] 05-03-PLAN.md — Character + object repo version-predicated CAS + zero-row classifier + delta/version refresh (wave 2)
@@ -186,7 +186,7 @@ Plans:
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
-| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 0/16 | Pending | — |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 1/16 | In Progress|  |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |

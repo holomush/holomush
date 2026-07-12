@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 5
-current_phase_name: M2 / M12
-status: "Phase 4 shipped — PR #4814"
+current_phase: 05
+current_phase_name: world-model-integrity-fixes-m2-m12
+status: executing
 stopped_at: Phase 5 round-5 scope decisions captured (D-06/D-07)
-last_updated: "2026-07-12T15:20:47.502Z"
+last_updated: "2026-07-12T18:58:05.104Z"
 last_activity: 2026-07-12
-last_activity_desc: Phase 05 planning complete
+last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 19
+  total_plans: 20
   completed_plans: 4
   percent: 17
 ---
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 5 — World-Model Integrity Fixes (M2 / M12)
+**Current focus:** Phase 05 — world-model-integrity-fixes-m2-m12
 
 ## Current Position
 
-Phase: 5 — World-Model Integrity Fixes (M2 / M12)
-Plan: Not started
-Status: Phase 4 shipped — PR #4814
-Last activity: 2026-07-12 — Phase 05 planning complete
+Phase: 05 (world-model-integrity-fixes-m2-m12) — EXECUTING
+Plan: 2 of 16
+Status: Ready to execute
+Last activity: 2026-07-12 — Phase 05 execution started
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Last activity: 2026-07-12 — Phase 05 planning complete
 | Phase 04 P02 | 35min | 2 tasks | 3 files |
 | Phase 04 P03 | ~55min | 2 tasks | 3 files |
 | Phase 04 P04 | ~90min | 3 tasks | 2 files |
+| Phase 05 P01 | 20m | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,7 @@ the next milestone yet.
 - [Phase 04]: Production world.Service wires NO EventEmitter — the move-notification leg is dead code today (pinned by a spec)
 - [Phase 04]: MODEL-01 decided: Option B — CRUD-canonical + optimistic concurrency + transactional outbox in the panel-ratified strengthened shape (consensus one-pager NORMATIVE); Phase 5 implements MODEL-03 version guard + MODEL-04 ordered atomic feed — Human decider (Sean Brandt) chose under future-state-first framing after a two-round three-model panel unanimously ratified the strengthened B shape; the ordered complete world-change feed is the platform's extensibility contract; evolvability inverts under event sourcing pre-1.0; coverage rot countered structurally (compile-time seam + census meta-test + delta-parity)
 - [Phase 04]: INV-WORLD-ATOMIC-FEED/-DELTA-PARITY/-FEED-ORDER/-WRITER-BOUNDARY named in the ADR; registration/binding deferred to Phase 5's spec per .claude/rules/invariants.md
+- [Phase ?]: Phase 5 slice-1 foundation: version INTEGER NOT NULL DEFAULT 1 on locations/exits/characters/objects (migration 000049); Version int on the four world structs; WORLD_CONCURRENT_EDIT/ErrConcurrentEdit as the single typed conflict signal (D-02/MODEL-03).
 
 ### Pending Todos
 
@@ -132,7 +134,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-12T15:20:47.496Z
+Last session: 2026-07-12T18:57:37.344Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Phase 5 round-5 scope decisions captured (D-06/D-07)
 Resume file: .planning/phases/05-world-model-integrity-fixes-m2-m12/05-CONTEXT.md
