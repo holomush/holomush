@@ -15,8 +15,189 @@ import (
 
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+// exitDBVersion reads the raw version column for an exit.
+func exitDBVersion(ctx context.Context, t *testing.T, id ulid.ULID) int {
+	t.Helper()
+	var v int
+	err := testPool.QueryRow(ctx, `SELECT version FROM exits WHERE id = $1`, id.String()).Scan(&v)
+	require.NoError(t, err)
+	return v
+}
+
+// TestExitRepository_UpdateVersionGuard binds MODEL-03 for exit Update.
+func TestExitRepository_UpdateVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+	loc1ID, loc2ID := createTestLocations(ctx, t)
+
+	newExit := func(name string) *world.Exit {
+		return &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           name,
+			Bidirectional:  false,
+			Visibility:     world.VisibilityAll,
+		}
+	}
+
+	t.Run("create populates version 1 and Get reads it back", func(t *testing.T) {
+		exit := newExit("guard-create")
+		delta, err := repo.Create(ctx, exit)
+		require.NoError(t, err)
+		assert.Equal(t, 1, exit.Version)
+		assert.Equal(t, 1, delta.Primary.AfterVersion)
+
+		got, err := repo.Get(ctx, exit.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 1, got.Version)
+	})
+
+	t.Run("successful update increments version by 1 and refreshes struct", func(t *testing.T) {
+		exit := newExit("guard-update")
+		require.NoError(t, delErr(repo.Create(ctx, exit)))
+		require.Equal(t, 1, exit.Version)
+
+		exit.Name = "guard-update-v2"
+		delta, err := repo.Update(ctx, exit)
+		require.NoError(t, err)
+		assert.Equal(t, 2, exit.Version)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+		assert.Equal(t, 2, delta.Primary.AfterVersion)
+		assert.Equal(t, 2, exitDBVersion(ctx, t, exit.ID))
+	})
+
+	t.Run("stale-version update returns WORLD_CONCURRENT_EDIT and does not overwrite", func(t *testing.T) {
+		exit := newExit("guard-stale")
+		require.NoError(t, delErr(repo.Create(ctx, exit)))
+
+		_, err := testPool.Exec(ctx, `UPDATE exits SET version = version + 1, name = $2 WHERE id = $1`,
+			exit.ID.String(), "winner")
+		require.NoError(t, err)
+
+		exit.Name = "loser"
+		_, err = repo.Update(ctx, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+
+		got, err := repo.Get(ctx, exit.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "winner", got.Name)
+	})
+
+	t.Run("update of an absent exit returns EXIT_NOT_FOUND", func(t *testing.T) {
+		exit := newExit("ghost")
+		exit.Version = 4
+		_, err := repo.Update(ctx, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
+	})
+}
+
+// TestExitRepository_DeleteVersionGuard binds MODEL-03 for exit Delete.
+func TestExitRepository_DeleteVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+	loc1ID, loc2ID := createTestLocations(ctx, t)
+
+	t.Run("stale-version delete returns WORLD_CONCURRENT_EDIT and leaves the row", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           "del-stale",
+			Visibility:     world.VisibilityAll,
+		}
+		require.NoError(t, delErr(repo.Create(ctx, exit)))
+
+		_, err := testPool.Exec(ctx, `UPDATE exits SET version = version + 1 WHERE id = $1`, exit.ID.String())
+		require.NoError(t, err)
+
+		_, err = repo.Delete(ctx, exit.ID, 1)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+
+		_, err = repo.Get(ctx, exit.ID)
+		require.NoError(t, err)
+	})
+
+	t.Run("matched-version delete succeeds with versioned tombstone delta", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           "del-match",
+			Visibility:     world.VisibilityAll,
+		}
+		require.NoError(t, delErr(repo.Create(ctx, exit)))
+
+		delta, err := repo.Delete(ctx, exit.ID, exit.Version)
+		require.NoError(t, err)
+		assert.True(t, delta.Primary.Tombstone)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+
+		_, err = repo.Get(ctx, exit.ID)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+	})
+
+	t.Run("absent-row delete returns EXIT_NOT_FOUND", func(t *testing.T) {
+		_, err := repo.Delete(ctx, ulid.Make(), 2)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
+	})
+}
+
+// TestExitRepository_BidirectionalDelta binds finding 7: a bidirectional Create's
+// delta lists the reverse exit, and a bidirectional Delete's delta lists the
+// cascaded return exit as a tombstone.
+func TestExitRepository_BidirectionalDelta(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+	loc1ID, loc2ID := createTestLocations(ctx, t)
+
+	exit := &world.Exit{
+		ID:             ulid.Make(),
+		FromLocationID: loc1ID,
+		ToLocationID:   loc2ID,
+		Name:           "bi-out",
+		Bidirectional:  true,
+		ReturnName:     "bi-back",
+		Visibility:     world.VisibilityAll,
+	}
+
+	createDelta, err := repo.Create(ctx, exit)
+	require.NoError(t, err)
+	require.Len(t, createDelta.Affected, 1, "bidirectional create carries the reverse exit")
+	assert.Equal(t, wmodel.AggregateExit, createDelta.Affected[0].Type)
+	assert.Equal(t, 1, createDelta.Affected[0].AfterVersion)
+	assert.False(t, createDelta.Affected[0].Tombstone)
+	reverseID := createDelta.Affected[0].ID
+
+	// The reverse exit really exists at loc2.
+	reverse, err := repo.FindByName(ctx, loc2ID, "bi-back")
+	require.NoError(t, err)
+	assert.Equal(t, reverseID, reverse.ID)
+
+	deleteDelta, err := repo.Delete(ctx, exit.ID, 0)
+	require.NoError(t, err)
+	require.Len(t, deleteDelta.Affected, 1, "bidirectional delete carries the cascaded return exit tombstone")
+	assert.Equal(t, reverseID, deleteDelta.Affected[0].ID)
+	assert.True(t, deleteDelta.Affected[0].Tombstone)
+
+	// Both are gone.
+	_, err = repo.Get(ctx, exit.ID)
+	assert.ErrorIs(t, err, world.ErrNotFound)
+	_, err = repo.FindByName(ctx, loc2ID, "bi-back")
+	assert.ErrorIs(t, err, world.ErrNotFound)
+}
 
 // createTestLocations creates two test locations for exit tests.
 func createTestLocations(ctx context.Context, t *testing.T) (ulid.ULID, ulid.ULID) {
