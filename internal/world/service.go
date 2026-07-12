@@ -5,6 +5,7 @@ package world
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -17,7 +18,22 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/pkg/errutil"
+)
+
+// defaultGameID is the single-game identity used when ServiceConfig.GameID is
+// empty. Phase 5 runs one game ("main"); the outbox feed counter, per-game
+// ordering, and consumer watermarks are all keyed by it, ready for multi-game
+// later (wmodel round-9 R6-5).
+const defaultGameID = "main"
+
+// Envelope taxonomy for the world-change feed. The versioned taxonomy schema
+// registry lands in 05-09; until then these literal kinds/version identify the
+// intent-level payload shape.
+const (
+	kindCharacterMoved = "character_moved"
+	worldSchemaVersion = 1
 )
 
 // ErrPermissionDenied is returned when an operation is not authorized.
@@ -36,8 +52,15 @@ type ServiceConfig struct {
 	CharacterRepo CharacterRepository
 	PropertyRepo  PropertyRepository
 	Engine        types.AccessPolicyEngine
-	EventEmitter  EventEmitter
 	Transactor    Transactor
+	// OutboxWriter persists the same-tx world-change envelope for guarded write
+	// commands routed through the write executor (05-06 wires MoveCharacter; the
+	// subsystem injection is 05-07). Injected as an interface so package world
+	// imports neither internal/world/outbox nor internal/world/postgres.
+	OutboxWriter OutboxWriter
+	// GameID keys the outbox feed counter and the outbox row's game_id. Defaults to
+	// "main" when empty (single-game Phase 5).
+	GameID string
 }
 
 // Service provides authorized access to world model operations.
@@ -50,9 +73,14 @@ type Service struct {
 	characterRepo CharacterRepository
 	propertyRepo  PropertyRepository
 	engine        types.AccessPolicyEngine
-	eventEmitter  EventEmitter
 	transactor    Transactor
 	movementHook  MovementHook
+	// mutator is the write executor + write-requires-envelope seam. It owns the
+	// private write repos + transactor + injected OutboxWriter (05-06). Nil until
+	// an OutboxWriter is configured; MoveCharacter reports a configuration error if
+	// so.
+	mutator *worldMutator
+	gameID  string
 }
 
 // NewService creates a new Service with the given configuration.
@@ -61,11 +89,19 @@ func NewService(cfg ServiceConfig) *Service {
 	if cfg.Engine == nil {
 		panic("world.NewService: Engine is required")
 	}
-	if cfg.EventEmitter == nil {
-		slog.Warn("world.NewService: EventEmitter not configured, operations requiring event emission will fail")
-	}
 	if cfg.PropertyRepo == nil || cfg.Transactor == nil {
 		slog.Warn("world.NewService: PropertyRepo and Transactor not configured, delete operations will fail (spec: 05-storage-audit.md §108-119 requires transactional cascade)")
+	}
+	if cfg.OutboxWriter == nil {
+		slog.Warn("world.NewService: OutboxWriter not configured, envelope-emitting write commands (MoveCharacter) will fail (subsystem wiring lands in 05-07)")
+	}
+	gameID := cfg.GameID
+	if gameID == "" {
+		gameID = defaultGameID
+	}
+	var mutator *worldMutator
+	if cfg.OutboxWriter != nil && cfg.Transactor != nil {
+		mutator = newWorldMutator(cfg.CharacterRepo, cfg.Transactor, cfg.OutboxWriter)
 	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
@@ -75,9 +111,10 @@ func NewService(cfg ServiceConfig) *Service {
 		characterRepo: cfg.CharacterRepo,
 		propertyRepo:  cfg.PropertyRepo,
 		engine:        cfg.Engine,
-		eventEmitter:  cfg.EventEmitter,
 		transactor:    cfg.Transactor,
 		movementHook:  NoopMovementHook{},
+		mutator:       mutator,
+		gameID:        gameID,
 	}
 }
 
@@ -534,18 +571,11 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 }
 
 // MoveObject moves an object to a new containment (location, character inventory, or another object).
-// Emits a "move" event for plugins after successful database update.
 //
-// Event emission follows eventual consistency: the database move succeeds atomically first,
-// then an event is emitted. If event emission fails after all retries (3 retries, 4 total attempts) are exhausted:
-//   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
-//   - Error context includes move_succeeded=true to indicate the database change persisted
-//   - Callers should NOT retry the move (it already succeeded in the database)
-//   - Callers may choose to log the event failure and treat the user operation as successful
-//
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-//
-// This design ensures data consistency while surfacing event delivery failures to callers.
+// The object-move envelope is not yet routed through the same-tx outbox — object
+// commands migrate to the write executor in 05-10/05-11. This slice (05-06) deletes
+// the post-commit emit path (D-03) and routes only MoveCharacter through the outbox;
+// MoveObject performs the guarded containment write and returns.
 func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
@@ -558,39 +588,19 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
 
-	// Get current containment for the move event
-	obj, err := s.objectRepo.Get(ctx, id)
-	if err != nil {
+	// Verify the object exists before moving.
+	if _, err := s.objectRepo.Get(ctx, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
 		}
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "get object %s", id)
 	}
-	from := obj.Containment()
 
 	if _, err := s.objectRepo.Move(ctx, id, to, 0); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
 		}
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "move object %s", id)
-	}
-
-	// Emit move event - failures are propagated to the caller
-	payload := MovePayload{
-		EntityType: EntityTypeObject,
-		EntityID:   id,
-		FromType:   from.Type(),
-		FromID:     from.ID(), // Can be nil for first-time placements
-		ToType:     to.Type(),
-		ToID:       *to.ID(), // Safe: to.Validate() ensures one field is set
-	}
-	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		// Add OBJECT_MOVE_EVENT_FAILED at top level for error categorization
-		// Inner error has EVENT_EMIT_FAILED code from events.go
-		return oops.Code("OBJECT_MOVE_EVENT_FAILED").
-			With("object_id", id.String()).
-			With("move_succeeded", true).
-			Wrapf(err, "move completed but event emission failed")
 	}
 
 	return nil
@@ -722,18 +732,19 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 }
 
 // MoveCharacter moves a character to a new location.
-// Emits a "move" event for plugins after successful database update.
 //
-// Event emission follows eventual consistency: the database move succeeds atomically first,
-// then an event is emitted. If event emission fails after all retries (3 retries, 4 total attempts) are exhausted:
-//   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
-//   - Error context includes move_succeeded=true to indicate the database change persisted
-//   - Callers should NOT retry the move (it already succeeded in the database)
-//   - Callers may choose to log the event failure and treat the user operation as successful
+// The character move and its ONE move envelope commit in the SAME transaction via
+// the write executor's same-tx outbox (05-06) — there is no post-commit emit step
+// to lose on a broker blip (the M2 dual-write window is closed for this command).
+// A failed or no-op move (version conflict, missing destination) writes no
+// envelope.
 //
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-//
-// This design ensures data consistency while surfacing event delivery failures to callers.
+// The movement hook fires AFTER that transaction commits, because it propagates the
+// new location to the session store — a separate connection pool that cannot enroll
+// in the world transaction. A hook failure is operational degradation, not a
+// command failure: the move and its envelope are already durable, so the hook error
+// is logged + counted and MoveCharacter returns SUCCESS (the session's derived
+// location may lag until re-sync — see MovementHook).
 func (s *Service) MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
@@ -743,7 +754,8 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 		return err
 	}
 
-	// Get current location for the move event
+	// Read the current character: its version is the CAS guard and its current
+	// location is the new-values-only intent's from-location field.
 	char, err := s.characterRepo.Get(ctx, characterID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -752,240 +764,94 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "get character %s", characterID)
 	}
 
-	// Verify destination location exists
+	// Verify destination location exists (a pre-commit failure emits no envelope).
 	if s.locationRepo == nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("location repository not configured")
 	}
-	if _, err := s.locationRepo.Get(ctx, toLocationID); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "move character to location %s", toLocationID)
+	if _, locErr := s.locationRepo.Get(ctx, toLocationID); locErr != nil {
+		if errors.Is(locErr, ErrNotFound) {
+			return oops.Code("LOCATION_NOT_FOUND").Wrapf(locErr, "move character to location %s", toLocationID)
 		}
-		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "verify destination location %s", toLocationID)
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(locErr, "verify destination location %s", toLocationID)
 	}
 
-	// Update character location
-	if _, err := s.characterRepo.UpdateLocation(ctx, characterID, &toLocationID, 0); err != nil {
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+
+	// Build the intent-level, new-values-only envelope intent (no manifest, no
+	// epoch/feed_position — those are the writer's to allocate).
+	intent, err := s.buildMoveIntent(char, subjectID, characterID, toLocationID)
+	if err != nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "build move intent for character %s", characterID)
+	}
+
+	// Route the guarded character-location write + its move envelope through the
+	// same-tx outbox seam. The character's read version is the CAS guard.
+	if _, err := s.mutator.moveCharacter(ctx, intent, characterID, toLocationID, char.Version); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "move character %s", characterID)
+		}
 		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "update character %s location", characterID)
 	}
 
-	// Fire movement hook — propagates new location to dependent stores (e.g. session store)
-	// before the move event is emitted so consumers see a consistent view.
+	// The state change AND its move envelope have now committed atomically. Fire the
+	// movement hook post-commit; a failure is operational degradation (log + metric,
+	// return success) — never a command failure after the commit (round-5 finding 3).
 	arrivedAt := time.Now().UTC()
 	if hookErr := s.movementHook.OnCharacterMoved(ctx, characterID, toLocationID, arrivedAt); hookErr != nil {
-		// move_succeeded=true: the character row was already committed (line
-		// 803 above). Callers MUST NOT retry the move as if it were atomic
-		// with the hook; this attribute lets them distinguish the partial-
-		// failure case from a pre-DB-commit failure.
-		return oops.Code("CHARACTER_MOVE_FAILED").
-			With("character_id", characterID.String()).
-			With("phase", "movement_hook").
-			With("move_succeeded", true).
-			Wrap(hookErr)
-	}
-
-	// Build move payload
-	var fromType ContainmentType
-	var fromID *ulid.ULID
-	if char.LocationID == nil {
-		fromType = ContainmentTypeNone
-		fromID = nil
-	} else {
-		fromType = ContainmentTypeLocation
-		fromID = char.LocationID
-	}
-
-	payload := MovePayload{
-		EntityType: EntityTypeCharacter,
-		EntityID:   characterID,
-		FromType:   fromType,
-		FromID:     fromID,
-		ToType:     ContainmentTypeLocation,
-		ToID:       toLocationID,
-	}
-	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		// Add CHARACTER_MOVE_EVENT_FAILED at top level for error categorization
-		// Inner error has EVENT_EMIT_FAILED code from events.go
-		return oops.Code("CHARACTER_MOVE_EVENT_FAILED").
-			With("character_id", characterID.String()).
-			With("move_succeeded", true).
-			Wrapf(err, "move completed but event emission failed")
+		observability.RecordMovementHookFailure()
+		slog.WarnContext(ctx, "movement hook failed after committed move; session-derived location may lag until re-sync",
+			"character_id", characterID.String(),
+			"to_location_id", toLocationID.String(),
+			"error", hookErr)
 	}
 
 	return nil
 }
 
-// ExamineLocation allows a character to examine a location.
-// Emits an examine event for plugins after validation and authorization.
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
-// ExamineLocation checks whether the character can examine a target location and
-// sends detailed location information to them.
-func (s *Service) ExamineLocation(ctx context.Context, subjectID string, characterID, targetLocationID ulid.ULID) error {
-	if s.characterRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
-	}
-	if s.locationRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("location repository not configured")
-	}
-
-	// Get the examining character
-	char, err := s.characterRepo.Get(ctx, characterID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
-	}
-
-	// Character must be in the world to examine anything
-	if char.LocationID == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
-	}
-
-	// Authorize before fetching target to prevent information disclosure
-	resource := access.LocationResource(targetLocationID.String())
-	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixLocation); checkErr != nil {
-		return checkErr
-	}
-
-	// Get the target location (only after authorization)
-	targetLoc, err := s.locationRepo.Get(ctx, targetLocationID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "target location %s not found", targetLocationID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target location %s", targetLocationID)
-	}
-
-	// Build and emit examine event
-	payload := ExaminePayload{
-		CharacterID: characterID,
-		TargetType:  TargetTypeLocation,
-		TargetID:    targetLocationID,
-		TargetName:  targetLoc.Name,
-		LocationID:  *char.LocationID,
-	}
-	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
-		return oops.Code("EXAMINE_LOCATION_EVENT_FAILED").
-			With("character_id", characterID.String()).
-			With("target_id", targetLocationID.String()).
-			Wrapf(err, "examine location event emission failed")
-	}
-	return nil
+// moveIntentPayload is the new-values-only, erasure-safe move payload persisted in
+// the envelope intent — no secrets, intent-level.
+type moveIntentPayload struct {
+	CharacterID    string  `json:"character_id"`
+	ToLocationID   string  `json:"to_location_id"`
+	FromLocationID *string `json:"from_location_id,omitempty"`
 }
 
-// ExamineObject allows a character to examine an object.
-// Emits an examine event for plugins after validation and authorization.
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
-func (s *Service) ExamineObject(ctx context.Context, subjectID string, characterID, targetObjectID ulid.ULID) error {
-	if s.characterRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
+// buildMoveIntent constructs the character-move EnvelopeIntent from the read
+// character and the command inputs. It carries the service's game id, the mover as
+// actor, and a new-values-only payload (from/to location). The intent deliberately
+// omits epoch/feed_position/manifest — the writer owns those.
+func (s *Service) buildMoveIntent(char *Character, subjectID string, characterID, toLocationID ulid.ULID) (wmodel.EnvelopeIntent, error) {
+	p := moveIntentPayload{
+		CharacterID:  characterID.String(),
+		ToLocationID: toLocationID.String(),
 	}
-	if s.objectRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("object repository not configured")
+	if char.LocationID != nil {
+		from := char.LocationID.String()
+		p.FromLocationID = &from
 	}
-
-	// Get the examining character
-	char, err := s.characterRepo.Get(ctx, characterID)
+	payload, err := json.Marshal(p)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
+		return wmodel.EnvelopeIntent{}, oops.Wrapf(err, "marshal move intent payload")
 	}
-
-	// Character must be in the world to examine anything
-	if char.LocationID == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
-	}
-
-	// Authorize before fetching target to prevent information disclosure
-	resource := access.ObjectResource(targetObjectID.String())
-	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixObject); checkErr != nil {
-		return checkErr
-	}
-
-	// Get the target object (only after authorization)
-	targetObj, err := s.objectRepo.Get(ctx, targetObjectID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "target object %s not found", targetObjectID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target object %s", targetObjectID)
-	}
-
-	// Build and emit examine event
-	payload := ExaminePayload{
-		CharacterID: characterID,
-		TargetType:  TargetTypeObject,
-		TargetID:    targetObjectID,
-		TargetName:  targetObj.Name,
-		LocationID:  *char.LocationID,
-	}
-	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
-		return oops.Code("EXAMINE_OBJECT_EVENT_FAILED").
-			With("character_id", characterID.String()).
-			With("target_id", targetObjectID.String()).
-			Wrapf(err, "examine object event emission failed")
-	}
-	return nil
+	return wmodel.NewEnvelopeIntent(wmodel.IntentParams{
+		GameID:        s.gameID,
+		Kind:          kindCharacterMoved,
+		SchemaVersion: worldSchemaVersion,
+		Actor:         subjectID,
+		AggregateType: wmodel.AggregateCharacter,
+		AggregateID:   characterID,
+		Payload:       payload,
+	}), nil
 }
 
-// ExamineCharacter allows a character to examine another character.
-// Emits an examine event for plugins after validation and authorization.
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
-func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, characterID, targetCharacterID ulid.ULID) error {
-	if s.characterRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
-	}
-
-	// Get the examining character
-	char, err := s.characterRepo.Get(ctx, characterID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
-	}
-
-	// Character must be in the world to examine anything
-	if char.LocationID == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
-	}
-
-	// Authorize before fetching target to prevent information disclosure
-	resource := access.CharacterResource(targetCharacterID.String())
-	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixCharacter); checkErr != nil {
-		return checkErr
-	}
-
-	// Get the target character (only after authorization)
-	targetChar, err := s.characterRepo.Get(ctx, targetCharacterID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "target character %s not found", targetCharacterID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target character %s", targetCharacterID)
-	}
-
-	// Build and emit examine event
-	payload := ExaminePayload{
-		CharacterID: characterID,
-		TargetType:  TargetTypeCharacter,
-		TargetID:    targetCharacterID,
-		TargetName:  targetChar.Name,
-		LocationID:  *char.LocationID,
-	}
-	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
-		return oops.Code("EXAMINE_CHARACTER_EVENT_FAILED").
-			With("character_id", characterID.String()).
-			With("target_id", targetCharacterID.String()).
-			Wrapf(err, "examine character event emission failed")
-	}
-	return nil
-}
+// The world-layer Examine{Location,Object,Character} commands were removed in
+// 05-06: their sole behavior was the post-commit examine emit path (deleted in
+// this slice, D-03), they had zero production callers, and an examine is a READ,
+// not a world-state change — so it is dropped from the world-change feed (RESEARCH
+// Open Question 1). The core-objects plugin owns the player-facing `examine`
+// command and its own `object_examine` notification.
 
 // FindLocationByName searches for a location by name after checking read authorization.
 // Returns ErrNotFound if no location matches.
