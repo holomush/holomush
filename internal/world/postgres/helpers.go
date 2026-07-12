@@ -46,6 +46,44 @@ func execerFromCtx(ctx context.Context, pool execer) execer {
 	return pool
 }
 
+// txBeginner abstracts Begin for a connection pool (satisfied by *pgxpool.Pool).
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// withTx runs fn inside a transaction with re-entrant semantics.
+//
+// If an ambient transaction is already present in ctx (stashed by an outer
+// withTx / Transactor.InTransaction), fn is executed within it and the OUTERMOST
+// caller owns commit/rollback — no second Begin is issued and no commit/rollback
+// happens here. This lets a repository write method enroll in an ambient mutation
+// transaction so it commits atomically with the caller's other statements (e.g.
+// the outbox row) and shares a single connection (so a locked follow-up read in
+// the same tx reuses the caller's connection).
+//
+// When no ambient transaction is present, withTx begins a new transaction, stashes
+// it via txKey{}, commits on a nil return, and rolls back on error — the standalone
+// repo-method path, behavior-identical to the previous per-method pool.Begin.
+func withTx(ctx context.Context, pool txBeginner, fn func(ctx context.Context) error) error {
+	if txFromContext(ctx) != nil {
+		return fn(ctx)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return oops.Code("TX_BEGIN_FAILED").Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	txCtx := context.WithValue(ctx, txKey{}, tx)
+	if err := fn(txCtx); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Code("TX_COMMIT_FAILED").Wrap(err)
+	}
+	return nil
+}
+
 // maxCTERecursionDepth limits recursion in CTEs to prevent infinite loops.
 // This is a safety guard; actual nesting is limited by business rules (maxNestingDepth).
 const maxCTERecursionDepth = 100
