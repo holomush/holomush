@@ -1,7 +1,8 @@
 # Phase 5: World-Model Integrity Fixes (M2 / M12) - Context
 
 **Gathered:** 2026-07-12
-**Status:** Ready for planning
+**Last updated:** 2026-07-12 — round-5 cross-AI review scope decisions (D-06 guest-reaper deletion; D-07 vestigial scene-participant removal)
+**Status:** Ready for planning (re-plan pending: `/gsd-plan-phase 5 --reviews`)
 
 <domain>
 ## Phase Boundary
@@ -114,13 +115,68 @@ the scope-boundary calls the ADR explicitly deferred to "Phase 5's spec."
   - A **follow-up GitHub issue** (NOT Phase 5) captures: verify whether the world-layer
     `internal/world/postgres/scene_repo.go` / `public.scene_participants` is live or vestigial
     legacy, and either model it or remove it; and any future "outbox for plugin-owned tables" work.
+    **(Round-5 UPDATE — SUPERSEDED by D-07:** the verify-or-remove verdict is now settled and
+    executed IN Phase 5 — verdict = **remove** the vestigial world surface; issue #4815 now
+    narrows to ONLY the future outbox-for-plugin-owned-tables work.)
   - This keeps Phase 5 at its original CONTEXT scope (four tables + zero product projections) — it
     does NOT reach into a product plugin's storage.
+
+### Guest-reaper character deletion (round-5 review resolution — IN scope)
+- **D-06:** Phase 5 **closes the guest-reaper character-deletion hole.** Round-5 Codex found a
+  **live** writer-boundary / feed-completeness violation the prior plans never modeled: the guest
+  reaper (`internal/auth/guest_reaper.go:68` → `DeleteGuestPlayer` → `internal/auth/postgres/player_repo.go:326`
+  `DELETE FROM players`) FK-cascades to the guest's characters (`internal/store/migrations/000002_player_is_guest.up.sql:9`)
+  with **no character tombstone** — a reaped guest's character enters the feed via genesis at
+  creation but its deletion is invisible, so `INV-WORLD-WRITER-BOUNDARY` / feed-completeness are
+  FALSE for a live path. The same hole exists in `GuestService` cleanup after token/session
+  failure (`internal/auth/guest_service.go:165/193`). **Decision: route guest reaping AND
+  failed-guest cleanup through a character-aware deletion that emits one `characters` tombstone
+  per reaped character in the SAME transaction as the delete, then deletes the player** — the
+  deletion-side symmetric counterpart to 05-15's `CharacterGenesisService` for creation. A
+  regression test MUST prove guest expiration cannot produce genesis-without-tombstone feed
+  history. This keeps `INV-WORLD-WRITER-BOUNDARY` genuinely true rather than false-green-bound;
+  it expands Phase 5 into the `internal/auth` deletion lifecycle by exactly this bounded amount
+  (no broader auth changes). The `DELETE FROM players` also currently evades the SQL fence (which
+  matches `DELETE FROM characters`) — closing this through the world-boundary deletion path
+  removes that evasion.
+
+### Vestigial world scene-participant surface (round-5 review resolution — REMOVE in Phase 5)
+- **D-07:** Round-5 confirmed `world.Service.AddSceneParticipant`/`RemoveSceneParticipant` are
+  world write commands with **no production callers outside `_test.go`** (Codex census + D-05),
+  which collides with D-01 ("every world write command emits an envelope, no allow-list") against
+  D-05 ("`scene_participants` is OUT"). **Decision: resolve by REMOVAL, not exemption** — delete
+  the vestigial world-layer scene-participant write surface in Phase 5:
+  `world.Service.AddSceneParticipant`/`RemoveSceneParticipant` and
+  `internal/world/postgres/scene_repo.go`'s `public.scene_participants` writes, **after a grep
+  confirms only `_test.go` files reference them**. Because the commands no longer exist, the
+  census bijection (D-01) has nothing to exempt and the D-01↔D-05 contradiction disappears — this
+  also fixes the round-5 finding that 05-11 still routed these through the outbox / taxonomy /
+  census. Include the `public.scene_participants` table `DROP` as a paired idempotent up/down
+  migration **only if** the planner confirms zero data / FK dependency; if a DROP is risky, remove
+  the Go surface now and defer only the physical table DROP to #4815. This **completes the
+  "verify-or-remove the vestigial world scene_repo" verdict D-05 deferred to #4815** (verdict =
+  remove); **#4815 now narrows to just the future "outbox for plugin-owned tables" work.** The
+  `plugins/core-scenes` plugin and its `plugin_core_scenes.scene_participants` schema are
+  **UNTOUCHED** (D-05 — the plugin owns its own schema; the SQL fence still excludes the `plugins/`
+  tree and `scene_participants`).
 
 ### Claude's Discretion
 - Internal wave decomposition within each slice, migration numbering, exact Go
   package placement of the outbox relay + mutation wrapper, and the reference-consumer
   shape — all left to research + planning against the NORMATIVE one-pager.
+- The remaining round-5 findings are **implementation-level** and left to the planner (no user
+  gray area): the `mutate()` executor contract (pass a write closure / typed command so the
+  operation is identified, per Codex — not a bare `entity, version, intent`); a **durable**
+  reference-consumer idempotency store (a `(consumer_name, event_id)` + watermark table) so
+  exactly-once survives restart beyond the JetStream dedup window; the `MoveCharacter`
+  movement-hook post-commit ordering (fold into the tx, or classify hook failure as operational
+  degradation with command success — never "fail after state+envelope commit"); location-delete
+  cascade-delta parity (preselect cascaded exits under lock, or narrow INV-WORLD-DELTA-PARITY to
+  exclude DB cascades); the `wmodel.Envelope` → `eventbus.Event.Payload` wire adapter
+  (per-kind vs global `App-Schema-Version`, epoch/feed_position read, skip-marker shape); and
+  replacing the raw `go build ./...` wave-1 gate with a `task build:all` Taskfile target (raw
+  `go build` violates CLAUDE.md's MUST-use-`task` rule — `task test`/`task test:int` already
+  compile `./...`).
 
 </decisions>
 

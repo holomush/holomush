@@ -74,3 +74,33 @@
 - Product feed consumers/projections (Phase 5 ships only the reference consumer).
 - ARCH-04 unified event-model collapse (Phase 7).
 - Real event sourcing / world-state rebuild (permanently forgone).
+
+---
+
+# Round-5 review scope resolution (2026-07-12)
+
+**Trigger:** `/gsd-review --phase 5 --codex --agy` (round 5) returned NOT-converged — Codex (source-grounded) HIGH/NOT-READY; Antigravity GREEN (false-green, weighted out per loop history). Two Codex findings were genuine *scope* questions (not planner-implementation); this session locks them. Round-5 fixes committed context @ round-4 `1eab68ad9`; round-5 review @ `7b4d3fad8`.
+
+## Guest-reaper character deletion (scope)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Close it in Phase 5 | Reaper + failed-guest cleanup emit one `characters` tombstone per reaped character in the same tx, then delete the player (symmetric to 05-15 genesis-for-creation) | ✓ |
+| Defer + narrow the invariant | Leave reaper as-is; scope INV-WORLD-4/feed-completeness to `world.Service` commands only, document the gap, file a follow-up issue | |
+
+**User's choice:** Close it in Phase 5 → **D-06**
+**Notes:** Guest reaping is a *live* production path (`guest_reaper.go:68`→`DeleteGuestPlayer`→`DELETE FROM players` FK-cascades to characters, no tombstone). Binding INV-WORLD-WRITER-BOUNDARY with a live counterexample would be a false-green invariant. Bounded expansion into `internal/auth` deletion lifecycle; regression test proves no genesis-without-tombstone.
+
+## Vestigial world scene-participant surface (scope)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Exempt from census/outbox, leave in place | Documented census exception; methods stay but don't emit; verify-or-remove stays in #4815 | |
+| Also remove/deprecate them now | Delete the vestigial `world.Service.AddSceneParticipant`/`RemoveSceneParticipant` + `scene_repo.go` writes in Phase 5, pre-empting #4815's verify-or-remove | ✓ |
+
+**User's choice:** Also remove/deprecate them now → **D-07**
+**Notes:** No prod callers outside `_test.go`. Removal is the clean resolution of the D-01↔D-05 tension — a deleted command has no census/outbox obligation, so nothing to exempt and no contradiction. Guarded by a grep (only tests reference them); physical `public.scene_participants` DROP only if zero data/FK dependency, else defer the DROP to #4815. Completes D-05's deferred verify-or-remove (verdict = remove); #4815 narrows to plugin-owned-table outbox work. `plugins/core-scenes` untouched.
+
+## Not put to the user (planner-implementation — captured in CONTEXT.md "Claude's Discretion")
+
+`mutate()` write-closure/typed-command contract; durable reference-consumer idempotency store; `MoveCharacter` movement-hook post-commit ordering; location-delete cascade-delta parity; envelope→wire adapter; raw `go build ./...` → `task build:all` (MUST-use-`task`).
