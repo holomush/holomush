@@ -114,6 +114,30 @@ func (s *BindingRepository) Create(ctx context.Context, playerID, characterID, r
 	return bindingID, nil
 }
 
+// DeleteByCharacter hard-deletes every binding row for characterID inside the
+// ambient transaction (bindingDBFromCtx). It exists ONLY for the guest-reaping
+// full-teardown path (05-16 / D-06): a reaped guest's character is deleted
+// through the world CharacterWriter.Delete to emit a tombstone, but
+// player_character_bindings.character_id is a RESTRICT FK (000040 keeps it
+// non-cascading so the OPERATOR character-delete path soft-ends bindings via
+// End() for crypto forensic retention). During a guest reap the ENTIRE player is
+// being torn down, so its bindings are removed regardless — the pre-05-16 reaper
+// already hard-deleted them via the players→bindings player_id cascade; this
+// removes them explicitly, in-tx, BEFORE the character row so the RESTRICT FK
+// does not block the tombstone-emitting delete. It MUST NOT be used on the
+// operator DeleteCharacter path (that path keeps bindings queryable via End()).
+func (s *BindingRepository) DeleteByCharacter(ctx context.Context, characterID string) error {
+	if _, err := bindingDBFromCtx(ctx, s.pool).Exec(
+		ctx,
+		`DELETE FROM player_character_bindings WHERE character_id = $1`,
+		characterID,
+	); err != nil {
+		return oops.Code("BINDING_STORE_DELETE_FAILED").
+			With("character_id", characterID).Wrap(err)
+	}
+	return nil
+}
+
 // End marks a binding as ended. Returns BINDING_NOT_FOUND if the
 // binding doesn't exist; BINDING_ALREADY_ENDED if it's already ended.
 func (s *BindingRepository) End(ctx context.Context, bindingID, reason string) error {

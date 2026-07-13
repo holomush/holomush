@@ -60,6 +60,20 @@ type ReapingPropertyDeleter interface {
 	DeleteByParent(ctx context.Context, parentType string, parentID ulid.ULID) error
 }
 
+// ReapingBindingDeleter hard-deletes a character's player↔character bindings
+// inside the reap tx, BEFORE the character row delete.
+// player_character_bindings.character_id is a RESTRICT FK (000040 — kept
+// non-cascading so the operator character-delete path can soft-end bindings for
+// crypto forensic retention), so the tombstone-emitting character delete would
+// otherwise fail 23503. A reaped guest's entire player is torn down, so its
+// bindings are removed regardless (the pre-05-16 reaper already removed them via
+// the player_id cascade). Satisfied by the world BindingRepository
+// (bindingDBFromCtx, so it enrolls in the reap tx). See BindingRepository.
+// DeleteByCharacter for why this is guest-teardown-only.
+type ReapingBindingDeleter interface {
+	DeleteByCharacter(ctx context.Context, characterID string) error
+}
+
 // PlayerReapMarker marks a guest player reaping BEFORE enumeration (round-6
 // R6-2), so the genesis service rejects new character creation for it.
 type PlayerReapMarker interface {
@@ -115,6 +129,7 @@ type CharacterReapingService struct {
 	lister     ReapingCharacterLister
 	deleter    ReapingCharacterDeleter
 	props      ReapingPropertyDeleter
+	bindings   ReapingBindingDeleter
 	transactor GenesisTransactor
 	outbox     world.OutboxWriter
 	players    GuestPlayerDeleter
@@ -124,12 +139,13 @@ type CharacterReapingService struct {
 
 // NewCharacterReapingService constructs the reaping service. It fails closed on
 // any nil dependency — a guest character can never be deleted through a partially
-// wired service that would skip the property cascade, the tombstone, or the
-// reaping mark.
+// wired service that would skip the binding removal, the property cascade, the
+// tombstone, or the reaping mark.
 func NewCharacterReapingService(
 	lister ReapingCharacterLister,
 	deleter ReapingCharacterDeleter,
 	props ReapingPropertyDeleter,
+	bindings ReapingBindingDeleter,
 	transactor GenesisTransactor,
 	outboxWriter world.OutboxWriter,
 	players GuestPlayerDeleter,
@@ -143,6 +159,9 @@ func NewCharacterReapingService(
 	}
 	if props == nil {
 		return nil, oops.Errorf("property deleter is required")
+	}
+	if bindings == nil {
+		return nil, oops.Errorf("binding deleter is required")
 	}
 	if transactor == nil {
 		return nil, oops.Errorf("transactor is required")
@@ -160,6 +179,7 @@ func NewCharacterReapingService(
 		lister:     lister,
 		deleter:    deleter,
 		props:      props,
+		bindings:   bindings,
 		transactor: transactor,
 		outbox:     outboxWriter,
 		players:    players,
@@ -222,6 +242,17 @@ func (s *CharacterReapingService) reapCharacter(ctx context.Context, char *world
 		return err
 	}
 	return oops.Wrap(s.transactor.InTransaction(ctx, func(txCtx context.Context) error {
+		// Remove the character's bindings BEFORE the character delete: the
+		// player_character_bindings.character_id RESTRICT FK (000040) would
+		// otherwise block the tombstone-emitting delete (23503). Guest teardown
+		// removes these regardless (they were previously removed by the player_id
+		// cascade); the operator delete path keeps bindings via End() for forensic
+		// retention and is unaffected.
+		if bErr := s.bindings.DeleteByCharacter(txCtx, char.ID.String()); bErr != nil {
+			return oops.Code("GUEST_REAP_FAILED").
+				With("character_id", char.ID.String()).
+				With("stage", "delete_bindings").Wrap(bErr)
+		}
 		// Property cascade BEFORE the character delete (R6-3 parity with
 		// world.Service.DeleteCharacter): entity_properties has no FK to characters.
 		if pErr := s.props.DeleteByParent(txCtx, "character", char.ID); pErr != nil {

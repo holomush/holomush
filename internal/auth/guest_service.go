@@ -54,16 +54,23 @@ type GuestService struct {
 	chars    GuestCharacterRepository
 	sessions PlayerSessionRepository
 	genesis  CharacterGenesis
+	cleaner  GuestCleaner
 }
 
 // NewGuestService creates a new GuestService.
 // Returns an error if any required dependency is nil.
+//
+// cleaner is the tombstone-emitting CharacterReapingService (05-16 / round-5
+// D-06): failed-guest cleanup routes character deletion through it so a
+// partially-created guest's character is tombstoned through the world boundary
+// before the player is deleted — never removed by a silent FK cascade.
 func NewGuestService(
 	namer GuestNamer,
 	players PlayerRepository,
 	chars GuestCharacterRepository,
 	sessions PlayerSessionRepository,
 	genesis CharacterGenesis,
+	cleaner GuestCleaner,
 ) (*GuestService, error) {
 	if namer == nil {
 		return nil, oops.Errorf("guest namer is required")
@@ -80,12 +87,16 @@ func NewGuestService(
 	if genesis == nil {
 		return nil, oops.Errorf("character genesis service is required")
 	}
+	if cleaner == nil {
+		return nil, oops.Errorf("guest cleaner is required")
+	}
 	return &GuestService{
 		namer:    namer,
 		players:  players,
 		chars:    chars,
 		sessions: sessions,
 		genesis:  genesis,
+		cleaner:  cleaner,
 	}, nil
 }
 
@@ -184,10 +195,17 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	}, nil
 }
 
-// cleanupGuestPlayer best-effort deletes an orphaned guest player and its
-// cascaded dependents (characters, player_sessions via FK CASCADE).
+// cleanupGuestPlayer best-effort cleans up an orphaned/partial guest player
+// through the tombstone-emitting reaping service (round-5 D-06): each of the
+// guest's characters is deleted through the world CharacterWriter.Delete AND a
+// character_deleted tombstone envelope, then the player is deleted — so a
+// character committed by a successful genesis but abandoned by a later
+// token/session failure never leaves the feed via genesis-without-tombstone.
+// (For a genesis that failed before committing a character, the reaping service
+// simply marks + deletes the player with zero characters to tombstone.)
+// Best-effort: failures are logged, not propagated.
 func (s *GuestService) cleanupGuestPlayer(ctx context.Context, playerID ulid.ULID) {
-	if err := s.players.Delete(ctx, playerID); err != nil {
+	if err := s.cleaner.DeleteGuestPlayer(ctx, playerID); err != nil {
 		slog.WarnContext(ctx, "guest_service: failed to clean up orphaned guest player",
 			"player_id", playerID.String(), "error", err)
 	}

@@ -401,10 +401,20 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		worldpg.NewReapingGuard(pool),
 	)
 	require.NoError(t, err, "integrationtest.Start: create character genesis service")
+	guestReaping, err := auth.NewCharacterReapingService(
+		worldCharRepo, worldCharRepo,
+		worldpg.NewPropertyRepository(pool),
+		guestBindingRepo,
+		guestTransactor,
+		worldpg.NewOutboxStore(pool),
+		playerRepo, playerRepo,
+	)
+	require.NoError(t, err, "integrationtest.Start: create character reaping service")
 	guestSvc, err := auth.NewGuestService(
 		telnet.NewGuestAuthenticator(guestNamer, guestLocID),
 		playerRepo, charRepo, playerSessionStore,
 		guestGenesis,
+		guestReaping,
 	)
 	require.NoError(t, err, "integrationtest.Start: create guest service")
 

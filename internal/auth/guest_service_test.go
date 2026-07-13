@@ -36,12 +36,29 @@ func (g *recordingGuestGenesis) Create(_ context.Context, char *world.Character,
 	return g.err
 }
 
+// recordingGuestCleaner is a hand-rolled auth.GuestCleaner fake standing in for
+// the tombstone-emitting CharacterReapingService in guest-service unit tests. It
+// records the cleanup call so a test can assert failed-guest cleanup routes
+// through the reaping service (not a raw player-cascade delete).
+type recordingGuestCleaner struct {
+	err    error
+	calls  int
+	lastID ulid.ULID
+}
+
+func (c *recordingGuestCleaner) DeleteGuestPlayer(_ context.Context, playerID ulid.ULID) error {
+	c.calls++
+	c.lastID = playerID
+	return c.err
+}
+
 func TestNewGuestServiceNilDeps(t *testing.T) {
 	validNamer := mocks.NewMockGuestNamer(t)
 	validPlayers := mocks.NewMockPlayerRepository(t)
 	validChars := mocks.NewMockGuestCharacterRepository(t)
 	validSessions := mocks.NewMockPlayerSessionRepository(t)
 	validGenesis := &recordingGuestGenesis{}
+	validCleaner := &recordingGuestCleaner{}
 
 	tests := []struct {
 		name     string
@@ -50,18 +67,20 @@ func TestNewGuestServiceNilDeps(t *testing.T) {
 		chars    auth.GuestCharacterRepository
 		sessions auth.PlayerSessionRepository
 		genesis  auth.CharacterGenesis
+		cleaner  auth.GuestCleaner
 		wantErr  string
 	}{
-		{"nil namer", nil, validPlayers, validChars, validSessions, validGenesis, "guest namer is required"},
-		{"nil players", validNamer, nil, validChars, validSessions, validGenesis, "players repository is required"},
-		{"nil chars", validNamer, validPlayers, nil, validSessions, validGenesis, "character repository is required"},
-		{"nil sessions", validNamer, validPlayers, validChars, nil, validGenesis, "player sessions repository is required"},
-		{"nil genesis", validNamer, validPlayers, validChars, validSessions, nil, "character genesis service is required"},
+		{"nil namer", nil, validPlayers, validChars, validSessions, validGenesis, validCleaner, "guest namer is required"},
+		{"nil players", validNamer, nil, validChars, validSessions, validGenesis, validCleaner, "players repository is required"},
+		{"nil chars", validNamer, validPlayers, nil, validSessions, validGenesis, validCleaner, "character repository is required"},
+		{"nil sessions", validNamer, validPlayers, validChars, nil, validGenesis, validCleaner, "player sessions repository is required"},
+		{"nil genesis", validNamer, validPlayers, validChars, validSessions, nil, validCleaner, "character genesis service is required"},
+		{"nil cleaner", validNamer, validPlayers, validChars, validSessions, validGenesis, nil, "guest cleaner is required"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.genesis)
+			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.genesis, tt.cleaner)
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -81,6 +100,7 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	genesis := &recordingGuestGenesis{}
 
 	charName := "Sapphire Diamond" // underscore→space conversion
+	cleaner := &recordingGuestCleaner{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
@@ -90,7 +110,7 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -124,6 +144,7 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 	genesis := &recordingGuestGenesis{}
 
+	cleaner := &recordingGuestCleaner{}
 	takenCharName := "Ruby Flame" // underscore→space form
 	freeCharName := "Jade River"  // underscore→space form
 
@@ -140,7 +161,7 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -162,6 +183,7 @@ func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 	genesis := &recordingGuestGenesis{}
+	cleaner := &recordingGuestCleaner{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
@@ -170,7 +192,7 @@ func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(errors.New("db timeout")).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -189,6 +211,7 @@ func TestGuestServiceReturnsErrorWhenPlayerCreateFails(t *testing.T) {
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 	genesis := &recordingGuestGenesis{}
 
+	cleaner := &recordingGuestCleaner{}
 	amberStartLoc := ulid.MustNew(ulid.Now(), nil)
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(amberStartLoc)
@@ -197,7 +220,7 @@ func TestGuestServiceReturnsErrorWhenPlayerCreateFails(t *testing.T) {
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(dbErr).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -216,22 +239,27 @@ func TestGuestServiceReturnsErrorWhenCharCreateFails(t *testing.T) {
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 	genesis := &recordingGuestGenesis{err: errors.New("db error")}
+	cleaner := &recordingGuestCleaner{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 	chars.EXPECT().ExistsByName(ctx, "Topaz Wind").Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	// genesis fails after the player commit -> release name + orphan-player cleanup.
+	// genesis fails after the player commit -> release name + orphan-player cleanup
+	// through the tombstone-emitting reaping service (D-06), NOT a raw player delete.
 	namer.EXPECT().ReleaseGuest(guestName).Once()
-	players.EXPECT().Delete(ctx, mock.AnythingOfType("ulid.ULID")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
 	require.Error(t, err)
 	assert.Nil(t, result)
 	errutil.AssertErrorCode(t, err, "GUEST_CREATE_FAILED")
+
+	// Failed-guest cleanup routed through the reaping service (tombstone-emitting),
+	// not a raw player-cascade delete.
+	assert.Equal(t, 1, cleaner.calls)
 }
 
 func TestGuestServiceReturnsErrorWhenSessionCreateFails(t *testing.T) {
@@ -244,6 +272,7 @@ func TestGuestServiceReturnsErrorWhenSessionCreateFails(t *testing.T) {
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 	genesis := &recordingGuestGenesis{}
+	cleaner := &recordingGuestCleaner{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
@@ -252,16 +281,18 @@ func TestGuestServiceReturnsErrorWhenSessionCreateFails(t *testing.T) {
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(errors.New("session db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
-	// best-effort player cleanup after session create failure
-	players.EXPECT().Delete(ctx, mock.AnythingOfType("ulid.ULID")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
 	require.Error(t, err)
 	assert.Nil(t, result)
 	errutil.AssertErrorCode(t, err, "GUEST_CREATE_FAILED")
+
+	// best-effort cleanup after session-create failure routes through the reaping
+	// service (character tombstoned before player delete), not a raw player delete.
+	assert.Equal(t, 1, cleaner.calls)
 }
 
 func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
@@ -272,6 +303,7 @@ func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 	genesis := &recordingGuestGenesis{}
+	cleaner := &recordingGuestCleaner{}
 
 	// All 10 generated names already exist in the database.
 	for range 10 {
@@ -281,7 +313,7 @@ func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
 		namer.EXPECT().ReleaseGuest(name).Once()
 	}
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -299,12 +331,13 @@ func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 	genesis := &recordingGuestGenesis{}
+	cleaner := &recordingGuestCleaner{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	chars.EXPECT().ExistsByName(ctx, "Crystal Fog").Return(false, errors.New("db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -327,6 +360,7 @@ func TestCreateGuestMintsBinding(t *testing.T) {
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 	genesis := &recordingGuestGenesis{}
+	cleaner := &recordingGuestCleaner{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
@@ -335,7 +369,7 @@ func TestCreateGuestMintsBinding(t *testing.T) {
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)

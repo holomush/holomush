@@ -70,6 +70,18 @@ func (f *fakeReapProps) DeleteByParent(_ context.Context, parentType string, par
 	return f.deleteErr
 }
 
+type fakeReapBindings struct {
+	seq       *[]string
+	byChar    []string
+	deleteErr error
+}
+
+func (f *fakeReapBindings) DeleteByCharacter(_ context.Context, characterID string) error {
+	*f.seq = append(*f.seq, "bind:"+characterID)
+	f.byChar = append(f.byChar, characterID)
+	return f.deleteErr
+}
+
 type fakeReapMarker struct {
 	seq     *[]string
 	markErr error
@@ -117,33 +129,36 @@ func TestNewCharacterReapingServiceFailsClosedOnNilDeps(t *testing.T) {
 	l := &fakeReapLister{}
 	d := &fakeReapDeleter{seq: &seq, errForID: map[string]error{}}
 	p := &fakeReapProps{seq: &seq}
+	b := &fakeReapBindings{seq: &seq}
 	tx := fakeGenesisTransactor{}
 	o := &fakeOutboxWriter{seq: &seq}
 	pd := &fakeReapPlayerDeleter{seq: &seq}
 	mk := &fakeReapMarker{seq: &seq}
 
 	tests := []struct {
-		name    string
-		lister  auth.ReapingCharacterLister
-		deleter auth.ReapingCharacterDeleter
-		props   auth.ReapingPropertyDeleter
-		tx      auth.GenesisTransactor
-		outbox  world.OutboxWriter
-		players auth.GuestPlayerDeleter
-		marker  auth.PlayerReapMarker
-		wantErr string
+		name     string
+		lister   auth.ReapingCharacterLister
+		deleter  auth.ReapingCharacterDeleter
+		props    auth.ReapingPropertyDeleter
+		bindings auth.ReapingBindingDeleter
+		tx       auth.GenesisTransactor
+		outbox   world.OutboxWriter
+		players  auth.GuestPlayerDeleter
+		marker   auth.PlayerReapMarker
+		wantErr  string
 	}{
-		{"nil lister", nil, d, p, tx, o, pd, mk, "character lister is required"},
-		{"nil deleter", l, nil, p, tx, o, pd, mk, "character deleter is required"},
-		{"nil props", l, d, nil, tx, o, pd, mk, "property deleter is required"},
-		{"nil transactor", l, d, p, nil, o, pd, mk, "transactor is required"},
-		{"nil outbox", l, d, p, tx, nil, pd, mk, "outbox writer is required"},
-		{"nil players", l, d, p, tx, o, nil, mk, "player deleter is required"},
-		{"nil marker", l, d, p, tx, o, pd, nil, "reaping marker is required"},
+		{"nil lister", nil, d, p, b, tx, o, pd, mk, "character lister is required"},
+		{"nil deleter", l, nil, p, b, tx, o, pd, mk, "character deleter is required"},
+		{"nil props", l, d, nil, b, tx, o, pd, mk, "property deleter is required"},
+		{"nil bindings", l, d, p, nil, tx, o, pd, mk, "binding deleter is required"},
+		{"nil transactor", l, d, p, b, nil, o, pd, mk, "transactor is required"},
+		{"nil outbox", l, d, p, b, tx, nil, pd, mk, "outbox writer is required"},
+		{"nil players", l, d, p, b, tx, o, nil, mk, "player deleter is required"},
+		{"nil marker", l, d, p, b, tx, o, pd, nil, "reaping marker is required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewCharacterReapingService(tt.lister, tt.deleter, tt.props, tt.tx, tt.outbox, tt.players, tt.marker)
+			svc, err := auth.NewCharacterReapingService(tt.lister, tt.deleter, tt.props, tt.bindings, tt.tx, tt.outbox, tt.players, tt.marker)
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -160,21 +175,22 @@ func TestCharacterReapingDeleteGuestPlayerTombstonesEachCharacterThenDeletesPlay
 	lister := &fakeReapLister{chars: []*world.Character{c1, c2}}
 	deleter := &fakeReapDeleter{seq: &seq, errForID: map[string]error{}}
 	props := &fakeReapProps{seq: &seq}
+	bindings := &fakeReapBindings{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 	players := &fakeReapPlayerDeleter{seq: &seq}
 	marker := &fakeReapMarker{seq: &seq}
 
-	svc, err := auth.NewCharacterReapingService(lister, deleter, props, fakeGenesisTransactor{}, outboxW, players, marker)
+	svc, err := auth.NewCharacterReapingService(lister, deleter, props, bindings, fakeGenesisTransactor{}, outboxW, players, marker)
 	require.NoError(t, err)
 
 	playerID := ulid.Make()
 	require.NoError(t, svc.DeleteGuestPlayer(context.Background(), playerID))
 
-	// mark FIRST, then per-character (props → delete → outbox) twice, then player.
+	// mark FIRST, then per-character (bind → props → delete → outbox) twice, then player.
 	assert.Equal(t, []string{
 		"mark",
-		"props:" + c1.ID.String(), "delete:" + c1.ID.String(), "outbox",
-		"props:" + c2.ID.String(), "delete:" + c2.ID.String(), "outbox",
+		"bind:" + c1.ID.String(), "props:" + c1.ID.String(), "delete:" + c1.ID.String(), "outbox",
+		"bind:" + c2.ID.String(), "props:" + c2.ID.String(), "delete:" + c2.ID.String(), "outbox",
 		"player",
 	}, seq)
 
@@ -205,11 +221,12 @@ func TestCharacterReapingDeleteGuestPlayerWithNoCharacters(t *testing.T) {
 	lister := &fakeReapLister{chars: nil}
 	deleter := &fakeReapDeleter{seq: &seq, errForID: map[string]error{}}
 	props := &fakeReapProps{seq: &seq}
+	bindings := &fakeReapBindings{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 	players := &fakeReapPlayerDeleter{seq: &seq}
 	marker := &fakeReapMarker{seq: &seq}
 
-	svc, err := auth.NewCharacterReapingService(lister, deleter, props, fakeGenesisTransactor{}, outboxW, players, marker)
+	svc, err := auth.NewCharacterReapingService(lister, deleter, props, bindings, fakeGenesisTransactor{}, outboxW, players, marker)
 	require.NoError(t, err)
 
 	require.NoError(t, svc.DeleteGuestPlayer(context.Background(), ulid.Make()))
@@ -229,11 +246,12 @@ func TestCharacterReapingPerCharacterConflictLeavesEarlierTombstonesAndSkipsPlay
 	lister := &fakeReapLister{chars: []*world.Character{c1, c2}}
 	deleter := &fakeReapDeleter{seq: &seq, errForID: map[string]error{c2.ID.String(): conflict}}
 	props := &fakeReapProps{seq: &seq}
+	bindings := &fakeReapBindings{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 	players := &fakeReapPlayerDeleter{seq: &seq}
 	marker := &fakeReapMarker{seq: &seq}
 
-	svc, err := auth.NewCharacterReapingService(lister, deleter, props, fakeGenesisTransactor{}, outboxW, players, marker)
+	svc, err := auth.NewCharacterReapingService(lister, deleter, props, bindings, fakeGenesisTransactor{}, outboxW, players, marker)
 	require.NoError(t, err)
 
 	err = svc.DeleteGuestPlayer(context.Background(), ulid.Make())
@@ -260,11 +278,12 @@ func TestCharacterReapingPropertyCascadeFailureAbortsReap(t *testing.T) {
 	lister := &fakeReapLister{chars: []*world.Character{c1}}
 	deleter := &fakeReapDeleter{seq: &seq, errForID: map[string]error{}}
 	props := &fakeReapProps{seq: &seq, deleteErr: errors.New("props boom")}
+	bindings := &fakeReapBindings{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 	players := &fakeReapPlayerDeleter{seq: &seq}
 	marker := &fakeReapMarker{seq: &seq}
 
-	svc, err := auth.NewCharacterReapingService(lister, deleter, props, fakeGenesisTransactor{}, outboxW, players, marker)
+	svc, err := auth.NewCharacterReapingService(lister, deleter, props, bindings, fakeGenesisTransactor{}, outboxW, players, marker)
 	require.NoError(t, err)
 
 	err = svc.DeleteGuestPlayer(context.Background(), ulid.Make())
@@ -281,11 +300,12 @@ func TestCharacterReapingMarkFailureAbortsBeforeEnumeration(t *testing.T) {
 	lister := &fakeReapLister{chars: []*world.Character{reapChar(t, 1)}}
 	deleter := &fakeReapDeleter{seq: &seq, errForID: map[string]error{}}
 	props := &fakeReapProps{seq: &seq}
+	bindings := &fakeReapBindings{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 	players := &fakeReapPlayerDeleter{seq: &seq}
 	marker := &fakeReapMarker{seq: &seq, markErr: errors.New("mark boom")}
 
-	svc, err := auth.NewCharacterReapingService(lister, deleter, props, fakeGenesisTransactor{}, outboxW, players, marker)
+	svc, err := auth.NewCharacterReapingService(lister, deleter, props, bindings, fakeGenesisTransactor{}, outboxW, players, marker)
 	require.NoError(t, err)
 
 	err = svc.DeleteGuestPlayer(context.Background(), ulid.Make())

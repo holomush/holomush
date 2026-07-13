@@ -143,7 +143,12 @@ func setupTestEnv() (*testEnv, error) {
 		eventStore.Close()
 		return nil, oops.Wrap(err)
 	}
-	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore, guestGenesis)
+	guestReaping, err := auth.NewCharacterReapingService(worldCharRepo, worldCharRepo, worldpg.NewPropertyRepository(pool), guestBindingRepo, guestTransactor, worldpg.NewOutboxStore(pool), playerRepo, playerRepo)
+	if err != nil {
+		eventStore.Close()
+		return nil, oops.Wrap(err)
+	}
+	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore, guestGenesis, guestReaping)
 	if err != nil {
 		eventStore.Close()
 		return nil, oops.Wrap(err)
