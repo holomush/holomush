@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 05
-current_phase_name: world-model-integrity-fixes-m2-m12
+current_phase: 6
+current_phase_name: Operational Hardening & Assurance Gates
 status: executing
 stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
-last_updated: "2026-07-13T16:03:32.089Z"
-last_activity: 2026-07-12
-last_activity_desc: Phase 05 execution started
+last_updated: "2026-07-13T16:12:40.221Z"
+last_activity: 2026-07-13
+last_activity_desc: Phase 05 complete, transitioned to Phase 6
 progress:
   total_phases: 6
   completed_phases: 2
@@ -30,16 +30,16 @@ trusted identically.
 
 ## Current Position
 
-Phase: 05 (world-model-integrity-fixes-m2-m12) — EXECUTING
-Plan: 16 of 16
+Phase: 6 — Operational Hardening & Assurance Gates
+Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-12 — Phase 05 execution started
+Last activity: 2026-07-13 — Phase 05 complete, transitioned to Phase 6
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 30
+- Total plans completed: 46
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -51,6 +51,7 @@ Last activity: 2026-07-12 — Phase 05 execution started
 | 02 | 7 | - | - |
 | 03 | 9 | - | - |
 | 04 | 4 | - | - |
+| 05 | 16 | - | - |
 
 **Recent Trend:**
 
