@@ -143,7 +143,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — OPS-02 core (atomic): partition-swap migration 000052 + writeAuditRow composite-PK/deterministic-timestamp idempotency crux (wave 1)
+- [ ] 06-01-PLAN.md — OPS-02 core (atomic): partition-swap migration 000052 (deterministic event_ms key, NO DEFAULT, data-preserving down) + writeAuditRow composite-PK idempotency crux + crypto-review gate (wave 1)
 - [ ] 06-03-PLAN.md — OPS-03: nats-server bump ≥v2.14.3 + `task lint:vuln` (govulncheck + osv-scanner) + vuln: CI job + ruleset flag (wave 1)
 - [ ] 06-04-PLAN.md — QUAL-01: codecov project ratchet + dual-file cleanup + doc-vs-reality rewrite + manual ruleset step (wave 1)
 
