@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,11 +38,13 @@ import (
 //   - the removal of Create from the auth-side character-repo interfaces (05-15).
 //
 // The OUT-OF-Service producer assertions (the character-genesis service 05-15 AND
-// the character-reaping service 05-16 each emit a DECLARED kind) are NOT here —
-// they land in 05-12 (round-9 R6-5), which depends on both, so this census does
-// NOT read the wave-10 internal/auth reaping file that 05-16 creates in the same
-// wave. This census is the IN-Service bijection over producers-of-record plus a
-// go/ast Service-mutating-method cross-check.
+// the character-reaping service 05-16 each emit a DECLARED kind) live in
+// TestWorldEnvelopeCensusOutOfServiceProducers below — added by 05-12 (round-9
+// R6-5), which depends_on BOTH 05-15 and 05-16, so both internal/auth producer
+// files are guaranteed present. They were deliberately NOT added by 05-11 because
+// 05-11 and 05-16 are both wave 10, so a 05-11 census reading the reaping file
+// could have run before 05-16 created it. The rest of this census is the IN-Service
+// bijection over producers-of-record plus a go/ast Service-mutating-method cross-check.
 
 // outOfServiceOnlyKinds are declared taxonomy kinds whose PRODUCER is an
 // out-of-Service application service, not a world.Service command — so they have
@@ -219,5 +222,125 @@ func TestWorldEnvelopeCensusHasNoSceneParticipantSurface(t *testing.T) {
 	for _, r := range removed {
 		_, present := allMethods[r]
 		assert.Falsef(t, present, "world.Service.%s was removed in 05-14 (D-07) and MUST NOT exist", r)
+	}
+}
+
+// authProducerFileKinds parses an out-of-Service producer file (internal/auth/*)
+// and returns the taxonomy kinds it stamps on the envelopes it emits: for every
+// wmodel.IntentParams composite literal, the value of its Kind field, resolved
+// through the file's local string consts. internal/auth MUST NOT import
+// internal/world/outbox, so a producer names its kind via a LOCAL literal const —
+// this go/ast pass resolves that literal so the census can prove it is a declared
+// taxonomy kind without importing the auth package.
+func authProducerFileKinds(t *testing.T, rel string) []string {
+	t.Helper()
+	root := findRepoRoot(t)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filepath.Join(root, filepath.FromSlash(rel)), nil, 0)
+	require.NoErrorf(t, err, "parse %s", rel)
+
+	// Collect local string consts (name -> value) so a Kind: field that is a const
+	// identifier can be resolved to its string.
+	consts := map[string]string{}
+	for _, decl := range file.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range vs.Names {
+				if i >= len(vs.Values) {
+					continue
+				}
+				lit, ok := vs.Values[i].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					continue
+				}
+				if v, uerr := strconv.Unquote(lit.Value); uerr == nil {
+					consts[name.Name] = v
+				}
+			}
+		}
+	}
+
+	var kinds []string
+	ast.Inspect(file, func(n ast.Node) bool {
+		cl, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		sel, ok := cl.Type.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		x, ok := sel.X.(*ast.Ident)
+		if !ok || x.Name != "wmodel" || sel.Sel.Name != "IntentParams" {
+			return true
+		}
+		for _, elt := range cl.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "Kind" {
+				continue
+			}
+			switch v := kv.Value.(type) {
+			case *ast.BasicLit:
+				if v.Kind == token.STRING {
+					if s, uerr := strconv.Unquote(v.Value); uerr == nil {
+						kinds = append(kinds, s)
+					}
+				}
+			case *ast.Ident:
+				if s, ok := consts[v.Name]; ok {
+					kinds = append(kinds, s)
+				}
+			}
+		}
+		return true
+	})
+	return kinds
+}
+
+// TestWorldEnvelopeCensusOutOfServiceProducers asserts the TWO sanctioned
+// out-of-world application services each emit a DECLARED taxonomy kind: the
+// character-genesis service (05-15, character_genesis) and the character-reaping
+// service (05-16/D-06, character_deleted — the SAME kind world.Service.DeleteCharacter
+// emits, so a kind MAY have >1 sanctioned producer; this asserts each out-of-world
+// writer maps to a DECLARED kind, NOT a unique one — it is NOT a bijection violation
+// and does NOT weaken the in-Service bijection above). No scene-participant producer
+// exists (D-07).
+//
+// This assertion lives in 05-12 (not 05-11) to avoid the wave-10 file-creation
+// race: 05-11 and 05-16 are both wave 10, so a 05-11 census reading
+// internal/auth/character_reaping.go could have run before 05-16 created it. This
+// plan depends_on BOTH 05-15 and 05-16, so both producer files are present here.
+func TestWorldEnvelopeCensusOutOfServiceProducers(t *testing.T) {
+	cases := []struct {
+		name     string
+		file     string
+		wantKind string
+	}{
+		{"character-genesis service (05-15)", "internal/auth/character_genesis.go", outbox.KindCharacterGenesis},
+		{"character-reaping service (05-16, D-06)", "internal/auth/character_reaping.go", outbox.KindCharacterDeleted},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			kinds := authProducerFileKinds(t, tc.file)
+			require.NotEmptyf(t, kinds, "%s emits at least one envelope kind", tc.file)
+			for _, k := range kinds {
+				assert.Truef(t, outbox.IsDeclared(k),
+					"out-of-Service producer %s emits kind %q, which MUST be declared in the taxonomy (no undeclared kind on the feed)",
+					tc.file, k)
+			}
+			assert.Containsf(t, kinds, tc.wantKind,
+				"%s must emit the declared kind %q", tc.file, tc.wantKind)
+		})
 	}
 }
