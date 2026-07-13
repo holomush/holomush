@@ -223,7 +223,7 @@ the strategic frame. Reviewed 2026-07-11 (`/gsd-review-backlog`): all 19 entries
 **Source:** beads migration — 7 item(s) incl. epic(s) `holomush-qve`; member list in TRIAGE.md
 **Related issues:** arch-review F6 PWA/offline #4803 (overlaps the offline-support + web-surface goals).
 **Requirements:** TBD
-**Plans:** 16/16 plans complete
+**Plans:** 4/4 plans complete
 
 Plans:
 
