@@ -58,9 +58,22 @@ func (s *OutboxStore) WriteIntent(
 
 	env := wmodel.Finalize(intent, delta, epoch, position)
 
+	e := execerFromCtx(ctx, s.pool)
+	if err := insertOutboxRow(ctx, e, env); err != nil {
+		return nil, err
+	}
+	return env, nil
+}
+
+// insertOutboxRow persists exactly one finalized envelope as an outbox row through
+// e (a tx-bound execer or the pool) and fires the transaction-side relay wakeup.
+// It is the single INSERT-outbox site shared by WriteIntent (05-05) and the
+// genesis snapshot writer (05-11), so both persist an identical row shape and
+// wake the relay the same way. The caller owns (epoch, feed_position) allocation.
+func insertOutboxRow(ctx context.Context, e execer, env *wmodel.Envelope) error {
 	affectedJSON, err := json.Marshal(env.Affected)
 	if err != nil {
-		return nil, oops.With("operation", "marshal affected manifest").
+		return oops.With("operation", "marshal affected manifest").
 			With("event_id", env.EventID.String()).Wrap(err)
 	}
 
@@ -71,7 +84,6 @@ func (s *OutboxStore) WriteIntent(
 		payload = []byte("null")
 	}
 
-	e := execerFromCtx(ctx, s.pool)
 	if _, err := e.Exec(
 		ctx, `
 		INSERT INTO outbox (
@@ -93,7 +105,7 @@ func (s *OutboxStore) WriteIntent(
 		affectedJSON,
 		payload,
 	); err != nil {
-		return nil, oops.With("operation", "insert outbox row").
+		return oops.With("operation", "insert outbox row").
 			With("event_id", env.EventID.String()).
 			With("game_id", env.GameID).Wrap(err)
 	}
@@ -103,10 +115,9 @@ func (s *OutboxStore) WriteIntent(
 	// connection is woken transactionally. A missed NOTIFY is covered by the
 	// relay's periodic sweep.
 	if _, err := e.Exec(ctx, `SELECT pg_notify($1, $2)`, OutboxNotifyChannel, env.GameID); err != nil {
-		return nil, oops.With("operation", "pg_notify outbox wakeup").
+		return oops.With("operation", "pg_notify outbox wakeup").
 			With("event_id", env.EventID.String()).
 			With("game_id", env.GameID).Wrap(err)
 	}
-
-	return env, nil
+	return nil
 }

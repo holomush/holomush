@@ -89,6 +89,13 @@ var coreOnlyFiles = map[string]struct{}{
 	// internal/eventbus by design. No admin UDS.
 	"outbox_admin.go":      {},
 	"outbox_admin_test.go": {},
+	// `holomush world genesis` / `world epoch-reset` CLI is a host-shell operator
+	// tool (like outbox_admin.go), not the gateway. It emits the cutover genesis
+	// snapshot / advances the feed epoch by driving the outbox GenesisService with
+	// the injected postgres GenesisStore (05-11, MODEL-04, round-4 A3); imports
+	// internal/world/{outbox,postgres} by design. No admin UDS, no crypto/abac.
+	"world_genesis.go":      {},
+	"world_genesis_test.go": {},
 }
 
 var forbidden = []string{
