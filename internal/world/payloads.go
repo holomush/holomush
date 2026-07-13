@@ -276,6 +276,25 @@ type ExitChangePayload struct {
 	ToLocationID   string `json:"to_location_id"`
 }
 
+// ObjectChangePayload is the new-values-only payload for an object create or
+// update envelope.
+type ObjectChangePayload struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// ObjectMoveChangePayload is the new-values-only payload for an object-move
+// envelope: the object and its destination containment, plus the source
+// containment read before the move (omitted for a first-time placement).
+type ObjectMoveChangePayload struct {
+	ObjectID string  `json:"object_id"`
+	ToType   string  `json:"to_type"`
+	ToID     string  `json:"to_id"`
+	FromType string  `json:"from_type,omitempty"`
+	FromID   *string `json:"from_id,omitempty"`
+}
+
 // TombstonePayload is the payload for a delete envelope: only the id of the
 // deleted aggregate. Cascaded aggregates (a location's exits, a bidirectional
 // exit's reverse) are represented in the envelope's affected-aggregates manifest
@@ -311,6 +330,59 @@ func BuildExitPayload(exit *Exit) ([]byte, error) {
 		return nil, oops.Wrapf(err, "marshal exit payload")
 	}
 	return payload, nil
+}
+
+// BuildObjectPayload marshals the new-values-only object payload for a
+// create/update envelope.
+func BuildObjectPayload(obj *Object) ([]byte, error) {
+	payload, err := json.Marshal(ObjectChangePayload{
+		ID:          obj.ID.String(),
+		Name:        obj.Name,
+		Description: obj.Description,
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal object payload")
+	}
+	return payload, nil
+}
+
+// BuildObjectMovePayload marshals the new-values-only object-move payload from the
+// object's pre-move containment (from) and the destination containment (to).
+func BuildObjectMovePayload(obj *Object, to Containment) ([]byte, error) {
+	var toID string
+	if id := to.ID(); id != nil {
+		toID = id.String()
+	}
+	p := ObjectMoveChangePayload{
+		ObjectID: obj.ID.String(),
+		ToType:   string(to.Type()),
+		ToID:     toID,
+	}
+	if fromType, fromID := currentContainment(obj); fromType != ContainmentTypeNone {
+		p.FromType = string(fromType)
+		fromStr := fromID.String()
+		p.FromID = &fromStr
+	}
+	payload, err := json.Marshal(p)
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal object move payload")
+	}
+	return payload, nil
+}
+
+// currentContainment returns the object's current containment type and id, or
+// (ContainmentTypeNone, zero) when the object has no prior containment.
+func currentContainment(obj *Object) (ContainmentType, ulid.ULID) {
+	switch {
+	case obj.LocationID() != nil:
+		return ContainmentTypeLocation, *obj.LocationID()
+	case obj.HeldByCharacterID() != nil:
+		return ContainmentTypeCharacter, *obj.HeldByCharacterID()
+	case obj.ContainedInObjectID() != nil:
+		return ContainmentTypeObject, *obj.ContainedInObjectID()
+	default:
+		return ContainmentTypeNone, ulid.ULID{}
+	}
 }
 
 // BuildTombstonePayload marshals the tombstone payload (the deleted id) for a

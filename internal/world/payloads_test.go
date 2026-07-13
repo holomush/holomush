@@ -1007,3 +1007,47 @@ func TestBuildTombstonePayload_OnlyID(t *testing.T) {
 	assert.Equal(t, id.String(), got["id"])
 	assert.Len(t, got, 1, "a tombstone carries only the deleted id; cascades live in the manifest")
 }
+
+func TestBuildObjectPayload_NewValuesOnly(t *testing.T) {
+	id := ulid.Make()
+	obj, err := world.NewObjectWithID(id, "lantern", world.InLocation(ulid.Make()))
+	require.NoError(t, err)
+	obj.Description = "a brass lantern"
+
+	raw, err := world.BuildObjectPayload(obj)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got["id"])
+	assert.Equal(t, "lantern", got["name"])
+	assert.Equal(t, "a brass lantern", got["description"])
+	assert.Len(t, got, 3)
+}
+
+func TestBuildObjectMovePayload_CarriesFromAndToContainment(t *testing.T) {
+	id := ulid.Make()
+	fromLoc := ulid.Make()
+	toChar := ulid.Make()
+
+	obj, err := world.NewObjectWithID(id, "lantern", world.InLocation(fromLoc))
+	require.NoError(t, err)
+
+	raw, err := world.BuildObjectMovePayload(obj, world.HeldByCharacter(toChar))
+	require.NoError(t, err)
+
+	var got struct {
+		ObjectID string  `json:"object_id"`
+		ToType   string  `json:"to_type"`
+		ToID     string  `json:"to_id"`
+		FromType string  `json:"from_type"`
+		FromID   *string `json:"from_id"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got.ObjectID)
+	assert.Equal(t, "character", got.ToType)
+	assert.Equal(t, toChar.String(), got.ToID)
+	assert.Equal(t, "location", got.FromType)
+	require.NotNil(t, got.FromID)
+	assert.Equal(t, fromLoc.String(), *got.FromID)
+}

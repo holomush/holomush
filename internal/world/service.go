@@ -43,6 +43,11 @@ const (
 	kindExitUpdated = "exit_updated"
 	kindExitDeleted = "exit_deleted"
 
+	kindObjectCreated = "object_created"
+	kindObjectUpdated = "object_updated"
+	kindObjectDeleted = "object_deleted"
+	kindObjectMoved   = "object_moved"
+
 	kindCharacterMoved             = "character_moved"
 	kindCharacterPreferencesUpdate = "character_preferences_update"
 	worldSchemaVersion             = 1
@@ -584,7 +589,15 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if err := obj.ValidateContainment(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
-	if _, err := s.objectRepo.Create(ctx, obj); err != nil {
+	if s.mutator == nil {
+		return oops.Code("OBJECT_CREATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildObjectPayload(obj)
+	if err != nil {
+		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "build object create payload %s", obj.ID)
+	}
+	intent := s.buildIntent(kindObjectCreated, wmodel.AggregateObject, obj.ID, subjectID, payload)
+	if _, err := s.mutator.createObject(ctx, intent, obj); err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "create object %s", obj.ID)
 	}
 	return nil
@@ -609,7 +622,18 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	if err := obj.ValidateContainment(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
-	if _, err := s.objectRepo.Update(ctx, obj); err != nil {
+	if s.mutator == nil {
+		return oops.Code("OBJECT_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildObjectPayload(obj)
+	if err != nil {
+		return oops.Code("OBJECT_UPDATE_FAILED").Wrapf(err, "build object update payload %s", obj.ID)
+	}
+	intent := s.buildIntent(kindObjectUpdated, wmodel.AggregateObject, obj.ID, subjectID, payload)
+	if _, err := s.mutator.updateObject(ctx, intent, obj); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("id", obj.ID.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "update object %s", obj.ID)
 		}
@@ -635,32 +659,32 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixObject); err != nil {
 		return err
 	}
-	deleteFn := func(ctx context.Context) error {
-		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
-			return oops.Code("OBJECT_DELETE_FAILED").
-				With("operation", "delete_object_properties").
-				Wrapf(err, "delete properties for object %s", id)
-		}
-		if _, err := s.objectRepo.Delete(ctx, id, 0); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
-			}
-			return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
-		}
-		return nil
+	if s.mutator == nil {
+		return oops.Code("OBJECT_DELETE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
-		return oops.Code("OBJECT_DELETE_FAILED").Wrap(err)
+	payload, err := BuildTombstonePayload(id)
+	if err != nil {
+		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "build object tombstone payload %s", id)
+	}
+	intent := s.buildIntent(kindObjectDeleted, wmodel.AggregateObject, id, subjectID, payload)
+	// The delete + its property cascade + the tombstone envelope commit in ONE
+	// transaction via the mutate() seam.
+	if _, err := s.mutator.deleteObject(ctx, intent, id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
+		}
+		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
 	}
 	return nil
 }
 
-// MoveObject moves an object to a new containment (location, character inventory, or another object).
+// MoveObject moves an object to a new containment (location, character inventory,
+// or another object).
 //
-// The object-move envelope is not yet routed through the same-tx outbox — object
-// commands migrate to the write executor in 05-10/05-11. This slice (05-06) deletes
-// the post-commit emit path (D-03) and routes only MoveCharacter through the outbox;
-// MoveObject performs the guarded containment write and returns.
+// The object move and its ONE object_moved envelope commit in the SAME transaction
+// via the write executor's same-tx outbox (05-10) — INV-WORLD-4. The object is read
+// first so the new-values-only payload can carry the source containment; a failed or
+// no-op move (missing object, version conflict) writes no envelope.
 func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
@@ -673,15 +697,28 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
 
-	// Verify the object exists before moving.
-	if _, err := s.objectRepo.Get(ctx, id); err != nil {
+	// Read the current object: it exists check + the source containment for the
+	// new-values-only move payload (a pre-commit failure emits no envelope).
+	obj, err := s.objectRepo.Get(ctx, id)
+	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
 		}
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "get object %s", id)
 	}
 
-	if _, err := s.objectRepo.Move(ctx, id, to, 0); err != nil {
+	if s.mutator == nil {
+		return oops.Code("OBJECT_MOVE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildObjectMovePayload(obj, to)
+	if err != nil {
+		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "build object move payload %s", id)
+	}
+	intent := s.buildIntent(kindObjectMoved, wmodel.AggregateObject, id, subjectID, payload)
+	if _, err := s.mutator.moveObject(ctx, intent, id, to); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("id", id.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
 		}

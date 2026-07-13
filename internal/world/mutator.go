@@ -280,3 +280,39 @@ func (m *worldMutator) deleteExit(ctx context.Context, intent wmodel.EnvelopeInt
 	}
 	return delta, notice, nil
 }
+
+// createObject routes an object create through mutate() (object_created).
+func (m *worldMutator) createObject(ctx context.Context, intent wmodel.EnvelopeIntent, obj *Object) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.objectWriter.Create(txCtx, obj)
+	})
+}
+
+// updateObject routes an object update through mutate() (object_updated).
+func (m *worldMutator) updateObject(ctx context.Context, intent wmodel.EnvelopeIntent, obj *Object) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.objectWriter.Update(txCtx, obj)
+	})
+}
+
+// deleteObject routes an object delete + its property cascade through mutate()
+// (object_deleted tombstone). The closure deletes the object's properties then the
+// object row; the single tombstone envelope's manifest is finalized from the repo
+// delta.
+func (m *worldMutator) deleteObject(ctx context.Context, intent wmodel.EnvelopeIntent, id ulid.ULID) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		if err := m.propertyWriter.DeleteByParent(txCtx, "object", id); err != nil {
+			return nil, oops.Code("OBJECT_DELETE_FAILED").
+				With("operation", "delete_object_properties").
+				Wrapf(err, "delete properties for object %s", id)
+		}
+		return m.objectWriter.Delete(txCtx, id, 0)
+	})
+}
+
+// moveObject routes an object containment change through mutate() (object_moved).
+func (m *worldMutator) moveObject(ctx context.Context, intent wmodel.EnvelopeIntent, id ulid.ULID, to Containment) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.objectWriter.Move(txCtx, id, to, 0)
+	})
+}

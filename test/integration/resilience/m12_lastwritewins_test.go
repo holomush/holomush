@@ -291,32 +291,41 @@ var _ = Describe("M12 last-write-wins closed by the version guard", Ordered, fun
 			close(start)
 			wg.Wait()
 
-			// Different fields: if the dispatches serialize, BOTH land; if they
-			// truly interleave, exactly one is rejected. Both-rejected is
-			// impossible.
-			Expect(errA == nil || errB == nil).To(BeTrue(),
-				"round %d: at least one write must commit (errA=%v, errB=%v)", n, errA, errB)
-
+			// name (rename) and description (describe) are DIFFERENT fields, but both
+			// writers issue a FULL-ROW version CAS through UpdateLocation. Once the
+			// per-game feed-counter lock (INV-WORLD-ATOMIC-FEED) globally serializes
+			// the write phase, two writers that both read the same version and then
+			// write see the second write rejected — even though they touched different
+			// columns. The `describe` COMMAND swallows its WORLD_CONCURRENT_EDIT into a
+			// user-facing status ("Unable to set description"), so it does NOT surface
+			// through SendCommand: describe's landing is determined by READ-BACK, not
+			// by errA. The service call (errB) DOES surface the typed conflict.
 			gotName, gotDesc := readBack(ctx)
+			describeLanded := gotDesc == descText
+			renameLanded := gotName == renameTo
+
+			Expect(describeLanded || renameLanded).To(BeTrue(),
+				"round %d: at least one write must land (errA=%v, errB=%v, name=%q, desc=%q)", n, errA, errB, gotName, gotDesc)
 
 			if errB != nil {
-				// B (service) raced-and-lost → surfaced conflict, rename not landed.
+				// B (service) raced-and-lost → surfaced conflict; rename must not land.
 				conflicts++
 				Expect(errB).To(MatchError(world.ErrConcurrentEdit),
 					"round %d: B's stale rename must surface WORLD_CONCURRENT_EDIT", n)
-				Expect(gotName).NotTo(Equal(renameTo),
-					"round %d: B was rejected — its rename must NOT have landed", n)
+				Expect(renameLanded).To(BeFalse(),
+					"round %d: B was rejected — its rename must NOT have landed (no silent resurrection)", n)
+			} else {
+				// The service call surfaces conflicts truthfully: success ⇒ landed
+				// (there is no silent lost update on the service path).
+				Expect(renameLanded).To(BeTrue(),
+					"round %d: B reported success — its rename must have landed", n)
 			}
-			if errA != nil {
-				// A (command) raced-and-lost → its describe was rejected.
+			if !describeLanded {
+				// describe raced-and-lost: the guarded full-row CAS rejected the stale
+				// write (the command swallowed the conflict into a user status). This is
+				// the guard closing last-write-wins, NOT a silent field-resurrection —
+				// the superseding field (name) is preserved above.
 				conflicts++
-				Expect(gotDesc).NotTo(Equal(descText),
-					"round %d: A was rejected — its describe must NOT have landed", n)
-			}
-			if errA == nil && errB == nil {
-				// Serialized: both writes applied, no silent loss on either field.
-				Expect(gotName).To(Equal(renameTo), "round %d: serialized rename must land", n)
-				Expect(gotDesc).To(Equal(descText), "round %d: serialized describe must land", n)
 			}
 		}
 
