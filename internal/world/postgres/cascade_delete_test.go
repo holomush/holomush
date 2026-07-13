@@ -403,6 +403,7 @@ func TestWorldService_DeleteCharacter_Integration(t *testing.T) {
 		PropertyRepo:  propRepo,
 		Engine:        ac,
 		Transactor:    tx,
+		OutboxWriter:  postgres.NewOutboxStore(testPool),
 	})
 
 	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "character", charID), "property should exist before delete")

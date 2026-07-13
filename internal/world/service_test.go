@@ -434,42 +434,47 @@ func TestWorldService_UpdateCharacterDescription(t *testing.T) {
 	charID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
-	t.Run("threads the read version into the guarded write", func(t *testing.T) {
+	t.Run("threads the read version into the guarded write and emits one character_updated envelope", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			CharacterRepo: mockRepo,
 			Engine:        engine,
-		})
+		}, outbox))
 
 		stored := &world.Character{ID: charID, Name: "Alice", Version: 5}
 		engine.Grant(subjectID, "write", access.CharacterResource(charID.String()))
 		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
 		// The RMW write MUST carry the version read at the start (5), never a
 		// re-read or a zeroed version — that is what arms the guard.
-		mockRepo.EXPECT().Update(ctx, mock.MatchedBy(func(c *world.Character) bool {
+		mockRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(c *world.Character) bool {
 			return c.Version == 5 && c.Description == "a new description"
 		})).Return(nil, nil)
 
 		err := svc.UpdateCharacterDescription(ctx, subjectID, charID, "a new description")
 		require.NoError(t, err)
+		require.Equal(t, 1, outbox.calls, "an update emits exactly one character_updated envelope")
+		assert.Equal(t, "character_updated", outbox.lastIntent.Kind)
+		assert.Equal(t, charID, outbox.lastIntent.AggregateID)
 	})
 
 	t.Run("surfaces WORLD_CONCURRENT_EDIT unchanged on a stale write (D-02)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			CharacterRepo: mockRepo,
 			Engine:        engine,
-		})
+		}, outbox))
 
 		stored := &world.Character{ID: charID, Name: "Alice", Version: 5}
 		engine.Grant(subjectID, "write", access.CharacterResource(charID.String()))
 		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
 		conflict := oops.Code(world.CodeConcurrentEdit).Wrap(world.ErrConcurrentEdit)
-		mockRepo.EXPECT().Update(ctx, mock.MatchedBy(func(c *world.Character) bool {
+		mockRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(c *world.Character) bool {
 			return c.Version == 5
 		})).Return(nil, conflict)
 
@@ -4309,6 +4314,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -4331,6 +4337,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
@@ -4350,6 +4357,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
@@ -4372,6 +4380,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
@@ -4391,6 +4400,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
@@ -4414,6 +4424,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -4436,6 +4447,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -4478,6 +4490,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -4500,6 +4513,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -4521,6 +4535,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 			PropertyRepo:  mockPropRepo,
 			Engine:        engine,
 			Transactor:    tx,
+			OutboxWriter:  &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -4750,6 +4765,7 @@ func TestWorldService_DeleteCharacter_PropertyDeleteFails(t *testing.T) {
 		PropertyRepo:  mockPropRepo,
 		Engine:        engine,
 		Transactor:    tx,
+		OutboxWriter:  &mockOutboxWriter{},
 	})
 
 	engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -4899,6 +4915,7 @@ func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 		PropertyRepo:  mockPropRepo,
 		Engine:        engine,
 		Transactor:    tx,
+		OutboxWriter:  &mockOutboxWriter{},
 	})
 
 	engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -5145,6 +5162,7 @@ func TestWorldService_DeleteCharacter_VerifiesAccessRequest(t *testing.T) {
 		PropertyRepo:  mockPropRepo,
 		Engine:        mockEngine,
 		Transactor:    mockTransactor,
+		OutboxWriter:  &mockOutboxWriter{},
 	})
 
 	// Capture the AccessRequest using mock.MatchedBy

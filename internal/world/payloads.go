@@ -295,6 +295,14 @@ type ObjectMoveChangePayload struct {
 	FromID   *string `json:"from_id,omitempty"`
 }
 
+// CharacterUpdateChangePayload is the new-values-only payload for a
+// character_updated envelope (the character-description write). It carries the
+// character id and the committed new description.
+type CharacterUpdateChangePayload struct {
+	CharacterID string `json:"character_id"`
+	Description string `json:"description"`
+}
+
 // TombstonePayload is the payload for a delete envelope: only the id of the
 // deleted aggregate. Cascaded aggregates (a location's exits, a bidirectional
 // exit's reverse) are represented in the envelope's affected-aggregates manifest
@@ -383,6 +391,19 @@ func currentContainment(obj *Object) (ContainmentType, ulid.ULID) {
 	default:
 		return ContainmentTypeNone, ulid.ULID{}
 	}
+}
+
+// BuildCharacterUpdatePayload marshals the new-values-only character-update
+// payload (character id + committed description) for a character_updated envelope.
+func BuildCharacterUpdatePayload(characterID ulid.ULID, description string) ([]byte, error) {
+	payload, err := json.Marshal(CharacterUpdateChangePayload{
+		CharacterID: characterID.String(),
+		Description: description,
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal character update payload")
+	}
+	return payload, nil
 }
 
 // BuildTombstonePayload marshals the tombstone payload (the deleted id) for a

@@ -203,6 +203,32 @@ func (m *worldMutator) updateCharacterPreferences(
 	})
 }
 
+// updateCharacter routes a character update through mutate() (character_updated).
+// char carries the read Version as the CAS guard; the character writer's Update
+// finalizes the character_updated envelope from the returned delta in the same tx.
+func (m *worldMutator) updateCharacter(ctx context.Context, intent wmodel.EnvelopeIntent, char *Character) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.characterWriter.Update(txCtx, char)
+	})
+}
+
+// deleteCharacter routes a character delete + its property cascade through
+// mutate() (character_deleted tombstone — the SAME kind the guest
+// CharacterReapingService reuses, 05-16/D-06; consumers treat all character
+// tombstones uniformly). The closure deletes the character's properties then the
+// character row; the single tombstone envelope's manifest is finalized from the
+// repo delta.
+func (m *worldMutator) deleteCharacter(ctx context.Context, intent wmodel.EnvelopeIntent, id ulid.ULID) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		if err := m.propertyWriter.DeleteByParent(txCtx, "character", id); err != nil {
+			return nil, oops.Code("CHARACTER_DELETE_FAILED").
+				With("operation", "delete_character_properties").
+				Wrapf(err, "delete properties for character %s", id)
+		}
+		return m.characterWriter.Delete(txCtx, id, 0)
+	})
+}
+
 // createLocation routes a location create through mutate(): the closure runs the
 // guarded location Create and returns its delta; the writer finalizes the
 // location_created envelope from that delta in the same tx.

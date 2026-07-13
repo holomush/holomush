@@ -48,6 +48,8 @@ const (
 	kindObjectDeleted = "object_deleted"
 	kindObjectMoved   = "object_moved"
 
+	kindCharacterUpdated           = "character_updated"
+	kindCharacterDeleted           = "character_deleted"
 	kindCharacterMoved             = "character_moved"
 	kindCharacterPreferencesUpdate = "character_preferences_update"
 	worldSchemaVersion             = 1
@@ -82,13 +84,22 @@ type ServiceConfig struct {
 
 // Service provides authorized access to world model operations.
 // All operations check authorization before delegating to repositories.
+//
+// Compile-time write fence (05-11, complete): Service holds ONLY the read-only
+// reader views of each repository. Every write command routes through the write
+// executor (`s.mutator`), which is the SOLE in-world owner of the writer repos —
+// so a direct `s.xRepo.Update(...)` / `.Delete(...)` / `.Create(...)` is a type
+// error. This is the reader-view half of INV-WORLD-4's enforceable boundary
+// (paired with the AST SQL fence (05-09) + the internal/world/postgres
+// composition allowlist (05-07 Task 4) + the two sanctioned out-of-world
+// application services: character-genesis (05-15) and character-reaping (05-16)).
 type Service struct {
-	locationRepo  LocationRepository
-	exitRepo      ExitRepository
-	objectRepo    ObjectRepository
-	sceneRepo     SceneRepository
-	characterRepo CharacterRepository
-	propertyRepo  PropertyRepository
+	locationRepo  LocationReader
+	exitRepo      ExitReader
+	objectRepo    ObjectReader
+	sceneRepo     SceneReader
+	characterRepo CharacterReader
+	propertyRepo  PropertyReader
 	engine        types.AccessPolicyEngine
 	transactor    Transactor
 	movementHook  MovementHook
@@ -745,22 +756,22 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixCharacter); err != nil {
 		return err
 	}
-	deleteFn := func(ctx context.Context) error {
-		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
-			return oops.Code("CHARACTER_DELETE_FAILED").
-				With("operation", "delete_character_properties").
-				Wrapf(err, "delete properties for character %s", id)
-		}
-		if _, err := s.characterRepo.Delete(ctx, id, 0); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
-			}
-			return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
-		}
-		return nil
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
-		return oops.Code("CHARACTER_DELETE_FAILED").Wrap(err)
+	payload, err := BuildTombstonePayload(id)
+	if err != nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "build character tombstone payload %s", id)
+	}
+	// The delete + its property cascade + the single character_deleted tombstone
+	// envelope commit in ONE transaction via the mutate() seam. The tombstone kind
+	// is the SAME kind the guest CharacterReapingService reuses (05-16/D-06).
+	intent := s.buildIntent(kindCharacterDeleted, wmodel.AggregateCharacter, id, subjectID, payload)
+	if _, err := s.mutator.deleteCharacter(ctx, intent, id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
+		}
+		return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
 	}
 	return nil
 }
@@ -800,8 +811,22 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 		}
 		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
 	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
 	char.Description = description
-	if _, err := s.characterRepo.Update(ctx, char); err != nil {
+	payload, err := BuildCharacterUpdatePayload(characterID, description)
+	if err != nil {
+		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "build character update payload %s", characterID)
+	}
+	// Route the guarded character update + its one character_updated envelope
+	// through the same-tx outbox seam. char carries the read Version (05-04) as the
+	// CAS guard so a concurrent conflicting write surfaces WORLD_CONCURRENT_EDIT.
+	intent := s.buildIntent(kindCharacterUpdated, wmodel.AggregateCharacter, characterID, subjectID, payload)
+	if _, err := s.mutator.updateCharacter(ctx, intent, char); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("character_id", characterID.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update character %s", characterID)
 		}

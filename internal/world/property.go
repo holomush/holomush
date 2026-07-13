@@ -28,19 +28,27 @@ type EntityProperty struct {
 	UpdatedAt    time.Time
 }
 
-// PropertyRepository manages entity properties.
-type PropertyRepository interface {
-	// Create persists a new entity property.
-	// Enforces visibility defaults: when visibility is "restricted" and VisibleTo
-	// is nil, auto-populates VisibleTo with [parent_id] and ExcludedFrom with [].
-	Create(ctx context.Context, p *EntityProperty) error
-
+// PropertyReader is the read-only view of entity-property persistence. The
+// compile-time write fence (05-11) gives world.Service a reader so a direct
+// property write does not type-check; the property WRITER lives only on the
+// write executor.
+type PropertyReader interface {
 	// Get retrieves an entity property by ID.
 	// Returns PROPERTY_NOT_FOUND error if not found.
 	Get(ctx context.Context, id ulid.ULID) (*EntityProperty, error)
 
 	// ListByParent returns all properties for the given parent entity.
 	ListByParent(ctx context.Context, parentType string, parentID ulid.ULID) ([]*EntityProperty, error)
+}
+
+// PropertyRepository manages entity properties.
+type PropertyRepository interface {
+	PropertyReader
+
+	// Create persists a new entity property.
+	// Enforces visibility defaults: when visibility is "restricted" and VisibleTo
+	// is nil, auto-populates VisibleTo with [parent_id] and ExcludedFrom with [].
+	Create(ctx context.Context, p *EntityProperty) error
 
 	// Update modifies an existing entity property.
 	// Applies the same visibility validation as Create.
