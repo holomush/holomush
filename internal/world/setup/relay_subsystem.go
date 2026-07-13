@@ -216,6 +216,21 @@ func (w *outboxWaker) Wait(ctx context.Context) error {
 	w.mu.Unlock()
 
 	_, err := conn.Conn().WaitForNotification(ctx)
+	if err != nil {
+		// A benign ctx-deadline/cancel AND a dead pinned connection (Postgres
+		// failover/restart, proxy idle-kill) both land here. Release the pinned
+		// conn so the next Wait re-acquires a live one and re-LISTENs; without
+		// this reset a dead connection is reused forever, WaitForNotification
+		// errors instantly every call, and the relay busy-loops on NextUnpublished
+		// scans (CR-01). Releasing on a benign deadline just re-acquires next
+		// tick — cheap and correct.
+		w.mu.Lock()
+		if w.conn == conn {
+			w.conn.Release()
+			w.conn = nil
+		}
+		w.mu.Unlock()
+	}
 	return err //nolint:wrapcheck // ctx-deadline/notify signal; relay ignores it and re-drains
 }
 
