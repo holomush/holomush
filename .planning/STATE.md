@@ -6,15 +6,15 @@ current_phase: 05
 current_phase_name: world-model-integrity-fixes-m2-m12
 status: executing
 stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
-last_updated: "2026-07-13T15:53:33.701Z"
+last_updated: "2026-07-13T16:03:32.089Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 20
-  completed_plans: 18
-  percent: 17
+  completed_plans: 20
+  percent: 33
 ---
 
 # Project State
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 05 (world-model-integrity-fixes-m2-m12) — EXECUTING
-Plan: 15 of 16
+Plan: 16 of 16
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 05 execution started
 
@@ -99,6 +99,7 @@ Last activity: 2026-07-12 — Phase 05 execution started
 | Phase 05 P15 | 120 | 2 tasks | 21 files |
 | Phase 05 P16 | 150 | 3 tasks | 22 files |
 | Phase 05 P12 | 14min | 3 tasks | 9 files |
+| Phase 05 P13 | 20min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,7 @@ the next milestone yet.
 - [Phase ?]: 05-12: INV-WORLD scope registered as status:pending because internal/world carries pre-existing FOREIGN bare INV-N tokens (holomush-72ou per-property-ABAC) the provenance residual-walk would misattribute; the four INV-WORLD-1..4 entries are nonetheless binding:bound (born canonical).
 - [Phase ?]: 05-12: INV-WORLD ids are canonical NUMERIC (INV-WORLD-1..4); ADR symbolic names (ATOMIC-FEED/DELTA-PARITY/FEED-ORDER/WRITER-BOUNDARY) live in summary+legacy — the //Verifies parser (invariant_registry_test.go:163) requires a trailing number (Codex finding 3).
 - [Phase ?]: 05-12: INV-WORLD-2 delta-parity binds to a REAL-ROW integration test in internal/world/outbox (location-delete cascade + bidirectional exit) proving manifest==MutationDelta==actual row version transition, not presence.
+- [Phase ?]: 05-13: MODEL-02 doc downgrade — false 'event sourcing / state derives from replay' corrected at 4 sites (CLAUDE.md/AGENTS.md-symlink, README.md, coding-standards.md, architecture.md) to the decided model (event-driven + append-only audit log, ADR holomush-i4784); real client-catch-up/Subscribe replay language preserved; index.mdx:41 legitimate audit-log language (Open Q4 resolved); regression-guarded by test/meta/world_model_doc_claim_test.go.
 
 ### Pending Todos
 
@@ -169,7 +171,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-13T15:53:13.073Z
+Last session: 2026-07-13T16:02:59.403Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
 Resume file: None
