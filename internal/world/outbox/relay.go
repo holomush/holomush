@@ -5,8 +5,10 @@ package outbox
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"log/slog"
+	"math/big"
 	"sync"
 	"time"
 
@@ -23,6 +25,14 @@ const defaultSweepInterval = 5 * time.Second
 // Drain gives up for this pass (a sustained broker outage is transient, NOT
 // poison — the relay resumes on the next sweep, in order).
 const defaultMaxPublishAttempts = 3
+
+// publishRetryBaseBackoff / publishRetryMaxBackoff bound the exponential backoff
+// between transient publish retries so a degraded broker is not hammered with
+// back-to-back retries precisely when it is struggling (WR-02).
+const (
+	publishRetryBaseBackoff = 50 * time.Millisecond
+	publishRetryMaxBackoff  = 2 * time.Second
+)
 
 // errPoison is the internal signal that a row is PERMANENTLY unpublishable
 // (malformed envelope / rejected by the publisher's validation). It HALTS the
@@ -68,8 +78,17 @@ type RelayConfig struct {
 type Relay struct {
 	cfg RelayConfig
 
-	mu           sync.Mutex
-	lease        Lease
+	// mu serializes Drain passes and protects the held lease. It is held across
+	// the network publish inside a pass to preserve strict (epoch, feed_position)
+	// ordering and one-event-per-position.
+	mu    sync.Mutex
+	lease Lease
+
+	// haltMu is a lightweight lock protecting ONLY the halt-state health signal.
+	// It is deliberately separate from mu so Halted() — the operator's stalled-feed
+	// alert probe — never blocks behind an in-flight (possibly hung) publish that
+	// holds mu (WR-01).
+	haltMu       sync.Mutex
 	halted       bool
 	haltPosition int64
 }
@@ -95,8 +114,8 @@ func (r *Relay) log() *slog.Logger {
 // Halted reports whether the relay is halted on a poison row and, if so, at what
 // feed_position — the halt-position health signal.
 func (r *Relay) Halted() (halted bool, position int64) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.haltMu.Lock()
+	defer r.haltMu.Unlock()
 	return r.halted, r.haltPosition
 }
 
@@ -204,8 +223,11 @@ func (r *Relay) Drain(ctx context.Context) (int, error) {
 		// Halt bookkeeping: once halted we stay halted until the poison position
 		// is resolved (an operator skip published the same-position marker and
 		// resolved the row, so the lowest unpublished position has advanced).
-		if r.halted {
-			if env == nil || env.FeedPosition != r.haltPosition {
+		// The halt fields are read/written under haltMu (not mu) so Halted()
+		// stays contention-free during a slow publish.
+		halted, haltPos := r.haltState()
+		if halted {
+			if env == nil || env.FeedPosition != haltPos {
 				r.clearHalt()
 			} else {
 				return published, nil
@@ -266,11 +288,18 @@ func (r *Relay) publishOne(ctx context.Context, env wmodel.Envelope) error {
 		if isPermanentPublishErr(lastErr) {
 			return oops.Wrapf(errPoison, "publish rejected: %v", lastErr)
 		}
-	}
-	if lastErr != nil {
-		if isPermanentPublishErr(lastErr) {
-			return oops.Wrapf(errPoison, "publish rejected: %v", lastErr)
+		// Transient failure: back off before the next attempt (never after the
+		// last one), honoring ctx so Stop still unwinds promptly.
+		if attempt < r.cfg.MaxPublishAttempts {
+			if err := sleepWithBackoff(ctx, attempt); err != nil {
+				return err
+			}
 		}
+	}
+	// The loop can only exit with lastErr != nil after a run of TRANSIENT
+	// failures — a permanent error returns errPoison from inside the loop — so no
+	// permanent-vs-transient re-check is needed here (IN-01).
+	if lastErr != nil {
 		return oops.Code("WORLD_OUTBOX_PUBLISH_TRANSIENT").Wrap(lastErr)
 	}
 
@@ -285,19 +314,74 @@ func (r *Relay) publishOne(ctx context.Context, env wmodel.Envelope) error {
 	return nil
 }
 
+// haltState snapshots the halt-state health signal under the lightweight haltMu.
+func (r *Relay) haltState() (halted bool, position int64) {
+	r.haltMu.Lock()
+	defer r.haltMu.Unlock()
+	return r.halted, r.haltPosition
+}
+
 // halt records the poison halt and raises the halt/lag alert metrics.
 func (r *Relay) halt(position int64) {
+	r.haltMu.Lock()
 	r.halted = true
 	r.haltPosition = position
+	r.haltMu.Unlock()
 	relayHalts.WithLabelValues(r.cfg.GameID).Inc()
 	relayHaltPosition.WithLabelValues(r.cfg.GameID).Set(float64(position))
 }
 
 // clearHalt clears the halt after the poison position was resolved.
 func (r *Relay) clearHalt() {
+	r.haltMu.Lock()
 	r.halted = false
 	r.haltPosition = 0
+	r.haltMu.Unlock()
 	relayHaltPosition.WithLabelValues(r.cfg.GameID).Set(0)
+}
+
+// sleepWithBackoff sleeps for an exponentially-growing, jittered, capped delay
+// before the next transient publish retry (WR-02). It returns a cancellation
+// error if ctx is done during the sleep so Stop unwinds promptly. attempt is
+// 1-based (the attempt that just failed).
+func sleepWithBackoff(ctx context.Context, attempt int) error {
+	delay := backoffDelay(attempt)
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return cancelErr(ctx)
+	case <-timer.C:
+		return nil
+	}
+}
+
+// backoffDelay computes an exponential backoff (base * 2^(attempt-1)) capped at
+// publishRetryMaxBackoff, with equal (half-fixed + half-random) jitter drawn
+// from crypto/rand — never math/rand — to de-correlate concurrent relays.
+func backoffDelay(attempt int) time.Duration {
+	base := publishRetryBaseBackoff
+	// Shift for exponential growth, guarding against overflow / the cap.
+	shift := attempt - 1
+	if shift < 0 {
+		shift = 0
+	}
+	if shift > 62 {
+		base = publishRetryMaxBackoff
+	} else {
+		base <<= uint(shift)
+	}
+	if base <= 0 || base > publishRetryMaxBackoff {
+		base = publishRetryMaxBackoff
+	}
+	half := base / 2
+	// Random component in [0, half]; on the (practically impossible) rand error
+	// fall back to the fixed half so the caller still backs off.
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(half)+1))
+	if err != nil {
+		return base
+	}
+	return half + time.Duration(n.Int64())
 }
 
 // isPermanentPublishErr classifies a publish error as permanent (poison) vs
