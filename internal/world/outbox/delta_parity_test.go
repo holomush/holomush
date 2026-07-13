@@ -123,6 +123,8 @@ func newDeltaIntent(gameID, kind string, aggType wmodel.AggregateType, aggID uli
 // the rows' actual version transition: the primary location tombstone and every
 // cascaded exit tombstone appear in the envelope's affected manifest with the
 // exact before-versions the rows held.
+//
+// Verifies: INV-WORLD-2
 func TestDeltaParityLocationDeleteCascade(t *testing.T) {
 	ctx := context.Background()
 	locRepo := postgres.NewLocationRepository(testPool)
@@ -186,6 +188,8 @@ func TestDeltaParityLocationDeleteCascade(t *testing.T) {
 // a manifest that lists BOTH the primary exit and the repository-generated reverse
 // exit, each with the before/after versions equal to the real rows' transition
 // (0 -> 1), matching the returned MutationDelta exactly.
+//
+// Verifies: INV-WORLD-2
 func TestDeltaParityBidirectionalExitCreate(t *testing.T) {
 	ctx := context.Background()
 	exitRepo := postgres.NewExitRepository(testPool)

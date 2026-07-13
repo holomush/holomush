@@ -181,6 +181,10 @@ func worldFenceSkipDir(rel, name string) bool {
 // the migration tree, failing on any core/world-table mutation SQL outside the
 // writer boundary / registered exceptions. It is HONESTLY green because 05-09
 // Task 2 folded the character_settings escape into internal/world/postgres first.
+// This is the AST SQL-fence half of INV-WORLD-4 (WRITER-BOUNDARY), covering
+// entity_properties AND migration files.
+//
+// Verifies: INV-WORLD-4
 func TestNoRawWorldSQLOutsideWriterBoundary(t *testing.T) {
 	root := findRepoRoot(t)
 	re := worldWriteSQLRegexp()

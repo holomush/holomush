@@ -55,6 +55,8 @@ func serviceReaderFields() []struct {
 // direct s.xRepo.Create()/Update()/Delete() is a type error), and the reader views
 // expose NO write method. Combined, no state change can reach the feed except
 // through the envelope seam — the reader-view half of INV-WORLD-4 (WRITER-BOUNDARY).
+//
+// Verifies: INV-WORLD-4
 func TestWorldServiceExposesNoDirectlyCallableWriteRepo(t *testing.T) {
 	st := reflect.TypeOf(world.Service{})
 

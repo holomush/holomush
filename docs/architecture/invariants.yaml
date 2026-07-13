@@ -4902,7 +4902,9 @@ invariants:
       SAME transaction — an envelope-less committed state change, or a committed envelope for a rolled-back state change,
       is impossible. Bound to the always-run state+envelope atomicity test (real world row + envelope: rollback→neither survives,
       commit→both survive, forced outbox failure after the state write→state rolls back)."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/world/postgres/outbox_store_test.go"
   - id: INV-WORLD-2
     scope: INV-WORLD
     origin_spec: "docs/adr/holomush-i4784-world-state-model-decision.md"
@@ -4911,7 +4913,9 @@ invariants:
       the guarded write returned — every affected aggregate's id, tombstone flag, and before/after versions equal the row's
       actual version transition, including DB-cascaded children (a location DELETE's cascaded exit tombstones) and a bidirectional
       exit's reverse aggregate. Manifest PRESENCE is insufficient — parity of the versions is the guarantee."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/world/outbox/delta_parity_test.go"
   - id: INV-WORLD-3
     scope: INV-WORLD
     origin_spec: "docs/adr/holomush-i4784-world-state-model-decision.md"
@@ -4919,7 +4923,9 @@ invariants:
     summary: "FEED-ORDER: the single leased relay publishes strictly in feed_position order with Nats-Msg-Id = the event ULID,
       a poison envelope HALTS the feed at its position (rows after it are withheld), and an operator skip leaves NO missing
       feed_position — a skip marker is published at the skipped position so the wire has no gap."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/world/outbox/relay_test.go"
   - id: INV-WORLD-4
     scope: INV-WORLD
     origin_spec: "docs/adr/holomush-i4784-world-state-model-decision.md"
@@ -4934,4 +4940,9 @@ invariants:
       and the character-reaping application service (05-16, D-06, DELETION — guest reaping + failed-guest cleanup emit one
       character tombstone per reaped character; previously an FK cascade with no tombstone). The guest-DELETION side is proven
       by the D-06 tombstone regression so the FK-cascade hole cannot regrow."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "internal/world/outbox/writer_boundary_test.go"
+      - "test/meta/world_sql_fence_test.go"
+      - "test/meta/world_import_graph_test.go"
+      - "test/integration/auth/guest_reaper_tombstone_test.go"

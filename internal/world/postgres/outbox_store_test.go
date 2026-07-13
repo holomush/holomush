@@ -125,8 +125,13 @@ func TestOutboxStoreWriteIntentGameIDRoundTripPerGame(t *testing.T) {
 }
 
 // TestOutboxStoreStateAndEnvelopeAtomicity is the always-run INV-WORLD-1 binding
-// target (the // Verifies: annotation is added in 05-12): a REAL world row and its
-// envelope commit or roll back TOGETHER.
+// target: a REAL world row and its envelope commit or roll back TOGETHER. It runs
+// in the normal task test:int Integration Test lane (NOT a quarantine-gated
+// resilience spec), and covers all three cases — rollback→neither survives,
+// commit→both survive, forced outbox failure after the state write→state rolls
+// back — so it is a full ATOMIC-FEED binding, not an envelope-only rollback.
+//
+// Verifies: INV-WORLD-1
 func TestOutboxStoreStateAndEnvelopeAtomicity(t *testing.T) {
 	ctx := context.Background()
 	store := postgres.NewOutboxStore(testPool)

@@ -201,6 +201,8 @@ func newRelay(store outbox.OutboxStore, pub eventbus.Publisher, game string) *ou
 
 // TestRelayPublishesInPositionOrderWithDedupKey proves ordered publish and that
 // each publish carries Nats-Msg-Id = the envelope's event ULID (Event.ID).
+//
+// Verifies: INV-WORLD-3
 func TestRelayPublishesInPositionOrderWithDedupKey(t *testing.T) {
 	game := ulid.Make().String()
 	rows := []*memRow{
@@ -228,6 +230,8 @@ func TestRelayPublishesInPositionOrderWithDedupKey(t *testing.T) {
 // TestRelayHaltsOnPoisonEnvelopeAtPosition proves a permanently-unpublishable row
 // HALTS the relay at its position; rows after it are NOT published, and the
 // halt-position is exposed.
+//
+// Verifies: INV-WORLD-3
 func TestRelayHaltsOnPoisonEnvelopeAtPosition(t *testing.T) {
 	game := ulid.Make().String()
 	// A row with an invalid kind can never build a wire event → poison.
@@ -299,7 +303,11 @@ func TestRelayReacquiresLeaseWithNewGenerationOnStaleAck(t *testing.T) {
 
 // TestSkipServicePublishesSamePositionMarkerThenResolves proves the SkipService
 // publishes an operator marker at the poison row's OWN feed_position, then (after
-// PubAck) resolves the row so the relay resumes — no wire gap.
+// PubAck) resolves the row so the relay resumes — no wire gap: after the skip the
+// wire has no missing feed_position (the round-2 same-position-skip-marker
+// redesign), which is what INV-WORLD-3 FEED-ORDER actually proves.
+//
+// Verifies: INV-WORLD-3
 func TestSkipServicePublishesSamePositionMarkerThenResolves(t *testing.T) {
 	game := ulid.Make().String()
 	poison := testEnv(game, 1, 2, "BAD KIND WITH SPACES")

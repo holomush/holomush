@@ -66,7 +66,10 @@ func TestWorldImportGraphForbiddenEdges(t *testing.T) {
 // TestWorldPostgresCompositionAllowlist asserts that ONLY composition/test
 // packages import internal/world/postgres, constraining concrete world-writer
 // construction (round-3 blocker #5 pairing). A new production package cannot hold
-// a concrete writer repo.
+// a concrete writer repo. This is the import-graph allowlist half of INV-WORLD-4
+// (WRITER-BOUNDARY).
+//
+// Verifies: INV-WORLD-4
 func TestWorldPostgresCompositionAllowlist(t *testing.T) {
 	root := findRepoRoot(t)
 	target := modulePath + "/internal/world/postgres"
