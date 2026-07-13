@@ -4,11 +4,10 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 6
 current_phase_name: Operational Hardening & Assurance Gates
-status: executing
+status: "Phase 05 shipped — PR #4816"
 stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
-last_updated: "2026-07-13T16:12:40.221Z"
+last_updated: "2026-07-13T18:14:31.182Z"
 last_activity: 2026-07-13
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
 progress:
   total_phases: 6
   completed_phases: 2
@@ -32,8 +31,8 @@ trusted identically.
 
 Phase: 6 — Operational Hardening & Assurance Gates
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-13 — Phase 05 complete, transitioned to Phase 6
+Status: Phase 05 shipped — PR #4816
+Last activity: 2026-07-13
 
 ## Performance Metrics
 
