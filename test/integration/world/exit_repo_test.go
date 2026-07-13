@@ -27,8 +27,8 @@ var _ = Describe("ExitRepository", func() {
 		// Create two rooms for exit tests
 		room1 = createTestLocation("Room One", "First room.", world.LocationTypePersistent)
 		room2 = createTestLocation("Room Two", "Second room.", world.LocationTypePersistent)
-		Expect(env.Locations.Create(ctx, room1)).To(Succeed())
-		Expect(env.Locations.Create(ctx, room2)).To(Succeed())
+		Expect(delErr(env.Locations.Create(ctx, room1))).To(Succeed())
+		Expect(delErr(env.Locations.Create(ctx, room2))).To(Succeed())
 	})
 
 	Describe("Create", func() {
@@ -37,7 +37,7 @@ var _ = Describe("ExitRepository", func() {
 			exit.Aliases = []string{"n", "forward"}
 			exit.Visibility = world.VisibilityAll
 
-			err := env.Exits.Create(ctx, exit)
+			err := delErr(env.Exits.Create(ctx, exit))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Exits.Get(ctx, exit.ID)
@@ -53,7 +53,7 @@ var _ = Describe("ExitRepository", func() {
 			exit.Bidirectional = true
 			exit.ReturnName = "south"
 
-			err := env.Exits.Create(ctx, exit)
+			err := delErr(env.Exits.Create(ctx, exit))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Find return exit
@@ -67,7 +67,7 @@ var _ = Describe("ExitRepository", func() {
 			exit := createTestExit(room1.ID, room2.ID, "door")
 			exit.Aliases = []string{"d", "doorway", "entrance"}
 
-			err := env.Exits.Create(ctx, exit)
+			err := delErr(env.Exits.Create(ctx, exit))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Exits.Get(ctx, exit.ID)
@@ -82,7 +82,7 @@ var _ = Describe("ExitRepository", func() {
 			exit.LockType = world.LockTypeKey
 			exit.LockData = map[string]any{"key_object_id": "abc123"}
 
-			err := env.Exits.Create(ctx, exit)
+			err := delErr(env.Exits.Create(ctx, exit))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Exits.Get(ctx, exit.ID)
@@ -98,7 +98,7 @@ var _ = Describe("ExitRepository", func() {
 			exit.Visibility = world.VisibilityList
 			exit.VisibleTo = []ulid.ULID{charID}
 
-			err := env.Exits.Create(ctx, exit)
+			err := delErr(env.Exits.Create(ctx, exit))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Exits.Get(ctx, exit.ID)
@@ -112,9 +112,9 @@ var _ = Describe("ExitRepository", func() {
 	Describe("Delete", func() {
 		It("removes exit from database", func() {
 			exit := createTestExit(room1.ID, room2.ID, "north")
-			Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
-			err := env.Exits.Delete(ctx, exit.ID)
+			err := delErr(env.Exits.Delete(ctx, exit.ID, 0))
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = env.Exits.Get(ctx, exit.ID)
@@ -125,14 +125,14 @@ var _ = Describe("ExitRepository", func() {
 			exit := createTestExit(room1.ID, room2.ID, "north")
 			exit.Bidirectional = true
 			exit.ReturnName = "south"
-			Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 			// Verify return exit exists
 			_, err := env.Exits.FindByName(ctx, room2.ID, "south")
 			Expect(err).NotTo(HaveOccurred())
 
 			// Delete primary exit
-			err = env.Exits.Delete(ctx, exit.ID)
+			err = delErr(env.Exits.Delete(ctx, exit.ID, 0))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Return exit should also be gone
@@ -144,14 +144,14 @@ var _ = Describe("ExitRepository", func() {
 			exit := createTestExit(room1.ID, room2.ID, "north")
 			exit.Bidirectional = true
 			exit.ReturnName = "south"
-			Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 			// Manually delete return exit first
 			returnExit, _ := env.Exits.FindByName(ctx, room2.ID, "south")
 			_, _ = env.pool.Exec(ctx, "DELETE FROM exits WHERE id = $1", returnExit.ID.String())
 
 			// Deleting primary returns cleanup result but not severe
-			err := env.Exits.Delete(ctx, exit.ID)
+			err := delErr(env.Exits.Delete(ctx, exit.ID, 0))
 			var cleanup *world.BidirectionalCleanupResult
 			Expect(errors.As(err, &cleanup)).To(BeTrue(), "expected BidirectionalCleanupResult")
 			Expect(cleanup.IsSevere()).To(BeFalse(), "missing return exit should not be severe")
@@ -162,7 +162,7 @@ var _ = Describe("ExitRepository", func() {
 		BeforeEach(func() {
 			exit := createTestExit(room1.ID, room2.ID, "North Door")
 			exit.Aliases = []string{"n", "door"}
-			Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 		})
 
 		It("matches exact name case-insensitively", func() {
@@ -194,7 +194,7 @@ var _ = Describe("ExitRepository", func() {
 				createTestExit(room1.ID, room2.ID, "south"),
 			}
 			for _, e := range exits {
-				Expect(env.Exits.Create(ctx, e)).To(Succeed())
+				Expect(delErr(env.Exits.Create(ctx, e))).To(Succeed())
 			}
 		})
 
@@ -229,10 +229,10 @@ var _ = Describe("ExitRepository", func() {
 	Describe("ListFromLocation", func() {
 		It("returns all exits from location", func() {
 			room3 := createTestLocation("Room Three", "Third room.", world.LocationTypePersistent)
-			Expect(env.Locations.Create(ctx, room3)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, room3))).To(Succeed())
 
-			Expect(env.Exits.Create(ctx, createTestExit(room1.ID, room2.ID, "north"))).To(Succeed())
-			Expect(env.Exits.Create(ctx, createTestExit(room1.ID, room3.ID, "east"))).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, createTestExit(room1.ID, room2.ID, "north")))).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, createTestExit(room1.ID, room3.ID, "east")))).To(Succeed())
 
 			exits, err := env.Exits.ListFromLocation(ctx, room1.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -241,10 +241,10 @@ var _ = Describe("ExitRepository", func() {
 
 		It("orders by name", func() {
 			room3 := createTestLocation("Room Three", "Third room.", world.LocationTypePersistent)
-			Expect(env.Locations.Create(ctx, room3)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, room3))).To(Succeed())
 
-			Expect(env.Exits.Create(ctx, createTestExit(room1.ID, room2.ID, "zulu"))).To(Succeed())
-			Expect(env.Exits.Create(ctx, createTestExit(room1.ID, room3.ID, "alpha"))).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, createTestExit(room1.ID, room2.ID, "zulu")))).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, createTestExit(room1.ID, room3.ID, "alpha")))).To(Succeed())
 
 			exits, err := env.Exits.ListFromLocation(ctx, room1.ID)
 			Expect(err).NotTo(HaveOccurred())

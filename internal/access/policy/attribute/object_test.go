@@ -12,6 +12,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,16 +30,16 @@ func (m *mockObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Ob
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockObjectRepository) Create(_ context.Context, _ *world.Object) error {
-	return errors.New("not implemented")
+func (m *mockObjectRepository) Create(_ context.Context, _ *world.Object) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
-func (m *mockObjectRepository) Update(_ context.Context, _ *world.Object) error {
-	return errors.New("not implemented")
+func (m *mockObjectRepository) Update(_ context.Context, _ *world.Object) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
-func (m *mockObjectRepository) Delete(_ context.Context, _ ulid.ULID) error {
-	return errors.New("not implemented")
+func (m *mockObjectRepository) Delete(_ context.Context, _ ulid.ULID, _ int) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (m *mockObjectRepository) ListAtLocation(_ context.Context, _ ulid.ULID) ([]*world.Object, error) {
@@ -53,8 +54,8 @@ func (m *mockObjectRepository) ListContainedIn(_ context.Context, _ ulid.ULID) (
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockObjectRepository) Move(_ context.Context, _ ulid.ULID, _ world.Containment) error {
-	return errors.New("not implemented")
+func (m *mockObjectRepository) Move(_ context.Context, _ ulid.ULID, _ world.Containment, _ int) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
 // newObjectInLocation builds a test Object directly in a location.

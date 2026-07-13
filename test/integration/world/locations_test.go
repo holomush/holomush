@@ -25,7 +25,7 @@ var _ = Describe("Location Management", func() {
 	Describe("Location types", func() {
 		It("creates persistent locations (permanent world rooms)", func() {
 			loc := createTestLocation("Town Square", "The center of town.", world.LocationTypePersistent)
-			Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -34,7 +34,7 @@ var _ = Describe("Location Management", func() {
 
 		It("creates scene locations (temporary RP rooms)", func() {
 			loc := createTestLocation("Private Meeting", "A private scene.", world.LocationTypeScene)
-			Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -43,7 +43,7 @@ var _ = Describe("Location Management", func() {
 
 		It("creates instance locations (future instanced content)", func() {
 			loc := createTestLocation("Dungeon Instance", "An instanced dungeon.", world.LocationTypeInstance)
-			Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -55,7 +55,7 @@ var _ = Describe("Location Management", func() {
 		Context("persistent locations", func() {
 			It("defaults to 'last:0' (no replay)", func() {
 				loc := createTestLocation("No Replay", "Testing default.", world.LocationTypePersistent)
-				Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+				Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 				got, err := env.Locations.Get(ctx, loc.ID)
 				Expect(err).NotTo(HaveOccurred())
@@ -66,7 +66,7 @@ var _ = Describe("Location Management", func() {
 		Context("scene locations", func() {
 			It("defaults to 'last:-1' (full history)", func() {
 				loc := createTestLocation("Full Replay", "Testing scene default.", world.LocationTypeScene)
-				Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+				Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 				got, err := env.Locations.Get(ctx, loc.ID)
 				Expect(err).NotTo(HaveOccurred())
@@ -91,7 +91,7 @@ var _ = Describe("Location Management", func() {
 		It("supports custom replay limits", func() {
 			loc := createTestLocation("Limited Replay", "Custom replay.", world.LocationTypePersistent)
 			loc.ReplayPolicy = "last:50"
-			Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -108,7 +108,7 @@ var _ = Describe("Location Management", func() {
 			ownerID := createTestCharacterID()
 			loc := createTestLocation("Built Room", "A builder-owned room.", world.LocationTypePersistent)
 			loc.OwnerID = &ownerID
-			Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -119,7 +119,7 @@ var _ = Describe("Location Management", func() {
 		It("allows nil owner for system-created locations", func() {
 			loc := createTestLocation("System Room", "Created by system.", world.LocationTypePersistent)
 			loc.OwnerID = nil
-			Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
 			Expect(err).NotTo(HaveOccurred())

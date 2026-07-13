@@ -3,7 +3,13 @@
 
 package world
 
-import "github.com/oklog/ulid/v2"
+import (
+	"encoding/json"
+
+	"github.com/oklog/ulid/v2"
+
+	"github.com/samber/oops"
+)
 
 // EntityType represents the type of entity being moved.
 type EntityType string
@@ -242,4 +248,170 @@ func NewObjectGivePayload(
 		return nil, err
 	}
 	return p, nil
+}
+
+// World-change envelope payloads (MODEL-04 mechanical rollout, 05-10).
+//
+// These are the intent-level, NEW-VALUES-ONLY payloads each location/exit/object
+// write command persists in its outbox envelope. They are erasure-safe (no
+// secrets) and carry only the committed new state (or, for a tombstone, the
+// deleted id). The before/after versions and cascade IDs live in the envelope's
+// affected-aggregates manifest — built by the writer from the repo's returned
+// MutationDelta (finding 7), NOT from these payloads.
+
+// LocationChangePayload is the new-values-only payload for a location create or
+// update envelope.
+type LocationChangePayload struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// ExitChangePayload is the new-values-only payload for an exit create or update
+// envelope. It carries the endpoints (from/to location) that define the exit.
+type ExitChangePayload struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	FromLocationID string `json:"from_location_id"`
+	ToLocationID   string `json:"to_location_id"`
+}
+
+// ObjectChangePayload is the new-values-only payload for an object create or
+// update envelope.
+type ObjectChangePayload struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// ObjectMoveChangePayload is the new-values-only payload for an object-move
+// envelope: the object and its destination containment, plus the source
+// containment read before the move (omitted for a first-time placement).
+type ObjectMoveChangePayload struct {
+	ObjectID string  `json:"object_id"`
+	ToType   string  `json:"to_type"`
+	ToID     string  `json:"to_id"`
+	FromType string  `json:"from_type,omitempty"`
+	FromID   *string `json:"from_id,omitempty"`
+}
+
+// CharacterUpdateChangePayload is the new-values-only payload for a
+// character_updated envelope (the character-description write). It carries the
+// character id and the committed new description.
+type CharacterUpdateChangePayload struct {
+	CharacterID string `json:"character_id"`
+	Description string `json:"description"`
+}
+
+// TombstonePayload is the payload for a delete envelope: only the id of the
+// deleted aggregate. Cascaded aggregates (a location's exits, a bidirectional
+// exit's reverse) are represented in the envelope's affected-aggregates manifest
+// (from the repo delta), not here — one envelope per command, not per cascaded row.
+type TombstonePayload struct {
+	ID string `json:"id"`
+}
+
+// BuildLocationPayload marshals the new-values-only location payload for a
+// create/update envelope.
+func BuildLocationPayload(loc *Location) ([]byte, error) {
+	payload, err := json.Marshal(LocationChangePayload{
+		ID:          loc.ID.String(),
+		Name:        loc.Name,
+		Description: loc.Description,
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal location payload")
+	}
+	return payload, nil
+}
+
+// BuildExitPayload marshals the new-values-only exit payload for a create/update
+// envelope.
+func BuildExitPayload(exit *Exit) ([]byte, error) {
+	payload, err := json.Marshal(ExitChangePayload{
+		ID:             exit.ID.String(),
+		Name:           exit.Name,
+		FromLocationID: exit.FromLocationID.String(),
+		ToLocationID:   exit.ToLocationID.String(),
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal exit payload")
+	}
+	return payload, nil
+}
+
+// BuildObjectPayload marshals the new-values-only object payload for a
+// create/update envelope.
+func BuildObjectPayload(obj *Object) ([]byte, error) {
+	payload, err := json.Marshal(ObjectChangePayload{
+		ID:          obj.ID.String(),
+		Name:        obj.Name,
+		Description: obj.Description,
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal object payload")
+	}
+	return payload, nil
+}
+
+// BuildObjectMovePayload marshals the new-values-only object-move payload from the
+// object's pre-move containment (from) and the destination containment (to).
+func BuildObjectMovePayload(obj *Object, to Containment) ([]byte, error) {
+	var toID string
+	if id := to.ID(); id != nil {
+		toID = id.String()
+	}
+	p := ObjectMoveChangePayload{
+		ObjectID: obj.ID.String(),
+		ToType:   string(to.Type()),
+		ToID:     toID,
+	}
+	if fromType, fromID := currentContainment(obj); fromType != ContainmentTypeNone {
+		p.FromType = string(fromType)
+		fromStr := fromID.String()
+		p.FromID = &fromStr
+	}
+	payload, err := json.Marshal(p)
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal object move payload")
+	}
+	return payload, nil
+}
+
+// currentContainment returns the object's current containment type and id, or
+// (ContainmentTypeNone, zero) when the object has no prior containment.
+func currentContainment(obj *Object) (ContainmentType, ulid.ULID) {
+	switch {
+	case obj.LocationID() != nil:
+		return ContainmentTypeLocation, *obj.LocationID()
+	case obj.HeldByCharacterID() != nil:
+		return ContainmentTypeCharacter, *obj.HeldByCharacterID()
+	case obj.ContainedInObjectID() != nil:
+		return ContainmentTypeObject, *obj.ContainedInObjectID()
+	default:
+		return ContainmentTypeNone, ulid.ULID{}
+	}
+}
+
+// BuildCharacterUpdatePayload marshals the new-values-only character-update
+// payload (character id + committed description) for a character_updated envelope.
+func BuildCharacterUpdatePayload(characterID ulid.ULID, description string) ([]byte, error) {
+	payload, err := json.Marshal(CharacterUpdateChangePayload{
+		CharacterID: characterID.String(),
+		Description: description,
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal character update payload")
+	}
+	return payload, nil
+}
+
+// BuildTombstonePayload marshals the tombstone payload (the deleted id) for a
+// delete envelope.
+func BuildTombstonePayload(id ulid.ULID) ([]byte, error) {
+	payload, err := json.Marshal(TombstonePayload{ID: id.String()})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal tombstone payload")
+	}
+	return payload, nil
 }

@@ -41,7 +41,7 @@ func TestLocationRepository_CreateWithNonExistentOwner(t *testing.T) {
 		CreatedAt:    time.Now().UTC(),
 	}
 
-	err := repo.Create(ctx, loc)
+	err := delErr(repo.Create(ctx, loc))
 	require.Error(t, err, "creating a location with a non-existent owner_id must fail")
 }
 
@@ -63,7 +63,7 @@ func TestLocationRepository_CreateWithNonExistentShadowsID(t *testing.T) {
 		CreatedAt:    time.Now().UTC(),
 	}
 
-	err := repo.Create(ctx, loc)
+	err := delErr(repo.Create(ctx, loc))
 	require.Error(t, err, "creating a location with a non-existent shadows_id must fail")
 }
 
@@ -81,8 +81,8 @@ func TestLocationRepository_ConcurrentUpdateConflict(t *testing.T) {
 		ReplayPolicy: "last:0",
 		CreatedAt:    time.Now().UTC(),
 	}
-	require.NoError(t, repo.Create(ctx, loc))
-	t.Cleanup(func() { _ = repo.Delete(ctx, loc.ID) })
+	require.NoError(t, delErr(repo.Create(ctx, loc)))
+	t.Cleanup(func() { _ = delErr(repo.Delete(ctx, loc.ID, 0)) })
 
 	// Lock the row in an open transaction.
 	tx, err := testPool.Begin(ctx)
@@ -97,7 +97,7 @@ func TestLocationRepository_ConcurrentUpdateConflict(t *testing.T) {
 	defer cancel()
 
 	loc.Name = "Should Not Land"
-	err = repo.Update(shortCtx, loc)
+	err = delErr(repo.Update(shortCtx, loc))
 	require.Error(t, err, "update should time out while the row is locked")
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 
@@ -105,7 +105,7 @@ func TestLocationRepository_ConcurrentUpdateConflict(t *testing.T) {
 	require.NoError(t, tx.Rollback(ctx))
 
 	loc.Name = "Updated After Lock"
-	require.NoError(t, repo.Update(ctx, loc))
+	require.NoError(t, delErr(repo.Update(ctx, loc)))
 
 	got, err := repo.Get(ctx, loc.ID)
 	require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestObjectRepository_CreateWithNonExistentLocation(t *testing.T) {
 	obj.Description = "References a non-existent location."
 	obj.CreatedAt = time.Now().UTC()
 
-	err = repo.Create(ctx, obj)
+	err = delErr(repo.Create(ctx, obj))
 	require.Error(t, err, "creating an object with a non-existent location_id must fail")
 }
 
@@ -156,7 +156,7 @@ func TestObjectRepository_CreateWithNonExistentOwner(t *testing.T) {
 	obj.OwnerID = &ghostOwner
 	obj.CreatedAt = time.Now().UTC()
 
-	err = repo.Create(ctx, obj)
+	err = delErr(repo.Create(ctx, obj))
 	require.Error(t, err, "creating an object with a non-existent owner_id must fail")
 }
 
@@ -178,8 +178,8 @@ func TestObjectRepository_ConcurrentUpdateConflict(t *testing.T) {
 	require.NoError(t, err)
 	obj.Description = "For concurrent update test."
 	obj.CreatedAt = time.Now().UTC()
-	require.NoError(t, repo.Create(ctx, obj))
-	t.Cleanup(func() { _ = repo.Delete(ctx, obj.ID) })
+	require.NoError(t, delErr(repo.Create(ctx, obj)))
+	t.Cleanup(func() { _ = delErr(repo.Delete(ctx, obj.ID, 0)) })
 
 	// Lock the row in an open transaction.
 	tx, err := testPool.Begin(ctx)
@@ -194,7 +194,7 @@ func TestObjectRepository_ConcurrentUpdateConflict(t *testing.T) {
 	defer cancel()
 
 	obj.Name = "Should Not Land"
-	err = repo.Update(shortCtx, obj)
+	err = delErr(repo.Update(shortCtx, obj))
 	require.Error(t, err, "update should time out while the row is locked")
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 
@@ -202,7 +202,7 @@ func TestObjectRepository_ConcurrentUpdateConflict(t *testing.T) {
 	require.NoError(t, tx.Rollback(ctx))
 
 	obj.Name = "Updated After Lock"
-	require.NoError(t, repo.Update(ctx, obj))
+	require.NoError(t, delErr(repo.Update(ctx, obj)))
 
 	got, err := repo.Get(ctx, obj.ID)
 	require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestCharacterRepository_CreateWithNonExistentPlayer(t *testing.T) {
 		CreatedAt:   time.Now().UTC(),
 	}
 
-	err := repo.Create(ctx, char)
+	err := delErr(repo.Create(ctx, char))
 	require.Error(t, err, "creating a character for a non-existent player must fail")
 	errutil.AssertErrorCode(t, err, "CHARACTER_CREATE_FAILED")
 }
@@ -253,7 +253,7 @@ func TestCharacterRepository_CreateWithNonExistentLocation(t *testing.T) {
 		CreatedAt:   time.Now().UTC(),
 	}
 
-	err := repo.Create(ctx, char)
+	err := delErr(repo.Create(ctx, char))
 	require.Error(t, err, "creating a character with a non-existent location_id must fail")
 	errutil.AssertErrorCode(t, err, "CHARACTER_CREATE_FAILED")
 }
@@ -285,7 +285,7 @@ func TestExitRepository_CreateWithNonExistentFromLocation(t *testing.T) {
 		Name:           "north",
 	}
 
-	err = repo.Create(ctx, exit)
+	err = delErr(repo.Create(ctx, exit))
 	require.Error(t, err, "creating an exit from a non-existent location must fail")
 }
 
@@ -315,7 +315,7 @@ func TestExitRepository_UniqueNamePerLocation(t *testing.T) {
 		ToLocationID:   toLocID,
 		Name:           "north",
 	}
-	require.NoError(t, repo.Create(ctx, exit1))
+	require.NoError(t, delErr(repo.Create(ctx, exit1)))
 
 	// Second exit with the same from_location_id + name must fail.
 	exit2 := &world.Exit{
@@ -324,6 +324,6 @@ func TestExitRepository_UniqueNamePerLocation(t *testing.T) {
 		ToLocationID:   toLocID,
 		Name:           "north", // same direction — unique constraint violation
 	}
-	err = repo.Create(ctx, exit2)
+	err = delErr(repo.Create(ctx, exit2))
 	require.Error(t, err, "inserting a duplicate (from_location_id, name) exit must fail")
 }

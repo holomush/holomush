@@ -29,9 +29,23 @@ func createTestSceneForSceneRepo(ctx context.Context, t *testing.T, repo *postgr
 		ReplayPolicy: "last:-1",
 		CreatedAt:    time.Now().UTC(),
 	}
-	err := repo.Create(ctx, scene)
+	_, err := repo.Create(ctx, scene)
 	require.NoError(t, err)
 	return scene
+}
+
+// seedParticipant inserts a scene_participants row directly. The world-layer
+// SceneRepository write surface (AddParticipant) was removed in 05-14 (D-07);
+// the read methods still SELECT/JOIN public.scene_participants, so read tests
+// seed the kept table via SQL.
+func seedParticipant(ctx context.Context, t *testing.T, sceneID, characterID ulid.ULID, role world.ParticipantRole) {
+	t.Helper()
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
+		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
+		ON CONFLICT (scene_id, character_id) DO UPDATE SET role = $3
+	`, sceneID.String(), characterID.String(), role.String())
+	require.NoError(t, err)
 }
 
 // createTestCharacterForSceneRepo creates a character in the database for testing.
@@ -71,87 +85,6 @@ func createTestCharacterForSceneRepo(ctx context.Context, t *testing.T, name str
 	return charID.String()
 }
 
-func TestSceneRepository_AddParticipant(t *testing.T) {
-	ctx := context.Background()
-	sceneRepo := postgres.NewSceneRepository(testPool)
-	locationRepo := postgres.NewLocationRepository(testPool)
-
-	scene := createTestSceneForSceneRepo(ctx, t, locationRepo, "Test Scene")
-	charIDStr := createTestCharacterForSceneRepo(ctx, t, "TestChar")
-	charID, err := ulid.Parse(charIDStr)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(ctx, `DELETE FROM scene_participants WHERE scene_id = $1`, scene.ID.String())
-		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charIDStr)
-		_ = locationRepo.Delete(ctx, scene.ID)
-	})
-
-	t.Run("adds new participant", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, world.RoleMember)
-		require.NoError(t, err)
-
-		participants, err := sceneRepo.ListParticipants(ctx, scene.ID)
-		require.NoError(t, err)
-		assert.Len(t, participants, 1)
-		assert.Equal(t, charID, participants[0].CharacterID)
-		assert.Equal(t, world.RoleMember, participants[0].Role)
-	})
-
-	t.Run("updates role on conflict", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, world.RoleOwner)
-		require.NoError(t, err)
-
-		participants, err := sceneRepo.ListParticipants(ctx, scene.ID)
-		require.NoError(t, err)
-		assert.Len(t, participants, 1)
-		assert.Equal(t, world.RoleOwner, participants[0].Role)
-	})
-
-	t.Run("returns ErrNotFound for non-existent scene", func(t *testing.T) {
-		nonExistentSceneID := ulid.Make()
-		err := sceneRepo.AddParticipant(ctx, nonExistentSceneID, charID, world.RoleMember)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrNotFound)
-	})
-}
-
-func TestSceneRepository_RemoveParticipant(t *testing.T) {
-	ctx := context.Background()
-	sceneRepo := postgres.NewSceneRepository(testPool)
-	locationRepo := postgres.NewLocationRepository(testPool)
-
-	scene := createTestSceneForSceneRepo(ctx, t, locationRepo, "Remove Test Scene")
-	charIDStr := createTestCharacterForSceneRepo(ctx, t, "RemoveTestChar")
-	charID, err := ulid.Parse(charIDStr)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(ctx, `DELETE FROM scene_participants WHERE scene_id = $1`, scene.ID.String())
-		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charIDStr)
-		_ = locationRepo.Delete(ctx, scene.ID)
-	})
-
-	t.Run("removes existing participant", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, world.RoleMember)
-		require.NoError(t, err)
-
-		err = sceneRepo.RemoveParticipant(ctx, scene.ID, charID)
-		require.NoError(t, err)
-
-		participants, err := sceneRepo.ListParticipants(ctx, scene.ID)
-		require.NoError(t, err)
-		assert.Empty(t, participants)
-	})
-
-	t.Run("returns error when not found", func(t *testing.T) {
-		nonExistentID := ulid.Make()
-		err := sceneRepo.RemoveParticipant(ctx, scene.ID, nonExistentID)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrNotFound)
-	})
-}
-
 func TestSceneRepository_ListParticipants(t *testing.T) {
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)
@@ -170,14 +103,12 @@ func TestSceneRepository_ListParticipants(t *testing.T) {
 		_, _ = testPool.Exec(ctx, `DELETE FROM scene_participants WHERE scene_id = $1`, scene.ID.String())
 		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, char1Str)
 		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, char2Str)
-		_ = locationRepo.Delete(ctx, scene.ID)
+		_, _ = locationRepo.Delete(ctx, scene.ID, 0)
 	})
 
 	t.Run("returns all participants", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene.ID, char1, world.RoleOwner)
-		require.NoError(t, err)
-		err = sceneRepo.AddParticipant(ctx, scene.ID, char2, world.RoleMember)
-		require.NoError(t, err)
+		seedParticipant(ctx, t, scene.ID, char1, world.RoleOwner)
+		seedParticipant(ctx, t, scene.ID, char2, world.RoleMember)
 
 		participants, err := sceneRepo.ListParticipants(ctx, scene.ID)
 		require.NoError(t, err)
@@ -187,7 +118,7 @@ func TestSceneRepository_ListParticipants(t *testing.T) {
 	t.Run("returns empty for no participants", func(t *testing.T) {
 		emptyScene := createTestSceneForSceneRepo(ctx, t, locationRepo, "Empty Scene")
 		t.Cleanup(func() {
-			_ = locationRepo.Delete(ctx, emptyScene.ID)
+			_, _ = locationRepo.Delete(ctx, emptyScene.ID, 0)
 		})
 
 		participants, err := sceneRepo.ListParticipants(ctx, emptyScene.ID)
@@ -218,15 +149,13 @@ func TestSceneRepository_GetScenesFor(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = testPool.Exec(ctx, `DELETE FROM scene_participants WHERE character_id = $1`, charIDStr)
 		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charIDStr)
-		_ = locationRepo.Delete(ctx, scene1.ID)
-		_ = locationRepo.Delete(ctx, scene2.ID)
+		_, _ = locationRepo.Delete(ctx, scene1.ID, 0)
+		_, _ = locationRepo.Delete(ctx, scene2.ID, 0)
 	})
 
 	t.Run("returns all scenes for character", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene1.ID, charID, world.RoleMember)
-		require.NoError(t, err)
-		err = sceneRepo.AddParticipant(ctx, scene2.ID, charID, world.RoleOwner)
-		require.NoError(t, err)
+		seedParticipant(ctx, t, scene1.ID, charID, world.RoleMember)
+		seedParticipant(ctx, t, scene2.ID, charID, world.RoleOwner)
 
 		scenes, err := sceneRepo.GetScenesFor(ctx, charID)
 		require.NoError(t, err)
@@ -261,12 +190,12 @@ func TestSceneRepository_GetScenesFor(t *testing.T) {
 		t.Cleanup(func() {
 			_, _ = testPool.Exec(ctx, `DELETE FROM scene_participants WHERE scene_id = $1`, removeScene.ID.String())
 			_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, removeCharStr)
-			_ = locationRepo.Delete(ctx, removeScene.ID)
+			_, _ = locationRepo.Delete(ctx, removeScene.ID, 0)
 		})
 
-		err = sceneRepo.AddParticipant(ctx, removeScene.ID, removeChar, world.RoleMember)
-		require.NoError(t, err)
-		err = sceneRepo.RemoveParticipant(ctx, removeScene.ID, removeChar)
+		seedParticipant(ctx, t, removeScene.ID, removeChar, world.RoleMember)
+		_, err = testPool.Exec(ctx, `DELETE FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+			removeScene.ID.String(), removeChar.String())
 		require.NoError(t, err)
 
 		scenes, err := sceneRepo.GetScenesFor(ctx, removeChar)

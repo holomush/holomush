@@ -30,21 +30,13 @@ type GuestNamer interface {
 }
 
 // GuestCharacterRepository is the subset of character repo needed by GuestService.
+//
+// It deliberately no longer exposes Create: guest characters are created only
+// through the CharacterGenesisService, which commits the character + binding +
+// genesis envelope atomically (the compile-level fence, 05-15). Only the
+// name-uniqueness read remains.
 type GuestCharacterRepository interface {
-	Create(ctx context.Context, char *world.Character) error
 	ExistsByName(ctx context.Context, name string) (bool, error)
-}
-
-// GuestTransactor begins a database transaction and calls fn with a
-// Tx-scoped context. Commit on success, rollback on error.
-type GuestTransactor interface {
-	InTransaction(ctx context.Context, fn func(ctx context.Context) error) error
-}
-
-// GuestBindingCreator creates a new active player↔character binding.
-// Returns the new binding ID.
-type GuestBindingCreator interface {
-	Create(ctx context.Context, playerID, characterID, reason string) (string, error)
 }
 
 // GuestResult holds everything created during guest account setup.
@@ -57,23 +49,28 @@ type GuestResult struct {
 
 // GuestService creates ephemeral guest players.
 type GuestService struct {
-	namer      GuestNamer
-	players    PlayerRepository
-	chars      GuestCharacterRepository
-	sessions   PlayerSessionRepository
-	transactor GuestTransactor
-	bindings   GuestBindingCreator
+	namer    GuestNamer
+	players  PlayerRepository
+	chars    GuestCharacterRepository
+	sessions PlayerSessionRepository
+	genesis  CharacterGenesis
+	cleaner  GuestCleaner
 }
 
 // NewGuestService creates a new GuestService.
 // Returns an error if any required dependency is nil.
+//
+// cleaner is the tombstone-emitting CharacterReapingService (05-16 / round-5
+// D-06): failed-guest cleanup routes character deletion through it so a
+// partially-created guest's character is tombstoned through the world boundary
+// before the player is deleted — never removed by a silent FK cascade.
 func NewGuestService(
 	namer GuestNamer,
 	players PlayerRepository,
 	chars GuestCharacterRepository,
 	sessions PlayerSessionRepository,
-	transactor GuestTransactor,
-	bindings GuestBindingCreator,
+	genesis CharacterGenesis,
+	cleaner GuestCleaner,
 ) (*GuestService, error) {
 	if namer == nil {
 		return nil, oops.Errorf("guest namer is required")
@@ -87,25 +84,34 @@ func NewGuestService(
 	if sessions == nil {
 		return nil, oops.Errorf("player sessions repository is required")
 	}
-	if transactor == nil {
-		return nil, oops.Errorf("transactor is required")
+	if genesis == nil {
+		return nil, oops.Errorf("character genesis service is required")
 	}
-	if bindings == nil {
-		return nil, oops.Errorf("binding creator is required")
+	if cleaner == nil {
+		return nil, oops.Errorf("guest cleaner is required")
 	}
 	return &GuestService{
-		namer:      namer,
-		players:    players,
-		chars:      chars,
-		sessions:   sessions,
-		transactor: transactor,
-		bindings:   bindings,
+		namer:    namer,
+		players:  players,
+		chars:    chars,
+		sessions: sessions,
+		genesis:  genesis,
+		cleaner:  cleaner,
 	}, nil
 }
 
 // CreateGuest creates an ephemeral guest player with a character and session.
-// Player, character, and binding creation are atomic (single transaction).
-// Session creation is outside the transaction (separate concern).
+//
+// Ordering (round-4 B4): the guest PLAYER is committed FIRST on its own pool
+// (auth/postgres.PlayerRepository does not enroll in the world transaction), so
+// the character's player_id FK targets a committed row. Then the CharacterGenesis
+// service commits the character + initial_bind_guest binding + genesis envelope
+// ATOMICALLY (the sound narrow atomic unit — an outer rollback removes those
+// three together). The player is NOT part of that transaction: if genesis fails
+// AFTER the player commit, an orphan guest player remains (no character) — an
+// accepted, documented compensation gap reconciled by re-run / guest cleanup;
+// it is OUTSIDE INV-WORLD-4 (which binds the character↔genesis-envelope pairing).
+// Session creation is outside the genesis transaction (separate concern).
 func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	// Generate a unique name not already in the database.
 	name, err := s.acquireUniqueName(ctx)
@@ -131,22 +137,21 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	}
 	char.LocationID = &startLoc
 
-	// Atomically create player, character, and binding in a single transaction.
-	// If any step fails, all three are rolled back — no orphan rows.
-	if txErr := s.transactor.InTransaction(ctx, func(txCtx context.Context) error {
-		if pErr := s.players.Create(txCtx, player); pErr != nil {
-			return oops.Code("GUEST_CREATE_FAILED").With("player_id", player.ID.String()).Wrap(pErr)
-		}
-		if cErr := s.chars.Create(txCtx, char); cErr != nil {
-			return oops.Code("GUEST_CREATE_FAILED").With("character_id", char.ID.String()).Wrap(cErr)
-		}
-		if _, bErr := s.bindings.Create(txCtx, player.ID.String(), char.ID.String(), "initial_bind_guest"); bErr != nil {
-			return oops.Code("CHARACTER_CREATE_BINDING_FAILED").Wrap(bErr)
-		}
-		return nil
-	}); txErr != nil {
+	// Commit the guest player FIRST (its own pool) so the character's player_id
+	// FK targets a committed row (round-4 B4 ordering).
+	if pErr := s.players.Create(ctx, player); pErr != nil {
 		s.namer.ReleaseGuest(name)
-		return nil, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(txErr)
+		return nil, oops.Code("GUEST_CREATE_FAILED").With("player_id", player.ID.String()).Wrap(pErr)
+	}
+
+	// Then create the character + initial_bind_guest binding + genesis envelope
+	// ATOMICALLY through the genesis service (the narrow sound atomic unit). On
+	// failure the character/binding/envelope roll back together; the already-
+	// committed player is cleaned up best-effort (orphan-player compensation).
+	if gErr := s.genesis.Create(ctx, char, "initial_bind_guest"); gErr != nil {
+		s.namer.ReleaseGuest(name)
+		s.cleanupGuestPlayer(ctx, player.ID) // best-effort orphan-player compensation
+		return nil, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(gErr)
 	}
 
 	// Best-effort: update the player's default character.
@@ -190,10 +195,17 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	}, nil
 }
 
-// cleanupGuestPlayer best-effort deletes an orphaned guest player and its
-// cascaded dependents (characters, player_sessions via FK CASCADE).
+// cleanupGuestPlayer best-effort cleans up an orphaned/partial guest player
+// through the tombstone-emitting reaping service (round-5 D-06): each of the
+// guest's characters is deleted through the world CharacterWriter.Delete AND a
+// character_deleted tombstone envelope, then the player is deleted — so a
+// character committed by a successful genesis but abandoned by a later
+// token/session failure never leaves the feed via genesis-without-tombstone.
+// (For a genesis that failed before committing a character, the reaping service
+// simply marks + deletes the player with zero characters to tombstone.)
+// Best-effort: failures are logged, not propagated.
 func (s *GuestService) cleanupGuestPlayer(ctx context.Context, playerID ulid.ULID) {
-	if err := s.players.Delete(ctx, playerID); err != nil {
+	if err := s.cleaner.DeleteGuestPlayer(ctx, playerID); err != nil {
 		slog.WarnContext(ctx, "guest_service: failed to clean up orphaned guest player",
 			"player_id", playerID.String(), "error", err)
 	}

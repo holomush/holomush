@@ -57,7 +57,7 @@ func (r *PropertyRepository) Create(ctx context.Context, p *world.EntityProperty
 	// Update (property_repo.go:135) — app-side time.Now() vs PG's NOW() can
 	// drift, breaking any reader that ORDERs BY updated_at across rows
 	// touched by both methods (holomush-gfo6.32 follow-up to gfo6.28 pattern).
-	_, err = r.pool.Exec(ctx, `
+	_, err = execerFromCtx(ctx, r.pool).Exec(ctx, `
 		INSERT INTO entity_properties (id, parent_type, parent_id, name, value, owner, visibility, flags, visible_to, excluded_from, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
 	`, p.ID.String(), p.ParentType, p.ParentID.String(), p.Name, p.Value, p.Owner,
@@ -133,7 +133,7 @@ func (r *PropertyRepository) Update(ctx context.Context, p *world.EntityProperty
 		return oops.Code("PROPERTY_UPDATE_FAILED").With("id", p.ID.String()).Wrap(err)
 	}
 
-	result, err := r.pool.Exec(ctx, `
+	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
 		UPDATE entity_properties
 		SET name = $2, value = $3, owner = $4, visibility = $5, flags = $6,
 		    visible_to = $7, excluded_from = $8, updated_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT

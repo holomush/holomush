@@ -23,6 +23,7 @@ import (
 
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
+	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/command"
@@ -328,23 +329,66 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	authCharRepo := bootstrapsetup.NewCharRepoAdapter(pool, charRepo)
 	authLocRepo := bootstrapsetup.NewLocRepoAdapter(&startLocationID, locRepo)
 
-	characterService, charErr := auth.NewCharacterService(authCharRepo, authLocRepo)
+	// 5. Create binding repository and transactor (shared with the genesis service).
+	bindingRepo := worldpostgres.NewBindingRepository(pool)
+	transactor := worldpostgres.NewTransactor(pool)
+
+	// 5a. Build the atomic character-genesis service (character + optional binding
+	// + genesis envelope in one world transaction, 05-15). Its concrete char
+	// writer, transactor, binding repo, and outbox store share the same pool so
+	// all three enroll in the same world txKey. It is the ONLY production path
+	// that inserts a character.
+	genesis, genErr := auth.NewCharacterGenesisService(
+		charRepo,
+		transactor,
+		bindingRepo,
+		worldpostgres.NewOutboxStore(pool),
+		worldpostgres.NewReapingGuard(pool),
+	)
+	if genErr != nil {
+		return oops.Code("CHARACTER_GENESIS_SERVICE_FAILED").Wrap(genErr)
+	}
+
+	characterService, charErr := auth.NewCharacterService(authCharRepo, authLocRepo, genesis)
 	if charErr != nil {
 		return oops.Code("CHARACTER_SERVICE_FAILED").Wrap(charErr)
 	}
 
-	// 5. Create binding repository and transactor for atomic character + binding creation.
-	bindingRepo := worldpostgres.NewBindingRepository(pool)
-	transactor := worldpostgres.NewTransactor(pool)
+	// 5a'. Build the atomic character-reaping service (05-16 / round-5 D-06): the
+	// tombstone-emitting DELETION counterpart to the genesis service. For each of a
+	// guest's characters it runs {property cascade + guarded world Delete +
+	// character_deleted envelope} in one re-entrant world tx, then deletes the
+	// player. It reaps through the version-scanning CharacterRepository.ListByPlayer
+	// (R6-1) + guarded Delete, the world property repo (R6-3 cascade parity), the
+	// same outbox store + transactor as genesis, and the concrete auth player repo
+	// (MarkReaping + DeleteGuestPlayer, own pool). Both guest-deletion paths — the
+	// reaper and failed-guest cleanup — route through it.
+	reapPlayerRepo := authpostgres.NewPlayerRepository(pool)
+	reapingService, reapErr := auth.NewCharacterReapingService(
+		charRepo, // version-scanning ListByPlayer (R6-1)
+		charRepo, // guarded tombstone-delta Delete
+		worldpostgres.NewPropertyRepository(pool),
+		bindingRepo, // hard-deletes guest bindings in-tx (RESTRICT FK, guest teardown)
+		transactor,
+		worldpostgres.NewOutboxStore(pool),
+		reapPlayerRepo, // DeleteGuestPlayer (own pool, ordered after tombstones)
+		reapPlayerRepo, // MarkReaping (R6-2 anti-TOCTOU)
+	)
+	if reapErr != nil {
+		return oops.Code("CHARACTER_REAPING_SERVICE_FAILED").Wrap(reapErr)
+	}
 
-	// 5b. Create guest service for gRPC-based guest login (web client).
+	// 5b. Create guest service for gRPC-based guest login (web client). Guest
+	// creation commits the player first (own pool), then routes character +
+	// binding + envelope through the genesis service. Failed-guest cleanup routes
+	// through the reaping service (tombstone-emitting).
 	guestService, guestSvcErr := auth.NewGuestService(
 		guestAuth,
 		authPlayerRepo,
 		authCharRepo,
 		authPlayerSessionRepo,
-		transactor,
-		bindingRepo,
+		genesis,
+		reapingService,
 	)
 	if guestSvcErr != nil {
 		return oops.Code("GUEST_SERVICE_FAILED").Wrap(guestSvcErr)
@@ -493,7 +537,6 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			}
 		}),
 		holoGRPC.WithGuestService(guestService),
-		holoGRPC.WithTransactor(transactor),
 		holoGRPC.WithBindingRepository(bindingRepo),
 		holoGRPC.WithCryptoActive(cryptoActiveFor(s.cfg)),
 		holoGRPC.WithStreamContributor(pluginManager),
@@ -520,8 +563,11 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	})
 	// Character-scope settings: repo-backed over characters.preferences
 	// (iokti.5). Owner-partitioned, persisted via read-modify-write.
+	// The preferences WRITE routes through the world boundary
+	// (world.Service.UpdateCharacterPreferences — version-guarded + enveloped;
+	// round-4 C5 / D-05); the READ stays a direct pool read.
 	characterSettings := settings.NewRepoCharacterSettingsStore(
-		store.NewCharacterSettingsRepository(pool),
+		store.NewCharacterSettingsRepository(pool, worldService),
 	)
 	focusCoordOpts := []holoFocus.CoordinatorOption{
 		holoFocus.WithSessionStore(sessionStore),
@@ -711,11 +757,15 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	})
 	go s.sessionReaper.Run(reaperCtx)
 
-	// 11. Create and start guest reaper.
+	// 11. Create and start guest reaper. Its cleaner is the tombstone-emitting
+	// reaping service (05-16 / D-06) — each reaped guest's characters are deleted
+	// through the world CharacterWriter.Delete + a character_deleted tombstone
+	// before the player is deleted, so guest expiration cannot produce
+	// genesis-without-tombstone feed history. The lister stays the auth player repo.
 	s.guestReaper = auth.NewGuestReaper(auth.GuestReaperConfig{
 		Interval: 1 * time.Minute,
 		IdleTTL:  10 * time.Minute,
-	}, authPlayerRepo, authPlayerRepo)
+	}, authPlayerRepo, reapingService)
 	go s.guestReaper.Run(reaperCtx)
 
 	// 12. Bind TCP listener.

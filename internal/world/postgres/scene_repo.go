@@ -23,55 +23,12 @@ func NewSceneRepository(pool *pgxpool.Pool) *SceneRepository {
 	return &SceneRepository{pool: pool}
 }
 
-// AddParticipant adds a character to a scene.
-func (r *SceneRepository) AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role world.ParticipantRole) error {
-	// Check if the scene exists
-	var exists bool
-	err := r.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM locations WHERE id = $1 AND type = 'scene')`,
-		sceneID.String()).Scan(&exists)
-	if err != nil {
-		return oops.With("operation", "check scene exists").With("scene_id", sceneID.String()).Wrap(err)
-	}
-	if !exists {
-		return oops.With("scene_id", sceneID.String()).Wrap(world.ErrNotFound)
-	}
-
-	_, err = r.pool.Exec(ctx, `
-		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
-		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
-		ON CONFLICT (scene_id, character_id) DO UPDATE SET role = $3
-	`, sceneID.String(), characterID.String(), role.String())
-	if err != nil {
-		return oops.
-			With("operation", "add participant").
-			With("scene_id", sceneID.String()).
-			With("character_id", characterID.String()).
-			Wrap(err)
-	}
-	return nil
-}
-
-// RemoveParticipant removes a character from a scene.
-func (r *SceneRepository) RemoveParticipant(ctx context.Context, sceneID, characterID ulid.ULID) error {
-	result, err := r.pool.Exec(ctx, `
-		DELETE FROM scene_participants WHERE scene_id = $1 AND character_id = $2
-	`, sceneID.String(), characterID.String())
-	if err != nil {
-		return oops.
-			With("operation", "remove participant").
-			With("scene_id", sceneID.String()).
-			With("character_id", characterID.String()).
-			Wrap(err)
-	}
-	if result.RowsAffected() == 0 {
-		return oops.
-			With("scene_id", sceneID.String()).
-			With("character_id", characterID.String()).
-			Wrap(world.ErrNotFound)
-	}
-	return nil
-}
+// Round-5 D-07: the vestigial world scene-participant WRITE surface
+// (AddParticipant/RemoveParticipant) was removed — it had no production caller
+// outside _test.go. The READ methods below are KEPT and still SELECT/JOIN
+// public.scene_participants; the physical table DROP is deferred to #4815.
+// plugins/core-scenes owns its own plugin_core_scenes.scene_participants schema
+// and is untouched.
 
 // ListParticipants returns all participants in a scene.
 func (r *SceneRepository) ListParticipants(ctx context.Context, sceneID ulid.ULID) ([]world.SceneParticipant, error) {
@@ -127,7 +84,7 @@ func (r *SceneRepository) ListParticipants(ctx context.Context, sceneID ulid.ULI
 // GetScenesFor returns all scenes a character is participating in.
 func (r *SceneRepository) GetScenesFor(ctx context.Context, characterID ulid.ULID) ([]*world.Location, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT l.id, l.type, l.shadows_id, l.name, l.description, l.owner_id, l.replay_policy, l.created_at, l.archived_at
+		SELECT l.id, l.type, l.shadows_id, l.name, l.description, l.owner_id, l.replay_policy, l.created_at, l.archived_at, l.version
 		FROM locations l
 		INNER JOIN scene_participants sp ON l.id = sp.scene_id
 		WHERE sp.character_id = $1

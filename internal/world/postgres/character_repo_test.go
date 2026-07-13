@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -77,11 +78,11 @@ func TestCharacterRepository_Get(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, char)
+		err := delErr(repo.Create(ctx, char))
 		require.NoError(t, err)
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		got, err := repo.Get(ctx, char.ID)
@@ -106,11 +107,11 @@ func TestCharacterRepository_Get(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, char)
+		err := delErr(repo.Create(ctx, char))
 		require.NoError(t, err)
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		got, err := repo.Get(ctx, char.ID)
@@ -150,12 +151,12 @@ func TestCharacterRepository_GetByLocation(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char1))
-		require.NoError(t, repo.Create(ctx, char2))
+		require.NoError(t, delErr(repo.Create(ctx, char1)))
+		require.NoError(t, delErr(repo.Create(ctx, char2)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char1.ID)
-			_ = repo.Delete(ctx, char2.ID)
+			_ = delErr(repo.Delete(ctx, char1.ID, 0))
+			_ = delErr(repo.Delete(ctx, char2.ID, 0))
 		})
 
 		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{})
@@ -192,12 +193,12 @@ func TestCharacterRepository_GetByLocation_Pagination(t *testing.T) {
 			LocationID:  &locationID,
 			CreatedAt:   time.Now().UTC(),
 		}
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 	}
 
 	t.Cleanup(func() {
 		for _, id := range charIDs {
-			_ = repo.Delete(ctx, id)
+			_ = delErr(repo.Delete(ctx, id, 0))
 		}
 	})
 
@@ -264,11 +265,11 @@ func TestCharacterRepository_Create(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, char)
+		err := delErr(repo.Create(ctx, char))
 		require.NoError(t, err)
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		// Verify creation
@@ -289,11 +290,11 @@ func TestCharacterRepository_Create(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		err := repo.Create(ctx, char)
+		err := delErr(repo.Create(ctx, char))
 		require.NoError(t, err)
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		got, err := repo.Get(ctx, char.ID)
@@ -319,15 +320,15 @@ func TestCharacterRepository_Update(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		char.Name = "UpdatedName"
 		char.Description = "Updated description."
-		err := repo.Update(ctx, char)
+		err := delErr(repo.Update(ctx, char))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, char.ID)
@@ -345,7 +346,7 @@ func TestCharacterRepository_Update(t *testing.T) {
 			Description: "Does not exist.",
 		}
 
-		err := repo.Update(ctx, char)
+		err := delErr(repo.Update(ctx, char))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
@@ -368,9 +369,9 @@ func TestCharacterRepository_Delete(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
-		err := repo.Delete(ctx, char.ID)
+		err := delErr(repo.Delete(ctx, char.ID, 0))
 		require.NoError(t, err)
 
 		_, err = repo.Get(ctx, char.ID)
@@ -378,7 +379,7 @@ func TestCharacterRepository_Delete(t *testing.T) {
 	})
 
 	t.Run("returns ErrNotFound for non-existent character", func(t *testing.T) {
-		err := repo.Delete(ctx, ulid.Make())
+		err := delErr(repo.Delete(ctx, ulid.Make(), 0))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
@@ -400,10 +401,10 @@ func TestCharacterRepository_IsOwnedByPlayer(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		owned, err := repo.IsOwnedByPlayer(ctx, char.ID, playerID)
@@ -423,10 +424,10 @@ func TestCharacterRepository_IsOwnedByPlayer(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
 		owned, err := repo.IsOwnedByPlayer(ctx, char.ID, otherPlayerID)
@@ -461,12 +462,12 @@ func TestCharacterRepository_GetNamesByIDs(t *testing.T) {
 		Name:      "bob",
 		CreatedAt: time.Now().UTC(),
 	}
-	require.NoError(t, repo.Create(ctx, char1))
-	require.NoError(t, repo.Create(ctx, char2))
+	require.NoError(t, delErr(repo.Create(ctx, char1)))
+	require.NoError(t, delErr(repo.Create(ctx, char2)))
 
 	t.Cleanup(func() {
-		_ = repo.Delete(ctx, char1.ID)
-		_ = repo.Delete(ctx, char2.ID)
+		_ = delErr(repo.Delete(ctx, char1.ID, 0))
+		_ = delErr(repo.Delete(ctx, char2.ID, 0))
 	})
 
 	t.Run("returns names for present IDs, omits missing IDs", func(t *testing.T) {
@@ -512,13 +513,13 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
-		err := repo.UpdateLocation(ctx, char.ID, &loc2)
+		err := delErr(repo.UpdateLocation(ctx, char.ID, &loc2, 0))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, char.ID)
@@ -540,13 +541,13 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 			CreatedAt:   time.Now().UTC(),
 		}
 
-		require.NoError(t, repo.Create(ctx, char))
+		require.NoError(t, delErr(repo.Create(ctx, char)))
 
 		t.Cleanup(func() {
-			_ = repo.Delete(ctx, char.ID)
+			_ = delErr(repo.Delete(ctx, char.ID, 0))
 		})
 
-		err := repo.UpdateLocation(ctx, char.ID, nil)
+		err := delErr(repo.UpdateLocation(ctx, char.ID, nil, 0))
 		require.NoError(t, err)
 
 		got, err := repo.Get(ctx, char.ID)
@@ -557,7 +558,7 @@ func TestCharacterRepository_UpdateLocation(t *testing.T) {
 	t.Run("returns ErrNotFound for non-existent character", func(t *testing.T) {
 		locationID := createTestLocation(ctx, t)
 
-		err := repo.UpdateLocation(ctx, ulid.Make(), &locationID)
+		err := delErr(repo.UpdateLocation(ctx, ulid.Make(), &locationID, 0))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
@@ -574,11 +575,11 @@ func TestCharacterRepository_ListAll(t *testing.T) {
 	// before "ZZZ-" under ORDER BY name ASC.
 	alice := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "AAA-" + ulid.Make().String()}
 	bob := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "ZZZ-" + ulid.Make().String()}
-	require.NoError(t, repo.Create(ctx, alice))
-	require.NoError(t, repo.Create(ctx, bob))
+	require.NoError(t, delErr(repo.Create(ctx, alice)))
+	require.NoError(t, delErr(repo.Create(ctx, bob)))
 	t.Cleanup(func() {
-		_ = repo.Delete(ctx, alice.ID)
-		_ = repo.Delete(ctx, bob.ID)
+		_ = delErr(repo.Delete(ctx, alice.ID, 0))
+		_ = delErr(repo.Delete(ctx, bob.ID, 0))
 	})
 
 	got, err := repo.ListAll(ctx)
@@ -599,4 +600,351 @@ func TestCharacterRepository_ListAll(t *testing.T) {
 	require.NotEqual(t, -1, idxAlice, "ListAll must include the first seeded character")
 	require.NotEqual(t, -1, idxBob, "ListAll must include the second seeded character")
 	assert.Less(t, idxAlice, idxBob, "ListAll must be ordered by name ascending")
+}
+
+// characterDBVersion reads the stored version column directly (out-of-band of the
+// repo) so a test can assert the guard did/did not advance the row.
+func characterDBVersion(ctx context.Context, t *testing.T, id ulid.ULID) int {
+	t.Helper()
+	var v int
+	err := testPool.QueryRow(ctx, `SELECT version FROM characters WHERE id = $1`, id.String()).Scan(&v)
+	require.NoError(t, err)
+	return v
+}
+
+// characterDBPreferences reads the stored preferences JSONB directly (out-of-band
+// of the repo) so a test can assert the guarded write landed the bytes.
+func characterDBPreferences(ctx context.Context, t *testing.T, id ulid.ULID) []byte {
+	t.Helper()
+	var raw []byte
+	err := testPool.QueryRow(ctx, `SELECT preferences FROM characters WHERE id = $1`, id.String()).Scan(&raw)
+	require.NoError(t, err)
+	return raw
+}
+
+// TestCharacterRepository_UpdatePreferencesVersionGuard binds MODEL-03 for the
+// folded-in character-settings write (round-4 C5 / D-05): the preferences write
+// lives in the world boundary and is version-guarded, so a stale writer surfaces
+// WORLD_CONCURRENT_EDIT rather than a silent last-write-wins.
+func TestCharacterRepository_UpdatePreferencesVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	newChar := func(t *testing.T, name string) *world.Character {
+		t.Helper()
+		playerID := createTestPlayer(ctx, t)
+		return &world.Character{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			Name:      name,
+			CreatedAt: time.Now().UTC(),
+		}
+	}
+
+	t.Run("successful preferences update increments version and lands bytes", func(t *testing.T) {
+		char := newChar(t, "prefs-ok")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		require.Equal(t, 1, char.Version)
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+
+		prefs := []byte(`{"host":"eyJrIjoidiJ9"}`)
+		delta, err := repo.UpdatePreferences(ctx, char.ID, prefs, char.Version)
+		require.NoError(t, err)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+		assert.Equal(t, 2, delta.Primary.AfterVersion)
+		assert.Equal(t, 2, characterDBVersion(ctx, t, char.ID))
+		assert.JSONEq(t, string(prefs), string(characterDBPreferences(ctx, t, char.ID)))
+	})
+
+	t.Run("stale-version preferences update returns WORLD_CONCURRENT_EDIT", func(t *testing.T) {
+		char := newChar(t, "prefs-stale")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+
+		// A concurrent winner advances the row past the caller's read version.
+		_, err := testPool.Exec(ctx, `UPDATE characters SET version = version + 1 WHERE id = $1`, char.ID.String())
+		require.NoError(t, err)
+
+		_, err = repo.UpdatePreferences(ctx, char.ID, []byte(`{"host":"bG9zZXI="}`), 1)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+	})
+
+	t.Run("preferences update of an absent character returns CHARACTER_NOT_FOUND", func(t *testing.T) {
+		_, err := repo.UpdatePreferences(ctx, ulid.Make(), []byte(`{}`), 3)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
+	})
+}
+
+// TestCharacterRepository_UpdateVersionGuard binds MODEL-03 for character Update.
+func TestCharacterRepository_UpdateVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	newChar := func(t *testing.T, name string) *world.Character {
+		t.Helper()
+		playerID := createTestPlayer(ctx, t)
+		locationID := createTestLocation(ctx, t)
+		return &world.Character{
+			ID:          ulid.Make(),
+			PlayerID:    playerID,
+			Name:        name,
+			Description: "d",
+			LocationID:  &locationID,
+			CreatedAt:   time.Now().UTC(),
+		}
+	}
+
+	t.Run("create populates version 1 and Get reads it back", func(t *testing.T) {
+		char := newChar(t, "guard-create")
+		delta, err := repo.Create(ctx, char)
+		require.NoError(t, err)
+		assert.Equal(t, 1, char.Version)
+		assert.Equal(t, 1, delta.Primary.AfterVersion)
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+
+		got, err := repo.Get(ctx, char.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 1, got.Version)
+	})
+
+	t.Run("successful update increments version by 1 and refreshes struct", func(t *testing.T) {
+		char := newChar(t, "guard-update")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		require.Equal(t, 1, char.Version)
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+
+		char.Name = "guard-update-v2"
+		delta, err := repo.Update(ctx, char)
+		require.NoError(t, err)
+		assert.Equal(t, 2, char.Version)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+		assert.Equal(t, 2, delta.Primary.AfterVersion)
+		assert.Equal(t, 2, characterDBVersion(ctx, t, char.ID))
+	})
+
+	t.Run("stale-version update returns WORLD_CONCURRENT_EDIT and does not overwrite", func(t *testing.T) {
+		char := newChar(t, "guard-stale")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+
+		// A concurrent winner advances the row past the caller's read version.
+		_, err := testPool.Exec(ctx, `UPDATE characters SET version = version + 1, name = $2 WHERE id = $1`,
+			char.ID.String(), "winner")
+		require.NoError(t, err)
+
+		char.Name = "loser"
+		_, err = repo.Update(ctx, char)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+
+		got, err := repo.Get(ctx, char.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "winner", got.Name)
+	})
+
+	t.Run("update of an absent character returns CHARACTER_NOT_FOUND", func(t *testing.T) {
+		playerID := createTestPlayer(ctx, t)
+		char := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "ghost", Version: 4}
+		_, err := repo.Update(ctx, char)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
+	})
+}
+
+// TestCharacterRepository_MoveVersionGuard binds MODEL-03 for the character move
+// write (UpdateLocation), which now carries expectedVersion.
+func TestCharacterRepository_MoveVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	newChar := func(t *testing.T, name string) *world.Character {
+		t.Helper()
+		playerID := createTestPlayer(ctx, t)
+		locationID := createTestLocation(ctx, t)
+		return &world.Character{
+			ID:         ulid.Make(),
+			PlayerID:   playerID,
+			Name:       name,
+			LocationID: &locationID,
+			CreatedAt:  time.Now().UTC(),
+		}
+	}
+
+	t.Run("successful move increments version", func(t *testing.T) {
+		char := newChar(t, "move-ok")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+		dest := createTestLocation(ctx, t)
+
+		delta, err := repo.UpdateLocation(ctx, char.ID, &dest, char.Version)
+		require.NoError(t, err)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+		assert.Equal(t, 2, delta.Primary.AfterVersion)
+		assert.Equal(t, 2, characterDBVersion(ctx, t, char.ID))
+	})
+
+	t.Run("stale-version move returns WORLD_CONCURRENT_EDIT", func(t *testing.T) {
+		char := newChar(t, "move-stale")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+		dest := createTestLocation(ctx, t)
+
+		_, err := testPool.Exec(ctx, `UPDATE characters SET version = version + 1 WHERE id = $1`, char.ID.String())
+		require.NoError(t, err)
+
+		_, err = repo.UpdateLocation(ctx, char.ID, &dest, 1) // stale expected version
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+	})
+
+	t.Run("move of an absent character returns CHARACTER_NOT_FOUND", func(t *testing.T) {
+		dest := createTestLocation(ctx, t)
+		_, err := repo.UpdateLocation(ctx, ulid.Make(), &dest, 3)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
+	})
+}
+
+// TestCharacterRepository_DeleteVersionGuard binds MODEL-03 for character Delete.
+func TestCharacterRepository_DeleteVersionGuard(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	newChar := func(t *testing.T, name string) *world.Character {
+		t.Helper()
+		playerID := createTestPlayer(ctx, t)
+		locationID := createTestLocation(ctx, t)
+		return &world.Character{
+			ID:         ulid.Make(),
+			PlayerID:   playerID,
+			Name:       name,
+			LocationID: &locationID,
+			CreatedAt:  time.Now().UTC(),
+		}
+	}
+
+	t.Run("stale-version delete returns WORLD_CONCURRENT_EDIT", func(t *testing.T) {
+		char := newChar(t, "del-stale")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+		t.Cleanup(func() { _ = delErr(repo.Delete(ctx, char.ID, 0)) })
+
+		_, err := testPool.Exec(ctx, `UPDATE characters SET version = version + 1 WHERE id = $1`, char.ID.String())
+		require.NoError(t, err)
+
+		_, err = repo.Delete(ctx, char.ID, 1) // stale expected version
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+	})
+
+	t.Run("delete of an absent character returns CHARACTER_NOT_FOUND", func(t *testing.T) {
+		_, err := repo.Delete(ctx, ulid.Make(), 2)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
+	})
+
+	t.Run("version-matched delete succeeds and returns a tombstone delta", func(t *testing.T) {
+		char := newChar(t, "del-ok")
+		require.NoError(t, delErr(repo.Create(ctx, char)))
+
+		delta, err := repo.Delete(ctx, char.ID, char.Version)
+		require.NoError(t, err)
+		assert.True(t, delta.Primary.Tombstone)
+		assert.Equal(t, 1, delta.Primary.BeforeVersion)
+
+		_, err = repo.Get(ctx, char.ID)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+	})
+}
+
+// TestCharacterRepository_ListByPlayer binds round-6 R6-1: the canonical
+// version-scanning list the guest reaper (05-16) uses — each listed character
+// carries its STORED version, so a subsequent CAS Delete(ctx, id, listedVersion)
+// matches and succeeds rather than permanently conflicting on Version==0.
+func TestCharacterRepository_ListByPlayer(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	playerID := createTestPlayer(ctx, t)
+	locationID := createTestLocation(ctx, t)
+
+	c1 := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "AAA-" + ulid.Make().String(), LocationID: &locationID}
+	c2 := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "ZZZ-" + ulid.Make().String(), LocationID: &locationID}
+	require.NoError(t, delErr(repo.Create(ctx, c1)))
+	require.NoError(t, delErr(repo.Create(ctx, c2)))
+	t.Cleanup(func() {
+		_ = delErr(repo.Delete(ctx, c1.ID, 0))
+		_ = delErr(repo.Delete(ctx, c2.ID, 0))
+	})
+
+	// Advance one character's version so listed-vs-stored is a non-trivial check.
+	c1.Name = "AAA-updated"
+	require.NoError(t, delErr(repo.Update(ctx, c1)))
+	require.Equal(t, 2, c1.Version)
+
+	listed, err := repo.ListByPlayer(ctx, playerID)
+	require.NoError(t, err)
+
+	byID := map[ulid.ULID]*world.Character{}
+	for _, c := range listed {
+		byID[c.ID] = c
+	}
+	require.Contains(t, byID, c1.ID)
+	require.Contains(t, byID, c2.ID)
+
+	// Listed version == stored version for every character.
+	assert.Equal(t, characterDBVersion(ctx, t, c1.ID), byID[c1.ID].Version)
+	assert.Equal(t, characterDBVersion(ctx, t, c2.ID), byID[c2.ID].Version)
+	assert.Equal(t, 2, byID[c1.ID].Version)
+	assert.Equal(t, 1, byID[c2.ID].Version)
+
+	// A guarded CAS delete keyed on the LISTED version succeeds (the reaper path).
+	_, err = repo.Delete(ctx, c1.ID, byID[c1.ID].Version)
+	require.NoError(t, err)
+}
+
+// TestCharRepoAdapter_ListByPlayerScansVersion binds round-6 R6-1/R6-3: the
+// production auth-facing list path (setup.CharRepoAdapter.ListByPlayer) — the
+// actual list a subsequent guarded write/delete consumes — must carry the stored
+// version, not 0, or the guest reaper's CAS Delete permanently conflicts.
+func TestCharRepoAdapter_ListByPlayerScansVersion(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+	adapter := setup.NewCharRepoAdapter(testPool, repo)
+
+	playerID := createTestPlayer(ctx, t)
+	locationID := createTestLocation(ctx, t)
+	c := &world.Character{ID: ulid.Make(), PlayerID: playerID, Name: "adapter-ver-" + ulid.Make().String(), LocationID: &locationID}
+	require.NoError(t, delErr(repo.Create(ctx, c)))
+	t.Cleanup(func() { _ = delErr(repo.Delete(ctx, c.ID, 0)) })
+
+	// Advance the version so listed-vs-stored is a non-trivial check.
+	c.Name = "adapter-ver-updated"
+	require.NoError(t, delErr(repo.Update(ctx, c)))
+	require.Equal(t, 2, c.Version)
+
+	listed, err := adapter.ListByPlayer(ctx, playerID)
+	require.NoError(t, err)
+	var found *world.Character
+	for _, lc := range listed {
+		if lc.ID == c.ID {
+			found = lc
+		}
+	}
+	require.NotNil(t, found, "adapter ListByPlayer must return the seeded character")
+	assert.Equal(t, characterDBVersion(ctx, t, c.ID), found.Version, "adapter must scan version")
+	assert.Equal(t, 2, found.Version)
+
+	// The listed version drives a successful guarded CAS delete (reaper path).
+	_, err = repo.Delete(ctx, c.ID, found.Version)
+	require.NoError(t, err)
 }

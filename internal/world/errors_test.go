@@ -8,7 +8,10 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/holomush/holomush/pkg/errutil"
 
 	"github.com/holomush/holomush/internal/world"
 )
@@ -191,6 +194,28 @@ func TestBidirectionalCleanupResult_IsSevere(t *testing.T) {
 			assert.Equal(t, tt.wantSevere, result.IsSevere())
 		})
 	}
+}
+
+func TestErrConcurrentEdit_IsTheTypedConflictSignal(t *testing.T) {
+	t.Run("wrapped conflict reports the concurrent-edit code", func(t *testing.T) {
+		// Mirrors how the guarded repos (05-02/05-03) will stamp a CAS conflict.
+		err := oops.Code(world.CodeConcurrentEdit).
+			With("id", ulid.Make().String()).
+			Wrap(world.ErrConcurrentEdit)
+
+		errutil.AssertErrorCode(t, err, "WORLD_CONCURRENT_EDIT")
+		assert.True(t, errors.Is(err, world.ErrConcurrentEdit),
+			"wrapped conflict must match the ErrConcurrentEdit sentinel")
+	})
+
+	t.Run("concurrent edit is distinct from not found", func(t *testing.T) {
+		err := oops.Code(world.CodeConcurrentEdit).Wrap(world.ErrConcurrentEdit)
+
+		assert.False(t, errors.Is(err, world.ErrNotFound),
+			"a concurrent-edit conflict must not be mistaken for not-found")
+		assert.False(t, errors.Is(world.ErrConcurrentEdit, world.ErrNotFound),
+			"the conflict sentinel itself must be distinct from ErrNotFound")
+	})
 }
 
 func TestErrNotFound_ExportedFromWorldPackage(t *testing.T) {

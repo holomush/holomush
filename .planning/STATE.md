@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 5
-current_phase_name: M2 / M12
-status: "Phase 4 shipped — PR #4814"
-stopped_at: Completed 04-04-PLAN.md — phase 04 ready for verification
-last_updated: "2026-07-11T22:12:15.897Z"
-last_activity: 2026-07-11
+current_phase: 6
+current_phase_name: Operational Hardening & Assurance Gates
+status: "Phase 05 shipped — PR #4816"
+stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
+last_updated: "2026-07-13T18:14:31.182Z"
+last_activity: 2026-07-13
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 17
+  completed_phases: 2
+  total_plans: 20
+  completed_plans: 20
+  percent: 33
 ---
 
 # Project State
@@ -25,20 +25,20 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 5 — World-Model Integrity Fixes (M2 / M12)
+**Current focus:** Phase 05 — world-model-integrity-fixes-m2-m12
 
 ## Current Position
 
-Phase: 5 — World-Model Integrity Fixes (M2 / M12)
+Phase: 6 — Operational Hardening & Assurance Gates
 Plan: Not started
-Status: Phase 4 shipped — PR #4814
-Last activity: 2026-07-11
+Status: Phase 05 shipped — PR #4816
+Last activity: 2026-07-13
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 30
+- Total plans completed: 46
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -50,6 +50,7 @@ Last activity: 2026-07-11
 | 02 | 7 | - | - |
 | 03 | 9 | - | - |
 | 04 | 4 | - | - |
+| 05 | 16 | - | - |
 
 **Recent Trend:**
 
@@ -84,6 +85,21 @@ Last activity: 2026-07-11
 | Phase 04 P02 | 35min | 2 tasks | 3 files |
 | Phase 04 P03 | ~55min | 2 tasks | 3 files |
 | Phase 04 P04 | ~90min | 3 tasks | 2 files |
+| Phase 05 P01 | 20m | 3 tasks | 9 files |
+| Phase 05 P14 | 45min | 3 tasks | 48 files |
+| Phase 05 P02 | 45m | 2 tasks | 6 files |
+| Phase 05 P03 | ~40m | 3 tasks | 5 files |
+| Phase 05 P04 | 45m | 2 tasks | 6 files |
+| Phase 05 P05 | 55min | 3 tasks | 11 files |
+| Phase 05 P06 | 75min | 3 tasks | 18 files |
+| Phase 05 P07 | 150min | 4 tasks | 26 files |
+| Phase 05 P08 | 110 | 2 tasks | 3 files |
+| Phase 05 P09 | 24min | 3 tasks tasks | 13 files files |
+| Phase 05 P10 | 120min | 2 tasks | 7 files |
+| Phase 05 P15 | 120 | 2 tasks | 21 files |
+| Phase 05 P16 | 150 | 3 tasks | 22 files |
+| Phase 05 P12 | 14min | 3 tasks | 9 files |
+| Phase 05 P13 | 20min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -99,6 +115,30 @@ the next milestone yet.
 - [Phase 04]: Production world.Service wires NO EventEmitter — the move-notification leg is dead code today (pinned by a spec)
 - [Phase 04]: MODEL-01 decided: Option B — CRUD-canonical + optimistic concurrency + transactional outbox in the panel-ratified strengthened shape (consensus one-pager NORMATIVE); Phase 5 implements MODEL-03 version guard + MODEL-04 ordered atomic feed — Human decider (Sean Brandt) chose under future-state-first framing after a two-round three-model panel unanimously ratified the strengthened B shape; the ordered complete world-change feed is the platform's extensibility contract; evolvability inverts under event sourcing pre-1.0; coverage rot countered structurally (compile-time seam + census meta-test + delta-parity)
 - [Phase 04]: INV-WORLD-ATOMIC-FEED/-DELTA-PARITY/-FEED-ORDER/-WRITER-BOUNDARY named in the ADR; registration/binding deferred to Phase 5's spec per .claude/rules/invariants.md
+- [Phase ?]: Phase 5 slice-1 foundation: version INTEGER NOT NULL DEFAULT 1 on locations/exits/characters/objects (migration 000049); Version int on the four world structs; WORLD_CONCURRENT_EDIT/ErrConcurrentEdit as the single typed conflict signal (D-02/MODEL-03).
+- [Phase ?]: [Phase 05]: MODEL-03 CAS mechanism for locations+exits (05-02): version-predicated Update/Delete + a locked follow-up read (same-connection via re-entrant withTx) classifying a zero-row result into TWO outcomes — existing-row-version-moved -> WORLD_CONCURRENT_EDIT, absent -> NOT_FOUND (a committed concurrent delete is correctly observed as not-found).
+- [Phase ?]: [Phase 05]: expectedVersion/Version==0 stays an unversioned (id-only) write so existing world.Service delete/update callers (which pass 0 today) remain green; the guard fires only when a caller threads a read version >0 (version-threading is plan 05-04).
+- [Phase ?]: [Phase 05]: location DELETE locks the parent row FOR UPDATE BEFORE preselecting FK-cascaded exits (round-6 R6-4) — the parent lock conflicts with the FK key-share lock a child-exit INSERT needs, fencing the child-insert phantom; an interleave integration test binds INV-WORLD-2 delta-parity adversarially.
+- [Phase ?]: 05-04: RMW version threading was already end-to-end after 05-02/05-03 via struct.Version transport plus deepest-oops-code; Task 1 added pinning tests with no production change
+- [Phase ?]: 05-04: M12 command-race specs serialize through HandleCommand, so the surfaced conflict is proven deterministically at the service level (spec 1 location + new spec 4 object)
+- [Phase ?]: [Phase 05]: 05-05 MODEL-04 outbox foundation (slice 2): migration 000050 lands outbox (event_id PK dedup + (game_id,epoch,feed_position) UNIQUE gap-free) + world_feed_counter (locked per-game next_position/epoch + durable lease_generation) + world_genesis_checkpoint + SPLIT world_consumer_receipts/world_consumer_watermarks.
+- [Phase ?]: [Phase 05]: 05-05 WriteIntent (internal/world/postgres writer boundary) is sole owner of storage-stamped envelope fields (round-3 blocker #1): allocates epoch/feed_position from the locked FOR UPDATE counter, finalizes via pure wmodel.Finalize, persists one outbox row via execerFromCtx (same tx), returns the finalized Envelope; types in wmodel leaf; WORLD_FEED_LOCK_TIMEOUT bounds a stuck lock.
+- [Phase ?]: [Phase 05]: 05-05 always-run INV-WORLD-1 integration test proves a REAL world row + its envelope commit-or-roll-back together (rollback/commit/forced-duplicate-event_id); binding annotation added in 05-12.
+- [Phase ?]: [Phase 05]: 05-06 mutate(ctx, intent, write-closure) compile-time write-requires-envelope seam — closure identifies+executes the operation (round-5 finding 1), writer repos private to executor, package world imports neither outbox nor postgres (round-2 cycle fix); injected world.OutboxWriter owns epoch/position+finalization (round-3 blocker #1).
+- [Phase ?]: [Phase 05]: 05-06 MoveCharacter is first through the same-tx outbox; post-commit emit path (events.go/EmitMoveEvent/go-retry) DELETED folding WR-01 (D-03); post-commit movement-hook failure = operational degradation (log+metric, command success), move_succeeded=true fail-after-commit path deleted (round-5 finding 3); M2 dual-write window CLOSED (proven by rewritten resilience spec).
+- [Phase ?]: [Phase 05]: 05-07 MODEL-04 relay slice — single leased relay (Lease abstraction, dedicated advisory-lock conn + durable generation fence), reference idempotent consumer (tx-bound ApplyOnce + contiguity-safe watermark UPSERT), SkipService (stable skip-marker id) wired as OutboxRelaySubsystem; production world.Service finally gets a real OutboxWriter; 8-edge import-graph guard + composition allowlist
+- [Phase ?]: 05-08: D-05 resilience specs construct the REAL relay/lease/reference-consumer over the shared stack via the production setup.NewOutboxStore adapter; relays release their lease via DeferCleanup so a pinned conn never blocks harness teardown.
+- [Phase ?]: 05-10: all 10 location/exit/object write commands route through the mutate() seam — one taxonomy-declared envelope per successful command in the same tx (INV-WORLD-4); manifest finalized from the repo's returned MutationDelta (cascaded exits, reverse exit), never command inputs. First half of the D-01 rollout; character/scene/property + census land in 05-11.
+- [Phase ?]: 05-10: the per-game feed-counter FOR UPDATE lock globally serializes the world-write phase; bisect-confirmed this widened the conflict window so the slow describe command path deterministically loses its full-row CAS to a concurrent direct UpdateLocation (correct per INV-WORLD-ATOMIC-FEED), surfacing an errA-swallowing assumption in the M12 cross-field-race spec — now read-back-driven.
+- [Phase ?]: 05-15: ONE atomic CharacterGenesisService; all 3 creation paths route through it; Create removed from auth repo interfaces (compile fence); player/role ordered not atomic (round-4 B4).
+- [Phase ?]: 05-15: genesis service must NOT import internal/world/outbox (eventbus-relay import cycle) — uses local kind/schema constants mirroring the taxonomy, like internal/world/service.go.
+- [Phase ?]: 05-16: guest character reaping routes through one atomic CharacterReapingService (per-character tombstone tx then ordered player delete) — deletion-side counterpart to 05-15 genesis, closing D-06
+- [Phase ?]: 05-16: anti-TOCTOU closed at creation side (R6-2 option b) — players.reaping_at + genesis SELECT reaping_at FOR UPDATE serializing with the reaper MarkReaping; single shared tx precluded by the two-pool boundary
+- [Phase ?]: 05-16: added BindingRepository.DeleteByCharacter (guest-teardown-only, in-tx) so the character-first tombstone delete avoids the RESTRICT binding FK; operator forensic soft-end path untouched
+- [Phase ?]: 05-12: INV-WORLD scope registered as status:pending because internal/world carries pre-existing FOREIGN bare INV-N tokens (holomush-72ou per-property-ABAC) the provenance residual-walk would misattribute; the four INV-WORLD-1..4 entries are nonetheless binding:bound (born canonical).
+- [Phase ?]: 05-12: INV-WORLD ids are canonical NUMERIC (INV-WORLD-1..4); ADR symbolic names (ATOMIC-FEED/DELTA-PARITY/FEED-ORDER/WRITER-BOUNDARY) live in summary+legacy — the //Verifies parser (invariant_registry_test.go:163) requires a trailing number (Codex finding 3).
+- [Phase ?]: 05-12: INV-WORLD-2 delta-parity binds to a REAL-ROW integration test in internal/world/outbox (location-delete cascade + bidirectional exit) proving manifest==MutationDelta==actual row version transition, not presence.
+- [Phase ?]: 05-13: MODEL-02 doc downgrade — false 'event sourcing / state derives from replay' corrected at 4 sites (CLAUDE.md/AGENTS.md-symlink, README.md, coding-standards.md, architecture.md) to the decided model (event-driven + append-only audit log, ADR holomush-i4784); real client-catch-up/Subscribe replay language preserved; index.mdx:41 legitimate audit-log language (Open Q4 resolved); regression-guarded by test/meta/world_model_doc_claim_test.go.
 
 ### Pending Todos
 
@@ -131,9 +171,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-11T21:32:14.327Z
+Last session: 2026-07-13T16:02:59.403Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 04-04-PLAN.md — phase 04 ready for verification
+Stopped at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
 Resume file: None
 
 ## Operator Next Steps

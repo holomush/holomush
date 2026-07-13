@@ -38,7 +38,7 @@ Phase execution artifacts: `milestones/v0.11-phases/`.
 > **Immediate opener (before Phase 4):** ship the **F2 gateway DoS cap** (OPS-01, #4785) as a fast `/gsd-quick` fix — a one-line `connect.WithReadMaxBytes(4<<20)` + read timeout + a rejection test. It closes a **live unauthenticated OOM DoS**, so it lands first, ahead of the multi-step F1 investigation; too small to warrant the full phase loop.
 
 - [x] **Phase 4: World-Model Resilience Investigation & Decision (F1)** — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR (decision gate) (completed 2026-07-11)
-- [ ] **Phase 5: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction
+- [x] **Phase 5: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction (completed 2026-07-13)
 - [ ] **Phase 6: Operational Hardening & Assurance Gates** — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage gate
 - [ ] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports
 - [ ] **Phase 8: God-Object Decomposition** — CoreServer + plugin/manager decomposition (behavior-preserving)
@@ -94,11 +94,37 @@ Plans:
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
 
-**Plans**: 0 plans
+**Plans**: 16/16 plans complete
 
 Plans:
 
-- [ ] TBD (created by /gsd-plan-phase 5)
+**Slice 1 — Version guard + repository foundation (MODEL-03)**
+
+- [x] 05-01-PLAN.md — Version-guard foundation: migration 000049 + Version struct fields + WORLD_CONCURRENT_EDIT error (wave 1)
+- [x] 05-14-PLAN.md — Transaction & repository foundation: re-entrant tx + self-tx repo refactor + MutationDelta + Delete(expectedVersion)/reader interfaces + mock regen (wave 1)
+- [x] 05-02-PLAN.md — Location + exit repo version-predicated CAS + zero-row classifier + delta/version refresh (wave 2)
+- [x] 05-03-PLAN.md — Character + object repo version-predicated CAS + zero-row classifier + delta/version refresh (wave 2)
+- [x] 05-04-PLAN.md — RMW version threading + conflict surfacing + M12 resilience spec flip (wave 3)
+
+**Slice 2 — Outbox + relay + MoveCharacter (MODEL-04, folds WR-01)**
+
+- [x] 05-05-PLAN.md — Outbox + world_feed_counter schema (000050) + envelope domain type + same-tx outbox store + late-locked counter (SQL in internal/world/postgres) (wave 4)
+- [x] 05-06-PLAN.md — Genuine compile-time write fence (reader views + write executor) + MoveCharacter through outbox (delta-derived manifest) + delete emit path + examine audit + f1 doc fix (wave 5)
+- [x] 05-07-PLAN.md — Single-lease relay (pg advisory lock + LISTEN/NOTIFY + sweep + halt/skip) + OutboxRelaySubsystem wired in core.go + reference consumer + D-04 gate confirm (wave 6)
+- [x] 05-08-PLAN.md — Fault-injection resilience matrix (incl. lease fencing) + per-aggregate race + M2 end-to-end redelivery (wave 7)
+
+**Slice 3 — Taxonomy + census + invariants + rollout (MODEL-04)** — data-first / enforcement-last (deliberate deviation from the one-pager order, acknowledged in 05-09/05-10/05-12)
+
+- [x] 05-09-PLAN.md — Versioned taxonomy registry (ARCH-04 input) + character_settings→guarded/versioned/envelope fold-in (round-4 C5/D-05) + raw-world-SQL AST/token fence (schema-scoped to core/world; scene_participants + plugins/ excluded, #4815) (wave 8)
+- [x] 05-10-PLAN.md — Emission rollout: location/exit/object write commands through the outbox (delta-derived manifests; location-delete cascade-delta parity) (wave 9)
+- [x] 05-15-PLAN.md — Atomic character-genesis service: ALL character creation (registered/guest/bootstrap-admin) emits a genesis envelope in one tx; interface Create removal (round-3 blocker #5) (wave 9)
+- [x] 05-11-PLAN.md — Emission rollout: character/property + reader-view fence completion + genesis snapshot (checkpoint-idempotent) + census meta-test (scene-participant surface removed per D-07) (wave 10)
+- [x] 05-16-PLAN.md — Atomic guest character-reaping service: guest reaping + failed-guest cleanup emit a character tombstone per reaped character in one tx, then delete the player (round-5 D-06; deletion-side counterpart to 05-15) (wave 10)
+- [x] 05-12-PLAN.md — Register + BIND the 4 INV-WORLD-1..4 invariants (numeric ids; symbolic names as legacy) (wave 11)
+
+**Slice 4 — Doc correction (MODEL-02)**
+
+- [x] 05-13-PLAN.md — Downgrade the false event-sourcing world-state doc claims + doc-claim meta-test (wave 12)
 
 ### Phase 6: Operational Hardening & Assurance Gates
 
@@ -160,7 +186,7 @@ Plans:
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
-| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 0 | Pending | — |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |

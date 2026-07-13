@@ -32,6 +32,10 @@ type EngineProvider interface {
 type WorldSubsystemConfig struct {
 	DB   PoolProvider
 	ABAC EngineProvider
+	// GameID keys the outbox feed counter + the outbox row's game_id. Defaults to
+	// "main" (world.ServiceConfig applies the default when empty). MUST match the
+	// OutboxRelaySubsystem's GameID so the writer and the relay share one feed.
+	GameID string
 }
 
 // WorldSubsystem manages the WorldService and all world repositories.
@@ -72,6 +76,11 @@ func (s *WorldSubsystem) Start(ctx context.Context) error {
 		PropertyRepo:  worldpostgres.NewPropertyRepository(pool),
 		Engine:        engine,
 		Transactor:    transactor,
+		// The production world.Service finally gets a real OutboxWriter (05-07):
+		// the postgres outbox store, replacing the dead no-emitter leg. The relay
+		// is a SEPARATE subsystem; the writer only persists the same-tx envelope.
+		OutboxWriter: worldpostgres.NewOutboxStore(pool),
+		GameID:       s.cfg.GameID,
 	})
 	s.transactor = transactor
 

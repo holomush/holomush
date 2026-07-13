@@ -28,29 +28,29 @@ func (_m *MockCharacterServiceProvider) EXPECT() *MockCharacterServiceProvider_E
 	return &MockCharacterServiceProvider_Expecter{mock: &_m.Mock}
 }
 
-// Create provides a mock function with given fields: ctx, playerID, name
-func (_m *MockCharacterServiceProvider) Create(ctx context.Context, playerID ulid.ULID, name string) (*world.Character, error) {
-	ret := _m.Called(ctx, playerID, name)
+// CreateBound provides a mock function with given fields: ctx, playerID, name, bindReason
+func (_m *MockCharacterServiceProvider) CreateBound(ctx context.Context, playerID ulid.ULID, name string, bindReason string) (*world.Character, error) {
+	ret := _m.Called(ctx, playerID, name, bindReason)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Create")
+		panic("no return value specified for CreateBound")
 	}
 
 	var r0 *world.Character
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string) (*world.Character, error)); ok {
-		return rf(ctx, playerID, name)
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string, string) (*world.Character, error)); ok {
+		return rf(ctx, playerID, name, bindReason)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string) *world.Character); ok {
-		r0 = rf(ctx, playerID, name)
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string, string) *world.Character); ok {
+		r0 = rf(ctx, playerID, name, bindReason)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*world.Character)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, string) error); ok {
-		r1 = rf(ctx, playerID, name)
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, string, string) error); ok {
+		r1 = rf(ctx, playerID, name, bindReason)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -58,32 +58,33 @@ func (_m *MockCharacterServiceProvider) Create(ctx context.Context, playerID uli
 	return r0, r1
 }
 
-// MockCharacterServiceProvider_Create_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Create'
-type MockCharacterServiceProvider_Create_Call struct {
+// MockCharacterServiceProvider_CreateBound_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateBound'
+type MockCharacterServiceProvider_CreateBound_Call struct {
 	*mock.Call
 }
 
-// Create is a helper method to define mock.On call
+// CreateBound is a helper method to define mock.On call
 //   - ctx context.Context
 //   - playerID ulid.ULID
 //   - name string
-func (_e *MockCharacterServiceProvider_Expecter) Create(ctx interface{}, playerID interface{}, name interface{}) *MockCharacterServiceProvider_Create_Call {
-	return &MockCharacterServiceProvider_Create_Call{Call: _e.mock.On("Create", ctx, playerID, name)}
+//   - bindReason string
+func (_e *MockCharacterServiceProvider_Expecter) CreateBound(ctx interface{}, playerID interface{}, name interface{}, bindReason interface{}) *MockCharacterServiceProvider_CreateBound_Call {
+	return &MockCharacterServiceProvider_CreateBound_Call{Call: _e.mock.On("CreateBound", ctx, playerID, name, bindReason)}
 }
 
-func (_c *MockCharacterServiceProvider_Create_Call) Run(run func(ctx context.Context, playerID ulid.ULID, name string)) *MockCharacterServiceProvider_Create_Call {
+func (_c *MockCharacterServiceProvider_CreateBound_Call) Run(run func(ctx context.Context, playerID ulid.ULID, name string, bindReason string)) *MockCharacterServiceProvider_CreateBound_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(string))
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(string), args[3].(string))
 	})
 	return _c
 }
 
-func (_c *MockCharacterServiceProvider_Create_Call) Return(_a0 *world.Character, _a1 error) *MockCharacterServiceProvider_Create_Call {
+func (_c *MockCharacterServiceProvider_CreateBound_Call) Return(_a0 *world.Character, _a1 error) *MockCharacterServiceProvider_CreateBound_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCharacterServiceProvider_Create_Call) RunAndReturn(run func(context.Context, ulid.ULID, string) (*world.Character, error)) *MockCharacterServiceProvider_Create_Call {
+func (_c *MockCharacterServiceProvider_CreateBound_Call) RunAndReturn(run func(context.Context, ulid.ULID, string, string) (*world.Character, error)) *MockCharacterServiceProvider_CreateBound_Call {
 	_c.Call.Return(run)
 	return _c
 }

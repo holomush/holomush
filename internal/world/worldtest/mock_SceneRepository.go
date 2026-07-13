@@ -27,55 +27,6 @@ func (_m *MockSceneRepository) EXPECT() *MockSceneRepository_Expecter {
 	return &MockSceneRepository_Expecter{mock: &_m.Mock}
 }
 
-// AddParticipant provides a mock function with given fields: ctx, sceneID, characterID, role
-func (_m *MockSceneRepository) AddParticipant(ctx context.Context, sceneID ulid.ULID, characterID ulid.ULID, role world.ParticipantRole) error {
-	ret := _m.Called(ctx, sceneID, characterID, role)
-
-	if len(ret) == 0 {
-		panic("no return value specified for AddParticipant")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID, world.ParticipantRole) error); ok {
-		r0 = rf(ctx, sceneID, characterID, role)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// MockSceneRepository_AddParticipant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddParticipant'
-type MockSceneRepository_AddParticipant_Call struct {
-	*mock.Call
-}
-
-// AddParticipant is a helper method to define mock.On call
-//   - ctx context.Context
-//   - sceneID ulid.ULID
-//   - characterID ulid.ULID
-//   - role world.ParticipantRole
-func (_e *MockSceneRepository_Expecter) AddParticipant(ctx interface{}, sceneID interface{}, characterID interface{}, role interface{}) *MockSceneRepository_AddParticipant_Call {
-	return &MockSceneRepository_AddParticipant_Call{Call: _e.mock.On("AddParticipant", ctx, sceneID, characterID, role)}
-}
-
-func (_c *MockSceneRepository_AddParticipant_Call) Run(run func(ctx context.Context, sceneID ulid.ULID, characterID ulid.ULID, role world.ParticipantRole)) *MockSceneRepository_AddParticipant_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(ulid.ULID), args[3].(world.ParticipantRole))
-	})
-	return _c
-}
-
-func (_c *MockSceneRepository_AddParticipant_Call) Return(_a0 error) *MockSceneRepository_AddParticipant_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockSceneRepository_AddParticipant_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID, world.ParticipantRole) error) *MockSceneRepository_AddParticipant_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GetScenesFor provides a mock function with given fields: ctx, characterID
 func (_m *MockSceneRepository) GetScenesFor(ctx context.Context, characterID ulid.ULID) ([]*world.Location, error) {
 	ret := _m.Called(ctx, characterID)
@@ -190,54 +141,6 @@ func (_c *MockSceneRepository_ListParticipants_Call) Return(_a0 []world.ScenePar
 }
 
 func (_c *MockSceneRepository_ListParticipants_Call) RunAndReturn(run func(context.Context, ulid.ULID) ([]world.SceneParticipant, error)) *MockSceneRepository_ListParticipants_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// RemoveParticipant provides a mock function with given fields: ctx, sceneID, characterID
-func (_m *MockSceneRepository) RemoveParticipant(ctx context.Context, sceneID ulid.ULID, characterID ulid.ULID) error {
-	ret := _m.Called(ctx, sceneID, characterID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for RemoveParticipant")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID) error); ok {
-		r0 = rf(ctx, sceneID, characterID)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// MockSceneRepository_RemoveParticipant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveParticipant'
-type MockSceneRepository_RemoveParticipant_Call struct {
-	*mock.Call
-}
-
-// RemoveParticipant is a helper method to define mock.On call
-//   - ctx context.Context
-//   - sceneID ulid.ULID
-//   - characterID ulid.ULID
-func (_e *MockSceneRepository_Expecter) RemoveParticipant(ctx interface{}, sceneID interface{}, characterID interface{}) *MockSceneRepository_RemoveParticipant_Call {
-	return &MockSceneRepository_RemoveParticipant_Call{Call: _e.mock.On("RemoveParticipant", ctx, sceneID, characterID)}
-}
-
-func (_c *MockSceneRepository_RemoveParticipant_Call) Run(run func(ctx context.Context, sceneID ulid.ULID, characterID ulid.ULID)) *MockSceneRepository_RemoveParticipant_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(ulid.ULID))
-	})
-	return _c
-}
-
-func (_c *MockSceneRepository_RemoveParticipant_Call) Return(_a0 error) *MockSceneRepository_RemoveParticipant_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockSceneRepository_RemoveParticipant_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID) error) *MockSceneRepository_RemoveParticipant_Call {
 	_c.Call.Return(run)
 	return _c
 }

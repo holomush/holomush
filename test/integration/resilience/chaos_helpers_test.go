@@ -13,34 +13,38 @@ import (
 	"testing"
 
 	dockerclient "github.com/moby/moby/client"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/samber/oops"
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	"github.com/holomush/holomush/internal/testsupport/natstest"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/outbox"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
+	worldsetup "github.com/holomush/holomush/internal/world/setup"
+	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
 // newWorldService constructs a world.Service over one replica's shared pgxpool,
 // mirroring the production construction in
 // internal/testsupport/integrationtest/plugins.go:267 (which itself mirrors
-// internal/world/setup/subsystem.go). EventEmitter is intentionally omitted —
-// M2's emitter wiring is plan 03's concern, and production world/setup omits it
-// too (world.NewService logs a benign slog.Warn). The allow-all default engine
-// (no WithRealABAC on the resilience replicas) accepts any subjectID string, so
-// the deterministic-interleave spec can drive UpdateLocation directly without a
-// seeded policy.
+// internal/world/setup/subsystem.go). It wires the transactional-outbox writer
+// (05-06): MoveCharacter commits its state change and its ONE move envelope in the
+// SAME transaction via world.OutboxWriter — the post-commit emit path is deleted
+// (D-03), so there is no separate notification leg to lose on a broker flap. The
+// allow-all default engine (no WithRealABAC on the resilience replicas) accepts any
+// subjectID string, so the specs can drive MoveCharacter/UpdateLocation directly
+// without a seeded policy.
 //
 // Because both replicas share ONE database, newWorldService(replicaA) and
 // newWorldService(replicaB) are two independent write paths onto the identical
-// unguarded full-row UPDATE (location_repo.go:73) — exactly the two-replica
-// concurrency surface the M12 verdict characterizes.
+// version-predicated guarded CAS Update (location_repo.go) — exactly the
+// two-replica concurrency surface the M12 regression gate exercises now that the
+// guard (plans 05-01..05-04) closes last-write-wins.
 func newWorldService(s *integrationtest.Server) *world.Service {
 	pool := s.Pool()
 	return world.NewService(world.ServiceConfig{
@@ -52,103 +56,8 @@ func newWorldService(s *integrationtest.Server) *world.Service {
 		PropertyRepo:  worldpostgres.NewPropertyRepository(pool),
 		Engine:        s.AccessEngine(),
 		Transactor:    worldpostgres.NewTransactor(pool),
-	})
-}
-
-// worldBusAppender implements world.EventAppender by translating a core.Event
-// into an eventbus.Event and publishing it through the RAW subsystem publisher
-// (s.Bus().Bus.Publisher()) — NOT the host's rendering publisher.
-//
-// This raw-publisher choice is deliberate and load-bearing for the M2 experiment:
-// the rendering publisher runs a verb-registry Lookup on every publish and
-// hard-fails EMIT_UNKNOWN_VERB for host-owned world event types (e.g. "move"),
-// which have no plugin-qualified verb registration. The M2 window is a
-// stream-PRESENCE question (did the post-commit move notification reach the
-// broker or not?), so rendering metadata is irrelevant and the verb-registry
-// lookup would only get in the way. The translation mirrors the harness's
-// busEventAppenderAdapter (Qualify → NewType → actor-kind mapping) verbatim.
-type worldBusAppender struct {
-	publisher eventbus.Publisher
-	gameID    func() string
-}
-
-var _ world.EventAppender = (*worldBusAppender)(nil)
-
-// Append translates event to an eventbus.Event and publishes it to the shared
-// broker via the raw publisher. Domain-relative stream references (e.g.
-// "location.01ABC") are qualified to full subjects via eventbus.Qualify.
-func (w *worldBusAppender) Append(ctx context.Context, event core.Event) error {
-	gid := w.gameID()
-	if gid == "" {
-		gid = "main"
-	}
-	sub, err := eventbus.Qualify(gid, event.Stream)
-	if err != nil {
-		return oops.With("stream", event.Stream).Wrap(err)
-	}
-	typ, err := eventbus.NewType(string(event.Type))
-	if err != nil {
-		return oops.With("type", string(event.Type)).Wrap(err)
-	}
-	return oops.Wrap(w.publisher.Publish(ctx, eventbus.Event{
-		ID:        event.ID,
-		Subject:   sub,
-		Type:      typ,
-		Timestamp: event.Timestamp,
-		Actor:     resilienceCoreToBusActor(event.Actor),
-		Payload:   event.Payload,
-	}))
-}
-
-// resilienceCoreToBusActor mirrors the harness's harnessCoreToBusActor: it maps
-// a core.Actor to an eventbus.Actor, parsing the ULID id when present. The
-// EventStoreAdapter stamps a system actor (core.WorldServiceActorULID), so this
-// resolves to ActorKindSystem with the parsed world-service ULID.
-func resilienceCoreToBusActor(a core.Actor) eventbus.Actor {
-	out := eventbus.Actor{Kind: resilienceCoreActorKindToBus(a.Kind)}
-	if a.ID == "" {
-		return out
-	}
-	if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
-		out.ID = parsed
-	}
-	return out
-}
-
-func resilienceCoreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
-	switch k {
-	case core.ActorCharacter:
-		return eventbus.ActorKindCharacter
-	case core.ActorPlugin:
-		return eventbus.ActorKindPlugin
-	default:
-		return eventbus.ActorKindSystem
-	}
-}
-
-// newEmittingWorldService constructs a world.Service identical to newWorldService
-// but WITH an EventEmitter wired: a world.EventStoreAdapter over a worldBusAppender
-// that publishes to the replica's shared broker via the raw publisher. This is the
-// deliberately-wired emitter the M2 dual-write experiment needs to make the
-// post-commit notification leg observable — production world/setup omits it
-// entirely (internal/world/setup/subsystem.go:66-77), which is itself the M2
-// production finding spec 3 pins.
-func newEmittingWorldService(s *integrationtest.Server) *world.Service {
-	pool := s.Pool()
-	appender := &worldBusAppender{
-		publisher: s.Bus().Bus.Publisher(),
-		gameID:    s.GameID,
-	}
-	return world.NewService(world.ServiceConfig{
-		LocationRepo:  worldpostgres.NewLocationRepository(pool),
-		ExitRepo:      worldpostgres.NewExitRepository(pool),
-		ObjectRepo:    worldpostgres.NewObjectRepository(pool),
-		SceneRepo:     worldpostgres.NewSceneRepository(pool),
-		CharacterRepo: worldpostgres.NewCharacterRepository(pool),
-		PropertyRepo:  worldpostgres.NewPropertyRepository(pool),
-		Engine:        s.AccessEngine(),
-		Transactor:    worldpostgres.NewTransactor(pool),
-		EventEmitter:  world.NewEventStoreAdapter(appender),
+		OutboxWriter:  worldpostgres.NewOutboxStore(pool),
+		GameID:        s.GameID(),
 	})
 }
 
@@ -258,4 +167,160 @@ func unpauseBroker(ctx context.Context, env *natstest.NATSEnv) {
 	// moby/moby client — the result value is discarded; only the error matters.
 	_, err = cli.ContainerUnpause(ctx, env.Container.GetContainerID(), dockerclient.ContainerUnpauseOptions{})
 	Expect(err).NotTo(HaveOccurred(), "unpauseBroker: ContainerUnpause")
+}
+
+// --- outbox relay + reference consumer + wire-inspection seams (plan 05-08) ---
+//
+// The integrationtest harness does NOT run the OutboxRelaySubsystem (it is
+// production-wired at the composition root in cmd/holomush/core.go), so the
+// fault-injection specs construct the relay + reference consumer directly over
+// the shared stack, exactly as production wires them. That keeps the relay under
+// test the REAL relay (05-07) with a real generation-fenced advisory-lock lease
+// and a real external-NATS publisher, while the specs drive Drain/Apply
+// explicitly so each fault window is deterministic (no background wakeup racing
+// an assertion).
+
+// outboxStoreFor builds the leased outbox store adapter over a replica's shared
+// pool exactly as production wires it (setup.NewOutboxStore over the postgres
+// OutboxStore), so the relay's DB ops run through the same generation-fenced
+// advisory-lock lease the composition root uses.
+func outboxStoreFor(s *integrationtest.Server) outbox.OutboxStore {
+	return worldsetup.NewOutboxStore(worldpostgres.NewOutboxStore(s.Pool()))
+}
+
+// busPublisher returns the replica's production eventbus publisher (external-mode
+// under WithExternalNATS). The relay publishes through it; it stamps
+// Nats-Msg-Id = Event.ID for JetStream dedup.
+func busPublisher(s *integrationtest.Server) eventbus.Publisher {
+	return s.Bus().Bus.Publisher()
+}
+
+// newOutboxRelay constructs a single leased relay draining game's feed over the
+// shared stack. It is sweep-only (nil Waker): the specs drive Drain explicitly.
+func newOutboxRelay(store outbox.OutboxStore, pub eventbus.Publisher, game string) *outbox.Relay {
+	return outbox.NewRelay(outbox.RelayConfig{Store: store, Publisher: pub, GameID: game})
+}
+
+// seedOutboxRow writes ONE committed outbox row for game via the production
+// same-tx writer (no MoveCharacter needed) and returns the finalized envelope
+// (carrying the writer-allocated epoch + feed_position). kind must be a valid
+// event type (no spaces) so the relay can build a wire event; the aggregate id is
+// fresh per call, so each seeded row lands on a UNIQUE subject the wire
+// assertions can isolate on.
+func seedOutboxRow(ctx context.Context, s *integrationtest.Server, game, kind string) *wmodel.Envelope {
+	GinkgoHelper()
+	store := worldpostgres.NewOutboxStore(s.Pool())
+	intent := wmodel.NewEnvelopeIntent(wmodel.IntentParams{
+		GameID:        game,
+		Kind:          kind,
+		SchemaVersion: 1,
+		Actor:         "system",
+		AggregateType: wmodel.AggregateLocation,
+		AggregateID:   ulid.Make(),
+		Payload:       []byte(`{"name":"chaos"}`),
+	})
+	delta := &wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{
+		Type: wmodel.AggregateLocation, ID: intent.AggregateID, BeforeVersion: 0, AfterVersion: 1,
+	}}
+	env, err := store.WriteIntent(ctx, intent, delta)
+	Expect(err).NotTo(HaveOccurred(), "seedOutboxRow: WriteIntent")
+	return env
+}
+
+// envelopeSubject reproduces the relay's wire subject for env
+// (events.<game>.<aggregate-type>.<aggregate-id>) so a per-subject stream count
+// can isolate one seeded row's deliveries from all other broker traffic.
+func envelopeSubject(env *wmodel.Envelope) string {
+	GinkgoHelper()
+	subj, err := eventbus.Qualify(env.GameID, string(env.AggregateType)+"."+env.AggregateID.String())
+	Expect(err).NotTo(HaveOccurred(), "envelopeSubject: Qualify")
+	return string(subj)
+}
+
+// checkpointStoreAdapter bridges the concrete postgres checkpoint store to the
+// consumer-owned outbox.ConsumerCheckpointStore. The setup package's equivalent
+// adapter is unexported, so this test-local mirror (identical to
+// setup.checkpointStoreAdapter) keeps the suite self-contained. The two
+// TxExecutor interfaces are structurally identical, so the effect bridge is a
+// direct pass-through.
+type checkpointStoreAdapter struct {
+	inner *worldpostgres.ConsumerCheckpointStore
+}
+
+func (a checkpointStoreAdapter) ApplyOnce(
+	ctx context.Context, consumer string, env wmodel.Envelope,
+	effect func(effCtx context.Context, exec outbox.TxExecutor) error,
+) (bool, error) {
+	return a.inner.ApplyOnce(ctx, consumer, env, func(effCtx context.Context, exec worldpostgres.TxExecutor) error {
+		return effect(effCtx, exec)
+	})
+}
+
+func (a checkpointStoreAdapter) InitWatermark(ctx context.Context, consumer, gameID string, epoch, position int64) error {
+	return a.inner.InitWatermark(ctx, consumer, gameID, epoch, position)
+}
+
+func (a checkpointStoreAdapter) Watermark(ctx context.Context, consumer, gameID string) (int64, int64, bool, error) {
+	return a.inner.Watermark(ctx, consumer, gameID)
+}
+
+// referenceConsumer bundles the reference idempotent consumer with the concrete
+// checkpoint store so a spec can both InitWatermark the (consumer, game) baseline
+// and Apply deliveries through the same durable receipt+watermark store.
+type referenceConsumer struct {
+	*outbox.Consumer
+	checkpoint *worldpostgres.ConsumerCheckpointStore
+	name       string
+}
+
+// newReferenceConsumer builds a reference consumer over the shared pool with a
+// UNIQUE durable name (so specs never contend on receipts/watermarks). effect MAY
+// be nil (pure receipt+watermark recording).
+func newReferenceConsumer(s *integrationtest.Server, effect outbox.EffectFunc) *referenceConsumer {
+	name := "resilience-" + ulid.Make().String()
+	checkpoint := worldpostgres.NewConsumerCheckpointStore(s.Pool())
+	return &referenceConsumer{
+		Consumer:   outbox.NewConsumer(name, checkpointStoreAdapter{inner: checkpoint}, effect, nil),
+		checkpoint: checkpoint,
+		name:       name,
+	}
+}
+
+// initWatermark seeds the consumer's (consumer, game) watermark so envelope at
+// (epoch, position) is the next contiguous delivery — letting a spec drive a
+// single row through Apply without replaying the whole feed prefix.
+func (c *referenceConsumer) initWatermark(ctx context.Context, game string, epoch, position int64) {
+	GinkgoHelper()
+	Expect(c.checkpoint.InitWatermark(ctx, c.name, game, epoch, position)).
+		To(Succeed(), "reference consumer InitWatermark")
+}
+
+// streamSubjectCount reports how many messages the shared EVENTS stream has
+// stored on subject — read over an INDEPENDENT connection (never a replica's
+// cached view), so the wire assertion binds on broker state and is isolated to
+// the one subject (immune to other traffic). Nats-Msg-Id dedup makes a duplicate
+// publish a no-op here: two publishes of the same event ULID leave the count at 1.
+func streamSubjectCount(ctx context.Context, env *natstest.NATSEnv, subject string) uint64 {
+	GinkgoHelper()
+	conn := env.Conn(suiteT)
+	js, err := jetstream.New(conn)
+	Expect(err).NotTo(HaveOccurred(), "streamSubjectCount: jetstream.New")
+	stream, err := js.Stream(ctx, eventbus.StreamName)
+	Expect(err).NotTo(HaveOccurred(), "streamSubjectCount: EVENTS stream must exist")
+	info, err := stream.Info(ctx, jetstream.WithSubjectFilter(subject))
+	Expect(err).NotTo(HaveOccurred(), "streamSubjectCount: stream.Info")
+	return info.State.Subjects[subject]
+}
+
+// outboxPublishedAt reads whether the outbox row for eventID has been marked
+// published (published_at IS NOT NULL) — the DB-side proof the relay PubAcked it
+// (MarkPublished runs only AFTER a successful publish). Read over the shared pool,
+// so it observes only committed state.
+func outboxPublishedAt(ctx context.Context, s *integrationtest.Server, eventID ulid.ULID) bool {
+	GinkgoHelper()
+	var published bool
+	Expect(s.Pool().QueryRow(ctx,
+		`SELECT published_at IS NOT NULL FROM outbox WHERE event_id = $1`, eventID.String()).
+		Scan(&published)).To(Succeed(), "outboxPublishedAt: read row")
+	return published
 }

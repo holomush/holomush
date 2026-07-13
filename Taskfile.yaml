@@ -297,6 +297,17 @@ tasks:
       # `go build`. See internal/web/static.go for the full rationale.
       - go build -tags realweb -o {{.BINARY_NAME}} {{.MAIN_PKG}}
 
+  build:all:
+    desc: Whole-tree production compile (go build ./...) — the wave-gate for interface-change blast radius
+    cmds:
+      # `task build` only compiles the main binary ({{.MAIN_PKG}}); it cannot
+      # catch a repository-interface change that breaks a sibling package.
+      # build:all compiles the WHOLE tree in production (non-test) mode, so an
+      # import cycle or a stale caller anywhere is a hard compile error here.
+      # Routed through `task` per CLAUDE.md (MUST-use-task); `task test` /
+      # `task test:int` cover the unit + integration-tagged compile respectively.
+      - go build ./...
+
   plugin:build-all:
     desc: Discover and compile all binary plugins (host + linux/amd64 + linux/arm64)
     # Sources cover the plugin tree, the SDK packages plugins import

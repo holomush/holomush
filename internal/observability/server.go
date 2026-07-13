@@ -52,6 +52,19 @@ var engineFailures = prometheus.NewCounterVec(
 	[]string{"operation"},
 )
 
+// movementHookFailures counts post-commit movement-hook failures. A MoveCharacter
+// commits its state change and move envelope atomically, then fires the movement
+// hook post-commit against a SEPARATE store (the session store); a hook failure is
+// operational degradation (the move succeeded and the envelope is durable), so it
+// is logged and counted here rather than failing the command (05-06 round-5
+// finding 3).
+var movementHookFailures = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "holomush_movement_hook_failures_total",
+		Help: "Total number of post-commit movement-hook failures (operational degradation; the move and its envelope already committed)",
+	},
+)
+
 // circuitBreakerTrips tracks circuit breaker activations by handler.
 var circuitBreakerTrips = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
@@ -95,6 +108,14 @@ func RecordEngineFailure(operation string) {
 	engineFailures.WithLabelValues(operation).Inc()
 }
 
+// RecordMovementHookFailure increments the movement-hook failure counter. Called
+// by world.Service.MoveCharacter when the post-commit movement hook fails; the
+// move and its envelope are already committed, so this is operational degradation,
+// not a command failure (05-06 round-5 finding 3).
+func RecordMovementHookFailure() {
+	movementHookFailures.Inc()
+}
+
 // EngineFailureCounter returns the engine failures counter for a given operation.
 // Exported for test assertions via prometheus/testutil.
 func EngineFailureCounter(operation string) prometheus.Counter {
@@ -134,6 +155,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	for _, c := range []prometheus.Collector{
 		commandOutputFailures, commandRateLimited,
 		engineFailures, circuitBreakerTrips, circuitBreakerSkipped,
+		movementHookFailures,
 	} {
 		if err := reg.Register(c); err != nil {
 			// Already registered — this is expected in tests with multiple servers.

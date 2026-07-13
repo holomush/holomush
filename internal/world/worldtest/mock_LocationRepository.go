@@ -11,6 +11,8 @@ import (
 	ulid "github.com/oklog/ulid/v2"
 	mock "github.com/stretchr/testify/mock"
 
+	wmodel "github.com/holomush/holomush/internal/world/wmodel"
+
 	world "github.com/holomush/holomush/internal/world"
 )
 
@@ -28,21 +30,33 @@ func (_m *MockLocationRepository) EXPECT() *MockLocationRepository_Expecter {
 }
 
 // Create provides a mock function with given fields: ctx, loc
-func (_m *MockLocationRepository) Create(ctx context.Context, loc *world.Location) error {
+func (_m *MockLocationRepository) Create(ctx context.Context, loc *world.Location) (*wmodel.MutationDelta, error) {
 	ret := _m.Called(ctx, loc)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Location) error); ok {
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Location) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, loc)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Location) *wmodel.MutationDelta); ok {
 		r0 = rf(ctx, loc)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, *world.Location) error); ok {
+		r1 = rf(ctx, loc)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockLocationRepository_Create_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Create'
@@ -64,32 +78,44 @@ func (_c *MockLocationRepository_Create_Call) Run(run func(ctx context.Context, 
 	return _c
 }
 
-func (_c *MockLocationRepository_Create_Call) Return(_a0 error) *MockLocationRepository_Create_Call {
-	_c.Call.Return(_a0)
+func (_c *MockLocationRepository_Create_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockLocationRepository_Create_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLocationRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Location) error) *MockLocationRepository_Create_Call {
+func (_c *MockLocationRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Location) (*wmodel.MutationDelta, error)) *MockLocationRepository_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// Delete provides a mock function with given fields: ctx, id
-func (_m *MockLocationRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	ret := _m.Called(ctx, id)
+// Delete provides a mock function with given fields: ctx, id, expectedVersion
+func (_m *MockLocationRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	ret := _m.Called(ctx, id, expectedVersion)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) error); ok {
-		r0 = rf(ctx, id)
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, int) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, id, expectedVersion)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, int) *wmodel.MutationDelta); ok {
+		r0 = rf(ctx, id, expectedVersion)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, int) error); ok {
+		r1 = rf(ctx, id, expectedVersion)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockLocationRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
@@ -100,23 +126,24 @@ type MockLocationRepository_Delete_Call struct {
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id ulid.ULID
-func (_e *MockLocationRepository_Expecter) Delete(ctx interface{}, id interface{}) *MockLocationRepository_Delete_Call {
-	return &MockLocationRepository_Delete_Call{Call: _e.mock.On("Delete", ctx, id)}
+//   - expectedVersion int
+func (_e *MockLocationRepository_Expecter) Delete(ctx interface{}, id interface{}, expectedVersion interface{}) *MockLocationRepository_Delete_Call {
+	return &MockLocationRepository_Delete_Call{Call: _e.mock.On("Delete", ctx, id, expectedVersion)}
 }
 
-func (_c *MockLocationRepository_Delete_Call) Run(run func(ctx context.Context, id ulid.ULID)) *MockLocationRepository_Delete_Call {
+func (_c *MockLocationRepository_Delete_Call) Run(run func(ctx context.Context, id ulid.ULID, expectedVersion int)) *MockLocationRepository_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID))
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(int))
 	})
 	return _c
 }
 
-func (_c *MockLocationRepository_Delete_Call) Return(_a0 error) *MockLocationRepository_Delete_Call {
-	_c.Call.Return(_a0)
+func (_c *MockLocationRepository_Delete_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockLocationRepository_Delete_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLocationRepository_Delete_Call) RunAndReturn(run func(context.Context, ulid.ULID) error) *MockLocationRepository_Delete_Call {
+func (_c *MockLocationRepository_Delete_Call) RunAndReturn(run func(context.Context, ulid.ULID, int) (*wmodel.MutationDelta, error)) *MockLocationRepository_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -358,21 +385,33 @@ func (_c *MockLocationRepository_ListByType_Call) RunAndReturn(run func(context.
 }
 
 // Update provides a mock function with given fields: ctx, loc
-func (_m *MockLocationRepository) Update(ctx context.Context, loc *world.Location) error {
+func (_m *MockLocationRepository) Update(ctx context.Context, loc *world.Location) (*wmodel.MutationDelta, error) {
 	ret := _m.Called(ctx, loc)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Update")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Location) error); ok {
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Location) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, loc)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Location) *wmodel.MutationDelta); ok {
 		r0 = rf(ctx, loc)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, *world.Location) error); ok {
+		r1 = rf(ctx, loc)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockLocationRepository_Update_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Update'
@@ -394,12 +433,12 @@ func (_c *MockLocationRepository_Update_Call) Run(run func(ctx context.Context, 
 	return _c
 }
 
-func (_c *MockLocationRepository_Update_Call) Return(_a0 error) *MockLocationRepository_Update_Call {
-	_c.Call.Return(_a0)
+func (_c *MockLocationRepository_Update_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockLocationRepository_Update_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLocationRepository_Update_Call) RunAndReturn(run func(context.Context, *world.Location) error) *MockLocationRepository_Update_Call {
+func (_c *MockLocationRepository_Update_Call) RunAndReturn(run func(context.Context, *world.Location) (*wmodel.MutationDelta, error)) *MockLocationRepository_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }

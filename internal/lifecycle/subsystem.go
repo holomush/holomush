@@ -33,6 +33,10 @@ const (
 	SubsystemCryptoChainVerifier  // crypto_chain_verifier
 	SubsystemCryptoPolicy         // crypto_policy
 	SubsystemRekeyCheckpointSweep // rekey_checkpoint_sweep
+	// SubsystemOutboxRelay is the world-change transactional-outbox relay
+	// (MODEL-04, 05-07): the single leased publisher that drains outbox rows to
+	// JetStream in strict feed order. DependsOn Database + EventBus.
+	SubsystemOutboxRelay // outbox_relay
 )
 
 // Subsystem is a top-level server component with lifecycle management

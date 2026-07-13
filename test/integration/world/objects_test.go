@@ -25,7 +25,7 @@ var _ = Describe("Object Handling", func() {
 		cleanupLocations(ctx, env.pool)
 
 		room = createTestLocation("Item Room", "For object tests.", world.LocationTypePersistent)
-		Expect(env.Locations.Create(ctx, room)).To(Succeed())
+		Expect(delErr(env.Locations.Create(ctx, room))).To(Succeed())
 
 		charID = createTestCharacterID()
 	})
@@ -33,9 +33,9 @@ var _ = Describe("Object Handling", func() {
 	Describe("Picking up objects", func() {
 		It("moves object from location to character inventory", func() {
 			obj := createTestObject("Sword", "A sharp blade.", world.Containment{LocationID: &room.ID})
-			Expect(env.Objects.Create(ctx, obj)).To(Succeed())
+			Expect(delErr(env.Objects.Create(ctx, obj))).To(Succeed())
 
-			err := env.Objects.Move(ctx, obj.ID, world.Containment{CharacterID: &charID})
+			err := delErr(env.Objects.Move(ctx, obj.ID, world.Containment{CharacterID: &charID}, 0))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Objects.Get(ctx, obj.ID)
@@ -49,9 +49,9 @@ var _ = Describe("Object Handling", func() {
 	Describe("Dropping objects", func() {
 		It("moves object from character inventory to location", func() {
 			obj := createTestObject("Shield", "A sturdy shield.", world.Containment{CharacterID: &charID})
-			Expect(env.Objects.Create(ctx, obj)).To(Succeed())
+			Expect(delErr(env.Objects.Create(ctx, obj))).To(Succeed())
 
-			err := env.Objects.Move(ctx, obj.ID, world.Containment{LocationID: &room.ID})
+			err := delErr(env.Objects.Move(ctx, obj.ID, world.Containment{LocationID: &room.ID}, 0))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Objects.Get(ctx, obj.ID)
@@ -68,15 +68,15 @@ var _ = Describe("Object Handling", func() {
 		BeforeEach(func() {
 			container = createTestObject("Backpack", "A leather backpack.", world.Containment{LocationID: &room.ID})
 			container.IsContainer = true
-			Expect(env.Objects.Create(ctx, container)).To(Succeed())
+			Expect(delErr(env.Objects.Create(ctx, container))).To(Succeed())
 		})
 
 		Context("putting objects in containers", func() {
 			It("moves object into container object", func() {
 				item := createTestObject("Gem", "A sparkling gem.", world.Containment{LocationID: &room.ID})
-				Expect(env.Objects.Create(ctx, item)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, item))).To(Succeed())
 
-				err := env.Objects.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID})
+				err := delErr(env.Objects.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID}, 0))
 				Expect(err).NotTo(HaveOccurred())
 
 				got, err := env.Objects.Get(ctx, item.ID)
@@ -88,12 +88,12 @@ var _ = Describe("Object Handling", func() {
 			It("fails when target is not a container", func() {
 				nonContainer := createTestObject("Rock", "Just a rock.", world.Containment{LocationID: &room.ID})
 				nonContainer.IsContainer = false
-				Expect(env.Objects.Create(ctx, nonContainer)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, nonContainer))).To(Succeed())
 
 				item := createTestObject("Pebble", "A tiny pebble.", world.Containment{LocationID: &room.ID})
-				Expect(env.Objects.Create(ctx, item)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, item))).To(Succeed())
 
-				err := env.Objects.Move(ctx, item.ID, world.Containment{ObjectID: &nonContainer.ID})
+				err := delErr(env.Objects.Move(ctx, item.ID, world.Containment{ObjectID: &nonContainer.ID}, 0))
 				Expect(err).To(HaveOccurred())
 			})
 
@@ -102,17 +102,17 @@ var _ = Describe("Object Handling", func() {
 				level1 := container
 				level2 := createTestObject("Pouch", "A small pouch.", world.Containment{ObjectID: &level1.ID})
 				level2.IsContainer = true
-				Expect(env.Objects.Create(ctx, level2)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, level2))).To(Succeed())
 
 				level3 := createTestObject("Wallet", "A tiny wallet.", world.Containment{ObjectID: &level2.ID})
 				level3.IsContainer = true
-				Expect(env.Objects.Create(ctx, level3)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, level3))).To(Succeed())
 
 				// Try to add to level3 (would be depth 4)
 				tooDeep := createTestObject("Coin", "A gold coin.", world.Containment{LocationID: &room.ID})
-				Expect(env.Objects.Create(ctx, tooDeep)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, tooDeep))).To(Succeed())
 
-				err := env.Objects.Move(ctx, tooDeep.ID, world.Containment{ObjectID: &level3.ID})
+				err := delErr(env.Objects.Move(ctx, tooDeep.ID, world.Containment{ObjectID: &level3.ID}, 0))
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("nesting depth"))
 			})
@@ -121,9 +121,9 @@ var _ = Describe("Object Handling", func() {
 		Context("taking objects from containers", func() {
 			It("moves object from container to character", func() {
 				item := createTestObject("Ring", "A gold ring.", world.Containment{ObjectID: &container.ID})
-				Expect(env.Objects.Create(ctx, item)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, item))).To(Succeed())
 
-				err := env.Objects.Move(ctx, item.ID, world.Containment{CharacterID: &charID})
+				err := delErr(env.Objects.Move(ctx, item.ID, world.Containment{CharacterID: &charID}, 0))
 				Expect(err).NotTo(HaveOccurred())
 
 				got, err := env.Objects.Get(ctx, item.ID)
@@ -135,17 +135,17 @@ var _ = Describe("Object Handling", func() {
 
 		Context("circular containment prevention", func() {
 			It("prevents putting container inside itself", func() {
-				err := env.Objects.Move(ctx, container.ID, world.Containment{ObjectID: &container.ID})
+				err := delErr(env.Objects.Move(ctx, container.ID, world.Containment{ObjectID: &container.ID}, 0))
 				Expect(err).To(HaveOccurred())
 			})
 
 			It("prevents A->B->A circular chains", func() {
 				containerB := createTestObject("Box B", "Another container.", world.Containment{ObjectID: &container.ID})
 				containerB.IsContainer = true
-				Expect(env.Objects.Create(ctx, containerB)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, containerB))).To(Succeed())
 
 				// Try to put container (A) inside containerB (which is already in A)
-				err := env.Objects.Move(ctx, container.ID, world.Containment{ObjectID: &containerB.ID})
+				err := delErr(env.Objects.Move(ctx, container.ID, world.Containment{ObjectID: &containerB.ID}, 0))
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("circular"))
 			})
@@ -153,14 +153,14 @@ var _ = Describe("Object Handling", func() {
 			It("prevents deep circular chains A->B->C->A", func() {
 				containerB := createTestObject("Box B", "Container B.", world.Containment{ObjectID: &container.ID})
 				containerB.IsContainer = true
-				Expect(env.Objects.Create(ctx, containerB)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, containerB))).To(Succeed())
 
 				containerC := createTestObject("Box C", "Container C.", world.Containment{ObjectID: &containerB.ID})
 				containerC.IsContainer = true
-				Expect(env.Objects.Create(ctx, containerC)).To(Succeed())
+				Expect(delErr(env.Objects.Create(ctx, containerC))).To(Succeed())
 
 				// Try to put container (A) inside containerC (A->B->C, trying to make C->A)
-				err := env.Objects.Move(ctx, container.ID, world.Containment{ObjectID: &containerC.ID})
+				err := delErr(env.Objects.Move(ctx, container.ID, world.Containment{ObjectID: &containerC.ID}, 0))
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("circular"))
 			})
@@ -170,10 +170,10 @@ var _ = Describe("Object Handling", func() {
 	Describe("Containment invariants", func() {
 		It("ensures object is in exactly one place", func() {
 			obj := createTestObject("Unique", "Can only be one place.", world.Containment{LocationID: &room.ID})
-			Expect(env.Objects.Create(ctx, obj)).To(Succeed())
+			Expect(delErr(env.Objects.Create(ctx, obj))).To(Succeed())
 
 			// Move to character
-			err := env.Objects.Move(ctx, obj.ID, world.Containment{CharacterID: &charID})
+			err := delErr(env.Objects.Move(ctx, obj.ID, world.Containment{CharacterID: &charID}, 0))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Objects.Get(ctx, obj.ID)
@@ -186,13 +186,13 @@ var _ = Describe("Object Handling", func() {
 		It("clears previous containment when moving", func() {
 			container := createTestObject("Chest", "A wooden chest.", world.Containment{LocationID: &room.ID})
 			container.IsContainer = true
-			Expect(env.Objects.Create(ctx, container)).To(Succeed())
+			Expect(delErr(env.Objects.Create(ctx, container))).To(Succeed())
 
 			obj := createTestObject("Jewel", "A precious jewel.", world.Containment{ObjectID: &container.ID})
-			Expect(env.Objects.Create(ctx, obj)).To(Succeed())
+			Expect(delErr(env.Objects.Create(ctx, obj))).To(Succeed())
 
 			// Move from container to room
-			err := env.Objects.Move(ctx, obj.ID, world.Containment{LocationID: &room.ID})
+			err := delErr(env.Objects.Move(ctx, obj.ID, world.Containment{LocationID: &room.ID}, 0))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Objects.Get(ctx, obj.ID)

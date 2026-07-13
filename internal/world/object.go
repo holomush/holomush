@@ -129,6 +129,14 @@ type Object struct {
 	IsContainer         bool
 	OwnerID             *ulid.ULID
 	CreatedAt           time.Time
+	// Version is the optimistic-concurrency version (MODEL-03). It carries the
+	// read version back into a guarded CAS write (... WHERE id=$1 AND version=$2)
+	// and is refreshed by the repo to the committed version after a successful
+	// create/update, so a struct reused for a later write does not carry a stale
+	// version and spuriously conflict. New rows get 1 from the DB default;
+	// constructors MUST NOT hand-set it — it is populated only by read-path scans
+	// and post-write refresh (added in the repo plans).
+	Version int
 }
 
 // LocationID returns the location ID if the object is in a location, or nil.

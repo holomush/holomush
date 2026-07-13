@@ -958,3 +958,96 @@ func TestExaminePayload_Validate(t *testing.T) {
 		})
 	}
 }
+
+// --- World-change envelope payload builders (05-10) ---
+
+func TestBuildLocationPayload_NewValuesOnly(t *testing.T) {
+	id := ulid.Make()
+	loc := &world.Location{ID: id, Name: "Atrium", Description: "a bright hall"}
+
+	raw, err := world.BuildLocationPayload(loc)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got["id"])
+	assert.Equal(t, "Atrium", got["name"])
+	assert.Equal(t, "a bright hall", got["description"])
+	// New-values-only: no version, no before/after, no secrets.
+	assert.NotContains(t, got, "version")
+	assert.Len(t, got, 3)
+}
+
+func TestBuildExitPayload_CarriesEndpoints(t *testing.T) {
+	id := ulid.Make()
+	from := ulid.Make()
+	to := ulid.Make()
+	exit := &world.Exit{ID: id, Name: "north", FromLocationID: from, ToLocationID: to}
+
+	raw, err := world.BuildExitPayload(exit)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got["id"])
+	assert.Equal(t, "north", got["name"])
+	assert.Equal(t, from.String(), got["from_location_id"])
+	assert.Equal(t, to.String(), got["to_location_id"])
+	assert.Len(t, got, 4)
+}
+
+func TestBuildTombstonePayload_OnlyID(t *testing.T) {
+	id := ulid.Make()
+
+	raw, err := world.BuildTombstonePayload(id)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got["id"])
+	assert.Len(t, got, 1, "a tombstone carries only the deleted id; cascades live in the manifest")
+}
+
+func TestBuildObjectPayload_NewValuesOnly(t *testing.T) {
+	id := ulid.Make()
+	obj, err := world.NewObjectWithID(id, "lantern", world.InLocation(ulid.Make()))
+	require.NoError(t, err)
+	obj.Description = "a brass lantern"
+
+	raw, err := world.BuildObjectPayload(obj)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got["id"])
+	assert.Equal(t, "lantern", got["name"])
+	assert.Equal(t, "a brass lantern", got["description"])
+	assert.Len(t, got, 3)
+}
+
+func TestBuildObjectMovePayload_CarriesFromAndToContainment(t *testing.T) {
+	id := ulid.Make()
+	fromLoc := ulid.Make()
+	toChar := ulid.Make()
+
+	obj, err := world.NewObjectWithID(id, "lantern", world.InLocation(fromLoc))
+	require.NoError(t, err)
+
+	raw, err := world.BuildObjectMovePayload(obj, world.HeldByCharacter(toChar))
+	require.NoError(t, err)
+
+	var got struct {
+		ObjectID string  `json:"object_id"`
+		ToType   string  `json:"to_type"`
+		ToID     string  `json:"to_id"`
+		FromType string  `json:"from_type"`
+		FromID   *string `json:"from_id"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got.ObjectID)
+	assert.Equal(t, "character", got.ToType)
+	assert.Equal(t, toChar.String(), got.ToID)
+	assert.Equal(t, "location", got.FromType)
+	require.NotNil(t, got.FromID)
+	assert.Equal(t, fromLoc.String(), *got.FromID)
+}

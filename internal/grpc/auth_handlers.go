@@ -58,9 +58,12 @@ type AuthServiceProvider interface {
 	Logout(ctx context.Context, tokenHash string) (ulid.ULID, error)
 }
 
-// CharacterServiceProvider defines the auth.CharacterService methods used by auth handlers.
+// CharacterServiceProvider defines the auth.CharacterService methods used by auth
+// handlers. Registered gRPC creation uses CreateBound, which commits the
+// character + initial_bind binding + genesis envelope atomically through the
+// genesis service (05-15) — there is no envelope-less degraded path.
 type CharacterServiceProvider interface {
-	Create(ctx context.Context, playerID ulid.ULID, name string) (*world.Character, error)
+	CreateBound(ctx context.Context, playerID ulid.ULID, name, bindReason string) (*world.Character, error)
 }
 
 // ResetServiceProvider defines the auth.PasswordResetService methods used by auth handlers.
@@ -69,17 +72,10 @@ type ResetServiceProvider interface {
 	ResetPassword(ctx context.Context, token, newPassword string) error
 }
 
-// Transactor begins a database transaction and calls fn with a Tx-scoped context.
-// Commit on nil return, rollback on non-nil return.
-type Transactor interface {
-	InTransaction(ctx context.Context, fn func(ctx context.Context) error) error
-}
-
-// BindingRepo provides player↔character binding operations used by the
-// Subscribe and QueryStreamHistory handlers (Current) and by the
-// CreateCharacter / CreateGuest handlers (Create).
+// BindingRepo provides player↔character binding lookup used by the Subscribe and
+// QueryStreamHistory handlers (Current). Binding CREATION at character-creation
+// time is owned by the genesis service (05-15), not the handler.
 type BindingRepo interface {
-	Create(ctx context.Context, playerID, characterID, reason string) (string, error)
 	// Current returns the active binding_id for characterID.
 	// Returns BINDING_NOT_FOUND if no active binding exists.
 	Current(ctx context.Context, characterID string) (string, error)
@@ -134,15 +130,8 @@ func WithGuestService(svc *auth.GuestService) CoreServerOption {
 	}
 }
 
-// WithTransactor sets the database transactor for atomic character + binding creation.
-func WithTransactor(t Transactor) CoreServerOption {
-	return func(s *CoreServer) {
-		s.transactor = t
-	}
-}
-
 // WithBindingRepository sets the binding repository for player↔character
-// binding creation (Create) and current-binding lookup (Current).
+// current-binding lookup (Current) used by Subscribe / QueryStreamHistory.
 func WithBindingRepository(b BindingRepo) CoreServerOption {
 	return func(s *CoreServer) {
 		s.bindings = b
@@ -493,8 +482,11 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 		}, nil
 	}
 
-	var char *world.Character
-	createErr := s.createCharacterAtomic(ctx, playerSession.PlayerID, req.CharacterName, &char)
+	// Character + initial_bind binding + genesis envelope commit atomically inside
+	// the genesis service (05-15). There is no envelope-less degraded path: a
+	// misconfigured genesis service fails closed with a typed error rather than
+	// silently creating an envelope-less character.
+	char, createErr := s.characterService.CreateBound(ctx, playerSession.PlayerID, req.CharacterName, "initial_bind")
 	if createErr != nil {
 		// SECURITY: log full error server-side; return sanitized message only.
 		slog.WarnContext(ctx, "grpc: CreateCharacter failed",
@@ -512,29 +504,6 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 		CharacterId:   char.ID.String(),
 		CharacterName: char.Name,
 	}, nil
-}
-
-// createCharacterAtomic creates a character and its binding in a single transaction
-// when both transactor and bindings are configured. Falls back to plain character
-// creation (no binding) when either is nil, preserving backward compatibility.
-func (s *CoreServer) createCharacterAtomic(ctx context.Context, playerID ulid.ULID, name string, out **world.Character) error {
-	if s.transactor == nil || s.bindings == nil {
-		// Fall back to non-transactional character creation (Phase 3b not fully wired).
-		var err error
-		*out, err = s.characterService.Create(ctx, playerID, name)
-		return oops.Wrap(err)
-	}
-	return oops.Wrap(s.transactor.InTransaction(ctx, func(txCtx context.Context) error {
-		var err error
-		*out, err = s.characterService.Create(txCtx, playerID, name)
-		if err != nil {
-			return oops.Code("CHARACTER_CREATE_FAILED").Wrap(err)
-		}
-		if _, bindErr := s.bindings.Create(txCtx, playerID.String(), (*out).ID.String(), "initial_bind"); bindErr != nil {
-			return oops.Code("CHARACTER_CREATE_BINDING_FAILED").Wrap(bindErr)
-		}
-		return nil
-	}))
 }
 
 // ListCharacters returns characters for an authenticated player.

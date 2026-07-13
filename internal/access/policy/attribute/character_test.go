@@ -12,6 +12,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,24 +42,28 @@ func (m *mockCharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockCharacterRepository) Create(_ context.Context, _ *world.Character) error {
-	return errors.New("not implemented")
+func (m *mockCharacterRepository) Create(_ context.Context, _ *world.Character) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
-func (m *mockCharacterRepository) Update(_ context.Context, _ *world.Character) error {
-	return errors.New("not implemented")
+func (m *mockCharacterRepository) Update(_ context.Context, _ *world.Character) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
-func (m *mockCharacterRepository) Delete(_ context.Context, _ ulid.ULID) error {
-	return errors.New("not implemented")
+func (m *mockCharacterRepository) Delete(_ context.Context, _ ulid.ULID, _ int) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (m *mockCharacterRepository) GetByLocation(_ context.Context, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockCharacterRepository) UpdateLocation(_ context.Context, _ ulid.ULID, _ *ulid.ULID) error {
-	return errors.New("not implemented")
+func (m *mockCharacterRepository) UpdateLocation(_ context.Context, _ ulid.ULID, _ *ulid.ULID, _ int) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockCharacterRepository) UpdatePreferences(_ context.Context, _ ulid.ULID, _ []byte, _ int) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (m *mockCharacterRepository) IsOwnedByPlayer(_ context.Context, _, _ ulid.ULID) (bool, error) {

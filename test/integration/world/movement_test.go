@@ -25,8 +25,8 @@ var _ = Describe("Character Movement", func() {
 
 		room1 = createTestLocation("Starting Room", "Where journeys begin.", world.LocationTypePersistent)
 		room2 = createTestLocation("Destination", "Where journeys end.", world.LocationTypePersistent)
-		Expect(env.Locations.Create(ctx, room1)).To(Succeed())
-		Expect(env.Locations.Create(ctx, room2)).To(Succeed())
+		Expect(delErr(env.Locations.Create(ctx, room1))).To(Succeed())
+		Expect(delErr(env.Locations.Create(ctx, room2))).To(Succeed())
 	})
 
 	Describe("Bidirectional exits", func() {
@@ -34,7 +34,7 @@ var _ = Describe("Character Movement", func() {
 			exit := createTestExit(room1.ID, room2.ID, "north")
 			exit.Bidirectional = true
 			exit.ReturnName = "south"
-			Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 			// Can find exit going north from room1
 			northExit, err := env.Exits.FindByName(ctx, room1.ID, "north")
@@ -51,7 +51,7 @@ var _ = Describe("Character Movement", func() {
 			exit := createTestExit(room1.ID, room2.ID, "doorway")
 			exit.Bidirectional = true
 			exit.ReturnName = "back"
-			Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 			returnExit, err := env.Exits.FindByName(ctx, room2.ID, "back")
 			Expect(err).NotTo(HaveOccurred())
@@ -66,14 +66,14 @@ var _ = Describe("Character Movement", func() {
 			ownerID = createTestCharacterID()
 			otherID = createTestCharacterID()
 			room1.OwnerID = &ownerID
-			Expect(env.Locations.Update(ctx, room1)).To(Succeed())
+			Expect(delErr(env.Locations.Update(ctx, room1))).To(Succeed())
 		})
 
 		Context("when visibility is 'all'", func() {
 			It("shows exit to any character", func() {
 				exit := createTestExit(room1.ID, room2.ID, "public door")
 				exit.Visibility = world.VisibilityAll
-				Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+				Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 				got, _ := env.Exits.Get(ctx, exit.ID)
 				Expect(got.IsVisibleTo(otherID, nil)).To(BeTrue())
@@ -85,7 +85,7 @@ var _ = Describe("Character Movement", func() {
 			It("shows exit only to location owner", func() {
 				exit := createTestExit(room1.ID, room2.ID, "owner door")
 				exit.Visibility = world.VisibilityOwner
-				Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+				Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 				got, _ := env.Exits.Get(ctx, exit.ID)
 				Expect(got.IsVisibleTo(ownerID, &ownerID)).To(BeTrue())
@@ -94,7 +94,7 @@ var _ = Describe("Character Movement", func() {
 			It("hides exit from non-owners", func() {
 				exit := createTestExit(room1.ID, room2.ID, "secret door")
 				exit.Visibility = world.VisibilityOwner
-				Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+				Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 				got, _ := env.Exits.Get(ctx, exit.ID)
 				Expect(got.IsVisibleTo(otherID, &ownerID)).To(BeFalse())
@@ -107,7 +107,7 @@ var _ = Describe("Character Movement", func() {
 				exit := createTestExit(room1.ID, room2.ID, "vip door")
 				exit.Visibility = world.VisibilityList
 				exit.VisibleTo = []ulid.ULID{allowedID}
-				Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+				Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 				got, _ := env.Exits.Get(ctx, exit.ID)
 				Expect(got.IsVisibleTo(allowedID, nil)).To(BeTrue())
@@ -124,7 +124,7 @@ var _ = Describe("Character Movement", func() {
 				exit.Locked = true
 				exit.LockType = world.LockTypeKey
 				exit.LockData = map[string]any{"key_object_id": keyObjectID}
-				Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+				Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 				got, err := env.Exits.Get(ctx, exit.ID)
 				Expect(err).NotTo(HaveOccurred())
@@ -140,7 +140,7 @@ var _ = Describe("Character Movement", func() {
 				exit.Locked = true
 				exit.LockType = world.LockTypePassword
 				exit.LockData = map[string]any{"password_hash": "hashed_secret"}
-				Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+				Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 
 				got, err := env.Exits.Get(ctx, exit.ID)
 				Expect(err).NotTo(HaveOccurred())
@@ -154,7 +154,7 @@ var _ = Describe("Character Movement", func() {
 		BeforeEach(func() {
 			exit := createTestExit(room1.ID, room2.ID, "Northern Gate")
 			exit.Aliases = []string{"n", "north", "gate"}
-			Expect(env.Exits.Create(ctx, exit)).To(Succeed())
+			Expect(delErr(env.Exits.Create(ctx, exit))).To(Succeed())
 		})
 
 		It("matches by exact name (case-insensitive)", func() {

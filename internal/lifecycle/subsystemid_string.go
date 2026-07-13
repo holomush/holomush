@@ -27,11 +27,12 @@ func _() {
 	_ = x[SubsystemCryptoChainVerifier-13]
 	_ = x[SubsystemCryptoPolicy-14]
 	_ = x[SubsystemRekeyCheckpointSweep-15]
+	_ = x[SubsystemOutboxRelay-16]
 }
 
-const _SubsystemID_name = "databasetlsabacauthworldpluginssessionsbootstrapgrpceventbusaudit_projectionclusteradmin_socketcrypto_chain_verifiercrypto_policyrekey_checkpoint_sweep"
+const _SubsystemID_name = "databasetlsabacauthworldpluginssessionsbootstrapgrpceventbusaudit_projectionclusteradmin_socketcrypto_chain_verifiercrypto_policyrekey_checkpoint_sweepoutbox_relay"
 
-var _SubsystemID_index = [...]uint8{0, 8, 11, 15, 19, 24, 31, 39, 48, 52, 60, 76, 83, 95, 116, 129, 151}
+var _SubsystemID_index = [...]uint8{0, 8, 11, 15, 19, 24, 31, 39, 48, 52, 60, 76, 83, 95, 116, 129, 151, 163}
 
 func (i SubsystemID) String() string {
 	idx := int(i) - 0

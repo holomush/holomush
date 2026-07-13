@@ -271,7 +271,7 @@ Full architecture map (world model, plugin host, event bus, sessions, access con
 - **Plugin runtime symmetry** — Binary and Lua plugins MUST be treated identically by the host (every host-side trust check applies to both); `.claude/rules/plugin-runtime-symmetry.md`.
 - **Command authorization** — two layers at dispatch: `engine.Evaluate(subject,"execute","command:<name>")` then `engine.CanPerformAction(subject,action,resource,scope)` per capability (`ScopeSelf`/`ScopeLocal`/`ScopeGlobal`).
 - **HTTP middleware** — wrappers of `http.ResponseWriter` MUST implement `http.Flusher` + `Unwrap()` (ConnectRPC streaming calls `Flush()` per frame).
-- **Event sourcing** — actions produce immutable ordered events; state derives from replay. **Access control** (`internal/access`) is ABAC, default-deny. Web client: SvelteKit patterns in `web/CLAUDE.md`.
+- **Event-driven with an append-only audit log** — actions produce immutable ordered events; world state is canonical in PostgreSQL and the event feed is an append-only audit/notification log (the decided model — `docs/adr/holomush-i4784-world-state-model-decision.md`). **Access control** (`internal/access`) is ABAC, default-deny. Web client: SvelteKit patterns in `web/CLAUDE.md`.
 
 ## Landing the Plane (Session Completion)
 

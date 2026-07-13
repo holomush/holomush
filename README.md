@@ -15,7 +15,7 @@ A modern MUSH platform combining classic text-based multiplayer gameplay with co
 
 ## Status
 
-**Core systems implemented** — Telnet server, event-sourced architecture, Lua plugin system, world model, and ABAC access control.
+**Core systems implemented** — Telnet server, event-driven architecture with an append-only audit log, Lua plugin system, world model, and ABAC access control.
 
 ### What Works Now
 

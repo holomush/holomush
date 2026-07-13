@@ -761,6 +761,26 @@ scopes:
       - "plugins/core-channels/**"
       - "test/integration/channels/**"
 
+  - name: INV-WORLD
+    description: "World-model write integrity: atomic state+feed emission, delta-parity of the affected-aggregates manifest,
+      ordered gap-free feed publication, and the raw-world-write boundary. Registered by 05-12 (Phase 5, MODEL-04)."
+    boundary: "World-model correctness guarantees born from the MODEL-01 ADR (holomush-i4784, Option B: CRUD-canonical world
+      state + optimistic-concurrency version guard + transactional outbox / ordered atomic feed). Does NOT include: crypto
+      payload encryption (→ INV-CRYPTO), plugin-owned scene storage (plugin_core_scenes.scene_participants is out of the world
+      fence, D-05), migration timestamp discipline (→ INV-STORE). status: pending because internal/world/ carries pre-existing
+      FOREIGN bare INV-N tokens from other design specs (the holomush-72ou per-property-ABAC INV-1/INV-2 in service.go / service_test.go)
+      that the provenance residual-walk would misattribute to this scope; the four INV-WORLD-N entries are nonetheless binding:
+      bound (born canonical — no legacy-token migration is pending for THIS scope)."
+    status: pending
+    origin_specs:
+      - "docs/adr/holomush-i4784-world-state-model-decision.md"
+      - "docs/reviews/arch-review/2026-07-11/verification/model-01-consensus-onepager.md"
+    owned_paths:
+      - "internal/world/**"
+      - "internal/world/outbox/**"
+      - "internal/world/postgres/**"
+    shared_files: []
+
 invariants:
   # ── INV-CRYPTO ── migrated (holomush-hz0v4.14.15). Origins: 2026-04-25 master
   # crypto, 2026-05-25 plugin-readback (RB), 2026-05-13 phase-7 (P7 crypto half),
@@ -4866,3 +4886,63 @@ invariants:
     binding: bound
     asserted_by:
       - "test/integration/channels/channels_e2e_test.go"
+
+  # ── INV-WORLD ── world-model write integrity (Phase 5, MODEL-04). Born from the
+  # MODEL-01 ADR (holomush-i4784) + the panel-ratified consensus one-pager.
+  # Registered AND bound by 05-12. Ids are CANONICAL NUMERIC (INV-WORLD-1..4) — the
+  # `// Verifies:` parser (test/meta/invariant_registry_test.go:163) requires a
+  # trailing number, so the ADR's SYMBOLIC names (ATOMIC-FEED / DELTA-PARITY /
+  # FEED-ORDER / WRITER-BOUNDARY) live in the summary + a legacy: alias for
+  # provenance, never as a parser id.
+  - id: INV-WORLD-1
+    scope: INV-WORLD
+    origin_spec: "docs/adr/holomush-i4784-world-state-model-decision.md"
+    legacy: ["INV-WORLD-ATOMIC-FEED@docs/adr/holomush-i4784-world-state-model-decision.md"]
+    summary: "ATOMIC-FEED: a world state change and its one semantic outbox envelope commit or roll back ATOMICALLY in the
+      SAME transaction — an envelope-less committed state change, or a committed envelope for a rolled-back state change,
+      is impossible. Bound to the always-run state+envelope atomicity test (real world row + envelope: rollback→neither survives,
+      commit→both survive, forced outbox failure after the state write→state rolls back)."
+    binding: bound
+    asserted_by:
+      - "internal/world/postgres/outbox_store_test.go"
+  - id: INV-WORLD-2
+    scope: INV-WORLD
+    origin_spec: "docs/adr/holomush-i4784-world-state-model-decision.md"
+    legacy: ["INV-WORLD-DELTA-PARITY@docs/adr/holomush-i4784-world-state-model-decision.md"]
+    summary: "DELTA-PARITY: the affected-aggregates manifest on the emitted envelope provably MATCHES the committed MutationDelta
+      the guarded write returned — every affected aggregate's id, tombstone flag, and before/after versions equal the row's
+      actual version transition, including DB-cascaded children (a location DELETE's cascaded exit tombstones) and a bidirectional
+      exit's reverse aggregate. Manifest PRESENCE is insufficient — parity of the versions is the guarantee."
+    binding: bound
+    asserted_by:
+      - "internal/world/outbox/delta_parity_test.go"
+  - id: INV-WORLD-3
+    scope: INV-WORLD
+    origin_spec: "docs/adr/holomush-i4784-world-state-model-decision.md"
+    legacy: ["INV-WORLD-FEED-ORDER@docs/adr/holomush-i4784-world-state-model-decision.md"]
+    summary: "FEED-ORDER: the single leased relay publishes strictly in feed_position order with Nats-Msg-Id = the event ULID,
+      a poison envelope HALTS the feed at its position (rows after it are withheld), and an operator skip leaves NO missing
+      feed_position — a skip marker is published at the skipped position so the wire has no gap."
+    binding: bound
+    asserted_by:
+      - "internal/world/outbox/relay_test.go"
+  - id: INV-WORLD-4
+    scope: INV-WORLD
+    origin_spec: "docs/adr/holomush-i4784-world-state-model-decision.md"
+    legacy: ["INV-WORLD-WRITER-BOUNDARY@docs/adr/holomush-i4784-world-state-model-decision.md"]
+    summary: "WRITER-BOUNDARY: raw world-table mutation SQL (locations/exits/characters/objects/entity_properties/outbox/
+      world_feed_counter) is confined to internal/world/postgres — enforced by the AST SQL fence, which ALSO scans MIGRATION
+      files (a migration mutating a world table without an envelope/epoch marker fails the fence — round-6 Codex MEDIUM: the
+      Go-source fence cannot see SQL migrations, and 000001_baseline already seeds world rows). world.Service exposes no directly-callable
+      writer repo (its fields are reader views — the compile fence), and ONLY composition/test packages may import internal/world/postgres
+      (the import-graph allowlist). The write executor is the sole in-world writer-repo owner; there are exactly TWO sanctioned
+      out-of-world writers, each emitting its envelope atomically: the character-genesis application service (05-15, CREATION)
+      and the character-reaping application service (05-16, D-06, DELETION — guest reaping + failed-guest cleanup emit one
+      character tombstone per reaped character; previously an FK cascade with no tombstone). The guest-DELETION side is proven
+      by the D-06 tombstone regression so the FK-cascade hole cannot regrow."
+    binding: bound
+    asserted_by:
+      - "internal/world/outbox/writer_boundary_test.go"
+      - "test/meta/world_sql_fence_test.go"
+      - "test/meta/world_import_graph_test.go"
+      - "test/integration/auth/guest_reaper_tombstone_test.go"

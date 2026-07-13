@@ -401,8 +401,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	})
 
 	worldSub := worldsetup.NewWorldSubsystem(worldsetup.WorldSubsystemConfig{
-		DB:   dbSub,
-		ABAC: abacSub,
+		DB:     dbSub,
+		ABAC:   abacSub,
+		GameID: gameID,
 	})
 
 	sessionSub := sessionsetup.NewSessionSubsystem(sessionsetup.SessionSubsystemConfig{
@@ -437,7 +438,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		DB:                 dbSub,
 		ABAC:               abacSub,
 		World:              worldSub,
-		WorldTx:            worldSub,
 		Plugins:            pluginSub,
 		PlayerRepos:        authSub,
 		Hashers:            authSub,
@@ -478,6 +478,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 				Wrap(scopeErr)
 		}
 	}
+	// OutboxRelaySubsystem (MODEL-04, 05-07): the single leased relay that drains
+	// world-change outbox rows to JetStream. Constructed with dbSub + eventBusSub,
+	// DependsOn Database + EventBus, registered in productionSubsystems after
+	// eventBusSub so start ordering respects the dependency.
+	outboxRelaySub := worldsetup.NewOutboxRelaySubsystem(worldsetup.OutboxRelaySubsystemConfig{
+		DB:       dbSub,
+		EventBus: eventBusSub,
+		GameID:   gameID,
+	})
+
 	// Ownership: cleanup eventBusSub on early-return paths until the
 	// orchestrator takes over via orch.StopAll below. The flag flips to
 	// true after orch.StartAll succeeds.
@@ -1077,6 +1087,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		grpcSub,
 		adminSub,
 		rekeyCheckpointSweepSub,
+		outboxRelaySub,
 	) {
 		orch.Register(sub)
 	}
@@ -1450,7 +1461,8 @@ func productionSubsystems(
 	cryptoPolicySub,
 	grpcSub,
 	adminSub,
-	rekeyCheckpointSweepSub lifecycle.Subsystem,
+	rekeyCheckpointSweepSub,
+	outboxRelaySub lifecycle.Subsystem,
 ) []lifecycle.Subsystem {
 	return []lifecycle.Subsystem{
 		dbSub, abacSub, authSub, worldSub,
@@ -1466,6 +1478,9 @@ func productionSubsystems(
 		// spec §6.2 / Task 28 DependsOn declaration. Sub-epic E T37
 		// (holomush-jxo8.7.34).
 		rekeyCheckpointSweepSub,
+		// OutboxRelaySubsystem (MODEL-04, 05-07): DependsOn Database + EventBus;
+		// registered after eventBusSub so the relay starts once the bus is up.
+		outboxRelaySub,
 	}
 }
 

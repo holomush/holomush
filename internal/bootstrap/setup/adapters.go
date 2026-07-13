@@ -11,7 +11,6 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
-	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 )
@@ -23,7 +22,9 @@ var (
 )
 
 // CharRepoAdapter wraps a pgxpool.Pool to implement auth.CharacterRepository.
-// It delegates Create to worldpostgres and adds auth-specific queries.
+// It provides the auth-side READ queries only; character creation is owned
+// exclusively by auth.CharacterGenesisService (05-15 removed Create from the
+// auth-side interfaces — the compile-level fence).
 type CharRepoAdapter struct {
 	pool     *pgxpool.Pool
 	charRepo *worldpostgres.CharacterRepository
@@ -32,14 +33,6 @@ type CharRepoAdapter struct {
 // NewCharRepoAdapter constructs a CharRepoAdapter using the provided PostgreSQL pool and character repository.
 func NewCharRepoAdapter(pool *pgxpool.Pool, charRepo *worldpostgres.CharacterRepository) *CharRepoAdapter {
 	return &CharRepoAdapter{pool: pool, charRepo: charRepo}
-}
-
-// Create persists a new character using the underlying world repository.
-func (a *CharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
-	if err := a.charRepo.Create(ctx, char); err != nil {
-		return oops.Code("CHARACTER_CREATE_FAILED").Wrap(err)
-	}
-	return nil
 }
 
 // ExistsByName reports whether a character with the given name already exists (case-insensitive).
@@ -71,55 +64,28 @@ func (a *CharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.ULID)
 }
 
 // ListByPlayer returns all characters owned by the given player, ordered by name.
+//
+// It delegates to the world repository's canonical version-scanning ListByPlayer
+// (round-6 R6-1/R6-3) so every returned Character.Version carries the STORED
+// version, not 0 — keeping the world reads inside the world boundary and ensuring
+// a caller that lists here and then issues a guarded write/delete (e.g. the 05-16
+// guest reaper's CAS Delete) has the correct expected version. A version-blind
+// list feeding a version-predicated delete would permanently conflict.
 func (a *CharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
-	rows, err := a.pool.Query(
-		ctx,
-		`SELECT id, player_id, name, description, location_id, created_at
-         FROM characters WHERE player_id = $1 ORDER BY name`,
-		playerID.String(),
-	)
+	chars, err := a.charRepo.ListByPlayer(ctx, playerID)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_LIST_FAILED").With("player_id", playerID.String()).Wrap(err)
-	}
-	defer rows.Close()
-
-	var chars []*world.Character
-	for rows.Next() {
-		var c world.Character
-		var idStr, playerIDStr string
-		var locIDStr *string
-		var createdAt pgnanos.Time
-		scanErr := rows.Scan(&idStr, &playerIDStr, &c.Name, &c.Description, &locIDStr, &createdAt)
-		if scanErr != nil {
-			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(scanErr)
-		}
-		c.CreatedAt = createdAt.Time()
-		var parseErr error
-		c.ID, parseErr = ulid.Parse(idStr)
-		if parseErr != nil {
-			return nil, oops.Code("CHARACTER_PARSE_FAILED").With("field", "id").With("value", idStr).Wrap(parseErr)
-		}
-		c.PlayerID, parseErr = ulid.Parse(playerIDStr)
-		if parseErr != nil {
-			return nil, oops.Code("CHARACTER_PARSE_FAILED").With("field", "player_id").With("value", playerIDStr).Wrap(parseErr)
-		}
-		if locIDStr != nil {
-			lid, lidErr := ulid.Parse(*locIDStr)
-			if lidErr != nil {
-				return nil, oops.Code("CHARACTER_PARSE_FAILED").With("field", "location_id").With("value", *locIDStr).Wrap(lidErr)
-			}
-			c.LocationID = &lid
-		}
-		chars = append(chars, &c)
-	}
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, oops.Code("CHARACTER_ITERATE_FAILED").Wrap(rowsErr)
 	}
 	return chars, nil
 }
 
 // ListAll returns every character ordered by name ascending (id + name only).
 // Delegates to the underlying world repository.
+//
+// This is a DIRECTORY read (id + name only, no version) for pickers/listings; it
+// is intentionally version-blind and MUST NOT back a guarded delete/CAS. Any path
+// that lists characters for a subsequent version-predicated write MUST use
+// ListByPlayer (which scans version), not ListAll (round-6 R6-3).
 func (a *CharRepoAdapter) ListAll(ctx context.Context) ([]*world.Character, error) {
 	chars, err := a.charRepo.ListAll(ctx)
 	if err != nil {

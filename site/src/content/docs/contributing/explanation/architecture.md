@@ -76,7 +76,7 @@ through the system:
 Events enable:
 
 - **Decoupling** - Components communicate through events, not direct calls
-- **Persistence** - All actions are stored and replayable
+- **Persistence** - All actions are recorded in an append-only audit log
 - **Plugins** - Extensions react to and emit events
 
 #### Event Ordering Model
@@ -292,7 +292,7 @@ Scope: `ScopeSelf` (default, own character), `ScopeLocal` (current location), `S
 | ----------------- | --------------------- | ------------------------------------- |
 | **Core**          | Go                    | Performance, concurrency, type safety |
 | **Database**      | PostgreSQL            | Reliability, SQL power, JSONB         |
-| **Events**        | Custom (ULID ordered) | Append-only, replayable               |
+| **Events**        | Custom (ULID ordered) | Append-only audit/notification log    |
 | **Telnet**        | Go stdlib             | Standard protocol support             |
 | **WebSocket**     | gorilla/websocket     | Mature, widely used                   |
 | **Web Client**    | SvelteKit PWA         | Modern, offline-capable               |
@@ -302,11 +302,11 @@ Scope: `ScopeSelf` (default, own character), `ScopeLocal` (current location), `S
 
 ## Design Principles
 
-### Event Sourcing
+### Event-Driven Architecture
 
-- All game state changes are events
-- Events are immutable and ordered
-- Current state is derived from event replay
+- All game state changes emit immutable, ordered events
+- World state is canonical in PostgreSQL; the event feed is an append-only audit and notification log
+- Recovery reads state from the database — see the decided model in ADR `docs/adr/holomush-i4784-world-state-model-decision.md`
 
 ### Interface-First
 

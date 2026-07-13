@@ -13,9 +13,28 @@ import (
 // ErrNotFound is returned when a requested entity does not exist.
 var ErrNotFound = errors.New("not found")
 
-// ErrNoEventEmitter is returned when an operation requires event emission but no emitter is configured.
-// This indicates a misconfiguration - production systems should always have an EventEmitter.
-var ErrNoEventEmitter = errors.New("event emitter not configured")
+// ErrConcurrentEdit is the single typed conflict signal for the world-model
+// optimistic-concurrency guard (MODEL-03). A version-predicated CAS write or
+// delete that finds the row's version has moved wraps this sentinel with
+// CodeConcurrentEdit. The world.Service boundary propagates it unchanged (D-02:
+// no UX mapping in this phase). It is deliberately distinct from ErrNotFound so
+// a lost update is never mistaken for a missing row.
+var ErrConcurrentEdit = errors.New("concurrent edit")
+
+// CodeConcurrentEdit is the oops code the guarded repos stamp on a conflict
+// wrapping ErrConcurrentEdit. Asserted with errutil.AssertErrorCode.
+const CodeConcurrentEdit = "WORLD_CONCURRENT_EDIT"
+
+// ErrFeedLockTimeout is returned when the per-game feed_position counter's
+// FOR UPDATE lock cannot be acquired within the allocator's bounded
+// lock/statement timeout (MODEL-04). The per-game counter serializes all
+// same-game writes; a stuck lock surfaces this typed error rather than blocking
+// the mutation transaction indefinitely.
+var ErrFeedLockTimeout = errors.New("world feed counter lock timeout")
+
+// CodeFeedLockTimeout is the oops code the feed-counter allocator stamps when the
+// FOR UPDATE lock acquisition times out. Asserted with errutil.AssertErrorCode.
+const CodeFeedLockTimeout = "WORLD_FEED_LOCK_TIMEOUT"
 
 // ErrSelfReferentialExit is returned when an exit's from and to locations are the same.
 var ErrSelfReferentialExit = errors.New("self-referential exit: from and to locations cannot be the same")

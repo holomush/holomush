@@ -28,7 +28,7 @@ var _ = Describe("LocationRepository", func() {
 		It("persists all location fields", func() {
 			loc := createTestLocation("Test Room", "A room for testing.", world.LocationTypePersistent)
 
-			err := env.Locations.Create(ctx, loc)
+			err := delErr(env.Locations.Create(ctx, loc))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
@@ -44,7 +44,7 @@ var _ = Describe("LocationRepository", func() {
 			loc.OwnerID = nil
 			loc.ShadowsID = nil
 
-			err := env.Locations.Create(ctx, loc)
+			err := delErr(env.Locations.Create(ctx, loc))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
@@ -57,7 +57,7 @@ var _ = Describe("LocationRepository", func() {
 			before := time.Now().Add(-time.Second)
 			loc := createTestLocation("Timed Room", "Testing timestamps.", world.LocationTypePersistent)
 
-			err := env.Locations.Create(ctx, loc)
+			err := delErr(env.Locations.Create(ctx, loc))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
@@ -73,7 +73,7 @@ var _ = Describe("LocationRepository", func() {
 			loc.OwnerID = &ownerID
 			loc.ReplayPolicy = "last:-1"
 
-			err := env.Locations.Create(ctx, loc)
+			err := delErr(env.Locations.Create(ctx, loc))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
@@ -95,12 +95,12 @@ var _ = Describe("LocationRepository", func() {
 	Describe("Update", func() {
 		It("updates mutable fields", func() {
 			loc := createTestLocation("Original", "Original description.", world.LocationTypePersistent)
-			err := env.Locations.Create(ctx, loc)
+			err := delErr(env.Locations.Create(ctx, loc))
 			Expect(err).NotTo(HaveOccurred())
 
 			loc.Name = "Updated"
 			loc.Description = "Updated description."
-			err = env.Locations.Update(ctx, loc)
+			err = delErr(env.Locations.Update(ctx, loc))
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.Locations.Get(ctx, loc.ID)
@@ -111,7 +111,7 @@ var _ = Describe("LocationRepository", func() {
 
 		It("returns ErrNotFound for missing ID", func() {
 			loc := createTestLocation("Ghost", "Doesn't exist.", world.LocationTypePersistent)
-			err := env.Locations.Update(ctx, loc)
+			err := delErr(env.Locations.Update(ctx, loc))
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring("not found")))
 		})
@@ -120,10 +120,10 @@ var _ = Describe("LocationRepository", func() {
 	Describe("Delete", func() {
 		It("removes location from database", func() {
 			loc := createTestLocation("To Delete", "Will be deleted.", world.LocationTypePersistent)
-			err := env.Locations.Create(ctx, loc)
+			err := delErr(env.Locations.Create(ctx, loc))
 			Expect(err).NotTo(HaveOccurred())
 
-			err = env.Locations.Delete(ctx, loc.ID)
+			err = delErr(env.Locations.Delete(ctx, loc.ID, 0))
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = env.Locations.Get(ctx, loc.ID)
@@ -131,7 +131,7 @@ var _ = Describe("LocationRepository", func() {
 		})
 
 		It("returns ErrNotFound for missing ID", func() {
-			err := env.Locations.Delete(ctx, ulid.Make())
+			err := delErr(env.Locations.Delete(ctx, ulid.Make(), 0))
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring("not found")))
 		})
@@ -145,8 +145,8 @@ var _ = Describe("LocationRepository", func() {
 			persistentLoc = createTestLocation("Persistent", "Persistent room.", world.LocationTypePersistent)
 			sceneLoc = createTestLocation("Scene", "Scene room.", world.LocationTypeScene)
 
-			Expect(env.Locations.Create(ctx, persistentLoc)).To(Succeed())
-			Expect(env.Locations.Create(ctx, sceneLoc)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, persistentLoc))).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, sceneLoc))).To(Succeed())
 		})
 
 		It("returns only locations of specified type", func() {
@@ -200,11 +200,11 @@ var _ = Describe("LocationRepository", func() {
 	Describe("GetShadowedBy", func() {
 		It("returns scenes that shadow the location", func() {
 			parent := createTestLocation("Tavern", "A cozy tavern.", world.LocationTypePersistent)
-			Expect(env.Locations.Create(ctx, parent)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, parent))).To(Succeed())
 
 			scene := createTestLocation("", "", world.LocationTypeScene)
 			scene.ShadowsID = &parent.ID
-			Expect(env.Locations.Create(ctx, scene)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, scene))).To(Succeed())
 
 			shadows, err := env.Locations.GetShadowedBy(ctx, parent.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -215,7 +215,7 @@ var _ = Describe("LocationRepository", func() {
 
 		It("returns empty slice when no shadows", func() {
 			loc := createTestLocation("Lonely", "No shadows.", world.LocationTypePersistent)
-			Expect(env.Locations.Create(ctx, loc)).To(Succeed())
+			Expect(delErr(env.Locations.Create(ctx, loc))).To(Succeed())
 
 			shadows, err := env.Locations.GetShadowedBy(ctx, loc.ID)
 			Expect(err).NotTo(HaveOccurred())

@@ -344,6 +344,31 @@ func (r *PlayerRepository) DeleteGuestPlayer(ctx context.Context, playerID ulid.
 	return nil
 }
 
+// MarkReaping sets players.reaping_at (epoch-ns) for a guest player, marking it
+// as being reaped so the character-genesis service (05-15) rejects any new
+// character creation for it (round-6 R6-2 anti-TOCTOU). The is_guest=true guard
+// prevents accidentally marking a registered player. The UPDATE takes the
+// players ROW LOCK, so an in-flight genesis holding SELECT reaping_at ... FOR
+// UPDATE on the same row blocks this mark until the character commits (then the
+// reaper's enumeration sees + tombstones it); a genesis starting after this mark
+// commits observes reaping_at set and is rejected. Idempotent for the reaper: a
+// re-mark simply overwrites the timestamp.
+func (r *PlayerRepository) MarkReaping(ctx context.Context, playerID ulid.ULID) error {
+	result, err := r.pool.Exec(ctx, `
+		UPDATE players SET reaping_at = $2 WHERE id = $1 AND is_guest = true
+	`, playerID.String(), pgnanos.From(time.Now()))
+	if err != nil {
+		return oops.Code("GUEST_MARK_REAPING_FAILED").
+			With("player_id", playerID.String()).Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.Code("GUEST_NOT_FOUND").
+			With("player_id", playerID.String()).
+			Wrap(auth.ErrNotFound)
+	}
+	return nil
+}
+
 // ExistingIDs returns the subset of the input ID strings that exist in
 // the players table. Used by the crypto.operators startup cross-check
 // (sub-epic B) to identify configured operator IDs that don't correspond

@@ -170,9 +170,9 @@ type CoreServer struct {
 	charRepo          auth.CharacterRepository
 	guestService      *auth.GuestService
 
-	// Phase 3b: transactor and binding repository for atomic character + binding INSERTs
-	// (Create) and current-binding lookup for Subscribe / QueryStreamHistory (Current).
-	transactor   Transactor
+	// Binding repository for current-binding lookup in Subscribe /
+	// QueryStreamHistory (Current). Character-creation binding is owned by the
+	// genesis service (05-15), not the CoreServer.
 	bindings     BindingRepo
 	cryptoActive bool // true when KEK (RekeyManager) is wired; gates binding lookup in Subscribe / QueryStreamHistory
 

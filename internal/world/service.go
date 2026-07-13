@@ -5,6 +5,7 @@ package world
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -17,7 +18,41 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/pkg/errutil"
+)
+
+// defaultGameID is the single-game identity used when ServiceConfig.GameID is
+// empty. Phase 5 runs one game ("main"); the outbox feed counter, per-game
+// ordering, and consumer watermarks are all keyed by it, ready for multi-game
+// later (wmodel round-9 R6-5).
+const defaultGameID = "main"
+
+// Envelope taxonomy kinds for the world-change feed. These literals MUST match
+// the taxonomy-declared kind strings in internal/world/outbox/taxonomy.go exactly
+// (the 05-11 census meta-test asserts the command↔kind bijection). They are
+// duplicated as local constants rather than imported because package world MUST
+// NOT import internal/world/outbox (the world→outbox import edge is forbidden — it
+// would re-form the round-2/round-3 cycle; test/meta/world_import_graph_test.go).
+const (
+	kindLocationCreated = "location_created"
+	kindLocationUpdated = "location_updated"
+	kindLocationDeleted = "location_deleted"
+
+	kindExitCreated = "exit_created"
+	kindExitUpdated = "exit_updated"
+	kindExitDeleted = "exit_deleted"
+
+	kindObjectCreated = "object_created"
+	kindObjectUpdated = "object_updated"
+	kindObjectDeleted = "object_deleted"
+	kindObjectMoved   = "object_moved"
+
+	kindCharacterUpdated           = "character_updated"
+	kindCharacterDeleted           = "character_deleted"
+	kindCharacterMoved             = "character_moved"
+	kindCharacterPreferencesUpdate = "character_preferences_update"
+	worldSchemaVersion             = 1
 )
 
 // ErrPermissionDenied is returned when an operation is not authorized.
@@ -36,23 +71,44 @@ type ServiceConfig struct {
 	CharacterRepo CharacterRepository
 	PropertyRepo  PropertyRepository
 	Engine        types.AccessPolicyEngine
-	EventEmitter  EventEmitter
 	Transactor    Transactor
+	// OutboxWriter persists the same-tx world-change envelope for guarded write
+	// commands routed through the write executor (05-06 wires MoveCharacter; the
+	// subsystem injection is 05-07). Injected as an interface so package world
+	// imports neither internal/world/outbox nor internal/world/postgres.
+	OutboxWriter OutboxWriter
+	// GameID keys the outbox feed counter and the outbox row's game_id. Defaults to
+	// "main" when empty (single-game Phase 5).
+	GameID string
 }
 
 // Service provides authorized access to world model operations.
 // All operations check authorization before delegating to repositories.
+//
+// Compile-time write fence (05-11, complete): Service holds ONLY the read-only
+// reader views of each repository. Every write command routes through the write
+// executor (`s.mutator`), which is the SOLE in-world owner of the writer repos —
+// so a direct `s.xRepo.Update(...)` / `.Delete(...)` / `.Create(...)` is a type
+// error. This is the reader-view half of INV-WORLD-4's enforceable boundary
+// (paired with the AST SQL fence (05-09) + the internal/world/postgres
+// composition allowlist (05-07 Task 4) + the two sanctioned out-of-world
+// application services: character-genesis (05-15) and character-reaping (05-16)).
 type Service struct {
-	locationRepo  LocationRepository
-	exitRepo      ExitRepository
-	objectRepo    ObjectRepository
-	sceneRepo     SceneRepository
-	characterRepo CharacterRepository
-	propertyRepo  PropertyRepository
+	locationRepo  LocationReader
+	exitRepo      ExitReader
+	objectRepo    ObjectReader
+	sceneRepo     SceneReader
+	characterRepo CharacterReader
+	propertyRepo  PropertyReader
 	engine        types.AccessPolicyEngine
-	eventEmitter  EventEmitter
 	transactor    Transactor
 	movementHook  MovementHook
+	// mutator is the write executor + write-requires-envelope seam. It owns the
+	// private write repos + transactor + injected OutboxWriter (05-06). Nil until
+	// an OutboxWriter is configured; MoveCharacter reports a configuration error if
+	// so.
+	mutator *worldMutator
+	gameID  string
 }
 
 // NewService creates a new Service with the given configuration.
@@ -61,11 +117,27 @@ func NewService(cfg ServiceConfig) *Service {
 	if cfg.Engine == nil {
 		panic("world.NewService: Engine is required")
 	}
-	if cfg.EventEmitter == nil {
-		slog.Warn("world.NewService: EventEmitter not configured, operations requiring event emission will fail")
-	}
 	if cfg.PropertyRepo == nil || cfg.Transactor == nil {
 		slog.Warn("world.NewService: PropertyRepo and Transactor not configured, delete operations will fail (spec: 05-storage-audit.md §108-119 requires transactional cascade)")
+	}
+	if cfg.OutboxWriter == nil {
+		slog.Warn("world.NewService: OutboxWriter not configured, envelope-emitting write commands (MoveCharacter) will fail (subsystem wiring lands in 05-07)")
+	}
+	gameID := cfg.GameID
+	if gameID == "" {
+		gameID = defaultGameID
+	}
+	var mutator *worldMutator
+	if cfg.OutboxWriter != nil && cfg.Transactor != nil {
+		mutator = newWorldMutator(
+			cfg.CharacterRepo,
+			cfg.LocationRepo,
+			cfg.ExitRepo,
+			cfg.ObjectRepo,
+			cfg.PropertyRepo,
+			cfg.Transactor,
+			cfg.OutboxWriter,
+		)
 	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
@@ -75,9 +147,10 @@ func NewService(cfg ServiceConfig) *Service {
 		characterRepo: cfg.CharacterRepo,
 		propertyRepo:  cfg.PropertyRepo,
 		engine:        cfg.Engine,
-		eventEmitter:  cfg.EventEmitter,
 		transactor:    cfg.Transactor,
 		movementHook:  NoopMovementHook{},
+		mutator:       mutator,
+		gameID:        gameID,
 	}
 }
 
@@ -219,7 +292,15 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
 	}
-	if err := s.locationRepo.Create(ctx, loc); err != nil {
+	if s.mutator == nil {
+		return oops.Code("LOCATION_CREATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildLocationPayload(loc)
+	if err != nil {
+		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "build location create payload %s", loc.ID)
+	}
+	intent := s.buildIntent(kindLocationCreated, wmodel.AggregateLocation, loc.ID, subjectID, payload)
+	if _, err := s.mutator.createLocation(ctx, intent, loc); err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "create location %s", loc.ID)
 	}
 	return nil
@@ -241,13 +322,41 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
 	}
-	if err := s.locationRepo.Update(ctx, loc); err != nil {
+	if s.mutator == nil {
+		return oops.Code("LOCATION_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildLocationPayload(loc)
+	if err != nil {
+		return oops.Code("LOCATION_UPDATE_FAILED").Wrapf(err, "build location update payload %s", loc.ID)
+	}
+	intent := s.buildIntent(kindLocationUpdated, wmodel.AggregateLocation, loc.ID, subjectID, payload)
+	if _, err := s.mutator.updateLocation(ctx, intent, loc); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("id", loc.ID.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "update location %s", loc.ID)
 		}
 		return oops.Code("LOCATION_UPDATE_FAILED").Wrapf(err, "update location %s", loc.ID)
 	}
 	return nil
+}
+
+// buildIntent constructs a world-change EnvelopeIntent for a command. The intent
+// carries the service's game id, the command's taxonomy-declared kind + aggregate,
+// the authorized principal as actor, and the new-values-only payload. It
+// deliberately omits epoch/feed_position/manifest — the postgres WriteIntent writer
+// owns those (round-3 blocker #1).
+func (s *Service) buildIntent(kind string, aggType wmodel.AggregateType, aggID ulid.ULID, actor string, payload []byte) wmodel.EnvelopeIntent {
+	return wmodel.NewEnvelopeIntent(wmodel.IntentParams{
+		GameID:        s.gameID,
+		Kind:          kind,
+		SchemaVersion: worldSchemaVersion,
+		Actor:         actor,
+		AggregateType: aggType,
+		AggregateID:   aggID,
+		Payload:       payload,
+	})
 }
 
 // DeleteLocation deletes a location and its properties after checking delete authorization.
@@ -267,22 +376,22 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixLocation); err != nil {
 		return err
 	}
-	deleteFn := func(ctx context.Context) error {
-		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
-			return oops.Code("LOCATION_DELETE_FAILED").
-				With("operation", "delete_location_properties").
-				Wrapf(err, "delete properties for location %s", id)
-		}
-		if err := s.locationRepo.Delete(ctx, id); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
-			}
-			return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
-		}
-		return nil
+	if s.mutator == nil {
+		return oops.Code("LOCATION_DELETE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
-		return oops.Code("LOCATION_DELETE_FAILED").Wrap(err)
+	payload, err := BuildTombstonePayload(id)
+	if err != nil {
+		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "build location tombstone payload %s", id)
+	}
+	intent := s.buildIntent(kindLocationDeleted, wmodel.AggregateLocation, id, subjectID, payload)
+	// The delete + its property cascade + the tombstone envelope commit in ONE
+	// transaction via the mutate() seam; the envelope manifest carries the
+	// DB-cascaded exits from the repo delta (INV-WORLD-2 parity).
+	if _, err := s.mutator.deleteLocation(ctx, intent, id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
+		}
+		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
 	}
 	return nil
 }
@@ -329,7 +438,15 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
 	}
-	if err := s.exitRepo.Create(ctx, exit); err != nil {
+	if s.mutator == nil {
+		return oops.Code("EXIT_CREATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildExitPayload(exit)
+	if err != nil {
+		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "build exit create payload %s", exit.ID)
+	}
+	intent := s.buildIntent(kindExitCreated, wmodel.AggregateExit, exit.ID, subjectID, payload)
+	if _, err := s.mutator.createExit(ctx, intent, exit); err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "create exit %s", exit.ID)
 	}
 	return nil
@@ -354,7 +471,18 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
 	}
-	if err := s.exitRepo.Update(ctx, exit); err != nil {
+	if s.mutator == nil {
+		return oops.Code("EXIT_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildExitPayload(exit)
+	if err != nil {
+		return oops.Code("EXIT_UPDATE_FAILED").Wrapf(err, "build exit update payload %s", exit.ID)
+	}
+	intent := s.buildIntent(kindExitUpdated, wmodel.AggregateExit, exit.ID, subjectID, payload)
+	if _, err := s.mutator.updateExit(ctx, intent, exit); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("id", exit.ID.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("EXIT_NOT_FOUND").Wrapf(err, "update exit %s", exit.ID)
 		}
@@ -375,31 +503,41 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixExit); err != nil {
 		return err
 	}
-	err := s.exitRepo.Delete(ctx, id)
+	if s.mutator == nil {
+		return oops.Code("EXIT_DELETE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildTombstonePayload(id)
 	if err != nil {
-		// Check if this is a cleanup result from bidirectional exit handling
+		return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "build exit tombstone payload %s", id)
+	}
+	intent := s.buildIntent(kindExitDeleted, wmodel.AggregateExit, id, subjectID, payload)
+	// The delete (incl. the atomic bidirectional reverse-exit cascade) and its
+	// single tombstone envelope commit in ONE transaction via mutate(); the envelope
+	// manifest carries the reverse exit from the repo delta. A non-severe cleanup
+	// notice (reverse exit already gone) is surfaced AFTER the commit — the primary
+	// delete still emitted its envelope.
+	_, notice, err := s.mutator.deleteExit(ctx, intent, id)
+	if err != nil {
+		// A severe bidirectional cleanup rolled the tx back (no envelope).
 		var cleanupResult *BidirectionalCleanupResult
-		if errors.As(err, &cleanupResult) {
-			// Log cleanup issues at appropriate level
-			if cleanupResult.IsSevere() {
-				// Severe: operation was rolled back, primary delete did NOT complete
-				slog.ErrorContext(ctx, "bidirectional exit delete rolled back",
-					"exit_id", cleanupResult.ExitID.String(),
-					"error", cleanupResult.Error())
-				return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "delete exit %s", id)
-			}
-			// Non-severe: primary delete succeeded, return exit was just not found
-			slog.InfoContext(ctx, "bidirectional exit cleanup notice: return exit already deleted",
+		if errors.As(err, &cleanupResult) && cleanupResult.IsSevere() {
+			slog.ErrorContext(ctx, "bidirectional exit delete rolled back",
 				"exit_id", cleanupResult.ExitID.String(),
-				"to_location_id", cleanupResult.ToLocationID.String(),
-				"return_name", cleanupResult.ReturnName)
-			return nil
+				"error", cleanupResult.Error())
+			return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "delete exit %s", id)
 		}
-		// Actual delete failure
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("EXIT_NOT_FOUND").Wrapf(err, "delete exit %s", id)
 		}
 		return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "delete exit %s", id)
+	}
+	if notice != nil {
+		// Non-severe: primary delete succeeded + envelope committed; the reverse exit
+		// was already gone.
+		slog.InfoContext(ctx, "bidirectional exit cleanup notice: return exit already deleted",
+			"exit_id", notice.ExitID.String(),
+			"to_location_id", notice.ToLocationID.String(),
+			"return_name", notice.ReturnName)
 	}
 	return nil
 }
@@ -462,7 +600,15 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if err := obj.ValidateContainment(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
-	if err := s.objectRepo.Create(ctx, obj); err != nil {
+	if s.mutator == nil {
+		return oops.Code("OBJECT_CREATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildObjectPayload(obj)
+	if err != nil {
+		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "build object create payload %s", obj.ID)
+	}
+	intent := s.buildIntent(kindObjectCreated, wmodel.AggregateObject, obj.ID, subjectID, payload)
+	if _, err := s.mutator.createObject(ctx, intent, obj); err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "create object %s", obj.ID)
 	}
 	return nil
@@ -487,7 +633,18 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	if err := obj.ValidateContainment(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
-	if err := s.objectRepo.Update(ctx, obj); err != nil {
+	if s.mutator == nil {
+		return oops.Code("OBJECT_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildObjectPayload(obj)
+	if err != nil {
+		return oops.Code("OBJECT_UPDATE_FAILED").Wrapf(err, "build object update payload %s", obj.ID)
+	}
+	intent := s.buildIntent(kindObjectUpdated, wmodel.AggregateObject, obj.ID, subjectID, payload)
+	if _, err := s.mutator.updateObject(ctx, intent, obj); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("id", obj.ID.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "update object %s", obj.ID)
 		}
@@ -513,39 +670,32 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixObject); err != nil {
 		return err
 	}
-	deleteFn := func(ctx context.Context) error {
-		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
-			return oops.Code("OBJECT_DELETE_FAILED").
-				With("operation", "delete_object_properties").
-				Wrapf(err, "delete properties for object %s", id)
-		}
-		if err := s.objectRepo.Delete(ctx, id); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
-			}
-			return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
-		}
-		return nil
+	if s.mutator == nil {
+		return oops.Code("OBJECT_DELETE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
-		return oops.Code("OBJECT_DELETE_FAILED").Wrap(err)
+	payload, err := BuildTombstonePayload(id)
+	if err != nil {
+		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "build object tombstone payload %s", id)
+	}
+	intent := s.buildIntent(kindObjectDeleted, wmodel.AggregateObject, id, subjectID, payload)
+	// The delete + its property cascade + the tombstone envelope commit in ONE
+	// transaction via the mutate() seam.
+	if _, err := s.mutator.deleteObject(ctx, intent, id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
+		}
+		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
 	}
 	return nil
 }
 
-// MoveObject moves an object to a new containment (location, character inventory, or another object).
-// Emits a "move" event for plugins after successful database update.
+// MoveObject moves an object to a new containment (location, character inventory,
+// or another object).
 //
-// Event emission follows eventual consistency: the database move succeeds atomically first,
-// then an event is emitted. If event emission fails after all retries (3 retries, 4 total attempts) are exhausted:
-//   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
-//   - Error context includes move_succeeded=true to indicate the database change persisted
-//   - Callers should NOT retry the move (it already succeeded in the database)
-//   - Callers may choose to log the event failure and treat the user operation as successful
-//
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-//
-// This design ensures data consistency while surfacing event delivery failures to callers.
+// The object move and its ONE object_moved envelope commit in the SAME transaction
+// via the write executor's same-tx outbox (05-10) — INV-WORLD-4. The object is read
+// first so the new-values-only payload can carry the source containment; a failed or
+// no-op move (missing object, version conflict) writes no envelope.
 func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
@@ -558,7 +708,8 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
 
-	// Get current containment for the move event
+	// Read the current object: it exists check + the source containment for the
+	// new-values-only move payload (a pre-commit failure emits no envelope).
 	obj, err := s.objectRepo.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -566,31 +717,23 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		}
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "get object %s", id)
 	}
-	from := obj.Containment()
 
-	if err := s.objectRepo.Move(ctx, id, to); err != nil {
+	if s.mutator == nil {
+		return oops.Code("OBJECT_MOVE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildObjectMovePayload(obj, to)
+	if err != nil {
+		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "build object move payload %s", id)
+	}
+	intent := s.buildIntent(kindObjectMoved, wmodel.AggregateObject, id, subjectID, payload)
+	if _, err := s.mutator.moveObject(ctx, intent, id, to); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("id", id.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
 		}
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "move object %s", id)
-	}
-
-	// Emit move event - failures are propagated to the caller
-	payload := MovePayload{
-		EntityType: EntityTypeObject,
-		EntityID:   id,
-		FromType:   from.Type(),
-		FromID:     from.ID(), // Can be nil for first-time placements
-		ToType:     to.Type(),
-		ToID:       *to.ID(), // Safe: to.Validate() ensures one field is set
-	}
-	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		// Add OBJECT_MOVE_EVENT_FAILED at top level for error categorization
-		// Inner error has EVENT_EMIT_FAILED code from events.go
-		return oops.Code("OBJECT_MOVE_EVENT_FAILED").
-			With("object_id", id.String()).
-			With("move_succeeded", true).
-			Wrapf(err, "move completed but event emission failed")
 	}
 
 	return nil
@@ -613,22 +756,22 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixCharacter); err != nil {
 		return err
 	}
-	deleteFn := func(ctx context.Context) error {
-		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
-			return oops.Code("CHARACTER_DELETE_FAILED").
-				With("operation", "delete_character_properties").
-				Wrapf(err, "delete properties for character %s", id)
-		}
-		if err := s.characterRepo.Delete(ctx, id); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
-			}
-			return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
-		}
-		return nil
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
-		return oops.Code("CHARACTER_DELETE_FAILED").Wrap(err)
+	payload, err := BuildTombstonePayload(id)
+	if err != nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "build character tombstone payload %s", id)
+	}
+	// The delete + its property cascade + the single character_deleted tombstone
+	// envelope commit in ONE transaction via the mutate() seam. The tombstone kind
+	// is the SAME kind the guest CharacterReapingService reuses (05-16/D-06).
+	intent := s.buildIntent(kindCharacterDeleted, wmodel.AggregateCharacter, id, subjectID, payload)
+	if _, err := s.mutator.deleteCharacter(ctx, intent, id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
+		}
+		return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
 	}
 	return nil
 }
@@ -668,14 +811,118 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 		}
 		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
 	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
 	char.Description = description
-	if err := s.characterRepo.Update(ctx, char); err != nil {
+	payload, err := BuildCharacterUpdatePayload(characterID, description)
+	if err != nil {
+		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "build character update payload %s", characterID)
+	}
+	// Route the guarded character update + its one character_updated envelope
+	// through the same-tx outbox seam. char carries the read Version (05-04) as the
+	// CAS guard so a concurrent conflicting write surfaces WORLD_CONCURRENT_EDIT.
+	intent := s.buildIntent(kindCharacterUpdated, wmodel.AggregateCharacter, characterID, subjectID, payload)
+	if _, err := s.mutator.updateCharacter(ctx, intent, char); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("character_id", characterID.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update character %s", characterID)
 		}
 		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "update character %s", characterID)
 	}
 	return nil
+}
+
+// UpdateCharacterPreferences persists a character's whole preferences bag
+// (pre-marshaled JSONB) through the guarded/versioned/envelope world path — the
+// folded-in character-settings write (round-4 C5 / D-05). The former raw
+// UPDATE characters in internal/store is replaced by this command so the write is
+// version-guarded (MODEL-03) and emits exactly one character_preferences_update
+// envelope in the SAME transaction (INV-WORLD-4 for the characters table).
+//
+// It is an RMW with NO caller-supplied version: it reads the current character
+// version internally and CASes on it, so two concurrent settings writes race the
+// read-then-CAS and exactly one wins — the other surfaces WORLD_CONCURRENT_EDIT
+// (D-02: no auto-retry; the settings caller surfaces the typed error rather than
+// silently clobbering).
+//
+// It deliberately runs NO checkAccess: this is the settings-subsystem persistence
+// primitive (the authorization decision is made at the settings command layer),
+// and the prior raw store path had no ABAC — gating it here would be an
+// out-of-scope behavior change (D-05). The envelope actor is the character
+// causing its own settings change.
+func (s *Service) UpdateCharacterPreferences(ctx context.Context, characterID ulid.ULID, prefs []byte) error {
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Errorf("character repository not configured")
+	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+
+	// Read the current character: its version is the CAS guard.
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update preferences for character %s", characterID)
+		}
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+
+	intent, err := s.buildPreferencesIntent(characterID, prefs)
+	if err != nil {
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Wrapf(err, "build preferences intent for character %s", characterID)
+	}
+
+	if _, err := s.mutator.updateCharacterPreferences(ctx, intent, characterID, prefs, char.Version); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			// Surface the typed conflict unchanged (D-02: no auto-retry).
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				Wrap(err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update preferences for character %s", characterID)
+		}
+		return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").Wrapf(err, "update preferences for character %s", characterID)
+	}
+	return nil
+}
+
+// preferencesIntentPayload is the new-values-only, erasure-safe preferences
+// payload persisted in the envelope intent: the character id and the whole
+// (pre-marshaled) preferences bag as opaque JSON. Settings bags are not secrets.
+type preferencesIntentPayload struct {
+	CharacterID string          `json:"character_id"`
+	Preferences json.RawMessage `json:"preferences"`
+}
+
+// buildPreferencesIntent constructs the character_preferences_update
+// EnvelopeIntent. The actor is the character causing its own settings change; the
+// payload is new-values-only. The intent omits epoch/feed_position/manifest — the
+// writer owns those.
+func (s *Service) buildPreferencesIntent(characterID ulid.ULID, prefs []byte) (wmodel.EnvelopeIntent, error) {
+	raw := json.RawMessage(prefs)
+	if len(raw) == 0 {
+		raw = json.RawMessage(`null`)
+	}
+	payload, err := json.Marshal(preferencesIntentPayload{
+		CharacterID: characterID.String(),
+		Preferences: raw,
+	})
+	if err != nil {
+		return wmodel.EnvelopeIntent{}, oops.Wrapf(err, "marshal preferences intent payload")
+	}
+	return wmodel.NewEnvelopeIntent(wmodel.IntentParams{
+		GameID:        s.gameID,
+		Kind:          kindCharacterPreferencesUpdate,
+		SchemaVersion: worldSchemaVersion,
+		Actor:         access.CharacterSubject(characterID.String()),
+		AggregateType: wmodel.AggregateCharacter,
+		AggregateID:   characterID,
+		Payload:       payload,
+	}), nil
 }
 
 // GetCharactersByLocation retrieves characters at a location with pagination after checking list_characters authorization.
@@ -698,45 +945,9 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 	return chars, nil
 }
 
-// AddSceneParticipant adds a character to a scene after checking write authorization.
-// Returns ErrInvalidParticipantRole if the role is not valid.
-func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID, role ParticipantRole) error {
-	if s.sceneRepo == nil {
-		return oops.Code("SCENE_ADD_PARTICIPANT_FAILED").Errorf("scene repository not configured")
-	}
-	resource := access.SceneResource(sceneID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixScene); err != nil {
-		return err
-	}
-	if err := role.Validate(); err != nil {
-		return oops.Code("SCENE_INVALID").Wrap(err)
-	}
-	if err := s.sceneRepo.AddParticipant(ctx, sceneID, characterID, role); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("SCENE_NOT_FOUND").Wrapf(err, "add participant %s to scene %s", characterID, sceneID)
-		}
-		return oops.Code("SCENE_ADD_PARTICIPANT_FAILED").Wrapf(err, "add participant %s to scene %s", characterID, sceneID)
-	}
-	return nil
-}
-
-// RemoveSceneParticipant removes a character from a scene after checking write authorization.
-func (s *Service) RemoveSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID) error {
-	if s.sceneRepo == nil {
-		return oops.Code("SCENE_REMOVE_PARTICIPANT_FAILED").Errorf("scene repository not configured")
-	}
-	resource := access.SceneResource(sceneID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixScene); err != nil {
-		return err
-	}
-	if err := s.sceneRepo.RemoveParticipant(ctx, sceneID, characterID); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("SCENE_NOT_FOUND").Wrapf(err, "remove participant %s from scene %s", characterID, sceneID)
-		}
-		return oops.Code("SCENE_REMOVE_PARTICIPANT_FAILED").Wrapf(err, "remove participant %s from scene %s", characterID, sceneID)
-	}
-	return nil
-}
+// Round-5 D-07: AddSceneParticipant/RemoveSceneParticipant were removed — the
+// vestigial world scene-participant write surface had no production caller. The
+// read surface (ListSceneParticipants) is KEPT.
 
 // ListSceneParticipants lists all participants in a scene after checking read authorization.
 func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, sceneID ulid.ULID) ([]SceneParticipant, error) {
@@ -758,18 +969,19 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 }
 
 // MoveCharacter moves a character to a new location.
-// Emits a "move" event for plugins after successful database update.
 //
-// Event emission follows eventual consistency: the database move succeeds atomically first,
-// then an event is emitted. If event emission fails after all retries (3 retries, 4 total attempts) are exhausted:
-//   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
-//   - Error context includes move_succeeded=true to indicate the database change persisted
-//   - Callers should NOT retry the move (it already succeeded in the database)
-//   - Callers may choose to log the event failure and treat the user operation as successful
+// The character move and its ONE move envelope commit in the SAME transaction via
+// the write executor's same-tx outbox (05-06) — there is no post-commit emit step
+// to lose on a broker blip (the M2 dual-write window is closed for this command).
+// A failed or no-op move (version conflict, missing destination) writes no
+// envelope.
 //
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-//
-// This design ensures data consistency while surfacing event delivery failures to callers.
+// The movement hook fires AFTER that transaction commits, because it propagates the
+// new location to the session store — a separate connection pool that cannot enroll
+// in the world transaction. A hook failure is operational degradation, not a
+// command failure: the move and its envelope are already durable, so the hook error
+// is logged + counted and MoveCharacter returns SUCCESS (the session's derived
+// location may lag until re-sync — see MovementHook).
 func (s *Service) MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
@@ -779,7 +991,8 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 		return err
 	}
 
-	// Get current location for the move event
+	// Read the current character: its version is the CAS guard and its current
+	// location is the new-values-only intent's from-location field.
 	char, err := s.characterRepo.Get(ctx, characterID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -788,240 +1001,94 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "get character %s", characterID)
 	}
 
-	// Verify destination location exists
+	// Verify destination location exists (a pre-commit failure emits no envelope).
 	if s.locationRepo == nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("location repository not configured")
 	}
-	if _, err := s.locationRepo.Get(ctx, toLocationID); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "move character to location %s", toLocationID)
+	if _, locErr := s.locationRepo.Get(ctx, toLocationID); locErr != nil {
+		if errors.Is(locErr, ErrNotFound) {
+			return oops.Code("LOCATION_NOT_FOUND").Wrapf(locErr, "move character to location %s", toLocationID)
 		}
-		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "verify destination location %s", toLocationID)
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(locErr, "verify destination location %s", toLocationID)
 	}
 
-	// Update character location
-	if err := s.characterRepo.UpdateLocation(ctx, characterID, &toLocationID); err != nil {
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+
+	// Build the intent-level, new-values-only envelope intent (no manifest, no
+	// epoch/feed_position — those are the writer's to allocate).
+	intent, err := s.buildMoveIntent(char, subjectID, characterID, toLocationID)
+	if err != nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "build move intent for character %s", characterID)
+	}
+
+	// Route the guarded character-location write + its move envelope through the
+	// same-tx outbox seam. The character's read version is the CAS guard.
+	if _, err := s.mutator.moveCharacter(ctx, intent, characterID, toLocationID, char.Version); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "move character %s", characterID)
+		}
 		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "update character %s location", characterID)
 	}
 
-	// Fire movement hook — propagates new location to dependent stores (e.g. session store)
-	// before the move event is emitted so consumers see a consistent view.
+	// The state change AND its move envelope have now committed atomically. Fire the
+	// movement hook post-commit; a failure is operational degradation (log + metric,
+	// return success) — never a command failure after the commit (round-5 finding 3).
 	arrivedAt := time.Now().UTC()
 	if hookErr := s.movementHook.OnCharacterMoved(ctx, characterID, toLocationID, arrivedAt); hookErr != nil {
-		// move_succeeded=true: the character row was already committed (line
-		// 803 above). Callers MUST NOT retry the move as if it were atomic
-		// with the hook; this attribute lets them distinguish the partial-
-		// failure case from a pre-DB-commit failure.
-		return oops.Code("CHARACTER_MOVE_FAILED").
-			With("character_id", characterID.String()).
-			With("phase", "movement_hook").
-			With("move_succeeded", true).
-			Wrap(hookErr)
-	}
-
-	// Build move payload
-	var fromType ContainmentType
-	var fromID *ulid.ULID
-	if char.LocationID == nil {
-		fromType = ContainmentTypeNone
-		fromID = nil
-	} else {
-		fromType = ContainmentTypeLocation
-		fromID = char.LocationID
-	}
-
-	payload := MovePayload{
-		EntityType: EntityTypeCharacter,
-		EntityID:   characterID,
-		FromType:   fromType,
-		FromID:     fromID,
-		ToType:     ContainmentTypeLocation,
-		ToID:       toLocationID,
-	}
-	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		// Add CHARACTER_MOVE_EVENT_FAILED at top level for error categorization
-		// Inner error has EVENT_EMIT_FAILED code from events.go
-		return oops.Code("CHARACTER_MOVE_EVENT_FAILED").
-			With("character_id", characterID.String()).
-			With("move_succeeded", true).
-			Wrapf(err, "move completed but event emission failed")
+		observability.RecordMovementHookFailure()
+		slog.WarnContext(ctx, "movement hook failed after committed move; session-derived location may lag until re-sync",
+			"character_id", characterID.String(),
+			"to_location_id", toLocationID.String(),
+			"error", hookErr)
 	}
 
 	return nil
 }
 
-// ExamineLocation allows a character to examine a location.
-// Emits an examine event for plugins after validation and authorization.
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
-// ExamineLocation checks whether the character can examine a target location and
-// sends detailed location information to them.
-func (s *Service) ExamineLocation(ctx context.Context, subjectID string, characterID, targetLocationID ulid.ULID) error {
-	if s.characterRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
-	}
-	if s.locationRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("location repository not configured")
-	}
-
-	// Get the examining character
-	char, err := s.characterRepo.Get(ctx, characterID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
-	}
-
-	// Character must be in the world to examine anything
-	if char.LocationID == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
-	}
-
-	// Authorize before fetching target to prevent information disclosure
-	resource := access.LocationResource(targetLocationID.String())
-	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixLocation); checkErr != nil {
-		return checkErr
-	}
-
-	// Get the target location (only after authorization)
-	targetLoc, err := s.locationRepo.Get(ctx, targetLocationID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "target location %s not found", targetLocationID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target location %s", targetLocationID)
-	}
-
-	// Build and emit examine event
-	payload := ExaminePayload{
-		CharacterID: characterID,
-		TargetType:  TargetTypeLocation,
-		TargetID:    targetLocationID,
-		TargetName:  targetLoc.Name,
-		LocationID:  *char.LocationID,
-	}
-	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
-		return oops.Code("EXAMINE_LOCATION_EVENT_FAILED").
-			With("character_id", characterID.String()).
-			With("target_id", targetLocationID.String()).
-			Wrapf(err, "examine location event emission failed")
-	}
-	return nil
+// moveIntentPayload is the new-values-only, erasure-safe move payload persisted in
+// the envelope intent — no secrets, intent-level.
+type moveIntentPayload struct {
+	CharacterID    string  `json:"character_id"`
+	ToLocationID   string  `json:"to_location_id"`
+	FromLocationID *string `json:"from_location_id,omitempty"`
 }
 
-// ExamineObject allows a character to examine an object.
-// Emits an examine event for plugins after validation and authorization.
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
-func (s *Service) ExamineObject(ctx context.Context, subjectID string, characterID, targetObjectID ulid.ULID) error {
-	if s.characterRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
+// buildMoveIntent constructs the character-move EnvelopeIntent from the read
+// character and the command inputs. It carries the service's game id, the mover as
+// actor, and a new-values-only payload (from/to location). The intent deliberately
+// omits epoch/feed_position/manifest — the writer owns those.
+func (s *Service) buildMoveIntent(char *Character, subjectID string, characterID, toLocationID ulid.ULID) (wmodel.EnvelopeIntent, error) {
+	p := moveIntentPayload{
+		CharacterID:  characterID.String(),
+		ToLocationID: toLocationID.String(),
 	}
-	if s.objectRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("object repository not configured")
+	if char.LocationID != nil {
+		from := char.LocationID.String()
+		p.FromLocationID = &from
 	}
-
-	// Get the examining character
-	char, err := s.characterRepo.Get(ctx, characterID)
+	payload, err := json.Marshal(p)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
+		return wmodel.EnvelopeIntent{}, oops.Wrapf(err, "marshal move intent payload")
 	}
-
-	// Character must be in the world to examine anything
-	if char.LocationID == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
-	}
-
-	// Authorize before fetching target to prevent information disclosure
-	resource := access.ObjectResource(targetObjectID.String())
-	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixObject); checkErr != nil {
-		return checkErr
-	}
-
-	// Get the target object (only after authorization)
-	targetObj, err := s.objectRepo.Get(ctx, targetObjectID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "target object %s not found", targetObjectID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target object %s", targetObjectID)
-	}
-
-	// Build and emit examine event
-	payload := ExaminePayload{
-		CharacterID: characterID,
-		TargetType:  TargetTypeObject,
-		TargetID:    targetObjectID,
-		TargetName:  targetObj.Name,
-		LocationID:  *char.LocationID,
-	}
-	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
-		return oops.Code("EXAMINE_OBJECT_EVENT_FAILED").
-			With("character_id", characterID.String()).
-			With("target_id", targetObjectID.String()).
-			Wrapf(err, "examine object event emission failed")
-	}
-	return nil
+	return wmodel.NewEnvelopeIntent(wmodel.IntentParams{
+		GameID:        s.gameID,
+		Kind:          kindCharacterMoved,
+		SchemaVersion: worldSchemaVersion,
+		Actor:         subjectID,
+		AggregateType: wmodel.AggregateCharacter,
+		AggregateID:   characterID,
+		Payload:       payload,
+	}), nil
 }
 
-// ExamineCharacter allows a character to examine another character.
-// Emits an examine event for plugins after validation and authorization.
-// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
-// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
-func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, characterID, targetCharacterID ulid.ULID) error {
-	if s.characterRepo == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
-	}
-
-	// Get the examining character
-	char, err := s.characterRepo.Get(ctx, characterID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
-	}
-
-	// Character must be in the world to examine anything
-	if char.LocationID == nil {
-		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
-	}
-
-	// Authorize before fetching target to prevent information disclosure
-	resource := access.CharacterResource(targetCharacterID.String())
-	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixCharacter); checkErr != nil {
-		return checkErr
-	}
-
-	// Get the target character (only after authorization)
-	targetChar, err := s.characterRepo.Get(ctx, targetCharacterID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "target character %s not found", targetCharacterID)
-		}
-		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target character %s", targetCharacterID)
-	}
-
-	// Build and emit examine event
-	payload := ExaminePayload{
-		CharacterID: characterID,
-		TargetType:  TargetTypeCharacter,
-		TargetID:    targetCharacterID,
-		TargetName:  targetChar.Name,
-		LocationID:  *char.LocationID,
-	}
-	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
-		return oops.Code("EXAMINE_CHARACTER_EVENT_FAILED").
-			With("character_id", characterID.String()).
-			With("target_id", targetCharacterID.String()).
-			Wrapf(err, "examine character event emission failed")
-	}
-	return nil
-}
+// The world-layer Examine{Location,Object,Character} commands were removed in
+// 05-06: their sole behavior was the post-commit examine emit path (deleted in
+// this slice, D-03), they had zero production callers, and an examine is a READ,
+// not a world-state change — so it is dropped from the world-change feed (RESEARCH
+// Open Question 1). The core-objects plugin owns the player-facing `examine`
+// command and its own `object_examine` notification.
 
 // FindLocationByName searches for a location by name after checking read authorization.
 // Returns ErrNotFound if no location matches.

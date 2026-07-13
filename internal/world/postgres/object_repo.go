@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
 // ObjectRepository implements world.ObjectRepository using PostgreSQL.
@@ -39,7 +40,7 @@ func NewObjectRepositoryWithDepth(pool *pgxpool.Pool, maxNestingDepth int) *Obje
 func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, name, description, location_id, held_by_character_id,
-		       contained_in_object_id, is_container, owner_id, created_at
+		       contained_in_object_id, is_container, owner_id, created_at, version
 		FROM objects WHERE id = $1
 	`, id.String())
 	obj, err := scanObjectRow(row)
@@ -53,65 +54,129 @@ func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object
 }
 
 // Create persists a new object.
-// Callers must validate the object before calling this method.
-func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error {
-	_, err := r.pool.Exec(ctx, `
+// Callers must validate the object before calling this method. The struct's
+// Version is refreshed to the DB-assigned initial version (1) so a reused struct
+// does not later carry a stale version and spuriously conflict (finding 12).
+func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) (*wmodel.MutationDelta, error) {
+	var newVersion int
+	err := querierFromCtx(ctx, r.pool).QueryRow(ctx, `
 		INSERT INTO objects (id, name, description, location_id, held_by_character_id,
 		                     contained_in_object_id, is_container, owner_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING version
 	`, obj.ID.String(), obj.Name, obj.Description,
 		ulidToStringPtr(obj.LocationID()),
 		ulidToStringPtr(obj.HeldByCharacterID()),
 		ulidToStringPtr(obj.ContainedInObjectID()),
 		obj.IsContainer,
 		ulidToStringPtr(obj.OwnerID),
-		pgnanos.From(obj.CreatedAt))
+		pgnanos.From(obj.CreatedAt)).Scan(&newVersion)
 	if err != nil {
-		return oops.With("operation", "create object").With("id", obj.ID.String()).Wrap(err)
+		return nil, oops.With("operation", "create object").With("id", obj.ID.String()).Wrap(err)
 	}
-	return nil
+	obj.Version = newVersion
+	return primaryDeltaVersioned(wmodel.AggregateObject, obj.ID, false, 0, newVersion), nil
 }
 
-// Update modifies an existing object.
+// Update modifies an existing object with a version-predicated CAS (MODEL-03).
 // Callers must validate the object before calling this method.
-func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error {
-	result, err := r.pool.Exec(ctx, `
+//
+// When obj.Version > 0 the UPDATE matches id + version, so a stale writer affects
+// zero rows; a locked follow-up read on the same connection then classifies the
+// zero-row result into WORLD_CONCURRENT_EDIT (row exists, moved version) or
+// OBJECT_NOT_FOUND (row absent). When obj.Version == 0 the write is unversioned
+// (id-only). On success obj.Version is refreshed to the committed value (finding 12).
+func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) (*wmodel.MutationDelta, error) {
+	query := `
 		UPDATE objects SET name = $2, description = $3, location_id = $4,
 		       held_by_character_id = $5, contained_in_object_id = $6,
-		       is_container = $7, owner_id = $8
-		WHERE id = $1
-	`, obj.ID.String(), obj.Name, obj.Description,
+		       is_container = $7, owner_id = $8, version = version + 1
+		WHERE id = $1`
+	args := []any{
+		obj.ID.String(), obj.Name, obj.Description,
 		ulidToStringPtr(obj.LocationID()),
 		ulidToStringPtr(obj.HeldByCharacterID()),
 		ulidToStringPtr(obj.ContainedInObjectID()),
 		obj.IsContainer,
-		ulidToStringPtr(obj.OwnerID))
-	if err != nil {
-		return oops.With("operation", "update object").With("id", obj.ID.String()).Wrap(err)
+		ulidToStringPtr(obj.OwnerID),
 	}
-	if result.RowsAffected() == 0 {
-		return oops.Code("OBJECT_NOT_FOUND").With("id", obj.ID.String()).Wrap(world.ErrNotFound)
+	if obj.Version > 0 {
+		query += ` AND version = $9`
+		args = append(args, obj.Version)
 	}
-	return nil
+	query += ` RETURNING version`
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		var newVersion int
+		err := tx.QueryRow(txCtx, query, args...).Scan(&newVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return classifyCASZeroRow(txCtx, tx,
+				`SELECT version FROM objects WHERE id = $1 FOR UPDATE`,
+				obj.ID,
+				oops.Code("OBJECT_NOT_FOUND").With("id", obj.ID.String()).Wrap(world.ErrNotFound))
+		}
+		if err != nil {
+			return oops.With("operation", "update object").With("id", obj.ID.String()).Wrap(err)
+		}
+		obj.Version = newVersion
+		delta = primaryDeltaVersioned(wmodel.AggregateObject, obj.ID, false, newVersion-1, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return delta, nil
 }
 
-// Delete removes an object by ID.
-func (r *ObjectRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `DELETE FROM objects WHERE id = $1`, id.String())
-	if err != nil {
-		return oops.With("operation", "delete object").With("id", id.String()).Wrap(err)
+// Delete removes an object by ID with a version-predicated CAS (MODEL-03).
+//
+// Inside the same transaction the method locks the object row with
+// SELECT version ... FOR UPDATE (existence check + version read), enforces the
+// optimistic-concurrency expectation, then deletes. The classifier is TWO outcomes
+// only (round-5 Codex MEDIUM): an absent row → OBJECT_NOT_FOUND; an existing row
+// whose version differs from a non-zero expectedVersion → WORLD_CONCURRENT_EDIT.
+// expectedVersion == 0 is an unversioned delete (existence-checked only).
+func (r *ObjectRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+
+		var currentVersion int
+		err := tx.QueryRow(txCtx, `SELECT version FROM objects WHERE id = $1 FOR UPDATE`, id.String()).Scan(&currentVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("OBJECT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
+		}
+		if err != nil {
+			return oops.With("operation", "lock object for delete").With("id", id.String()).Wrap(err)
+		}
+		if expectedVersion > 0 && currentVersion != expectedVersion {
+			return oops.Code(world.CodeConcurrentEdit).
+				With("id", id.String()).
+				With("expected_version", expectedVersion).
+				With("current_version", currentVersion).
+				Wrap(world.ErrConcurrentEdit)
+		}
+
+		if _, err := tx.Exec(txCtx, `DELETE FROM objects WHERE id = $1`, id.String()); err != nil {
+			return oops.With("operation", "delete object").With("id", id.String()).Wrap(err)
+		}
+
+		delta = primaryDeltaVersioned(wmodel.AggregateObject, id, true, currentVersion, 0)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
 	}
-	if result.RowsAffected() == 0 {
-		return oops.Code("OBJECT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
-	}
-	return nil
+	return delta, nil
 }
 
 // ListAtLocation returns all objects at a location.
 func (r *ObjectRepository) ListAtLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Object, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, name, description, location_id, held_by_character_id,
-		       contained_in_object_id, is_container, owner_id, created_at
+		       contained_in_object_id, is_container, owner_id, created_at, version
 		FROM objects WHERE location_id = $1 ORDER BY created_at DESC, id DESC
 	`, locationID.String()) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
@@ -126,7 +191,7 @@ func (r *ObjectRepository) ListAtLocation(ctx context.Context, locationID ulid.U
 func (r *ObjectRepository) ListHeldBy(ctx context.Context, characterID ulid.ULID) ([]*world.Object, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, name, description, location_id, held_by_character_id,
-		       contained_in_object_id, is_container, owner_id, created_at
+		       contained_in_object_id, is_container, owner_id, created_at, version
 		FROM objects WHERE held_by_character_id = $1 ORDER BY created_at DESC, id DESC
 	`, characterID.String()) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
@@ -141,7 +206,7 @@ func (r *ObjectRepository) ListHeldBy(ctx context.Context, characterID ulid.ULID
 func (r *ObjectRepository) ListContainedIn(ctx context.Context, objectID ulid.ULID) ([]*world.Object, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, name, description, location_id, held_by_character_id,
-		       contained_in_object_id, is_container, owner_id, created_at
+		       contained_in_object_id, is_container, owner_id, created_at, version
 		FROM objects WHERE contained_in_object_id = $1 ORDER BY created_at DESC, id DESC
 	`, objectID.String()) // tiebreaker for sub-ns insert collisions across dual-clock writers (holomush-gfo6.33)
 	if err != nil {
@@ -162,91 +227,106 @@ const DefaultMaxNestingDepth = 3
 // - Circular containment is prevented
 // Uses a transaction with SELECT FOR UPDATE to ensure atomicity and prevent TOCTOU
 // vulnerabilities - both the object and container (if any) are locked for the duration.
-func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment) error {
+func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment, expectedVersion int) (*wmodel.MutationDelta, error) {
 	// Validate containment
 	if err := to.Validate(); err != nil {
-		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
+		return nil, oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 	}
 
-	// Use a transaction to ensure validation and update are atomic
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return oops.With("operation", "begin transaction").Wrap(err)
-	}
-	defer func() {
-		// Rollback is a no-op if tx was committed
-		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
-	}()
+	// beforeVersion is the locked primary-row version (delta BeforeVersion); the
+	// move is a version-predicated CAS write (MODEL-03) — a stale expectedVersion
+	// affects zero rows and surfaces WORLD_CONCURRENT_EDIT rather than relocating.
+	var beforeVersion int
 
-	// Lock the object being moved to prevent concurrent move operations
-	var exists bool
-	err = tx.QueryRow(ctx, `
-		SELECT EXISTS(SELECT 1 FROM objects WHERE id = $1 FOR UPDATE)
-	`, objectID.String()).Scan(&exists)
-	if err != nil {
-		return oops.With("operation", "lock object").With("object_id", objectID.String()).Wrap(err)
-	}
-	if !exists {
-		return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
-	}
+	// Enroll in the ambient mutation transaction if present, else begin+commit a
+	// local one. Preserves FOR UPDATE locks on object + container and the
+	// nesting/circular-containment checks.
+	err := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
 
-	// If moving to a container, verify the container exists and is actually a container
-	// FOR UPDATE locks the container row to prevent deletion/modification during this transaction
-	if to.ObjectID != nil {
-		var isContainer bool
-		err = tx.QueryRow(ctx, `
-			SELECT is_container FROM objects WHERE id = $1 FOR UPDATE
-		`, to.ObjectID.String()).Scan(&isContainer)
+		// Lock the object being moved to prevent concurrent move operations, and
+		// read its version for the optimistic-concurrency check.
+		var currentVersion int
+		err := tx.QueryRow(txCtx, `
+			SELECT version FROM objects WHERE id = $1 FOR UPDATE
+		`, objectID.String()).Scan(&currentVersion)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.
-				Code("CONTAINER_NOT_FOUND").
-				With("operation", "move object").
-				With("object_id", objectID.String()).
-				With("container_id", to.ObjectID.String()).
-				Wrap(world.ErrNotFound)
+			return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
 		}
+		if err != nil {
+			return oops.With("operation", "lock object").With("object_id", objectID.String()).Wrap(err)
+		}
+		if expectedVersion > 0 && currentVersion != expectedVersion {
+			return oops.Code(world.CodeConcurrentEdit).
+				With("object_id", objectID.String()).
+				With("expected_version", expectedVersion).
+				With("current_version", currentVersion).
+				Wrap(world.ErrConcurrentEdit)
+		}
+		beforeVersion = currentVersion
+
+		// If moving to a container, verify the container exists and is actually a container
+		// FOR UPDATE locks the container row to prevent deletion/modification during this transaction
+		if to.ObjectID != nil {
+			var isContainer bool
+			err = tx.QueryRow(txCtx, `
+				SELECT is_container FROM objects WHERE id = $1 FOR UPDATE
+			`, to.ObjectID.String()).Scan(&isContainer)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.
+					Code("CONTAINER_NOT_FOUND").
+					With("operation", "move object").
+					With("object_id", objectID.String()).
+					With("container_id", to.ObjectID.String()).
+					Wrap(world.ErrNotFound)
+			}
+			if err != nil {
+				return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
+			}
+			if !isContainer {
+				return oops.
+					With("operation", "move object").
+					With("object_id", objectID.String()).
+					With("container_id", to.ObjectID.String()).
+					Wrap(world.ErrInvalidContainment)
+			}
+
+			// Check for circular containment: object cannot be placed inside itself
+			// or inside any object that is contained within it
+			err = r.checkCircularContainmentTx(txCtx, tx, objectID, *to.ObjectID)
+			if err != nil {
+				return err
+			}
+
+			// Check max nesting depth: verify that target container depth + object subtree depth
+			// won't exceed the maximum allowed depth
+			err = r.checkNestingDepthTx(txCtx, tx, objectID, *to.ObjectID)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Clear all containment fields, set the new one, and increment version. The
+		// row is already locked FOR UPDATE above with the version verified, so a
+		// bare id-predicated UPDATE is safe here (no zero-row window).
+		result, err := tx.Exec(txCtx, `
+			UPDATE objects SET location_id = $2, held_by_character_id = $3, contained_in_object_id = $4,
+			       version = version + 1
+			WHERE id = $1
+		`, objectID.String(), ulidToStringPtr(to.LocationID), ulidToStringPtr(to.CharacterID), ulidToStringPtr(to.ObjectID))
 		if err != nil {
 			return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 		}
-		if !isContainer {
-			return oops.
-				With("operation", "move object").
-				With("object_id", objectID.String()).
-				With("container_id", to.ObjectID.String()).
-				Wrap(world.ErrInvalidContainment)
+		if result.RowsAffected() == 0 {
+			return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
 		}
 
-		// Check for circular containment: object cannot be placed inside itself
-		// or inside any object that is contained within it
-		err = r.checkCircularContainmentTx(ctx, tx, objectID, *to.ObjectID)
-		if err != nil {
-			return err
-		}
-
-		// Check max nesting depth: verify that target container depth + object subtree depth
-		// won't exceed the maximum allowed depth
-		err = r.checkNestingDepthTx(ctx, tx, objectID, *to.ObjectID)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Clear all containment fields and set the new one
-	result, err := tx.Exec(ctx, `
-		UPDATE objects SET location_id = $2, held_by_character_id = $3, contained_in_object_id = $4
-		WHERE id = $1
-	`, objectID.String(), ulidToStringPtr(to.LocationID), ulidToStringPtr(to.CharacterID), ulidToStringPtr(to.ObjectID))
+		return nil
+	})
 	if err != nil {
-		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
+		return nil, err
 	}
-	if result.RowsAffected() == 0 {
-		return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return oops.With("operation", "commit transaction").Wrap(err)
-	}
-	return nil
+	return primaryDeltaVersioned(wmodel.AggregateObject, objectID, false, beforeVersion, beforeVersion+1), nil
 }
 
 // checkCircularContainmentTx verifies that placing objectID into targetContainerID
@@ -370,7 +450,7 @@ func scanObjectRow(row pgx.Row) (*world.Object, error) {
 
 	err := row.Scan(
 		&f.idStr, &obj.Name, &obj.Description, &f.locationIDStr, &f.heldByStr,
-		&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &f.createdAt,
+		&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &f.createdAt, &obj.Version,
 	)
 	if err != nil {
 		return nil, oops.With("operation", "scan object").Wrap(err)
@@ -435,7 +515,7 @@ func scanObjects(rows pgx.Rows) ([]*world.Object, error) {
 
 		if err := rows.Scan(
 			&f.idStr, &obj.Name, &obj.Description, &f.locationIDStr, &f.heldByStr,
-			&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &f.createdAt,
+			&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &f.createdAt, &obj.Version,
 		); err != nil {
 			return nil, oops.With("operation", "scan object").Wrap(err)
 		}

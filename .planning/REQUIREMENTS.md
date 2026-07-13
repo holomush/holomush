@@ -14,9 +14,9 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 <!-- F1 #4784 is a decision gate: sequence early; MODEL-03/04 and ARCH-04 depend on its outcome. -->
 
 - [x] **MODEL-01**: The event-sourcing-vs-CRUD divergence is resolved by a committed ADR that investigates whether world-state event sourcing was ever meant to be real and formally decides the model — build a real projection/outbox, or adopt CRUD-canonical + optimistic-concurrency/transactional-outbox — grounded in F1 (`docs/reviews/arch-review/2026-07-11/verification/f1-eventsourcing-why.md`, #4784)
-- [ ] **MODEL-02**: Every doc site stating the false "event sourcing / current state derives from replay" principle (the ~6 sites incl. root `CLAUDE.md`, `contributing/explanation/architecture.md`, `coding-standards.md`, and the public site `index.mdx`) is corrected to describe the decided model (MODEL-01)
-- [ ] **MODEL-03**: World-state writes (locations/exits/characters/objects) carry an optimistic-concurrency version guard so a concurrent writer cannot silently lose an update — closes last-write-wins M12 (#4798), verified to hold under the two-replica deployment
-- [ ] **MODEL-04**: The dual-write window (world event emitted after a non-atomic DB commit, `move_succeeded:true` while the notification is lost on a NATS blip) is eliminated per the MODEL-01 mechanism (transactional outbox or real projection) — closes M2
+- [x] **MODEL-02**: Every doc site stating the false "event sourcing / current state derives from replay" principle (the ~6 sites incl. root `CLAUDE.md`, `contributing/explanation/architecture.md`, `coding-standards.md`, and the public site `index.mdx`) is corrected to describe the decided model (MODEL-01)
+- [x] **MODEL-03**: World-state writes (locations/exits/characters/objects) carry an optimistic-concurrency version guard so a concurrent writer cannot silently lose an update — closes last-write-wins M12 (#4798), verified to hold under the two-replica deployment
+- [x] **MODEL-04**: The dual-write window (world event emitted after a non-atomic DB commit, `move_succeeded:true` while the notification is lost on a NATS blip) is eliminated per the MODEL-01 mechanism (transactional outbox or real projection) — closes M2
 
 ### Operational Hardening
 
@@ -82,9 +82,9 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | OPS-01 | Quick fix (pre-Phase 4) | Pending |
 | MODEL-01 | Phase 4 | Complete |
 | OPS-05 | Phase 4 | Complete |
-| MODEL-02 | Phase 5 | Pending |
-| MODEL-03 | Phase 5 | Pending |
-| MODEL-04 | Phase 5 | Pending |
+| MODEL-02 | Phase 5 | Complete |
+| MODEL-03 | Phase 5 | Complete |
+| MODEL-04 | Phase 5 | Complete |
 | OPS-02 | Phase 6 | Pending |
 | OPS-03 | Phase 6 | Pending |
 | OPS-04 | Phase 6 | Pending |

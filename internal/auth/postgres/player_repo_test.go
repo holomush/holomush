@@ -564,6 +564,55 @@ func TestPlayerRepository_DeleteGuestPlayer_CascadesBindings(t *testing.T) {
 	assert.Zero(t, chars, "character should cascade-delete with the guest player")
 }
 
+// MarkReaping sets players.reaping_at for a guest player and is a no-op
+// (GUEST_NOT_FOUND) for a non-guest, so the anti-TOCTOU flag is only ever set on
+// reapable guests (round-6 R6-2).
+func TestPlayerRepository_MarkReaping(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPlayerRepository(testPool)
+
+	t.Run("marks a guest player reaping", func(t *testing.T) {
+		guestID := ulid.Make()
+		_, err := testPool.Exec(ctx,
+			`INSERT INTO players (id, username, password_hash, is_guest) VALUES ($1, $2, '', true)`,
+			guestID.String(), "guest_mark_"+guestID.String())
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, guestID.String())
+		})
+
+		require.NoError(t, repo.MarkReaping(ctx, guestID))
+
+		var reapingAt *int64
+		require.NoError(t, testPool.QueryRow(ctx,
+			`SELECT reaping_at FROM players WHERE id = $1`, guestID.String()).Scan(&reapingAt))
+		require.NotNil(t, reapingAt, "reaping_at should be set")
+		assert.Positive(t, *reapingAt)
+	})
+
+	t.Run("is GUEST_NOT_FOUND for a non-guest player", func(t *testing.T) {
+		player := &auth.Player{
+			ID:           ulid.Make(),
+			Username:     "nonguest_mark_" + ulid.Make().String(),
+			PasswordHash: "hash",
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
+		}
+		require.NoError(t, repo.Create(ctx, player))
+		t.Cleanup(func() {
+			_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, player.ID.String())
+		})
+
+		err := repo.MarkReaping(ctx, player.ID)
+		require.Error(t, err)
+
+		var reapingAt *int64
+		require.NoError(t, testPool.QueryRow(ctx,
+			`SELECT reaping_at FROM players WHERE id = $1`, player.ID.String()).Scan(&reapingAt))
+		assert.Nil(t, reapingAt, "non-guest player must not be marked reaping")
+	})
+}
+
 // Compile-time interface check.
 var _ auth.PlayerRepository = (*postgres.PlayerRepository)(nil)
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
 // CharacterRepository implements world.CharacterRepository using PostgreSQL.
@@ -29,7 +30,7 @@ func NewCharacterRepository(pool *pgxpool.Pool) *CharacterRepository {
 // Get retrieves a character by ID.
 func (r *CharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world.Character, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, player_id, name, description, location_id, created_at
+		SELECT id, player_id, name, description, location_id, created_at, version
 		FROM characters WHERE id = $1
 	`, id.String())
 	char, err := scanCharacterRow(row)
@@ -44,45 +45,111 @@ func (r *CharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world.Cha
 
 // Create persists a new character.
 // Callers must validate the character before calling this method.
-// Uses execerFromCtx so callers may compose this within a transaction.
-func (r *CharacterRepository) Create(ctx context.Context, char *world.Character) error {
-	_, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
+// Uses querierFromCtx so callers may compose this within a transaction; the
+// struct's Version is refreshed to the DB-assigned initial version (1) so a
+// reused struct does not later carry a stale version and spuriously conflict
+// (finding 12).
+func (r *CharacterRepository) Create(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
+	var newVersion int
+	err := querierFromCtx(ctx, r.pool).QueryRow(ctx, `
 		INSERT INTO characters (id, player_id, name, description, location_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING version
 	`, char.ID.String(), char.PlayerID.String(), char.Name, char.Description,
-		ulidToStringPtr(char.LocationID), pgnanos.From(char.CreatedAt))
+		ulidToStringPtr(char.LocationID), pgnanos.From(char.CreatedAt)).Scan(&newVersion)
 	if err != nil {
-		return oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
+		return nil, oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
 	}
-	return nil
+	char.Version = newVersion
+	return primaryDeltaVersioned(wmodel.AggregateCharacter, char.ID, false, 0, newVersion), nil
 }
 
-// Update modifies an existing character.
+// Update modifies an existing character with a version-predicated CAS (MODEL-03).
 // Callers must validate the character before calling this method.
-func (r *CharacterRepository) Update(ctx context.Context, char *world.Character) error {
-	result, err := r.pool.Exec(ctx, `
-		UPDATE characters SET name = $2, description = $3, location_id = $4
-		WHERE id = $1
-	`, char.ID.String(), char.Name, char.Description, ulidToStringPtr(char.LocationID))
-	if err != nil {
-		return oops.Code("CHARACTER_UPDATE_FAILED").With("id", char.ID.String()).Wrap(err)
+//
+// When char.Version > 0 the UPDATE's WHERE clause matches both id and version, so
+// a stale writer affects zero rows; a locked follow-up read on the same connection
+// then classifies the zero-row result into WORLD_CONCURRENT_EDIT (the row exists
+// with a different version) or CHARACTER_NOT_FOUND (the row is absent). When
+// char.Version == 0 the write is unversioned (id-only) for callers that have not
+// yet threaded a read version. On success char.Version is refreshed to the
+// committed value (finding 12).
+func (r *CharacterRepository) Update(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
+	query := `
+		UPDATE characters SET name = $2, description = $3, location_id = $4, version = version + 1
+		WHERE id = $1`
+	args := []any{char.ID.String(), char.Name, char.Description, ulidToStringPtr(char.LocationID)}
+	if char.Version > 0 {
+		query += ` AND version = $5`
+		args = append(args, char.Version)
 	}
-	if result.RowsAffected() == 0 {
-		return oops.Code("CHARACTER_NOT_FOUND").With("id", char.ID.String()).Wrap(world.ErrNotFound)
+	query += ` RETURNING version`
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		var newVersion int
+		err := tx.QueryRow(txCtx, query, args...).Scan(&newVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return classifyCASZeroRow(txCtx, tx,
+				`SELECT version FROM characters WHERE id = $1 FOR UPDATE`,
+				char.ID,
+				oops.Code("CHARACTER_NOT_FOUND").With("id", char.ID.String()).Wrap(world.ErrNotFound))
+		}
+		if err != nil {
+			return oops.Code("CHARACTER_UPDATE_FAILED").With("id", char.ID.String()).Wrap(err)
+		}
+		char.Version = newVersion
+		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, char.ID, false, newVersion-1, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
 	}
-	return nil
+	return delta, nil
 }
 
-// Delete removes a character by ID.
-func (r *CharacterRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `DELETE FROM characters WHERE id = $1`, id.String())
-	if err != nil {
-		return oops.Code("CHARACTER_DELETE_FAILED").With("id", id.String()).Wrap(err)
+// Delete removes a character by ID with a version-predicated CAS (MODEL-03).
+//
+// Inside the same transaction the method locks the character row with
+// SELECT version ... FOR UPDATE (existence check + version read), enforces the
+// optimistic-concurrency expectation, then deletes. The classifier is TWO outcomes
+// only (round-5 Codex MEDIUM): an absent row → CHARACTER_NOT_FOUND (a concurrent
+// delete that already committed is correctly observed as not-found); an existing
+// row whose version differs from a non-zero expectedVersion → WORLD_CONCURRENT_EDIT.
+// expectedVersion == 0 is an unversioned delete (existence-checked only).
+func (r *CharacterRepository) Delete(ctx context.Context, id ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+
+		var currentVersion int
+		err := tx.QueryRow(txCtx, `SELECT version FROM characters WHERE id = $1 FOR UPDATE`, id.String()).Scan(&currentVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("CHARACTER_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
+		}
+		if err != nil {
+			return oops.With("operation", "lock character for delete").With("id", id.String()).Wrap(err)
+		}
+		if expectedVersion > 0 && currentVersion != expectedVersion {
+			return oops.Code(world.CodeConcurrentEdit).
+				With("id", id.String()).
+				With("expected_version", expectedVersion).
+				With("current_version", currentVersion).
+				Wrap(world.ErrConcurrentEdit)
+		}
+
+		if _, err := tx.Exec(txCtx, `DELETE FROM characters WHERE id = $1`, id.String()); err != nil {
+			return oops.Code("CHARACTER_DELETE_FAILED").With("id", id.String()).Wrap(err)
+		}
+
+		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, id, true, currentVersion, 0)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
 	}
-	if result.RowsAffected() == 0 {
-		return oops.Code("CHARACTER_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
-	}
-	return nil
+	return delta, nil
 }
 
 // GetByLocation retrieves characters at a location with pagination.
@@ -92,7 +159,7 @@ func (r *CharacterRepository) GetByLocation(ctx context.Context, locationID ulid
 		limit = world.DefaultLimit
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, player_id, name, description, location_id, created_at
+		SELECT id, player_id, name, description, location_id, created_at, version
 		FROM characters WHERE location_id = $1
 		ORDER BY name
 		LIMIT $2 OFFSET $3
@@ -105,18 +172,105 @@ func (r *CharacterRepository) GetByLocation(ctx context.Context, locationID ulid
 	return scanCharacters(rows)
 }
 
-// UpdateLocation moves a character to a new location.
-func (r *CharacterRepository) UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID) error {
-	result, err := r.pool.Exec(ctx, `
-		UPDATE characters SET location_id = $2 WHERE id = $1
-	`, characterID.String(), ulidToStringPtr(locationID))
+// ListByPlayer returns every character owned by the given player, ordered by name,
+// with each Character.Version populated from the row's version column (round-6
+// R6-1). This is the canonical in-boundary version-bearing list the 05-16 guest
+// reaper lists through, so its CAS Delete(ctx, id, char.Version) matches the
+// stored version rather than conflicting on a zero. A READ, so r.pool.Query is
+// correct — the SQL fence only fences mutations.
+func (r *CharacterRepository) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, player_id, name, description, location_id, created_at, version
+		FROM characters WHERE player_id = $1 ORDER BY name
+	`, playerID.String())
 	if err != nil {
-		return oops.Code("CHARACTER_MOVE_FAILED").With("character_id", characterID.String()).Wrap(err)
+		return nil, oops.Code("CHARACTER_LIST_FAILED").With("player_id", playerID.String()).Wrap(err)
 	}
-	if result.RowsAffected() == 0 {
-		return oops.Code("CHARACTER_NOT_FOUND").With("character_id", characterID.String()).Wrap(world.ErrNotFound)
+	defer rows.Close()
+
+	return scanCharacters(rows)
+}
+
+// UpdateLocation moves a character to a new location with a version-predicated CAS
+// (MODEL-03). When expectedVersion > 0 the UPDATE matches id + version, so a stale
+// move affects zero rows and the locked follow-up read classifies it into
+// WORLD_CONCURRENT_EDIT (existing row, moved version) or CHARACTER_NOT_FOUND
+// (absent). expectedVersion == 0 is an unversioned move. The expected version is
+// threaded from the calling command in service.go (05-11 MoveCharacter rollout).
+func (r *CharacterRepository) UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID, expectedVersion int) (*wmodel.MutationDelta, error) {
+	query := `UPDATE characters SET location_id = $2, version = version + 1 WHERE id = $1`
+	args := []any{characterID.String(), ulidToStringPtr(locationID)}
+	if expectedVersion > 0 {
+		query += ` AND version = $3`
+		args = append(args, expectedVersion)
 	}
-	return nil
+	query += ` RETURNING version`
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		var newVersion int
+		err := tx.QueryRow(txCtx, query, args...).Scan(&newVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return classifyCASZeroRow(txCtx, tx,
+				`SELECT version FROM characters WHERE id = $1 FOR UPDATE`,
+				characterID,
+				oops.Code("CHARACTER_NOT_FOUND").With("character_id", characterID.String()).Wrap(world.ErrNotFound))
+		}
+		if err != nil {
+			return oops.Code("CHARACTER_MOVE_FAILED").With("character_id", characterID.String()).Wrap(err)
+		}
+		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, characterID, false, newVersion-1, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return delta, nil
+}
+
+// UpdatePreferences writes a character's whole preferences bag with a
+// version-predicated CAS (MODEL-03) — the folded-in character-settings write
+// (round-4 C5 / D-05). The former raw UPDATE in internal/store is moved here, into
+// the sanctioned writer boundary, so the raw-world-SQL fence stays honestly green.
+//
+// prefs is the pre-marshaled JSONB preferences bag. When expectedVersion > 0 the
+// UPDATE matches id + version, so a stale writer affects zero rows and the locked
+// follow-up read classifies the zero-row result into WORLD_CONCURRENT_EDIT (the
+// row exists at a moved version) or CHARACTER_NOT_FOUND (the row is absent).
+// expectedVersion == 0 is an unversioned (id-only) write. Returns a
+// wmodel.MutationDelta so the caller's mutate() can persist exactly one
+// character_preferences_update envelope in the same transaction (INV-WORLD-4).
+func (r *CharacterRepository) UpdatePreferences(ctx context.Context, characterID ulid.ULID, prefs []byte, expectedVersion int) (*wmodel.MutationDelta, error) {
+	query := `UPDATE characters SET preferences = $2, version = version + 1 WHERE id = $1`
+	args := []any{characterID.String(), prefs}
+	if expectedVersion > 0 {
+		query += ` AND version = $3`
+		args = append(args, expectedVersion)
+	}
+	query += ` RETURNING version`
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		var newVersion int
+		err := tx.QueryRow(txCtx, query, args...).Scan(&newVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return classifyCASZeroRow(txCtx, tx,
+				`SELECT version FROM characters WHERE id = $1 FOR UPDATE`,
+				characterID,
+				oops.Code("CHARACTER_NOT_FOUND").With("character_id", characterID.String()).Wrap(world.ErrNotFound))
+		}
+		if err != nil {
+			return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").With("character_id", characterID.String()).Wrap(err)
+		}
+		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, characterID, false, newVersion-1, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return delta, nil
 }
 
 // IsOwnedByPlayer checks if a character is owned by a specific player.
@@ -150,7 +304,7 @@ func scanCharacterRow(row pgx.Row) (*world.Character, error) {
 
 	err := row.Scan(
 		&f.idStr, &f.playerIDStr, &char.Name, &char.Description,
-		&f.locationIDStr, &f.createdAt,
+		&f.locationIDStr, &f.createdAt, &char.Version,
 	)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(err)
@@ -190,7 +344,7 @@ func scanCharacters(rows pgx.Rows) ([]*world.Character, error) {
 
 		if err := rows.Scan(
 			&f.idStr, &f.playerIDStr, &char.Name, &char.Description,
-			&f.locationIDStr, &f.createdAt,
+			&f.locationIDStr, &f.createdAt, &char.Version,
 		); err != nil {
 			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(err)
 		}
