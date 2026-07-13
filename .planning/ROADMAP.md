@@ -141,10 +141,14 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 06-01-PLAN.md — OPS-02 core (atomic): partition-swap migration 000052 + writeAuditRow composite-PK/deterministic-timestamp idempotency crux (wave 1)
 - [ ] 06-03-PLAN.md — OPS-03: nats-server bump ≥v2.14.3 + `task lint:vuln` (govulncheck + osv-scanner) + vuln: CI job + ruleset flag (wave 1)
 - [ ] 06-04-PLAN.md — QUAL-01: codecov project ratchet + dual-file cleanup + doc-vs-reality rewrite + manual ruleset step (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02-PLAN.md — OPS-02 worker: events_audit PartitionManager + RetentionWorker wiring into SubsystemAuditProjection + configurable 90d window (wave 2, depends 06-01)
 - [ ] 06-05-PLAN.md — OPS-04: DLQ replay game_id resolve + --game-id flag + non-tautological divergent-game natstest test (wave 2, depends 06-01)
 
