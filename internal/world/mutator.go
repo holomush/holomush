@@ -60,6 +60,56 @@ type Mutator interface {
 // Compile-time check that Service implements Mutator.
 var _ Mutator = (*Service)(nil)
 
+// WriteCommandDescriptor names one world.Service write command AND the single
+// taxonomy kind its envelope declares. It is one member of the EXPLICIT closed
+// write-command construct the census (05-11) derives the write-command surface
+// from — NOT name-prefix inference over method declarations, and NOT the
+// incomplete world.Mutator interface subset (Codex finding 10).
+type WriteCommandDescriptor struct {
+	// Command is the stable world.Service write-command method name.
+	Command string
+	// Kind is the single taxonomy kind the command's envelope declares. Each Kind
+	// string mirrors internal/world/outbox/taxonomy.go exactly (package world MUST
+	// NOT import internal/world/outbox); the census asserts the bijection across
+	// that boundary.
+	Kind string
+}
+
+// writeCommands is the EXPLICIT, closed set of world.Service write commands and
+// the single taxonomy kind each emits. Membership is mechanically discoverable
+// here (not inferred): a new Service write command that isn't registered here has
+// no declared kind, so the census fails. No scene-participant descriptor exists —
+// the vestigial surface was removed in 05-14 (D-07). Character CREATE
+// (character_genesis) is NOT here: its producer is the out-of-Service
+// character-genesis application service (05-15), asserted in 05-12.
+var writeCommands = []WriteCommandDescriptor{
+	{Command: "CreateLocation", Kind: kindLocationCreated},
+	{Command: "UpdateLocation", Kind: kindLocationUpdated},
+	{Command: "DeleteLocation", Kind: kindLocationDeleted},
+	{Command: "CreateExit", Kind: kindExitCreated},
+	{Command: "UpdateExit", Kind: kindExitUpdated},
+	{Command: "DeleteExit", Kind: kindExitDeleted},
+	{Command: "CreateObject", Kind: kindObjectCreated},
+	{Command: "UpdateObject", Kind: kindObjectUpdated},
+	{Command: "DeleteObject", Kind: kindObjectDeleted},
+	{Command: "MoveObject", Kind: kindObjectMoved},
+	{Command: "DeleteCharacter", Kind: kindCharacterDeleted},
+	{Command: "UpdateCharacterDescription", Kind: kindCharacterUpdated},
+	{Command: "MoveCharacter", Kind: kindCharacterMoved},
+	{Command: "UpdateCharacterPreferences", Kind: kindCharacterPreferencesUpdate},
+}
+
+// WriteCommands returns the explicit closed write-command descriptor set (a copy),
+// the in-Service half of the D-01 rollout the census (05-11) asserts a bijection
+// over. Each per-operation executor method and each command site keys off this
+// set; a registered command without a declared kind — or a kind with no registered
+// in-Service producer — fails the census.
+func WriteCommands() []WriteCommandDescriptor {
+	out := make([]WriteCommandDescriptor, len(writeCommands))
+	copy(out, writeCommands)
+	return out
+}
+
 // OutboxWriter persists a finalized world-change envelope inside the caller-owned
 // mutation transaction and returns it. Its sole production implementation is the
 // internal/world/postgres.OutboxStore (05-05), INJECTED via ServiceConfig — so
