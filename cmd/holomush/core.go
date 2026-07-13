@@ -438,7 +438,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		DB:                 dbSub,
 		ABAC:               abacSub,
 		World:              worldSub,
-		WorldTx:            worldSub,
 		Plugins:            pluginSub,
 		PlayerRepos:        authSub,
 		Hashers:            authSub,

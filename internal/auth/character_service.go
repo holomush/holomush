@@ -12,12 +12,14 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-// CharacterRepository defines the persistence operations needed by CharacterService.
-// This extends world.CharacterRepository with methods for name uniqueness and player queries.
+// CharacterRepository defines the READ persistence operations needed by
+// CharacterService (name uniqueness, player queries, directory listing).
+//
+// It deliberately no longer exposes Create: the ONLY way to insert a character
+// is the CharacterGenesisService, which commits the character + optional binding
+// + genesis envelope atomically (INV-WORLD-4). This is the compile-level fence —
+// no production package can create an envelope-less character (05-15).
 type CharacterRepository interface {
-	// Create persists a new character.
-	Create(ctx context.Context, char *world.Character) error
-
 	// ExistsByName checks if a character with the given name exists (case-insensitive).
 	ExistsByName(ctx context.Context, name string) (bool, error)
 
@@ -39,34 +41,66 @@ type LocationRepository interface {
 	GetStartingLocation(ctx context.Context) (*world.Location, error)
 }
 
-// CharacterService handles character creation and management.
+// CharacterGenesis is the atomic character-creation primitive CharacterService
+// delegates persistence to. Its Create commits the character row, an optional
+// player↔character binding (empty bindReason = no binding), and the
+// character-genesis envelope in one transaction (INV-WORLD-4). Satisfied by
+// *CharacterGenesisService.
+type CharacterGenesis interface {
+	Create(ctx context.Context, char *world.Character, bindReason string) error
+}
+
+// CharacterService handles character creation and management. It owns the
+// validation pipeline (normalize, uniqueness, limit, starting location) and
+// delegates the actual persistence + genesis envelope to CharacterGenesis.
 type CharacterService struct {
 	charRepo CharacterRepository
 	locRepo  LocationRepository
+	genesis  CharacterGenesis
 }
 
 // NewCharacterService creates a new CharacterService.
 // Returns an error if any required dependency is nil.
-func NewCharacterService(charRepo CharacterRepository, locRepo LocationRepository) (*CharacterService, error) {
+func NewCharacterService(charRepo CharacterRepository, locRepo LocationRepository, genesis CharacterGenesis) (*CharacterService, error) {
 	if charRepo == nil {
 		return nil, oops.Errorf("character repository is required")
 	}
 	if locRepo == nil {
 		return nil, oops.Errorf("location repository is required")
 	}
+	if genesis == nil {
+		return nil, oops.Errorf("character genesis service is required")
+	}
 	return &CharacterService{
 		charRepo: charRepo,
 		locRepo:  locRepo,
+		genesis:  genesis,
 	}, nil
 }
 
-// Create creates a new character for a player with the default character limit.
+// Create creates a new character for a player with the default character limit
+// and NO binding (the bootstrap-admin behavior; bootstrap.CharacterCreator
+// signature, unchanged).
 func (s *CharacterService) Create(ctx context.Context, playerID ulid.ULID, name string) (*world.Character, error) {
-	return s.CreateWithMaxCharacters(ctx, playerID, name, DefaultMaxCharacters)
+	return s.createWithMaxAndBind(ctx, playerID, name, DefaultMaxCharacters, "")
 }
 
-// CreateWithMaxCharacters creates a new character for a player with a custom character limit.
+// CreateBound creates a new character for a player with the default character
+// limit and binds it with bindReason (registered gRPC creation uses
+// "initial_bind"). An empty bindReason creates no binding.
+func (s *CharacterService) CreateBound(ctx context.Context, playerID ulid.ULID, name, bindReason string) (*world.Character, error) {
+	return s.createWithMaxAndBind(ctx, playerID, name, DefaultMaxCharacters, bindReason)
+}
+
+// CreateWithMaxCharacters creates a new character for a player with a custom
+// character limit and NO binding.
 func (s *CharacterService) CreateWithMaxCharacters(ctx context.Context, playerID ulid.ULID, name string, maxCharacters int) (*world.Character, error) {
+	return s.createWithMaxAndBind(ctx, playerID, name, maxCharacters, "")
+}
+
+// createWithMaxAndBind runs the validation pipeline then persists the character +
+// optional binding + genesis envelope atomically through the genesis service.
+func (s *CharacterService) createWithMaxAndBind(ctx context.Context, playerID ulid.ULID, name string, maxCharacters int, bindReason string) (*world.Character, error) {
 	// Normalize the name (trims whitespace, collapses spaces, Initial Caps)
 	normalizedName := world.NormalizeCharacterName(name)
 
@@ -114,8 +148,8 @@ func (s *CharacterService) CreateWithMaxCharacters(ctx context.Context, playerID
 	// Set the starting location
 	char.LocationID = &startingLoc.ID
 
-	// Persist the character
-	if err := s.charRepo.Create(ctx, char); err != nil {
+	// Persist the character + optional binding + genesis envelope atomically.
+	if err := s.genesis.Create(ctx, char, bindReason); err != nil {
 		return nil, oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
 	}
 

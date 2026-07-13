@@ -328,23 +328,39 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	authCharRepo := bootstrapsetup.NewCharRepoAdapter(pool, charRepo)
 	authLocRepo := bootstrapsetup.NewLocRepoAdapter(&startLocationID, locRepo)
 
-	characterService, charErr := auth.NewCharacterService(authCharRepo, authLocRepo)
+	// 5. Create binding repository and transactor (shared with the genesis service).
+	bindingRepo := worldpostgres.NewBindingRepository(pool)
+	transactor := worldpostgres.NewTransactor(pool)
+
+	// 5a. Build the atomic character-genesis service (character + optional binding
+	// + genesis envelope in one world transaction, 05-15). Its concrete char
+	// writer, transactor, binding repo, and outbox store share the same pool so
+	// all three enroll in the same world txKey. It is the ONLY production path
+	// that inserts a character.
+	genesis, genErr := auth.NewCharacterGenesisService(
+		charRepo,
+		transactor,
+		bindingRepo,
+		worldpostgres.NewOutboxStore(pool),
+	)
+	if genErr != nil {
+		return oops.Code("CHARACTER_GENESIS_SERVICE_FAILED").Wrap(genErr)
+	}
+
+	characterService, charErr := auth.NewCharacterService(authCharRepo, authLocRepo, genesis)
 	if charErr != nil {
 		return oops.Code("CHARACTER_SERVICE_FAILED").Wrap(charErr)
 	}
 
-	// 5. Create binding repository and transactor for atomic character + binding creation.
-	bindingRepo := worldpostgres.NewBindingRepository(pool)
-	transactor := worldpostgres.NewTransactor(pool)
-
-	// 5b. Create guest service for gRPC-based guest login (web client).
+	// 5b. Create guest service for gRPC-based guest login (web client). Guest
+	// creation commits the player first (own pool), then routes character +
+	// binding + envelope through the genesis service.
 	guestService, guestSvcErr := auth.NewGuestService(
 		guestAuth,
 		authPlayerRepo,
 		authCharRepo,
 		authPlayerSessionRepo,
-		transactor,
-		bindingRepo,
+		genesis,
 	)
 	if guestSvcErr != nil {
 		return oops.Code("GUEST_SERVICE_FAILED").Wrap(guestSvcErr)
@@ -493,7 +509,6 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			}
 		}),
 		holoGRPC.WithGuestService(guestService),
-		holoGRPC.WithTransactor(transactor),
 		holoGRPC.WithBindingRepository(bindingRepo),
 		holoGRPC.WithCryptoActive(cryptoActiveFor(s.cfg)),
 		holoGRPC.WithStreamContributor(pluginManager),

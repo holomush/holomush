@@ -112,7 +112,8 @@ func setupTestEnv() (*testEnv, error) {
 		return nil, err
 	}
 
-	charRepo := &authCharRepoAdapter{pool: pool, charRepo: worldpg.NewCharacterRepository(pool)}
+	worldCharRepo := worldpg.NewCharacterRepository(pool)
+	charRepo := &authCharRepoAdapter{pool: pool, charRepo: worldCharRepo}
 	sessionStore := store.NewPostgresSessionStore(pool)
 
 	// Build the in-process gateway+core stack. Auth/multi-tab specs exercise
@@ -137,7 +138,12 @@ func setupTestEnv() (*testEnv, error) {
 	guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), guestStartLocationID)
 	guestBindingRepo := worldpg.NewBindingRepository(pool)
 	guestTransactor := worldpg.NewTransactor(pool)
-	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore, guestTransactor, guestBindingRepo)
+	guestGenesis, err := auth.NewCharacterGenesisService(worldCharRepo, guestTransactor, guestBindingRepo, worldpg.NewOutboxStore(pool))
+	if err != nil {
+		eventStore.Close()
+		return nil, oops.Wrap(err)
+	}
+	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore, guestGenesis)
 	if err != nil {
 		eventStore.Close()
 		return nil, oops.Wrap(err)

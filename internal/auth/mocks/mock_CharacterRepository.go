@@ -84,53 +84,6 @@ func (_c *MockCharacterRepository_CountByPlayer_Call) RunAndReturn(run func(cont
 	return _c
 }
 
-// Create provides a mock function with given fields: ctx, char
-func (_m *MockCharacterRepository) Create(ctx context.Context, char *world.Character) error {
-	ret := _m.Called(ctx, char)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Create")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) error); ok {
-		r0 = rf(ctx, char)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// MockCharacterRepository_Create_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Create'
-type MockCharacterRepository_Create_Call struct {
-	*mock.Call
-}
-
-// Create is a helper method to define mock.On call
-//   - ctx context.Context
-//   - char *world.Character
-func (_e *MockCharacterRepository_Expecter) Create(ctx interface{}, char interface{}) *MockCharacterRepository_Create_Call {
-	return &MockCharacterRepository_Create_Call{Call: _e.mock.On("Create", ctx, char)}
-}
-
-func (_c *MockCharacterRepository_Create_Call) Run(run func(ctx context.Context, char *world.Character)) *MockCharacterRepository_Create_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*world.Character))
-	})
-	return _c
-}
-
-func (_c *MockCharacterRepository_Create_Call) Return(_a0 error) *MockCharacterRepository_Create_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockCharacterRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Character) error) *MockCharacterRepository_Create_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // ExistsByName provides a mock function with given fields: ctx, name
 func (_m *MockCharacterRepository) ExistsByName(ctx context.Context, name string) (bool, error) {
 	ret := _m.Called(ctx, name)

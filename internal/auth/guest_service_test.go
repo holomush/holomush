@@ -15,19 +15,25 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
+	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// passthroughTransactor returns a mock transactor that calls fn(ctx) directly,
-// simulating a committed transaction. Use for success-path tests.
-func passthroughTransactor(t *testing.T) *mocks.MockGuestTransactor {
-	t.Helper()
-	tr := mocks.NewMockGuestTransactor(t)
-	tr.EXPECT().InTransaction(mock.Anything, mock.AnythingOfType("func(context.Context) error")).
-		RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {
-			return fn(ctx)
-		})
-	return tr
+// recordingGuestGenesis is a hand-rolled auth.CharacterGenesis fake for guest
+// tests: it records the character and bind reason and returns the configured
+// error (simulating the character + binding + envelope atomic unit).
+type recordingGuestGenesis struct {
+	err            error
+	calls          int
+	lastChar       *world.Character
+	lastBindReason string
+}
+
+func (g *recordingGuestGenesis) Create(_ context.Context, char *world.Character, bindReason string) error {
+	g.calls++
+	g.lastChar = char
+	g.lastBindReason = bindReason
+	return g.err
 }
 
 func TestNewGuestServiceNilDeps(t *testing.T) {
@@ -35,84 +41,27 @@ func TestNewGuestServiceNilDeps(t *testing.T) {
 	validPlayers := mocks.NewMockPlayerRepository(t)
 	validChars := mocks.NewMockGuestCharacterRepository(t)
 	validSessions := mocks.NewMockPlayerSessionRepository(t)
-	validTransactor := mocks.NewMockGuestTransactor(t)
-	validBindings := mocks.NewMockGuestBindingCreator(t)
+	validGenesis := &recordingGuestGenesis{}
 
 	tests := []struct {
-		name       string
-		namer      auth.GuestNamer
-		players    auth.PlayerRepository
-		chars      auth.GuestCharacterRepository
-		sessions   auth.PlayerSessionRepository
-		transactor auth.GuestTransactor
-		bindings   auth.GuestBindingCreator
-		wantErr    string
+		name     string
+		namer    auth.GuestNamer
+		players  auth.PlayerRepository
+		chars    auth.GuestCharacterRepository
+		sessions auth.PlayerSessionRepository
+		genesis  auth.CharacterGenesis
+		wantErr  string
 	}{
-		{
-			name:       "nil namer",
-			namer:      nil,
-			players:    validPlayers,
-			chars:      validChars,
-			sessions:   validSessions,
-			transactor: validTransactor,
-			bindings:   validBindings,
-			wantErr:    "guest namer is required",
-		},
-		{
-			name:       "nil players",
-			namer:      validNamer,
-			players:    nil,
-			chars:      validChars,
-			sessions:   validSessions,
-			transactor: validTransactor,
-			bindings:   validBindings,
-			wantErr:    "players repository is required",
-		},
-		{
-			name:       "nil chars",
-			namer:      validNamer,
-			players:    validPlayers,
-			chars:      nil,
-			sessions:   validSessions,
-			transactor: validTransactor,
-			bindings:   validBindings,
-			wantErr:    "character repository is required",
-		},
-		{
-			name:       "nil sessions",
-			namer:      validNamer,
-			players:    validPlayers,
-			chars:      validChars,
-			sessions:   nil,
-			transactor: validTransactor,
-			bindings:   validBindings,
-			wantErr:    "player sessions repository is required",
-		},
-		{
-			name:       "nil transactor",
-			namer:      validNamer,
-			players:    validPlayers,
-			chars:      validChars,
-			sessions:   validSessions,
-			transactor: nil,
-			bindings:   validBindings,
-			wantErr:    "transactor is required",
-		},
-		{
-			name:       "nil bindings",
-			namer:      validNamer,
-			players:    validPlayers,
-			chars:      validChars,
-			sessions:   validSessions,
-			transactor: validTransactor,
-			bindings:   nil,
-			wantErr:    "binding creator is required",
-		},
+		{"nil namer", nil, validPlayers, validChars, validSessions, validGenesis, "guest namer is required"},
+		{"nil players", validNamer, nil, validChars, validSessions, validGenesis, "players repository is required"},
+		{"nil chars", validNamer, validPlayers, nil, validSessions, validGenesis, "character repository is required"},
+		{"nil sessions", validNamer, validPlayers, validChars, nil, validGenesis, "player sessions repository is required"},
+		{"nil genesis", validNamer, validPlayers, validChars, validSessions, nil, "character genesis service is required"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.transactor, tt.bindings)
+			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.genesis)
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -129,8 +78,7 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := passthroughTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{}
 
 	charName := "Sapphire Diamond" // underscore→space conversion
 
@@ -139,12 +87,10 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 
 	chars.EXPECT().ExistsByName(ctx, charName).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
-	bindings.EXPECT().Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").Return("bind-id-1", nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -159,6 +105,11 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	assert.NotEmpty(t, result.RawToken)
 	assert.NotNil(t, result.PlayerSession)
 	assert.Equal(t, result.Player.ID, result.PlayerSession.PlayerID)
+
+	// Character routed through the genesis service with the guest binding reason.
+	assert.Equal(t, 1, genesis.calls)
+	assert.Equal(t, "initial_bind_guest", genesis.lastBindReason)
+	assert.Equal(t, result.Character, genesis.lastChar)
 }
 
 func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
@@ -171,8 +122,7 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := passthroughTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{}
 
 	takenCharName := "Ruby Flame" // underscore→space form
 	freeCharName := "Jade River"  // underscore→space form
@@ -187,12 +137,10 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 
 	namer.EXPECT().StartLocation().Return(startLoc)
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
-	bindings.EXPECT().Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").Return("bind-id-2", nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -200,6 +148,7 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, freeName, result.Player.Username)
 	assert.Equal(t, freeCharName, result.Character.Name)
+	assert.Equal(t, 1, genesis.calls)
 }
 
 func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
@@ -212,19 +161,16 @@ func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := passthroughTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 	chars.EXPECT().ExistsByName(ctx, "Coral Breeze").Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
-	bindings.EXPECT().Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").Return("bind-id-3", nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(errors.New("db timeout")).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -241,23 +187,23 @@ func TestGuestServiceReturnsErrorWhenPlayerCreateFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := passthroughTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{}
 
 	amberStartLoc := ulid.MustNew(ulid.Now(), nil)
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(amberStartLoc)
 	chars.EXPECT().ExistsByName(ctx, "Amber Storm").Return(false, nil).Once()
-	// player.Create fails inside the transaction; rollback handles cleanup (no explicit Delete needed).
+	// player.Create (committed first, own pool) fails -> release name, no genesis.
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(dbErr).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
 	require.Error(t, err)
 	assert.Nil(t, result)
+	assert.Equal(t, 0, genesis.calls)
 }
 
 func TestGuestServiceReturnsErrorWhenCharCreateFails(t *testing.T) {
@@ -269,18 +215,17 @@ func TestGuestServiceReturnsErrorWhenCharCreateFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := passthroughTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{err: errors.New("db error")}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 	chars.EXPECT().ExistsByName(ctx, "Topaz Wind").Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	// chars.Create fails inside the transaction; rollback handles cleanup (no explicit players.Delete needed).
-	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(errors.New("db error")).Once()
+	// genesis fails after the player commit -> release name + orphan-player cleanup.
 	namer.EXPECT().ReleaseGuest(guestName).Once()
+	players.EXPECT().Delete(ctx, mock.AnythingOfType("ulid.ULID")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -298,22 +243,19 @@ func TestGuestServiceReturnsErrorWhenSessionCreateFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := passthroughTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 	chars.EXPECT().ExistsByName(ctx, "Marble Creek").Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
-	bindings.EXPECT().Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").Return("bind-id-4", nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(errors.New("session db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 	// best-effort player cleanup after session create failure
 	players.EXPECT().Delete(ctx, mock.AnythingOfType("ulid.ULID")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -329,8 +271,7 @@ func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := mocks.NewMockGuestTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{}
 
 	// All 10 generated names already exist in the database.
 	for range 10 {
@@ -340,7 +281,7 @@ func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
 		namer.EXPECT().ReleaseGuest(name).Once()
 	}
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -357,14 +298,13 @@ func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := mocks.NewMockGuestTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	chars.EXPECT().ExistsByName(ctx, "Crystal Fog").Return(false, errors.New("db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -374,9 +314,9 @@ func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
 }
 
 // Verifies: INV-CRYPTO-120
-// Asserts guest creation mints a binding with reason "initial_bind_guest" in the
-// same transaction, and that the returned binding ID is non-empty so a subsequent
-// bindings.Current call resolves it (i.e., no orphan character row without a binding).
+// Asserts guest creation routes the character through the genesis service with
+// reason "initial_bind_guest" — so the binding is minted in the SAME transaction
+// as the character + genesis envelope (no orphan character row without a binding).
 func TestCreateGuestMintsBinding(t *testing.T) {
 	ctx := context.Background()
 	startLoc := ulid.MustNew(ulid.Now(), nil)
@@ -386,8 +326,7 @@ func TestCreateGuestMintsBinding(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
-	transactor := passthroughTransactor(t)
-	bindings := mocks.NewMockGuestBindingCreator(t)
+	genesis := &recordingGuestGenesis{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
@@ -395,31 +334,18 @@ func TestCreateGuestMintsBinding(t *testing.T) {
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
-	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
 
-	var (
-		capturedPlayerID string
-		capturedCharID   string
-		capturedReason   string
-	)
-	bindings.EXPECT().
-		Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").
-		RunAndReturn(func(_ context.Context, playerID, characterID, reason string) (string, error) {
-			capturedPlayerID = playerID
-			capturedCharID = characterID
-			capturedReason = reason
-			return "bind-guest-mint-1", nil
-		}).Once()
-
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Create was called with reason "initial_bind_guest" for the guest character.
-	assert.Equal(t, "initial_bind_guest", capturedReason)
-	assert.Equal(t, result.Character.ID.String(), capturedCharID)
-	assert.Equal(t, result.Player.ID.String(), capturedPlayerID)
+	// Character routed through genesis with reason "initial_bind_guest" — the
+	// genesis service mints the binding atomically with the character + envelope.
+	assert.Equal(t, 1, genesis.calls)
+	assert.Equal(t, "initial_bind_guest", genesis.lastBindReason)
+	assert.Equal(t, result.Character.ID, genesis.lastChar.ID)
+	assert.Equal(t, result.Player.ID, genesis.lastChar.PlayerID)
 }

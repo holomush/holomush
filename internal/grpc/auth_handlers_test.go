@@ -783,49 +783,12 @@ func TestCreateCharacter_ErrorPaths(t *testing.T) {
 	}
 }
 
-// recordingBindingRepo implements BindingRepo for testing. Create records
-// (playerID, characterID, reason) and returns the canned ID; Current returns
-// the last recorded binding ID for the given character, or "" if none.
-type recordingBindingRepo struct {
-	bindingID string // returned by Create
-	creates   []recordedCreate
-}
-
-type recordedCreate struct {
-	playerID    string
-	characterID string
-	reason      string
-}
-
-func (r *recordingBindingRepo) Create(_ context.Context, playerID, characterID, reason string) (string, error) {
-	r.creates = append(r.creates, recordedCreate{playerID: playerID, characterID: characterID, reason: reason})
-	return r.bindingID, nil
-}
-
-func (r *recordingBindingRepo) Current(_ context.Context, characterID string) (string, error) {
-	for i := len(r.creates) - 1; i >= 0; i-- {
-		if r.creates[i].characterID == characterID {
-			return r.bindingID, nil
-		}
-	}
-	return "", samberOops.Code("BINDING_NOT_FOUND").Errorf("no active binding for character %s", characterID)
-}
-
-var _ BindingRepo = (*recordingBindingRepo)(nil)
-
-// passthroughTransactorForGRPC implements Transactor for tests by executing fn
-// directly with the provided ctx, simulating a committed transaction.
-type passthroughTransactorForGRPC struct{}
-
-func (passthroughTransactorForGRPC) InTransaction(ctx context.Context, fn func(context.Context) error) error {
-	return fn(ctx)
-}
-
-var _ Transactor = passthroughTransactorForGRPC{}
-
 // Verifies: INV-CRYPTO-120
-// Asserts createCharacterAtomic mints a current binding so bindings.Current resolves.
-func TestCreateCharacterMintsBindingResolvableByCurrent(t *testing.T) {
+// Asserts registered gRPC CreateCharacter routes through CharacterService.CreateBound
+// with reason "initial_bind" — so the binding is minted in the SAME transaction as
+// the character + genesis envelope inside the genesis service (05-15). The handler
+// no longer owns a separate binding INSERT.
+func TestCreateCharacterMintsBindingViaGenesis(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
 	charID := ulid.Make()
@@ -839,15 +802,11 @@ func TestCreateCharacterMintsBindingResolvableByCurrent(t *testing.T) {
 		return &world.Character{ID: charID, PlayerID: pid, Name: name}, nil
 	}
 
-	repo := &recordingBindingRepo{bindingID: "bind-mint-1"}
-
 	server := &CoreServer{
 		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		characterService:  charSvc,
-		transactor:        passthroughTransactorForGRPC{},
-		bindings:          repo,
 	}
 
 	resp, err := server.CreateCharacter(ctx, &corev1.CreateCharacterRequest{
@@ -857,16 +816,10 @@ func TestCreateCharacterMintsBindingResolvableByCurrent(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Success)
 
-	// Create was called with reason "initial_bind" for the new character.
-	require.Len(t, repo.creates, 1)
-	assert.Equal(t, "initial_bind", repo.creates[0].reason)
-	assert.Equal(t, charID.String(), repo.creates[0].characterID)
-	assert.Equal(t, playerID.String(), repo.creates[0].playerID)
-
-	// Current resolves the binding for the new character — no error, non-empty ID.
-	bindingID, err := repo.Current(ctx, charID.String())
-	require.NoError(t, err)
-	assert.NotEmpty(t, bindingID)
+	// CreateBound was called with reason "initial_bind" — the genesis service mints
+	// the binding atomically with the character + envelope.
+	assert.Equal(t, "initial_bind", charSvc.lastBindReason)
+	assert.Equal(t, charID.String(), resp.CharacterId)
 }
 
 // --- ListCharacters ---
@@ -1768,21 +1721,24 @@ func (m *mockAuthServiceForHandlers) Logout(ctx context.Context, tokenHash strin
 	return ulid.ULID{}, nil
 }
 
-// mockCharacterServiceForHandlers wraps auth.CharacterService methods used by handlers.
+// mockCharacterServiceForHandlers wraps auth.CharacterService methods used by
+// handlers. CreateBound records the bind reason and delegates to createFunc.
 type mockCharacterServiceForHandlers struct {
-	t          *testing.T
-	createFunc func(ctx context.Context, playerID ulid.ULID, name string) (*world.Character, error)
+	t              *testing.T
+	createFunc     func(ctx context.Context, playerID ulid.ULID, name string) (*world.Character, error)
+	lastBindReason string
 }
 
 func newMockCharacterService(t *testing.T) *mockCharacterServiceForHandlers {
 	return &mockCharacterServiceForHandlers{t: t}
 }
 
-func (m *mockCharacterServiceForHandlers) Create(ctx context.Context, playerID ulid.ULID, name string) (*world.Character, error) {
+func (m *mockCharacterServiceForHandlers) CreateBound(ctx context.Context, playerID ulid.ULID, name, bindReason string) (*world.Character, error) {
+	m.lastBindReason = bindReason
 	if m.createFunc != nil {
 		return m.createFunc(ctx, playerID, name)
 	}
-	m.t.Fatal("unexpected call to CharacterService.Create")
+	m.t.Fatal("unexpected call to CharacterService.CreateBound")
 	return nil, nil
 }
 

@@ -391,14 +391,19 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	_, err = locRepo.Create(ctx, guestLoc)
 	require.NoError(t, err, "integrationtest.Start: create guest start location")
 
-	// GuestService wiring.
+	// GuestService wiring (05-15: guest creation routes character + binding +
+	// genesis envelope through the atomic genesis service).
 	guestNamer := naming.NewGemstoneElementTheme()
 	guestBindingRepo := worldpg.NewBindingRepository(pool)
 	guestTransactor := worldpg.NewTransactor(pool)
+	guestGenesis, err := auth.NewCharacterGenesisService(
+		worldCharRepo, guestTransactor, guestBindingRepo, worldpg.NewOutboxStore(pool),
+	)
+	require.NoError(t, err, "integrationtest.Start: create character genesis service")
 	guestSvc, err := auth.NewGuestService(
 		telnet.NewGuestAuthenticator(guestNamer, guestLocID),
 		playerRepo, charRepo, playerSessionStore,
-		guestTransactor, guestBindingRepo,
+		guestGenesis,
 	)
 	require.NoError(t, err, "integrationtest.Start: create guest service")
 
@@ -1107,8 +1112,10 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 	char, err := world.NewCharacter(player.ID, charName)
 	require.NoError(s.t, err, "integrationtest.ConnectAuthedWithRoles: NewCharacter")
 	char.LocationID = &startLocID
-	// authCharRepoAdapter.Create delegates to worldpg.CharacterRepository.Create.
-	require.NoError(s.t, s.charRepo.Create(ctx, char),
+	// Test-support direct seeding via the concrete world char repo (outside the
+	// production genesis fence by design — harness only).
+	_, seedErr := s.worldCharRepo.Create(ctx, char)
+	require.NoError(s.t, seedErr,
 		"integrationtest.ConnectAuthedWithRoles: persist character")
 
 	// Under WithPluginCrypto the CoreServer runs with WithCryptoActive(true), so
@@ -1188,7 +1195,9 @@ func (s *Server) AuthedPlayer(ctx context.Context, charName string) *AuthedPlaye
 	char, err := world.NewCharacter(player.ID, charName)
 	require.NoError(s.t, err, "integrationtest.Server.AuthedPlayer: NewCharacter")
 	char.LocationID = &startLocID
-	require.NoError(s.t, s.charRepo.Create(ctx, char),
+	// Test-support direct seeding via the concrete world char repo (harness only).
+	_, seedErr := s.worldCharRepo.Create(ctx, char)
+	require.NoError(s.t, seedErr,
 		"integrationtest.Server.AuthedPlayer: persist character")
 
 	return &AuthedPlayer{

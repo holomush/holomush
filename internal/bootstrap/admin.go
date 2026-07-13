@@ -22,14 +22,12 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-// CharacterCreator is the subset of auth.CharacterService needed for admin bootstrap.
+// CharacterCreator is the subset of auth.CharacterService needed for admin
+// bootstrap. Its Create is genesis-backed (05-15): it commits the admin
+// character + its genesis envelope atomically with NO binding (behavior
+// preserved) — the signature is unchanged.
 type CharacterCreator interface {
 	Create(ctx context.Context, playerID ulid.ULID, name string) (*world.Character, error)
-}
-
-// Transactor wraps a function in a database transaction.
-type Transactor interface {
-	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 // SeedAdminDeps holds the dependencies for admin bootstrapping.
@@ -39,7 +37,6 @@ type SeedAdminDeps struct {
 	RoleStore   store.RoleStore
 	Hasher      auth.PasswordHasher
 	NameTheme   naming.Theme
-	Transactor  Transactor // optional; nil = no transaction wrapping
 }
 
 // SeedAdmin creates an admin player and character on first boot.
@@ -82,30 +79,26 @@ func SeedAdmin(ctx context.Context, deps SeedAdminDeps) error {
 		return oops.Code("ADMIN_BOOTSTRAP_FAILED").With("operation", "create player").Wrap(err)
 	}
 
-	var char *world.Character
-	writesFn := func(txCtx context.Context) error {
-		if createErr := deps.PlayerRepo.Create(txCtx, player); createErr != nil {
-			return oops.Code("ADMIN_BOOTSTRAP_FAILED").With("operation", "persist player").Wrap(createErr)
-		}
-		var charErr error
-		char, charErr = deps.CharService.Create(txCtx, player.ID, charName)
-		if charErr != nil {
-			return oops.Code("ADMIN_BOOTSTRAP_FAILED").With("operation", "create character").Wrap(charErr)
-		}
-		if roleErr := deps.RoleStore.AddRole(txCtx, char.ID.String(), access.RoleAdmin); roleErr != nil {
-			return oops.Code("ADMIN_BOOTSTRAP_FAILED").With("operation", "assign admin role").Wrap(roleErr)
-		}
-		return nil
+	// Ordering (round-4 B4): commit the admin PLAYER (its own pool), then run the
+	// genesis transaction (character + envelope, NO binding — behavior preserved),
+	// then assign the admin ROLE AFTER the genesis tx has committed. role_store
+	// writes character_roles on its OWN pool and does NOT enroll in the world
+	// transaction, so assigning the role while the character row is still
+	// uncommitted in the outer world tx would BLOCK on the character_roles→
+	// characters FK against a row held on a second connection. Assigning it after
+	// the character commits avoids that cross-connection FK wait. player+character+
+	// role are NOT one transaction (the round-3 claim was false); admin-role-missing
+	// on a post-commit role failure is an accepted, documented compensation gap
+	// (reconciled by a SeedAdmin re-run) outside INV-WORLD-4.
+	if createErr := deps.PlayerRepo.Create(ctx, player); createErr != nil {
+		return oops.Code("ADMIN_BOOTSTRAP_FAILED").With("operation", "persist player").Wrap(createErr)
 	}
-
-	if deps.Transactor != nil {
-		if err := deps.Transactor.WithTx(ctx, writesFn); err != nil {
-			return oops.Code("ADMIN_BOOTSTRAP_FAILED").With("operation", "transaction").Wrap(err)
-		}
-	} else {
-		if err := writesFn(ctx); err != nil {
-			return err
-		}
+	char, charErr := deps.CharService.Create(ctx, player.ID, charName)
+	if charErr != nil {
+		return oops.Code("ADMIN_BOOTSTRAP_FAILED").With("operation", "create character").Wrap(charErr)
+	}
+	if roleErr := deps.RoleStore.AddRole(ctx, char.ID.String(), access.RoleAdmin); roleErr != nil {
+		return oops.Code("ADMIN_BOOTSTRAP_FAILED").With("operation", "assign admin role").Wrap(roleErr)
 	}
 
 	slog.InfoContext(

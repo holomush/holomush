@@ -40,27 +40,9 @@ type WorldServiceProvider interface {
 	Service() *world.Service
 }
 
-// WorldTransactorProvider provides the world transactor.
-type WorldTransactorProvider interface {
-	Transactor() world.Transactor
-}
-
 // PluginManagerProvider provides the plugin manager for setting plugin discovery.
 type PluginManagerProvider interface {
 	Manager() *plugins.Manager
-}
-
-// bootstrapTransactor adapts world.Transactor (InTransaction) to the
-// bootstrap.Transactor interface (WithTx).
-type bootstrapTransactor struct {
-	inner world.Transactor
-}
-
-func (b *bootstrapTransactor) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if err := b.inner.InTransaction(ctx, fn); err != nil {
-		return oops.Wrap(err)
-	}
-	return nil
 }
 
 // PlayerRepoProvider provides a player repository lazily. Implemented by the
@@ -86,7 +68,6 @@ type BootstrapSubsystemConfig struct {
 	DB                 PoolProvider
 	ABAC               PolicyStoreProvider // for policy bootstrap (uses store with invalidation hook)
 	World              WorldServiceProvider
-	WorldTx            WorldTransactorProvider
 	Plugins            PluginManagerProvider
 	PlayerRepos        PlayerRepoProvider // from auth subsystem (lazy)
 	Hashers            HasherProvider     // from auth subsystem (lazy)
@@ -176,11 +157,25 @@ func (s *BootstrapSubsystem) Start(ctx context.Context) error {
 	charRepo := worldpostgres.NewCharacterRepository(pool)
 	locRepo := worldpostgres.NewLocationRepository(pool)
 
+	// Build the atomic character-genesis service (character + envelope in one
+	// world transaction) and back CharacterService with it (05-15). All four
+	// deps share the same pool so the character write, binding, and outbox
+	// envelope enroll in the same world txKey.
+	genesis, genErr := auth.NewCharacterGenesisService(
+		charRepo,
+		worldpostgres.NewTransactor(pool),
+		worldpostgres.NewBindingRepository(pool),
+		worldpostgres.NewOutboxStore(pool),
+	)
+	if genErr != nil {
+		return oops.Code("AUTH_SETUP_FAILED").Wrap(genErr)
+	}
+
 	// Build CharacterService with a location adapter that defers to the
 	// startLocationID pointer (resolved after bootstrap completes).
 	authCharRepo := NewCharRepoAdapter(pool, charRepo)
 	authLocRepo := NewLocRepoAdapter(&s.startLocationID, locRepo)
-	characterService, err := auth.NewCharacterService(authCharRepo, authLocRepo)
+	characterService, err := auth.NewCharacterService(authCharRepo, authLocRepo, genesis)
 	if err != nil {
 		return oops.Code("AUTH_SETUP_FAILED").Wrap(err)
 	}
@@ -192,7 +187,6 @@ func (s *BootstrapSubsystem) Start(ctx context.Context) error {
 		RoleStore:   roleStore,
 		Hasher:      s.cfg.Hashers.Hasher(),
 		NameTheme:   naming.NewStarTheme(),
-		Transactor:  &bootstrapTransactor{inner: s.cfg.WorldTx.Transactor()},
 	}))
 
 	// 5. Run all bootstrappers in priority order.

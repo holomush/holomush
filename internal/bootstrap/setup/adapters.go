@@ -22,7 +22,9 @@ var (
 )
 
 // CharRepoAdapter wraps a pgxpool.Pool to implement auth.CharacterRepository.
-// It delegates Create to worldpostgres and adds auth-specific queries.
+// It provides the auth-side READ queries only; character creation is owned
+// exclusively by auth.CharacterGenesisService (05-15 removed Create from the
+// auth-side interfaces — the compile-level fence).
 type CharRepoAdapter struct {
 	pool     *pgxpool.Pool
 	charRepo *worldpostgres.CharacterRepository
@@ -31,18 +33,6 @@ type CharRepoAdapter struct {
 // NewCharRepoAdapter constructs a CharRepoAdapter using the provided PostgreSQL pool and character repository.
 func NewCharRepoAdapter(pool *pgxpool.Pool, charRepo *worldpostgres.CharacterRepository) *CharRepoAdapter {
 	return &CharRepoAdapter{pool: pool, charRepo: charRepo}
-}
-
-// Create persists a new character using the underlying world repository.
-// The world repository now returns a *wmodel.MutationDelta; this adapter is a
-// documented wave-1 compatibility bridge (05-14) that discards the delta so the
-// auth.CharacterRepository interface (Create(...) error) stays unchanged. 05-15
-// removes Create from the auth-side interfaces entirely.
-func (a *CharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
-	if _, err := a.charRepo.Create(ctx, char); err != nil {
-		return oops.Code("CHARACTER_CREATE_FAILED").Wrap(err)
-	}
-	return nil
 }
 
 // ExistsByName reports whether a character with the given name already exists (case-insensitive).

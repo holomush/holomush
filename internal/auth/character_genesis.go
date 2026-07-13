@@ -167,8 +167,8 @@ func (s *CharacterGenesisService) Create(ctx context.Context, char *world.Charac
 
 // buildIntent constructs the character-genesis EnvelopeIntent from the created
 // character. The event identity is minted by wmodel.NewEnvelopeIntent via
-// core.NewULID() (never idgen.New()); the actor is the owning player (the
-// already-authorized, committed fact that caused the genesis). The intent
+// core.NewULID() (never the entity-id generator); the actor is the owning player
+// (the already-authorized, committed fact that caused the genesis). The intent
 // deliberately omits epoch/feed_position/manifest — the OutboxWriter owns those
 // (round-3 blocker #1).
 func (s *CharacterGenesisService) buildIntent(char *world.Character) (wmodel.EnvelopeIntent, error) {

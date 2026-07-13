@@ -173,6 +173,64 @@ func TestSeedAdmin_UsesEnvVarOverrides(t *testing.T) {
 	assert.Equal(t, "Gandalf", cs.createdName)
 }
 
+// orderingCharService and orderingRoleStore record into a shared sequence so a
+// test can assert the admin role is assigned AFTER the character is created
+// (round-4 B4 ordering: role_store's own-pool insert must not run while the
+// character row is uncommitted in the genesis transaction).
+type orderingCharService struct {
+	seq      *[]string
+	playerID ulid.ULID
+	charID   ulid.ULID
+}
+
+func (o *orderingCharService) Create(_ context.Context, playerID ulid.ULID, name string) (*world.Character, error) {
+	*o.seq = append(*o.seq, "character")
+	o.playerID = playerID
+	o.charID = ulid.Make()
+	return &world.Character{ID: o.charID, PlayerID: playerID, Name: name}, nil
+}
+
+type orderingRoleStore struct {
+	seq        *[]string
+	roleCharID string
+}
+
+func (o *orderingRoleStore) GetRoles(_ context.Context, _ string) ([]string, error) { return nil, nil }
+
+func (o *orderingRoleStore) AddRole(_ context.Context, charID, _ string) error {
+	*o.seq = append(*o.seq, "role")
+	o.roleCharID = charID
+	return nil
+}
+func (o *orderingRoleStore) RemoveRole(_ context.Context, _, _ string) error { return nil }
+func (o *orderingRoleStore) PlayerHasRole(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+
+func TestSeedAdminAssignsRoleAfterCharacterCreate(t *testing.T) {
+	t.Setenv("HOLOMUSH_ADMIN_USERNAME", "")
+	t.Setenv("HOLOMUSH_ADMIN_PASSWORD", "")
+	t.Setenv("HOLOMUSH_ADMIN_CHARACTER", "")
+
+	seq := []string{}
+	cs := &orderingCharService{seq: &seq}
+	rs := &orderingRoleStore{seq: &seq}
+	deps := SeedAdminDeps{
+		PlayerRepo:  &fakePlayerRepo{},
+		CharService: cs,
+		RoleStore:   rs,
+		Hasher:      &fakeHasher{},
+		NameTheme:   &fakeNameTheme{},
+	}
+
+	require.NoError(t, SeedAdmin(context.Background(), deps))
+
+	// character created BEFORE the role is assigned (post-commit ordering).
+	require.Equal(t, []string{"character", "role"}, seq)
+	// the role is assigned to the character that was just created.
+	assert.Equal(t, cs.charID.String(), rs.roleCharID)
+}
+
 func TestSeedAdmin_GeneratesPasswordWhenNotSet(t *testing.T) {
 	t.Setenv("HOLOMUSH_ADMIN_USERNAME", "")
 	t.Setenv("HOLOMUSH_ADMIN_PASSWORD", "")
