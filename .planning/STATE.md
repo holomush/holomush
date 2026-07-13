@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: world-model-integrity-fixes-m2-m12
 status: executing
 stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
-last_updated: "2026-07-13T01:04:26.890Z"
+last_updated: "2026-07-13T01:43:24.951Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 20
-  completed_plans: 14
+  completed_plans: 16
   percent: 17
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 05 (world-model-integrity-fixes-m2-m12) — EXECUTING
-Plan: 12 of 16
+Plan: 13 of 16
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 05 execution started
 
@@ -96,6 +96,7 @@ Last activity: 2026-07-12 — Phase 05 execution started
 | Phase 05 P08 | 110 | 2 tasks | 3 files |
 | Phase 05 P09 | 24min | 3 tasks tasks | 13 files files |
 | Phase 05 P10 | 120min | 2 tasks | 7 files |
+| Phase 05 P15 | 120 | 2 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,8 @@ the next milestone yet.
 - [Phase ?]: 05-08: D-05 resilience specs construct the REAL relay/lease/reference-consumer over the shared stack via the production setup.NewOutboxStore adapter; relays release their lease via DeferCleanup so a pinned conn never blocks harness teardown.
 - [Phase ?]: 05-10: all 10 location/exit/object write commands route through the mutate() seam — one taxonomy-declared envelope per successful command in the same tx (INV-WORLD-4); manifest finalized from the repo's returned MutationDelta (cascaded exits, reverse exit), never command inputs. First half of the D-01 rollout; character/scene/property + census land in 05-11.
 - [Phase ?]: 05-10: the per-game feed-counter FOR UPDATE lock globally serializes the world-write phase; bisect-confirmed this widened the conflict window so the slow describe command path deterministically loses its full-row CAS to a concurrent direct UpdateLocation (correct per INV-WORLD-ATOMIC-FEED), surfacing an errA-swallowing assumption in the M12 cross-field-race spec — now read-back-driven.
+- [Phase ?]: 05-15: ONE atomic CharacterGenesisService; all 3 creation paths route through it; Create removed from auth repo interfaces (compile fence); player/role ordered not atomic (round-4 B4).
+- [Phase ?]: 05-15: genesis service must NOT import internal/world/outbox (eventbus-relay import cycle) — uses local kind/schema constants mirroring the taxonomy, like internal/world/service.go.
 
 ### Pending Todos
 
@@ -158,7 +161,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-13T01:03:17.317Z
+Last session: 2026-07-13T01:43:05.985Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
 Resume file: None

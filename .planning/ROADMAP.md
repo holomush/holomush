@@ -94,7 +94,7 @@ Plans:
 3. Every doc site that stated the false "event sourcing / state derives from replay" principle now describes the decided model; no doc claims replay-derived world state the code does not provide
 4. The relevant INV-* invariants for the new guard/outbox are bound (not left `pending`)
 
-**Plans**: 10/16 plans executed
+**Plans**: 12/16 plans executed
 
 Plans:
 
@@ -116,8 +116,8 @@ Plans:
 **Slice 3 — Taxonomy + census + invariants + rollout (MODEL-04)** — data-first / enforcement-last (deliberate deviation from the one-pager order, acknowledged in 05-09/05-10/05-12)
 
 - [x] 05-09-PLAN.md — Versioned taxonomy registry (ARCH-04 input) + character_settings→guarded/versioned/envelope fold-in (round-4 C5/D-05) + raw-world-SQL AST/token fence (schema-scoped to core/world; scene_participants + plugins/ excluded, #4815) (wave 8)
-- [ ] 05-10-PLAN.md — Emission rollout: location/exit/object write commands through the outbox (delta-derived manifests; location-delete cascade-delta parity) (wave 9)
-- [ ] 05-15-PLAN.md — Atomic character-genesis service: ALL character creation (registered/guest/bootstrap-admin) emits a genesis envelope in one tx; interface Create removal (round-3 blocker #5) (wave 9)
+- [x] 05-10-PLAN.md — Emission rollout: location/exit/object write commands through the outbox (delta-derived manifests; location-delete cascade-delta parity) (wave 9)
+- [x] 05-15-PLAN.md — Atomic character-genesis service: ALL character creation (registered/guest/bootstrap-admin) emits a genesis envelope in one tx; interface Create removal (round-3 blocker #5) (wave 9)
 - [ ] 05-11-PLAN.md — Emission rollout: character/property + reader-view fence completion + genesis snapshot (checkpoint-idempotent) + census meta-test (scene-participant surface removed per D-07) (wave 10)
 - [ ] 05-16-PLAN.md — Atomic guest character-reaping service: guest reaping + failed-guest cleanup emit a character tombstone per reaped character in one tx, then delete the player (round-5 D-06; deletion-side counterpart to 05-15) (wave 10)
 - [ ] 05-12-PLAN.md — Register + BIND the 4 INV-WORLD-1..4 invariants (numeric ids; symbolic names as legacy) (wave 11)
@@ -186,7 +186,7 @@ Plans:
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
-| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 10/16 | In Progress|  |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 12/16 | In Progress|  |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 0 | Pending | — |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
