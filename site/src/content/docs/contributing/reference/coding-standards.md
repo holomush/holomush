@@ -341,11 +341,11 @@ type AccessControl interface {
 
 ## Patterns
 
-### Event Sourcing
+### Event-Driven Architecture
 
 - All game actions produce events
 - Events are immutable and ordered
-- State is derived from event replay
+- World state is canonical in PostgreSQL; the event feed is an append-only audit and notification log (the decided model — see ADR `docs/adr/holomush-i4784-world-state-model-decision.md`)
 
 ### Dependency Injection
 
