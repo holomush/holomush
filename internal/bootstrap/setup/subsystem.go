@@ -166,6 +166,7 @@ func (s *BootstrapSubsystem) Start(ctx context.Context) error {
 		worldpostgres.NewTransactor(pool),
 		worldpostgres.NewBindingRepository(pool),
 		worldpostgres.NewOutboxStore(pool),
+		worldpostgres.NewReapingGuard(pool),
 	)
 	if genErr != nil {
 		return oops.Code("AUTH_SETUP_FAILED").Wrap(genErr)

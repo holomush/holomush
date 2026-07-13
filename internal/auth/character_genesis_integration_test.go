@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -52,6 +53,7 @@ func newGenesisService(t *testing.T, pool *pgxpool.Pool) *auth.CharacterGenesisS
 		worldpostgres.NewTransactor(pool),
 		worldpostgres.NewBindingRepository(pool),
 		worldpostgres.NewOutboxStore(pool),
+		worldpostgres.NewReapingGuard(pool),
 	)
 	require.NoError(t, err)
 	return svc
@@ -103,6 +105,31 @@ func TestCharacterGenesisCreateCommitsCharacterBindingAndEnvelope(t *testing.T) 
 	assert.Equal(t, 1, countCharacter(t, pool, char.ID))
 	assert.Equal(t, 1, countBinding(t, pool, char.ID))
 	assert.Equal(t, 1, countGenesisEnvelope(t, pool, char.ID))
+}
+
+// A player marked reaping is rejected by the genesis service (round-6 R6-2): the
+// reaping-reject guard's SELECT reaping_at ... FOR UPDATE fires at the start of
+// the creation tx, so no character row is inserted for a reaping player.
+func TestCharacterGenesisCreateRejectsReapingPlayerAgainstDB(t *testing.T) {
+	ctx := context.Background()
+	pool := genesisPool(t)
+	svc := newGenesisService(t, pool)
+	playerID := seedGenesisPlayer(t, pool)
+
+	// Mark the player reaping directly (the MarkReaping equivalent).
+	_, err := pool.Exec(ctx,
+		`UPDATE players SET reaping_at = (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT WHERE id = $1`,
+		playerID.String())
+	require.NoError(t, err)
+
+	char := genesisChar(t, playerID, "Reaping Reject")
+	err = svc.Create(ctx, char, "initial_bind_guest")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PLAYER_REAPING")
+
+	// No character row was inserted for the reaping player.
+	assert.Equal(t, 0, countCharacter(t, pool, char.ID))
+	assert.Equal(t, 0, countGenesisEnvelope(t, pool, char.ID))
 }
 
 // bindReason "" emits the envelope with NO binding (bootstrap-admin mode).

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/world"
@@ -62,6 +63,20 @@ type GenesisBindingCreator interface {
 	Create(ctx context.Context, playerID, characterID, reason string) (string, error)
 }
 
+// PlayerReapingGuard rejects character creation for a player being reaped
+// (round-6 R6-2 anti-TOCTOU). EnsureNotReaping runs a SELECT reaping_at ... FOR
+// UPDATE on the ambient (genesis) transaction connection, holding the players
+// row lock until the tx commits and returning a PLAYER_REAPING-coded error when
+// the player is marked reaping. Satisfied by
+// internal/world/postgres.PlayerReapingGuard (it MUST live there to reach the
+// world txKey; the guard's doc-comment records the durable layering exception).
+// The genesis service calls it FIRST in its creation tx — a character can never
+// be inserted for a player after its reaping mark, so no un-tombstoned character
+// reaches the guest player-delete FK cascade.
+type PlayerReapingGuard interface {
+	EnsureNotReaping(ctx context.Context, playerID ulid.ULID) error
+}
+
 // CharacterGenesisService is the ONE atomic character-creation primitive. It
 // owns the character insert, an OPTIONAL player↔character binding, and the
 // character-genesis outbox envelope in a SINGLE re-entrant transaction — so a
@@ -88,17 +103,20 @@ type CharacterGenesisService struct {
 	transactor GenesisTransactor
 	bindings   GenesisBindingCreator
 	outbox     world.OutboxWriter
+	guard      PlayerReapingGuard
 	gameID     string
 }
 
 // NewCharacterGenesisService constructs the genesis service. It fails closed on
 // any nil dependency — a character can never be created through a partially
-// wired service that would skip the binding or the envelope.
+// wired service that would skip the binding, the envelope, or the reaping-reject
+// guard.
 func NewCharacterGenesisService(
 	writer CharacterWriter,
 	transactor GenesisTransactor,
 	bindings GenesisBindingCreator,
 	outboxWriter world.OutboxWriter,
+	guard PlayerReapingGuard,
 ) (*CharacterGenesisService, error) {
 	if writer == nil {
 		return nil, oops.Errorf("character writer is required")
@@ -112,11 +130,15 @@ func NewCharacterGenesisService(
 	if outboxWriter == nil {
 		return nil, oops.Errorf("outbox writer is required")
 	}
+	if guard == nil {
+		return nil, oops.Errorf("player reaping guard is required")
+	}
 	return &CharacterGenesisService{
 		writer:     writer,
 		transactor: transactor,
 		bindings:   bindings,
 		outbox:     outboxWriter,
+		guard:      guard,
 		gameID:     genesisGameID,
 	}, nil
 }
@@ -146,6 +168,13 @@ func (s *CharacterGenesisService) Create(ctx context.Context, char *world.Charac
 		return err
 	}
 	return oops.Wrap(s.transactor.InTransaction(ctx, func(txCtx context.Context) error {
+		// Reaping-reject guard FIRST (round-6 R6-2): a SELECT reaping_at ... FOR
+		// UPDATE on this tx connection. If the owning player is being reaped the
+		// creation is rejected (PLAYER_REAPING) with no character inserted; the
+		// row lock also serializes with the reaper's MarkReaping.
+		if gErr := s.guard.EnsureNotReaping(txCtx, char.PlayerID); gErr != nil {
+			return oops.Wrap(gErr)
+		}
 		delta, wErr := s.writer.Create(txCtx, char)
 		if wErr != nil {
 			return oops.Code("CHARACTER_GENESIS_FAILED").

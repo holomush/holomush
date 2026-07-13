@@ -398,6 +398,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	guestTransactor := worldpg.NewTransactor(pool)
 	guestGenesis, err := auth.NewCharacterGenesisService(
 		worldCharRepo, guestTransactor, guestBindingRepo, worldpg.NewOutboxStore(pool),
+		worldpg.NewReapingGuard(pool),
 	)
 	require.NoError(t, err, "integrationtest.Start: create character genesis service")
 	guestSvc, err := auth.NewGuestService(

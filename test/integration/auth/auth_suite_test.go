@@ -138,7 +138,7 @@ func setupTestEnv() (*testEnv, error) {
 	guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), guestStartLocationID)
 	guestBindingRepo := worldpg.NewBindingRepository(pool)
 	guestTransactor := worldpg.NewTransactor(pool)
-	guestGenesis, err := auth.NewCharacterGenesisService(worldCharRepo, guestTransactor, guestBindingRepo, worldpg.NewOutboxStore(pool))
+	guestGenesis, err := auth.NewCharacterGenesisService(worldCharRepo, guestTransactor, guestBindingRepo, worldpg.NewOutboxStore(pool), worldpg.NewReapingGuard(pool))
 	if err != nil {
 		eventStore.Close()
 		return nil, oops.Wrap(err)

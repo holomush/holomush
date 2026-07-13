@@ -342,6 +342,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		transactor,
 		bindingRepo,
 		worldpostgres.NewOutboxStore(pool),
+		worldpostgres.NewReapingGuard(pool),
 	)
 	if genErr != nil {
 		return oops.Code("CHARACTER_GENESIS_SERVICE_FAILED").Wrap(genErr)

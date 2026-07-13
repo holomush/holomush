@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -89,6 +90,22 @@ func (fakeGenesisTransactor) InTransaction(ctx context.Context, fn func(context.
 	return fn(ctx)
 }
 
+// fakeReapingGuard is the unit-test PlayerReapingGuard seam. By default it
+// permits creation (returns nil); set guardErr to simulate a reaping player.
+type fakeReapingGuard struct {
+	seq      *[]string
+	guardErr error
+	calls    int
+}
+
+func (f *fakeReapingGuard) EnsureNotReaping(_ context.Context, _ ulid.ULID) error {
+	if f.seq != nil {
+		*f.seq = append(*f.seq, "guard")
+	}
+	f.calls++
+	return f.guardErr
+}
+
 func newGenesisChar(t *testing.T) *world.Character {
 	t.Helper()
 	char, err := world.NewCharacter(ulid.Make(), "Genesis Hero")
@@ -106,6 +123,7 @@ func TestNewCharacterGenesisServiceFailsClosedOnNilDeps(t *testing.T) {
 	validTx := fakeGenesisTransactor{}
 	validBind := &fakeGenesisBindingCreator{seq: &seq}
 	validOutbox := &fakeOutboxWriter{seq: &seq}
+	validGuard := &fakeReapingGuard{seq: &seq}
 
 	tests := []struct {
 		name    string
@@ -113,17 +131,19 @@ func TestNewCharacterGenesisServiceFailsClosedOnNilDeps(t *testing.T) {
 		tx      auth.GenesisTransactor
 		bind    auth.GenesisBindingCreator
 		outbox  world.OutboxWriter
+		guard   auth.PlayerReapingGuard
 		wantErr string
 	}{
-		{"nil writer", nil, validTx, validBind, validOutbox, "character writer is required"},
-		{"nil transactor", validWriter, nil, validBind, validOutbox, "transactor is required"},
-		{"nil bindings", validWriter, validTx, nil, validOutbox, "binding creator is required"},
-		{"nil outbox", validWriter, validTx, validBind, nil, "outbox writer is required"},
+		{"nil writer", nil, validTx, validBind, validOutbox, validGuard, "character writer is required"},
+		{"nil transactor", validWriter, nil, validBind, validOutbox, validGuard, "transactor is required"},
+		{"nil bindings", validWriter, validTx, nil, validOutbox, validGuard, "binding creator is required"},
+		{"nil outbox", validWriter, validTx, validBind, nil, validGuard, "outbox writer is required"},
+		{"nil guard", validWriter, validTx, validBind, validOutbox, nil, "player reaping guard is required"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewCharacterGenesisService(tt.writer, tt.tx, tt.bind, tt.outbox)
+			svc, err := auth.NewCharacterGenesisService(tt.writer, tt.tx, tt.bind, tt.outbox, tt.guard)
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -139,7 +159,7 @@ func TestCharacterGenesisCreateWritesCharacterBindingThenEnvelopeInOrder(t *test
 	bind := &fakeGenesisBindingCreator{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 
-	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW)
+	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
 	char := newGenesisChar(t)
@@ -167,7 +187,7 @@ func TestCharacterGenesisCreateEmptyBindReasonEmitsEnvelopeWithNoBinding(t *test
 	bind := &fakeGenesisBindingCreator{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 
-	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW)
+	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Create(context.Background(), newGenesisChar(t), ""))
@@ -186,7 +206,7 @@ func TestCharacterGenesisCreateFailsWhenWriterFails(t *testing.T) {
 	bind := &fakeGenesisBindingCreator{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 
-	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW)
+	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
 	err = svc.Create(context.Background(), newGenesisChar(t), "initial_bind")
@@ -203,7 +223,7 @@ func TestCharacterGenesisCreateFailsWhenBindingFails(t *testing.T) {
 	bind := &fakeGenesisBindingCreator{seq: &seq, bindErr: errors.New("bind boom")}
 	outboxW := &fakeOutboxWriter{seq: &seq}
 
-	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW)
+	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
 	err = svc.Create(context.Background(), newGenesisChar(t), "initial_bind")
@@ -219,7 +239,7 @@ func TestCharacterGenesisCreateFailsWhenEnvelopeFails(t *testing.T) {
 	bind := &fakeGenesisBindingCreator{seq: &seq}
 	outboxW := &fakeOutboxWriter{seq: &seq, writeErr: errors.New("outbox boom")}
 
-	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW)
+	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
 	err = svc.Create(context.Background(), newGenesisChar(t), "initial_bind")
@@ -232,10 +252,36 @@ func TestCharacterGenesisCreateRejectsNilCharacter(t *testing.T) {
 	svc, err := auth.NewCharacterGenesisService(
 		&fakeCharWriter{seq: &seq}, fakeGenesisTransactor{},
 		&fakeGenesisBindingCreator{seq: &seq}, &fakeOutboxWriter{seq: &seq},
+		&fakeReapingGuard{seq: &seq},
 	)
 	require.NoError(t, err)
 
 	err = svc.Create(context.Background(), nil, "initial_bind")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CHARACTER_GENESIS_FAILED")
+}
+
+// --- reaping-reject guard (round-6 R6-2) ---
+
+func TestCharacterGenesisCreateRejectsReapingPlayer(t *testing.T) {
+	seq := []string{}
+	writer := &fakeCharWriter{seq: &seq}
+	bind := &fakeGenesisBindingCreator{seq: &seq}
+	outboxW := &fakeOutboxWriter{seq: &seq}
+	guard := &fakeReapingGuard{seq: &seq, guardErr: oops.Code("PLAYER_REAPING").Errorf("reaping")}
+
+	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, guard)
+	require.NoError(t, err)
+
+	err = svc.Create(context.Background(), newGenesisChar(t), "initial_bind_guest")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PLAYER_REAPING")
+
+	// The guard ran FIRST and rejected: no character inserted, no binding, no
+	// envelope written for a reaping player.
+	assert.Equal(t, 1, guard.calls)
+	assert.Equal(t, []string{"guard"}, seq)
+	assert.Nil(t, writer.created)
+	assert.Equal(t, 0, bind.calls)
+	assert.Equal(t, 0, outboxW.calls)
 }
