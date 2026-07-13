@@ -28,10 +28,21 @@ import (
 // later (wmodel round-9 R6-5).
 const defaultGameID = "main"
 
-// Envelope taxonomy for the world-change feed. The versioned taxonomy schema
-// registry lands in 05-09; until then these literal kinds/version identify the
-// intent-level payload shape.
+// Envelope taxonomy kinds for the world-change feed. These literals MUST match
+// the taxonomy-declared kind strings in internal/world/outbox/taxonomy.go exactly
+// (the 05-11 census meta-test asserts the command↔kind bijection). They are
+// duplicated as local constants rather than imported because package world MUST
+// NOT import internal/world/outbox (the world→outbox import edge is forbidden — it
+// would re-form the round-2/round-3 cycle; test/meta/world_import_graph_test.go).
 const (
+	kindLocationCreated = "location_created"
+	kindLocationUpdated = "location_updated"
+	kindLocationDeleted = "location_deleted"
+
+	kindExitCreated = "exit_created"
+	kindExitUpdated = "exit_updated"
+	kindExitDeleted = "exit_deleted"
+
 	kindCharacterMoved             = "character_moved"
 	kindCharacterPreferencesUpdate = "character_preferences_update"
 	worldSchemaVersion             = 1
@@ -102,7 +113,15 @@ func NewService(cfg ServiceConfig) *Service {
 	}
 	var mutator *worldMutator
 	if cfg.OutboxWriter != nil && cfg.Transactor != nil {
-		mutator = newWorldMutator(cfg.CharacterRepo, cfg.Transactor, cfg.OutboxWriter)
+		mutator = newWorldMutator(
+			cfg.CharacterRepo,
+			cfg.LocationRepo,
+			cfg.ExitRepo,
+			cfg.ObjectRepo,
+			cfg.PropertyRepo,
+			cfg.Transactor,
+			cfg.OutboxWriter,
+		)
 	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
@@ -257,7 +276,15 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
 	}
-	if _, err := s.locationRepo.Create(ctx, loc); err != nil {
+	if s.mutator == nil {
+		return oops.Code("LOCATION_CREATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildLocationPayload(loc)
+	if err != nil {
+		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "build location create payload %s", loc.ID)
+	}
+	intent := s.buildIntent(kindLocationCreated, wmodel.AggregateLocation, loc.ID, subjectID, payload)
+	if _, err := s.mutator.createLocation(ctx, intent, loc); err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "create location %s", loc.ID)
 	}
 	return nil
@@ -279,13 +306,41 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
 	}
-	if _, err := s.locationRepo.Update(ctx, loc); err != nil {
+	if s.mutator == nil {
+		return oops.Code("LOCATION_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildLocationPayload(loc)
+	if err != nil {
+		return oops.Code("LOCATION_UPDATE_FAILED").Wrapf(err, "build location update payload %s", loc.ID)
+	}
+	intent := s.buildIntent(kindLocationUpdated, wmodel.AggregateLocation, loc.ID, subjectID, payload)
+	if _, err := s.mutator.updateLocation(ctx, intent, loc); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("id", loc.ID.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "update location %s", loc.ID)
 		}
 		return oops.Code("LOCATION_UPDATE_FAILED").Wrapf(err, "update location %s", loc.ID)
 	}
 	return nil
+}
+
+// buildIntent constructs a world-change EnvelopeIntent for a command. The intent
+// carries the service's game id, the command's taxonomy-declared kind + aggregate,
+// the authorized principal as actor, and the new-values-only payload. It
+// deliberately omits epoch/feed_position/manifest — the postgres WriteIntent writer
+// owns those (round-3 blocker #1).
+func (s *Service) buildIntent(kind string, aggType wmodel.AggregateType, aggID ulid.ULID, actor string, payload []byte) wmodel.EnvelopeIntent {
+	return wmodel.NewEnvelopeIntent(wmodel.IntentParams{
+		GameID:        s.gameID,
+		Kind:          kind,
+		SchemaVersion: worldSchemaVersion,
+		Actor:         actor,
+		AggregateType: aggType,
+		AggregateID:   aggID,
+		Payload:       payload,
+	})
 }
 
 // DeleteLocation deletes a location and its properties after checking delete authorization.
@@ -305,22 +360,22 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixLocation); err != nil {
 		return err
 	}
-	deleteFn := func(ctx context.Context) error {
-		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
-			return oops.Code("LOCATION_DELETE_FAILED").
-				With("operation", "delete_location_properties").
-				Wrapf(err, "delete properties for location %s", id)
-		}
-		if _, err := s.locationRepo.Delete(ctx, id, 0); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
-			}
-			return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
-		}
-		return nil
+	if s.mutator == nil {
+		return oops.Code("LOCATION_DELETE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
-		return oops.Code("LOCATION_DELETE_FAILED").Wrap(err)
+	payload, err := BuildTombstonePayload(id)
+	if err != nil {
+		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "build location tombstone payload %s", id)
+	}
+	intent := s.buildIntent(kindLocationDeleted, wmodel.AggregateLocation, id, subjectID, payload)
+	// The delete + its property cascade + the tombstone envelope commit in ONE
+	// transaction via the mutate() seam; the envelope manifest carries the
+	// DB-cascaded exits from the repo delta (INV-WORLD-2 parity).
+	if _, err := s.mutator.deleteLocation(ctx, intent, id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
+		}
+		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
 	}
 	return nil
 }
@@ -367,7 +422,15 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
 	}
-	if _, err := s.exitRepo.Create(ctx, exit); err != nil {
+	if s.mutator == nil {
+		return oops.Code("EXIT_CREATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildExitPayload(exit)
+	if err != nil {
+		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "build exit create payload %s", exit.ID)
+	}
+	intent := s.buildIntent(kindExitCreated, wmodel.AggregateExit, exit.ID, subjectID, payload)
+	if _, err := s.mutator.createExit(ctx, intent, exit); err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "create exit %s", exit.ID)
 	}
 	return nil
@@ -392,7 +455,18 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
 	}
-	if _, err := s.exitRepo.Update(ctx, exit); err != nil {
+	if s.mutator == nil {
+		return oops.Code("EXIT_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildExitPayload(exit)
+	if err != nil {
+		return oops.Code("EXIT_UPDATE_FAILED").Wrapf(err, "build exit update payload %s", exit.ID)
+	}
+	intent := s.buildIntent(kindExitUpdated, wmodel.AggregateExit, exit.ID, subjectID, payload)
+	if _, err := s.mutator.updateExit(ctx, intent, exit); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).With("id", exit.ID.String()).Wrap(err)
+		}
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("EXIT_NOT_FOUND").Wrapf(err, "update exit %s", exit.ID)
 		}
@@ -413,31 +487,41 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixExit); err != nil {
 		return err
 	}
-	_, err := s.exitRepo.Delete(ctx, id, 0)
+	if s.mutator == nil {
+		return oops.Code("EXIT_DELETE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildTombstonePayload(id)
 	if err != nil {
-		// Check if this is a cleanup result from bidirectional exit handling
+		return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "build exit tombstone payload %s", id)
+	}
+	intent := s.buildIntent(kindExitDeleted, wmodel.AggregateExit, id, subjectID, payload)
+	// The delete (incl. the atomic bidirectional reverse-exit cascade) and its
+	// single tombstone envelope commit in ONE transaction via mutate(); the envelope
+	// manifest carries the reverse exit from the repo delta. A non-severe cleanup
+	// notice (reverse exit already gone) is surfaced AFTER the commit — the primary
+	// delete still emitted its envelope.
+	_, notice, err := s.mutator.deleteExit(ctx, intent, id)
+	if err != nil {
+		// A severe bidirectional cleanup rolled the tx back (no envelope).
 		var cleanupResult *BidirectionalCleanupResult
-		if errors.As(err, &cleanupResult) {
-			// Log cleanup issues at appropriate level
-			if cleanupResult.IsSevere() {
-				// Severe: operation was rolled back, primary delete did NOT complete
-				slog.ErrorContext(ctx, "bidirectional exit delete rolled back",
-					"exit_id", cleanupResult.ExitID.String(),
-					"error", cleanupResult.Error())
-				return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "delete exit %s", id)
-			}
-			// Non-severe: primary delete succeeded, return exit was just not found
-			slog.InfoContext(ctx, "bidirectional exit cleanup notice: return exit already deleted",
+		if errors.As(err, &cleanupResult) && cleanupResult.IsSevere() {
+			slog.ErrorContext(ctx, "bidirectional exit delete rolled back",
 				"exit_id", cleanupResult.ExitID.String(),
-				"to_location_id", cleanupResult.ToLocationID.String(),
-				"return_name", cleanupResult.ReturnName)
-			return nil
+				"error", cleanupResult.Error())
+			return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "delete exit %s", id)
 		}
-		// Actual delete failure
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("EXIT_NOT_FOUND").Wrapf(err, "delete exit %s", id)
 		}
 		return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "delete exit %s", id)
+	}
+	if notice != nil {
+		// Non-severe: primary delete succeeded + envelope committed; the reverse exit
+		// was already gone.
+		slog.InfoContext(ctx, "bidirectional exit cleanup notice: return exit already deleted",
+			"exit_id", notice.ExitID.String(),
+			"to_location_id", notice.ToLocationID.String(),
+			"return_name", notice.ReturnName)
 	}
 	return nil
 }

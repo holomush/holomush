@@ -67,6 +67,16 @@ func (m *mockOutboxWriter) WriteIntent(_ context.Context, intent wmodel.Envelope
 	return env, nil
 }
 
+// withWriteExecutor wires a ServiceConfig with the write executor (a passthrough
+// mockTransactor + the given outbox) so location/exit/object write commands route
+// through the mutate() seam (05-10). Tests that reach a repo write MUST supply the
+// executor or the command reports a configuration error.
+func withWriteExecutor(cfg world.ServiceConfig, outbox *mockOutboxWriter) world.ServiceConfig {
+	cfg.Transactor = &mockTransactor{}
+	cfg.OutboxWriter = outbox
+	return cfg
+}
+
 func TestWorldService_GetLocation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
@@ -227,14 +237,15 @@ func TestWorldService_CreateLocation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
-	t.Run("creates location when authorized", func(t *testing.T) {
+	t.Run("creates location when authorized and emits one location_created envelope", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, outbox))
 
 		loc := &world.Location{
 			Name:        "New Room",
@@ -242,24 +253,44 @@ func TestWorldService_CreateLocation(t *testing.T) {
 			Type:        world.LocationTypePersistent,
 		}
 
+		delta := &wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateLocation, AfterVersion: 1}}
 		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.MatchedBy(func(l *world.Location) bool {
 			return l.Name == "New Room" && !l.ID.IsZero()
-		})).Return(nil, nil)
+		})).Return(delta, nil)
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
 		assert.False(t, loc.ID.IsZero(), "ID should be generated")
+
+		// Exactly one location_created envelope, finalized from the returned delta.
+		require.Equal(t, 1, outbox.calls, "exactly one location_created envelope")
+		assert.Equal(t, "location_created", outbox.lastIntent.Kind)
+		assert.Equal(t, wmodel.AggregateLocation, outbox.lastIntent.AggregateType)
+		assert.Equal(t, loc.ID, outbox.lastIntent.AggregateID)
+		assert.Equal(t, subjectID, outbox.lastIntent.Actor)
+		assert.Same(t, delta, outbox.lastDelta, "the writer finalizes from the returned MutationDelta")
+
+		var payload struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		require.NoError(t, json.Unmarshal(outbox.lastIntent.Payload, &payload))
+		assert.Equal(t, loc.ID.String(), payload.ID)
+		assert.Equal(t, "New Room", payload.Name)
+		assert.Equal(t, "A test room", payload.Description)
 	})
 
 	t.Run("preserves existing ID when already set", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, outbox))
 
 		existingID := ulid.Make()
 		loc := &world.Location{
@@ -277,22 +308,25 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
 		assert.Equal(t, existingID, loc.ID, "pre-set ID should be preserved")
+		assert.Equal(t, existingID, outbox.lastIntent.AggregateID)
 	})
 
-	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+	t.Run("returns permission denied when not authorized (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, outbox))
 
 		loc := &world.Location{Name: "New Room"}
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockRepo.AssertNotCalled(t, "Create")
+		assert.Equal(t, 0, outbox.calls, "a denied command emits nothing")
 	})
 }
 
@@ -301,48 +335,59 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 	locID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
-	t.Run("updates location when authorized", func(t *testing.T) {
+	t.Run("updates location when authorized and emits one location_updated envelope", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, outbox))
 
 		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
 
+		delta := &wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateLocation, ID: locID, BeforeVersion: 1, AfterVersion: 2}}
 		engine.Grant(subjectID, "write", "location:"+locID.String())
-		mockRepo.EXPECT().Update(ctx, loc).Return(nil, nil)
+		mockRepo.EXPECT().Update(ctx, loc).Return(delta, nil)
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
+
+		require.Equal(t, 1, outbox.calls, "exactly one location_updated envelope")
+		assert.Equal(t, "location_updated", outbox.lastIntent.Kind)
+		assert.Equal(t, wmodel.AggregateLocation, outbox.lastIntent.AggregateType)
+		assert.Equal(t, locID, outbox.lastIntent.AggregateID)
+		assert.Same(t, delta, outbox.lastDelta)
 	})
 
-	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+	t.Run("returns permission denied when not authorized (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, outbox))
 
 		loc := &world.Location{ID: locID, Name: "Updated Room"}
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockRepo.AssertNotCalled(t, "Update")
+		assert.Equal(t, 0, outbox.calls)
 	})
 
-	t.Run("returns not found when location does not exist", func(t *testing.T) {
+	t.Run("returns not found when location does not exist (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, outbox))
 
 		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
 
@@ -353,16 +398,18 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+		assert.Equal(t, 0, outbox.calls, "a failed write rolls back with no envelope")
 	})
 
 	t.Run("surfaces WORLD_CONCURRENT_EDIT unchanged on a stale write (D-02)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, outbox))
 
 		// Version 3 was read; a concurrent writer advanced it, so the guarded
 		// CAS rejects this stale write with the typed conflict.
@@ -378,6 +425,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		// D-02: the conflict propagates unchanged — the top-level code stays
 		// WORLD_CONCURRENT_EDIT, not a generic LOCATION_UPDATE_FAILED mask.
 		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+		assert.Equal(t, 0, outbox.calls, "a conflict writes no envelope")
 	})
 }
 
@@ -437,59 +485,70 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 	locID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
-	t.Run("deletes location when authorized", func(t *testing.T) {
+	t.Run("deletes location when authorized and emits one location_deleted tombstone with cascade manifest", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
-		tx := &mockTransactor{}
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
-			Transactor:   tx,
-		})
+		}, outbox))
 
+		// The repo delta carries the DB-cascaded exit tombstones (preselected under
+		// lock in 05-02); the single envelope's manifest must cover them.
+		cascadedExit := ulid.Make()
+		delta := &wmodel.MutationDelta{
+			Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateLocation, ID: locID, Tombstone: true, BeforeVersion: 4},
+			Affected: []wmodel.AffectedAggregate{
+				{Type: wmodel.AggregateExit, ID: cascadedExit, Tombstone: true, BeforeVersion: 2},
+			},
+		}
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
-		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, nil)
+		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(delta, nil)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.NoError(t, err)
-		assert.True(t, tx.called, "expected InTransaction to be called")
+
+		require.Equal(t, 1, outbox.calls, "a delete emits exactly one tombstone envelope, not one per cascaded row")
+		assert.Equal(t, "location_deleted", outbox.lastIntent.Kind)
+		assert.Equal(t, locID, outbox.lastIntent.AggregateID)
+		assert.Same(t, delta, outbox.lastDelta, "the manifest is finalized from the repo delta incl. the cascaded exits")
 	})
 
-	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+	t.Run("returns permission denied when not authorized (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
-		tx := &mockTransactor{}
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
-			Transactor:   tx,
-		})
+		}, outbox))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockRepo.AssertNotCalled(t, "Delete")
 		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
+		assert.Equal(t, 0, outbox.calls)
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
 		engine := policytest.DenyAllEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
-		tx := &mockTransactor{}
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
-			Transactor:   tx,
-		})
+		}, outbox))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -501,18 +560,17 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 			"explicit deny must not be reported as evaluation error")
 	})
 
-	t.Run("propagates repository errors", func(t *testing.T) {
+	t.Run("propagates repository errors (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
-		tx := &mockTransactor{}
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
-			Transactor:   tx,
-		})
+		}, outbox))
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
@@ -521,6 +579,7 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
+		assert.Equal(t, 0, outbox.calls, "a rolled-back delete writes no envelope")
 	})
 }
 
@@ -570,14 +629,15 @@ func TestWorldService_CreateExit(t *testing.T) {
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
-	t.Run("creates exit when authorized", func(t *testing.T) {
+	t.Run("creates exit when authorized and emits one exit_created envelope", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		exit := &world.Exit{
 			FromLocationID: fromLocID,
@@ -586,30 +646,50 @@ func TestWorldService_CreateExit(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
+		delta := &wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateExit, AfterVersion: 1}}
 		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.MatchedBy(func(e *world.Exit) bool {
 			return e.Name == "north" && !e.ID.IsZero()
-		})).Return(nil, nil)
+		})).Return(delta, nil)
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.NoError(t, err)
 		assert.False(t, exit.ID.IsZero(), "ID should be generated")
+
+		require.Equal(t, 1, outbox.calls, "exactly one exit_created envelope")
+		assert.Equal(t, "exit_created", outbox.lastIntent.Kind)
+		assert.Equal(t, wmodel.AggregateExit, outbox.lastIntent.AggregateType)
+		assert.Equal(t, exit.ID, outbox.lastIntent.AggregateID)
+		assert.Same(t, delta, outbox.lastDelta)
+
+		var payload struct {
+			ID             string `json:"id"`
+			Name           string `json:"name"`
+			FromLocationID string `json:"from_location_id"`
+			ToLocationID   string `json:"to_location_id"`
+		}
+		require.NoError(t, json.Unmarshal(outbox.lastIntent.Payload, &payload))
+		assert.Equal(t, "north", payload.Name)
+		assert.Equal(t, fromLocID.String(), payload.FromLocationID)
+		assert.Equal(t, toLocID.String(), payload.ToLocationID)
 	})
 
-	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+	t.Run("returns permission denied when not authorized (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		exit := &world.Exit{Name: "north"}
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockExitRepo.AssertNotCalled(t, "Create")
+		assert.Equal(t, 0, outbox.calls)
 	})
 }
 
@@ -618,48 +698,58 @@ func TestWorldService_UpdateExit(t *testing.T) {
 	exitID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
-	t.Run("updates exit when authorized", func(t *testing.T) {
+	t.Run("updates exit when authorized and emits one exit_updated envelope", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		exit := &world.Exit{ID: exitID, Name: "north updated", Visibility: world.VisibilityAll}
 
+		delta := &wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateExit, ID: exitID, BeforeVersion: 1, AfterVersion: 2}}
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil, nil)
+		mockExitRepo.EXPECT().Update(ctx, exit).Return(delta, nil)
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.NoError(t, err)
+
+		require.Equal(t, 1, outbox.calls, "exactly one exit_updated envelope")
+		assert.Equal(t, "exit_updated", outbox.lastIntent.Kind)
+		assert.Equal(t, exitID, outbox.lastIntent.AggregateID)
+		assert.Same(t, delta, outbox.lastDelta)
 	})
 
-	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+	t.Run("returns permission denied when not authorized (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockExitRepo.AssertNotCalled(t, "Update")
+		assert.Equal(t, 0, outbox.calls)
 	})
 
-	t.Run("propagates repository errors", func(t *testing.T) {
+	t.Run("propagates repository errors (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
@@ -669,16 +759,18 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
+		assert.Equal(t, 0, outbox.calls)
 	})
 
-	t.Run("returns not found when exit does not exist", func(t *testing.T) {
+	t.Run("returns not found when exit does not exist (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
@@ -689,6 +781,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
+		assert.Equal(t, 0, outbox.calls)
 	})
 }
 
@@ -697,44 +790,62 @@ func TestWorldService_DeleteExit(t *testing.T) {
 	exitID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
-	t.Run("deletes exit when authorized", func(t *testing.T) {
+	t.Run("deletes exit when authorized and emits one exit_deleted tombstone", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
+		// A bidirectional delete reports the reverse exit in the delta's Affected;
+		// the single tombstone envelope's manifest covers it.
+		reverseExit := ulid.Make()
+		delta := &wmodel.MutationDelta{
+			Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateExit, ID: exitID, Tombstone: true, BeforeVersion: 3},
+			Affected: []wmodel.AffectedAggregate{
+				{Type: wmodel.AggregateExit, ID: reverseExit, Tombstone: true, BeforeVersion: 1},
+			},
+		}
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, nil)
+		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(delta, nil)
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.NoError(t, err)
+
+		require.Equal(t, 1, outbox.calls, "a bidirectional delete emits one tombstone envelope, not one per exit")
+		assert.Equal(t, "exit_deleted", outbox.lastIntent.Kind)
+		assert.Equal(t, exitID, outbox.lastIntent.AggregateID)
+		assert.Same(t, delta, outbox.lastDelta)
 	})
 
-	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+	t.Run("returns permission denied when not authorized (no envelope)", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockExitRepo.AssertNotCalled(t, "Delete")
+		assert.Equal(t, 0, outbox.calls)
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
 		engine := policytest.DenyAllEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.Error(t, err)
@@ -745,16 +856,20 @@ func TestWorldService_DeleteExit(t *testing.T) {
 			"explicit deny must not be reported as evaluation error")
 	})
 
-	t.Run("handles cleanup result for bidirectional exit", func(t *testing.T) {
+	t.Run("non-severe bidirectional cleanup commits the envelope and succeeds", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
+		outbox := &mockOutboxWriter{}
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, outbox))
 
 		toLocationID := ulid.Make()
+		// Non-severe: primary delete committed, the reverse exit was already gone.
+		// The repo returns (delta, non-severe-cleanup); the command still emits.
+		delta := &wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateExit, ID: exitID, Tombstone: true, BeforeVersion: 2}}
 		cleanupResult := &world.BidirectionalCleanupResult{
 			ExitID:       exitID,
 			ToLocationID: toLocationID,
@@ -765,11 +880,13 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		}
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
-		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, cleanupResult)
+		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(delta, cleanupResult)
 
-		// Should succeed since primary delete worked
+		// Should succeed since primary delete worked, AND still emit the tombstone.
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.NoError(t, err)
+		require.Equal(t, 1, outbox.calls, "a non-severe cleanup still commits + emits the tombstone")
+		assert.Equal(t, "exit_deleted", outbox.lastIntent.Kind)
 	})
 }
 
@@ -1420,10 +1537,10 @@ func TestWorldService_CreateLocationErrorPropagation(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		loc := &world.Location{
 			Name: "Test Room",
@@ -1473,10 +1590,10 @@ func TestWorldService_CreateExitErrorPropagation(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		exit := &world.Exit{
 			FromLocationID: fromLocID,
@@ -1581,10 +1698,10 @@ func TestWorldService_DeleteExitSevereCleanup(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		toLocationID := ulid.Make()
 		cleanupResult := &world.BidirectionalCleanupResult{
@@ -1610,10 +1727,10 @@ func TestWorldService_DeleteExitSevereCleanup(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		toLocationID := ulid.Make()
 		returnExitID := ulid.Make()
@@ -2143,10 +2260,10 @@ func TestWorldService_CreateExitValidationBypass(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		exit := &world.Exit{
 			FromLocationID: fromLocID,
@@ -2168,10 +2285,10 @@ func TestWorldService_CreateExitValidationBypass(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockExitRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		// Create duplicate ULIDs in VisibleTo - invalid but should be ignored for VisibilityAll
 		duplicateID := ulid.Make()
@@ -2541,10 +2658,10 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
@@ -2589,10 +2706,10 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			LocationRepo: mockRepo,
 			Engine:       engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
 		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(nil, errors.New("db error"))
@@ -2633,6 +2750,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
 			Transactor:   tx,
+			OutboxWriter: &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -2655,6 +2773,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
 			Transactor:   tx,
+			OutboxWriter: &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -2827,10 +2946,10 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		engine.Grant(subjectID, "write", "exit:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
@@ -2875,10 +2994,10 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(nil, errors.New("db error"))
@@ -2907,10 +3026,10 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, world.ErrNotFound)
@@ -2924,10 +3043,10 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
-		svc := world.NewService(world.ServiceConfig{
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 			ExitRepo: mockRepo,
 			Engine:   engine,
-		})
+		}, &mockOutboxWriter{}))
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, errors.New("db error"))
@@ -4360,6 +4479,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
 			Transactor:   tx,
+			OutboxWriter: &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4382,6 +4502,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
 			Transactor:   tx,
+			OutboxWriter: &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4403,6 +4524,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 			PropertyRepo: mockPropRepo,
 			Engine:       engine,
 			Transactor:   tx,
+			OutboxWriter: &mockOutboxWriter{},
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4501,6 +4623,7 @@ func TestWorldService_DeleteLocation_PropertyDeleteFails(t *testing.T) {
 		PropertyRepo: mockPropRepo,
 		Engine:       engine,
 		Transactor:   tx,
+		OutboxWriter: &mockOutboxWriter{},
 	})
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4648,6 +4771,7 @@ func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 		PropertyRepo: mockPropRepo,
 		Engine:       engine,
 		Transactor:   tx,
+		OutboxWriter: &mockOutboxWriter{},
 	})
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4726,6 +4850,7 @@ func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
 		PropertyRepo: mockPropRepo,
 		Engine:       engine,
 		Transactor:   tx,
+		OutboxWriter: &mockOutboxWriter{},
 	})
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4781,10 +4906,10 @@ func TestWorldService_CreateLocation_VerifiesAccessRequest(t *testing.T) {
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockLocationRepository(t)
 
-	svc := world.NewService(world.ServiceConfig{
+	svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 		LocationRepo: mockRepo,
 		Engine:       mockEngine,
-	})
+	}, &mockOutboxWriter{}))
 
 	loc := &world.Location{
 		Name:        "New Room",
@@ -4866,10 +4991,10 @@ func TestWorldService_CreateExit_VerifiesAccessRequest(t *testing.T) {
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockExitRepository(t)
 
-	svc := world.NewService(world.ServiceConfig{
+	svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 		ExitRepo: mockRepo,
 		Engine:   mockEngine,
-	})
+	}, &mockOutboxWriter{}))
 
 	exit := &world.Exit{
 		Name:           "North",
@@ -4906,10 +5031,10 @@ func TestWorldService_DeleteExit_VerifiesAccessRequest(t *testing.T) {
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockExitRepository(t)
 
-	svc := world.NewService(world.ServiceConfig{
+	svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 		ExitRepo: mockRepo,
 		Engine:   mockEngine,
-	})
+	}, &mockOutboxWriter{}))
 
 	// Capture the AccessRequest using mock.MatchedBy
 	var capturedRequest types.AccessRequest
@@ -5010,10 +5135,10 @@ func TestWorldService_UpdateExit_VerifiesAccessRequest(t *testing.T) {
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockExitRepository(t)
 
-	svc := world.NewService(world.ServiceConfig{
+	svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 		ExitRepo: mockRepo,
 		Engine:   mockEngine,
-	})
+	}, &mockOutboxWriter{}))
 
 	exit := &world.Exit{
 		ID:             ulid.Make(),
@@ -5288,10 +5413,10 @@ func TestWorldService_UpdateLocation_VerifiesAccessRequest(t *testing.T) {
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockLocationRepository(t)
 
-	svc := world.NewService(world.ServiceConfig{
+	svc := world.NewService(withWriteExecutor(world.ServiceConfig{
 		LocationRepo: mockRepo,
 		Engine:       mockEngine,
-	})
+	}, &mockOutboxWriter{}))
 
 	loc := &world.Location{
 		ID:          ulid.Make(),
@@ -5332,6 +5457,7 @@ func TestWorldService_DeleteLocation_VerifiesAccessRequest(t *testing.T) {
 		PropertyRepo: mockPropRepo,
 		Engine:       mockEngine,
 		Transactor:   mockTransactor,
+		OutboxWriter: &mockOutboxWriter{},
 	})
 
 	var capturedRequest types.AccessRequest

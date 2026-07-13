@@ -5,6 +5,7 @@ package world
 
 import (
 	"context"
+	"errors"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -84,22 +85,46 @@ type OutboxWriter interface {
 // package world cannot construct a write closure that reaches a writer repo, so a
 // state write cannot happen without the accompanying envelope.
 //
-// As of 05-06 only the character writer is owned here (MoveCharacter is the first
-// command through the seam). The remaining write commands migrate in 05-10/05-11,
-// and the genuine compile-time fence (Service holds only reader views, no
-// directly-callable write repo) closes in 05-11 once every command routes through
-// mutate() — closing it here would break compilation of the un-migrated commands.
+// As of 05-10 the character writer plus the location/exit/property writers are
+// owned here (MoveCharacter was the first command through the seam; the
+// location/exit/object write commands migrate in 05-10/05-11). The object writer
+// is added in 05-10 Task 2. The genuine compile-time fence (Service holds only
+// reader views, no directly-callable write repo) closes in 05-11 once every
+// command routes through mutate() — closing it here would break compilation of the
+// un-migrated commands.
 type worldMutator struct {
 	characterWriter CharacterRepository
+	locationWriter  LocationRepository
+	exitWriter      ExitRepository
+	objectWriter    ObjectRepository
+	propertyWriter  PropertyRepository
 	transactor      Transactor
 	outbox          OutboxWriter
 }
 
-// newWorldMutator constructs the write executor. characterWriter is the private
-// write-capable character repository; transactor is the re-entrant transaction
-// seam (05-14); outbox is the injected OutboxWriter the executor persists through.
-func newWorldMutator(characterWriter CharacterRepository, transactor Transactor, outbox OutboxWriter) *worldMutator {
-	return &worldMutator{characterWriter: characterWriter, transactor: transactor, outbox: outbox}
+// newWorldMutator constructs the write executor. The *Writer args are the private
+// write-capable repositories (reachable only through the per-operation
+// closure-builder methods); transactor is the re-entrant transaction seam (05-14);
+// outbox is the injected OutboxWriter the executor persists through. propertyWriter
+// is used by the delete closures for the same-tx property cascade.
+func newWorldMutator(
+	characterWriter CharacterRepository,
+	locationWriter LocationRepository,
+	exitWriter ExitRepository,
+	objectWriter ObjectRepository,
+	propertyWriter PropertyRepository,
+	transactor Transactor,
+	outbox OutboxWriter,
+) *worldMutator {
+	return &worldMutator{
+		characterWriter: characterWriter,
+		locationWriter:  locationWriter,
+		exitWriter:      exitWriter,
+		objectWriter:    objectWriter,
+		propertyWriter:  propertyWriter,
+		transactor:      transactor,
+		outbox:          outbox,
+	}
 }
 
 // mutate is the write-requires-envelope seam. BOTH parameters are non-optional —
@@ -176,4 +201,82 @@ func (m *worldMutator) updateCharacterPreferences(
 	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
 		return m.characterWriter.UpdatePreferences(txCtx, characterID, prefs, expectedVersion)
 	})
+}
+
+// createLocation routes a location create through mutate(): the closure runs the
+// guarded location Create and returns its delta; the writer finalizes the
+// location_created envelope from that delta in the same tx.
+func (m *worldMutator) createLocation(ctx context.Context, intent wmodel.EnvelopeIntent, loc *Location) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.locationWriter.Create(txCtx, loc)
+	})
+}
+
+// updateLocation routes a location update through mutate() (location_updated).
+func (m *worldMutator) updateLocation(ctx context.Context, intent wmodel.EnvelopeIntent, loc *Location) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.locationWriter.Update(txCtx, loc)
+	})
+}
+
+// deleteLocation routes a location delete + its property cascade through mutate().
+// The closure deletes the location's properties then the location row (whose repo
+// delta carries the DB-cascaded exit tombstones preselected under lock, 05-02), so
+// the single location_deleted tombstone envelope's manifest covers the cascade
+// (INV-WORLD-2 parity) — one envelope per command, not per cascaded row.
+func (m *worldMutator) deleteLocation(ctx context.Context, intent wmodel.EnvelopeIntent, id ulid.ULID) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		if err := m.propertyWriter.DeleteByParent(txCtx, "location", id); err != nil {
+			return nil, oops.Code("LOCATION_DELETE_FAILED").
+				With("operation", "delete_location_properties").
+				Wrapf(err, "delete properties for location %s", id)
+		}
+		return m.locationWriter.Delete(txCtx, id, 0)
+	})
+}
+
+// createExit routes an exit create through mutate() (exit_created).
+func (m *worldMutator) createExit(ctx context.Context, intent wmodel.EnvelopeIntent, exit *Exit) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.exitWriter.Create(txCtx, exit)
+	})
+}
+
+// updateExit routes an exit update through mutate() (exit_updated).
+func (m *worldMutator) updateExit(ctx context.Context, intent wmodel.EnvelopeIntent, exit *Exit) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.exitWriter.Update(txCtx, exit)
+	})
+}
+
+// deleteExit routes an exit delete through mutate() (exit_deleted tombstone). The
+// exit repo's Delete atomically removes the bidirectional reverse exit and reports
+// it in the delta's Affected list, so the single tombstone envelope's manifest
+// covers the cascade.
+//
+// A NON-severe BidirectionalCleanupResult (the reverse exit was already gone) means
+// the primary delete committed — the closure captures it and returns (delta, nil)
+// so the envelope IS written and the tx commits; the notice is surfaced to the
+// caller post-commit. A SEVERE cleanup result (or any other error) rolls the tx
+// back with no envelope. deleteExit returns (delta, non-severe-notice-or-nil, err).
+func (m *worldMutator) deleteExit(ctx context.Context, intent wmodel.EnvelopeIntent, id ulid.ULID) (*wmodel.MutationDelta, *BidirectionalCleanupResult, error) {
+	var notice *BidirectionalCleanupResult
+	delta, err := m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		d, delErr := m.exitWriter.Delete(txCtx, id, 0)
+		if delErr != nil {
+			var cleanup *BidirectionalCleanupResult
+			if errors.As(delErr, &cleanup) && !cleanup.IsSevere() {
+				// Non-severe: the primary delete committed; surface the notice after
+				// commit and still write the tombstone envelope from the returned delta.
+				notice = cleanup
+				return d, nil
+			}
+			return nil, oops.Wrap(delErr)
+		}
+		return d, nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return delta, notice, nil
 }

@@ -958,3 +958,52 @@ func TestExaminePayload_Validate(t *testing.T) {
 		})
 	}
 }
+
+// --- World-change envelope payload builders (05-10) ---
+
+func TestBuildLocationPayload_NewValuesOnly(t *testing.T) {
+	id := ulid.Make()
+	loc := &world.Location{ID: id, Name: "Atrium", Description: "a bright hall"}
+
+	raw, err := world.BuildLocationPayload(loc)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got["id"])
+	assert.Equal(t, "Atrium", got["name"])
+	assert.Equal(t, "a bright hall", got["description"])
+	// New-values-only: no version, no before/after, no secrets.
+	assert.NotContains(t, got, "version")
+	assert.Len(t, got, 3)
+}
+
+func TestBuildExitPayload_CarriesEndpoints(t *testing.T) {
+	id := ulid.Make()
+	from := ulid.Make()
+	to := ulid.Make()
+	exit := &world.Exit{ID: id, Name: "north", FromLocationID: from, ToLocationID: to}
+
+	raw, err := world.BuildExitPayload(exit)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got["id"])
+	assert.Equal(t, "north", got["name"])
+	assert.Equal(t, from.String(), got["from_location_id"])
+	assert.Equal(t, to.String(), got["to_location_id"])
+	assert.Len(t, got, 4)
+}
+
+func TestBuildTombstonePayload_OnlyID(t *testing.T) {
+	id := ulid.Make()
+
+	raw, err := world.BuildTombstonePayload(id)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got["id"])
+	assert.Len(t, got, 1, "a tombstone carries only the deleted id; cascades live in the manifest")
+}
