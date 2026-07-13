@@ -360,10 +360,11 @@ var _ = Describe("Outbox relay fault-injection matrix", Ordered, func() {
 		// relay does NOT halt (it backs off), and every row stays unpublished.
 		pauseBroker(ctx, env)
 		frozenCtx, frozenCancel := context.WithTimeout(ctx, pausedDrainCeiling)
-		publishedFrozen, _ := relay.Drain(frozenCtx)
+		publishedFrozen, frozenErr := relay.Drain(frozenCtx)
 		frozenCancel()
 		unpauseBroker(ctx, env)
 
+		Expect(frozenErr).NotTo(HaveOccurred(), "a frozen broker must not surface as a hard error")
 		Expect(publishedFrozen).To(Equal(0), "a frozen broker publishes nothing")
 		halted, _ := relay.Halted()
 		Expect(halted).To(BeFalse(), "broker downtime is transient — the relay backs off, it does NOT halt")

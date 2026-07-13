@@ -48,6 +48,9 @@ type PlayerReapingGuard struct {
 // caller-owned genesis transaction and enrolls via querierFromCtx so the
 // FOR UPDATE lock is held on the genesis tx connection.
 func NewReapingGuard(pool *pgxpool.Pool) *PlayerReapingGuard {
+	if pool == nil {
+		panic("NewReapingGuard: pool must not be nil")
+	}
 	return &PlayerReapingGuard{pool: pool}
 }
 

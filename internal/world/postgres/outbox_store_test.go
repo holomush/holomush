@@ -10,6 +10,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,12 +40,10 @@ func outboxRow(ctx context.Context, t *testing.T, eventID ulid.ULID) (gameID str
 	err := testPool.QueryRow(ctx,
 		`SELECT game_id, epoch, feed_position FROM outbox WHERE event_id = $1`, eventID.String()).
 		Scan(&gameID, &epoch, &position)
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return "", 0, 0, false
 	}
-	if err != nil {
-		return "", 0, 0, false
-	}
+	require.NoError(t, err, "unexpected query error reading outbox row")
 	return gameID, epoch, position, true
 }
 

@@ -127,6 +127,11 @@ func Bootstrap(ctx context.Context, cfg BootstrapConfig) error {
 			With("consumer", cfg.ConsumerName).
 			Errorf("bootstrap requires a snapshot function")
 	}
+	if cfg.Store == nil {
+		return oops.Code("WORLD_OUTBOX_BOOTSTRAP_NO_STORE").
+			With("consumer", cfg.ConsumerName).
+			Errorf("bootstrap requires a checkpoint store")
+	}
 	epoch, highWater, err := cfg.Snapshot(ctx)
 	if err != nil {
 		return oops.Code("WORLD_OUTBOX_BOOTSTRAP_SNAPSHOT_FAILED").
