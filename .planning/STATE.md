@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: world-model-integrity-fixes-m2-m12
 status: executing
 stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
-last_updated: "2026-07-13T02:30:06.481Z"
+last_updated: "2026-07-13T15:25:38.849Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 20
-  completed_plans: 17
+  completed_plans: 18
   percent: 17
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 05 (world-model-integrity-fixes-m2-m12) — EXECUTING
-Plan: 13 of 16
+Plan: 14 of 16
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 05 execution started
 
@@ -97,6 +97,7 @@ Last activity: 2026-07-12 — Phase 05 execution started
 | Phase 05 P09 | 24min | 3 tasks tasks | 13 files files |
 | Phase 05 P10 | 120min | 2 tasks | 7 files |
 | Phase 05 P15 | 120 | 2 tasks | 21 files |
+| Phase 05 P16 | 150 | 3 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,9 @@ the next milestone yet.
 - [Phase ?]: 05-10: the per-game feed-counter FOR UPDATE lock globally serializes the world-write phase; bisect-confirmed this widened the conflict window so the slow describe command path deterministically loses its full-row CAS to a concurrent direct UpdateLocation (correct per INV-WORLD-ATOMIC-FEED), surfacing an errA-swallowing assumption in the M12 cross-field-race spec — now read-back-driven.
 - [Phase ?]: 05-15: ONE atomic CharacterGenesisService; all 3 creation paths route through it; Create removed from auth repo interfaces (compile fence); player/role ordered not atomic (round-4 B4).
 - [Phase ?]: 05-15: genesis service must NOT import internal/world/outbox (eventbus-relay import cycle) — uses local kind/schema constants mirroring the taxonomy, like internal/world/service.go.
+- [Phase ?]: 05-16: guest character reaping routes through one atomic CharacterReapingService (per-character tombstone tx then ordered player delete) — deletion-side counterpart to 05-15 genesis, closing D-06
+- [Phase ?]: 05-16: anti-TOCTOU closed at creation side (R6-2 option b) — players.reaping_at + genesis SELECT reaping_at FOR UPDATE serializing with the reaper MarkReaping; single shared tx precluded by the two-pool boundary
+- [Phase ?]: 05-16: added BindingRepository.DeleteByCharacter (guest-teardown-only, in-tx) so the character-first tombstone delete avoids the RESTRICT binding FK; operator forensic soft-end path untouched
 
 ### Pending Todos
 
@@ -161,7 +165,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-13T02:30:06.476Z
+Last session: 2026-07-13T15:25:06.595Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
 Resume file: None
