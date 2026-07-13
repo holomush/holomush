@@ -55,8 +55,8 @@
 | Correct the doc only (no new gate) | Soften MUST to match non-enforcement; zero assurance; Phase 9 depends on a real bar | |
 | Enforce full per-package >80% now | Literal compliance; would block nearly all merges at 54.6% | |
 
-**User's choice:** Enforce patch gate + correct the doc
-**Notes:** Reconciles both directions — enforce where feasible (new code) + fix the doc to match reality. Legacy 54.6% not retroactively blocked. Planner flag: codecov blocking is via branch protection (a GitHub setting, not in-repo) — pick between making the codecov status a required check vs. a self-computed in-repo CI gate. Doc rewrite must close the per-package-vs-project semantic mismatch.
+**User's choice:** Enforce patch gate + correct the doc — then, after a durable-memory reconciliation, **also add a project-coverage ratchet gate.**
+**Notes:** POST-DISCUSSION REFRAME: engram memory `7qhyhb3hsb`/`v5k0e4zs3s` corrected the scout's "patch isn't blocking" finding — codecov/patch @ 80% is ALREADY a hard merge gate via the protect-main *ruleset* (invisible to the classic branch-protection API the scout checked; `fail_ci_if_error:false` only affects the upload step). So the "enforce a gate" half is already satisfied. A second question was asked: (a) document real bar + correct doc + resolve conflicts, vs (b) that PLUS a project-coverage ratchet. User chose **(b)** — add a project ratchet so project% can't drop and nudges 54.6%→80% over time (gives Phase 9 a rising floor). Legacy not retroactively blocked. Planner flag: making the project status a *required* check needs it added to the ruleset (operator action), not just YAML.
 
 ## Claude's Discretion
 

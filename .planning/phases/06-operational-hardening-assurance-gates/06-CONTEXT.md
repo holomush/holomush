@@ -92,25 +92,48 @@ NOT open for planning to re-scope.
 > augment.
 
 ### QUAL-01 — coverage reconciliation
-- **D-07 (direction):** **enforce a blocking PATCH-coverage gate + correct the
-  doc.** New code is held to a patch-coverage bar (blocking); the legacy 54.6%
-  is **not** retroactively blocked. Rewrite the doc MUST from the fictional
-  "per-package > 80%" (`CLAUDE.md` + `.claude/rules/testing.md:25`) to the
-  actually-enforced **project + patch** reality codecov measures.
+> **IMPORTANT reframe (durable memory `7qhyhb3hsb` / `v5k0e4zs3s`):**
+> codecov/**patch @ 80% is ALREADY a hard merge gate**, enforced via the
+> **protect-main *ruleset*** — NOT classic branch protection, which is why
+> `gh api repos/.../branches/main/protection` returns 404 and a scout checking
+> that API wrongly concludes "not blocking." `fail_ci_if_error: false` governs
+> only the *upload* step, not the codecov *status check*. A failing codecov/patch
+> shows COMPLETED/FAILURE and BLOCKS merge (`mergeStateStatus=BLOCKED`). So new
+> code is **already** held to 80% patch; the "enforce a gate" half of the
+> requirement is substantially satisfied. The real gap is doc-vs-reality + no
+> project floor.
+
+- **D-07 (direction):** **correct the doc to the real bar + add a project-coverage
+  ratchet.** Do NOT frame this as "add a patch gate" — that gate already exists.
+  - Rewrite the doc MUST from the fictional "per-package > 80%"
+    (`CLAUDE.md` + `.claude/rules/testing.md:25`) to the **actually-enforced**
+    reality: **codecov/patch @ 80% is a hard merge gate (ruleset)**; project is a
+    separate status. Close the *per-package-vs-project/patch* semantic mismatch —
+    codecov never measures per-package.
+  - **NEW gate (user choice):** add a **project-coverage ratchet** — a codecov
+    `project` status configured so project% **cannot drop** (threshold-based),
+    nudging the ~54.6% baseline toward 80% over time. Gives Phase 9's code-health
+    sweep a rising floor. Legacy code is not retroactively blocked; the ratchet
+    only fails a PR that *lowers* project coverage.
 - **D-08 (cleanup):** resolve the **two conflicting codecov files** — `.codecov.yml`
   (full config: project 80%/patch 80%) and `codecov.yml` (375 B, ignore-only).
-  Delete/merge the duplicate.
+  Delete/merge the duplicate so there is one authoritative config.
 
-> **⚠ Planner flag for QUAL-01:** `.codecov.yml` already sets `patch target 80%`,
-> but `ci.yaml` uploads with `fail_ci_if_error: false` and codecov's *blocking*
-> is via **branch protection (a GitHub repo setting, not in-repo)**. "Enforce"
-> therefore has two implementation shapes to choose between: (a) make the
-> codecov patch **status a required check** via branch-protection settings
-> (operator action, not code), or (b) add a **CI job that computes patch
-> coverage and fails** in-repo. Pick one explicitly; don't leave it as "codecov
-> will block" when nothing currently does. Doc MUST is *per-package* while
-> codecov measures *project/patch* — the doc rewrite MUST close that semantic
-> mismatch, not just the number.
+> **⚠ Planner flags for QUAL-01:**
+> - The patch gate lives in the **protect-main ruleset**, not `.codecov.yml`
+>   alone (the YAML defines the *status*; the ruleset makes it *required*). Making
+>   the new **project** status a *required*/blocking check likewise needs it added
+>   to the ruleset — a repo settings/operator action, not purely in-repo YAML. The
+>   in-repo change is the `.codecov.yml` `project` status + threshold; flag the
+>   ruleset step explicitly so it isn't left as "codecov will block" when the
+>   ruleset hasn't been updated.
+> - Ratchet threshold choice (`project: { target: auto, threshold: 0% }` strict
+>   no-drop vs a small tolerance) is a planner/research call.
+> - Coverage = merge of unit (`task test`) + integration (`task test:int`,
+>   flag=integration) uploads, posted after `after_n_builds: 2`; a pending/absent
+>   codecov status just means CI hasn't finished both uploads. Multi-line
+>   `slog.*Context` error branches count as many uncovered lines — budget error-
+>   branch tests or patch% tanks even with the happy path covered.
 
 ### Claude's Discretion
 - Retention window default (90d) and patch-coverage target number — sensible
