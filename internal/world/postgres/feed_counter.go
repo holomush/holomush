@@ -57,6 +57,16 @@ func NewFeedCounter(pool *pgxpool.Pool) *FeedCounter {
 // Keying on game_id makes multi-game a data change, not a schema change (single
 // `main` today; resolves Open Question 2).
 func (c *FeedCounter) Allocate(ctx context.Context, gameID string) (epoch, position int64, err error) {
+	// Fail closed when there is no ambient mutation transaction. Without a tx,
+	// SET LOCAL lock_timeout no-ops and the SELECT ... FOR UPDATE + increment can
+	// land on DIFFERENT pooled connections — losing both the lock timeout and the
+	// allocation's atomicity, risking a duplicate feed_position. Degrading
+	// silently on the pool-fallback path is a footgun (IN-02); refuse instead.
+	if txFromContext(ctx) == nil {
+		return 0, 0, oops.Code("WORLD_FEED_ALLOCATE_NO_TX").
+			With("game_id", gameID).
+			Errorf("feed counter Allocate requires an ambient mutation transaction; refusing to allocate on the raw pool")
+	}
 	e := execerFromCtx(ctx, c.pool)
 	q := querierFromCtx(ctx, c.pool)
 
