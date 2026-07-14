@@ -6,14 +6,14 @@ current_phase: 06
 current_phase_name: operational-hardening-assurance-gates
 status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-07-14T21:46:49.796Z"
+last_updated: "2026-07-14T22:41:18.360Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 25
-  completed_plans: 20
+  completed_plans: 21
   percent: 33
 ---
 
@@ -31,8 +31,8 @@ trusted identically.
 ## Current Position
 
 Phase: 06 (operational-hardening-assurance-gates) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 06
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-07-14 — Phase 06 execution started
 
 ## Performance Metrics
@@ -140,6 +140,7 @@ the next milestone yet.
 - [Phase ?]: 05-12: INV-WORLD ids are canonical NUMERIC (INV-WORLD-1..4); ADR symbolic names (ATOMIC-FEED/DELTA-PARITY/FEED-ORDER/WRITER-BOUNDARY) live in summary+legacy — the //Verifies parser (invariant_registry_test.go:163) requires a trailing number (Codex finding 3).
 - [Phase ?]: 05-12: INV-WORLD-2 delta-parity binds to a REAL-ROW integration test in internal/world/outbox (location-delete cascade + bidirectional exit) proving manifest==MutationDelta==actual row version transition, not presence.
 - [Phase ?]: 05-13: MODEL-02 doc downgrade — false 'event sourcing / state derives from replay' corrected at 4 sites (CLAUDE.md/AGENTS.md-symlink, README.md, coding-standards.md, architecture.md) to the decided model (event-driven + append-only audit log, ADR holomush-i4784); real client-catch-up/Subscribe replay language preserved; index.mdx:41 legitimate audit-log language (Open Q4 resolved); regression-guarded by test/meta/world_model_doc_claim_test.go.
+- [Phase ?]: 06-01: events_audit partitioned on a deterministic ULID-derived event_ms key; timestamp column unchanged (cold-tier boundary preserved); no DEFAULT partition; crypto gate READY
 
 ### Pending Todos
 
@@ -172,7 +173,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-13T20:48:57.561Z
+Last session: 2026-07-14T22:41:05.755Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Phase 6 context gathered
 Resume file: .planning/phases/06-operational-hardening-assurance-gates/06-CONTEXT.md
