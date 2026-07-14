@@ -55,7 +55,7 @@ func (c *PostgresPartitionCreator) EnsurePartitions(ctx context.Context, months 
 ```
 **Adaptation:** retarget `access_audit_log` → `events_audit`, naming `events_audit_%04d_%02d`, partition on `event_ms` (int64-ns). `EnsurePartitions` covers the retention window **backward** (derived from the operator RetainWindow) AND `months` forward. Add `DetachExpiredPartitions` (`ALTER TABLE events_audit DETACH PARTITION ... CONCURRENTLY` — MUST run outside an explicit tx; `pool.Exec` autocommits — THEN rename child → `events_audit_<YYYY_MM>_detached_<unix>` to stamp the grace clock), `DropDetachedPartitions` (discover by the `events_audit_%_detached_%` name pattern, parse the epoch, `DROP TABLE` past grace), `PurgeExpiredAllows` → **no-op `return 0, nil`** (events_audit has no allow/deny split), `HealthCheck` → cheap `SELECT 1 FROM events_audit LIMIT 0`.
 
-**Crash-atomicity (round-2 review finding 7):** `DETACH … CONCURRENTLY` runs outside a tx and the rename is a separate statement — a crash between them leaves a canonical-named `events_audit_YYYY_MM` that is no longer a child and lacks the `_detached_<unix>` suffix (stranded). Each detach cycle MUST first **reconcile**: find any `events_audit_YYYY_MM` that is NOT a current child of `events_audit` (absent from `pg_inherits`) and rename it to the `_detached_<now>` form before proceeding.
+**Crash/interrupt-atomicity (round-2 finding 7 + round-3 finding 2):** `DETACH … CONCURRENTLY` runs in TWO internal transactions outside an explicit tx, and the rename is a separate statement. Each detach cycle MUST run TWO recovery passes BEFORE any new detach, both schema-qualified: (1) **FINALIZE** — find any child marked `pg_inherits.inhdetachpending = true` (an INTERRUPTED concurrent detach PG left mid-way — still a child), run `ALTER TABLE events_audit DETACH PARTITION <child> FINALIZE`, then rename to the `_detached_<now>` form; (2) **RECONCILE** — find any canonical-named `events_audit_YYYY_MM` that is NOT a current child (absent from `pg_inherits`) and lacks the `_detached_<unix>` suffix (a completed detach whose rename crashed) and rename it to `_detached_<now>`. Guard reconciliation on the events_audit column signature so a same-named non-child table is never swept.
 
 **Legacy `Backfill(ctx)` (round-2 review finding 4; the migration leaves rows in `events_audit_unpartitioned`):** re-home each legacy row into the partitioned `events_audit`, computing `event_ms` via the SAME shared helper as `writeAuditRow` (`ulid.Time(parsedID.Time()).UnixNano()`), `EnsurePartitions` over the legacy range first, `ON CONFLICT (id, event_ms) DO NOTHING`, chunked; then rename/drop `events_audit_unpartitioned`. Idempotent (no-op when the old table is gone).
 
@@ -120,8 +120,9 @@ paired data-preserving down, no persisted triggers/functions (anonymous DO-block
 fine; DETACH/DROP lives in the Go worker), no in-migration backfill. Every column
 BIGINT (INV-STORE-1 / `lint:no-timestamptz` `Taskfile.yaml:709`) — do NOT reintroduce
 TIMESTAMPTZ. **Down:** copy partitioned rows (+ surviving `events_audit_unpartitioned`
-rows) into a temp restored table, DROP the partitioned parent+children FIRST (frees the
-original index/PK names), then rename temp → `events_audit` and create the original PK/indexes.
+rows) into a temp restored table — BOTH copies use `ON CONFLICT (id) DO NOTHING` so a resumed
+partial down is idempotent (round-3 MEDIUM) — DROP the partitioned parent+children FIRST (frees
+the original index/PK names), then rename temp → `events_audit` and create the original PK/indexes.
 
 ### `internal/eventbus/audit/projection.go` writeAuditRow (MOD — idempotency crux)
 
@@ -171,7 +172,7 @@ func DefaultRetentionConfig() RetentionConfig {
 	return RetentionConfig{RetainDenials: 90*24*time.Hour, RetainAllows: 7*24*time.Hour, PurgeInterval: 24*time.Hour}
 }
 ```
-**Adaptation:** single window `RetainWindow` (default 90d, D-02) mapped onto `RetentionConfig.RetainDenials`; `RetainAllows` unused (no-op purge). Wire into `Config.Defaults()` at `subsystem.go:100`.
+**Adaptation:** single window `RetainWindow` (default 90d, D-02) mapped onto `RetentionConfig.RetainDenials`; `RetainAllows` unused (no-op purge). Wire into `Config.Defaults()` at `subsystem.go:100`. **Validate (round-3 finding 3):** Defaults() fills only ZERO values, so a NEGATIVE survives — a validation step MUST REJECT `RetainWindow <= 0` (would make `now.Add(-RetainDenials)` future-facing → detach every partition, retention.go:83) and `PurgeInterval <= 0` (panics `time.NewTicker`, retention.go:130) in the tested audit.Config surface, surfaced as a Start error.
 
 ---
 
@@ -191,7 +192,7 @@ lint:no-timestamptz:
         echo "FAIL: ..."; exit 1
       fi
 ```
-**Adaptation:** `set -euo pipefail`; run `govulncheck ./...` (reachability, Go-vulndb) then `osv-scanner --config=osv-scanner.toml ./...` (OSV DB includes GHSA → catches nats-server GHSA-q59r-vq66-pxc2). Fail closed on any unlisted finding. **Keep OUT of the `lint:` umbrella `cmds`** (`:116` area) — the scanners download vuln DBs and would slow every local `task lint`; invokable standalone.
+**Adaptation:** `set -euo pipefail`; run `govulncheck ./...` (reachability, Go-vulndb) then OSV-Scanner **v2**: `osv-scanner scan source -L go.mod --config=osv-scanner.toml` (the v2 `scan source` subcommand form — NOT the v1 `osv-scanner --config=... ./...` shape; the OSV DB includes GHSA → catches nats-server GHSA-q59r-vq66-pxc2). Fail closed on any unlisted finding, decided by EXIT CODE (never by grepping scanner stdout). **Keep OUT of the `lint:` umbrella `cmds`** (`:116` area) — the scanners download vuln DBs and would slow every local `task lint`; invokable standalone.
 
 ### `.github/workflows/ci.yaml` `vuln:` job (NEW)
 
@@ -204,10 +205,10 @@ lint:no-timestamptz:
     echo "${BUF_SHA256}  /tmp/buf" | sha256sum -c -
     sudo install -m 0755 /tmp/buf /usr/local/bin/buf
 ```
-**Adaptation:** new `vuln:` job (sibling of `lint`/`test`/`integration`/`e2e`). Pin govulncheck via `go install golang.org/x/vuln/cmd/govulncheck@<ver>` / tool module; pin osv-scanner with the same SHA256-verify pattern (or a checksum-pinned composite under `.github/actions/install-*`). Job runs `task lint:vuln`. Add to the protect-main ruleset for blocking (operator step — flag it).
+**Adaptation:** new `vuln:` job (sibling of `lint`/`test`/`integration`/`e2e`) with an EXPLICIT stable `name: Vuln`. Pin govulncheck via `go install golang.org/x/vuln/cmd/govulncheck@<ver>` / tool module; pin osv-scanner **v2** with the same SHA256-verify pattern (or a checksum-pinned composite under `.github/actions/install-*`). Job runs `task lint:vuln`. Add to the protect-main ruleset for blocking (operator step — flag it). **The required-check context is the RENDERED job name `Vuln`, NOT the workflow key `vuln`** — GitHub rulesets match the rendered name (ci.yaml's `lint:` key renders `name: Lint`, which is what the live ruleset requires). Verify the added check in a real PR's `statusCheckRollup`, not only ruleset JSON.
 
 ### `osv-scanner.toml` (NEW — no in-repo analog)
-Allowlist via `[[IgnoredVulns]]` (`id`, optional `ignoreUntil`, `reason`) — this is the documented-allowlist mechanism D-04 requires (govulncheck has none). Seed empty or with a `reason`-documented entry only if a reachable-but-accepted CVE surfaces.
+Allowlist via `[[IgnoredVulns]]` (`id`, `ignoreUntil` EXPIRY, `reason`) — the documented-allowlist mechanism D-04 requires (govulncheck has none). **Seed it EMPTY as a syntactically-valid `IgnoredVulns = []` line, NOT a bare `[[IgnoredVulns]]` header** (an empty array-of-tables header creates an entry with no `id`, which is invalid). Add a `reason`+`ignoreUntil`-documented entry only if a reachable-but-accepted OSV-scoped CVE surfaces. Validate by running osv-scanner against the config (a malformed config errors there).
 
 ### `go.mod:22` — mechanical bump `nats-server/v2 v2.14.2 → v2.14.3`, then `go mod tidy`. `nats.go`/`prometheus-nats-exporter` NOT implicated (server-only CVEs).
 
@@ -230,7 +231,7 @@ func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
 	...
 }
 ```
-**Adaptation (D-05):** add `cmd.Flags().String("game-id", "", "...")` in `newAuditDLQReplayCmd:107-119`; in `runAuditDLQReplay` after `openAuditPool` (`:319`) resolve: (1) `--game-id` override → use it; (2) else `GetSystemInfo(ctx, "game_id")` (or a direct `SELECT value FROM holomush_system_info WHERE key='game_id'` on the open pool); (3) else `cfg.GameID`. Pass resolved id to `dlqConfigForGame`. Mirrors `core.go:~300-304` server resolution order.
+**Adaptation (D-05) — MIRRORS THE SERVER (core.go:300-303), NOT the rejected DB-before-config order:** add `cmd.Flags().String("game-id", "", "...")` in `newAuditDLQReplayCmd:107-119`; in `runAuditDLQReplay` after `openAuditPool` (`:319`) resolve in the SERVER's order: (1) non-empty `--game-id` override → use it; (2) else `core.game_id` — the `coreConfig.GameID` field loaded via `config.Load(configFile, cmd, &coreCfg, "core")` exactly as core.go:125 does (NOT `event_bus.game_id`, NOT the YAML root, and WITHOUT `event_bus.Config.Defaults()`, which forces "main"); (3) else the persisted `GetSystemInfo(ctx, "game_id")` DB value. Pass the resolved id to `dlqConfigForGame`. **Do NOT put DB before `core.game_id`** (the round-2-rejected order) — that diverges from the server whenever an explicit `core.game_id` differs from the DB value.
 
 ### `internal/eventbus/audit/dlq_replay_integration_test.go` (REWRITE)
 
@@ -256,7 +257,7 @@ coverage:
         threshold: 2%    # → threshold: 1%  (absorb two-upload merge jitter)
     patch:
       default:
-        target: 80%      # KEEP — already the ruleset-enforced hard gate
+        target: 80%      # KEEP — POSTS an 80%-on-changed-lines status; NOT a required ruleset check today (accepted-deferred, see 06-04)
         threshold: 5%
 ```
 **Adaptation:** `project.default → { target: auto, threshold: 1% }` (D-07 rising-floor ratchet; baseline ~54.6% not retroactively blocked). Keep `patch` unchanged. **Delete `codecov.yml`** (375 B, ignore-only subset of `.codecov.yml`'s ignore list — D-08); `.codecov.yml` `notify.after_n_builds: 2` (`:20`) is why a pending status ≠ failure.
@@ -275,14 +276,19 @@ currently required checks** — they block only when added to the protect-main r
 branch protection); codecov measures patch + project, **never per-package**. Drop the
 "SHOULD 90%+ per-package" line.
 
-### Non-YAML operator step (FLAG, not in-repo) — MANDATORY blocking checkpoint
-Making `codecov/patch`, `codecov/project`, AND the OPS-03 `vuln` check *block* merges
-requires adding them to the protect-main **ruleset** required checks. Adding a status to
-`.codecov.yml` / the CI job only makes it *post/run*, not block. This is a **mandatory
-human-action checkpoint** (round-2 review finding 6), NOT an open follow-up — the
-consolidated protect-main assurance-gate checklist (`vuln` + `codecov/patch` +
-`codecov/project`) is enumerated in **06-04 Task 3**; **06-03 Task 4** independently
-blocks on `vuln` (D-04 mandates it). Verify with `gh api …/rulesets/11923801`.
+### Non-YAML operator step (FLAG, not in-repo) — one consolidated ruleset edit
+Making a check *block* merges requires adding it to the protect-main **ruleset** required
+checks (adding a status to `.codecov.yml` / the CI job only makes it *post/run*, not block).
+**The required-check context is the RENDERED job name** (`Lint`, not `lint`; the OPS-03 job
+must be added as the rendered `Vuln`, not the key `vuln`). Split disposition (round-3 F6
+resolution):
+- **MANDATORY** — the OPS-03 rendered `Vuln` check (D-04). A **mandatory blocking
+  human-action checkpoint**, NOT an open follow-up: **06-03 Task 4** independently blocks on it.
+- **OPTIONAL / ACCEPTED-DEFERRED** — `codecov/patch` + `codecov/project` (the QUAL-01 ratchet).
+  Deferring them is a legitimate, documented outcome; QUAL-01 criterion #4 is met by the doc
+  correction + the `.codecov.yml` ratchet either way. Do NOT call codecov "mandatory".
+The consolidated checklist is enumerated in **06-04 Task 3**. Verify with
+`gh api …/rulesets/11923801` AND a real PR's `statusCheckRollup`.
 
 ---
 
