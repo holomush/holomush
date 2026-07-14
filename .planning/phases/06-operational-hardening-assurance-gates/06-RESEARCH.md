@@ -308,11 +308,13 @@ No SLOP/SUS verdicts. `osv-scanner` is the only genuinely new tool — gate its 
 | A4 | osv-scanner's OSV DB contains GHSA-q59r-vq66-pxc2 for nats-server (making criterion #2 achievable) | OPS-03 | MEDIUM — GHSA advisories are ingested into OSV, but confirm the specific ID resolves in osv-scanner before relying on it as the gate's proof; if not, fall back to a go.mod min-version lint for nats-server |
 | A5 | Starting the RetentionWorker inside `SubsystemAuditProjection` avoids the productionSubsystems cascade | OPS-02 | LOW — if the audit subsystem can't host a goroutine cleanly, fall back to a dedicated SubsystemID (higher blast radius, still viable) |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **OPS-02 partition key + dedup** — `timestamp` sourced from `ulid.Time(id)` (recommended) vs a ULID-generated column. Blocks the migration; lock before writing `000052`.
-2. **OPS-03 gate composition** — govulncheck+osv-scanner (recommended) vs osv-scanner-only vs govulncheck+wrapper. Determines whether criterion #2 is provable.
-3. **QUAL-01 ratchet threshold** — 0% vs 1% (recommended) vs 0.5%; and whether the ruleset update is in-phase.
+All three locked during planning (rounds 1–5) and represented in the executable plans:
+
+1. **OPS-02 partition key + dedup** — RESOLVED: dedicated deterministic `event_ms BIGINT` column derived from `ulid.Time(id.Time()).UnixNano()` (NOT a ULID-generated column, NOT the filtered `timestamp` column which stays unchanged). Composite PK `(id, event_ms)`; migration `000052` in 06-01.
+2. **OPS-03 gate composition** — RESOLVED: two-tool gate `govulncheck` + OSV-Scanner v2 (`scan source`). govulncheck alone cannot satisfy criterion #2 (nats-server not in the Go vuln DB); OSV-Scanner provides the native `[[IgnoredVulns]]` allowlist. In 06-03.
+3. **QUAL-01 ratchet threshold** — RESOLVED: project `{target: auto, threshold: 1%}` ratchet; ruleset update is in-phase (autonomous:false operator checkpoint). In 06-04.
 
 ## Environment Availability
 
