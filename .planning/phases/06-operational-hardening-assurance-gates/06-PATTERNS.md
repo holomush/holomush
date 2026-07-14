@@ -53,7 +53,11 @@ func (c *PostgresPartitionCreator) EnsurePartitions(ctx context.Context, months 
 // partitionRange: name = fmt.Sprintf("access_audit_log_%04d_%02d", t.Year(), t.Month())
 //   start = first-of-month UTC; end = start.AddDate(0,1,0)
 ```
-**Adaptation:** retarget `access_audit_log` → `events_audit`, naming `events_audit_%04d_%02d`. Add `DetachExpiredPartitions` (`ALTER TABLE events_audit DETACH PARTITION ... CONCURRENTLY` — MUST run outside an explicit tx; `pool.Exec` autocommits), `DropDetachedPartitions` (`DROP TABLE` past grace), `PurgeExpiredAllows` → **no-op `return 0, nil`** (events_audit has no allow/deny split), `HealthCheck` → cheap `SELECT 1 FROM events_audit LIMIT 0`.
+**Adaptation:** retarget `access_audit_log` → `events_audit`, naming `events_audit_%04d_%02d`, partition on `event_ms` (int64-ns). `EnsurePartitions` covers the retention window **backward** (derived from the operator RetainWindow) AND `months` forward. Add `DetachExpiredPartitions` (`ALTER TABLE events_audit DETACH PARTITION ... CONCURRENTLY` — MUST run outside an explicit tx; `pool.Exec` autocommits — THEN rename child → `events_audit_<YYYY_MM>_detached_<unix>` to stamp the grace clock), `DropDetachedPartitions` (discover by the `events_audit_%_detached_%` name pattern, parse the epoch, `DROP TABLE` past grace), `PurgeExpiredAllows` → **no-op `return 0, nil`** (events_audit has no allow/deny split), `HealthCheck` → cheap `SELECT 1 FROM events_audit LIMIT 0`.
+
+**Crash-atomicity (round-2 review finding 7):** `DETACH … CONCURRENTLY` runs outside a tx and the rename is a separate statement — a crash between them leaves a canonical-named `events_audit_YYYY_MM` that is no longer a child and lacks the `_detached_<unix>` suffix (stranded). Each detach cycle MUST first **reconcile**: find any `events_audit_YYYY_MM` that is NOT a current child of `events_audit` (absent from `pg_inherits`) and rename it to the `_detached_<now>` form before proceeding.
+
+**Legacy `Backfill(ctx)` (round-2 review finding 4; the migration leaves rows in `events_audit_unpartitioned`):** re-home each legacy row into the partitioned `events_audit`, computing `event_ms` via the SAME shared helper as `writeAuditRow` (`ulid.Time(parsedID.Time()).UnixNano()`), `EnsurePartitions` over the legacy range first, `ON CONFLICT (id, event_ms) DO NOTHING`, chunked; then rename/drop `events_audit_unpartitioned`. Idempotent (no-op when the old table is gone).
 
 **Interface it must satisfy** (`internal/audit/retention.go:31-38`):
 ```go
@@ -68,34 +72,62 @@ type PartitionManager interface {
 
 ### `000052_events_audit_partition.{up,down}.sql` (NEW migration)
 
-**Analog A — partitioned-table shape** (`000001_baseline.up.sql:287-308`):
+> **REVISED after round-2 cross-AI review** (06-REVIEWS.md). The design below
+> SUPERSEDES the earlier `PARTITION BY RANGE (timestamp)` + `ATTACH`-of-old-table
+> shape. Load-bearing changes: (a) a **separate deterministic `event_ms BIGINT
+> NOT NULL`** partition key — NOT the `timestamp` column, which is left untouched;
+> (b) **NO DEFAULT partition**; (c) legacy rows are **left in
+> `events_audit_unpartitioned`** and re-homed by a **Go `Backfill`** (06-02),
+> never ATTACHed; (d) the legacy PK/indexes are **renamed to `_legacy`** before
+> the new parent is created (name-collision fix); (e) a **data-preserving down**.
+
+**Analog A — partitioned-table shape** (`000001_baseline.up.sql:287-308`): mirror
+the SHAPE (composite PK includes the partition column, BRIN + btree indexes), but
+partition on the NEW `event_ms` column, not `timestamp`:
 ```sql
 CREATE TABLE access_audit_log (
     id               TEXT NOT NULL,
-    timestamp        TIMESTAMPTZ NOT NULL DEFAULT now(),
     ...
     PRIMARY KEY (id, timestamp)          -- composite PK MUST include partition col
 ) PARTITION BY RANGE (timestamp);
-
-CREATE INDEX idx_audit_log_timestamp ON access_audit_log USING BRIN (timestamp)
-    WITH (pages_per_range = 128);
-CREATE INDEX idx_audit_log_subject ON access_audit_log(subject, timestamp DESC);
 ```
-**Analog B — table being converted** (`000009_create_events_audit.up.sql`, note `timestamp`/`inserted_at` are now **BIGINT epoch-ns** after `000038`, so partition bounds are int64 ns exactly like `access_audit_log`):
-```sql
-CREATE TABLE IF NOT EXISTS events_audit (
-    id           BYTEA       PRIMARY KEY,   -- becomes PRIMARY KEY (id, timestamp)
-    subject      TEXT NOT NULL, type TEXT NOT NULL, timestamp <BIGINT ns>, ...
-);
-CREATE INDEX events_audit_subject_id  ON events_audit (subject, id);
-CREATE INDEX events_audit_subject_ts  ON events_audit (subject, timestamp);
-CREATE INDEX events_audit_subject_pat ON events_audit (subject text_pattern_ops);
-```
-**Adaptation:** per research §OPS-02(a): `RENAME events_audit → events_audit_unpartitioned` (regclass-guarded) → `CREATE TABLE events_audit (...) PARTITION BY RANGE (timestamp)` with composite `PRIMARY KEY (id, timestamp)` and the three indexes recreated on the parent → `ATTACH PARTITION` the old table (recommended) rather than copy rows. **Migration-rule compliance:** idempotent (`IF EXISTS`/`IF NOT EXISTS`/regclass), paired down that cleanly reverts, no triggers/functions (DETACH/DROP lives in the Go worker). Column MUST be BIGINT (INV-STORE-1 / `lint:no-timestamptz` `Taskfile.yaml:709`) — do NOT reintroduce TIMESTAMPTZ.
+**Analog B — table being converted** (`000009_create_events_audit.up.sql`, but the
+CURRENT column set is post-000038: `timestamp`/`inserted_at` are **BIGINT epoch-ns**,
+`payload`→`envelope` (000017), `rendering` (000012), `dek_ref`/`dek_version`
+(000014) — reproduce the POST-000038 column set, NOT 000009 verbatim). Existing
+relation names 000009→000014 created: PK `events_audit_pkey`, indexes
+`events_audit_subject_id`, `events_audit_subject_ts`, `events_audit_subject_pat`,
+`events_audit_subject_js_seq` (000011), `events_audit_dek_ref` (000014).
+**Adaptation (revised):**
+1. Regclass-guarded `RENAME events_audit → events_audit_unpartitioned` (only when
+   `events_audit` exists AND relkind != 'p' AND `events_audit_unpartitioned` absent).
+2. **Rename the legacy PK + every `events_audit_*` index to `_legacy`** on the
+   renamed table (`ALTER TABLE events_audit_unpartitioned RENAME CONSTRAINT
+   events_audit_pkey TO events_audit_pkey_legacy`; `ALTER INDEX events_audit_subject_id
+   RENAME TO events_audit_subject_id_legacy`; …) inside a DO-block guarded on
+   `to_regclass`/catalog existence (the 000017/000038 idempotency idiom) — otherwise
+   the new parent's PK/index names collide and `CREATE INDEX IF NOT EXISTS` can
+   silently reuse the legacy index, leaving the new parent unindexed.
+3. `CREATE TABLE events_audit ( <post-000038 columns> , event_ms BIGINT NOT NULL )
+   PARTITION BY RANGE (event_ms)` with composite `PRIMARY KEY (id, event_ms)`;
+   recreate the original-named indexes on the parent + a BRIN index on `event_ms`.
+4. Create the CURRENT + next-2 monthly `event_ms` partitions inline (naming
+   `events_audit_%04d_%02d`, int64-ns FROM/TO). **NO DEFAULT partition** (a DEFAULT
+   forbids `DETACH … CONCURRENTLY` in 06-02 and never prunes). Do NOT ATTACH/copy
+   the legacy rows — 06-02's `Backfill` re-homes them.
+**Migration-rule compliance:** idempotent (`IF EXISTS`/`IF NOT EXISTS`/regclass/DO-guard),
+paired data-preserving down, no persisted triggers/functions (anonymous DO-blocks are
+fine; DETACH/DROP lives in the Go worker), no in-migration backfill. Every column
+BIGINT (INV-STORE-1 / `lint:no-timestamptz` `Taskfile.yaml:709`) — do NOT reintroduce
+TIMESTAMPTZ. **Down:** copy partitioned rows (+ surviving `events_audit_unpartitioned`
+rows) into a temp restored table, DROP the partitioned parent+children FIRST (frees the
+original index/PK names), then rename temp → `events_audit` and create the original PK/indexes.
 
-### `internal/eventbus/audit/projection.go:414-421` (MOD — idempotency crux)
+### `internal/eventbus/audit/projection.go` writeAuditRow (MOD — idempotency crux)
 
-**Current block to change** (`projection.go:414-425`):
+**Current block to change** (`projection.go:414-435`, the INSERT; `idBytes, err :=
+decodeULIDString(msgID)` at :409 — `decodeULIDString` returns `([]byte, error)`, NOT a
+parsed ULID):
 ```go
 _, err = pool.Exec(ctx, `
 	INSERT INTO events_audit (
@@ -105,10 +137,26 @@ _, err = pool.Exec(ctx, `
 	) VALUES ($1, ...)
 	ON CONFLICT (id) DO NOTHING`,        // ← FAILS on composite PK
 	idBytes, subject, eventType,
-	pgnanos.From(meta.Timestamp),         // ← non-deterministic live vs replay
+	pgnanos.From(meta.Timestamp),         // ← LEAVE THIS UNCHANGED (store-time)
 	...)
 ```
-**Adaptation (the highest-risk edit):** change conflict target to `ON CONFLICT (id, timestamp) DO NOTHING` AND change the `timestamp` source from `pgnanos.From(meta.Timestamp)` (JetStream store time — differs between live and DLQ-replay for the same event) to a **deterministic** value derived from the event ULID (`ulid.Time(id)` embedded creation ms). `writeAuditRow` is shared by the live projection (`projection.go:330`) and DLQ replay (`replay.go:219`), so this one change covers both paths — which is exactly why replay dedup depends on the same key. Verify no cold-history reader relies on `timestamp == JetStream store time` (research A3).
+**Adaptation (the highest-risk edit) — REVISED:**
+- Add `event_ms BIGINT` to the INSERT column list + placeholder.
+- Compute `event_ms` **deterministically from the event ULID** via a shared package
+  helper (both `writeAuditRow` and 06-02's `Backfill` are in `internal/eventbus/audit`,
+  so they share it): `parsedID, err := ulid.Parse(msgID)`; `event_ms :=
+  ulid.Time(parsedID.Time()).UnixNano()`. NOTE the API: `oklog/ulid/v2@v2.1.1` defines
+  `func (id ULID) Time() uint64` (embedded ms) and `func Time(ms uint64) time.Time` —
+  so it MUST be `ulid.Time(parsedID.Time())`, NOT `ulid.Time(parsedID)` (which does not
+  compile). Equivalent form: `int64(parsedID.Time()) * int64(time.Millisecond)`.
+- Change the conflict target `ON CONFLICT (id) DO NOTHING` →
+  `ON CONFLICT (id, event_ms) DO NOTHING` (matches the composite PK).
+- **LEAVE `timestamp` = `pgnanos.From(meta.Timestamp)`** (JetStream store-time). This is
+  the whole point of the separate `event_ms` key: cold_postgres.go filters on `timestamp`
+  (`:159-183`), so keeping its store-time meaning preserves the hot/cold tier boundary
+  with no parity test. `writeAuditRow` is shared by live projection (`projection.go:329`)
+  and DLQ replay (`replay.go:219`), so `event_ms` (identical per event) dedups the same
+  event across both paths even when store-times differ.
 
 ### `internal/eventbus/audit/subsystem.go` (MOD — wire the worker) + `internal/eventbus/config.go` (retention cfg)
 
@@ -214,10 +262,27 @@ coverage:
 **Adaptation:** `project.default → { target: auto, threshold: 1% }` (D-07 rising-floor ratchet; baseline ~54.6% not retroactively blocked). Keep `patch` unchanged. **Delete `codecov.yml`** (375 B, ignore-only subset of `.codecov.yml`'s ignore list — D-08); `.codecov.yml` `notify.after_n_builds: 2` (`:20`) is why a pending status ≠ failure.
 
 ### `.claude/rules/testing.md` + `CLAUDE.md` (doc MOD)
-Rewrite the fictional "MUST maintain >80% coverage | Per-package" rows to the enforced reality: **codecov/patch @ 80% is a hard merge gate via the protect-main ruleset** (NOT branch protection — `branches/main/protection` 404 is expected); codecov measures patch + project, **never per-package**. Drop the "SHOULD 90%+ per-package" line.
+> **CORRECTED after round-2 review** (the earlier "codecov/patch @ 80% is a hard
+> merge gate" claim is FALSE against live state — VERIFIED via `gh api
+> repos/holomush/holomush/rulesets/11923801`: required checks are `[Build, Lint,
+> Test, CodeRabbit, Integration Test, E2E Test]`; NEITHER `codecov/patch` NOR
+> `codecov/project` is required.)
 
-### Non-YAML operator step (FLAG, not in-repo)
-Making `codecov/project` *block* merges requires adding it to the protect-main **ruleset** required checks (same as `codecov/patch` today). Adding the status to `.codecov.yml` only makes codecov *post* it. Call this out explicitly in the plan so it isn't left as "codecov will block."
+Rewrite the fictional "MUST maintain >80% coverage | Per-package" rows to the TRUE
+enforced reality: `codecov/patch` and `codecov/project` **POST statuses but are NOT
+currently required checks** — they block only when added to the protect-main ruleset
+(`branches/main/protection` 404 is expected — enforcement is via ruleset, not classic
+branch protection); codecov measures patch + project, **never per-package**. Drop the
+"SHOULD 90%+ per-package" line.
+
+### Non-YAML operator step (FLAG, not in-repo) — MANDATORY blocking checkpoint
+Making `codecov/patch`, `codecov/project`, AND the OPS-03 `vuln` check *block* merges
+requires adding them to the protect-main **ruleset** required checks. Adding a status to
+`.codecov.yml` / the CI job only makes it *post/run*, not block. This is a **mandatory
+human-action checkpoint** (round-2 review finding 6), NOT an open follow-up — the
+consolidated protect-main assurance-gate checklist (`vuln` + `codecov/patch` +
+`codecov/project`) is enumerated in **06-04 Task 3**; **06-03 Task 4** independently
+blocks on `vuln` (D-04 mandates it). Verify with `gh api …/rulesets/11923801`.
 
 ---
 
