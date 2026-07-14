@@ -39,6 +39,7 @@ var expectedTables = []string{
 	"crypto_rekey_checkpoints",
 	"entity_properties",
 	"events_audit",
+	"events_audit_unpartitioned",
 	"exits",
 	"holomush_system_info",
 	"locations",
@@ -64,7 +65,10 @@ var expectedTables = []string{
 }
 
 // queryTableNames returns user-defined table names (excluding schema_migrations)
-// from the public schema, sorted alphabetically.
+// from the public schema, sorted alphabetically. Partition CHILD tables are
+// excluded (relispartition): they are an implementation detail and their names
+// are time-varying (e.g. the events_audit_YYYY_MM monthly partitions created by
+// 000052), so only the ordinary tables and partitioned PARENTS are returned.
 func queryTableNames(t *testing.T, ctx context.Context, connStr string) []string {
 	t.Helper()
 	conn, err := pgx.Connect(ctx, connStr)
@@ -72,9 +76,14 @@ func queryTableNames(t *testing.T, ctx context.Context, connStr string) []string
 	defer conn.Close(ctx)
 
 	rows, err := conn.Query(ctx,
-		`SELECT tablename FROM pg_catalog.pg_tables
-		 WHERE schemaname = 'public' AND tablename != 'schema_migrations'
-		 ORDER BY tablename`)
+		`SELECT c.relname
+		 FROM pg_catalog.pg_class c
+		 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		 WHERE n.nspname = 'public'
+		   AND c.relkind IN ('r', 'p')
+		   AND c.relispartition = false
+		   AND c.relname != 'schema_migrations'
+		 ORDER BY c.relname`)
 	require.NoError(t, err)
 	defer rows.Close()
 
@@ -145,7 +154,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(51)))
+			Expect(version).To(Equal(uint(52)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)
@@ -168,7 +177,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(51)))
+			Expect(version).To(Equal(uint(52)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)

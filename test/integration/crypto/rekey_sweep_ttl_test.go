@@ -51,13 +51,15 @@ func (p *sweepTestAuditPublisher) PublishAudit(
 	payload []byte,
 ) (ulid.ULID, error) {
 	id := ulid.Make()
-	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
+	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1). event_ms
+	// (000052 partition key) is derived from the now-based ULID id.
+	eventMS := int64(id.Time()) * int64(time.Millisecond)
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO events_audit
-		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'system', $4, 1, 'identity', 0, '{}'::jsonb)
-		 ON CONFLICT (id) DO NOTHING`,
-		id[:], subject, evType, payload)
+		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering, event_ms)
+		 VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'system', $4, 1, 'identity', 0, '{}'::jsonb, $5)
+		 ON CONFLICT (id, event_ms) DO NOTHING`,
+		id[:], subject, evType, payload, eventMS)
 	return id, err //nolint:wrapcheck // passthrough; caller surfaces as oops code
 }
 

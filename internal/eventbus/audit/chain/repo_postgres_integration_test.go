@@ -36,18 +36,21 @@ func newIntegrationPool() *pgxpool.Pool {
 // subject, and JSON payload. The envelope column carries the raw payload bytes
 // (identity codec: no proto wrapping for these synthetic test rows).
 func insertAuditEntry(pool *pgxpool.Pool, jsSeq int64, subject, payloadJSON string) {
-	// Use a deterministic fake event ID derived from jsSeq.
+	// Use a deterministic fake event ID derived from jsSeq. It is NOT a ULID, so
+	// event_ms (the 000052 partition key) is derived from the row's OWN store-time
+	// (now), landing it in the current-month partition.
 	fakeID := make([]byte, 16)
 	fakeID[0] = byte(jsSeq >> 8)
 	fakeID[1] = byte(jsSeq)
+	ts := pgnanos.From(time.Now())
 	_, err := pool.Exec(context.Background(), `
 		INSERT INTO events_audit
 			(id, subject, type, timestamp, actor_kind, actor_id,
-			 envelope, schema_ver, codec, js_seq, rendering)
+			 envelope, schema_ver, codec, js_seq, rendering, event_ms)
 		VALUES
 			($1, $2, 'test.chain.event', $5, 'system', NULL,
-			 $3, 1, 'identity', $4, '{}'::jsonb)
-	`, fakeID, subject, []byte(payloadJSON), jsSeq, pgnanos.From(time.Now()))
+			 $3, 1, 'identity', $4, '{}'::jsonb, $6)
+	`, fakeID, subject, []byte(payloadJSON), jsSeq, ts, ts)
 	Expect(err).NotTo(HaveOccurred())
 }
 

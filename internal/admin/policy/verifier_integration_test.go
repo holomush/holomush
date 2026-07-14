@@ -97,11 +97,14 @@ func insertChainRow(t *testing.T, subject string, jsSeq int64, p policy.PolicySe
 
 	idBytes := chainRowIDBytes(jsSeq)
 
+	// idBytes is a synthetic non-ULID id, so event_ms (000052 partition key) is
+	// the row's own now()-based store-time — lands in the current partition.
+	ts := pgnanos.From(time.Now())
 	_, err = testPool.Exec(context.Background(),
 		`INSERT INTO events_audit
-		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, $3, $6, 'system', $4, 1, 'identity', $5, '{}'::jsonb)`,
-		idBytes, subject, "crypto.policy_set", envelope, jsSeq, pgnanos.From(time.Now()))
+		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering, event_ms)
+		 VALUES ($1, $2, $3, $6, 'system', $4, 1, 'identity', $5, '{}'::jsonb, $7)`,
+		idBytes, subject, "crypto.policy_set", envelope, jsSeq, ts, ts)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -127,11 +130,14 @@ func insertChainRowGinkgo(subject string, jsSeq int64, p policy.PolicySetPayload
 
 	idBytes := chainRowIDBytes(jsSeq)
 
+	// idBytes is a synthetic non-ULID id, so event_ms (000052 partition key) is
+	// the row's own now()-based store-time — lands in the current partition.
+	ts := pgnanos.From(time.Now())
 	_, err = testPool.Exec(context.Background(),
 		`INSERT INTO events_audit
-		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, $3, $6, 'system', $4, 1, 'identity', $5, '{}'::jsonb)`,
-		idBytes, subject, "crypto.policy_set", envelope, jsSeq, pgnanos.From(time.Now()))
+		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering, event_ms)
+		 VALUES ($1, $2, $3, $6, 'system', $4, 1, 'identity', $5, '{}'::jsonb, $7)`,
+		idBytes, subject, "crypto.policy_set", envelope, jsSeq, ts, ts)
 	Expect(err).NotTo(HaveOccurred())
 
 	DeferCleanup(func() {

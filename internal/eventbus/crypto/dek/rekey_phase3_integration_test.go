@@ -216,15 +216,19 @@ func (s *phase3TestSetup) InsertEncryptedRow(plaintext []byte) ulid.ULID {
 	envelopeBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(envelope)
 	Expect(err).NotTo(HaveOccurred())
 
+	// event_ms (000052 partition key) is derived from the now-based ULID id
+	// (idgen.New) — lands in the current partition. Not an AAD input.
+	eventMS := int64(id.Time()) * int64(time.Millisecond)
 	_, err = s.pool.Exec(context.Background(), `
         INSERT INTO events_audit
           (id, subject, type, timestamp, actor_kind, envelope, schema_ver,
-           codec, js_seq, rendering, dek_ref, dek_version)
+           codec, js_seq, rendering, dek_ref, dek_version, event_ms)
         VALUES ($1, 'events.g1.system.scene.01PH3', 'test.event', $2,
-                'system', $3, 1, $4, $5, '{}'::jsonb, $6, $7)
+                'system', $3, 1, $4, $5, '{}'::jsonb, $6, $7, $8)
     `, id[:], pgnanos.From(time.Now()), envelopeBytes, string(s.codecName),
 		int64(time.Now().UnixNano()),   // js_seq monotonic placeholder
-		s.oldDEKID, int32(s.oldDEKVer)) //nolint:gosec // G115: oldDEKVer is uint32 < 2^31
+		s.oldDEKID, int32(s.oldDEKVer), //nolint:gosec // G115: oldDEKVer is uint32 < 2^31
+		eventMS)
 	Expect(err).NotTo(HaveOccurred())
 
 	s.eventIDs = append(s.eventIDs, id)

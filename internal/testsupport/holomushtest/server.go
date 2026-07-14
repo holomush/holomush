@@ -551,13 +551,16 @@ func (p *testAuditPublisher) PublishAudit(
 ) (ulid.ULID, error) {
 	id := ulid.Make()
 	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1); use the SQL-side
-	// BIGINT-ns expression rather than TIMESTAMPTZ now().
+	// BIGINT-ns expression rather than TIMESTAMPTZ now(). event_ms is the
+	// deterministic partition key (000052), derived from the (real) ULID — a
+	// now()-based ULID lands in the current-month partition created by 000052.
+	eventMS := int64(id.Time()) * int64(time.Millisecond)
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO events_audit
-		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'system', $4, 1, 'identity', 0, '{}'::jsonb)
-		 ON CONFLICT (id) DO NOTHING`,
-		id[:], subject, evType, payload)
+		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering, event_ms)
+		 VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'system', $4, 1, 'identity', 0, '{}'::jsonb, $5)
+		 ON CONFLICT (id, event_ms) DO NOTHING`,
+		id[:], subject, evType, payload, eventMS)
 	return id, err
 }
 
@@ -771,11 +774,15 @@ func (p *directSQLPublisher) Publish(ctx context.Context, ev eventbus.Event) err
 	// when proto.Unmarshal fails, so this path is correct for test usage.
 	// events_audit.timestamp is BIGINT-ns post-gfo6 (INV-STORE-1); SQL-side
 	// expression mirrors the migration's DEFAULT.
+	// The id is gen_random_bytes(16) — NOT a ULID — so event_ms is derived from
+	// the row's OWN store-time (the same now()-based BIGINT-ns expression as the
+	// timestamp column), landing it in the current-month partition (000052).
 	_, err := p.pool.Exec(ctx,
 		`INSERT INTO events_audit
-		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering, event_ms)
 		 VALUES (gen_random_bytes(16), $1, $2, (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT, 'system', $3, 1, 'identity',
-		         (SELECT COALESCE(MAX(js_seq), 0) + 1 FROM events_audit), '{}'::jsonb)`,
+		         (SELECT COALESCE(MAX(js_seq), 0) + 1 FROM events_audit), '{}'::jsonb,
+		         (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)`,
 		string(ev.Subject), string(ev.Type), ev.Payload)
 	return err
 }
