@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 6
-current_phase_name: Operational Hardening & Assurance Gates
-status: "Phase 05 shipped — PR #4816"
+current_phase: 06
+current_phase_name: operational-hardening-assurance-gates
+status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-07-13T21:49:29.570Z"
-last_activity: 2026-07-13
-last_activity_desc: Phase 6 planning complete
+last_updated: "2026-07-14T21:46:49.796Z"
+last_activity: 2026-07-14
+last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 20
+  total_plans: 25
   completed_plans: 20
   percent: 33
 ---
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 05 — world-model-integrity-fixes-m2-m12
+**Current focus:** Phase 06 — operational-hardening-assurance-gates
 
 ## Current Position
 
-Phase: 6 — Operational Hardening & Assurance Gates
-Plan: Not started
-Status: Phase 05 shipped — PR #4816
-Last activity: 2026-07-13 — Phase 6 planning complete
+Phase: 06 (operational-hardening-assurance-gates) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 06
+Last activity: 2026-07-14 — Phase 06 execution started
 
 ## Performance Metrics
 
