@@ -367,8 +367,8 @@ func runAuditDLQReplay(cmd *cobra.Command) error {
 	// value. This makes the CLI's DLQ subject prefix match the server's.
 	override, _ := cmd.Flags().GetString("game-id") //nolint:errcheck // flag defined in newAuditDLQReplayCmd; absence is a programmer error
 	var coreCfg coreConfig
-	if err := config.Load(configFile, cmd, &coreCfg, "core"); err != nil {
-		return oops.Code("AUDIT_DLQ_CORE_CONFIG_FAILED").Wrap(err)
+	if loadErr := config.Load(configFile, cmd, &coreCfg, "core"); loadErr != nil {
+		return oops.Code("AUDIT_DLQ_CORE_CONFIG_FAILED").Wrap(loadErr)
 	}
 	gameID, err := resolveGameID(cmd.Context(), es.GetSystemInfo, override, coreCfg.GameID)
 	if err != nil {
