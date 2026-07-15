@@ -76,16 +76,32 @@ func TestStartBootGateBackfillsBeforeProjection(t *testing.T) {
 
 // TestStartBootGateFailureReturnsErrorBeforeProjection proves finding 10: a
 // first-cycle Backfill failure returns from Start before any projection exists
-// (nothing to roll back). A non-16-byte legacy id makes Backfill fail closed.
+// (nothing to roll back). The failure is injected via a same-named non-child
+// occupying the legacy row's month partition, which makes Backfill's
+// ensureMonthPartition fail closed (AUDIT_PARTITION_NAME_OCCUPIED). (A malformed
+// legacy id is no longer a boot-gate failure — round-6 WR-02 skips+logs it — so
+// the occupancy conflict is the durable first-cycle Backfill-abort trigger.)
 func TestStartBootGateFailureReturnsErrorBeforeProjection(t *testing.T) {
 	pool := bootGatePool(t)
 	ctx := context.Background()
 
-	// A malformed legacy id (not a 16-byte ULID) makes the Backfill fail closed.
+	// A valid legacy row ~150 days ago — its month is NOT pre-created by
+	// migration 000052 (which pre-creates only current+2), so the decoy below is
+	// the sole occupant of that month's partition name.
+	oldTime := time.Now().UTC().AddDate(0, 0, -150)
+	oldID := ulid.MustNew(ulid.Timestamp(oldTime), ulid.DefaultEntropy())
 	_, err := pool.Exec(ctx, `
 		INSERT INTO events_audit_unpartitioned
 		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		VALUES ('\xAB', 'events.main.legacy', 'legacy', 0, 'system', '\x00', 1, 'identity', 1, '{}')`)
+		VALUES ($1, 'events.main.legacy', 'legacy', $2, 'system', '\x00', 1, 'identity', 1, '{}')`,
+		oldID.Bytes(), oldTime.UnixNano())
+	require.NoError(t, err)
+
+	// A same-named NON-CHILD occupies that month's partition name, so Backfill's
+	// ensureMonthPartition fails closed (the stamp-time child-ness gate refuses a
+	// same-named non-child).
+	occName := fmt.Sprintf("events_audit_%04d_%02d", oldTime.Year(), int(oldTime.Month()))
+	_, err = pool.Exec(ctx, fmt.Sprintf("CREATE TABLE %s (id bytea)", occName))
 	require.NoError(t, err)
 
 	bus := eventbustest.New(t)
@@ -93,9 +109,9 @@ func TestStartBootGateFailureReturnsErrorBeforeProjection(t *testing.T) {
 	startErr := sub.Start(ctx)
 	require.Error(t, startErr, "boot gate failure aborts Start")
 	// The boot gate wraps with AUDIT_BACKFILL_BOOT_GATE_FAILED, but oops
-	// surfaces the root cause code (AUDIT_BACKFILL_BAD_ID) through the chain —
-	// the point is Start returns the failure before any projection starts.
-	errutil.AssertErrorCode(t, startErr, "AUDIT_BACKFILL_BAD_ID")
+	// surfaces the root cause code (AUDIT_PARTITION_NAME_OCCUPIED) through the
+	// chain — the point is Start returns the failure before any projection starts.
+	errutil.AssertErrorCode(t, startErr, "AUDIT_PARTITION_NAME_OCCUPIED")
 
 	// The projection never started: Stop is a clean no-op.
 	require.NoError(t, sub.Stop(context.Background()))
