@@ -101,7 +101,10 @@ jobs:
     # the context the protect-main ruleset must require (GitHub rulesets match
     # the rendered job `name`, not the workflow key `vuln`).
     name: Vuln
-    runs-on: namespace-profile-linux-amd64-2x4
+    # 4x8 (8 GB), not 2x4: `govulncheck ./...` builds a whole-module SSA callgraph
+    # over ~1.9k Go files, whose peak RSS exceeds 4 GB and gets OOM-killed (exit
+    # 137) on the 2x4 profile. Matches the 4x8 the other Go-heavy jobs use.
+    runs-on: namespace-profile-linux-amd64-4x8
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
