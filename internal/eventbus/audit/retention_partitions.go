@@ -426,7 +426,7 @@ func (m *EventsAuditPartitionManager) Backfill(ctx context.Context) error {
 	}
 
 	ensured := make(map[string]struct{})
-	var copied int
+	var copied, skipped int
 	lastID := []byte{} // empty bytea sorts before any 16-byte ULID
 	for {
 		rows, err := m.readLegacyChunk(ctx, lastID)
@@ -438,10 +438,20 @@ func (m *EventsAuditPartitionManager) Backfill(ctx context.Context) error {
 		}
 		for i := range rows {
 			r := &rows[i]
+			// Advance the keyset cursor for EVERY row (valid or skipped) so a
+			// malformed row at the end of a chunk cannot loop the pagination.
+			lastID = r.id
+			// A malformed id cannot be a valid event, so it is skipped (logged +
+			// counted) rather than aborting the whole boot gate: an abort would
+			// leave events_audit_unpartitioned un-renamed, so every subsequent
+			// boot would re-hit the same bad row with no operator escape hatch
+			// (round-6 WR-02). Dropping it from the backfill is acceptable.
 			if len(r.id) != 16 {
-				return oops.Code("AUDIT_BACKFILL_BAD_ID").
-					With("id_len", len(r.id)).
-					Errorf("legacy events_audit id is not a 16-byte ULID")
+				skipped++
+				m.logger.WarnContext(ctx,
+					"skipping malformed legacy audit row: id is not a 16-byte ULID",
+					"id_len", len(r.id))
+				continue
 			}
 			var u ulid.ULID
 			copy(u[:], r.id)
@@ -471,7 +481,6 @@ func (m *EventsAuditPartitionManager) Backfill(ctx context.Context) error {
 				return oops.Code("AUDIT_BACKFILL_INSERT_FAILED").Wrap(err)
 			}
 			copied++
-			lastID = r.id
 		}
 		if len(rows) < backfillChunk {
 			break
@@ -489,7 +498,7 @@ func (m *EventsAuditPartitionManager) Backfill(ctx context.Context) error {
 		return oops.Code("AUDIT_BACKFILL_RENAME_FAILED").Wrap(err)
 	}
 	m.logger.InfoContext(ctx, "backfilled legacy events_audit rows into partitioned table",
-		"rows", copied, "partitions_ensured", len(ensured))
+		"rows", copied, "partitions_ensured", len(ensured), "skipped_malformed", skipped)
 	return nil
 }
 

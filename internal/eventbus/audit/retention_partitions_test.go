@@ -531,6 +531,51 @@ func TestBackfillAndHealthCheckTargetPublicUnderLeakedSearchPath(t *testing.T) {
 	require.NoError(t, mgr.HealthCheck(ctx), "HealthCheck must operate on public under a leaked search_path")
 }
 
+// TestBackfillSkipsMalformedLegacyRowsWithoutBricking proves round-6 WR-02: a
+// single legacy row whose id is not a 16-byte ULID is SKIPPED (logged, counted)
+// rather than aborting the whole boot gate. Backfill still re-homes the valid
+// rows and renames the legacy table so subsequent boots proceed.
+func TestBackfillSkipsMalformedLegacyRowsWithoutBricking(t *testing.T) {
+	pool := auditIdemPool(t)
+	ctx := context.Background()
+	mgr := NewEventsAuditPartitionManager(pool, 365*24*time.Hour)
+
+	// A valid legacy row.
+	oldTime := time.Now().UTC().AddDate(0, 0, -45)
+	validID := ulid.MustNew(ulid.Timestamp(oldTime), ulid.DefaultEntropy())
+	_, err := pool.Exec(ctx, `
+		INSERT INTO events_audit_unpartitioned
+		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		VALUES ($1, 'events.main.legacy', 'legacy', $2, 'system', '\x00', 1, 'identity', 1, '{}')`,
+		validID.Bytes(), oldTime.UnixNano())
+	require.NoError(t, err)
+
+	// A malformed legacy row: id is not a 16-byte ULID (4 bytes here). The
+	// legacy id column is BYTEA with no length constraint, so this is insertable.
+	malformedID := []byte{0xde, 0xad, 0xbe, 0xef}
+	_, err = pool.Exec(ctx, `
+		INSERT INTO events_audit_unpartitioned
+		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		VALUES ($1, 'events.main.legacy', 'legacy', $2, 'system', '\x00', 1, 'identity', 1, '{}')`,
+		malformedID, oldTime.UnixNano())
+	require.NoError(t, err)
+
+	// Backfill must COMPLETE — the malformed row must not brick the boot gate.
+	require.NoError(t, mgr.Backfill(ctx),
+		"a single malformed legacy row must be skipped, not abort the whole backfill")
+
+	// The valid row was re-homed; the malformed row was dropped.
+	require.Equal(t, 1, countAllAuditRows(t, pool), "exactly the one valid row re-homed")
+	var gotValid int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM events_audit WHERE id = $1`, validID.Bytes()).Scan(&gotValid))
+	require.Equal(t, 1, gotValid, "valid legacy row present")
+
+	// The legacy table was renamed so subsequent boots are a no-op.
+	require.False(t, relExists(t, pool, "events_audit_unpartitioned"), "legacy table renamed away")
+	require.True(t, relExists(t, pool, "events_audit_legacy_migrated"), "legacy table renamed to _legacy_migrated")
+}
+
 // TestBackfillNoLegacyTableIsNoop proves Backfill returns nil immediately when
 // events_audit_unpartitioned is absent (already re-homed / clean install).
 func TestBackfillNoLegacyTableIsNoop(t *testing.T) {
