@@ -357,3 +357,63 @@ func TestFinalizeInterruptedConcurrentDetach(t *testing.T) {
 	assert.False(t, isChildOfEventsAudit(t, pool, pendName), "finalized child no longer a child")
 	assert.False(t, relExists(t, pool, pendName), "finalized child renamed away from canonical name")
 }
+
+// TestBackfillReHomesLegacyRowsAndStraddleDedups proves the one-time Backfill
+// re-homes legacy events_audit_unpartitioned rows into the partitioned table
+// with no history loss, and that a legacy row + a later DLQ replay of the SAME
+// event dedup to exactly one row (backfill and writeAuditRow derive event_ms
+// identically via the shared eventMsFromULID helper). Also proves idempotency.
+func TestBackfillReHomesLegacyRowsAndStraddleDedups(t *testing.T) {
+	pool := auditIdemPool(t)
+	ctx := context.Background()
+	mgr := NewEventsAuditPartitionManager(pool, 365*24*time.Hour)
+
+	// Legacy row with an OLD event ULID (~60 days ago) in the unpartitioned table.
+	oldTime := time.Now().UTC().AddDate(0, 0, -60)
+	oldID := ulid.MustNew(ulid.Timestamp(oldTime), ulid.DefaultEntropy())
+	_, err := pool.Exec(ctx, `
+		INSERT INTO events_audit_unpartitioned
+		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		VALUES ($1, 'events.main.legacy', 'legacy', $2, 'system', '\x00', 1, 'identity', 1, '{}')`,
+		oldID.Bytes(), oldTime.UnixNano())
+	require.NoError(t, err)
+
+	require.NoError(t, mgr.Backfill(ctx))
+
+	// The legacy row is now queryable via the partitioned events_audit.
+	require.Equal(t, 1, countAllAuditRows(t, pool))
+	var gotEventMS int64
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT event_ms FROM events_audit WHERE id = $1`, oldID.Bytes()).Scan(&gotEventMS))
+	require.Equal(t, eventMsFromULID(oldID), gotEventMS)
+
+	// The legacy table was renamed away.
+	require.False(t, relExists(t, pool, "events_audit_unpartitioned"))
+	require.True(t, relExists(t, pool, "events_audit_legacy_migrated"))
+
+	// Straddle: a later DLQ replay of the SAME event (different store-time) must
+	// dedup to exactly one row.
+	h := validHeaders(t)
+	h.Set(headerMsgID, oldID.String())
+	replay := idemStubMsg(t, h, "events.main.legacy", time.Now().UTC(), 99)
+	require.NoError(t, writeAuditRow(ctx, pool, "events.main.legacy", replay))
+	require.Equal(t, 1, countAllAuditRows(t, pool), "legacy row + replay of same event → exactly one row")
+
+	// Idempotent: a second Backfill is a no-op (legacy table already renamed).
+	require.NoError(t, mgr.Backfill(ctx))
+	require.Equal(t, 1, countAllAuditRows(t, pool))
+}
+
+// TestBackfillNoLegacyTableIsNoop proves Backfill returns nil immediately when
+// events_audit_unpartitioned is absent (already re-homed / clean install).
+func TestBackfillNoLegacyTableIsNoop(t *testing.T) {
+	pool := auditIdemPool(t)
+	ctx := context.Background()
+	mgr := NewEventsAuditPartitionManager(pool, 90*24*time.Hour)
+
+	// Drain the (empty) legacy table first so it is absent.
+	require.NoError(t, mgr.Backfill(ctx))
+	require.False(t, relExists(t, pool, "events_audit_unpartitioned"))
+	// Second call with the table absent is a clean no-op.
+	require.NoError(t, mgr.Backfill(ctx))
+}

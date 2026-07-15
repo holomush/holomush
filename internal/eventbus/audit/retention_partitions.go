@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	retaudit "github.com/holomush/holomush/internal/audit"
@@ -25,7 +26,7 @@ import (
 // migration 000052). It maintains the retention-window-backward + forward
 // partition coverage, prunes old partitions via a DETACH-rename-then-drop-by-
 // name-age cycle, and re-homes the legacy events_audit_unpartitioned history
-// (Backfill, see retention_backfill in this file's Backfill method).
+// (the one-time Backfill method).
 //
 // It lives in package audit (internal/eventbus/audit) while the
 // PartitionManager interface / RetentionWorker live in a DIFFERENT package
@@ -384,6 +385,141 @@ func (m *EventsAuditPartitionManager) HealthCheck(ctx context.Context) error {
 		return oops.Code("AUDIT_PARTITION_HEALTHCHECK_FAILED").Wrap(err)
 	}
 	return nil
+}
+
+// backfillChunk bounds how many legacy rows are read per keyset page.
+const backfillChunk = 1000
+
+// legacyAuditRow is one row of the pre-000052 events_audit table (now
+// events_audit_unpartitioned), which has NO event_ms column.
+type legacyAuditRow struct {
+	id        []byte
+	subject   string
+	typ       string
+	timestamp int64
+	actorKind string
+	actorID   []byte
+	envelope  []byte
+	schemaVer int16
+	codec     string
+	jsSeq     int64
+	rendering []byte
+	dekRef    *int64
+	dekVer    *int32
+}
+
+// Backfill is the one-time re-homing of the legacy events_audit_unpartitioned
+// rows into the partitioned events_audit, so no audit history is lost after
+// 06-01's migration 000052 renamed the legacy table out of the way. It is the
+// ONLY path that restores cold-history visibility after 000052.
+//
+// For each legacy row it derives event_ms via 06-01's shared eventMsFromULID
+// helper (IDENTICAL to writeAuditRow), ensures a covering partition, and
+// inserts ON CONFLICT (id, event_ms) DO NOTHING — so a legacy row and a later
+// DLQ replay of the same event dedup to exactly one row. Rows are processed in
+// bounded keyset chunks (ORDER BY id). After all rows are copied the legacy
+// table is renamed to events_audit_legacy_migrated (retained briefly for ops).
+//
+// Idempotent: if events_audit_unpartitioned is absent, it returns nil
+// immediately; a partial prior run re-copies harmlessly under ON CONFLICT.
+func (m *EventsAuditPartitionManager) Backfill(ctx context.Context) error {
+	var present *string
+	if err := m.pool.QueryRow(ctx,
+		`SELECT to_regclass('public.events_audit_unpartitioned')::text`).Scan(&present); err != nil {
+		return oops.Code("AUDIT_BACKFILL_PROBE_FAILED").Wrap(err)
+	}
+	if present == nil {
+		return nil // already re-homed (or never existed) — no-op
+	}
+
+	ensured := make(map[string]struct{})
+	var copied int
+	lastID := []byte{} // empty bytea sorts before any 16-byte ULID
+	for {
+		rows, err := m.readLegacyChunk(ctx, lastID)
+		if err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, r := range rows {
+			if len(r.id) != 16 {
+				return oops.Code("AUDIT_BACKFILL_BAD_ID").
+					With("id_len", len(r.id)).
+					Errorf("legacy events_audit id is not a 16-byte ULID")
+			}
+			var u ulid.ULID
+			copy(u[:], r.id)
+			eventMS := eventMsFromULID(u)
+
+			// Ensure the covering historical partition exists exactly once per
+			// distinct month (memoized), reusing the stamp-gated ensure logic.
+			ms := monthStart(time.Unix(0, eventMS).UTC())
+			name := partitionNameForMonth(ms)
+			if _, ok := ensured[name]; !ok {
+				if err := m.ensureMonthPartition(ctx, ms); err != nil {
+					return err
+				}
+				ensured[name] = struct{}{}
+			}
+
+			if _, err := m.pool.Exec(
+				ctx, `
+				INSERT INTO events_audit
+				  (id, subject, type, timestamp, actor_kind, actor_id, envelope,
+				   schema_ver, codec, js_seq, rendering, dek_ref, dek_version, event_ms)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+				ON CONFLICT (id, event_ms) DO NOTHING`,
+				r.id, r.subject, r.typ, r.timestamp, r.actorKind, r.actorID, r.envelope,
+				r.schemaVer, r.codec, r.jsSeq, r.rendering, r.dekRef, r.dekVer, eventMS,
+			); err != nil {
+				return oops.Code("AUDIT_BACKFILL_INSERT_FAILED").Wrap(err)
+			}
+			copied++
+			lastID = r.id
+		}
+		if len(rows) < backfillChunk {
+			break
+		}
+	}
+
+	// Rename the drained legacy table so a re-run is a no-op.
+	if _, err := m.pool.Exec(ctx,
+		"ALTER TABLE events_audit_unpartitioned RENAME TO events_audit_legacy_migrated"); err != nil {
+		return oops.Code("AUDIT_BACKFILL_RENAME_FAILED").Wrap(err)
+	}
+	m.logger.InfoContext(ctx, "backfilled legacy events_audit rows into partitioned table",
+		"rows", copied, "partitions_ensured", len(ensured))
+	return nil
+}
+
+// readLegacyChunk keyset-paginates the legacy table by id.
+func (m *EventsAuditPartitionManager) readLegacyChunk(ctx context.Context, afterID []byte) ([]legacyAuditRow, error) {
+	rows, err := m.pool.Query(ctx, `
+		SELECT id, subject, type, timestamp, actor_kind, actor_id, envelope,
+		       schema_ver, codec, js_seq, rendering, dek_ref, dek_version
+		  FROM events_audit_unpartitioned
+		 WHERE id > $1
+		 ORDER BY id
+		 LIMIT $2`, afterID, backfillChunk)
+	if err != nil {
+		return nil, oops.Code("AUDIT_BACKFILL_READ_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+	var out []legacyAuditRow
+	for rows.Next() {
+		var r legacyAuditRow
+		if err := rows.Scan(&r.id, &r.subject, &r.typ, &r.timestamp, &r.actorKind, &r.actorID,
+			&r.envelope, &r.schemaVer, &r.codec, &r.jsSeq, &r.rendering, &r.dekRef, &r.dekVer); err != nil {
+			return nil, oops.Code("AUDIT_BACKFILL_SCAN_FAILED").Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("AUDIT_BACKFILL_READ_FAILED").Wrap(err)
+	}
+	return out, nil
 }
 
 // queryNames runs a single-column relname query and returns the names. It
