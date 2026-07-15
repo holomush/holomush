@@ -462,6 +462,75 @@ func TestBackfillReHomesLegacyRowsAndStraddleDedups(t *testing.T) {
 	require.Equal(t, 1, countAllAuditRows(t, pool))
 }
 
+// TestBackfillAndHealthCheckTargetPublicUnderLeakedSearchPath proves the
+// round-6 WR-01 sibling to the EnsurePartitions leaked-search_path test: the
+// Backfill INSERT / legacy RENAME and the HealthCheck probe operate on
+// public.events_audit unconditionally, even when a non-public session
+// search_path is leaked onto the pooled connection. A decoy leaked_ns.events_audit
+// (search_path HEAD) is created so a BARE `INSERT INTO events_audit` would land
+// the re-homed row in the wrong schema; the public-qualified INSERT lands it in
+// public regardless.
+func TestBackfillAndHealthCheckTargetPublicUnderLeakedSearchPath(t *testing.T) {
+	shared := testutil.SharedPostgres(t)
+	cfg, err := pgxpool.ParseConfig(testutil.FreshDatabase(t, shared))
+	require.NoError(t, err)
+	// A single connection so a non-LOCAL SET leaks onto every later operation.
+	cfg.MaxConns = 1
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	ctx := context.Background()
+	mgr := NewEventsAuditPartitionManager(pool, 365*24*time.Hour)
+
+	// Seed a valid legacy row into the (public) unpartitioned table BEFORE the
+	// search_path is leaked.
+	oldTime := time.Now().UTC().AddDate(0, 0, -60)
+	oldID := ulid.MustNew(ulid.Timestamp(oldTime), ulid.DefaultEntropy())
+	_, err = pool.Exec(ctx, `
+		INSERT INTO public.events_audit_unpartitioned
+		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		VALUES ($1, 'events.main.legacy', 'legacy', $2, 'system', '\x00', 1, 'identity', 1, '{}')`,
+		oldID.Bytes(), oldTime.UnixNano())
+	require.NoError(t, err)
+
+	// Decoy events_audit in a non-public schema that would silently swallow a
+	// bare INSERT. INCLUDING ALL copies the (id, event_ms) PK so ON CONFLICT
+	// resolves against the decoy.
+	_, err = pool.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS leaked_ns")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "CREATE TABLE leaked_ns.events_audit (LIKE public.events_audit INCLUDING ALL)")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "SET search_path TO leaked_ns, public")
+	require.NoError(t, err)
+
+	require.NoError(t, mgr.Backfill(ctx),
+		"Backfill must not fail under a leaked non-public search_path")
+
+	// The re-homed row must land in public.events_audit, never the decoy.
+	var publicCount int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM public.events_audit WHERE id = $1`, oldID.Bytes()).Scan(&publicCount))
+	require.Equal(t, 1, publicCount, "re-homed legacy row must land in public.events_audit")
+
+	var decoyCount int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM leaked_ns.events_audit`).Scan(&decoyCount))
+	require.Equal(t, 0, decoyCount, "no re-homed row leaked into the non-public decoy")
+
+	// The legacy RENAME operated on the public table.
+	var unpart, migrated *string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT to_regclass('public.events_audit_unpartitioned')::text`).Scan(&unpart))
+	require.Nil(t, unpart, "public legacy table renamed away")
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT to_regclass('public.events_audit_legacy_migrated')::text`).Scan(&migrated))
+	require.NotNil(t, migrated, "public legacy table renamed to events_audit_legacy_migrated")
+
+	// HealthCheck probes public and succeeds under the leaked search_path.
+	require.NoError(t, mgr.HealthCheck(ctx), "HealthCheck must operate on public under a leaked search_path")
+}
+
 // TestBackfillNoLegacyTableIsNoop proves Backfill returns nil immediately when
 // events_audit_unpartitioned is absent (already re-homed / clean install).
 func TestBackfillNoLegacyTableIsNoop(t *testing.T) {

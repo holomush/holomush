@@ -374,7 +374,7 @@ func (m *EventsAuditPartitionManager) PurgeExpiredAllows(_ context.Context, _ ti
 
 // HealthCheck returns nil when events_audit is reachable (cheap probe).
 func (m *EventsAuditPartitionManager) HealthCheck(ctx context.Context) error {
-	if _, err := m.pool.Exec(ctx, "SELECT 1 FROM events_audit LIMIT 0"); err != nil {
+	if _, err := m.pool.Exec(ctx, "SELECT 1 FROM public.events_audit LIMIT 0"); err != nil {
 		return oops.Code("AUDIT_PARTITION_HEALTHCHECK_FAILED").Wrap(err)
 	}
 	return nil
@@ -460,7 +460,7 @@ func (m *EventsAuditPartitionManager) Backfill(ctx context.Context) error {
 
 			if _, err := m.pool.Exec(
 				ctx, `
-				INSERT INTO events_audit
+				INSERT INTO public.events_audit
 				  (id, subject, type, timestamp, actor_kind, actor_id, envelope,
 				   schema_ver, codec, js_seq, rendering, dek_ref, dek_version, event_ms)
 				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
@@ -478,9 +478,14 @@ func (m *EventsAuditPartitionManager) Backfill(ctx context.Context) error {
 		}
 	}
 
-	// Rename the drained legacy table so a re-run is a no-op.
-	if _, err := m.pool.Exec(ctx,
-		"ALTER TABLE events_audit_unpartitioned RENAME TO events_audit_legacy_migrated"); err != nil {
+	// Rename the drained legacy table so a re-run is a no-op. The SOURCE is
+	// schema-qualified to public (matching the rest of this file's hardening);
+	// RENAME TO takes a BARE new name — a schema-qualified target is a syntax
+	// error (mirrors renameDetached).
+	rename := fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
+		pgx.Identifier{schemaName, "events_audit_unpartitioned"}.Sanitize(),
+		pgx.Identifier{"events_audit_legacy_migrated"}.Sanitize())
+	if _, err := m.pool.Exec(ctx, rename); err != nil {
 		return oops.Code("AUDIT_BACKFILL_RENAME_FAILED").Wrap(err)
 	}
 	m.logger.InfoContext(ctx, "backfilled legacy events_audit rows into partitioned table",
