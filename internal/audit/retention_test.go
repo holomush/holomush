@@ -254,19 +254,22 @@ func TestRetentionWorkerWithSkipFirstRunDefersDestructiveCycle(t *testing.T) {
 
 	require.NoError(t, worker.Start(ctx))
 
-	// Immediately after Start (well before the first tick) NO destructive
-	// cycle has run.
-	time.Sleep(30 * time.Millisecond)
-	_, _, detach, drop, _ := mock.getCalls()
-	assert.Equal(t, 0, detach, "no detach before the first tick")
-	assert.Equal(t, 0, drop, "no drop before the first tick")
+	// Before the first tick (PurgeInterval=120ms) NO destructive cycle runs.
+	// Assert the condition STAYS false for a window comfortably inside one
+	// interval, rather than sleeping a fixed duration and sampling once (a
+	// delayed goroutine would otherwise flake).
+	require.Never(t, func() bool {
+		_, _, detach, drop, _ := mock.getCalls()
+		return detach > 0 || drop > 0
+	}, 80*time.Millisecond, 10*time.Millisecond, "no destructive cycle before the first tick")
 
-	// After the first tick, at least one destructive cycle has run.
-	time.Sleep(200 * time.Millisecond)
+	// After the first tick, at least one destructive cycle runs. Poll with a
+	// timeout comfortably larger than one PurgeInterval instead of a fixed sleep.
+	require.Eventually(t, func() bool {
+		_, _, detach, drop, _ := mock.getCalls()
+		return detach >= 1 && drop >= 1
+	}, 2*time.Second, 10*time.Millisecond, "detach and drop fire after the first tick")
 	worker.Stop()
-	_, _, detach, drop, _ = mock.getCalls()
-	assert.GreaterOrEqual(t, detach, 1, "detach fires after the first tick")
-	assert.GreaterOrEqual(t, drop, 1, "drop fires after the first tick")
 }
 
 func TestRetentionWorkerDefaultRunsImmediately(t *testing.T) {

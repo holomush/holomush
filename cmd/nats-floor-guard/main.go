@@ -29,32 +29,69 @@ const (
 )
 
 // checkNatsFloor parses go.mod content and returns a non-nil error when the
-// required nats-server/v2 version is below floor, when nats-server/v2 is absent
-// from the require block, or when the pinned version is not valid semver.
-func checkNatsFloor(gomod []byte, floor string) error {
+// EFFECTIVE nats-server/v2 version is below natsSecurityFloor, when
+// nats-server/v2 is absent from the require block, or when the pinned version is
+// not valid semver.
+//
+// A `replace` directive is honored before the comparison: a `require` pin can
+// look compliant while `go.mod` swaps nats-server for an older tag, a fork, or a
+// local path. The guard resolves the replacement's version and compares that;
+// a versionless replacement (local/filesystem path or bare directory) is
+// unverifiable, so the guard fails CLOSED rather than trusting the require pin.
+func checkNatsFloor(gomod []byte) error {
 	f, err := modfile.Parse(goModPath, gomod, nil)
 	if err != nil {
 		return fmt.Errorf("parse go.mod: %w", err)
 	}
+
+	requiredVersion := ""
 	for _, req := range f.Require {
-		if req.Mod.Path != natsModulePath {
+		if req.Mod.Path == natsModulePath {
+			requiredVersion = req.Mod.Version
+			break
+		}
+	}
+	if requiredVersion == "" {
+		return fmt.Errorf("%s not found in go.mod require block", natsModulePath)
+	}
+
+	// The require pin is the effective version unless a matching replace overrides it.
+	effectivePath, effectiveVersion := natsModulePath, requiredVersion
+	for _, rep := range f.Replace {
+		if rep.Old.Path != natsModulePath {
 			continue
 		}
-		v := req.Mod.Version
-		if !semver.IsValid(v) {
-			return fmt.Errorf("%s has invalid semver version %q", natsModulePath, v)
+		// A replace with a specific Old.Version only applies to that exact
+		// version; an empty Old.Version replaces every version of the module.
+		if rep.Old.Version != "" && rep.Old.Version != requiredVersion {
+			continue
 		}
-		if semver.Compare(v, floor) < 0 {
+		if rep.New.Version == "" {
+			// Local/filesystem path or versionless replacement — the code that
+			// actually builds is unverifiable against the floor. Fail closed.
 			return fmt.Errorf(
-				"%s is pinned at %s, below the required security floor %s "+
-					"(GHSA-q59r-vq66-pxc2 / CVE-2026-58207 is a git-range-only OSV "+
-					"record no manifest scanner can flag) — bump to >= %s",
-				natsModulePath, v, floor, floor,
+				"%s is replaced by %q with no resolvable version (local path or "+
+					"versionless replacement) — cannot verify it meets the security "+
+					"floor %s; fail closed", natsModulePath, rep.New.Path, natsSecurityFloor,
 			)
 		}
-		return nil
+		effectivePath, effectiveVersion = rep.New.Path, rep.New.Version
+		break
 	}
-	return fmt.Errorf("%s not found in go.mod require block", natsModulePath)
+
+	if !semver.IsValid(effectiveVersion) {
+		return fmt.Errorf("%s effective version %q (via %s) is not valid semver",
+			natsModulePath, effectiveVersion, effectivePath)
+	}
+	if semver.Compare(effectiveVersion, natsSecurityFloor) < 0 {
+		return fmt.Errorf(
+			"%s resolves to %s (via %s), below the required security floor %s "+
+				"(GHSA-q59r-vq66-pxc2 / CVE-2026-58207 is a git-range-only OSV "+
+				"record no manifest scanner can flag) — bump to >= %s",
+			natsModulePath, effectiveVersion, effectivePath, natsSecurityFloor, natsSecurityFloor,
+		)
+	}
+	return nil
 }
 
 func main() {
@@ -63,7 +100,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "nats-floor-guard: cannot read %s: %v\n", goModPath, err)
 		os.Exit(1)
 	}
-	if err := checkNatsFloor(data, natsSecurityFloor); err != nil {
+	if err := checkNatsFloor(data); err != nil {
 		fmt.Fprintf(os.Stderr, "nats-floor-guard: FAIL: %v\n", err)
 		os.Exit(1)
 	}

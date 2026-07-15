@@ -97,9 +97,11 @@ func insertIntegrationAuditRowAt(pool *pgxpool.Pool, id ulid.ULID, subject event
 		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
 	})
 	Expect(err).NotTo(HaveOccurred())
-	// event_ms (000052 partition key) is the row's own store-time; ensure the
-	// covering partition exists (ts may be out of the current-month window).
-	eventMS := ts.UTC().UnixNano()
+	// event_ms (000052 partition key) is ULID-derived from the immutable event
+	// id — exactly as production (eventMsFromULID) — so fixtures route rows into
+	// partitions the same way real writes do. Ensure the covering partition
+	// exists (the id's time may be out of the current-month window).
+	eventMS := ulid.Time(id.Time()).UnixNano()
 	ensureEventsAuditPartition(pool, eventMS)
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
@@ -123,8 +125,9 @@ func insertIntegrationColdRowWithDEK(pool *pgxpool.Pool, id ulid.ULID, subject, 
 		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
 	})
 	Expect(err).NotTo(HaveOccurred())
-	// event_ms (000052 partition key) is the row's own now()-based store-time.
-	eventMS := time.Now().UTC().UnixNano()
+	// event_ms (000052 partition key) is ULID-derived from the immutable event
+	// id — exactly as production (eventMsFromULID) — not a second now() call.
+	eventMS := ulid.Time(id.Time()).UnixNano()
 	ensureEventsAuditPartition(pool, eventMS)
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (

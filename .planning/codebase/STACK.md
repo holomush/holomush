@@ -19,7 +19,7 @@
 
 **Environment:**
 
-- Go 1.26.5 toolchain (`go.mod` line 3: `go 1.26.5`)
+- Go 1.26.5 minimum — `go.mod` line 3 (`go 1.26.5`) is the language floor, not an exact toolchain pin; the installed Go version is enforced in CI via `actions/setup-go` with `go-version-file: go.mod`
 - Node.js runtime for `web/` (SvelteKit) and `site/` (Astro) — no `.nvmrc`/`.node-version` committed; the authoritative pin is CI's `node-version: 24` (`.github/workflows/ci.yaml`, `release.yaml`, `site.yml`, `scripts-tests.yaml`)
 
 **Package Manager:**

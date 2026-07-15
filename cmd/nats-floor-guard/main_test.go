@@ -37,7 +37,7 @@ func TestCheckNatsFloor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := checkNatsFloor(gomodFixture(tt.natsVersion), natsSecurityFloor)
+			err := checkNatsFloor(gomodFixture(tt.natsVersion))
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), natsSecurityFloor)
@@ -51,8 +51,58 @@ func TestCheckNatsFloor(t *testing.T) {
 func TestCheckNatsFloorFailsWhenNatsAbsentFromGoMod(t *testing.T) {
 	gomod := []byte("module example.com/holomush-test\n\ngo 1.26\n")
 
-	err := checkNatsFloor(gomod, natsSecurityFloor)
+	err := checkNatsFloor(gomod)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), natsModulePath)
+}
+
+// gomodWithReplace builds a go.mod that pins nats-server/v2 at requireVersion and
+// adds a `replace` directive with the given right-hand side (target path plus an
+// optional version), so the guard's replace-resolution can be exercised.
+func gomodWithReplace(requireVersion, replaceRHS string) []byte {
+	return []byte("module example.com/holomush-test\n\ngo 1.26\n\n" +
+		"require github.com/nats-io/nats-server/v2 " + requireVersion + "\n\n" +
+		"replace github.com/nats-io/nats-server/v2 => " + replaceRHS + "\n")
+}
+
+// TestCheckNatsFloorHonorsReplaceDirectives proves a `replace` cannot smuggle a
+// vulnerable nats-server past a compliant `require` pin: the guard resolves the
+// effective replacement version, and fails closed on an unverifiable
+// (versionless / local-path) replacement.
+func TestCheckNatsFloorHonorsReplaceDirectives(t *testing.T) {
+	tests := []struct {
+		name       string
+		requireVer string
+		replaceRHS string
+		wantErr    bool
+	}{
+		{
+			"fails when a replace downgrades a compliant require below the floor",
+			"v2.14.3", "github.com/nats-io/nats-server/v2 v2.10.0", true,
+		},
+		{
+			"passes when a replace lifts a below-floor require to the floor",
+			"v2.14.2", "github.com/nats-io/nats-server/v2 v2.14.3", false,
+		},
+		{
+			"passes when a replace points at a fork at or above the floor",
+			"v2.14.3", "github.com/acme/nats-server/v2 v2.20.0", false,
+		},
+		{
+			"fails closed when a replace points at a versionless local path",
+			"v2.14.3", "../local-nats-server", true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkNatsFloor(gomodWithReplace(tt.requireVer, tt.replaceRHS))
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

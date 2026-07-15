@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -137,6 +138,25 @@ func (m *EventsAuditPartitionManager) ensureMonthPartition(ctx context.Context, 
 			Errorf("relation %q exists but is not a current child of %s (same-named non-child); refusing to stamp provenance marker", name, eventsAuditTable)
 	}
 
+	// Bound gate (review hardening): a same-named child attached with a
+	// DIFFERENT range passes the child-ness check but covers the wrong months.
+	// Compare the catalog's stored range bound to the requested [fromNS, toNS)
+	// and fail closed on a mismatch, so provenance is stamped only on a
+	// partition that actually covers this month. A wrong-bound child never gets
+	// the marker, so it is never eligible for the marker-gated detach/drop.
+	boundOK, err := m.childBoundMatches(ctx, name, fromNS, toNS)
+	if err != nil {
+		return oops.Code("AUDIT_PARTITION_BOUND_PROBE_FAILED").With("partition", name).Wrap(err)
+	}
+	if !boundOK {
+		return oops.Code("AUDIT_PARTITION_BOUND_MISMATCH").
+			With("partition", name).
+			With("parent", eventsAuditTable).
+			With("expected_from_ns", fromNS).
+			With("expected_to_ns", toNS).
+			Errorf("partition %q is a current child but its stored range bound does not match the expected [%d, %d); refusing to stamp provenance marker", name, fromNS, toNS)
+	}
+
 	// Idempotent on a genuine existing child (COMMENT set to the same value).
 	stamp := fmt.Sprintf(
 		"COMMENT ON TABLE %s IS %s",
@@ -169,6 +189,59 @@ func (m *EventsAuditPartitionManager) isCurrentChild(ctx context.Context, child 
 		return false, oops.Code("AUDIT_CHILD_PROBE_FAILED").Wrap(err)
 	}
 	return true, nil
+}
+
+// rangeBoundRE extracts the two int64 nanosecond endpoints from a PostgreSQL
+// RANGE-partition bound expression such as
+// `FOR VALUES FROM ('1719792000000000000') TO ('1722470400000000000')`.
+// pg_get_expr renders bigint bounds as single-quoted string literals; the
+// quotes are matched optionally so a future unquoted rendering still parses.
+var rangeBoundRE = regexp.MustCompile(`FROM\s*\(\s*'?(-?\d+)'?\s*\)\s*TO\s*\(\s*'?(-?\d+)'?\s*\)`)
+
+// parseRangeBoundNS pulls the [from, to) endpoints out of a range-partition
+// bound expression. ok is false when the expression is not a simple
+// single-column int64 range (e.g. DEFAULT or a multi-column bound), which the
+// caller treats as a mismatch (fail closed).
+func parseRangeBoundNS(expr string) (from, to int64, ok bool) {
+	mm := rangeBoundRE.FindStringSubmatch(expr)
+	if mm == nil {
+		return 0, 0, false
+	}
+	lo, err1 := strconv.ParseInt(mm[1], 10, 64)
+	hi, err2 := strconv.ParseInt(mm[2], 10, 64)
+	if err1 != nil || err2 != nil {
+		return 0, 0, false
+	}
+	return lo, hi, true
+}
+
+// childBoundMatches reports whether `child` is a current partition of
+// events_audit whose stored range bound is exactly [fromNS, toNS). It returns
+// false (not an error) when `child` is not a current child or its bound cannot
+// be parsed / differs, so the caller fails closed without stamping provenance.
+func (m *EventsAuditPartitionManager) childBoundMatches(ctx context.Context, child string, fromNS, toNS int64) (bool, error) {
+	var boundExpr string
+	err := m.pool.QueryRow(ctx, `
+		SELECT pg_get_expr(c.relpartbound, c.oid)
+		  FROM pg_inherits i
+		  JOIN pg_class c      ON c.oid = i.inhrelid
+		  JOIN pg_namespace n  ON n.oid = c.relnamespace
+		  JOIN pg_class p      ON p.oid = i.inhparent
+		  JOIN pg_namespace pn ON pn.oid = p.relnamespace
+		 WHERE pn.nspname = $1 AND p.relname = $2
+		   AND n.nspname  = $1 AND c.relname = $3`,
+		schemaName, eventsAuditTable, child).Scan(&boundExpr)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, oops.Code("AUDIT_CHILD_BOUND_PROBE_FAILED").Wrap(err)
+	}
+	lo, hi, ok := parseRangeBoundNS(boundExpr)
+	if !ok {
+		return false, nil
+	}
+	return lo == fromNS && hi == toNS, nil
 }
 
 // DetachExpiredPartitions runs two recovery passes FIRST, then the normal
@@ -507,7 +580,7 @@ func (m *EventsAuditPartitionManager) readLegacyChunk(ctx context.Context, after
 	rows, err := m.pool.Query(ctx, `
 		SELECT id, subject, type, timestamp, actor_kind, actor_id, envelope,
 		       schema_ver, codec, js_seq, rendering, dek_ref, dek_version
-		  FROM events_audit_unpartitioned
+		  FROM public.events_audit_unpartitioned
 		 WHERE id > $1
 		 ORDER BY id
 		 LIMIT $2`, afterID, backfillChunk)

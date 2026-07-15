@@ -85,8 +85,10 @@ func insertEncryptedAuditRow(
 	Expect(err).NotTo(HaveOccurred())
 
 	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1). event_ms (000052 partition
-	// key) is the row's own store-time; ensure its covering partition exists.
-	eventMS := ts.UTC().UnixNano()
+	// key) is ULID-derived from the immutable event id — exactly as production
+	// (eventMsFromULID) — so fixtures route rows into partitions the same way
+	// real writes do. Ensure its covering partition exists.
+	eventMS := ulid.Time(id.Time()).UnixNano()
 	ensureEventsAuditPartition(pool, eventMS)
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
@@ -120,8 +122,10 @@ func insertIdentityAuditRow(
 	Expect(err).NotTo(HaveOccurred())
 
 	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1). event_ms (000052 partition
-	// key) is the row's own store-time; ensure its covering partition exists.
-	eventMS := ts.UTC().UnixNano()
+	// key) is ULID-derived from the immutable event id — exactly as production
+	// (eventMsFromULID) — so fixtures route rows into partitions the same way
+	// real writes do. Ensure its covering partition exists.
+	eventMS := ulid.Time(id.Time()).UnixNano()
 	ensureEventsAuditPartition(pool, eventMS)
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (

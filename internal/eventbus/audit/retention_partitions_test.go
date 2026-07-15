@@ -392,8 +392,13 @@ func TestFinalizeInterruptedConcurrentDetach(t *testing.T) {
 	require.NoError(t, err)
 	_, detErr := detacher.Exec(ctx, fmt.Sprintf("ALTER TABLE %s DETACH PARTITION %s CONCURRENTLY",
 		pgx.Identifier{eventsAuditTable}.Sanitize(), pgx.Identifier{pendName}.Sanitize()))
-	require.Error(t, detErr, "concurrent detach must be interrupted by statement_timeout")
+	// Reset the session timeout before returning this pooled connection so the
+	// non-LOCAL SET does not leak the 750ms budget onto the next acquirer (which
+	// could then hit it on unrelated DDL). Runs before the assertion so it fires
+	// even if require.Error aborts the test.
+	_, _ = detacher.Exec(context.Background(), "RESET statement_timeout")
 	detacher.Release()
+	require.Error(t, detErr, "concurrent detach must be interrupted by statement_timeout")
 
 	// Release the blocker so subsequent DDL is not itself blocked.
 	_, _ = blocker.Exec(ctx, "ROLLBACK")
@@ -501,6 +506,22 @@ func TestBackfillAndHealthCheckTargetPublicUnderLeakedSearchPath(t *testing.T) {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, "CREATE TABLE leaked_ns.events_audit (LIKE public.events_audit INCLUDING ALL)")
 	require.NoError(t, err)
+
+	// Decoy events_audit_unpartitioned in the same non-public schema holding a
+	// DIFFERENT legacy row. readLegacyChunk must read ONLY
+	// public.events_audit_unpartitioned; a bare `FROM events_audit_unpartitioned`
+	// would follow the leaked search_path and re-home this decoy row.
+	decoyTime := time.Now().UTC().AddDate(0, 0, -50)
+	decoyID := ulid.MustNew(ulid.Timestamp(decoyTime), ulid.DefaultEntropy())
+	_, err = pool.Exec(ctx, "CREATE TABLE leaked_ns.events_audit_unpartitioned (LIKE public.events_audit_unpartitioned INCLUDING ALL)")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO leaked_ns.events_audit_unpartitioned
+		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		VALUES ($1, 'events.main.decoy', 'decoy', $2, 'system', '\x00', 1, 'identity', 1, '{}')`,
+		decoyID.Bytes(), decoyTime.UnixNano())
+	require.NoError(t, err)
+
 	_, err = pool.Exec(ctx, "SET search_path TO leaked_ns, public")
 	require.NoError(t, err)
 
@@ -517,6 +538,13 @@ func TestBackfillAndHealthCheckTargetPublicUnderLeakedSearchPath(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx,
 		`SELECT count(*) FROM leaked_ns.events_audit`).Scan(&decoyCount))
 	require.Equal(t, 0, decoyCount, "no re-homed row leaked into the non-public decoy")
+
+	// The decoy legacy row (leaked_ns.events_audit_unpartitioned) must NOT have
+	// been read/re-homed: readLegacyChunk reads only public.events_audit_unpartitioned.
+	var decoyReHomed int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM public.events_audit WHERE id = $1`, decoyID.Bytes()).Scan(&decoyReHomed))
+	require.Equal(t, 0, decoyReHomed, "decoy legacy row from leaked_ns must not be re-homed into public")
 
 	// The legacy RENAME operated on the public table.
 	var unpart, migrated *string

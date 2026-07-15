@@ -32,7 +32,7 @@ BEGIN
      AND (SELECT relkind FROM pg_class WHERE oid = 'public.events_audit'::regclass) <> 'p'
      AND to_regclass('public.events_audit_unpartitioned') IS NULL
   THEN
-    ALTER TABLE events_audit RENAME TO events_audit_unpartitioned;
+    ALTER TABLE public.events_audit RENAME TO events_audit_unpartitioned;
   END IF;
 END $$;
 
@@ -53,7 +53,7 @@ BEGIN
     WHERE conname = 'events_audit_pkey'
       AND conrelid = 'public.events_audit_unpartitioned'::regclass
   ) THEN
-    ALTER TABLE events_audit_unpartitioned
+    ALTER TABLE public.events_audit_unpartitioned
       RENAME CONSTRAINT events_audit_pkey TO events_audit_pkey_legacy;
   END IF;
 
@@ -62,7 +62,7 @@ BEGIN
     WHERE ic.relname = 'events_audit_subject_id'
       AND i.indrelid = 'public.events_audit_unpartitioned'::regclass
   ) THEN
-    ALTER INDEX events_audit_subject_id RENAME TO events_audit_subject_id_legacy;
+    ALTER INDEX public.events_audit_subject_id RENAME TO events_audit_subject_id_legacy;
   END IF;
 
   IF EXISTS (
@@ -70,7 +70,7 @@ BEGIN
     WHERE ic.relname = 'events_audit_subject_ts'
       AND i.indrelid = 'public.events_audit_unpartitioned'::regclass
   ) THEN
-    ALTER INDEX events_audit_subject_ts RENAME TO events_audit_subject_ts_legacy;
+    ALTER INDEX public.events_audit_subject_ts RENAME TO events_audit_subject_ts_legacy;
   END IF;
 
   IF EXISTS (
@@ -78,7 +78,7 @@ BEGIN
     WHERE ic.relname = 'events_audit_subject_pat'
       AND i.indrelid = 'public.events_audit_unpartitioned'::regclass
   ) THEN
-    ALTER INDEX events_audit_subject_pat RENAME TO events_audit_subject_pat_legacy;
+    ALTER INDEX public.events_audit_subject_pat RENAME TO events_audit_subject_pat_legacy;
   END IF;
 
   IF EXISTS (
@@ -86,7 +86,7 @@ BEGIN
     WHERE ic.relname = 'events_audit_subject_js_seq'
       AND i.indrelid = 'public.events_audit_unpartitioned'::regclass
   ) THEN
-    ALTER INDEX events_audit_subject_js_seq RENAME TO events_audit_subject_js_seq_legacy;
+    ALTER INDEX public.events_audit_subject_js_seq RENAME TO events_audit_subject_js_seq_legacy;
   END IF;
 
   IF EXISTS (
@@ -94,7 +94,7 @@ BEGIN
     WHERE ic.relname = 'events_audit_dek_ref'
       AND i.indrelid = 'public.events_audit_unpartitioned'::regclass
   ) THEN
-    ALTER INDEX events_audit_dek_ref RENAME TO events_audit_dek_ref_legacy;
+    ALTER INDEX public.events_audit_dek_ref RENAME TO events_audit_dek_ref_legacy;
   END IF;
 END $$;
 
@@ -104,7 +104,7 @@ END $$;
 -- plus the NEW event_ms partition key. Composite PK includes the partition
 -- column (Postgres requirement). Recreate the original-named indexes on the
 -- parent (names freed by Step 2) + a BRIN index on event_ms for cheap pruning.
-CREATE TABLE IF NOT EXISTS events_audit (
+CREATE TABLE IF NOT EXISTS public.events_audit (
     id           BYTEA       NOT NULL,
     subject      TEXT        NOT NULL,
     type         TEXT        NOT NULL,
@@ -123,12 +123,12 @@ CREATE TABLE IF NOT EXISTS events_audit (
     PRIMARY KEY (id, event_ms)
 ) PARTITION BY RANGE (event_ms);
 
-CREATE INDEX IF NOT EXISTS events_audit_subject_id      ON events_audit (subject, id);
-CREATE INDEX IF NOT EXISTS events_audit_subject_ts      ON events_audit (subject, timestamp);
-CREATE INDEX IF NOT EXISTS events_audit_subject_pat     ON events_audit (subject text_pattern_ops);
-CREATE INDEX IF NOT EXISTS events_audit_subject_js_seq  ON events_audit (subject, js_seq);
-CREATE INDEX IF NOT EXISTS events_audit_dek_ref         ON events_audit (dek_ref) WHERE dek_ref IS NOT NULL;
-CREATE INDEX IF NOT EXISTS events_audit_event_ms_brin   ON events_audit USING BRIN (event_ms);
+CREATE INDEX IF NOT EXISTS events_audit_subject_id      ON public.events_audit (subject, id);
+CREATE INDEX IF NOT EXISTS events_audit_subject_ts      ON public.events_audit (subject, timestamp);
+CREATE INDEX IF NOT EXISTS events_audit_subject_pat     ON public.events_audit (subject text_pattern_ops);
+CREATE INDEX IF NOT EXISTS events_audit_subject_js_seq  ON public.events_audit (subject, js_seq);
+CREATE INDEX IF NOT EXISTS events_audit_dek_ref         ON public.events_audit (dek_ref) WHERE dek_ref IS NOT NULL;
+CREATE INDEX IF NOT EXISTS events_audit_event_ms_brin   ON public.events_audit USING BRIN (event_ms);
 
 -- ── Step 4: create the current + next-2 monthly event_ms partitions ──────────
 -- Mirror the Go worker naming (events_audit_%04d_%02d) and int64-ns UnixNano
@@ -150,7 +150,7 @@ BEGIN
     to_ns   := (EXTRACT(EPOCH FROM ((date_trunc('month', now() AT TIME ZONE 'UTC') + make_interval(months => i + 1)) AT TIME ZONE 'UTC'))::bigint) * 1000000000;
     pname   := 'events_audit_' || to_char(date_trunc('month', now() AT TIME ZONE 'UTC') + make_interval(months => i), 'YYYY_MM');
     EXECUTE format(
-      'CREATE TABLE IF NOT EXISTS %I PARTITION OF events_audit FOR VALUES FROM (%s) TO (%s)',
+      'CREATE TABLE IF NOT EXISTS public.%I PARTITION OF public.events_audit FOR VALUES FROM (%s) TO (%s)',
       pname, from_ns, to_ns);
   END LOOP;
 END $$;

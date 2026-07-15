@@ -183,8 +183,8 @@ func DefaultRetentionConfig() RetentionConfig {
 docker compose ... pull core gateway cloudflared
 docker compose ... build backup
 docker compose ... up -d --no-recreate postgres
-docker compose ... stop core                       # round-4: stop OLD core before migrate (ends the incompatible-write window)
-docker compose ... run --rm -T core migrate </dev/null   # migrate with no old core writing (preserve the </dev/null + -T stdin guard, holomush-aocap)
+docker compose ... stop cloudflared gateway core   # round-5 H1: sever the WHOLE player-traffic path AND the old core before migrate (no gateway can reach the new core before the readiness gate)
+docker compose ... run --rm -T core migrate </dev/null   # migrate with no old core (or gateway) writing (preserve the </dev/null + -T stdin guard, holomush-aocap)
 docker compose ... up -d --wait --no-deps core     # start NEW core; --wait blocks on its healthcheck = the synchronous audit Backfill+Ensure boot gate (06-02 Task 3)
 docker compose ... up -d                            # restore player traffic (gateway/cloudflared) only after core is ready
 ```

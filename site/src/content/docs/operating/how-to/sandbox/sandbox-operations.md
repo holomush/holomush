@@ -241,8 +241,8 @@ docker compose --profile tunnel --profile backups up -d --no-recreate postgres
 # budget (~90s: start_period 15s + retries 15 × interval 5s). Above ~500k rows,
 # run an ahead-of-deploy backfill or temporarily raise the core start_period.
 ROWS=$(docker compose --profile tunnel --profile backups exec -T postgres \
-  psql -U holomush -d holomush -tAc "SELECT count(*) FROM events_audit" </dev/null | tr -d '[:space:]')
-echo "pre-migrate events_audit rows: ${ROWS} (core health budget ~90s)"
+  psql -U holomush -d holomush -tAc "SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.events_audit'::regclass" </dev/null | tr -d '[:space:]')
+echo "pre-migrate events_audit row estimate: ${ROWS:-unknown} (pg_class.reltuples; core health budget ~90s)"
 
 # Sever the whole player-traffic path AND the old core before migrate, so the
 # old core's now-incompatible audit INSERT never runs against the 000052 schema.
