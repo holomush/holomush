@@ -96,15 +96,60 @@ jobs:
             docker compose --profile tunnel --profile backups pull core gateway cloudflared
             docker compose --profile tunnel --profile backups build backup
             docker compose --profile tunnel --profile backups up -d --no-recreate postgres
+
+            # ── Deploy choreography for migration 000052 (06-01/06-02; round-4
+            # HIGH + round-5 H1/M4) ────────────────────────────────────────────
+            # 000052 makes the OLD core's audit INSERT incompatible (event_ms
+            # NOT NULL + dropped id-alone unique index — projection.go:414), so
+            # the old core MUST NOT be writing audit rows while `core migrate`
+            # runs. We STOP the entire player-traffic path (cloudflared → gateway
+            # → core) BEFORE migrate, migrate with no old core writing, start ONLY
+            # the new core gated on its readiness (which incorporates 06-02's
+            # synchronous audit Backfill + EnsurePartitions boot gate), then
+            # restore player traffic (gateway + cloudflared) LAST. The brief
+            # audit-write outage is a deliberate, bounded single-node risk; the
+            # readiness gate is the compensating control that aborts the deploy
+            # before traffic is restored if the backfill fails. NOT expand/contract
+            # — 000052 is unchanged (operator chose deploy choreography).
+            #
+            # Pre-migrate backfill-budget probe (round-5 M4): the new core's
+            # synchronous Backfill runs BEFORE whole-process readiness, so a large
+            # events_audit_unpartitioned can push startup past the core health
+            # budget (compose.prod.yaml core: start_period 15s + retries 15 ×
+            # interval 5s ≈ 90s) → Docker marks it unhealthy → `restart:
+            # unless-stopped` thrashes while `up -d --wait` is pending. Warn (non-
+            # fatal) above a conservative threshold so the operator can run an
+            # ahead-of-deploy backfill or temporarily raise the core start_period.
+            ROWS=$(docker compose --profile tunnel --profile backups exec -T postgres \
+              psql -U holomush -d holomush -tAc "SELECT count(*) FROM events_audit" </dev/null 2>/dev/null | tr -d '[:space:]' || true)
+            echo "pre-migrate events_audit row count: ${ROWS:-unknown} (core health budget ~90s: start_period 15s + retries 15 × interval 5s)"
+            if [ "${ROWS:-0}" -gt 500000 ]; then
+              echo "::warning::events_audit has ${ROWS} rows; the new core's synchronous audit Backfill runs before readiness and may exceed the ~90s core health budget. Run an ahead-of-deploy backfill or temporarily raise the core start_period in compose before proceeding."
+            fi
+
+            # Sever the whole player-traffic path AND the old core before migrate.
+            # Stopping cloudflared + gateway guarantees no player request can reach
+            # the new core before the readiness gate — even though core's gRPC
+            # begins serving before whole-process readiness and does not DependsOn
+            # SubsystemAuditProjection (sub_grpc.go:166,771).
+            docker compose --profile tunnel --profile backups stop cloudflared gateway core
+
             # `</dev/null` is load-bearing: this script is fed to `ssh ... bash -s
             # <<'EOF'`, so stdin IS the heredoc. A foreground `compose run`/`exec`
-            # attaches stdin by default and drains the remaining heredoc lines
-            # (the `up -d` below) into the container as its stdin — so the recreate
-            # never runs and core/gateway stay on the old image while the deploy
-            # still "succeeds" (holomush-aocap). `-T` only disables the pseudo-TTY;
-            # it does NOT detach stdin, so the `</dev/null` redirect is the actual
-            # guard. Keep both: `-T` documents intent, `</dev/null` enforces it.
+            # attaches stdin by default and drains the remaining heredoc lines into
+            # the container as its stdin (holomush-aocap). `-T` documents intent,
+            # `</dev/null` enforces it. migrate now runs with NO old core writing.
             docker compose --profile tunnel --profile backups run --rm -T core migrate </dev/null
+
+            # Start ONLY the new core and GATE on its readiness before restoring
+            # traffic. `--wait` blocks until the core healthcheck passes, which only
+            # happens after the synchronous audit Backfill + EnsurePartitions boot
+            # gate succeeds. `--no-deps` keeps gateway/cloudflared DOWN here. If the
+            # gate fails, `up -d --wait` exits non-zero and `set -euo pipefail`
+            # ABORTS the deploy BEFORE traffic is restored (the compensating control).
+            docker compose --profile tunnel --profile backups up -d --wait --no-deps core
+
+            # Restore player traffic (gateway + cloudflared) only after core is ready.
             docker compose --profile tunnel --profile backups up -d
           EOF
 
