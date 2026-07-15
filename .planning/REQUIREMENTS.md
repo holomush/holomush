@@ -42,7 +42,7 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 
 <!-- F7 coverage governance + the code-health/test-quality batch (epics holomush-ec22/89o9). -->
 
-- [ ] **QUAL-01**: Per-package coverage and CI are reconciled — the >80% MUST is either enforced as a CI gate or corrected to match reality — so the documented bar and the enforced bar agree (F7 #4804; `main` last merged at 54.6% patch)
+- [x] **QUAL-01**: Per-package coverage and CI are reconciled — the >80% MUST is either enforced as a CI gate or corrected to match reality — so the documented bar and the enforced bar agree (F7 #4804; `main` last merged at 54.6% patch)
 - [ ] **QUAL-02**: Packages under the reconciled bar (surfaced by a coverage audit) are backfilled with genuine behavioral tests
 - [ ] **QUAL-03**: Skeleton/weak tests (zero-assertion, tautological) are remediated to assert real behavior, and ACE test-naming violations are corrected to the sentence convention
 - [ ] **QUAL-04**: A session-lifecycle test matrix covers the connect / reconnect / multi-character / idle-timeout paths
@@ -88,7 +88,7 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | OPS-02 | Phase 6 | Complete |
 | OPS-03 | Phase 6 | Pending |
 | OPS-04 | Phase 6 | Pending |
-| QUAL-01 | Phase 6 | Pending |
+| QUAL-01 | Phase 6 | Complete |
 | ARCH-03 | Phase 7 | Pending |
 | ARCH-04 | Phase 7 | Pending |
 | ARCH-05 | Phase 7 | Pending |

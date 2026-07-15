@@ -138,14 +138,14 @@ Plans:
 3. The audit-DLQ replay CLI recovers messages for an external-NATS deployment (game_id bridge), proven by a non-tautological test — F3 #4787
 4. Coverage policy and CI enforcement agree — the >80% gate blocks merges, or the doc MUST is corrected to the enforced reality — F7 #4804
 
-**Plans**: 2/5 plans executed
+**Plans**: 3/5 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 06-01-PLAN.md — OPS-02 core (atomic): partition-swap migration 000052 (deterministic event_ms key, NO DEFAULT, data-preserving down) + writeAuditRow composite-PK idempotency crux + crypto-review gate (wave 1)
 - [x] 06-03-PLAN.md — OPS-03: nats-server bump ≥v2.14.3 + `task lint:vuln` (nats floor guard + govulncheck + osv-scanner) + vuln: CI job (wave 1) — impl complete; **the rendered `Vuln` required-check ruleset flag is a PENDING operator step at ship** (Task 4; see 06-03-SUMMARY)
-- [ ] 06-04-PLAN.md — QUAL-01: codecov project ratchet + dual-file cleanup + doc-vs-reality rewrite + manual ruleset step (wave 1)
+- [x] 06-04-PLAN.md — QUAL-01: codecov project ratchet + dual-file cleanup + doc-vs-reality rewrite + manual ruleset step (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -195,7 +195,7 @@ Plans:
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
-| 6. Operational Hardening & Assurance Gates | v0.12 | 2/5 | In Progress|  |
+| 6. Operational Hardening & Assurance Gates | v0.12 | 3/5 | In Progress|  |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
