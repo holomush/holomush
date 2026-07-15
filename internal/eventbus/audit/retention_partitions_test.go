@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	retaudit "github.com/holomush/holomush/internal/audit"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // containsPrefix reports whether any name in names starts with prefix.
@@ -137,6 +138,63 @@ func TestEnsurePartitionsCoversRetentionBackwardAndStampsMarker(t *testing.T) {
 
 	// Re-running is idempotent (no error, marker unchanged).
 	require.NoError(t, mgr.EnsurePartitions(ctx, 1))
+}
+
+// TestEnsurePartitionsLandsChildrenInPublicUnderLeakedSearchPath proves the
+// PartitionManager's DDL is robust to a non-public session search_path leaked
+// onto the pooled connection (the eventbus_e2e harness's non-LOCAL
+// `SET search_path` × bare-DDL interaction). A partition child is placed in the
+// CURRENT schema (search_path head), independent of the parent's schema, so
+// bare `CREATE ... PARTITION OF` under a leaked search_path would land the child
+// in the wrong namespace and the public-pinned child-ness gate would fail closed
+// with AUDIT_PARTITION_NAME_OCCUPIED. Schema-qualifying every write to public
+// makes it land in public unconditionally.
+func TestEnsurePartitionsLandsChildrenInPublicUnderLeakedSearchPath(t *testing.T) {
+	shared := testutil.SharedPostgres(t)
+	cfg, err := pgxpool.ParseConfig(testutil.FreshDatabase(t, shared))
+	require.NoError(t, err)
+	// A single connection so a non-LOCAL SET leaks onto every later operation
+	// (pgxpool performs no session reset on release), faithfully reproducing the
+	// harness leak.
+	cfg.MaxConns = 1
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	ctx := context.Background()
+
+	// Leak a non-public search_path onto the pooled connection.
+	_, err = pool.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS leaked_ns")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "SET search_path TO leaked_ns, public")
+	require.NoError(t, err)
+
+	// A 180-day retention window forces a backward span reaching ~6 months back,
+	// including a month migration 000052 did NOT pre-create (it pre-creates only
+	// current+2), so a real CREATE is exercised under the leaked search_path.
+	mgr := NewEventsAuditPartitionManager(pool, 180*24*time.Hour)
+	require.NoError(t, mgr.EnsurePartitions(ctx, 1),
+		"EnsurePartitions must not fail closed under a leaked non-public search_path")
+
+	pastMonth := monthStart(time.Now().UTC().AddDate(0, -5, 0))
+	pastName := partitionNameForMonth(pastMonth)
+
+	// The child must be a genuine current child of public.events_audit.
+	require.True(t, isChildOfEventsAudit(t, pool, pastName),
+		"backward partition %s must be a current public child", pastName)
+
+	// Its namespace must be exactly public, never the leaked schema.
+	var nsp string
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		 WHERE c.relname = $1`, pastName).Scan(&nsp))
+	require.Equal(t, "public", nsp, "child partition must be created in public, not the leaked schema")
+
+	// No stray copy leaked into the non-public schema.
+	var leaked *string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT to_regclass($1)::text`, "leaked_ns."+pastName).Scan(&leaked))
+	require.Nil(t, leaked, "no partition child leaked into the non-public schema")
 }
 
 // TestDetachRenameDropByNameAge proves the full prune cycle: an old partition

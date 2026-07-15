@@ -110,8 +110,8 @@ func (m *EventsAuditPartitionManager) ensureMonthPartition(ctx context.Context, 
 
 	create := fmt.Sprintf(
 		"CREATE TABLE IF NOT EXISTS %s PARTITION OF %s FOR VALUES FROM (%d) TO (%d)",
-		pgx.Identifier{name}.Sanitize(),
-		pgx.Identifier{eventsAuditTable}.Sanitize(),
+		pgx.Identifier{schemaName, name}.Sanitize(),
+		pgx.Identifier{schemaName, eventsAuditTable}.Sanitize(),
 		fromNS, toNS,
 	)
 	if _, err := m.pool.Exec(ctx, create); err != nil {
@@ -140,7 +140,7 @@ func (m *EventsAuditPartitionManager) ensureMonthPartition(ctx context.Context, 
 	// Idempotent on a genuine existing child (COMMENT set to the same value).
 	stamp := fmt.Sprintf(
 		"COMMENT ON TABLE %s IS %s",
-		pgx.Identifier{name}.Sanitize(),
+		pgx.Identifier{schemaName, name}.Sanitize(),
 		quoteLiteral(partitionProvenanceMarker),
 	)
 	if _, err := m.pool.Exec(ctx, stamp); err != nil {
@@ -222,7 +222,7 @@ func (m *EventsAuditPartitionManager) finalizePendingDetaches(ctx context.Contex
 	var renamed []string
 	for _, name := range names {
 		fin := fmt.Sprintf("ALTER TABLE %s DETACH PARTITION %s FINALIZE",
-			pgx.Identifier{eventsAuditTable}.Sanitize(), pgx.Identifier{name}.Sanitize())
+			pgx.Identifier{schemaName, eventsAuditTable}.Sanitize(), pgx.Identifier{schemaName, name}.Sanitize())
 		if _, err := m.pool.Exec(ctx, fin); err != nil {
 			return renamed, oops.Code("AUDIT_DETACH_FINALIZE_FAILED").With("partition", name).Wrap(err)
 		}
@@ -300,7 +300,7 @@ func (m *EventsAuditPartitionManager) detachOlderThan(ctx context.Context, older
 		// DETACH CONCURRENTLY MUST run outside an explicit tx; pool.Exec
 		// autocommits (no Begin/Commit), one detach at a time.
 		detach := fmt.Sprintf("ALTER TABLE %s DETACH PARTITION %s CONCURRENTLY",
-			pgx.Identifier{eventsAuditTable}.Sanitize(), pgx.Identifier{name}.Sanitize())
+			pgx.Identifier{schemaName, eventsAuditTable}.Sanitize(), pgx.Identifier{schemaName, name}.Sanitize())
 		if _, err := m.pool.Exec(ctx, detach); err != nil {
 			return renamed, oops.Code("AUDIT_DETACH_FAILED").With("partition", name).Wrap(err)
 		}
@@ -318,8 +318,11 @@ func (m *EventsAuditPartitionManager) detachOlderThan(ctx context.Context, older
 // events_audit_<YYYY_MM>_detached_<now-unix>, stamping the detach epoch.
 func (m *EventsAuditPartitionManager) renameDetached(ctx context.Context, canonical string) (string, error) {
 	newName := fmt.Sprintf("%s%s%d", canonical, detachedInfix, time.Now().UTC().Unix())
+	// The source is schema-qualified to public (matching the public-pinned
+	// discovery queries); RENAME TO takes a BARE new name — a schema-qualified
+	// target is a syntax error and cannot move a relation across schemas.
 	rename := fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
-		pgx.Identifier{canonical}.Sanitize(), pgx.Identifier{newName}.Sanitize())
+		pgx.Identifier{schemaName, canonical}.Sanitize(), pgx.Identifier{newName}.Sanitize())
 	if _, err := m.pool.Exec(ctx, rename); err != nil {
 		return "", oops.Code("AUDIT_DETACH_RENAME_FAILED").With("from", canonical).With("to", newName).Wrap(err)
 	}
@@ -353,7 +356,7 @@ func (m *EventsAuditPartitionManager) DropDetachedPartitions(ctx context.Context
 		if nowUnix-epoch <= graceSecs {
 			continue // still within grace
 		}
-		drop := fmt.Sprintf("DROP TABLE IF EXISTS %s", pgx.Identifier{name}.Sanitize())
+		drop := fmt.Sprintf("DROP TABLE IF EXISTS %s", pgx.Identifier{schemaName, name}.Sanitize())
 		if _, err := m.pool.Exec(ctx, drop); err != nil {
 			return dropped, oops.Code("AUDIT_DROP_FAILED").With("partition", name).Wrap(err)
 		}
