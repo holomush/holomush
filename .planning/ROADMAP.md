@@ -163,7 +163,12 @@ Plans:
 2. Process bootstrap runs through `lifecycle.Orchestrator` with unified start/stop ordering; startup/shutdown behavior is unchanged
 3. `internal/web` / `internal/telnet` import only protocol-translation dependencies; the gateway-boundary rule passes with zero violations
 
-**Plans**: 11 plans
+**Plans**: 11 plans across 9 waves
+
+> Wave numbers below are resynced to the plan frontmatter, which is the **source of
+> truth** (rev 3; an earlier revision's roadmap labels were off by one from wave 4
+> onward). 07-03∥07-05 and 07-04∥07-06 run in parallel — verified empty
+> `files_modified` intersections.
 
 Plans:
 
@@ -175,38 +180,35 @@ Plans:
 
 - [ ] 07-02-PLAN.md — D-05 event-vocabulary leaf `internal/eventvocab`; resolves the ARCH-04↔ARCH-05 collision (wave 2)
 
-**Wave 3** *(blocked on Wave 2)*
+**Wave 3** *(blocked on Wave 2 — the two plans run in parallel)*
 
-- [ ] 07-03-PLAN.md — D-16 gateway value leaves: `internal/ulidgen`, `internal/cmdparse`, `internal/sessionlease` (wave 3)
+- [ ] 07-03-PLAN.md — D-16 gateway value leaves: `internal/ulidgen`, `internal/cmdparse`, `internal/sessionlease`; **owns the full gateway core/session ban** (wave 3)
+- [ ] 07-05-PLAN.md — D-03/D-04: `internal/presence` + auth consumer-defined interface (breaks the FINDING-1 cycle) (wave 3)
 
-**Wave 4** *(blocked on Wave 3 / Wave 2)*
+**Wave 4** *(blocked on Wave 3 — the two plans run in parallel)*
 
 - [ ] 07-04-PLAN.md — D-15/D-17/D-18: `forbidden` amendment, transitive-closure gate, `INV-EVENTBUS-1` binding (wave 4)
-- [ ] 07-05-PLAN.md — D-03/D-04: `internal/presence` + auth consumer-defined interface (breaks the FINDING-1 cycle) (wave 4)
+- [ ] 07-06-PLAN.md — D-02: one broadcast builder (`internal/sysbroadcast`), two callers; `command` sheds its event dep (wave 4)
 
-**Wave 5** *(blocked on Wave 4)*
+**Wave 5** *(blocked on Wave 4 — depends on BOTH 07-04 and 07-06, so ARCH-05 converges before ARCH-04's deletions)*
 
-- [ ] 07-06-PLAN.md — D-02: one broadcast builder (`internal/sysbroadcast`), two callers; `command` sheds its event dep (wave 5)
+- [ ] 07-07-PLAN.md — D-01/D-06: delete `core.Event`/`NewEvent`/`EventAppender`; collapse 3 actor bridges to 1; `WithEventPublisher` replaces `WithEventStore`; amend the rules (wave 5)
 
 **Wave 6** *(blocked on Wave 5)*
 
-- [ ] 07-07-PLAN.md — D-01/D-06: delete `core.Event`/`NewEvent`/`EventAppender`; collapse 3 actor bridges to 1; amend the rules (wave 6)
+- [ ] 07-08-PLAN.md — D-07/D-08: seq-correct plugin history pagination (TDD) + `hostv1.Event` no-seq guard (wave 6)
 
 **Wave 7** *(blocked on Wave 6)*
 
-- [ ] 07-08-PLAN.md — D-07/D-08: seq-correct plugin history pagination (TDD) + `hostv1.Event` no-seq guard (wave 7)
+- [ ] 07-09-PLAN.md — ARCH-03 Wave A: handles-not-live-values (`cryptoWiring` hoist), TLS subsystem, all 5 eager starts die, LOW-8 (wave 7)
 
 **Wave 8** *(blocked on Wave 7)*
 
-- [ ] 07-09-PLAN.md — ARCH-03 Wave A: handles-not-live-values, TLS subsystem, all 5 eager starts die, LOW-8 (wave 8)
+- [ ] 07-10-PLAN.md — D-14: LOW-7 `StopAll` deadline (closure, not deferred arg), MEDIUM-11 real edge, gRPC AuditProjection edge, topo-order pin (wave 8)
 
 **Wave 9** *(blocked on Wave 8)*
 
-- [ ] 07-10-PLAN.md — D-14: LOW-7 `StopAll` deadline, MEDIUM-11 real edge, gRPC AuditProjection edge, topo-order pin (wave 9)
-
-**Wave 10** *(blocked on Wave 9)*
-
-- [ ] 07-11-PLAN.md — ARCH-03 Wave B: Prepare/Activate split, two-sweep barrier, rollback semantics (wave 10)
+- [ ] 07-11-PLAN.md — ARCH-03 Wave B: Prepare/Activate split, two-sweep barrier scoped to external surfaces + domain loops, rollback semantics (wave 9)
 
 ### Phase 8: God-Object Decomposition
 

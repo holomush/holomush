@@ -4,11 +4,11 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 7
 current_phase_name: Event-Model & Bootstrap Decomposition
-status: Phase 7 planned — ready to execute
-stopped_at: Phase 7 planned (11 plans, 9 waves)
-last_updated: "2026-07-15T21:56:49.349Z"
+status: Phase 7 planned (rev 3 — round-2 review folded in) — ready to execute
+stopped_at: Phase 7 replanned (11 plans, 9 waves; round-2 cross-AI review incorporated)
+last_updated: "2026-07-15T23:40:00.000Z"
 last_activity: 2026-07-15
-last_activity_desc: Phase 7 planning complete
+last_activity_desc: Phase 7 rev 3 — round-2 review blockers fixed
 progress:
   total_phases: 6
   completed_phases: 3
@@ -32,8 +32,8 @@ trusted identically.
 
 Phase: 7 — Event-Model & Bootstrap Decomposition
 Plan: Not started — 11 plans across 9 waves, ready to execute
-Status: Phase 7 planned; cross-AI reviewed (codex + grok-4.5) and review feedback folded in
-Last activity: 2026-07-15 — Phase 7 planning complete (reviews incorporated)
+Status: Phase 7 planned (rev 3); round-2 cross-AI review (codex + grok-4.5, both grounded) folded in — 4 verified blockers fixed
+Last activity: 2026-07-15 — Phase 7 rev 3 (round-2 reviews incorporated)
 
 ## Performance Metrics
 
@@ -148,6 +148,11 @@ the next milestone yet.
 - [Phase ?]: 06-03: nats CVE GHSA-q59r-vq66-pxc2 is a git-range-only OSV record no manifest/reachability scanner can flag; remediation = bump to v2.14.3 + deterministic cmd/nats-floor-guard compensating control.
 - [Phase ?]: 06-03: task lint:vuln = 3 fail-closed legs (nats floor guard + govulncheck + osv-scanner v2); OSV allowlist scoped to osv-scanner only; 5 test-only docker/docker findings allowlisted (issue #4817).
 - [Phase ?]: 06-04: codecov project ratchet (target: auto, threshold: 1%); patch+project POST but are not required protect-main checks (gh api ruleset 11923801) — codecov ruleset add accepted-deferred, only OPS-03 Vuln mandatory (owned by 06-03)
+- [Phase 07]: rev3 D-13.0 — the Prepare/Activate barrier is scoped to EXTERNALLY-REACHABLE surfaces + domain work loops, not "anything running". Grounding: embedded NATS sets `DontListen: true` (eventbus/subsystem.go:153) so it binds no socket, and audit's own acquisition requires that server live (audit/subsystem.go:273 AUDIT_DEP_NOT_STARTED) — a universal "nothing serves until everything is acquired" barrier is circular for that chain. eventbus's whole Start body → Prepare; plugin loading/subprocess launch → Prepare (audit's DependsOn(Plugins) forces it); only grpc's listener and admin.sock bind in Activate.
+- [Phase 07]: rev3 — 07-09's ~20 pre-orchestrator live-value reads are settled by HOISTING core.go:705-1060 whole into a memoized (sync.Once) `cryptoWiring` builder in package main; the block's body moves verbatim so the dbSub.Pool()/authSub.Hasher()/abacSub.Resolver() reads inside it simply execute post-Start. No 18th subsystem; no repo signature churn. THE RULE: every cryptoWiring consumer must declare DependsOn ⊇ {Database, Auth, ABAC, EventBus} — the first consumer to resolve the provider builds it.
+- [Phase 07]: rev3 — `deps.TLSCertEnsurer` (deps.go:53,71) is a live test seam that breaks at compile time when ensureTLSCerts is deleted; the body becomes exported `tls.EnsureCerts` with the SAME signature so the Deps field type is unchanged.
+- [Phase 07]: rev3 — the promised `Seq == 0` → BeforeID pagination fallback DOES NOT EXIST (bus.go:87,94; hot_jetstream.go:334; cold_postgres.go:125 — BeforeID is a tripwire for a NONZERO seq). Policy settled: zero seq means "no cursor, read the tail" (status quo); reject-as-stale and ID→seq resolution both rejected.
+- [Phase 07]: rev3 — Go evaluates deferred ARGUMENTS at registration, so `defer orch.StopAll(shutdownCtx)` would expire ~5s into uptime and cancel every graceful stop. The closure form (core.go:255-261 telemetry / :356-362 observability) is the in-repo precedent and the mandated shape.
 - [Phase ?]: 06-05: OPS-04 audit-DLQ replay resolves game_id MIRRORING the server (--game-id override -> core.game_id via config.Load(...,core) -> persisted DB), closing the F3 external-NATS subject-prefix mismatch; tautological embedded-NATS test replaced with a divergent-game natstest test driving the real resolver seam
 
 ### Pending Todos
