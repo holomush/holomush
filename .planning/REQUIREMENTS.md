@@ -25,7 +25,7 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 - [ ] **OPS-01**: The public gateway caps request-body size (`connect.WithReadMaxBytes`) and sets a read timeout, so an unauthenticated client cannot OOM the gateway with an unbounded body — closes F2 (#4785). **Ships first as a `/gsd-quick` fix (pre-Phase 4)** — a live DoS one-liner, too small for the full phase loop.
 - [x] **OPS-02**: `events_audit` growth is bounded by extending the existing RetentionWorker (the sibling ABAC-audit table's machinery) to it, so the table cannot grow without limit — closes F4 (#4786)
 - [ ] **OPS-03**: The `nats-server` CVE is remediated (≥ v2.14.3) AND a govulncheck / vuln-scan CI gate is added so a vulnerable dependency is caught rather than merged blind — closes F8 (#4790)
-- [ ] **OPS-04**: The audit-DLQ replay CLI recovers for its target external-NATS deployment (the `game_id` split bridge is fixed) and its tautological coverage test is replaced with a genuine recovery assertion — closes F3 (#4787)
+- [x] **OPS-04**: The audit-DLQ replay CLI recovers for its target external-NATS deployment (the `game_id` split bridge is fixed) and its tautological coverage test is replaced with a genuine recovery assertion — closes F3 (#4787)
 - [x] **OPS-05**: A resilience/concurrency pass reproduces concurrent commands + a NATS broker flap + a replica restart + client reconnect, empirically establishing whether M12 corrupts state under two-replica concurrency and confirming the MODEL-03 guard holds — the report's #1 recommended follow-up (#4791)
 
 ### Architecture Decomposition (999.9)
@@ -87,7 +87,7 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | MODEL-04 | Phase 5 | Complete |
 | OPS-02 | Phase 6 | Complete |
 | OPS-03 | Phase 6 | Pending |
-| OPS-04 | Phase 6 | Pending |
+| OPS-04 | Phase 6 | Complete |
 | QUAL-01 | Phase 6 | Complete |
 | ARCH-03 | Phase 7 | Pending |
 | ARCH-04 | Phase 7 | Pending |

@@ -6,15 +6,15 @@ current_phase: 06
 current_phase_name: operational-hardening-assurance-gates
 status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-07-15T12:45:36.905Z"
+last_updated: "2026-07-15T12:59:22.259Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 25
-  completed_plans: 24
-  percent: 33
+  completed_plans: 25
+  percent: 50
 ---
 
 # Project State
@@ -31,7 +31,7 @@ trusted identically.
 ## Current Position
 
 Phase: 06 (operational-hardening-assurance-gates) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 06 execution started
 
@@ -103,6 +103,7 @@ Last activity: 2026-07-14 — Phase 06 execution started
 | Phase 05 P13 | 20min | 2 tasks | 5 files |
 | Phase 06 P03 | 30 | 6 tasks | 8 files |
 | Phase 06 P04 | 8min | 3 tasks | 4 files |
+| Phase 06 P05 | 35min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,7 @@ the next milestone yet.
 - [Phase ?]: 06-03: nats CVE GHSA-q59r-vq66-pxc2 is a git-range-only OSV record no manifest/reachability scanner can flag; remediation = bump to v2.14.3 + deterministic cmd/nats-floor-guard compensating control.
 - [Phase ?]: 06-03: task lint:vuln = 3 fail-closed legs (nats floor guard + govulncheck + osv-scanner v2); OSV allowlist scoped to osv-scanner only; 5 test-only docker/docker findings allowlisted (issue #4817).
 - [Phase ?]: 06-04: codecov project ratchet (target: auto, threshold: 1%); patch+project POST but are not required protect-main checks (gh api ruleset 11923801) — codecov ruleset add accepted-deferred, only OPS-03 Vuln mandatory (owned by 06-03)
+- [Phase ?]: 06-05: OPS-04 audit-DLQ replay resolves game_id MIRRORING the server (--game-id override -> core.game_id via config.Load(...,core) -> persisted DB), closing the F3 external-NATS subject-prefix mismatch; tautological embedded-NATS test replaced with a divergent-game natstest test driving the real resolver seam
 
 ### Pending Todos
 
@@ -178,7 +180,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-15T12:03:14.813Z
+Last session: 2026-07-15T12:59:01.113Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
 Stopped at: Phase 6 context gathered
 Resume file: .planning/phases/06-operational-hardening-assurance-gates/06-CONTEXT.md
