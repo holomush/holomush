@@ -71,7 +71,9 @@ created: 2026-07-15
 | ARCH-04 | Lua/binary emit parity preserved | integration | `task test:int` | ✅ `test/integration/pluginparity/` | ⬜ pending |
 | ARCH-04 | Broadcast payload `{"message":...}` shape preserved from one builder | unit+integration | `task test -- ./internal/command/ ./internal/plugin/hostcap/` | ✅ `hostcap/system_broadcaster_test.go`, `plugin/setup/system_broadcaster_test.go`, `test/integration/pluginparity/session_admin_broadcast_test.go` | ⬜ pending |
 | ARCH-04 | No import cycle (FINDING-1) | build | `task build` + `task test:int` | ✅ compiler is the oracle | ⬜ pending |
-| **D-07** | **Plugin history pages neither skip nor repeat under concurrent publishers** | integration | `task test:int` | ❌ **W0 — NEW** | ⬜ pending |
+| **D-07** | **Plugin history multipage walk advances on a QUIET stream (page 2 ≠ page 1) — the RED gate** | integration | `task test:int` | ❌ **W0 — NEW** | ⬜ pending |
+| **D-07** | **Plugin history pages neither skip nor repeat under concurrent publishers** (post-green defence-in-depth: proves seq, not ID, advances the cursor) | integration | `task test:int` | ❌ **W0 — NEW** | ⬜ pending |
+| **D-07** | **Lua hostfunc cursor round-trip carries the real Seq** (`stdlib_focus.go:441` hardcodes `Seq: 0` independently of hostcap — runtime-symmetry surface) | unit | `task test -- ./internal/plugin/hostfunc/` | ❌ **NEW** | ⬜ pending |
 | D-08 | `hostv1.Event` still has no seq field; cursor stays opaque | unit (meta) | `task test -- ./internal/plugin/hostcap/` | ❌ **NEW** (guard) | ⬜ pending |
 | ARCH-03 | Boot succeeds with KEK wired; zero pre-starts | integration | `task test:int` | ⚠️ partial — must confirm KEK wired | ⬜ pending |
 | ARCH-03 | Topological start order pinned | unit | `task test -- ./cmd/holomush/` | ❌ **W0 — NEW** (D-14 MEDIUM-11) | ⬜ pending |
@@ -87,16 +89,36 @@ created: 2026-07-15
 
 ## Wave 0 Requirements
 
-- [ ] **D-07 concurrent-publisher pagination regression** — integration, `//go:build integration`.
-      MUST reproduce the real failure: concurrent publishers producing ULIDs that do NOT match
-      stream sequence, then assert pages neither skip nor repeat. **A quiet-stream page walk passes
-      today and proves nothing** (`hot_jetstream.go:424-431` names the exact condition). Home:
-      `test/integration/eventbus_e2e/` or alongside existing history-tier tests. Use `eventbustest`
-      embedded NATS (correct tier — not external-mode-specific).
+- [ ] **D-07 multipage pagination regression** — integration, `//go:build integration`.
+      **⚠️ CORRECTED 2026-07-15** (external review challenge, re-verified live; see
+      `07-08-PLAN.md` § `<red_framing_correction>`). This item previously read *"MUST reproduce
+      the real failure: concurrent publishers … A quiet-stream page walk passes today and proves
+      nothing."* **That was FALSE and is retracted.** `BeforeID` is only a **tripwire for
+      `BeforeSeq`**, not a filter (`internal/eventbus/bus.go:98-104`); `matchesQuery` has no
+      `BeforeID` branch (`hot_jetstream.go:392-402`) and the hot tier only advances on
+      `BeforeSeq > 0` (`:338`), while the cold tier gates on `hasCursor := cursorSeq > 0`
+      (`cold_postgres.go:132`). Since `ReplayTail` never sets `BeforeSeq`, **a quiet-stream
+      multipage walk repeats the newest page forever** — deterministically, no concurrency.
+      - **RED gate = Spec A:** quiet-stream multipage walk, pageSize ≪ total, assert no repeat
+        and no skip. Iteration-bounded so a non-advancing cursor fails rather than hangs.
+      - **Post-green defence-in-depth = Spec B:** concurrent publishers with per-event
+        `crand` ULIDs — the proof the cursor advances by *seq*, not *ID*.
+      - **Home: `cmd/holomush/`, `package main`** — NOT `test/integration/eventbus_e2e/`
+        (`package eventbus_e2e_test` cannot reach the unexported `busHistoryReaderAdapter` in
+        `package main`; the original location could not compile). Precedents in-package:
+        `cmd_audit_dlq_replay_integration_test.go` (eventbustest under an integration tag) and
+        `sub_grpc_adapters_test.go` (constructs the adapter). Use `eventbustest` embedded NATS
+        (correct tier — not external-mode-specific).
+      - **Both runtimes:** the Lua hostfunc path hardcodes `Seq: 0` independently
+        (`stdlib_focus.go:441`) and decodes only `beforeID` (`:367-380`) — coverage MUST include
+        a Lua cursor round-trip (`.claude/rules/plugin-runtime-symmetry.md`).
 - [ ] **Gateway transitive-closure assertion** — unit, `cmd/holomush/gateway_imports_test.go`.
       Asserts `go list -deps ./internal/telnet` and `./internal/web` contain no
-      `internal/{world,access,command,store,grpc,plugin,eventbus,auth/service}`. Closes FINDING-3's
+      `internal/{world,access,command,store,grpc,plugin,eventbus,auth}`. Closes FINDING-3's
       gap; is the **genuine** binding for INV-EVENTBUS-1.
+      ⚠️ **`internal/auth/service` does not exist** — the real package is `internal/auth`. The
+      phantom is live in `gateway_imports_test.go:107` and `invariants.yaml:2345`; 07-04 Task 2
+      fixes both.
 - [ ] **Topological start-order pin** — unit, `cmd/holomush/core_subsystems_test.go`. Pins the actual
       `topoSort` sequence so MEDIUM-11's comment-vs-graph divergence cannot recur.
 - [ ] **`StopAll` deadline test** — unit, `internal/lifecycle/`.

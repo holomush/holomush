@@ -80,6 +80,19 @@ architecture review (`docs/reviews/arch-review/2026-07-11/findings/d1-architectu
     (`store EventAppender`) and three methods that marshal a payload → build an `Event` →
     `Append` (`internal/core/engine.go:65-107`, `engine_end_session.go`). A port would
     leave an empty shell delegating to the thing that replaced it.
+
+  > **Correction (2026-07-15, verified live; independently confirmed by 2 external
+  > reviewers).** The **decision stands unchanged** — move, do not port. Its *rationale
+  > above is false* and MUST NOT be restated. Engine has **two pieces of real,
+  > load-bearing logic**, both of which the move CARRIES deliberately:
+  > (a) `NewEngine`'s typed-nil `reflect` guard (`internal/core/engine.go:44-62`) —
+  > misconfiguration panics at construction rather than nil-dereferencing on first use;
+  > (b) `EndSession`'s deliberate ctx-ignoring bounded background commit
+  > (`engine_end_session.go:33-45,68-70`) and its cause-dependent actor selection
+  > (`:56-59`) — a client hangup MUST NOT skip the audit-critical `session_ended`
+  > append, and an eviction MUST NOT be recorded as the character's own quit.
+  > Engine also has **three** methods, not two (`EndSession` is the third). See
+  > `07-05-PLAN.md` § `must_settle`.
   - **Why it can't stay:** `internal/eventbus` **already imports** `internal/core`
     (`types.go:13`, `rendering_publisher.go:12` — for `VerbRegistry` + `NewULID`). If
     `core.Engine` named `eventbus.Event`, that is `core → eventbus → core`: **an import
@@ -101,6 +114,21 @@ architecture review (`docs/reviews/arch-review/2026-07-11/findings/d1-architectu
     moment it costs nothing.
   - `ArrivePayload` / `LeavePayload` travel with it. `presence` imports eventbus; imported
     by `grpc` + `cmd/holomush`; **no cycle** (eventbus imports neither).
+
+  > **Correction (2026-07-15, verified live; independently confirmed by 2 external
+  > reviewers).** The **decision stands unchanged** — new package `internal/presence`,
+  > type renamed, methods renamed. Two factual errors in the rationale above:
+  > (1) **The consumer list is incomplete.** `internal/auth` is a **fourth** `core.Engine`
+  > consumer (`auth_service.go:28,39,115,235,243`), never enumerated here.
+  > (2) **"no cycle" is FALSE.** `go list -deps ./internal/eventbus` **contains**
+  > `internal/auth`; the path is `eventbus` → `crypto/dek` (`publisher.go:26`) →
+  > `admin/approval` (`rekey.go:16`) → `admin/auth` → `auth` (`ingame.go:13`). So
+  > `auth → presence → eventbus → … → auth` is a **live cycle** a naive implementation
+  > would have hit at compile time. The repair (settled in `07-05-PLAN.md` FINDING-1):
+  > `internal/auth` declares its own two-method `PresenceEmitter` interface and never
+  > imports `internal/presence`. `internal/grpc` and `cmd/holomush` importing
+  > `internal/presence` directly IS verified safe — neither is in eventbus's closure.
+  > The final verb set is `EmitArrive` / `EmitLeave` / `EmitSessionEnded`.
 
 - **D-05:** **Event-type vocabulary lives in a dependency-free leaf** that BOTH
   `internal/eventbus` AND the gateway may import.
@@ -229,6 +257,17 @@ architecture review (`docs/reviews/arch-review/2026-07-11/findings/d1-architectu
      deliberately whether to keep it as defense-in-depth or retire it; do not inherit it by
      accident.
 
+  > **Correction to sub-item 2 (2026-07-15, verified live; independently confirmed by 2
+  > external reviewers).** The **instruction stands unchanged** — the planner MUST settle
+  > both, deliberately, per-subsystem. But the premise *"exists to support the pre-start
+  > hack"* is **half-false**, so "once eager starts die it may be vestigial" does NOT
+  > follow. Idempotency guards protect **real non-idempotent side effects** that survive
+  > D-09 entirely: `internal/access/setup/subsystem.go:75-77` says in its own words the
+  > guard prevents launching **a duplicate poller goroutine**; `internal/cluster/heartbeat.go:26,79`'s
+  > `subAlive` guard protects **four subscriptions and two goroutines**. Settled in
+  > `07-11-PLAN.md`: KEEP the guards, DELETE only the pre-start justification prose. A
+  > blanket retirement is rejected; a per-subsystem verdict table is required.
+
 - **D-14:** **Ride-along arch-review findings (ALL four selected — in scope):**
   - **MEDIUM-11** — `productionSubsystems`' comment (`core.go:1458`) asserts "cryptoChainVerifierSub
     runs before EventBus", but `StartAll` uses `topoSort` order and `eventbus.Subsystem.DependsOn()`
@@ -243,6 +282,14 @@ architecture review (`docs/reviews/arch-review/2026-07-11/findings/d1-architectu
     `lifecycle.Subsystem` params; a mis-order compiles silently (defused today only because
     `topoSort` re-derives real order). Already grew 12→15. Fix: per-subsystem `Register`
     calls or a named struct. Falls out naturally once D-09 rewrites this wiring.
+
+  > **Correction to LOW-8 (2026-07-15, verified live; independently confirmed by 2
+  > external reviewers).** The **decision stands unchanged** — all four ride-alongs are in
+  > scope, and LOW-8's fix is a named struct. The **count is wrong**: `core.go:1462-1471`
+  > takes **16** positional `lifecycle.Subsystem` params today (not 15), so the growth is
+  > **12→16**, and registering the phantom `SubsystemTLS` in this same decision makes it
+  > **17**. `07-09-PLAN.md` Task 3 carries the corrected count and the hard-coded
+  > `[16]stubSubsystem` → `[17]` cascade in `cmd/holomush/core_subsystems_test.go`.
   - **Phantom `SubsystemTLS`** — the ID is declared (`internal/lifecycle/subsystem.go:18`)
     and stringer-generated but **never registered**; it appears only in the const block, the
     stringer, and `cmd/holomush/core_subsystems_test.go:82`. `ensureTLSCerts`
@@ -262,6 +309,20 @@ architecture review (`docs/reviews/arch-review/2026-07-11/findings/d1-architectu
     grown to ~30 entries, each a judgement call nobody re-checks.
   - Converges with D-01/D-03/D-05: ARCH-04 is already shrinking `internal/core`.
 
+  > **Correction (2026-07-15, verified live; independently confirmed by 2 external
+  > reviewers).** The **decision stands unchanged** — `internal/core`, `internal/session`
+  > and `internal/grpc` go on `forbidden` wholesale, and the per-symbol allow-list stays
+  > rejected. But the **stated justification is false for two of the three**, and the
+  > honest justification is different (and still sufficient):
+  > `go list -deps ./internal/session` returns **only itself**; `./internal/core` returns
+  > only itself plus `pkg/proto/.../core/v1`. **Both are already leaves — neither reaches
+  > DB, domain, or bus.** Only `internal/grpc` actually reaches the DB/domain (it is the
+  > CoreServer monolith; telnet's closure is 47 internal packages today).
+  > Forbidding `core` and `session` is therefore **drift prevention** — they are the two
+  > packages most likely to *regain* a DB reach, and the gateway must not be coupled to
+  > that risk — **not** DB isolation. Do NOT restate "session is the DB-reaching store".
+  > See the matching correction on D-16's `session.DefaultLeaseRefreshInterval` row.
+
 - **D-16:** **The complete violation inventory** (verified live; arch-review LOW-6):
   | Symbol | Site | Disposition |
   |---|---|---|
@@ -271,6 +332,20 @@ architecture review (`docs/reviews/arch-review/2026-07-11/findings/d1-architectu
   | `core.ParseCommand` | `internal/telnet/gateway_handler.go:406` | Command grammar → leaf. |
   | `core.EventTypeArrive` / `EventTypeLeave` | `internal/telnet/gateway_handler.go:1247-1249` | Resolved by **D-05** (leaf vocabulary package). |
   | `naming.Theme` | `internal/telnet/guest_auth.go:21,28` | Guest-name theme; leaf-ish, not domain — currently NOT forbidden. Planner: confirm `internal/naming` is a true leaf; if so it may stay. |
+
+  > **Correction (2026-07-15, verified live; independently confirmed by 2 external
+  > reviewers).** The **inventory and every disposition stand unchanged** — all six
+  > symbols move as specified. One row's *reasoning* is false: the
+  > `session.DefaultLeaseRefreshInterval` row calls `internal/session` *"the DB-reaching
+  > session store — the dangerous import the tripwire would miss"*. It is **not**:
+  > `go list -deps ./internal/session` returns only itself. Moving the constant to a leaf
+  > is still correct (D-15's leaf-only principle + drift prevention), just not for the
+  > stated reason. The `grpcclient.TranslateSubscribeErr` row's reasoning IS accurate and
+  > is the consequential one — `internal/grpc` genuinely drags the domain into the
+  > gateway's closure. Additionally: the `forbidden` list this inventory feeds contains a
+  > **phantom package**, `internal/auth/service`, which does not exist (the real package
+  > is `internal/auth`); `07-04-PLAN.md` Task 2 fixes it in both the test and
+  > `invariants.yaml`.
 
 - **D-17:** **Enforcement — extend the existing AST test and BIND the invariant.**
   - The existing test (`cmd/holomush/gateway_imports_test.go:111-137`) **already loads

@@ -565,10 +565,22 @@ var forbidden = []string{
 	"github.com/holomush/holomush/internal/store",
 	"github.com/holomush/holomush/internal/plugin",
 	"github.com/holomush/holomush/internal/eventbus",
-	"github.com/holomush/holomush/internal/auth/service",
+	"github.com/holomush/holomush/internal/auth/service", // ← PHANTOM: package does not exist. See warning below.
 	"github.com/holomush/holomush/internal/command",
 }
 ```
+
+> ⚠️ **This excerpt is the CURRENT (broken) state — do NOT copy the
+> `internal/auth/service` line forward.** Added 2026-07-15 after a cross-AI review
+> caught it; verified live: **`internal/auth/service` does not exist** — the
+> package files sit directly in `internal/auth`, and `go list ./internal/auth/...`
+> yields no `service` subpackage. A forbidden entry naming a package that cannot
+> exist never matches: it is a dead rule protecting nothing. **07-04 Task 2
+> replaces it with `"github.com/holomush/holomush/internal/auth"`** and Task 3
+> fixes the identical phantom in `docs/architecture/invariants.yaml:2345`'s
+> INV-EVENTBUS-1 summary. This excerpt is retained verbatim because it is what is
+> on disk today (that is what makes it a useful analog for *editing* the file) —
+> but the corrected list is the target.
 ```go
 // Source: cmd/holomush/gateway_imports_test.go:111-138 [VERIFIED live]
 // TestGatewayImportsAreOnlyProtocolTranslation is INV-EVENTBUS-1. Gateway-side
