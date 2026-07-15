@@ -96,6 +96,41 @@ jobs:
       - name: Check formatting
         run: task fmt:check
 
+  vuln:
+    # Supply-chain gate (OPS-03 / D-04). Rendered check name is `Vuln` — that is
+    # the context the protect-main ruleset must require (GitHub rulesets match
+    # the rendered job `name`, not the workflow key `vuln`).
+    name: Vuln
+    runs-on: namespace-profile-linux-amd64-2x4
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Install vuln scanners (pinned; verified via the Go checksum DB)
+        # Pinned by module version — go install verifies each build against
+        # sum.golang.org (a supply-chain control equivalent to go.sum). Never
+        # @latest. These land in $(go env GOPATH)/bin, which task lint:vuln
+        # references by absolute path. The nats floor-guard leg needs only Go.
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.4.0
+
+      - name: Vuln scan
+        run: task lint:vuln
+
   test:
     name: Test
     runs-on: namespace-profile-linux-amd64-4x8
