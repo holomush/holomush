@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 6
-current_phase_name: Operational Hardening & Assurance Gates
-status: "Phase 05 shipped — PR #4816"
-stopped_at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
-last_updated: "2026-07-13T18:14:31.182Z"
-last_activity: 2026-07-13
+current_phase: 7
+current_phase_name: Event-Model & Bootstrap Decomposition
+status: "Phase 6 shipped — PR #4819"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-07-15T14:36:40.556Z"
+last_activity: 2026-07-15
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 20
-  completed_plans: 20
-  percent: 33
+  completed_phases: 3
+  total_plans: 25
+  completed_plans: 25
+  percent: 50
 ---
 
 # Project State
@@ -25,20 +25,20 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 05 — world-model-integrity-fixes-m2-m12
+**Current focus:** Phase 06 — operational-hardening-assurance-gates
 
 ## Current Position
 
-Phase: 6 — Operational Hardening & Assurance Gates
+Phase: 7 — Event-Model & Bootstrap Decomposition
 Plan: Not started
-Status: Phase 05 shipped — PR #4816
-Last activity: 2026-07-13
+Status: Phase 6 shipped — PR #4819
+Last activity: 2026-07-15
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 46
+- Total plans completed: 51
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -51,6 +51,7 @@ Last activity: 2026-07-13
 | 03 | 9 | - | - |
 | 04 | 4 | - | - |
 | 05 | 16 | - | - |
+| 06 | 5 | - | - |
 
 **Recent Trend:**
 
@@ -100,6 +101,9 @@ Last activity: 2026-07-13
 | Phase 05 P16 | 150 | 3 tasks | 22 files |
 | Phase 05 P12 | 14min | 3 tasks | 9 files |
 | Phase 05 P13 | 20min | 2 tasks | 5 files |
+| Phase 06 P03 | 30 | 6 tasks | 8 files |
+| Phase 06 P04 | 8min | 3 tasks | 4 files |
+| Phase 06 P05 | 35min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -139,6 +143,11 @@ the next milestone yet.
 - [Phase ?]: 05-12: INV-WORLD ids are canonical NUMERIC (INV-WORLD-1..4); ADR symbolic names (ATOMIC-FEED/DELTA-PARITY/FEED-ORDER/WRITER-BOUNDARY) live in summary+legacy — the //Verifies parser (invariant_registry_test.go:163) requires a trailing number (Codex finding 3).
 - [Phase ?]: 05-12: INV-WORLD-2 delta-parity binds to a REAL-ROW integration test in internal/world/outbox (location-delete cascade + bidirectional exit) proving manifest==MutationDelta==actual row version transition, not presence.
 - [Phase ?]: 05-13: MODEL-02 doc downgrade — false 'event sourcing / state derives from replay' corrected at 4 sites (CLAUDE.md/AGENTS.md-symlink, README.md, coding-standards.md, architecture.md) to the decided model (event-driven + append-only audit log, ADR holomush-i4784); real client-catch-up/Subscribe replay language preserved; index.mdx:41 legitimate audit-log language (Open Q4 resolved); regression-guarded by test/meta/world_model_doc_claim_test.go.
+- [Phase ?]: 06-01: events_audit partitioned on a deterministic ULID-derived event_ms key; timestamp column unchanged (cold-tier boundary preserved); no DEFAULT partition; crypto gate READY
+- [Phase ?]: 06-03: nats CVE GHSA-q59r-vq66-pxc2 is a git-range-only OSV record no manifest/reachability scanner can flag; remediation = bump to v2.14.3 + deterministic cmd/nats-floor-guard compensating control.
+- [Phase ?]: 06-03: task lint:vuln = 3 fail-closed legs (nats floor guard + govulncheck + osv-scanner v2); OSV allowlist scoped to osv-scanner only; 5 test-only docker/docker findings allowlisted (issue #4817).
+- [Phase ?]: 06-04: codecov project ratchet (target: auto, threshold: 1%); patch+project POST but are not required protect-main checks (gh api ruleset 11923801) — codecov ruleset add accepted-deferred, only OPS-03 Vuln mandatory (owned by 06-03)
+- [Phase ?]: 06-05: OPS-04 audit-DLQ replay resolves game_id MIRRORING the server (--game-id override -> core.game_id via config.Load(...,core) -> persisted DB), closing the F3 external-NATS subject-prefix mismatch; tautological embedded-NATS test replaced with a divergent-game natstest test driving the real resolver seam
 
 ### Pending Todos
 
@@ -171,10 +180,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-13T16:02:59.403Z
+Last session: 2026-07-15T12:59:01.113Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 05-04-PLAN.md (version-threaded RMW + M12 spec flip; MODEL-03 complete)
-Resume file: None
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-operational-hardening-assurance-gates/06-CONTEXT.md
 
 ## Operator Next Steps
 

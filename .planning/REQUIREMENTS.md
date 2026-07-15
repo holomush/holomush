@@ -23,9 +23,9 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 <!-- The "true Highs" (F2/F4/F8) + F3 recoverability + the report's #1 follow-up resilience pass. -->
 
 - [ ] **OPS-01**: The public gateway caps request-body size (`connect.WithReadMaxBytes`) and sets a read timeout, so an unauthenticated client cannot OOM the gateway with an unbounded body — closes F2 (#4785). **Ships first as a `/gsd-quick` fix (pre-Phase 4)** — a live DoS one-liner, too small for the full phase loop.
-- [ ] **OPS-02**: `events_audit` growth is bounded by extending the existing RetentionWorker (the sibling ABAC-audit table's machinery) to it, so the table cannot grow without limit — closes F4 (#4786)
-- [ ] **OPS-03**: The `nats-server` CVE is remediated (≥ v2.14.3) AND a govulncheck / vuln-scan CI gate is added so a vulnerable dependency is caught rather than merged blind — closes F8 (#4790)
-- [ ] **OPS-04**: The audit-DLQ replay CLI recovers for its target external-NATS deployment (the `game_id` split bridge is fixed) and its tautological coverage test is replaced with a genuine recovery assertion — closes F3 (#4787)
+- [x] **OPS-02**: `events_audit` growth is bounded by extending the existing RetentionWorker (the sibling ABAC-audit table's machinery) to it, so the table cannot grow without limit — closes F4 (#4786)
+- [x] **OPS-03**: The `nats-server` CVE is remediated (≥ v2.14.3) AND a govulncheck / vuln-scan CI gate is added so a vulnerable dependency is caught rather than merged blind — closes F8 (#4790)
+- [x] **OPS-04**: The audit-DLQ replay CLI recovers for its target external-NATS deployment (the `game_id` split bridge is fixed) and its tautological coverage test is replaced with a genuine recovery assertion — closes F3 (#4787)
 - [x] **OPS-05**: A resilience/concurrency pass reproduces concurrent commands + a NATS broker flap + a replica restart + client reconnect, empirically establishing whether M12 corrupts state under two-replica concurrency and confirming the MODEL-03 guard holds — the report's #1 recommended follow-up (#4791)
 
 ### Architecture Decomposition (999.9)
@@ -42,7 +42,7 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 
 <!-- F7 coverage governance + the code-health/test-quality batch (epics holomush-ec22/89o9). -->
 
-- [ ] **QUAL-01**: Per-package coverage and CI are reconciled — the >80% MUST is either enforced as a CI gate or corrected to match reality — so the documented bar and the enforced bar agree (F7 #4804; `main` last merged at 54.6% patch)
+- [x] **QUAL-01**: Per-package coverage and CI are reconciled — the >80% MUST is either enforced as a CI gate or corrected to match reality — so the documented bar and the enforced bar agree (F7 #4804; `main` last merged at 54.6% patch)
 - [ ] **QUAL-02**: Packages under the reconciled bar (surfaced by a coverage audit) are backfilled with genuine behavioral tests
 - [ ] **QUAL-03**: Skeleton/weak tests (zero-assertion, tautological) are remediated to assert real behavior, and ACE test-naming violations are corrected to the sentence convention
 - [ ] **QUAL-04**: A session-lifecycle test matrix covers the connect / reconnect / multi-character / idle-timeout paths
@@ -85,10 +85,10 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | MODEL-02 | Phase 5 | Complete |
 | MODEL-03 | Phase 5 | Complete |
 | MODEL-04 | Phase 5 | Complete |
-| OPS-02 | Phase 6 | Pending |
-| OPS-03 | Phase 6 | Pending |
-| OPS-04 | Phase 6 | Pending |
-| QUAL-01 | Phase 6 | Pending |
+| OPS-02 | Phase 6 | Complete |
+| OPS-03 | Phase 6 | Complete |
+| OPS-04 | Phase 6 | Complete |
+| QUAL-01 | Phase 6 | Complete |
 | ARCH-03 | Phase 7 | Pending |
 | ARCH-04 | Phase 7 | Pending |
 | ARCH-05 | Phase 7 | Pending |

@@ -79,6 +79,51 @@ func TestConfigDefaultsFillsMaxDeliver(t *testing.T) {
 	assert.Equal(t, audit.DefaultMaxDeliver, c.MaxDeliver)
 }
 
+func TestConfigDefaultsFillsRetentionFields(t *testing.T) {
+	t.Parallel()
+	c := audit.Config{}.Defaults()
+	assert.Equal(t, audit.DefaultRetainWindow, c.RetainWindow)
+	assert.Equal(t, audit.DefaultPurgeInterval, c.PurgeInterval)
+}
+
+func TestConfigDefaultsPreservesSetRetention(t *testing.T) {
+	t.Parallel()
+	c := audit.Config{
+		RetainWindow:  30 * 24 * time.Hour,
+		PurgeInterval: 6 * time.Hour,
+	}.Defaults()
+	assert.Equal(t, 30*24*time.Hour, c.RetainWindow, "operator retain_window survives Defaults")
+	assert.Equal(t, 6*time.Hour, c.PurgeInterval, "operator purge_interval survives Defaults")
+}
+
+func TestConfigValidateAcceptsDefaults(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, audit.Config{}.Defaults().Validate())
+}
+
+func TestConfigValidateRejectsNonPositiveRetainWindow(t *testing.T) {
+	t.Parallel()
+	// A negative window would make the detach cutoff future-facing and detach
+	// EVERY partition (retention.go:83) — must be rejected.
+	err := audit.Config{RetainWindow: -1 * time.Hour, PurgeInterval: 24 * time.Hour}.Validate()
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_CONFIG_INVALID")
+
+	require.Error(t, audit.Config{RetainWindow: 0, PurgeInterval: 24 * time.Hour}.Validate(),
+		"a zero retain_window is also rejected")
+}
+
+func TestConfigValidateRejectsNonPositivePurgeInterval(t *testing.T) {
+	t.Parallel()
+	// A non-positive interval panics time.NewTicker (retention.go:130) — reject.
+	err := audit.Config{RetainWindow: 90 * 24 * time.Hour, PurgeInterval: -1 * time.Second}.Validate()
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_CONFIG_INVALID")
+
+	require.Error(t, audit.Config{RetainWindow: 90 * 24 * time.Hour, PurgeInterval: 0}.Validate(),
+		"a zero purge_interval is also rejected")
+}
+
 func TestStartWithNilJSReturnsDepNotStartedError(t *testing.T) {
 	t.Parallel()
 	s := audit.NewSubsystem(stubJS{}, stubPool{}, audit.Config{})

@@ -483,17 +483,20 @@ func (e *adminAuthEnv) seedAdminReadStreamData(
 			envelopeBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(envProto)
 			Expect(err).NotTo(HaveOccurred(), "seedAdminReadStreamData: proto.Marshal")
 
+			// event_ms (000052 partition key) from the now-based ULID id → current
+			// partition. Not an AAD input (envelope proto is the AAD source).
+			eventMS := int64(id.Time()) * int64(time.Millisecond)
 			_, err = e.queryPool.Exec(ctx, `
 				INSERT INTO events_audit
 				  (id, subject, type, timestamp, actor_kind, actor_id,
 				   envelope, schema_ver, codec, js_seq, rendering,
-				   dek_ref, dek_version)
+				   dek_ref, dek_version, event_ms)
 				VALUES ($1, $2, 'test.encrypted', $3, 'system', NULL,
 				        $4, 1, $5, $6, '{}'::jsonb,
-				        $7, $8)
+				        $7, $8, $9)
 			`, id[:], subject, pgnanos.From(ts), envelopeBytes, codecName,
 				int64(time.Now().UnixNano())+int64(ctxIdx*1_000_000+i),
-				dekRef, dekVersion)
+				dekRef, dekVersion, eventMS)
 			Expect(err).NotTo(HaveOccurred(), "seedAdminReadStreamData: INSERT events_audit")
 
 			out = append(out, id)
@@ -522,13 +525,15 @@ func (e *adminAuthEnv) seedPlainAuditRow(subject string, ts time.Time) ulid.ULID
 	envelopeBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(envProto)
 	Expect(err).NotTo(HaveOccurred(), "seedPlainAuditRow: proto.Marshal")
 
+	// event_ms (000052 partition key) from the now-based ULID id → current partition.
+	eventMS := int64(id.Time()) * int64(time.Millisecond)
 	_, err = e.queryPool.Exec(ctx, `
 		INSERT INTO events_audit
 		  (id, subject, type, timestamp, actor_kind, actor_id,
-		   envelope, schema_ver, codec, js_seq, rendering)
+		   envelope, schema_ver, codec, js_seq, rendering, event_ms)
 		VALUES ($1, $2, 'test.cleartext', $3, 'system', NULL,
-		        $4, 1, 'identity', $5, '{}'::jsonb)
-	`, id[:], subject, pgnanos.From(ts), envelopeBytes, int64(time.Now().UnixNano()))
+		        $4, 1, 'identity', $5, '{}'::jsonb, $6)
+	`, id[:], subject, pgnanos.From(ts), envelopeBytes, int64(time.Now().UnixNano()), eventMS)
 	Expect(err).NotTo(HaveOccurred(), "seedPlainAuditRow: INSERT events_audit")
 	return id
 }
@@ -567,18 +572,20 @@ func (e *adminAuthEnv) seedOrphanDEKAuditRow(
 	envelopeBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(envProto)
 	Expect(err).NotTo(HaveOccurred(), "seedOrphanDEKAuditRow: proto.Marshal")
 
+	// event_ms (000052 partition key) from the now-based ULID id → current partition.
+	eventMS := int64(id.Time()) * int64(time.Millisecond)
 	_, err = e.queryPool.Exec(ctx, `
 		INSERT INTO events_audit
 		  (id, subject, type, timestamp, actor_kind, actor_id,
 		   envelope, schema_ver, codec, js_seq, rendering,
-		   dek_ref, dek_version)
+		   dek_ref, dek_version, event_ms)
 		VALUES ($1, $2, 'test.orphan', $3, 'system', NULL,
 		        $4, 1, $5, $6, '{}'::jsonb,
-		        $7, 1)
+		        $7, 1, $8)
 	`, id[:], subject, pgnanos.From(ts), envelopeBytes,
 		string(codec.NameXChaCha20v1),
 		int64(time.Now().UnixNano()),
-		orphanDEKRef)
+		orphanDEKRef, eventMS)
 	Expect(err).NotTo(HaveOccurred(), "seedOrphanDEKAuditRow: INSERT events_audit")
 	return id
 }

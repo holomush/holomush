@@ -187,9 +187,12 @@ func (h *Harness) seedDEKAndEvents(t *testing.T, cfg HarnessConfig) {
 	// (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT expression evaluates once per
 	// statement, so all seeded rows share one timestamp. Specs that need a
 	// deterministic order over the seed rows MUST order by js_seq, not timestamp.
+	// id is gen_random_bytes(16) — NOT a ULID — so event_ms (000052 partition
+	// key) is the row's own now()-based store-time, landing in the current
+	// partition (same expression as the timestamp column).
 	_, err := h.DB.Exec(ctx, `
 		INSERT INTO events_audit
-		    (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
+		    (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering, event_ms)
 		SELECT
 		    gen_random_bytes(16),
 		    $1,
@@ -200,7 +203,8 @@ func (h *Harness) seedDEKAndEvents(t *testing.T, cfg HarnessConfig) {
 		    1,
 		    'identity',
 		    g.i,
-		    '{}'::jsonb
+		    '{}'::jsonb,
+		    (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT
 		FROM generate_series(1, $2::int) AS g(i)`,
 		cfg.EventSubject, cfg.EventCount)
 	Expect(err).NotTo(HaveOccurred(), "seedDEKAndEvents: bulk insert events")

@@ -24,9 +24,21 @@ coverage:
   status:
     project:
       default:
-        target: 80%
-        threshold: 2%
+        # Rising-floor ratchet: `target: auto` requires this PR's whole-repo
+        # project coverage to not fall below the base commit's, within the
+        # threshold. The baseline (~54.6%) is NOT retroactively blocked;
+        # only a PR that LOWERS project coverage beyond the tolerance fails.
+        # threshold: 1% is a 1-percentage-point regression allowance (NOT
+        # "no-drop" — it permits a 1-point decline). It absorbs the two-upload
+        # merge jitter (unit + integration/e2e sessions merge after
+        # `notify.after_n_builds: 2`). Tighten toward `threshold: 0%` (a true
+        # no-drop ratchet) once coverage stabilizes.
+        target: auto
+        threshold: 1%
     patch:
+      # Coverage on changed lines only. codecov POSTS this status on PRs; it
+      # is NOT a required protect-main check today, so it does not block
+      # merges (see 06-04 Task 3). Do not describe it as an enforced gate.
       default:
         target: 80%
         threshold: 5%

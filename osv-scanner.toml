@@ -1,0 +1,49 @@
+# OSV-Scanner allowlist — suppresses OSV-Scanner (`scan source`) findings ONLY.
+#
+# Scope & policy (see Taskfile.yaml `lint:vuln` and 06-03-SUMMARY):
+#   - This allowlist applies to the OSV-Scanner leg of `task lint:vuln` ONLY.
+#     govulncheck has NO finding-suppression mechanism (golang/go#59507), so any
+#     REACHABLE Go vuln it reports is a HARD STOP — remediate (bump/patch), never
+#     suppress. Do not expect this file to silence govulncheck.
+#   - The nats-server CVE (GHSA-q59r-vq66-pxc2 / CVE-2026-58207) is intentionally
+#     NOT allowlisted; it is remediated by bumping nats-server/v2 to >= v2.14.3
+#     AND caught by the deterministic cmd/nats-floor-guard leg of lint:vuln (that
+#     advisory is a git-range-only OSV record no manifest scanner can flag).
+#
+# Every entry MUST carry id + reason + ignoreUntil EXPIRY — a suppression cannot
+# live forever; the expiry forces periodic re-review.
+#
+# ── Allowlisted: test-only github.com/docker/docker vulns (tracked #4817) ──
+# github.com/docker/docker v28.5.2+incompatible is an INDIRECT, TEST-ONLY dep,
+# pulled in transitively via internal/store → golang-migrate/migrate/v4 (pgx/v5
+# test harness) → dhui/dktest → docker/docker. Zero non-test production imports,
+# so these are not reachable in the shipped binary (govulncheck ./... reports 0
+# affected). All 5 report FIXED VERSION "--" (no upstream fix available), so they
+# cannot be remediated by a bump. Remove these entries when an upstream fix ships
+# or golang-migrate/dktest drops docker/docker.
+# Tracking: https://github.com/holomush/holomush/issues/4817
+
+[[IgnoredVulns]]
+id = "GO-2026-4883"
+ignoreUntil = "2027-01-15T00:00:00Z"
+reason = "test-only indirect docker/docker (via golang-migrate dktest harness); not production-reachable; no upstream fix. Tracked: holomush/holomush#4817"
+
+[[IgnoredVulns]]
+id = "GO-2026-4887"
+ignoreUntil = "2027-01-15T00:00:00Z"
+reason = "test-only indirect docker/docker (via golang-migrate dktest harness); not production-reachable; no upstream fix. Tracked: holomush/holomush#4817"
+
+[[IgnoredVulns]]
+id = "GO-2026-5617"
+ignoreUntil = "2027-01-15T00:00:00Z"
+reason = "test-only indirect docker/docker (via golang-migrate dktest harness); not production-reachable; no upstream fix. Tracked: holomush/holomush#4817"
+
+[[IgnoredVulns]]
+id = "GO-2026-5668"
+ignoreUntil = "2027-01-15T00:00:00Z"
+reason = "test-only indirect docker/docker (via golang-migrate dktest harness); not production-reachable; no upstream fix. Tracked: holomush/holomush#4817"
+
+[[IgnoredVulns]]
+id = "GO-2026-5746"
+ignoreUntil = "2027-01-15T00:00:00Z"
+reason = "test-only indirect docker/docker (via golang-migrate dktest harness); not production-reachable; no upstream fix. Tracked: holomush/holomush#4817"

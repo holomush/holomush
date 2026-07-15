@@ -9,6 +9,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -527,6 +528,24 @@ func insertAuditRows(ctx context.Context, t *testing.T, bus *eventbustest.Embedd
 	}
 }
 
+// ensureEventsAuditPartitionForCrossTier creates the month partition covering
+// eventMs (BIGINT epoch-ns) if absent. Cross-tier scenarios seed events at
+// times well outside the current+2 partitions created by 000052, so the
+// covering partition must be created before the direct INSERT.
+func ensureEventsAuditPartitionForCrossTier(t *testing.T, ctx context.Context, pool *pgxpool.Pool, eventMs int64) {
+	t.Helper()
+	tm := time.Unix(0, eventMs).UTC()
+	start := time.Date(tm.Year(), tm.Month(), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	name := fmt.Sprintf("events_audit_%04d_%02d", start.Year(), int(start.Month()))
+	if _, err := pool.Exec(ctx, fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS %s PARTITION OF events_audit FOR VALUES FROM (%d) TO (%d)`,
+		name, start.UnixNano(), end.UnixNano(),
+	)); err != nil {
+		t.Fatalf("ensureEventsAuditPartitionForCrossTier: %v", err)
+	}
+}
+
 // insertAuditRowWithSeq INSERTs one events_audit row with an explicit js_seq.
 //
 // The envelope column carries a marshaled eventbusv1.Event matching what
@@ -536,6 +555,13 @@ func insertAuditRows(ctx context.Context, t *testing.T, bus *eventbustest.Embedd
 func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool, e eventbus.Event, seq uint64) {
 	t.Helper()
 	id := e.ID.Bytes()
+	// event_ms (000052 partition key) is derived from the event's real ULID
+	// (e.ID) — identical to what writeAuditRow would compute, so the seeded row
+	// dedups exactly as production. Cold-tier scenarios craft events with OLD
+	// embedded times (outside the current partition), so ensure the covering
+	// partition exists first.
+	eventMS := int64(e.ID.Time()) * int64(time.Millisecond)
+	ensureEventsAuditPartitionForCrossTier(t, ctx, pool, eventMS)
 	var actorID []byte
 	if e.Actor.ID != (ulid.ULID{}) {
 		b := e.Actor.ID.Bytes()
@@ -559,9 +585,9 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			envelope, schema_ver, codec, js_seq, rendering
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		ON CONFLICT (id) DO NOTHING`,
+			envelope, schema_ver, codec, js_seq, rendering, event_ms
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (id, event_ms) DO NOTHING`,
 		id,
 		string(e.Subject),
 		string(e.Type),
@@ -573,6 +599,7 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		"identity",
 		int64(seq), //nolint:gosec // G115: seq is always a positive JetStream sequence; fits safely in int64
 		[]byte(`{}`),
+		eventMS,
 	)
 	if qerr != nil {
 		t.Fatalf("insertAuditRowWithSeq exec: %v", qerr)

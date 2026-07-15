@@ -235,9 +235,43 @@ sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${VERSION}/" .env
 docker compose --profile tunnel --profile backups pull core gateway cloudflared
 docker compose --profile tunnel --profile backups build backup
 docker compose --profile tunnel --profile backups up -d --no-recreate postgres
-docker compose --profile tunnel --profile backups run --rm core migrate
+
+# Pre-migrate backfill-budget probe: the new core's synchronous audit Backfill
+# runs before readiness, so a large events_audit can exceed the core health
+# budget (~90s: start_period 15s + retries 15 × interval 5s). Above ~500k rows,
+# run an ahead-of-deploy backfill or temporarily raise the core start_period.
+ROWS=$(docker compose --profile tunnel --profile backups exec -T postgres \
+  psql -U holomush -d holomush -tAc "SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.events_audit'::regclass" </dev/null | tr -d '[:space:]')
+echo "pre-migrate events_audit row estimate: ${ROWS:-unknown} (pg_class.reltuples; core health budget ~90s)"
+
+# Sever the whole player-traffic path AND the old core before migrate, so the
+# old core's now-incompatible audit INSERT never runs against the 000052 schema.
+docker compose --profile tunnel --profile backups stop cloudflared gateway core
+
+# `-T` + `</dev/null` guard stdin (this block may be pasted into an ssh heredoc).
+docker compose --profile tunnel --profile backups run --rm -T core migrate </dev/null
+
+# Start ONLY the new core, gated on its readiness (its synchronous audit backfill
+# boot gate). If the gate fails, `up -d --wait` exits non-zero and aborts here —
+# player traffic is never restored onto a bad core.
+docker compose --profile tunnel --profile backups up -d --wait --no-deps core
+
+# Restore player traffic (gateway + cloudflared) only after core is ready.
 docker compose --profile tunnel --profile backups up -d
 ```
+
+Migration 000052 (audit-log partitioning, shipped in the same release as the
+retention worker) makes the old core's `events_audit` INSERT incompatible with
+the new schema (`event_ms NOT NULL` plus a dropped `id`-alone unique index). The
+sequence above therefore **stops cloudflared + gateway + core before
+`core migrate`** — severing the entire player-traffic path so no request reaches
+a half-migrated core — runs the migration with no old core writing, starts
+**only** the new core gated on its readiness, and restores player traffic
+**last**. The brief audit-write outage during the migrate/readiness window is a
+deliberate, bounded single-node risk; the readiness gate aborts the deploy
+before traffic is restored if the new core's audit backfill fails. The
+pre-migrate row-count probe warns when a large `events_audit` history could push
+the synchronous backfill past the ~90s core health budget.
 
 ### View logs
 

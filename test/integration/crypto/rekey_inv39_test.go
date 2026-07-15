@@ -136,17 +136,21 @@ func insertEncryptedAuditRow(
 		return ulid.ULID{}, err
 	}
 
-	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
+	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1). event_ms (000052 partition
+	// key) is derived from the now-based ULID id — lands in the current partition.
+	// event_ms/timestamp are NOT AAD inputs (aad.Build binds the envelope proto).
+	eventMS := int64(id.Time()) * int64(time.Millisecond)
 	_, execErr := pool.Exec(ctx, `
 		INSERT INTO events_audit
 		  (id, subject, type, timestamp, actor_kind, envelope, schema_ver,
-		   codec, js_seq, rendering, dek_ref, dek_version)
+		   codec, js_seq, rendering, dek_ref, dek_version, event_ms)
 		VALUES ($1, 'events.g1.scene.01ABC.sensitive', 'test.sensitive',
 		        (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT,
-		        'system', $2, 1, $3, $4, '{}'::jsonb, $5, $6)
+		        'system', $2, 1, $3, $4, '{}'::jsonb, $5, $6, $7)
 	`, id[:], envelopeBytes, string(codec.NameXChaCha20v1),
 		int64(time.Now().UnixNano()),
-		dekID, int32(dekVersion)) //nolint:gosec // G115: dekVersion fits in int32 for column storage
+		dekID, int32(dekVersion), //nolint:gosec // G115: dekVersion fits in int32 for column storage
+		eventMS)
 	return id, execErr
 }
 

@@ -81,9 +81,28 @@ type Config struct {
 	// DLQ bounds the audit dead-letter stream (D-12).
 	DLQ DLQConfig `koanf:"dlq"`
 
+	// Audit carries operator overrides for the host audit projection's
+	// retention window (OPS-02 / D-02). Distinct from DLQ (which bounds the
+	// dead-letter stream, not events_audit history).
+	Audit AuditRetentionConfig `koanf:"audit"`
+
 	// Crypto gates the Phase 3a sensitivity-aware crypto path.
 	// See spec §11.1 phase 3.
 	Crypto CryptoConfig `koanf:"crypto"`
+}
+
+// AuditRetentionConfig carries operator overrides for events_audit retention
+// (OPS-02 / D-02). Zero values defer to the audit subsystem's own defaults
+// (DefaultRetainWindow 90d, DefaultPurgeInterval 24h). The field name
+// retain_window is deliberately distinct from the DLQ max_age so operators do
+// not conflate audit-history retention with dead-letter retention.
+type AuditRetentionConfig struct {
+	// RetainWindow overrides how long events_audit history is kept before an
+	// entirely-older partition is detached and dropped. Zero → default 90d.
+	RetainWindow time.Duration `koanf:"retain_window"`
+	// PurgeInterval overrides how often the retention worker runs its
+	// Detach/Drop cycle. Zero → default 24h.
+	PurgeInterval time.Duration `koanf:"purge_interval"`
 }
 
 // TLSConfig carries an optional TLS block for external-mode connections

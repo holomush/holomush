@@ -20,11 +20,21 @@ This file auto-loads when editing test files. The high-level testing posture is 
 
 ## Coverage
 
+codecov measures coverage at two granularities — **patch** (the lines your PR
+changed) and **project** (the whole repo). It does **not** measure per-package,
+so there is no per-package coverage floor to satisfy.
+
 | Requirement | Description |
 | ----------- | ----------- |
-| **MUST** maintain >80% coverage | Per-package coverage must exceed 80% |
-| **MUST** run `task test:cover` | Verify coverage before completing work |
-| **SHOULD** target 90%+ coverage | For core packages (`internal/core`, `internal/world`) |
+| **SHOULD** cover changed lines to 80% | codecov's `patch` status targets 80% coverage on changed lines (`threshold: 5%`). It POSTS a status on the PR but is **not** a required protect-main check today — it does not block merges. It becomes a merge gate only when added to the protect-main ruleset (`11923801`). |
+| **MUST NOT** lower whole-repo coverage | codecov's `project` status is a rising-floor ratchet (`target: auto, threshold: 1%`) — a PR MUST NOT drop project coverage more than 1 percentage point below the base commit. Legacy code is not retroactively blocked. Also POSTED, not currently required. |
+| **MUST** run `task test:cover` | Verify coverage locally before completing work. |
+
+The required protect-main checks are [Build, Lint, Test, CodeRabbit, Integration
+Test, E2E Test] plus the OPS-03 `Vuln` check (once the operator adds it). Classic
+branch protection is off, so `gh api repos/holomush/holomush/branches/main/protection`
+returning 404 is expected — the ruleset (`11923801`), not classic protection, is
+authoritative.
 
 ## Integration Tests and Refactoring
 

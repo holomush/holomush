@@ -10,7 +10,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/samber/oops"
@@ -19,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
+	"github.com/holomush/holomush/internal/store"
 )
 
 // auditDLQScanTimeout bounds a single list/show scan of the DLQ stream.
@@ -115,7 +115,44 @@ func newAuditDLQReplayCmd() *cobra.Command {
 	cmd.Flags().Bool("all", false, "Replay every dead letter in the stream")
 	cmd.Flags().String("msg-id", "", "Replay only the dead letter with this Nats-Msg-Id")
 	cmd.Flags().Int("limit", 0, "Cap the number of dead letters scanned in one pass (0 = no cap)")
+	cmd.Flags().String("game-id", "", "Override the game_id whose DLQ subject to replay (default: the server's configured/persisted game_id)")
 	return cmd
+}
+
+// sysInfoReader reads a persisted holomush_system_info value by key.
+// *store.PostgresEventStore.GetSystemInfo satisfies it; injecting it as a
+// function value keeps resolveGameID unit-testable without a live pool.
+type sysInfoReader func(ctx context.Context, key string) (string, error)
+
+// resolveGameID resolves the effective game_id whose DLQ subject the replay
+// targets, MIRRORING the server's own order at core.go:300-303 so the CLI's
+// subject prefix always matches the server's persisted one (closes the F3
+// empty-game_id → internal.main.audit.dlq mismatch):
+//
+//  1. a non-empty --game-id override wins;
+//  2. else the configured core.game_id (the SAME coreConfig.GameID core.go
+//     reads via config.Load(..., "core"); NOT event_bus.game_id and WITHOUT
+//     event_bus.Config.Defaults(), which would force "main" and reintroduce
+//     the mismatch);
+//  3. else the persisted holomush_system_info game_id (D-05 auto-resolve).
+//
+// When all three are unset it returns "" — the resolver invents nothing; the
+// caller then defaults to the legacy internal.main.audit.dlq single-game shape.
+func resolveGameID(ctx context.Context, lookup sysInfoReader, override, coreGameID string) (string, error) {
+	if override != "" {
+		return override, nil
+	}
+	if coreGameID != "" {
+		return coreGameID, nil
+	}
+	gameID, err := lookup(ctx, "game_id")
+	if err != nil {
+		if errors.Is(err, store.ErrSystemInfoNotFound) {
+			return "", nil
+		}
+		return "", oops.Code("AUDIT_DLQ_GAME_ID_LOOKUP_FAILED").Wrap(err)
+	}
+	return gameID, nil
 }
 
 // dialAuditJetStream dials the external NATS cluster described by cfg via
@@ -148,18 +185,20 @@ func loadEventBusConfig(cmd *cobra.Command) (eventbus.Config, error) {
 	return cfg, nil
 }
 
-// openAuditPool opens a pgxpool against DATABASE_URL — the durable
-// events_audit table replay writes to.
-func openAuditPool(ctx context.Context) (*pgxpool.Pool, error) {
+// openAuditStore opens a PostgresEventStore against DATABASE_URL — it owns the
+// pgxpool the durable events_audit replay writes to (via Pool()) AND the
+// persisted-game_id read leg the resolver uses (via GetSystemInfo), so a single
+// pool backs both. The caller MUST Close it.
+func openAuditStore(ctx context.Context) (*store.PostgresEventStore, error) {
 	url, err := getDatabaseURL()
 	if err != nil {
 		return nil, oops.Code("AUDIT_DLQ_DATABASE_URL_MISSING").Wrap(err)
 	}
-	pool, err := pgxpool.New(ctx, url)
+	es, err := store.NewPostgresEventStore(ctx, url)
 	if err != nil {
 		return nil, oops.Code("AUDIT_DLQ_POOL_FAILED").Wrap(err)
 	}
-	return pool, nil
+	return es, nil
 }
 
 // runAuditDLQList prints a summary of the EVENTS_AUDIT_DLQ stream.
@@ -316,13 +355,27 @@ func runAuditDLQReplay(cmd *cobra.Command) error {
 	}
 	defer conn.Close()
 
-	pool, err := openAuditPool(cmd.Context())
+	es, err := openAuditStore(cmd.Context())
 	if err != nil {
 		return err
 	}
-	defer pool.Close()
+	defer es.Close()
 
-	res, err := audit.ReplayDLQ(cmd.Context(), js, pool, dlqConfigForGame(cfg.GameID), opts)
+	// Resolve the effective game_id MIRRORING the server (core.go:300-303):
+	// --game-id override → configured core.game_id (loaded from the SAME
+	// `core` section core.go reads, NOT event_bus.game_id) → persisted DB
+	// value. This makes the CLI's DLQ subject prefix match the server's.
+	override, _ := cmd.Flags().GetString("game-id") //nolint:errcheck // flag defined in newAuditDLQReplayCmd; absence is a programmer error
+	var coreCfg coreConfig
+	if loadErr := config.Load(configFile, cmd, &coreCfg, "core"); loadErr != nil {
+		return oops.Code("AUDIT_DLQ_CORE_CONFIG_FAILED").Wrap(loadErr)
+	}
+	gameID, err := resolveGameID(cmd.Context(), es.GetSystemInfo, override, coreCfg.GameID)
+	if err != nil {
+		return err
+	}
+
+	res, err := audit.ReplayDLQ(cmd.Context(), js, es.Pool(), dlqConfigForGame(gameID), opts)
 	if err != nil {
 		return oops.Code("AUDIT_DLQ_REPLAY_FAILED").Wrap(err)
 	}

@@ -8,6 +8,7 @@ package readstream
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,6 +25,25 @@ import (
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
+
+// ensureEventsAuditPartition creates the month partition covering eventMs
+// (BIGINT epoch-ns) if it does not already exist. These cold-reader fixtures
+// seed rows at arbitrary store-times (including hours before now, which can
+// cross a month boundary), so the current+2 partitions created by 000052 do
+// not always cover them. testULIDAt embeds a synthetic (often 1970-era) time
+// in the id, so event_ms is derived from the row's store-time, NOT the ULID.
+func ensureEventsAuditPartition(pool *pgxpool.Pool, eventMs int64) {
+	GinkgoHelper()
+	t := time.Unix(0, eventMs).UTC()
+	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	name := fmt.Sprintf("events_audit_%04d_%02d", start.Year(), int(start.Month()))
+	_, err := pool.Exec(context.Background(), fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS %s PARTITION OF events_audit FOR VALUES FROM (%d) TO (%d)`,
+		name, start.UnixNano(), end.UnixNano(),
+	))
+	Expect(err).NotTo(HaveOccurred())
+}
 
 // newColdReaderTestPool opens a pgxpool against a fresh migrated test database.
 func newColdReaderTestPool() *pgxpool.Pool {
@@ -64,16 +84,21 @@ func insertEncryptedAuditRow(
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
+	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1). event_ms (000052 partition
+	// key) is ULID-derived from the immutable event id — exactly as production
+	// (eventMsFromULID) — so fixtures route rows into partitions the same way
+	// real writes do. Ensure its covering partition exists.
+	eventMS := ulid.Time(id.Time()).UnixNano()
+	ensureEventsAuditPartition(pool, eventMS)
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering,
-			dek_ref, dek_version
+			dek_ref, dek_version, event_ms
 		) VALUES ($1, $2, 'test.encrypted', $3, 'system', NULL,
 		          $4, 1, 'aes256-gcm', $5, '{}',
-		          42, 1)
-	`, id[:], string(subject), pgnanos.From(ts), envelopeBytes, int64(seq))
+		          42, 1, $6)
+	`, id[:], string(subject), pgnanos.From(ts), envelopeBytes, int64(seq), eventMS)
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -96,14 +121,19 @@ func insertIdentityAuditRow(
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1).
+	// timestamp is BIGINT-ns post-gfo6 (INV-STORE-1). event_ms (000052 partition
+	// key) is ULID-derived from the immutable event id — exactly as production
+	// (eventMsFromULID) — so fixtures route rows into partitions the same way
+	// real writes do. Ensure its covering partition exists.
+	eventMS := ulid.Time(id.Time()).UnixNano()
+	ensureEventsAuditPartition(pool, eventMS)
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			envelope, schema_ver, codec, js_seq, rendering
+			envelope, schema_ver, codec, js_seq, rendering, event_ms
 		) VALUES ($1, $2, 'test.cleartext', $3, 'system', NULL,
-		          $4, 1, 'identity', $5, '{}')
-	`, id[:], string(subject), pgnanos.From(ts), envelopeBytes, int64(seq))
+		          $4, 1, 'identity', $5, '{}', $6)
+	`, id[:], string(subject), pgnanos.From(ts), envelopeBytes, int64(seq), eventMS)
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -245,15 +275,17 @@ var _ = Describe("ColdReader", func() {
 
 			// Insert a row with dek_ref set but dek_version explicitly NULL.
 			// This violates INV-CRYPTO-25 and must be detected by the scanner.
+			eventMS := now.UTC().UnixNano()
+			ensureEventsAuditPartition(pool, eventMS)
 			_, err = pool.Exec(context.Background(), `
 				INSERT INTO events_audit (
 					id, subject, type, timestamp, actor_kind, actor_id,
 					envelope, schema_ver, codec, js_seq, rendering,
-					dek_ref, dek_version
+					dek_ref, dek_version, event_ms
 				) VALUES ($1, $2, 'test.encrypted', $3, 'system', NULL,
 				          $4, 1, 'xchacha20poly1305-v1', $5, '{}',
-				          42, NULL)
-			`, id[:], string(subject), pgnanos.From(now), envelopeBytes, int64(9001))
+				          42, NULL, $6)
+			`, id[:], string(subject), pgnanos.From(now), envelopeBytes, int64(9001), eventMS)
 			Expect(err).NotTo(HaveOccurred())
 
 			cr := NewColdReader(pool)

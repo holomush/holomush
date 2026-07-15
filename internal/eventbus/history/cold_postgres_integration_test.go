@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,6 +26,24 @@ import (
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
+
+// ensureEventsAuditPartition creates the month partition covering eventMs
+// (BIGINT epoch-ns) if absent. These cold-tier fixtures seed rows at explicit
+// store-times (including out-of-window ones for NotBefore/NotAfter tests) that
+// the current+2 partitions from 000052 do not always cover. integrationULID
+// embeds a synthetic ms in the id, so event_ms is the row's store-time.
+func ensureEventsAuditPartition(pool *pgxpool.Pool, eventMs int64) {
+	GinkgoHelper()
+	t := time.Unix(0, eventMs).UTC()
+	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	name := fmt.Sprintf("events_audit_%04d_%02d", start.Year(), int(start.Month()))
+	_, err := pool.Exec(context.Background(), fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS %s PARTITION OF events_audit FOR VALUES FROM (%d) TO (%d)`,
+		name, start.UnixNano(), end.UnixNano(),
+	))
+	Expect(err).NotTo(HaveOccurred())
+}
 
 // newErrorSnapshotForTest builds a snapshot whose Get() returns the given
 // error. Used to verify that infra failures propagate rather than being
@@ -78,12 +97,18 @@ func insertIntegrationAuditRowAt(pool *pgxpool.Pool, id ulid.ULID, subject event
 		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
 	})
 	Expect(err).NotTo(HaveOccurred())
+	// event_ms (000052 partition key) is ULID-derived from the immutable event
+	// id — exactly as production (eventMsFromULID) — so fixtures route rows into
+	// partitions the same way real writes do. Ensure the covering partition
+	// exists (the id's time may be out of the current-month window).
+	eventMS := ulid.Time(id.Time()).UnixNano()
+	ensureEventsAuditPartition(pool, eventMS)
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			envelope, schema_ver, codec, js_seq, rendering
-		) VALUES ($1, $2, 'test.event', $4, 'system', NULL, $5, 1, 'identity', $3, '{}'::jsonb)
-	`, id[:], string(subject), int64(seq), pgnanos.From(ts), envelopeBytes)
+			envelope, schema_ver, codec, js_seq, rendering, event_ms
+		) VALUES ($1, $2, 'test.event', $4, 'system', NULL, $5, 1, 'identity', $3, '{}'::jsonb, $6)
+	`, id[:], string(subject), int64(seq), pgnanos.From(ts), envelopeBytes, eventMS)
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -100,13 +125,17 @@ func insertIntegrationColdRowWithDEK(pool *pgxpool.Pool, id ulid.ULID, subject, 
 		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
 	})
 	Expect(err).NotTo(HaveOccurred())
+	// event_ms (000052 partition key) is ULID-derived from the immutable event
+	// id — exactly as production (eventMsFromULID) — not a second now() call.
+	eventMS := ulid.Time(id.Time()).UnixNano()
+	ensureEventsAuditPartition(pool, eventMS)
 	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering,
-			dek_ref, dek_version
-		) VALUES ($1, $2, $3, $7, 'system', NULL, $4, 1, 'xchacha20v1', 1, '{}'::jsonb, $5, $6)
-	`, id[:], subject, evType, envelopeBytes, dekRef, dekVersion, pgnanos.From(time.Now()))
+			dek_ref, dek_version, event_ms
+		) VALUES ($1, $2, $3, $7, 'system', NULL, $4, 1, 'xchacha20v1', 1, '{}'::jsonb, $5, $6, $8)
+	`, id[:], subject, evType, envelopeBytes, dekRef, dekVersion, pgnanos.From(time.Now()), eventMS)
 	Expect(err).NotTo(HaveOccurred())
 }
 

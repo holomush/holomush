@@ -1,6 +1,6 @@
 module github.com/holomush/holomush/gorules
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/golangci/plugin-module-register v0.1.2

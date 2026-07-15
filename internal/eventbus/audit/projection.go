@@ -331,8 +331,8 @@ func (p *projection) persist(msg jetstream.Msg) error {
 }
 
 // writeAuditRow parses a JetStream message's audit headers and writes the
-// corresponding events_audit row with ON CONFLICT (id) DO NOTHING. It is
-// the single durable-write body shared by the live projection (persist)
+// corresponding events_audit row with ON CONFLICT (id, event_ms) DO NOTHING.
+// It is the single durable-write body shared by the live projection (persist)
 // and the DLQ replay path (ReplayDLQ) so header parsing and idempotency
 // stay byte-identical across both — a replayed dead letter reconstructs
 // the exact row the live path would have written (CLUSTER-04, D-11).
@@ -343,13 +343,22 @@ func (p *projection) persist(msg jetstream.Msg) error {
 // <dlq-prefix>.<orig-subject>), so the recovered row's subject column
 // matches what the live path would have written.
 //
-// Note: timestamp and js_seq derive from msg.Metadata(). On the live path
-// that is the EVENTS stream's metadata; on replay it is the
-// EVENTS_AUDIT_DLQ message's metadata (the original event's stream
-// sequence/timestamp are not preserved by DLQ capture — only headers,
-// data, and the subject-suffix survive). The dedup key is the
-// header-carried Nats-Msg-Id (id column), which IS preserved, so
-// idempotency holds regardless of which stream the message is read from.
+// Dedup key (events_audit composite PK, 000052): (id, event_ms). Both
+// components are derived from the immutable event ULID (Nats-Msg-Id) — id is
+// the raw 16 bytes; event_ms is eventMsFromULID(id), the ULID's embedded
+// millisecond rendered to UnixNano. Because event_ms is ULID-derived (NOT
+// store-time), the SAME event dedups to one row even across the live and
+// DLQ-replay paths, which carry DIFFERENT JetStream store-times.
+//
+// timestamp and js_seq derive from msg.Metadata() and remain JetStream
+// STORE-TIME (pgnanos.From(meta.Timestamp)) — deliberately left unchanged so
+// cold-history window filtering (cold_postgres.go) keeps its exact semantics.
+// On the live path metadata is the EVENTS stream's; on replay it is the
+// EVENTS_AUDIT_DLQ message's (the original stream sequence/store-time are not
+// preserved by DLQ capture — only headers, data, and the subject-suffix
+// survive). The dedup key is the ULID-derived (id, event_ms), which IS
+// preserved, so idempotency holds regardless of which stream the message is
+// read from.
 func writeAuditRow(ctx context.Context, pool *pgxpool.Pool, subject string, msg jetstream.Msg) error {
 	h := msg.Headers()
 
@@ -410,15 +419,24 @@ func writeAuditRow(ctx context.Context, pool *pgxpool.Pool, subject string, msg 
 	if err != nil {
 		return oops.Code("AUDIT_BAD_MSG_ID").With("msg_id", msgID).Wrap(err)
 	}
+	// event_ms is the deterministic partition key (000052): the ULID's embedded
+	// millisecond rendered to UnixNano. Reconstruct the ULID from the raw bytes
+	// just parsed (no second string parse) and derive event_ms via the shared
+	// helper. It is IDENTICAL across the live and DLQ-replay paths (both carry
+	// the same Nats-Msg-Id), so (id, event_ms) dedups the same event even when
+	// store-times differ. NOT derived from meta.Timestamp.
+	var parsedID ulid.ULID
+	copy(parsedID[:], idBytes)
+	eventMS := eventMsFromULID(parsedID)
 
 	_, err = pool.Exec(
 		ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering,
-			dek_ref, dek_version
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-		ON CONFLICT (id) DO NOTHING`,
+			dek_ref, dek_version, event_ms
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		ON CONFLICT (id, event_ms) DO NOTHING`,
 		idBytes,
 		subject,
 		eventType,
@@ -432,6 +450,7 @@ func writeAuditRow(ctx context.Context, pool *pgxpool.Pool, subject string, msg 
 		renderingJSON,
 		dekRef,
 		dekVer,
+		eventMS,
 	)
 	if err != nil {
 		return oops.Code("AUDIT_INSERT_FAILED").Wrap(err)
@@ -504,6 +523,20 @@ func (p *projection) awaitDrained(t AwaitT, timeout time.Duration) {
 		<-time.After(AwaitPollInterval)
 	}
 	t.Fatalf("audit projection did not drain within %s", timeout)
+}
+
+// eventMsFromULID renders a ULID's embedded millisecond timestamp to UnixNano.
+// It is the SHARED derivation of events_audit.event_ms — the deterministic
+// RANGE-partition key (000052) — reused by writeAuditRow (live + DLQ-replay
+// paths) and 06-02's legacy Backfill, so the dedup key is identical per event
+// across every producer.
+//
+// The API composition matters: oklog/ulid/v2 defines `func (id ULID) Time()
+// uint64` (embedded ms) and `func Time(ms uint64) time.Time` — so it MUST be
+// ulid.Time(id.Time()).UnixNano(), NOT ulid.Time(id) (which does not compile:
+// Time takes a uint64 ms, not a ulid.ULID).
+func eventMsFromULID(id ulid.ULID) int64 {
+	return ulid.Time(id.Time()).UnixNano()
 }
 
 // decodeULIDString parses a canonical 26-char ULID string into its 16

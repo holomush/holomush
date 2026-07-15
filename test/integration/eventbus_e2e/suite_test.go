@@ -125,8 +125,13 @@ func ensurePluginSchema(ctx context.Context, t *testing.T, pool *pgxpool.Pool, s
 	t.Helper()
 	_, err := pool.Exec(ctx, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema))
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", schema))
-	require.NoError(t, err)
+	// No non-LOCAL `SET search_path` here: every statement in this harness (the
+	// ddl below and all queries/inserts against plugin_core_scenes.scene_log) is
+	// already schema-qualified, so nothing depends on the session search_path.
+	// A non-LOCAL SET would leak onto the shared pgxpool connection (pgx does not
+	// reset session state on release) and corrupt later boot-time DDL run on that
+	// connection — the search_path × bare-DDL footgun the 06-02 PartitionManager
+	// fix removed at the source.
 	_, err = pool.Exec(ctx, ddl)
 	require.NoError(t, err)
 }

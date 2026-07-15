@@ -44,18 +44,41 @@ type RetentionWorker struct {
 	logger  *slog.Logger
 	clock   func() time.Time
 
+	// skipFirstRun defers the FIRST destructive RunOnce until the first
+	// ticker tick instead of firing it immediately on Start. See
+	// WithSkipFirstRun.
+	skipFirstRun bool
+
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
+// Option configures a RetentionWorker at construction.
+type Option func(*RetentionWorker)
+
+// WithSkipFirstRun makes the worker SKIP the immediate RunOnce that Start
+// otherwise fires before the ticker, so the first destructive Detach/Drop
+// cycle only runs after the first PurgeInterval tick (round-4 MEDIUM). The
+// events_audit worker wires this so a subsystem that fails after the
+// synchronous boot gate cannot trigger DETACH/DROP during a red deploy. The
+// default (no option) preserves the immediate-run behavior the ABAC
+// access_audit worker relies on.
+func WithSkipFirstRun() Option {
+	return func(w *RetentionWorker) { w.skipFirstRun = true }
+}
+
 // NewRetentionWorker creates a new retention worker.
-func NewRetentionWorker(cfg RetentionConfig, manager PartitionManager) *RetentionWorker {
-	return &RetentionWorker{
+func NewRetentionWorker(cfg RetentionConfig, manager PartitionManager, opts ...Option) *RetentionWorker {
+	w := &RetentionWorker{
 		cfg:     cfg,
 		manager: manager,
 		logger:  slog.Default(),
 		clock:   time.Now,
 	}
+	for _, opt := range opts {
+		opt(w)
+	}
+	return w
 }
 
 // RunOnce executes a single retention cycle. All operations are attempted
@@ -130,9 +153,13 @@ func (w *RetentionWorker) run(ctx context.Context) {
 	ticker := time.NewTicker(w.cfg.PurgeInterval)
 	defer ticker.Stop()
 
-	// Run once immediately
-	if err := w.RunOnce(ctx); err != nil {
-		w.logger.ErrorContext(ctx, "retention cycle failed", "error", err)
+	// Run once immediately unless the caller deferred the first destructive
+	// cycle to the first tick (WithSkipFirstRun — round-4 MEDIUM: no prune on
+	// a red deploy).
+	if !w.skipFirstRun {
+		if err := w.RunOnce(ctx); err != nil {
+			w.logger.ErrorContext(ctx, "retention cycle failed", "error", err)
+		}
 	}
 
 	for {

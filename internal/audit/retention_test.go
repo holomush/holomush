@@ -240,6 +240,59 @@ func TestRetentionWorkerStartStopLifecycle(t *testing.T) {
 	assert.GreaterOrEqual(t, drop, 2, "should run at least 2 cycles")
 }
 
+func TestRetentionWorkerWithSkipFirstRunDefersDestructiveCycle(t *testing.T) {
+	cfg := RetentionConfig{
+		RetainDenials: 90 * 24 * time.Hour,
+		RetainAllows:  7 * 24 * time.Hour,
+		PurgeInterval: 120 * time.Millisecond,
+	}
+	mock := &mockPartitionManager{}
+
+	worker := NewRetentionWorker(cfg, mock, WithSkipFirstRun())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	require.NoError(t, worker.Start(ctx))
+
+	// Before the first tick (PurgeInterval=120ms) NO destructive cycle runs.
+	// Assert the condition STAYS false for a window comfortably inside one
+	// interval, rather than sleeping a fixed duration and sampling once (a
+	// delayed goroutine would otherwise flake).
+	require.Never(t, func() bool {
+		_, _, detach, drop, _ := mock.getCalls()
+		return detach > 0 || drop > 0
+	}, 80*time.Millisecond, 10*time.Millisecond, "no destructive cycle before the first tick")
+
+	// After the first tick, at least one destructive cycle runs. Poll with a
+	// timeout comfortably larger than one PurgeInterval instead of a fixed sleep.
+	require.Eventually(t, func() bool {
+		_, _, detach, drop, _ := mock.getCalls()
+		return detach >= 1 && drop >= 1
+	}, 2*time.Second, 10*time.Millisecond, "detach and drop fire after the first tick")
+	worker.Stop()
+}
+
+func TestRetentionWorkerDefaultRunsImmediately(t *testing.T) {
+	cfg := RetentionConfig{
+		RetainDenials: 90 * 24 * time.Hour,
+		RetainAllows:  7 * 24 * time.Hour,
+		PurgeInterval: 10 * time.Second, // long: only the immediate run should fire
+	}
+	mock := &mockPartitionManager{}
+
+	worker := NewRetentionWorker(cfg, mock) // no option → immediate run preserved
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	require.NoError(t, worker.Start(ctx))
+	// The immediate RunOnce fires quickly (no tick needed).
+	require.Eventually(t, func() bool {
+		_, _, detach, _, _ := mock.getCalls()
+		return detach >= 1
+	}, 2*time.Second, 10*time.Millisecond, "default worker runs a destructive cycle immediately on Start")
+	worker.Stop()
+}
+
 func TestRetentionWorkerHealthCheckDelegation(t *testing.T) {
 	cfg := DefaultRetentionConfig()
 	mock := &mockPartitionManager{

@@ -57,11 +57,14 @@ func seedPolicySetHeadForOrch(t *testing.T, pool *pgxpool.Pool, gameID, policyNa
 	})
 	require.NoError(t, err)
 
+	// The id is a synthetic non-ULID byte string, so event_ms (000052 partition
+	// key) is the row's own now()-based store-time — lands in the current partition.
+	ts := pgnanos.From(time.Now())
 	_, err = pool.Exec(context.Background(),
 		`INSERT INTO events_audit
-		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering)
-		 VALUES ($1, $2, 'crypto.policy_set', $3, 'system', $4, 1, 'identity', $5, '{}'::jsonb)`,
-		[]byte("01JX00000000000000000000001"), subject, pgnanos.From(time.Now()), envelope, int64(1))
+		   (id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq, rendering, event_ms)
+		 VALUES ($1, $2, 'crypto.policy_set', $3, 'system', $4, 1, 'identity', $5, '{}'::jsonb, $6)`,
+		[]byte("01JX00000000000000000000001"), subject, ts, envelope, int64(1), ts)
 	require.NoError(t, err)
 }
 
