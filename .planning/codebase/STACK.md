@@ -6,7 +6,7 @@
 
 **Primary:**
 
-- Go 1.26.4 - core server, plugins, CLIs (`go.mod`)
+- Go 1.26.5 - core server, plugins, CLIs (`go.mod`)
 - TypeScript/Svelte 5 - web PWA client (`web/package.json`, `web/tsconfig.json`)
 
 **Secondary:**
@@ -19,7 +19,7 @@
 
 **Environment:**
 
-- Go 1.26.4 toolchain (`go.mod` line 3: `go 1.26.4`)
+- Go 1.26.5 toolchain (`go.mod` line 3: `go 1.26.5`)
 - Node.js runtime for `web/` (SvelteKit) and `site/` (Astro) — no `.nvmrc`/`.node-version` committed; the authoritative pin is CI's `node-version: 24` (`.github/workflows/ci.yaml`, `release.yaml`, `site.yml`, `scripts-tests.yaml`)
 
 **Package Manager:**
@@ -108,7 +108,7 @@
 
 **Development:**
 
-- Go 1.26.4 (pinned in `go.mod`)
+- Go 1.26.5 (pinned in `go.mod`)
 - Node.js + pnpm 11.9.0 (`web/package.json` `packageManager`)
 - Docker (for `task dev`, `task test:int`, testcontainers-based session-store tests)
 - `task` CLI (go-task) as the mandatory command runner

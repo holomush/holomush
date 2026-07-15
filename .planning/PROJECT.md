@@ -161,7 +161,7 @@ scenes should bind relevant invariants as part of its own definition of done rat
 
 ## Constraints
 
-- **Tech stack**: Go 1.26.4 core/plugins; SvelteKit 2.69/Svelte 5 web PWA; PostgreSQL 18; NATS JetStream —
+- **Tech stack**: Go 1.26.5 core/plugins; SvelteKit 2.69/Svelte 5 web PWA; PostgreSQL 18; NATS JetStream —
   embedded (zero-config default) or external/clustered (`eventbus: mode: external`, shipped Phase 3) — see
   `.planning/codebase/STACK.md`.
 - **Build/process**: `task` is the mandatory entry point for build/test/lint/fmt (never raw `go`/lint

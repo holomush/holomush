@@ -1,6 +1,6 @@
 module github.com/holomush/holomush
 
-go 1.26.4
+go 1.26.5
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1
