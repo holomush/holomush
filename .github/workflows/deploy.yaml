@@ -120,11 +120,15 @@ jobs:
             # unless-stopped` thrashes while `up -d --wait` is pending. Warn (non-
             # fatal) above a conservative threshold so the operator can run an
             # ahead-of-deploy backfill or temporarily raise the core start_period.
+            # Uses the pg_class.reltuples ESTIMATE, not a full count(*) aggregate
+            # scan (IN-02) — the same anti-aggregate-scan pattern bootstrap_orphan.go
+            # deliberately uses, since this probe runs during the deploy window on
+            # the very table sized to matter. Adequate for a "warn if big" gate.
             ROWS=$(docker compose --profile tunnel --profile backups exec -T postgres \
-              psql -U holomush -d holomush -tAc "SELECT count(*) FROM events_audit" </dev/null 2>/dev/null | tr -d '[:space:]' || true)
-            echo "pre-migrate events_audit row count: ${ROWS:-unknown} (core health budget ~90s: start_period 15s + retries 15 × interval 5s)"
+              psql -U holomush -d holomush -tAc "SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.events_audit'::regclass" </dev/null 2>/dev/null | tr -d '[:space:]' || true)
+            echo "pre-migrate events_audit row estimate: ${ROWS:-unknown} (pg_class.reltuples; core health budget ~90s: start_period 15s + retries 15 × interval 5s)"
             if [ "${ROWS:-0}" -gt 500000 ]; then
-              echo "::warning::events_audit has ${ROWS} rows; the new core's synchronous audit Backfill runs before readiness and may exceed the ~90s core health budget. Run an ahead-of-deploy backfill or temporarily raise the core start_period in compose before proceeding."
+              echo "::warning::events_audit has ~${ROWS} rows (estimate); the new core's synchronous audit Backfill runs before readiness and may exceed the ~90s core health budget. Run an ahead-of-deploy backfill or temporarily raise the core start_period in compose before proceeding."
             fi
 
             # Sever the whole player-traffic path AND the old core before migrate.
