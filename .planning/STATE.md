@@ -4,9 +4,9 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 7
 current_phase_name: Event-Model & Bootstrap Decomposition
-status: "Phase 7 planned — ready to execute"
+status: Phase 7 planned — ready to execute
 stopped_at: Phase 7 planned (11 plans, 9 waves)
-last_updated: "2026-07-15T18:41:19.355Z"
+last_updated: "2026-07-15T21:56:49.349Z"
 last_activity: 2026-07-15
 last_activity_desc: Phase 7 planning complete
 progress:
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 06 — operational-hardening-assurance-gates
+**Current focus:** Phase 07 — event-model-bootstrap-decomposition
 
 ## Current Position
 
 Phase: 7 — Event-Model & Bootstrap Decomposition
-Plan: Not started
-Status: Phase 6 shipped — PR #4819
-Last activity: 2026-07-15 — Phase 7 planning complete
+Plan: Not started — 11 plans across 9 waves, ready to execute
+Status: Phase 7 planned; cross-AI reviewed (codex + grok-4.5) and review feedback folded in
+Last activity: 2026-07-15 — Phase 7 planning complete (reviews incorporated)
 
 ## Performance Metrics
 
