@@ -743,6 +743,51 @@ tasks:
           exit 1
         fi
 
+  lint:vuln:
+    desc: "Supply-chain vuln gate: nats version-floor guard + govulncheck (Go vuln DB) + OSV-Scanner v2 (OSV/GHSA DB). NOT
+      in the lint: umbrella (scanners fetch DBs). OPS-03 / D-04."
+    cmds:
+      - |
+        set -euo pipefail
+        # Three-leg supply-chain gate. Every leg fails-closed by EXIT CODE; do
+        # NOT grep scanner stdout for a success/failure string (repo rule:
+        # .claude/rules/search-tools.md — judge by exit code).
+        #
+        # EXCEPTION POLICY — asymmetric by design (fail-closed):
+        #   - OSV-Scanner findings CAN be allowlisted via osv-scanner.toml
+        #     [[IgnoredVulns]] (id + reason + ignoreUntil EXPIRY). That file is
+        #     the ONLY suppression surface.
+        #   - govulncheck has NO suppression (golang/go#59507). Any REACHABLE Go
+        #     vuln it reports is a HARD STOP — remediate (bump/patch), never
+        #     suppress. osv-scanner.toml does NOT silence govulncheck.
+        #   - the nats floor guard has NO suppression by design — it is the
+        #     compensating control for an advisory the scanners CANNOT see.
+        #
+        # Tools are pinned (OPS-03 Task 1 supply-chain checkpoint):
+        #   govulncheck  golang.org/x/vuln@v1.6.0
+        #   osv-scanner  github.com/google/osv-scanner/v2@v2.4.0
+        # Installed to $(go env GOPATH)/bin (persistent, on PATH). Never @latest.
+        # CI installs the same pins checksum-verified (.github/workflows/ci.yaml vuln: job).
+        GOBIN="$(go env GOPATH)/bin"
+
+        # (1) Deterministic nats version-floor guard (no network, runs first so a
+        # regression is caught even offline). The nats-server advisory
+        # GHSA-q59r-vq66-pxc2 / CVE-2026-58207 is a git-commit-range-only OSV
+        # record with NO Go-ecosystem package binding, so NEITHER scanner below
+        # can flag a vulnerable nats-server v2.14.2 from go.mod. This guard is the
+        # compensating control: it hard-fails if go.mod pins nats-server/v2
+        # below v2.14.3. See cmd/nats-floor-guard.
+        go run ./cmd/nats-floor-guard
+
+        # (2) Reachability leg: Go vuln DB, callgraph-aware.
+        "${GOBIN}/govulncheck" ./...
+
+        # (3) OSV/GHSA leg: catches advisories that ARE bound to a Go-ecosystem
+        # package in OSV (forward coverage for future vulns). v2 `scan source`
+        # subcommand form (NOT the v1 `osv-scanner --config=... <target>` shape).
+        # Findings are suppressed only via osv-scanner.toml [[IgnoredVulns]].
+        "${GOBIN}/osv-scanner" scan source -L go.mod --config=osv-scanner.toml
+
   lint:no-zensical:
     desc: "INV-7: no zensical docs surface remains (bead holomush-cwnu0.19)"
     cmds:
