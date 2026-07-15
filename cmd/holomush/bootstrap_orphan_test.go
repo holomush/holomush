@@ -70,3 +70,53 @@ func TestBootstrapFailsWithSyntheticOrphan(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_ACTOR_ORPHAN_DETECTED")
 }
+
+// TestBootstrapFailsWithOrphanInUnpartitioned proves the check also scans the
+// legacy events_audit_unpartitioned table (finding 5): after 000052 renamed
+// history off events_audit, a restore-from-old-backup orphan sits in the
+// unpartitioned table, and the pre-Start gate must still catch it.
+func TestBootstrapFailsWithOrphanInUnpartitioned(t *testing.T) {
+	connStr, cleanup := startPostgresContainer(t)
+	defer cleanup()
+
+	applyAllMigrations(t, connStr)
+
+	pool, err := pgxpool.New(context.Background(), connStr)
+	require.NoError(t, err)
+	defer pool.Close()
+
+	// The legacy table exists after 000052 (empty). Seed a plugin-actor orphan
+	// into it (old schema: no event_ms column).
+	orphanID := ulid.Make()
+	_, execErr := pool.Exec(context.Background(), `
+		INSERT INTO events_audit_unpartitioned (id, subject, type, timestamp, actor_kind,
+		                         actor_id, envelope, schema_ver, codec, js_seq, rendering)
+		VALUES ($1, 'test', 'test', $3, $2, NULL, '\x00', 1, 'identity', 1, '{}'::jsonb)
+	`, orphanID[:], eventbus.ActorKindPlugin.String(), pgnanos.From(time.Now()))
+	require.NoError(t, execErr)
+
+	err = runBootstrapOrphanCheck(context.Background(), pool)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PLUGIN_ACTOR_ORPHAN_DETECTED")
+}
+
+// TestBootstrapPassesWhenUnpartitionedAbsent proves a clean install (no
+// events_audit_unpartitioned) does not error with "relation does not exist" and
+// passes when there are no orphans — the to_regclass guard keeps the legacy
+// table out of the probe when it is absent.
+func TestBootstrapPassesWhenUnpartitionedAbsent(t *testing.T) {
+	connStr, cleanup := startPostgresContainer(t)
+	defer cleanup()
+
+	applyAllMigrations(t, connStr)
+
+	pool, err := pgxpool.New(context.Background(), connStr)
+	require.NoError(t, err)
+	defer pool.Close()
+
+	// Simulate a clean install / post-Backfill state: the legacy table is gone.
+	_, dropErr := pool.Exec(context.Background(), `DROP TABLE IF EXISTS events_audit_unpartitioned`)
+	require.NoError(t, dropErr)
+
+	require.NoError(t, runBootstrapOrphanCheck(context.Background(), pool))
+}
