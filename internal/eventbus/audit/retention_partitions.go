@@ -166,7 +166,7 @@ func (m *EventsAuditPartitionManager) isCurrentChild(ctx context.Context, child 
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, oops.Code("AUDIT_CHILD_PROBE_FAILED").Wrap(err)
 	}
 	return true, nil
 }
@@ -186,29 +186,19 @@ func (m *EventsAuditPartitionManager) isCurrentChild(ctx context.Context, child 
 //
 // Returns the new _detached_<unix> names. A recent partition is not detached.
 func (m *EventsAuditPartitionManager) DetachExpiredPartitions(ctx context.Context, olderThan time.Time) ([]string, error) {
-	var renamed []string
-	var errs []error
+	// Passes run in order (finalize → reconcile → detach); all three are
+	// attempted even if an earlier one errors, and errors are combined.
+	fin, finErr := m.finalizePendingDetaches(ctx)
+	rec, recErr := m.reconcileCrashOrphans(ctx)
+	det, detErr := m.detachOlderThan(ctx, olderThan.UnixNano())
 
-	fin, err := m.finalizePendingDetaches(ctx)
+	renamed := make([]string, 0, len(fin)+len(rec)+len(det))
 	renamed = append(renamed, fin...)
-	if err != nil {
-		errs = append(errs, err)
-	}
-
-	rec, err := m.reconcileCrashOrphans(ctx)
 	renamed = append(renamed, rec...)
-	if err != nil {
-		errs = append(errs, err)
-	}
-
-	det, err := m.detachOlderThan(ctx, olderThan.UnixNano())
 	renamed = append(renamed, det...)
-	if err != nil {
-		errs = append(errs, err)
-	}
 
-	if len(errs) > 0 {
-		return renamed, oops.Code("AUDIT_DETACH_CYCLE_FAILED").Wrap(errors.Join(errs...))
+	if err := errors.Join(finErr, recErr, detErr); err != nil {
+		return renamed, oops.Code("AUDIT_DETACH_CYCLE_FAILED").Wrap(err)
 	}
 	return renamed, nil
 }
@@ -443,7 +433,8 @@ func (m *EventsAuditPartitionManager) Backfill(ctx context.Context) error {
 		if len(rows) == 0 {
 			break
 		}
-		for _, r := range rows {
+		for i := range rows {
+			r := &rows[i]
 			if len(r.id) != 16 {
 				return oops.Code("AUDIT_BACKFILL_BAD_ID").
 					With("id_len", len(r.id)).
@@ -528,19 +519,19 @@ func (m *EventsAuditPartitionManager) readLegacyChunk(ctx context.Context, after
 func (m *EventsAuditPartitionManager) queryNames(ctx context.Context, query string, args ...any) ([]string, error) {
 	rows, err := m.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, oops.Code("AUDIT_CATALOG_QUERY_FAILED").Wrap(err)
 	}
 	defer rows.Close()
 	var names []string
 	for rows.Next() {
 		var n string
 		if err := rows.Scan(&n); err != nil {
-			return nil, err
+			return nil, oops.Code("AUDIT_CATALOG_SCAN_FAILED").Wrap(err)
 		}
 		names = append(names, n)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, oops.Code("AUDIT_CATALOG_QUERY_FAILED").Wrap(err)
 	}
 	return names, nil
 }

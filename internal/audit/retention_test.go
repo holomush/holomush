@@ -240,6 +240,56 @@ func TestRetentionWorkerStartStopLifecycle(t *testing.T) {
 	assert.GreaterOrEqual(t, drop, 2, "should run at least 2 cycles")
 }
 
+func TestRetentionWorkerWithSkipFirstRunDefersDestructiveCycle(t *testing.T) {
+	cfg := RetentionConfig{
+		RetainDenials: 90 * 24 * time.Hour,
+		RetainAllows:  7 * 24 * time.Hour,
+		PurgeInterval: 120 * time.Millisecond,
+	}
+	mock := &mockPartitionManager{}
+
+	worker := NewRetentionWorker(cfg, mock, WithSkipFirstRun())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	require.NoError(t, worker.Start(ctx))
+
+	// Immediately after Start (well before the first tick) NO destructive
+	// cycle has run.
+	time.Sleep(30 * time.Millisecond)
+	_, _, detach, drop, _ := mock.getCalls()
+	assert.Equal(t, 0, detach, "no detach before the first tick")
+	assert.Equal(t, 0, drop, "no drop before the first tick")
+
+	// After the first tick, at least one destructive cycle has run.
+	time.Sleep(200 * time.Millisecond)
+	worker.Stop()
+	_, _, detach, drop, _ = mock.getCalls()
+	assert.GreaterOrEqual(t, detach, 1, "detach fires after the first tick")
+	assert.GreaterOrEqual(t, drop, 1, "drop fires after the first tick")
+}
+
+func TestRetentionWorkerDefaultRunsImmediately(t *testing.T) {
+	cfg := RetentionConfig{
+		RetainDenials: 90 * 24 * time.Hour,
+		RetainAllows:  7 * 24 * time.Hour,
+		PurgeInterval: 10 * time.Second, // long: only the immediate run should fire
+	}
+	mock := &mockPartitionManager{}
+
+	worker := NewRetentionWorker(cfg, mock) // no option → immediate run preserved
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	require.NoError(t, worker.Start(ctx))
+	// The immediate RunOnce fires quickly (no tick needed).
+	require.Eventually(t, func() bool {
+		_, _, detach, _, _ := mock.getCalls()
+		return detach >= 1
+	}, 2*time.Second, 10*time.Millisecond, "default worker runs a destructive cycle immediately on Start")
+	worker.Stop()
+}
+
 func TestRetentionWorkerHealthCheckDelegation(t *testing.T) {
 	cfg := DefaultRetentionConfig()
 	mock := &mockPartitionManager{

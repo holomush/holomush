@@ -578,6 +578,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			MaxAge:   eventBusConfig.DLQ.MaxAge,
 			MaxBytes: eventBusConfig.DLQ.MaxBytes,
 		},
+		// events_audit retention (OPS-02 / D-02). Zero values defer to the
+		// audit subsystem's DefaultRetainWindow (90d) / DefaultPurgeInterval
+		// (24h) via Config.Defaults(); a negative value is rejected by
+		// Config.Validate() at Start before the projection accepts traffic.
+		RetainWindow:  eventBusConfig.Audit.RetainWindow,
+		PurgeInterval: eventBusConfig.Audit.PurgeInterval,
 	})
 
 	// Phase 7 INV-CRYPTO-45: build the codec.KeySelector ONCE at boot. The

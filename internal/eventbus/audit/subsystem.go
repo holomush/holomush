@@ -21,6 +21,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/samber/oops"
 
+	retaudit "github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
@@ -59,6 +60,22 @@ const (
 	// attempt the projection captures the message to the bounded
 	// EVENTS_AUDIT_DLQ stream (see dlq.go) rather than dropping it.
 	DefaultMaxDeliver = 10
+
+	// DefaultRetainWindow is how long events_audit history is retained
+	// before a partition fully older than the window is detached and
+	// dropped (OPS-02 / D-02). Mirrors the ABAC RetentionConfig 90d denial
+	// default. Operator-overridable via event_bus.audit.retain_window.
+	DefaultRetainWindow = 90 * 24 * time.Hour
+
+	// DefaultPurgeInterval is how often the periodic RetentionWorker runs its
+	// Detach/Drop cycle. Also the delay before the FIRST destructive cycle
+	// (WithSkipFirstRun defers it one tick past boot).
+	DefaultPurgeInterval = 24 * time.Hour
+
+	// auditForwardMonths is how many months forward EnsurePartitions covers
+	// on the synchronous boot gate and each periodic cycle (matches the ABAC
+	// worker's RunOnce horizon).
+	auditForwardMonths = 3
 )
 
 // Config controls the audit projection worker.
@@ -94,6 +111,16 @@ type Config struct {
 	// messages exhausting MaxDeliver (CLUSTER-04, D-09/D-12). Zero-valued
 	// fields resolve via DLQConfig.Defaults().
 	DLQ DLQConfig
+
+	// RetainWindow is how long events_audit history is retained before an
+	// entirely-older partition is detached and dropped (OPS-02 / D-02).
+	// Zero resolves to DefaultRetainWindow. A distinct field from DLQ.MaxAge
+	// (which bounds the dead-letter stream, not audit history).
+	RetainWindow time.Duration
+
+	// PurgeInterval is how often the periodic RetentionWorker runs its
+	// Detach/Drop cycle. Zero resolves to DefaultPurgeInterval.
+	PurgeInterval time.Duration
 }
 
 // Defaults fills any zero-valued fields with defaults.
@@ -113,8 +140,45 @@ func (c Config) Defaults() Config {
 	if c.MaxDeliver == 0 {
 		c.MaxDeliver = DefaultMaxDeliver
 	}
+	if c.RetainWindow == 0 {
+		c.RetainWindow = DefaultRetainWindow
+	}
+	if c.PurgeInterval == 0 {
+		c.PurgeInterval = DefaultPurgeInterval
+	}
 	c.DLQ = c.DLQ.Defaults()
 	return c
+}
+
+// Validate rejects a retention config that would make the RetentionWorker
+// destructive-by-accident (round-3 finding 3). Defaults() only fills ZERO
+// values, so a NEGATIVE survives: a negative RetainWindow makes the detach
+// cutoff future-facing (now.Add(-RetainWindow)) and would detach EVERY
+// partition; a non-positive PurgeInterval panics time.NewTicker. This runs in
+// Subsystem.Start before the projection accepts traffic (and is unit-tested).
+func (c Config) Validate() error {
+	if c.RetainWindow <= 0 {
+		return oops.Code("AUDIT_CONFIG_INVALID").
+			With("retain_window", c.RetainWindow).
+			Errorf("audit retain_window must be positive")
+	}
+	if c.PurgeInterval <= 0 {
+		return oops.Code("AUDIT_CONFIG_INVALID").
+			With("purge_interval", c.PurgeInterval).
+			Errorf("audit purge_interval must be positive")
+	}
+	return nil
+}
+
+// retentionConfig maps the audit Config onto the internal/audit
+// RetentionConfig consumed by the RetentionWorker. RetainAllows is unused by
+// events_audit (PurgeExpiredAllows is a no-op) but set for completeness.
+func (c Config) retentionConfig() retaudit.RetentionConfig {
+	return retaudit.RetentionConfig{
+		RetainDenials: c.RetainWindow,
+		RetainAllows:  c.RetainWindow,
+		PurgeInterval: c.PurgeInterval,
+	}
 }
 
 // JSProvider yields the JetStream context at Start time. Constructed
@@ -140,13 +204,14 @@ type PoolProvider interface {
 // shutdown racing with a signal handler) cannot observe worker = nil
 // while the first Stop is still inside drain().
 type Subsystem struct {
-	mu        sync.Mutex
-	jsProv    JSProvider
-	poolProv  PoolProvider
-	cfg       Config
-	cancel    context.CancelFunc
-	worker    *projection
-	pluginMgr *PluginConsumerManager
+	mu              sync.Mutex
+	jsProv          JSProvider
+	poolProv        PoolProvider
+	cfg             Config
+	cancel          context.CancelFunc
+	worker          *projection
+	pluginMgr       *PluginConsumerManager
+	retentionWorker *retaudit.RetentionWorker
 	// lateInit is called once from Start (before newProjection) so the
 	// owner map and per-plugin consumer manager can be built from plugin
 	// manifests that are only available after SubsystemPlugins has
@@ -213,6 +278,25 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	if pool == nil {
 		return oops.Code("AUDIT_DEP_NOT_STARTED").Errorf("database pool not available at audit.Start")
 	}
+	// Reject a destructive-by-accident retention config (negative window /
+	// non-positive interval) before anything starts (round-3 finding 3).
+	if err := s.cfg.Validate(); err != nil {
+		return err
+	}
+	// SYNCHRONOUS BOOT GATE (findings 9 & 10): construct the events_audit
+	// PartitionManager, re-home the legacy events_audit_unpartitioned history
+	// (Backfill), and ensure partition coverage — ALL BEFORE the projection
+	// starts accepting traffic. This is Backfill + EnsurePartitions ONLY, never
+	// a full RunOnce (no Detach/Drop on boot — a red first-boot must not prune).
+	// A gate failure returns from Start before any projection exists, so there
+	// is nothing to roll back and the rename/backfill cannot race a DLQ replay.
+	partitionMgr := NewEventsAuditPartitionManager(pool, s.cfg.RetainWindow)
+	if err := partitionMgr.Backfill(ctx); err != nil {
+		return oops.Code("AUDIT_BACKFILL_BOOT_GATE_FAILED").Wrap(err)
+	}
+	if err := partitionMgr.EnsurePartitions(ctx, auditForwardMonths); err != nil {
+		return oops.Code("AUDIT_ENSURE_BOOT_GATE_FAILED").Wrap(err)
+	}
 	// Late-bind the owner map + per-plugin consumer manager if a
 	// provider was installed (F5): plugin manifests are only available
 	// after the plugin subsystem has started, which is guaranteed by the
@@ -257,6 +341,17 @@ func (s *Subsystem) Start(ctx context.Context) error {
 			return err
 		}
 	}
+	// Periodic retention worker (OPS-02): runs the Detach/Drop cycle on
+	// PurgeInterval. WithSkipFirstRun defers the FIRST destructive cycle to the
+	// first tick (round-4 MEDIUM) so a subsystem that fails after the boot gate
+	// cannot prune on a red deploy — the boot gate above ran only the
+	// non-destructive Backfill + EnsurePartitions. Consequently the first prune
+	// is ~one PurgeInterval (24h default) after boot; operators must NOT expect
+	// an immediate detach on deploy (round-5 LOW). Start always returns nil
+	// (it spawns the loop); later RunOnce failures are logged non-fatally.
+	worker := retaudit.NewRetentionWorker(s.cfg.retentionConfig(), partitionMgr, retaudit.WithSkipFirstRun())
+	_ = worker.Start(workerCtx) //nolint:errcheck // Start always returns nil
+	s.retentionWorker = worker
 	return nil
 }
 
@@ -276,6 +371,12 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
+	}
+	// Stop the periodic retention worker (bounded; waits for any in-flight
+	// RunOnce to finish) before draining the projection.
+	if s.retentionWorker != nil {
+		s.retentionWorker.Stop()
+		s.retentionWorker = nil
 	}
 	// Drain per-plugin consumers before the host projection so a plugin
 	// cannot keep dispatching while the host projection is tearing down.
