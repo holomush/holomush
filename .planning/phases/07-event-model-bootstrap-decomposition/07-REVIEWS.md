@@ -1,347 +1,610 @@
 ---
 phase: 7
-round: 4
+round: 5
 reviewers: [codex, opencode]
-reviewed_at: 2026-07-16T01:39:56Z
-supersedes: ce525400f
-reviewed_commit: 9e5d29db8
-reviewer_models:
-  codex: default (codex-cli 0.144.4)
-  opencode: openrouter/x-ai/grok-4.5
-reviewer_grounding:
-  codex: grounded — all findings carry path:line
-  opencode: grounded — hand-computed the topo order from live IDs + tie-break
-antigravity: SKIPPED — round 2 proved it ungrounded
-verdicts:
-  codex: HIGH — NOT APPROVED (3 execution blockers)
-  opencode: MEDIUM — not approved as security-self-certified on T-07-51/Wave A
-plans_reviewed: [07-01, 07-02, 07-03, 07-04, 07-05, 07-06, 07-07, 07-08, 07-09, 07-10, 07-11]
+reviewed_at: 2026-07-16T13:04:08Z
+plans_reviewed: [07-01-PLAN.md, 07-02-PLAN.md, 07-03-PLAN.md, 07-04-PLAN.md, 07-05-PLAN.md, 07-06-PLAN.md, 07-07-PLAN.md, 07-08-PLAN.md, 07-09-PLAN.md, 07-10-PLAN.md, 07-11-PLAN.md]
+plans_revision: "rev 7 (f9ad8be40)"
+notes: "Round 4 preserved at e5807eb30. Reviewers were given NO prior-round feedback (user decision: judge rev 7 on merits). opencode model: openrouter/x-ai/grok-4.5; codex: default model, codex-cli 0.144.4."
 ---
 
-# Cross-AI Plan Review — Phase 7 (Round 4)
-
-> **Round 4, reviewing rev 6 (`9e5d29db8`).** Round 3 (`ce525400f`) found 5 blockers in rev 4 —
-> which had passed the `gsd-plan-checker` with **0 blockers**. Rev 5 answered them; a FULL checker
-> pass then found 6 broken-regex warnings → rev 6, after which every gate went green again.
->
-> Round 4 existed to review rev 5's **self-certified design decisions** — a deleted security-gate
-> edge, a threat downgraded by the agent that needed it low, a rejected reviewer finding, two rows
-> settled by retreat, and a 2.3× manifest expansion. None had ever been seen by an external reviewer.
->
-> **It found 4 more blockers.** Prior-round feedback was withheld; both reviewers re-derived
-> independently.
-
----
+# Cross-AI Plan Review — Phase 7 (Round 5, rev 7)
 
 ## Codex Review
 
-## Summary
+# Executive assessment
 
-**Not approved.** Revision 6 substantially improves the lifecycle design: deleting the reverse EventBus→Verifier edge is correct, the declared post-wave dependency graph is acyclic, the Prepare/Activate barrier is a valid in-scope substitute for the impossible ordinal gate, and the admin-socket/plugin dispositions match the code. However, three implementation blockers remain: Wave A cannot currently preserve crypto-operator initialization, its `gameID` provider migration omits several concrete consumers, and 07-11’s caller manifest is still incomplete. At least one revised verification pattern is also guaranteed to fail on correct code.
+The phase is architecturally coherent and unusually well-grounded, but it is not execution-ready yet. I found four blocking areas:
 
-## Strengths
+- 07-01 omits an integration-tagged gRPC-client caller, so `task test:int` will not compile after the move.
+- 07-09’s central `cryptoWiring` provider contract is not package-realizable as currently specified and leaves eager verifier construction unresolved.
+- 07-11 omits two gRPC reaper loops from the Prepare/Activate disposition.
+- 07-11 also leaves the disabled admin-socket path unsafe and does not actually settle phase-specific idempotency for all 17 subsystems.
 
-- The deleted crypto edge is the correct decision. The verifier’s handler set depends on `eventBusSub.Publisher()` through [core.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:735), while [buildReadStreamWiring](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/readstream_wiring.go:115) returns empty wiring without that publisher. Adding EventBus→Verifier after 07-09 adds Verifier→EventBus would therefore form a cycle that [topoSort](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/orchestrator.go:108) rejects at lines 144–145.
+Overall phase risk: **HIGH until those plans are amended**. The event-model sequence and gateway-boundary work are otherwise strong.
 
-- The literal ordering intent—“the EventBus process is not running before verification”—is not implementable without redesigning the atomic embedded-server/connect seam at [eventbus/subsystem.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/subsystem.go:164). But the security intent is implementable in bounds: EventBus prepares its process-internal substrate, the verifier walks the chain later in the Prepare sweep, and no domain `Activate` runs until every Prepare succeeds. That is a sound third option, already captured in [07-11](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:157).
+## 07-01 — Extract `internal/grpcclient`
 
-- The intended post-wave graph is acyclic once the reverse edge is removed. Its principal chains flow forward—Database→ABAC→World→Plugins→Audit→gRPC and EventBus→Verifier/Cluster/Audit/gRPC—with no declared path returning to EventBus. The proposed live-edge acyclicity test is well designed: it requires the real registration set and live `DependsOn()` methods, and explicitly reconstructs the rev-4 cycle as its RED proof in [07-10](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-10-PLAN.md:491). The production registration seam is indeed centralized at [core.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:1087).
+### Summary
 
-- Both “retreat” dispositions match the code:
+The package extraction is the right first move and materially reduces the gateway closure. However, the caller census is incomplete, creating a guaranteed integration compilation failure.
 
-  - Admin socket construction allocates nothing, while [Server.Start](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/socket/server.go:58) atomically acquires the lock, removes the stale socket, binds and serves. `NewServer` in Prepare and `srv.Start()` in Activate is the smallest truthful split.
-  - [PluginSubsystem.Start](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/setup/subsystem.go:163) builds the stack and registry; it owns no delivery loop. A documented no-op Activate is correct.
+### Strengths
 
-- The 07-07 rejection is substantively correct. Its YAML frontmatter parses to **34 unique entries**, not 25, and the plan itself correctly explains the comment-aware result at [07-07-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-07-PLAN.md:529).
+- `client.go` is already a clean extraction candidate: it imports only external libraries and generated protobuf packages, with no `internal/...` dependencies ([internal/grpc/client.go:7](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/grpc/client.go:7)).
+- The plan correctly includes `cmd/holomush/gateway.go`, which directly imports `internal/grpc` and constructs `ClientConfig`/`NewClient` ([cmd/holomush/gateway.go:20](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway.go:20), [cmd/holomush/gateway.go:152](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway.go:152)).
+- Preserving the error-classification implementation verbatim is appropriate for the gateway trust boundary.
 
-- Parallel-wave ownership is clean: parsed frontmatter gives empty intersections for **07-03∥07-05** and **07-04∥07-06**.
+### Concerns
 
-## Concerns
+- **HIGH — omitted integration caller.** `test/integration/phase1_5_test.go` imports the combined `internal/grpc` package and uses both server and client symbols. It calls `grpcpkg.NewClient` with `grpcpkg.ClientConfig` at three sites ([test/integration/phase1_5_test.go:27](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/test/integration/phase1_5_test.go:27), [test/integration/phase1_5_test.go:297](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/test/integration/phase1_5_test.go:297), [test/integration/phase1_5_test.go:374](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/test/integration/phase1_5_test.go:374), [test/integration/phase1_5_test.go:529](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/test/integration/phase1_5_test.go:529)). The file is integration-tagged ([test/integration/phase1_5_test.go:4](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/test/integration/phase1_5_test.go:4)) and absent from the plan manifest ([07-01-PLAN.md:7](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-01-PLAN.md:7)). Deleting `internal/grpc/client.go` therefore breaks `task test:int`.
 
-- **HIGH — Crypto-operator initialization has an unresolved dependency cycle.** Today operators are validated using the live DB pool before constructing ABAC at [core.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:377), then passed as the concrete `CryptoOperators []string` field at lines 392–396. ABAC consumes that slice while building its stack at [access/setup/subsystem.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/access/setup/subsystem.go:79). Rev 6 instead moves `validateCryptoOperators` into `cryptoWiring` at [07-09-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-09-PLAN.md:261), but `cryptoWiring` requires ABAC itself to be started. ABAC is not listed as a wiring consumer, and making it one would create `ABAC → cryptoWiring → ABAC`. As written, Wave A cannot both delete the DB pre-start and construct ABAC with the validated values.
+### Suggestions
 
-- **HIGH — The `gameID` migration is underdesigned and its manifest cannot support it.** Rev 6 gives TLS an explicit provider but handles all other consumers with one sentence: “Other consumers … take `func() string`” at [07-09-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-09-PLAN.md:255). Current consumers require concrete strings:
+- Add `test/integration/phase1_5_test.go` to `files_modified`.
+- Retain `grpcpkg` for `NewCoreServer`/`WithEventStore`, and add `grpcclient` for `NewClient`/`ClientConfig`.
+- Re-run the census using symbol-specific patterns rather than aliases.
 
-  - World: [world/setup/subsystem.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/world/setup/subsystem.go:31)
-  - Plugin: [plugin/setup/subsystem.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/setup/subsystem.go:99)
-  - Outbox relay: [relay_subsystem.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/world/setup/relay_subsystem.go:38)
-  - Cluster: construction rejects an empty `ClusterID` at [cluster/registry.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/cluster/registry.go:78)
-  - Audit DLQ: subject is eagerly constructed at [core.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:571)
+### Risk Assessment
 
-  Yet 07-09’s manifest omits the world, plugin, relay and audit implementation files. A function cannot be assigned to these string fields, and resolving `dbSub.GameID()` during straight-line construction violates the plan’s own zero-live-read truth.
+**HIGH** until the missing caller is added; otherwise the design is low-risk mechanical relocation.
 
-- **HIGH — 07-11’s 57-entry caller census remains incomplete.** Confirmed direct subsystem calls omitted from its frontmatter include:
+## 07-02 — Extract `internal/eventvocab`
 
-  - [internal/admin/policy/subsystem_test.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/policy/subsystem_test.go:82)
-  - [internal/admin/policy/subsystem_integration_test.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/policy/subsystem_integration_test.go:41), with additional calls at lines 72 and 93
-  - [internal/eventbus/audit/subsystem_test.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/audit/subsystem_test.go:127), with another call at line 145
+### Summary
 
-  Removing `Start` breaks these. Worse, 07-11 explicitly says an unlisted caller is a planning defect and the executor must stop at [07-11-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:719). Its census regex also misses `s.Start(t.Context())`, explaining the audit omission.
+This plan cleanly separates gateway-safe wire vocabulary from the eventual `eventbus.Event` representation and properly sequences the ARCH-04/ARCH-05 collision.
 
-- **MEDIUM — T-07-51’s downgrade overstates the evidence.** The plan says exposure is “bounded to nothing observable” at [07-10-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-10-PLAN.md:613). `DontListen: true` prevents the NATS client listener, but the same configuration supplies `HTTPPort` at [eventbus/subsystem.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/subsystem.go:149), so the monitor can bind. External mode also dials a remote broker at [eventbus/subsystem.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/subsystem.go:204), and `EnsureStream` may mutate broker state before verification at line 98. The domain-serving barrier keeps player-facing exposure bounded, but “nothing observable” and the embedded-only rationale do not justify the threat across both supported modes.
+### Strengths
 
-- **MEDIUM — A rev-6 verification count is guaranteed to fail on correct code.** Task 2 demands exactly 17 files matching production `Prepare`/`Activate` implementations at [07-11-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:948). But Task 1 has already migrated the test stub in `internal/lifecycle/orchestrator_test.go`, making the count at least 18; Task 3 later adds two more test implementations. The regex is syntactically fixed but semantically scoped incorrectly.
+- The current `core/event.go` genuinely mixes vocabulary, payload validation, payload structures, actors, and the duplicate Event model ([internal/core/event.go:14](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:14), [internal/core/event.go:35](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:35), [internal/core/event.go:63](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:63), [internal/core/event.go:232](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:232)).
+- Telnet directly consumes arrive/leave vocabulary for rendering, validating the need for a gateway-safe leaf ([internal/telnet/gateway_handler.go:1246](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/telnet/gateway_handler.go:1246)).
+- Pinning every string and JSON shape before relocating it is an appropriate behavior-preservation gate.
 
-- **LOW — 07-07 still carries superseded count prose.** It correctly records 34 entries at lines 529–535 but still says “30 `files_modified`” at [07-07-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-07-PLAN.md:494). The prior rejection is valid; this remaining stale number should nevertheless be corrected.
+### Concerns
 
-## Suggestions
+- **LOW — census volatility.** This is a wide symbol move across production, unit, and integration code. The plan acknowledges this and provides a reproducible census, so I found no specific missing consumer in the current tree.
 
-- Move crypto-operator validation into ABAC Prepare, using its existing DB dependency, or provide ABAC a dedicated **DB-only** validator. Do not route it through `cryptoWiring`. Preserve the current lax-and-warn behavior from [crypto_operator_validation.go](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/crypto_operator_validation.go:42).
+### Suggestions
 
-- Add an explicit `gameID` consumer table to 07-09. For each consumer, name the provider signature, resolution phase, dependency edge, config-field change and modified files. Preserve `cfg.GameID` override precedence. Update the manifest for world, plugin, relay, cluster and audit.
+- Re-run the declared census immediately before editing and compare its exact file set with the manifest.
+- Keep the leaf free of all internal imports; external `oops` usage for validation is reasonable.
 
-- Replace 07-11’s restricted caller regex with a broad `.Start(` census followed by type classification, or a `go/packages`/AST census. Add the three confirmed missing files before execution.
+### Risk Assessment
 
-- Scope the Prepare/Activate count to an explicit production file list or count compile-time `lifecycle.Subsystem` assertions instead of searching all tests and production files together.
+**MEDIUM** because of the mechanical blast radius, not because of an architectural flaw.
 
-- Keep the reverse crypto edge deleted, but rewrite T-07-51 as: no external **domain** surface activates before verification; observability endpoints and external-broker acquisition may be observable during Prepare. Address embedded and external modes separately.
+## 07-03 — Gateway value leaves
 
-- Correct the 07-07 count from 30 to 34.
+### Summary
 
-## Risk Assessment
+The three leaves are appropriately scoped and preserve the critical distinction between event/session ULIDs and entity IDs. One moved test will retain a false historical rationale unless amended.
 
-**HIGH.** The declared lifecycle graph is now acyclic and its barrier design is defensible, but Wave A lacks implementable provider paths for two boot-critical values, and Wave B’s manifest still omits callers that will fail compilation or stop execution at its own preflight. These are execution blockers, not advisory polish.
+### Strengths
+
+- The ULID generator has genuinely coupled entropy/lock/timestamp state, so moving the implementation once and retaining a forwarding shim avoids duplicated generators ([internal/core/ulid.go:16](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/ulid.go:16)).
+- The gateway’s uses are exactly leaf-shaped: command parsing ([internal/telnet/gateway_handler.go:406](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/telnet/gateway_handler.go:406)), connection ID generation ([internal/telnet/gateway_handler.go:670](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/telnet/gateway_handler.go:670)), and the lease cadence ([internal/session/reaper.go:14](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/session/reaper.go:14)).
+- Keeping `core.NewULID` as a temporary forwarder correctly avoids an unnecessary phase-wide rename.
+
+### Concerns
+
+- **LOW — stale test rationale.** The plan moves `ulid_test.go` verbatim, but its monotonicity test says `PostgresEventStore.Replay` orders by event ULID and silently skips lexicographically inverted events ([internal/core/ulid_test.go:36](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/ulid_test.go:36)). That contradicts the settled JetStream-sequence ordering model. The production comment is scheduled for correction, but the moved test comment is not.
+
+### Suggestions
+
+- Update the moved test commentary to assert only the still-live monotonicity consumers. Remove the retired Postgres event-replay rationale.
+- Preserve the actual strict-monotonicity test unless a separate decision retires that guarantee.
+
+### Risk Assessment
+
+**MEDIUM**, mainly due to identity-generation sensitivity.
+
+## 07-04 — Gateway enforcement and invariant binding
+
+### Summary
+
+The direct and transitive gates together genuinely enforce ARCH-05, and the invariant correction is well designed. The implementation should avoid introducing two independent forbidden-package lists.
+
+### Strengths
+
+- The existing gate is demonstrably direct-import-only: it iterates `file.Imports` and compares literal paths ([cmd/holomush/gateway_imports_test.go:140](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway_imports_test.go:140)).
+- The current list contains the phantom `internal/auth/service` package ([cmd/holomush/gateway_imports_test.go:101](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway_imports_test.go:101)).
+- The registry is genuinely stale: the summary and `refs` token both name the obsolete paths/tokens, and the binding remains pending ([docs/architecture/invariants.yaml:2340](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/docs/architecture/invariants.yaml:2340)).
+- Retaining the GW regex fixtures is correct; the migration is explicitly documented in the meta-test ([internal/gateway_invariants/meta_test.go:16](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/gateway_invariants/meta_test.go:16)).
+
+### Concerns
+
+- **MEDIUM — duplicated policy data.** The plan adds a new `forbiddenClosure` variable while retaining the existing `forbidden` slice. Because both tests are `package main`, they can share one canonical list. Two lists recreate the synchronization problem the plan otherwise tries to eliminate.
+
+### Suggestions
+
+- Rename the existing slice to a neutral `gatewayForbiddenPackages` and use it from both direct and transitive tests.
+- Keep both tests in `asserted_by`; they prove different halves of the invariant.
+- Retain the positive control, with the documented replace-don’t-delete instruction.
+
+### Risk Assessment
+
+**MEDIUM**. The enforcement design is strong once the package list is made single-source.
+
+## 07-05 — Move `core.Engine` to `presence.Emitter`
+
+### Summary
+
+This plan correctly preserves the non-obvious behavior in `Engine` and resolves the auth import cycle through a consumer-owned interface.
+
+### Strengths
+
+- It explicitly carries the typed-nil fail-fast guard, which is real behavior rather than scaffolding ([internal/core/engine.go:37](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/engine.go:37)).
+- It preserves `EndSession`’s audit-critical background timeout and cause-dependent actor selection ([internal/core/engine_end_session.go:20](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/engine_end_session.go:20), [internal/core/engine_end_session.go:56](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/engine_end_session.go:56), [internal/core/engine_end_session.go:68](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/engine_end_session.go:68)).
+- The two-method auth interface matches actual auth usage: eviction calls disconnect and session-ended emission, but not arrival ([internal/auth/auth_service.go:225](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/auth/auth_service.go:225)).
+- Reproducing qualification before publishing is essential because the old adapter currently owns that translation.
+
+### Concerns
+
+- No source-backed blocker found.
+
+### Suggestions
+
+- Keep explicit tests for an already-cancelled caller context and the non-quit system actor; these are the easiest behaviors to lose during the move.
+- Ensure the auth interface uses the final renamed methods rather than retaining compatibility names.
+
+### Risk Assessment
+
+**MEDIUM**. Sensitive cross-package move, but the plan covers its critical behavior.
+
+## 07-06 — Unified system broadcast builder
+
+### Summary
+
+The intent-shaped broadcaster removes a genuine duplicate payload contract while keeping `internal/command` independent of `eventbus`.
+
+### Strengths
+
+- The current hostcap implementation explicitly admits that it mirrors the command-layer JSON shape ([internal/plugin/hostcap/system_broadcaster.go:45](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostcap/system_broadcaster.go:45)).
+- `SessionAdmin` is already an appropriate consumer-owned interface ([internal/plugin/hostcap/capabilities.go:54](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostcap/capabilities.go:54)).
+- The plan correctly pins qualification and requires an exact subject assertion rather than recomputing the expected value through the same function.
+
+### Concerns
+
+- **LOW — retained interface method is implicit.** The task describes the new broadcast delegation but does not explicitly say to retain `DisconnectSession`, which is needed to continue satisfying `SessionAdmin` and currently returns the deliberate `ErrDisconnectUnsupported` result ([internal/plugin/hostcap/system_broadcaster.go:64](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostcap/system_broadcaster.go:64)). The compiler will catch deletion, but the plan should not rely on that.
+
+### Suggestions
+
+- Add one sentence: “Retain `DisconnectSession` unchanged.”
+- Keep its existing unsupported-behavior test alongside the broadcast delegation tests.
+
+### Risk Assessment
+
+**MEDIUM** because it crosses command and plugin-runtime surfaces, though the core design is sound.
+
+## 07-07 — Collapse to `eventbus.Event`
+
+### Summary
+
+This is a strong and complete collapse plan. It identifies the previously missing CoreServer publication replacement and preserves the package-private audit seam that constrains the survivor type.
+
+### Strengths
+
+- `eventbus.Event` carries host-internal fields that cannot safely move to a neutral package, especially the unexported `auditRow` used by crypto downgrade checks ([internal/eventbus/types.go:136](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/types.go:136), [internal/eventbus/types.go:195](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/types.go:195)).
+- The current history bridge destroys `Seq` by converting to `core.Event` ([cmd/holomush/sub_grpc.go:959](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:959)).
+- The plan correctly supplies a real replacement for CoreServer’s only publication seam; today it stores `core.EventAppender` and publishes command responses through it ([internal/grpc/server.go:151](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/grpc/server.go:151), [internal/grpc/server.go:616](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/grpc/server.go:616)).
+- Retaining the actor bridge with non-ULID rejection preserves an important spoofing control ([internal/plugin/event_emitter.go:299](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/event_emitter.go:299)).
+
+### Concerns
+
+- No source-backed blocker found. Execution remains broad and security-sensitive.
+
+### Suggestions
+
+- Keep the exact wire-subject assertion and nil-publisher test as mandatory.
+- Treat `task test:int` and the crypto reviewer as hard gates, not end-of-phase cleanup.
+
+### Risk Assessment
+
+**HIGH execution risk**, but the plan itself is well specified.
+
+## 07-08 — Sequence-correct plugin history
+
+### Summary
+
+The identified bug is real, and the proposed sequence threading fixes the correct layer without exposing sequence values to plugins. Binary-host coverage should be made as explicit as Lua coverage.
+
+### Strengths
+
+- `HostCursor` already carries both `Seq` and `ID` ([internal/eventbus/cursor/cursor.go:53](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/cursor/cursor.go:53)).
+- The current adapter passes `BeforeID` but never `BeforeSeq` ([cmd/holomush/sub_grpc.go:913](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:913)).
+- Hostcap hardcodes `Seq: 0` ([internal/plugin/hostcap/servers.go:1279](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostcap/servers.go:1279)), while the Lua path independently does so at both per-event and next-page sites ([internal/plugin/hostfunc/stdlib_focus.go:436](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostfunc/stdlib_focus.go:436), [internal/plugin/hostfunc/stdlib_focus.go:452](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostfunc/stdlib_focus.go:452)).
+- The public proto exposes only an opaque cursor and no sequence field ([api/proto/holomush/plugin/host/v1/stream.proto:43](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/api/proto/holomush/plugin/host/v1/stream.proto:43)).
+
+### Concerns
+
+- **MEDIUM — hostcap round-trip coverage is less explicit than Lua coverage.** Task 1 exercises `busHistoryReaderAdapter` directly, while Task 2 explicitly requires a multipage Lua walk. The hostcap encode/decode layer at [servers.go:871](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostcap/servers.go:871) and [servers.go:900](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostcap/servers.go:900) could still regress independently.
+
+### Suggestions
+
+- Add a hostcap `QueryStreamHistory` two-page test that feeds response `NextCursor` into the second request.
+- Assert the fake reader receives the oldest event’s real `(beforeSeq, beforeID)` pair.
+- Retain the existing Lua multipage test for runtime symmetry.
+
+### Risk Assessment
+
+**MEDIUM** after adding binary-host round-trip coverage.
+
+## 07-09 — Bootstrap Wave A
+
+### Summary
+
+The plan accurately identifies all five eager-start causes and the dependency-cycle hazards. Its central wiring abstraction is still insufficiently specified to implement safely across package boundaries.
+
+### Strengths
+
+- The current bootstrap demonstrably starts DB and EventBus outside the orchestrator ([cmd/holomush/core.go:281](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:281), [cmd/holomush/core.go:450](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:450)).
+- Accessor calls really do require live subsystems, and the current comments admit the pre-start workaround.
+- The plan correctly identifies that verifier handler construction eventually depends on the bus and therefore forbids the reverse EventBus→Verifier edge.
+- Moving TLS into a real DB-dependent subsystem directly addresses the first eager-start cause.
+
+### Concerns
+
+- **HIGH — `cryptoWiring` cannot be named by internal package configs as written.** The plan defines `cryptoWiring` in `package main` and says subsystem configs should take `func() (*cryptoWiring, error)` “or a narrow accessor” ([07-09-PLAN.md:190](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-09-PLAN.md:190)). Packages such as `internal/admin/policy` cannot import or name a `cmd/holomush` type. The fallback accessor design is load-bearing but not settled.
+- **HIGH — verifier construction remains eager unless explicitly redesigned.** `NewVerifierSubsystem` immediately constructs `NewVerifier(cfg.Repo)` ([internal/eventbus/audit/chain/verifier_subsystem.go:50](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/audit/chain/verifier_subsystem.go:50)). Adding only `HandlersProvider` does not defer the repo dependency; a repo produced by the lazy builder is still unavailable at construction.
+- **MEDIUM — failure semantics need per-consumer definition.** Policy, checkpoint sweep, verifier, admin socket, and gRPC currently hold different concrete dependency shapes ([internal/admin/policy/subsystem.go:23](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/policy/subsystem.go:23), [internal/eventbus/crypto/dek/sweep.go:28](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/crypto/dek/sweep.go:28), [cmd/holomush/sub_grpc.go:64](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:64)). “Narrow accessor” does not state the concrete API or when each consumer caches its result.
+
+### Suggestions
+
+Define the actual consumer-owned provider types in the plan, for example:
+
+- verifier: provider returning repo plus handlers; construct `Verifier` in Start/Prepare;
+- checkpoint sweep: provider returning repo and emitter;
+- crypto policy: provider returning `policy.EmitDeps`;
+- admin socket: provider returning concrete handlers;
+- gRPC: provider returning its concrete crypto inputs.
+
+The closures can close over `*cryptoWiring` inside `package main`, but their public signatures must use types owned by the consuming internal package.
+
+### Risk Assessment
+
+**HIGH** and currently blocking.
+
+## 07-10 — Lifecycle ordering and bounded shutdown
+
+### Summary
+
+The shutdown and ordering corrections address real operational defects, but the topology-test seam and abandoned-stop behavior need tighter definition.
+
+### Strengths
+
+- `StopAll` currently calls each `Stop` synchronously and never checks context cancellation ([internal/lifecycle/orchestrator.go:80](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/orchestrator.go:80)).
+- Production currently defers it with an unbounded background context ([cmd/holomush/core.go:1101](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:1101)).
+- The plan correctly uses a deferred closure so the timeout starts at shutdown rather than at defer registration.
+- The false ordering comment is real: the slice claims verifier-before-EventBus although topo order is derived independently ([cmd/holomush/core.go:1459](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:1459)).
+- gRPC genuinely lacks the AuditProjection dependency ([cmd/holomush/sub_grpc.go:166](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:166)).
+
+### Concerns
+
+- **MEDIUM — the topology test’s access mechanism is unclear.** `topoSort` is unexported ([internal/lifecycle/orchestrator.go:98](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/orchestrator.go:98)), while the planned tests live in `cmd/holomush`, a different package. The tests can infer order through `StartAll`, but the plan repeatedly says they directly assert `topoSort` results without specifying that mechanism.
+- **MEDIUM — abandoned Stop goroutines can overlap later StopAll calls.** The plan deliberately returns while a context-ignoring `Stop` goroutine continues. The interface promises idempotency and boundedness, but not concurrent-call safety ([internal/lifecycle/subsystem.go:55](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/subsystem.go:55)). A subsequent rollback or test call could invoke `Stop` again while the first is still running.
+
+### Suggestions
+
+- Specify that topology tests call `StartAll` on no-op recording wrappers whose dependencies are read from live subsystem instances; do not imply direct access to `topoSort`.
+- Alternatively add a narrow read-only validation/order method to `internal/lifecycle`.
+- Snapshot and clear `startOrder` before launching stop goroutines, or track per-subsystem stopping state, so a second `StopAll` cannot re-enter an abandoned Stop.
+
+### Risk Assessment
+
+**HIGH** because it changes shutdown and boot graph behavior, though its main mechanisms are sound.
+
+## 07-11 — Prepare/Activate Wave B
+
+### Summary
+
+The two-sweep design and rollback semantics are conceptually strong, but this plan still has multiple execution blockers. The settled 17-row table is incomplete for live gRPC work, unsafe for disabled admin sockets, and does not actually settle phase-specific idempotency.
+
+### Strengths
+
+- The corrected eventbus/audit relationship is source-accurate: embedded NATS starts as part of connection acquisition with `DontListen: true` ([internal/eventbus/subsystem.go:149](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/subsystem.go:149)), while audit fails closed if JetStream is not already live ([internal/eventbus/audit/subsystem.go:267](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/audit/subsystem.go:267)).
+- Separating audit’s synchronous partition boot gate from projection/consumer loops follows the existing code’s own seam ([internal/eventbus/audit/subsystem.go:286](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/audit/subsystem.go:286), [internal/eventbus/audit/subsystem.go:313](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/audit/subsystem.go:313)).
+- Rolling back every prepared subsystem, including the one whose Prepare partially failed, is the correct resource-safety model.
+- The broad direct-caller census and mandatory integration compilation gate are appropriate for this interface migration.
+
+### Concerns
+
+- **HIGH — two gRPC domain loops are absent from the settled table.** Current `grpcSubsystem.Start` launches both the session reaper and guest reaper before binding the listener ([cmd/holomush/sub_grpc.go:758](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:758), [cmd/holomush/sub_grpc.go:769](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:769)). Row 16 assigns only listener/Serve and coordinator start to Activate. Following the table literally either drops the reapers or leaves domain loops in Prepare, violating D-13.0.
+- **HIGH — disabled admin socket becomes unsafe.** Today an empty `SocketPath` returns before creating a server ([internal/admin/socket/subsystem.go:73](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/socket/subsystem.go:73)). Under two sweeps, returning from Prepare does not skip Activate. The plan then tells Activate to call `srv.Start()` without specifying a disabled-state guard. The existing test only exercises the single-phase behavior ([internal/admin/socket/subsystem_test.go:110](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/socket/subsystem_test.go:110)).
+- **HIGH — D-13.2 is not actually settled per subsystem.** The plan declares both phases MUST be idempotent, but delegates the 17 verdicts to the executor/SUMMARY. Several live methods have clearly non-idempotent effects:
+  - policy publishes on every invocation ([internal/admin/policy/subsystem.go:47](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/policy/subsystem.go:47));
+  - outbox relay creates another cancellation context and goroutine every invocation ([internal/world/setup/relay_subsystem.go:99](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/world/setup/relay_subsystem.go:99));
+  - checkpoint sweep starts another loop every invocation ([internal/eventbus/crypto/dek/sweep.go:86](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/crypto/dek/sweep.go:86));
+  - admin socket binds/serves on every Start ([internal/admin/socket/subsystem.go:89](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/socket/subsystem.go:89)).
+- **LOW — SessionSubsystem row remains conditional rather than settled.** Its current Start only constructs a store and launches no reaper ([internal/session/setup/subsystem.go:51](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/session/setup/subsystem.go:51)). Row 7 should state Activate is a no-op, not “if its Start launches one.”
+
+### Suggestions
+
+- Amend row 16:
+  - Prepare constructs both reapers and stores their context/cancel state.
+  - Activate starts both `Run` goroutines, then coordinator, listener, and Serve.
+  - Stop cancels/drains all owned activity.
+  - Add a test proving neither reaper runs after Prepare alone.
+- Add explicit disabled state to AdminSocketSubsystem, or make Activate return nil when `s.server == nil`/`SocketPath == ""`. Migrate the empty-path test to call both phases.
+- Put the full 17-row idempotency verdict in the plan, not the execution summary. Specify phase-owned state flags and repeated-call tests for every non-idempotent side effect.
+- Change SessionSubsystem Activate to an explicit documented no-op.
+
+### Risk Assessment
+
+**HIGH** and currently blocking.
+
+# Final recommendation
+
+Revise 07-01, 07-09, and 07-11 before execution. Clarify 07-10’s topology-test seam and shutdown re-entry behavior, and strengthen 07-08’s binary-host pagination coverage. After those changes, the phase should achieve all three goals: one Event model, orchestrator-owned bootstrap, and enforced gateway isolation.
 
 ---
 
 ## OpenCode Review (grok-4.5)
 
-# Cross-AI Plan Review — Phase 7 Rev 6
+# Phase 7 Cross-AI Plan Review
+
+**Verdict: READY with execution risk concentrated in Waves 7–9**  
+Overall risk: **MEDIUM** (design risk LOW–MEDIUM; implementation blast radius HIGH)
+
+I verified the load-bearing mechanisms against live source in this worktree. Claims about gateway drift, seq cursor bug mechanics, engine→auth cycle, DontListen/atomic admin socket, productionSubsystems count (16), and the phantom `internal/auth/service` entry all check out.
+
+---
 
 ## 1. Summary
 
-Rev 6 is substantially stronger than the round‑3/4 surface: FINDING‑5/6 (gameID + ·`NewEvent`/`NewType`), the Seq multipage RED reframing (`bus.go:87-104`), the page-advance `[0]` anchor, the StopAll **closure-not-arg** bug, the Prepare/Activate **circular barrier** repair, and live caller censuses for 07‑07/07‑11 all look real against this tree at `9e5d29db8`. The headline rev‑5 security story is only **partly** justified: deleting `EventBus → CryptoChainVerifier` is correct (it is a cycle after 07‑09 and would also drop `operator_read` from the boot gate), and the post‑wave graph is acyclic with that non-edge. **T‑07‑51 `low`/`accept` is not fully grounded for Wave A alone** — under the settled deps and ι tie-break, **gRPC and admin.sock can `Start` before the chain verifier**, so “nothing serves” is false until Wave B’s two-sweep barrier (or explicit `DependsOn(CryptoChainVerifier)` on external surfaces). Outside that residual, the eleven plans are execute-ready with clear MUST settlements and mechanically greppable gates.
+These plans are unusually strong for a phase this size: 11 plans, 9 waves, three requirements (ARCH-03/04/05), with decisions already hardened through multi-round review. ARCH-05 is sequenced correctly (extract client leaf → vocab leaf → value leaves → permanent gates). ARCH-04 avoids deepening MEDIUM-4 by keeping `command` off `eventbus`, and correctly treats D-07 as a real correctness fix with a deterministic quiet-stream RED. ARCH-03 (07-09→11) is the hard part: the `cryptoWiring` hoist, gameID dual-path migration, MEDIUM-11 edge/cycle analysis, and Prepare/Activate barrier are *settled designs*, not implementer-invented. Residual risk is mostly “can one executor land ~50-file rewrites without partial-fix modes,” not “is the architecture wrong.” Phase goals are achievable if wave gates and `task test:int` (with KEK) are treated as non-negotiable.
+
+---
 
 ## 2. Strengths
 
-- **Cycle analysis for MEDIUM‑11 is right about the load-bearing fact.** Verifier handler assembly uses `eventBusSub.Publisher()` via `auditPublisher` at `cmd/holomush/core.go:735` and hard-requires `AuditPublisher` in `buildReadStreamWiring` (`cmd/holomush/readstream_wiring.go:118`). `chainHandlers` optionally appends `readStreamW.AuditChainHandler` only when wiring succeeded (`core.go:1046-1052`). After 07‑09’s cryptoWiring rule forces `Verifier → EventBus`, the reverse edge is a freestanding **cycle** Kahn detects at `internal/lifecycle/orchestrator.go:144-146`.
-- **Third-option analysis that was written down is useful:** splitting provider packs for boot-gate registration would change INV‑CRYPTO‑102 registration semantics; leaving it is coherent with “behavior-preserving.”
-- **D‑07/D‑08 grounding matches the code.** `HistoryQuery` documents `BeforeID` as tripwire and zero seq as tail (`internal/eventbus/bus.go:87-104`); cold uses `hasCursor := cursorSeq > 0` (`cold_postgres.go:134`); `ReplayTail` sets only `BeforeID` (`sub_grpc.go:928-936`); hostcap hardcodes `Seq: 0` and **still lies** about an “ID-only fallback” (`hostcap/servers.go:1279-1290`); Lua has two independent `Seq: 0` sites (`stdlib_focus.go:441,463`) with oldest-anchor comments at `:452-463`. Plan 07‑08’s red_framing + page_advance + legacy_zero_seq are accurate, not rhetorical.
-- **Admin socket / Plugin retreats match the seams.** `Server.Start` is lock+remove+listen+Serve one shot (`admin/socket/server.go:58-113`); `NewServer` allocates nothing (`:53-55`). Plugin `Start` builds stack and returns — no work-loop launch (`plugin/setup/subsystem.go:163-165`; no `go ` / subscribe loop in that body).
-- **07‑07 `files_modified` rejection checks out.** Frontmatter parses to **34** paths; body-only citations (proto, taxonomy, dispatcher, qualify) are assertion targets, not edits.
-- **Parallel waves are file-disjoint.** 03∩05 = 0, 04∩06 = 0.
-- **ARCH‑05 stack is sequenced correctly.** grpcclient extraction addresses live `gateway.go:20` import; session/core leaf correction; phantom `internal/auth/service` is real in `gateway_imports_test.go:107`; D‑18 stale INV‑GW rename trap is correctly refused.
-- **StopAll deadline wiring** correctly rejects deferred-arg evaluation; in-tree precedent at `core.go:255-261` / `356-362`.
-- **07‑11 D‑13.0 barrier scoping** matches `DontListen: true` + `HTTPPort` (`eventbus/subsystem.go:153-156`) and audit’s `AUDIT_DEP_NOT_STARTED` path — the universal “nothing runs” framing would not boot.
-- **07‑10 Task 4 acyclicity gate** is the right durable fix for “wave N+1 proved against pre‑wave N state.”
+- **Grounded drift corrections, not folklore**
+  - `cmd/holomush/gateway.go:20,152-153` imports `internal/grpc` and is **not** in `coreOnlyFiles` (`gateway_imports_test.go:22-99`) — so 07-01’s extract-before-forbid is mandatory, not optional.
+  - `forbidden` still lists nonexistent `internal/auth/service` (`gateway_imports_test.go:107`); `INV-EVENTBUS-1` summary/`refs` still say `auth/service` and token `INV-GW-1` (`invariants.yaml:2344-2348`) — 07-04 Task 2–3 owns the real fix.
+  - D-04/FINDING-1 cycle is real: `auth` holds `*core.Engine` (`auth_service.go:engine field, 39,115,235,243`); `go list -deps ./internal/eventbus` contains `internal/auth`.
+
+- **Correct collapse direction & constraints**
+  - `eventbus.Event` stays put (auditRow/crypto fence rationale matches D-01).
+  - `command` must not import `eventbus` (MEDIUM-4) — D-02/`sysbroadcast` is the right pattern; already used in-tree (`hostcap.SessionAdmin`).
+
+- **D-07 bug chain verified hop-by-hop**
+  - `HistoryQuery` treats `BeforeID` as tripwire (`bus.go:88-105`); `matchesQuery` has no `BeforeID` branch (`hot_jetstream.go:392-402`); `BeforeSeq==0` → tail read (`:348-350`).
+  - Both runtimes hardcode `Seq:0`: hostcap `encodeHostEventCursor` (`servers.go:1285-1290`) **and** Lua sites (`stdlib_focus.go:441` and `:463`).
+  - `next_cursor` correctly uses **oldest / index 0** (`servers.go:900-906`, `stdlib_focus.go:452-463`). Plans correctly retract the false “last event” and “ID-only fallback” framings.
+
+- **Wave DAG is worktree-safe**
+  - Parallel pairs (07-03∥07-05, 07-04∥07-06) have empty `files_modified` intersections (checked mechanically).
+  - 07-07 depends on **both** 07-04 and 07-06 so ARCH-05 gates exist before `core.Event` deletion.
+
+- **ARCH-03 design depth matches the risk**
+  - Five eager starts at `core.go:287,462,797,800,977`; unbounded `StopAll` at `:1105`; false “runs before EventBus” at `:1476`; 16 positional params in `productionSubsystems` (`:1462-1472`); `SubsystemTLS` already at `subsystem.go:18`.
+  - MEDIUM-11 reverse edge correctly **retracted**: verifier handler set is built from `eventBusSub.Publisher()` path; EventBus→Verifier would cycle after 07-09’s consumer rule **and** risk unregistering `operator_read`.
+  - Wave B barrier scoped by DontListen (`eventbus/subsystem.go:153`) + audit’s hard require on live JS — earlier “universal barrier” would not boot.
+
+- **Enforcement rasters match the claims**
+  - Direct AST gate is insufficient alone; 07-04’s transitive closure + positive control on `internal/grpc→store` is what makes INV-EVENTBUS-1’s binding genuine.
+  - D-18 / no INV-GW rename + keep INV-GW regex fixtures is correct (`gateway_invariants/meta_test.go` migration story).
+
+---
 
 ## 3. Concerns
 
 ### HIGH
 
-1. **T‑07‑51 is under-defended for Wave A (the claimed “complete win if Wave B is deferred”).**  
-   Hand-topo with post‑plan deps (THE RULE on admin/grpc/verifier; gRPC + AuditProjection/TLS/Cluster/Plugins; EventBus `DependsOn=nil`) and SubsystemID tie-break (`orchestrator.go:125,140`; IDs at `subsystem.go:17-39`) yields order of form:  
-   `… → eventbus → audit_projection → cluster → **grpc** → **admin_socket** → **crypto_chain_verifier** → …`  
-   So under **combined `Start` (Wave A only)**:
-   - gRPC binds TCP and `Serve`s in `Start` (`sub_grpc.go:771-781`) **before** the verifier runs.
-   - Admin socket binds UDS in atomic `Server.Start` (`server.go:58-113`) **before** the verifier when both are ready (IDs 12 vs 13).  
-   Grounds in the threat row:  
-   - **(a) `DontListen`** — true for **embedded bus only** (`subsystem.go:153`); does not cover gRPC/admin.  
-   - **(b) `StartAll` abort + `StopAll`** — true eventual rollback (`orchestrator.go:58-64`), but **not** “nothing served”: there is a live accept window while the verifier still runs (chain walk over DB can be non-trivial). Public “ready” is later (`core.go:1107-1129`), but the **listener is already open**.  
-   - **(c) Wave B barrier** — valid **only if Wave B ships**; contradicts D‑12’s “Wave A remains a complete win if B is hairy.”  
-   Scoring T‑07‑51 as `low`/`accept` with those three grounds **fits the deleted-edge decision more than the residual risk**.
-
-2. **In-bounds third option exists and was not used for external surfaces.**  
-   `grpc → CryptoChainVerifier` and `admin_socket → CryptoChainVerifier` are **acyclic** (Verifier does not depend on them; only `EventBus → Verifier` cycles). That encodes “fail-closed before bind” without provider surgery or a second ordering authority. Plans pocket residual risk into “accept” instead of that cheap edge (or requiring Wave B for the threat disposition).
+- **None as design blockers.** No plan today would reintroduce a known compile-cycle or reverse a finished migration if executed as written.
 
 ### MEDIUM
 
-3. **`hostcap/servers.go:1282` still teaches the false ID‑only fallback in production code today** — 07‑08 rewrites it, but any partial/early execution that functions “with Seq:0 fallback comments” risks reintroducing the revoked framing; criteria that ban the phrase are good — keep them.
+1. **07-01 under-declares a real client consumer**  
+   `test/integration/phase1_5_test.go:297,374,529` calls `grpcpkg.NewClient` / `ClientConfig` while also using `NewCoreServer`. That file is **not** in 07-01 `files_modified` (it appears later for Engine/`WithEventStore`).  
+   Impact: `task test:int` will break until dual-import rewire. Acceptance runs `test:int`, so it is *caught*, but the plan’s “authoritative consumer list” is incomplete and invites a late scramble.
 
-4. **Wave A admin break-glass window** is worse than embedded NATS residual: admin handlers include rekey/readstream — crypto‑adjacent, not “in-process substrate only.”
+2. **Execution complexity of 07-09 + 07-11 dominates phase risk**  
+   Verified complexity deserves this weight:
+   - ~26 live-value reads on `core.go`’s pre-start path (`rg` count was 26).
+   - `cryptoWiring` memoized hoist of the `:705–1060` block is necessary but easy to half-apply (drop a consumer from THE RULE, route ABAC through wiring again, turn Coordinator start failures fatal).
+   - 07-11 migrates ~17 impls + ~27 callers, most integration-tagged → only `task test:int` sees them. A partial migrate (Prepare without Activate) compiles and goes green while loops never run. Plans name this; discipline still required.
 
-5. **Current `StartAll` rollback uses the startup `ctx`** (`orchestrator.go:60`) — 07‑11 correctly treats cancelled-startup inheritance as a bug. Until Wave B lands, 07‑10’s deadline-aware `StopAll` can **amplify** abandon-on-cancel on that path. 07‑11 should not be optional if 07‑10 ships first in production without the rollback-context fix (ordering is 10 then 11 — OK if both ship; weak if 10 alone for a long time).
+3. **“No behavior change” is slightly oversold for ARCH-03**  
+   Phase success criterion #2 says startup/shutdown behavior is unchanged. 07-09/10 **intentionally** change topo order (AuditProjection before gRPC; Verifier before gRPC/admin.sock; Cluster/Legacy TLS edges). That is correct bug-fix behavior, not pure rename. Risk is review/comms: executors omit a new edge to “preserve order” and re-open the accept-before-verify window.
 
-6. **07‑11 scope (~57 files)** is justified as atomic but is execution risk (integration-only callers). The plan mitigates with Step 0 census + `task test:int`; still a single large blast radius for human review.
+4. **07-05 interim dual path is subtle**  
+   `presence.Emitter` publishes via `eventbus.Publisher`, while `busEventAppender` (`sub_grpc.go:821+`) remains until 07-07 for other appenders. Plan is explicit, but subject construction must match `busEventAppender` (`Qualify` + `""→main` + `NewType` + `NewEvent`) or arrive/leave subjects silently diverge prior to collapse. Criteria pin exact-literal subjects — good; easy to violate under schedule pressure.
+
+5. **StopAll abandon-in-goroutine residual (07-10)**  
+   Design is correct for process exit + one boot rollback. Doc comment requirement is right. Residual: a misbehaving subsystem `Stop` after repeated orchestrator use in long-lived test harnesses can still leak goroutines; accepted, not new.
 
 ### LOW
 
-7. **Live doc lies that plans fix (good, but nominate as first-week landmines):** `core.go:1476` “runs before EventBus”; hostcap cursor comment; possibly `tier.go:719-720` as 07‑08 notes.
+6. **07-02/serialization on `gateway_handler.go`**  
+   depends_on 07-01 purely for worktree collision is correct process design, not type need. Mild wall-clock cost; fine.
 
-8. **Prod count 16→17** matches `core.go:1462-1471` (16 params) + TLS — fine.
+7. **07-04 positive control coupling to `internal/grpc→store`**  
+   Settled as live control with replace-dont-delete; residual is future false red if grpc becomes a leaf — acceptable and loud.
 
-9. **`encodeHostEventCursor` “cold handles Seq=0 as ID-only”** is not only wrong — cold `hasCursor := cursorSeq > 0` proves zero-seq never opens a cursor (`cold_postgres.go:134`).
+8. **Leaf forwarders (`core.NewULID`, `session.DefaultLeaseRefreshInterval`)**  
+   Drift risk long-term if someone “simplifies” by deleting forwarders mid-call-site churn; 07-03/07 documents why they stay.
+
+9. **Forbidden list growth vs. `coreOnlyFiles`**  
+   Plan correctly rejects growing `coreOnlyFiles`. Residual: other CLI/e2e files not in the allowlist must remain free of `core/session/grpc` or the shared gate fails — research claimed zero; re-check at 07-04 wall-clock.
+
+---
 
 ## 4. Suggestions
 
-1. **Re-open T‑07‑51** to either:  
-   - **`medium`/`mitigate`:** add `DependsOn(SubsystemCryptoChainVerifier)` on `grpcSubsystem` and `AdminSocketSubsystem` in 07‑10 (or 07‑09 wiring rule for “external surfaces”), pin in topo test **verifier-before-grpc** and **verifier-before-admin**; or  
-   - keep `accept` only with an explicit **“accept only after Wave B lands; Wave A ships with residual external bind-before-chain window”** in SUCCESS + threat model (not the current “structural via Wave B” as Wave‑A comfort).
-2. **Topo pin named assertions** in 07‑10 should include **`crypto_chain_verifier` before `grpc` and `admin_socket`** once edges (or Wave B-only disposition) say so; today only bus-before-verifier + audit-before-grpc is required — that is **not** enough for chain-before-serve.
-3. Do **not** revive `EventBus → CryptoChainVerifier` under any “encode the comment” rewrite — Task 4 RED proof should stay mandatory.
-4. Prefer landing **07‑10 + 07‑11 in one ship unit** if StopAll becomes timeout-aggressive before rollback uses `context.Background()`-parented stop.
-5. On 07‑07, keep rejecting adding read-only paths to `files_modified` — that rejection is correct.
+1. **Pre-execution: add to 07-01 Task 2 files / acceptance census**  
+   ```text
+   test/integration/phase1_5_test.go   # NewClient + ClientConfig + CoreServer dual import
+   ```  
+   Optional: re-run `rg -n 'holomush/internal/grpc\.(NewClient|ClientConfig|Client\b|TranslateSubscribeErr)'` and treat any hit outside host/server packages as mandatory rewire.
+
+2. **07-09 boat-anchor: one integration checkpoint before Task 3**  
+   After Task 2 (eager starts dead + cryptoWiring), require green:
+   - `task test:int -- -run 'TestAdminAuthenticate|AdminRekey' ./cmd/holomush/`
+   - the THE RULE DependsOn-superset test  
+   before renaming `productionSubsystems`. Prevents stacking LOW-8 refactors on a boot that already panics.
+
+3. **Explicit “topo order may change” note on ARCH-03 success criteria**  
+   Pin: “observable player/API behavior unchanged; boot *order* may change to match real DependsOn (MEDIUM-11, LOW-7, AuditProjection edge).” Reduces “don’t change DependsOn” regressions.
+
+4. **07-08 Spec A must round-trip the same dusk path hostcap uses**  
+   Cursor from **index 0**; pageSize ≪ N; iteration-bounded. Plan says this — make SUMMARY require observed page1 IDs ∩ page2 IDs empty as the human-readable anchor proof.
+
+5. **Do not split 07-11 further into “impl plan / caller plan”**  
+   Compile atomicity argument is correct. If context limits force a split, only acceptable intermediate is a **temporary dual-method backward-compat shim**, which D-11 rejects — i.e. better keep one atomic wave.
+
+6. **crypto-reviewer scheduling**  
+   Plans flag 07-06/07-07 (`event_emitter`) and 07-08 (history path). Run domain gates **after each of those waves**, not only pre-merge, so regressions don’t compound into Wave 9.
+
+7. **Deferred doc drift issue (CONTEXT.md)**  
+   Still create the MODEL-02 completeness issue for `.planning/PROJECT.md` / ARCHITECTURE.md event-sourcing text during 07-07 Task 3 as planned — otherwise the next planning agent re-litigates MODEL-01.
+
+---
 
 ## 5. Risk Assessment
 
-| Dimension | Level | Why |
-|-----------|--------|-----|
-| **Plan correctness (execute → intended design)** | **MEDIUM** | High-quality settlements and green path are real; Wave‑A threat story overclaims. |
-| **Security residual if executed as written** | **MEDIUM–HIGH until Wave B** (or external deps-on-verifier edges) | Bind/serve before chain walk under supervised graph; Window closes with two-sweep Activate. |
-| **Operational/execute risk** | **MEDIUM** | 07‑11 size + integration-only callers; mitigated by census and test:int gates. |
-| **Import-cycle / ARCH‑04–05 coherence** | **LOW** | Consumer interfaces + leaves match eventbus→auth cycle proof (`go list -deps` contains `internal/auth`); 03∥05 / 04∥06 disjoint. |
+| Axis | Level | Justification |
+|------|-------|---------------|
+| **Design correctness** | **LOW** | Settlements match live code; false rationales corrected advertising-style instead of silently shipping lies. |
+| **Requirement coverage** | **LOW risk of gaps** | ARCH-05 → 01..04; ARCH-04 → 02,05..08; ARCH-03 → 09..11. Phase success criteria each have an automated pin (closure, wire-type greps, topo pin, two-sweep property test, KEK boot). |
+| **Dependency ordering** | **LOW–MEDIUM** | Wave DAG sound; 07-07 convergence on ARCH-05 is critical and present. Parallelism only where files don’t collide. |
+| **Silent integration breakage** | **MEDIUM** | Class of risk is named repeatedly; residual is human skip of `task test:int` / KEK-less false greens (plans already ban `task test` for those E2Es). |
+| **Security regress** | **LOW–MEDIUM** | Crypto/identity surfaces handled deliberately (AuditRowOf, non-ULID bridge, no plugin Seq, verifier-before-bind, AuditProjection edge). Highest residual is mis-wired Activate error swallowing for Coordinator degraded mode. |
+| **Over-engineering** | **LOW** | Large, but driven by proven cycles/bugs (pre-starts, MEDIUM-11 cycle, seq zero). Not greenfield inventiveness. |
+| **Overall** | **MEDIUM** | Plans are execution-ready. Risk is recipe following + burnout size of 07-09/11, not bad strategy. |
 
-**Overall: MEDIUM** — **not APPROVED as security-self-certified on T‑07‑51 / Wave A completeness without the fix above**; **APPROVED to execute** if T‑07‑51 is re-scoped or external surfaces gain `DependsOn(CryptoChainVerifier)` (preferred) and 07‑10 Task 4 remains mandatory.
+---
 
-### Focus item verdicts (as requested)
+## 6. Per-plan snapshot
 
-| Item | Verdict |
-|------|---------|
-| 1. Deleted `EventBus → Verifier` fail-closed edge | **Correctly deleted.** Intent “bus must not come up while chain unproven” is **not** implementable as that edge post‑07‑09; bus-up-first is forced by handler construction. Post-graph without that edge is acyclic. **True fail-closed for external serve needs other edges or Wave B**, not the deleted edge. |
-| 2. T‑07‑51 high/mitigate → low/accept | **Not fully justified.** (a) only covers embedded bus; (b) leaves a serve-then-rollback window; (c) is Wave B. Fits the edge deletion more than residual risk. |
-| 3. 07‑07 files_modified under-count rejection | **Accepted.** 34 parsed entries; body-only paths are non-edit citations. |
-| 4. Admin-socket + Plugin retreats | **Match code.** Atomic `Server.Start`; plugin has no Activate loop to move. |
-| 5. 07‑11 25→57 census + parallel disjoint `files_modified` | **Manifest growth is justified** if Step 0 re-census stays mandatory; **03∥05 and 04∥06 are empty intersections.** |
+| Plan | Wave | Goal hit? | Notes |
+|------|------|-----------|-------|
+| **07-01** | 1 | Yes (~85% ARCH-05) | client extract verified necessary; add `phase1_5_test.go` to consumer list |
+| **07-02** | 2 | Yes | Vocab-only exit criteria correctly scoped; doesn’t falsely claim core ban |
+| **07-03** | 3 | Yes | End-of-plan full gateway ban ownership is correct placement |
+| **04** | 4 | Yes | Closure + genuine INV binding; phantom auth fix required |
+| **05** | 3 | Yes | FINDING-1/5/6 settled; carry EndSession discipline for real |
+| **06** | 4 | Yes | One payload builder; FINDING-5 parity with presence; Lua-only asymmetry preserved |
+| **07** | 5 | Yes | Depends on 04+06; WithEventPublisher specified (not “build event without publish”); rules amended same change |
+| **08** | 6 | Yes | Quiet multipage RED is correct; all three Lua encode/decode sites enumerated |
+| **09** | 7 | Yes | Wave A design table is the plan; THE RULE + no-ABAC-consumer + TLS + 16→17 |
+| **10** | 8 | Yes | MEDIUM-11 = delete false claim + pin (not reverse edge); rollback fresh ctx; acyclicity test vs rev4 cycle |
+| **11** | 9 | Yes | D-13.0 barrier scoped correctly; Plugin Activate no-op; admin.sock atomic; caller census mandatory |
+
+---
+
+## 7. Do the plans achieve the phase goals?
+
+| Success criterion | Achieved by |
+|-------------------|-------------|
+| Single Event representation; callers migrated; no *wire* behavior change | 07-07 (+05/06 prep, +02 vocab); `AppSchemaVersion=1` asserted; wire already `eventbus.Event` |
+| Bootstrap via Orchestrator; unified start/stop; boot works | 07-09 (zero pre-starts) + 07-10 (honest edges/deadline) + 07-11 (Prepare/Activate structure) |
+| Gateway protocol-translation-only; boundary green | 07-01→03 leaves + 07-04 direct+transitive gates + bound INV-EVENTBUS-1 |
+
+**Bottom line:** Approve for execution. Treat 07-01 consumer census as a quick patch before Wave 1 starts; treat Waves 7–9 as a single high-attention sequence with mandatory KEK `task test:int` checkpoints, not a bulk autonomous grind.
 
 ---
 
 ## Consensus Summary
 
-**Verdict: NOT execution-ready. Do not start Wave 1.** Round 4 found **4 blockers** in rev 6 — plans
-that had passed a FULL plan-checker with 0 blockers and cleared every coverage gate. This is the
-**fourth consecutive round** to find real defects.
+**Verdict: NOT execution-ready — rev 8 required. All blocking findings are narrow plan amendments, not design reversals.**
 
-### The signal worth acting on: every round-4 blocker is in ARCH-03
+The reviewers split hard on the headline: OpenCode says **READY** (zero HIGH design blockers); Codex says
+**HIGH risk until amended** (four blocking areas). Grounding checks resolve the split in Codex's favor on
+three of its four areas — each was verified against the live tree and the rev-7 plan text by the
+orchestrator before this summary was written. Per standing practice, consensus below is weighted by
+grounding, not headcount.
 
-| Round | ARCH-04/05 (07-01…07-08) | ARCH-03 (07-09/07-10/07-11) |
-| --- | --- | --- |
-| 2 | 07-02, 07-06, 07-07, 07-08 | 07-09, 07-10, 07-11 |
-| 3 | 07-08 anchor | **cycle #1**, admin-socket seam, PluginSubsystem loop |
-| 4 | **none** | **ABAC cycle #2**, gameID migration, census, T-07-51 |
+### Blockers (orchestrator-verified against tree + plan text)
 
-**ARCH-04 and ARCH-05 have converged — round 4 found zero blockers across 07-01…07-08.** ARCH-03 has
-produced blockers in every round, including **two independent dependency cycles**. Both reviewers
-separately flag 07-09/07-11 size as the residual execution risk. See "Recommendation" below.
+1. **BLOCKER (agreed: Codex HIGH, OpenCode MEDIUM — VERIFIED) — 07-01's caller census misses
+   `test/integration/phase1_5_test.go`.** The file imports `internal/grpc` as `grpcpkg`
+   (`test/integration/phase1_5_test.go:27`) and calls `grpcpkg.NewClient`/`ClientConfig` at `:297`,
+   `:374`, `:529`; it is integration-tagged and absent from 07-01's `files_modified` (it appears only in
+   07-05/07-07 for later, unrelated edits). Moving `client.go` breaks `task test:int` compile. Caught by
+   07-01's own acceptance gate, but the plan's "authoritative consumer list" claim is false as written.
+   *Fix:* add the file to `files_modified` + a dual-import rewire step (`grpcpkg` stays for
+   `NewCoreServer`; new `grpcclient` import for the client symbols).
 
-### Blockers
+2. **BLOCKER (Codex HIGH — VERIFIED) — 07-11 row 16 omits two live gRPC domain loops.** Current
+   `grpcSubsystem.Start` launches the session reaper (`go s.sessionReaper.Run(reaperCtx)`,
+   `cmd/holomush/sub_grpc.go:758`) and guest reaper (`go s.guestReaper.Run(reaperCtx)`, `:769`) before
+   the listener bind. Both are domain loops (lease sweeps call `engine.HandleDisconnect`; guest reaping
+   deletes characters + emits tombstones). Row 16 (`07-11-PLAN.md:377`) assigns Prepare = build/register/
+   wire/construct-Coordinator and Activate = bind+serve+`coordinator.Start()` — the reapers are assigned
+   to neither sweep. By the plan's own stop-and-report rule an executor must halt here; the only other
+   `reaper` mention is row 7 (SessionSubsystem). This is the round-4 census-class defect recurring at
+   row granularity. *Fix:* amend row 16 — Prepare constructs both reapers + their ctx/cancel state;
+   Activate starts both `Run` goroutines, then coordinator, listener, Serve; Stop cancels/drains; add a
+   test that neither reaper runs after Prepare alone.
 
-1. **BLOCKER — a SECOND dependency cycle: `ABAC → cryptoWiring → ABAC`.** *(Codex only. Verified.)*
-   Today operators are validated against the live DB pool (`cmd/holomush/core.go:377-385`) and passed
-   to ABAC as a **concrete slice** at construction — `abacsetup.NewABACSubsystem(… CryptoOperators:
-   cryptoOperators)` (`core.go:392-396`). Rev 6 moves `validateCryptoOperators` **into `cryptoWiring`**
-   (`07-09-PLAN.md:261`). But THE RULE forces every `cryptoWiring` consumer to
-   `DependsOn(…, SubsystemABAC)` — so making ABAC a consumer closes `ABAC → cryptoWiring → ABAC`.
-   **Wave A cannot both delete the `:385` DB pre-start and construct ABAC with validated values.**
-   *Fix (Codex):* validate inside **ABAC's own Prepare** using its existing DB edge — it already does
-   `pool := s.cfg.DB.Pool()` (`internal/access/setup/subsystem.go:79`) — or give ABAC a DB-only
-   validator. Do **not** route it through `cryptoWiring`. Preserve the lax-and-warn behavior
-   (`cmd/holomush/crypto_operator_validation.go:42`).
+3. **BLOCKER (Codex HIGH — VERIFIED) — disabled admin socket nil-panics in Activate.** Row 14 settles
+   Prepare = "the `SocketPath == \"\"` disabled-mode early return … and `srv := NewServer(Config{…})`"
+   (`07-11-PLAN.md:428-431`) and Activate = "`errCh, err := srv.Start()` … unchanged". In disabled mode
+   Prepare early-returns before `NewServer`, so `s.server` is nil — and the two-sweep orchestrator still
+   calls Activate, which the plan directs to call `srv.Start()` with **no nil/disabled guard specified
+   anywhere** (checked rows, settlement text, and acceptance criteria at `:1017`). Boot panic in exactly
+   the degraded environment (no XDG runtime dir) the disabled mode exists to survive. *Fix:* one guard —
+   Activate returns nil when `s.server == nil` — and migrate the empty-path test
+   (`internal/admin/socket/subsystem_test.go:110`) to drive both phases.
 
-2. **BLOCKER — the `gameID` provider migration is underdesigned and unsupported by its manifest.**
-   *(Codex only.)* Rev 6 gives TLS an explicit provider and disposes of everything else in one
-   sentence — *"Other consumers … take `func() string`"* (`07-09-PLAN.md:255`). But live consumers
-   require **concrete strings**: `internal/world/setup/subsystem.go:31`,
-   `internal/plugin/setup/subsystem.go:99`, `internal/world/setup/relay_subsystem.go:38`,
-   `internal/cluster/registry.go:78` (rejects an empty `ClusterID`), and the audit DLQ subject
-   eagerly built at `cmd/holomush/core.go:571`. **A function cannot be assigned to a string field**,
-   and resolving `dbSub.GameID()` during straight-line construction violates 07-09's own
-   zero-live-read truth. 07-09's manifest omits the world, plugin, relay and audit files.
-   *Fix:* an explicit per-consumer table — provider signature, resolution phase, dependency edge,
-   config-field change, files — preserving `cfg.GameID` override precedence.
+4. **BLOCKER (Codex HIGH — VERIFIED, NARROWED) — 07-09's consumer provider contract is not
+   package-realizable as primarily stated, and the verifier's `Repo` deferral is unspecified.** The
+   settled design says each consumer config "takes `func() (*cryptoWiring, error)` (or a narrow accessor
+   off it)" (`07-09-PLAN.md:206-208`) — but `cryptoWiring` is a `package main` type, unnameable from
+   `internal/admin/policy`, `dek`, `chain`, or `socket` configs; only the gRPC subsystem (package main)
+   can hold that type. The hedge is real but unsettled: of the five consumers, only the verifier's
+   `Handlers` gets a concrete new provider type (`HandlersProvider func() []chain.Handler`, `:298`).
+   Meanwhile `NewVerifierSubsystem` constructs `NewVerifier(cfg.Repo)` **at construction time**
+   (`internal/eventbus/audit/chain/verifier_subsystem.go:52-56`) and the plan routes
+   `chain.NewPostgresRepo` **inside the hoist** (`07-09-PLAN.md:288`) — post-07-09 there is no pool
+   before `StartAll`, so a resolved `Repo` cannot exist when the subsystem is constructed. The plan
+   converts `Handlers` but never says how `Repo` defers or that `NewVerifier` moves into Start.
+   *Fix:* settle the per-consumer provider signatures in the plan (policy → `func() (policy.EmitDeps,
+   error)`; sweep → repo+emitter provider; verifier → repo+handlers providers with `NewVerifier` moved
+   to Start; admin socket → concrete handler provider; gRPC may close over `*cryptoWiring` directly).
+   Closures live in `package main`; public signatures use consumer-owned types.
 
-3. **BLOCKER — 07-11's 57-entry census is STILL incomplete, and its own preflight will halt.**
-   *(Codex only.)* Confirmed omitted direct callers: `internal/admin/policy/subsystem_test.go:82`;
-   `internal/admin/policy/subsystem_integration_test.go:41` (+ `:72`, `:93`);
-   `internal/eventbus/audit/subsystem_test.go:127` (+ `:145`). The census regex misses
-   `s.Start(t.Context())`, which explains the audit omission. **07-11 itself says an unlisted caller
-   is a planning defect and the executor must stop** (`07-11-PLAN.md:719`) — so this halts execution
-   by the plan's own rule. *Fix:* replace the restricted regex with a broad `.Start(` census plus type
-   classification, or a `go/packages`/AST census.
+### Downgraded / refuted findings (checked, not blockers)
 
-4. **BLOCKER (OpenCode HIGH) / MEDIUM (Codex) — T-07-51's downgrade does not hold for Wave A, and an
-   in-bounds third option exists.** *(Verified independently, including the remedy.)*
-   Hand-computing the post-plan graph: `topoSort` tie-breaks ready subsystems by ascending
-   `SubsystemID` (`internal/lifecycle/orchestrator.go:139`), and
-   `SubsystemGRPC` (`subsystem.go:25`) < `SubsystemAdminSocket` (`:29`) <
-   `SubsystemCryptoChainVerifier` (`:33`). Under **Wave A (combined `Start`)**, gRPC binds TCP and
-   serves inside its own `Start` (`cmd/holomush/sub_grpc.go:772` `net.Listen` → `:779-781`
-   `go s.grpcServer.Serve`) — **before the chain verifier runs**. The three grounds for `low/accept`:
-   - **(a) `DontListen`** covers the **embedded bus only** (`internal/eventbus/subsystem.go:153`) —
-     it says nothing about gRPC or admin.sock.
-   - **(b) `StartAll` abort + `StopAll`** is *eventual* rollback (`orchestrator.go:58-64`); the
-     listener is already accepting during the chain walk.
-   - **(c) "Wave B's barrier makes it structural"** — **contradicts locked decision D-12**
-     (`07-CONTEXT.md:247`: *"Wave A remains a complete win if B proves hairy"*). The threat's
-     disposition cannot depend on a wave the phase explicitly allows to be deferred.
-   **The in-bounds third option the planner missed:** `grpc → CryptoChainVerifier` and
-   `admin_socket → CryptoChainVerifier` are **acyclic** — the verifier depends only on Database
-   (`internal/eventbus/audit/chain/verifier_subsystem.go:67-69`), so it depends on neither. Only
-   `EventBus → Verifier` cycles. Those two edges encode fail-closed-before-bind with no provider
-   surgery and no second ordering authority.
-   *Codex adds (MEDIUM):* "nothing observable" also overstates for the NATS monitor (`HTTPPort`,
-   `subsystem.go:149`) and for **external mode**, which dials a remote broker (`:204`) and may mutate
-   broker state via `EnsureStream` (`:98`) before verification. Address embedded and external modes
-   separately.
+- **Codex HIGH "D-13.2 idempotency not settled per-subsystem" → MEDIUM.** The contract is stated
+  per-interface with the corrected rationale (`07-11-PLAN.md:245,286-287`), and Codex's cited
+  non-idempotent bodies are real — but the orchestrator calls each phase once per boot, so this is a
+  robustness-contract completeness gap, not a boot-correctness defect. Still worth fixing in rev 8
+  (per-row idempotency verdicts belong in the plan under this phase's zero-executor-decides standard),
+  at WARNING severity.
+- **Codex MEDIUM "07-10's topology-test access mechanism is unclear" → REFUTED.** The plan specifies
+  dep-carrying stub subsystems driven through a real orchestrator (`07-10-PLAN.md:486`, `:649` — "a
+  dep-carrying stub subsystem in `package main` (or an exported one from `internal/lifecycle`)").
+  Codex missed the mechanism; no amendment required.
+- **OpenCode's READY verdict** is overridden by the three verified Codex blockers above. Its review is
+  genuinely grounded (drift corrections, D-07 chain, eager-start inventory all check out) but it did not
+  descend to row-level disposition or provider-type realizability, which is where rev 7's remaining
+  defects live.
 
-### Divergence (worth reading — the reviewers split, and both are partly right)
+### Agreed strengths (both reviewers, independently verified)
 
-On T-07-51, **OpenCode says HIGH; Codex says MEDIUM.** Codex holds that 07-11's Prepare/Activate
-barrier *is* the sound third option and is already captured (`07-11-PLAN.md:157`). OpenCode's counter
-is decisive and Codex never engaged it: **the barrier only exists if Wave B ships, and D-12 explicitly
-promises Wave A stands alone.** Conversely Codex found the external-mode exposure OpenCode missed.
-Take the union: the barrier is right *with* Wave B; the external-surface edges are what make Wave A
-honest on its own.
+- The round-4 fixes all held: no reviewer re-found the ABAC↔cryptoWiring cycle, the gameID migration
+  design, the census method, or the T-07-51 scoping — and both endorse the surface→verifier edges and
+  the MEDIUM-11 comment-deletion + topo-pin settlement (`EventBus → Verifier` stays impossible).
+- ARCH-04/05 (07-01…07-08) remain converged: the only blocker there is the 07-01 census file; everything
+  else is LOW/suggestion-grade (07-03 stale test rationale, 07-04 single-source forbidden list, 07-06
+  "retain `DisconnectSession`" sentence, 07-08 hostcap two-page round-trip test).
+- Wave DAG is sound; parallel pairs file-disjoint; 07-07's convergence gating (depends on both 07-04
+  and 07-06) is correct; D-07's bug chain is verified hop-by-hop by both reviewers.
 
-**The planner's error here was over-generalization, not miscalculation.** It correctly proved
-`EventBus → Verifier` is impossible (the verifier is built from the bus's publisher), then slid from
-*"this edge is impossible"* to *"the intent is unimplementable."* The intent never needed that edge —
-it needed edges on the external surfaces.
+### Divergence
 
-### Agreed Strengths (both reviewers, verified)
-
-- **Deleting `EventBus → Verifier` was CORRECT** — the verifier's handler set is built from
-  `eventBusSub.Publisher()` (`cmd/holomush/core.go:735`) and `buildReadStreamWiring` returns empty
-  wiring without it (`cmd/holomush/readstream_wiring.go:115`), so the reverse edge is a cycle
-  `topoSort` rejects (`internal/lifecycle/orchestrator.go:144-146`). **Do not revive it.**
-- **The post-wave graph is acyclic** with that non-edge.
-- **07-10 Task 4's live-edge acyclicity test is the right durable fix** for the "wave N+1 proved
-  against pre-wave-N state" class — it requires the real registration set and live `DependsOn()`, and
-  reconstructs the rev-4 cycle as its RED proof (`07-10-PLAN.md:491`); the production seam is indeed
-  centralized (`cmd/holomush/core.go:1087`).
-- **Both "retreat" dispositions match the code** — `Server.Start` is atomic
-  (`internal/admin/socket/server.go:58`), `NewServer` allocates nothing (`:53-55`);
-  `PluginSubsystem.Start` builds the stack and owns no delivery loop
-  (`internal/plugin/setup/subsystem.go:163-165`).
-- **The 07-07 rejection is CORRECT** — frontmatter parses to **34** entries; body-only paths are
-  non-edit citations. *(Both reviewers upheld it. Do not re-open.)*
-- **Parallel waves are file-disjoint** — 07-03∩07-05 = ∅, 07-04∩07-06 = ∅.
-- **07-08's D-07/D-08 grounding matches the code**, including the `[0]` page-advance anchor and the
-  two independent Lua `Seq: 0` sites; ARCH-05's stack sequences correctly; the D-18 stale INV-GW
-  rename trap is correctly refused.
-
-### Lesser findings
-
-- **MEDIUM (Codex) — 07-11 Task 2's "exactly 17 files" count is guaranteed to fail on correct code**
-  (`07-11-PLAN.md:948`): Task 1 has already migrated the `internal/lifecycle/orchestrator_test.go`
-  stub (≥18), and Task 3 adds two more. The regex is syntactically fixed but semantically mis-scoped.
-  *Fix:* scope to an explicit production file list, or count compile-time `lifecycle.Subsystem`
-  assertions.
-- **MEDIUM (OpenCode) — Wave-A admin break-glass window is worse than the NATS residual**: admin
-  handlers include rekey/readstream — crypto-adjacent, not in-process substrate.
-- **MEDIUM (OpenCode) — ship 07-10 + 07-11 together**: until Wave B lands, 07-10's deadline-aware
-  `StopAll` can amplify abandon-on-cancel on the rollback path that still inherits the startup ctx
-  (`orchestrator.go:60`).
-- **LOW (Codex) — 07-07 still says "30 `files_modified`"** at `:494` while correctly recording 34 at
-  `:529-535`. Stale count; the rejection itself stands.
+Same complementarity pattern as rounds 2–4: near-zero HIGH overlap between grounded reviewers. OpenCode
+audited breadth (all 11 plans, phase goals, DAG) and found the census gap; Codex audited depth (row-level
+dispositions, type realizability, constructor timing) and found the other three. Neither is wrong about
+what it checked; a single grounded reviewer would have missed half the picture again.
 
 ### Recommendation
 
-**Rev 7 is required. But consider a phase split first — the evidence now supports it.**
-
-Four rounds have converged ARCH-04 and ARCH-05 (07-01…07-08): **round 4 found zero blockers there.**
-Every round-4 blocker, and 4 of 5 round-3 blockers, are in **ARCH-03** (07-09/07-10/07-11) — which has
-now produced **two independent dependency cycles**, a still-incomplete caller census on its fourth
-attempt, an underdesigned provider migration, and a security threat whose disposition contradicts a
-locked decision. Both reviewers independently name 07-09/07-11 size as the residual risk.
-
-That is not a plan-quality problem that a fifth revision fixes; it is a **scope** signal. ARCH-03
-rewires boot-order for 17 subsystems across two waves while ARCH-04/05 are ordinary (if large)
-mechanical refactors. Splitting would let the converged 8 plans ship and give ARCH-03 its own
-discuss → plan cycle with the cycles/providers as first-class design inputs rather than review
-findings.
-
-If the phase is NOT split, rev 7 must: (1) move crypto-operator validation into ABAC's Prepare;
-(2) build the explicit `gameID` consumer table; (3) redo 07-11's census with an AST/`go/packages`
-sweep; (4) re-scope T-07-51 — preferably by adding `grpc → CryptoChainVerifier` and
-`admin_socket → CryptoChainVerifier` (acyclic, cheap) and pinning verifier-before-grpc /
-verifier-before-admin in 07-10's topo test; (5) fix the 17-file count and the stale 30/34.
+**Rev 8, five amendments, no split, no design changes:** (1) 07-01 add `phase1_5_test.go` + rewire step;
+(2) 07-09 settle per-consumer provider types + verifier `Repo`/`NewVerifier` deferral; (3) 07-11 row 16
+reapers; (4) 07-11 row 14 disabled-mode Activate guard + two-phase test; (5) 07-11 per-row idempotency
+verdicts (WARNING-grade). Optionally fold in the four LOW/suggestion items above while touching those
+plans. The blockers are all specification precision, not architecture — the round-4 signal ("ARCH-03
+scope") has resolved into ordinary plan-amendment work.
