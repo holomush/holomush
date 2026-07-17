@@ -98,7 +98,7 @@ var coreOnlyFiles = map[string]struct{}{
 	"world_genesis_test.go": {},
 }
 
-var forbidden = []string{
+var gatewayForbiddenPackages = []string{
 	"github.com/holomush/holomush/internal/world",
 	"github.com/holomush/holomush/internal/access",
 	"github.com/holomush/holomush/internal/store",
@@ -147,7 +147,7 @@ func checkFile(t *testing.T, pkgPath, goFile string, file *ast.File) {
 	}
 	for _, imp := range file.Imports {
 		importPath := strings.Trim(imp.Path.Value, `"`)
-		for _, bad := range forbidden {
+		for _, bad := range gatewayForbiddenPackages {
 			if importPath == bad || strings.HasPrefix(importPath, bad+"/") {
 				t.Errorf("%s/%s imports forbidden domain package %s",
 					pkgPath, base, importPath)
