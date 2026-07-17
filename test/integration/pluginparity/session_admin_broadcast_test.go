@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
@@ -76,7 +77,7 @@ var _ = Describe("SessionAdmin broadcast backing over the Lua bufconn path (holo
 		Expect(events).To(HaveLen(1), "broadcast must emit exactly one event")
 		ev := events[0]
 		Expect(ev.Stream).To(Equal(core.SystemBroadcastSubject), "broadcast must target the reserved system subject")
-		Expect(ev.Type).To(Equal(core.EventTypeSystem))
+		Expect(ev.Type).To(Equal(eventvocab.EventTypeSystem))
 		Expect(ev.Actor.Kind).To(Equal(core.ActorSystem), "host stamps the system actor on the plugin's behalf")
 		Expect(ev.Actor.ID).To(Equal(core.ActorSystemID))
 

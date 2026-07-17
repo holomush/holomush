@@ -18,6 +18,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventvocab"
 )
 
 // Round 3 coverage: the adapter types in sub_grpc.go translate between
@@ -63,7 +64,7 @@ func TestBusEventAppenderQualifiesRelativeSubjectAndPublishes(t *testing.T) {
 	require.NoError(t, appender.Append(context.Background(), core.Event{
 		ID:        evID,
 		Stream:    "location.01ABCDEFGHJKMNPQRSTVWXYZ00",
-		Type:      core.EventType("pose"),
+		Type:      eventvocab.EventType("pose"),
 		Timestamp: time.Unix(42, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID},
 		Payload:   []byte(`{"x":1}`),
@@ -86,7 +87,7 @@ func TestBusEventAppenderDefaultsGameIDToMainWhenBusUnset(t *testing.T) {
 	require.NoError(t, appender.Append(context.Background(), core.Event{
 		ID:        core.NewULID(),
 		Stream:    "scene.01SCENE000000000000000000",
-		Type:      core.EventType("system"),
+		Type:      eventvocab.EventType("system"),
 		Timestamp: time.Unix(1, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
 		Payload:   []byte(`{}`),
@@ -102,7 +103,7 @@ func TestBusEventAppenderWrapsPublishFailure(t *testing.T) {
 	err := appender.Append(context.Background(), core.Event{
 		ID:        core.NewULID(),
 		Stream:    "location.01XYZ000000000000000000000",
-		Type:      core.EventType("pose"),
+		Type:      eventvocab.EventType("pose"),
 		Timestamp: time.Unix(1, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
 		Payload:   []byte(`{}`),
@@ -118,7 +119,7 @@ func TestBusEventAppenderRejectsInvalidSubject(t *testing.T) {
 	err := appender.Append(context.Background(), core.Event{
 		ID:        core.NewULID(),
 		Stream:    "", // empty stream reference → Qualify error
-		Type:      core.EventType("pose"),
+		Type:      eventvocab.EventType("pose"),
 		Timestamp: time.Unix(1, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
 		Payload:   []byte(`{}`),
@@ -135,7 +136,7 @@ func TestBusEventAppenderRejectsInvalidType(t *testing.T) {
 	err := appender.Append(context.Background(), core.Event{
 		ID:        core.NewULID(),
 		Stream:    "location.01ABC000000000000000000000",
-		Type:      core.EventType(""),
+		Type:      eventvocab.EventType(""),
 		Timestamp: time.Unix(1, 0).UTC(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
 		Payload:   []byte(`{}`),

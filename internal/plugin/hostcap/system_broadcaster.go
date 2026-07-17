@@ -11,6 +11,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 )
 
 // ErrDisconnectUnsupported is returned by SessionAdmin.DisconnectSession backings
@@ -51,7 +52,7 @@ func (b *systemBroadcaster) BroadcastSystemMessage(ctx context.Context, message 
 	payload, _ := json.Marshal(map[string]string{"message": message})
 	event := core.NewEvent(
 		core.SystemBroadcastSubject,
-		core.EventTypeSystem,
+		eventvocab.EventTypeSystem,
 		core.Actor{Kind: core.ActorSystem, ID: core.ActorSystemID},
 		payload,
 	)

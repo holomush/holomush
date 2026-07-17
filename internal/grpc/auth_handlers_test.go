@@ -24,6 +24,7 @@ import (
 	authmocks "github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	sessionmocks "github.com/holomush/holomush/internal/session/mocks"
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
@@ -1196,7 +1197,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 
 			var found *core.Event
 			for i := range events {
-				if events[i].Type == core.EventTypeSessionEnded {
+				if events[i].Type == eventvocab.EventTypeSessionEnded {
 					found = &events[i]
 					break
 				}
@@ -2379,11 +2380,11 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 	failingStore := &mockEventStore{
 		appendFunc: func(_ context.Context, ev core.Event) error {
 			appendMu.Lock()
-			if ev.Type == core.EventTypeSessionEnded {
+			if ev.Type == eventvocab.EventTypeSessionEnded {
 				sessionEndedAppends++
 			}
 			appendMu.Unlock()
-			if ev.Type == core.EventTypeSessionEnded {
+			if ev.Type == eventvocab.EventTypeSessionEnded {
 				return errors.New("event store unavailable")
 			}
 			return nil
@@ -2593,7 +2594,7 @@ func TestSelectCharacterArriveEventEmission(t *testing.T) {
 			require.NoError(t, err)
 			var arriveCount int
 			for _, e := range events {
-				if e.Type == core.EventTypeArrive {
+				if e.Type == eventvocab.EventTypeArrive {
 					arriveCount++
 				}
 			}

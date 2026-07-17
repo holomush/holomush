@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -161,7 +162,7 @@ func TestSubscriberSubscribeAllEventTypes(t *testing.T) {
 
 	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
 	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventType("pose")}
-	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventType(core.EventTypeArrive)}
+	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventType(eventvocab.EventTypeArrive)}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -343,7 +344,7 @@ func TestSubscriberEmptyEventTypesSliceReceivesAll(t *testing.T) {
 
 	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
 	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventType("pose")}
-	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventType(core.EventTypeArrive)}
+	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventType(eventvocab.EventTypeArrive)}
 
 	time.Sleep(50 * time.Millisecond)
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/session"
 	corecomm "github.com/holomush/holomush/plugins/core-communication"
@@ -357,7 +358,7 @@ func TestQueryStreamHistoryReturnsResultTableWithEventsAndMeta(t *testing.T) {
 	ev := core.Event{
 		ID:        targetID,
 		Stream:    "scene:abc:ic",
-		Type:      core.EventType(corecomm.EventTypeSay),
+		Type:      eventvocab.EventType(corecomm.EventTypeSay),
 		Timestamp: time.UnixMilli(1700000000000).UTC(),
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
 		Payload:   []byte(`{"msg":"hello"}`),
@@ -453,8 +454,8 @@ func TestQueryStreamHistoryClampsNegativeCountToZero(t *testing.T) {
 
 func TestQueryStreamHistoryHasMoreTrueWhenFullPageReturned(t *testing.T) {
 	// 2 events returned for count=2 → has_more=true, next_cursor is set.
-	e1 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: core.EventType(corecomm.EventTypeSay)}
-	e2 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: core.EventType(corecomm.EventTypeSay)}
+	e1 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: eventvocab.EventType(corecomm.EventTypeSay)}
+	e2 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: eventvocab.EventType(corecomm.EventTypeSay)}
 	hr := &mockHistoryReader{result: []core.Event{e1, e2}}
 	L := newFocusTestState(t, nil, hr)
 
@@ -473,7 +474,7 @@ func TestQueryStreamHistoryCursorRoundTripsAsBase64(t *testing.T) {
 	ev := core.Event{
 		ID:     eventID,
 		Stream: "scene:abc:ic",
-		Type:   core.EventType(corecomm.EventTypeSay),
+		Type:   eventvocab.EventType(corecomm.EventTypeSay),
 	}
 	hr := &mockHistoryReader{result: []core.Event{ev}}
 	L := newFocusTestState(t, nil, hr)

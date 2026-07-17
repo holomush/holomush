@@ -34,6 +34,7 @@ import (
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
@@ -614,7 +615,7 @@ func isUserFacingError(err error) bool {
 // emitCommandResponse emits a command_response or command_error event to the
 // character's personal stream. Returns an error if the event could not be emitted.
 func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) error {
-	payload, err := json.Marshal(core.CommandResponsePayload{
+	payload, err := json.Marshal(eventvocab.CommandResponsePayload{
 		Text: text,
 	})
 	if err != nil {
@@ -626,9 +627,9 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 		return oops.Code("COMMAND_RESPONSE_MARSHAL_FAILED").Wrap(err)
 	}
 
-	eventType := core.EventTypeCommandResponse
+	eventType := eventvocab.EventTypeCommandResponse
 	if isError {
-		eventType = core.EventTypeCommandError
+		eventType = eventvocab.EventTypeCommandError
 	}
 	event := core.NewEvent(world.CharacterStream(char.ID), eventType, core.Actor{
 		Kind: core.ActorSystem,
@@ -1391,10 +1392,10 @@ func (s *CoreServer) dispatchDelivery(
 	// rather than a colon prefix. The wire frame.Stream
 	// (toProtoSubscribeResponse) now carries that same qualified subject
 	// (holomush-rops).
-	if string(event.Type) == string(core.EventTypeMove) &&
+	if string(event.Type) == string(eventvocab.EventTypeMove) &&
 		isCharacterStream(string(event.Subject)) &&
 		lf != nil {
-		handled = lf.handleMovePayload(ctx, core.EventType(event.Type), event.Payload, stream)
+		handled = lf.handleMovePayload(ctx, eventvocab.EventType(event.Type), event.Payload, stream)
 	}
 
 	if !handled {
@@ -1414,7 +1415,7 @@ func (s *CoreServer) dispatchDelivery(
 	}
 
 	// Terminal session_ended for this session → graceful close.
-	if string(event.Type) == string(core.EventTypeSessionEnded) {
+	if string(event.Type) == string(eventvocab.EventTypeSessionEnded) {
 		var payload core.SessionEndedPayload
 		if unmarshalErr := json.Unmarshal(event.Payload, &payload); unmarshalErr != nil {
 			slog.WarnContext(ctx, "grpc: session_ended payload unmarshal failed — stream left open",

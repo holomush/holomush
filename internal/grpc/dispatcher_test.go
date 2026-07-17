@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -48,7 +49,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 			})
 			event := core.NewEvent(
 				"location."+exec.LocationID().String(),
-				core.EventType(corecomm.EventTypeSay),
+				eventvocab.EventType(corecomm.EventTypeSay),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
@@ -65,7 +66,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 			})
 			event := core.NewEvent(
 				"location."+exec.LocationID().String(),
-				core.EventType(corecomm.EventTypePose),
+				eventvocab.EventType(corecomm.EventTypePose),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
@@ -76,14 +77,14 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 		Name:   "ooc",
 		Source: "test",
 		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
-			payload, _ := json.Marshal(core.OOCPayload{
+			payload, _ := json.Marshal(eventvocab.OOCPayload{
 				CharacterName: exec.CharacterName(),
 				Message:       exec.Args,
 				Style:         "say",
 			})
 			event := core.NewEvent(
 				"location."+exec.LocationID().String(),
-				core.EventType(corecomm.EventTypeOOC),
+				eventvocab.EventType(corecomm.EventTypeOOC),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
@@ -176,7 +177,7 @@ func TestDispatcher_HandleCommand_Say(t *testing.T) {
 
 	// Should emit a say event on the location stream
 	require.NotEmpty(t, appended)
-	assert.Equal(t, core.EventType(corecomm.EventTypeSay), appended[0].Type)
+	assert.Equal(t, eventvocab.EventType(corecomm.EventTypeSay), appended[0].Type)
 	assert.Equal(t, "location."+locationID.String(), appended[0].Stream)
 }
 
@@ -214,7 +215,7 @@ func TestDispatcher_HandleCommand_Pose(t *testing.T) {
 	assert.True(t, resp.Success, "pose should succeed: %s", resp.Error)
 
 	require.NotEmpty(t, appended)
-	assert.Equal(t, core.EventType(corecomm.EventTypePose), appended[0].Type)
+	assert.Equal(t, eventvocab.EventType(corecomm.EventTypePose), appended[0].Type)
 }
 
 func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
@@ -251,7 +252,7 @@ func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
 	assert.True(t, resp.Success, ": should expand to pose via alias: %s", resp.Error)
 
 	require.NotEmpty(t, appended)
-	assert.Equal(t, core.EventType(corecomm.EventTypePose), appended[0].Type)
+	assert.Equal(t, eventvocab.EventType(corecomm.EventTypePose), appended[0].Type)
 }
 
 func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
@@ -284,9 +285,9 @@ func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents, "expected command_response event")
-	assert.Equal(t, core.EventTypeCommandError, charEvents[0].Type)
+	assert.Equal(t, eventvocab.EventTypeCommandError, charEvents[0].Type)
 
-	var crp core.CommandResponsePayload
+	var crp eventvocab.CommandResponsePayload
 	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp))
 }
 
@@ -332,15 +333,15 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 	locEvents, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.Len(t, locEvents, 1, "expected exactly one leave event")
-	assert.Equal(t, core.EventTypeLeave, locEvents[0].Type)
+	assert.Equal(t, eventvocab.EventTypeLeave, locEvents[0].Type)
 
 	// Goodbye command_response event on character stream
 	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents)
-	assert.Equal(t, core.EventTypeCommandResponse, charEvents[0].Type)
+	assert.Equal(t, eventvocab.EventTypeCommandResponse, charEvents[0].Type)
 
-	var crp core.CommandResponsePayload
+	var crp eventvocab.CommandResponsePayload
 	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp))
 	assert.Contains(t, crp.Text, "Goodbye")
 
@@ -387,7 +388,7 @@ func TestQuitPathAppendsSessionEndedOnCharacterStream(t *testing.T) {
 
 	var sessionEnded *core.Event
 	for i := range charEvents {
-		if charEvents[i].Type == core.EventTypeSessionEnded {
+		if charEvents[i].Type == eventvocab.EventTypeSessionEnded {
 			sessionEnded = &charEvents[i]
 			break
 		}
@@ -446,7 +447,7 @@ func TestGuestDisconnectEmitsSessionEndedOnCharacterStream(t *testing.T) {
 
 	var sessionEnded *core.Event
 	for i := range charEvents {
-		if charEvents[i].Type == core.EventTypeSessionEnded {
+		if charEvents[i].Type == eventvocab.EventTypeSessionEnded {
 			sessionEnded = &charEvents[i]
 			break
 		}
@@ -532,7 +533,7 @@ func TestDisconnectGatesGuestCleanupOnRemovalSignal(t *testing.T) {
 			require.NoError(t, err)
 			ended := 0
 			for i := range charEvents {
-				if charEvents[i].Type == core.EventTypeSessionEnded {
+				if charEvents[i].Type == eventvocab.EventTypeSessionEnded {
 					ended++
 				}
 			}
@@ -724,7 +725,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 
 	var sessionEnded *core.Event
 	for i := range charEvents {
-		if charEvents[i].Type == core.EventTypeSessionEnded {
+		if charEvents[i].Type == eventvocab.EventTypeSessionEnded {
 			sessionEnded = &charEvents[i]
 			break
 		}
@@ -758,7 +759,7 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 	// Fail Append for session_ended events specifically; allow all others.
 	store := &mockEventStore{
 		appendFunc: func(_ context.Context, ev core.Event) error {
-			if ev.Type == core.EventTypeSessionEnded {
+			if ev.Type == eventvocab.EventTypeSessionEnded {
 				return errors.New("event store unavailable")
 			}
 			return nil

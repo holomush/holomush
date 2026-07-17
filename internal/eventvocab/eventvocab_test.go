@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/holomush/holomush/internal/eventvocab"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // TestEventTypeArriveIsTheArriveWireString pins every EventType constant's
@@ -52,13 +53,37 @@ func TestValidatePayloadAcceptsExactlyMaxPayloadSize(t *testing.T) {
 }
 
 // TestValidatePayloadRejectsOneByteOverMaxPayloadSize verifies a payload one
-// byte over the boundary is rejected with the EVENT_PAYLOAD_TOO_LARGE code.
+// byte over the boundary is rejected with the EVENT_PAYLOAD_TOO_LARGE code
+// and the size context values needed for diagnostics.
 func TestValidatePayloadRejectsOneByteOverMaxPayloadSize(t *testing.T) {
 	payload := bytes.Repeat([]byte("a"), eventvocab.MaxPayloadSize+1)
 
 	err := eventvocab.ValidatePayload(payload)
 	if err == nil {
 		t.Fatalf("ValidatePayload(%d bytes) = nil, want error", len(payload))
+	}
+	errutil.AssertErrorCode(t, err, "EVENT_PAYLOAD_TOO_LARGE")
+	errutil.AssertErrorContext(t, err, "payload_size", eventvocab.MaxPayloadSize+1)
+	errutil.AssertErrorContext(t, err, "max_payload_size", eventvocab.MaxPayloadSize)
+}
+
+// TestValidatePayloadAcceptsPayloadWellBelowLimit verifies a small payload
+// far under the boundary is accepted (the common case).
+func TestValidatePayloadAcceptsPayloadWellBelowLimit(t *testing.T) {
+	payload := make([]byte, 1024)
+	if err := eventvocab.ValidatePayload(payload); err != nil {
+		t.Errorf("ValidatePayload(%d bytes) = %v, want nil", len(payload), err)
+	}
+}
+
+// TestValidatePayloadAcceptsEmptyOrNilPayload verifies both a nil and a
+// zero-length payload are accepted.
+func TestValidatePayloadAcceptsEmptyOrNilPayload(t *testing.T) {
+	if err := eventvocab.ValidatePayload(nil); err != nil {
+		t.Errorf("ValidatePayload(nil) = %v, want nil", err)
+	}
+	if err := eventvocab.ValidatePayload([]byte{}); err != nil {
+		t.Errorf("ValidatePayload([]byte{}) = %v, want nil", err)
 	}
 }
 

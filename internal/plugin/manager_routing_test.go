@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -198,7 +199,7 @@ binary-plugin:
 		emitCtx := core.WithActor(ctx, core.Actor{Kind: core.ActorPlugin, ID: fixturePluginULID.String()})
 		return host.emitter.Emit(emitCtx, manifest.Name, pluginsdk.EmitIntent{
 			Subject: "scene.test",
-			Type:    pluginsdk.EventType(core.EventTypeSystem),
+			Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 			Payload: `{"phase":"init"}`,
 		})
 	}

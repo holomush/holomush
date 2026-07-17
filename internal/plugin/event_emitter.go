@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventvocab"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -159,7 +160,7 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 	}
 
 	payload := []byte(intent.Payload)
-	if pErr := core.ValidatePayload(payload); pErr != nil {
+	if pErr := eventvocab.ValidatePayload(payload); pErr != nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).Wrap(pErr)
 	}
 	if !json.Valid(payload) {

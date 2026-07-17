@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	sessionmocks "github.com/holomush/holomush/internal/session/mocks"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -417,7 +418,7 @@ func TestAuthenticatePlayerEmitsSessionEndedForEvictedSessionChildren(t *testing
 	require.NoError(t, replayErr)
 	require.Len(t, events, 1, "expected exactly one session_ended event on character stream")
 
-	assert.Equal(t, core.EventTypeSessionEnded, events[0].Type)
+	assert.Equal(t, eventvocab.EventTypeSessionEnded, events[0].Type)
 
 	var payload core.SessionEndedPayload
 	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
@@ -504,7 +505,7 @@ func TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet(t *testing.T) {
 	evictedEvents, replayErr := eventStore.Replay(ctx, evictedStream, ulid.ULID{}, 100)
 	require.NoError(t, replayErr)
 	require.Len(t, evictedEvents, 1, "evicted child must have a session_ended event")
-	assert.Equal(t, core.EventTypeSessionEnded, evictedEvents[0].Type)
+	assert.Equal(t, eventvocab.EventTypeSessionEnded, evictedEvents[0].Type)
 
 	// Kept child must NOT have session_ended.
 	keptStream := "character." + keptCharID.String()
@@ -587,7 +588,7 @@ type failingEventStore struct {
 
 func (f *failingEventStore) Append(_ context.Context, ev core.Event) error {
 	f.mu.Lock()
-	if ev.Type == core.EventTypeSessionEnded {
+	if ev.Type == eventvocab.EventTypeSessionEnded {
 		f.sessionEndedAppends++
 	}
 	f.mu.Unlock()

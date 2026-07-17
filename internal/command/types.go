@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -630,7 +631,7 @@ func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message s
 		"message": message,
 	})
 
-	event := core.NewEvent(stream, core.EventTypeSystem, core.Actor{
+	event := core.NewEvent(stream, eventvocab.EventTypeSystem, core.Actor{
 		Kind: core.ActorSystem,
 		ID:   core.ActorSystemID,
 	}, payload)

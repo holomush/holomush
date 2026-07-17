@@ -84,6 +84,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	"github.com/holomush/holomush/internal/eventvocab"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
@@ -1584,7 +1585,7 @@ func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
 	return core.Event{
 		ID:        e.ID,
 		Stream:    stream,
-		Type:      core.EventType(e.Type),
+		Type:      eventvocab.EventType(e.Type),
 		Timestamp: e.Timestamp,
 		Actor: core.Actor{
 			Kind: busActorKindToCore(e.Actor.Kind),

@@ -25,6 +25,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
 	"github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/telemetry"
@@ -1244,9 +1245,9 @@ func (h *GatewayHandler) formatMovement(ev *corev1.EventFrame, rendering *corev1
 	}
 
 	switch ev.GetType() {
-	case string(core.EventTypeArrive):
+	case string(eventvocab.EventTypeArrive):
 		return fmt.Sprintf("%s has arrived.", actor)
-	case string(core.EventTypeLeave):
+	case string(eventvocab.EventTypeLeave):
 		reason := stringFromPayload(payload, "reason")
 		if reason != "" {
 			return fmt.Sprintf("%s has left (%s).", actor, reason)

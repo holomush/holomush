@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -37,7 +38,7 @@ func TestEndSessionEmitsCorrectEventShapeOnCharacterStream(t *testing.T) {
 
 	ev := events[0]
 	assert.Equal(t, stream, ev.Stream, "stream must be character:{ID}")
-	assert.Equal(t, core.EventTypeSessionEnded, ev.Type)
+	assert.Equal(t, eventvocab.EventTypeSessionEnded, ev.Type)
 	assert.Equal(t, core.ActorCharacter, ev.Actor.Kind, "cause=quit uses ActorCharacter")
 	assert.Equal(t, charID.String(), ev.Actor.ID)
 	assert.NotZero(t, ev.ID, "event MUST have a ULID (monotonic per I-16)")

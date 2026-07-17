@@ -10,13 +10,9 @@ import (
 	"time"
 
 	"github.com/samber/oops"
-)
 
-// CommandResponsePayload is the JSON payload for command_response and
-// command_error events. The event type itself carries the error distinction.
-type CommandResponsePayload struct {
-	Text string `json:"text"`
-}
+	"github.com/holomush/holomush/internal/eventvocab"
+)
 
 // ArrivePayload is the JSON payload for arrive events.
 type ArrivePayload struct {
@@ -71,7 +67,7 @@ func (e *Engine) HandleConnect(ctx context.Context, char CharacterRef) error {
 	event := Event{
 		ID:        NewULID(),
 		Stream:    "location." + char.LocationID.String(),
-		Type:      EventTypeArrive,
+		Type:      eventvocab.EventTypeArrive,
 		Timestamp: time.Now(),
 		Actor:     Actor{Kind: ActorCharacter, ID: char.ID.String()},
 		Payload:   payload,
@@ -94,7 +90,7 @@ func (e *Engine) HandleDisconnect(ctx context.Context, char CharacterRef, reason
 	event := Event{
 		ID:        NewULID(),
 		Stream:    "location." + char.LocationID.String(),
-		Type:      EventTypeLeave,
+		Type:      eventvocab.EventTypeLeave,
 		Timestamp: time.Now(),
 		Actor:     Actor{Kind: ActorCharacter, ID: char.ID.String()},
 		Payload:   payload,

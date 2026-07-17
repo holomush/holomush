@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -107,7 +108,7 @@ func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.NewEvent(world.CharacterStream(charID), core.EventTypeMove, core.Actor{}, movePayload)
+	event := core.NewEvent(world.CharacterStream(charID), eventvocab.EventTypeMove, core.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -115,10 +116,10 @@ func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	assert.True(t, handled)
 	assert.Equal(t, newLocID, lf.currentLocID)
 	require.Len(t, stream.sent, 1)
-	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
+	assert.Equal(t, string(eventvocab.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
 
 	// Verify location_state payload
-	var locState core.LocationStatePayload
+	var locState eventvocab.LocationStatePayload
 	require.NoError(t, json.Unmarshal(stream.sent[0].GetEvent().GetPayload(), &locState))
 	assert.Equal(t, "New Location", locState.Location.Name)
 }
@@ -130,7 +131,7 @@ func TestLocationFollower_HandleEvent_IgnoresNonMoveEvents(t *testing.T) {
 		worldQuerier: &mockWorldQuerier{},
 	}
 
-	event := core.NewEvent("", core.EventType(corecomm.EventTypeSay), core.Actor{}, nil)
+	event := core.NewEvent("", eventvocab.EventType(corecomm.EventTypeSay), core.Actor{}, nil)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -161,7 +162,7 @@ func TestLocationFollower_HandleEvent_IgnoresOtherCharacterMoves(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.NewEvent("", core.EventTypeMove, core.Actor{}, movePayload)
+	event := core.NewEvent("", eventvocab.EventTypeMove, core.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -193,7 +194,7 @@ func TestLocationFollower_HandleEvent_IgnoresObjectMoves(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.NewEvent("", core.EventTypeMove, core.Actor{}, movePayload)
+	event := core.NewEvent("", eventvocab.EventTypeMove, core.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -209,7 +210,7 @@ func TestLocationFollower_HandleEvent_NilWorldQuerier(t *testing.T) {
 		worldQuerier: nil,
 	}
 
-	event := core.NewEvent("", core.EventTypeMove, core.Actor{}, nil)
+	event := core.NewEvent("", eventvocab.EventTypeMove, core.Actor{}, nil)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -259,7 +260,7 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	require.NotNil(t, ev)
 
 	ef := ev.GetEvent()
-	assert.Equal(t, string(core.EventTypeLocationState), ef.GetType())
+	assert.Equal(t, string(eventvocab.EventTypeLocationState), ef.GetType())
 	assert.Equal(t, "system", ef.GetActorType())
 	assert.Equal(t, world.LocationStream(locID), ef.GetStream())
 
@@ -272,7 +273,7 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	assert.Equal(t, corev1.EventChannel_EVENT_CHANNEL_STATE, rendering.GetDisplayTarget())
 	assert.Equal(t, "builtin", rendering.GetSourcePlugin())
 
-	var payload core.LocationStatePayload
+	var payload eventvocab.LocationStatePayload
 	require.NoError(t, json.Unmarshal(ef.GetPayload(), &payload))
 	assert.Equal(t, "Hall", payload.Location.Name)
 	assert.Len(t, payload.Exits, 1)
@@ -357,7 +358,7 @@ func TestSendSyntheticSendsLocationStateForCurrentLocation(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, stream.sent, 1)
-	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
+	assert.Equal(t, string(eventvocab.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
 	// holomush-4wdu: synthetic location_state MUST carry RenderingMetadata
 	// (gateway drops nil-Rendering events per INV-EVENTBUS-6).
 	require.NotNil(t, stream.sent[0].GetEvent().GetRendering(),

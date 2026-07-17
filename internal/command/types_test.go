@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -777,7 +778,7 @@ func TestServicesBroadcastSystemMessageCreatesCorrectEvent(t *testing.T) {
 	assert.Equal(t, stream, event.Stream, "Stream should match input")
 
 	// Verify event type
-	assert.Equal(t, core.EventTypeSystem, event.Type, "Type should be EventTypeSystem")
+	assert.Equal(t, eventvocab.EventTypeSystem, event.Type, "Type should be EventTypeSystem")
 
 	// Verify actor
 	assert.Equal(t, core.ActorSystem, event.Actor.Kind, "Actor.Kind should be ActorSystem")

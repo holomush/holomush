@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	corecomm "github.com/holomush/holomush/plugins/core-communication"
@@ -60,7 +61,7 @@ func TestPipelineRendering(t *testing.T) {
 		// Find the say event.
 		var sayEvent *core.Event
 		for i := range events {
-			if events[i].Type == core.EventType(corecomm.EventTypeSay) {
+			if events[i].Type == eventvocab.EventType(corecomm.EventTypeSay) {
 				sayEvent = &events[i]
 				break
 			}
@@ -107,7 +108,7 @@ func TestPipelineRendering(t *testing.T) {
 
 		var poseEvent *core.Event
 		for i := range events {
-			if events[i].Type == core.EventType(corecomm.EventTypePose) {
+			if events[i].Type == eventvocab.EventType(corecomm.EventTypePose) {
 				poseEvent = &events[i]
 				break
 			}
@@ -156,8 +157,8 @@ func TestPipelineRendering(t *testing.T) {
 
 		var found bool
 		for _, ev := range charEvents {
-			if ev.Type == core.EventTypeCommandError {
-				var payload core.CommandResponsePayload
+			if ev.Type == eventvocab.EventTypeCommandError {
+				var payload eventvocab.CommandResponsePayload
 				require.NoError(t, json.Unmarshal(ev.Payload, &payload))
 				assert.NotEmpty(t, payload.Text,
 					"error text should not be empty")
@@ -203,7 +204,7 @@ func TestPipelineRendering(t *testing.T) {
 
 		// Verify the event carries the fields needed for EventFrame construction.
 		ev := events[0]
-		assert.Equal(t, core.EventType(corecomm.EventTypeSay), ev.Type)
+		assert.Equal(t, eventvocab.EventType(corecomm.EventTypeSay), ev.Type)
 		assert.Equal(t, "location."+locationID.String(), ev.Stream)
 		assert.False(t, ev.ID.IsZero(), "event ID must be set")
 		assert.False(t, ev.Timestamp.IsZero(), "timestamp must be set")
@@ -248,14 +249,14 @@ func TestPipelineRendering(t *testing.T) {
 
 		var oocEvent *core.Event
 		for i := range events {
-			if events[i].Type == core.EventType(corecomm.EventTypeOOC) {
+			if events[i].Type == eventvocab.EventType(corecomm.EventTypeOOC) {
 				oocEvent = &events[i]
 				break
 			}
 		}
 		require.NotNil(t, oocEvent, "expected an ooc event in the location stream")
 
-		var payload core.OOCPayload
+		var payload eventvocab.OOCPayload
 		require.NoError(t, json.Unmarshal(oocEvent.Payload, &payload))
 		assert.Equal(t, "Eve", payload.CharacterName)
 		assert.Equal(t, "heading out for lunch", payload.Message)

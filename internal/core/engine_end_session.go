@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/eventvocab"
 )
 
 // sessionTerminalCommitTimeout bounds how long EndSession will block the
@@ -60,7 +62,7 @@ func (e *Engine) EndSession(
 
 	event := NewEvent(
 		"character."+char.ID.String(),
-		EventTypeSessionEnded,
+		eventvocab.EventTypeSessionEnded,
 		actor,
 		payload,
 	)

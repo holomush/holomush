@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventvocab"
 )
 
 func TestEngineHandleConnectStoresArriveEventWithCharacterPayload(t *testing.T) {
@@ -34,7 +35,7 @@ func TestEngineHandleConnectStoresArriveEventWithCharacterPayload(t *testing.T) 
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, core.EventTypeArrive, events[0].Type)
+	assert.Equal(t, eventvocab.EventTypeArrive, events[0].Type)
 	assert.Equal(t, stream, events[0].Stream)
 	assert.Equal(t, core.ActorCharacter, events[0].Actor.Kind)
 	assert.Equal(t, charID.String(), events[0].Actor.ID)
@@ -63,7 +64,7 @@ func TestEngineHandleDisconnectStoresLeaveEventWithReasonPayload(t *testing.T) {
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, core.EventTypeLeave, events[0].Type)
+	assert.Equal(t, eventvocab.EventTypeLeave, events[0].Type)
 	assert.Equal(t, stream, events[0].Stream)
 	assert.Equal(t, core.ActorCharacter, events[0].Actor.Kind)
 	assert.Equal(t, charID.String(), events[0].Actor.ID)

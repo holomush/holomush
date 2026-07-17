@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -229,17 +230,17 @@ func TestTranslateEvent_CommandError(t *testing.T) {
 
 func TestTranslateEvent_LocationState(t *testing.T) {
 	h := newTestHandler(t)
-	payload := core.LocationStatePayload{
-		Location: core.LocationStateInfo{
+	payload := eventvocab.LocationStatePayload{
+		Location: eventvocab.LocationStateInfo{
 			ID:          "loc-123",
 			Name:        "Town Square",
 			Description: "A bustling town square.",
 		},
-		Exits: []core.LocationStateExit{
+		Exits: []eventvocab.LocationStateExit{
 			{Direction: "north", Name: "Market", Locked: false},
 			{Direction: "east", Name: "Library", Locked: true},
 		},
-		Present: []core.LocationStateChar{
+		Present: []eventvocab.LocationStateChar{
 			// CharacterID is opaque to translate.go (no parsing), so test
 			// fixtures use clearly-fake strings consistent with the surrounding
 			// "loc-123" convention rather than fake-ULID strings.
@@ -278,8 +279,8 @@ func TestTranslateEvent_LocationState(t *testing.T) {
 
 func TestTranslateEvent_ExitUpdate(t *testing.T) {
 	h := newTestHandler(t)
-	payload := core.ExitUpdatePayload{
-		Exits: []core.LocationStateExit{
+	payload := eventvocab.ExitUpdatePayload{
+		Exits: []eventvocab.LocationStateExit{
 			{Direction: "south", Name: "Garden", Locked: false},
 		},
 	}
@@ -307,7 +308,7 @@ func TestTranslateEvent_OOC(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "core-communication:ooc",
-		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Alice", Message: "brb", Style: "say"}),
+		Payload: mustMarshal(t, eventvocab.OOCPayload{CharacterName: "Alice", Message: "brb", Style: "say"}),
 	}
 
 	got := h.translateEvent(withRendering(ev))
@@ -325,7 +326,7 @@ func TestTranslateEvent_OOC_PoseStyle(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "core-communication:ooc",
-		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Bob", Message: "waves.", Style: "pose"}),
+		Payload: mustMarshal(t, eventvocab.OOCPayload{CharacterName: "Bob", Message: "waves.", Style: "pose"}),
 	}
 
 	got := h.translateEvent(withRendering(ev))
@@ -339,7 +340,7 @@ func TestTranslateEvent_Pemit(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type: "core-communication:pemit",
-		Payload: mustMarshal(t, core.PemitPayload{
+		Payload: mustMarshal(t, eventvocab.PemitPayload{
 			SenderName: "Alice",
 			Message:    "Secret message.",
 		}),
@@ -358,7 +359,7 @@ func TestTranslateEvent_Page(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type: "core-communication:page",
-		Payload: mustMarshal(t, core.PagePayload{
+		Payload: mustMarshal(t, eventvocab.PagePayload{
 			SenderName: "Alice",
 			Message:    "Hey there!",
 		}),

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	corecomm "github.com/holomush/holomush/plugins/core-communication"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,7 @@ import (
 
 func TestNewEventAssignsMonotonicID(t *testing.T) {
 	before := time.Now()
-	ev := core.NewEvent("location:test", core.EventType(corecomm.EventTypeSay), core.Actor{
+	ev := core.NewEvent("location:test", eventvocab.EventType(corecomm.EventTypeSay), core.Actor{
 		Kind: core.ActorCharacter,
 		ID:   "char-1",
 	}, []byte(`{"message":"hello"}`))
@@ -26,7 +27,7 @@ func TestNewEventAssignsMonotonicID(t *testing.T) {
 
 	require.NotEqual(t, ulid.ULID{}, ev.ID, "ID must be non-zero")
 	assert.Equal(t, "location:test", ev.Stream)
-	assert.Equal(t, core.EventType(corecomm.EventTypeSay), ev.Type)
+	assert.Equal(t, eventvocab.EventType(corecomm.EventTypeSay), ev.Type)
 	assert.Equal(t, core.ActorCharacter, ev.Actor.Kind)
 	assert.Equal(t, "char-1", ev.Actor.ID)
 	assert.Equal(t, []byte(`{"message":"hello"}`), ev.Payload)
@@ -37,7 +38,7 @@ func TestNewEventAssignsMonotonicID(t *testing.T) {
 func TestNewEventProducesUniqueIDs(t *testing.T) {
 	seen := make(map[ulid.ULID]struct{}, 100)
 	for range 100 {
-		ev := core.NewEvent("location:test", core.EventType(corecomm.EventTypeSay), core.Actor{
+		ev := core.NewEvent("location:test", eventvocab.EventType(corecomm.EventTypeSay), core.Actor{
 			Kind: core.ActorSystem,
 			ID:   "system",
 		}, []byte(`{}`))
@@ -50,7 +51,7 @@ func TestNewEventProducesUniqueIDs(t *testing.T) {
 func TestNewEventIDsAreMonotonicWithinGoroutine(t *testing.T) {
 	var prev ulid.ULID
 	for range 1000 {
-		ev := core.NewEvent("location:test", core.EventType(corecomm.EventTypeSay), core.Actor{
+		ev := core.NewEvent("location:test", eventvocab.EventType(corecomm.EventTypeSay), core.Actor{
 			Kind: core.ActorSystem,
 			ID:   "system",
 		}, []byte(`{}`))
@@ -81,7 +82,7 @@ func TestEventIDMonotonicityUnderLoad(t *testing.T) {
 			defer wg.Done()
 			ids := make(idSlice, 0, eventsPerGoroutine)
 			for range eventsPerGoroutine {
-				ev := core.NewEvent("stress:test", core.EventType(corecomm.EventTypeSay), core.Actor{
+				ev := core.NewEvent("stress:test", eventvocab.EventType(corecomm.EventTypeSay), core.Actor{
 					Kind: core.ActorSystem,
 					ID:   "stress",
 				}, []byte(`{}`))

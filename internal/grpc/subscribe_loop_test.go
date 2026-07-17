@@ -19,6 +19,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -196,7 +197,7 @@ func TestDispatchDeliveryTerminatesOnMatchingSessionEnded(t *testing.T) {
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
-	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
+	d := makeDelivery(t, string(eventvocab.EventTypeSessionEnded), charID)
 	payload, _ := json.Marshal(core.SessionEndedPayload{
 		SessionID: "s1",
 		Cause:     core.SessionEndedCauseQuit,
@@ -219,7 +220,7 @@ func TestDispatchDeliveryIgnoresNonMatchingSessionEnded(t *testing.T) {
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
-	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
+	d := makeDelivery(t, string(eventvocab.EventTypeSessionEnded), charID)
 	payload, _ := json.Marshal(core.SessionEndedPayload{
 		SessionID: "SOME_OTHER_SESSION",
 		Cause:     core.SessionEndedCauseQuit,
@@ -240,7 +241,7 @@ func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
-	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
+	d := makeDelivery(t, string(eventvocab.EventTypeSessionEnded), charID)
 	d.ev.Payload = []byte("not-json")
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil, nil)
@@ -735,7 +736,7 @@ func TestRunSubscribeLoopReturnsNilOnSessionEnded(t *testing.T) {
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 
-	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
+	d := makeDelivery(t, string(eventvocab.EventTypeSessionEnded), charID)
 	payload, _ := json.Marshal(core.SessionEndedPayload{SessionID: "s1", Reason: "goodbye"})
 	d.ev.Payload = payload
 	bs.push(d)

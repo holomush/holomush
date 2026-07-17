@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
 	holoGRPC "github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/telnet/gamenotice"
@@ -368,12 +368,12 @@ func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()
 
-	payload, err := json.Marshal(core.CommandResponsePayload{Text: "Hello from server!"})
+	payload, err := json.Marshal(eventvocab.CommandResponsePayload{Text: "Hello from server!"})
 	require.NoError(t, err)
 
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Frame: &corev1.SubscribeResponse_Event{Event: withRendering(&corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: payload})}},
+			{Frame: &corev1.SubscribeResponse_Event{Event: withRendering(&corev1.EventFrame{Type: string(eventvocab.EventTypeCommandResponse), Payload: payload})}},
 		},
 	}
 
@@ -439,7 +439,7 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Frame: &corev1.SubscribeResponse_Event{Event: withRendering(&corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: []byte("not-valid-json")})}},
+			{Frame: &corev1.SubscribeResponse_Event{Event: withRendering(&corev1.EventFrame{Type: string(eventvocab.EventTypeCommandResponse), Payload: []byte("not-valid-json")})}},
 		},
 	}
 

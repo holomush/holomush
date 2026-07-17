@@ -14,7 +14,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
@@ -86,7 +86,7 @@ var _ = Describe("holomush-sjtlz: scene info metadata-read access under real ABA
 
 	// commandText unmarshals a command_response/command_error frame's payload.
 	commandText := func(payload []byte) string {
-		var crp core.CommandResponsePayload
+		var crp eventvocab.CommandResponsePayload
 		Expect(json.Unmarshal(payload, &crp)).To(Succeed(),
 			"command event payload must unmarshal as CommandResponsePayload")
 		return crp.Text
@@ -105,7 +105,7 @@ var _ = Describe("holomush-sjtlz: scene info metadata-read access under real ABA
 		Expect(outsider.SendCommand(ctx, "scene info #"+sceneID.String())).To(Succeed(),
 			"a plugin-level permission denial is a user-facing command_error event, not an RPC failure")
 
-		denialFrame := outsider.WaitForEvent(ctx, string(core.EventTypeCommandError))
+		denialFrame := outsider.WaitForEvent(ctx, string(eventvocab.EventTypeCommandError))
 		text := commandText(denialFrame.GetPayload())
 		Expect(text).NotTo(ContainSubstring("Scene: test scene"),
 			"holomush-sjtlz: a non-participant must NOT receive private scene metadata")
@@ -122,7 +122,7 @@ var _ = Describe("holomush-sjtlz: scene info metadata-read access under real ABA
 		// seed removal did not over-restrict (fail-closed) participant reads.
 		Expect(owner.SendCommand(ctx, "scene info #"+sceneID.String())).To(Succeed())
 
-		frame := owner.WaitForEvent(ctx, string(core.EventTypeCommandResponse))
+		frame := owner.WaitForEvent(ctx, string(eventvocab.EventTypeCommandResponse))
 		Expect(commandText(frame.GetPayload())).To(ContainSubstring("Scene: test scene"),
 			"read-scene-as-participant MUST permit a participant's scene info")
 	})
@@ -140,7 +140,7 @@ var _ = Describe("holomush-sjtlz: scene info metadata-read access under real ABA
 		// outsider is now in resource.scene.invitees but NOT in participants.
 		Expect(owner.SendCommand(ctx,
 			"scene invite #"+sceneID.String()+" "+outsider.CharacterID.String())).To(Succeed())
-		inviteFrame := owner.WaitForEvent(ctx, string(core.EventTypeCommandResponse))
+		inviteFrame := owner.WaitForEvent(ctx, string(eventvocab.EventTypeCommandResponse))
 		Expect(commandText(inviteFrame.GetPayload())).To(ContainSubstring("Invited"),
 			"precondition: the invite must actually land (not a silent command_error)")
 
@@ -148,7 +148,7 @@ var _ = Describe("holomush-sjtlz: scene info metadata-read access under real ABA
 		// invited to before accepting.
 		Expect(outsider.SendCommand(ctx, "scene info #"+sceneID.String())).To(Succeed())
 
-		frame := outsider.WaitForEvent(ctx, string(core.EventTypeCommandResponse))
+		frame := outsider.WaitForEvent(ctx, string(eventvocab.EventTypeCommandResponse))
 		Expect(commandText(frame.GetPayload())).To(ContainSubstring("Scene: test scene"),
 			"read-scene-as-invitee MUST permit an invitee's scene info")
 	})
@@ -164,7 +164,7 @@ var _ = Describe("holomush-sjtlz: scene info metadata-read access under real ABA
 		// coherently public too.
 		Expect(outsider.SendCommand(ctx, "scene info #"+sceneID.String())).To(Succeed())
 
-		frame := outsider.WaitForEvent(ctx, string(core.EventTypeCommandResponse))
+		frame := outsider.WaitForEvent(ctx, string(eventvocab.EventTypeCommandResponse))
 		Expect(commandText(frame.GetPayload())).To(ContainSubstring("Scene: test scene"),
 			"read-open-scene MUST permit a non-participant's info read of an open scene")
 	})

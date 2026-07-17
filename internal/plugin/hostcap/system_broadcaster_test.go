@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 )
 
@@ -46,7 +47,7 @@ func TestSystemBroadcasterBroadcastAppendsSystemEventToReservedSubject(t *testin
 	require.Len(t, app.events, 1)
 	ev := app.events[0]
 	assert.Equal(t, core.SystemBroadcastSubject, ev.Stream, "broadcast must target the reserved system subject")
-	assert.Equal(t, core.EventTypeSystem, ev.Type)
+	assert.Equal(t, eventvocab.EventTypeSystem, ev.Type)
 	assert.Equal(t, core.ActorSystem, ev.Actor.Kind, "host stamps the system actor")
 	assert.Equal(t, core.ActorSystemID, ev.Actor.ID)
 

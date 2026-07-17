@@ -12,6 +12,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -37,7 +38,7 @@ func TestWithGameIDOptionStampsConfiguredGameIDIntoSubject(t *testing.T) {
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"x":1}`,
 	})
 	require.NoError(t, err)
@@ -59,7 +60,7 @@ func TestWithGameIDEmptyProviderFallsBackToMain(t *testing.T) {
 	)
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{}`,
 	})
 	require.NoError(t, err)
@@ -80,7 +81,7 @@ func TestEmitAcceptsJetStreamNativeSubject(t *testing.T) {
 	// Native subject already dot-delimited and events-prefixed.
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "events.main.scene.01ABC",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"n":1}`,
 	})
 	require.NoError(t, err)
@@ -109,7 +110,7 @@ func TestEmitRejectsJetStreamSubjectMissingNamespaceTokens(t *testing.T) {
 			)
 			err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 				Subject: tc.subject,
-				Type:    pluginsdk.EventType(core.EventTypeSystem),
+				Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 				Payload: `{}`,
 			})
 			require.Error(t, err)
@@ -130,7 +131,7 @@ func TestEmitRejectsJetStreamSubjectWithInvalidNamespaceChars(t *testing.T) {
 	// Uppercase chars violate the ^[a-z](-?[a-z0-9])*$ plugin-name pattern.
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "events.main.SCENE.01ABC",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{}`,
 	})
 	require.Error(t, err)
@@ -160,7 +161,7 @@ func TestEmitRejectsSystemActorAtManifestGate(t *testing.T) {
 	)
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{}`,
 	})
 	require.Error(t, err)

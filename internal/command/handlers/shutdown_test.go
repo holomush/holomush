@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventvocab"
 )
 
 // Note: Capability checks are performed by the dispatcher, not the handler.
@@ -55,7 +56,7 @@ func TestShutdownHandlerImmediateShutdown(t *testing.T) {
 	events, replayErr := store.Replay(ctx, "system", ulid.ULID{}, 10)
 	require.NoError(t, replayErr)
 	require.Len(t, events, 1)
-	assert.Equal(t, core.EventTypeSystem, events[0].Type)
+	assert.Equal(t, eventvocab.EventTypeSystem, events[0].Type)
 	assert.Contains(t, string(events[0].Payload), "[SHUTDOWN]")
 	assert.Contains(t, string(events[0].Payload), "NOW")
 	assert.Contains(t, buf.String(), "Initiating server shutdown")
@@ -117,7 +118,7 @@ func TestShutdownHandlerBroadcastsToSystemStream(t *testing.T) {
 	events, replayErr := store.Replay(ctx, "system", ulid.ULID{}, 10)
 	require.NoError(t, replayErr)
 	require.Len(t, events, 1)
-	assert.Equal(t, core.EventTypeSystem, events[0].Type)
+	assert.Equal(t, eventvocab.EventTypeSystem, events[0].Type)
 	assert.Equal(t, core.ActorSystem, events[0].Actor.Kind)
 	assert.Contains(t, string(events[0].Payload), "[SHUTDOWN]")
 }

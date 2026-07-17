@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -1360,7 +1361,7 @@ func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
 	})
 	_, err := host.DeliverEvent(ctx, "core-scenes", pluginsdk.Event{
 		Stream: "scene:01SCENE",
-		Type:   pluginsdk.EventType(core.EventTypeSystem),
+		Type:   pluginsdk.EventType(eventvocab.EventTypeSystem),
 	})
 	require.NoError(t, err)
 

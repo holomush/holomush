@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
 )
@@ -26,7 +26,7 @@ import (
 // user-facing outcomes are asserted against these frames, mirroring the scenes
 // e2e (scene_info_read_access_test.go).
 func commandText(payload []byte) string {
-	var crp core.CommandResponsePayload
+	var crp eventvocab.CommandResponsePayload
 	Expect(json.Unmarshal(payload, &crp)).To(Succeed(),
 		"command event payload must unmarshal as CommandResponsePayload")
 	return crp.Text
@@ -232,10 +232,10 @@ var _ = Describe("core-channels e2e: error uniformity + admin override (INV-CHAN
 		// session's stream, not the SendCommand return.
 		Expect(target.SendCommand(ctx, "channel join Secret")).To(Succeed(),
 			"the join command dispatches; the refusal arrives as a command_error event")
-		hiddenText := commandText(target.WaitForEvent(cctx, string(core.EventTypeCommandError)).GetPayload())
+		hiddenText := commandText(target.WaitForEvent(cctx, string(eventvocab.EventTypeCommandError)).GetPayload())
 
 		Expect(target.SendCommand(ctx, "channel join Nonexistentchannel")).To(Succeed())
-		absentText := commandText(target.WaitForEvent(cctx, string(core.EventTypeCommandError)).GetPayload())
+		absentText := commandText(target.WaitForEvent(cctx, string(eventvocab.EventTypeCommandError)).GetPayload())
 
 		Expect(hiddenText).To(ContainSubstring("No such channel."),
 			"a non-invitee joining a PRIVATE channel MUST get the uniform not-found")
@@ -253,7 +253,7 @@ var _ = Describe("core-channels e2e: error uniformity + admin override (INV-CHAN
 		// override (admin-override-channel) grants the invite authority. Success
 		// is the command_response "Invited." (a denial would be a command_error).
 		Expect(admin2.SendCommand(ctx, "channel invite Secret "+target.CharacterID.String())).To(Succeed())
-		inviteText := commandText(admin2.WaitForEvent(cctx, string(core.EventTypeCommandResponse)).GetPayload())
+		inviteText := commandText(admin2.WaitForEvent(cctx, string(eventvocab.EventTypeCommandResponse)).GetPayload())
 		Expect(inviteText).To(ContainSubstring("Invited"),
 			"a non-owner admin MUST be able to invite (admin override, D-06)")
 
@@ -261,7 +261,7 @@ var _ = Describe("core-channels e2e: error uniformity + admin override (INV-CHAN
 		// now resolves (read gate passes for a member) rather than the uniform
 		// not-found it received before the invite.
 		Expect(target.SendCommand(ctx, "channel join Secret")).To(Succeed())
-		joinText := commandText(target.WaitForEvent(cctx, string(core.EventTypeCommandResponse)).GetPayload())
+		joinText := commandText(target.WaitForEvent(cctx, string(eventvocab.EventTypeCommandResponse)).GetPayload())
 		Expect(joinText).To(ContainSubstring("Joined"),
 			"an invited character MUST be admitted to the private channel")
 	})
