@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -294,7 +295,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create gRPC client with mTLS
-			client, err := grpcpkg.NewClient(env.ctx, grpcpkg.ClientConfig{
+			client, err := grpcclient.NewClient(env.ctx, grpcclient.ClientConfig{
 				Address:   env.grpcAddr,
 				TLSConfig: clientTLS,
 			})
@@ -371,7 +372,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			badClientTLS, err := tlscerts.LoadClientTLS(badCertsDir, "gateway", "bad-game-id")
 			Expect(err).NotTo(HaveOccurred())
 
-			client, err := grpcpkg.NewClient(env.ctx, grpcpkg.ClientConfig{
+			client, err := grpcclient.NewClient(env.ctx, grpcclient.ClientConfig{
 				Address:   env.grpcAddr,
 				TLSConfig: badClientTLS,
 			})
@@ -526,7 +527,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			clientTLS, err := tlscerts.LoadClientTLS(env.certsDir, "gateway", gameID)
 			Expect(err).NotTo(HaveOccurred())
 
-			client, err := grpcpkg.NewClient(env.ctx, grpcpkg.ClientConfig{
+			client, err := grpcclient.NewClient(env.ctx, grpcclient.ClientConfig{
 				Address:   env.grpcAddr,
 				TLSConfig: clientTLS,
 			})

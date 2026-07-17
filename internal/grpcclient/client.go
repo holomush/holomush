@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package grpc provides gRPC client and server implementations for HoloMUSH.
-package grpc
+// Package grpcclient provides the gRPC client for the Core, Content, and
+// SceneAccess services. It is a protocol-translation leaf: proto + grpc-go +
+// oops only, with no domain package dependencies, so gateway processes
+// (telnet, web) can hold a gRPC client without pulling the CoreServer
+// monolith's domain closure into their build graph.
+package grpcclient
 
 import (
 	"context"

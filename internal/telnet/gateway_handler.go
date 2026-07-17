@@ -26,7 +26,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
-	grpcclient "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/telnet/gamenotice"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"

@@ -14,7 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/control"
-	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	holoGRPC "github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/xdg"

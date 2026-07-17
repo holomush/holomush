@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package grpc
+package grpcclient
 
 import (
 	"context"
@@ -25,6 +25,18 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 )
+
+// testPlayerSessionToken is a placeholder token these client-wrapper tests
+// pass through HandleCommandRequest.PlayerSessionToken. Unlike the
+// internal/grpc server-side unit tests (whose fakePlayerSessionRepo validates
+// the token hash), the mock CoreServiceServer stubs in this file never
+// inspect the token — its value only needs to be non-empty and consistent
+// across the calls in a given test. Deliberately NOT shared with
+// internal/grpc/test_helpers_test.go's package-private constant of the same
+// name: that constant lives in package grpc and is unreachable from here
+// (07-01 Task 1 — the move surfaced this as a real compile dependency, not a
+// cross-package alias).
+const testPlayerSessionToken = "unit-test-player-session-token"
 
 // closeWithCheck is a helper that closes an io.Closer and logs any error.
 // Use with defer in tests to satisfy errcheck linter.
@@ -635,7 +647,10 @@ func TestClientSubscribeWrapsImmediateRPCErrorAsRPCFailed(t *testing.T) {
 // SESSION_NOT_FOUND oops code so the gateways treat it as terminal; every other
 // status code (and non-status errors) MUST stay RPC_FAILED so a transient
 // core-down is retried. This pins the fix at its source: the server stamps the
-// wire code via subscribeSessionNotFound, and this translator decodes it.
+// wire code via subscribeSessionNotFound, and this translator decodes it. The
+// server-side half of the round trip (subscribeSessionNotFound itself, which
+// is package-private to internal/grpc) is pinned separately in
+// internal/grpc/server_helpers_test.go.
 func TestTranslateSubscribeErrClassifiesWireCodes(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -677,27 +692,6 @@ func TestTranslateSubscribeErrClassifiesWireCodes(t *testing.T) {
 			assert.Equal(t, tt.expectedCode, oopsErr.Code())
 		})
 	}
-}
-
-// TestSubscribeSessionNotFoundStampsUnauthenticatedWireCode pins the server
-// half of the rsoe6.11.1 fix: subscribeSessionNotFound MUST carry a gRPC status
-// code on the wire (codes.Unauthenticated) rather than a bare oops error, which
-// grpc-go would surface to the client as codes.Unknown — indistinguishable from
-// a transient fault and thus undecodable by TranslateSubscribeErr.
-func TestSubscribeSessionNotFoundStampsUnauthenticatedWireCode(t *testing.T) {
-	err := subscribeSessionNotFound("test-session")
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok, "SESSION_NOT_FOUND must be a gRPC status error so the wire code is classifiable")
-	assert.Equal(t, codes.Unauthenticated, st.Code(),
-		"SESSION_NOT_FOUND must cross the wire as Unauthenticated so the gateway decodes it as terminal")
-	// Round-trip: the wire code must decode back to the SESSION_NOT_FOUND oops
-	// code via the client translator.
-	decoded := TranslateSubscribeErr(err)
-	oopsErr, ok := oops.AsOops(decoded)
-	require.True(t, ok)
-	assert.Equal(t, "SESSION_NOT_FOUND", oopsErr.Code(),
-		"server wire code MUST round-trip back to SESSION_NOT_FOUND through the client translator")
 }
 
 // fakeCoreClient is a minimal corev1.CoreServiceClient that lets a single

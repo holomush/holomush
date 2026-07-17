@@ -17,7 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
-	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	holoGRPC "github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/logging"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/telemetry"

@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -195,7 +196,7 @@ func TestSubscribeRejectsMissingSessionToken(t *testing.T) {
 	assert.Equal(t, codes.Unauthenticated, st.Code())
 	// And it must round-trip back to the SESSION_NOT_FOUND oops code via the
 	// client translator the gateways use.
-	o, ok := oops.AsOops(TranslateSubscribeErr(err))
+	o, ok := oops.AsOops(grpcclient.TranslateSubscribeErr(err))
 	require.True(t, ok)
 	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
 }
@@ -217,9 +218,36 @@ func TestSubscribeRejectsUnknownSession(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok, "SESSION_NOT_FOUND must carry a gRPC status code")
 	assert.Equal(t, codes.Unauthenticated, st.Code())
-	o, ok := oops.AsOops(TranslateSubscribeErr(err))
+	o, ok := oops.AsOops(grpcclient.TranslateSubscribeErr(err))
 	require.True(t, ok)
 	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
+}
+
+// TestSubscribeSessionNotFoundStampsUnauthenticatedWireCode pins the server
+// half of the rsoe6.11.1 fix: subscribeSessionNotFound MUST carry a gRPC status
+// code on the wire (codes.Unauthenticated) rather than a bare oops error, which
+// grpc-go would surface to the client as codes.Unknown — indistinguishable from
+// a transient fault and thus undecodable by grpcclient.TranslateSubscribeErr.
+//
+// Relocated here (07-01 Task 1/2) from internal/grpc/client_test.go, which
+// moved to internal/grpcclient/client_test.go: subscribeSessionNotFound is
+// package-private to internal/grpc and unreachable from grpcclient, so this
+// server-side pin cannot move with the client wrapper's tests.
+func TestSubscribeSessionNotFoundStampsUnauthenticatedWireCode(t *testing.T) {
+	t.Parallel()
+	err := subscribeSessionNotFound("test-session")
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok, "SESSION_NOT_FOUND must be a gRPC status error so the wire code is classifiable")
+	assert.Equal(t, codes.Unauthenticated, st.Code(),
+		"SESSION_NOT_FOUND must cross the wire as Unauthenticated so the gateway decodes it as terminal")
+	// Round-trip: the wire code must decode back to the SESSION_NOT_FOUND oops
+	// code via the client translator.
+	decoded := grpcclient.TranslateSubscribeErr(err)
+	oopsErr, ok := oops.AsOops(decoded)
+	require.True(t, ok)
+	assert.Equal(t, "SESSION_NOT_FOUND", oopsErr.Code(),
+		"server wire code MUST round-trip back to SESSION_NOT_FOUND through the client translator")
 }
 
 // stubSubscriber is a minimal eventbus.Subscriber that errors on OpenSession.

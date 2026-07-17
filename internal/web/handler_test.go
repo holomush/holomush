@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	holoGRPC "github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
