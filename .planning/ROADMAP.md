@@ -163,7 +163,7 @@ Plans:
 2. Process bootstrap runs through `lifecycle.Orchestrator` with unified start/stop ordering; startup/shutdown behavior is unchanged
 3. `internal/web` / `internal/telnet` import only protocol-translation dependencies; the gateway-boundary rule passes with zero violations
 
-**Plans**: 3/11 plans executed
+**Plans**: 4/11 plans executed
 
 > Wave numbers below are resynced to the plan frontmatter, which is the **source of
 > truth** (rev 3; an earlier revision's roadmap labels were off by one from wave 4
@@ -183,7 +183,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 — the two plans run in parallel)*
 
 - [x] 07-03-PLAN.md — D-16 gateway value leaves: `internal/ulidgen`, `internal/cmdparse`, `internal/sessionlease`; **owns the full gateway core/session ban** (wave 3)
-- [ ] 07-05-PLAN.md — D-03/D-04: `internal/presence` + auth consumer-defined interface (breaks the FINDING-1 cycle) (wave 3)
+- [x] 07-05-PLAN.md — D-03/D-04: `internal/presence` + auth consumer-defined interface (breaks the FINDING-1 cycle) (wave 3)
 
 **Wave 4** *(blocked on Wave 3 — the two plans run in parallel)*
 
@@ -243,7 +243,7 @@ Plans:
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
-| 7. Event-Model & Bootstrap Decomposition | v0.12 | 3/11 | In Progress|  |
+| 7. Event-Model & Bootstrap Decomposition | v0.12 | 4/11 | In Progress|  |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
 
