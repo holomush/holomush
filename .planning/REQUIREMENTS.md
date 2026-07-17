@@ -36,7 +36,7 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 - [ ] **ARCH-02**: The `plugin/manager` god object is decomposed similarly, with no behavior change (epic `holomush-dj95`)
 - [ ] **ARCH-03**: Process bootstrap is migrated onto `lifecycle.Orchestrator`, unifying subsystem start/stop ordering (epic `holomush-yvdm`)
 - [ ] **ARCH-04**: The parallel `core.Event` / `eventbus.Event` models are collapsed to a single representation, coordinated with the MODEL-01 outcome
-- [ ] **ARCH-05**: Remaining gateway-boundary import violations are removed so `internal/web` / `internal/telnet` hold only protocol-translation dependencies (`.claude/rules/gateway-boundary.md`)
+- [x] **ARCH-05**: Remaining gateway-boundary import violations are removed so `internal/web` / `internal/telnet` hold only protocol-translation dependencies (`.claude/rules/gateway-boundary.md`)
 
 ### Code Health & Test Quality (999.10)
 
@@ -91,7 +91,7 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | QUAL-01 | Phase 6 | Complete |
 | ARCH-03 | Phase 7 | Pending |
 | ARCH-04 | Phase 7 | Pending |
-| ARCH-05 | Phase 7 | Pending |
+| ARCH-05 | Phase 7 | Complete |
 | ARCH-01 | Phase 8 | Pending |
 | ARCH-02 | Phase 8 | Pending |
 | QUAL-02 | Phase 9 | Pending |

@@ -2,19 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 7
-current_phase_name: Event-Model & Bootstrap Decomposition
-status: Phase 7 planned (rev 3 — round-2 review folded in) — ready to execute
-stopped_at: Phase 7 replanned (11 plans, 9 waves; round-2 cross-AI review incorporated)
-last_updated: "2026-07-15T23:40:00.000Z"
-last_activity: 2026-07-15
-last_activity_desc: Phase 7 rev 3 — round-2 review blockers fixed
+current_phase: 07
+current_phase_name: event-model-bootstrap-decomposition
+status: executing
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-07-17T22:06:14.590Z"
+last_activity: 2026-07-17
+last_activity_desc: Phase 07 execution started
 progress:
-  total_phases: 6
+  total_phases: 4
   completed_phases: 3
-  total_plans: 25
-  completed_plans: 25
-  percent: 50
+  total_plans: 36
+  completed_plans: 26
 ---
 
 # Project State
@@ -30,10 +29,10 @@ trusted identically.
 
 ## Current Position
 
-Phase: 7 — Event-Model & Bootstrap Decomposition
-Plan: Not started — 11 plans across 9 waves, ready to execute
-Status: Phase 7 planned (rev 3); round-2 cross-AI review (codex + grok-4.5, both grounded) folded in — 4 verified blockers fixed
-Last activity: 2026-07-15 — Phase 7 rev 3 (round-2 reviews incorporated)
+Phase: 07 (event-model-bootstrap-decomposition) — EXECUTING
+Plan: 2 of 11
+Status: Ready to execute
+Last activity: 2026-07-17 — Phase 07 execution started
 
 ## Performance Metrics
 
@@ -105,6 +104,11 @@ Last activity: 2026-07-15 — Phase 7 rev 3 (round-2 reviews incorporated)
 | Phase 06 P03 | 30 | 6 tasks | 8 files |
 | Phase 06 P04 | 8min | 3 tasks | 4 files |
 | Phase 06 P05 | 35min | 2 tasks | 4 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 07 P01 | 20min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -154,6 +158,7 @@ the next milestone yet.
 - [Phase 07]: rev3 — the promised `Seq == 0` → BeforeID pagination fallback DOES NOT EXIST (bus.go:87,94; hot_jetstream.go:334; cold_postgres.go:125 — BeforeID is a tripwire for a NONZERO seq). Policy settled: zero seq means "no cursor, read the tail" (status quo); reject-as-stale and ID→seq resolution both rejected.
 - [Phase 07]: rev3 — Go evaluates deferred ARGUMENTS at registration, so `defer orch.StopAll(shutdownCtx)` would expire ~5s into uptime and cancel every graceful stop. The closure form (core.go:255-261 telemetry / :356-362 observability) is the in-repo precedent and the mandated shape.
 - [Phase ?]: 06-05: OPS-04 audit-DLQ replay resolves game_id MIRRORING the server (--game-id override -> core.game_id via config.Load(...,core) -> persisted DB), closing the F3 external-NATS subject-prefix mismatch; tautological embedded-NATS test replaced with a divergent-game natstest test driving the real resolver seam
+- [Phase ?]: 07-01: internal/grpc/client.go extracted verbatim into new leaf package internal/grpcclient; telnet closure dropped 47->10 holomush/internal/ packages, closing the gateway.go client-import gap RESEARCH.md Pitfall-4 missed
 
 ### Pending Todos
 
@@ -186,10 +191,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-15T17:14:08.246Z
+Last session: 2026-07-17T22:06:14.583Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-event-model-bootstrap-decomposition/07-CONTEXT.md
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
