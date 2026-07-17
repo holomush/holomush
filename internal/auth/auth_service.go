@@ -15,6 +15,19 @@ import (
 	gamesession "github.com/holomush/holomush/internal/session"
 )
 
+// PresenceEmitter is the subset of *presence.Emitter's methods auth actually
+// calls: the eviction fanout's leave + session_ended emissions. Implemented
+// by *presence.Emitter without requiring a direct import — internal/eventbus's
+// transitive closure contains internal/auth (go list -deps ./internal/eventbus
+// includes github.com/holomush/holomush/internal/auth), so importing
+// internal/presence (which imports internal/eventbus) here would create an
+// import cycle (FINDING-1). EmitArrive is deliberately excluded: auth's
+// eviction fanout only ever calls EmitLeave/EmitSessionEnded, below.
+type PresenceEmitter interface {
+	EmitLeave(ctx context.Context, char core.CharacterRef, reason string) error
+	EmitSessionEnded(ctx context.Context, char core.CharacterRef, sessionID, cause, reason string) error
+}
+
 // Service provides authentication operations.
 type Service struct {
 	players              PlayerRepository
@@ -25,7 +38,7 @@ type Service struct {
 
 	// Optional: when both are set, AuthenticatePlayer emits session_ended
 	// (cause=evicted) for child game sessions belonging to trimmed PlayerSessions.
-	engine       *core.Engine
+	presence     PresenceEmitter
 	gameSessions gamesession.Store
 }
 
@@ -34,12 +47,12 @@ type ServiceOption func(*Service)
 
 // WithGameSessionFanout configures the Service to emit session_ended events
 // (cause=evicted) for child game sessions when CreateWithCap trims PlayerSessions.
-// Both engine and gameSessions must be non-nil; if either is nil, this option
+// Both pres and gameSessions must be non-nil; if either is nil, this option
 // is silently ignored.
-func WithGameSessionFanout(engine *core.Engine, gameSessions gamesession.Store) ServiceOption {
+func WithGameSessionFanout(pres PresenceEmitter, gameSessions gamesession.Store) ServiceOption {
 	return func(s *Service) {
-		if engine != nil && gameSessions != nil {
-			s.engine = engine
+		if pres != nil && gameSessions != nil {
+			s.presence = pres
 			s.gameSessions = gameSessions
 		}
 	}
@@ -107,14 +120,14 @@ func (s *Service) SetMaxSessionsPerPlayer(n int) {
 	s.maxSessionsPerPlayer = n
 }
 
-// ConfigureGameSessionFanout sets the engine and game session store used to
-// emit session_ended (cause=evicted) events for child game sessions when
-// CreateWithCap trims PlayerSessions. Called after construction when the
-// engine is available (e.g. in sub_grpc.go after the engine is created).
+// ConfigureGameSessionFanout sets the presence emitter and game session store
+// used to emit session_ended (cause=evicted) events for child game sessions
+// when CreateWithCap trims PlayerSessions. Called after construction when the
+// presence emitter is available (e.g. in sub_grpc.go after it is created).
 // If either argument is nil, fanout is left unconfigured.
-func (s *Service) ConfigureGameSessionFanout(engine *core.Engine, gameSessions gamesession.Store) {
-	if engine != nil && gameSessions != nil {
-		s.engine = engine
+func (s *Service) ConfigureGameSessionFanout(pres PresenceEmitter, gameSessions gamesession.Store) {
+	if pres != nil && gameSessions != nil {
+		s.presence = pres
 		s.gameSessions = gameSessions
 	}
 }
@@ -180,7 +193,7 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 	// Children created or destroyed between here and CreateWithCap are silently
 	// missed; FK CASCADE still cleans up state.
 	var candidateChildren []*gamesession.Info
-	if s.engine != nil && s.gameSessions != nil && s.maxSessionsPerPlayer > 0 {
+	if s.presence != nil && s.gameSessions != nil && s.maxSessionsPerPlayer > 0 {
 		activePSs, listErr := s.playerSessions.ListByPlayer(ctx, player.ID)
 		if listErr == nil && len(activePSs) >= s.maxSessionsPerPlayer {
 			psIDs := make([]ulid.ULID, len(activePSs))
@@ -218,7 +231,7 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 	// are a gRPC-layer concern — auth.Service does not own hook registration.
 	// The remaining gap is tracked as a follow-up; the reaper's OnExpired
 	// callback and normal session-lifecycle cleanup cover the common cases.
-	if len(trimmedIDs) > 0 && s.engine != nil && s.gameSessions != nil {
+	if len(trimmedIDs) > 0 && s.presence != nil && s.gameSessions != nil {
 		trimmedSet := make(map[ulid.ULID]struct{}, len(trimmedIDs))
 		for _, id := range trimmedIDs {
 			trimmedSet[id] = struct{}{}
@@ -232,7 +245,7 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 				Name:       child.CharacterName,
 				LocationID: child.LocationID,
 			}
-			if dcErr := s.engine.HandleDisconnect(ctx, char, "evicted"); dcErr != nil {
+			if dcErr := s.presence.EmitLeave(ctx, char, "evicted"); dcErr != nil {
 				s.logger.WarnContext(
 					ctx, "eviction: leave event failed",
 					"session_id", child.ID,
@@ -240,7 +253,7 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 					"error", dcErr,
 				)
 			}
-			if endErr := s.engine.EndSession(ctx, char, child.ID,
+			if endErr := s.presence.EmitSessionEnded(ctx, char, child.ID,
 				core.SessionEndedCauseEvicted,
 				"Session evicted — you logged in elsewhere."); endErr != nil {
 				s.logger.WarnContext(

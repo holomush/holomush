@@ -6,7 +6,7 @@
 // .claude/rules/terminology.md's "presence" definition: "active sessions at
 // a location"). Emitter is the sole type: it publishes these three event
 // shapes through an injected eventbus.Publisher, replacing the former
-// core.Engine + busEventAppender pair (D-03/D-04).
+// internal/core game-engine + busEventAppender pair (D-03/D-04).
 package presence
 
 import (

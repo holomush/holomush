@@ -47,6 +47,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/settings"
@@ -292,12 +293,16 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	// subsystem started, so this cannot be a host construction-time option.
 	s.cfg.Plugins.ConfigureSystemBroadcaster(eventStore)
 
-	// 1. Create core engine from event store.
-	engine := core.NewEngine(eventStore)
+	// 1. Create the presence emitter (arrive/leave/session_ended) over the
+	// SAME wrapped publisher busEventAppender uses (never rawPublisher — the
+	// audit projection fails closed without the App-Rendering header the
+	// wrapper stamps), plus the bus's own GameID as the qualification source
+	// (FINDING-5).
+	presenceEmitter := presence.NewEmitter(publisher, s.cfg.EventBus.GameID)
 
 	// Wire game-session fanout into the auth service so evictions emit
 	// session_ended events for child game sessions before FK cascade removes them.
-	authService.ConfigureGameSessionFanout(engine, sessionStore)
+	authService.ConfigureGameSessionFanout(presenceEmitter, sessionStore)
 
 	// 2. Create gRPC server with TLS credentials.
 	// Install GRPCServiceProxy as UnknownServiceHandler so plugin-provided
@@ -670,7 +675,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			"service", sceneServiceName)
 	}
 
-	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
+	coreServer := holoGRPC.NewCoreServer(presenceEmitter, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)
 
 	// 9. Create ContentService, register with gRPC.
@@ -724,7 +729,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			char := core.CharacterRef{
 				ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
 			}
-			if dcErr := engine.HandleDisconnect(reaperCtx, char, "session expired"); dcErr != nil {
+			if dcErr := presenceEmitter.EmitLeave(reaperCtx, char, "session expired"); dcErr != nil {
 				slog.WarnContext(
 					reaperCtx,
 					"reaper: leave event failed",
@@ -732,7 +737,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 					"error", dcErr,
 				)
 			}
-			if endErr := engine.EndSession(reaperCtx, char, info.ID,
+			if endErr := presenceEmitter.EmitSessionEnded(reaperCtx, char, info.ID,
 				core.SessionEndedCauseReaped,
 				"Session expired due to inactivity."); endErr != nil {
 				slog.WarnContext(reaperCtx, "reaper: session_ended event failed",
@@ -750,7 +755,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			char := core.CharacterRef{
 				ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
 			}
-			if dcErr := engine.HandleDisconnect(reaperCtx, char, "phased out"); dcErr != nil {
+			if dcErr := presenceEmitter.EmitLeave(reaperCtx, char, "phased out"); dcErr != nil {
 				slog.WarnContext(reaperCtx, "lease sweep grid phase-out leave failed",
 					"session_id", info.ID, "error", dcErr)
 			}

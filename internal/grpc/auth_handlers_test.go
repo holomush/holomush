@@ -89,7 +89,7 @@ func TestAuthenticatePlayerReturnsTokenAndCharactersOnValidCredentials(t *testin
 	sessionStore := sessiontest.NewStore(t)
 
 	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
+		presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 
 		sessionStore:      sessionStore,
 		authService:       authSvc,
@@ -163,7 +163,7 @@ func TestAuthenticatePlayer_ErrorPaths(t *testing.T) {
 			ctx := context.Background()
 
 			server := &CoreServer{
-				engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+				presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 				sessionStore: sessiontest.NewStore(t),
 			}
 
@@ -231,7 +231,7 @@ func TestSelectCharacter(t *testing.T) {
 				sessiontest.SeedPlayerSession(t, pool, ps)
 
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessionStore,
 					playerSessionRepo: sessionRepo,
 					charRepo:          charRepo,
@@ -257,7 +257,7 @@ func TestSelectCharacter(t *testing.T) {
 					Return(nil, auth.ErrNotFound)
 
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
@@ -285,7 +285,7 @@ func TestSelectCharacter(t *testing.T) {
 					}, nil)
 
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					charRepo:          charRepo,
@@ -327,7 +327,7 @@ func TestSelectCharacter(t *testing.T) {
 				}))
 
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessionStore,
 					playerSessionRepo: sessionRepo,
 					charRepo:          charRepo,
@@ -364,7 +364,7 @@ func TestSelectCharacter(t *testing.T) {
 
 				before := time.Now()
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessionStore,
 					playerSessionRepo: sessionRepo,
 					charRepo:          charRepo,
@@ -421,7 +421,7 @@ func TestSelectCharacter(t *testing.T) {
 				}))
 
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessionStore,
 					playerSessionRepo: sessionRepo,
 					charRepo:          charRepo,
@@ -481,7 +481,7 @@ func TestSelectCharacterReattachesOnSecondCallWithSameToken(t *testing.T) {
 	sessiontest.SeedPlayerSession(t, pool, ps)
 	callCount := 0
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessionStore,
 		playerSessionRepo: sessionRepo,
 		charRepo:          charRepo,
@@ -535,7 +535,7 @@ func TestCreatePlayerReturnsSessionTokenForNewAccount(t *testing.T) {
 	playerSessionRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.PlayerSession")).Return(nil)
 
 	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
+		presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 
 		sessionStore:      sessiontest.NewStore(t),
 		authService:       authSvc,
@@ -572,7 +572,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 			name: "service not configured returns success=false with not configured message",
 			setupServer: func(t *testing.T) *CoreServer {
 				return &CoreServer{
-					engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore: sessiontest.NewStore(t),
 				}
 			},
@@ -586,7 +586,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 					return nil, nil, "", auth.ErrNotFound // simulates username taken via oops
 				}
 				return &CoreServer{
-					engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore: sessiontest.NewStore(t),
 					authService:  authSvc,
 				}
@@ -602,7 +602,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 					return nil, nil, "", errors.New("pq: relation \"players_private_v3\" does not exist")
 				}
 				return &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					authService:       authSvc,
 					playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
@@ -621,7 +621,7 @@ func TestCreatePlayer_ErrorPaths(t *testing.T) {
 						"operation", "check username availability")
 				}
 				return &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					authService:       authSvc,
 					playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
@@ -678,7 +678,7 @@ func TestCreateCharacterReturnsCharacterIDAndNameOnSuccess(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		characterService:  charSvc,
@@ -717,7 +717,7 @@ func TestCreateCharacter_ErrorPaths(t *testing.T) {
 				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
 					Return(nil, auth.ErrNotFound)
 				return &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					playerSessionRepo: sessionRepo,
 					characterService:  newMockCharacterService(t),
 				}
@@ -730,7 +730,7 @@ func TestCreateCharacter_ErrorPaths(t *testing.T) {
 			setupServer: func(_ *testing.T) *CoreServer {
 				// playerSessionRepo is nil — resolvePlayerSession returns error
 				return &CoreServer{
-					engine: core.NewEngine(coretest.NewMemoryEventStore()),
+					presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 				}
 			},
 			wantMsgContains: "invalid or expired",
@@ -749,7 +749,7 @@ func TestCreateCharacter_ErrorPaths(t *testing.T) {
 						"shard", "char_shard_3")
 				}
 				return &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					characterService:  charSvc,
@@ -804,7 +804,7 @@ func TestCreateCharacterMintsBindingViaGenesis(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		characterService:  charSvc,
@@ -842,7 +842,7 @@ func TestListCharacters_ErrorPaths(t *testing.T) {
 				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken("bad-token")).
 					Return(nil, auth.ErrNotFound)
 				return &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					playerSessionRepo: sessionRepo,
 				}
 			},
@@ -853,7 +853,7 @@ func TestListCharacters_ErrorPaths(t *testing.T) {
 			setupServer: func(t *testing.T) *CoreServer {
 				t.Helper()
 				return &CoreServer{
-					engine: core.NewEngine(coretest.NewMemoryEventStore()),
+					presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					// playerSessionRepo is nil
 				}
 			},
@@ -888,7 +888,7 @@ func TestListCharactersReturnsCharactersWithoutLocationWhenNoWorldQuerier(t *tes
 		}, nil)
 
 	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
+		presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
@@ -955,7 +955,7 @@ func TestListCharacters_LocationDerivation(t *testing.T) {
 				}, nil)
 
 			server := &CoreServer{
-				engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+				presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 				sessionStore:      sessiontest.NewStore(t),
 				playerSessionRepo: sessionRepo,
 				charRepo:          charRepo,
@@ -988,7 +988,7 @@ func TestRequestPasswordReset_AlwaysSuccess(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
+		presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 
 		sessionStore: sessiontest.NewStore(t),
 		resetService: resetSvc,
@@ -1006,7 +1006,7 @@ func TestRequestPasswordReset_NotConfigured(t *testing.T) {
 	ctx := context.Background()
 
 	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
+		presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 
 		sessionStore: sessiontest.NewStore(t),
 	}
@@ -1033,7 +1033,7 @@ func TestConfirmPasswordResetReturnsSuccessForValidToken(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
+		presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 
 		sessionStore: sessiontest.NewStore(t),
 		resetService: resetSvc,
@@ -1086,7 +1086,7 @@ func TestConfirmPasswordReset_InvalidTokenPaths(t *testing.T) {
 			resetSvc.resetPasswordFunc = tt.resetPasswordFunc
 
 			server := &CoreServer{
-				engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+				presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 				sessionStore: sessiontest.NewStore(t),
 				resetService: resetSvc,
 			}
@@ -1219,7 +1219,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:            core.NewEngine(store),
+		presence:          newTestPresenceEmitter(store),
 		sessionStore:      sessStore,
 		eventStore:        store,
 		authService:       authSvc,
@@ -1249,7 +1249,7 @@ func TestLogoutHashesTokenAndCallsAuthServiceLogout(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine: core.NewEngine(coretest.NewMemoryEventStore()),
+		presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 
 		sessionStore: sessiontest.NewStore(t),
 		authService:  authSvc,
@@ -1282,7 +1282,7 @@ func TestLogout_ErrorPaths(t *testing.T) {
 					return ulid.ULID{}, auth.ErrNotFound
 				}
 				return &CoreServer{
-					engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore: sessiontest.NewStore(t),
 					authService:  authSvc,
 				}
@@ -1294,7 +1294,7 @@ func TestLogout_ErrorPaths(t *testing.T) {
 			setupServer: func(t *testing.T) *CoreServer {
 				t.Helper()
 				return &CoreServer{
-					engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore: sessiontest.NewStore(t),
 				}
 			},
@@ -1315,7 +1315,7 @@ func TestLogout_ErrorPaths(t *testing.T) {
 
 func TestResolvePlayerSession_RepoNotConfigured(t *testing.T) {
 	server := &CoreServer{
-		engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore: sessiontest.NewStore(t),
 		// playerSessionRepo is nil
 	}
@@ -1333,7 +1333,7 @@ func TestResolvePlayerSession_TokenNotFound(t *testing.T) {
 		Return(nil, auth.ErrNotFound)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
@@ -1354,7 +1354,7 @@ func TestResolvePlayerSession_RefreshTTLError_StillReturnsSession(t *testing.T) 
 		Return(errors.New("redis timeout"))
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
@@ -1385,7 +1385,7 @@ func TestCheckPlayerSession(t *testing.T) {
 				playerRepo.EXPECT().GetByID(mock.Anything, playerID).
 					Return(&auth.Player{ID: playerID, Username: "alice"}, nil)
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					playerRepo:        playerRepo,
@@ -1402,7 +1402,7 @@ func TestCheckPlayerSession(t *testing.T) {
 				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
 					Return(nil, auth.ErrNotFound)
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
@@ -1414,7 +1414,7 @@ func TestCheckPlayerSession(t *testing.T) {
 			name: "session repo not configured",
 			setup: func(t *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest) {
 				server := &CoreServer{
-					engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore: sessiontest.NewStore(t),
 				}
 				return server, &corev1.CheckPlayerSessionRequest{PlayerSessionToken: validToken}
@@ -1429,7 +1429,7 @@ func TestCheckPlayerSession(t *testing.T) {
 				ps := makePlayerSession(playerID)
 				sessionRepo := setupSessionRepo(t, ps)
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
@@ -1475,7 +1475,7 @@ func TestCheckPlayerSessionPopulatesPlayerIDIsGuestAndCharactersOnSuccess(t *tes
 		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Jasper Iodine"}}, nil)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		playerRepo:        playerRepo,
@@ -1521,7 +1521,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
 					Return(nil, samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("unknown token"))
 				return &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
@@ -1533,7 +1533,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 			setupServer: func(t *testing.T) *CoreServer {
 				// playerSessionRepo unset → resolvePlayerSession returns NOT_CONFIGURED.
 				return &CoreServer{
-					engine:       core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:     newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore: sessiontest.NewStore(t),
 				}
 			},
@@ -1550,7 +1550,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 				playerRepo.EXPECT().GetByID(mock.Anything, playerID).
 					Return(nil, errors.New("connection refused"))
 				return &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					playerRepo:        playerRepo,
@@ -1571,7 +1571,7 @@ func TestCheckPlayerSession_ErrorTranslation(t *testing.T) {
 				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 					Return(nil, errors.New("char repo down"))
 				return &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 					playerRepo:        playerRepo,
@@ -1812,7 +1812,7 @@ func TestListPlayerSessionsReturnsCallersOwnSessionsWithIsCurrentFlag(t *testing
 		Return([]*auth.PlayerSession{ps1, ps2}, nil)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
@@ -1883,7 +1883,7 @@ func TestListPlayerSessions_ReturnsEmptyPaths(t *testing.T) {
 			sessionRepo := tt.setupRepo(t)
 
 			server := &CoreServer{
-				engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+				presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 				sessionStore:      sessiontest.NewStore(t),
 				playerSessionRepo: sessionRepo,
 			}
@@ -1929,7 +1929,7 @@ func TestRevokePlayerSessionRevokesOwnOtherSession(t *testing.T) {
 	sessionRepo.EXPECT().Delete(mock.Anything, targetPS.ID).Return(nil)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
@@ -1981,7 +1981,7 @@ func TestRevokePlayerSession_RejectsPaths(t *testing.T) {
 				// Delete MUST NOT be called for a foreign session - the mock would fail the test
 				// if an unexpected call were made.
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
@@ -1999,7 +1999,7 @@ func TestRevokePlayerSession_RejectsPaths(t *testing.T) {
 				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken("invalid")).
 					Return(nil, auth.ErrNotFound)
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
@@ -2027,7 +2027,7 @@ func TestRevokePlayerSession_RejectsPaths(t *testing.T) {
 				sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
 				// No GetByID expectation — "not-a-ulid" fails parse first.
 				server := &CoreServer{
-					engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+					presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 					sessionStore:      sessiontest.NewStore(t),
 					playerSessionRepo: sessionRepo,
 				}
@@ -2093,7 +2093,7 @@ func TestRevokeOtherPlayerSessionsKeepsCallerDeletesRest(t *testing.T) {
 	sessionRepo.EXPECT().Delete(mock.Anything, other2.ID).Return(nil)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
@@ -2114,7 +2114,7 @@ func TestRevokeOtherPlayerSessionsRejectsInvalidToken(t *testing.T) {
 		Return(nil, auth.ErrNotFound)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
@@ -2146,7 +2146,7 @@ func TestRevokeOtherPlayerSessionsSucceedsWithNoOtherSessions(t *testing.T) {
 		Return([]*auth.PlayerSession{callerPS}, nil)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 	}
@@ -2188,7 +2188,7 @@ func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
 		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
 
 		server := &CoreServer{
-			engine: core.NewEngine(coretest.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
+			presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
 			playerSessionRepo: repo,
 		}
 		_, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{PlayerSessionToken: validToken})
@@ -2205,7 +2205,7 @@ func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
 		repo.EXPECT().Delete(mock.Anything, target.ID).Return(nil)
 
 		server := &CoreServer{
-			engine: core.NewEngine(coretest.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
+			presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
 			playerSessionRepo: repo,
 		}
 		_, err := server.RevokePlayerSession(ctx, &corev1.RevokePlayerSessionRequest{
@@ -2222,7 +2222,7 @@ func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
 		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
 
 		server := &CoreServer{
-			engine: core.NewEngine(coretest.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
+			presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
 			playerSessionRepo: repo,
 		}
 		_, err := server.RevokeOtherPlayerSessions(ctx, &corev1.RevokeOtherPlayerSessionsRequest{PlayerSessionToken: validToken})
@@ -2238,7 +2238,7 @@ func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
 		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
 
 		server := &CoreServer{
-			engine: core.NewEngine(coretest.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
+			presence: newTestPresenceEmitter(coretest.NewMemoryEventStore()), sessionStore: sessiontest.NewStore(t),
 			playerSessionRepo: repo,
 		}
 		resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{PlayerSessionToken: validToken})
@@ -2282,7 +2282,7 @@ func TestLogoutProceedsWithoutFanoutWhenGetByTokenHashFails(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		eventStore:        coretest.NewMemoryEventStore(),
 		authService:       authSvc,
@@ -2330,7 +2330,7 @@ func TestLogoutProceedsWithoutFanoutWhenListByPlayerSessionFails(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      mockSessStore,
 		eventStore:        coretest.NewMemoryEventStore(),
 		authService:       authSvc,
@@ -2426,7 +2426,7 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:            core.NewEngine(failingStore),
+		presence:          newTestPresenceEmitter(failingStore),
 		sessionStore:      sessStore,
 		eventStore:        failingStore,
 		authService:       authSvc,
@@ -2489,7 +2489,7 @@ func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
 	sessionID := core.NewULID()
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessionStore,
 		playerSessionRepo: sessionRepo,
 		charRepo:          charRepo,
@@ -2574,7 +2574,7 @@ func TestSelectCharacterArriveEventEmission(t *testing.T) {
 
 			eventStore := coretest.NewMemoryEventStore()
 			server := &CoreServer{
-				engine:            core.NewEngine(eventStore),
+				presence:          newTestPresenceEmitter(eventStore),
 				sessionStore:      sessionStore,
 				playerSessionRepo: sessionRepo,
 				charRepo:          charRepo,
@@ -2649,7 +2649,7 @@ func TestSelectCharacterGridPresent(t *testing.T) {
 			sessiontest.SeedPlayerSession(t, pool, ps)
 
 			server := &CoreServer{
-				engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+				presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 				sessionStore:      sessionStore,
 				playerSessionRepo: sessionRepo,
 				charRepo:          charRepo,
@@ -2691,7 +2691,7 @@ func TestListAllCharactersDeniedWhenPolicyDenies(t *testing.T) {
 	// ListAll MUST NOT be called when ABAC denies — the gate must block before the read.
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		charRepo:          charRepo,
@@ -2725,7 +2725,7 @@ func TestListAllCharactersDeniedWhenEngineUnconfigured(t *testing.T) {
 		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Alice"}}, nil)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		charRepo:          charRepo,
@@ -2759,7 +2759,7 @@ func TestListAllCharactersReturnsDirectoryForAnyAuthenticatedCaller(t *testing.T
 	charRepo.EXPECT().ListAll(mock.Anything).Return([]*world.Character{alice, bob}, nil).Once()
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		charRepo:          charRepo,
@@ -2791,7 +2791,7 @@ func TestListAllCharactersRejectsMissingToken(t *testing.T) {
 		Return(nil, samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("not found"))
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		accessEngine:      policytest.AllowAllEngine(),
@@ -2822,7 +2822,7 @@ func TestListAllCharactersRejectsNonOwnedCharacter(t *testing.T) {
 		Return([]*world.Character{{ID: ownedCharID, PlayerID: playerID, Name: "Alice"}}, nil)
 
 	server := &CoreServer{
-		engine:            core.NewEngine(coretest.NewMemoryEventStore()),
+		presence:          newTestPresenceEmitter(coretest.NewMemoryEventStore()),
 		sessionStore:      sessiontest.NewStore(t),
 		playerSessionRepo: sessionRepo,
 		charRepo:          charRepo,

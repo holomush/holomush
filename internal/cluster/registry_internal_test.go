@@ -64,8 +64,8 @@ func TestNewSubsystemRejectsInterfaceNilConn(t *testing.T) {
 }
 
 // TestIsNilConnDetectsTypedNilPointer is the unit-level lock for the
-// helper. Mirrors the pattern in internal/core/engine.go's
-// isNilEventAppender unit coverage.
+// helper. Mirrors the pattern in internal/presence/emitter.go's
+// isNilPublisher unit coverage.
 func TestIsNilConnDetectsTypedNilPointer(t *testing.T) {
 	t.Parallel()
 

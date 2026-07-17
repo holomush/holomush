@@ -282,7 +282,7 @@ func (r *registry) SetLastInvalidationSeq(seq uint64) {
 // interface header, missing typed-nil values like (*nats.Conn)(nil)
 // (see internal/eventbus/natsconn/natsconn_test.go:33-37 for the
 // runtime demonstration). Mirrors the pattern in
-// internal/core/engine.go::isNilEventAppender so callers truly fail
+// internal/presence/emitter.go::isNilPublisher so callers truly fail
 // fast at construction rather than crashing on first method call.
 func isNilConn(c natsconn.Conn) bool {
 	v := reflect.ValueOf(c)

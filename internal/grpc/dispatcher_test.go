@@ -104,7 +104,7 @@ func newDispatcherTestServer(t *testing.T, store core.EventAppender, opts ...Cor
 // (`:`, `;`, `"`) loaded into the alias cache, matching production bootstrap.
 func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
-	engine := core.NewEngine(store)
+	pres := newTestPresenceEmitter(store)
 	sessStore := sessiontest.NewStore(t)
 
 	reg := command.NewRegistry()
@@ -139,7 +139,7 @@ func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, 
 	)
 	allOpts = append(allOpts, opts...)
 
-	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
+	return NewCoreServer(pres, sessStore, dispatcher, svc, allOpts...)
 }
 
 func TestDispatcher_HandleCommand_Say(t *testing.T) {
@@ -653,7 +653,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	// Build a server with a "testboot" command that records the target
 	// session as booted. Server teardown logic then emits the session_ended
 	// event, runs disconnect hooks, and deletes the session.
-	engine := core.NewEngine(store)
+	pres := newTestPresenceEmitter(store)
 	sessStore := sessiontest.NewStore(t)
 	reg := command.NewRegistry()
 	registerTestCommands(t, reg)
@@ -685,7 +685,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	require.NoError(t, err)
 
 	server := NewCoreServer(
-		engine, sessStore, dispatcher, svc,
+		pres, sessStore, dispatcher, svc,
 		WithEventStore(store),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
@@ -766,7 +766,7 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
+	pres := newTestPresenceEmitter(store)
 	sessStore := sessiontest.NewStore(t)
 	reg := command.NewRegistry()
 	registerTestCommands(t, reg)
@@ -796,7 +796,7 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 
 	var hookCalled bool
 	server := NewCoreServer(
-		engine, sessStore, dispatcher, svc,
+		pres, sessStore, dispatcher, svc,
 		WithEventStore(store),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 		WithDisconnectHook(func(_ session.Info) {
@@ -856,7 +856,7 @@ func TestHandleCommand_ConnectionIDThreadedToExecution(t *testing.T) {
 	var capturedConnID ulid.ULID
 
 	store := &mockEventStore{}
-	engine := core.NewEngine(store)
+	pres := newTestPresenceEmitter(store)
 	sessStore := sessiontest.NewStore(t)
 
 	reg := command.NewRegistry()
@@ -882,7 +882,7 @@ func TestHandleCommand_ConnectionIDThreadedToExecution(t *testing.T) {
 	require.NoError(t, err)
 
 	server := NewCoreServer(
-		engine, sessStore, dispatcher, svc,
+		pres, sessStore, dispatcher, svc,
 		WithEventStore(store),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)

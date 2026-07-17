@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,9 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventvocab"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 )
@@ -134,14 +138,67 @@ func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) sessio
 	return store
 }
 
+// eventbusToCoreAppender adapts an eventbus.Publisher.Publish call into a
+// core.EventAppender.Append call on the same store used for
+// dispatcher-emitted (command_response, say/pose/ooc) events — the reverse of
+// cmd/holomush/sub_grpc.go's busEventAppender.Append. This lets tests assert
+// both dispatcher-emitted and presence-emitted (arrive/leave/session_ended)
+// events via a single core.EventAppender.Replay call on one shared in-memory
+// store, matching this package's pre-migration (internal/core game-engine)
+// test shape.
+type eventbusToCoreAppender struct {
+	appender core.EventAppender
+}
+
+func (a *eventbusToCoreAppender) Publish(ctx context.Context, ev eventbus.Event) error {
+	return a.appender.Append(ctx, core.Event{
+		ID:        ev.ID,
+		Stream:    strings.TrimPrefix(string(ev.Subject), "events.main."),
+		Type:      eventvocab.EventType(ev.Type),
+		Timestamp: ev.Timestamp,
+		Actor:     busActorToCoreActor(ev.Actor),
+		Payload:   ev.Payload,
+	})
+}
+
+var _ eventbus.Publisher = (*eventbusToCoreAppender)(nil)
+
+// busActorToCoreActor is the test-side reverse of coreToBusActor
+// (cmd/holomush/sub_grpc.go).
+func busActorToCoreActor(a eventbus.Actor) core.Actor {
+	out := core.Actor{}
+	switch a.Kind {
+	case eventbus.ActorKindSystem:
+		out.Kind = core.ActorSystem
+	case eventbus.ActorKindPlugin:
+		out.Kind = core.ActorPlugin
+	default:
+		out.Kind = core.ActorCharacter
+	}
+	if a.ID != (ulid.ULID{}) {
+		out.ID = a.ID.String()
+	}
+	return out
+}
+
+// newTestPresenceEmitter builds a *presence.Emitter over store via
+// eventbusToCoreAppender, with gameID fixed to "main" (matching this
+// package's test fixtures, which build relative streams like
+// "location."+id.String() and expect them to land unqualified in the shared
+// store).
+func newTestPresenceEmitter(store core.EventAppender) *presence.Emitter {
+	return presence.NewEmitter(&eventbusToCoreAppender{appender: store}, func() string { return "main" })
+}
+
 // newHandleCommandServer creates a CoreServer wired with the unified command
 // dispatcher. Tests that call HandleCommand MUST use this helper.
 //
-// The store is used for both Engine and dispatcher Services.Events.
-// Pass a custom sessStore to pre-populate sessions; nil uses a fresh Postgres-backed store.
+// The store is used for both the presence emitter and dispatcher
+// Services.Events. Pass a custom sessStore to pre-populate sessions; nil uses
+// a fresh Postgres-backed store.
 func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
-	engine := core.NewEngine(store)
+	pres := newTestPresenceEmitter(store)
 	if sessStore == nil {
 		sessStore = sessiontest.NewStore(t)
 	}
@@ -168,7 +225,7 @@ func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore se
 	)
 	allOpts = append(allOpts, opts...)
 
-	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
+	return NewCoreServer(pres, sessStore, dispatcher, svc, allOpts...)
 }
 
 // mockEventStore implements core.EventAppender for testing.

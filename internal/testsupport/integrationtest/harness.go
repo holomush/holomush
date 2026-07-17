@@ -94,6 +94,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
@@ -569,8 +570,10 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// without it, command-driven plugin E2Es panic on the nil Session getter.
 	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe, Session: sessionStoreInst})
 
-	// Core engine with a no-op event appender.
-	engine := core.NewEngine(&noopEventAppender{})
+	// Presence emitter with a no-op publisher. gameID resolves from the SAME
+	// bus production does (bus.Bus.GameID), not a hardcoded "main" — otherwise
+	// task test:int would assert a subject production could never emit.
+	presenceEmitter := presence.NewEmitter(&noopPublisher{}, bus.Bus.GameID)
 
 	// HistoryReader: minimal wiring against the embedded bus's JetStream
 	// and the test Postgres pool. Without WithPluginCrypto, all crypto/audit/
@@ -719,7 +722,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamContributor(pluginSub.Manager()))
 	}
 	coreServer := holoGRPC.NewCoreServer(
-		engine,
+		presenceEmitter,
 		sessionStoreInst,
 		dispatcher,
 		cmdServices,
@@ -1316,6 +1319,15 @@ type noopEventAppender struct{}
 func (*noopEventAppender) Append(_ context.Context, _ core.Event) error { return nil }
 
 var _ core.EventAppender = (*noopEventAppender)(nil)
+
+// noopPublisher satisfies eventbus.Publisher for the harness's presence
+// emitter, which does not need to exercise arrive/leave/session_ended
+// delivery for most integration suites. Sibling of noopEventAppender above.
+type noopPublisher struct{}
+
+func (*noopPublisher) Publish(_ context.Context, _ eventbus.Event) error { return nil }
+
+var _ eventbus.Publisher = (*noopPublisher)(nil)
 
 // busEventAppenderAdapter implements core.EventAppender by translating
 // core.Events to eventbus.Events and publishing them to the embedded JetStream

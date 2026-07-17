@@ -37,6 +37,7 @@ import (
 	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -153,7 +154,7 @@ type GameIDProvider func() string
 type CoreServer struct {
 	corev1.UnimplementedCoreServiceServer
 
-	engine          *core.Engine
+	presence        *presence.Emitter
 	sessionStore    session.Store
 	eventStore      core.EventAppender
 	worldQuerier    WorldQuerier
@@ -341,9 +342,9 @@ func WithSceneMuteChecker(c SceneMuteChecker) CoreServerOption {
 }
 
 // NewCoreServer creates a new Core gRPC server.
-func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *command.Dispatcher, cmdServices *command.Services, opts ...CoreServerOption) *CoreServer {
+func NewCoreServer(pres *presence.Emitter, sessionStore session.Store, dispatcher *command.Dispatcher, cmdServices *command.Services, opts ...CoreServerOption) *CoreServer {
 	s := &CoreServer{
-		engine:       engine,
+		presence:     pres,
 		sessionStore: sessionStore,
 		dispatcher:   dispatcher,
 		cmdServices:  cmdServices,
@@ -510,10 +511,10 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 
 	// Quit/self-boot detection: handler signals intent, server does teardown.
 	if errors.Is(dispatchErr, command.ErrSessionEnded) {
-		if dcErr := s.engine.HandleDisconnect(ctx, char, "quit"); dcErr != nil {
+		if dcErr := s.presence.EmitLeave(ctx, char, "quit"); dcErr != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", dcErr)
 		}
-		if endErr := s.engine.EndSession(ctx, char, info.ID,
+		if endErr := s.presence.EmitSessionEnded(ctx, char, info.ID,
 			core.SessionEndedCauseQuit, "Goodbye!"); endErr != nil {
 			// If we can't append session_ended, subscribers will not receive
 			// STREAM_CLOSED. Retain the session row so the reaper can retry
@@ -572,12 +573,12 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 			booted.SessionInfo = *info
 		}
 
-		if dcErr := s.engine.HandleDisconnect(ctx, booted.CharacterRef, "booted"); dcErr != nil {
+		if dcErr := s.presence.EmitLeave(ctx, booted.CharacterRef, "booted"); dcErr != nil {
 			slog.WarnContext(ctx, "boot leave event failed",
 				"target_id", booted.CharacterRef.ID.String(),
 				"error", dcErr)
 		}
-		if endErr := s.engine.EndSession(ctx, booted.CharacterRef, booted.SessionInfo.ID,
+		if endErr := s.presence.EmitSessionEnded(ctx, booted.CharacterRef, booted.SessionInfo.ID,
 			core.SessionEndedCauseKicked,
 			"You have been disconnected by an administrator."); endErr != nil {
 			// If we can't append session_ended, subscribers will not receive
@@ -1621,7 +1622,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		if info.IsGuest {
 			// Guests can't reconnect — delete immediately
 			char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-			if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
+			if err := s.presence.EmitLeave(ctx, char, "quit"); err != nil {
 				slog.WarnContext(
 					ctx, "leave event failed",
 					"request_id", requestID,
@@ -1629,7 +1630,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				)
 			}
 
-			if endErr := s.engine.EndSession(ctx, char, info.ID,
+			if endErr := s.presence.EmitSessionEnded(ctx, char, info.ID,
 				core.SessionEndedCauseGuestEnd, "Session ended."); endErr != nil {
 				// If we can't append session_ended, subscribers will not receive
 				// STREAM_CLOSED. Retain the session row so the reaper can retry
@@ -1674,7 +1675,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		// Only comms_hub connections remain — phase out from grid.
 		// Emit the leave event (engine concern), then update grid presence via helper.
 		char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-		if err := s.engine.HandleDisconnect(ctx, char, "phased out"); err != nil {
+		if err := s.presence.EmitLeave(ctx, char, "phased out"); err != nil {
 			slog.WarnContext(
 				ctx, "phase-out leave event failed",
 				"request_id", requestID,

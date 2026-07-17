@@ -402,7 +402,7 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	// (spec 2026-06-07 §V2).
 	if req.GetClientType() != "comms_hub" {
 		char := core.CharacterRef{ID: charID, Name: selectedChar.Name, LocationID: locationID}
-		if err := s.engine.HandleConnect(ctx, char); err != nil {
+		if err := s.presence.EmitArrive(ctx, char); err != nil {
 			slog.WarnContext(ctx, "arrive event failed", "error", err)
 		}
 	}
@@ -687,11 +687,11 @@ func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*co
 					Name:       info.CharacterName,
 					LocationID: info.LocationID,
 				}
-				if dcErr := s.engine.HandleDisconnect(ctx, char, "logout"); dcErr != nil {
+				if dcErr := s.presence.EmitLeave(ctx, char, "logout"); dcErr != nil {
 					slog.WarnContext(ctx, "logout: leave event failed",
 						"session_id", info.ID, "error", dcErr)
 				}
-				if endErr := s.engine.EndSession(ctx, char, info.ID,
+				if endErr := s.presence.EmitSessionEnded(ctx, char, info.ID,
 					core.SessionEndedCauseLogout, "Session ended by logout."); endErr != nil {
 					slog.WarnContext(ctx, "logout: session_ended event failed",
 						"session_id", info.ID, "error", endErr)
