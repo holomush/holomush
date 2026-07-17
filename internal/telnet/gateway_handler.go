@@ -24,7 +24,7 @@ import (
 
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/cmdparse"
 	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
 	"github.com/holomush/holomush/internal/grpcclient"
@@ -405,7 +405,7 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 		return nil
 	}
 
-	cmd, arg := core.ParseCommand(line)
+	cmd, arg := cmdparse.ParseCommand(line)
 
 	switch cmd {
 	case "connect":

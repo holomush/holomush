@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package core
+package cmdparse
 
 import (
 	"testing"
@@ -23,6 +23,7 @@ func TestParseCommand(t *testing.T) {
 		{"quit", "quit", "quit", ""},
 		{"empty", "", "", ""},
 		{"whitespace", "  say  hello  ", "say", "hello"},
+		{"verb lowercased, inner argument spacing preserved", "SAY  hello  world", "say", "hello  world"},
 	}
 
 	for _, tt := range tests {

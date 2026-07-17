@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package core
+// Package cmdparse is the dependency-free command-grammar leaf: splitting
+// raw telnet input into a verb and argument string.
+package cmdparse
 
 import "strings"
 

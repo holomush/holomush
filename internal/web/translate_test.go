@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
+	"github.com/holomush/holomush/internal/ulidgen"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -465,7 +465,7 @@ func TestTranslateEvent_StateCorruptPayload(t *testing.T) {
 
 func TestTranslateEvent_PopulatesEventIdForCommunicationEvents(t *testing.T) {
 	h := newTestHandler(t)
-	expectedID := core.NewULID().String()
+	expectedID := ulidgen.New().String()
 	ev := &corev1.EventFrame{
 		Id:        expectedID,
 		Type:      "core-communication:say",
@@ -480,7 +480,7 @@ func TestTranslateEvent_PopulatesEventIdForCommunicationEvents(t *testing.T) {
 
 func TestTranslateEvent_PopulatesEventIdForStateEvents(t *testing.T) {
 	h := newTestHandler(t)
-	expectedID := core.NewULID().String()
+	expectedID := ulidgen.New().String()
 	ev := &corev1.EventFrame{
 		Id:        expectedID,
 		Type:      "location_state",
