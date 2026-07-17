@@ -145,6 +145,8 @@ Two ULID generators; the choice matters for correctness:
 
 `core.Event{}` struct literals MUST use `core.NewEvent()` rather than a raw literal — `NewEvent()` stamps a monotonic ULID via `core.NewULID()`. Never supply `Event.ID` manually (e.g., from `idgen.New()`).
 
+The generator itself lives in `internal/ulidgen` (a dependency-free leaf). `core.NewULID()` remains the spelling for core-side event/session IDs (forwards to `ulidgen.New()`, one entropy source). Gateway-side code (`internal/web`, `internal/telnet`) calls `ulidgen.New()` directly because INV-EVENTBUS-1 forbids importing `internal/core`.
+
 ### Error Handling
 
 Use `oops` for structured errors (`oops.With(k,v).Wrap(err)`, `oops.Errorf(...)`, `oops.Code("CODE").Wrap(err)` at boundaries); log with `errutil.LogError`/`LogErrorContext`; test with `errutil.AssertErrorCode`/`AssertErrorContext`. **Method-value gotcha:** always call accessor methods with `()` (e.g. `decision.Reason()`) — without parens Go makes a method value that compiles silently in `...any` params (`oops.With`, `slog`).

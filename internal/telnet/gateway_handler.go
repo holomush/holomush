@@ -30,6 +30,7 @@ import (
 	"github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/telnet/gamenotice"
+	"github.com/holomush/holomush/internal/ulidgen"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -668,7 +669,7 @@ func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.S
 // resubscribe can classify a terminal SESSION_NOT_FOUND apart from a transient
 // core-down. A nil error with a non-nil channel means the subscription is live.
 func (h *GatewayHandler) trySubscribe(ctx context.Context) (<-chan *corev1.SubscribeResponse, error) {
-	h.connectionID = core.NewULID().String()
+	h.connectionID = ulidgen.New().String()
 	stream, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId:          h.sessionID,
 		PlayerSessionToken: h.playerSessionToken,
