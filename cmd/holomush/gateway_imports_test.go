@@ -57,6 +57,12 @@ var coreOnlyFiles = map[string]struct{}{
 	"cmd_admin_test.go":      {},
 	"cmd_admin_totp.go":      {},
 	"cmd_admin_totp_deps.go": {},
+	// Test-only fixture for cmd_admin_totp.go's run function; imports
+	// internal/auth for the auth.Player stub type. Surfaced by 07-04's
+	// internal/auth/service -> internal/auth phantom-package fix (D-17):
+	// the phantom entry never matched anything, so this pre-existing
+	// import was never actually gated before now.
+	"cmd_admin_totp_run_test.go": {},
 	// Phase 7 INV-CRYPTO-45 + INV-CRYPTO-42 + INV-CRYPTO-50 wiring (holomush-1r0v.5).
 	// Constructs the boot-time PluginDowngradeFence helpers (crypto_keys
 	// lookup, violation emitter). Imports eventbus/history + core; core-only
@@ -96,21 +102,52 @@ var coreOnlyFiles = map[string]struct{}{
 	// internal/world/{outbox,postgres} by design. No admin UDS, no crypto/abac.
 	"world_genesis.go":      {},
 	"world_genesis_test.go": {},
+	// validateCryptoOperators (Phase 5 sub-epic B, INV-B5/INV-B7) cross-checks
+	// the configured crypto.operator allow-list against the players table at
+	// boot. Called only from core.go; imports internal/auth/postgres by
+	// design (matches kek_provision.go precedent). Surfaced by 07-04's
+	// internal/auth/service -> internal/auth phantom-package fix (D-17): the
+	// phantom entry never matched anything, so this pre-existing import was
+	// never actually gated before now.
+	"crypto_operator_validation.go":      {},
+	"crypto_operator_validation_test.go": {},
 }
 
+// gatewayForbiddenPackages is the single, shared policy list read by both
+// gateway boundary gates (this direct-import AST gate and the transitive
+// closure gate in gateway_closure_test.go). internal/core, internal/session,
+// and internal/grpc are forbidden WHOLESALE rather than allow-listed by
+// symbol: D-15 rejects the per-symbol escape hatch that let coreOnlyFiles
+// grow to ~30 unreviewed judgement calls. internal/core and internal/session
+// are already dependency-free leaves (verified live: `go list -deps
+// ./internal/core` and `./internal/session` each return only themselves);
+// internal/grpc is the one entry that reaches the DB (a 41-package closure
+// through world/access/command/store) and was removed from the gateway by
+// 07-01's internal/grpcclient extraction.
 var gatewayForbiddenPackages = []string{
 	"github.com/holomush/holomush/internal/world",
 	"github.com/holomush/holomush/internal/access",
 	"github.com/holomush/holomush/internal/store",
 	"github.com/holomush/holomush/internal/plugin",
 	"github.com/holomush/holomush/internal/eventbus",
-	"github.com/holomush/holomush/internal/auth/service",
+	// internal/auth (not internal/auth/service, which does not exist -
+	// go list ./internal/auth/... yields no service subpackage). Matched
+	// below by exact-path OR "internal/auth/"-prefix (checkFile and
+	// closureContainsPackage both use this rule), so it does NOT
+	// accidentally match an unrelated internal/authz-style sibling; there
+	// is no such sibling today.
+	"github.com/holomush/holomush/internal/auth",
 	"github.com/holomush/holomush/internal/command",
+	"github.com/holomush/holomush/internal/core",
+	"github.com/holomush/holomush/internal/session",
+	"github.com/holomush/holomush/internal/grpc",
 }
 
 // TestGatewayImportsAreOnlyProtocolTranslation is INV-EVENTBUS-1. Gateway-side
 // files MUST NOT import domain packages. Core-process files are excluded
 // via coreOnlyFiles.
+//
+// Verifies: INV-EVENTBUS-1
 func TestGatewayImportsAreOnlyProtocolTranslation(t *testing.T) {
 	pkgs, err := packages.Load(
 		&packages.Config{
