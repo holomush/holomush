@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/sessionlease"
 	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/ulidgen"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -459,7 +459,7 @@ func (h *Handler) runSubscribeOnce(
 
 	hbInterval := h.heartbeatInterval
 	if hbInterval <= 0 {
-		hbInterval = session.DefaultLeaseRefreshInterval
+		hbInterval = sessionlease.DefaultRefreshInterval
 	}
 	heartbeat := time.NewTicker(hbInterval)
 	defer heartbeat.Stop()

@@ -5,6 +5,7 @@ package core
 
 import (
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/ulidgen"
 )
@@ -22,5 +23,9 @@ func NewULID() ulid.ULID {
 
 // ParseULID parses a ULID string. Forwards to internal/ulidgen.Parse.
 func ParseULID(s string) (ulid.ULID, error) {
-	return ulidgen.Parse(s)
+	id, err := ulidgen.Parse(s)
+	if err != nil {
+		return ulid.ULID{}, oops.Wrap(err)
+	}
+	return id, nil
 }
