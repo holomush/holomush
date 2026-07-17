@@ -343,7 +343,7 @@ invariants.
 
 | ID | Summary | Legacy | Binding |
 |----|---------|--------|---------|
-| `INV-EVENTBUS-1` | The gateway process MUST NOT import internal/world, internal/access, internal/store, internal/plugin, internal/eventbus, internal/auth/service, or internal/command. | `INV-GW-1` | pending |
+| `INV-EVENTBUS-1` | The gateway process MUST NOT import, directly or transitively, internal/world, internal/access, internal/store, internal/plugin, internal/eventbus, internal/auth, internal/command, internal/core, internal/session, or internal/grpc. | `INV-GW-1` | bound |
 | `INV-EVENTBUS-2` | RenderingPublisher.Publish MUST stamp event.Rendering from the verb registry before publishing. | `INV-GW-2` | bound |
 | `INV-EVENTBUS-3` | RenderingPublisher.Publish MUST return EMIT_UNKNOWN_VERB when the verb registry has no entry for event.Type. | `INV-GW-3` | bound |
 | `INV-EVENTBUS-4` | JetStreamPublisher.Publish MUST copy event.Rendering into the eventbusv1.Event.Rendering proto field before proto.Marshal; round-trip publish + JetStream consume MUST preserve Rendering byte-for-byte. | `INV-GW-3a` | bound |

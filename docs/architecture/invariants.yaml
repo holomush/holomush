@@ -2341,11 +2341,14 @@ invariants:
     scope: INV-EVENTBUS
     origin_spec: "docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"
     legacy: ["INV-GW-1@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
-    summary: "The gateway process MUST NOT import internal/world, internal/access, internal/store, internal/plugin, internal/eventbus,
-      internal/auth/service, or internal/command."
-    binding: pending
+    summary: "The gateway process MUST NOT import, directly or transitively, internal/world, internal/access, internal/store,
+      internal/plugin, internal/eventbus, internal/auth, internal/command, internal/core, internal/session, or internal/grpc."
+    binding: bound
+    asserted_by:
+      - "cmd/holomush/gateway_imports_test.go"
+      - "cmd/holomush/gateway_closure_test.go"
     refs:
-      - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-GW-1"}
+      - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-EVENTBUS-1"}
   - id: INV-EVENTBUS-2
     scope: INV-EVENTBUS
     origin_spec: "docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"
