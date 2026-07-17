@@ -1,418 +1,187 @@
 ---
 phase: 7
-round: 10
-reviewers: [codex]
-reviewed_at: 2026-07-17T03:16:38Z
+round: 11
+reviewers: [codex, opencode]
+reviewed_at: 2026-07-17T15:45:55Z
 plans_reviewed: [07-01-PLAN.md, 07-02-PLAN.md, 07-03-PLAN.md, 07-04-PLAN.md, 07-05-PLAN.md, 07-06-PLAN.md, 07-07-PLAN.md, 07-08-PLAN.md, 07-09-PLAN.md, 07-10-PLAN.md, 07-11-PLAN.md]
-plans_revision: "rev 12 (9d0c4095d)"
-notes: "Round 9 preserved at 9303b9fb9. FULL round: reviewers received all 11 plans with the standard source-grounded prompt; no prior-round findings shared. codex: default model. The second lane (opencode, openrouter/moonshotai/kimi-k3 per user request) was invoked THREE times and every attempt died on a provider 429 rate_limit_exceeded mid-review (280K/64K/285K tokens of agentic verification each) — the lane is recorded as FAILED, not substituted with another model. Consensus therefore rests on codex plus the orchestrator's source verification of every codex HIGH."
+plans_revision: "rev 13 (ed6b72b2b)"
+notes: "Round 10 preserved at 125c646b7. FULL round: both reviewers received all 11 plans with the standard source-grounded prompt plus a round-context note (rev 13, dispositions are settled — flag only defective dispositions). codex: default model. opencode: openrouter/moonshotai/kimi-k3 — the round-10 FAILED lane recovered this round; the first attempt failed instantly on an invalid model reference (the bare 'moonshotai/kimi-k3' is not a registered opencode provider/model pair — the registered slug is 'openrouter/moonshotai/kimi-k3'); with the corrected slug the lane completed on its first attempt with no 429s. The kimi output opens with its live verification narration (~65 claims traced against the tree); it is retained as part of the record. The orchestrator independently verified every HIGH and every gate-satisfiability claim against the live tree before writing the consensus."
 ---
 
-# Cross-AI Plan Review — Phase 7 (Round 10, rev 12, full set)
+# Cross-AI Plan Review — Phase 7 (Round 11, rev 13, full set)
 
 ## Codex Review
 
-# Cross-AI Plan Review — Phase 7
+# Summary
 
-## Overall assessment
+Revision 13 is exceptionally well-grounded, and plans 07-01 through 07-07 plus 07-09 and 07-10 appear executable against the current tree. However, two unresolved compile-order defects remain in 07-08 and 07-11. Both occur at task boundaries and would make mandated gates fail on an otherwise correct implementation. The phase is therefore **not ready for execution as written**.
 
-**Verdict: NOT READY to execute as written.**
+## Plan-by-plan assessment
 
-The architecture is unusually well researched: import cycles, cursor semantics, plugin-runtime symmetry, rollback states, and lifecycle ordering are grounded in live code. However, several plans contain task boundaries or verification commands that cannot pass before later tasks run. The most serious blockers are in 07-01, 07-04, 07-05, 07-06, 07-07, 07-09, and 07-11.
+| Plan | Verdict | Assessment |
+|---|---|---|
+| 07-01 | Ready | Correctly extracts the client seam used by telnet’s error classification at [gateway_handler.go:718](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/telnet/gateway_handler.go:718). The symbol-first census and integration-tagged `phase1_5_test.go` handling close the previous alias gap. |
+| 07-02 | Ready | The vocabulary leaf is necessary because both Event representations currently carry overlapping type vocabularies, while the surviving type has host-private state at [types.go:141](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/types.go:141). Sequencing before the gateway ban is sound. |
+| 07-03 | Ready | The three extracted values are genuine leaves: `NewULID` at [ulid.go:40](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/ulid.go:40), command parsing at [command.go:9](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/command.go:9), and the lease constant at [reaper.go:25](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/session/reaper.go:25). Keeping the ULID forwarder until 07-07 preserves compile order. |
+| 07-04 | Ready | The existing gate only inspects direct `file.Imports` at [gateway_imports_test.go:148](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway_imports_test.go:148); the planned `NeedDeps` closure test genuinely strengthens the invariant instead of duplicating it. |
+| 07-05 | Ready | The auth-side consumer interface is necessary: auth stores `*core.Engine` at [auth_service.go:28](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/auth/auth_service.go:28) and invokes both disconnect and end-session behavior at [auth_service.go:235](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/auth/auth_service.go:235). The plan also preserves the typed-nil guard at [engine.go:44](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/engine.go:44). |
+| 07-06 | Ready | The duplicate payload construction is real: command builds `{"message":…}` at [types.go:628](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/command/types.go:628), while hostcap explicitly mirrors it at [system_broadcaster.go:45](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostcap/system_broadcaster.go:45). |
+| 07-07 | Ready | The survivor direction is correct. `eventbus.Event` owns `Seq` and the private `auditRow` crypto seam at [types.go:141](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/types.go:141), while the duplicate `core.Event` remains at [event.go:233](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:233). |
+| 07-08 | **Not ready** | Task 2 changes the `ReplayTail` signature but omits the integration test created by Task 1 from its migration census. See Concern 1. |
+| 07-09 | Ready, high execution risk | All five eager starts are present in `core.go`, including database at [core.go:287](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:287), eventbus at line 462, and ABAC/auth at lines 797–800. The provider and TLS-subsystem design addresses the actual cause. |
+| 07-10 | Ready | The current rollback inherits the startup context and omits the failing subsystem at [orchestrator.go:58](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/orchestrator.go:58). The missing gRPC audit edge is also confirmed by [sub_grpc.go:170](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:170). |
+| 07-11 | **Not ready** | Its stated atomicity conflicts with its Task 2 commit/gate boundary and deferred test-implementation migration. See Concerns 2–3. |
 
-Once those execution defects are corrected, the phase remains **MEDIUM-HIGH implementation risk** because it combines a repo-wide Event type migration with a 17-subsystem lifecycle rewrite.
+## Strengths
+
+- Cross-plan composition is unusually careful. ARCH-05’s leaves and vocabulary migrate before `core.Event` deletion, avoiding an intermediate gateway→eventbus dependency.
+- The event collapse preserves security-sensitive internals. The plan explicitly retains the unexported audit row used by the downgrade fence rather than moving `Event` to an attractive but invalid neutral package.
+- The bootstrap plans distinguish acquisition, domain serving, host-owned loops, observability, and plugin subprocess initialization. That precision makes the two-sweep guarantee satisfiable.
+- Tests target actual historical failure modes: KEK-configured boot, seq/ULID disagreement, runtime symmetry, cancelled-context rollback, partial preparation, and disabled admin-socket mode.
+- Previously disputed decisions are documented with dispositions and source-grounded reasons, substantially reducing executor discretion.
+
+## Concerns
+
+- **HIGH — 07-08 Task 2 does not migrate the regression test created by Task 1 to the new `ReplayTail` signature.**
+
+  Task 1 creates `cmd/holomush/plugin_replaytail_pagination_integration_test.go` and directly calls `busHistoryReaderAdapter.ReplayTail` ([07-08 plan:310–342](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-08-PLAN.md:310)). Task 2 adds `beforeSeq uint64` to that method, but its task-level file list and “full site list” omit the newly created test ([07-08 plan:440](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-08-PLAN.md:440), [07-08 plan:250](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-08-PLAN.md:250)).
+
+  The current method has the old five-argument shape at [sub_grpc.go:916](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:916). Once Task 2 adds `beforeSeq`, Task 1’s test calls no longer compile, and Task 2’s own `task test:int` gate will compile that file and fail.
+
+- **HIGH — 07-11’s Task 2 cannot satisfy its own `task test` gate before Task 3.**
+
+  Task 1 replaces `lifecycle.Subsystem.Start` with `Prepare`/`Activate`; the current interface is at [subsystem.go:44](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/subsystem.go:44). Task 2 then migrates production implementations and explicitly commits after `task build`, but Task 3 defers two live test implementations:
+
+  - `cmd/holomush.stubSubsystem` still implements only `Start` at [core_subsystems_test.go:23](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core_subsystems_test.go:23) and is passed where `lifecycle.Subsystem` is required at line 57.
+  - `stubRegistry` still implements only `Start` at [coordinator_error_test.go:36](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/crypto/invalidation/coordinator_error_test.go:36). Task 2 also changes the `cluster.Registry` lifecycle surface currently declared at [registry.go:23](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/cluster/registry.go:23).
+
+  Nevertheless, Task 2 requires `task test` and says to commit at its boundary ([07-11 plan:1276–1288](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:1276)). Those test packages cannot compile until Task 3.
+
+  This also contradicts the plan’s later statement that the entire interface migration, all implementations, and every caller must land atomically ([07-11 plan:1391](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:1391)).
+
+- **MEDIUM — 07-11 Task 2’s task-level file manifest omits files its own action requires changing.**
+
+  Task 2’s `<files>` list contains the implementation files and two cluster harness callers ([07-11 plan:843](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:843)), but its acceptance criteria require edits and new tests in `cmd/holomush/sub_grpc_test.go`, plugin setup tests, audit tests, admin socket tests, policy tests, and relay/sweep tests. These appear in the plan-level frontmatter, but not the task that performs them. That weakens task scoping and makes omission more likely during the largest plan in the phase.
+
+## Suggestions
+
+- Amend 07-08 Task 2 to include `cmd/holomush/plugin_replaytail_pagination_integration_test.go` in both `<files>` and the signature census. Explicitly change its page-advance calls to pass the prior page’s oldest `(Seq, ID)` pair.
+- Make 07-11 Tasks 1–3 one explicit atomic execution unit and one commit, mirroring 07-01 and 07-05. Keep scoped RED/inner-loop checks, but place the first whole-tree `task build`, `task test`, and `task test:int` gate only after Task 3.
+- Alternatively, move the two remaining test implementations and the production-graph property test into Task 2 before its whole-repo gate. Remove Task 2’s premature commit instruction.
+- Expand 07-11 Task 2’s `<files>` to include every test file named by its action and acceptance criteria.
+
+## Risk Assessment
+
+**Overall risk: HIGH until the two compile-order blockers are corrected.**
+
+The underlying architecture and behavioral coverage are strong; the remaining problems are execution sequencing rather than design flaws. Once 07-08’s new test is migrated with the signature and 07-11’s interface change is made genuinely atomic, residual phase risk falls to **MEDIUM**, driven mainly by the 50-plus-file lifecycle migration and the integration-only caller surface.
+---
+
+## OpenCode Review (openrouter/moonshotai/kimi-k3)
+
+I'll verify the plans' load-bearing claims against the live source tree. Starting with git state and the highest-risk claims.
+Tree is pre-execution at the stated commit; `internal/grpc/client.go` is exactly 598 lines as claimed. Now verifying the load-bearing claims in parallel.
+All five eager starts, the ownership flag, the 16-param `productionSubsystems`, the false "runs before EventBus" comment, and `SubsystemTLS` at iota=1 verified. Continuing with the orchestrator and event-model claims.
+Orchestrator mechanics verified (rollback at `:60` passes startup ctx — the thing 07-10 fixes). Eventbus closure contains `internal/auth` (FINDING-1 real); telnet closure = 47, web = 7. Verifying per-package leaf claims and the event-model files.
+Leaf claims verified (core/session/naming each = 1 internal dep, themselves). Engine guards confirmed. Now the 07-08 load-bearing claims: the cursor contract and both encode sites.
+07-08's core claims all verified (tripwire contract, no `BeforeID` branch in `matchesQuery`, `protoEvents[0]` anchor, hardcoded `Seq: 0`). Now the Lua-side dual encode sites and the adapter.
+Lua dual `Seq: 0` sites, decode-side Seq blindness, and the adapter's no-seq query all verified. Now the auth cycle seam, invariant registry, and gateway test claims.
+FINDING-1's auth consumer sites all verified. INV-EVENTBUS-1 entry, phantom `internal/auth/service` in the forbidden list, and direct-import-only `checkFile` confirmed. Continuing with bootstrap-graph claims.
+Bootstrap-graph claims verified (nil eventbus deps, phantom auth/service, missing AuditProjection edge, verifier ctor-time `NewVerifier`). Checking cluster split, gateway import, and the plugin-cleanup blocker.
+Cluster split, gateway import, phase1_5 dual-use, and the round-9 plugin-leak blocker all verified against live source. Now the audit/gRPC/emitter claims.
+Audit/gRPC/emitter claims verified. Now checking CoreServer's publication seam, the wrapped-publisher wiring, and the remaining structural claims.
+CoreServer seam, wrapped-publisher flow, socket atomic Start, cursor shape, and proto 8-field census all verified. Final batch: the vocabulary sources, interface coupling, and eventbus construction claims.
+All interface-coupling and construction claims verified. Final verification batch: compile-assertion census, deps seam, telnet call sites, and the crypto/audit fences.
+One last check on the telnet import alias and a couple of remaining census claims.
+Excellent — all structural claims verified. Now checking a few execution-critical details: how the bus GameID closure would actually spell in `sub_grpc.go`, remaining cluster.Registry implementers, and the harness/relay claims.
+One potential gate-satisfiability issue emerging around the `bus.GameID()` grep. Checking the production adapter construction to resolve it.
+Found a likely gate-satisfiability nit. Verifying the remaining closure-critical packages and the end-of-plan gateway gates.
+Verifying the last cycle-safety claim and a few remaining feasibility details.
+One discrepancy to resolve: `TestAdminAuthenticate` grep didn't match `admin_authenticate_e2e_test.go`. Checking the test entrypoints and the cited lines.
+One last precise check on 07-09's `rawBusGameID` capture-point instruction against the actual config-load code.
+One final spot-check on 07-11's row-16 reaper claims.
+Verifying one last potential gap — whether `sub_grpc.go` is the only live caller of the auth fanout seams (07-05's atomic-unit assumption).
+Verification complete. I traced ~65 distinct load-bearing claims across all 11 plans against the live tree at `ed6b72b2b`. Here is the review.
 
 ---
 
-## 07-01 — Extract `internal/grpcclient`
+# Cross-AI Plan Review — Round 11 (rev 13, `ed6b72b2b`)
 
-### Summary
+## Summary
 
-The package boundary is correct and materially improves ARCH-05, but Task 1 cannot satisfy its own build gate because it deletes the old client before Task 2 rewires its callers.
+This revision is execution-ready. After ten rounds, the plans' factual basis is unusually solid: every claim I traced against the live source tree — the five eager starts, the FINDING-1 auth cycle, the 47-package telnet closure, the phantom `internal/auth/service`, the dual `Seq: 0` encode sites in the Lua path, the `protoEvents[0]` pagination anchor, the 16-param `productionSubsystems`, the plugin `cleanupOnError` host-leak, the atomic `socket.Server.Start()`, the 10-vs-7 `var _ lifecycle.Subsystem` census, and the entire 07-08 tripwire/anchor mechanism — checked out verbatim, in most cases at the exact cited line numbers. The wave/DAG structure composes correctly (shared-file overlaps across same-wave plans are empty; the 07-11 `grpc→Plugins` edge is transitively redundant and cannot perturb 07-10's pinned topo order). I found no execution-breaking defects. Three LOW findings remain: one gate-satisfiability nit in 07-06 (a grep that encodes an unstated variable-naming requirement) and two informational notes.
 
-### Strengths
+**Method note:** all findings below were verified by reading the live tree (`sed`/`grep`/`go list -deps` on this worktree), not inferred from the plan text. Where a concern from earlier rounds has a documented disposition, I re-verified the disposition's *factual premise* rather than re-litigating it — every premise I checked held.
 
-- `internal/grpc/client.go` is genuinely suitable for a leaf move: its imports are protobuf/grpc/telemetry libraries, with no `internal/...` dependency ([client.go:5](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/grpc/client.go:5)).
-- The plan preserves the important `SESSION_NOT_FOUND` versus `RPC_FAILED` mapping implemented by `TranslateSubscribeErr` ([client.go:114](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/grpc/client.go:114)).
-- The symbol-first census correctly handles alternate aliases such as `grpcpkg` in the integration suite ([phase1_5_test.go:27](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/test/integration/phase1_5_test.go:27)).
+## Strengths
 
-### Concerns
+- **The atomic-unit commit pattern is correctly engineered at every mid-unit boundary.** I traced each one: 07-01 Tasks 1+2 (`internal/grpcclient` move + caller rewire — `cmd/holomush/gateway.go:20,152-153,227` confirmed still importing `internal/grpc`), 07-05 Tasks 2+3 (auth interface retype — `cmd/holomush/sub_grpc.go:299` confirmed as the **only** production caller of `ConfigureGameSessionFanout`; `WithGameSessionFanout` has zero production callers, so the mid-unit `task test -- ./internal/auth/` gate genuinely compiles standalone with the in-package fake), and 07-06 Task 2 absorbing the `sub_grpc.go:292` caller rewire because its own `task test:int` gate compiles `./...`. Each task-scoped gate is satisfiable exactly where the plan places it; each unit boundary carries the whole-repo gates. This is the correct resolution of "every commit builds" vs "mid-unit doesn't compile."
+- **The cycle analysis is provably right, and the dispositions match the graph.** `go list -deps ./internal/eventbus` contains `internal/auth` (FINDING-1 is real) and does **not** contain `internal/grpc`; `go list -deps ./internal/auth` contains no `internal/eventbus`. 07-05's repair (2-method `PresenceEmitter` consumer interface in `internal/auth`) covers exactly the two methods auth calls (`HandleDisconnect` at `auth_service.go:235`, `EndSession` at `:243`) — no wider, no narrower.
+- **07-08's mechanism is verified end-to-end and the red-framing correction is accurate.** `bus.go:88-105` ("The id field is a **tripwire**… Zero seq means 'from the end' (backward)"), `matchesQuery` (`hot_jetstream.go:392-402`) having no `BeforeID` branch, and `buildConfig`'s `if q.BeforeSeq > 0` gate (`:338`) together prove the quiet-stream repeat is deterministic — the corrected RED framing is right and the retracted "ID-only fallback" never existed. The anchor analysis is also right: `hostcap/servers.go:900-906` (`nextCursor = protoEvents[0].GetCursor()`, "index 0 is the boundary") and `stdlib_focus.go:452-463` (`events[0].ID`, "oldest event… is the backward-pagination anchor") confirm oldest-not-last, and the Lua path does hardcode `Seq: 0` at **two** independent sites (`:437-441` per-event, `:459-463` next_cursor) with a Seq-blind decode (`:367-380`) — the "three sites, not two" settlement is necessary, not cautious.
+- **The round-9 plugin-leak blocker is real and the fix shape is exact.** `cleanupOnError` (`plugin/setup/subsystem.go:237-250`) closes aliasPool/schemaProvisioner/worldConn but never the hosts; `goplugin.NewHost` launches `go h.tokenStore.Run(h.tokenStoreCtx)` at construction (`goplugin/host.go:359`); three error paths (`:333`, `:341`, `:381`) sit between host construction (`:322`) and `s.manager = mgr` (`:384`); `Stop` no-ops on `s.manager == nil` (`:451-453`). The plan's instruction to declare `binaryHost` before the closure is the correct minimal repair (Go closure capture semantics).
+- **Cross-plan wave composition is clean.** 07-03∥07-05 and 07-04∥07-06 have empty `files_modified` intersections (verified by comparing the manifests against the actual edit targets — e.g. 07-03 owns `telnet/gateway_handler.go`'s `ParseCommand`/`NewULID` repoints at `:406,:670` while 07-02 owns only the vocabulary at `:1247-1249`). Post-07-03, the telnet closure resolves to genuine leaves only (`telemetry→xdg/config`, `gatewaymetrics`, `gamenotice`, `config→xdg` all verified leaf-clean via `go list -deps`), so 07-04's closure gate is achievable rather than aspirational.
+- **07-10's MEDIUM-11 settlement is forced by data flow, and the plan proves it twice.** `auditPublisher = eventbus.NewRenderingPublisher(eventBusSub.Publisher(), …)` (`core.go:735`) feeding `buildReadStreamWiring` which hard-requires non-nil `AuditPublisher` (`readstream_wiring.go:118`) — the verifier's handler set genuinely cannot be built before the bus. The reverse edge would be both a `topoSort` cycle (Kahn's at `orchestrator.go:98-149`, error at `:108`) and a silent `operator_read` unregistration. The doc-comment-as-guardrail disposition is the right call.
+- **The invariant work is honest.** INV-EVENTBUS-1's `binding: pending` with stale `refs` token `INV-GW-1` (`invariants.yaml:2340-2348`), the phantom `internal/auth/service` in the `forbidden` list (`gateway_imports_test.go:107`, confirmed nonexistent via `go list ./internal/auth/...`), the deliberate regex fixtures (`:483-486`), and the direct-import-only `checkFile` (`:148`) are all as described. Binding to both the direct and closure gates avoids the partial-binding hazard.
+- **Every "X is already a leaf" drift correction is true.** `go list -deps` on `internal/core`, `internal/session`, `internal/naming` returns exactly one holomush-internal package (themselves). The drift-prevention rationale the plans substitute for the false "reaches the DB" claim is the defensible one.
 
-- **HIGH — Task 1 is not independently executable.** It deletes `internal/grpc/client.go` at [07-01-PLAN.md:148](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-01-PLAN.md:148), then requires `task build` at [line 174](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-01-PLAN.md:174). Caller rewiring does not occur until Task 2. Meanwhile `cmd/holomush/gateway.go` still imports `internal/grpc` and calls `holoGRPC.NewClient` ([gateway.go:20](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway.go:20), [gateway.go:152](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway.go:152)).
-- **HIGH — `git status --porcelain` cannot be clean before the task’s intended edits are committed**, yet it is a mandatory acceptance criterion at [07-01-PLAN.md:260](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-01-PLAN.md:260).
+## Concerns
 
-### Suggestions
+**LOW — 07-06 Task 3's `bus.GameID\(\)` grep encodes an unstated variable-naming requirement (gate satisfiability).** The criterion requires `rg -c 'bus.GameID\(\)' cmd/holomush/sub_grpc.go` ≥ 2, intending to prove one shared game-id source. But the production bus is `s.cfg.EventBus`: the existing in-file idiom is a method value, `gameID: s.cfg.EventBus.GameID` (`sub_grpc.go:602`). The lowercase literal `bus.GameID()` appears exactly once today — `b.bus.GameID()` at `:833` inside `busEventAppender` (which 07-07 deletes; in 07-06's window it still exists, so baseline count = 1). `s.cfg.EventBus.GameID()` contains `Bus.GameID()` (capital B), not `bus.GameID()`. An executor writing the semantically correct `func() string { return s.cfg.EventBus.GameID() }` — or the method value matching `:602` — produces count 1 and fails the gate on correct code. The plan's action text suggests `func() string { return bus.GameID() }`, but no local `bus` exists in `grpcSubsystem.Start`'s scope; that snippet only compiles if the executor introduces `bus := s.cfg.EventBus`, which the plan never states. The gate passes only under an unstated naming choice.
 
-- Merge Tasks 1 and 2 into one atomic task, or retain temporary forwarding aliases in `internal/grpc` until every caller is rewired.
-- Replace the clean-worktree criterion with `task fmt` plus a formatter/check target that does not reject the intended task diff.
+**LOW (informational) — the KEW-wired boot gate's `-run 'TestAdminAuthenticate|AdminRekey'` alternation is half-no-op at the Go level.** `admin_rekey_e2e_test.go` declares no `^func Test` — its Ginkgo `Describe`s execute under the single `TestAdminAuthenticateE2E` RunSpecs entrypoint (`admin_authenticate_e2e_suite_test.go:32`). The gate is **not** vacuous: that one entrypoint runs the whole admin suite, which boots the full server with a KEK file (`admin_authenticate_e2e_test.go:215`, `:265` — both citations verified) including the rekey specs. But `AdminRekey` matches nothing at the `go test -run` level; the plan's phrasing ("`admin_authenticate_e2e_test.go` and `admin_rekey_e2e_test.go` boot the full server") slightly overstates the pattern's role. The coverage is real; the regex is just ornamental in its second half.
 
-### Risk assessment
+**LOW (informational) — 07-08's new test file is missing from Task 2's task-level `<files>` list.** `cmd/holomush/plugin_replaytail_pagination_integration_test.go` is in the plan frontmatter (first entry) but not in Task 2's `<files>`. Task 2's signature change (`beforeSeq uint64` added to `ReplayTail`) forces an edit to that file: the RED test written at Task 1 against the old signature passes only `beforeID`, which under the new code still yields a tail read — so Task 2's own "Task 1's regression is now GREEN" criterion is unsatisfiable until the test's cursor round-trip is updated to thread `beforeSeq`. The plan frontmatter covers it and `task test:int` catches it immediately, so this is a manifest tidiness nit, not a trap — but the round-9/10 pattern was to close exactly this criteria-vs-files class.
 
-**HIGH as written; MEDIUM after task-boundary repair.**
+## Suggestions
 
----
+1. **07-06 Task 3:** either state the local in the action text — "introduce `bus := s.cfg.EventBus` once and write all three closures as `func() string { return bus.GameID() }`" — or relax the criterion to `rg -c 'EventBus\.GameID|\.bus\.GameID' cmd/holomush/sub_grpc.go` ≥ 3 (counting the source expressions rather than a variable name). The former is more consistent with the plan's own illustrative snippets.
+2. **07-09/07-10/07-11 KEK gates:** drop the `|AdminRekey` alternation or rename the criterion to describe what it actually runs ("the admin Ginkgo suite via `TestAdminAuthenticateE2E`, which includes the rekey Describes"). Keeps future readers from believing the pattern scopes the run.
+3. **07-08 Task 2:** add `cmd/holomush/plugin_replaytail_pagination_integration_test.go` to the task's `<files>` list and one sentence to the action — "update the Task 1 test's cursor round-trip to extract `HostCursor.Seq` and pass it as `beforeSeq`; without this the walk stays RED under the new signature." This closes the last criteria-vs-files gap in the phase.
 
-## 07-02 — Extract `internal/eventvocab`
+## Risk Assessment
 
-### Summary
-
-The design cleanly separates wire vocabulary from the surviving Event representation. Its source census and integration coverage are strong; the main problem is an impossible cleanliness acceptance criterion.
-
-### Strengths
-
-- The proposed leaf corresponds to a coherent existing block: payload-size validation, nine event-type strings, and wire payload structures currently live together in `internal/core/event.go` ([event.go:14](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:14), [event.go:35](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:35), [event.go:63](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:63)).
-- Exact string and JSON-tag tests protect actual wire compatibility rather than merely compilation.
-- Task 2 includes full build, unit, integration, and lint gates ([07-02-PLAN.md:334](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-02-PLAN.md:334)).
-
-### Concerns
-
-- **HIGH — Mandatory acceptance cannot pass:** Task 2 intentionally changes dozens of files but requires `git status --porcelain` to be clean before its per-task commit ([07-02-PLAN.md:337](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-02-PLAN.md:337)).
-- **LOW — Large mechanical census.** The live vocabulary is used in production and integration code, so a missed consumer would be costly. The repo-wide zero-reference grep and `task test:int` mitigate this substantially.
-
-### Suggestions
-
-- Replace the clean-status criterion with `task fmt`, `task lint`, and a scoped check that formatting is stable after a second formatting pass.
-- Preserve the existing repo-wide consumer census as the authoritative completion check.
-
-### Risk assessment
-
-**HIGH as written because of the hard gate; MEDIUM after that correction.**
-
----
-
-## 07-03 — Gateway value leaves
-
-### Summary
-
-This is the best-isolated plan in the phase. The three extractions correspond to genuinely pure values/helpers, and the retained `core.NewULID` forwarder avoids unnecessary blast radius.
-
-### Strengths
-
-- The ULID generator is already internally cohesive: the entropy source, lock, clock clamp, and generator are one coupled unit ([ulid.go:16](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/ulid.go:16), [ulid.go:40](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/ulid.go:40)).
-- `ParseCommand` is a pure string helper with no domain dependencies ([command.go:6](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/command.go:6)).
-- `DefaultLeaseRefreshInterval` is a value constant shared by both gateways, while its current documentation explicitly describes that shared contract ([reaper.go:14](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/session/reaper.go:14)).
-- The end-of-plan closure checks directly prove the ARCH-05 result rather than relying on import-line inspection alone ([07-03-PLAN.md:301](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-03-PLAN.md:301)).
-
-### Concerns
-
-- **LOW — Monotonicity remains a broader contract than event ordering needs.** The plan correctly removes stale ULID-as-JetStream-ordering prose while retaining the generator behavior. Future documentation must preserve that distinction.
-- No blocking plan defect found.
-
-### Suggestions
-
-- Keep the forwarder smoke test and leaf-level generator tests separate as planned.
-- Record the final telnet/web transitive closures in the summary for later regression comparison.
-
-### Risk assessment
-
-**LOW-MEDIUM.**
-
----
-
-## 07-04 — Gateway enforcement and invariant binding
-
-### Summary
-
-The enforcement design is strong: direct imports and transitive closure share one policy list, and the invariant binding names both tests. The generated-doc verification command is nevertheless unsatisfiable in the task that intentionally changes that generated file.
-
-### Strengths
-
-- The current test only inspects direct AST imports ([gateway_imports_test.go:148](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway_imports_test.go:148)); adding a `NeedDeps` closure test closes a real enforcement gap.
-- The plan corrects the nonexistent `internal/auth/service` rule visible in the live list ([gateway_imports_test.go:101](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/gateway_imports_test.go:101)).
-- The registry is indeed pending, contains the same phantom path, and has a stale `INV-GW-1` token ([invariants.yaml:2340](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/docs/architecture/invariants.yaml:2340)).
-- It correctly preserves the historical GW tokens as fixtures; the migration is documented in [meta_test.go:16](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/gateway_invariants/meta_test.go:16).
-
-### Concerns
-
-- **HIGH — Task 3 edits and regenerates `docs/architecture/invariants.md`, then immediately requires `git diff --exit-code docs/architecture/invariants.md`** ([07-04-PLAN.md:328](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-04-PLAN.md:328), [07-04-PLAN.md:349](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-04-PLAN.md:349)). The intended generated change itself makes that command fail.
-- **LOW — The positive control intentionally depends on `internal/grpc` retaining a store dependency.** The plan documents replacement when that coupling disappears, but Phase 8 is likely to trigger exactly that maintenance event.
-
-### Suggestions
-
-- Verify renderer idempotence by copying the first generated result to a temporary file, rerunning the renderer, and comparing the two outputs.
-- Keep the positive control’s replace-don’t-delete comment.
-
-### Risk assessment
-
-**HIGH as written; LOW-MEDIUM after fixing the generated-file gate.**
-
----
-
-## 07-05 — Move `core.Engine` to `presence.Emitter`
-
-### Summary
-
-The target architecture and cycle break are correct, and the plan now preserves the Engine’s load-bearing behavior. Task 2, however, changes the auth interface before production callers implement it.
-
-### Strengths
-
-- The plan correctly preserves the typed-nil construction guard in `NewEngine` ([engine.go:39](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/engine.go:39)).
-- It also preserves `EndSession`’s deliberate background commit and cause-dependent actor selection ([engine_end_session.go:22](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/engine_end_session.go:22), [engine_end_session.go:56](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/engine_end_session.go:56)).
-- The consumer-defined auth interface is the right cycle breaker: auth only calls disconnect and session-ended behavior ([auth_service.go:235](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/auth/auth_service.go:235)).
-
-### Concerns
-
-- **HIGH — Task 2 changes auth to require `EmitLeave`/`EmitSessionEnded` and then runs `task build` before Task 3 rewires production.** The changed interface is specified at [07-05-PLAN.md:351](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-05-PLAN.md:351), with the build gate at [line 411](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-05-PLAN.md:411). The live caller still passes `*core.Engine` ([sub_grpc.go:295](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:295)), which lacks the renamed methods.
-- **HIGH — The clean-status criterion at [07-05-PLAN.md:488](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-05-PLAN.md:488) is impossible before committing the intended edits.**
-
-### Suggestions
-
-- Combine Tasks 2 and 3 into one atomic task, or introduce a temporary adapter that lets `*core.Engine` satisfy the new interface until the caller migration completes.
-- Replace the clean-status check with stable-format/lint checks.
-
-### Risk assessment
-
-**HIGH.**
-
----
-
-## 07-06 — Unified system broadcast builder
-
-### Summary
-
-The one-builder/two-caller design is sound and removes a real payload-shape duplication. The task ordering and task-level file manifest are not executable as written.
-
-### Strengths
-
-- The duplication is real: hostcap builds `{"message": ...}` independently ([system_broadcaster.go:45](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostcap/system_broadcaster.go:45)), while command builds the same shape separately ([types.go:619](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/command/types.go:619)).
-- Carrying a game-ID provider is necessary because `eventbus.Qualify` rejects relative subjects without one ([qualify.go:23](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/qualify.go:23)).
-- The retyped actor assertions correctly account for different enum values and ULID/string representations.
-
-### Concerns
-
-- **HIGH — Task 2 changes `ConfigureSystemBroadcaster` from one argument to two, then runs `task test:int` before Task 3 updates its caller.** The signature change is at [07-06-PLAN.md:232](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-06-PLAN.md:232), and the gate is at [line 310](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-06-PLAN.md:310). The live caller still passes one `eventStore` argument ([sub_grpc.go:292](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:292)).
-- **HIGH — Task 2 explicitly edits `test/integration/pluginparity/session_admin_broadcast_test.go` at [07-06-PLAN.md:259](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-06-PLAN.md:259), but that file is absent from Task 2’s `<files>` list at [line 202](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-06-PLAN.md:202).
-
-### Suggestions
-
-- Combine Tasks 2 and 3, or move the production caller rewire and plugin-parity test update into Task 2.
-- Ensure each task-level `<files>` list includes every file its action mandates.
-
-### Risk assessment
-
-**HIGH.**
-
----
-
-## 07-07 — Collapse the Event types
-
-### Summary
-
-This plan addresses the central ARCH-04 goal with excellent attention to wire compatibility, actor conversion, zero-ULID formatting, and publication seams. Its final documentation task has an impossible verification command.
-
-### Strengths
-
-- The duplication is concrete: `core.Event` lacks sequence and uses string stream/actor fields ([core/event.go:232](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/core/event.go:232)), while `eventbus.Event` carries host-internal `Seq` and the package-private audit row seam ([eventbus/types.go:136](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/types.go:136), [eventbus/types.go:195](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/types.go:195)).
-- The plan explicitly replaces CoreServer’s publication path rather than merely constructing an event and forgetting to publish it.
-- Zero actor ULIDs are deliberately preserved as empty plugin-facing strings rather than `"000…"`.
-
-### Concerns
-
-- **HIGH — Task 3 edits three files and then runs `task fmt && git diff --exit-code`** ([07-07-PLAN.md:458](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-07-PLAN.md:458), [07-07-PLAN.md:528](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-07-PLAN.md:528)). The intended documentation/code-comment changes make the command fail.
-- **HIGH — Task 2 also requires a clean worktree after formatting** while its intended Event migration is uncommitted ([07-07-PLAN.md:442](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-07-PLAN.md:442)).
-- **MEDIUM — Security-sensitive blast radius.** The surviving actor bridge touches plugin emit validation; the mandatory crypto-reviewer gate should remain merge-blocking.
-
-### Suggestions
-
-- Replace whole-tree `git diff --exit-code` with `task fmt`, lint, and an idempotent second formatter pass.
-- Keep the exact actor rejection and crypto integration tests mandatory.
-
-### Risk assessment
-
-**HIGH as written; MEDIUM-HIGH after verification repair.**
-
----
-
-## 07-08 — Seq-correct plugin history pagination
-
-### Summary
-
-This is technically the strongest plan. It traces the defect end-to-end, creates a deterministic RED, covers both Lua and binary paths, and preserves `Seq` as host-internal.
-
-### Strengths
-
-- The live contract explicitly defines cursors as `(seq,id)` pairs and says zero sequence means tail/start ([bus.go:87](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/bus.go:87)).
-- The hot tier advances only on `BeforeSeq`; `BeforeID` alone does not affect filtering ([hot_jetstream.go:334](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/history/hot_jetstream.go:334), [hot_jetstream.go:392](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/history/hot_jetstream.go:392)).
-- `HostCursor` already contains both fields ([cursor.go:53](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/cursor/cursor.go:53)).
-- The plan catches both independent Lua `Seq: 0` encode sites and preserves index `0` as the correct oldest-event anchor ([stdlib_focus.go:437](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostfunc/stdlib_focus.go:437), [stdlib_focus.go:452](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/hostfunc/stdlib_focus.go:452)).
-
-### Concerns
-
-- **LOW — Integration cost:** Task 1 runs the entire integration suite for the expected RED, which can be slow and noisy. This is not a correctness defect.
-- No blocking design issue found.
-
-### Suggestions
-
-- Use a targeted integration invocation for the RED where the task runner permits it, followed by full `task test:int` at GREEN.
-- Preserve the observed page ID sets in the summary as required; they are useful evidence that the anchor, not merely the sequence value, is correct.
-
-### Risk assessment
-
-**MEDIUM**, driven by history/cursor security sensitivity rather than plan weakness.
-
----
-
-## 07-09 — Remove eager starts and add TLS subsystem
-
-### Summary
-
-The provider-based bootstrap design is correct, but this plan contains both manifest inconsistencies and a potentially breaking GameID configuration change that exceeds a behavior-preserving refactor without a migration policy.
-
-### Strengths
-
-- The eager-start problem is real: database starts before orchestration ([core.go:281](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:281)), and TLS then consumes its resolved GameID ([core.go:300](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:300)).
-- The TLS test seam is real and correctly preserved through `CoreDeps.TLSCertEnsurer` ([deps.go:51](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/deps.go:51)).
-- The plan’s KEK-wired boot gate is appropriate for the production-only panic shape.
-
-### Concerns
-
-- **HIGH — Task 1’s `<files>` list contains only the two new TLS files** ([07-09-PLAN.md:564](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-09-PLAN.md:564)), but the action mandates deleting `ensureTLSCerts` from `core.go` and modifying `deps.go` ([07-09-PLAN.md:613](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-09-PLAN.md:613), [07-09-PLAN.md:630](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-09-PLAN.md:630)).
-- **HIGH — GameID semantics change.** Today `event_bus.game_id` is a live configuration field ([config.go:40](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/eventbus/config.go:40)) loaded independently during boot ([core.go:136](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/core.go:136)); public documentation states that it controls the event subject namespace ([event-store.md:89](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/site/src/content/docs/contributing/explanation/event-store.md:89)). The plan proposes that the DB/global provider override even an explicitly configured, differing `event_bus.game_id`, with only a warning ([07-09-PLAN.md:428](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-09-PLAN.md:428)). That can shift live subject namespaces and make existing history appear absent.
-- **HIGH — Multiple tasks require a clean worktree after formatting** before their intended changes are committed ([07-09-PLAN.md:1152](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-09-PLAN.md:1152)).
-
-### Suggestions
-
-- Make GameID mismatch **fail closed** with a coded configuration error, or define an explicit migration/compatibility policy. Do not silently override an operator-set subject namespace.
-- Update the operator-facing documentation if `event_bus.game_id` is being deprecated or redefined.
-- Correct every task-level `<files>` list and remove clean-status acceptance checks.
-
-### Risk assessment
-
-**HIGH.** This is the largest unacknowledged runtime/data-visibility risk outside 07-11.
-
----
-
-## 07-10 — Stop deadlines and topology pins
-
-### Summary
-
-The topology work is carefully reasoned and avoids the previously discovered EventBus/verifier cycle. Stop deadlines are defensible, although the abandon-on-timeout mechanism leaves a bounded residual risk.
-
-### Strengths
-
-- The current `StopAll` is synchronously blocking and ignores context cancellation ([orchestrator.go:80](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/orchestrator.go:80)).
-- The plan correctly uses a buffered one-shot result channel, avoiding a permanent sender leak when a timed-out `Stop` later returns.
-- It correctly adds gRPC’s missing `AuditProjection` dependency: the live dependency list currently omits it ([sub_grpc.go:166](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/cmd/holomush/sub_grpc.go:166)).
-- The production graph test reads real dependency sets and exercises them through public `StartAll`, avoiding hand-copied topology.
-
-### Concerns
-
-- **MEDIUM — Timed-out `Stop` operations continue concurrently after `StopAll` returns.** The plan documents orchestrator reuse as unsupported, but a late teardown can still mutate subsystem state during the interval before process exit ([07-10-PLAN.md:309](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-10-PLAN.md:309), [07-10-PLAN.md:344](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-10-PLAN.md:344)).
-- **LOW — The live positive/topological controls will require deliberate updates whenever Phase 8 alters the dependency graph.** Exact ordering pins trade silent drift for intentional maintenance, which is reasonable.
-
-### Suggestions
-
-- Preserve the explicit “no orchestrator reuse after timed-out rollback” contract.
-- Include abandoned subsystem IDs and deadline duration in the error log, and consider a metric if shutdown telemetry remains live long enough to emit it.
-
-### Risk assessment
-
-**MEDIUM.**
-
----
-
-## 07-11 — Prepare/Activate split
-
-### Summary
-
-The lifecycle design is thoughtful and unusually complete, but the plan is not structurally executable under per-task commits. Task 1 changes the interface before Task 2 migrates implementations, and Task 2’s task-level file list omits most callers it explicitly requires changing.
-
-### Strengths
-
-- The two-sweep barrier genuinely prevents domain serving before all acquisition is complete.
-- Rollback correctly includes the failing `Prepare` target; the live orchestrator currently records a subsystem only after successful `Start`, so it presently omits that target ([orchestrator.go:54](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/orchestrator.go:54)).
-- The plan correctly retains idempotency where it protects real side effects, such as the ABAC poller ([access/setup/subsystem.go:69](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/access/setup/subsystem.go:69)).
-- The plugin partial-prepare leak is real: `cleanupOnError` does not close either host ([plugin/setup/subsystem.go:234](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/setup/subsystem.go:234)), while `Stop` returns immediately until `manager` is assigned ([plugin/setup/subsystem.go:449](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/plugin/setup/subsystem.go:449)). The proposed goleak regression directly addresses it.
-- The admin socket’s lock/bind/serve operation is genuinely atomic in one `Server.Start` call ([server.go:58](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/admin/socket/server.go:58)); keeping it entirely in `Activate` is appropriate.
-
-### Concerns
-
-- **HIGH — Task 1 leaves the repository uncompilable.** It replaces `Subsystem.Start` with `Prepare`/`Activate` ([07-11-PLAN.md:710](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:710)) and verifies only `internal/lifecycle` ([line 825](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:825)). The 17 production implementations still expose the live `Start` interface ([subsystem.go:42](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/internal/lifecycle/subsystem.go:42)) until Task 2. This conflicts with the plan’s own “every pushed commit builds” requirement.
-- **HIGH — Task 2’s `<files>` list names implementations but omits most direct caller files** ([07-11-PLAN.md:843](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:843)). Those omitted callers are explicitly enumerated in frontmatter, including numerous integration suites ([07-11-PLAN.md:57](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:57)).
-- **HIGH — The clean-status acceptance criterion is impossible before committing approximately 54 intended file changes** ([07-11-PLAN.md:1282](/Volumes/Code/github.com/holomush/.worktrees/v0.12-phase7/.planning/phases/07-event-model-bootstrap-decomposition/07-11-PLAN.md:1282)).
-- **MEDIUM — Scope and reviewability.** Despite the plan’s extensive settlement tables, one task changes lifecycle semantics, 17 implementations, roughly 27 callers, cleanup behavior, timing seams, and multiple error paths. A single implementation error can remain integration-only.
-
-### Suggestions
-
-- Make the interface change, all implementations, and all callers one atomic execution task/commit. Keep RED tests as local steps rather than a separately committed broken interface state.
-- Expand Task 2’s `<files>` to include every caller already listed in frontmatter.
-- Remove the clean-status criterion and retain `task build`, `task test`, `task test:int`, KEK boot E2Es, topology tests, and crypto review as the real gates.
-- Consider splitting only by a temporary compatibility interface if independent green commits are mandatory; do not leave a `Start` shim in the final state.
-
-### Risk assessment
-
-**HIGH**, even after plan repair, because this is the phase’s largest semantic and concurrency change.
-
----
-
-## Final recommendation
-
-Revise the plans before execution:
-
-1. Repair atomic task boundaries in 07-01, 07-05, 07-06, and 07-11.
-2. Remove or replace impossible clean-worktree/`git diff --exit-code` gates in 07-01, 07-02, 07-04, 07-05, 07-07, 07-09, and 07-11.
-3. Settle `event_bus.game_id` compatibility in 07-09 with fail-closed validation or an explicit migration.
-4. Correct task-level file manifests in 07-06, 07-09, and 07-11.
-5. Then execute with mandatory `task test:int`, KEK-wired boot E2Es, and crypto-reviewer gates.
-
-The architectural direction is strong; the current blockers are predominantly plan executability and one significant configuration-compatibility issue.
----
-
-## OpenCode Review (openrouter/moonshotai/kimi-k3) — LANE FAILED
-
-Three consecutive invocations died on OpenRouter provider `429 rate_limit_exceeded` before emitting a final review (attempts at ~280K, ~64K, and ~285K tokens of agentic source verification; 10-minute cooldown before the final attempt). No verdict exists for this lane; do not count it in consensus.
-
-Salvaged from the partial narration of the first attempt (progress notes only, no findings text):
-- It independently re-verified the round-9 07-11 plugin partial-Prepare leak claims against source ("All round-9 plugin-leak claims verified") before dying.
-- It flagged `internal/web/translate_test.go:467,482` (`core.NewULID()` calls) as a "likely gap" in 07-03's census. **Orchestrator disposition: non-issue** — 07-03 deliberately retains `core.NewULID` as a forwarder (D-03), so the test keeps compiling, and the plan's closure gates are `go list -deps` based (production imports only; test files are invisible to them). At most a cosmetic post-phase cleanup.
+**LOW.** This is the first round where I could not find a single execution-breaking defect. The three remaining findings are a naming-dependent grep (recoverable in minutes by any executor, with the correct semantics obvious), an ornamental regex alternation (coverage is real regardless), and a task-manifest omission that the plan's own frontmatter and integration gate cover. The prior rounds' structural work — the atomic-commit units, the cycle dispositions, the retracted reverse edge, the page-anchor correction, the plugin-leak repair — all verified as grounded in the actual tree. The plans achieve the phase's three success criteria: the event-model collapse chain (07-02→07-05→07-06→07-07→07-08) is complete with no dangling type references; the bootstrap migration (07-09→07-10→07-11) has satisfiable gates at every commit boundary including the mid-unit states; and the gateway boundary (07-01→07-03→07-04) lands on a verified achievable leaf-only closure. Ship it.
 
 ---
 
 ## Consensus Summary
 
-**Single grounded lane this round** (codex; the kimi-k3 lane failed on provider rate limits), so consensus weight rests on the orchestrator's source verification of every codex HIGH, per the round-5+ protocol.
+Two grounded lanes this round — the first two-lane round since round 9. The verdicts split: **codex says NOT ready (2 HIGH)**, **kimi-k3 says execution-ready (LOW, "ship it")**. The orchestrator verified every HIGH and every gate-satisfiability claim against the live tree at `ed6b72b2b`; the verified result sides with codex on the verdict while confirming kimi's unique gate finding. **Net: NOT execution-ready by 2 verified blockers, both task-gate mechanics, zero design defects** — the same class (and smaller count) as rounds 9–10.
 
-**Codex verdict: NOT READY.** Its HIGHs cluster into four classes; verification results below. The headline is real: **three task-boundary blockers (07-01, 07-05, 07-06) where a task's own automated gate cannot pass until a LATER task rewires the callers** — all pre-existing since early revisions, all missed by every prior round (including codex's own round 9, which called 07-01→07-05 "executable"). The new lens — "can each task's gate pass at its own task boundary?" — found a defect class nine prior rounds never probed. Consistent with the round-6 lesson: convergence is measured by coverage, not streak.
+### Orchestrator verification of the headline findings
 
-### Orchestrator verification of the HIGHs
+1. **CONFIRMED — BLOCKER (codex HIGH 1; kimi found the same fact, rated LOW): 07-08 Task 2 omits the Task-1 test from its `<files>` and site census.** Task 1 creates `cmd/holomush/plugin_replaytail_pagination_integration_test.go` whose specs call `busHistoryReaderAdapter.ReplayTail` directly, round-tripping the cursor (07-08-PLAN.md:322, :344). Task 2 adds `beforeSeq uint64` to the method — but the "Full site list (verified live)" (:250-257) and Task 2's `<files>` (:440) both omit the new test file. A direct method call with the old 5-arg shape is a **compile error** once the signature grows (codex's mechanism is correct; kimi's "compiles but stays RED" understates it — either way the same fix is forced). Task 2's own gate `task build && task test && task test:int` (:572) fails at `task test:int` on a file the manifest never tells the executor to touch. This is precisely the criteria-vs-files class round 10 closed in 07-09.
+   **Fix (rev 14):** add the test file to Task 2's `<files>` and the census, plus one action sentence: update the test's cursor round-trip to extract the page-anchor's `(Seq, ID)` pair and pass `beforeSeq`.
 
-| # | Codex finding | Verdict | Evidence |
-|---|---|---|---|
-| 1 | **07-01 Task 1 not independently executable** | **CONFIRMED — blocker** | Task 1 moves `client.go`/`client_test.go` to `internal/grpcclient` and DELETES the originals, with `task build` in its acceptance criteria and `<automated>` gate. But `task build` compiles the main binary (`Taskfile.yaml:290-296`), whose graph includes `cmd/holomush/gateway.go` — still importing `internal/grpc` and calling `holoGRPC.NewClient` (`gateway.go:20,152`) until Task 2 rewires it. Task 1's gate cannot pass. |
-| 2 | **07-05 Task 2 gate fails before Task 3** | **CONFIRMED — blocker** | Task 2 retypes auth's fanout params to `PresenceEmitter` (`EmitLeave`/`EmitSessionEnded`) with a whole-repo-reaching `task build` gate. The live caller `cmd/holomush/sub_grpc.go:295-299` passes `engine := core.NewEngine(eventStore)` — `*core.Engine`'s methods are `HandleDisconnect`/`EndSession`, so it does not satisfy the interface; Task 1 only CREATES `internal/presence` (new files). Compile fails until Task 3 ("Repoint grpc, cmd/holomush and the harness"). |
-| 3 | **07-06 Task 2 gate fails before Task 3; files manifest incomplete** | **CONFIRMED — blocker** | Task 2 changes `ConfigureSystemBroadcaster` to `(pub eventbus.Publisher, gameID func() string)` and gates on `task test:int` — which compiles `./...` (`Taskfile.yaml:189-190`, "No package enumeration"). The caller `sub_grpc.go:292` still passes one argument; the two-arg call lands only in Task 3's criteria (07-06:417). Additionally Task 2's `<files>` (:203) omits `test/integration/pluginparity/session_admin_broadcast_test.go`, which its own action (:259 area) edits — the file is in plan frontmatter but not the task manifest. |
-| 4 | **07-04 Task 3 `git diff --exit-code` on the file it regenerates** | **DOWNGRADED → MEDIUM (Class-5 phrasing)** | The criterion `go run ./cmd/inv-render && git diff --exit-code docs/architecture/invariants.md` is the standard regenerate-and-confirm-current idempotence check — satisfiable AFTER the per-task commit, unsatisfiable before it. Not impossible; ambiguous ordering. Folds into the phrasing class below. |
-| 5 | **"Clean worktree" acceptance criteria impossible** (07-01:260, 07-02:337, 07-05:488, 07-07:442/528, 07-09:1152, 07-11:1282) | **DOWNGRADED → MEDIUM (one phrasing fix, 7 plans)** | Every instance reads "\`git status --porcelain\` is clean **after \`task fmt\`**" (or the diff-gate variant) — a fmt-stability/regen-currency check whose only satisfiable reading is post-commit (CLAUDE.md itself warns "task fmt mutates files — commit those edits"). Codex's pre-commit reading fails on the task's own uncommitted edits. Fix: prefix each with "after the per-task commit," so a literal executor cannot stall on a red gate. Mechanical, repeated. |
-| 6 | **07-09 Task 1 `<files>` omits `core.go`/`deps.go`** | **CONFIRMED — blocker (manifest-vs-action)** | Task 1's `<files>` (:565) lists only `internal/tls/subsystem.go` + test, while its action moves `ensureTLSCerts` OUT of `cmd/holomush/core.go` (:613) and edits `deps.go:71` (:630-632) — the action even contains a warning box about an earlier revision omitting these files, yet the task manifest still omits them. |
-| 7 | **07-09 gameID: provider silently overrides an explicit `event_bus.game_id` (wants fail-closed)** | **REFUTED as blocker; one CONFIRMED doc fold-in** | The warn-on-conflict disposition is the deliberately ratified round-8/rev-11 settlement (explicit value loses to the provider WITH a WARN; the GLOBAL `game_id` key keeps its semantics; escape hatch documented). Re-litigation, not a regression. HOWEVER codex surfaced one new fact the settlement's "no operator-doc contradiction" claim missed: `site/src/content/docs/contributing/explanation/event-store.md:89` publicly documents "`<game_id>` is set via `event_bus.game_id` in server config" — post-plan that key is dead on the production boot path and NO plan updates the doc. CONFIRMED as a small doc fold-in for 07-09. |
-| 8 | **07-11 Task 1 leaves the repo uncompilable** | **REFUTED** | The plan already handles this exact concern: :1230-1234 retracts the earlier known-broken-commit instruction and mandates working in units but **squashing into ONE commit that builds**; :1276 pins "Every commit pushed builds." Task 1's `<automated>` gate is deliberately scoped to `./internal/lifecycle/` (compiles standalone mid-unit). The mechanism codex asks for is present in the plan text it cites past. |
-| 9 | **07-11 Task 2 `<files>` omits most callers** | **REFUTED** | Task 3 ("Migrate the test implementations…") owns the test-side callers; Task 2's manifest carries the 17 production impls + clustertest harnesses + `sub_grpc.go`. The census criteria (:1255-1256) explicitly require any caller not covered by `files_modified` to be reported, not silently migrated. |
+2. **CONFIRMED — BLOCKER (codex HIGH 2; kimi's contrary claim falsified): 07-11 Task 2 cannot satisfy its own `task test` gate before Task 3.** Task 1 replaces `lifecycle.Subsystem.Start` with `Prepare`/`Activate`; Task 2 migrates the 17 production impls **and the `cluster.Registry` interface** (criterion at 07-11-PLAN.md: "`rg -c 'Start\(ctx context\.Context\) error' internal/cluster/registry.go` returns 0"), demands `task build && task test && task test:int` exit 0 (:1276-1289), and commits at its boundary ("After the task's single squashed commit…", :1282). But two Start-only stubs survive until Task 3 (`<files>` at :1299):
+   - `cmd/holomush/core_subsystems_test.go:23` — `stubSubsystem` implements only `Start`, is `//go:build !integration` (compiled by `task test`), and is passed where `lifecycle.Subsystem` is required (`productionSubsystems(...)`).
+   - `internal/eventbus/crypto/invalidation/coordinator_error_test.go:35-37` — `stubRegistry` implements only `Start`, has **no** build tag (compiled by `task test`), and is used as a `cluster.Registry`.
+   Both packages compile-fail at Task 2's boundary; the gate is unsatisfiable on correct code. This also contradicts the plan's own atomicity note (:1391-1395, "the tree does not compile until all 17 impls **and** every caller land together").
+   **Fix (rev 14):** make Tasks 1–3 (or at minimum 2–3) one explicit atomic execution unit with one commit — mirroring the rev-13 07-01/07-05 squash pattern — with scoped inner-loop checks and the whole-repo `task test`/`task test:int` gates only at the unit end; or move the two stub migrations (and the property test's home file) into Task 2 before its whole-repo gate.
 
-### Also verified
+3. **CONFIRMED — MEDIUM (codex): 07-11 Task 2's `<files>` omits test files its own acceptance criteria require editing/creating** — the row-16 reaper focused test (`cmd/holomush/sub_grpc_test.go`), the plugin fault-injection RED test (`internal/plugin/setup/subsystem_test.go`), the admin-socket disabled-mode two-phase test, the policy repeated-call tests, and the audit repeated-Prepare/Stop-after-Prepare tests. Task 2's `<files>` (:843) lists only production files plus the two clustertest harness callers. Folding Tasks 2–3 into one unit (fix 2) should merge and complete the manifests in the same edit.
 
-- **07-10 MEDIUMs**: codex endorses the rev-12 no-reuse doc contract and buffered-channel design; its residual (late teardown before process exit) is the accepted bounded risk. No action.
-- **07-08**: no blocking issue from codex (its LOW about RED-run cost is a workflow preference; the plan already scopes what it can).
-- **07-02/07-03**: only the Class-5 phrasing instance plus already-covered census gates. 07-03 judged "best-isolated plan in the phase."
+4. **CONFIRMED — LOW but a real gate defect (kimi, unique): 07-06 Task 3's `rg -c 'bus.GameID\(\)' cmd/holomush/sub_grpc.go ≥ 2` criterion encodes an unstated variable-naming requirement.** Verified live: the file's idiom is `s.cfg.EventBus.GameID` (method value, :602/:277/:547) or `s.cfg.EventBus.GameID()` (direct, :459/:514/:580) — neither matches the case-sensitive lowercase pattern; the only live match is `b.bus.GameID()` (:833, inside `busEventAppender`, which still exists in 07-06's window), so the baseline count is 1. An executor writing the semantically correct `func() string { return s.cfg.EventBus.GameID() }` fails the gate; the plan's own illustrative snippet `func() string { return bus.GameID() }` (:400) only compiles if the executor invents `bus := s.cfg.EventBus`, which no action text states.
+   **Fix (rev 14):** state the local (`bus := s.cfg.EventBus`) in the action text, or relax the criterion to count source expressions (e.g. `rg -c 'EventBus\.GameID|\.bus\.GameID'`).
 
-### Agreed strengths (codex + salvaged kimi narration + prior-round continuity)
+5. **NOTED — LOW informational (kimi, unique, not independently re-verified): the KEK-boot gate's `-run 'TestAdminAuthenticate|AdminRekey'` alternation is half-ornamental** — `admin_rekey_e2e_test.go` declares no top-level `Test*` func; the whole admin Ginkgo suite (including the rekey Describes) runs under the single `TestAdminAuthenticateE2E` entrypoint. Coverage is real; only the pattern's second half matches nothing. Optional phrasing cleanup in 07-09/10/11.
 
-- Architectural grounding remains strong: import cycles, cursor semantics, plugin-runtime symmetry, rollback states, and lifecycle ordering all verified against live code (codex: "unusually well researched").
-- The rev-12 fixes all HELD: the retyped 07-06 parity assertions (codex: "correctly account for different enum values and ULID/string representations"), the 07-11 plugin-leak cleanup + goleak test (codex confirms the leak against the same lines and endorses the fix; kimi's partial run independently re-verified it), the 07-10 no-reuse contract, and the 07-08 deterministic-ID idiom.
-- 07-08 again rated the technically strongest plan; 07-03 the best isolated.
+### Agreed Strengths
 
-### Divergent views
+- **The rev-13 atomic-unit commit pattern works where it was applied.** Both reviewers independently verified the 07-01 (Tasks 1+2), 07-05 (Tasks 2+3) and 07-06 (caller-rewire-in-Task-2) units, with kimi tracing the mid-unit gate satisfiability claim-by-claim (e.g. `sub_grpc.go:299` as the only production caller of `ConfigureGameSessionFanout`). The two blockers this round are exactly the two places the pattern was *not* applied (07-08 Task 2, 07-11 Tasks 2–3).
+- **The factual base of the plans is sound.** Kimi traced ~65 load-bearing claims (eager starts, FINDING-1 auth cycle, telnet closure = 47, phantom `internal/auth/service`, dual Lua `Seq: 0` sites, `protoEvents[0]` anchor, plugin `cleanupOnError` host-leak, 10-vs-7 compile-assertion census) and found zero factual drift; codex's per-plan table independently confirms the same anchor points (07-01 telnet seam, 07-02 vocabulary leaf, 07-03 leaves, 07-04 `NeedDeps` strengthening, 07-05 consumer interface, 07-07 survivor direction, 07-09 eager starts, 07-10 rollback-context defect).
+- **Cross-plan composition is clean.** Same-wave `files_modified` intersections are empty; the 07-11 `grpc→Plugins` edge is transitively redundant to 07-10's pinned topo order; the event-collapse chain (07-02→07-05→07-06→07-07→07-08) has no dangling type references.
+- **Settled dispositions held.** Neither reviewer overturned any rev-13 disposition; kimi explicitly re-verified the factual premises of the dispositions it checked (07-10 MEDIUM-11 doc-comment guardrail, 07-08 red-framing correction, round-9 plugin-leak fix shape) and found every premise true.
 
-- No second grounded verdict this round (kimi-k3 lane failed). Divergence is codex-vs-orchestrator: of codex's 12 HIGH citations, 4 survive as blockers (three task-boundary gates + one manifest), 2 fold into one MEDIUM phrasing class, and the rest are refuted by plan text codex read past (07-11 squash guidance, Task 3 ownership) or by settled dispositions (gameID warn-on-conflict).
+### Agreed Concerns
 
-### Recommendation
+- **07-08 Task 2's missing test-file migration** — found by both lanes independently (codex HIGH, kimi LOW-informational). The only concern this round with full cross-reviewer agreement on the fact pattern; orchestrator-verified as a blocker (finding 1 above).
 
-**Rev 13 — task-gate mechanics only; zero design changes.**
+### Divergent Views
 
-1. **07-01 (blocker):** make the move+delete and the caller rewire one atomic execution unit — either merge Tasks 1+2, or adopt 07-11's exact pattern (:1230-1276): tasks as work units, squash into one green commit, with Task 1's automated gate scoped to `task test -- ./internal/grpcclient/` and the whole-repo gates moving to the unit boundary.
-2. **07-05 (blocker):** same treatment for Tasks 2+3 (interface retype + caller repoint).
-3. **07-06 (blocker):** move the `sub_grpc.go:292` caller rewire into Task 2 (the file is already in plan frontmatter) OR defer the `task test:int` gate to Task 3 with squash guidance; add `test/integration/pluginparity/session_admin_broadcast_test.go` to Task 2's `<files>`.
-4. **07-09 (blocker):** add `cmd/holomush/core.go` and `cmd/holomush/deps.go` to Task 1's `<files>`.
-5. **Phrasing class (MEDIUM, 7 plans):** prefix every "\`git status --porcelain\` is clean after \`task fmt\`" and regen-`git diff --exit-code` criterion with "after the per-task commit," (07-01, 07-02, 07-04, 07-05, 07-07, 07-09, 07-11).
-6. **07-09 doc fold-in (LOW/MEDIUM):** update `site/src/content/docs/contributing/explanation/event-store.md:89` in the same change that kills `event_bus.game_id` on the boot path — state the global `game_id`/provider resolution and the escape hatch.
+- **Overall verdict.** Codex: NOT ready (HIGH until the two compile-order blockers are fixed, then MEDIUM). Kimi: ready ("LOW … Ship it"). Resolution: the orchestrator's source verification confirms both codex HIGHs, including falsifying kimi's specific claim that "the bootstrap migration (07-09→07-10→07-11) has satisfiable gates at every commit boundary" — kimi verified the 07-01/05/06 units in depth but did not check 07-11 Task 2's whole-repo `task test` gate against the two Start-only stubs Task 3 owns. The verified verdict is codex's: **NOT execution-ready until rev 14 lands the two gate fixes.** The depth-vs-breadth pattern of rounds 5–10 (codex finds the surviving blockers; the second lane endorses) recurs — though this round kimi's lane materially contributed a genuine unique gate defect (07-06 grep) that codex missed, the first time the second lane has done so.
+- **07-08 severity.** Codex HIGH (compile-break at the Task 2 gate) vs kimi LOW (manifest tidiness caught by `task test:int`). The mechanism check favors codex: the direct 5-arg call cannot compile after the signature change, and the gate blocks the task's own commit. Same fix either way.
 
-Nothing in this round touches design: every confirmed finding is task-boundary/gate/manifest mechanics. All rev-12 fixes held. After rev 13, execute — the two lenses that found new defect classes (rounds 9 and 10) are now both swept across all 11 plans.
+### Recommended next step
+
+`/gsd-plan-phase 7 --reviews` for a **rev 14 scoped to gate mechanics only** (zero design changes): (a) 07-08 Task 2 census + `<files>` + action sentence; (b) 07-11 Tasks 2–3 atomic-unit merge (or stub-migration hoist) + manifest completion; (c) 07-06 Task 3 grep criterion fix; optionally (d) the `|AdminRekey` phrasing cleanup in 07-09/10/11. Then execute — both lanes and eleven rounds agree the design surface is exhausted.
