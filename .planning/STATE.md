@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 07
 current_phase_name: event-model-bootstrap-decomposition
 status: executing
-stopped_at: Completed 07-05-PLAN.md
-last_updated: "2026-07-17T23:42:03.079Z"
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-07-17T23:59:41.120Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 36
-  completed_plans: 29
+  completed_plans: 30
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 07 (event-model-bootstrap-decomposition) — EXECUTING
-Plan: 5 of 11
+Plan: 6 of 11
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 07 execution started
 
@@ -112,6 +112,7 @@ Last activity: 2026-07-17 — Phase 07 execution started
 | Phase 07 P02 | 33min | 2 tasks | 40 files |
 | Phase 07 P03 | 25min | 3 tasks | 15 files |
 | Phase 07 P05 | 50min | 3 tasks | 22 files |
+| Phase 07 P04 | ~35min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,7 @@ the next milestone yet.
 - [Phase ?]: [Phase 07]: 07-03: internal/ulidgen/cmdparse/sessionlease leaves extracted — internal/telnet and internal/web now import neither internal/core nor internal/session (production or test code); D-16's three remaining gateway leaks closed; 07-04 has no code left to change, only enforcement to add
 - [Phase ?]: 07-05: core.Engine moved to internal/presence (presence.Emitter), publishing arrive/leave/session_ended through eventbus.Publisher; internal/auth breaks the resulting import cycle with its own 2-method consumer-defined PresenceEmitter interface rather than importing presence
 - [Phase ?]: 07-05: cmd/holomush's presence emitter wraps the wrapPublisher-wrapped publisher (never rawPublisher) so events_audit still receives the App-Rendering header; harness resolves gameID from its own bus.GameID, not a hardcoded main
+- [Phase ?]: [Phase 07]: 07-04 gateway boundary closure gate + INV-EVENTBUS-1 binding — added a transitive-closure import gate (packages.NeedDeps walk) alongside the existing AST direct-import gate; forbade internal/core/session/grpc wholesale (D-15/D-17); fixed the dead internal/auth/service phantom entry (replaced with internal/auth), surfacing two genuinely core-only files that needed coreOnlyFiles classification (crypto_operator_validation.go, cmd_admin_totp_run_test.go); INV-EVENTBUS-1 flipped pending->bound with asserted_by naming both gates
 
 ### Pending Todos
 
@@ -198,9 +200,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-17T23:42:03.071Z
+Last session: 2026-07-17T23:59:41.112Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 07-05-PLAN.md
+Stopped at: Completed 07-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
