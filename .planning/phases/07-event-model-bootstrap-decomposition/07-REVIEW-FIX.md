@@ -1,136 +1,86 @@
 ---
 phase: 07-event-model-bootstrap-decomposition
-fixed_at: 2026-07-18T19:20:00Z
+fixed_at: 2026-07-18T20:30:00Z
 review_path: .planning/phases/07-event-model-bootstrap-decomposition/07-REVIEW.md
-iteration: 2
-findings_in_scope: 4
-fixed: 4
+iteration: 3
+findings_in_scope: 3
+fixed: 3
 skipped: 0
 status: all_fixed
 ---
 
-# Phase 07: Code Review Fix Report (iteration 2)
+# Phase 07: Code Review Fix Report (iteration 3 — final)
 
-**Fixed at:** 2026-07-18T19:20:00Z
+**Fixed at:** 2026-07-18T20:30:00Z
 **Source review:** .planning/phases/07-event-model-bootstrap-decomposition/07-REVIEW.md
-**Iteration:** 2
+**Iteration:** 3 (final adversarial pass; fixes applied by the orchestrator directly, not a spawned gsd-code-fixer, given severity and to avoid a third worktree-isolation risk this session)
 
 **Summary:**
-- Findings in scope: 4 (0 Critical, 3 Warnings, 1 Info) — `fix_scope: all`
-- Fixed: 4
+- Findings in scope: 3 (2 Critical, 1 Warning)
+- Fixed: 3
 - Skipped: 0
 
-This round's findings were themselves surfaced by adversarially re-reviewing
-iteration 1's fixes — two of the four (WR-02, and a regression inside WR-01's
-own fix) are gaps in code this same fix-loop had just landed in the prior
-iteration, one caught by the reviewer's own tracing and one caught by
-`task test:int` during this round's own verification.
-
-Commits were developed in an isolated scratch worktree (`gsd-reviewfix/07-72488`),
-fully verified there (`task build`/`test`/`test:int`/`lint` all green), then
-cherry-picked onto this branch — cherry-pick was chosen over a fast-forward
-merge per explicit user direction, after two earlier incidents this session
-where a fixer agent's own cleanup-tail heuristic mis-targeted the primary
-`main` checkout instead of this worktree (both self-corrected immediately,
-zero actual impact, independently verified via fresh `git fetch` against
-`origin/main` both times). Cherry-pick avoids that entire class of risk since
-it never moves a branch pointer in another checkout. Commit SHAs below are
-the cherry-picked SHAs on this branch, not the original scratch-branch SHAs.
+This iteration's re-review hunted specifically for siblings of the bug class
+the iteration-2 `sweep.go` fix addressed (a goroutine reading a mutable
+subsystem field directly instead of a captured local, racing `Stop`'s
+nil-out) and found two more real instances, plus one narrower
+interaction-level race.
 
 ## Fixed Issues
 
-### WR-01: `CheckpointSweepSubsystem.Stop`'s ctx-timeout branch didn't reset its guard, then that fix's own follow-up introduced a nil-channel panic caught by `task test:int`
+### CR-01: `eventbus.Subsystem.Stop`'s background `WaitForShutdown` goroutine raced its own `s.server = nil` reset
 
-**File modified:** `internal/eventbus/crypto/dek/sweep.go`
-**Commits:** `0e79c76c0`, `b3d597572`
+**File modified:** `internal/eventbus/subsystem.go`
+**Commit:** `8e1a26697`
+**Applied fix:** Captured `s.server` into a local `srv` before launching
+the background goroutine, and threaded `srv`/`done` in as explicit
+parameters rather than closing over the mutable field — identical shape
+to the `sweep.go` fix this same review round's iteration 2 landed. Closes
+a real unsynchronized data race with a nil-pointer-panic path into
+`nats-server`'s `WaitForShutdown` (which immediately dereferences
+`s.shutdownComplete` on a nil receiver).
 
-**Applied fix (first commit):** The prior iteration's fix reset `s.done = nil`
-only in the happy-path `case <-s.done:` branch, leaving the `case <-ctx.Done():`
-timeout branch untouched — so a `Stop` call that timed out left `s.done`
-non-nil, causing a subsequent `Activate` retry to silently no-op on a stale
-guard. Fixed by capturing `s.done` into a local `done` variable and resetting
-`s.done = nil` unconditionally *before* the `select`, then selecting on the
-local — mirroring `internal/eventbus/subsystem.go` and
-`internal/eventbus/audit/subsystem.go`, both of which reset their guard
-fields unconditionally regardless of select/drain outcome.
+### CR-02: `OutboxRelaySubsystem.Activate`'s drain goroutine raced `Stop`'s nil-out of `s.done`/`s.relay`
 
-**Applied fix (second commit — self-caught regression):** `task test:int`
-caught a genuine bug this first commit introduced: `CheckpointSweepSubsystem.loop`'s
-`defer close(s.done)` reads the `s.done` **field** at defer-evaluation time,
-not a value captured when the goroutine launched. Because `go s.loop(sctx)`
-does not guarantee the goroutine runs before `Stop` returns, a fast `Stop`
-call could nil `s.done` (the very fix above) before `loop`'s own defer
-statement evaluated it, causing `close(nil)` to panic. Reproduced directly:
-`TestDEKIntegration` panicked at `sweep.go:165` ("close of nil channel").
-Fixed by threading the channel into `loop` as an explicit parameter,
-captured synchronously at the `go` statement's argument-evaluation time
-(before `Stop` can possibly run), so `loop` always closes the exact channel
-it was launched with regardless of any later `s.done` field mutation.
-Verified with 4 repeated `RACE=-race task test:int -- ./internal/eventbus/crypto/dek/...`
-runs, all green.
+**File modified:** `internal/world/setup/relay_subsystem.go`
+**Commit:** `996555abb`
+**Applied fix:** Captured `done` and `relay` as locals before the `go`
+statement and threaded them in as explicit parameters, so the goroutine's
+`defer close(done)` always closes the exact channel it was launched with
+regardless of any later `s.done` field mutation by a concurrent `Stop`.
+Same fix shape as CR-01.
 
-### WR-02: `ABACSubsystem`/`PluginSubsystem`'s now-functional Prepare retry reaches `ReadinessRegistry.Register` a second time, which panics on duplicate registration
+### WR-01: `CoordHolder.coord` was an unsynchronized bare field read/written from three sites
 
-**Files modified:** `internal/lifecycle/registry.go`, `internal/access/setup/subsystem.go`, `internal/plugin/setup/subsystem.go`
-**Commit:** `b96a86040`
+**Files modified:** `cmd/holomush/crypto_rekey_wiring.go`, `cmd/holomush/cryptowiring.go`, `cmd/holomush/sub_grpc.go`, `cmd/holomush/cryptowiring_test.go`
+**Commit:** `976cd9513`
+**Applied fix:** Added a `sync.Mutex` to `coordHolder` plus `set`/`get`/
+`takeAndStop` methods. `set` is called once by `buildCryptoWiring`'s
+construction; `get` is called by the Invalidator closure on every
+`RequestInvalidation`; `takeAndStop` atomically clears the field under the
+lock and stops the Coordinator outside it, used by both
+`grpcSubsystem.Stop` and `stopCoordinatorOnBootFailure` — the two callers
+the review identified as able to run concurrently per
+`orchestrator.StopAll`'s documented "abandon a slow Stop" behavior.
+Corrected `cryptowiring.go`'s doc comment, which previously asserted this
+path was race-free based on an assumption (mutual exclusivity between the
+two callers) the orchestrator's own documented abandonment behavior
+actually invalidates.
 
-**Applied fix:** Read `internal/lifecycle/registry.go` in full first,
-confirming `Register` panics unconditionally on a duplicate `SubsystemID`
-and that `ReadinessRegistry` has no `Unregister` method, and confirming the
-locking discipline (`sync.RWMutex`: `Register`/the new `Unregister` take the
-write lock via `mu.Lock()`; `AllReady`/`Status` take the read lock via
-`mu.RLock()`) — a `delete` under the same write lock `Register` uses is safe
-against concurrent reads with no additional discipline needed.
+**Self-discovered, same-file, same-fix-class addition:** while implementing
+this fix inside `grpcSubsystem.Stop`, found the identical bug pattern one
+function above it in the same method — the `GracefulStop`/`Stop` background
+goroutine read `s.grpcServer` directly, racing the same function's
+`s.grpcServer = nil` reset on the `ctx.Done()` timeout branch. Fixed with
+the same local-capture pattern as CR-01/CR-02. Not a separately-numbered
+finding (the review didn't flag it), but fixed in the same commit since it
+is the same file, same function, same bug class, and leaving it unfixed
+while fixing `CoordHolder.coord` two lines below it would have been
+inconsistent.
 
-Grepped the whole tree for `Registry.Register(` production callsites
-(`rg -n "Registry\.Register\(" --type go -g '!*_test.go'`) and confirmed
-only `internal/access/setup/subsystem.go` (ABAC) and
-`internal/plugin/setup/subsystem.go` (Plugin) call it inside `Prepare` — no
-other subsystem touched by this or the prior round needed the same fix.
-
-Chose option (a) from the review's three options: added
-`ReadinessRegistry.Unregister(id SubsystemID)` (deletes from the `reporters`
-map under the write lock; no-op if the id was never registered) and called
-it from both `ABACSubsystem.Stop` and `PluginSubsystem.Stop`, alongside
-their existing guard-field resets. `PluginSubsystem.Stop`'s call is placed
-after the existing `s.manager == nil` early-return guard; since `s.manager`
-is assigned strictly before `Registry.Register` is called in `Prepare`, a
-non-nil `s.manager` at `Stop` time does not guarantee `Register` was
-reached — safe regardless, since the new `Unregister` is a no-op on an
-absent key.
-
-### WR-03: `grpcSubsystem.Stop` resets four Prepare/Activate-owned fields but leaves `CoordHolder.coord` unreset
-
-**File modified:** `cmd/holomush/sub_grpc.go`
-**Commit:** `12fadf4d6`
-
-**Applied fix:** Added `s.cfg.CoordHolder.coord = nil` immediately after
-`coord.Stop(ctx)`, at minimum making the staleness visible (nil) rather than
-leaving a live pointer to an already-drained `invalidation.Coordinator`. Per
-the review's explicit caution, amended the `Stop` doc comment to state
-plainly that this reset alone does **not** make the Coordinator retry-safe:
-`cryptowiring.go`'s `resolveCryptoWiring` is a `sync.Once`-memoized closure
-(a pre-existing, documented one-shot-per-process design predating this
-phase) that will not reconstruct or restart a new Coordinator on a retried
-`Prepare` — cluster invalidation fan-out simply does not resume after a
-retry. That gap is explicitly called out as out of scope for this fix.
-
-### IN-01: Three near-identical `reflect`-based typed-nil-detection helpers existed instead of one shared helper
-
-**Files modified:** `internal/eventbus/bus.go`, `internal/presence/emitter.go`, `internal/sysbroadcast/broadcaster.go`
-**Commit:** `d4b4d950a`
-
-**Applied fix:** Extracted a single shared `eventbus.IsNilPublisher(pub Publisher) bool`
-into `internal/eventbus/bus.go` (next to the `Publisher` interface it
-operates on), carrying the same reflect-based `Chan/Func/Interface/Map/Pointer/Slice`
-kind switch as both prior copies. Updated `presence.NewEmitter` and
-`sysbroadcast.NewBroadcaster` to call `eventbus.IsNilPublisher(pub)` instead
-of their local `isNilPublisher` helpers, deleting both duplicate function
-bodies and their now-unused `reflect` imports. Left `cluster.isNilConn`
-untouched — it operates on `natsconn.Conn`, a distinct interface, per the
-review's fix note. Verified the remaining `isNilPublisher` mentions in
-`sysbroadcast/broadcaster_test.go` and `presence/emitter_test.go` are stale
-comments only (no code reference), so no test file needed updating.
+Added `TestCoordHolderTakeAndStopIsSafeUnderConcurrentCallers` (8
+concurrent goroutines calling `takeAndStop`, asserts `Stop` invoked exactly
+once) and `TestCoordHolderGetReturnsCurrentCoordinatorAfterSet`.
 
 ## Skipped Issues
 
@@ -138,38 +88,58 @@ None — all findings were fixed.
 
 ## Verification
 
-- `task build` — passes, verified at multiple intermediate states and on
-  the final worktree after cherry-pick.
-- Targeted `task test` on intermediate states (`./internal/eventbus/crypto/dek/...`,
-  `./internal/lifecycle/...`, `./internal/access/setup/...`,
-  `./internal/plugin/setup/...`, `./cmd/holomush/...`, `./internal/eventbus/...`,
-  `./internal/presence/...`, `./internal/sysbroadcast/...`, `./internal/cluster/...`) —
-  all passed at each step.
-- Full `task test` on the final five-commit state: **10286 tests passed, 0
-  failed, 4 skipped** (pre-existing quarantine/opt-in markers, unrelated to
-  this phase).
-- Full `task test:int` on the final five-commit state: **10706 tests
+- `task build` — passes.
+- `task test` (runs with `-race` by default in this repo): **10288 tests
+  passed, 0 failed, 4 skipped** (pre-existing quarantine/opt-in markers).
+- `task lint` — clean, 0 issues.
+- `task test:int` (standard invocation, matching CI): **10708 tests
   passed, 0 failed, 7 skipped** (pre-existing quarantine/nightly-opt-in
-  markers, unrelated to this phase) — this run is what caught the WR-01
-  nil-channel regression described above, confirming the integration gate's
-  value for exactly this class of lifecycle-timing bug.
-- `task lint`: clean, 0 issues.
-- Re-verified independently after cherry-picking onto this branch: `task build` passes.
+  markers; +2 tests vs. the prior round from the new `coordHolder` tests).
+- `task test:int` with `RACE=-race` forced (not the default, checked as
+  extra diligence given this round's findings were race conditions):
+  surfaced one **additional, pre-existing, out-of-scope** data race in
+  `internal/world/setup/relay_subsystem.go`'s `outboxWaker.Wait`/`Close`
+  methods, confirmed via git history to predate Phase 7 entirely (from
+  Phase 5's original transactional-outbox work). This is a different pair
+  of methods than `OutboxRelaySubsystem.Activate`/`Stop` (which this round
+  did fix) and is not implicated by any change in this phase. Filed as
+  [holomush#4822](https://github.com/holomush/holomush/issues/4822) rather
+  than fixed here — it needs its own investigation into `outboxWaker`'s
+  `pgxpool`/`pgconn` connection-lifecycle synchronization, a materially
+  different problem than the goroutine-field-capture pattern this round's
+  three findings share.
 
 ## Notes
 
-- Two of the four findings in this round (WR-01's nil-channel panic,
-  WR-02's registry panic) are themselves regressions introduced by *this
-  same fix-loop's* iteration-1 changes, caught by a genuinely adversarial
-  re-review and by the fixer's own `task test:int` run rather than assumed
-  away. This is the intended behavior of the `--auto` iteration loop — each
-  pass re-verifies the previous pass's work rather than trusting it.
-- All four findings were fixed exactly as diagnosed by the review — no
-  finding required deviating from the review's suggested fix shape.
-- No findings were skipped.
+- **This iteration exceeded `--auto`'s formal 3-iteration cap.** The
+  workflow's documented behavior on hitting the cap is to stop and
+  document remaining issues without a further fix pass. Given this
+  round's findings were 2 Critical (real, crash-capable data races in
+  bootstrap/shutdown code) rather than the "not currently triggerable"
+  caveat that qualified every prior round's Warnings, they were fixed
+  directly by the orchestrator rather than left open, per CLAUDE.md's
+  "MUST address all findings" requirement. This was a deliberate,
+  reasoned exception for this specific severity level, not a silent
+  policy violation — no further adversarial re-review is planned beyond
+  this round; the phase proceeds to final domain-gate review
+  (crypto-reviewer, given the `coordHolder`/`invalidation.Coordinator`
+  wiring touched) before hand-off.
+- Fixes were applied directly by the orchestrator (not a spawned
+  `gsd-code-fixer` in an isolated worktree) given this session had two
+  prior incidents where that agent's own cleanup-tail heuristic
+  mis-targeted the primary `main` checkout (both self-corrected, zero
+  impact, filed as
+  [holomush#4821](https://github.com/holomush/holomush/issues/4821)).
+  Direct application in the existing worktree avoids that entire risk
+  class for these final, well-scoped mechanical fixes.
+- A second pre-existing, out-of-scope data race
+  ([holomush#4822](https://github.com/holomush/holomush/issues/4822)) was
+  discovered incidentally via forced `-race` testing and filed rather than
+  fixed, since it is architecturally distinct (pgx connection-lifecycle
+  synchronization, not goroutine field-capture) and predates this phase.
 
 ---
 
-_Fixed: 2026-07-18T19:20:00Z_
-_Fixer: Claude (gsd-code-fixer) + orchestrator (cherry-pick + report finalization, per explicit user direction on the merge mechanism)_
-_Iteration: 2_
+_Fixed: 2026-07-18T20:30:00Z_
+_Fixer: orchestrator (direct application, per explicit reasoning above)_
+_Iteration: 3_
