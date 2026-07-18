@@ -534,11 +534,18 @@ func (s *PluginSubsystem) Activate(_ context.Context) error { return nil }
 // accessors depend on to nil, so a legitimate retry of Prepare after Stop
 // rebuilds the full plugin stack (including relaunching binary-plugin
 // subprocesses) rather than short-circuiting on an already-closed manager
-// (WR-01/IN-01, 07-review).
+// (WR-01/IN-01, 07-review). Also unregisters from the readiness registry
+// so a retried Prepare's Registry.Register call does not panic on a
+// duplicate registration (WR-02); Unregister is a no-op if Prepare failed
+// before reaching its own Register call, so this is safe to call
+// unconditionally.
 // codecov:ignore — tested by integration and E2E tests
 func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if s.manager == nil {
 		return nil
+	}
+	if s.cfg.Registry != nil {
+		s.cfg.Registry.Unregister(lifecycle.SubsystemPlugins)
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()

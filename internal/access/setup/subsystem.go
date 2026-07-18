@@ -154,12 +154,17 @@ func (s *ABACSubsystem) Activate(ctx context.Context) error {
 // Prepare/Activate guard fields (stack, pollerCancel) to nil so a
 // legitimate retry of Prepare/Activate after Stop rebuilds the stack and
 // relaunches the poller rather than short-circuiting on a closed one
-// (WR-01).
+// (WR-01). It also unregisters from the readiness registry so a retried
+// Prepare's Registry.Register call does not panic on a duplicate
+// registration (WR-02).
 // codecov:ignore — tested by integration and E2E tests
 func (s *ABACSubsystem) Stop(_ context.Context) error {
 	if s.pollerCancel != nil {
 		s.pollerCancel()
 		s.pollerCancel = nil
+	}
+	if s.cfg.Registry != nil {
+		s.cfg.Registry.Unregister(lifecycle.SubsystemABAC)
 	}
 	if s.stack != nil {
 		err := s.stack.Close()
