@@ -25,7 +25,8 @@ import (
 // are the file's documented smoke/dev placeholders (a real deploy uses
 // nsc/JWT — see deploy/nats/README.md).
 const (
-	ScopedServerUser     = "holomush-server"
+	ScopedServerUser = "holomush-server"
+	//nolint:gosec // G101 false positive: documented smoke/dev test credential, not a real secret (see doc comment above)
 	ScopedServerPassword = "holomush-server-smoke"
 )
 
