@@ -12,7 +12,6 @@ package presence
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -52,26 +51,13 @@ type Emitter struct {
 // both untyped nil and typed-nil interface values (e.g. a typed-nil concrete
 // pointer) so callers truly fail fast at construction.
 func NewEmitter(pub eventbus.Publisher, gameID func() string) *Emitter {
-	if pub == nil || isNilPublisher(pub) {
+	if pub == nil || eventbus.IsNilPublisher(pub) {
 		panic("presence.NewEmitter: nil Publisher")
 	}
 	if gameID == nil {
 		panic("presence.NewEmitter: nil gameID")
 	}
 	return &Emitter{pub: pub, gameID: gameID}
-}
-
-// isNilPublisher detects typed-nil interface values whose underlying
-// concrete kind is nilable (pointer, slice, map, chan, func, interface).
-// Returns false for non-nilable kinds (struct, value-receiver fakes).
-func isNilPublisher(pub eventbus.Publisher) bool {
-	v := reflect.ValueOf(pub)
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }
 
 // buildEvent resolves the game id (falling back to "main" when gameID()

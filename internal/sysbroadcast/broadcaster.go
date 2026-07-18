@@ -11,7 +11,6 @@ package sysbroadcast
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 
 	"github.com/samber/oops"
 
@@ -39,30 +38,13 @@ type Broadcaster struct {
 // Detects both untyped nil and typed-nil interface values (e.g. a typed-nil
 // concrete pointer) so callers truly fail fast at construction.
 func NewBroadcaster(pub eventbus.Publisher, gameID func() string) *Broadcaster {
-	if pub == nil || isNilPublisher(pub) {
+	if pub == nil || eventbus.IsNilPublisher(pub) {
 		panic("sysbroadcast.NewBroadcaster: nil Publisher")
 	}
 	if gameID == nil {
 		panic("sysbroadcast.NewBroadcaster: nil gameID")
 	}
 	return &Broadcaster{pub: pub, gameID: gameID}
-}
-
-// isNilPublisher detects typed-nil interface values whose underlying
-// concrete kind is nilable (pointer, slice, map, chan, func, interface).
-// Returns false for non-nilable kinds (struct, value-receiver fakes).
-// Mirrors internal/presence/emitter.go::isNilPublisher and
-// internal/cluster/registry.go::isNilConn (WR-02) so all three
-// eventbus.Publisher-shaped nil-checking constructors introduced in this
-// phase detect the same failure mode.
-func isNilPublisher(pub eventbus.Publisher) bool {
-	v := reflect.ValueOf(pub)
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }
 
 // Broadcast publishes a single system-actor system event carrying message to

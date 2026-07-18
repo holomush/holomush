@@ -5,6 +5,7 @@ package eventbus
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -14,6 +15,33 @@ import (
 // internal/plugin/event_emitter.go after Phase B (F1).
 type Publisher interface {
 	Publish(ctx context.Context, event Event) error
+}
+
+// IsNilPublisher detects typed-nil interface values whose underlying
+// concrete kind is nilable (pointer, slice, map, chan, func, interface).
+// Returns false for non-nilable kinds (struct, value-receiver fakes).
+//
+// A bare `pub == nil` check misses a typed-nil concrete pointer boxed into
+// the Publisher interface (e.g. a nil *someConcretePublisher passed as
+// Publisher) — the interface value itself is non-nil even though the
+// underlying pointer is nil. Callers that want to fail fast at
+// construction (rather than nil-deref on first Publish call) MUST check
+// both: `pub == nil || eventbus.IsNilPublisher(pub)`.
+//
+// Shared by internal/presence and internal/sysbroadcast, both of which
+// construct Publisher-typed wrappers with this exact construction-time
+// guard (07-review IN-01: extracted here instead of duplicating the
+// reflect-based check in each package). internal/cluster's isNilConn
+// performs the same check for a different interface (natsconn.Conn) and
+// stays separate.
+func IsNilPublisher(pub Publisher) bool {
+	v := reflect.ValueOf(pub)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 // Subscriber opens long-lived session streams. Used by the gRPC Subscribe
