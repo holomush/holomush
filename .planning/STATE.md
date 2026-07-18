@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 07
 current_phase_name: event-model-bootstrap-decomposition
 status: executing
-stopped_at: Completed 07-08-PLAN.md
-last_updated: "2026-07-18T02:01:08.084Z"
+stopped_at: Completed 07-09-PLAN.md
+last_updated: "2026-07-18T03:41:26.090Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 36
-  completed_plans: 33
+  completed_plans: 34
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 07 (event-model-bootstrap-decomposition) — EXECUTING
-Plan: 9 of 11
+Plan: 10 of 11
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 07 execution started
 
@@ -116,6 +116,7 @@ Last activity: 2026-07-17 — Phase 07 execution started
 | Phase 07 P06 | 50min | 3 tasks | 13 files |
 | Phase 07 P07 | 46min | 3 tasks | 35 files |
 | Phase 07 P08 | 35min | 3 tasks | 13 files |
+| Phase 07 P09 | ~5h | 3 tasks | 50 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,10 @@ the next milestone yet.
 - [Phase ?]: 07-07: event_emitter.go untouched — CoreServer builds a direct typed system-actor literal instead of exporting the plugin-private actor bridge
 - [Phase ?]: 07-08: D-07 fixed — ReplayTail (plugins.HistoryReader + hostfunc.HistoryReader, lockstep) gains beforeSeq uint64; both runtimes' cursor encoders thread each event's real Seq (encodeHostEventCursor + hostfunc's two independent encode sites) instead of a hardcoded 0; beforeSeq==0 means read-the-tail with no ID-only fallback on either tier
 - [Phase ?]: 07-08: D-08 preserved — hostv1.Event stays at exactly 8 fields, pinned by a new census meta-test (TestHostV1EventFieldCensusExcludesSequence) asserting field-set equality, not just seq-absence
+- [Phase ?]: 07-09: D-12 Wave A — killed all five eager subsystem starts (dbSub/eventBusSub/abacSub/authSub/invalidation.Coordinator); every gameID/live-value consumer resolves through gameIDProvider or the memoized cryptoWiring builder (cryptowiring.go) at its own Start, gated by a real DependsOn edge
+- [Phase ?]: 07-09: TLS is a real registered lifecycle.Subsystem (tlscerts.TLSSubsystem, DependsOn Database); productionSubsystems takes a named 17-field productionSubsystemSet instead of a 16-position positional list (LOW-8)
+- [Phase ?]: 07-09: ABAC deliberately excluded from the cryptoWiring consumer set (crypto-operator validation moved into ABACSubsystem.Start instead) to avoid a second ABAC->cryptoWiring->ABAC cycle; chain.VerifierSubsystem/socket.AdminSocketSubsystem both gate external binds on SubsystemCryptoChainVerifier, permanently forbidding the EventBus->CryptoChainVerifier reverse edge
+- [Phase ?]: 07-09: eventbus.Subsystem.Start now runs VerifyAccountScoping unconditionally in external mode, exposing that a bare/unscoped natstest.StartNATS() container is over-scoped by design; added natstest.StartScopedNATS/ScopedURL (loads deploy/nats/cluster-server.conf) for test harnesses needing a full external-mode boot to succeed
 
 ### Pending Todos
 
@@ -211,9 +216,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-18T02:01:08.077Z
+Last session: 2026-07-18T03:41:16.304Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 07-08-PLAN.md
+Stopped at: Completed 07-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

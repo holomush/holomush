@@ -34,7 +34,7 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 
 - [ ] **ARCH-01**: The `CoreServer` god object is decomposed into cohesive, separately-testable units with no behavior change (epics `holomush-1bft`/`wm0fi`)
 - [ ] **ARCH-02**: The `plugin/manager` god object is decomposed similarly, with no behavior change (epic `holomush-dj95`)
-- [ ] **ARCH-03**: Process bootstrap is migrated onto `lifecycle.Orchestrator`, unifying subsystem start/stop ordering (epic `holomush-yvdm`)
+- [x] **ARCH-03**: Process bootstrap is migrated onto `lifecycle.Orchestrator`, unifying subsystem start/stop ordering (epic `holomush-yvdm`)
 - [x] **ARCH-04**: The parallel `core.Event` / `eventbus.Event` models are collapsed to a single representation, coordinated with the MODEL-01 outcome
 - [x] **ARCH-05**: Remaining gateway-boundary import violations are removed so `internal/web` / `internal/telnet` hold only protocol-translation dependencies (`.claude/rules/gateway-boundary.md`)
 
@@ -89,7 +89,7 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | OPS-03 | Phase 6 | Complete |
 | OPS-04 | Phase 6 | Complete |
 | QUAL-01 | Phase 6 | Complete |
-| ARCH-03 | Phase 7 | Pending |
+| ARCH-03 | Phase 7 | Complete |
 | ARCH-04 | Phase 7 | Complete |
 | ARCH-05 | Phase 7 | Complete |
 | ARCH-01 | Phase 8 | Pending |
