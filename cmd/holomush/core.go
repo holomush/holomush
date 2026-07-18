@@ -854,7 +854,17 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if orchErr := orch.StartAll(ctx); orchErr != nil {
 		return orchErr
 	}
-	defer orch.StopAll(context.Background())
+	defer func() {
+		// The timeout MUST be constructed inside this closure, not at the
+		// defer site: Go evaluates deferred call arguments at registration
+		// time, so a context.WithTimeout built here at the `defer` keyword
+		// would start its 5s timer at boot and already be dead by the time
+		// this closure actually runs at shutdown (LOW-7; same in-repo idiom
+		// as the telemetry/observability shutdown closures above).
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		orch.StopAll(stopCtx)
+	}()
 
 	// --- 9. Readiness gate ---
 	readinessCtx, readinessCancel := context.WithTimeout(ctx, 30*time.Second)
@@ -933,7 +943,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		slog.WarnContext(shutdownCtx, "error stopping control gRPC server", "error", err)
 	}
 
-	// Subsystem shutdown handled by deferred orch.StopAll above.
+	// Subsystem shutdown is handled by the deferred orchestrator stop
+	// closure registered right after StartAll above.
 
 	slog.InfoContext(ctx, "shutdown complete")
 	return nil

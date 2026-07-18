@@ -56,8 +56,17 @@ func (o *Orchestrator) StartAll(ctx context.Context) error {
 		start := time.Now()
 
 		if startErr := sub.Start(ctx); startErr != nil {
-			// Rollback: stop already-started subsystems in reverse order.
-			o.StopAll(ctx)
+			// Rollback: stop already-started subsystems in reverse order, on
+			// a FRESH bounded context — never the startup ctx. The startup
+			// ctx is exactly what may already be cancelled in the failure
+			// modes rollback exists for (SIGINT mid-boot, a boot deadline
+			// elapsing), and StopAll below is deadline-aware: handing it an
+			// already-dead ctx would make it abandon every rollback Stop
+			// instantly (cross-AI round 4, MEDIUM — verified). Normal
+			// (non-rollback) callers keep passing their own ctx.
+			stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			o.StopAll(stopCtx)
+			cancel()
 			return oops.
 				Code("SUBSYSTEM_START_FAILED").
 				With("subsystem", id.String()).
@@ -77,22 +86,85 @@ func (o *Orchestrator) StartAll(ctx context.Context) error {
 	return nil
 }
 
-// StopAll stops subsystems in reverse start order.
+// StopAll stops subsystems in reverse start order, honoring ctx's deadline
+// (LOW-7). If ctx is done before every subsystem has been stopped, StopAll
+// logs the remaining SubsystemIDs at error level and returns immediately
+// rather than waiting further — silent abandonment is worse than a slow
+// shutdown (T-07-53), but an unbounded shutdown is worse than a bounded one.
+//
+// Each subsystem's Stop runs in its own goroutine so that one Stop which
+// ignores its own ctx and hangs past the deadline cannot hold up the loop;
+// StopAll races that goroutine against ctx.Done(). The per-Stop result
+// channel MUST be buffered (capacity 1): once StopAll abandons a Stop and
+// moves on, nothing will ever receive from that channel, so an unbuffered
+// send would block the goroutine forever — a permanent leak instead of one
+// that ends the moment the abandoned Stop actually returns.
+//
+// This design assumes StopAll's callers are terminal. In production StopAll
+// is called exactly once at process exit (the deferred call in
+// cmd/holomush/core.go), plus at most once more on StartAll's rollback path
+// below — which always builds its OWN fresh bounded context, never the
+// (possibly already-cancelled) startup ctx, so a cancelled boot cannot
+// abandon rollback cleanup. A subsystem whose Stop routinely outlives the
+// deadline is a bug in that subsystem, not a tolerated steady state: the
+// Subsystem interface already contracts that Stop "MUST NOT block
+// indefinitely" (subsystem.go:55-57) — this method simply stops trusting
+// that contract blindly and bounds the damage when it is violated.
+//
+// Reusing an Orchestrator after a rollback that timed out — calling
+// StartAll again, or registering/starting replacement subsystems on the
+// same instance — is UNSUPPORTED while abandoned Stop goroutines may still
+// be running: an abandoned teardown can mutate subsystem state after
+// rollback returns. Production never does this (a failed StartAll is
+// followed by process exit; there is no in-tree retry path). Tests that
+// exercise rollback must either use stubs whose Stop honors its ctx, or
+// discard the Orchestrator instance afterward.
 func (o *Orchestrator) StopAll(ctx context.Context) {
 	for i := len(o.startOrder) - 1; i >= 0; i-- {
+		if ctx.Err() != nil {
+			logAbandonedSubsystems(ctx, o.startOrder[:i+1])
+			return
+		}
+
 		id := o.startOrder[i]
 		sub := o.subsystems[id]
 		slog.InfoContext(ctx, "stopping subsystem", "subsystem", id.String())
 
-		if err := sub.Stop(ctx); err != nil {
-			slog.ErrorContext(
-				ctx,
-				"subsystem stop error",
-				"subsystem", id.String(),
-				"error", err,
-			)
+		result := make(chan error, 1) // buffered one-shot: see doc comment above
+		go func() {
+			result <- sub.Stop(ctx)
+		}()
+
+		select {
+		case stopErr := <-result:
+			if stopErr != nil {
+				slog.ErrorContext(
+					ctx,
+					"subsystem stop error",
+					"subsystem", id.String(),
+					"error", stopErr,
+				)
+			}
+		case <-ctx.Done():
+			logAbandonedSubsystems(ctx, o.startOrder[:i+1])
+			return
 		}
 	}
+}
+
+// logAbandonedSubsystems logs, at error level, the SubsystemIDs StopAll did
+// not get to stop before ctx's deadline elapsed (T-07-53: silent
+// abandonment is worse than a slow shutdown).
+func logAbandonedSubsystems(ctx context.Context, remaining []SubsystemID) {
+	ids := make([]string, len(remaining))
+	for i, id := range remaining {
+		ids[i] = id.String()
+	}
+	slog.ErrorContext(
+		ctx,
+		"stopall deadline exceeded, abandoning remaining subsystems",
+		"remaining_subsystems", ids,
+	)
 }
 
 // topoSort performs Kahn's algorithm for topological sorting.

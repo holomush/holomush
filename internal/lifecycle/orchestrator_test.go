@@ -4,10 +4,13 @@
 package lifecycle_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -195,4 +198,147 @@ func indexOf(slice []lifecycle.SubsystemID, id lifecycle.SubsystemID) int {
 		}
 	}
 	return -1
+}
+
+// TestStopAllReturnsWithinDeadlineWhenMiddleSubsystemStopBlocksOnCtxDone
+// covers LOW-7's core requirement: a well-behaved Stop that blocks until its
+// OWN ctx is done must not prevent StopAll from returning once the deadline
+// elapses. Three subsystems are started; the middle one's Stop blocks on
+// <-ctx.Done() (a subsystem correctly honoring cancellation, just slow to
+// react to it in practice). StopAll, given a short-deadline ctx, must return
+// at roughly that deadline rather than waiting indefinitely.
+func TestStopAllReturnsWithinDeadlineWhenMiddleSubsystemStopBlocksOnCtxDone(t *testing.T) {
+	db := &stubSubsystem{id: lifecycle.SubsystemDatabase}
+	blocked := &stubSubsystem{
+		id:   lifecycle.SubsystemABAC,
+		deps: []lifecycle.SubsystemID{lifecycle.SubsystemDatabase},
+		stopFn: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+	top := &stubSubsystem{id: lifecycle.SubsystemBootstrap, deps: []lifecycle.SubsystemID{lifecycle.SubsystemABAC}}
+
+	orch := lifecycle.NewOrchestrator()
+	orch.Register(db)
+	orch.Register(blocked)
+	orch.Register(top)
+	require.NoError(t, orch.StartAll(context.Background()))
+
+	deadline := 100 * time.Millisecond
+	stopCtx, cancel := context.WithTimeout(context.Background(), deadline)
+	defer cancel()
+
+	start := time.Now()
+	orch.StopAll(stopCtx)
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, 2*time.Second, "StopAll must return at roughly the deadline, not block indefinitely")
+
+	// "top" stops first in reverse order and has no special Stop, so it
+	// completes immediately.
+	top.mu.Lock()
+	assert.True(t, top.stopped, "top must have been stopped before the deadline consumed by the blocked middle subsystem")
+	top.mu.Unlock()
+}
+
+// TestStopAllReturnsWithinDeadlineWhenSubsystemStopIgnoresCtxAndSleepsPastDeadline
+// covers the misbehaving case: a Stop that IGNORES its ctx entirely and
+// sleeps well past the deadline must still not hold up StopAll — the
+// orchestrator stops trusting the Subsystem interface's "MUST NOT block
+// indefinitely" contract and forcibly abandons it via the goroutine+select.
+func TestStopAllReturnsWithinDeadlineWhenSubsystemStopIgnoresCtxAndSleepsPastDeadline(t *testing.T) {
+	db := &stubSubsystem{id: lifecycle.SubsystemDatabase}
+	rude := &stubSubsystem{
+		id:   lifecycle.SubsystemABAC,
+		deps: []lifecycle.SubsystemID{lifecycle.SubsystemDatabase},
+		stopFn: func(_ context.Context) error {
+			time.Sleep(2 * time.Second) // ignores its ctx entirely
+			return nil
+		},
+	}
+
+	orch := lifecycle.NewOrchestrator()
+	orch.Register(db)
+	orch.Register(rude)
+	require.NoError(t, orch.StartAll(context.Background()))
+
+	deadline := 100 * time.Millisecond
+	stopCtx, cancel := context.WithTimeout(context.Background(), deadline)
+	defer cancel()
+
+	start := time.Now()
+	orch.StopAll(stopCtx)
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, 1*time.Second, "StopAll must return near the deadline even though rude's Stop ignores its ctx and sleeps for 2s")
+}
+
+// TestStopAllLogsAbandonedSubsystemsAtErrorLevelOnDeadline covers T-07-53:
+// silent abandonment is worse than a slow shutdown, so StopAll must log
+// (at error level) which subsystems it did not get to stop.
+func TestStopAllLogsAbandonedSubsystemsAtErrorLevelOnDeadline(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewJSONHandler(&buf, nil)
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	db := &stubSubsystem{id: lifecycle.SubsystemDatabase}
+	rude := &stubSubsystem{
+		id:   lifecycle.SubsystemABAC,
+		deps: []lifecycle.SubsystemID{lifecycle.SubsystemDatabase},
+		stopFn: func(_ context.Context) error {
+			time.Sleep(2 * time.Second)
+			return nil
+		},
+	}
+
+	orch := lifecycle.NewOrchestrator()
+	orch.Register(db)
+	orch.Register(rude)
+	require.NoError(t, orch.StartAll(context.Background()))
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	orch.StopAll(stopCtx)
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, "abandon", "abandoned-subsystem log line must mention abandonment")
+	assert.Contains(t, logOutput, `"level":"ERROR"`, "abandoned-subsystem log must be at error level")
+}
+
+// TestStartAllRollbackStopsSubsystemsWhenStartupCtxAlreadyCancelled covers
+// the rollback-path fix (cross-AI round 4, MEDIUM): once StopAll is
+// deadline-aware, StartAll's rollback branch must NOT hand it the startup
+// ctx, because that ctx can already be cancelled by the very failure that
+// triggered rollback (e.g. a SIGINT mid-boot). Passing the cancelled ctx
+// straight through would make the new ctx.Err() check abandon every
+// rollback Stop instantly. Rollback must run on a fresh bounded context.
+func TestStartAllRollbackStopsSubsystemsWhenStartupCtxAlreadyCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db := &stubSubsystem{id: lifecycle.SubsystemDatabase}
+	abac := &stubSubsystem{
+		id:   lifecycle.SubsystemABAC,
+		deps: []lifecycle.SubsystemID{lifecycle.SubsystemDatabase},
+		startFn: func(_ context.Context) error {
+			// Simulate the startup ctx being cancelled (e.g. SIGINT) at the
+			// exact moment the failure that triggers rollback occurs.
+			cancel()
+			return errors.New("abac init failed")
+		},
+	}
+
+	orch := lifecycle.NewOrchestrator()
+	orch.Register(db)
+	orch.Register(abac)
+
+	err := orch.StartAll(ctx)
+	require.Error(t, err)
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	assert.True(t, db.stopped, "database must be stopped during rollback even though the startup ctx is already cancelled")
 }
