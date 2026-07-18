@@ -156,7 +156,7 @@ type CoreServer struct {
 
 	presence        *presence.Emitter
 	sessionStore    session.Store
-	eventStore      core.EventAppender
+	publisher       eventbus.Publisher
 	worldQuerier    WorldQuerier
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
@@ -248,11 +248,18 @@ func WithSessionDefaults(defaults SessionDefaults) CoreServerOption {
 	}
 }
 
-// WithEventStore sets the event appender for host-engine events (e.g.
-// command_response). Post-F7 this is wired to the JetStream bus.
-func WithEventStore(store core.EventAppender) CoreServerOption {
+// WithEventPublisher sets the event publisher for host-engine events (e.g.
+// command_response/command_error) and the game-id qualification source used
+// to turn emitCommandResponse's domain-relative stream ref into a fully
+// qualified subject (eventbus.Qualify rejects a relative ref with an empty
+// game id). gameID also feeds currentGameID/Subscribe subject qualification
+// (D-02: one game-id source for the whole host) — it is the SAME field as
+// WithGameID, not a duplicate; passing both is fine, the last one wins.
+// Post-ARCH-04 this replaces the retired event-appender-backed seam.
+func WithEventPublisher(pub eventbus.Publisher, gameID GameIDProvider) CoreServerOption {
 	return func(s *CoreServer) {
-		s.eventStore = store
+		s.publisher = pub
+		s.gameID = gameID
 	}
 }
 
@@ -632,19 +639,28 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 	if isError {
 		eventType = eventvocab.EventTypeCommandError
 	}
-	event := core.NewEvent(world.CharacterStream(char.ID), eventType, core.Actor{
-		Kind: core.ActorSystem,
-		ID:   core.ActorSystemID,
-	}, payload)
 
-	if s.eventStore == nil {
-		slog.DebugContext(ctx, "emitCommandResponse: eventStore not configured, event not emitted")
+	if s.publisher == nil {
+		slog.DebugContext(ctx, "emitCommandResponse: publisher not configured, event not emitted")
 		return nil
 	}
 
-	if err := s.eventStore.Append(ctx, event); err != nil {
+	sub, err := s.toSubject(s.currentGameID(), world.CharacterStream(char.ID))
+	if err != nil {
+		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").With("character_id", char.ID.String()).Wrap(err)
+	}
+	typ, err := eventbus.NewType(string(eventType))
+	if err != nil {
+		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").With("character_id", char.ID.String()).Wrap(err)
+	}
+	event := eventbus.NewEvent(sub, typ, eventbus.Actor{
+		Kind: eventbus.ActorKindSystem,
+		ID:   core.SystemActorULID,
+	}, payload)
+
+	if err := s.publisher.Publish(ctx, event); err != nil {
 		slog.WarnContext(
-			ctx, "failed to append command_response event",
+			ctx, "failed to publish command_response event",
 			"character_id", char.ID.String(),
 			"error", err,
 		)

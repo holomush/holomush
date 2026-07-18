@@ -96,6 +96,44 @@ func TestToSubjectRejectsInvalidSubjectCharacters(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestEmitCommandResponseNilPublisherIsSilentNoOp asserts the ARCH-04
+// WithEventPublisher migration preserves the pre-migration nil-eventStore
+// contract verbatim: many CoreServer test fixtures construct without wiring
+// a publisher at all, and emitCommandResponse MUST silently no-op (return
+// nil, no panic) rather than dereference a nil s.publisher.
+func TestEmitCommandResponseNilPublisherIsSilentNoOp(t *testing.T) {
+	t.Parallel()
+	s := &CoreServer{} // publisher intentionally unset (nil)
+	err := s.emitCommandResponse(context.Background(), core.CharacterRef{ID: core.NewULID(), Name: "Nobody"}, "hi", false)
+	require.NoError(t, err)
+}
+
+// TestEmitCommandResponsePublishesOnExactQualifiedSubject asserts
+// emitCommandResponse qualifies world.CharacterStream's domain-relative
+// reference through the SAME gameID source WithEventPublisher wires
+// (D-02), by exact literal — not by recomputing eventbus.Qualify with the
+// function under test, which would be tautological.
+func TestEmitCommandResponsePublishesOnExactQualifiedSubject(t *testing.T) {
+	t.Parallel()
+	var got eventbus.Event
+	pub := &mockEventStore{
+		publishFunc: func(_ context.Context, ev eventbus.Event) error {
+			got = ev
+			return nil
+		},
+	}
+	s := &CoreServer{}
+	WithEventPublisher(pub, func() string { return "main" })(s)
+
+	charID := core.NewULID()
+	require.NoError(t, s.emitCommandResponse(context.Background(), core.CharacterRef{ID: charID, Name: "Alice"}, "hi", false))
+
+	assert.Equal(t, eventbus.Subject("events.main.character."+charID.String()), got.Subject,
+		"emitCommandResponse must qualify by exact literal, not a recomputed Qualify call")
+	assert.Equal(t, eventbus.ActorKindSystem, got.Actor.Kind)
+	assert.Equal(t, core.SystemActorULID, got.Actor.ID)
+}
+
 func TestCurrentGameIDFallsBackToMain(t *testing.T) {
 	t.Parallel()
 	s := &CoreServer{}
@@ -295,7 +333,7 @@ func TestServerOptionClosuresAssignFields(t *testing.T) {
 	opts := []CoreServerOption{
 		WithSessionStore(sessiontest.NewStore(t)),
 		WithSessionDefaults(SessionDefaults{TTL: time.Minute, MaxHistory: 10, MaxReplay: 5}),
-		WithEventStore(&mockEventStore{}),
+		WithEventPublisher(&mockEventStore{}, gameIDFn),
 		WithWorldQuerier(nil),
 		WithVerbRegistry(nil),
 		WithStreamContributor(nil),

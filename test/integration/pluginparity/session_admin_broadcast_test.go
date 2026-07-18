@@ -80,9 +80,10 @@ var _ = Describe("SessionAdmin broadcast backing over the Lua bufconn path (holo
 		Expect(events).To(HaveLen(1), "broadcast must emit exactly one event")
 		ev := events[0]
 		// Post-collapse the recorded Subject is qualified — the pre-collapse bare
-		// core.SystemBroadcastSubject ("system") qualified later inside
-		// busEventAppender; now sysbroadcast.Broadcaster qualifies before publish
-		// (FINDING-5). Pin the exact literal, not a recomputed eventbus.Qualify(...).
+		// core.SystemBroadcastSubject ("system") qualified later inside the
+		// retired JetStream event-appender; now sysbroadcast.Broadcaster
+		// qualifies before publish (FINDING-5). Pin the exact literal, not a
+		// recomputed eventbus.Qualify(...).
 		Expect(ev.Subject).To(Equal(eventbus.Subject("events.main."+core.SystemBroadcastSubject)),
 			"broadcast must target the reserved system subject, fully qualified")
 		Expect(ev.Type).To(Equal(eventbus.Type("system")))

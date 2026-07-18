@@ -12,7 +12,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 )
 
@@ -46,7 +46,7 @@ func newAuthorizingHistoryReader(inner HistoryReader, engine types.AccessPolicyE
 	}
 }
 
-func (r *authorizingHistoryReader) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+func (r *authorizingHistoryReader) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	dec, err := pluginauthz.AuthorizeStreamRead(ctx, pluginauthz.StreamReadInput{
 		Engine:     r.engine,
 		Auditor:    r.auditor,

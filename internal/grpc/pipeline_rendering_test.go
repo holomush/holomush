@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -34,7 +34,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := coretest.NewMemoryEventStore()
+		store := newTestEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -59,9 +59,9 @@ func TestPipelineRendering(t *testing.T) {
 		require.NoError(t, err)
 
 		// Find the say event.
-		var sayEvent *core.Event
+		var sayEvent *eventbus.Event
 		for i := range events {
-			if events[i].Type == eventvocab.EventType(corecomm.EventTypeSay) {
+			if events[i].Type == eventbus.Type(corecomm.EventTypeSay) {
 				sayEvent = &events[i]
 				break
 			}
@@ -83,7 +83,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := coretest.NewMemoryEventStore()
+		store := newTestEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -106,9 +106,9 @@ func TestPipelineRendering(t *testing.T) {
 		events, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 		require.NoError(t, err)
 
-		var poseEvent *core.Event
+		var poseEvent *eventbus.Event
 		for i := range events {
-			if events[i].Type == eventvocab.EventType(corecomm.EventTypePose) {
+			if events[i].Type == eventbus.Type(corecomm.EventTypePose) {
 				poseEvent = &events[i]
 				break
 			}
@@ -129,7 +129,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := coretest.NewMemoryEventStore()
+		store := newTestEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -156,10 +156,10 @@ func TestPipelineRendering(t *testing.T) {
 		require.NotEmpty(t, charEvents, "expected command_error event on character stream")
 
 		var found bool
-		for _, ev := range charEvents {
-			if ev.Type == eventvocab.EventTypeCommandError {
+		for i := range charEvents {
+			if charEvents[i].Type == eventbus.Type(eventvocab.EventTypeCommandError) {
 				var payload eventvocab.CommandResponsePayload
-				require.NoError(t, json.Unmarshal(ev.Payload, &payload))
+				require.NoError(t, json.Unmarshal(charEvents[i].Payload, &payload))
 				assert.NotEmpty(t, payload.Text,
 					"error text should not be empty")
 				found = true
@@ -177,7 +177,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := coretest.NewMemoryEventStore()
+		store := newTestEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -204,8 +204,8 @@ func TestPipelineRendering(t *testing.T) {
 
 		// Verify the event carries the fields needed for EventFrame construction.
 		ev := events[0]
-		assert.Equal(t, eventvocab.EventType(corecomm.EventTypeSay), ev.Type)
-		assert.Equal(t, "location."+locationID.String(), ev.Stream)
+		assert.Equal(t, eventbus.Type(corecomm.EventTypeSay), ev.Type)
+		assert.Equal(t, eventbus.Subject("location."+locationID.String()), ev.Subject)
 		assert.False(t, ev.ID.IsZero(), "event ID must be set")
 		assert.False(t, ev.Timestamp.IsZero(), "timestamp must be set")
 
@@ -224,7 +224,7 @@ func TestPipelineRendering(t *testing.T) {
 		sessionID := core.NewULID()
 		locationID := core.NewULID()
 
-		store := coretest.NewMemoryEventStore()
+		store := newTestEventStore()
 		server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:   charID,
@@ -247,9 +247,9 @@ func TestPipelineRendering(t *testing.T) {
 		events, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 		require.NoError(t, err)
 
-		var oocEvent *core.Event
+		var oocEvent *eventbus.Event
 		for i := range events {
-			if events[i].Type == eventvocab.EventType(corecomm.EventTypeOOC) {
+			if events[i].Type == eventbus.Type(corecomm.EventTypeOOC) {
 				oocEvent = &events[i]
 				break
 			}

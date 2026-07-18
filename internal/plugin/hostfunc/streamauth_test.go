@@ -15,12 +15,12 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 )
 
 type recordingInnerReader struct{ called bool }
 
-func (r *recordingInnerReader) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
+func (r *recordingInnerReader) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]eventbus.Event, error) {
 	r.called = true
 	return nil, nil
 }

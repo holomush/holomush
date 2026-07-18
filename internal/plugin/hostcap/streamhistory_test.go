@@ -16,7 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
@@ -29,7 +29,7 @@ type recordingHistoryReader struct {
 	gotStream string
 }
 
-func (r *recordingHistoryReader) ReplayTail(_ context.Context, stream string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
+func (r *recordingHistoryReader) ReplayTail(_ context.Context, stream string, _ int, _ time.Time, _ ulid.ULID) ([]eventbus.Event, error) {
 	r.called = true
 	r.gotStream = stream
 	return nil, nil

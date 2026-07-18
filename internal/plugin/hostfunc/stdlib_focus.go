@@ -13,7 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/session"
 )
@@ -47,7 +47,22 @@ type FocusOps interface {
 
 // HistoryReader provides read-only event history access for Lua plugins.
 type HistoryReader interface {
-	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error)
+	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error)
+}
+
+// actorIDString renders an event actor's ULID for the plugin-facing Lua
+// table, mapping the zero ULID (anonymous/system-unset) to the empty string
+// rather than its 26-char Crockford text. Mirrors the deleted
+// busEventToCoreEvent's deliberate zero→"" mapping
+// (cmd/holomush/sub_grpc.go, pre-ARCH-04) and the precedent at
+// internal/grpc/server.go's actorIDString — a bare ulid.ULID.String() would
+// surface the zero actor as "00000000000000000000000000", an observable
+// behavior change plugins do not expect (cross-AI round 7, MEDIUM).
+func actorIDString(id ulid.ULID) string {
+	if id == (ulid.ULID{}) {
+		return ""
+	}
+	return id.String()
 }
 
 // RegisterStreamHistoryFunc adds ONLY holomush.query_stream_history (the
@@ -424,14 +439,15 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 	}
 
 	eventsTable := ls.NewTable()
-	for i, e := range events {
+	for i := range events {
+		e := &events[i]
 		et := ls.NewTable()
 		ls.SetField(et, "id", lua.LString(e.ID.String()))
-		ls.SetField(et, "stream", lua.LString(e.Stream))
+		ls.SetField(et, "stream", lua.LString(string(e.Subject)))
 		ls.SetField(et, "type", lua.LString(string(e.Type)))
 		ls.SetField(et, "timestamp", lua.LNumber(e.Timestamp.UnixMilli()))
 		ls.SetField(et, "actor_kind", lua.LString(e.Actor.Kind.String()))
-		ls.SetField(et, "actor_id", lua.LString(e.Actor.ID))
+		ls.SetField(et, "actor_id", lua.LString(actorIDString(e.Actor.ID)))
 		ls.SetField(et, "payload", lua.LString(string(e.Payload)))
 		// Encode a per-event cursor so callers can paginate from this event.
 		evtCursorBytes, encErr := cursor.Encode(cursor.Cursor{

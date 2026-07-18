@@ -6,7 +6,7 @@
 // .claude/rules/terminology.md's "presence" definition: "active sessions at
 // a location"). Emitter is the sole type: it publishes these three event
 // shapes through an injected eventbus.Publisher, replacing the former
-// internal/core game-engine + busEventAppender pair (D-03/D-04).
+// internal/core game-engine + its JetStream event-appender pair (D-03/D-04).
 package presence
 
 import (
@@ -75,12 +75,12 @@ func isNilPublisher(pub eventbus.Publisher) bool {
 }
 
 // buildEvent resolves the game id (falling back to "main" when gameID()
-// returns empty, the same fallback busEventAppender.Append had), qualifies
-// relRef into a fully-qualified Subject via eventbus.Qualify, converts typ
-// into an eventbus.Type via eventbus.NewType, and constructs the Event via
-// the canonical eventbus.NewEvent constructor. Mirrors
-// busEventAppender.Append's four steps (cmd/holomush/sub_grpc.go) so the
-// Emitter reproduces exactly what the retired Engine+adapter pair produced.
+// returns empty — the same fallback the retired JetStream event-appender
+// had), qualifies relRef into a fully-qualified Subject via eventbus.Qualify,
+// converts typ into an eventbus.Type via eventbus.NewType, and constructs
+// the Event via the canonical eventbus.NewEvent constructor. Mirrors the
+// same four steps that appender's Append method used so the Emitter
+// reproduces exactly what the retired Engine+adapter pair produced.
 func (e *Emitter) buildEvent(relRef string, typ eventvocab.EventType, actor core.Actor, payload []byte) (eventbus.Event, error) {
 	var zero eventbus.Event
 
@@ -104,14 +104,13 @@ func (e *Emitter) buildEvent(relRef string, typ eventvocab.EventType, actor core
 
 // mapActor bridges the legacy core.Actor (ID is a string, expected to be a
 // ULID post-w9ml) to the JetStream-side Actor (ID is a ULID; zero for
-// anonymous/system). Mirrors coreToBusActor (cmd/holomush/sub_grpc.go).
+// anonymous/system).
 //
 // Note: ULID parse failure for non-empty IDs is silently ignored at this
-// boundary, matching coreToBusActor's documented behavior — post-w9ml every
-// stamp site stamps a valid ULID, and a failure here indicates a contract
-// violation upstream that the structured emit-side gate
-// (coreActorToEventbusActor in internal/plugin/event_emitter.go) already
-// surfaces with full context.
+// boundary — post-w9ml every stamp site stamps a valid ULID, and a failure
+// here indicates a contract violation upstream that the structured
+// emit-side gate (coreActorToEventbusActor in
+// internal/plugin/event_emitter.go) already surfaces with full context.
 func mapActor(a core.Actor) eventbus.Actor {
 	out := eventbus.Actor{Kind: mapActorKind(a.Kind)}
 	if a.ID == "" {

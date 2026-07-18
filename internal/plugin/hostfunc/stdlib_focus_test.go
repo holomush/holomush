@@ -15,9 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
-	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/session"
 	corecomm "github.com/holomush/holomush/plugins/core-communication"
@@ -91,7 +90,7 @@ func (m *mockFocusOps) GetConnectionFocus(_ context.Context, _ ulid.ULID) (*sess
 
 type mockHistoryReader struct {
 	calls  []historyCall
-	result []core.Event
+	result []eventbus.Event
 	err    error
 }
 
@@ -102,7 +101,7 @@ type historyCall struct {
 	beforeID  ulid.ULID
 }
 
-func (m *mockHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+func (m *mockHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	m.calls = append(m.calls, historyCall{stream, count, notBefore, beforeID})
 	return m.result, m.err
 }
@@ -341,7 +340,7 @@ func encodeTestCursor(t *testing.T, id ulid.ULID) string {
 }
 
 func TestQueryStreamHistoryCallsReaderWithCorrectArgs(t *testing.T) {
-	hr := &mockHistoryReader{result: []core.Event{}}
+	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`holomush.query_stream_history({stream="scene:01ABC:ic", count=10, not_before_ms=1700000000000})`)
@@ -355,15 +354,16 @@ func TestQueryStreamHistoryCallsReaderWithCorrectArgs(t *testing.T) {
 
 func TestQueryStreamHistoryReturnsResultTableWithEventsAndMeta(t *testing.T) {
 	targetID := ulid.Make()
-	ev := core.Event{
+	actorID := ulid.Make()
+	ev := eventbus.Event{
 		ID:        targetID,
-		Stream:    "scene:abc:ic",
-		Type:      eventvocab.EventType(corecomm.EventTypeSay),
+		Subject:   "scene:abc:ic",
+		Type:      eventbus.Type(corecomm.EventTypeSay),
 		Timestamp: time.UnixMilli(1700000000000).UTC(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: actorID},
 		Payload:   []byte(`{"msg":"hello"}`),
 	}
-	hr := &mockHistoryReader{result: []core.Event{ev}}
+	hr := &mockHistoryReader{result: []eventbus.Event{ev}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`
@@ -375,11 +375,34 @@ local e = result.events[1]
 assert(e.stream == "scene:abc:ic", "wrong stream: " .. tostring(e.stream))
 assert(e.type == "core-communication:say", "wrong type: " .. tostring(e.type))
 assert(e.actor_kind == "character", "wrong actor_kind: " .. tostring(e.actor_kind))
-assert(e.actor_id == "char-1", "wrong actor_id: " .. tostring(e.actor_id))
+assert(e.actor_id == "` + actorID.String() + `", "wrong actor_id: " .. tostring(e.actor_id))
 assert(e.payload == '{"msg":"hello"}', "wrong payload: " .. tostring(e.payload))
 assert(type(e.cursor) == "string", "expected cursor string, got: " .. type(e.cursor))
 assert(result.has_more == false, "expected has_more=false for partial page")
 assert(result.next_cursor == nil, "expected next_cursor=nil for partial page")
+`)
+	require.NoError(t, err)
+}
+
+// TestQueryStreamHistoryZeroActorIDRendersAsEmptyString locks in the
+// zero-ULID → "" mapping (actorIDString) so a system/anonymous actor renders
+// as the empty string plugins already observe, not the 26-char all-zeros
+// ULID text (cross-AI round 7, MEDIUM).
+func TestQueryStreamHistoryZeroActorIDRendersAsEmptyString(t *testing.T) {
+	ev := eventbus.Event{
+		ID:      ulid.Make(),
+		Subject: "scene:abc:ic",
+		Type:    eventbus.Type(corecomm.EventTypeSay),
+		Actor:   eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload: []byte(`{}`),
+	}
+	hr := &mockHistoryReader{result: []eventbus.Event{ev}}
+	L := newFocusTestState(t, nil, hr)
+
+	err := L.DoString(`
+local result = holomush.query_stream_history({stream="scene:abc:ic", count=5})
+local e = result.events[1]
+assert(e.actor_id == "", "expected zero actor ULID to render as empty string, got: " .. tostring(e.actor_id))
 `)
 	require.NoError(t, err)
 }
@@ -397,7 +420,7 @@ assert(errmsg == "store unavailable", "expected error message, got: " .. tostrin
 }
 
 func TestQueryStreamHistoryWithZeroNotBeforePassesZeroTime(t *testing.T) {
-	hr := &mockHistoryReader{result: []core.Event{}}
+	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=5})`)
@@ -431,7 +454,7 @@ func TestFocusFuncsWithNilOpsAreNoOps(t *testing.T) {
 }
 
 func TestQueryStreamHistoryClampsCountAbove500ToMax(t *testing.T) {
-	hr := &mockHistoryReader{result: []core.Event{}}
+	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=1000})`)
@@ -442,7 +465,7 @@ func TestQueryStreamHistoryClampsCountAbove500ToMax(t *testing.T) {
 }
 
 func TestQueryStreamHistoryClampsNegativeCountToZero(t *testing.T) {
-	hr := &mockHistoryReader{result: []core.Event{}}
+	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=-5})`)
@@ -454,9 +477,9 @@ func TestQueryStreamHistoryClampsNegativeCountToZero(t *testing.T) {
 
 func TestQueryStreamHistoryHasMoreTrueWhenFullPageReturned(t *testing.T) {
 	// 2 events returned for count=2 → has_more=true, next_cursor is set.
-	e1 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: eventvocab.EventType(corecomm.EventTypeSay)}
-	e2 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: eventvocab.EventType(corecomm.EventTypeSay)}
-	hr := &mockHistoryReader{result: []core.Event{e1, e2}}
+	e1 := eventbus.Event{ID: ulid.Make(), Subject: "scene:abc:ic", Type: eventbus.Type(corecomm.EventTypeSay)}
+	e2 := eventbus.Event{ID: ulid.Make(), Subject: "scene:abc:ic", Type: eventbus.Type(corecomm.EventTypeSay)}
+	hr := &mockHistoryReader{result: []eventbus.Event{e1, e2}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`
@@ -471,12 +494,12 @@ assert(#result.next_cursor > 0, "expected non-empty next_cursor")
 func TestQueryStreamHistoryCursorRoundTripsAsBase64(t *testing.T) {
 	// Encode a cursor, pass it back in the next call, verify beforeID is extracted.
 	eventID := ulid.Make()
-	ev := core.Event{
-		ID:     eventID,
-		Stream: "scene:abc:ic",
-		Type:   eventvocab.EventType(corecomm.EventTypeSay),
+	ev := eventbus.Event{
+		ID:      eventID,
+		Subject: "scene:abc:ic",
+		Type:    eventbus.Type(corecomm.EventTypeSay),
 	}
-	hr := &mockHistoryReader{result: []core.Event{ev}}
+	hr := &mockHistoryReader{result: []eventbus.Event{ev}}
 	L := newFocusTestState(t, nil, hr)
 
 	// First page — get cursor from first event.
@@ -488,7 +511,7 @@ _G.captured_cursor = result.events[1].cursor
 	require.NoError(t, err)
 
 	// Second call using the cursor — verify the call was made with the decoded beforeID.
-	hr.result = []core.Event{}
+	hr.result = []eventbus.Event{}
 	err = L.DoString(`
 local result2 = holomush.query_stream_history({stream="scene:abc:ic", count=5, cursor=_G.captured_cursor})
 assert(type(result2) == "table", "expected table on second call")
@@ -505,7 +528,7 @@ func TestQueryStreamHistoryPassesCursorToReaderAsBeforeID(t *testing.T) {
 	anchorID := ulid.Make()
 	cursorStr := encodeTestCursor(t, anchorID)
 
-	hr := &mockHistoryReader{result: []core.Event{}}
+	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=5, cursor="` + cursorStr + `"})`)
@@ -516,7 +539,7 @@ func TestQueryStreamHistoryPassesCursorToReaderAsBeforeID(t *testing.T) {
 }
 
 func TestQueryStreamHistoryReturnsErrorForInvalidBase64Cursor(t *testing.T) {
-	hr := &mockHistoryReader{result: []core.Event{}}
+	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`
@@ -529,7 +552,7 @@ assert(string.find(errmsg, "base64"), "expected base64 error, got: " .. tostring
 }
 
 func TestQueryStreamHistoryReturnsErrorWhenStreamMissing(t *testing.T) {
-	hr := &mockHistoryReader{result: []core.Event{}}
+	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`
@@ -541,7 +564,7 @@ assert(errmsg ~= nil, "expected error message")
 }
 
 func TestQueryStreamHistoryReturnsErrorWhenCountMissing(t *testing.T) {
-	hr := &mockHistoryReader{result: []core.Event{}}
+	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`

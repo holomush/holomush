@@ -6,6 +6,7 @@ package grpc
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,9 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
@@ -138,56 +137,84 @@ func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) sessio
 	return store
 }
 
-// eventbusToCoreAppender adapts an eventbus.Publisher.Publish call into a
-// core.EventAppender.Append call on the same store used for
-// dispatcher-emitted (command_response, say/pose/ooc) events — the reverse of
-// cmd/holomush/sub_grpc.go's busEventAppender.Append. This lets tests assert
-// both dispatcher-emitted and presence-emitted (arrive/leave/session_ended)
-// events via a single core.EventAppender.Replay call on one shared in-memory
-// store, matching this package's pre-migration (internal/core game-engine)
-// test shape.
-type eventbusToCoreAppender struct {
-	appender core.EventAppender
+// testEventStore is a fake eventbus.Publisher that records published events
+// per (game-relative) stream name, replacing the retired EventAppender-backed
+// in-memory store for this package's test suite now that the core-package
+// Event type and its appender interface are deleted (ARCH-04). It backs both
+// the presence emitter and CoreServer.publisher (WithEventPublisher)
+// in tests, and the say/pose/ooc test command handlers (registerTestCommands),
+// all writing into ONE shared in-memory log so tests can Replay-assert across
+// dispatcher-emitted and presence-emitted events — matching this package's
+// pre-migration (internal/core game-engine) test shape.
+type testEventStore struct {
+	mu          sync.RWMutex
+	streams     map[string][]eventbus.Event
+	publishFunc func(ctx context.Context, event eventbus.Event) error
 }
 
-func (a *eventbusToCoreAppender) Publish(ctx context.Context, ev eventbus.Event) error {
-	return a.appender.Append(ctx, core.Event{
-		ID:        ev.ID,
-		Stream:    strings.TrimPrefix(string(ev.Subject), "events.main."),
-		Type:      eventvocab.EventType(ev.Type),
-		Timestamp: ev.Timestamp,
-		Actor:     busActorToCoreActor(ev.Actor),
-		Payload:   ev.Payload,
-	})
+func newTestEventStore() *testEventStore {
+	return &testEventStore{streams: make(map[string][]eventbus.Event)}
 }
 
-var _ eventbus.Publisher = (*eventbusToCoreAppender)(nil)
+var _ eventbus.Publisher = (*testEventStore)(nil)
 
-// busActorToCoreActor is the test-side reverse of coreToBusActor
-// (cmd/holomush/sub_grpc.go).
-func busActorToCoreActor(a eventbus.Actor) core.Actor {
-	out := core.Actor{}
-	switch a.Kind {
-	case eventbus.ActorKindSystem:
-		out.Kind = core.ActorSystem
-	case eventbus.ActorKindPlugin:
-		out.Kind = core.ActorPlugin
-	default:
-		out.Kind = core.ActorCharacter
+// Publish satisfies eventbus.Publisher. The subject is stored under its
+// game-relative stream name (trimming the "events.main." qualification
+// prefix WithEventPublisher's gameID="main" always produces in this
+// package's fixtures) so Replay callers can look it up by the same relative
+// stream string production/test code emits with (e.g. "location.01ABC").
+func (s *testEventStore) Publish(ctx context.Context, event eventbus.Event) error {
+	if s.publishFunc != nil {
+		return s.publishFunc(ctx, event)
 	}
-	if a.ID != (ulid.ULID{}) {
-		out.ID = a.ID.String()
-	}
-	return out
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stream := strings.TrimPrefix(string(event.Subject), "events.main.")
+	s.streams[stream] = append(s.streams[stream], event)
+	return nil
 }
 
-// newTestPresenceEmitter builds a *presence.Emitter over store via
-// eventbusToCoreAppender, with gameID fixed to "main" (matching this
+// Replay returns events recorded for stream (game-relative form, e.g.
+// "character.01ABC") with ID greater than afterID, up to limit — mirroring
+// the retired coretest.MemoryEventStore.Replay test-inspection helper's
+// shape so existing assertions keep working against []eventbus.Event.
+func (s *testEventStore) Replay(_ context.Context, stream string, afterID ulid.ULID, limit int) ([]eventbus.Event, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	events := s.streams[stream]
+	if len(events) == 0 {
+		return nil, nil
+	}
+
+	startIdx := 0
+	if afterID.Compare(ulid.ULID{}) != 0 {
+		found := false
+		for i := range events {
+			if events[i].ID == afterID {
+				startIdx = i + 1
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, nil
+		}
+	}
+
+	endIdx := min(startIdx+limit, len(events))
+	result := make([]eventbus.Event, endIdx-startIdx)
+	copy(result, events[startIdx:endIdx])
+	return result, nil
+}
+
+// newTestPresenceEmitter builds a *presence.Emitter directly over store
+// (an eventbus.Publisher), with gameID fixed to "main" (matching this
 // package's test fixtures, which build relative streams like
-// "location."+id.String() and expect them to land unqualified in the shared
-// store).
-func newTestPresenceEmitter(store core.EventAppender) *presence.Emitter {
-	return presence.NewEmitter(&eventbusToCoreAppender{appender: store}, func() string { return "main" })
+// "location."+id.String() and expect them to land unqualified — i.e.
+// stripped of "events.main." — in the shared store).
+func newTestPresenceEmitter(store eventbus.Publisher) *presence.Emitter {
+	return presence.NewEmitter(store, func() string { return "main" })
 }
 
 // newHandleCommandServer creates a CoreServer wired with the unified command
@@ -196,7 +223,7 @@ func newTestPresenceEmitter(store core.EventAppender) *presence.Emitter {
 // The store is used for both the presence emitter and the say/pose/ooc
 // stub command handlers registerTestCommands registers. Pass a custom
 // sessStore to pre-populate sessions; nil uses a fresh Postgres-backed store.
-func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
+func newHandleCommandServer(t *testing.T, store eventbus.Publisher, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	pres := newTestPresenceEmitter(store)
 	if sessStore == nil {
@@ -219,7 +246,7 @@ func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore se
 	allOpts := make([]CoreServerOption, 0, 2+len(opts))
 	allOpts = append(
 		allOpts,
-		WithEventStore(store),
+		WithEventPublisher(store, func() string { return "main" }),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
 	allOpts = append(allOpts, opts...)
@@ -227,16 +254,16 @@ func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore se
 	return NewCoreServer(pres, sessStore, dispatcher, svc, allOpts...)
 }
 
-// mockEventStore implements core.EventAppender for testing.
+// mockEventStore implements eventbus.Publisher for testing.
 type mockEventStore struct {
-	appendFunc func(ctx context.Context, event core.Event) error
+	publishFunc func(ctx context.Context, event eventbus.Event) error
 }
 
-func (m *mockEventStore) Append(ctx context.Context, event core.Event) error {
-	if m.appendFunc != nil {
-		return m.appendFunc(ctx, event)
+func (m *mockEventStore) Publish(ctx context.Context, event eventbus.Event) error {
+	if m.publishFunc != nil {
+		return m.publishFunc(ctx, event)
 	}
 	return nil
 }
 
-var _ core.EventAppender = (*mockEventStore)(nil)
+var _ eventbus.Publisher = (*mockEventStore)(nil)

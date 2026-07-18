@@ -148,8 +148,8 @@ func TestEmitArrivePublishesOnFullyQualifiedSubject(t *testing.T) {
 }
 
 // TestEmitArriveFallsBackToMainGameIDWhenGameIDFuncReturnsEmpty proves the
-// gameID()=="" -> "main" fallback, the same fallback busEventAppender.Append
-// had (cmd/holomush/sub_grpc.go:822-825).
+// gameID()=="" -> "main" fallback, the same fallback the retired JetStream
+// event-appender had.
 func TestEmitArriveFallsBackToMainGameIDWhenGameIDFuncReturnsEmpty(t *testing.T) {
 	pub := &fakePublisher{}
 	e := NewEmitter(pub, func() string { return "" })
@@ -163,5 +163,5 @@ func TestEmitArriveFallsBackToMainGameIDWhenGameIDFuncReturnsEmpty(t *testing.T)
 	events := pub.events()
 	require.Len(t, events, 1)
 	assert.True(t, strings.HasPrefix(string(events[0].Subject), "events.main."),
-		"an empty gameID() must fall back to 'main', matching busEventAppender.Append's fallback")
+		"an empty gameID() must fall back to 'main'")
 }

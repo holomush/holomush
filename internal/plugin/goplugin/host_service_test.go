@@ -107,7 +107,7 @@ var _ focus.Coordinator = (*stubCoordinator)(nil)
 // stubHistoryReader implements plugins.HistoryReader for testing.
 type stubHistoryReader struct {
 	replayTailCalls  []replayTailCall
-	replayTailResult []core.Event
+	replayTailResult []eventbus.Event
 	replayTailErr    error
 }
 
@@ -118,7 +118,7 @@ type replayTailCall struct {
 	beforeID  ulid.ULID
 }
 
-func (s *stubHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+func (s *stubHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	s.replayTailCalls = append(s.replayTailCalls, replayTailCall{stream, count, notBefore, beforeID})
 	return s.replayTailResult, s.replayTailErr
 }
@@ -360,8 +360,8 @@ func TestPresentFocusReturnsErrorWhenCoordinatorFails(t *testing.T) {
 
 func TestQueryStreamHistoryDelegatesToEventStore(t *testing.T) {
 	es := &stubHistoryReader{
-		replayTailResult: []core.Event{
-			{Stream: "channel.abc", Type: "say", Payload: []byte(`{"text":"hi"}`)},
+		replayTailResult: []eventbus.Event{
+			{Subject: "channel.abc", Type: "say", Payload: []byte(`{"text":"hi"}`)},
 		},
 	}
 	srv := newTestServer(nil, es)
@@ -482,8 +482,8 @@ func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
 func TestQueryStreamHistoryPopulatesPerEventCursors(t *testing.T) {
 	evID := ulid.Make()
 	es := &stubHistoryReader{
-		replayTailResult: []core.Event{
-			{ID: evID, Stream: "channel.abc", Type: "say", Payload: []byte(`{}`)},
+		replayTailResult: []eventbus.Event{
+			{ID: evID, Subject: "channel.abc", Type: "say", Payload: []byte(`{}`)},
 		},
 	}
 	srv := newTestServer(nil, es)
@@ -546,9 +546,9 @@ func TestQueryStreamHistoryRejectsInvalidCursorBytes(t *testing.T) {
 
 func TestQueryStreamHistorySetsNextCursorWhenPageFull(t *testing.T) {
 	// When len(events) == count, next_cursor should be populated.
-	evts := make([]core.Event, 0, 3)
+	evts := make([]eventbus.Event, 0, 3)
 	for range 3 {
-		evts = append(evts, core.Event{ID: ulid.Make(), Stream: "channel.abc", Type: "say", Payload: []byte(`{}`)})
+		evts = append(evts, eventbus.Event{ID: ulid.Make(), Subject: "channel.abc", Type: "say", Payload: []byte(`{}`)})
 	}
 	es := &stubHistoryReader{replayTailResult: evts}
 	srv := newTestServer(nil, es)
@@ -562,8 +562,8 @@ func TestQueryStreamHistorySetsNextCursorWhenPageFull(t *testing.T) {
 }
 
 func TestQueryStreamHistoryNextCursorEmptyWhenFewerEventsThanCount(t *testing.T) {
-	evts := []core.Event{
-		{ID: ulid.Make(), Stream: "channel.abc", Type: "say", Payload: []byte(`{}`)},
+	evts := []eventbus.Event{
+		{ID: ulid.Make(), Subject: "channel.abc", Type: "say", Payload: []byte(`{}`)},
 	}
 	es := &stubHistoryReader{replayTailResult: evts}
 	srv := newTestServer(nil, es)

@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -108,7 +109,7 @@ func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.NewEvent(world.CharacterStream(charID), eventvocab.EventTypeMove, core.Actor{}, movePayload)
+	event := eventbus.NewEvent(eventbus.Subject(world.CharacterStream(charID)), eventbus.Type(eventvocab.EventTypeMove), eventbus.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -131,7 +132,7 @@ func TestLocationFollower_HandleEvent_IgnoresNonMoveEvents(t *testing.T) {
 		worldQuerier: &mockWorldQuerier{},
 	}
 
-	event := core.NewEvent("", eventvocab.EventType(corecomm.EventTypeSay), core.Actor{}, nil)
+	event := eventbus.NewEvent("", eventbus.Type(corecomm.EventTypeSay), eventbus.Actor{}, nil)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -162,7 +163,7 @@ func TestLocationFollower_HandleEvent_IgnoresOtherCharacterMoves(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.NewEvent("", eventvocab.EventTypeMove, core.Actor{}, movePayload)
+	event := eventbus.NewEvent("", eventbus.Type(eventvocab.EventTypeMove), eventbus.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -194,7 +195,7 @@ func TestLocationFollower_HandleEvent_IgnoresObjectMoves(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.NewEvent("", eventvocab.EventTypeMove, core.Actor{}, movePayload)
+	event := eventbus.NewEvent("", eventbus.Type(eventvocab.EventTypeMove), eventbus.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -210,7 +211,7 @@ func TestLocationFollower_HandleEvent_NilWorldQuerier(t *testing.T) {
 		worldQuerier: nil,
 	}
 
-	event := core.NewEvent("", eventvocab.EventTypeMove, core.Actor{}, nil)
+	event := eventbus.NewEvent("", eventbus.Type(eventvocab.EventTypeMove), eventbus.Actor{}, nil)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)

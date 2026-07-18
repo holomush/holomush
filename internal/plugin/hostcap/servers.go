@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -891,9 +892,9 @@ func (s *streamHistoryServer) QueryStreamHistory(ctx context.Context, req *hostv
 	}
 
 	protoEvents := make([]*hostv1.Event, 0, len(events))
-	for _, e := range events {
-		pe := coreEventToProto(e)
-		pe.Cursor = encodeHostEventCursor(e.ID)
+	for i := range events {
+		pe := eventbusEventToProto(events[i])
+		pe.Cursor = encodeHostEventCursor(events[i].ID)
 		protoEvents = append(protoEvents, pe)
 	}
 
@@ -1295,15 +1296,28 @@ func encodeHostEventCursor(id ulid.ULID) []byte {
 	return b
 }
 
-// coreEventToProto converts a core.Event to the host.v1 Event.
-func coreEventToProto(e core.Event) *hostv1.Event {
+// actorIDString renders an event actor's ULID for the plugin-facing
+// host.v1.Event.actor_id field, mapping the zero ULID (anonymous/system-
+// unset) to the empty string rather than its 26-char Crockford text.
+// Mirrors the deleted busEventToCoreEvent's deliberate zero→"" mapping
+// (cmd/holomush/sub_grpc.go, pre-ARCH-04) and the precedent at
+// internal/grpc/server.go's actorIDString (cross-AI round 7, MEDIUM).
+func actorIDString(id ulid.ULID) string {
+	if id == (ulid.ULID{}) {
+		return ""
+	}
+	return id.String()
+}
+
+// eventbusEventToProto converts an eventbus.Event to the host.v1 Event.
+func eventbusEventToProto(e eventbus.Event) *hostv1.Event {
 	return &hostv1.Event{
 		Id:        e.ID.String(),
-		Stream:    e.Stream,
+		Stream:    string(e.Subject),
 		Type:      string(e.Type),
 		Timestamp: e.Timestamp.UnixMilli(),
 		ActorKind: e.Actor.Kind.String(),
-		ActorId:   e.Actor.ID,
+		ActorId:   actorIDString(e.Actor.ID),
 		Payload:   string(e.Payload),
 	}
 }

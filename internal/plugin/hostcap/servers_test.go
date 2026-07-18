@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
 
@@ -82,24 +82,42 @@ func TestProtoToFocusKindReturnsErrorForUnspecified(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported focus kind")
 }
 
-func TestCoreEventToProtoConvertsAllFields(t *testing.T) {
+func TestEventbusEventToProtoConvertsAllFields(t *testing.T) {
 	eventID := ulid.Make()
+	actorID := ulid.Make()
 	ts := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
-	e := core.Event{
+	e := eventbus.Event{
 		ID:        eventID,
-		Stream:    "scene:abc:ic",
+		Subject:   "scene:abc:ic",
 		Type:      "say",
 		Timestamp: ts,
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: actorID},
 		Payload:   []byte(`{"text":"hello"}`),
 	}
 
-	pe := coreEventToProto(e)
+	pe := eventbusEventToProto(e)
 	assert.Equal(t, eventID.String(), pe.GetId())
 	assert.Equal(t, "scene:abc:ic", pe.GetStream())
 	assert.Equal(t, "say", pe.GetType())
 	assert.Equal(t, ts.UnixMilli(), pe.GetTimestamp())
 	assert.Equal(t, "character", pe.GetActorKind())
-	assert.Equal(t, "char-1", pe.GetActorId())
+	assert.Equal(t, actorID.String(), pe.GetActorId())
 	assert.Equal(t, `{"text":"hello"}`, pe.GetPayload())
+}
+
+// TestEventbusEventToProtoZeroActorIDRendersAsEmptyString locks in the
+// zero-ULID → "" mapping (actorIDString) so a system/anonymous actor renders
+// as the empty string plugins already observe, not the 26-char all-zeros
+// ULID text (cross-AI round 7, MEDIUM).
+func TestEventbusEventToProtoZeroActorIDRendersAsEmptyString(t *testing.T) {
+	e := eventbus.Event{
+		ID:      ulid.Make(),
+		Subject: "scene:abc:ic",
+		Type:    "say",
+		Actor:   eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload: []byte(`{}`),
+	}
+
+	pe := eventbusEventToProto(e)
+	assert.Empty(t, pe.GetActorId(), "expected zero actor ULID to render as empty string")
 }

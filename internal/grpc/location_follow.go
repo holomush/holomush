@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -55,16 +56,15 @@ type locationFollower struct {
 // Returns true if a location_state was sent (caller may skip duplicate forwarding).
 func (lf *locationFollower) handleEvent(
 	ctx context.Context,
-	event core.Event,
+	event eventbus.Event,
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 ) bool {
-	return lf.handleMovePayload(ctx, event.Type, event.Payload, stream)
+	return lf.handleMovePayload(ctx, eventvocab.EventType(event.Type), event.Payload, stream)
 }
 
 // handleMovePayload is the bus-friendly entry point: it takes the typed
-// event kind and raw payload bytes instead of a full core.Event literal,
-// sidestepping the I-16 ruleguard (which forbids core.Event{} outside
-// core.NewEvent). Semantically identical to handleEvent.
+// event kind and raw payload bytes instead of a full eventbus.Event literal.
+// Semantically identical to handleEvent.
 func (lf *locationFollower) handleMovePayload(
 	ctx context.Context,
 	eventType eventvocab.EventType,

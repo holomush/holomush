@@ -23,7 +23,6 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/control"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/grpcclient"
@@ -36,15 +35,9 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// noopEventStore is a stub EventAppender for tests that don't exercise event functionality.
-type noopEventStore struct{}
-
-func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return nil }
-
-var _ core.EventAppender = (*noopEventStore)(nil)
-
-// noopPublisher is a stub eventbus.Publisher for the presence emitter in
-// tests that don't exercise arrive/leave/session_ended delivery.
+// noopPublisher is a stub eventbus.Publisher for the presence emitter and
+// CoreServer.publisher in tests that don't exercise
+// arrive/leave/session_ended or command_response/command_error delivery.
 type noopPublisher struct{}
 
 func (n *noopPublisher) Publish(_ context.Context, _ eventbus.Event) error { return nil }
@@ -270,13 +263,12 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
-			eventStore := &noopEventStore{}
 			presenceEmitter := presence.NewEmitter(&noopPublisher{}, func() string { return "main" })
 
 			// Create gRPC server with mTLS
 			disp, cmdSvc := newMinimalDispatcher()
 			coreServer := grpcpkg.NewCoreServer(presenceEmitter, env.sessionStore, disp, cmdSvc,
-				grpcpkg.WithEventStore(eventStore))
+				grpcpkg.WithEventPublisher(&noopPublisher{}, func() string { return "main" }))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -342,13 +334,12 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
-			eventStore := &noopEventStore{}
 			presenceEmitter := presence.NewEmitter(&noopPublisher{}, func() string { return "main" })
 
 			// Create gRPC server with mTLS
 			disp, cmdSvc := newMinimalDispatcher()
 			coreServer := grpcpkg.NewCoreServer(presenceEmitter, env.sessionStore, disp, cmdSvc,
-				grpcpkg.WithEventStore(eventStore))
+				grpcpkg.WithEventPublisher(&noopPublisher{}, func() string { return "main" }))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -506,12 +497,11 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			serverTLS, err := tlscerts.LoadServerTLS(env.certsDir, "core")
 			Expect(err).NotTo(HaveOccurred())
 
-			eventStore := &noopEventStore{}
 			presenceEmitter := presence.NewEmitter(&noopPublisher{}, func() string { return "main" })
 
 			disp, cmdSvc := newMinimalDispatcher()
 			coreServer := grpcpkg.NewCoreServer(presenceEmitter, env.sessionStore, disp, cmdSvc,
-				grpcpkg.WithEventStore(eventStore))
+				grpcpkg.WithEventPublisher(&noopPublisher{}, func() string { return "main" }))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 

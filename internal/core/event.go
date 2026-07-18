@@ -5,11 +5,7 @@
 package core
 
 import (
-	"time"
-
 	"github.com/oklog/ulid/v2"
-
-	"github.com/holomush/holomush/internal/eventvocab"
 )
 
 // ActorKind identifies what type of entity caused an event.
@@ -55,10 +51,10 @@ var WorldServiceActorULID = ulid.ULID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 // changes (string → ULID-string).
 var ActorSystemID = SystemActorULID.String()
 
-// SystemBroadcastSubject is the reserved stream (the `stream` argument to
-// NewEvent) for grid-wide system broadcasts — server announcements and the
-// admin `wall` command. The event appender qualifies it to
-// events.<game_id>.system at the emit boundary. Both the command-layer
+// SystemBroadcastSubject is the reserved stream (the `subject` argument to
+// eventbus.NewEvent) for grid-wide system broadcasts — server announcements
+// and the admin `wall` command. internal/sysbroadcast.Broadcaster qualifies
+// it to events.<game_id>.system at the emit boundary. Both the command-layer
 // broadcast path (command.Services.BroadcastSystemMessage / the shutdown
 // command) and the plugin-host SessionAdmin broadcast backing
 // (hostcap.NewSystemBroadcaster, decision holomush-t019a) MUST agree on this
@@ -100,37 +96,4 @@ type Actor struct {
 	// core.Actor has no Unknown kind — empty ID is undefined behavior at
 	// the core layer; the bus translation maps to ActorKindUnknown.
 	ID string
-}
-
-// Event represents something that happened in the game world.
-type Event struct {
-	ID        ulid.ULID
-	Stream    string // e.g., "location.01ABC", "character.01XYZ"
-	Type      eventvocab.EventType
-	Timestamp time.Time
-	Actor     Actor
-	Payload   []byte // JSON
-}
-
-// NewEvent constructs an Event with a monotonic ULID (from NewULID) and
-// the current timestamp. This is the ONLY blessed construction path for
-// events that will be appended to an EventStore.
-//
-// Invariant I-16 (Event ID Monotonicity): every event appended to
-// EventStore MUST be constructed via NewEvent, which assigns the ID from
-// NewULID() -- a monotonic-within-millisecond generator. idgen.New() and
-// ulid.Make() are forbidden for event IDs because they produce
-// non-monotonic IDs that silently break PostgresEventStore.Replay
-// (WHERE id > afterID ORDER BY id) and cursor CAS advances.
-//
-// See docs/superpowers/specs/2026-04-11-focus-substrate-design.md section 3.1.
-func NewEvent(stream string, eventType eventvocab.EventType, actor Actor, payload []byte) Event {
-	return Event{
-		ID:        NewULID(),
-		Stream:    stream,
-		Type:      eventType,
-		Timestamp: time.Now(),
-		Actor:     actor,
-		Payload:   payload,
-	}
 }

@@ -18,7 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/core/coretest"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/sessiontest"
@@ -35,7 +35,7 @@ import (
 // so its say/pose/ooc stub handlers can append fabricated events into the
 // same shared in-memory store the presence emitter and dispatcher-emitted
 // events use, for store.Replay-based assertions.
-func registerTestCommands(t *testing.T, reg *command.Registry, store core.EventAppender) {
+func registerTestCommands(t *testing.T, reg *command.Registry, store eventbus.Publisher) {
 	t.Helper()
 	handlers.RegisterAll(reg)
 	mustRegister := func(cfg command.CommandEntryConfig) {
@@ -52,13 +52,13 @@ func registerTestCommands(t *testing.T, reg *command.Registry, store core.EventA
 				"character_name": exec.CharacterName(),
 				"message":        exec.Args,
 			})
-			event := core.NewEvent(
-				"location."+exec.LocationID().String(),
-				eventvocab.EventType(corecomm.EventTypeSay),
-				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+			event := eventbus.NewEvent(
+				eventbus.Subject("location."+exec.LocationID().String()),
+				eventbus.Type(corecomm.EventTypeSay),
+				eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: exec.CharacterID()},
 				payload,
 			)
-			return store.Append(ctx, event)
+			return store.Publish(ctx, event)
 		},
 	})
 	mustRegister(command.CommandEntryConfig{
@@ -69,13 +69,13 @@ func registerTestCommands(t *testing.T, reg *command.Registry, store core.EventA
 				"character_name": exec.CharacterName(),
 				"action":         exec.Args,
 			})
-			event := core.NewEvent(
-				"location."+exec.LocationID().String(),
-				eventvocab.EventType(corecomm.EventTypePose),
-				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+			event := eventbus.NewEvent(
+				eventbus.Subject("location."+exec.LocationID().String()),
+				eventbus.Type(corecomm.EventTypePose),
+				eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: exec.CharacterID()},
 				payload,
 			)
-			return store.Append(ctx, event)
+			return store.Publish(ctx, event)
 		},
 	})
 	mustRegister(command.CommandEntryConfig{
@@ -87,27 +87,27 @@ func registerTestCommands(t *testing.T, reg *command.Registry, store core.EventA
 				Message:       exec.Args,
 				Style:         "say",
 			})
-			event := core.NewEvent(
-				"location."+exec.LocationID().String(),
-				eventvocab.EventType(corecomm.EventTypeOOC),
-				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+			event := eventbus.NewEvent(
+				eventbus.Subject("location."+exec.LocationID().String()),
+				eventbus.Type(corecomm.EventTypeOOC),
+				eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: exec.CharacterID()},
 				payload,
 			)
-			return store.Append(ctx, event)
+			return store.Publish(ctx, event)
 		},
 	})
 }
 
 // newDispatcherTestServer creates a CoreServer wired with the unified
 // command dispatcher, using in-memory stores for testing.
-func newDispatcherTestServer(t *testing.T, store core.EventAppender, opts ...CoreServerOption) *CoreServer {
+func newDispatcherTestServer(t *testing.T, store eventbus.Publisher, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	return newHandleCommandServer(t, store, nil, opts...)
 }
 
 // newDispatcherTestServerWithAliases creates a CoreServer with MUSH aliases
 // (`:`, `;`, `"`) loaded into the alias cache, matching production bootstrap.
-func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, opts ...CoreServerOption) *CoreServer {
+func newDispatcherTestServerWithAliases(t *testing.T, store eventbus.Publisher, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	pres := newTestPresenceEmitter(store)
 	sessStore := sessiontest.NewStore(t)
@@ -138,7 +138,7 @@ func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, 
 	allOpts := make([]CoreServerOption, 0, 2+len(opts))
 	allOpts = append(
 		allOpts,
-		WithEventStore(store),
+		WithEventPublisher(store, func() string { return "main" }),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
 	allOpts = append(allOpts, opts...)
@@ -151,9 +151,9 @@ func TestDispatcher_HandleCommand_Say(t *testing.T) {
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
 
-	var appended []core.Event
+	var appended []eventbus.Event
 	store := &mockEventStore{
-		appendFunc: func(_ context.Context, event core.Event) error {
+		publishFunc: func(_ context.Context, event eventbus.Event) error {
 			appended = append(appended, event)
 			return nil
 		},
@@ -181,8 +181,8 @@ func TestDispatcher_HandleCommand_Say(t *testing.T) {
 
 	// Should emit a say event on the location stream
 	require.NotEmpty(t, appended)
-	assert.Equal(t, eventvocab.EventType(corecomm.EventTypeSay), appended[0].Type)
-	assert.Equal(t, "location."+locationID.String(), appended[0].Stream)
+	assert.Equal(t, eventbus.Type(corecomm.EventTypeSay), appended[0].Type)
+	assert.Equal(t, eventbus.Subject("location."+locationID.String()), appended[0].Subject)
 }
 
 func TestDispatcher_HandleCommand_Pose(t *testing.T) {
@@ -190,9 +190,9 @@ func TestDispatcher_HandleCommand_Pose(t *testing.T) {
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
 
-	var appended []core.Event
+	var appended []eventbus.Event
 	store := &mockEventStore{
-		appendFunc: func(_ context.Context, event core.Event) error {
+		publishFunc: func(_ context.Context, event eventbus.Event) error {
 			appended = append(appended, event)
 			return nil
 		},
@@ -219,7 +219,7 @@ func TestDispatcher_HandleCommand_Pose(t *testing.T) {
 	assert.True(t, resp.Success, "pose should succeed: %s", resp.Error)
 
 	require.NotEmpty(t, appended)
-	assert.Equal(t, eventvocab.EventType(corecomm.EventTypePose), appended[0].Type)
+	assert.Equal(t, eventbus.Type(corecomm.EventTypePose), appended[0].Type)
 }
 
 func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
@@ -227,9 +227,9 @@ func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
 
-	var appended []core.Event
+	var appended []eventbus.Event
 	store := &mockEventStore{
-		appendFunc: func(_ context.Context, event core.Event) error {
+		publishFunc: func(_ context.Context, event eventbus.Event) error {
 			appended = append(appended, event)
 			return nil
 		},
@@ -256,14 +256,14 @@ func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
 	assert.True(t, resp.Success, ": should expand to pose via alias: %s", resp.Error)
 
 	require.NotEmpty(t, appended)
-	assert.Equal(t, eventvocab.EventType(corecomm.EventTypePose), appended[0].Type)
+	assert.Equal(t, eventbus.Type(corecomm.EventTypePose), appended[0].Type)
 }
 
 func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
-	store := coretest.NewMemoryEventStore()
+	store := newTestEventStore()
 
 	server := newDispatcherTestServer(t, store)
 
@@ -289,7 +289,7 @@ func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents, "expected command_response event")
-	assert.Equal(t, eventvocab.EventTypeCommandError, charEvents[0].Type)
+	assert.Equal(t, eventbus.Type(eventvocab.EventTypeCommandError), charEvents[0].Type)
 
 	var crp eventvocab.CommandResponsePayload
 	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp))
@@ -299,7 +299,7 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
-	store := coretest.NewMemoryEventStore()
+	store := newTestEventStore()
 
 	var hookCalled bool
 	server := newDispatcherTestServer(
@@ -337,13 +337,13 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 	locEvents, err := store.Replay(ctx, "location."+locationID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.Len(t, locEvents, 1, "expected exactly one leave event")
-	assert.Equal(t, eventvocab.EventTypeLeave, locEvents[0].Type)
+	assert.Equal(t, eventbus.Type(eventvocab.EventTypeLeave), locEvents[0].Type)
 
 	// Goodbye command_response event on character stream
 	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents)
-	assert.Equal(t, eventvocab.EventTypeCommandResponse, charEvents[0].Type)
+	assert.Equal(t, eventbus.Type(eventvocab.EventTypeCommandResponse), charEvents[0].Type)
 
 	var crp eventvocab.CommandResponsePayload
 	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp))
@@ -361,7 +361,7 @@ func TestQuitPathAppendsSessionEndedOnCharacterStream(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
-	store := coretest.NewMemoryEventStore()
+	store := newTestEventStore()
 
 	server := newDispatcherTestServer(t, store)
 
@@ -390,16 +390,16 @@ func TestQuitPathAppendsSessionEndedOnCharacterStream(t *testing.T) {
 	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 
-	var sessionEnded *core.Event
+	var sessionEnded *eventbus.Event
 	for i := range charEvents {
-		if charEvents[i].Type == eventvocab.EventTypeSessionEnded {
+		if charEvents[i].Type == eventbus.Type(eventvocab.EventTypeSessionEnded) {
 			sessionEnded = &charEvents[i]
 			break
 		}
 	}
 	require.NotNil(t, sessionEnded, "expected a session_ended event on character stream")
-	assert.Equal(t, "character."+charID.String(), sessionEnded.Stream)
-	assert.Equal(t, core.ActorCharacter, sessionEnded.Actor.Kind,
+	assert.Equal(t, eventbus.Subject("events.main.character."+charID.String()), sessionEnded.Subject)
+	assert.Equal(t, eventbus.ActorKindCharacter, sessionEnded.Actor.Kind,
 		"cause=quit uses ActorCharacter per Design Decision #1")
 
 	var payload core.SessionEndedPayload
@@ -420,7 +420,7 @@ func TestGuestDisconnectEmitsSessionEndedOnCharacterStream(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
-	store := coretest.NewMemoryEventStore()
+	store := newTestEventStore()
 
 	server := newDispatcherTestServer(t, store)
 
@@ -449,15 +449,15 @@ func TestGuestDisconnectEmitsSessionEndedOnCharacterStream(t *testing.T) {
 	charEvents, err := store.Replay(ctx, "character."+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 
-	var sessionEnded *core.Event
+	var sessionEnded *eventbus.Event
 	for i := range charEvents {
-		if charEvents[i].Type == eventvocab.EventTypeSessionEnded {
+		if charEvents[i].Type == eventbus.Type(eventvocab.EventTypeSessionEnded) {
 			sessionEnded = &charEvents[i]
 			break
 		}
 	}
 	require.NotNil(t, sessionEnded, "expected a session_ended event on character stream for guest disconnect")
-	assert.Equal(t, "character."+charID.String(), sessionEnded.Stream)
+	assert.Equal(t, eventbus.Subject("events.main.character."+charID.String()), sessionEnded.Subject)
 
 	var payload core.SessionEndedPayload
 	require.NoError(t, json.Unmarshal(sessionEnded.Payload, &payload))
@@ -503,7 +503,7 @@ func TestDisconnectGatesGuestCleanupOnRemovalSignal(t *testing.T) {
 			charID := core.NewULID()
 			sessionID := core.NewULID()
 			locationID := core.NewULID()
-			store := coretest.NewMemoryEventStore()
+			store := newTestEventStore()
 			server := newDispatcherTestServer(t, store)
 
 			ctx := context.Background()
@@ -537,7 +537,7 @@ func TestDisconnectGatesGuestCleanupOnRemovalSignal(t *testing.T) {
 			require.NoError(t, err)
 			ended := 0
 			for i := range charEvents {
-				if charEvents[i].Type == eventvocab.EventTypeSessionEnded {
+				if charEvents[i].Type == eventbus.Type(eventvocab.EventTypeSessionEnded) {
 					ended++
 				}
 			}
@@ -613,7 +613,7 @@ func TestDisconnectToleratesStoreCountErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			charID := core.NewULID()
 			sessionID := core.NewULID()
-			store := coretest.NewMemoryEventStore()
+			store := newTestEventStore()
 			server := newDispatcherTestServer(t, store)
 
 			ctx := context.Background()
@@ -652,7 +652,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	targetSessionID := core.NewULID()
 	targetLocationID := core.NewULID()
 
-	store := coretest.NewMemoryEventStore()
+	store := newTestEventStore()
 
 	// Build a server with a "testboot" command that records the target
 	// session as booted. Server teardown logic then emits the session_ended
@@ -689,7 +689,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 
 	server := NewCoreServer(
 		pres, sessStore, dispatcher, svc,
-		WithEventStore(store),
+		WithEventPublisher(store, func() string { return "main" }),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
 
@@ -726,15 +726,15 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	charEvents, err := store.Replay(ctx, "character."+targetCharID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 
-	var sessionEnded *core.Event
+	var sessionEnded *eventbus.Event
 	for i := range charEvents {
-		if charEvents[i].Type == eventvocab.EventTypeSessionEnded {
+		if charEvents[i].Type == eventbus.Type(eventvocab.EventTypeSessionEnded) {
 			sessionEnded = &charEvents[i]
 			break
 		}
 	}
 	require.NotNil(t, sessionEnded, "expected a session_ended event on target character stream for admin boot")
-	assert.Equal(t, "character."+targetCharID.String(), sessionEnded.Stream)
+	assert.Equal(t, eventbus.Subject("events.main.character."+targetCharID.String()), sessionEnded.Subject)
 
 	var payload core.SessionEndedPayload
 	require.NoError(t, json.Unmarshal(sessionEnded.Payload, &payload))
@@ -759,10 +759,10 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 	targetSessionID := core.NewULID()
 	targetLocationID := core.NewULID()
 
-	// Fail Append for session_ended events specifically; allow all others.
+	// Fail publish for session_ended events specifically; allow all others.
 	store := &mockEventStore{
-		appendFunc: func(_ context.Context, ev core.Event) error {
-			if ev.Type == eventvocab.EventTypeSessionEnded {
+		publishFunc: func(_ context.Context, ev eventbus.Event) error {
+			if ev.Type == eventbus.Type(eventvocab.EventTypeSessionEnded) {
 				return errors.New("event store unavailable")
 			}
 			return nil
@@ -799,7 +799,7 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 	var hookCalled bool
 	server := NewCoreServer(
 		pres, sessStore, dispatcher, svc,
-		WithEventStore(store),
+		WithEventPublisher(store, func() string { return "main" }),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 		WithDisconnectHook(func(_ session.Info) {
 			hookCalled = true
@@ -884,7 +884,7 @@ func TestHandleCommand_ConnectionIDThreadedToExecution(t *testing.T) {
 
 	server := NewCoreServer(
 		pres, sessStore, dispatcher, svc,
-		WithEventStore(store),
+		WithEventPublisher(store, func() string { return "main" }),
 		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
 

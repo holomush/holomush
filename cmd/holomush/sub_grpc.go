@@ -38,7 +38,6 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	"github.com/holomush/holomush/internal/eventbus/history/source"
-	"github.com/holomush/holomush/internal/eventvocab"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
@@ -152,8 +151,8 @@ func newGRPCSubsystem(cfg grpcSubsystemConfig) *grpcSubsystem {
 }
 
 // wrapPublisher wraps the raw EventBus publisher with RenderingPublisher
-// so all emit-site callers (pluginManager and busEventAppender) get
-// rendering-metadata enrichment for free. Returns an error if the verb
+// so all emit-site callers (pluginManager and CoreServer.emitCommandResponse)
+// get rendering-metadata enrichment for free. Returns an error if the verb
 // registry is not configured.
 func (s *grpcSubsystem) wrapPublisher(raw eventbus.Publisher) (eventbus.Publisher, error) {
 	if s.cfg.VerbRegistry == nil {
@@ -234,9 +233,10 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	}
 
 	// Gather dependencies from subsystems.
-	// F7: EventWriter and PG events table are gone. Append goes directly to
-	// JetStream via busEventAppender. rawEventStore is kept only for
-	// system-info / game-ID (GetSystemInfo / InitGameID) used by GameSettings.
+	// F7: EventWriter and PG events table are gone. CoreServer.emitCommandResponse
+	// publishes directly to JetStream via WithEventPublisher. rawEventStore is
+	// kept only for system-info / game-ID (GetSystemInfo / InitGameID) used by
+	// GameSettings.
 	rawEventStore := s.cfg.DB.EventStore()
 	pool := s.cfg.DB.Pool()
 	policyEngine := s.cfg.ABAC.Engine()
@@ -280,13 +280,6 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		plugins.WithGameID(s.cfg.EventBus.GameID),
 	)
 
-	// F7: build the JetStream-backed EventAppender. All host-engine Append
-	// calls publish directly to JetStream; the PG events table is gone.
-	eventStore := &busEventAppender{
-		publisher: publisher,
-		bus:       s.cfg.EventBus,
-	}
-
 	// bus is the one game-id source shared by every closure below — the
 	// presence emitter, the SessionAdmin broadcast backing, and (Task 3)
 	// command.Services' SystemBroadcaster all qualify subjects off the same
@@ -301,10 +294,10 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	s.cfg.Plugins.ConfigureSystemBroadcaster(publisher, func() string { return bus.GameID() })
 
 	// 1. Create the presence emitter (arrive/leave/session_ended) over the
-	// SAME wrapped publisher busEventAppender uses (never rawPublisher — the
-	// audit projection fails closed without the App-Rendering header the
-	// wrapper stamps), plus the bus's own GameID as the qualification source
-	// (FINDING-5).
+	// SAME wrapped publisher CoreServer.emitCommandResponse uses (never
+	// rawPublisher — the audit projection fails closed without the
+	// App-Rendering header the wrapper stamps), plus the bus's own GameID
+	// as the qualification source (FINDING-5).
 	presenceEmitter := presence.NewEmitter(publisher, s.cfg.EventBus.GameID)
 
 	// Wire game-session fanout into the auth service so evictions emit
@@ -532,7 +525,10 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		s.cfg.KeySelector, alwaysSensitive, cryptoKeysLookupForFence, violationEmitterForFence)
 
 	coreServerOpts := []holoGRPC.CoreServerOption{
-		holoGRPC.WithEventStore(eventStore),
+		// The wrapped publisher (RenderingPublisher) is used here — NEVER
+		// rawPublisher — so command_response/command_error events carry the
+		// App-Rendering header the audit projection requires (round 7, MEDIUM).
+		holoGRPC.WithEventPublisher(publisher, s.cfg.EventBus.GameID),
 		holoGRPC.WithWorldQuerier(worldService),
 		holoGRPC.WithAuthService(authService),
 		holoGRPC.WithResetService(resetService),
@@ -557,6 +553,10 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		holoGRPC.WithCommandQuerier(s.cfg.Plugins.CommandQuerier()),
 		holoGRPC.WithSubscriber(subscriber),
 		holoGRPC.WithHistoryReader(historyReader),
+		// gameID is also set by WithEventPublisher above (same source,
+		// s.cfg.EventBus.GameID); kept explicit here too since WithGameID
+		// predates WithEventPublisher and other Subscribe-path readers
+		// look for it by name.
 		holoGRPC.WithGameID(s.cfg.EventBus.GameID),
 		holoGRPC.WithIdentityRegistry(pluginManager),
 		// VerbRegistry feeds the synthetic-location_state emit path's
@@ -828,77 +828,6 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	return nil
 }
 
-// busEventAppender implements core.EventAppender by publishing directly to
-// JetStream. F7 removes the PG events table and the EventWriter; all host-
-// engine Append calls go straight to the bus.
-type busEventAppender struct {
-	publisher eventbus.Publisher
-	bus       *eventbus.Subsystem
-}
-
-var _ core.EventAppender = (*busEventAppender)(nil)
-
-// Append translates a core.Event to an eventbus.Event and publishes it to
-// JetStream. The engine emits domain-relative dot stream references
-// (e.g. "location.01ABC"); eventbus.Qualify prepends `events.<gameID>.` and
-// validates the result (holomush-rops).
-func (b *busEventAppender) Append(ctx context.Context, event core.Event) error {
-	gameID := b.bus.GameID()
-	if gameID == "" {
-		gameID = "main"
-	}
-	sub, err := eventbus.Qualify(gameID, event.Stream)
-	if err != nil {
-		return oops.With("stream", event.Stream).Wrap(err)
-	}
-	typ, err := eventbus.NewType(string(event.Type))
-	if err != nil {
-		return oops.With("type", string(event.Type)).Wrap(err)
-	}
-	busEvent := eventbus.Event{
-		ID:        event.ID,
-		Subject:   sub,
-		Type:      typ,
-		Timestamp: event.Timestamp,
-		Actor:     coreToBusActor(event.Actor),
-		Payload:   event.Payload,
-	}
-	return oops.Wrap(b.publisher.Publish(ctx, busEvent))
-}
-
-// coreToBusActor bridges the legacy core.Actor (ID is a string, expected
-// to be a ULID post-w9ml) to the JetStream-side Actor (ID is a ULID; zero
-// for anonymous/system).
-//
-// Note: ULID parse failure for non-empty IDs is silently ignored at this
-// boundary. Post-w9ml, every stamp site stamps a valid ULID; a failure
-// here indicates a contract violation upstream. The structured emit-side
-// gate at coreActorToEventbusActor (in internal/plugin/event_emitter.go)
-// surfaces ACTOR_ID_NOT_ULID with full context.
-func coreToBusActor(a core.Actor) eventbus.Actor {
-	out := eventbus.Actor{Kind: coreActorKindToBus(a.Kind)}
-	if a.ID == "" {
-		return out
-	}
-	if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
-		out.ID = parsed
-	}
-	return out
-}
-
-func coreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
-	switch k {
-	case core.ActorCharacter:
-		return eventbus.ActorKindCharacter
-	case core.ActorSystem:
-		return eventbus.ActorKindSystem
-	case core.ActorPlugin:
-		return eventbus.ActorKindPlugin
-	default:
-		return eventbus.ActorKindUnknown
-	}
-}
-
 // sessionStoreMovementHook implements world.MovementHook by delegating to
 // session.Store.UpdateLocationOnMove. Wired at gRPC subsystem startup so
 // character moves propagate LocationID + LocationArrivedAt to active sessions
@@ -926,7 +855,7 @@ var _ plugins.HistoryReader = (*busHistoryReaderAdapter)(nil)
 // ReplayTail satisfies plugins.HistoryReader. It fetches count most-recent
 // events on stream (optionally filtered by notBefore and exclusive beforeID),
 // returning them in ascending ULID order (oldest→newest).
-func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	if count <= 0 {
 		return nil, nil
 	}
@@ -969,52 +898,17 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 		}
 	}
 
-	// Reverse to ascending (oldest→newest) and translate to core.Event. The
-	// frame stream is the already-qualified dot subject (holomush-rops).
-	result := make([]core.Event, len(collected))
+	// Reverse to ascending (oldest→newest). The frame's Subject is already
+	// the fully-qualified dot subject QueryHistory produced (holomush-rops);
+	// callers reading it as a plugin-facing "stream" value re-derive the
+	// relative form themselves (see eventbusEventToProto / the Lua table
+	// build in hostfunc), so no per-event reconstruction happens here.
+	result := make([]eventbus.Event, len(collected))
 	for i := range collected {
 		j := len(collected) - 1 - i
-		result[j] = busEventToCoreEvent(collected[i], string(collected[i].Subject))
+		result[j] = collected[i]
 	}
 	return result, nil
-}
-
-// busEventToCoreEvent reconstructs a core.Event from a persisted
-// eventbus.Event on the history read-back path (ReplayTail / QueryHistory).
-// It MUST copy the stored ID and Timestamp verbatim — core.NewEvent() would
-// stamp a fresh ULID + time.Now(), corrupting historical identity and breaking
-// beforeID cursor pagination. This is the read path, not the I-16 append path,
-// so the raw core.Event{} literal is correct here. The Actor ID is a ULID
-// string when present.
-func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
-	actorID := ""
-	if e.Actor.ID != (ulid.ULID{}) {
-		actorID = e.Actor.ID.String()
-	}
-	return core.Event{
-		ID:        e.ID,
-		Stream:    stream,
-		Type:      eventvocab.EventType(e.Type),
-		Timestamp: e.Timestamp,
-		Actor: core.Actor{
-			Kind: busActorKindToCore(e.Actor.Kind),
-			ID:   actorID,
-		},
-		Payload: e.Payload,
-	}
-}
-
-func busActorKindToCore(k eventbus.ActorKind) core.ActorKind {
-	switch k {
-	case eventbus.ActorKindCharacter:
-		return core.ActorCharacter
-	case eventbus.ActorKindSystem:
-		return core.ActorSystem
-	case eventbus.ActorKindPlugin:
-		return core.ActorPlugin
-	default:
-		return core.ActorSystem
-	}
 }
 
 // focusStreamContributorAdapter bridges plugins.Manager.QuerySessionStreams
