@@ -114,6 +114,14 @@ var coreOnlyFiles = map[string]struct{}{
 	// tests moved to internal/access/setup (ABACSubsystem's own Start,
 	// against its own pool); the two crypto-operator-validation files no
 	// longer exist here.
+	//
+	// 07-10 Task 3/4: pins the real production topological start order and
+	// proves the real production dependency graph acyclic (MEDIUM-11 /
+	// T-07-65). Constructs every production subsystem type with a
+	// zero-value config purely to read its live DependsOn() — this is the
+	// core process's own orchestrator wiring under test, not the gateway;
+	// imports the same domain packages core.go itself imports.
+	"core_topo_order_test.go": {},
 }
 
 // gatewayForbiddenPackages is the single, shared policy list read by both
