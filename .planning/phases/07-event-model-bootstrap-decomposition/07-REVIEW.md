@@ -1,276 +1,243 @@
 ---
 phase: 07-event-model-bootstrap-decomposition
-reviewed: 2026-07-18T00:00:00Z
+reviewed: 2026-07-18T18:15:39Z
 depth: standard
-files_reviewed: 45
+files_reviewed: 82
 files_reviewed_list:
   - .claude/rules/event-conventions.md
   - cmd/holomush/core.go
   - cmd/holomush/core_topo_order_test.go
   - cmd/holomush/cryptowiring.go
+  - cmd/holomush/cryptowiring_test.go
   - cmd/holomush/deps.go
+  - cmd/holomush/deps_test.go
   - cmd/holomush/gateway.go
   - cmd/holomush/gateway_closure_test.go
   - cmd/holomush/gateway_imports_test.go
+  - cmd/holomush/plugin_replaytail_pagination_integration_test.go
   - cmd/holomush/sub_grpc.go
+  - cmd/holomush/sub_grpc_adapters_test.go
+  - cmd/holomush/sub_grpc_test.go
+  - docs/architecture/invariants.md
+  - docs/architecture/invariants.yaml
   - internal/access/setup/crypto_operator_validation.go
+  - internal/access/setup/crypto_operator_validation_internal_test.go
   - internal/access/setup/subsystem.go
   - internal/admin/policy/subsystem.go
   - internal/admin/socket/subsystem.go
+  - internal/auth/auth_service.go
+  - internal/auth/auth_service_test.go
   - internal/auth/setup/subsystem.go
+  - internal/bootstrap/setup/orphan_check_internal_test.go
   - internal/bootstrap/setup/subsystem.go
   - internal/cluster/heartbeat.go
   - internal/cluster/registry.go
+  - internal/cluster/registry_internal_test.go
   - internal/cmdparse/cmdparse.go
   - internal/cmdparse/cmdparse_test.go
-  - internal/command/types.go (diff)
+  - internal/command/dispatcher_test.go
+  - internal/command/handlers/shutdown_test.go
+  - internal/command/types.go
+  - internal/command/types_test.go
   - internal/core/event.go
   - internal/core/ulid.go
+  - internal/core/ulid_test.go
   - internal/eventbus/audit/chain/verifier_subsystem.go
   - internal/eventbus/audit/dlq.go
   - internal/eventbus/audit/subsystem.go
+  - internal/eventbus/audit/subsystem_prepare_retry_integration_test.go
   - internal/eventbus/config.go
   - internal/eventbus/crypto/dek/sweep.go
   - internal/eventbus/subsystem.go
   - internal/eventvocab/eventvocab.go
-  - internal/grpc/location_follow.go (diff)
-  - internal/grpc/server.go (diff, stat only)
-  - internal/idgen/id.go
+  - internal/eventvocab/eventvocab_test.go
+  - internal/grpc/auth_handlers.go
+  - internal/grpc/auth_handlers_test.go
+  - internal/grpc/dispatcher_test.go
+  - internal/grpc/location_follow.go
+  - internal/grpc/pipeline_rendering_test.go
+  - internal/grpc/server.go
+  - internal/grpc/server_helpers_test.go
+  - internal/grpc/test_helpers_test.go
+  - internal/grpcclient/client.go
+  - internal/grpcclient/client_test.go
   - internal/lifecycle/orchestrator.go
+  - internal/lifecycle/orchestrator_test.go
   - internal/lifecycle/subsystem.go
   - internal/plugin/event_emitter.go
-  - internal/plugin/host.go (diff)
-  - internal/plugin/hostcap/servers.go (diff)
+  - internal/plugin/goplugin/host_service_test.go
+  - internal/plugin/host.go
+  - internal/plugin/hostcap/hostv1_no_seq_test.go
+  - internal/plugin/hostcap/servers.go
+  - internal/plugin/hostcap/streamhistory_test.go
   - internal/plugin/hostcap/system_broadcaster.go
-  - internal/plugin/hostfunc/stdlib_focus.go (diff)
+  - internal/plugin/hostcap/system_broadcaster_test.go
+  - internal/plugin/hostfunc/stdlib_focus.go
+  - internal/plugin/hostfunc/stdlib_focus_test.go
+  - internal/plugin/hostfunc/streamauth.go
+  - internal/plugin/hostfunc/streamauth_test.go
   - internal/plugin/setup/subsystem.go
-  - internal/plugin/setup/world_conn.go
+  - internal/plugin/setup/system_broadcaster_test.go
   - internal/presence/emitter.go
+  - internal/presence/emitter_test.go
   - internal/presence/session_ended.go
+  - internal/presence/session_ended_test.go
   - internal/session/reaper.go
   - internal/session/setup/subsystem.go
   - internal/sessionlease/sessionlease.go
+  - internal/sessionlease/sessionlease_test.go
   - internal/store/subsystem.go
   - internal/sysbroadcast/broadcaster.go
-  - internal/telnet/gateway_handler.go (diff)
+  - internal/sysbroadcast/broadcaster_test.go
+  - internal/telnet/gateway_handler.go
+  - internal/telnet/gateway_handler_test.go
   - internal/telnet/limits.go
+  - internal/testsupport/integrationtest/harness.go
+  - internal/testsupport/natstest/scoped.go
   - internal/tls/subsystem.go
+  - internal/tls/subsystem_test.go
   - internal/ulidgen/ulidgen.go
-  - internal/web/handler.go (diff, stat only)
+  - internal/ulidgen/ulidgen_internal_test.go
+  - internal/ulidgen/ulidgen_test.go
+  - internal/web/handler.go
+  - internal/web/handler_test.go
+  - internal/web/scene_handlers_test.go
+  - internal/web/translate_test.go
   - internal/world/setup/relay_subsystem.go
   - internal/world/setup/subsystem.go
+  - test/integration/auth/auth_suite_test.go
+  - test/integration/auth/multi_tab_test.go
+  - test/integration/command/ratelimit_integration_test.go
+  - test/integration/phase1_5_test.go
+  - test/integration/pluginparity/session_admin_broadcast_test.go
 findings:
-  critical: 1
-  warning: 3
-  info: 0
-  total: 4
+  critical: 0
+  warning: 2
+  info: 1
+  total: 3
 status: issues_found
 ---
 
-# Phase 7: Code Review Report
+# Phase 07: Code Review Report
 
-**Reviewed:** 2026-07-18T00:00:00Z
+**Reviewed:** 2026-07-18T18:15:39Z
 **Depth:** standard
-**Files Reviewed:** 45 read/diffed of the ~85 named in required_reading (see note below)
+**Files Reviewed:** 82 (full required-reading set; several test files skimmed only far enough to confirm they exercise the production code correctly, per "do not report issues in test files unless they affect test reliability")
 **Status:** issues_found
 
 ## Summary
 
-This is a very large (198-file), carefully-documented refactor. Every Prepare/Activate
-split I inspected (Database, TLS, ABAC, Auth, World, Sessions, Plugins, Bootstrap,
-EventBus, OutboxRelay, AuditProjection, CryptoChainVerifier, CryptoPolicy,
-CheckpointSweep, AdminSocket, cluster.Registry, grpcSubsystem) individually honors the
-documented D-13.3 boundary (acquire-only in Prepare, domain-traffic/external-bind only
-in Activate), and the orchestrator's rollback/StopAll mechanics (fresh rollback context,
-buffered per-Stop channel, preparedOrder-is-superset-of-activatedOrder) are sound and
-well-reasoned in isolation. The gateway-boundary tests (`gateway_imports_test.go`,
-`gateway_closure_test.go`) are a genuinely strong enforcement mechanism with a real
-positive control, not a tautology.
+This is a genuinely fresh re-review of a large (11-plan, 9-wave) refactor: the
+`core.Event`/`eventbus.Event` collapse, the `Subsystem.Start` → `Prepare`/`Activate`
+split across all 17 production subsystems, and the gateway-boundary import
+closure. I independently re-verified all four items the prior review's fixes
+addressed (WR-01 Lua-host-leak-on-world-conn-failure, WR-02 canonical
+`eventbus.NewEvent()` construction in `PluginEventEmitter.Emit`, WR-03
+reaper `bootAt` stamped in `Run` not `NewReaper`, and the CR-01
+`stopCoordinatorOnBootFailure` boot-failure cleanup path) — all four are
+present, correctly reasoned, and match their documented rationale; I did not
+just trust the commit messages, I read each fix's current code and traced
+its call sites. I also traced the orchestrator's topological ordering
+against every subsystem's live `DependsOn()` and cross-checked it against
+`core_topo_order_test.go`'s pinned assertions by hand (not just by reading
+the assertion) — the graph is acyclic and the pinned order matches what the
+code actually produces.
 
-However, adversarial review found one cross-subsystem correctness gap in the rollback
-path that the per-subsystem-in-isolation review missed: the `invalidation.Coordinator`
-started as a side effect of the shared `cryptoWiring` builder is only ever stopped by
-`grpcSubsystem.Stop`, but the builder's *first caller* in the real topological order is
-`CryptoChainVerifier` (earlier than `grpcSubsystem`) — so a Prepare failure in
-`CryptoChainVerifier` itself (or any other wiring consumer between it and gRPC) after
-the Coordinator has started leaves it running forever, because `grpcSubsystem`'s own
-`Prepare`/`Stop` are never reached. Three further, lower-severity findings round out the
-report (a leaked Lua host on one Prepare error path, a raw `eventbus.Event{}` literal
-that bypasses the project's own single-construction-path invariant, and a boot-grace
-window whose start point silently moved earlier under the two-sweep split).
+The most substantive finding from this pass is a genuine gap in the new
+Prepare/Activate contract itself: several subsystems' "already
+prepared"/"already activated" guards are never reset by `Stop`, silently
+defeating the retry semantics the `lifecycle.Subsystem` interface documents
+as a MUST. This does not affect the current production boot path (which
+calls `StartAll` exactly once and exits on failure), but it is a real,
+concrete contract violation with a straightforward fix, and it is
+inconsistent with several subsystems in the very same phase
+(`eventbus.Subsystem`, `internal/eventbus/audit.Subsystem`,
+`cluster.registry`) that got this right. A second, minor finding is an
+inconsistent nil-guard pattern across three near-identical
+publisher-wrapping constructors introduced in this phase.
 
-**Coverage note:** given the scale of this phase (85 named files, several 1000+-line
-diffs), some files were reviewed via targeted `git diff` against the phase base rather
-than a full re-read (marked `(diff)` above); a few very large gateway-side files
-(`internal/grpc/server.go`, `internal/web/handler.go`) were only diff-stat'd given no
-findings surfaced in the directly-related files they call into. No file in the required
-list was skipped outright, but review depth is not uniform across all ~85 files.
-
-## Critical Issues
-
-### CR-01: `invalidation.Coordinator` leaks on any Prepare failure between `CryptoChainVerifier` and `grpcSubsystem`
-
-**File:** `cmd/holomush/cryptowiring.go:335-380`, `cmd/holomush/sub_grpc.go:936-946`, `internal/eventbus/audit/chain/verifier_subsystem.go:102-131`
-
-**Issue:** The `invalidation.Coordinator` (a live component with its own NATS
-subscriptions for cross-replica DEK-cache invalidation) is constructed **and started**
-inside `buildCryptoWiring` (`cryptowiring.go:349-380`) as a side effect of the *first*
-subsystem in topological order that resolves the shared, memoized `cryptoWiringFn`.
-`grpcSubsystem` is the only subsystem whose `Stop` knows how to tear the Coordinator
-down (`sub_grpc.go:941-945`, gated on `s.cfg.CoordHolder.coord != nil`) — this replaced
-a former `defer` in `runCore` that unconditionally ran regardless of where boot failed.
-
-But `grpcSubsystem` is *not* the first caller of `cryptoWiringFn` in the real
-production graph: `chain.VerifierSubsystem` (`SubsystemCryptoChainVerifier`) also holds
-a provider (`RepoProvider`) backed by the same builder, and the pinned real topological
-order (`cmd/holomush/core_topo_order_test.go`'s
-`TestProductionSubsystemsTopologicalStartOrderIsPinned`) places
-`SubsystemCryptoChainVerifier` at index 8, five subsystems *before*
-`SubsystemGRPC` at index 14. `chain.VerifierSubsystem.Prepare` calls
-`s.cfg.RepoProvider()` **first** (line 104-110, triggering the full wiring build,
-including the Coordinator's construction+`Start()`), and only *afterward* runs
-`ValidateRegistration` and `s.verifier.VerifyAll` for every registered chain handler
-(lines 118-129) — either of which can fail (a broken hash chain is exactly
-`INV-CRYPTO-102`'s designed failure mode).
-
-If `VerifyAll` (or `ValidateRegistration`) fails, `VerifierSubsystem.Prepare` returns a
-non-nil error. `Orchestrator.StartAll` then calls `rollback` → `StopAll`, which walks
-`preparedOrder` in reverse and calls `Stop` on every subsystem whose `Prepare` was
-*invoked* — but `grpcSubsystem.Prepare` was **never invoked** (topological order never
-reached it), so `grpcSubsystem` is not in `preparedOrder` and its `Stop` — the only code
-path that reads `CoordHolder.coord` — never runs. The already-started
-`invalidation.Coordinator` (goroutines + NATS subscriptions) is never stopped.
-
-The same gap applies to any Prepare failure in `AdminSocketSubsystem`,
-`OutboxRelaySubsystem`, `PluginSubsystem`, `BootstrapSubsystem`, or
-`AuditProjection.Subsystem` (all of which sit between index 8 and index 14 in the
-pinned order) *after* the wiring has already been resolved by `CryptoChainVerifier`.
-
-This is precisely the failure mode `cryptowiring.go`'s own doc comment
-(`cryptoWiringInputs.CoordHolder`, lines 100-118) half-acknowledges — it discusses why
-starting the Coordinator inside Prepare (rather than Activate) is safe for the
-D-13.0 barrier, but does not address that the *cleanup* owner (`grpcSubsystem`) can be
-topologically unreachable when the *builder* (triggered by an earlier consumer) fails
-downstream of Coordinator construction.
-
-**Impact:** In production a failed `StartAll` aborts the process shortly after, so the
-leaked goroutines/subscriptions are bounded by process exit — but this is exactly the
-kind of gap that bites in integration tests (repeated `StartAll`/rollback cycles in one
-test binary, e.g. a chain-integrity regression test) and violates the subsystem's own
-stated contract that `grpcSubsystem` "owns the Coordinator's lifecycle" when
-`grpcSubsystem` may never even be constructed-into-Prepare in the failing run.
-
-**Fix:** Give the Coordinator's lifecycle to something that is guaranteed to be in
-`preparedOrder` whenever it was started — e.g. stash `CoordHolder` cleanup inside
-`buildCryptoWiring`'s own error/rollback path is not enough (a *later* failure, not the
-builder's own, is the trigger); instead, either (a) have *every* wiring-consumer
-subsystem's `Stop` check-and-stop `CoordHolder.coord` (idempotent `Stop` already exists
-on `invalidation.Coordinator`, so this is safe to duplicate), or (b) register the
-Coordinator's stop as an orchestrator-independent deferred cleanup that runs whenever
-`resolveCryptoWiring`'s `once.Do` actually fired, not gated on any one subsystem's own
-successful Prepare.
+I did not find any security vulnerabilities, data-loss risks, or crashes in
+the reviewed files. No BLOCKER-severity findings.
 
 ## Warnings
 
-### WR-01: `PluginSubsystem.Prepare`'s world-conn error path bypasses `cleanupOnError`, leaking the Lua host
+### WR-01: Several subsystems' Prepare/Activate idempotency guards are never reset by Stop, silently defeating the documented retry contract
 
-**File:** `internal/plugin/setup/subsystem.go:219-247`
+**File:** `internal/lifecycle/subsystem.go:95-99,119-121` (the contract), with concrete violations at:
+- `internal/store/subsystem.go:53-56` (Prepare guard) / `:91-96` (Stop)
+- `internal/access/setup/subsystem.go:79-82` (Prepare guard) / `:155-163` (Stop)
+- `cmd/holomush/cryptowiring.go:283-286` (Prepare guard), `:881-884` (Activate guard) / `:913-947` (Stop)
+- `internal/admin/socket/subsystem.go:156-163` (Activate guard) / `:205-210` (Stop)
+- `internal/world/setup/relay_subsystem.go:86-89` (Prepare guard), `:119-122` (Activate guard) / `:138-155` (Stop)
+- `internal/eventbus/crypto/dek/sweep.go:121-124` (Activate guard) / `:136-149` (Stop)
 
-**Issue:** `s.luaHost = luaHost` is assigned at line 238 (Lua host fully constructed).
-Immediately after, `newWorldInProcessConn` is called (line 244); on error, the function
-returns directly (`return oops.Code("WORLD_INPROCESS_CONN_FAILED")...`, line 246) —
-**before** `cleanupOnError` is even defined in the function body (its definition starts
-at line 272). Every *other* pre-manager error path in this function correctly calls
-`cleanupOnError()` (which closes `binaryHost`, `s.luaHost`, and `s.worldConn`), and the
-subsystem's own doc comment for `Stop` explicitly relies on this: "every pre-manager
-error path inside Prepare already routes through cleanupOnError, making Stop's
-`s.manager == nil` early return a TRUE no-op." That claim is false for this one path:
-`Stop()` sees `s.manager == nil` and no-ops, so the already-constructed `s.luaHost`
-(with its state-factory pool) is never closed.
+**Issue:** `lifecycle.Subsystem`'s doc comment (`internal/lifecycle/subsystem.go:95-99` for `Prepare`, `:119-121` for `Activate`) states both methods "MUST be idempotent... because the orchestrator does not promise to call Prepare exactly once — a failed Activate elsewhere in the sweep rolls back via Stop, and a caller may legitimately retry Prepare after fixing a transient failure." Every subsystem listed above implements the "idempotent" half as an early-return guard keyed on a field set during the first successful `Prepare`/`Activate` (e.g. `store.DatabaseSubsystem.Prepare`: `if s.eventStore != nil { return nil }`). But none of these subsystems' `Stop` methods reset that guarding field — `DatabaseSubsystem.Stop` calls `s.eventStore.Close()` but never sets `s.eventStore = nil`; `ABACSubsystem.Stop` calls `s.stack.Close()` but never sets `s.stack = nil`; `grpcSubsystem.Stop` calls `GracefulStop()`/closes the listener but never nils `s.grpcServer`/`s.listener`; `AdminSocketSubsystem.Stop` never nils `s.errCh`; `OutboxRelaySubsystem.Stop` never nils `s.relay`/`s.done`; `CheckpointSweepSubsystem.Stop` never nils `s.done`.
 
-**Fix:** Move the `newWorldInProcessConn` call (and the `s.registry` construction it
-depends on) above the Lua-host construction, or hoist `cleanupOnError`'s definition
-above this call site and invoke it on this error path too:
+Consequently, if `StartAll` is ever retried on the same `Orchestrator` instance after a rollback (exactly the scenario the interface doc describes as legitimate), every one of these subsystems' `Prepare`/`Activate` would see its guard field still non-nil (pointing at an already-`Close()`d/stopped resource) and return `nil` immediately — the retry would silently report success while serving a closed DB pool, a torn-down ABAC stack, an unbound gRPC listener, a dead admin socket, or a stopped outbox relay, with no error surfaced anywhere.
+
+Contrast with the subsystems in this same phase that get this right:
+`internal/eventbus/subsystem.go:463-464` (`Stop` sets `s.conn = nil; s.js = nil`, matching the `Prepare` guard at `:118`), `internal/eventbus/audit/subsystem.go:450-479` (`Stop` explicitly clears `preparedProjection`/`partitionManager`/`worker` after drain, with an inline comment explaining exactly why), and `internal/cluster/heartbeat.go:154-175` (`Stop` explicitly nils `subAlive`/`subBye`/`subProbe`/`subPoison`/tickers/done-channels before returning).
+
+This has no impact on the current production boot path (`cmd/holomush/core.go` calls `orch.StartAll(ctx)` exactly once and exits on failure — no in-tree retry path, as `internal/lifecycle/orchestrator.go:157-166` itself documents), so it is not a currently-triggerable production bug. It is, however, a real and concrete violation of an explicit MUST written in the very interface these subsystems implement, and a latent trap for any future retry path, test harness, or long-running admin tool that reuses an `Orchestrator`.
+
+**Fix:** Either (a) reset the guarding field to its zero value in each affected `Stop`, mirroring the eventbus/audit/cluster pattern (e.g. `store.DatabaseSubsystem.Stop`: `s.eventStore = nil; s.pool = nil` after `Close()`; `grpcSubsystem.Stop`: `s.grpcServer = nil` after `GracefulStop()`/`Stop()`, `s.listener = nil` after `Close()`), or (b) narrow `internal/lifecycle/subsystem.go`'s doc comment to scope "MUST be idempotent" explicitly to "idempotent within a single `StartAll` sweep" (which is all the orchestrator's own `topoSort`-driven single-pass-per-subsystem execution actually requires) and drop the "a caller may legitimately retry Prepare" claim, so the documented contract matches what the code actually guarantees.
 
 ```go
-worldConn, worldConnErr := newWorldInProcessConn(s.cfg.World.Service())
-if worldConnErr != nil {
-    if s.luaHost != nil {
-        _ = s.luaHost.Close(ctx) //nolint:errcheck // best-effort cleanup
-        s.luaHost = nil
-    }
-    return oops.Code("WORLD_INPROCESS_CONN_FAILED").Wrap(worldConnErr)
+// internal/store/subsystem.go — example of (a)
+func (s *DatabaseSubsystem) Stop(_ context.Context) error {
+	if s.eventStore != nil {
+		s.eventStore.Close()
+		s.eventStore = nil
+		s.pool = nil
+	}
+	return nil
 }
 ```
 
-### WR-02: `PluginEventEmitter.Emit` constructs a raw `eventbus.Event{}` literal instead of `eventbus.NewEvent()`
+### WR-02: `sysbroadcast.NewBroadcaster` does not detect typed-nil `Publisher` values, unlike its two sibling constructors introduced in the same phase
 
-**File:** `internal/plugin/event_emitter.go:191-199`
+**File:** `internal/sysbroadcast/broadcaster.go:38-46`
 
-**Issue:** `eventbus/types.go`'s `NewEvent` doc comment states it is "post-ARCH-04, the
-ONLY construction path for eventbus.Event values that will be published," and
-`internal/idgen/id.go` independently documents: "eventbus.Event{} struct literals must
-use eventbus.NewEvent() ... never construct an Event literal with a manually-supplied
-ID." `PluginEventEmitter.Emit` — the single publish path for every plugin emit,
-arguably the highest-traffic event construction site in the whole system — does exactly
-that:
+**Issue:** `NewBroadcaster` guards against a nil `Publisher` with a bare `pub == nil` check:
 
 ```go
-event := eventbus.Event{
-    ID:        core.NewULID(),
-    Subject:   sub,
-    Type:      typ,
-    Timestamp: time.Now().UTC(),
-    Actor:     busActor,
-    Payload:   payload,
-    Sensitive: sensitive,
+func NewBroadcaster(pub eventbus.Publisher, gameID func() string) *Broadcaster {
+	if pub == nil {
+		panic("sysbroadcast.NewBroadcaster: nil Publisher")
+	}
+	...
 }
 ```
 
-It happens to use the correct generator (`core.NewULID()`, not `idgen.New()`), so
-today's dedup/ordering behavior is not broken. But it has already drifted from
-`NewEvent` in one detail — `time.Now().UTC()` vs. `NewEvent`'s bare `time.Now()` — and,
-more importantly, bypasses the single-construction-path invariant this refactor's own
-conventions establish: any future change to `NewEvent`'s stamping (added validation,
-a new defaulted field) will silently not apply here.
+This phase introduces two sibling constructors over the same `eventbus.Publisher`-shaped nil-checking problem — `presence.NewEmitter` (`internal/presence/emitter.go:54-62`) and `cluster.NewSubsystem`'s `isNilConn` helper (`internal/cluster/registry.go:303-320`) — both of which explicitly detect *typed*-nil interface values via `reflect.ValueOf(x).IsNil()` on the nilable-kind cases, with a doc comment explaining why the bare `== nil` check is insufficient: a nil concrete pointer wrapped in an interface is not itself `== nil` at the interface level, so `presence.NewEmitter`'s own doc calls this out explicitly ("Detects both untyped nil and typed-nil interface values... so callers truly fail fast at construction"). `sysbroadcast.NewBroadcaster` reintroduces exactly the gap `presence.NewEmitter` was written to close: a typed-nil concrete `Publisher` implementation passed to `NewBroadcaster` would pass the `pub == nil` check, defer the failure past construction, and panic (or nil-pointer-dereference) inside `Broadcast` instead — the same failure-mode the sibling constructor's doc comment says construction-time detection exists specifically to avoid.
 
-**Fix:** Build the base event via `eventbus.NewEvent(sub, typ, busActor, payload)` and
-set `Sensitive` afterward, matching the pattern `NewEvent`'s own doc comment
-prescribes ("Callers that need to override specific fields after construction ...
-MUST still use NewEvent for the base value").
+Current callers (`cmd/holomush/sub_grpc.go`'s `sysbroadcast.NewBroadcaster(publisher, ...)`, `hostcap.NewSystemBroadcaster`) always pass a concrete non-nil `*RenderingPublisher`, so this is not exploitable today — but it is a real inconsistency between three constructors doing the same defensive job in the same PR, one of which explicitly documents the pattern the other two omit.
 
-### WR-03: Session reaper's `bootAt` is captured at construction (Prepare), not at `Run()` (Activate)
+**Fix:** Reuse (or extract to a shared helper in `internal/eventbus`) the same `reflect`-based typed-nil detection `presence.isNilPublisher` and `cluster.isNilConn` already implement:
 
-**File:** `cmd/holomush/sub_grpc.go:805-813`, `internal/session/reaper.go:52-63`
+```go
+func NewBroadcaster(pub eventbus.Publisher, gameID func() string) *Broadcaster {
+	if pub == nil || isNilPublisher(pub) { // reuse presence's isNilPublisher (extract to a shared helper)
+		panic("sysbroadcast.NewBroadcaster: nil Publisher")
+	}
+	...
+}
+```
 
-**Issue:** `session.NewReaper(...)` — which stamps `r.bootAt = config.Now()` inside its
-constructor (`reaper.go:61`) — is called from `grpcSubsystem.Prepare` (`sub_grpc.go:810`,
-step 10, "launch deferred to Activate — row 16"). The reaper's `Run()` loop, which is
-the thing that actually *consults* `bootAt` to suppress the lease sweep for
-`BootGrace` (`reaper.go:76`), is not launched until `grpcSubsystem.Activate`
-(`sub_grpc.go:886`). Under the two-sweep orchestrator, `grpcSubsystem.Activate` runs
-only after every earlier-topo-order subsystem's own `Activate` has completed (13
-subsystems, per the pinned order in `core_topo_order_test.go`) — so the wall-clock
-instant `bootAt` records is measurably earlier than the instant the reaper loop
-actually starts checking it. This silently shrinks the effective `BootGrace` window
-below the configured value (default 60s, floor-enforced at 2× the 15s gateway refresh
-cadence in `parseSessionConfig`) by whatever time the tail of Prepare + the rest of
-Activate takes.
+## Info
 
-In the pre-refactor single-phase `Start`, `NewReaper` and `go reaper.Run(...)` ran back
-to back with no intervening barrier, so `bootAt` and the loop's actual start were
-effectively simultaneous. This is a genuine (if currently small — likely sub-second in
-practice) semantic drift introduced by the Prepare/Activate split, and the drift grows
-with every future subsystem inserted between `SubsystemCryptoChainVerifier` and
-`SubsystemGRPC` in topological order.
+### IN-01: `PluginSubsystem.Prepare` has no "already prepared" idempotency guard at all, unlike every sibling subsystem
 
-**Fix:** Capture `bootAt` in `Run()` (or add a `Reaper.MarkBoot()` called from
-`Activate` immediately before `go s.sessionReaper.Run(...)`) rather than in the
-constructor, so the grace window is measured from when the reaper actually starts
-protecting sessions, not from when it was merely constructed.
+**File:** `internal/plugin/setup/subsystem.go:173-179`
+
+**Issue:** Every other subsystem reviewed in this phase implements one of two documented dispositions for repeat `Prepare` calls: an explicit early-return guard (`store.DatabaseSubsystem`, `ABACSubsystem`, `grpcSubsystem`, `eventbus.Subsystem`, `OutboxRelaySubsystem`), or an explicit "no guard needed — re-running is benign reassignment" comment (`WorldSubsystem`, `SessionSubsystem`, `TLSSubsystem`, `BootstrapSubsystem`). `PluginSubsystem.Prepare` has neither: it unconditionally resolves the plugins dir, builds a fresh `hostfunc` bridge, a fresh Lua host, a fresh service registry, and (on non-empty `DatabaseConnStr`) a fresh alias pool + schema provisioner + binary host + `Manager` + `LoadAll` — every time it is called, with no comment explaining whether re-running is intended to be safe/cheap. Given `goplugin.NewHost` launches subprocess-management goroutines and `Manager.LoadAll` re-runs bootstrap-alias-seeding side effects, a second `Prepare` call (the same cross-`StartAll`-retry scenario WR-01 discusses) would silently duplicate plugin-subprocess launch and re-run `LoadAll`'s side effects rather than short-circuiting or explicitly documenting why full re-construction is safe.
+
+This is Info-severity because, unlike WR-01's subsystems, `PluginSubsystem` at least does real work on a retry rather than silently reporting stale success — the failure mode here is "wasteful/duplicated work", not "silent use of a closed resource".
+
+**Fix:** Either add an explicit "already prepared" guard (`if s.manager != nil { return nil }`) mirroring the sibling subsystems that use one, or add a one-line doc comment explicitly stating why unconditional re-construction on retry is considered safe (matching the style of `WorldSubsystem`/`SessionSubsystem`/`BootstrapSubsystem`'s "no idempotency guard is needed" comments), so a future reader doesn't have to independently re-derive this.
 
 ---
 
-_Reviewed: 2026-07-18T00:00:00Z_
+_Reviewed: 2026-07-18T18:15:39Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
