@@ -127,8 +127,9 @@ func (s *CheckpointSweepSubsystem) Activate(ctx context.Context) error {
 	}
 	sctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
-	s.done = make(chan struct{})
-	go s.loop(sctx)
+	done := make(chan struct{})
+	s.done = done
+	go s.loop(sctx, done)
 	return nil
 }
 
@@ -154,9 +155,18 @@ func (s *CheckpointSweepSubsystem) Stop(ctx context.Context) error {
 	}
 }
 
-// loop is the background goroutine.
-func (s *CheckpointSweepSubsystem) loop(ctx context.Context) {
-	defer close(s.done)
+// loop is the background goroutine. done is the exact channel object
+// Activate created and assigned to s.done, passed explicitly (rather than
+// read from the s.done field inside the deferred close) so this always
+// closes the channel it was launched with. Reading s.done here instead
+// would race Stop's field reset: `go s.loop(sctx)` schedules the goroutine
+// but does not guarantee it runs before Stop returns, so a `defer
+// close(s.done)` could evaluate the field AFTER Stop's WR-01 fix nils it,
+// panicking with "close of nil channel". Threading done as a parameter
+// captures the channel value synchronously in Activate, at `go` statement
+// evaluation time, immune to any later field mutation.
+func (s *CheckpointSweepSubsystem) loop(ctx context.Context, done chan struct{}) {
+	defer close(done)
 	t := time.NewTicker(s.cfg.Interval)
 	defer t.Stop()
 	for {
