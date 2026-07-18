@@ -123,11 +123,13 @@ func (s *OutboxRelaySubsystem) Activate(ctx context.Context) error {
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
-	s.done = make(chan struct{})
-	go func() {
-		defer close(s.done)
-		_ = s.relay.Run(runCtx) //nolint:errcheck // Run returns only the ctx-cancellation reason on Stop
-	}()
+	done := make(chan struct{})
+	s.done = done
+	relay := s.relay
+	go func(done chan struct{}, relay *outbox.Relay) {
+		defer close(done)
+		_ = relay.Run(runCtx) //nolint:errcheck // Run returns only the ctx-cancellation reason on Stop
+	}(done, relay)
 
 	slog.InfoContext(ctx, "outbox relay subsystem activated")
 	return nil
