@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 07
 current_phase_name: event-model-bootstrap-decomposition
 status: executing
-stopped_at: Completed 07-06-PLAN.md
-last_updated: "2026-07-18T00:35:23.278Z"
+stopped_at: Completed 07-07-PLAN.md
+last_updated: "2026-07-18T01:23:56.161Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 36
-  completed_plans: 31
+  completed_plans: 32
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 07 (event-model-bootstrap-decomposition) — EXECUTING
-Plan: 7 of 11
+Plan: 8 of 11
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 07 execution started
 
@@ -114,6 +114,7 @@ Last activity: 2026-07-17 — Phase 07 execution started
 | Phase 07 P05 | 50min | 3 tasks | 22 files |
 | Phase 07 P04 | ~35min | 3 tasks | 4 files |
 | Phase 07 P06 | 50min | 3 tasks | 13 files |
+| Phase 07 P07 | 46min | 3 tasks | 35 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,9 @@ the next milestone yet.
 - [Phase ?]: sysbroadcast.Broadcaster copies presence.Emitter's {pub eventbus.Publisher; gameID func() string} shape verbatim (FINDING-5), including the empty-gameID->main fallback
 - [Phase ?]: cmd/holomush introduces a shared bus := s.cfg.EventBus local in grpcSubsystem.Start reused by both the SessionAdmin broadcast closure and the command-services broadcaster closure — one game-id source for the whole host
 - [Phase ?]: internal/grpc's dispatcher_test.go/test_helpers_test.go were undeclared consumers of the deleted Services.Events() accessor; registerTestCommands now takes the shared store directly as a parameter
+- [Phase ?]: 07-07: WithEventPublisher reuses CoreServer's existing gameID field rather than adding a duplicate
+- [Phase ?]: 07-07: Combined Task 1+2 into one commit (interdependent edits verified together); Task 3 committed separately
+- [Phase ?]: 07-07: event_emitter.go untouched — CoreServer builds a direct typed system-actor literal instead of exporting the plugin-private actor bridge
 
 ### Pending Todos
 
@@ -204,9 +208,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-18T00:35:23.271Z
+Last session: 2026-07-18T01:23:56.154Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 07-06-PLAN.md
+Stopped at: Completed 07-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
