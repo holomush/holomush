@@ -133,24 +133,34 @@ func (s *OutboxRelaySubsystem) Activate(ctx context.Context) error {
 	return nil
 }
 
-// Stop cancels the relay loop, closes the waker, and releases the lease.
+// Stop cancels the relay loop, closes the waker, and releases the lease. It
+// resets the Prepare guard (relay) and Activate guard (done), plus the
+// waker/cancel/consumer fields, to nil so a legitimate retry of
+// Prepare/Activate after Stop reacquires a fresh lease and relaunches the
+// drain loop rather than short-circuiting on an already-released one
+// (WR-01).
 // codecov:ignore — exercised by integration and E2E tests.
 func (s *OutboxRelaySubsystem) Stop(ctx context.Context) error {
 	if s.cancel != nil {
 		s.cancel()
+		s.cancel = nil
 	}
 	if s.waker != nil {
 		s.waker.Close()
+		s.waker = nil
 	}
 	if s.done != nil {
 		select {
 		case <-s.done:
 		case <-time.After(relayStopTimeout):
 		}
+		s.done = nil
 	}
 	if s.relay != nil {
 		_ = s.relay.Stop(ctx) //nolint:errcheck // Stop only releases the lease; a release warning is already logged
+		s.relay = nil
 	}
+	s.consumer = nil
 	return nil
 }
 

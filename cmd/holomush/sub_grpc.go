@@ -909,6 +909,10 @@ func (s *grpcSubsystem) Activate(ctx context.Context) error {
 
 // Stop gracefully shuts down the gRPC server, cancels reapers, and closes the listener.
 // GracefulStop is bound to the context — if the context expires, a hard Stop() is forced.
+// Resets the Prepare guard (grpcServer) and Activate guard (listener), plus
+// the reaper context fields, to nil so a legitimate retry of Prepare/Activate
+// after Stop reacquires fresh state rather than short-circuiting on an
+// already-stopped server/listener (WR-01).
 // codecov:ignore — tested by integration and E2E tests
 func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	if s.grpcServer != nil {
@@ -924,14 +928,18 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 			slog.WarnContext(ctx, "gRPC graceful shutdown timed out, forcing stop")
 			s.grpcServer.Stop()
 		}
+		s.grpcServer = nil
 	}
 	if s.reaperCancel != nil {
 		s.reaperCancel()
+		s.reaperCancel = nil
 	}
+	s.reaperCtx = nil
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
 			slog.DebugContext(ctx, "error closing gRPC listener", "error", err)
 		}
+		s.listener = nil
 	}
 	// grpcSubsystem owns the invalidation.Coordinator's lifecycle (07-09
 	// item 4) — replaces the former runCore-level ad-hoc defer with

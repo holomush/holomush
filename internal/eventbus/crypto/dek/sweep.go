@@ -132,16 +132,21 @@ func (s *CheckpointSweepSubsystem) Activate(ctx context.Context) error {
 	return nil
 }
 
-// Stop cancels the background loop and waits for it to drain.
+// Stop cancels the background loop and waits for it to drain. It resets
+// the Activate guard (done) and cancel to nil so a legitimate retry of
+// Activate after Stop relaunches the tick loop rather than short-circuiting
+// on an already-stopped one (WR-01).
 func (s *CheckpointSweepSubsystem) Stop(ctx context.Context) error {
 	if s.cancel != nil {
 		s.cancel()
+		s.cancel = nil
 	}
 	if s.done == nil {
 		return nil
 	}
 	select {
 	case <-s.done:
+		s.done = nil
 		return nil
 	case <-ctx.Done():
 		return oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT").Wrap(ctx.Err())

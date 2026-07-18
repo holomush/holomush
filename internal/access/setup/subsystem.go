@@ -150,14 +150,21 @@ func (s *ABACSubsystem) Activate(ctx context.Context) error {
 	return nil
 }
 
-// Stop cancels the poller and closes the ABAC stack.
+// Stop cancels the poller and closes the ABAC stack. It resets the
+// Prepare/Activate guard fields (stack, pollerCancel) to nil so a
+// legitimate retry of Prepare/Activate after Stop rebuilds the stack and
+// relaunches the poller rather than short-circuiting on a closed one
+// (WR-01).
 // codecov:ignore — tested by integration and E2E tests
 func (s *ABACSubsystem) Stop(_ context.Context) error {
 	if s.pollerCancel != nil {
 		s.pollerCancel()
+		s.pollerCancel = nil
 	}
 	if s.stack != nil {
-		return s.stack.Close()
+		err := s.stack.Close()
+		s.stack = nil
+		return err
 	}
 	return nil
 }

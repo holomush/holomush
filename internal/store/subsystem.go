@@ -86,11 +86,16 @@ func (s *DatabaseSubsystem) Activate(_ context.Context) error {
 	return nil
 }
 
-// Stop closes the event store and its connection pool.
+// Stop closes the event store and its connection pool. It resets the
+// Prepare guard fields (eventStore, pool) to nil so a legitimate retry of
+// Prepare after Stop re-acquires a fresh event store and pool rather than
+// short-circuiting on a closed one (WR-01).
 // codecov:ignore — tested by integration and E2E tests
 func (s *DatabaseSubsystem) Stop(_ context.Context) error {
 	if s.eventStore != nil {
 		s.eventStore.Close()
+		s.eventStore = nil
+		s.pool = nil
 	}
 	return nil
 }

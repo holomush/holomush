@@ -201,10 +201,17 @@ func runErrMonitor(errCh <-chan error, shutdown func(error)) {
 	}
 }
 
-// Stop shuts down the admin socket server and releases admin.lock.
+// Stop shuts down the admin socket server and releases admin.lock. Resets
+// the Activate guard (errCh) and the server reference to nil so a
+// legitimate retry of Prepare/Activate after Stop reacquires admin.lock and
+// rebinds admin.sock rather than short-circuiting on an already-stopped
+// server (WR-01).
 func (s *AdminSocketSubsystem) Stop(ctx context.Context) error {
 	if s.server == nil {
 		return nil
 	}
-	return s.server.Stop(ctx)
+	err := s.server.Stop(ctx)
+	s.server = nil
+	s.errCh = nil
+	return err
 }
