@@ -5,6 +5,7 @@ package session_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -77,4 +78,36 @@ func TestReaper_SkipsActiveAndFutureSessions(t *testing.T) {
 	reaper.Run(reaperCtx)
 
 	assert.Empty(t, reaped)
+}
+
+// TestReaperCapturesBootAtWhenRunStartsNotWhenConstructed covers WR-03
+// (07-review): under the Prepare/Activate lifecycle split, NewReaper is
+// called from grpcSubsystem.Prepare but Run is not launched until
+// grpcSubsystem.Activate — which runs only after every earlier-topo-order
+// subsystem's own Activate has completed. Stamping bootAt at construction
+// (the pre-fix behavior) measured the BootGrace window from an instant
+// strictly earlier than when the sweep loop actually starts consulting it.
+// This asserts config.Now() is untouched at construction and is only
+// invoked once Run starts the sweep loop.
+func TestReaperCapturesBootAtWhenRunStartsNotWhenConstructed(t *testing.T) {
+	store := sessiontest.NewStore(t)
+
+	var nowCalls atomic.Int32
+	fakeNow := func() time.Time {
+		nowCalls.Add(1)
+		return time.Now()
+	}
+
+	reaper := session.NewReaper(store, session.ReaperConfig{
+		Interval: 20 * time.Millisecond,
+		Now:      fakeNow,
+	})
+	assert.Zero(t, nowCalls.Load(),
+		"NewReaper must not call Now() at construction — bootAt is captured when Run starts, not when the reaper is constructed")
+
+	reaperCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	reaper.Run(reaperCtx)
+
+	assert.Positive(t, nowCalls.Load(), "Run must call Now() to stamp bootAt and drive the sweep loop")
 }

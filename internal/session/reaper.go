@@ -57,13 +57,23 @@ func NewReaper(store Store, config ReaperConfig) *Reaper {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	r := &Reaper{store: store, config: config}
-	r.bootAt = config.Now()
-	return r
+	return &Reaper{store: store, config: config}
 }
 
 // Run starts the reaper loop. Blocks until context is cancelled.
+//
+// bootAt is stamped HERE, not in NewReaper (WR-03, 07-review): under the
+// Prepare/Activate lifecycle split, NewReaper is called from Prepare but
+// Run is not launched until Activate — which runs only after every
+// earlier-topo-order subsystem's own Activate has completed. Stamping
+// bootAt at construction measured the grace window from a wall-clock
+// instant strictly earlier than the moment the sweep loop actually starts
+// consulting it, silently shrinking the effective BootGrace window below
+// the configured value. Stamping it here restores the pre-split behavior,
+// where NewReaper and `go reaper.Run(...)` ran back-to-back with no
+// intervening barrier.
 func (r *Reaper) Run(ctx context.Context) {
+	r.bootAt = r.config.Now()
 	ticker := time.NewTicker(r.config.Interval)
 	defer ticker.Stop()
 
