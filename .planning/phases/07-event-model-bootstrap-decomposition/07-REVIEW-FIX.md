@@ -1,115 +1,136 @@
 ---
 phase: 07-event-model-bootstrap-decomposition
-fixed_at: 2026-07-18T06:10:00Z
+fixed_at: 2026-07-18T19:20:00Z
 review_path: .planning/phases/07-event-model-bootstrap-decomposition/07-REVIEW.md
-iteration: 1
+iteration: 2
 findings_in_scope: 4
 fixed: 4
 skipped: 0
 status: all_fixed
 ---
 
-# Phase 7: Code Review Fix Report
+# Phase 07: Code Review Fix Report (iteration 2)
 
-**Fixed at:** 2026-07-18T06:10:00Z
+**Fixed at:** 2026-07-18T19:20:00Z
 **Source review:** .planning/phases/07-event-model-bootstrap-decomposition/07-REVIEW.md
-**Iteration:** 1
+**Iteration:** 2
 
 **Summary:**
-- Findings in scope: 4 (1 Critical, 3 Warnings)
+- Findings in scope: 4 (0 Critical, 3 Warnings, 1 Info) — `fix_scope: all`
 - Fixed: 4
 - Skipped: 0
 
+This round's findings were themselves surfaced by adversarially re-reviewing
+iteration 1's fixes — two of the four (WR-02, and a regression inside WR-01's
+own fix) are gaps in code this same fix-loop had just landed in the prior
+iteration, one caught by the reviewer's own tracing and one caught by
+`task test:int` during this round's own verification.
+
+Commits were developed in an isolated scratch worktree (`gsd-reviewfix/07-72488`),
+fully verified there (`task build`/`test`/`test:int`/`lint` all green), then
+cherry-picked onto this branch — cherry-pick was chosen over a fast-forward
+merge per explicit user direction, after two earlier incidents this session
+where a fixer agent's own cleanup-tail heuristic mis-targeted the primary
+`main` checkout instead of this worktree (both self-corrected immediately,
+zero actual impact, independently verified via fresh `git fetch` against
+`origin/main` both times). Cherry-pick avoids that entire class of risk since
+it never moves a branch pointer in another checkout. Commit SHAs below are
+the cherry-picked SHAs on this branch, not the original scratch-branch SHAs.
+
 ## Fixed Issues
 
-### CR-01: `invalidation.Coordinator` leaks on any Prepare failure between `CryptoChainVerifier` and `grpcSubsystem`
+### WR-01: `CheckpointSweepSubsystem.Stop`'s ctx-timeout branch didn't reset its guard, then that fix's own follow-up introduced a nil-channel panic caught by `task test:int`
 
-**Files modified:** `cmd/holomush/core.go`, `cmd/holomush/cryptowiring.go`, `cmd/holomush/cryptowiring_test.go`
-**Commit:** `2a3b15631`
-**Applied fix:** Chose the review's option (b) — an orchestrator-independent
-cleanup keyed on whether the Coordinator was actually constructed+started,
-not on any one subsystem's own Prepare outcome. Added
-`stopCoordinatorOnBootFailure(ctx, holder *coordHolder)` in
-`cryptowiring.go`, called unconditionally from `runCoreWithDeps` on every
-`orch.StartAll` failure (previously the code just `return orchErr`'d with
-no cleanup at all). The helper no-ops when `holder` or `holder.coord` is
-nil, and Stops the Coordinator with a 5s timeout otherwise, logging (not
-propagating) any Stop error. This is mutually exclusive with
-`grpcSubsystem.Stop`'s existing happy-path Coordinator-Stop (only reached
-via the deferred `orch.StopAll` after a StartAll success), so there is no
-double-stop or race — `invalidation.Coordinator.Stop` is idempotent in any
-case. Updated two doc comments in `cryptowiring.go` that previously
-implied `grpcSubsystem.Stop` was the *sole* cleanup owner.
+**File modified:** `internal/eventbus/crypto/dek/sweep.go`
+**Commits:** `0e79c76c0`, `b3d597572`
 
-Added `TestStopCoordinatorOnBootFailure` (4 subtests, `cryptowiring_test.go`)
-using a minimal `fakeCoordinator` test double satisfying the 3-method
-`invalidation.Coordinator` interface: verifies Stop is called when a
-coordinator was started, and that the helper is a safe no-op when the
-coordinator was never started (nil `holder.coord`, e.g. no KEK) or when
-`holder` itself is nil. A full end-to-end regression (a real `StartAll`
-that fails after the Coordinator has started, asserting via goleak that
-its goroutines/subscriptions are gone) was not added — constructing that
-scenario needs a real EventBus + cluster.Registry + KEK-backed
-`dek.Manager`, which is full-integration-harness territory (per the
-07-11 precedent cited in the review) rather than a cheap unit test; the
-unit-level tests above directly exercise the new cleanup logic instead.
+**Applied fix (first commit):** The prior iteration's fix reset `s.done = nil`
+only in the happy-path `case <-s.done:` branch, leaving the `case <-ctx.Done():`
+timeout branch untouched — so a `Stop` call that timed out left `s.done`
+non-nil, causing a subsequent `Activate` retry to silently no-op on a stale
+guard. Fixed by capturing `s.done` into a local `done` variable and resetting
+`s.done = nil` unconditionally *before* the `select`, then selecting on the
+local — mirroring `internal/eventbus/subsystem.go` and
+`internal/eventbus/audit/subsystem.go`, both of which reset their guard
+fields unconditionally regardless of select/drain outcome.
 
-### WR-01: `PluginSubsystem.Prepare`'s world-conn error path bypasses `cleanupOnError`, leaking the Lua host
+**Applied fix (second commit — self-caught regression):** `task test:int`
+caught a genuine bug this first commit introduced: `CheckpointSweepSubsystem.loop`'s
+`defer close(s.done)` reads the `s.done` **field** at defer-evaluation time,
+not a value captured when the goroutine launched. Because `go s.loop(sctx)`
+does not guarantee the goroutine runs before `Stop` returns, a fast `Stop`
+call could nil `s.done` (the very fix above) before `loop`'s own defer
+statement evaluated it, causing `close(nil)` to panic. Reproduced directly:
+`TestDEKIntegration` panicked at `sweep.go:165` ("close of nil channel").
+Fixed by threading the channel into `loop` as an explicit parameter,
+captured synchronously at the `go` statement's argument-evaluation time
+(before `Stop` can possibly run), so `loop` always closes the exact channel
+it was launched with regardless of any later `s.done` field mutation.
+Verified with 4 repeated `RACE=-race task test:int -- ./internal/eventbus/crypto/dek/...`
+runs, all green.
 
-**Files modified:** `internal/plugin/setup/subsystem.go`
-**Commit:** `0d0ffda52`
-**Applied fix:** Applied the review's suggested fix verbatim in shape:
-on `newWorldInProcessConn`'s error path (before `cleanupOnError` is even
-defined later in the function), close `s.luaHost` inline if non-nil and
-nil it out, before returning `WORLD_INPROCESS_CONN_FAILED`. Updated
-`Stop`'s doc comment, which previously overclaimed that `cleanupOnError`
-alone accounted for every pre-manager error path — it now correctly notes
-this one specific path releases its own resource in-body.
+### WR-02: `ABACSubsystem`/`PluginSubsystem`'s now-functional Prepare retry reaches `ReadinessRegistry.Register` a second time, which panics on duplicate registration
 
-No new regression test added: `newWorldInProcessConn`'s only error path
-is `plugins.NewInProcessConn` returning a non-nil error, which only
-happens when its `*grpc.Server` argument is nil — but the call site
-always constructs a fresh `grpc.NewServer()` first, so this path has no
-cheap, deterministic public-API injection point (unlike WR-01's sibling
-fault-injection test `TestPluginSubsystemPrepareFailureAfterHostConstructionLeavesNoSweeperGoroutine`,
-which injects via `VerbRegistry: nil`). Existing tests in
-`internal/plugin/setup` (18 tests, including the goleak-based sweeper-leak
-test) continue to pass unmodified.
+**Files modified:** `internal/lifecycle/registry.go`, `internal/access/setup/subsystem.go`, `internal/plugin/setup/subsystem.go`
+**Commit:** `b96a86040`
 
-### WR-02: `PluginEventEmitter.Emit` constructs a raw `eventbus.Event{}` literal instead of `eventbus.NewEvent()`
+**Applied fix:** Read `internal/lifecycle/registry.go` in full first,
+confirming `Register` panics unconditionally on a duplicate `SubsystemID`
+and that `ReadinessRegistry` has no `Unregister` method, and confirming the
+locking discipline (`sync.RWMutex`: `Register`/the new `Unregister` take the
+write lock via `mu.Lock()`; `AllReady`/`Status` take the read lock via
+`mu.RLock()`) — a `delete` under the same write lock `Register` uses is safe
+against concurrent reads with no additional discipline needed.
 
-**Files modified:** `internal/plugin/event_emitter.go`
-**Commit:** `4d6bdbad3`
-**Applied fix:** Replaced the raw `eventbus.Event{...}` literal with
-`eventbus.NewEvent(sub, typ, busActor, payload)` followed by
-`event.Sensitive = sensitive`, exactly matching the review's suggested
-fix and `NewEvent`'s own doc-comment-prescribed override pattern. Removed
-the now-unused `time` import (the literal's `time.Now().UTC()` call was
-the only user of that package in the file); `core` remains used elsewhere
-in the file. `task lint:go` on `internal/plugin/...` reports 0 issues.
-This file is named in CLAUDE.md's Pre-Push Review Gates table
-(`internal/plugin/event_emitter.go::Emit`) as requiring `crypto-reviewer`
-sign-off — the orchestrator should run that gate after these fixes land.
+Grepped the whole tree for `Registry.Register(` production callsites
+(`rg -n "Registry\.Register\(" --type go -g '!*_test.go'`) and confirmed
+only `internal/access/setup/subsystem.go` (ABAC) and
+`internal/plugin/setup/subsystem.go` (Plugin) call it inside `Prepare` — no
+other subsystem touched by this or the prior round needed the same fix.
 
-### WR-03: Session reaper's `bootAt` is captured at construction (Prepare) rather than when `Run()` actually starts consuming it (Activate)
+Chose option (a) from the review's three options: added
+`ReadinessRegistry.Unregister(id SubsystemID)` (deletes from the `reporters`
+map under the write lock; no-op if the id was never registered) and called
+it from both `ABACSubsystem.Stop` and `PluginSubsystem.Stop`, alongside
+their existing guard-field resets. `PluginSubsystem.Stop`'s call is placed
+after the existing `s.manager == nil` early-return guard; since `s.manager`
+is assigned strictly before `Registry.Register` is called in `Prepare`, a
+non-nil `s.manager` at `Stop` time does not guarantee `Register` was
+reached — safe regardless, since the new `Unregister` is a no-op on an
+absent key.
 
-**Files modified:** `internal/session/reaper.go`, `internal/session/reaper_test.go`
-**Commit:** `652e2587d`
-**Applied fix:** Moved the `r.bootAt = config.Now()` stamp from
-`NewReaper` (construction) to the top of `Run()`, per the review's first
-suggested option. `grpcSubsystem.Activate` calls
-`go s.sessionReaper.Run(s.reaperCtx)` directly (no intermediate
-`MarkBoot()`-style call site to wire), so this required no changes to
-`cmd/holomush/sub_grpc.go`. Existing reaper tests (`reaper_test.go`,
-`reaper_lease_test.go`) call `Run` immediately after `NewReaper` with a
-fixed fake clock, so their behavior is unaffected.
+### WR-03: `grpcSubsystem.Stop` resets four Prepare/Activate-owned fields but leaves `CoordHolder.coord` unreset
 
-Added `TestReaperCapturesBootAtWhenRunStartsNotWhenConstructed`
-(`reaper_test.go`): asserts `config.Now()` is never called during
-`NewReaper` and is only invoked once `Run` starts the sweep loop, using
-an atomic call counter — a direct, cheap regression test for the fix
-(no Docker/testcontainer dependency, unlike the sibling lease-sweep
-tests in the same package).
+**File modified:** `cmd/holomush/sub_grpc.go`
+**Commit:** `12fadf4d6`
+
+**Applied fix:** Added `s.cfg.CoordHolder.coord = nil` immediately after
+`coord.Stop(ctx)`, at minimum making the staleness visible (nil) rather than
+leaving a live pointer to an already-drained `invalidation.Coordinator`. Per
+the review's explicit caution, amended the `Stop` doc comment to state
+plainly that this reset alone does **not** make the Coordinator retry-safe:
+`cryptowiring.go`'s `resolveCryptoWiring` is a `sync.Once`-memoized closure
+(a pre-existing, documented one-shot-per-process design predating this
+phase) that will not reconstruct or restart a new Coordinator on a retried
+`Prepare` — cluster invalidation fan-out simply does not resume after a
+retry. That gap is explicitly called out as out of scope for this fix.
+
+### IN-01: Three near-identical `reflect`-based typed-nil-detection helpers existed instead of one shared helper
+
+**Files modified:** `internal/eventbus/bus.go`, `internal/presence/emitter.go`, `internal/sysbroadcast/broadcaster.go`
+**Commit:** `d4b4d950a`
+
+**Applied fix:** Extracted a single shared `eventbus.IsNilPublisher(pub Publisher) bool`
+into `internal/eventbus/bus.go` (next to the `Publisher` interface it
+operates on), carrying the same reflect-based `Chan/Func/Interface/Map/Pointer/Slice`
+kind switch as both prior copies. Updated `presence.NewEmitter` and
+`sysbroadcast.NewBroadcaster` to call `eventbus.IsNilPublisher(pub)` instead
+of their local `isNilPublisher` helpers, deleting both duplicate function
+bodies and their now-unused `reflect` imports. Left `cluster.isNilConn`
+untouched — it operates on `natsconn.Conn`, a distinct interface, per the
+review's fix note. Verified the remaining `isNilPublisher` mentions in
+`sysbroadcast/broadcaster_test.go` and `presence/emitter_test.go` are stale
+comments only (no code reference), so no test file needed updating.
 
 ## Skipped Issues
 
@@ -117,35 +138,38 @@ None — all findings were fixed.
 
 ## Verification
 
-Run inside an isolated worktree (`gsd-reviewfix/07-7388`, branched from
-`gsd/phase-07-event-model-bootstrap-decomposition`), one commit per
-finding, each verified individually with `task build` + a scoped
-`task test` before committing. After all four fixes landed:
-
-- `task build`: passes.
-- `task test` (full suite): **10285 tests passed, 0 failed, 4 skipped**
-  (skips are pre-existing quarantine/opt-in markers unrelated to this
-  phase).
-- `task test:int` (full suite): **10705 tests passed, 0 failed, 7 skipped**
-  (skips are pre-existing quarantine/nightly-opt-in markers unrelated to
+- `task build` — passes, verified at multiple intermediate states and on
+  the final worktree after cherry-pick.
+- Targeted `task test` on intermediate states (`./internal/eventbus/crypto/dek/...`,
+  `./internal/lifecycle/...`, `./internal/access/setup/...`,
+  `./internal/plugin/setup/...`, `./cmd/holomush/...`, `./internal/eventbus/...`,
+  `./internal/presence/...`, `./internal/sysbroadcast/...`, `./internal/cluster/...`) —
+  all passed at each step.
+- Full `task test` on the final five-commit state: **10286 tests passed, 0
+  failed, 4 skipped** (pre-existing quarantine/opt-in markers, unrelated to
   this phase).
-- `task lint:go` on every touched package: 0 issues.
+- Full `task test:int` on the final five-commit state: **10706 tests
+  passed, 0 failed, 7 skipped** (pre-existing quarantine/nightly-opt-in
+  markers, unrelated to this phase) — this run is what caught the WR-01
+  nil-channel regression described above, confirming the integration gate's
+  value for exactly this class of lifecycle-timing bug.
+- `task lint`: clean, 0 issues.
+- Re-verified independently after cherry-picking onto this branch: `task build` passes.
 
-No logic-classified findings in this batch required a
-"requires human verification" downgrade — CR-01, WR-01, and WR-03 are all
-lifecycle/resource-cleanup fixes with direct unit-test coverage of the new
-code paths (or, for WR-01, coverage of the surrounding invariant via
-existing tests); WR-02 is a mechanical single-construction-path
-substitution verified by the existing emitter test suite plus a clean
-lint pass.
+## Notes
 
-**Follow-up for the orchestrator:** WR-02 touches
-`internal/plugin/event_emitter.go::Emit`, which CLAUDE.md's Pre-Push
-Review Gates table names as requiring `crypto-reviewer` sign-off before
-push/PR.
+- Two of the four findings in this round (WR-01's nil-channel panic,
+  WR-02's registry panic) are themselves regressions introduced by *this
+  same fix-loop's* iteration-1 changes, caught by a genuinely adversarial
+  re-review and by the fixer's own `task test:int` run rather than assumed
+  away. This is the intended behavior of the `--auto` iteration loop — each
+  pass re-verifies the previous pass's work rather than trusting it.
+- All four findings were fixed exactly as diagnosed by the review — no
+  finding required deviating from the review's suggested fix shape.
+- No findings were skipped.
 
 ---
 
-_Fixed: 2026-07-18T06:10:00Z_
-_Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Fixed: 2026-07-18T19:20:00Z_
+_Fixer: Claude (gsd-code-fixer) + orchestrator (cherry-pick + report finalization, per explicit user direction on the merge mechanism)_
+_Iteration: 2_

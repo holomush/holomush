@@ -1,6 +1,6 @@
 ---
 phase: 07-event-model-bootstrap-decomposition
-reviewed: 2026-07-18T18:15:39Z
+reviewed: 2026-07-18T18:51:00Z
 depth: standard
 files_reviewed: 82
 files_reviewed_list:
@@ -112,132 +112,228 @@ files_reviewed_list:
   - test/integration/pluginparity/session_admin_broadcast_test.go
 findings:
   critical: 0
-  warning: 2
+  warning: 3
   info: 1
-  total: 3
+  total: 4
 status: issues_found
 ---
 
 # Phase 07: Code Review Report
 
-**Reviewed:** 2026-07-18T18:15:39Z
+**Reviewed:** 2026-07-18T18:51:00Z
 **Depth:** standard
-**Files Reviewed:** 82 (full required-reading set; several test files skimmed only far enough to confirm they exercise the production code correctly, per "do not report issues in test files unless they affect test reliability")
+**Files Reviewed:** 82
 **Status:** issues_found
 
 ## Summary
 
-This is a genuinely fresh re-review of a large (11-plan, 9-wave) refactor: the
-`core.Event`/`eventbus.Event` collapse, the `Subsystem.Start` → `Prepare`/`Activate`
-split across all 17 production subsystems, and the gateway-boundary import
-closure. I independently re-verified all four items the prior review's fixes
-addressed (WR-01 Lua-host-leak-on-world-conn-failure, WR-02 canonical
-`eventbus.NewEvent()` construction in `PluginEventEmitter.Emit`, WR-03
-reaper `bootAt` stamped in `Run` not `NewReaper`, and the CR-01
-`stopCoordinatorOnBootFailure` boot-failure cleanup path) — all four are
-present, correctly reasoned, and match their documented rationale; I did not
-just trust the commit messages, I read each fix's current code and traced
-its call sites. I also traced the orchestrator's topological ordering
-against every subsystem's live `DependsOn()` and cross-checked it against
-`core_topo_order_test.go`'s pinned assertions by hand (not just by reading
-the assertion) — the graph is acyclic and the pinned order matches what the
-code actually produces.
+This is iteration 2 of the review/fix loop. A fixer landed three commits
+addressing the prior round's WR-01 (Prepare/Activate idempotency guards
+never reset by `Stop` across `DatabaseSubsystem`, `ABACSubsystem`,
+`grpcSubsystem`, `AdminSocketSubsystem`, `OutboxRelaySubsystem`,
+`CheckpointSweepSubsystem`), WR-02 (`sysbroadcast.NewBroadcaster`'s missing
+typed-nil `Publisher` detection), and IN-01 (`PluginSubsystem.Prepare`'s
+missing idempotency guard). I re-read all three fixes' current code
+(not the commit messages) and traced every guarded field to its
+construction site and its `Stop`-side reset:
 
-The most substantive finding from this pass is a genuine gap in the new
-Prepare/Activate contract itself: several subsystems' "already
-prepared"/"already activated" guards are never reset by `Stop`, silently
-defeating the retry semantics the `lifecycle.Subsystem` interface documents
-as a MUST. This does not affect the current production boot path (which
-calls `StartAll` exactly once and exits on failure), but it is a real,
-concrete contract violation with a straightforward fix, and it is
-inconsistent with several subsystems in the very same phase
-(`eventbus.Subsystem`, `internal/eventbus/audit.Subsystem`,
-`cluster.registry`) that got this right. A second, minor finding is an
-inconsistent nil-guard pattern across three near-identical
-publisher-wrapping constructors introduced in this phase.
+- **WR-02 (typed-nil Publisher)**: verified correct and byte-for-byte
+  consistent with `presence.isNilPublisher` and `cluster.isNilConn` — same
+  `reflect.Kind` switch, same panic discipline, new test
+  (`TestNewBroadcasterPanicsOnTypedNilPublisher`) exercises it. No issues.
+- **WR-01 (guard resets)**: `DatabaseSubsystem`, `ABACSubsystem`,
+  `AdminSocketSubsystem`, and `OutboxRelaySubsystem`'s `Stop` methods
+  correctly and unconditionally reset every guarding field. `grpcSubsystem`
+  correctly resets `grpcServer`/`listener`/`reaperCancel`/`reaperCtx` — but
+  see WR-03 below for a field it does NOT reset in the same function.
+  `CheckpointSweepSubsystem`'s fix is **incomplete** — see WR-01 below: one
+  of its two `Stop` return branches skips the reset the other branch
+  performs, an inconsistency the sibling fixes in the same commit do not
+  have.
+- **IN-01 (Plugin guard)**: the guard field (`s.manager`) is set
+  mid-`Prepare` and the orchestrator's own `preparedOrder`-before-call
+  design (`internal/lifecycle/orchestrator.go:71-75`) guarantees `Stop`
+  always runs on a subsystem whose `Prepare` was invoked, even on partial
+  failure, so the "guard set before Prepare fully completes" shape is not
+  by itself exploitable. However, combining the now-functional retry path
+  this fix (and WR-01) enables with a **pre-existing** call these two
+  subsystems make in `Prepare` — `ReadinessRegistry.Register`, which
+  panics on a duplicate `SubsystemID` and has no corresponding
+  `Unregister` — produces a genuine new failure mode on a legitimate
+  retry. See WR-02 below.
 
-I did not find any security vulnerabilities, data-loss risks, or crashes in
-the reviewed files. No BLOCKER-severity findings.
+Net: the three targeted fixes are directionally correct and none of them
+regress anything exercised by the current single-boot production path
+(`cmd/holomush/core.go` calls `StartAll` exactly once). But two of the
+three fixes are **incomplete** in ways that matter for the exact retry
+contract they were written to satisfy, and I traced a genuine, previously
+undetected interaction between the fixes and pre-existing code
+(`ReadinessRegistry.Register`'s panic-on-duplicate) that a legitimate
+retry would now hit. All three new findings share the same
+not-currently-triggerable caveat as the original WR-01 (no in-tree retry
+path exists today), so I am keeping them at Warning severity for
+consistency with how the prior round scored this exact class of issue —
+but they should be fixed before any retry-capable caller (an admin tool,
+a test harness reusing an `Orchestrator`) is introduced.
 
 ## Warnings
 
-### WR-01: Several subsystems' Prepare/Activate idempotency guards are never reset by Stop, silently defeating the documented retry contract
+### WR-01: `CheckpointSweepSubsystem.Stop`'s ctx-timeout branch does not reset the guard it just failed to wait for, inconsistent with its own happy-path branch and every other Stop in this codebase
 
-**File:** `internal/lifecycle/subsystem.go:95-99,119-121` (the contract), with concrete violations at:
-- `internal/store/subsystem.go:53-56` (Prepare guard) / `:91-96` (Stop)
-- `internal/access/setup/subsystem.go:79-82` (Prepare guard) / `:155-163` (Stop)
-- `cmd/holomush/cryptowiring.go:283-286` (Prepare guard), `:881-884` (Activate guard) / `:913-947` (Stop)
-- `internal/admin/socket/subsystem.go:156-163` (Activate guard) / `:205-210` (Stop)
-- `internal/world/setup/relay_subsystem.go:86-89` (Prepare guard), `:119-122` (Activate guard) / `:138-155` (Stop)
-- `internal/eventbus/crypto/dek/sweep.go:121-124` (Activate guard) / `:136-149` (Stop)
+**File:** `internal/eventbus/crypto/dek/sweep.go:139-154`
 
-**Issue:** `lifecycle.Subsystem`'s doc comment (`internal/lifecycle/subsystem.go:95-99` for `Prepare`, `:119-121` for `Activate`) states both methods "MUST be idempotent... because the orchestrator does not promise to call Prepare exactly once — a failed Activate elsewhere in the sweep rolls back via Stop, and a caller may legitimately retry Prepare after fixing a transient failure." Every subsystem listed above implements the "idempotent" half as an early-return guard keyed on a field set during the first successful `Prepare`/`Activate` (e.g. `store.DatabaseSubsystem.Prepare`: `if s.eventStore != nil { return nil }`). But none of these subsystems' `Stop` methods reset that guarding field — `DatabaseSubsystem.Stop` calls `s.eventStore.Close()` but never sets `s.eventStore = nil`; `ABACSubsystem.Stop` calls `s.stack.Close()` but never sets `s.stack = nil`; `grpcSubsystem.Stop` calls `GracefulStop()`/closes the listener but never nils `s.grpcServer`/`s.listener`; `AdminSocketSubsystem.Stop` never nils `s.errCh`; `OutboxRelaySubsystem.Stop` never nils `s.relay`/`s.done`; `CheckpointSweepSubsystem.Stop` never nils `s.done`.
-
-Consequently, if `StartAll` is ever retried on the same `Orchestrator` instance after a rollback (exactly the scenario the interface doc describes as legitimate), every one of these subsystems' `Prepare`/`Activate` would see its guard field still non-nil (pointing at an already-`Close()`d/stopped resource) and return `nil` immediately — the retry would silently report success while serving a closed DB pool, a torn-down ABAC stack, an unbound gRPC listener, a dead admin socket, or a stopped outbox relay, with no error surfaced anywhere.
-
-Contrast with the subsystems in this same phase that get this right:
-`internal/eventbus/subsystem.go:463-464` (`Stop` sets `s.conn = nil; s.js = nil`, matching the `Prepare` guard at `:118`), `internal/eventbus/audit/subsystem.go:450-479` (`Stop` explicitly clears `preparedProjection`/`partitionManager`/`worker` after drain, with an inline comment explaining exactly why), and `internal/cluster/heartbeat.go:154-175` (`Stop` explicitly nils `subAlive`/`subBye`/`subProbe`/`subPoison`/tickers/done-channels before returning).
-
-This has no impact on the current production boot path (`cmd/holomush/core.go` calls `orch.StartAll(ctx)` exactly once and exits on failure — no in-tree retry path, as `internal/lifecycle/orchestrator.go:157-166` itself documents), so it is not a currently-triggerable production bug. It is, however, a real and concrete violation of an explicit MUST written in the very interface these subsystems implement, and a latent trap for any future retry path, test harness, or long-running admin tool that reuses an `Orchestrator`.
-
-**Fix:** Either (a) reset the guarding field to its zero value in each affected `Stop`, mirroring the eventbus/audit/cluster pattern (e.g. `store.DatabaseSubsystem.Stop`: `s.eventStore = nil; s.pool = nil` after `Close()`; `grpcSubsystem.Stop`: `s.grpcServer = nil` after `GracefulStop()`/`Stop()`, `s.listener = nil` after `Close()`), or (b) narrow `internal/lifecycle/subsystem.go`'s doc comment to scope "MUST be idempotent" explicitly to "idempotent within a single `StartAll` sweep" (which is all the orchestrator's own `topoSort`-driven single-pass-per-subsystem execution actually requires) and drop the "a caller may legitimately retry Prepare" claim, so the documented contract matches what the code actually guarantees.
+**Issue:** The WR-01 fix added `s.done = nil` to the happy-path branch of `Stop`, but the sibling `ctx.Done()` (timeout) branch was left untouched:
 
 ```go
-// internal/store/subsystem.go — example of (a)
-func (s *DatabaseSubsystem) Stop(_ context.Context) error {
-	if s.eventStore != nil {
-		s.eventStore.Close()
-		s.eventStore = nil
-		s.pool = nil
+func (s *CheckpointSweepSubsystem) Stop(ctx context.Context) error {
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
 	}
-	return nil
+	if s.done == nil {
+		return nil
+	}
+	select {
+	case <-s.done:
+		s.done = nil
+		return nil
+	case <-ctx.Done():
+		return oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT").Wrap(ctx.Err())
+	}
 }
 ```
 
-### WR-02: `sysbroadcast.NewBroadcaster` does not detect typed-nil `Publisher` values, unlike its two sibling constructors introduced in the same phase
+If `Stop` is called with a context whose deadline elapses before the
+background loop drains (exactly the scenario `oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT")`
+exists to report), `s.done` is left non-nil. `Activate`'s idempotency guard
+is `if s.done != nil { return nil }` (line 122) — so a subsequent legitimate
+retry of `Activate` (the same scenario this whole fix round exists to
+support) would silently no-op, believing the checkpoint sweep is already
+running, when in fact the prior loop may have already fully exited (its
+`defer close(s.done)` still fires on the channel object captured at
+`Activate`, line 158) or may still be winding down. Either way, no new tick
+loop launches and the guard gives no signal that anything is wrong.
 
-**File:** `internal/sysbroadcast/broadcaster.go:38-46`
+This is a real regression against the very contract this iteration's fix
+commit exists to establish, and it contradicts the pattern used by every
+other subsystem fixed in the same commit (`DatabaseSubsystem`,
+`ABACSubsystem`, `AdminSocketSubsystem`, `OutboxRelaySubsystem` all reset
+their guard fields unconditionally, regardless of the return path) — and
+by the two subsystems this whole approach was modeled on:
+`internal/eventbus/subsystem.go:448-464` sets `s.server = nil` /
+`s.conn = nil` / `s.js = nil` unconditionally, AFTER the `select` block,
+specifically so the `ctx.Done()` fallthrough branch ("Fall through — server
+teardown continues in the background") still resets state; and
+`internal/eventbus/audit/subsystem.go:472-479` sets `s.worker = nil` /
+`s.preparedProjection = nil` / `s.partitionManager = nil` unconditionally
+before checking whether `drain(ctx)` returned an error.
 
-**Issue:** `NewBroadcaster` guards against a nil `Publisher` with a bare `pub == nil` check:
+**Fix:** Move the reset out of the `case <-s.done:` branch so it runs on both paths, mirroring the two cited reference implementations:
 
 ```go
-func NewBroadcaster(pub eventbus.Publisher, gameID func() string) *Broadcaster {
-	if pub == nil {
-		panic("sysbroadcast.NewBroadcaster: nil Publisher")
+func (s *CheckpointSweepSubsystem) Stop(ctx context.Context) error {
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
 	}
-	...
+	if s.done == nil {
+		return nil
+	}
+	done := s.done
+	s.done = nil
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT").Wrap(ctx.Err())
+	}
 }
 ```
 
-This phase introduces two sibling constructors over the same `eventbus.Publisher`-shaped nil-checking problem — `presence.NewEmitter` (`internal/presence/emitter.go:54-62`) and `cluster.NewSubsystem`'s `isNilConn` helper (`internal/cluster/registry.go:303-320`) — both of which explicitly detect *typed*-nil interface values via `reflect.ValueOf(x).IsNil()` on the nilable-kind cases, with a doc comment explaining why the bare `== nil` check is insufficient: a nil concrete pointer wrapped in an interface is not itself `== nil` at the interface level, so `presence.NewEmitter`'s own doc calls this out explicitly ("Detects both untyped nil and typed-nil interface values... so callers truly fail fast at construction"). `sysbroadcast.NewBroadcaster` reintroduces exactly the gap `presence.NewEmitter` was written to close: a typed-nil concrete `Publisher` implementation passed to `NewBroadcaster` would pass the `pub == nil` check, defer the failure past construction, and panic (or nil-pointer-dereference) inside `Broadcast` instead — the same failure-mode the sibling constructor's doc comment says construction-time detection exists specifically to avoid.
+### WR-02: WR-01/IN-01's now-functional Prepare retry reaches `ReadinessRegistry.Register` a second time for `ABACSubsystem` and `PluginSubsystem`, which panics (no `Unregister` exists)
 
-Current callers (`cmd/holomush/sub_grpc.go`'s `sysbroadcast.NewBroadcaster(publisher, ...)`, `hostcap.NewSystemBroadcaster`) always pass a concrete non-nil `*RenderingPublisher`, so this is not exploitable today — but it is a real inconsistency between three constructors doing the same defensive job in the same PR, one of which explicitly documents the pattern the other two omit.
+**Files:**
+- `internal/access/setup/subsystem.go:79-82` (guard), `:125-127` (Register call), `:159-166` (Stop, now resets the guard)
+- `internal/plugin/setup/subsystem.go:178-180` (guard, added by IN-01), `:473-475` (Register call), `:539-570` (Stop, now resets the guard)
+- `internal/lifecycle/registry.go:29-37` (`Register` panics on duplicate `SubsystemID`; no `Unregister` method exists on `ReadinessRegistry`)
 
-**Fix:** Reuse (or extract to a shared helper in `internal/eventbus`) the same `reflect`-based typed-nil detection `presence.isNilPublisher` and `cluster.isNilConn` already implement:
+**Issue:** Before this iteration's fixes, `ABACSubsystem.Stop` never reset `s.stack`, and `PluginSubsystem.Prepare` had no guard at all. Combined, a retried `Prepare` on either subsystem was previously either a silent no-op (ABAC, pre-WR-01) or a genuinely wasteful-but-safe full rebuild (Plugin, pre-IN-01) — in both cases, a second call to `s.cfg.Registry.Register(...)` never happened, because ABAC's old code never reached the guarded-off Prepare body again on retry, and Plugin's old code had never gone through a guard-enforced "first success" boundary that a second call would collide with.
+
+Now that both subsystems reset their guard field in `Stop` (WR-01 for ABAC, IN-01 for Plugin), a legitimate retry sequence — `Prepare` succeeds → some other subsystem's `Activate` fails elsewhere in the sweep → orchestrator rolls back via `Stop` (which resets the guard) → caller retries `StartAll` — now genuinely re-enters the full `Prepare` body on the second attempt, including:
 
 ```go
-func NewBroadcaster(pub eventbus.Publisher, gameID func() string) *Broadcaster {
-	if pub == nil || isNilPublisher(pub) { // reuse presence's isNilPublisher (extract to a shared helper)
-		panic("sysbroadcast.NewBroadcaster: nil Publisher")
-	}
-	...
+// internal/access/setup/subsystem.go:125-127
+if s.cfg.Registry != nil {
+	s.cfg.Registry.Register(lifecycle.SubsystemABAC, stack.HealthTracker)
 }
 ```
+```go
+// internal/plugin/setup/subsystem.go:473-475
+if s.cfg.Registry != nil {
+	s.cfg.Registry.Register(lifecycle.SubsystemPlugins, s)
+}
+```
+
+`ReadinessRegistry.Register` (`internal/lifecycle/registry.go:33-35`) panics unconditionally on a duplicate `SubsystemID`:
+
+```go
+if _, exists := r.reporters[id]; exists {
+	panic("lifecycle: duplicate registration for subsystem " + id.String())
+}
+```
+
+Neither subsystem's `Stop` unregisters from `s.cfg.Registry`, and `ReadinessRegistry` exposes no `Unregister` method at all — there is no way to undo the first registration. So the retry this round's fixes were written to enable now reaches a **hard panic** on the second `Prepare`, for exactly the two subsystems whose `Stop` methods this round modified to reset their guards. This is a strictly worse failure mode than the WR-01 finding it replaces (silent stale-resource reuse vs. a process panic), even though — like the original WR-01 — it shares the same "not currently triggerable" caveat: production's `cmd/holomush/core.go` calls `StartAll` exactly once and exits on failure, so no in-tree caller retries an `Orchestrator` today. I confirmed no other touched subsystem calls `Registry.Register` inside `Prepare` (`internal/eventbus/subsystem.go`, `internal/eventbus/audit/subsystem.go`, `internal/cluster/heartbeat.go`, `internal/tls/subsystem.go` do not), so this is specifically confined to the two subsystems this round's fixes modified.
+
+**Fix:** Either (a) add an `Unregister(id SubsystemID)` method to `ReadinessRegistry` and call it from both subsystems' `Stop`, or (b) make `Register` idempotent for the same `(id, reporter)` pair re-registered after a `Stop` (e.g., allow overwrite, since `Stop` already tore down the old reporter), or (c) narrow the `lifecycle.Subsystem` interface doc's "a caller may legitimately retry Prepare" claim to explicitly exclude subsystems that register with a `ReadinessRegistry`, until (a) or (b) lands. (a) matches the existing idiom most closely:
+
+```go
+// internal/lifecycle/registry.go
+func (r *ReadinessRegistry) Unregister(id SubsystemID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.reporters, id)
+}
+```
+```go
+// internal/access/setup/subsystem.go — Stop
+if s.cfg.Registry != nil {
+	s.cfg.Registry.Unregister(lifecycle.SubsystemABAC)
+}
+```
+
+### WR-03: `grpcSubsystem.Stop` resets four Prepare/Activate-owned fields but leaves `CoordHolder.coord` unreset, inconsistent with the sibling resets added in the same function by this round's fix
+
+**File:** `cmd/holomush/sub_grpc.go:917-951`, `cmd/holomush/cryptowiring.go:335-387`
+
+**Issue:** This round's WR-01 fix added resets for `s.grpcServer`, `s.reaperCancel`, `s.reaperCtx`, and `s.listener` inside `grpcSubsystem.Stop` — but the same function also unconditionally calls `s.cfg.CoordHolder.coord.Stop(ctx)` a few lines later (lines 949-951) without ever setting `s.cfg.CoordHolder.coord = nil`:
+
+```go
+if s.cfg.CoordHolder != nil && s.cfg.CoordHolder.coord != nil {
+	if stopErr := s.cfg.CoordHolder.coord.Stop(ctx); stopErr != nil {
+		slog.WarnContext(ctx, "invalidation.Coordinator stop error", "error", stopErr)
+	}
+}
+return nil
+```
+
+`CoordHolder.coord` is set exactly once, inside `buildCryptoWiring` (`cmd/holomush/cryptowiring.go:379`), which itself runs inside a `sync.Once`-memoized closure (`resolveCryptoWiring`, `cmd/holomush/cryptowiring.go:141-156` — "the `sync.Once` body runs AT MOST ONCE per process"). Since a retried `grpcSubsystem.Prepare` calls the same memoized `resolveCryptoWiring()` closure, it will NOT re-run `buildCryptoWiring` and will NOT reassign `CoordHolder.coord` — the field keeps pointing at the coordinator instance that was already `Stop()`-ed in the previous attempt. A retry therefore "succeeds" at `Prepare`/`Activate` while silently leaving the invalidation-fan-out path bound to an already-drained `coordinator` (its own `Stop` is idempotent and won't panic on a second call, but `RequestInvalidation`'s cluster fan-out never resumes because `Start` is never called again either).
+
+This is a narrower issue than WR-01/WR-02 above (the crypto-wiring memoization was already a known, deliberately-documented one-shot-per-process design predating this phase's fixes — see the comment at `cryptowiring.go:344-353`), but it is still a genuine inconsistency introduced by this round's specific fix: every other field this same `Stop` function touches was reset to restore the "fresh state on retry" guarantee the fix's own doc comment claims ("resets... to nil so a legitimate retry of Prepare/Activate after Stop reacquires fresh state"), while `CoordHolder.coord` — set and read in the same function — was not, even though it is exactly the kind of "already-torn-down handle" WR-01 exists to guard against.
+
+**Fix:** At minimum, reset `s.cfg.CoordHolder.coord = nil` alongside the other fields in `Stop` so the staleness is at least visible/nil rather than a live pointer to a stopped coordinator; note in the doc comment that this alone does not make the Coordinator retry-safe (the memoized builder would still need to become retry-aware to actually reconstruct it — out of scope for this fix but should not be silently implied by the "reacquires fresh state" doc comment as currently written).
 
 ## Info
 
-### IN-01: `PluginSubsystem.Prepare` has no "already prepared" idempotency guard at all, unlike every sibling subsystem
+### IN-01: Three near-identical `reflect`-based typed-nil detection helpers now exist in three packages instead of one shared helper, as the prior round's WR-02 finding recommended
 
-**File:** `internal/plugin/setup/subsystem.go:173-179`
+**Files:** `internal/sysbroadcast/broadcaster.go:51-65` (new, this round), `internal/presence/emitter.go:64-75`, `internal/cluster/registry.go:303-320`
 
-**Issue:** Every other subsystem reviewed in this phase implements one of two documented dispositions for repeat `Prepare` calls: an explicit early-return guard (`store.DatabaseSubsystem`, `ABACSubsystem`, `grpcSubsystem`, `eventbus.Subsystem`, `OutboxRelaySubsystem`), or an explicit "no guard needed — re-running is benign reassignment" comment (`WorldSubsystem`, `SessionSubsystem`, `TLSSubsystem`, `BootstrapSubsystem`). `PluginSubsystem.Prepare` has neither: it unconditionally resolves the plugins dir, builds a fresh `hostfunc` bridge, a fresh Lua host, a fresh service registry, and (on non-empty `DatabaseConnStr`) a fresh alias pool + schema provisioner + binary host + `Manager` + `LoadAll` — every time it is called, with no comment explaining whether re-running is intended to be safe/cheap. Given `goplugin.NewHost` launches subprocess-management goroutines and `Manager.LoadAll` re-runs bootstrap-alias-seeding side effects, a second `Prepare` call (the same cross-`StartAll`-retry scenario WR-01 discusses) would silently duplicate plugin-subprocess launch and re-run `LoadAll`'s side effects rather than short-circuiting or explicitly documenting why full re-construction is safe.
+**Issue:** The prior round's WR-02 finding explicitly suggested "reuse (or extract to a shared helper in `internal/eventbus`)" the typed-nil detection pattern. The landed fix instead added a third copy — `sysbroadcast.isNilPublisher` — byte-for-byte identical in body to `presence.isNilPublisher`, both operating on `eventbus.Publisher`. This is correct and consistent (see Summary), but it is the less-preferred of the two options the prior finding offered, and now there are two verbatim-duplicate `isNilPublisher` functions (plus a third `isNilConn` variant differing only by parameter type) doing the same reflection dance in three different packages.
 
-This is Info-severity because, unlike WR-01's subsystems, `PluginSubsystem` at least does real work on a retry rather than silently reporting stale success — the failure mode here is "wasteful/duplicated work", not "silent use of a closed resource".
-
-**Fix:** Either add an explicit "already prepared" guard (`if s.manager != nil { return nil }`) mirroring the sibling subsystems that use one, or add a one-line doc comment explicitly stating why unconditional re-construction on retry is considered safe (matching the style of `WorldSubsystem`/`SessionSubsystem`/`BootstrapSubsystem`'s "no idempotency guard is needed" comments), so a future reader doesn't have to independently re-derive this.
+**Fix:** Extract a single generic (or `eventbus.Publisher`-typed) helper — e.g. `eventbus.IsNilPublisher(pub eventbus.Publisher) bool` — and have `presence` and `sysbroadcast` both call it, eliminating one of the two duplicate copies. `cluster.isNilConn` operates on a different interface (`natsconn.Conn`) so it would remain separate unless a generic `reflect`-based nil-check helper is introduced instead.
 
 ---
 
-_Reviewed: 2026-07-18T18:15:39Z_
+_Reviewed: 2026-07-18T18:51:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
