@@ -5,10 +5,12 @@ package setup_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
@@ -20,6 +22,8 @@ import (
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/world"
 )
 
 // Compile-time interface checks: *setup.PluginSubsystem must satisfy both interfaces.
@@ -71,6 +75,66 @@ func TestPluginSubsystemCommandQuerierPanicsBeforeStart(t *testing.T) {
 func TestPluginSubsystemStopBeforeStartIsNoop(t *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
 	assert.NoError(t, sub.Stop(t.Context()))
+}
+
+// fakeWorldServiceProvider satisfies setup.WorldServiceProvider, returning a
+// nil *world.Service. newWorldInProcessConn registers the resulting
+// world.NewGRPCServer on an in-memory bufconn without invoking it, so a nil
+// service does not panic during Prepare.
+type fakeWorldServiceProvider struct{}
+
+func (fakeWorldServiceProvider) Service() *world.Service { return nil }
+
+// fakeSessionProvider satisfies setup.SessionProvider, returning a nil
+// session.Access — only stashed by hostfunc.WithSessionAccess at
+// construction, never dereferenced before the manager-construction failure
+// point this test injects.
+type fakeSessionProvider struct{}
+
+func (fakeSessionProvider) SessionStore() session.Access { return nil }
+
+// fakePolicyInstallerProvider satisfies setup.PolicyInstallerProvider.
+type fakePolicyInstallerProvider struct {
+	installer *plugins.PolicyInstaller
+}
+
+func (f fakePolicyInstallerProvider) PolicyInstaller() *plugins.PolicyInstaller {
+	return f.installer
+}
+
+// TestPluginSubsystemPrepareFailureAfterHostConstructionLeavesNoSweeperGoroutine
+// is the fault-injection test for D-13.2 row 9 / cross-AI round 9 BLOCKER:
+// a Prepare failure between goplugin.NewHost (which launches the
+// token-store sweeper goroutine at construction) and the s.manager
+// assignment must leave no token-store sweeper goroutine running and no
+// live Lua host — Stop no-ops while s.manager == nil, so cleanupOnError's
+// in-body cleanup is the ONLY release path for that window.
+//
+// VerbRegistry: nil drives plugins.NewManager to fail deterministically
+// AFTER goplugin.NewHost (manager.go's ErrMissingVerbRegistry check), which
+// is exactly the injection window this test targets — not an earlier,
+// accidental failure.
+func TestPluginSubsystemPrepareFailureAfterHostConstructionLeavesNoSweeperGoroutine(t *testing.T) {
+	// NOTE: NOT t.Parallel — goleak.VerifyNone observes ALL live goroutines
+	// at the moment it runs, including sibling t.Parallel test runners.
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
+	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{
+		DataDir:         t.TempDir(),
+		DatabaseConnStr: "", // skips both the schema provisioner and the alias pool
+		ABAC:            &fakeEngineProvider{},
+		PolicyInst:      fakePolicyInstallerProvider{installer: plugins.NewPolicyInstaller(nil)},
+		World:           fakeWorldServiceProvider{},
+		Sessions:        fakeSessionProvider{},
+		VerbRegistry:    nil, // -> plugins.ErrMissingVerbRegistry, deterministically after goplugin.NewHost
+	})
+
+	err := sub.Prepare(t.Context())
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, plugins.ErrMissingVerbRegistry),
+		"Prepare must fail at the intended injection point (ErrMissingVerbRegistry), not earlier")
+
+	require.NoError(t, sub.Stop(t.Context()), "Stop after a failed Prepare must be a safe no-op")
 }
 
 func TestPluginSubsystemHealthStatusReportsDeadBeforeStart(t *testing.T) {

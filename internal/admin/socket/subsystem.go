@@ -95,14 +95,16 @@ func (s *AdminSocketSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Start creates the server, acquires admin.lock, binds admin.sock, and
-// begins serving. If SocketPath is empty (XDG runtime dir unavailable at
-// startup), Start is a no-op: the admin socket is disabled but the server
-// continues serving normally — the disabled-mode early return runs BEFORE
-// HandlersProvider is ever resolved, so a disabled admin socket never
-// triggers the wiring build.
+// Prepare constructs the Server (Config{...}) only — NO live resources are
+// allocated (NewServer's own doc already promises this). If SocketPath is
+// empty (XDG runtime dir unavailable at startup), Prepare is a no-op: the
+// admin socket is disabled but the server continues preparing normally —
+// the disabled-mode early return runs BEFORE HandlersProvider is ever
+// resolved, so a disabled admin socket never triggers the wiring build
+// (D-13.3 row 14). admin.lock acquisition does NOT happen here — see
+// Activate.
 // codecov:ignore — tested by integration and E2E tests
-func (s *AdminSocketSubsystem) Start(ctx context.Context) error {
+func (s *AdminSocketSubsystem) Prepare(ctx context.Context) error {
 	if s.cfg.SocketPath == "" {
 		slog.WarnContext(ctx, "admin socket subsystem: disabled — no socket path configured; break-glass unavailable")
 		return nil
@@ -123,7 +125,7 @@ func (s *AdminSocketSubsystem) Start(ctx context.Context) error {
 		handlers = resolved
 	}
 
-	srv := NewServer(Config{
+	s.server = NewServer(Config{
 		SocketPath:          s.cfg.SocketPath,
 		LockPath:            s.cfg.LockPath,
 		Version:             s.cfg.Version,
@@ -133,13 +135,37 @@ func (s *AdminSocketSubsystem) Start(ctx context.Context) error {
 		RekeyHandler:        handlers.Rekey,
 		ReadStreamHandler:   handlers.ReadStream,
 	})
+	return nil
+}
 
-	errCh, err := srv.Start()
+// Activate acquires admin.lock, binds admin.sock, and begins serving — the
+// existing atomic srv.Start() call, unmodified (D-13.3 row 14). It FIRST
+// guards on s.server == nil (disabled mode — Prepare's early return skips
+// server construction, but the two-sweep orchestrator still calls Activate
+// on every subsystem; without this guard srv.Start() would nil-panic the
+// boot in exactly the degraded no-XDG-runtime-dir environment disabled mode
+// exists to survive — cross-AI round 5, BLOCKER). The WARN was already
+// logged in Prepare; Activate returns nil silently in disabled mode.
+//
+// This is the break-glass surface: admin.sock is the only other
+// externally-reachable bind besides the gRPC listener, and it accepting
+// before every dependency has prepared is precisely what the two-sweep
+// barrier exists to prevent. Idempotent: guarded on s.errCh != nil (already
+// activated).
+// codecov:ignore — tested by integration and E2E tests
+func (s *AdminSocketSubsystem) Activate(_ context.Context) error {
+	if s.server == nil {
+		return nil // disabled mode — never constructed in Prepare
+	}
+	if s.errCh != nil {
+		return nil // already activated
+	}
+
+	errCh, err := s.server.Start()
 	if err != nil {
 		return err
 	}
 
-	s.server = srv
 	s.errCh = errCh
 
 	go runErrMonitor(s.errCh, s.cfg.Shutdown)

@@ -85,7 +85,8 @@ var _ = Describe("Plugin crash resilience", func() {
 		hostSub.SetLateInitProvider(func() (*audit.OwnerMap, *audit.PluginConsumerManager) {
 			return owners, pluginMgr
 		})
-		Expect(hostSub.Start(ctx)).To(Succeed())
+		Expect(hostSub.Prepare(ctx)).To(Succeed())
+		Expect(hostSub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		// Publish one plugin-owned event.

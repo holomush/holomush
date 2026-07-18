@@ -64,7 +64,8 @@ var _ = Describe("AdminSocketSubsystem (integration, holomush-jxo8.9)", func() {
 				Version:    "test-jxo8.9",
 				Shutdown:   func(err error) { shutdownCh <- err },
 			})
-			Expect(sub.Start(context.Background())).To(Succeed())
+			Expect(sub.Prepare(context.Background())).To(Succeed())
+			Expect(sub.Activate(context.Background())).To(Succeed())
 			DeferCleanup(func() {
 				stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -105,7 +106,8 @@ var _ = Describe("AdminSocketSubsystem (integration, holomush-jxo8.9)", func() {
 				Version:    "test-jxo8.9-stop",
 				Shutdown:   func(error) { shutdownFired <- struct{}{} },
 			})
-			Expect(sub.Start(context.Background())).To(Succeed())
+			Expect(sub.Prepare(context.Background())).To(Succeed())
+			Expect(sub.Activate(context.Background())).To(Succeed())
 
 			stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

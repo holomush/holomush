@@ -24,7 +24,8 @@ type Registry interface {
 	// Lifecycle (called by subsystem orchestrator)
 	ID() lifecycle.SubsystemID
 	DependsOn() []lifecycle.SubsystemID
-	Start(ctx context.Context) error
+	Prepare(ctx context.Context) error
+	Activate(ctx context.Context) error
 	Stop(ctx context.Context) error
 
 	// Self returns this process's MemberID.

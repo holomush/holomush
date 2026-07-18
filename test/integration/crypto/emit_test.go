@@ -90,7 +90,8 @@ var _ = Describe("Sensitive emit produces ciphertext on bus and in audit (INV-CR
 		// Stand up the audit projection so events_audit gets populated.
 		// audit.Config{} (no OwnerMap) means host owns every subject.
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-		Expect(hostSub.Start(ctx)).NotTo(HaveOccurred())
+		Expect(hostSub.Prepare(ctx)).NotTo(HaveOccurred())
+		Expect(hostSub.Activate(ctx)).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		manifest := &plugins.Manifest{

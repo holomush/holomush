@@ -79,9 +79,15 @@ func (s *OutboxRelaySubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase, lifecycle.SubsystemEventBus}
 }
 
-// Start constructs the leased relay + the reference consumer and launches the
-// relay drain loop. codecov:ignore — exercised by integration and E2E tests.
-func (s *OutboxRelaySubsystem) Start(ctx context.Context) error {
+// Prepare constructs the leased relay + the reference consumer — lease/conn
+// acquisition and wiring, no work loop (D-13.3 row 6). Idempotent: guarded
+// on s.relay so a second Prepare does not rebuild the waker/relay.
+// codecov:ignore — exercised by integration and E2E tests.
+func (s *OutboxRelaySubsystem) Prepare(ctx context.Context) error {
+	if s.relay != nil {
+		return nil // already prepared
+	}
+
 	pool := s.cfg.DB.Pool()
 	store := worldpostgres.NewOutboxStore(pool)
 	checkpoint := worldpostgres.NewConsumerCheckpointStore(pool)
@@ -102,6 +108,19 @@ func (s *OutboxRelaySubsystem) Start(ctx context.Context) error {
 	// 05-11 (this plan wires the consumer/bootstrap + subsystem plumbing only).
 	s.consumer = outbox.NewConsumer(referenceConsumerName, checkpointStoreAdapter{store: checkpoint}, nil, s.cfg.Logger)
 
+	slog.InfoContext(ctx, "outbox relay subsystem prepared", "game_id", gameID)
+	return nil
+}
+
+// Activate launches the relay drain loop — domain traffic (D-13.3 row 6).
+// Idempotent: guarded on s.done, a phase-owned field set only by Activate,
+// so a repeated Activate does not launch a second drain goroutine.
+// codecov:ignore — exercised by integration and E2E tests.
+func (s *OutboxRelaySubsystem) Activate(ctx context.Context) error {
+	if s.done != nil {
+		return nil // already activated
+	}
+
 	runCtx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 	s.done = make(chan struct{})
@@ -110,7 +129,7 @@ func (s *OutboxRelaySubsystem) Start(ctx context.Context) error {
 		_ = s.relay.Run(runCtx) //nolint:errcheck // Run returns only the ctx-cancellation reason on Stop
 	}()
 
-	slog.InfoContext(ctx, "outbox relay subsystem started", "game_id", gameID)
+	slog.InfoContext(ctx, "outbox relay subsystem activated")
 	return nil
 }
 

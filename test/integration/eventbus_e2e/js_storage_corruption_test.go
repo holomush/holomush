@@ -44,7 +44,8 @@ var _ = Describe("JS storage corruption rebuild from PG audit preserves ULIDs", 
 		pool := freshPool()
 
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-		Expect(hostSub.Start(ctx)).To(Succeed())
+		Expect(hostSub.Prepare(ctx)).To(Succeed())
+		Expect(hostSub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		pub := bus.Bus.Publisher()

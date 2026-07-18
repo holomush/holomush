@@ -36,7 +36,8 @@ var _ = Describe("Rendering completeness", func() {
 
 		// Stand up the host audit projection so publishes reach events_audit.
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-		Expect(hostSub.Start(ctx)).To(Succeed())
+		Expect(hostSub.Prepare(ctx)).To(Succeed())
+		Expect(hostSub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		// Build the wrapped publisher: BootstrapVerbRegistry + RenderingPublisher.

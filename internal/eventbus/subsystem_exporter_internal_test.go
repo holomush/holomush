@@ -40,16 +40,16 @@ func TestStartRollsBackWhenExporterFails(t *testing.T) {
 		MonitorPort:        -1, // random; nats-server binds a free port
 	}.Defaults()
 	sub := NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
-	err := sub.Start(context.Background())
+	err := sub.Prepare(context.Background())
 	require.Error(t, err)
-	require.ErrorIs(t, err, sentinel, "start error should wrap the injected failure")
+	require.ErrorIs(t, err, sentinel, "prepare error should wrap the injected failure")
 	// Also assert the structured error code so this branch's API-boundary
 	// contract is locked — callers distinguishing rollback reasons rely on it.
 	errutil.AssertErrorCode(t, err, "EVENTBUS_EXPORTER_START_FAILED")
 
 	// Rollback invariants: no dangling server/conn/js; safe to retry.
-	assert.Nil(t, sub.JS(), "JS should be nil after failed Start rollback")
-	assert.Nil(t, sub.Conn(), "Conn should be nil after failed Start rollback")
-	// Idempotent Stop after failed Start.
+	assert.Nil(t, sub.JS(), "JS should be nil after failed Prepare rollback")
+	assert.Nil(t, sub.Conn(), "Conn should be nil after failed Prepare rollback")
+	// Idempotent Stop after failed Prepare.
 	require.NoError(t, sub.Stop(context.Background()))
 }

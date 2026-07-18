@@ -339,7 +339,8 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 
 	ps := pluginsetup.NewPluginSubsystem(cfg)
 	t.Cleanup(func() { _ = ps.Stop(context.Background()) })
-	require.NoError(t, ps.Start(ctx), "startPlugins: PluginSubsystem.Start (LoadAll)")
+	require.NoError(t, ps.Prepare(ctx), "startPlugins: PluginSubsystem.Prepare (LoadAll)")
+	require.NoError(t, ps.Activate(ctx), "startPlugins: PluginSubsystem.Activate")
 
 	// Wire the plugin event emitter to the crypto-enabled publisher when
 	// WithPluginCrypto supplied one. WithGameID takes a GameIDProvider

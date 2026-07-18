@@ -62,9 +62,12 @@ func (s *WorldSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase, lifecycle.SubsystemABAC}
 }
 
-// Start creates all world repositories, transactor, and WorldService.
+// Prepare creates all world repositories, transactor, and WorldService — the
+// cleanest split in the tree: it is all acquire+wire (D-13.3 row 5). No
+// idempotency guard is needed: re-running is benign reassignment, not a
+// duplicated side effect.
 // codecov:ignore — tested by integration and E2E tests
-func (s *WorldSubsystem) Start(ctx context.Context) error {
+func (s *WorldSubsystem) Prepare(ctx context.Context) error {
 	pool := s.cfg.DB.Pool()
 	engine := s.cfg.ABAC.Engine()
 
@@ -92,26 +95,30 @@ func (s *WorldSubsystem) Start(ctx context.Context) error {
 	})
 	s.transactor = transactor
 
-	slog.InfoContext(ctx, "world subsystem started")
+	slog.InfoContext(ctx, "world subsystem prepared")
 	return nil
 }
+
+// Activate is a no-op — the world subsystem serves nothing of its own
+// (D-13.3 row 5).
+func (s *WorldSubsystem) Activate(_ context.Context) error { return nil }
 
 // Stop is a no-op — world services are stateless after init.
 // codecov:ignore — tested by integration and E2E tests
 func (s *WorldSubsystem) Stop(_ context.Context) error { return nil }
 
-// Service returns the WorldService. Panics if called before Start().
+// Service returns the WorldService. Panics if called before Prepare().
 func (s *WorldSubsystem) Service() *world.Service {
 	if s.service == nil {
-		panic("world/setup: Service() called before Start()")
+		panic("world/setup: Service() called before Prepare()")
 	}
 	return s.service
 }
 
-// Transactor returns the world Transactor. Panics if called before Start().
+// Transactor returns the world Transactor. Panics if called before Prepare().
 func (s *WorldSubsystem) Transactor() world.Transactor {
 	if s.transactor == nil {
-		panic("world/setup: Transactor() called before Start()")
+		panic("world/setup: Transactor() called before Prepare()")
 	}
 	return s.transactor
 }

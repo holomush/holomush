@@ -17,12 +17,13 @@ import (
 // It starts them in topological (dependency) order and stops them
 // in reverse order.
 type Orchestrator struct {
-	subsystems map[SubsystemID]Subsystem
-	startOrder []SubsystemID // populated by StartAll
+	subsystems     map[SubsystemID]Subsystem
+	preparedOrder  []SubsystemID // subsystems whose Prepare was invoked, in invocation order
+	activatedOrder []SubsystemID // subsystems whose Activate succeeded, in invocation order
 }
 
 // NewOrchestrator returns a new Orchestrator initialized with an empty subsystem registry.
-// The returned Orchestrator has an empty subsystems map and a nil startOrder.
+// The returned Orchestrator has an empty subsystems map and no prepared/activated history.
 func NewOrchestrator() *Orchestrator {
 	return &Orchestrator{
 		subsystems: make(map[SubsystemID]Subsystem),
@@ -38,46 +39,78 @@ func (o *Orchestrator) Register(s Subsystem) {
 	o.subsystems[id] = s
 }
 
-// StartAll topologically sorts subsystems by dependencies and starts
-// them in order. Returns an error on the first Start failure, cycle
-// detection, or missing dependency.
+// StartAll topologically sorts subsystems by dependencies and runs two full
+// sweeps over that order: every subsystem's Prepare, then every subsystem's
+// Activate. This two-sweep shape is the point (D-12 Wave B, D-13.1) — it is
+// what makes "no subsystem accepts externally-reachable domain traffic and
+// no host-owned domain work loop runs until every subsystem has acquired" a
+// structural property of the orchestrator rather than something that
+// depends on every DependsOn edge being remembered.
+//
+// Returns an error on the first Prepare or Activate failure, cycle
+// detection, or missing dependency. On a Prepare or Activate failure,
+// StartAll rolls back every prepared subsystem (Stop, in reverse order) on
+// a fresh bounded context before returning.
 func (o *Orchestrator) StartAll(ctx context.Context) error {
 	order, err := o.topoSort()
 	if err != nil {
 		return err
 	}
 
-	// Reset startOrder — only subsystems that successfully start are tracked.
-	o.startOrder = nil
+	// Reset prepared/activated history — only subsystems actually swept in
+	// this call are tracked.
+	o.preparedOrder = nil
+	o.activatedOrder = nil
 
+	// Sweep 1: Prepare every subsystem in topological order.
 	for _, id := range order {
 		sub := o.subsystems[id]
-		slog.InfoContext(ctx, "starting subsystem", "subsystem", id.String())
+		slog.InfoContext(ctx, "preparing subsystem", "subsystem", id.String())
 		start := time.Now()
 
-		if startErr := sub.Start(ctx); startErr != nil {
-			// Rollback: stop already-started subsystems in reverse order, on
-			// a FRESH bounded context — never the startup ctx. The startup
-			// ctx is exactly what may already be cancelled in the failure
-			// modes rollback exists for (SIGINT mid-boot, a boot deadline
-			// elapsing), and StopAll below is deadline-aware: handing it an
-			// already-dead ctx would make it abandon every rollback Stop
-			// instantly (cross-AI round 4, MEDIUM — verified). Normal
-			// (non-rollback) callers keep passing their own ctx.
-			stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			o.StopAll(stopCtx)
-			cancel()
+		// Record the id BEFORE calling Prepare (not after success): a failed
+		// Prepare may have partially acquired resources, and the subsystem
+		// that just failed is precisely the one most likely to need Stop
+		// called on it during rollback (cross-AI review, Bug 1).
+		o.preparedOrder = append(o.preparedOrder, id)
+
+		if prepErr := sub.Prepare(ctx); prepErr != nil {
+			o.rollback(ctx)
 			return oops.
 				Code("SUBSYSTEM_START_FAILED").
 				With("subsystem", id.String()).
-				Wrapf(startErr, "subsystem %s failed to start", id.String())
+				Wrapf(prepErr, "subsystem %s failed to prepare", id.String())
 		}
-
-		o.startOrder = append(o.startOrder, id)
 
 		slog.InfoContext(
 			ctx,
-			"subsystem started",
+			"subsystem prepared",
+			"subsystem", id.String(),
+			"duration", time.Since(start).String(),
+		)
+	}
+
+	// Sweep 2: Activate every subsystem in topological order. This is the
+	// global barrier — no Activate runs until every Prepare above has
+	// returned successfully.
+	for _, id := range order {
+		sub := o.subsystems[id]
+		slog.InfoContext(ctx, "activating subsystem", "subsystem", id.String())
+		start := time.Now()
+
+		if actErr := sub.Activate(ctx); actErr != nil {
+			o.rollback(ctx)
+			return oops.
+				Code("SUBSYSTEM_START_FAILED").
+				With("subsystem", id.String()).
+				Wrapf(actErr, "subsystem %s failed to activate", id.String())
+		}
+
+		o.activatedOrder = append(o.activatedOrder, id)
+
+		slog.InfoContext(
+			ctx,
+			"subsystem activated",
 			"subsystem", id.String(),
 			"duration", time.Since(start).String(),
 		)
@@ -86,11 +119,32 @@ func (o *Orchestrator) StartAll(ctx context.Context) error {
 	return nil
 }
 
-// StopAll stops subsystems in reverse start order, honoring ctx's deadline
-// (LOW-7). If ctx is done before every subsystem has been stopped, StopAll
-// logs the remaining SubsystemIDs at error level and returns immediately
-// rather than waiting further — silent abandonment is worse than a slow
-// shutdown (T-07-53), but an unbounded shutdown is worse than a bounded one.
+// rollback tears down every prepared subsystem (a superset of the activated
+// set — activatedOrder is a subset of preparedOrder by construction) via
+// StopAll, on a FRESH bounded context — never the startup ctx passed to
+// StartAll. The startup ctx is exactly what may already be cancelled in the
+// failure modes rollback exists for (SIGINT mid-boot, a boot deadline
+// elapsing), and StopAll is deadline-aware: handing it an already-dead ctx
+// would make it abandon every rollback Stop instantly (cross-AI review,
+// Bug 2 — verified). Normal (non-rollback) StopAll callers keep passing
+// their own ctx; this fresh-context rule applies only to StartAll's own
+// rollback path.
+func (o *Orchestrator) rollback(_ context.Context) {
+	stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	o.StopAll(stopCtx)
+}
+
+// StopAll stops every prepared subsystem — preparedOrder is a superset of
+// activatedOrder, so one reverse walk correctly tears down subsystems that
+// were prepared but never activated, partially prepared, or fully activated
+// (D-13.1: this is why three methods, Prepare/Activate/Stop, suffice; no
+// separate Unprepare/Deactivate is needed) — in reverse order, honoring
+// ctx's deadline (LOW-7). If ctx is done before every subsystem has been
+// stopped, StopAll logs the remaining SubsystemIDs at error level and
+// returns immediately rather than waiting further — silent abandonment is
+// worse than a slow shutdown (T-07-53), but an unbounded shutdown is worse
+// than a bounded one.
 //
 // Each subsystem's Stop runs in its own goroutine so that one Stop which
 // ignores its own ctx and hangs past the deadline cannot hold up the loop;
@@ -103,13 +157,13 @@ func (o *Orchestrator) StartAll(ctx context.Context) error {
 // This design assumes StopAll's callers are terminal. In production StopAll
 // is called exactly once at process exit (the deferred call in
 // cmd/holomush/core.go), plus at most once more on StartAll's rollback path
-// below — which always builds its OWN fresh bounded context, never the
+// above — which always builds its OWN fresh bounded context, never the
 // (possibly already-cancelled) startup ctx, so a cancelled boot cannot
 // abandon rollback cleanup. A subsystem whose Stop routinely outlives the
 // deadline is a bug in that subsystem, not a tolerated steady state: the
 // Subsystem interface already contracts that Stop "MUST NOT block
-// indefinitely" (subsystem.go:55-57) — this method simply stops trusting
-// that contract blindly and bounds the damage when it is violated.
+// indefinitely" (subsystem.go) — this method simply stops trusting that
+// contract blindly and bounds the damage when it is violated.
 //
 // Reusing an Orchestrator after a rollback that timed out — calling
 // StartAll again, or registering/starting replacement subsystems on the
@@ -120,13 +174,13 @@ func (o *Orchestrator) StartAll(ctx context.Context) error {
 // exercise rollback must either use stubs whose Stop honors its ctx, or
 // discard the Orchestrator instance afterward.
 func (o *Orchestrator) StopAll(ctx context.Context) {
-	for i := len(o.startOrder) - 1; i >= 0; i-- {
+	for i := len(o.preparedOrder) - 1; i >= 0; i-- {
 		if ctx.Err() != nil {
-			logAbandonedSubsystems(ctx, o.startOrder[:i+1])
+			logAbandonedSubsystems(ctx, o.preparedOrder[:i+1])
 			return
 		}
 
-		id := o.startOrder[i]
+		id := o.preparedOrder[i]
 		sub := o.subsystems[id]
 		slog.InfoContext(ctx, "stopping subsystem", "subsystem", id.String())
 
@@ -146,7 +200,7 @@ func (o *Orchestrator) StopAll(ctx context.Context) {
 				)
 			}
 		case <-ctx.Done():
-			logAbandonedSubsystems(ctx, o.startOrder[:i+1])
+			logAbandonedSubsystems(ctx, o.preparedOrder[:i+1])
 			return
 		}
 	}

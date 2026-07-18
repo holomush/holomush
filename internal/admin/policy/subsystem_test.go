@@ -72,9 +72,10 @@ func TestCryptoPolicySubsystemStopIsNoOp(t *testing.T) {
 	require.NoError(t, s.Stop(context.Background()))
 }
 
-// TestCryptoPolicySubsystemStartEmitsNothingForEmptyPolicyNames documents the
-// loop's no-op shape: an empty PolicyNames list returns nil and publishes nothing.
-func TestCryptoPolicySubsystemStartEmitsNothingForEmptyPolicyNames(t *testing.T) {
+// TestCryptoPolicySubsystemActivateEmitsNothingForEmptyPolicyNames documents
+// the loop's no-op shape: an empty PolicyNames list returns nil and
+// publishes nothing.
+func TestCryptoPolicySubsystemActivateEmitsNothingForEmptyPolicyNames(t *testing.T) {
 	pub := &subsystemFakePub{}
 	s := policy.NewCryptoPolicySubsystem(policy.CryptoPolicySubsystemConfig{
 		EmitDeps: policy.EmitDeps{
@@ -87,6 +88,12 @@ func TestCryptoPolicySubsystemStartEmitsNothingForEmptyPolicyNames(t *testing.T)
 		},
 		PolicyNames: nil,
 	})
-	require.NoError(t, s.Start(context.Background()))
+	require.NoError(t, s.Prepare(context.Background()))
+	require.NoError(t, s.Activate(context.Background()))
 	assert.Empty(t, pub.Events())
 }
+
+// The repeated-Activate no-op and mid-loop-failure retry-suffix behaviors
+// (D-13.2 row 15) require a real Postgres pool (EmitCurrentSnapshot's
+// loadChainEntries queries events_audit) and are proven at integration tier
+// in subsystem_integration_test.go.

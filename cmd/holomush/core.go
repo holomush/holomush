@@ -728,9 +728,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// Thread the memoized wiring into the gRPC subsystem — the one consumer
 	// in package main, so it may hold func() (*cryptoWiring, error) directly
 	// rather than a narrow consumer-owned provider type (round 5, BLOCKER 4).
-	// Resolved inside grpcSubsystem.Start, which is the FIRST caller of
-	// cryptoWiringFn in the running system — satisfying item 4's "move the
-	// Coordinator's construction + Start into grpcSub's Start" requirement.
+	// Resolved inside grpcSubsystem.Prepare. Per cryptoWiringInputs.CoordHolder's
+	// doc, grpcSubsystem is not necessarily the first caller of cryptoWiringFn —
+	// whichever wiring consumer's Prepare runs earliest in topological order is —
+	// but every caller's resolution happens during the Prepare sweep, so the
+	// Coordinator's construction+Start (a side effect of this builder) is
+	// always confined there, before any Activate.
 	grpcSub.cfg.CryptoWiring = cryptoWiringFn
 
 	// --- The block's three lifecycle-subsystem CONSTRUCTIONS stay on

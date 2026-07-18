@@ -95,9 +95,26 @@ type cryptoWiringInputs struct {
 	// CoordHolder is the late-bound holder for the invalidation.Coordinator
 	// (see crypto_rekey_wiring.go's coordHolder doc). The builder sets
 	// CoordHolder.coord as a side effect of a successful Coordinator
-	// construction+Start — this IS the "move construction + c.Start(ctx)
-	// into grpcSub's Start" requirement (07-09 item 4): grpcSubsystem.Start
-	// is the first caller of the memoized builder in the running system.
+	// construction+Start (07-09 item 4).
+	//
+	// 07-11 note: the FIRST caller of the memoized builder in the running
+	// system is whichever wiring consumer's Prepare is scheduled earliest in
+	// topological order — CryptoChainVerifier is required to prepare before
+	// grpcSubsystem (pinned by cmd/holomush/core_topo_order_test.go), so it
+	// is frequently that consumer, not grpcSubsystem. This is unchanged
+	// behavior from pre-07-11 (the "grpcSub is the first caller" framing in
+	// the code predates the Prepare/Activate split and was already
+	// inaccurate under the single-phase topology). Construction+Start
+	// deliberately stay bundled inside this builder rather than split
+	// across phases: whichever Prepare call triggers it, the build —
+	// including the Coordinator's Start() — runs during the Prepare sweep,
+	// strictly before any Activate, so D-13.0's barrier (no
+	// externally-reachable DOMAIN surface or host-owned domain work loop
+	// before every subsystem has prepared) still holds. The Coordinator's
+	// own pub/sub is process/cluster-internal invalidation signaling over
+	// the cluster's already-prepared connection, not client-facing domain
+	// traffic — the same class of exception D-13.0 grants eventbus's whole
+	// Prepare body.
 	CoordHolder *coordHolder
 }
 
@@ -322,10 +339,13 @@ func buildCryptoWiring(in cryptoWiringInputs) (*cryptoWiring, error) {
 	// Manager was successfully constructed (rekeyW.Manager non-nil) —
 	// otherwise the Coordinator has no caches to bind to.
 	//
-	// grpcSubsystem owns the Coordinator's lifecycle (07-09 item 4):
-	// construction + Start() happen here, as a side effect of the FIRST
-	// call to this builder — which is grpcSubsystem.Start, the first
-	// wiring consumer in the running system.
+	// grpcSubsystem owns the Coordinator's lifecycle for STOP purposes
+	// (07-09 item 4: grpcSubsystem.Stop drives Coordinator.Stop via
+	// CoordHolder). Construction + Start() happen HERE, inside this
+	// memoized builder, as a side effect of the first call to it — which
+	// may be any wiring consumer's Prepare, not necessarily grpcSubsystem's
+	// (see cryptoWiringInputs.CoordHolder's doc for why this is
+	// deliberately unchanged from pre-07-11 and still D-13.0-compliant).
 	if rekeyW.Manager != nil {
 		accessor, accessorOK := rekeyW.Manager.(dek.CacheAccessor)
 		if !accessorOK {

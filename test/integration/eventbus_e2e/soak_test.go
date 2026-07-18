@@ -60,7 +60,8 @@ var _ = Describe("Soak publish 1k/sec for 5 minutes", func() {
 		bus := freshBus()
 		pool := freshPool()
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-		Expect(hostSub.Start(ctx)).To(Succeed())
+		Expect(hostSub.Prepare(ctx)).To(Succeed())
+		Expect(hostSub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		pub := bus.Bus.Publisher()

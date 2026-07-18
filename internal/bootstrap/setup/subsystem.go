@@ -112,7 +112,8 @@ func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Start runs the full bootstrap sequence:
+// Prepare runs the full bootstrap sequence — one-shot DB work against a
+// prepared pool, not a loop and not external (D-13.3 row 8):
 //  1. Create BootstrapRunner
 //  2. Register policy bootstrapper (priority 200)
 //  3. Register setting bootstrapper (priority 300) if configured
@@ -120,8 +121,10 @@ func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 //  5. Run all bootstrappers
 //  6. Resolve starting location
 //
+// No idempotency guard: seeding already runs on every boot by design, and
+// re-running is harmless.
 // codecov:ignore — tested by integration and E2E tests
-func (s *BootstrapSubsystem) Start(ctx context.Context) error {
+func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	pool := s.cfg.DB.Pool()
 
 	// Defense-in-depth: refuse to start if any plugin-kind event in
@@ -228,19 +231,23 @@ func (s *BootstrapSubsystem) Start(ctx context.Context) error {
 	}
 
 	s.started = true
-	slog.InfoContext(ctx, "bootstrap subsystem started")
+	slog.InfoContext(ctx, "bootstrap subsystem prepared")
 	return nil
 }
+
+// Activate is a no-op — bootstrap's work is a one-shot Prepare-time seed
+// (D-13.3 row 8).
+func (s *BootstrapSubsystem) Activate(_ context.Context) error { return nil }
 
 // Stop is a no-op — bootstrap runs once during startup.
 // codecov:ignore — tested by integration and E2E tests
 func (s *BootstrapSubsystem) Stop(_ context.Context) error { return nil }
 
 // StartLocationID returns the resolved starting location ULID.
-// Panics if called before Start().
+// Panics if called before Prepare().
 func (s *BootstrapSubsystem) StartLocationID() ulid.ULID {
 	if !s.started {
-		panic("bootstrap/setup: StartLocationID() called before Start()")
+		panic("bootstrap/setup: StartLocationID() called before Prepare()")
 	}
 	return s.startLocationID
 }

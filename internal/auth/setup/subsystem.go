@@ -60,22 +60,21 @@ func (s *AuthSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
 }
 
-// Start creates auth repositories, hasher, and services.
-// Start is idempotent: if the subsystem is already started, it returns nil
-// immediately. This allows the auth subsystem to be pre-started in core
-// boot when admin handler construction needs Hasher() / AuthService()
-// before the orchestrator drives StartAll. Mirrors store.DatabaseSubsystem.Start.
+// Prepare creates auth repositories, hasher, and services — construction
+// only, no external surface (D-13.3 row 4).
+// Prepare is idempotent: if the subsystem is already prepared, it returns nil
+// immediately.
 // codecov:ignore — tested by integration and E2E tests
-func (s *AuthSubsystem) Start(ctx context.Context) error {
+func (s *AuthSubsystem) Prepare(ctx context.Context) error {
 	// Idempotency guard: only short-circuit if BOTH services are constructed.
-	// If a previous Start partially failed (e.g., resetSvc construction
+	// If a previous Prepare partially failed (e.g., resetSvc construction
 	// errored after authSvc was assigned), s.authService would be non-nil
-	// and the next Start would return nil while s.resetService remained
+	// and the next Prepare would return nil while s.resetService remained
 	// nil — locking the subsystem into a partially-initialized state.
 	// Defer all field assignments to the end so partial failure leaves
 	// the subsystem in its initial zero state and a retry runs cleanly.
 	if s.authService != nil && s.resetService != nil {
-		return nil // already started
+		return nil // already prepared
 	}
 	pool := s.cfg.DB.Pool()
 
@@ -103,58 +102,62 @@ func (s *AuthSubsystem) Start(ctx context.Context) error {
 	s.authService = authSvc
 	s.resetService = resetSvc
 
-	slog.InfoContext(ctx, "auth subsystem started")
+	slog.InfoContext(ctx, "auth subsystem prepared")
 	return nil
 }
+
+// Activate is a no-op — auth serves nothing of its own; its services are
+// invoked synchronously by callers (D-13.3 row 4).
+func (s *AuthSubsystem) Activate(_ context.Context) error { return nil }
 
 // Stop is a no-op — auth services are stateless after init.
 // codecov:ignore — tested by integration and E2E tests
 func (s *AuthSubsystem) Stop(_ context.Context) error { return nil }
 
-// PlayerRepo returns the player repository. Panics if called before Start().
+// PlayerRepo returns the player repository. Panics if called before Prepare().
 func (s *AuthSubsystem) PlayerRepo() auth.PlayerRepository {
 	if s.playerRepo == nil {
-		panic("auth/setup: PlayerRepo() called before Start()")
+		panic("auth/setup: PlayerRepo() called before Prepare()")
 	}
 	return s.playerRepo
 }
 
-// ResetRepo returns the password reset repository. Panics if called before Start().
+// ResetRepo returns the password reset repository. Panics if called before Prepare().
 func (s *AuthSubsystem) ResetRepo() *authpostgres.PasswordResetRepository {
 	if s.resetRepo == nil {
-		panic("auth/setup: ResetRepo() called before Start()")
+		panic("auth/setup: ResetRepo() called before Prepare()")
 	}
 	return s.resetRepo
 }
 
-// PlayerSessionStore returns the player session store. Panics if called before Start().
+// PlayerSessionStore returns the player session store. Panics if called before Prepare().
 func (s *AuthSubsystem) PlayerSessionStore() *store.PostgresPlayerSessionStore {
 	if s.playerSessionStore == nil {
-		panic("auth/setup: PlayerSessionStore() called before Start()")
+		panic("auth/setup: PlayerSessionStore() called before Prepare()")
 	}
 	return s.playerSessionStore
 }
 
-// Hasher returns the password hasher. Panics if called before Start().
+// Hasher returns the password hasher. Panics if called before Prepare().
 func (s *AuthSubsystem) Hasher() auth.PasswordHasher {
 	if s.hasher == nil {
-		panic("auth/setup: Hasher() called before Start()")
+		panic("auth/setup: Hasher() called before Prepare()")
 	}
 	return s.hasher
 }
 
-// AuthService returns the authentication service. Panics if called before Start().
+// AuthService returns the authentication service. Panics if called before Prepare().
 func (s *AuthSubsystem) AuthService() *auth.Service {
 	if s.authService == nil {
-		panic("auth/setup: AuthService() called before Start()")
+		panic("auth/setup: AuthService() called before Prepare()")
 	}
 	return s.authService
 }
 
-// ResetService returns the password reset service. Panics if called before Start().
+// ResetService returns the password reset service. Panics if called before Prepare().
 func (s *AuthSubsystem) ResetService() *auth.PasswordResetService {
 	if s.resetService == nil {
-		panic("auth/setup: ResetService() called before Start()")
+		panic("auth/setup: ResetService() called before Prepare()")
 	}
 	return s.resetService
 }

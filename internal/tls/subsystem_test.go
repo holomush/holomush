@@ -15,6 +15,9 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
+// Compile-time interface check: *TLSSubsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*TLSSubsystem)(nil)
+
 func TestTLSSubsystemIDReturnsSubsystemTLS(t *testing.T) {
 	sub := NewTLSSubsystem(TLSSubsystemConfig{})
 	assert.Equal(t, lifecycle.SubsystemTLS, sub.ID())
@@ -40,9 +43,9 @@ func TestNewTLSSubsystemAllocatesNoRuntimeResources(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "constructor must not create the certs directory")
 }
 
-// TestTLSSubsystemTLSConfigPanicsBeforeStart proves the accessor's
-// panic-before-Start guard — the same idiom as store.DatabaseSubsystem.Pool().
-func TestTLSSubsystemTLSConfigPanicsBeforeStart(t *testing.T) {
+// TestTLSSubsystemTLSConfigPanicsBeforePrepare proves the accessor's
+// panic-before-Prepare guard — the same idiom as store.DatabaseSubsystem.Pool().
+func TestTLSSubsystemTLSConfigPanicsBeforePrepare(t *testing.T) {
 	sub := NewTLSSubsystem(TLSSubsystemConfig{
 		CertsDir: t.TempDir(),
 		GameID:   func() string { return "test-game" },
@@ -50,10 +53,10 @@ func TestTLSSubsystemTLSConfigPanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.TLSConfig() })
 }
 
-// TestTLSSubsystemStartResolvesGameIDAndPopulatesTLSConfig proves Start
+// TestTLSSubsystemPrepareResolvesGameIDAndPopulatesTLSConfig proves Prepare
 // resolves the gameID from the provider — via a CertEnsurer override, the
 // existing test seam — and TLSConfig() returns the ensured config afterward.
-func TestTLSSubsystemStartResolvesGameIDAndPopulatesTLSConfig(t *testing.T) {
+func TestTLSSubsystemPrepareResolvesGameIDAndPopulatesTLSConfig(t *testing.T) {
 	certsDir := t.TempDir()
 	var gotGameID string
 	wantConfig := &cryptotls.Config{}
@@ -66,22 +69,24 @@ func TestTLSSubsystemStartResolvesGameIDAndPopulatesTLSConfig(t *testing.T) {
 		},
 	})
 
-	require.NoError(t, sub.Start(context.Background()))
+	require.NoError(t, sub.Prepare(context.Background()))
+	require.NoError(t, sub.Activate(context.Background()))
 	assert.Equal(t, "resolved-game-id", gotGameID)
 	assert.Same(t, wantConfig, sub.TLSConfig())
 	assert.NoError(t, sub.Stop(context.Background()))
 }
 
-// TestTLSSubsystemStartUsesRealEnsurerWhenNoOverride proves Start falls back
+// TestTLSSubsystemPrepareUsesRealEnsurerWhenNoOverride proves Prepare falls back
 // to the real EnsureCerts when no CertEnsurer override is supplied.
-func TestTLSSubsystemStartUsesRealEnsurerWhenNoOverride(t *testing.T) {
+func TestTLSSubsystemPrepareUsesRealEnsurerWhenNoOverride(t *testing.T) {
 	certsDir := t.TempDir()
 	sub := NewTLSSubsystem(TLSSubsystemConfig{
 		CertsDir: certsDir,
 		GameID:   func() string { return "resolved-game-id" },
 	})
 
-	require.NoError(t, sub.Start(context.Background()))
+	require.NoError(t, sub.Prepare(context.Background()))
+	require.NoError(t, sub.Activate(context.Background()))
 	cfg := sub.TLSConfig()
 	require.NotNil(t, cfg)
 	assert.NoError(t, sub.Stop(context.Background()))

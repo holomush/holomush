@@ -43,7 +43,8 @@ var _ = Describe("Audit drift detector reports tampered row", func() {
 
 		// Stand up the host projection so publishes reach events_audit.
 		hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-		Expect(hostSub.Start(ctx)).To(Succeed())
+		Expect(hostSub.Prepare(ctx)).To(Succeed())
+		Expect(hostSub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		// Publish one event.

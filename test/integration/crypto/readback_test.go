@@ -133,7 +133,8 @@ func buildReadbackEnv(ctx context.Context, t *testing.T, pluginName string) *rea
 
 	// Host audit subsystem — populates events_audit for emitted events.
 	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, hostSub.Start(ctx))
+	require.NoError(t, hostSub.Prepare(ctx))
+	require.NoError(t, hostSub.Activate(ctx))
 
 	// VerbRegistry — needed by RenderingPublisher.
 	registry, err := core.BootstrapVerbRegistry("test")
@@ -543,7 +544,8 @@ func TestReadbackWithoutReadbackFlagDenied(t *testing.T) {
 	hostPub := eventbus.NewRenderingPublisher(rawPub, registry)
 
 	hostSub := audit.NewSubsystem(fixedJS{js: busInst.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, hostSub.Start(ctx))
+	require.NoError(t, hostSub.Prepare(ctx))
+	require.NoError(t, hostSub.Activate(ctx))
 	defer func() { _ = hostSub.Stop(context.Background()) }() //nolint:errcheck // test cleanup
 
 	manifest := &plugins.Manifest{

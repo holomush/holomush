@@ -81,7 +81,8 @@ func TestProjectionCapturesPoisonToDLQAfterMaxDeliver(t *testing.T) {
 			Storage: jetstream.MemoryStorage,
 		},
 	})
-	require.NoError(t, sub.Start(t.Context()))
+	require.NoError(t, sub.Prepare(t.Context()))
+	require.NoError(t, sub.Activate(t.Context()))
 	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
 
 	publishPoison(t, bus.JS, "events.main.poison")

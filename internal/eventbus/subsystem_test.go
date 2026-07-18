@@ -17,6 +17,9 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
+// Compile-time interface check: *eventbus.Subsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*eventbus.Subsystem)(nil)
+
 func TestSubsystemStartsAndExposesJetStream(t *testing.T) {
 	t.Parallel()
 	e := eventbustest.New(t)
@@ -70,7 +73,7 @@ func TestSubsystemDependsOnDatabase(t *testing.T) {
 // 8, OpenCode pin): Config{GameID: ""} lets Defaults() substitute the
 // literal "main", but a non-nil GameIDProvider must win at Start — GameID()
 // must never observe "main" when a provider resolves a different id.
-func TestEventBusStartResolvesGameIDProviderOverDefaultMain(t *testing.T) {
+func TestEventBusPrepareResolvesGameIDProviderOverDefaultMain(t *testing.T) {
 	t.Parallel()
 	cfg := eventbus.Config{
 		StoreDir:       t.TempDir(),
@@ -79,13 +82,14 @@ func TestEventBusStartResolvesGameIDProviderOverDefaultMain(t *testing.T) {
 	require.Equal(t, "main", cfg.GameID, "Defaults() substitutes the literal default when GameID is unset")
 
 	bus := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
-	require.NoError(t, bus.Start(context.Background()))
+	require.NoError(t, bus.Prepare(context.Background()))
+	require.NoError(t, bus.Activate(context.Background()))
 	t.Cleanup(func() { _ = bus.Stop(context.Background()) })
 
 	assert.Equal(t, "resolved-from-db", bus.GameID(), "GameIDProvider must win over the Defaults()-substituted main")
 }
 
-func TestSubsystemStartIsBounded(t *testing.T) {
+func TestSubsystemPrepareIsBounded(t *testing.T) {
 	t.Parallel()
 	start := time.Now()
 	e := eventbustest.New(t)
@@ -94,10 +98,10 @@ func TestSubsystemStartIsBounded(t *testing.T) {
 	// Bound is aligned with (readyTimeout in subsystem.go) + headroom so
 	// the test does not flake on slow CI hosts while the implementation
 	// is still correct within its own 10s readiness window.
-	require.Less(t, elapsed, 11*time.Second, "Subsystem.Start exceeded readiness window")
+	require.Less(t, elapsed, 11*time.Second, "Subsystem.Prepare exceeded readiness window")
 }
 
-func TestEnsureStreamBeforeStartReturnsError(t *testing.T) {
+func TestEnsureStreamBeforePrepareReturnsError(t *testing.T) {
 	t.Parallel()
 	s := eventbus.NewSubsystem(eventbus.Config{}.Defaults())
 	err := s.EnsureStream(context.Background())
@@ -116,12 +120,12 @@ func TestConfigDefaultsFillZeroValues(t *testing.T) {
 	assert.Empty(t, c.StoreDir)
 }
 
-func TestSubsystemStartAfterStartIsNoop(t *testing.T) {
+func TestSubsystemPrepareAfterPrepareIsNoop(t *testing.T) {
 	t.Parallel()
 	e := eventbustest.New(t)
-	// Second Start on an already-started subsystem returns nil without
+	// Second Prepare on an already-prepared subsystem returns nil without
 	// spinning up a second server.
-	require.NoError(t, e.Bus.Start(context.Background()))
+	require.NoError(t, e.Bus.Prepare(context.Background()))
 }
 
 func TestSubsystemResolvesXDGStoreDirWhenBlank(t *testing.T) {
@@ -132,7 +136,8 @@ func TestSubsystemResolvesXDGStoreDirWhenBlank(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	cfg := eventbus.Config{}.Defaults()
 	bus := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
-	require.NoError(t, bus.Start(context.Background()))
+	require.NoError(t, bus.Prepare(context.Background()))
+	require.NoError(t, bus.Activate(context.Background()))
 	t.Cleanup(func() { _ = bus.Stop(context.Background()) })
 	require.NotNil(t, bus.JS())
 }
@@ -146,7 +151,8 @@ func TestSubsystemPrometheusExporterStartsWhenMonitorPortSet(t *testing.T) {
 		ExporterPort:       0, // random exporter port.
 	}.Defaults()
 	bus := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
-	require.NoError(t, bus.Start(context.Background()))
+	require.NoError(t, bus.Prepare(context.Background()))
+	require.NoError(t, bus.Activate(context.Background()))
 	t.Cleanup(func() { _ = bus.Stop(context.Background()) })
 
 	// The subsystem must expose JetStream and the exporter must be stoppable
@@ -164,8 +170,8 @@ func TestSubsystemPrometheusExporterRequiresMonitorPort(t *testing.T) {
 		PrometheusExporter: true,
 	}.Defaults()
 	bus := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
-	err := bus.Start(context.Background())
-	require.Error(t, err, "PrometheusExporter=true + MonitorPort=0 must fail at Start")
+	err := bus.Prepare(context.Background())
+	require.Error(t, err, "PrometheusExporter=true + MonitorPort=0 must fail at Prepare")
 	// No leaks: a second Stop must be a clean no-op.
 	require.NoError(t, bus.Stop(context.Background()))
 }
@@ -186,14 +192,15 @@ func TestConfigDefaultsPreserveExplicitValues(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, c.DupeWindow)
 }
 
-// TestSubsystemStartRollsBackWhenPrometheusExporterRequiresUnboundMonitor
+// TestSubsystemPrepareRollsBackWhenPrometheusExporterRequiresUnboundMonitor
 // exercises the rollback branch when the operator has enabled the
 // Prometheus exporter but the embedded NATS server's HTTP monitor port
-// is unbound (MonitorPort == 0 disables monitoring entirely). Start MUST
+// is unbound (MonitorPort == 0 disables monitoring entirely). Prepare MUST
 // reject with EVENTBUS_EXPORTER_MONITOR_UNBOUND and leave no server /
 // conn / js state behind — otherwise a subsequent retry would collide
-// with the stranded NATS filestore.
-func TestSubsystemStartRollsBackWhenPrometheusExporterRequiresUnboundMonitor(t *testing.T) {
+// with the stranded NATS filestore. Prepare-only: Activate is never called
+// because Prepare itself fails.
+func TestSubsystemPrepareRollsBackWhenPrometheusExporterRequiresUnboundMonitor(t *testing.T) {
 	t.Parallel()
 	cfg := eventbus.Config{
 		StoreDir:           t.TempDir(),
@@ -201,14 +208,14 @@ func TestSubsystemStartRollsBackWhenPrometheusExporterRequiresUnboundMonitor(t *
 		MonitorPort:        0, // explicitly disabled → rollback path
 	}.Defaults()
 	sub := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
-	err := sub.Start(context.Background())
+	err := sub.Prepare(context.Background())
 	require.Error(t, err)
 	// The oops code is metadata; the error message carries the hint.
 	assert.Contains(t, err.Error(), "MonitorPort")
-	// Rollback: after a failed Start the subsystem MUST be safe to retry
+	// Rollback: after a failed Prepare the subsystem MUST be safe to retry
 	// (no dangling server, conn, or js reference).
-	assert.Nil(t, sub.JS(), "JS should be nil after failed Start rollback")
-	assert.Nil(t, sub.Conn(), "Conn should be nil after failed Start rollback")
-	// Stop on a failed Start must be a safe no-op (idempotent).
+	assert.Nil(t, sub.JS(), "JS should be nil after failed Prepare rollback")
+	assert.Nil(t, sub.Conn(), "Conn should be nil after failed Prepare rollback")
+	// Stop on a failed Prepare must be a safe no-op (idempotent).
 	require.NoError(t, sub.Stop(context.Background()))
 }

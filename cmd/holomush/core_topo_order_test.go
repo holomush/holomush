@@ -58,11 +58,14 @@ import (
 
 // depStubSubsystem is a lifecycle.Subsystem whose ID and DependsOn are
 // sourced from a REAL production subsystem type (see
-// realProductionSubsystemGraph below), and whose Start records its own ID
+// realProductionSubsystemGraph below), and whose Prepare records its own ID
 // into a shared, mutex-guarded order slice instead of doing any real work.
-// Because Orchestrator.StartAll starts subsystems in exactly topoSort's
-// order (internal/lifecycle/orchestrator.go), the recorded start order IS
-// the topological order, byte for byte.
+// Because Orchestrator.StartAll's Prepare sweep runs in exactly topoSort's
+// order (internal/lifecycle/orchestrator.go), the recorded order IS the
+// topological order, byte for byte — recording on Prepare (rather than
+// Activate) preserves the exact pinned sequence this file asserted before
+// the Prepare/Activate split, since both sweeps walk the identical
+// topoSort() order.
 //
 // Deliberately NOT the nil-deps stub type declared in core_subsystems_test.go
 // for the productionSubsystems slice-shape tests: that type's DependsOn()
@@ -76,11 +79,12 @@ type depStubSubsystem struct {
 
 func (s *depStubSubsystem) ID() lifecycle.SubsystemID          { return s.id }
 func (s *depStubSubsystem) DependsOn() []lifecycle.SubsystemID { return s.deps }
-func (s *depStubSubsystem) Start(_ context.Context) error {
+func (s *depStubSubsystem) Prepare(_ context.Context) error {
 	s.rec.record(s.id)
 	return nil
 }
-func (s *depStubSubsystem) Stop(_ context.Context) error { return nil }
+func (s *depStubSubsystem) Activate(_ context.Context) error { return nil }
+func (s *depStubSubsystem) Stop(_ context.Context) error     { return nil }
 
 // startRecorder records the order in which depStubSubsystem.Start is
 // invoked. Orchestrator.StartAll starts subsystems sequentially (no

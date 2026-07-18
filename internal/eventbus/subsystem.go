@@ -95,16 +95,28 @@ func (s *Subsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
 }
 
-// Start establishes the NATS transport for the configured mode, obtains a
+// Prepare establishes the NATS transport for the configured mode, obtains a
 // JetStream context, and declares the EVENTS stream (D-03 provision policy).
 // In embedded mode it brings the in-process NATS server up; in external mode
 // (CLUSTER-01) it dials the configured cluster with creds/TLS and fails closed
 // at boot if unreachable (D-02). Any failure mid-way rolls back earlier state
 // (shutdown server if any, close conn).
+//
+// The ENTIRE Start body — including `go s.server.Start()` — belongs in
+// Prepare (D-13.3 row 2): the embedded server sets DontListen: true, so it
+// binds no socket and is reachable only in-process via
+// nats.InProcessServer(s.server); server-start and client-connect are one
+// atomic call with no seam between them. The NATS Prometheus monitor's
+// operator-facing HTTP port (HTTPPort: s.cfg.MonitorPort, set in
+// connectEmbedded) DOES bind here — that is D-13.0's exception 1
+// (observability, not domain traffic), the same class as the observability
+// server that already starts before StartAll today. Do NOT move any of this
+// to Activate: audit's own Prepare requires this live JetStream context
+// (it fails closed with AUDIT_DEP_NOT_STARTED otherwise).
 // codecov:ignore — rollback branches exercised by integration and E2E tests
-func (s *Subsystem) Start(ctx context.Context) error {
+func (s *Subsystem) Prepare(ctx context.Context) error {
 	if s.conn != nil {
-		return nil // already started (embedded or external)
+		return nil // already prepared (embedded or external)
 	}
 
 	// Resolve the gameID provider once, before connect()/EnsureStream (07-09
@@ -172,6 +184,14 @@ func (s *Subsystem) Start(ctx context.Context) error {
 				Wrap(scopeErr)
 		}
 	}
+	return nil
+}
+
+// Activate is a no-op — publishing happens through consumers, not here
+// (D-13.3 row 2). The entire acquisition sequence, including bringing the
+// embedded server up, already ran in Prepare; documented here so nobody
+// "corrects" this by moving work into Activate.
+func (s *Subsystem) Activate(_ context.Context) error {
 	return nil
 }
 
@@ -302,7 +322,7 @@ func (s *Subsystem) rollbackStart(conn *nats.Conn) {
 // EVENTBUS_STREAM_CONFIG_MISMATCH — the server MUST NOT attempt stream admin.
 func (s *Subsystem) EnsureStream(ctx context.Context) error {
 	if s.js == nil {
-		return oops.Code("EVENTBUS_NOT_STARTED").Errorf("EnsureStream called before Start")
+		return oops.Code("EVENTBUS_NOT_STARTED").Errorf("EnsureStream called before Prepare")
 	}
 
 	desired := s.desiredStreamConfig()

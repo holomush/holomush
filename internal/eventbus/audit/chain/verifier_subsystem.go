@@ -86,16 +86,20 @@ func (s *VerifierSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Start resolves RepoProvider FIRST (its error is the wiring-build error —
+// Prepare resolves RepoProvider FIRST (its error is the wiring-build error —
 // StartAll aborts the boot), constructs the Verifier, THEN resolves
 // HandlersProvider (safe error-free: the memoized build already succeeded),
 // validates each registered Handler's Chain metadata, and walks every chain
 // via [Verifier.VerifyAll]. Returns on the first failure.
 //
+// The chain walk is a boot GATE, not serving (D-13.3 row 11) — it belongs in
+// Prepare so it refuses before ANY subsystem activates, independent of any
+// DependsOn edge. This is the two-sweep barrier's clearest payoff.
+//
 // INV-CRYPTO-102: server boot MUST refuse with
 // AUDIT_CHAIN_BROKEN (or a more specific AUDIT_CHAIN_* code) when any
 // registered chain has a break.
-func (s *VerifierSubsystem) Start(ctx context.Context) error {
+func (s *VerifierSubsystem) Prepare(ctx context.Context) error {
 	repo := s.cfg.Repo
 	if s.cfg.RepoProvider != nil {
 		resolved, err := s.cfg.RepoProvider()
@@ -125,6 +129,10 @@ func (s *VerifierSubsystem) Start(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Activate is a no-op — the chain walk already ran (and gated the boot) in
+// Prepare (D-13.3 row 11).
+func (s *VerifierSubsystem) Activate(_ context.Context) error { return nil }
 
 // Stop is a no-op: the verifier subsystem holds no background goroutines.
 func (s *VerifierSubsystem) Stop(_ context.Context) error { return nil }

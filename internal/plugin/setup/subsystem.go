@@ -164,9 +164,13 @@ func (s *PluginSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Start builds the full plugin stack and command registry.
+// Prepare builds the full plugin stack and command registry — including
+// binary-plugin subprocess launch and Lua loading (D-13.3 row 9: a plugin
+// subprocess is a host-controlled child reachable only over the host's own
+// mTLS gRPC, no externally-reachable surface, and audit's own Prepare
+// DependsOn(SubsystemPlugins) requires loading to have completed here).
 // codecov:ignore — tested by integration and E2E tests
-func (s *PluginSubsystem) Start(ctx context.Context) error {
+func (s *PluginSubsystem) Prepare(ctx context.Context) error {
 	// 1. Resolve plugin directory.
 	pluginsDir, err := s.resolvePluginsDir()
 	if err != nil {
@@ -243,9 +247,28 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	}
 	s.worldConn = worldConn
 
-	// cleanupOnError closes partially initialized resources when startup fails.
-	// Order matters: alias pool first because it was opened latest and holds
-	// PG connections; then schema provisioner; then world conn.
+	// binaryHost is declared here — BEFORE cleanupOnError's definition — so the
+	// closure below observes the later assignment at goplugin.NewHost(...)
+	// (Go closures capture variables, not values). This is what lets
+	// cleanupOnError close the binary host on every pre-manager error path,
+	// including the ones that occur before binaryHost is actually assigned
+	// (a nil *goplugin.Host closes as a no-op).
+	var binaryHost *goplugin.Host
+
+	// cleanupOnError closes partially initialized resources when startup
+	// fails. Order matters: alias pool first because it was opened latest
+	// and holds PG connections; then schema provisioner; then the binary
+	// host (releases its token-store sweeper goroutine,
+	// goplugin/host.go:1579-1580); then the Lua host; then world conn.
+	//
+	// D-13.2 row 9 / cross-AI round 9 BLOCKER: without closing binaryHost
+	// and s.luaHost here, a Prepare failure between goplugin.NewHost (which
+	// launches the token-store sweeper goroutine at construction) and the
+	// s.manager assignment leaked that goroutine and the live Lua host,
+	// because Stop no-ops while s.manager == nil. Every pre-manager error
+	// path now routes through this extended cleanup, making Stop's
+	// s.manager == nil early return a TRUE no-op (everything already
+	// released in-body) rather than a leak.
 	cleanupOnError := func() {
 		if s.aliasPool != nil {
 			s.aliasPool.Close()
@@ -257,8 +280,18 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 			s.schemaProvisioner.Close()
 			s.schemaProvisioner = nil
 		}
-		_ = s.worldConn.Close() //nolint:errcheck // best-effort cleanup
-		s.worldConn = nil
+		if binaryHost != nil {
+			_ = binaryHost.Close(ctx) //nolint:errcheck // best-effort cleanup; cancels the token-store sweeper
+			binaryHost = nil
+		}
+		if s.luaHost != nil {
+			_ = s.luaHost.Close(ctx) //nolint:errcheck // best-effort cleanup
+			s.luaHost = nil
+		}
+		if s.worldConn != nil {
+			_ = s.worldConn.Close() //nolint:errcheck // best-effort cleanup
+			s.worldConn = nil
+		}
 	}
 
 	if regErr := s.registry.Register(plugins.RegisteredService{
@@ -331,7 +364,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		}
 	}
 
-	binaryHost := goplugin.NewHost(hostOpts...)
+	binaryHost = goplugin.NewHost(hostOpts...)
 	// Wire the session stream registry so the served stream.subscription
 	// capability (AddSessionStream/RemoveSessionStream) reaches the same host
 	// SessionStreamRegistry the Lua hostfunc path uses (plugin-runtime-symmetry).
@@ -454,11 +487,27 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// cannot be threaded at construction time — use the setter instead.
 	binaryHost.SetCommandQuerier(s.commandQuerier)
 
-	slog.InfoContext(ctx, "plugin subsystem started", "plugins_dir", pluginsDir)
+	slog.InfoContext(ctx, "plugin subsystem prepared", "plugins_dir", pluginsDir)
 	return nil
 }
 
+// Activate is a documented no-op (D-13.3 row 9, cross-AI round 3 HIGH,
+// settled): PluginSubsystem runs no event-delivery or command-dispatch
+// loop of its own. Delivery is a synchronous manager method
+// (Manager.DeliverEvent, internal/plugin/manager.go) invoked by the event
+// subscriber and the command dispatcher, both of which live elsewhere. Do
+// NOT relocate a delivery loop here — that is Phase 8 / MEDIUM-4 territory.
+func (s *PluginSubsystem) Activate(_ context.Context) error { return nil }
+
 // Stop shuts down the plugin manager and server-internal connections.
+//
+// The s.manager == nil early return is a TRUE no-op for any Prepare failure
+// that occurred before the manager was assigned: every pre-manager error
+// path inside Prepare already routes through cleanupOnError, which closes
+// the binary host (releasing its token-store sweeper goroutine), the Lua
+// host, the schema provisioner, the alias pool, and the world in-process
+// connection in-body (D-13.2 row 9). Nothing is left for Stop to release in
+// that case.
 // codecov:ignore — tested by integration and E2E tests
 func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if s.manager == nil {
@@ -483,10 +532,10 @@ func (s *PluginSubsystem) Stop(_ context.Context) error {
 	return nil
 }
 
-// Manager returns the plugin Manager. Panics if called before Start().
+// Manager returns the plugin Manager. Panics if called before Prepare().
 func (s *PluginSubsystem) Manager() *plugins.Manager {
 	if s.manager == nil {
-		panic("plugin/setup: Manager() called before Start()")
+		panic("plugin/setup: Manager() called before Prepare()")
 	}
 	return s.manager
 }
@@ -494,7 +543,7 @@ func (s *PluginSubsystem) Manager() *plugins.Manager {
 // ConfigureSystemBroadcaster wires the SessionAdmin broadcast backing — a
 // system-event emit over pub — into the Lua host so the brokered
 // SessionAdminService serves real broadcasts (holomush-eykuh.4.2, decision
-// holomush-t019a). It MUST be called from the gRPC subsystem's Start once the
+// holomush-t019a). It MUST be called from the gRPC subsystem's Prepare once the
 // publisher exists: the publisher is built after the plugin subsystem starts,
 // so a construction-time option cannot reach it (same late-binding rationale as
 // Manager.ConfigureEventEmitter / ConfigureFocusDeps). No-op when the Lua host is
@@ -509,53 +558,53 @@ func (s *PluginSubsystem) ConfigureSystemBroadcaster(pub eventbus.Publisher, gam
 	s.luaHost.SetSessionAdmin(hostcap.NewSystemBroadcaster(pub, gameID))
 }
 
-// CommandRegistry returns the command Registry. Panics if called before Start().
+// CommandRegistry returns the command Registry. Panics if called before Prepare().
 func (s *PluginSubsystem) CommandRegistry() *command.Registry {
 	if s.cmdRegistry == nil {
-		panic("plugin/setup: CommandRegistry() called before Start()")
+		panic("plugin/setup: CommandRegistry() called before Prepare()")
 	}
 	return s.cmdRegistry
 }
 
-// CommandQuerier returns the shared command querier. Panics if called before Start().
+// CommandQuerier returns the shared command querier. Panics if called before Prepare().
 // Consumed by the gRPC subsystem (holoGRPC.WithCommandQuerier) and the binary
 // host.v1 CommandRegistryService (bead .8) to ensure a single
 // command-visibility filter across both surfaces (INV-COMMAND-1).
 func (s *PluginSubsystem) CommandQuerier() *commandquery.Querier {
 	if s.commandQuerier == nil {
-		panic("plugin/setup: CommandQuerier() called before Start()")
+		panic("plugin/setup: CommandQuerier() called before Prepare()")
 	}
 	return s.commandQuerier
 }
 
-// ServiceRegistry returns the ServiceRegistry. Panics if called before Start().
+// ServiceRegistry returns the ServiceRegistry. Panics if called before Prepare().
 func (s *PluginSubsystem) ServiceRegistry() *plugins.ServiceRegistry {
 	if s.registry == nil {
-		panic("plugin/setup: ServiceRegistry() called before Start()")
+		panic("plugin/setup: ServiceRegistry() called before Prepare()")
 	}
 	return s.registry
 }
 
 // AliasRepo returns the alias repository created during Start().
-// Panics if called before Start().
+// Panics if called before Prepare().
 func (s *PluginSubsystem) AliasRepo() *store.PostgresAliasRepository {
 	if s.aliasRepo == nil {
-		panic("plugin/setup: AliasRepo() called before Start()")
+		panic("plugin/setup: AliasRepo() called before Prepare()")
 	}
 	return s.aliasRepo
 }
 
 // AliasCache returns the alias cache populated during plugin loading.
-// Panics if called before Start().
+// Panics if called before Prepare().
 func (s *PluginSubsystem) AliasCache() *command.AliasCache {
 	if s.aliasCache == nil {
-		panic("plugin/setup: AliasCache() called before Start()")
+		panic("plugin/setup: AliasCache() called before Prepare()")
 	}
 	return s.aliasCache
 }
 
 // HealthStatus reports the plugin subsystem's health tier.
-// Returns Dead with reason if the subsystem has not been started.
+// Returns Dead with reason if the subsystem has not been prepared.
 func (s *PluginSubsystem) HealthStatus() lifecycle.HealthStatus {
 	if s.health == nil {
 		return lifecycle.HealthStatus{

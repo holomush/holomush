@@ -11,8 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+// Compile-time interface check: *registry must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*registry)(nil)
 
 // TestNewSubsystemAllowsNilConnAtConstruction proves construction no longer
 // eagerly requires a live connection (D-09 / 07-09 item 1) — the nil-Conn
@@ -61,7 +65,7 @@ func TestStartRejectsTypedNilConn(t *testing.T) {
 	sub, err := NewSubsystem(cfg, deps)
 	require.NoError(t, err)
 
-	err = sub.Start(context.Background())
+	err = sub.Prepare(context.Background()) // Prepare-only: the nil-Conn check fails before Activate would run
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CLUSTER_DEPS_NIL")
 	errutil.AssertErrorContext(t, err, "dep", "Conn")
@@ -83,7 +87,7 @@ func TestStartRejectsInterfaceNilConn(t *testing.T) {
 	sub, err := NewSubsystem(cfg, deps)
 	require.NoError(t, err)
 
-	err = sub.Start(context.Background())
+	err = sub.Prepare(context.Background()) // Prepare-only: the nil-Conn check fails before Activate would run
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CLUSTER_DEPS_NIL")
 	errutil.AssertErrorContext(t, err, "dep", "Conn")

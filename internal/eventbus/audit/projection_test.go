@@ -139,7 +139,8 @@ func TestProjectionDrainsPublishedMessageToAuditTable(t *testing.T) {
 	bus := eventbustest.New(t)
 
 	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, sub.Start(t.Context()))
+	require.NoError(t, sub.Prepare(t.Context()))
+	require.NoError(t, sub.Activate(t.Context()))
 	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
 
 	id := publishTestMessage(t, bus.JS)
@@ -185,7 +186,8 @@ func TestProjectionIsIdempotentOnDuplicate(t *testing.T) {
 	bus := eventbustest.New(t)
 
 	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, sub.Start(t.Context()))
+	require.NoError(t, sub.Prepare(t.Context()))
+	require.NoError(t, sub.Activate(t.Context()))
 	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
 
 	id := ulid.Make()
@@ -216,7 +218,8 @@ func TestProjectionResumesAfterRestart(t *testing.T) {
 
 	// First projection instance.
 	sub1 := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, sub1.Start(t.Context()))
+	require.NoError(t, sub1.Prepare(t.Context()))
+	require.NoError(t, sub1.Activate(t.Context()))
 	publishTestMessage(t, bus.JS)
 	sub1.AwaitDrained(t, awaitTimeout)
 	require.NoError(t, sub1.Stop(context.Background()))
@@ -228,7 +231,8 @@ func TestProjectionResumesAfterRestart(t *testing.T) {
 	// from the same consumer on the server. No new messages should be
 	// delivered (AckFloor == last published seq).
 	sub2 := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, sub2.Start(t.Context()))
+	require.NoError(t, sub2.Prepare(t.Context()))
+	require.NoError(t, sub2.Activate(t.Context()))
 	t.Cleanup(func() { _ = sub2.Stop(context.Background()) })
 
 	sub2.AwaitDrained(t, awaitTimeout)
@@ -263,7 +267,8 @@ func TestProjectionAckSkipsPluginOwnedSubjects(t *testing.T) {
 		fixedPool{pool: pool},
 		audit.Config{Owners: owners},
 	)
-	require.NoError(t, sub.Start(t.Context()))
+	require.NoError(t, sub.Prepare(t.Context()))
+	require.NoError(t, sub.Activate(t.Context()))
 	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
 
 	// Publish one plugin-owned message (scene) and one host-owned message.
@@ -342,7 +347,8 @@ func TestPersistWritesDekColumnsFromHeaders(t *testing.T) {
 	bus := eventbustest.New(t)
 
 	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, sub.Start(t.Context()))
+	require.NoError(t, sub.Prepare(t.Context()))
+	require.NoError(t, sub.Activate(t.Context()))
 	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
 
 	id := publishTestMessageWithExtraHeaders(t, bus.JS, "xchacha20poly1305-v1", map[string]string{
@@ -378,7 +384,8 @@ func TestPersistWritesNullDekColumnsForIdentityCodec(t *testing.T) {
 	bus := eventbustest.New(t)
 
 	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, sub.Start(t.Context()))
+	require.NoError(t, sub.Prepare(t.Context()))
+	require.NoError(t, sub.Activate(t.Context()))
 	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
 
 	id := publishTestMessageWithExtraHeaders(t, bus.JS, testCodec, nil)

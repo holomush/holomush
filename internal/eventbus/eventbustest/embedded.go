@@ -66,7 +66,8 @@ func New(t TB) *Embedded {
 		StoreDir: t.TempDir(),
 	}.Defaults()
 	bus := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
-	require.NoError(t, bus.Start(context.Background()))
+	require.NoError(t, bus.Prepare(context.Background()))
+	require.NoError(t, bus.Activate(context.Background())) // no-op today (D-13.3 row 2); called for interface completeness
 	t.Cleanup(func() {
 		if err := bus.Stop(context.Background()); err != nil {
 			t.Logf("eventbustest: bus.Stop error: %v", err)

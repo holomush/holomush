@@ -122,6 +122,14 @@ var coreOnlyFiles = map[string]struct{}{
 	// core process's own orchestrator wiring under test, not the gateway;
 	// imports the same domain packages core.go itself imports.
 	"core_topo_order_test.go": {},
+	// 07-11 D-13.1: core_subsystems_test.go's new
+	// TestStartAllActivatesNothingUntilEverySubsystemHasPrepared property
+	// test constructs every production subsystem type (the same
+	// zero-value-config pattern core_topo_order_test.go uses) to source
+	// DependsOn() live rather than hand-copying it, so it needs the exact
+	// same domain imports. Core process's own orchestrator wiring under
+	// test, not the gateway.
+	"core_subsystems_test.go": {},
 }
 
 // gatewayForbiddenPackages is the single, shared policy list read by both

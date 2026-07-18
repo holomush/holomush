@@ -62,10 +62,11 @@ func (s *TLSSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
 }
 
-// Start resolves the gameID from the provider and ensures the TLS
-// certificates exist, generating them on first boot.
+// Prepare resolves the gameID from the provider and ensures the TLS
+// certificates exist, generating them on first boot — filesystem work
+// against a prepared gameID; nothing external (D-13.3 row 17).
 // codecov:ignore — tested by integration and E2E tests
-func (s *TLSSubsystem) Start(ctx context.Context) error {
+func (s *TLSSubsystem) Prepare(ctx context.Context) error {
 	gameID := s.cfg.GameID()
 
 	ensurer := s.cfg.CertEnsurer
@@ -83,15 +84,19 @@ func (s *TLSSubsystem) Start(ctx context.Context) error {
 	return nil
 }
 
+// Activate is a no-op — EnsureCerts is idempotent by its own regeneration
+// conditions; nothing further to do once Prepare has run (D-13.3 row 17).
+func (s *TLSSubsystem) Activate(_ context.Context) error { return nil }
+
 // Stop is a no-op — TLS certificate generation owns no runtime resource.
 // codecov:ignore — tested by integration and E2E tests
 func (s *TLSSubsystem) Stop(_ context.Context) error { return nil }
 
 // TLSConfig returns the loaded server TLS configuration. Panics if called
-// before Start().
+// before Prepare().
 func (s *TLSSubsystem) TLSConfig() *cryptotls.Config {
 	if s.tlsConfig == nil {
-		panic("tlscerts: TLSConfig() called before Start()")
+		panic("tlscerts: TLSConfig() called before Prepare()")
 	}
 	return s.tlsConfig
 }

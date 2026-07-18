@@ -96,11 +96,12 @@ func (s *CheckpointSweepSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Start resolves the checkpoint repo + audit emitter (DepsProvider wins over
-// the given Repo/AuditEmitter fields when non-nil), runs an immediate sweep,
-// then launches the background tick loop. A failure in the boot-time sweep
-// is fatal (returns non-nil error).
-func (s *CheckpointSweepSubsystem) Start(ctx context.Context) error {
+// Prepare resolves the checkpoint repo + audit emitter (DepsProvider wins
+// over the given Repo/AuditEmitter fields when non-nil) — provider
+// resolution only; it is memoized upstream and benign to re-run (D-13.3 row
+// 12). The boot-time sweep and the tick loop are domain work and belong in
+// Activate.
+func (s *CheckpointSweepSubsystem) Prepare(_ context.Context) error {
 	if s.cfg.DepsProvider != nil {
 		repo, emitter, err := s.cfg.DepsProvider()
 		if err != nil {
@@ -108,6 +109,18 @@ func (s *CheckpointSweepSubsystem) Start(ctx context.Context) error {
 		}
 		s.cfg.Repo = repo
 		s.cfg.AuditEmitter = emitter
+	}
+	return nil
+}
+
+// Activate runs an immediate sweep, then launches the background tick loop
+// (D-13.3 row 12). A failure in the boot-time sweep is fatal (returns
+// non-nil error). Idempotent: guarded on s.done, a phase-owned field set
+// only by Activate, so a repeated Activate does not run a second boot sweep
+// or launch a second tick-loop goroutine.
+func (s *CheckpointSweepSubsystem) Activate(ctx context.Context) error {
+	if s.done != nil {
+		return nil // already activated
 	}
 	if err := s.sweepOnce(ctx); err != nil {
 		return oops.Code("DEK_REKEY_SWEEP_BOOT_FAILED").Wrap(err)

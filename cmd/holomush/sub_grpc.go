@@ -78,6 +78,12 @@ type grpcSubsystemConfig struct {
 	EventBus *eventbus.Subsystem
 
 	GRPCAddr string
+	// GuestReaperInterval is the tick interval for the guest reaper (row 16,
+	// round 7 MEDIUM). Defaults to 1 * time.Minute when zero — production
+	// wiring passes nothing, preserving today's hardcoded value; the
+	// seam exists so tests can shorten the interval to make the
+	// neither-reaper-runs-after-Prepare-alone test deterministic.
+	GuestReaperInterval time.Duration
 	// TLSConfig is a given value for callers that already hold a resolved
 	// TLS config at construction (test literals). TLSProvider, resolved
 	// once at the top of Start, is the production path — it wins when
@@ -147,6 +153,7 @@ type grpcSubsystem struct {
 
 	grpcServer    *grpc.Server
 	listener      net.Listener
+	reaperCtx     context.Context //nolint:containedctx // deliberate: shared by both reapers' Run goroutines, launched from Activate but built in Prepare; outlives the boot ctx like the audit worker's context.Background() parent
 	reaperCancel  context.CancelFunc
 	guestReaper   *auth.GuestReaper
 	sessionReaper *session.Reaper
@@ -192,7 +199,7 @@ func (s *grpcSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemG
 // EventBus is required so the Publisher is ready when ConfigureEventEmitter
 // runs (F1 cutover: plugin emits publish to JetStream).
 //
-// TLS is required because Start resolves TLSProvider (07-09 item 2). Cluster
+// TLS is required because Prepare resolves TLSProvider (07-09 item 2). Cluster
 // is required because the invalidation.Coordinator (built as a side effect
 // of the first CryptoWiring resolution) needs Registry: clusterSub (07-09
 // item 4). CryptoChainVerifier is the T-07-51 re-scope (07-09 item 8): gRPC
@@ -264,12 +271,18 @@ func subscriberOptionsFor(
 	return opts
 }
 
-// Start wires all dependencies and starts the gRPC server.
-// Start is idempotent: if the gRPC server is already running, it returns nil.
+// Prepare wires all dependencies, builds the gRPC server, registers
+// services, and constructs (but does NOT launch) both reapers plus their
+// shared reaperCtx/reaperCancel state (D-13.3 row 16). It does not bind the
+// TCP listener or start serving — those are Activate's job. This is the
+// row D-11 exists for: get the split exactly right.
+//
+// Prepare is idempotent: if the gRPC server has already been built, it
+// returns nil.
 // codecov:ignore — tested by integration and E2E tests
-func (s *grpcSubsystem) Start(ctx context.Context) error {
+func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	if s.grpcServer != nil {
-		return nil // already started
+		return nil // already prepared
 	}
 
 	// Resolve the TLS config provider (07-09 item 2) — wins over the given
@@ -789,8 +802,9 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	}
 	sceneaccessv1.RegisterSceneAccessServiceServer(s.grpcServer, sceneAccessSrv)
 
-	// 10. Create and start session reaper.
+	// 10. Construct the session reaper (launch deferred to Activate — row 16).
 	reaperCtx, reaperCancel := context.WithCancel(context.Background())
+	s.reaperCtx = reaperCtx
 	s.reaperCancel = reaperCancel
 
 	s.sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{
@@ -833,27 +847,56 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			}
 		},
 	})
-	go s.sessionReaper.Run(reaperCtx)
 
-	// 11. Create and start guest reaper. Its cleaner is the tombstone-emitting
-	// reaping service (05-16 / D-06) — each reaped guest's characters are deleted
-	// through the world CharacterWriter.Delete + a character_deleted tombstone
-	// before the player is deleted, so guest expiration cannot produce
-	// genesis-without-tombstone feed history. The lister stays the auth player repo.
+	// 11. Construct the guest reaper (launch deferred to Activate — row 16).
+	// Its cleaner is the tombstone-emitting reaping service (05-16 / D-06) —
+	// each reaped guest's characters are deleted through the world
+	// CharacterWriter.Delete + a character_deleted tombstone before the
+	// player is deleted, so guest expiration cannot produce
+	// genesis-without-tombstone feed history. The lister stays the auth
+	// player repo. GuestReaperInterval defaults to 1 minute when zero (row
+	// 16, round 7 MEDIUM) — production wiring passes nothing, preserving
+	// today's hardcoded value.
+	guestReaperInterval := s.cfg.GuestReaperInterval
+	if guestReaperInterval <= 0 {
+		guestReaperInterval = 1 * time.Minute
+	}
 	s.guestReaper = auth.NewGuestReaper(auth.GuestReaperConfig{
-		Interval: 1 * time.Minute,
+		Interval: guestReaperInterval,
 		IdleTTL:  10 * time.Minute,
 	}, authPlayerRepo, reapingService)
-	go s.guestReaper.Run(reaperCtx)
 
-	// 12. Bind TCP listener.
+	return nil
+}
+
+// Activate launches both reaper Run goroutines FIRST — so lease/guest
+// hygiene is live before external traffic lands — then binds the TCP
+// listener and starts serving (D-13.3 row 16, cross-AI round 5 BLOCKER: the
+// class of bug D-11 exists to eliminate — gRPC accepting traffic before a
+// declared dependency has finished acquiring). This subsystem is the whole
+// reason the two-sweep barrier exists; get this split exactly right.
+//
+// Idempotent: guarded on s.listener != nil.
+// codecov:ignore — tested by integration and E2E tests
+func (s *grpcSubsystem) Activate(ctx context.Context) error {
+	if s.listener != nil {
+		return nil // already activated
+	}
+
+	go s.sessionReaper.Run(s.reaperCtx)
+	go s.guestReaper.Run(s.reaperCtx)
+
+	// Bind TCP listener.
+	var err error
 	s.listener, err = net.Listen("tcp", s.cfg.GRPCAddr)
 	if err != nil {
-		reaperCancel()
+		if s.reaperCancel != nil {
+			s.reaperCancel()
+		}
 		return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", s.cfg.GRPCAddr).Wrap(err)
 	}
 
-	// 13. Start grpcServer.Serve() in goroutine.
+	// Start grpcServer.Serve() in goroutine.
 	slog.InfoContext(ctx, "gRPC server listening", "addr", s.cfg.GRPCAddr)
 	go func() {
 		if serveErr := s.grpcServer.Serve(s.listener); serveErr != nil {

@@ -92,7 +92,8 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 		// RenderingPublisher → JetStream; this subsystem drains JetStream
 		// into events_audit.
 		hostSub = audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-		Expect(hostSub.Start(ctx)).To(Succeed(), "audit.Subsystem.Start")
+		Expect(hostSub.Prepare(ctx)).To(Succeed(), "audit.Subsystem.Prepare")
+		Expect(hostSub.Activate(ctx)).To(Succeed(), "audit.Subsystem.Activate")
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		registry, err := core.BootstrapVerbRegistry("test-0.1")
@@ -120,7 +121,8 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 			},
 			PolicyNames: []string{policyName},
 		})
-		Expect(emitter.Start(ctx)).To(Succeed(), "CryptoPolicySubsystem.Start")
+		Expect(emitter.Prepare(ctx)).To(Succeed(), "CryptoPolicySubsystem.Prepare")
+		Expect(emitter.Activate(ctx)).To(Succeed(), "CryptoPolicySubsystem.Activate")
 	}
 
 	// awaitChainLength blocks until events_audit has exactly the expected
@@ -170,7 +172,7 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 			HandlersProvider: func() []chain.Handler { return []chain.Handler{policy.PolicySetHandlerFor(gameID)} },
 			Logger:           slog.Default(),
 		})
-		Expect(verifier.Start(ctx)).To(Succeed(),
+		Expect(verifier.Prepare(ctx)).To(Succeed(),
 			"genesis chain MUST pass verifier")
 	})
 
@@ -217,7 +219,7 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 			HandlersProvider: func() []chain.Handler { return []chain.Handler{policy.PolicySetHandlerFor(gameID)} },
 			Logger:           slog.Default(),
 		})
-		Expect(verifier.Start(ctx)).To(Succeed(),
+		Expect(verifier.Prepare(ctx)).To(Succeed(),
 			"two-row chain MUST pass verifier on second-boot path")
 	})
 
@@ -237,7 +239,7 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 			HandlersProvider: func() []chain.Handler { return []chain.Handler{policy.PolicySetHandlerFor(gameID)} },
 			Logger:           slog.Default(),
 		})
-		Expect(cleanVerifier.Start(ctx)).To(Succeed(),
+		Expect(cleanVerifier.Prepare(ctx)).To(Succeed(),
 			"sanity: clean chain MUST verify before tamper")
 
 		// Tamper: corrupt the second row's envelope by overwriting its
@@ -262,7 +264,7 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 			HandlersProvider: func() []chain.Handler { return []chain.Handler{policy.PolicySetHandlerFor(gameID)} },
 			Logger:           slog.Default(),
 		})
-		err := tamperedVerifier.Start(ctx)
+		err := tamperedVerifier.Prepare(ctx) // Prepare-only: the chain walk fails before Activate would ever run
 		Expect(err).To(HaveOccurred(),
 			"verifier MUST fail-closed on tampered chain (INV-CRYPTO-78/INV-CRYPTO-79)")
 

@@ -197,8 +197,11 @@ func buildPluginDecryptHarness(t *testing.T) *pluginDecryptHarness {
 	// Host audit subsystem: populates events_audit. Handle stays local —
 	// no test calls AwaitDrained on it.
 	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	if err := hostSub.Start(ctx); err != nil {
-		t.Fatalf("buildPluginDecryptHarness: hostSub.Start: %v", err)
+	if err := hostSub.Prepare(ctx); err != nil {
+		t.Fatalf("buildPluginDecryptHarness: hostSub.Prepare: %v", err)
+	}
+	if err := hostSub.Activate(ctx); err != nil {
+		t.Fatalf("buildPluginDecryptHarness: hostSub.Activate: %v", err)
 	}
 	t.Cleanup(func() { _ = hostSub.Stop(context.Background()) })
 

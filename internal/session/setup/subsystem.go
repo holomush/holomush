@@ -48,22 +48,29 @@ func (s *SessionSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
 }
 
-// Start creates the PostgresSessionStore from the database pool.
+// Prepare creates the PostgresSessionStore from the database pool — the
+// entire current body (D-13.3 row 7). No idempotency guard is needed:
+// reassignment is benign.
 // codecov:ignore — tested by integration and E2E tests
-func (s *SessionSubsystem) Start(ctx context.Context) error {
+func (s *SessionSubsystem) Prepare(ctx context.Context) error {
 	s.sessionStore = store.NewPostgresSessionStore(s.cfg.DB.Pool())
-	slog.InfoContext(ctx, "session subsystem started")
+	slog.InfoContext(ctx, "session subsystem prepared")
 	return nil
 }
+
+// Activate is a documented no-op (D-13.3 row 7, cross-AI round 5 settled):
+// this Start launches no reaper, ticker, or goroutine. The session reaper is
+// a grpcSubsystem-owned loop (D-13.3 row 16) — do not relocate it here.
+func (s *SessionSubsystem) Activate(_ context.Context) error { return nil }
 
 // Stop is a no-op — the session store requires no explicit cleanup.
 // codecov:ignore — tested by integration and E2E tests
 func (s *SessionSubsystem) Stop(_ context.Context) error { return nil }
 
-// Store returns the PostgresSessionStore. Panics if called before Start().
+// Store returns the PostgresSessionStore. Panics if called before Prepare().
 func (s *SessionSubsystem) Store() *store.PostgresSessionStore {
 	if s.sessionStore == nil {
-		panic("session/setup: Store() called before Start()")
+		panic("session/setup: Store() called before Prepare()")
 	}
 	return s.sessionStore
 }

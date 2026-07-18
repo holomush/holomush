@@ -116,7 +116,8 @@ func TestVerifierSubsystem_WalksAllRegisteredChains(t *testing.T) {
 		Logger:           slog.Default(),
 	})
 
-	require.NoError(t, sub.Start(context.Background()))
+	require.NoError(t, sub.Prepare(context.Background()))
+	require.NoError(t, sub.Activate(context.Background()))
 	require.NoError(t, sub.Stop(context.Background()))
 }
 
@@ -144,7 +145,7 @@ func TestVerifierSubsystem_RefusesBootOnBreak(t *testing.T) {
 		Logger:           slog.Default(),
 	})
 
-	err := sub.Start(context.Background())
+	err := sub.Prepare(context.Background()) // Prepare-only: the chain walk fails before Activate would ever run
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_CHAIN_HASH_MISMATCH")
 }
@@ -170,7 +171,7 @@ func TestVerifierSubsystem_RejectsInvalidChainRegistration(t *testing.T) {
 		Logger:           slog.Default(),
 	})
 
-	err := sub.Start(context.Background())
+	err := sub.Prepare(context.Background()) // Prepare-only: the chain walk fails before Activate would ever run
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_CHAIN_INVALID_REGISTRATION")
 }

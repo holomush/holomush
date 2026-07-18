@@ -130,11 +130,12 @@ var _ = Describe("External-mode event bus boot (CLUSTER-01)", func() {
 
 			env := startScopedExternalNATS(ctx)
 			sub := newExternalSubsystem(env.URL, nil, streamMaxAge) // provision default (true)
-			Expect(sub.Start(ctx)).To(Succeed())
+			Expect(sub.Prepare(ctx)).To(Succeed())
+			Expect(sub.Activate(ctx)).To(Succeed())
 			DeferCleanup(func() { _ = sub.Stop(context.Background()) })
 
-			Expect(sub.JS()).NotTo(BeNil(), "JetStream context must be live after external Start")
-			Expect(sub.Conn()).NotTo(BeNil(), "connection must be live after external Start")
+			Expect(sub.JS()).NotTo(BeNil(), "JetStream context must be live after external Prepare")
+			Expect(sub.Conn()).NotTo(BeNil(), "connection must be live after external Prepare")
 
 			_, err := sub.JS().Stream(ctx, eventbus.StreamName)
 			Expect(err).NotTo(HaveOccurred(), "EVENTS stream must be declared by EnsureStream")
@@ -149,7 +150,7 @@ var _ = Describe("External-mode event bus boot (CLUSTER-01)", func() {
 
 			// 127.0.0.1:1 refuses connections immediately; there is no fallback.
 			sub := newExternalSubsystem("nats://127.0.0.1:1", nil, streamMaxAge)
-			err := sub.Start(ctx)
+			err := sub.Prepare(ctx) // Prepare-only: the dial fails before Activate would ever run
 			expectOopsCode(err, "EVENTBUS_EXTERNAL_CONNECT_FAILED")
 			Expect(sub.Conn()).To(BeNil(), "no connection after a failed external dial")
 			Expect(sub.JS()).To(BeNil(), "no JetStream context after a failed external dial")
@@ -167,12 +168,14 @@ var _ = Describe("External-mode event bus boot (CLUSTER-01)", func() {
 			// stop it (external Stop drains the conn; the stream persists on the
 			// broker).
 			provisioner := newExternalSubsystem(env.URL, boolPtr(true), streamMaxAge)
-			Expect(provisioner.Start(ctx)).To(Succeed())
+			Expect(provisioner.Prepare(ctx)).To(Succeed())
+			Expect(provisioner.Activate(ctx)).To(Succeed())
 			Expect(provisioner.Stop(ctx)).To(Succeed())
 
 			// A provision:false subsystem with the SAME config verifies and boots.
 			verifier := newExternalSubsystem(env.URL, boolPtr(false), streamMaxAge)
-			Expect(verifier.Start(ctx)).To(Succeed())
+			Expect(verifier.Prepare(ctx)).To(Succeed())
+			Expect(verifier.Activate(ctx)).To(Succeed())
 			DeferCleanup(func() { _ = verifier.Stop(context.Background()) })
 			Expect(verifier.JS()).NotTo(BeNil())
 		})
@@ -186,13 +189,14 @@ var _ = Describe("External-mode event bus boot (CLUSTER-01)", func() {
 
 			// Provision EVENTS with a DIFFERENT retention than the verifier wants.
 			provisioner := newExternalSubsystem(env.URL, boolPtr(true), altStreamMaxAge)
-			Expect(provisioner.Start(ctx)).To(Succeed())
+			Expect(provisioner.Prepare(ctx)).To(Succeed())
+			Expect(provisioner.Activate(ctx)).To(Succeed())
 			Expect(provisioner.Stop(ctx)).To(Succeed())
 
 			verifier := newExternalSubsystem(env.URL, boolPtr(false), streamMaxAge)
-			err := verifier.Start(ctx)
+			err := verifier.Prepare(ctx) // Prepare-only: the mismatch fails before Activate would ever run
 			expectOopsCode(err, "EVENTBUS_STREAM_CONFIG_MISMATCH")
-			Expect(verifier.Conn()).To(BeNil(), "fail-closed Start leaves no live connection")
+			Expect(verifier.Conn()).To(BeNil(), "fail-closed Prepare leaves no live connection")
 			Expect(verifier.JS()).To(BeNil())
 		})
 
@@ -204,7 +208,7 @@ var _ = Describe("External-mode event bus boot (CLUSTER-01)", func() {
 			env := startExternalNATS(ctx)
 
 			sub := newExternalSubsystem(env.URL, boolPtr(false), streamMaxAge)
-			err := sub.Start(ctx)
+			err := sub.Prepare(ctx) // Prepare-only: the absent-stream check fails before Activate would ever run
 			expectOopsCode(err, "EVENTBUS_STREAM_CONFIG_MISMATCH")
 
 			// The server MUST NOT have created the stream in provision:false mode.

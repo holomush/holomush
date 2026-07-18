@@ -85,10 +85,13 @@ func NewExternal(t TB, env *natstest.NATSEnv, clusterID string, n int, opts ...O
 			t.Fatalf("NewSubsystem[%d]: %v", i, err)
 		}
 		startCtx, cancelStart := context.WithTimeout(context.Background(), 5*time.Second)
-		err = reg.Start(startCtx)
+		err = reg.Prepare(startCtx)
+		if err == nil {
+			err = reg.Activate(startCtx)
+		}
 		cancelStart()
 		if err != nil {
-			t.Fatalf("reg[%d].Start: %v", i, err)
+			t.Fatalf("reg[%d].Prepare/Activate: %v", i, err)
 		}
 		regForCleanup := reg
 		t.Cleanup(func() {

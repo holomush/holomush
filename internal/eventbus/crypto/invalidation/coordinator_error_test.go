@@ -33,7 +33,8 @@ type stubRegistry struct {
 
 func (s *stubRegistry) ID() lifecycle.SubsystemID          { return lifecycle.SubsystemCluster }
 func (s *stubRegistry) DependsOn() []lifecycle.SubsystemID { return nil }
-func (s *stubRegistry) Start(_ context.Context) error      { return nil }
+func (s *stubRegistry) Prepare(_ context.Context) error    { return nil }
+func (s *stubRegistry) Activate(_ context.Context) error   { return nil }
 func (s *stubRegistry) Stop(_ context.Context) error       { return nil }
 func (s *stubRegistry) Self() cluster.MemberID             { return s.self }
 func (s *stubRegistry) LiveMembers() []cluster.Member {

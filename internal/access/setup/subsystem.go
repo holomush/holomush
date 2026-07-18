@@ -68,15 +68,17 @@ func (s *ABACSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
 }
 
-// Start builds the ABAC stack, registers health, and starts the poller.
-// Start is idempotent: if the subsystem is already started, it returns nil
-// immediately. This allows the ABAC subsystem to be pre-started in core
-// boot when admin handler construction needs Resolver() before the
-// orchestrator drives StartAll. Mirrors store.DatabaseSubsystem.Start.
+// Prepare builds the ABAC stack, including the crypto-operator allow-list
+// validation, and registers health (D-13.3 row 3). The poller goroutine is
+// NOT started here — it is domain work and belongs in Activate.
+// Prepare is idempotent: if the subsystem is already prepared, it returns
+// nil immediately — a real guard, because a second Prepare would rebuild the
+// stack (wasted DB round trips) even though the poller itself now guards
+// separately in Activate.
 // codecov:ignore — tested by integration and E2E tests
-func (s *ABACSubsystem) Start(ctx context.Context) error {
+func (s *ABACSubsystem) Prepare(ctx context.Context) error {
 	if s.stack != nil {
-		return nil // already started — guard against double-start (would launch a duplicate poller goroutine)
+		return nil // already prepared
 	}
 	pool := s.cfg.DB.Pool()
 
@@ -124,13 +126,27 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 		s.cfg.Registry.Register(lifecycle.SubsystemABAC, stack.HealthTracker)
 	}
 
+	slog.InfoContext(ctx, "ABAC subsystem prepared")
+	return nil
+}
+
+// Activate starts the policy poller — a domain work loop (D-13.3 row 3).
+// Idempotent: guarded on the poller's own phase-owned state (pollerCancel),
+// not on s.stack, so a repeated Activate does not launch a duplicate poller
+// goroutine.
+// codecov:ignore — tested by integration and E2E tests
+func (s *ABACSubsystem) Activate(ctx context.Context) error {
+	if s.pollerCancel != nil {
+		return nil // already activated — guard against a duplicate poller goroutine
+	}
+
 	// Start policy poller with background context so it outlives the startup context.
 	// Shutdown is driven by pollerCancel, not the caller's ctx.
 	pollerCtx, pollerCancel := context.WithCancel(context.Background())
 	s.pollerCancel = pollerCancel
-	go stack.Poller.Run(pollerCtx)
+	go s.stack.Poller.Run(pollerCtx)
 
-	slog.InfoContext(ctx, "ABAC subsystem started")
+	slog.InfoContext(ctx, "ABAC subsystem activated")
 	return nil
 }
 
@@ -146,43 +162,43 @@ func (s *ABACSubsystem) Stop(_ context.Context) error {
 	return nil
 }
 
-// Engine returns the ABAC policy engine. Panics if called before Start().
+// Engine returns the ABAC policy engine. Panics if called before Prepare().
 func (s *ABACSubsystem) Engine() types.AccessPolicyEngine {
 	if s.stack == nil {
-		panic("setup: Engine() called before Start()")
+		panic("setup: Engine() called before Prepare()")
 	}
 	return s.stack.Engine
 }
 
 // PolicyStore returns the policy store (with invalidation hook wired).
-// Panics if called before Start().
+// Panics if called before Prepare().
 func (s *ABACSubsystem) PolicyStore() policystore.PolicyStore {
 	if s.stack == nil {
-		panic("setup: PolicyStore() called before Start()")
+		panic("setup: PolicyStore() called before Prepare()")
 	}
 	return s.stack.PolicyStore
 }
 
-// PolicyInstaller returns the plugin policy installer. Panics if called before Start().
+// PolicyInstaller returns the plugin policy installer. Panics if called before Prepare().
 func (s *ABACSubsystem) PolicyInstaller() *plugins.PolicyInstaller {
 	if s.stack == nil {
-		panic("setup: PolicyInstaller() called before Start()")
+		panic("setup: PolicyInstaller() called before Prepare()")
 	}
 	return s.stack.PolicyInstaller
 }
 
-// PluginProvider returns the ABAC plugin attribute provider. Panics if called before Start().
+// PluginProvider returns the ABAC plugin attribute provider. Panics if called before Prepare().
 func (s *ABACSubsystem) PluginProvider() *attribute.PluginProvider {
 	if s.stack == nil {
-		panic("setup: PluginProvider() called before Start()")
+		panic("setup: PluginProvider() called before Prepare()")
 	}
 	return s.stack.PluginProvider
 }
 
-// HealthTracker returns the health tracker. Panics if called before Start().
+// HealthTracker returns the health tracker. Panics if called before Prepare().
 func (s *ABACSubsystem) HealthTracker() *lifecycle.HealthTracker {
 	if s.stack == nil {
-		panic("setup: HealthTracker() called before Start()")
+		panic("setup: HealthTracker() called before Prepare()")
 	}
 	return s.stack.HealthTracker
 }
@@ -191,10 +207,10 @@ func (s *ABACSubsystem) HealthTracker() *lifecycle.HealthTracker {
 // interface. The concrete *attribute.Resolver also exposes mutator methods
 // (RegisterProvider, UnregisterProvider, RegisterEnvironmentProvider) that
 // callers MUST NOT touch after Start — narrowing the return type makes that
-// invariant compile-time enforceable. Panics if called before Start().
+// invariant compile-time enforceable. Panics if called before Prepare().
 func (s *ABACSubsystem) Resolver() access.SubjectResolver {
 	if s.stack == nil {
-		panic("setup: Resolver() called before Start()")
+		panic("setup: Resolver() called before Prepare()")
 	}
 	return s.stack.Resolver
 }
@@ -207,7 +223,7 @@ func (s *ABACSubsystem) Resolver() access.SubjectResolver {
 // before Start().
 func (s *ABACSubsystem) AttributeResolver() *attribute.Resolver {
 	if s.stack == nil {
-		panic("setup: AttributeResolver() called before Start()")
+		panic("setup: AttributeResolver() called before Prepare()")
 	}
 	return s.stack.Resolver
 }
@@ -218,10 +234,10 @@ func (s *ABACSubsystem) AttributeResolver() *attribute.Resolver {
 // hostfunc.WithAuditLogger to satisfy spec §5 / INV-PLUGIN-25. Returns nil when
 // AuditLogger is nil (audit logging disabled), giving callers a clean nil
 // interface value rather than an interface wrapping a nil pointer.
-// Panics if called before Start().
+// Panics if called before Prepare().
 func (s *ABACSubsystem) AuditLogger() pluginauthz.Auditor {
 	if s.stack == nil {
-		panic("setup: AuditLogger() called before Start()")
+		panic("setup: AuditLogger() called before Prepare()")
 	}
 	if s.stack.AuditLogger == nil {
 		return nil

@@ -433,7 +433,8 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			Mode: eventbus.ModeExternal,
 			URL:  cfg.externalNATSURL,
 		}.Defaults())
-		require.NoError(t, sub.Start(ctx), "integrationtest.Start: start external NATS subsystem")
+		require.NoError(t, sub.Prepare(ctx), "integrationtest.Start: prepare external NATS subsystem")
+		require.NoError(t, sub.Activate(ctx), "integrationtest.Start: activate external NATS subsystem")
 		t.Cleanup(func() {
 			// Log (not fail) on Stop error: deliberate chaos in the resilience
 			// suite may have wedged the connection before teardown.
@@ -829,10 +830,11 @@ func (s *Server) CommandRegistry() *command.Registry {
 }
 
 // CommandQuerier returns the shared, ABAC-filtered command querier built by the
-// production PluginSubsystem.Start() path (subsystem.go) and late-bound into the
-// Lua host via SetCommandQuerier. Panics if WithInTreePlugins was not passed.
-// Used by the whole-system wiring regression to prove Start() yields a non-nil
-// querier (design spec INV-COMMAND-1: single command-visibility filter).
+// production PluginSubsystem.Prepare() path (subsystem.go) and late-bound into
+// the Lua host via SetCommandQuerier. Panics if WithInTreePlugins was not
+// passed. Used by the whole-system wiring regression to prove Prepare() yields
+// a non-nil querier (design spec INV-COMMAND-1: single command-visibility
+// filter).
 func (s *Server) CommandQuerier() *commandquery.Querier {
 	s.requirePlugins("CommandQuerier")
 	return s.pluginSub.CommandQuerier()
