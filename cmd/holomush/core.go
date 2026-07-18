@@ -855,6 +855,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 
 	if orchErr := orch.StartAll(ctx); orchErr != nil {
+		// CR-01 (07-review): the invalidation.Coordinator's only
+		// orchestrator-owned cleanup path is grpcSubsystem.Stop, which is
+		// unreachable when StartAll fails before grpcSubsystem.Prepare
+		// ever runs (several wiring consumers prepare before it in
+		// topological order). Stop it here too — see
+		// stopCoordinatorOnBootFailure's doc for why this is safe and
+		// cannot race or double-stop against grpcSubsystem's own Stop.
+		stopCoordinatorOnBootFailure(ctx, coordHolderPtr)
 		return orchErr
 	}
 	defer func() {

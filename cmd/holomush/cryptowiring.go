@@ -339,13 +339,18 @@ func buildCryptoWiring(in cryptoWiringInputs) (*cryptoWiring, error) {
 	// Manager was successfully constructed (rekeyW.Manager non-nil) —
 	// otherwise the Coordinator has no caches to bind to.
 	//
-	// grpcSubsystem owns the Coordinator's lifecycle for STOP purposes
-	// (07-09 item 4: grpcSubsystem.Stop drives Coordinator.Stop via
-	// CoordHolder). Construction + Start() happen HERE, inside this
-	// memoized builder, as a side effect of the first call to it — which
-	// may be any wiring consumer's Prepare, not necessarily grpcSubsystem's
-	// (see cryptoWiringInputs.CoordHolder's doc for why this is
-	// deliberately unchanged from pre-07-11 and still D-13.0-compliant).
+	// grpcSubsystem owns the Coordinator's lifecycle for STOP purposes on
+	// the happy path (07-09 item 4: grpcSubsystem.Stop drives
+	// Coordinator.Stop via CoordHolder). Construction + Start() happen
+	// HERE, inside this memoized builder, as a side effect of the first
+	// call to it — which may be any wiring consumer's Prepare, not
+	// necessarily grpcSubsystem's (see cryptoWiringInputs.CoordHolder's
+	// doc for why this is deliberately unchanged from pre-07-11 and still
+	// D-13.0-compliant). Because of that, a boot failure between this
+	// consumer and grpcSubsystem's own Prepare would otherwise strand the
+	// Coordinator — runCore's StartAll-failure branch also calls
+	// stopCoordinatorOnBootFailure as a second, orchestrator-independent
+	// cleanup path (CR-01, 07-review).
 	if rekeyW.Manager != nil {
 		accessor, accessorOK := rekeyW.Manager.(dek.CacheAccessor)
 		if !accessorOK {
@@ -372,10 +377,12 @@ func buildCryptoWiring(in cryptoWiringInputs) (*cryptoWiring, error) {
 				"error", startErr)
 		} else {
 			in.CoordHolder.coord = c
-			// Stop is owned by grpcSubsystem.Stop (07-09 item 4) — no
-			// ad-hoc defer here; the orchestrator now drives shutdown
-			// ordering (and deadline handling, 07-10) for the Coordinator
-			// just like every other subsystem.
+			// Stop is owned by grpcSubsystem.Stop (07-09 item 4) on the
+			// happy path — the orchestrator drives shutdown ordering (and
+			// deadline handling, 07-10) for the Coordinator just like
+			// every other subsystem. A StartAll failure that never
+			// reaches grpcSubsystem.Prepare is handled separately by
+			// stopCoordinatorOnBootFailure (CR-01, 07-review).
 		}
 	}
 
@@ -446,4 +453,40 @@ func buildCryptoWiring(in cryptoWiringInputs) (*cryptoWiring, error) {
 		},
 		rekeyManager: rekeyW.Manager,
 	}, nil
+}
+
+// stopCoordinatorOnBootFailure stops the invalidation.Coordinator held by
+// holder, if one was constructed and started, after a boot failure
+// (orch.StartAll returning a non-nil error).
+//
+// CR-01 (07-review): the Coordinator's only orchestrator-owned cleanup path
+// is grpcSubsystem.Stop (07-09 item 4), which is reached only when
+// grpcSubsystem.Prepare itself was invoked. Several wiring consumers
+// (CryptoChainVerifier among them, per the pinned topological order in
+// core_topo_order_test.go) resolve cryptoWiringFn — and therefore may
+// trigger the Coordinator's construction+Start — BEFORE grpcSubsystem in
+// topological order. A Prepare failure in any of those earlier consumers
+// aborts orch.StartAll before grpcSubsystem.Prepare ever runs, so the
+// orchestrator's internal rollback (which only Stops subsystems whose
+// Prepare was actually invoked) never reaches grpcSubsystem.Stop, and the
+// already-started Coordinator (goroutines + NATS subscriptions) would
+// otherwise leak for the remaining life of the process.
+//
+// This check is deliberately independent of any one subsystem's Prepare
+// outcome — it is keyed only on whether the Coordinator was actually
+// constructed+started (holder.coord != nil), which buildCryptoWiring sets
+// regardless of which consumer triggered the build. It is safe to call
+// unconditionally on every StartAll failure: invalidation.Coordinator.Stop
+// is idempotent, and this path is mutually exclusive with grpcSubsystem's
+// own Stop (that only runs via the deferred orch.StopAll on the StartAll
+// SUCCESS branch), so there is no double-stop or race.
+func stopCoordinatorOnBootFailure(ctx context.Context, holder *coordHolder) {
+	if holder == nil || holder.coord == nil {
+		return
+	}
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	if stopErr := holder.coord.Stop(stopCtx); stopErr != nil {
+		slog.WarnContext(ctx, "invalidation.Coordinator stop error during boot-failure cleanup", "error", stopErr)
+	}
 }
