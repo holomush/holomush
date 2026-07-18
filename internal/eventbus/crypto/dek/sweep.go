@@ -144,9 +144,10 @@ func (s *CheckpointSweepSubsystem) Stop(ctx context.Context) error {
 	if s.done == nil {
 		return nil
 	}
+	done := s.done
+	s.done = nil
 	select {
-	case <-s.done:
-		s.done = nil
+	case <-done:
 		return nil
 	case <-ctx.Done():
 		return oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT").Wrap(ctx.Err())
