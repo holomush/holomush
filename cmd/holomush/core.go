@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	cryptotls "crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -52,7 +51,6 @@ import (
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telemetry"
-	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/totp"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
@@ -1311,80 +1309,6 @@ func (b *adminDepsBridge) AdminDeps() handlers.AdminDeps {
 		ResetRepo:      b.auth.ResetRepo(),
 		CharLister:     bootstrapsetup.NewCharRepoAdapter(pool, worldpostgres.NewCharacterRepository(pool)),
 	}
-}
-
-// ensureTLSCerts ensures server and CA/client TLS certificates exist for the core
-// component and returns a loaded server TLS configuration.
-//
-// If any of the expected files (`core.crt`, `core.key`, `root-ca.crt`) are already
-// present in certsDir, the existing server TLS configuration is loaded and returned.
-// Otherwise the function creates certsDir, generates a CA and server certificate for
-// `core`, generates a gateway client certificate, saves all artifacts, and then loads
-// and returns the resulting server TLS configuration. Returns a coded error if any
-// step (directory creation, certificate generation, saving, or loading) fails.
-func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
-	certPath := certsDir + "/core.crt"
-	keyPath := certsDir + "/core.key"
-	caPath := certsDir + "/root-ca.crt"
-
-	certExists := fileExists(certPath)
-	keyExists := fileExists(keyPath)
-	caExists := fileExists(caPath)
-
-	if certExists || keyExists || caExists {
-		existingConfig, err := tlscerts.LoadServerTLS(certsDir, "core")
-		if err != nil {
-			return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load existing TLS certificates").With("certs_dir", certsDir).Wrap(err)
-		}
-		return existingConfig, nil
-	}
-
-	slog.Info("generating TLS certificates", "certs_dir", certsDir)
-
-	if err := xdg.EnsureDir(certsDir); err != nil {
-		return nil, oops.Code("CERTS_DIR_CREATE_FAILED").With("operation", "create certs directory").With("certs_dir", certsDir).Wrap(err)
-	}
-
-	ca, err := tlscerts.GenerateCA(gameID)
-	if err != nil {
-		return nil, oops.Code("CA_GENERATE_FAILED").With("operation", "generate CA").With("game_id", gameID).Wrap(err)
-	}
-
-	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		return nil, oops.Code("SERVER_CERT_GENERATE_FAILED").With("operation", "generate server certificate").With("component", "core").Wrap(err)
-	}
-
-	err = tlscerts.SaveCertificates(certsDir, ca, serverCert)
-	if err != nil {
-		return nil, oops.Code("CERTS_SAVE_FAILED").With("operation", "save certificates").With("certs_dir", certsDir).Wrap(err)
-	}
-
-	gatewayCert, err := tlscerts.GenerateClientCert(ca, "gateway")
-	if err != nil {
-		return nil, oops.Code("CLIENT_CERT_GENERATE_FAILED").With("operation", "generate gateway certificate").With("component", "gateway").Wrap(err)
-	}
-
-	err = tlscerts.SaveClientCert(certsDir, gatewayCert)
-	if err != nil {
-		return nil, oops.Code("CLIENT_CERT_SAVE_FAILED").With("operation", "save gateway certificate").With("component", "gateway").Wrap(err)
-	}
-
-	slog.Info("TLS certificates generated")
-
-	tlsConfig, err := tlscerts.LoadServerTLS(certsDir, "core")
-	if err != nil {
-		return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load generated certificates").With("certs_dir", certsDir).Wrap(err)
-	}
-	return tlsConfig, nil
-}
-
-// fileExists reports whether the file at path exists or should be treated as
-// existing. Permission errors are treated as "exists" to avoid silently
-// overwriting files we can't read.
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil || !os.IsNotExist(err)
 }
 
 // monitorServerErrors watches errCh and cancels the provided context when a non-nil error is received.
