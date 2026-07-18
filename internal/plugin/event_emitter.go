@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -188,15 +187,15 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 	if err != nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).Wrap(err)
 	}
-	event := eventbus.Event{
-		ID:        core.NewULID(),
-		Subject:   sub,
-		Type:      typ,
-		Timestamp: time.Now().UTC(),
-		Actor:     busActor,
-		Payload:   payload,
-		Sensitive: sensitive,
-	}
+	// WR-02 (07-review): NewEvent is the canonical — and, post-ARCH-04, the
+	// ONLY — construction path for eventbus.Event values that will be
+	// published (eventbus/types.go doc comment). Sensitive is not a
+	// NewEvent parameter, so it's set on the returned value per NewEvent's
+	// own prescribed pattern ("callers that need to override specific
+	// fields after construction ... MUST still use NewEvent for the base
+	// value").
+	event := eventbus.NewEvent(sub, typ, busActor, payload)
+	event.Sensitive = sensitive
 	if err := e.publisher.Publish(ctx, event); err != nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).
 			With("qualified_subject", string(sub)).Wrap(err)
