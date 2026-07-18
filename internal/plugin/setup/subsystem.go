@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
@@ -480,21 +481,21 @@ func (s *PluginSubsystem) Manager() *plugins.Manager {
 }
 
 // ConfigureSystemBroadcaster wires the SessionAdmin broadcast backing — a
-// system-event emit over appender — into the Lua host so the brokered
+// system-event emit over pub — into the Lua host so the brokered
 // SessionAdminService serves real broadcasts (holomush-eykuh.4.2, decision
 // holomush-t019a). It MUST be called from the gRPC subsystem's Start once the
-// event appender exists: the appender is built after the plugin subsystem starts,
+// publisher exists: the publisher is built after the plugin subsystem starts,
 // so a construction-time option cannot reach it (same late-binding rationale as
 // Manager.ConfigureEventEmitter / ConfigureFocusDeps). No-op when the Lua host is
-// not yet built or the appender is nil (leaves the server fail-closed). The
+// not yet built or pub/gameID is nil (leaves the server fail-closed). The
 // binary host needs no equivalent: SessionAdminService is Lua-only (not in
 // hostcap.BinaryDefaultSet). Disconnect stays Unimplemented — no production
 // forcible-disconnect mechanism (follow-up holomush-obo44).
-func (s *PluginSubsystem) ConfigureSystemBroadcaster(appender core.EventAppender) {
-	if s.luaHost == nil || appender == nil {
+func (s *PluginSubsystem) ConfigureSystemBroadcaster(pub eventbus.Publisher, gameID func() string) {
+	if s.luaHost == nil || pub == nil || gameID == nil {
 		return
 	}
-	s.luaHost.SetSessionAdmin(hostcap.NewSystemBroadcaster(appender))
+	s.luaHost.SetSessionAdmin(hostcap.NewSystemBroadcaster(pub, gameID))
 }
 
 // CommandRegistry returns the command Registry. Panics if called before Start().

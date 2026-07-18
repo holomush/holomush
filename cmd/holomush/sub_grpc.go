@@ -286,12 +286,18 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		bus:       s.cfg.EventBus,
 	}
 
-	// Wire the plugin SessionAdmin broadcast backing now that the event appender
+	// bus is the one game-id source shared by every closure below — the
+	// presence emitter, the SessionAdmin broadcast backing, and (Task 3)
+	// command.Services' SystemBroadcaster all qualify subjects off the same
+	// EventBus.GameID(), rather than three independent sources (D-02).
+	bus := s.cfg.EventBus
+
+	// Wire the plugin SessionAdmin broadcast backing now that the publisher
 	// exists — the brokered SessionAdminService.Broadcast emits a system event to
-	// the reserved subject over this appender (holomush-eykuh.4.2, decision
-	// holomush-t019a). Late binding: the appender is built here, after the plugin
+	// the reserved subject over this publisher (holomush-eykuh.4.2, decision
+	// holomush-t019a). Late binding: the publisher is built here, after the plugin
 	// subsystem started, so this cannot be a host construction-time option.
-	s.cfg.Plugins.ConfigureSystemBroadcaster(eventStore)
+	s.cfg.Plugins.ConfigureSystemBroadcaster(publisher, func() string { return bus.GameID() })
 
 	// 1. Create the presence emitter (arrive/leave/session_ended) over the
 	// SAME wrapped publisher busEventAppender uses (never rawPublisher — the
