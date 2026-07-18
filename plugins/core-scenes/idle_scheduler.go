@@ -43,7 +43,7 @@ type sceneIdleStore interface {
 // true, a scene_idle_nudge is emitted through sink after each active→paused
 // transition. sink and gameID are the plugin's binary emit path (the same sink
 // the publish emitters use) — the idle nudge is emitted via EventSink.Emit, not
-// host-core core.NewEvent() (review Concern 3).
+// host-core eventbus.NewEvent() (review Concern 3).
 type idleScheduler struct {
 	store                  sceneIdleStore
 	interval               time.Duration

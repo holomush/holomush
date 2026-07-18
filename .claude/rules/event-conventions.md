@@ -41,13 +41,14 @@ events.<game_id>.<domain>.<entity-id>[.<facet>...]
 
 | Concern | Owner |
 |---------|-------|
-| Identity / dedup key | `core.Event.ID` (ULID) — set as `Nats-Msg-Id` for JetStream dedup |
+| Identity / dedup key | `eventbus.Event.ID` (ULID) — set as `Nats-Msg-Id` for JetStream dedup |
 | Ordering | JetStream's per-stream `uint64` sequence — **never** rely on ULID lex order |
 
 ## Event construction
 
-- MUST use `core.NewEvent()` — it stamps a monotonic ULID via `core.NewULID()`
-- MUST NOT use `core.Event{}` struct literals
+- `eventbus.Event` is the single Event representation (ARCH-04 collapsed the former `core.Event`/`eventbus.Event` duplication)
+- MUST use `eventbus.NewEvent()` — it stamps a monotonic ULID via `core.NewULID()`
+- MUST NOT use `eventbus.Event{}` struct literals
 - MUST NOT supply `Event.ID` manually (e.g., from `idgen.New()` which is for entity primary keys, not events)
 
 ## Plugin event types

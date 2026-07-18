@@ -14,7 +14,7 @@
 // server-side replication (OQ-4).
 //
 // Production code MUST NOT import this package — it is test-support only, kept
-// at depguard parity with eventbustest/coretest.
+// at depguard parity with eventbustest and quarantinetest.
 package natstest
 
 import (
