@@ -169,8 +169,17 @@ func (s *PluginSubsystem) DependsOn() []lifecycle.SubsystemID {
 // subprocess is a host-controlled child reachable only over the host's own
 // mTLS gRPC, no externally-reachable surface, and audit's own Prepare
 // DependsOn(SubsystemPlugins) requires loading to have completed here).
+// Prepare is idempotent: if the subsystem is already prepared, it returns
+// nil immediately (a real guard, unlike a comment-only disposition — a
+// second Prepare would launch a duplicate set of binary-plugin subprocesses
+// via goplugin.NewHost and re-run Manager.LoadAll's bootstrap-alias-seeding
+// side effects, IN-01/07-review).
 // codecov:ignore — tested by integration and E2E tests
 func (s *PluginSubsystem) Prepare(ctx context.Context) error {
+	if s.manager != nil {
+		return nil // already prepared
+	}
+
 	// 1. Resolve plugin directory.
 	pluginsDir, err := s.resolvePluginsDir()
 	if err != nil {
@@ -520,6 +529,12 @@ func (s *PluginSubsystem) Activate(_ context.Context) error { return nil }
 // (releasing its token-store sweeper goroutine), the Lua host, the schema
 // provisioner, the alias pool, and the world in-process connection
 // (D-13.2 row 9). Nothing is left for Stop to release in that case.
+//
+// Resets every field Prepare's guard (s.manager) and its downstream
+// accessors depend on to nil, so a legitimate retry of Prepare after Stop
+// rebuilds the full plugin stack (including relaunching binary-plugin
+// subprocesses) rather than short-circuiting on an already-closed manager
+// (WR-01/IN-01, 07-review).
 // codecov:ignore — tested by integration and E2E tests
 func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if s.manager == nil {
@@ -530,17 +545,28 @@ func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if err := s.manager.Close(shutdownCtx); err != nil {
 		slog.WarnContext(shutdownCtx, "error closing plugin manager", "error", err)
 	}
+	s.manager = nil
+	s.luaHost = nil
+	s.registry = nil
 	if s.worldConn != nil {
 		if err := s.worldConn.Close(); err != nil {
 			slog.WarnContext(shutdownCtx, "error closing world in-process connection", "error", err)
 		}
+		s.worldConn = nil
 	}
 	if s.schemaProvisioner != nil {
 		s.schemaProvisioner.Close()
+		s.schemaProvisioner = nil
 	}
 	if s.aliasPool != nil {
 		s.aliasPool.Close()
+		s.aliasPool = nil
 	}
+	s.aliasRepo = nil
+	s.aliasCache = nil
+	s.cmdRegistry = nil
+	s.commandQuerier = nil
+	s.health = nil
 	return nil
 }
 
