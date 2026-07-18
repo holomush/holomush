@@ -913,6 +913,16 @@ func (s *grpcSubsystem) Activate(ctx context.Context) error {
 // the reaper context fields, to nil so a legitimate retry of Prepare/Activate
 // after Stop reacquires fresh state rather than short-circuiting on an
 // already-stopped server/listener (WR-01).
+//
+// CoordHolder.coord is also reset to nil after Stop (WR-03) so the field
+// does not keep pointing at an already-drained Coordinator. This alone does
+// NOT make the Coordinator retry-safe: cryptoWiring's resolveCryptoWiring
+// is a sync.Once-memoized closure (cryptowiring.go) that runs the
+// Coordinator-constructing buildCryptoWiring step at most once per
+// process, predating this phase's fixes and out of scope here — a retried
+// Prepare will find CoordHolder.coord nil and simply skip re-Stop()-ing it
+// on a subsequent Stop, but will NOT reconstruct or restart a new
+// Coordinator, so cluster invalidation fan-out does not resume.
 // codecov:ignore — tested by integration and E2E tests
 func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	if s.grpcServer != nil {
@@ -950,6 +960,7 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 		if stopErr := s.cfg.CoordHolder.coord.Stop(ctx); stopErr != nil {
 			slog.WarnContext(ctx, "invalidation.Coordinator stop error", "error", stopErr)
 		}
+		s.cfg.CoordHolder.coord = nil
 	}
 	return nil
 }
