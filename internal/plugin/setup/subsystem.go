@@ -243,6 +243,16 @@ func (s *PluginSubsystem) Prepare(ctx context.Context) error {
 	// 4a. Register WorldService as a server-internal service.
 	worldConn, worldConnErr := newWorldInProcessConn(s.cfg.World.Service())
 	if worldConnErr != nil {
+		// cleanupOnError isn't defined until below (it also closes
+		// binaryHost/aliasPool/schemaProvisioner, none of which are
+		// constructed yet at this point in Prepare) — but s.luaHost WAS
+		// already assigned above, and Stop() no-ops while s.manager == nil.
+		// Without this, a world-conn failure leaks the Lua host's
+		// state-factory pool (WR-01, 07-review).
+		if s.luaHost != nil {
+			_ = s.luaHost.Close(ctx) //nolint:errcheck // best-effort cleanup
+			s.luaHost = nil
+		}
 		return oops.Code("WORLD_INPROCESS_CONN_FAILED").Wrap(worldConnErr)
 	}
 	s.worldConn = worldConn
@@ -503,11 +513,13 @@ func (s *PluginSubsystem) Activate(_ context.Context) error { return nil }
 //
 // The s.manager == nil early return is a TRUE no-op for any Prepare failure
 // that occurred before the manager was assigned: every pre-manager error
-// path inside Prepare already routes through cleanupOnError, which closes
-// the binary host (releasing its token-store sweeper goroutine), the Lua
-// host, the schema provisioner, the alias pool, and the world in-process
-// connection in-body (D-13.2 row 9). Nothing is left for Stop to release in
-// that case.
+// path inside Prepare releases its own already-constructed resources
+// in-body before returning — the world-in-process-connection failure path
+// closes s.luaHost directly (WR-01, 07-review), and every later pre-manager
+// error path routes through cleanupOnError, which closes the binary host
+// (releasing its token-store sweeper goroutine), the Lua host, the schema
+// provisioner, the alias pool, and the world in-process connection
+// (D-13.2 row 9). Nothing is left for Stop to release in that case.
 // codecov:ignore — tested by integration and E2E tests
 func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if s.manager == nil {
