@@ -853,9 +853,17 @@ type busHistoryReaderAdapter struct {
 var _ plugins.HistoryReader = (*busHistoryReaderAdapter)(nil)
 
 // ReplayTail satisfies plugins.HistoryReader. It fetches count most-recent
-// events on stream (optionally filtered by notBefore and exclusive beforeID),
-// returning them in ascending ULID order (oldest→newest).
-func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
+// events on stream (optionally filtered by notBefore and an exclusive
+// (beforeSeq, beforeID) cursor), returning them in ascending ULID order
+// (oldest→newest).
+//
+// beforeSeq == 0 means "no cursor — read the tail" (D-07/ARCH-04): there is
+// no ID-only pagination fallback on either tier (see
+// internal/eventbus/bus.go's HistoryQuery doc). beforeID alone is a tripwire
+// that validates a nonzero beforeSeq still names the same event in storage;
+// it is set whenever provided (including as a stale legacy artifact of a
+// zero-seq cursor) but only takes effect once beforeSeq is also nonzero.
+func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	if count <= 0 {
 		return nil, nil
 	}
@@ -872,6 +880,9 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 		Direction: eventbus.DirectionBackward,
 		PageSize:  count,
 		NotBefore: notBefore,
+	}
+	if beforeSeq != 0 {
+		q.BeforeSeq = beforeSeq
 	}
 	if !beforeID.IsZero() {
 		q.BeforeID = beforeID

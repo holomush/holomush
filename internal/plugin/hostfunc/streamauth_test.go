@@ -20,7 +20,7 @@ import (
 
 type recordingInnerReader struct{ called bool }
 
-func (r *recordingInnerReader) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]eventbus.Event, error) {
+func (r *recordingInnerReader) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ uint64, _ ulid.ULID) ([]eventbus.Event, error) {
 	r.called = true
 	return nil, nil
 }
@@ -48,7 +48,7 @@ func TestAuthorizingHistoryReaderReplayTail(t *testing.T) {
 			inner := &recordingInnerReader{}
 			hr := newAuthorizingHistoryReader(inner, tc.engine, nil, "main", "echo-bot")
 
-			_, err := hr.ReplayTail(context.Background(), tc.stream, 10, time.Time{}, ulid.ULID{})
+			_, err := hr.ReplayTail(context.Background(), tc.stream, 10, time.Time{}, 0, ulid.ULID{})
 			if tc.wantDelegated {
 				require.NoError(t, err)
 			} else {

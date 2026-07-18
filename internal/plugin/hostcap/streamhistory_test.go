@@ -29,10 +29,42 @@ type recordingHistoryReader struct {
 	gotStream string
 }
 
-func (r *recordingHistoryReader) ReplayTail(_ context.Context, stream string, _ int, _ time.Time, _ ulid.ULID) ([]eventbus.Event, error) {
+func (r *recordingHistoryReader) ReplayTail(_ context.Context, stream string, _ int, _ time.Time, _ uint64, _ ulid.ULID) ([]eventbus.Event, error) {
 	r.called = true
 	r.gotStream = stream
 	return nil, nil
+}
+
+// pagedHistoryCall records one ReplayTail invocation's arguments, so a test
+// can assert the SECOND call in a page walk carries the real
+// (beforeSeq, beforeID) anchor rather than a hardcoded Seq:0.
+type pagedHistoryCall struct {
+	stream    string
+	count     int
+	notBefore time.Time
+	beforeSeq uint64
+	beforeID  ulid.ULID
+}
+
+// pagingHistoryReader returns one page per call from a preconfigured list and
+// records the arguments of every call. Used for the hostcap two-page
+// QueryStreamHistory round-trip test (cross-AI round 5): it drives the REAL
+// encode (servers.go:901) → decode (servers.go:872) → ReplayTail circuit as
+// one unit, so a regression that fixes the per-event cursor but leaves
+// next_cursor hardcoded at Seq:0 (the most plausible partial-fix failure)
+// is caught here even though the fake doesn't itself filter by cursor.
+type pagingHistoryReader struct {
+	pages [][]eventbus.Event
+	calls []pagedHistoryCall
+}
+
+func (r *pagingHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error) {
+	r.calls = append(r.calls, pagedHistoryCall{stream, count, notBefore, beforeSeq, beforeID})
+	idx := len(r.calls) - 1
+	if idx >= len(r.pages) {
+		return nil, nil
+	}
+	return r.pages[idx], nil
 }
 
 // streamHostCaps is a focused HostCapabilities stub for streamHistoryServer
@@ -128,4 +160,41 @@ func TestStreamHistoryQualifiesRelativeStreamBeforeABAC(t *testing.T) {
 	assert.Equal(t, "stream:events.main.system.rekey.01CT000.01CID00", eng.gotResource,
 		"handler must evaluate the QUALIFIED stream so the system forbid can match")
 	assert.False(t, reader.called)
+}
+
+// TestStreamHistoryQueryStreamHistoryTwoPageRoundTripAnchorsOnRealSeq drives
+// the hostcap encode/decode circuit as ONE unit (cross-AI round 5, MEDIUM):
+// page 1's NextCursor is fed verbatim into the page-2 request, and the fake
+// reader's recorded page-2 arguments must equal page 1's OLDEST event's real
+// (Seq, ID) — not a hardcoded Seq:0. This is the only unit-tier assertion
+// covering servers.go's decode (:872) → next_cursor (:900) loop together;
+// Task 1's integration Spec A/B cover the same circuit against a real bus.
+func TestStreamHistoryQueryStreamHistoryTwoPageRoundTripAnchorsOnRealSeq(t *testing.T) {
+	page1e1 := eventbus.Event{ID: ulid.Make(), Seq: 200, Subject: "events.main.location.01LOCAAAAAAAAAAAAAAAAAA", Type: "test", Actor: eventbus.Actor{Kind: eventbus.ActorKindSystem}}
+	page1e2 := eventbus.Event{ID: ulid.Make(), Seq: 201, Subject: "events.main.location.01LOCAAAAAAAAAAAAAAAAAA", Type: "test", Actor: eventbus.Actor{Kind: eventbus.ActorKindSystem}}
+	page2e1 := eventbus.Event{ID: ulid.Make(), Seq: 150, Subject: "events.main.location.01LOCAAAAAAAAAAAAAAAAAA", Type: "test", Actor: eventbus.Actor{Kind: eventbus.ActorKindSystem}}
+
+	reader := &pagingHistoryReader{pages: [][]eventbus.Event{{page1e1, page1e2}, {page2e1}}}
+	srv := newStreamServer(policytest.AllowAllEngine(), reader)
+
+	resp1, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
+		Stream: "location.01LOCAAAAAAAAAAAAAAAAAA",
+		Count:  2,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp1.GetEvents(), 2)
+	require.NotEmpty(t, resp1.GetNextCursor(), "a full page must produce a next_cursor")
+
+	resp2, err := srv.QueryStreamHistory(context.Background(), &hostv1.QueryStreamHistoryRequest{
+		Stream: "location.01LOCAAAAAAAAAAAAAAAAAA",
+		Count:  2,
+		Cursor: resp1.GetNextCursor(),
+	})
+	require.NoError(t, err)
+	require.Len(t, resp2.GetEvents(), 1)
+
+	require.Len(t, reader.calls, 2)
+	assert.Equal(t, page1e1.Seq, reader.calls[1].beforeSeq,
+		"page 2 must anchor on page 1's OLDEST event's real Seq (index 0), not a hardcoded 0")
+	assert.Equal(t, page1e1.ID, reader.calls[1].beforeID)
 }

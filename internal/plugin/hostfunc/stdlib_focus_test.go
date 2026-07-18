@@ -98,11 +98,12 @@ type historyCall struct {
 	stream    string
 	count     int
 	notBefore time.Time
+	beforeSeq uint64
 	beforeID  ulid.ULID
 }
 
-func (m *mockHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
-	m.calls = append(m.calls, historyCall{stream, count, notBefore, beforeID})
+func (m *mockHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error) {
+	m.calls = append(m.calls, historyCall{stream, count, notBefore, beforeSeq, beforeID})
 	return m.result, m.err
 }
 
@@ -327,13 +328,13 @@ assert(errmsg == "focus not found", "expected error message, got: " .. tostring(
 }
 
 // encodeTestCursor builds a base64 cursor string for use in test assertions.
-func encodeTestCursor(t *testing.T, id ulid.ULID) string {
+func encodeTestCursor(t *testing.T, seq uint64, id ulid.ULID) string {
 	t.Helper()
 	b, err := cursor.Encode(cursor.Cursor{
 		Version: cursor.CurrentVersion,
 		Epoch:   cursor.CurrentEpoch(),
 		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
-		Host:    &cursor.HostCursor{Seq: 0, ID: id},
+		Host:    &cursor.HostCursor{Seq: seq, ID: id},
 	})
 	require.NoError(t, err)
 	return base64.StdEncoding.EncodeToString(b)
@@ -491,11 +492,57 @@ assert(#result.next_cursor > 0, "expected non-empty next_cursor")
 	require.NoError(t, err)
 }
 
+// TestQueryStreamHistoryMultipageWalkThreadsRealSeqIntoNextCursor is a
+// genuine MULTIPAGE walk — not just a single-page encode assertion — because
+// a regression that fixes only the per-event cursor literal
+// (stdlib_focus.go's per-event encode site) while leaving the SEPARATE
+// next_cursor literal hardcoded at Seq:0 would pass every single-page test in
+// this file while still reproducing D-07's repeat bug in production (the
+// next_cursor is the token the plugin actually feeds back). This test drives
+// two query_stream_history calls, feeding page 1's next_cursor into page 2's
+// request, and asserts the SECOND ReplayTail call carries page 1's oldest
+// event's (index 0) REAL Seq — not a hardcoded 0 — as beforeSeq.
+func TestQueryStreamHistoryMultipageWalkThreadsRealSeqIntoNextCursor(t *testing.T) {
+	page1e1 := eventbus.Event{ID: ulid.Make(), Seq: 100, Subject: "scene:abc:ic", Type: eventbus.Type(corecomm.EventTypeSay)}
+	page1e2 := eventbus.Event{ID: ulid.Make(), Seq: 101, Subject: "scene:abc:ic", Type: eventbus.Type(corecomm.EventTypeSay)}
+	hr := &mockHistoryReader{result: []eventbus.Event{page1e1, page1e2}}
+	L := newFocusTestState(t, nil, hr)
+
+	err := L.DoString(`
+local result = holomush.query_stream_history({stream="scene:abc:ic", count=2})
+assert(result.has_more == true, "expected has_more=true for full page")
+_G.next_cursor = result.next_cursor
+_G.page1_id_1 = result.events[1].id
+_G.page1_id_2 = result.events[2].id
+`)
+	require.NoError(t, err)
+
+	page2e1 := eventbus.Event{ID: ulid.Make(), Seq: 50, Subject: "scene:abc:ic", Type: eventbus.Type(corecomm.EventTypeSay)}
+	hr.result = []eventbus.Event{page2e1}
+	err = L.DoString(`
+local result2 = holomush.query_stream_history({stream="scene:abc:ic", count=2, cursor=_G.next_cursor})
+assert(result2.events[1].id ~= _G.page1_id_1, "page 2 must not repeat page 1's first event (D-07)")
+assert(result2.events[1].id ~= _G.page1_id_2, "page 2 must not repeat page 1's second event (D-07)")
+`)
+	require.NoError(t, err)
+
+	require.Len(t, hr.calls, 2)
+	// The next_cursor anchor is page1e1 (index 0 of the ascending page,
+	// per <page_advance_anchor>) — its REAL Seq, not a hardcoded 0.
+	assert.Equal(t, page1e1.Seq, hr.calls[1].beforeSeq, "next_cursor must carry the oldest event's real Seq, not a hardcoded 0")
+	assert.Equal(t, page1e1.ID, hr.calls[1].beforeID)
+}
+
 func TestQueryStreamHistoryCursorRoundTripsAsBase64(t *testing.T) {
-	// Encode a cursor, pass it back in the next call, verify beforeID is extracted.
+	// Encode a cursor, pass it back in the next call, verify beforeSeq and
+	// beforeID both survive the encode→decode round trip (D-07/ARCH-04:
+	// the per-event cursor must carry the event's real Seq, not a
+	// hardcoded 0).
 	eventID := ulid.Make()
+	const eventSeq = uint64(9001)
 	ev := eventbus.Event{
 		ID:      eventID,
+		Seq:     eventSeq,
 		Subject: "scene:abc:ic",
 		Type:    eventbus.Type(corecomm.EventTypeSay),
 	}
@@ -510,7 +557,8 @@ _G.captured_cursor = result.events[1].cursor
 `)
 	require.NoError(t, err)
 
-	// Second call using the cursor — verify the call was made with the decoded beforeID.
+	// Second call using the cursor — verify the call was made with the decoded
+	// (beforeSeq, beforeID) pair.
 	hr.result = []eventbus.Event{}
 	err = L.DoString(`
 local result2 = holomush.query_stream_history({stream="scene:abc:ic", count=5, cursor=_G.captured_cursor})
@@ -518,15 +566,18 @@ assert(type(result2) == "table", "expected table on second call")
 `)
 	require.NoError(t, err)
 
-	// The second call should have passed the decoded beforeID (eventID) to ReplayTail.
+	// The second call should have passed the decoded (beforeSeq, beforeID)
+	// pair (eventSeq, eventID) to ReplayTail.
 	require.Len(t, hr.calls, 2)
 	assert.Equal(t, eventID, hr.calls[1].beforeID, "cursor should decode to the event's ULID as beforeID")
+	assert.Equal(t, eventSeq, hr.calls[1].beforeSeq, "cursor should decode to the event's real Seq as beforeSeq, not a hardcoded 0")
 }
 
 func TestQueryStreamHistoryPassesCursorToReaderAsBeforeID(t *testing.T) {
 	// Build a cursor externally and verify it decodes correctly when passed to the hostfunc.
+	const anchorSeq = uint64(77)
 	anchorID := ulid.Make()
-	cursorStr := encodeTestCursor(t, anchorID)
+	cursorStr := encodeTestCursor(t, anchorSeq, anchorID)
 
 	hr := &mockHistoryReader{result: []eventbus.Event{}}
 	L := newFocusTestState(t, nil, hr)
@@ -536,6 +587,7 @@ func TestQueryStreamHistoryPassesCursorToReaderAsBeforeID(t *testing.T) {
 
 	require.Len(t, hr.calls, 1)
 	assert.Equal(t, anchorID, hr.calls[0].beforeID, "decoded cursor should match anchor ULID")
+	assert.Equal(t, anchorSeq, hr.calls[0].beforeSeq, "decoded cursor should match anchor Seq")
 }
 
 func TestQueryStreamHistoryReturnsErrorForInvalidBase64Cursor(t *testing.T) {

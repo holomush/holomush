@@ -115,11 +115,12 @@ type replayTailCall struct {
 	stream    string
 	count     int
 	notBefore time.Time
+	beforeSeq uint64
 	beforeID  ulid.ULID
 }
 
-func (s *stubHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
-	s.replayTailCalls = append(s.replayTailCalls, replayTailCall{stream, count, notBefore, beforeID})
+func (s *stubHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error) {
+	s.replayTailCalls = append(s.replayTailCalls, replayTailCall{stream, count, notBefore, beforeSeq, beforeID})
 	return s.replayTailResult, s.replayTailErr
 }
 
@@ -499,7 +500,9 @@ func TestQueryStreamHistoryPopulatesPerEventCursors(t *testing.T) {
 }
 
 func TestQueryStreamHistoryDecodesOpaqueBeforeIDCursor(t *testing.T) {
-	// Build a valid host cursor wrapping a ULID as the beforeID.
+	// Build a valid host cursor wrapping a (Seq, ULID) pair as the
+	// (beforeSeq, beforeID) anchor (D-07/ARCH-04).
+	const anchorSeq = uint64(123)
 	anchorID := ulid.Make()
 	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
@@ -511,7 +514,7 @@ func TestQueryStreamHistoryDecodesOpaqueBeforeIDCursor(t *testing.T) {
 		Version: cursor.CurrentVersion,
 		Epoch:   cursor.CurrentEpoch(),
 		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
-		Host:    &cursor.HostCursor{Seq: 0, ID: anchorID},
+		Host:    &cursor.HostCursor{Seq: anchorSeq, ID: anchorID},
 	})
 	require.NoError(t, encErr)
 	require.NotEmpty(t, cursorBytes)
@@ -525,6 +528,7 @@ func TestQueryStreamHistoryDecodesOpaqueBeforeIDCursor(t *testing.T) {
 
 	require.Len(t, es.replayTailCalls, 1)
 	assert.Equal(t, anchorID, es.replayTailCalls[0].beforeID, "decoded cursor ULID must be forwarded as beforeID")
+	assert.Equal(t, anchorSeq, es.replayTailCalls[0].beforeSeq, "decoded cursor Seq must be forwarded as beforeSeq")
 }
 
 func TestQueryStreamHistoryRejectsInvalidCursorBytes(t *testing.T) {

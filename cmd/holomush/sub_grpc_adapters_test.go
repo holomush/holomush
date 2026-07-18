@@ -78,7 +78,7 @@ func TestBusHistoryReaderReplayTailReturnsReversedEvents(t *testing.T) {
 	reader := &stubHistoryReader{stream: &stubHistoryStream{events: []eventbus.Event{e2, e1}}}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
 
-	events, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 10, time.Time{}, ulid.ULID{})
+	events, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 10, time.Time{}, 0, ulid.ULID{})
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	// Reversed: oldest-first.
@@ -93,7 +93,7 @@ func TestBusHistoryReaderReplayTailPassesBeforeIDOnQuery(t *testing.T) {
 	reader := &stubHistoryReader{stream: &stubHistoryStream{}}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
 	notBefore := time.Unix(100, 0).UTC()
-	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, notBefore, before)
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, notBefore, 0, before)
 	require.NoError(t, err)
 	assert.Equal(t, before, reader.gotQuery.BeforeID)
 	assert.Equal(t, notBefore, reader.gotQuery.NotBefore)
@@ -101,10 +101,37 @@ func TestBusHistoryReaderReplayTailPassesBeforeIDOnQuery(t *testing.T) {
 	assert.Equal(t, 5, reader.gotQuery.PageSize)
 }
 
+// TestBusHistoryReaderReplayTailPassesBeforeSeqOnQuery pins D-07: a nonzero
+// beforeSeq must reach HistoryQuery.BeforeSeq, the field the hot and cold
+// tiers actually key pagination on (BeforeID alone paginates nothing).
+func TestBusHistoryReaderReplayTailPassesBeforeSeqOnQuery(t *testing.T) {
+	const beforeSeq = uint64(42)
+	before := ulid.Make()
+	reader := &stubHistoryReader{stream: &stubHistoryStream{}}
+	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, beforeSeq, before)
+	require.NoError(t, err)
+	assert.Equal(t, beforeSeq, reader.gotQuery.BeforeSeq)
+	assert.Equal(t, before, reader.gotQuery.BeforeID)
+}
+
+// TestBusHistoryReaderReplayTailZeroBeforeSeqLeavesQueryBeforeSeqUnsetTailRead
+// pins the settled D-07 legacy-cursor policy: beforeSeq==0 means "no cursor —
+// read the tail", not "fall back to ID-only pagination" (no such fallback
+// exists on either tier). HistoryQuery.BeforeSeq must stay at its zero value
+// so the reader takes the tail-oriented read path.
+func TestBusHistoryReaderReplayTailZeroBeforeSeqLeavesQueryBeforeSeqUnsetTailRead(t *testing.T) {
+	reader := &stubHistoryReader{stream: &stubHistoryStream{}}
+	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, 0, ulid.ULID{})
+	require.NoError(t, err)
+	assert.Zero(t, reader.gotQuery.BeforeSeq, "beforeSeq==0 must leave HistoryQuery.BeforeSeq unset (tail read), not synthesize an ID-only fallback")
+}
+
 func TestBusHistoryReaderReplayTailZeroCountReturnsNilWithoutQuery(t *testing.T) {
 	reader := &stubHistoryReader{stream: &stubHistoryStream{}}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
-	events, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 0, time.Time{}, ulid.ULID{})
+	events, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 0, time.Time{}, 0, ulid.ULID{})
 	require.NoError(t, err)
 	assert.Nil(t, events)
 }
@@ -112,7 +139,7 @@ func TestBusHistoryReaderReplayTailZeroCountReturnsNilWithoutQuery(t *testing.T)
 func TestBusHistoryReaderReplayTailDefaultsEmptyGameIDToMain(t *testing.T) {
 	reader := &stubHistoryReader{stream: &stubHistoryStream{}}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "" }}
-	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, ulid.ULID{})
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, 0, ulid.ULID{})
 	require.NoError(t, err)
 	// Subject was translated using the "main" default.
 	assert.Equal(t, eventbus.Subject("events.main.scene.01ABC"), reader.gotQuery.Subject)
@@ -122,7 +149,7 @@ func TestBusHistoryReaderReplayTailWrapsQueryFailure(t *testing.T) {
 	sentinel := errors.New("query failed")
 	reader := &stubHistoryReader{err: sentinel}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
-	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, ulid.ULID{})
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, 0, ulid.ULID{})
 	require.Error(t, err)
 	require.ErrorIs(t, err, sentinel)
 }
@@ -132,7 +159,7 @@ func TestBusHistoryReaderReplayTailWrapsNextFailure(t *testing.T) {
 	stream := &stubHistoryStream{err: sentinel, errOn: 0}
 	reader := &stubHistoryReader{stream: stream}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
-	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, ulid.ULID{})
+	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, 0, ulid.ULID{})
 	require.Error(t, err)
 	require.ErrorIs(t, err, sentinel)
 	assert.True(t, stream.closed, "stream is closed via defer even on error")
@@ -142,7 +169,7 @@ func TestBusHistoryReaderReplayTailRejectsInvalidStream(t *testing.T) {
 	reader := &stubHistoryReader{}
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
 	// Empty stream → Qualify fails.
-	_, err := adapter.ReplayTail(context.Background(), "", 5, time.Time{}, ulid.ULID{})
+	_, err := adapter.ReplayTail(context.Background(), "", 5, time.Time{}, 0, ulid.ULID{})
 	require.Error(t, err)
 }
 
@@ -169,7 +196,7 @@ func TestBusHistoryReaderAdapterFailsClosedOnPluginOwnedSubjects(t *testing.T) {
 	}
 
 	_, err := adapter.ReplayTail(context.Background(),
-		"scene.01HYXSCENE00000000000000CC.ic", 10, time.Time{}, ulid.ULID{})
+		"scene.01HYXSCENE00000000000000CC.ic", 10, time.Time{}, 0, ulid.ULID{})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err),
 		"adapter MUST surface the plugin's PermissionDenied for plugin-owned subjects until the plugin-as-caller follow-up lands")

@@ -1454,9 +1454,11 @@ type focusHistoryReaderAdapter struct {
 var _ plugins.HistoryReader = (*focusHistoryReaderAdapter)(nil)
 
 // ReplayTail satisfies plugins.HistoryReader. Fetches up to count most-recent
-// events on stream (optionally filtered by notBefore and exclusive beforeID),
-// returning them in ascending ULID order (oldest→newest).
-func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
+// events on stream (optionally filtered by notBefore and an exclusive
+// (beforeSeq, beforeID) cursor), returning them in ascending ULID order
+// (oldest→newest). Mirrors busHistoryReaderAdapter.ReplayTail's beforeSeq==0
+// "read the tail" contract (D-07/ARCH-04).
+func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	if count <= 0 {
 		return nil, nil
 	}
@@ -1473,6 +1475,9 @@ func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream strin
 		Direction: eventbus.DirectionBackward,
 		PageSize:  count,
 		NotBefore: notBefore,
+	}
+	if beforeSeq != 0 {
+		q.BeforeSeq = beforeSeq
 	}
 	if !beforeID.IsZero() {
 		q.BeforeID = beforeID

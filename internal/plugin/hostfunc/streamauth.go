@@ -46,7 +46,7 @@ func newAuthorizingHistoryReader(inner HistoryReader, engine types.AccessPolicyE
 	}
 }
 
-func (r *authorizingHistoryReader) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]eventbus.Event, error) {
+func (r *authorizingHistoryReader) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	dec, err := pluginauthz.AuthorizeStreamRead(ctx, pluginauthz.StreamReadInput{
 		Engine:     r.engine,
 		Auditor:    r.auditor,
@@ -63,7 +63,7 @@ func (r *authorizingHistoryReader) ReplayTail(ctx context.Context, stream string
 			With("plugin", r.pluginName).With("stream", stream).
 			Errorf("not authorized to read stream")
 	}
-	events, err := r.inner.ReplayTail(ctx, stream, count, notBefore, beforeID)
+	events, err := r.inner.ReplayTail(ctx, stream, count, notBefore, beforeSeq, beforeID)
 	if err != nil {
 		return nil, oops.With("plugin", r.pluginName).With("stream", stream).Wrap(err)
 	}

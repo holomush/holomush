@@ -869,10 +869,13 @@ func (s *streamHistoryServer) QueryStreamHistory(ctx context.Context, req *hostv
 		notBefore = time.UnixMilli(req.GetNotBeforeMs()).UTC()
 	}
 
-	// Decode the opaque cursor (if any) to extract the beforeID for
-	// ReplayTail. The cursor bytes are a host-format OwnerHost token
-	// (Seq + ULID) produced by encodeHostEventCursor below. On first
-	// page the cursor is empty and we pass the zero ULID.
+	// Decode the opaque cursor (if any) to extract the (beforeSeq, beforeID)
+	// pair for ReplayTail. The cursor bytes are a host-format OwnerHost token
+	// (Seq + ULID) produced by encodeHostEventCursor below. On first page the
+	// cursor is empty and we pass the zero seq and zero ULID — beforeSeq==0
+	// means "no cursor — read the tail" (D-07/ARCH-04); there is no ID-only
+	// fallback on either tier.
+	var beforeSeq uint64
 	var beforeID ulid.ULID
 	if len(req.GetCursor()) > 0 {
 		c, decodeErr := cursor.Decode(req.GetCursor())
@@ -882,11 +885,12 @@ func (s *streamHistoryServer) QueryStreamHistory(ctx context.Context, req *hostv
 				Wrap(decodeErr)
 		}
 		if c.Host != nil {
+			beforeSeq = c.Host.Seq
 			beforeID = c.Host.ID
 		}
 	}
 
-	events, err := hr.ReplayTail(ctx, req.GetStream(), count, notBefore, beforeID)
+	events, err := hr.ReplayTail(ctx, req.GetStream(), count, notBefore, beforeSeq, beforeID)
 	if err != nil {
 		return nil, oops.With("plugin", s.pluginName).With("stream", req.GetStream()).Wrap(err)
 	}
@@ -894,13 +898,16 @@ func (s *streamHistoryServer) QueryStreamHistory(ctx context.Context, req *hostv
 	protoEvents := make([]*hostv1.Event, 0, len(events))
 	for i := range events {
 		pe := eventbusEventToProto(events[i])
-		pe.Cursor = encodeHostEventCursor(events[i].ID)
+		pe.Cursor = encodeHostEventCursor(events[i].Seq, events[i].ID)
 		protoEvents = append(protoEvents, pe)
 	}
 
 	// Populate next_cursor from the oldest (first) event in the page, which
 	// is the pagination anchor for the next backward read. ReplayTail returns
 	// events in ascending order (oldest→newest), so index 0 is the boundary.
+	// Do NOT re-point this at the last event: BeforeSeq is an exclusive upper
+	// bound, so anchoring on the newest event would re-request the page just
+	// returned (D-07's repeat bug via a different mechanism).
 	var nextCursor []byte
 	if len(protoEvents) == count && len(protoEvents) > 0 {
 		nextCursor = protoEvents[0].GetCursor()
@@ -1277,18 +1284,21 @@ func protoToFocusKind(pk hostv1.FocusKind) (session.FocusKind, error) {
 
 const maxQueryStreamHistoryCount = 500
 
-// encodeHostEventCursor encodes an event ULID into an opaque host cursor
-// token for the plugin → host boundary. Seq is not available here (the
-// plugins.HistoryReader.ReplayTail interface returns core.Event without Seq),
-// so Seq=0 is used. The cold tier handles Seq=0 as "ID-only" fallback.
-// Returns nil on encoding failure (non-fatal; client cannot paginate from
-// this event but the page result is still valid).
-func encodeHostEventCursor(id ulid.ULID) []byte {
+// encodeHostEventCursor encodes an event's JetStream stream sequence and
+// ULID into an opaque host cursor token for the plugin → host boundary
+// (D-07/ARCH-04). The token remains opaque to plugins — it is never
+// deserialized by any code outside internal/eventbus/cursor, and Seq is
+// never serialized into hostv1.Event itself (D-08; see
+// internal/eventbus/types.go's "never serialized in any public proto
+// envelope" rule and hostv1_no_seq_test.go's census guard). Returns nil on
+// encoding failure (non-fatal; client cannot paginate from this event but the
+// page result is still valid).
+func encodeHostEventCursor(seq uint64, id ulid.ULID) []byte {
 	b, err := cursor.Encode(cursor.Cursor{
 		Version: cursor.CurrentVersion,
 		Epoch:   cursor.CurrentEpoch(),
 		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
-		Host:    &cursor.HostCursor{Seq: 0, ID: id},
+		Host:    &cursor.HostCursor{Seq: seq, ID: id},
 	})
 	if err != nil {
 		return nil

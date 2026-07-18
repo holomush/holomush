@@ -125,12 +125,13 @@ func TestReplayTailPaginationAdvancesAcrossPagesOnQuietStream(t *testing.T) {
 
 	const pageSize = 20
 	seen := make(map[ulid.ULID]bool, total)
+	var beforeSeq uint64
 	var beforeID ulid.ULID
 	for iteration := 1; ; iteration++ {
 		require.LessOrEqualf(t, iteration, replayTailPaginationMaxWalk,
 			"walk did not terminate within %d iterations — cursor is not advancing (page repeat)", replayTailPaginationMaxWalk)
 
-		events, err := adapter.ReplayTail(ctx, streamRef, pageSize, time.Time{}, beforeID)
+		events, err := adapter.ReplayTail(ctx, streamRef, pageSize, time.Time{}, beforeSeq, beforeID)
 		require.NoError(t, err)
 		if len(events) == 0 {
 			break
@@ -145,6 +146,7 @@ func TestReplayTailPaginationAdvancesAcrossPagesOnQuietStream(t *testing.T) {
 		// exclusive upper bound; anchoring on the newest event would
 		// re-request the page just returned.
 		anchor := events[0]
+		beforeSeq = anchor.Seq
 		beforeID = anchor.ID
 
 		if len(events) < pageSize {
@@ -232,12 +234,13 @@ func TestReplayTailPaginationAdvancesWhenULIDOrderDisagreesWithSeqOrder(t *testi
 
 	const pageSize = 10
 	seen := make(map[ulid.ULID]bool, total)
+	var beforeSeq uint64
 	var beforeID ulid.ULID
 	for iteration := 1; ; iteration++ {
 		require.LessOrEqualf(t, iteration, replayTailPaginationMaxWalk,
 			"walk did not terminate within %d iterations — cursor is not advancing (page repeat)", replayTailPaginationMaxWalk)
 
-		events, err := adapter.ReplayTail(ctx, streamRef, pageSize, time.Time{}, beforeID)
+		events, err := adapter.ReplayTail(ctx, streamRef, pageSize, time.Time{}, beforeSeq, beforeID)
 		require.NoError(t, err)
 		if len(events) == 0 {
 			break
@@ -248,6 +251,7 @@ func TestReplayTailPaginationAdvancesWhenULIDOrderDisagreesWithSeqOrder(t *testi
 		}
 
 		anchor := events[0]
+		beforeSeq = anchor.Seq
 		beforeID = anchor.ID
 
 		if len(events) < pageSize {
