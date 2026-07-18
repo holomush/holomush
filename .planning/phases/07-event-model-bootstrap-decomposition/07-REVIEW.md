@@ -1,8 +1,8 @@
 ---
 phase: 07-event-model-bootstrap-decomposition
-reviewed: 2026-07-18T18:51:00Z
+reviewed: 2026-07-18T20:01:46Z
 depth: standard
-files_reviewed: 82
+files_reviewed: 133
 files_reviewed_list:
   - .claude/rules/event-conventions.md
   - cmd/holomush/core.go
@@ -46,6 +46,7 @@ files_reviewed_list:
   - internal/eventbus/audit/dlq.go
   - internal/eventbus/audit/subsystem.go
   - internal/eventbus/audit/subsystem_prepare_retry_integration_test.go
+  - internal/eventbus/bus.go
   - internal/eventbus/config.go
   - internal/eventbus/crypto/dek/sweep.go
   - internal/eventbus/subsystem.go
@@ -63,6 +64,7 @@ files_reviewed_list:
   - internal/grpcclient/client_test.go
   - internal/lifecycle/orchestrator.go
   - internal/lifecycle/orchestrator_test.go
+  - internal/lifecycle/registry.go
   - internal/lifecycle/subsystem.go
   - internal/plugin/event_emitter.go
   - internal/plugin/goplugin/host_service_test.go
@@ -111,229 +113,224 @@ files_reviewed_list:
   - test/integration/phase1_5_test.go
   - test/integration/pluginparity/session_admin_broadcast_test.go
 findings:
-  critical: 0
-  warning: 3
-  info: 1
-  total: 4
+  critical: 2
+  warning: 1
+  info: 0
+  total: 3
 status: issues_found
 ---
 
-# Phase 07: Code Review Report
+# Phase 07: Code Review Report (iteration 3 — final)
 
-**Reviewed:** 2026-07-18T18:51:00Z
+**Reviewed:** 2026-07-18T20:01:46Z
 **Depth:** standard
-**Files Reviewed:** 82
+**Files Reviewed:** 133
 **Status:** issues_found
 
 ## Summary
 
-This is iteration 2 of the review/fix loop. A fixer landed three commits
-addressing the prior round's WR-01 (Prepare/Activate idempotency guards
-never reset by `Stop` across `DatabaseSubsystem`, `ABACSubsystem`,
-`grpcSubsystem`, `AdminSocketSubsystem`, `OutboxRelaySubsystem`,
-`CheckpointSweepSubsystem`), WR-02 (`sysbroadcast.NewBroadcaster`'s missing
-typed-nil `Publisher` detection), and IN-01 (`PluginSubsystem.Prepare`'s
-missing idempotency guard). I re-read all three fixes' current code
-(not the commit messages) and traced every guarded field to its
-construction site and its `Stop`-side reset:
+This is the third and final iteration of the review/fix loop. I re-verified all four fixes
+from the prior round by reading the current code directly (not trusting the fix report):
 
-- **WR-02 (typed-nil Publisher)**: verified correct and byte-for-byte
-  consistent with `presence.isNilPublisher` and `cluster.isNilConn` — same
-  `reflect.Kind` switch, same panic discipline, new test
-  (`TestNewBroadcasterPanicsOnTypedNilPublisher`) exercises it. No issues.
-- **WR-01 (guard resets)**: `DatabaseSubsystem`, `ABACSubsystem`,
-  `AdminSocketSubsystem`, and `OutboxRelaySubsystem`'s `Stop` methods
-  correctly and unconditionally reset every guarding field. `grpcSubsystem`
-  correctly resets `grpcServer`/`listener`/`reaperCancel`/`reaperCtx` — but
-  see WR-03 below for a field it does NOT reset in the same function.
-  `CheckpointSweepSubsystem`'s fix is **incomplete** — see WR-01 below: one
-  of its two `Stop` return branches skips the reset the other branch
-  performs, an inconsistency the sibling fixes in the same commit do not
-  have.
-- **IN-01 (Plugin guard)**: the guard field (`s.manager`) is set
-  mid-`Prepare` and the orchestrator's own `preparedOrder`-before-call
-  design (`internal/lifecycle/orchestrator.go:71-75`) guarantees `Stop`
-  always runs on a subsystem whose `Prepare` was invoked, even on partial
-  failure, so the "guard set before Prepare fully completes" shape is not
-  by itself exploitable. However, combining the now-functional retry path
-  this fix (and WR-01) enables with a **pre-existing** call these two
-  subsystems make in `Prepare` — `ReadinessRegistry.Register`, which
-  panics on a duplicate `SubsystemID` and has no corresponding
-  `Unregister` — produces a genuine new failure mode on a legitimate
-  retry. See WR-02 below.
+1. **`CheckpointSweepSubsystem` (`internal/eventbus/crypto/dek/sweep.go`)** — `Stop` correctly
+   captures `done := s.done` into a local before nilling the field, and `loop` now takes `done
+   chan struct{}` as an explicit parameter rather than reading `s.done` from inside the
+   goroutine. This is the correct fix for the class of bug it addresses (a goroutine reading a
+   mutable field that `Stop` concurrently nils). Verified sound.
+2. **`ReadinessRegistry.Unregister` (`internal/lifecycle/registry.go`)** — correctly guarded
+   with the registry's own mutex, a genuine no-op on a missing key, called unconditionally from
+   both `ABACSubsystem.Stop` and `PluginSubsystem.Stop`. Verified sound; also traced the actual
+   production interaction it enables (`grpcSubsystem.Stop` resetting `CoordHolder.coord`, see
+   below) and confirmed it closes the intended double-Register panic path.
+3. **`grpcSubsystem.Stop` resets `CoordHolder.coord`** (`cmd/holomush/sub_grpc.go`) — verified
+   this is not just cosmetic: it is load-bearing for `stopCoordinatorOnBootFailure`
+   (`cmd/holomush/cryptowiring.go`) to correctly detect "already stopped by the orchestrator's
+   own rollback" and skip a second `Coordinator.Stop()` call on the normal (non-abandoned)
+   rollback path. See the WR finding below for a residual race in the *abandoned*-Stop variant
+   of this same interaction that neither fix addresses.
+4. **`eventbus.IsNilPublisher`** (`internal/eventbus/bus.go`) — correctly extracted, used
+   identically by `internal/presence/emitter.go` and `internal/sysbroadcast/broadcaster.go`.
+   Verified sound.
 
-Net: the three targeted fixes are directionally correct and none of them
-regress anything exercised by the current single-boot production path
-(`cmd/holomush/core.go` calls `StartAll` exactly once). But two of the
-three fixes are **incomplete** in ways that matter for the exact retry
-contract they were written to satisfy, and I traced a genuine, previously
-undetected interaction between the fixes and pre-existing code
-(`ReadinessRegistry.Register`'s panic-on-duplicate) that a legitimate
-retry would now hit. All three new findings share the same
-not-currently-triggerable caveat as the original WR-01 (no in-tree retry
-path exists today), so I am keeping them at Warning severity for
-consistency with how the prior round scored this exact class of issue —
-but they should be fixed before any retry-capable caller (an admin tool,
-a test harness reusing an `Orchestrator`) is introduced.
+Having verified the four prior fixes, I did a fresh adversarial sweep specifically for
+**siblings of the exact bug class WR-01 fixed in `sweep.go`**: a background goroutine that
+reads a subsystem's own mutable field directly (instead of an explicit parameter/local capture
+taken at launch time), racing a `Stop()` that concurrently resets that same field to nil. I
+found two more, unfixed instances of precisely this pattern in files that are in scope for this
+phase, plus one narrower interaction-level race enabled by combining two of the fixes above with
+the orchestrator's own documented "abandon a slow Stop and move on" behavior. All three are
+reported below with reasoning for why they were not caught by the existing (green,
+`-race`-enabled) test suite, and concrete fixes mirroring the pattern `sweep.go`'s fix already
+established correctly. All other subsystems checked for this same pattern
+(`internal/cluster/heartbeat.go`, `internal/eventbus/audit/subsystem.go`,
+`internal/admin/socket/subsystem.go`, `internal/access/setup/subsystem.go`,
+`internal/plugin/setup/subsystem.go`, `internal/session/reaper.go`) use either a mutex or a
+proper explicit-parameter capture and are sound.
+
+## Critical Issues
+
+### CR-01: `Subsystem.Stop` (eventbus) races its own background `WaitForShutdown` goroutine on `s.server`
+
+**File:** `internal/eventbus/subsystem.go:448-462`
+
+**Issue:** `Stop` launches a background goroutine that reads the subsystem's own mutable
+`s.server` field directly, then falls through to `s.server = nil` when its own `select`
+resolves on `ctx.Done()` instead of `<-done`:
+
+```go
+if s.server != nil {
+    s.server.Shutdown()
+    done := make(chan struct{})
+    go func() {
+        s.server.WaitForShutdown()   // reads s.server directly — not captured
+        close(done)
+    }()
+    select {
+    case <-done:
+    case <-ctx.Done():
+        // Fall through — server teardown continues in the background.
+    }
+    s.server = nil                   // races the goroutine's read above
+}
+```
+
+This is the exact class of bug WR-01 fixed in `internal/eventbus/crypto/dek/sweep.go`'s
+`loop()` (that fix's own doc comment describes precisely this hazard: "a `defer close(s.done)`
+could evaluate the field AFTER Stop's ... nils it, panicking ..."). Here the risk is worse: if
+the `ctx.Done()` branch fires before the launched goroutine has actually started executing its
+first statement (plausible when `ctx` has very little budget left — e.g. `StopAll`'s reverse-order
+walk sharing one 5s budget across many subsystems, or `orch.rollback`'s fresh-but-still-bounded
+5s context), the main `Stop()` goroutine sets `s.server = nil` while the background goroutine is
+about to read that same field. `(*server.Server).WaitForShutdown()`
+(`github.com/nats-io/nats-server/v2/server`) immediately dereferences `s.shutdownComplete`
+(verified: `func (s *Server) WaitForShutdown() { <-s.shutdownComplete }`), so a nil receiver
+there is an unrecovered nil-pointer panic in a background goroutine — which crashes the whole
+process, not just the shutdown path. Independent of whether the nil-deref actually fires on any
+given run, this is also a genuine unsynchronized data race on `s.server` per Go's memory model
+(one goroutine writes, another reads, no lock, no channel handoff of the value) — it is only
+absent from existing `-race` runs because current tests always give `Stop` a context with ample
+budget, so `<-done` always wins the select before `s.server = nil` executes.
+
+**Fix:** capture the server as a local before launching the goroutine, mirroring the `sweep.go`
+fix (thread state in, don't read the mutable field from inside the goroutine):
+
+```go
+if s.server != nil {
+    srv := s.server
+    srv.Shutdown()
+    done := make(chan struct{})
+    go func(srv *server.Server, done chan struct{}) {
+        srv.WaitForShutdown()
+        close(done)
+    }(srv, done)
+    select {
+    case <-done:
+    case <-ctx.Done():
+    }
+    s.server = nil
+}
+```
+
+### CR-02: `OutboxRelaySubsystem.Activate` races `Stop` on `s.done` (and `s.relay`) via `defer close(s.done)`
+
+**File:** `internal/world/setup/relay_subsystem.go:119-134` (goroutine at 127-130), `Stop` at 143-165
+
+**Issue:** `Activate` launches the drain goroutine with the exact anti-pattern the `sweep.go`
+fix eliminated — reading the mutable `s.done` field (and `s.relay`) directly inside the
+goroutine, rather than capturing them as parameters at launch:
+
+```go
+s.done = make(chan struct{})
+go func() {
+    defer close(s.done)              // reads s.done at defer-registration time (goroutine start)
+    _ = s.relay.Run(runCtx)          // reads s.relay at call time
+}()
+```
+
+`defer close(s.done)`'s argument (`s.done`) is evaluated when the defer statement executes —
+i.e. essentially the goroutine's first statement — not when the deferred call actually runs.
+`Stop` (same file, lines 152-158) does:
+
+```go
+if s.done != nil {
+    select {
+    case <-s.done:
+    case <-time.After(relayStopTimeout):
+    }
+    s.done = nil
+}
+```
+
+If `Stop` runs concurrently with a not-yet-scheduled instance of the `Activate` goroutine (the
+race window is the interval between the `go func(){...}()` statement returning and the goroutine
+actually being scheduled), `Stop` can observe `s.done` non-nil, wait out `relayStopTimeout`, and
+set `s.done = nil` — all before the goroutine's `defer close(s.done)` line has executed. When
+that goroutine is finally scheduled, it evaluates `s.done` as `nil` and defers `close(nil)`,
+which panics with "close of nil channel" when `s.relay.Run(runCtx)` eventually returns. The same
+`s.relay` field is subject to an analogous read-after-reset race against `Stop`'s
+`s.relay = nil` (line 161). Not observed in the current test suite because
+`TestOutboxRelaySubsystemRepeatedActivateLaunchesOnlyOneDrainGoroutine` only exercises repeated
+`Activate`, never an `Activate` racing a concurrent `Stop`.
+
+**Fix:** capture `done` (and, ideally, `relay`) as locals before the `go` statement and thread
+them in as parameters, exactly like `sweep.go`'s `loop(ctx, done)`:
+
+```go
+done := make(chan struct{})
+s.done = done
+relay := s.relay
+go func(done chan struct{}, relay *outbox.Relay) {
+    defer close(done)
+    _ = relay.Run(runCtx) //nolint:errcheck // Run returns only the ctx-cancellation reason on Stop
+}(done, relay)
+```
 
 ## Warnings
 
-### WR-01: `CheckpointSweepSubsystem.Stop`'s ctx-timeout branch does not reset the guard it just failed to wait for, inconsistent with its own happy-path branch and every other Stop in this codebase
+### WR-01: `CoordHolder.coord` unsynchronized across an abandoned `grpcSubsystem.Stop` and `stopCoordinatorOnBootFailure`
 
-**File:** `internal/eventbus/crypto/dek/sweep.go:139-154`
+**File:** `cmd/holomush/sub_grpc.go:954-964`, `cmd/holomush/cryptowiring.go:483-492`,
+`internal/lifecycle/orchestrator.go:176-207`
 
-**Issue:** The WR-01 fix added `s.done = nil` to the happy-path branch of `Stop`, but the sibling `ctx.Done()` (timeout) branch was left untouched:
+**Issue:** The prior-round fix (`grpcSubsystem.Stop` resetting `CoordHolder.coord = nil`)
+correctly closes the double-`Coordinator.Stop()` gap for the *normal* (non-abandoned) rollback
+path — verified by tracing `orch.StartAll` → `o.rollback` → `o.StopAll` → `grpcSubsystem.Stop`
+(which now nils `coord`) → `core.go`'s own unconditional `stopCoordinatorOnBootFailure` call,
+which now correctly no-ops because `holder.coord` is already nil.
 
-```go
-func (s *CheckpointSweepSubsystem) Stop(ctx context.Context) error {
-	if s.cancel != nil {
-		s.cancel()
-		s.cancel = nil
-	}
-	if s.done == nil {
-		return nil
-	}
-	select {
-	case <-s.done:
-		s.done = nil
-		return nil
-	case <-ctx.Done():
-		return oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT").Wrap(ctx.Err())
-	}
-}
-```
+However, `orchestrator.go`'s own documented behavior (`StopAll`, lines 176-207) is to run each
+subsystem's `Stop` in its own goroutine and *abandon* it — without waiting further — if the
+orchestrator's own `ctx` expires first, moving on / returning while that `Stop` call keeps
+running in the background. `coordHolder` (`cmd/holomush/crypto_rekey_wiring.go:99-101`) is a bare
+struct with no mutex around `coord`. If `grpcSubsystem.Stop`'s `GracefulStop()` (or the reaper
+teardown ahead of it) is slow enough that `orch.rollback`'s 5s bounded context expires before
+`grpcSubsystem.Stop` reaches its `CoordHolder.coord = nil` line, `StopAll` returns (abandoning
+that in-flight `Stop` goroutine) while `orch.StartAll` itself returns the Prepare/Activate error
+to `core.go`, which immediately calls `stopCoordinatorOnBootFailure(ctx, coordHolderPtr)` on the
+*same* `coordHolder` from the *main* goroutine — reading and potentially writing `holder.coord`
+concurrently with the still-running, abandoned `grpcSubsystem.Stop` goroutine's own read/write of
+the same field. This is an unsynchronized concurrent read/write (a data race) and can also result
+in `invalidation.Coordinator.Stop()` being invoked twice concurrently (its own `Stop`,
+`internal/eventbus/crypto/invalidation/coordinator.go:83-92`, also mutates `c.sub` without a
+lock, so a concurrent double-Stop there is itself unsynchronized). The comment in
+`cryptowiring.go:479-482` claiming "there is no double-stop or race" is true for the
+*non-abandoned* path but does not account for the orchestrator's own documented abandonment
+behavior when a boot-failure rollback also runs slow.
 
-If `Stop` is called with a context whose deadline elapses before the
-background loop drains (exactly the scenario `oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT")`
-exists to report), `s.done` is left non-nil. `Activate`'s idempotency guard
-is `if s.done != nil { return nil }` (line 122) — so a subsequent legitimate
-retry of `Activate` (the same scenario this whole fix round exists to
-support) would silently no-op, believing the checkpoint sweep is already
-running, when in fact the prior loop may have already fully exited (its
-`defer close(s.done)` still fires on the channel object captured at
-`Activate`, line 158) or may still be winding down. Either way, no new tick
-loop launches and the guard gives no signal that anything is wrong.
+This requires two coincident, low-probability conditions (a Prepare/Activate failure late in
+topological order, and a slow-enough `grpcSubsystem.Stop` to blow the rollback's 5s budget), so
+it is narrower than CR-01/CR-02, but it is a real, provable gap in the same "lifecycle guard
+reset" family this iteration was scoped to re-check, so it is reported rather than silently
+dropped.
 
-This is a real regression against the very contract this iteration's fix
-commit exists to establish, and it contradicts the pattern used by every
-other subsystem fixed in the same commit (`DatabaseSubsystem`,
-`ABACSubsystem`, `AdminSocketSubsystem`, `OutboxRelaySubsystem` all reset
-their guard fields unconditionally, regardless of the return path) — and
-by the two subsystems this whole approach was modeled on:
-`internal/eventbus/subsystem.go:448-464` sets `s.server = nil` /
-`s.conn = nil` / `s.js = nil` unconditionally, AFTER the `select` block,
-specifically so the `ctx.Done()` fallthrough branch ("Fall through — server
-teardown continues in the background") still resets state; and
-`internal/eventbus/audit/subsystem.go:472-479` sets `s.worker = nil` /
-`s.preparedProjection = nil` / `s.partitionManager = nil` unconditionally
-before checking whether `drain(ctx)` returned an error.
-
-**Fix:** Move the reset out of the `case <-s.done:` branch so it runs on both paths, mirroring the two cited reference implementations:
-
-```go
-func (s *CheckpointSweepSubsystem) Stop(ctx context.Context) error {
-	if s.cancel != nil {
-		s.cancel()
-		s.cancel = nil
-	}
-	if s.done == nil {
-		return nil
-	}
-	done := s.done
-	s.done = nil
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT").Wrap(ctx.Err())
-	}
-}
-```
-
-### WR-02: WR-01/IN-01's now-functional Prepare retry reaches `ReadinessRegistry.Register` a second time for `ABACSubsystem` and `PluginSubsystem`, which panics (no `Unregister` exists)
-
-**Files:**
-- `internal/access/setup/subsystem.go:79-82` (guard), `:125-127` (Register call), `:159-166` (Stop, now resets the guard)
-- `internal/plugin/setup/subsystem.go:178-180` (guard, added by IN-01), `:473-475` (Register call), `:539-570` (Stop, now resets the guard)
-- `internal/lifecycle/registry.go:29-37` (`Register` panics on duplicate `SubsystemID`; no `Unregister` method exists on `ReadinessRegistry`)
-
-**Issue:** Before this iteration's fixes, `ABACSubsystem.Stop` never reset `s.stack`, and `PluginSubsystem.Prepare` had no guard at all. Combined, a retried `Prepare` on either subsystem was previously either a silent no-op (ABAC, pre-WR-01) or a genuinely wasteful-but-safe full rebuild (Plugin, pre-IN-01) — in both cases, a second call to `s.cfg.Registry.Register(...)` never happened, because ABAC's old code never reached the guarded-off Prepare body again on retry, and Plugin's old code had never gone through a guard-enforced "first success" boundary that a second call would collide with.
-
-Now that both subsystems reset their guard field in `Stop` (WR-01 for ABAC, IN-01 for Plugin), a legitimate retry sequence — `Prepare` succeeds → some other subsystem's `Activate` fails elsewhere in the sweep → orchestrator rolls back via `Stop` (which resets the guard) → caller retries `StartAll` — now genuinely re-enters the full `Prepare` body on the second attempt, including:
-
-```go
-// internal/access/setup/subsystem.go:125-127
-if s.cfg.Registry != nil {
-	s.cfg.Registry.Register(lifecycle.SubsystemABAC, stack.HealthTracker)
-}
-```
-```go
-// internal/plugin/setup/subsystem.go:473-475
-if s.cfg.Registry != nil {
-	s.cfg.Registry.Register(lifecycle.SubsystemPlugins, s)
-}
-```
-
-`ReadinessRegistry.Register` (`internal/lifecycle/registry.go:33-35`) panics unconditionally on a duplicate `SubsystemID`:
-
-```go
-if _, exists := r.reporters[id]; exists {
-	panic("lifecycle: duplicate registration for subsystem " + id.String())
-}
-```
-
-Neither subsystem's `Stop` unregisters from `s.cfg.Registry`, and `ReadinessRegistry` exposes no `Unregister` method at all — there is no way to undo the first registration. So the retry this round's fixes were written to enable now reaches a **hard panic** on the second `Prepare`, for exactly the two subsystems whose `Stop` methods this round modified to reset their guards. This is a strictly worse failure mode than the WR-01 finding it replaces (silent stale-resource reuse vs. a process panic), even though — like the original WR-01 — it shares the same "not currently triggerable" caveat: production's `cmd/holomush/core.go` calls `StartAll` exactly once and exits on failure, so no in-tree caller retries an `Orchestrator` today. I confirmed no other touched subsystem calls `Registry.Register` inside `Prepare` (`internal/eventbus/subsystem.go`, `internal/eventbus/audit/subsystem.go`, `internal/cluster/heartbeat.go`, `internal/tls/subsystem.go` do not), so this is specifically confined to the two subsystems this round's fixes modified.
-
-**Fix:** Either (a) add an `Unregister(id SubsystemID)` method to `ReadinessRegistry` and call it from both subsystems' `Stop`, or (b) make `Register` idempotent for the same `(id, reporter)` pair re-registered after a `Stop` (e.g., allow overwrite, since `Stop` already tore down the old reporter), or (c) narrow the `lifecycle.Subsystem` interface doc's "a caller may legitimately retry Prepare" claim to explicitly exclude subsystems that register with a `ReadinessRegistry`, until (a) or (b) lands. (a) matches the existing idiom most closely:
-
-```go
-// internal/lifecycle/registry.go
-func (r *ReadinessRegistry) Unregister(id SubsystemID) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.reporters, id)
-}
-```
-```go
-// internal/access/setup/subsystem.go — Stop
-if s.cfg.Registry != nil {
-	s.cfg.Registry.Unregister(lifecycle.SubsystemABAC)
-}
-```
-
-### WR-03: `grpcSubsystem.Stop` resets four Prepare/Activate-owned fields but leaves `CoordHolder.coord` unreset, inconsistent with the sibling resets added in the same function by this round's fix
-
-**File:** `cmd/holomush/sub_grpc.go:917-951`, `cmd/holomush/cryptowiring.go:335-387`
-
-**Issue:** This round's WR-01 fix added resets for `s.grpcServer`, `s.reaperCancel`, `s.reaperCtx`, and `s.listener` inside `grpcSubsystem.Stop` — but the same function also unconditionally calls `s.cfg.CoordHolder.coord.Stop(ctx)` a few lines later (lines 949-951) without ever setting `s.cfg.CoordHolder.coord = nil`:
-
-```go
-if s.cfg.CoordHolder != nil && s.cfg.CoordHolder.coord != nil {
-	if stopErr := s.cfg.CoordHolder.coord.Stop(ctx); stopErr != nil {
-		slog.WarnContext(ctx, "invalidation.Coordinator stop error", "error", stopErr)
-	}
-}
-return nil
-```
-
-`CoordHolder.coord` is set exactly once, inside `buildCryptoWiring` (`cmd/holomush/cryptowiring.go:379`), which itself runs inside a `sync.Once`-memoized closure (`resolveCryptoWiring`, `cmd/holomush/cryptowiring.go:141-156` — "the `sync.Once` body runs AT MOST ONCE per process"). Since a retried `grpcSubsystem.Prepare` calls the same memoized `resolveCryptoWiring()` closure, it will NOT re-run `buildCryptoWiring` and will NOT reassign `CoordHolder.coord` — the field keeps pointing at the coordinator instance that was already `Stop()`-ed in the previous attempt. A retry therefore "succeeds" at `Prepare`/`Activate` while silently leaving the invalidation-fan-out path bound to an already-drained `coordinator` (its own `Stop` is idempotent and won't panic on a second call, but `RequestInvalidation`'s cluster fan-out never resumes because `Start` is never called again either).
-
-This is a narrower issue than WR-01/WR-02 above (the crypto-wiring memoization was already a known, deliberately-documented one-shot-per-process design predating this phase's fixes — see the comment at `cryptowiring.go:344-353`), but it is still a genuine inconsistency introduced by this round's specific fix: every other field this same `Stop` function touches was reset to restore the "fresh state on retry" guarantee the fix's own doc comment claims ("resets... to nil so a legitimate retry of Prepare/Activate after Stop reacquires fresh state"), while `CoordHolder.coord` — set and read in the same function — was not, even though it is exactly the kind of "already-torn-down handle" WR-01 exists to guard against.
-
-**Fix:** At minimum, reset `s.cfg.CoordHolder.coord = nil` alongside the other fields in `Stop` so the staleness is at least visible/nil rather than a live pointer to a stopped coordinator; note in the doc comment that this alone does not make the Coordinator retry-safe (the memoized builder would still need to become retry-aware to actually reconstruct it — out of scope for this fix but should not be silently implied by the "reacquires fresh state" doc comment as currently written).
-
-## Info
-
-### IN-01: Three near-identical `reflect`-based typed-nil detection helpers now exist in three packages instead of one shared helper, as the prior round's WR-02 finding recommended
-
-**Files:** `internal/sysbroadcast/broadcaster.go:51-65` (new, this round), `internal/presence/emitter.go:64-75`, `internal/cluster/registry.go:303-320`
-
-**Issue:** The prior round's WR-02 finding explicitly suggested "reuse (or extract to a shared helper in `internal/eventbus`)" the typed-nil detection pattern. The landed fix instead added a third copy — `sysbroadcast.isNilPublisher` — byte-for-byte identical in body to `presence.isNilPublisher`, both operating on `eventbus.Publisher`. This is correct and consistent (see Summary), but it is the less-preferred of the two options the prior finding offered, and now there are two verbatim-duplicate `isNilPublisher` functions (plus a third `isNilConn` variant differing only by parameter type) doing the same reflection dance in three different packages.
-
-**Fix:** Extract a single generic (or `eventbus.Publisher`-typed) helper — e.g. `eventbus.IsNilPublisher(pub eventbus.Publisher) bool` — and have `presence` and `sysbroadcast` both call it, eliminating one of the two duplicate copies. `cluster.isNilConn` operates on a different interface (`natsconn.Conn`) so it would remain separate unless a generic `reflect`-based nil-check helper is introduced instead.
+**Fix:** guard `coordHolder.coord` with a small mutex (`sync.Mutex`) and have both
+`grpcSubsystem.Stop`'s reset and `stopCoordinatorOnBootFailure`'s read+call go through a
+lock-protected accessor method (e.g. `coordHolder.takeAndStop(ctx)` that atomically reads, nils,
+and stops under the lock) so at most one caller ever observes a non-nil `coord` and invokes
+`Stop()` on it.
 
 ---
 
-_Reviewed: 2026-07-18T18:51:00Z_
+_Reviewed: 2026-07-18T20:01:46Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
