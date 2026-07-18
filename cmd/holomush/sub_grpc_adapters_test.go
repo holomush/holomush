@@ -125,7 +125,7 @@ func TestBusHistoryReaderReplayTailZeroBeforeSeqLeavesQueryBeforeSeqUnsetTailRea
 	adapter := &busHistoryReaderAdapter{reader: reader, gameID: func() string { return "main" }}
 	_, err := adapter.ReplayTail(context.Background(), "scene.01ABC", 5, time.Time{}, 0, ulid.ULID{})
 	require.NoError(t, err)
-	assert.Zero(t, reader.gotQuery.BeforeSeq, "beforeSeq==0 must leave HistoryQuery.BeforeSeq unset (tail read), not synthesize an ID-only fallback")
+	assert.Zero(t, reader.gotQuery.BeforeSeq, "beforeSeq==0 must leave HistoryQuery.BeforeSeq unset (tail read), not synthesize a fallback keyed on ID alone")
 }
 
 func TestBusHistoryReaderReplayTailZeroCountReturnsNilWithoutQuery(t *testing.T) {

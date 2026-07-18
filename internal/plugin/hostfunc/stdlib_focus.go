@@ -385,7 +385,7 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 	}
 
 	// Decode optional cursor from base64. beforeSeq==0 means "no cursor —
-	// read the tail" (D-07/ARCH-04); there is no ID-only fallback.
+	// read the tail" (D-07/ARCH-04); there is no fallback keyed on ID alone.
 	var beforeSeq uint64
 	var beforeID ulid.ULID
 	cursorVal := ls.GetField(args, "cursor")
