@@ -30,7 +30,12 @@ import (
 // for say, pose, and ooc so that dispatcher and pipeline tests can exercise the
 // full dispatch path. The stub payloads match the format expected by the web
 // translation layer (character_name, message, action fields).
-func registerTestCommands(t *testing.T, reg *command.Registry) {
+// registerTestCommands takes store directly (rather than reaching it via
+// command.Services, which no longer holds an event sink post-07-06 D-02)
+// so its say/pose/ooc stub handlers can append fabricated events into the
+// same shared in-memory store the presence emitter and dispatcher-emitted
+// events use, for store.Replay-based assertions.
+func registerTestCommands(t *testing.T, reg *command.Registry, store core.EventAppender) {
 	t.Helper()
 	handlers.RegisterAll(reg)
 	mustRegister := func(cfg command.CommandEntryConfig) {
@@ -53,7 +58,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
-			return exec.Services().Events().Append(ctx, event)
+			return store.Append(ctx, event)
 		},
 	})
 	mustRegister(command.CommandEntryConfig{
@@ -70,7 +75,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
-			return exec.Services().Events().Append(ctx, event)
+			return store.Append(ctx, event)
 		},
 	})
 	mustRegister(command.CommandEntryConfig{
@@ -88,7 +93,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
-			return exec.Services().Events().Append(ctx, event)
+			return store.Append(ctx, event)
 		},
 	})
 }
@@ -108,7 +113,7 @@ func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, 
 	sessStore := sessiontest.NewStore(t)
 
 	reg := command.NewRegistry()
-	registerTestCommands(t, reg)
+	registerTestCommands(t, reg, store)
 
 	policyEngine := policytest.AllowAllEngine()
 	aliasCache := command.NewAliasCache()
@@ -122,7 +127,6 @@ func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, 
 		World:   nil,
 		Session: sessStore,
 		Engine:  policyEngine,
-		Events:  store,
 	})
 
 	dispatcher, err := command.NewDispatcher(
@@ -656,7 +660,7 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	pres := newTestPresenceEmitter(store)
 	sessStore := sessiontest.NewStore(t)
 	reg := command.NewRegistry()
-	registerTestCommands(t, reg)
+	registerTestCommands(t, reg, store)
 
 	entry, err := command.NewCommandEntry(command.CommandEntryConfig{
 		Name:   "testboot",
@@ -679,7 +683,6 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 		World:   nil,
 		Session: sessStore,
 		Engine:  policyEngine,
-		Events:  store,
 	})
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)
@@ -769,7 +772,7 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 	pres := newTestPresenceEmitter(store)
 	sessStore := sessiontest.NewStore(t)
 	reg := command.NewRegistry()
-	registerTestCommands(t, reg)
+	registerTestCommands(t, reg, store)
 
 	entry, err := command.NewCommandEntry(command.CommandEntryConfig{
 		Name:   "testboot",
@@ -789,7 +792,6 @@ func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
 		World:   nil,
 		Session: sessStore,
 		Engine:  policyEngine,
-		Events:  store,
 	})
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)
@@ -876,7 +878,6 @@ func TestHandleCommand_ConnectionIDThreadedToExecution(t *testing.T) {
 		World:   nil,
 		Session: sessStore,
 		Engine:  policyEngine,
-		Events:  store,
 	})
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)

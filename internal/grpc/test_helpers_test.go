@@ -193,9 +193,9 @@ func newTestPresenceEmitter(store core.EventAppender) *presence.Emitter {
 // newHandleCommandServer creates a CoreServer wired with the unified command
 // dispatcher. Tests that call HandleCommand MUST use this helper.
 //
-// The store is used for both the presence emitter and dispatcher
-// Services.Events. Pass a custom sessStore to pre-populate sessions; nil uses
-// a fresh Postgres-backed store.
+// The store is used for both the presence emitter and the say/pose/ooc
+// stub command handlers registerTestCommands registers. Pass a custom
+// sessStore to pre-populate sessions; nil uses a fresh Postgres-backed store.
 func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	pres := newTestPresenceEmitter(store)
@@ -204,14 +204,13 @@ func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore se
 	}
 
 	reg := command.NewRegistry()
-	registerTestCommands(t, reg)
+	registerTestCommands(t, reg, store)
 
 	policyEngine := policytest.AllowAllEngine()
 	svc := command.NewTestServices(command.ServicesConfig{
 		World:   nil,
 		Session: sessStore,
 		Engine:  policyEngine,
-		Events:  store,
 	})
 
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)

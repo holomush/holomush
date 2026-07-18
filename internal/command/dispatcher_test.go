@@ -38,10 +38,10 @@ import (
 // allowing the dispatcher to proceed with command execution.
 func stubServices() *Services {
 	svc, _ := NewServices(ServicesConfig{
-		World:   &world.Service{},
-		Session: &stubAccess{},
-		Engine:  policytest.AllowAllEngine(),
-		Events:  &stubEventStore{},
+		World:       &world.Service{},
+		Session:     &stubAccess{},
+		Engine:      policytest.AllowAllEngine(),
+		Broadcaster: &stubBroadcaster{},
 	})
 	return svc
 }
@@ -77,11 +77,11 @@ func (s *stubAccess) UpdateLastWhispered(_ context.Context, _ string, _ string) 
 	return nil
 }
 
-type stubEventStore struct{}
+type stubBroadcaster struct{}
 
-func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+func (s *stubBroadcaster) Broadcast(_ context.Context, _, _ string) error { return nil }
 
-var _ core.EventAppender = (*stubEventStore)(nil)
+var _ SystemBroadcaster = (*stubBroadcaster)(nil)
 
 func TestDispatcherDispatch(t *testing.T) {
 	reg := NewRegistry()
@@ -2123,16 +2123,16 @@ func newTestCommandExecutionWithServices(t *testing.T, services *Services) *Comm
 	})
 }
 
-type appendCountingEventStore struct {
-	appendCount int
+type broadcastCountingBroadcaster struct {
+	broadcastCount int
 }
 
-func (s *appendCountingEventStore) Append(_ context.Context, _ core.Event) error {
-	s.appendCount++
+func (s *broadcastCountingBroadcaster) Broadcast(_ context.Context, _, _ string) error {
+	s.broadcastCount++
 	return nil
 }
 
-var _ core.EventAppender = (*appendCountingEventStore)(nil)
+var _ SystemBroadcaster = (*broadcastCountingBroadcaster)(nil)
 
 func TestDispatcherAttachesAuditContextToDispatchContext(t *testing.T) {
 	// Verify that after Dispatch is called, the context seen by the
@@ -2160,9 +2160,9 @@ func TestDispatcherAttachesAuditContextToDispatchContext(t *testing.T) {
 }
 
 func TestDispatcherRoutesPluginResponseEventsThroughSharedEmitter(t *testing.T) {
-	store := &appendCountingEventStore{}
+	store := &broadcastCountingBroadcaster{}
 	services := NewTestServices(ServicesConfig{
-		Events: store,
+		Broadcaster: store,
 	})
 
 	var emittedActor core.Actor
@@ -2191,7 +2191,7 @@ func TestDispatcherRoutesPluginResponseEventsThroughSharedEmitter(t *testing.T) 
 	err := dispatcher.Dispatch(context.Background(), "plugintest", exec)
 	require.NoError(t, err)
 	assert.Len(t, deliverer.emits, 1, "plugin response events should route through shared emitter")
-	assert.Equal(t, 0, store.appendCount, "dispatcher must not append plugin response events directly")
+	assert.Equal(t, 0, store.broadcastCount, "dispatcher must not broadcast plugin response events directly")
 	assert.Equal(t, core.ActorCharacter, emittedActor.Kind)
 	assert.Equal(t, exec.CharacterID().String(), emittedActor.ID)
 }

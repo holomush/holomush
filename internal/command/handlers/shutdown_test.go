@@ -17,20 +17,44 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/core/coretest"
-	"github.com/holomush/holomush/internal/eventvocab"
 )
 
 // Note: Capability checks are performed by the dispatcher, not the handler.
 // See TestDispatcher_PermissionDenied in dispatcher_test.go for capability tests.
 
-func newShutdownExec(t *testing.T, args string, store core.EventAppender) (*command.CommandExecution, *bytes.Buffer) {
+// broadcastCall records one Broadcast(ctx, subject, message) invocation.
+type broadcastCall struct {
+	subject string
+	message string
+}
+
+// fakeBroadcaster is a minimal command.SystemBroadcaster fake that records
+// every Broadcast call for assertion. The event construction it stands in
+// for (payload shape, actor stamp, event type) is proven once, at the
+// builder level, by internal/sysbroadcast's tests — this package only needs
+// to prove ShutdownHandler calls Broadcast with the right subject/message.
+type fakeBroadcaster struct {
+	calls []broadcastCall
+	err   error
+}
+
+func (f *fakeBroadcaster) Broadcast(_ context.Context, subject, message string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.calls = append(f.calls, broadcastCall{subject: subject, message: message})
+	return nil
+}
+
+var _ command.SystemBroadcaster = (*fakeBroadcaster)(nil)
+
+func newShutdownExec(t *testing.T, args string, broadcaster command.SystemBroadcaster) (*command.CommandExecution, *bytes.Buffer) {
 	t.Helper()
 
 	var buf bytes.Buffer
 	svc := command.NewTestServices(command.ServicesConfig{
-		Engine: policytest.AllowAllEngine(),
-		Events: store,
+		Engine:      policytest.AllowAllEngine(),
+		Broadcaster: broadcaster,
 	})
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   ulid.Make(),
@@ -45,27 +69,25 @@ func newShutdownExec(t *testing.T, args string, store core.EventAppender) (*comm
 
 func TestShutdownHandlerImmediateShutdown(t *testing.T) {
 	ctx := context.Background()
-	store := coretest.NewMemoryEventStore()
-	exec, buf := newShutdownExec(t, "", store)
+	fb := &fakeBroadcaster{}
+	exec, buf := newShutdownExec(t, "", fb)
 
 	err := ShutdownHandler(ctx, exec)
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, command.ErrShutdownRequested))
 
-	events, replayErr := store.Replay(ctx, "system", ulid.ULID{}, 10)
-	require.NoError(t, replayErr)
-	require.Len(t, events, 1)
-	assert.Equal(t, eventvocab.EventTypeSystem, events[0].Type)
-	assert.Contains(t, string(events[0].Payload), "[SHUTDOWN]")
-	assert.Contains(t, string(events[0].Payload), "NOW")
+	require.Len(t, fb.calls, 1)
+	assert.Equal(t, core.SystemBroadcastSubject, fb.calls[0].subject)
+	assert.Contains(t, fb.calls[0].message, "[SHUTDOWN]")
+	assert.Contains(t, fb.calls[0].message, "NOW")
 	assert.Contains(t, buf.String(), "Initiating server shutdown")
 }
 
 func TestShutdownHandlerDelayedShutdown(t *testing.T) {
 	ctx := context.Background()
-	store := coretest.NewMemoryEventStore()
-	exec, buf := newShutdownExec(t, "60", store)
+	fb := &fakeBroadcaster{}
+	exec, buf := newShutdownExec(t, "60", fb)
 
 	err := ShutdownHandler(ctx, exec)
 
@@ -76,10 +98,8 @@ func TestShutdownHandlerDelayedShutdown(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, int64(60), oopsErr.Context()["delay_seconds"])
 
-	events, replayErr := store.Replay(ctx, "system", ulid.ULID{}, 10)
-	require.NoError(t, replayErr)
-	require.Len(t, events, 1)
-	assert.Contains(t, string(events[0].Payload), "60 seconds")
+	require.Len(t, fb.calls, 1)
+	assert.Contains(t, fb.calls[0].message, "60 seconds")
 	assert.Contains(t, buf.String(), "60 seconds")
 }
 
@@ -108,19 +128,16 @@ func TestShutdownHandler_InvalidDelay(t *testing.T) {
 
 func TestShutdownHandlerBroadcastsToSystemStream(t *testing.T) {
 	ctx := context.Background()
-	store := coretest.NewMemoryEventStore()
-	exec, _ := newShutdownExec(t, "", store)
+	fb := &fakeBroadcaster{}
+	exec, _ := newShutdownExec(t, "", fb)
 
 	err := ShutdownHandler(ctx, exec)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, command.ErrShutdownRequested))
 
-	events, replayErr := store.Replay(ctx, "system", ulid.ULID{}, 10)
-	require.NoError(t, replayErr)
-	require.Len(t, events, 1)
-	assert.Equal(t, eventvocab.EventTypeSystem, events[0].Type)
-	assert.Equal(t, core.ActorSystem, events[0].Actor.Kind)
-	assert.Contains(t, string(events[0].Payload), "[SHUTDOWN]")
+	require.Len(t, fb.calls, 1)
+	assert.Equal(t, core.SystemBroadcastSubject, fb.calls[0].subject)
+	assert.Contains(t, fb.calls[0].message, "[SHUTDOWN]")
 }
 
 func TestShutdownHandlerWithNilEventsIsNoOp(t *testing.T) {

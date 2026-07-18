@@ -52,6 +52,7 @@ import (
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/sysbroadcast"
 	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
@@ -420,7 +421,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		World:              worldService,
 		Session:            sessionStore,
 		Engine:             policyEngine,
-		Events:             eventStore,
+		Broadcaster:        sysbroadcast.NewBroadcaster(publisher, func() string { return bus.GameID() }),
 		AliasCache:         aliasCache,
 		AliasRepo:          aliasRepo,
 		Registry:           cmdRegistry,
