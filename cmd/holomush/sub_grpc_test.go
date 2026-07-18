@@ -54,12 +54,15 @@ func TestGRPCSubsystemIDReturnsGRPC(t *testing.T) {
 }
 
 // TestGRPCSubsystemDependsOnExpectedSubsystems verifies that DependsOn
-// returns exactly the 07-09 grown set: Bootstrap, Sessions, Auth, EventBus
-// (F1 cutover: gRPC Start() reads the eventbus Publisher when wiring the
-// shared plugin event emitter), TLS (Start() resolves TLSProvider), Cluster
-// (the invalidation.Coordinator needs Registry: clusterSub), CryptoChainVerifier
-// (T-07-51 re-scope: gRPC binds its TCP listener only after the chain walk),
-// and Database + ABAC (THE RULE's cryptoWiring consumer superset).
+// returns exactly the 07-09 grown set plus 07-10's AuditProjection edge:
+// Bootstrap, Sessions, Auth, EventBus (F1 cutover: gRPC Start() reads the
+// eventbus Publisher when wiring the shared plugin event emitter), TLS
+// (Start() resolves TLSProvider), Cluster (the invalidation.Coordinator
+// needs Registry: clusterSub), CryptoChainVerifier (T-07-51 re-scope: gRPC
+// binds its TCP listener only after the chain walk), Database + ABAC (THE
+// RULE's cryptoWiring consumer superset), and AuditProjection (07-10,
+// T-07-50: gRPC must not begin serving before the host audit projection is
+// up, or events served in that window would not be durably audited).
 func TestGRPCSubsystemDependsOnExpectedSubsystems(t *testing.T) {
 	s := newGRPCSubsystem(grpcSubsystemConfig{})
 
@@ -75,6 +78,7 @@ func TestGRPCSubsystemDependsOnExpectedSubsystems(t *testing.T) {
 		lifecycle.SubsystemCryptoChainVerifier,
 		lifecycle.SubsystemDatabase,
 		lifecycle.SubsystemABAC,
+		lifecycle.SubsystemAuditProjection,
 	}, deps)
 }
 

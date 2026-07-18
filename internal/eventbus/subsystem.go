@@ -76,6 +76,21 @@ func (s *Subsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemEvent
 // DependsOn returns [SubsystemDatabase] (07-09 item 7, round 7 BLOCKER 1) —
 // GameIDProvider resolves the DB-backed gameID at Start, so the database
 // subsystem must have run InitGameID first. Acyclic: Database has no deps.
+//
+// DO NOT add SubsystemCryptoChainVerifier here. The verifier's own DependsOn
+// includes SubsystemEventBus (internal/eventbus/audit/chain/verifier_subsystem.go)
+// because its chain-handler set is built from THIS subsystem's Publisher():
+// cryptoWiring's readStreamW wiring (cmd/holomush/core.go, buildReadStreamWiring
+// in cmd/holomush/readstream_wiring.go:118) hard-requires an AuditPublisher
+// derived from eventBusSub.Publisher() (cmd/holomush/core.go:~735) — a nil
+// Publisher makes buildReadStreamWiring return an empty wiring, silently
+// unregistering operator_read from the boot gate. So the bus must start
+// BEFORE the verifier can know which chains it verifies; adding the reverse
+// edge here would close EventBus -> CryptoChainVerifier -> EventBus, a cycle
+// internal/lifecycle/orchestrator.go's topoSort refuses at boot (07-10
+// MEDIUM-11 — this is the false ordering claim that used to live at
+// cmd/holomush/core.go as a comment; the real order is pinned as a test in
+// cmd/holomush/core_topo_order_test.go, not asserted here or there in prose).
 func (s *Subsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
 }

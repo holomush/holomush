@@ -200,6 +200,9 @@ func (s *grpcSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemG
 // Database/Auth/ABAC are THE RULE's cryptoWiring consumer superset — this
 // subsystem holds a CryptoWiring provider, and whichever consumer resolves
 // it first builds it, so every consumer must declare the full set.
+// AuditProjection is required (07-10, T-07-50): without this edge gRPC could
+// begin serving before the host audit projection is up, so events served in
+// that window would not be durably audited (a repudiation gap).
 func (s *grpcSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{
 		lifecycle.SubsystemBootstrap,
@@ -211,6 +214,7 @@ func (s *grpcSubsystem) DependsOn() []lifecycle.SubsystemID {
 		lifecycle.SubsystemCryptoChainVerifier,
 		lifecycle.SubsystemDatabase,
 		lifecycle.SubsystemABAC,
+		lifecycle.SubsystemAuditProjection,
 	}
 }
 

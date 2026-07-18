@@ -1186,9 +1186,17 @@ func productionSubsystems(s productionSubsystemSet) []lifecycle.Subsystem {
 		s.TLS,
 		s.ABAC, s.Auth, s.World,
 		s.Sessions, s.Plugins, s.Bootstrap,
-		s.CryptoChainVerifier, // runs before EventBus (chain integrity check)
+		// The verifier's real start order is EventBus first, then
+		// CryptoChainVerifier — its handler set is built from
+		// eventBusSub.Publisher() (see readStreamW below), so the bus must be
+		// up first. This SLICE position is cosmetic per the doc comment
+		// above; the asserted order lives in
+		// cmd/holomush/core_topo_order_test.go (07-10 Task 3's pin), not here.
+		s.CryptoChainVerifier,
 		s.EventBus, s.Cluster, s.AuditProjection,
-		s.CryptoPolicy, // runs after AuditProjection (policy snapshot emit)
+		// CryptoPolicy's real edge is AuditProjection (policy.CryptoPolicySubsystemConfig.DependsOn
+		// includes SubsystemAuditProjection) — see core_topo_order_test.go for the asserted order.
+		s.CryptoPolicy,
 		s.GRPC, s.AdminSocket,
 		// Sweep auto-aborts non-terminal rekey checkpoints whose heartbeat
 		// has exceeded TTL. Runs after CryptoChainVerifier (chain integrity
