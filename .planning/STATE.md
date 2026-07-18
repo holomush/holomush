@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 07
 current_phase_name: event-model-bootstrap-decomposition
 status: executing
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-07-17T23:59:41.120Z"
+stopped_at: Completed 07-06-PLAN.md
+last_updated: "2026-07-18T00:35:23.278Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 36
-  completed_plans: 30
+  completed_plans: 31
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 07 (event-model-bootstrap-decomposition) — EXECUTING
-Plan: 6 of 11
+Plan: 7 of 11
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 07 execution started
 
@@ -113,6 +113,7 @@ Last activity: 2026-07-17 — Phase 07 execution started
 | Phase 07 P03 | 25min | 3 tasks | 15 files |
 | Phase 07 P05 | 50min | 3 tasks | 22 files |
 | Phase 07 P04 | ~35min | 3 tasks | 4 files |
+| Phase 07 P06 | 50min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,9 @@ the next milestone yet.
 - [Phase ?]: 07-05: core.Engine moved to internal/presence (presence.Emitter), publishing arrive/leave/session_ended through eventbus.Publisher; internal/auth breaks the resulting import cycle with its own 2-method consumer-defined PresenceEmitter interface rather than importing presence
 - [Phase ?]: 07-05: cmd/holomush's presence emitter wraps the wrapPublisher-wrapped publisher (never rawPublisher) so events_audit still receives the App-Rendering header; harness resolves gameID from its own bus.GameID, not a hardcoded main
 - [Phase ?]: [Phase 07]: 07-04 gateway boundary closure gate + INV-EVENTBUS-1 binding — added a transitive-closure import gate (packages.NeedDeps walk) alongside the existing AST direct-import gate; forbade internal/core/session/grpc wholesale (D-15/D-17); fixed the dead internal/auth/service phantom entry (replaced with internal/auth), surfacing two genuinely core-only files that needed coreOnlyFiles classification (crypto_operator_validation.go, cmd_admin_totp_run_test.go); INV-EVENTBUS-1 flipped pending->bound with asserted_by naming both gates
+- [Phase ?]: sysbroadcast.Broadcaster copies presence.Emitter's {pub eventbus.Publisher; gameID func() string} shape verbatim (FINDING-5), including the empty-gameID->main fallback
+- [Phase ?]: cmd/holomush introduces a shared bus := s.cfg.EventBus local in grpcSubsystem.Start reused by both the SessionAdmin broadcast closure and the command-services broadcaster closure — one game-id source for the whole host
+- [Phase ?]: internal/grpc's dispatcher_test.go/test_helpers_test.go were undeclared consumers of the deleted Services.Events() accessor; registerTestCommands now takes the shared store directly as a parameter
 
 ### Pending Todos
 
@@ -200,9 +204,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-17T23:59:41.112Z
+Last session: 2026-07-18T00:35:23.271Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 07-04-PLAN.md
+Stopped at: Completed 07-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
