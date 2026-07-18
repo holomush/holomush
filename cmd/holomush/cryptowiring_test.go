@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -122,4 +123,68 @@ func TestStopCoordinatorOnBootFailure(t *testing.T) {
 		})
 		assert.True(t, coord.stopCalled, "Stop must still be attempted even though it returns an error")
 	})
+}
+
+// stopCountingCoordinator counts Stop calls under its own lock, so a test can
+// assert exactly-once-Stop even when multiple goroutines race takeAndStop.
+type stopCountingCoordinator struct {
+	mu    sync.Mutex
+	stops int
+}
+
+var _ invalidation.Coordinator = (*stopCountingCoordinator)(nil)
+
+func (c *stopCountingCoordinator) Start(_ context.Context) error { return nil }
+
+func (c *stopCountingCoordinator) Stop(_ context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.stops++
+	return nil
+}
+
+func (c *stopCountingCoordinator) RequestInvalidation(_ context.Context, _ dek.ContextID, _ invalidation.Action, _, _ uint32) error {
+	return nil
+}
+
+// TestCoordHolderTakeAndStopIsSafeUnderConcurrentCallers covers WR-01
+// (07-review round 3): grpcSubsystem.Stop and stopCoordinatorOnBootFailure
+// can both call takeAndStop on the same holder when orchestrator.StopAll
+// abandons a slow Stop concurrently with a boot-failure cleanup. Asserts
+// the Coordinator is stopped exactly once regardless of how many callers
+// race takeAndStop.
+func TestCoordHolderTakeAndStopIsSafeUnderConcurrentCallers(t *testing.T) {
+	coord := &stopCountingCoordinator{}
+	holder := &coordHolder{coord: coord}
+
+	const callers = 8
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for range callers {
+		go func() {
+			defer wg.Done()
+			_ = holder.takeAndStop(context.Background())
+		}()
+	}
+	wg.Wait()
+
+	coord.mu.Lock()
+	defer coord.mu.Unlock()
+	assert.Equal(t, 1, coord.stops, "Stop must be invoked exactly once across all concurrent takeAndStop callers")
+}
+
+// TestCoordHolderGetReturnsCurrentCoordinatorAfterSet covers the set/get
+// accessors used by resolveCryptoWiring's write and the Invalidator
+// closure's per-call read (07-review round 3, WR-01).
+func TestCoordHolderGetReturnsCurrentCoordinatorAfterSet(t *testing.T) {
+	holder := &coordHolder{}
+	assert.Nil(t, holder.get(), "get must return nil before set is ever called")
+
+	coord := &fakeCoordinator{}
+	holder.set(coord)
+	assert.Same(t, invalidation.Coordinator(coord), holder.get(), "get must return the coordinator installed by set")
+
+	err := holder.takeAndStop(context.Background())
+	assert.NoError(t, err)
+	assert.Nil(t, holder.get(), "get must return nil after takeAndStop clears the holder")
 }

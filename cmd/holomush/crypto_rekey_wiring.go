@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -96,8 +97,47 @@ type rekeyWiringDeps struct {
 // construction; a nil Coord during the construction window or when the
 // deployment cannot wire a Coordinator returns
 // INVALIDATION_NO_LIVE_MEMBERS at call time.
+// coord is guarded by mu — it is written once by buildCryptoWiring, read on
+// every RequestInvalidation call via the Invalidator closure below, and
+// read+cleared by both grpcSubsystem.Stop (the normal shutdown path) and
+// stopCoordinatorOnBootFailure (the boot-failure path), which can run
+// concurrently with an abandoned Stop per orchestrator.StopAll's own
+// documented "abandon a slow Stop" behavior (WR-01, phase 07 round 3).
 type coordHolder struct {
+	mu    sync.Mutex
 	coord invalidation.Coordinator
+}
+
+// set installs the constructed Coordinator. Called exactly once, by
+// buildCryptoWiring's resolveCryptoWiring sync.Once body.
+func (h *coordHolder) set(c invalidation.Coordinator) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.coord = c
+}
+
+// get returns the current Coordinator (nil if never constructed or already
+// stopped). Used by the Invalidator closure on every RequestInvalidation call.
+func (h *coordHolder) get() invalidation.Coordinator {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.coord
+}
+
+// takeAndStop atomically takes ownership of the held Coordinator (clearing
+// the field under the lock) and stops it outside the lock, so at most one
+// caller ever observes a non-nil coord and invokes Stop on it — safe to call
+// concurrently from grpcSubsystem.Stop and stopCoordinatorOnBootFailure.
+// No-ops if the Coordinator was never constructed or was already taken.
+func (h *coordHolder) takeAndStop(ctx context.Context) error {
+	h.mu.Lock()
+	c := h.coord
+	h.coord = nil
+	h.mu.Unlock()
+	if c == nil {
+		return nil
+	}
+	return c.Stop(ctx)
 }
 
 // buildRekeyWiring constructs the production dek.Manager + Orchestrator +
@@ -152,14 +192,15 @@ func buildRekeyWiring(
 	// success that could mask split-brain risk.
 	holder := deps.CoordHolder
 	invFn := func(ctx context.Context, ctxID dek.ContextID, action string, version, succVersion uint32) error {
-		if holder.coord == nil {
+		coord := holder.get()
+		if coord == nil {
 			return oops.Code("INVALIDATION_NO_LIVE_MEMBERS").
 				With("context_type", ctxID.Type).
 				With("context_id", ctxID.ID).
 				With("action", action).
 				Errorf("invalidation.Coordinator not wired — cluster fan-out disabled")
 		}
-		return holder.coord.RequestInvalidation(
+		return coord.RequestInvalidation(
 			ctx, ctxID, invalidation.Action(action), version, succVersion,
 		)
 	}

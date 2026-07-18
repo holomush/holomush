@@ -376,7 +376,7 @@ func buildCryptoWiring(in cryptoWiringInputs) (*cryptoWiring, error) {
 			slog.WarnContext(ctx, "invalidation.Coordinator start failed — cluster fan-out unavailable",
 				"error", startErr)
 		} else {
-			in.CoordHolder.coord = c
+			in.CoordHolder.set(c)
 			// Stop is owned by grpcSubsystem.Stop (07-09 item 4) on the
 			// happy path — the orchestrator drives shutdown ordering (and
 			// deadline handling, 07-10) for the Coordinator just like
@@ -474,19 +474,21 @@ func buildCryptoWiring(in cryptoWiringInputs) (*cryptoWiring, error) {
 //
 // This check is deliberately independent of any one subsystem's Prepare
 // outcome — it is keyed only on whether the Coordinator was actually
-// constructed+started (holder.coord != nil), which buildCryptoWiring sets
-// regardless of which consumer triggered the build. It is safe to call
-// unconditionally on every StartAll failure: invalidation.Coordinator.Stop
-// is idempotent, and this path is mutually exclusive with grpcSubsystem's
-// own Stop (that only runs via the deferred orch.StopAll on the StartAll
-// SUCCESS branch), so there is no double-stop or race.
+// constructed+started, which buildCryptoWiring sets regardless of which
+// consumer triggered the build. It is safe to call unconditionally on every
+// StartAll failure: takeAndStop is mutex-guarded, so even if grpcSubsystem's
+// own Stop is still running concurrently (orchestrator.StopAll abandons a
+// Stop whose deadline expires rather than waiting for it — WR-01, 07-review
+// round 3), at most one of the two callers observes a non-nil coord and
+// invokes Stop on it. invalidation.Coordinator.Stop is additionally
+// idempotent as a second line of defense.
 func stopCoordinatorOnBootFailure(ctx context.Context, holder *coordHolder) {
-	if holder == nil || holder.coord == nil {
+	if holder == nil {
 		return
 	}
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stopCancel()
-	if stopErr := holder.coord.Stop(stopCtx); stopErr != nil {
+	if stopErr := holder.takeAndStop(stopCtx); stopErr != nil {
 		slog.WarnContext(ctx, "invalidation.Coordinator stop error during boot-failure cleanup", "error", stopErr)
 	}
 }

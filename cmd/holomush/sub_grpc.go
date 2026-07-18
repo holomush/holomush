@@ -914,29 +914,32 @@ func (s *grpcSubsystem) Activate(ctx context.Context) error {
 // after Stop reacquires fresh state rather than short-circuiting on an
 // already-stopped server/listener (WR-01).
 //
-// CoordHolder.coord is also reset to nil after Stop (WR-03) so the field
-// does not keep pointing at an already-drained Coordinator. This alone does
-// NOT make the Coordinator retry-safe: cryptoWiring's resolveCryptoWiring
-// is a sync.Once-memoized closure (cryptowiring.go) that runs the
+// CoordHolder.coord is stopped and cleared via takeAndStop (WR-03, WR-01 —
+// mutex-guarded so it is safe even if stopCoordinatorOnBootFailure runs
+// concurrently on an abandoned Stop, see orchestrator.StopAll's own
+// documented abandonment behavior). This alone does NOT make the
+// Coordinator retry-safe: cryptoWiring's resolveCryptoWiring is a
+// sync.Once-memoized closure (cryptowiring.go) that runs the
 // Coordinator-constructing buildCryptoWiring step at most once per
 // process, predating this phase's fixes and out of scope here — a retried
-// Prepare will find CoordHolder.coord nil and simply skip re-Stop()-ing it
-// on a subsequent Stop, but will NOT reconstruct or restart a new
-// Coordinator, so cluster invalidation fan-out does not resume.
+// Prepare will find the Coordinator already taken and simply skip
+// re-Stop()-ing it, but will NOT reconstruct or restart a new one, so
+// cluster invalidation fan-out does not resume.
 // codecov:ignore — tested by integration and E2E tests
 func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	if s.grpcServer != nil {
+		srv := s.grpcServer
 		done := make(chan struct{})
-		go func() {
-			s.grpcServer.GracefulStop()
+		go func(srv *grpc.Server, done chan struct{}) {
+			srv.GracefulStop()
 			close(done)
-		}()
+		}(srv, done)
 		select {
 		case <-done:
 			// graceful shutdown completed
 		case <-ctx.Done():
 			slog.WarnContext(ctx, "gRPC graceful shutdown timed out, forcing stop")
-			s.grpcServer.Stop()
+			srv.Stop()
 		}
 		s.grpcServer = nil
 	}
@@ -953,14 +956,14 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	}
 	// grpcSubsystem owns the invalidation.Coordinator's lifecycle (07-09
 	// item 4) — replaces the former runCore-level ad-hoc defer with
-	// orchestrator-ordered Stop. CoordHolder.coord is nil when the wiring
-	// was never resolved (CryptoWiring nil, e.g. some unit-test configs) or
-	// when the Coordinator degraded-path construction/start failed.
-	if s.cfg.CoordHolder != nil && s.cfg.CoordHolder.coord != nil {
-		if stopErr := s.cfg.CoordHolder.coord.Stop(ctx); stopErr != nil {
+	// orchestrator-ordered Stop. takeAndStop no-ops when the wiring was
+	// never resolved (CryptoWiring nil, e.g. some unit-test configs), when
+	// the Coordinator degraded-path construction/start failed, or when it
+	// was already taken by a concurrent stopCoordinatorOnBootFailure call.
+	if s.cfg.CoordHolder != nil {
+		if stopErr := s.cfg.CoordHolder.takeAndStop(ctx); stopErr != nil {
 			slog.WarnContext(ctx, "invalidation.Coordinator stop error", "error", stopErr)
 		}
-		s.cfg.CoordHolder.coord = nil
 	}
 	return nil
 }
