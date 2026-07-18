@@ -33,8 +33,16 @@ var coreOnlyFiles = map[string]struct{}{
 	"migrate_test.go":                 {},
 	"cmd_plugin_events.go":            {},
 	"cmd_plugin_validate.go":          {},
-	"bootstrap_orphan.go":             {},
-	"bootstrap_orphan_test.go":        {},
+	// 07-09 item 5: the bootstrap orphan boot gate's definition + tests
+	// moved to internal/bootstrap/setup (behind the Bootstrap -> Database
+	// edge); the two bootstrap-orphan files no longer exist here.
+	//
+	// 07-09: the crypto/admin wiring block hoisted out of core.go into its
+	// own memoized builder. Imports dek/chain/invalidation/access/admin/
+	// eventbus/core/store; core-only by design (matches
+	// crypto_rekey_wiring.go precedent).
+	"cryptowiring.go":      {},
+	"cryptowiring_test.go": {},
 	// Phase 5 sub-epic E rekey wiring (holomush-jxo8.7.34). Constructs
 	// dek.PolicyHashSource over auditchain.Repo for the orchestrator's
 	// INV-CRYPTO-112 capture-at-Phase-1 dependency. Core-only.
@@ -102,15 +110,10 @@ var coreOnlyFiles = map[string]struct{}{
 	// internal/world/{outbox,postgres} by design. No admin UDS, no crypto/abac.
 	"world_genesis.go":      {},
 	"world_genesis_test.go": {},
-	// validateCryptoOperators (Phase 5 sub-epic B, INV-B5/INV-B7) cross-checks
-	// the configured crypto.operator allow-list against the players table at
-	// boot. Called only from core.go; imports internal/auth/postgres by
-	// design (matches kek_provision.go precedent). Surfaced by 07-04's
-	// internal/auth/service -> internal/auth phantom-package fix (D-17): the
-	// phantom entry never matched anything, so this pre-existing import was
-	// never actually gated before now.
-	"crypto_operator_validation.go":      {},
-	"crypto_operator_validation_test.go": {},
+	// 07-09 item 6: the crypto-operator allow-list validation's definition +
+	// tests moved to internal/access/setup (ABACSubsystem's own Start,
+	// against its own pool); the two crypto-operator-validation files no
+	// longer exist here.
 }
 
 // gatewayForbiddenPackages is the single, shared policy list read by both

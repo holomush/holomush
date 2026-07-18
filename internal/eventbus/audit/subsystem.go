@@ -278,6 +278,15 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	if pool == nil {
 		return oops.Code("AUDIT_DEP_NOT_STARTED").Errorf("database pool not available at audit.Start")
 	}
+	// Resolve the DLQ subject provider, if any, before config validation /
+	// DLQ setup — it wins over the Defaults()-substituted Subject (07-09
+	// item 7). The AuditProjection -> Database edge (already declared)
+	// guarantees the gameID this provider reads is resolvable by now.
+	if s.cfg.DLQ.SubjectProvider != nil {
+		if subject := s.cfg.DLQ.SubjectProvider(); subject != "" {
+			s.cfg.DLQ.Subject = subject
+		}
+	}
 	// Reject a destructive-by-accident retention config (negative window /
 	// non-positive interval) before anything starts (round-3 finding 3).
 	if err := s.cfg.Validate(); err != nil {

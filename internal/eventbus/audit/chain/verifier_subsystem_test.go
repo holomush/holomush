@@ -111,9 +111,9 @@ func TestVerifierSubsystem_WalksAllRegisteredChains(t *testing.T) {
 
 	repo := &fakeRepo{} // both chains empty → first-boot OK
 	sub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-		Repo:     repo,
-		Handlers: []chain.Handler{h1, h2},
-		Logger:   slog.Default(),
+		Repo:             repo,
+		HandlersProvider: func() []chain.Handler { return []chain.Handler{h1, h2} },
+		Logger:           slog.Default(),
 	})
 
 	require.NoError(t, sub.Start(context.Background()))
@@ -139,9 +139,9 @@ func TestVerifierSubsystem_RefusesBootOnBreak(t *testing.T) {
 		scopes: []string{"scopeA"},
 	}
 	sub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-		Repo:     repo,
-		Handlers: []chain.Handler{h},
-		Logger:   slog.Default(),
+		Repo:             repo,
+		HandlersProvider: func() []chain.Handler { return []chain.Handler{h} },
+		Logger:           slog.Default(),
 	})
 
 	err := sub.Start(context.Background())
@@ -165,9 +165,9 @@ func TestVerifierSubsystem_RejectsInvalidChainRegistration(t *testing.T) {
 		},
 	}
 	sub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-		Repo:     &fakeRepo{},
-		Handlers: []chain.Handler{bad},
-		Logger:   slog.Default(),
+		Repo:             &fakeRepo{},
+		HandlersProvider: func() []chain.Handler { return []chain.Handler{bad} },
+		Logger:           slog.Default(),
 	})
 
 	err := sub.Start(context.Background())

@@ -38,9 +38,21 @@ const (
 // internal/xdg. This keeps Defaults() pure (no filesystem side effects)
 // and lets test helpers swap in a t.TempDir().
 type Config struct {
-	Mode     Mode   `koanf:"mode"`
+	Mode Mode `koanf:"mode"`
+	// GameID is the koanf-mapped event_bus.game_id key. It stays live for
+	// standalone tools/tests that construct Config directly, but on the
+	// production boot path GameIDProvider (below) supersedes it: runCore
+	// always assigns a provider derived from the global game_id /
+	// database-resolved id (07-09 item 7, round 7 BLOCKER 1 + round 8
+	// correction), and WARNs rather than silently discarding an
+	// explicitly-set event_bus.game_id that loses to the provider.
 	GameID   string `koanf:"game_id"`
 	StoreDir string `koanf:"store_dir"`
+
+	// GameIDProvider resolves the game ID once at the top of Subsystem.Start,
+	// winning over GameID/Defaults() when non-nil. Wiring-only — deliberately
+	// NOT koanf-mapped, since it carries a closure rather than config data.
+	GameIDProvider func() string `koanf:"-"`
 
 	StreamMaxAge time.Duration `koanf:"stream_max_age"`
 	DupeWindow   time.Duration `koanf:"dupe_window"`

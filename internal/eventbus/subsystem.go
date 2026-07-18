@@ -73,8 +73,12 @@ func NewSubsystemWithStorage(cfg Config, storage jetstream.StorageType) *Subsyst
 // ID returns lifecycle.SubsystemEventBus.
 func (s *Subsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemEventBus }
 
-// DependsOn returns nil — the event bus has no subsystem dependencies.
-func (s *Subsystem) DependsOn() []lifecycle.SubsystemID { return nil }
+// DependsOn returns [SubsystemDatabase] (07-09 item 7, round 7 BLOCKER 1) —
+// GameIDProvider resolves the DB-backed gameID at Start, so the database
+// subsystem must have run InitGameID first. Acyclic: Database has no deps.
+func (s *Subsystem) DependsOn() []lifecycle.SubsystemID {
+	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
+}
 
 // Start establishes the NATS transport for the configured mode, obtains a
 // JetStream context, and declares the EVENTS stream (D-03 provision policy).
@@ -86,6 +90,17 @@ func (s *Subsystem) DependsOn() []lifecycle.SubsystemID { return nil }
 func (s *Subsystem) Start(ctx context.Context) error {
 	if s.conn != nil {
 		return nil // already started (embedded or external)
+	}
+
+	// Resolve the gameID provider once, before connect()/EnsureStream (07-09
+	// item 7, round 7 BLOCKER 1 + round 8 correction). An empty resolve
+	// keeps whatever Defaults()-substituted (or koanf-loaded) value is
+	// already in s.cfg.GameID — the same "empty resolve keeps the default"
+	// rule used by the DLQ subject / relay gameID rows.
+	if s.cfg.GameIDProvider != nil {
+		if resolved := s.cfg.GameIDProvider(); resolved != "" {
+			s.cfg.GameID = resolved
+		}
 	}
 
 	conn, js, err := s.connect()
@@ -121,6 +136,26 @@ func (s *Subsystem) Start(ctx context.Context) error {
 				Wrap(expErr)
 		}
 		s.exporter = exp
+	}
+
+	// CLUSTER-02 (D-13c): in external mode the server authenticates as the
+	// single `holomush-server` account scoped to events.>/audit.>/internal.>/
+	// _INBOX.>. Self-verify that our own account is not over-scoped and
+	// refuse to boot if it can reach beyond the granted prefixes (fail
+	// closed). Skipped in embedded mode, which has no account model (its
+	// default-open permissions would always look over-scoped). The
+	// complementary external proof that other principals are locked out is
+	// deploy/nats/verify-scoping.sh. Moved in from cmd/holomush (07-09,
+	// design table row :475) — this package owns its own connection, so the
+	// check belongs in its own boot path rather than a caller-side
+	// post-Start step.
+	if s.cfg.Mode == ModeExternal {
+		if scopeErr := VerifyAccountScoping(ctx, s.conn); scopeErr != nil {
+			s.rollbackStart(conn)
+			return oops.Code("EVENTBUS_SCOPE_CHECK_FAILED").
+				With("operation", "verify_account_scoping").
+				Wrap(scopeErr)
+		}
 	}
 	return nil
 }

@@ -39,8 +39,13 @@ type EventBusProvider interface {
 type OutboxRelaySubsystemConfig struct {
 	DB       PoolProvider
 	EventBus EventBusProvider
-	GameID   string
-	Logger   *slog.Logger
+	// GameID resolves the game ID at Start time (07-09 item 7) — a provider,
+	// not a live value, since the resolved id is not known until the
+	// database subsystem's InitGameID has run. A nil provider, or one
+	// resolving to "", falls back to defaultRelayGameID at Start (the
+	// default application moved out of the constructor).
+	GameID func() string
+	Logger *slog.Logger
 }
 
 // OutboxRelaySubsystem is the dedicated lifecycle subsystem that runs the single
@@ -56,11 +61,10 @@ type OutboxRelaySubsystem struct {
 	done     chan struct{}
 }
 
-// NewOutboxRelaySubsystem constructs an OutboxRelaySubsystem.
+// NewOutboxRelaySubsystem constructs an OutboxRelaySubsystem. It does not
+// allocate or start any runtime resources; call Start to construct the relay
+// and launch the drain loop.
 func NewOutboxRelaySubsystem(cfg OutboxRelaySubsystemConfig) *OutboxRelaySubsystem {
-	if cfg.GameID == "" {
-		cfg.GameID = defaultRelayGameID
-	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -83,11 +87,13 @@ func (s *OutboxRelaySubsystem) Start(ctx context.Context) error {
 	checkpoint := worldpostgres.NewConsumerCheckpointStore(pool)
 	publisher := s.cfg.EventBus.Publisher()
 
+	gameID := s.resolveGameID()
+
 	s.waker = newOutboxWaker(pool)
 	s.relay = outbox.NewRelay(outbox.RelayConfig{
 		Store:     leaseStoreAdapter{store: store},
 		Publisher: publisher,
-		GameID:    s.cfg.GameID,
+		GameID:    gameID,
 		Waker:     s.waker,
 		Logger:    s.cfg.Logger,
 	})
@@ -104,7 +110,7 @@ func (s *OutboxRelaySubsystem) Start(ctx context.Context) error {
 		_ = s.relay.Run(runCtx) //nolint:errcheck // Run returns only the ctx-cancellation reason on Stop
 	}()
 
-	slog.InfoContext(ctx, "outbox relay subsystem started", "game_id", s.cfg.GameID)
+	slog.InfoContext(ctx, "outbox relay subsystem started", "game_id", gameID)
 	return nil
 }
 
@@ -131,6 +137,21 @@ func (s *OutboxRelaySubsystem) Stop(ctx context.Context) error {
 
 // Consumer exposes the reference consumer (for bootstrap wiring / tests).
 func (s *OutboxRelaySubsystem) Consumer() *outbox.Consumer { return s.consumer }
+
+// resolveGameID applies the GameID provider (if any), falling back to
+// defaultRelayGameID when the provider is nil or resolves to "" — the same
+// default OutboxRelaySubsystemConfig's constructor used to apply eagerly
+// (07-09 item 7 moves the default application to Start-time resolution).
+func (s *OutboxRelaySubsystem) resolveGameID() string {
+	gameID := ""
+	if s.cfg.GameID != nil {
+		gameID = s.cfg.GameID()
+	}
+	if gameID == "" {
+		gameID = defaultRelayGameID
+	}
+	return gameID
+}
 
 // --- setup-layer adapters: bind the concrete postgres impls to the
 // consumer-owned outbox interfaces so package postgres never imports

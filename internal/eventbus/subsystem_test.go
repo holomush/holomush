@@ -55,10 +55,34 @@ func TestSubsystemIDIsEventBus(t *testing.T) {
 	assert.Equal(t, lifecycle.SubsystemEventBus, s.ID())
 }
 
-func TestSubsystemDependsOnNothing(t *testing.T) {
+// TestSubsystemDependsOnDatabase pins the exact DependsOn set (07-09 item 7,
+// round 7 BLOCKER 1) — GameIDProvider resolves the DB-backed gameID at Start,
+// so the event bus now depends on the database subsystem. Renamed from
+// TestSubsystemDependsOnNothing (ACE); asserts the exact set, not emptiness.
+func TestSubsystemDependsOnDatabase(t *testing.T) {
 	t.Parallel()
 	s := eventbus.NewSubsystem(eventbus.Config{}.Defaults())
-	require.Empty(t, s.DependsOn())
+	require.Equal(t, []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}, s.DependsOn())
+}
+
+// TestEventBusStartResolvesGameIDProviderOverDefaultMain hardens the
+// dual-path GameID/GameIDProvider wiring against partial-wiring drift (round
+// 8, OpenCode pin): Config{GameID: ""} lets Defaults() substitute the
+// literal "main", but a non-nil GameIDProvider must win at Start — GameID()
+// must never observe "main" when a provider resolves a different id.
+func TestEventBusStartResolvesGameIDProviderOverDefaultMain(t *testing.T) {
+	t.Parallel()
+	cfg := eventbus.Config{
+		StoreDir:       t.TempDir(),
+		GameIDProvider: func() string { return "resolved-from-db" },
+	}.Defaults()
+	require.Equal(t, "main", cfg.GameID, "Defaults() substitutes the literal default when GameID is unset")
+
+	bus := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
+	require.NoError(t, bus.Start(context.Background()))
+	t.Cleanup(func() { _ = bus.Stop(context.Background()) })
+
+	assert.Equal(t, "resolved-from-db", bus.GameID(), "GameIDProvider must win over the Defaults()-substituted main")
 }
 
 func TestSubsystemStartIsBounded(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/holomush/holomush/internal/cluster"
+	"github.com/holomush/holomush/internal/eventbus/natsconn"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/testsupport/natstest"
 )
@@ -75,7 +76,7 @@ func NewExternal(t TB, env *natstest.NATSEnv, clusterID string, n int, opts ...O
 		// coupling in tests and match production observability.
 		memberID := cluster.MemberID(idgen.New().String())
 		reg, err := cluster.NewSubsystem(cfg, cluster.Deps{
-			Conn:          conn,
+			ConnProvider:  cluster.ConnProviderFunc(func() natsconn.Conn { return conn }),
 			Logger:        logger,
 			Pill:          pill,
 			SelfIDForTest: memberID,

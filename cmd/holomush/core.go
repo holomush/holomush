@@ -23,11 +23,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
-	"github.com/holomush/holomush/internal/admin/approval"
-	adminauth "github.com/holomush/holomush/internal/admin/auth"
 	"github.com/holomush/holomush/internal/admin/policy"
 	socket "github.com/holomush/holomush/internal/admin/socket"
-	totpaudit "github.com/holomush/holomush/internal/admin/totp_audit"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	"github.com/holomush/holomush/internal/bootstrap"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
@@ -40,7 +37,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/audit/chain"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
-	"github.com/holomush/holomush/internal/eventbus/crypto/invalidation"
+	"github.com/holomush/holomush/internal/eventbus/natsconn"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -51,7 +48,7 @@ import (
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telemetry"
-	"github.com/holomush/holomush/internal/totp"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	"github.com/holomush/holomush/internal/xdg"
@@ -135,7 +132,15 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, &eventBusConfig, "event_bus"); err != nil {
 				return err
 			}
-			eventBusConfig = eventBusConfig.Defaults()
+			// Validate BEFORE Defaults() — Validate is documented as
+			// order-independent w.r.t. Defaults() ("" is accepted and
+			// normalized to ModeEmbedded). Defaults() itself is deliberately
+			// NOT applied here: runCoreWithDeps captures the RAW
+			// event_bus.game_id value (rawBusGameID) before applying
+			// Defaults(), so an explicit koanf value stays distinguishable
+			// from the substituted "main" default (07-09 item 7, round 8
+			// correction). Applying Defaults() here would make that
+			// distinction impossible by the time runCoreWithDeps sees it.
 			if err := eventBusConfig.Validate(); err != nil {
 				return err
 			}
@@ -276,42 +281,45 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return migErr
 	}
 
-	// --- 3. Database subsystem (started early for gameID) ---
-	// The DB subsystem must start before TLS cert generation because the gameID
-	// (from InitGameID) is embedded in the CA certificate on first boot.
+	// --- 3. Database subsystem ---
+	// Construction only — no live resources. The DB subsystem's own Start
+	// (invoked by orch.StartAll below) opens the pool and resolves the
+	// gameID (InitGameID); every gameID consumer resolves through
+	// gameIDProvider below instead of a hand-sequenced pre-start (07-09).
 	dbSub := store.NewSubsystem(store.SubsystemConfig{
 		DatabaseURL: databaseURL,
 	})
-	if startErr := dbSub.Start(ctx); startErr != nil {
-		return startErr
-	}
-	// DB shutdown is handled by orch.StopAll (step 8) — no explicit defer needed here.
 
-	// --- 3b. Bootstrap orphan check (w9ml T19) ---
-	// Defense-in-depth: refuse to start if any plugin-kind event in events_audit
-	// lacks an actor_id. Migration 000018 makes orphans impossible from a clean
-	// install; this guards against manual restore from an old backup.
-	if orphanErr := runBootstrapOrphanCheck(ctx, dbSub.Pool()); orphanErr != nil {
-		return orphanErr
+	// gameIDProvider is THE single gameID resolution + override site
+	// (07-09 item 7): every consumer in this process — TLS, world, plugin,
+	// outbox relay, cluster, audit DLQ, the EventBus itself, and the
+	// cryptoWiring block — resolves the game id through this closure at its
+	// own Start, never eagerly here. cfg.GameID wins when explicitly set;
+	// otherwise it defers to dbSub.GameID(), which panics before the
+	// database subsystem's Start has run — that panic-before-Start guard is
+	// the point: no gameID consumer may resolve it before Database starts.
+	gameIDProvider := func() string {
+		if cfg.GameID != "" {
+			return cfg.GameID
+		}
+		return dbSub.GameID()
 	}
-
-	gameID := cfg.GameID
-	if gameID == "" {
-		gameID = dbSub.GameID()
-	}
-	slog.InfoContext(ctx, "game ID initialized", "game_id", gameID)
 
 	// --- 4. TLS certificates ---
+	// TLSSubsystem resolves the gameID (via gameIDProvider) and generates
+	// or loads the certificates inside its own Start, declaring
+	// DependsOn(SubsystemDatabase) — the real edge that used to be a
+	// hand-sequenced DB pre-start (core.go pre-07-09).
 	certsDir, err := deps.CertsDirGetter()
 	if err != nil {
 		return oops.Code("CERTS_DIR_FAILED").With("operation", "get certs directory").Wrap(err)
 	}
 
-	tlsConfig, err := deps.TLSCertEnsurer(certsDir, gameID)
-	if err != nil {
-		return oops.Code("TLS_SETUP_FAILED").With("operation", "set up TLS").With("certs_dir", certsDir).Wrap(err)
-	}
-	slog.InfoContext(ctx, "TLS certificates ready", "certs_dir", certsDir)
+	tlsSub := tlscerts.NewTLSSubsystem(tlscerts.TLSSubsystemConfig{
+		CertsDir:    certsDir,
+		GameID:      gameIDProvider,
+		CertEnsurer: deps.TLSCertEnsurer,
+	})
 
 	// Derive admin socket paths from XDG runtime dir. Non-fatal: if the
 	// runtime dir is unavailable, the admin socket is disabled (break-glass
@@ -372,25 +380,23 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// --- 7. Subsystem construction (config only, no live resources) ---
 
-	// Cross-check the configured crypto.operator allow-list against the
-	// players table. Lax+warn: unknown IDs and transient PG failures
-	// emit a structured warning but MUST NOT gate startup (Phase 5
-	// sub-epic B INV-B5 / INV-B7). The returned slice is the source of
-	// truth wired into the PlayerAttributeProvider via the ABAC stack.
-	// validateCryptoOperators always returns nil error in Phase 5 sub-epic B
-	// (lax+warn). The signature reserves the slot for future fail-closed
-	// modes (sub-epic D), but today there is no error path to handle.
-	cryptoOperators, _ := validateCryptoOperators(ctx, dbSub.Pool(), cryptoConfig.Operators, slog.Default()) //nolint:errcheck // Phase 5 sub-epic B is lax+warn; sub-epic D will rewire to handle errors here.
-
 	// Filter crypto.dual_control_required against the known op_kind registry.
 	// Lax+warn: unknown op_kinds emit a structured warning and are excluded
-	// from enforcement; the server continues to start. Per spec §9.
+	// from enforcement; the server continues to start. Per spec §9. This is
+	// a pure config filter (no live reads) — it stays in runCore.
 	validatedDualControl := validateDualControlRequired(cryptoConfig.DualControlRequired, slog.Default())
 
+	// abacSub validates the RAW configured crypto.operator allow-list
+	// against the players table INSIDE its own Start (07-09 item 6) — lax+
+	// warn (INV-B5/INV-B7); unknown IDs and transient PG failures WARN but
+	// MUST NOT gate startup. Routing this through the cryptoWiring builder
+	// instead would make ABAC a wiring consumer and close a second
+	// ABAC -> cryptoWiring -> ABAC cycle (THE RULE forces every consumer to
+	// DependsOn SubsystemABAC) — cross-AI round 4, BLOCKER.
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
 		DB:              dbSub,
 		Registry:        registry,
-		CryptoOperators: cryptoOperators,
+		CryptoOperators: cryptoConfig.Operators,
 	})
 
 	authSub := authsetup.NewAuthSubsystem(authsetup.AuthSubsystemConfig{
@@ -401,7 +407,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	worldSub := worldsetup.NewWorldSubsystem(worldsetup.WorldSubsystemConfig{
 		DB:     dbSub,
 		ABAC:   abacSub,
-		GameID: gameID,
+		GameID: gameIDProvider,
 	})
 
 	sessionSub := sessionsetup.NewSessionSubsystem(sessionsetup.SessionSubsystemConfig{
@@ -417,7 +423,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		DataDir:            cfg.DataDir,
 		DatabaseConnStr:    databaseURL,
 		CertsDir:           certsDir,
-		GameID:             gameID,
+		GameID:             gameIDProvider,
 		TrustAllowlist:     gameConfig.PluginTrustAllowlist,
 		ABAC:               abacSub,
 		PolicyInst:         abacSub,
@@ -449,33 +455,32 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// subsystems but has no consumers, publishers, or subscribers attached
 	// yet. Phase B (F1+) will wire the plugin emit path and gRPC Subscribe
 	// handler through the bus. Until then this is pure infrastructure.
+	//
+	// rawBusGameID captures the koanf event_bus.game_id value BEFORE
+	// Defaults() substitutes "main" for an empty GameID — after Defaults an
+	// explicit value is indistinguishable from the substituted default
+	// (round 8 correction: event_bus.game_id IS a live boot-path koanf read
+	// today; post-plan the global gameIDProvider supersedes it here, but an
+	// explicitly-set value must never be silently discarded — it WARNs
+	// instead). GameIDProvider is a wiring-only field (not koanf-mapped)
+	// that wins over the koanf GameID/Defaults() substitution, resolved
+	// once at the top of Subsystem.Start (07-09 item 7, round 7 BLOCKER 1).
+	rawBusGameID := eventBusConfig.GameID
+	eventBusConfig = eventBusConfig.Defaults()
+	eventBusConfig.GameIDProvider = func() string {
+		resolved := gameIDProvider()
+		if rawBusGameID != "" && rawBusGameID != resolved {
+			//nolint:sloglint // no-ctx closure (GameIDProvider is func() string, matching
+			// eventbus.Config's field signature) — the core.go:1122-class bare-Warn carve-out
+			// for "no ctx exists and one cannot reasonably be plumbed" (.claude/rules/logging.md).
+			slog.Warn("event_bus.game_id config key is set but does not match the resolved game id; the global game_id (or database-derived id) wins — remove event_bus.game_id or align it with the global game_id",
+				"event_bus_game_id", rawBusGameID,
+				"resolved_game_id", resolved)
+		}
+		return resolved
+	}
 	eventBusSub := eventbus.NewSubsystem(eventBusConfig)
 
-	// EventBus is pre-started here (mirroring the early-start of dbSub
-	// above) because cluster.NewSubsystem requires a non-nil *nats.Conn
-	// at construction time, and eventBusSub.Conn() returns nil prior to
-	// Start. Start is idempotent, so the orchestrator's StartAll below
-	// will short-circuit when it reaches eventBusSub. EventBus shutdown
-	// is handled by orch.StopAll (step 8) — no explicit defer needed.
-	if startErr := eventBusSub.Start(ctx); startErr != nil {
-		return oops.Code("EVENTBUS_START_FAILED").
-			With("operation", "start_event_bus").
-			Wrap(startErr)
-	}
-	// CLUSTER-02 (D-13c): in external mode the server authenticates as the
-	// single `holomush-server` account scoped to events.>/audit.>/internal.>/
-	// _INBOX.>. Self-verify that our own account is not over-scoped and refuse
-	// to boot if it can reach beyond the granted prefixes (fail closed). Skipped
-	// in embedded mode, which has no account model (its default-open permissions
-	// would always look over-scoped). The complementary external proof that
-	// other principals are locked out is deploy/nats/verify-scoping.sh.
-	if eventBusConfig.Mode == eventbus.ModeExternal {
-		if scopeErr := eventbus.VerifyAccountScoping(ctx, eventBusSub.Conn()); scopeErr != nil {
-			return oops.Code("EVENTBUS_SCOPE_CHECK_FAILED").
-				With("operation", "verify_account_scoping").
-				Wrap(scopeErr)
-		}
-	}
 	// OutboxRelaySubsystem (MODEL-04, 05-07): the single leased relay that drains
 	// world-change outbox rows to JetStream. Constructed with dbSub + eventBusSub,
 	// DependsOn Database + EventBus, registered in productionSubsystems after
@@ -483,27 +488,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	outboxRelaySub := worldsetup.NewOutboxRelaySubsystem(worldsetup.OutboxRelaySubsystemConfig{
 		DB:       dbSub,
 		EventBus: eventBusSub,
-		GameID:   gameID,
+		GameID:   gameIDProvider,
 	})
-
-	// Ownership: cleanup eventBusSub on early-return paths until the
-	// orchestrator takes over via orch.StopAll below. The flag flips to
-	// true after orch.StartAll succeeds.
-	eventBusOwnedByOrchestrator := false
-	defer func() {
-		if !eventBusOwnedByOrchestrator {
-			// Bound the cleanup so a wedged Stop can't hang startup-
-			// failure handling forever. 5s matches typical NATS
-			// graceful-shutdown budgets; primary error has already
-			// been returned, so logging is the only signal we have.
-			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer stopCancel()
-			if stopErr := eventBusSub.Stop(stopCtx); stopErr != nil {
-				slog.WarnContext(stopCtx, "event bus cleanup failed on early-return path",
-					"err", stopErr.Error())
-			}
-		}
-	}()
 
 	// Phase 3c (holomush-ojw1.3): cluster.Registry runs in every deployment
 	// from this PR onward; it provides cross-replica health/status surface
@@ -539,10 +525,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	clusterSelfID := cluster.MemberID(idgen.New().String())
 	clusterPill := cluster.NewProductionPill(clusterSelfID, slog.Default(), clusterPillMetrics)
 	clusterSub, clusterErr := cluster.NewSubsystem(cluster.Config{
-		ClusterID:       gameID,
-		HolomushVersion: version, // package-private to main; ldflag-set via -X
+		ClusterIDProvider: gameIDProvider,
+		HolomushVersion:   version, // package-private to main; ldflag-set via -X
 	}, cluster.Deps{
-		Conn:              eventBusSub.Conn(),
+		ConnProvider:      cluster.ConnProviderFunc(func() natsconn.Conn { return eventBusSub.Conn() }),
 		Logger:            slog.Default(),
 		PillMetrics:       clusterPillMetrics,
 		SkewMetrics:       clusterSkewMetrics,
@@ -553,9 +539,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		SelfIDForTest:     clusterSelfID,
 	})
 	if clusterErr != nil {
-		return oops.Code("CLUSTER_SUBSYSTEM_INIT_FAILED").
-			With("cluster_id", gameID).
-			Wrap(clusterErr)
+		return oops.Code("CLUSTER_SUBSYSTEM_INIT_FAILED").Wrap(clusterErr)
 	}
 
 	// AuditProjection drains the EVENTS stream into events_audit so every
@@ -568,11 +552,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// prefix so it stays within the holomush-server account's permissions.
 	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{
 		DLQ: audit.DLQConfig{
-			// Use the resolved gameID (cfg.GameID, else dbSub.GameID()) so the DLQ
-			// subject matches the rest of the process; eventBusConfig.GameID can
-			// still be the unresolved default. The replay CLI must target the same
-			// game_id — a mismatch fails loud (WR-06), never silently.
-			Subject:  fmt.Sprintf("internal.%s.audit.dlq", gameID),
+			// SubjectProvider resolves the gameID through the SAME
+			// gameIDProvider closure every other consumer uses, so the DLQ
+			// subject matches the rest of the process (07-09 item 7). The
+			// format string stays in package main, matching the replay
+			// CLI's shape (cmd_audit.go's dlqConfigForGame) so the WR-06
+			// same-subject contract is preserved by inspection. Resolved
+			// once inside audit.Subsystem.Start, before config validation.
+			SubjectProvider: func() string {
+				return fmt.Sprintf("internal.%s.audit.dlq", gameIDProvider())
+			},
 			MaxAge:   eventBusConfig.DLQ.MaxAge,
 			MaxBytes: eventBusConfig.DLQ.MaxBytes,
 		},
@@ -592,6 +581,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// history.WithCodecSelector). Pointer-identity is asserted by
 	// TestDispatcherAndHotTierShareSelector.
 	pluginCodecKeySelector := cryptowiring.KeySelector()
+
+	// coordHolderPtr is the late-bound indirection through which the
+	// Manager's Invalidator closure and the Orchestrator's Phase5Coordinator
+	// reach the invalidation.Coordinator, which the cryptoWiring builder
+	// constructs+starts as a side effect (cryptowiring.go). grpcSubsystem
+	// owns its lifecycle (07-09 item 4): grpcSub.Stop calls
+	// coordHolderPtr.coord.Stop when non-nil.
+	coordHolderPtr := &coordHolder{}
 
 	// F5: wire per-plugin audit plumbing. Both the OwnerMap (drives host-
 	// projection ack-and-skip) and the per-plugin consumer manager (drives
@@ -685,7 +682,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		Bootstrap:      bootstrapSub,
 		EventBus:       eventBusSub,
 		GRPCAddr:       cfg.GRPCAddr,
-		TLSConfig:      tlsConfig,
+		TLSProvider:    tlsSub.TLSConfig,
+		CoordHolder:    coordHolderPtr,
 		SessionTTL:     sessionTTL,
 		ReaperInterval: reaperInterval,
 		LeaseTTL:       leaseTTL,
@@ -701,357 +699,99 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	})
 
 	// --- Crypto subsystems (T22 / holomush-jxo8.6.21; generalized holomush-jxo8.7.8) ---
-	// auditchain.VerifierSubsystem walks every registered hash chain at boot,
-	// replacing D's policy-specific CryptoChainVerifierSubsystem. RekeyChain
-	// wired here per Task 19 (holomush-jxo8.7.17); OperatorReadChain wired
-	// per sub-epic F R.14 (holomush-jxo8.8.38) — the verifier subsystem is
-	// constructed below, after readstream wiring runs, so we can append
-	// readstream.OperatorReadHandlerFor(gameID) to its Handlers slice.
-	dek.SetGameIDForRekey(gameID) // must be set before RekeyHandlerFor is called below.
-	auditChainRepo := chain.NewPostgresRepo(dbSub.Pool())
+	// The block that used to run here eagerly (auditChainRepo, admin-handler
+	// construction, rekey/readstream wiring, the invalidation.Coordinator)
+	// is now the memoized cryptoWiring builder (cryptowiring.go) — every
+	// dbSub.Pool()/authSub.Hasher()/abacSub.Resolver()/eventBusSub.Conn()/
+	// eventBusSub.Publisher() read it contains executes lazily, inside the
+	// first wiring consumer's Start, never here on runCore's straight-line
+	// path (D-09 / 07-09 item 9). THE RULE: every consumer below declares
+	// DependsOn ⊇ {Database, Auth, ABAC, EventBus} — the first consumer to
+	// resolve cryptoWiringFn is the one that builds it.
+	cryptoCfg := cryptoConfig.Defaults()
+	cryptoWiringFn := resolveCryptoWiring(cryptoWiringInputs{
+		DB:                   dbSub,
+		Auth:                 authSub,
+		ABAC:                 abacSub,
+		EventBus:             eventBusSub,
+		Cluster:              clusterSub,
+		GameID:               gameIDProvider,
+		DataDir:              cfg.DataDir,
+		AutoGenKEK:           cfg.AutoGenKEK,
+		CryptoCfg:            cryptoCfg,
+		ValidatedDualControl: validatedDualControl,
+		VerbRegistry:         verbRegistry,
+		MetricsRegisterer:    metricsReg,
+		CoordHolder:          coordHolderPtr,
+	})
 
-	// Mint a server-start ULID to stamp the CryptoPolicySubsystem's emits so
-	// a given run's events can be correlated in events_audit.
-	serverStartULID := core.NewULID().String()
+	// Thread the memoized wiring into the gRPC subsystem — the one consumer
+	// in package main, so it may hold func() (*cryptoWiring, error) directly
+	// rather than a narrow consumer-owned provider type (round 5, BLOCKER 4).
+	// Resolved inside grpcSubsystem.Start, which is the FIRST caller of
+	// cryptoWiringFn in the running system — satisfying item 4's "move the
+	// Coordinator's construction + Start into grpcSub's Start" requirement.
+	grpcSub.cfg.CryptoWiring = cryptoWiringFn
 
-	// Derive server identity: prefer hostname, fall back to "holomush".
-	serverIdentity := "holomush"
-	if hostname, hostErr := os.Hostname(); hostErr == nil && hostname != "" {
-		serverIdentity = "holomush@" + hostname
-	}
-
-	effectiveConfig := policy.CryptoEffectiveConfig{
-		DualControlRequired: validatedDualControl,
-	}
-
-	// Wrap the bare EventBus publisher with RenderingPublisher so the
-	// host-emit audit publishers stamp the App-Rendering NATS header
-	// required by audit/projection.go::persist (headerRendering check).
-	// Without this wrapping the projection rejects every host-emit audit
-	// event with AUDIT_MISSING_HEADER and they never reach events_audit.
-	// (holomush-jxo8.6.26 / INV-CRYPTO-81, INV-CRYPTO-84.)
-	auditPublisher := eventbus.NewRenderingPublisher(eventBusSub.Publisher(), verbRegistry)
+	// --- The block's three lifecycle-subsystem CONSTRUCTIONS stay on
+	// runCore's straight-line path (round 7, BLOCKER 2 — a builder first
+	// invoked by a consumer's Start cannot also create that consumer). Each
+	// takes a provider-shaped config whose closure projects off the
+	// memoized cryptoWiringFn; the constructors allocate nothing and read
+	// no live value.
 
 	// CryptoPolicySubsystem emits the current policy snapshot after AuditProjection.
 	cryptoPolicySub := policy.NewCryptoPolicySubsystem(policy.CryptoPolicySubsystemConfig{
-		EmitDeps: policy.EmitDeps{
-			GameID:          gameID,
-			ServerStartULID: serverStartULID,
-			ServerIdentity:  serverIdentity,
-			Pool:            dbSub.Pool(),
-			Publisher:       auditPublisher,
-			Clock:           totp.NewRealClock(),
-			Config:          effectiveConfig,
+		EmitDepsProvider: func() (policy.EmitDeps, error) {
+			w, wErr := cryptoWiringFn()
+			if wErr != nil {
+				return policy.EmitDeps{}, wErr
+			}
+			return w.policyEmitDeps, nil
 		},
 		PolicyNames: []string{"dual_control_required"},
 	})
 
-	// --- Phase 5 sub-epic E rekey wiring (holomush-jxo8.7.34 / T37) ---
-	//
-	// Constructs the rekey audit emitter and checkpoint-sweep subsystem,
-	// the two components that can stand alone without the full DEK manager
-	// stack (the orchestrator + RekeyHandler need dek.Manager which a later
-	// bead wires; until then those RPCs remain unimplemented).
-	//
 	// The sweep subsystem auto-aborts non-terminal checkpoints whose
-	// last_heartbeat_at has exceeded TTL (INV-CRYPTO-105 / INV-CRYPTO-106, spec §6.2);
-	// it depends only on CheckpointRepo + AuditEmitter, both of which the
-	// host already has at this point.
-	cryptoCfg := cryptoConfig.Defaults()
-	rekeyCheckpointRepo := dek.NewCheckpointRepo(dbSub.Pool())
-	rekeyAuditEmitter := dek.NewRekeyAuditEmitter(
-		chain.NewEmitter(auditChainRepo),
-		&rekeyAuditPublisherAdapter{publisher: auditPublisher, clock: totp.NewRealClock()},
-	)
-	// policyHashSource backs the Phase 1 policy_hash freeze (INV-CRYPTO-112).
-	// Sub-epic E T44 (holomush-jxo8.7.44) consumes it via buildRekeyWiring
-	// below; earlier beads referenced the constructor but did not wire it
-	// into a Manager yet (no production dek.NewManager call site existed).
-	policyHashSrc := newPolicyHashSourceFromAuditChain(auditChainRepo, gameID)
-
+	// last_heartbeat_at has exceeded TTL (INV-CRYPTO-105 / INV-CRYPTO-106,
+	// spec §6.2). TTL/Interval are pure config (cryptoCfg); only the
+	// storage (Repo/AuditEmitter) is provider-backed.
 	rekeyCheckpointSweepSub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
-		Repo:         rekeyCheckpointRepo,
-		AuditEmitter: rekeyAuditEmitter,
-		Logger:       slog.Default(),
-		TTL:          cryptoCfg.RekeyCheckpointTTL,
-		Interval:     cryptoCfg.RekeyCheckpointSweepInterval,
-	})
-
-	// --- Admin handler construction (T22 / holomush-jxo8.6.21) ---
-	//
-	// Pre-start AuthSubsystem and ABACSubsystem so admin handler construction
-	// below can call authSub.Hasher() / authSub.AuthService() / abacSub.Resolver()
-	// without hitting the "called before Start()" panic guards. The orchestrator
-	// re-invokes both Start methods later via StartAll; both are idempotent
-	// (early-return when already initialized), mirroring the dbSub pre-start
-	// pattern at step 3 above.
-	//
-	// Surfaced by Phase 5 sub-epic D's E2E (holomush-jxo8.6.23 / T25): the
-	// production admin-handler wiring panics on every boot when KEK is
-	// available because the original T22 wiring constructed the handlers
-	// before the orchestrator ran. Without this pre-start the gated
-	// `if kekProvider != nil` branch panics during boot in any environment
-	// with a configured KEK (which is the production-deploy shape).
-	if abacStartErr := abacSub.Start(ctx); abacStartErr != nil {
-		return oops.Code("ABAC_PRESTART_FAILED").Wrap(abacStartErr)
-	}
-	if authStartErr := authSub.Start(ctx); authStartErr != nil {
-		return oops.Code("AUTH_PRESTART_FAILED").Wrap(authStartErr)
-	}
-
-	// Build the in-memory session store for Authenticate → Approve / ResetTOTP flow.
-	// totp.NewRealClock() satisfies adminauth.Clock (both require Now() time.Time).
-	adminSessionStore := adminauth.NewSessionStore(totp.NewRealClock(), 10*time.Minute)
-
-	// Provision the boot KEK provider: a KEK is REQUIRED to start. The keyfile
-	// path comes from HOLOMUSH_KEK_FILE and the passphrase from env / file-ref /
-	// prompt (resolvePassphrase); --auto-gen-kek mints the keyfile on first boot.
-	// Any provisioning failure is fatal (BOOT_KEK_REQUIRED) — there is no
-	// degraded KEK-less mode. The admin-totp CLI keeps its own stricter path
-	// (buildKEKProviderFromConfig: pre-existing keyfile only, never auto-gen).
-	kekProvider, kekErr := provisionBootKEKProvider(ctx, dbSub.Pool(), cfg.AutoGenKEK)
-	if kekErr != nil {
-		return oops.Code("BOOT_KEK_REQUIRED").
-			Errorf("a KEK is required to start: %w (set %s + a passphrase source, or pass --auto-gen-kek)", kekErr, envKEKFile)
-	}
-
-	var adminTOTPSvc totp.Service
-	if kekProvider != nil {
-		totpRepo := totp.NewRepository(dbSub.Pool())
-		builtTOTP, totpErr := totp.NewService(
-			totp.Config{GameID: gameID},
-			totpRepo,
-			kekProvider,
-			totp.NewRealClock(),
-			authSub.Hasher(),
-		)
-		if totpErr != nil {
-			slog.WarnContext(ctx, "admin handlers: TOTP service construction failed — admin TOTP RPCs will be unavailable at runtime",
-				"error", totpErr)
-		} else {
-			adminTOTPSvc = builtTOTP
-		}
-	}
-
-	// AuditingService wraps the totp.Service to emit crypto.totp_* events.
-	// When adminTOTPSvc is nil (KEK unavailable), totpAuditSvc is also nil and
-	// the admin handlers will return errors on any TOTP operation.
-	var totpAuditSvc *totpaudit.AuditingService
-	if adminTOTPSvc != nil {
-		builtAudit, auditErr := totpaudit.NewAuditingService(
-			adminTOTPSvc,
-			auditPublisher,
-			gameID,
-			totp.NewRealClock(),
-			slog.Default(),
-		)
-		if auditErr != nil {
-			slog.WarnContext(ctx, "admin handlers: TOTP audit service construction failed", "error", auditErr)
-		} else {
-			totpAuditSvc = builtAudit
-		}
-	}
-
-	// Build the in-game credentials provider that walks the 6-step auth sequence.
-	adminRoleStore := store.NewPostgresRoleStore(dbSub.Pool())
-
-	var authenticateHandler socket.AuthenticateHandler
-	var approveHandler socket.ApproveHandler
-	var resetTOTPHandler socket.ResetTOTPHandler
-
-	if totpAuditSvc != nil {
-		ingameProvider, provErr := adminauth.NewInGameCredentialsProvider(
-			authSub.AuthService(),
-			totpAuditSvc,
-			abacSub.Resolver(),
-			adminRoleStore,
-		)
-		if provErr != nil {
-			slog.WarnContext(ctx, "admin handlers: InGameCredentialsProvider construction failed — Authenticate will be unavailable",
-				"error", provErr)
-		} else {
-			approvalRepo := approval.NewPostgresRepo(dbSub.Pool(), nil)
-			authenticateHandler = adminauth.NewAuthenticateHandler(ingameProvider, adminSessionStore)
-			approveHandler = approval.NewApproveHandler(adminSessionStore, approvalRepo, abacSub.Resolver(), adminRoleStore)
-			resetTOTPHandler = adminauth.NewResetTOTPHandler(adminSessionStore, abacSub.Resolver(), adminRoleStore, totpAuditSvc)
-		}
-	} else {
-		slog.WarnContext(ctx, "admin handlers: TOTP audit service unavailable — all three admin RPCs (Authenticate/Approve/ResetTOTP) will return errors")
-	}
-
-	// --- Phase 5 sub-epic E T44: production dek.Manager + rekey RPC wiring ---
-	//
-	// Constructs dek.Manager (no production call site existed before .44),
-	// dek.Orchestrator with all five post-construction seams, and the
-	// socket.RekeyHandler adapter chain. When kekProvider is nil (KEK env
-	// vars unavailable) buildRekeyWiring returns a zero-valued wiring so the
-	// admin socket falls back to Unimplemented for the Rekey RPCs but the
-	// rest of the server continues to start.
-	//
-	// Construction order is load-bearing per Phase 3c grounding doc
-	// Decision 5: the invalidation.Coordinator's Deps.DEKCache and
-	// Deps.PartCache MUST share pointer identity with the dek.Manager's
-	// own caches. Without that identity, the receive-side handler evicts
-	// dedicated caches while the Manager's caches keep serving stale OLD
-	// DEK material for up to the cache TTL (~5min) after a cross-replica
-	// Rekey — a forward-secrecy regression on the master crypto spec.
-	//
-	// So we:
-	//
-	//   1. Build the Manager + Orchestrator FIRST (with the Invalidator
-	//      closure indirecting through coordHolder; the closure returns
-	//      INVALIDATION_NO_LIVE_MEMBERS while holder.coord is nil).
-	//   2. Extract the Manager's caches via dek.CacheAccessor.
-	//   3. Build the invalidation.Coordinator with THOSE cache pointers.
-	//   4. Set holder.coord = coord; the Manager's Invalidator and the
-	//      Orchestrator's Phase5Coordinator both see the live Coordinator
-	//      from their next call onward.
-	//
-	// invalidation.Coordinator is itself NOT a lifecycle.Subsystem in Phase
-	// 5; we Start it inline alongside the orchestrator and Stop it via the
-	// deferred Stop path. Sub-epic E T44.
-	coordHolderPtr := &coordHolder{}
-
-	rekeyW, rekeyWErr := buildRekeyWiring(ctx, rekeyWiringDeps{
-		Pool:              dbSub.Pool(),
-		KEKProvider:       kekProvider,
-		GameID:            gameID,
-		DataDir:           cfg.DataDir,
-		AuditChainRepo:    auditChainRepo,
-		RekeyAuditEmitter: rekeyAuditEmitter,
-		CheckpointRepo:    rekeyCheckpointRepo,
-		SubjectResolver:   abacSub.Resolver(),
-		SessionStore:      adminSessionStore,
-		RoleChecker:       adminRoleStore,
-		CoordHolder:       coordHolderPtr,
-		PolicyHashSrc:     policyHashSrc,
-	})
-	if rekeyWErr != nil {
-		// Construction failure is fatal because it means the production
-		// shape is incoherent (Manager interface satisfied wrong, etc.).
-		// A missing dependency returns a zero wiring with nil error, NOT
-		// this branch.
-		return rekeyWErr
-	}
-	if rekeyW.RekeyHandler == nil {
-		slog.WarnContext(ctx, "rekey wiring incomplete — Rekey admin RPCs will return Unimplemented",
-			"kek_available", kekProvider != nil)
-	}
-	// Thread the production dek.Manager into the gRPC subsystem so Start()
-	// can construct the AuthGuard + AuditEmitter for INV-CRYPTO-22 FallbackResolver.
-	// When nil (KEK unavailable), the history reader keeps nil-auth passthrough.
-	grpcSub.cfg.RekeyManager = rekeyW.Manager
-
-	// Build the invalidation.Coordinator USING the Manager's own caches
-	// (Phase 3c grounding doc Decision 5; without this identity, peers
-	// continue serving stale OLD DEK from the Manager's cache for up to
-	// TTL after a cross-replica Rekey — a forward-secrecy regression).
-	// Then set coordHolderPtr.coord so the Manager's Invalidator closure
-	// and the Orchestrator's Phase5Coordinator pick up the live
-	// Coordinator on their next call. Only proceed if the Manager was
-	// successfully constructed (rekeyW.Manager non-nil) — otherwise the
-	// Coordinator has no caches to bind to.
-	if rekeyW.Manager != nil {
-		accessor, accessorOK := rekeyW.Manager.(dek.CacheAccessor)
-		if !accessorOK {
-			// Fail closed: a regenerated Manager that drops the accessor
-			// would silently revert to the dedicated-caches regression.
-			return oops.Code("CRYPTO_DEK_MANAGER_CACHE_ACCESSOR_NOT_SATISFIED").
-				Errorf("dek.NewManager return value does not satisfy dek.CacheAccessor — required for invalidation.Coordinator wiring per Phase 3c grounding Decision 5")
-		}
-		// Same scraped-registry rationale as the cluster metrics above.
-		invMetrics := invalidation.NewMetrics(metricsReg)
-		c, invErr := invalidation.New(invalidation.Config{ClusterID: gameID}, invalidation.Deps{
-			Conn:      eventBusSub.Conn(),
-			Registry:  clusterSub,
-			DEKCache:  accessor.Cache(),
-			PartCache: accessor.PartCache(),
-			Logger:    slog.Default(),
-			Metrics:   invMetrics,
-		})
-		if invErr != nil {
-			slog.WarnContext(ctx, "invalidation.Coordinator construction failed — cluster fan-out unavailable; Rekey will surface INVALIDATION_NO_LIVE_MEMBERS",
-				"error", invErr)
-		} else if startErr := c.Start(ctx); startErr != nil {
-			slog.WarnContext(ctx, "invalidation.Coordinator start failed — cluster fan-out unavailable",
-				"error", startErr)
-		} else {
-			coordHolderPtr.coord = c
-			// Coordinator is not orchestrator-owned; stop it on normal exit.
-			defer func() {
-				stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if stopErr := c.Stop(stopCtx); stopErr != nil {
-					slog.WarnContext(stopCtx, "invalidation.Coordinator stop error", "error", stopErr)
-				}
-			}()
-		}
-	}
-
-	// --- Phase 5 sub-epic F R.14 AdminReadStream wiring (holomush-jxo8.8.38) ---
-	//
-	// Constructs the operator-read handler (ColdReader, audit emitter, DEK +
-	// codec adapters, session-store adapter). When the upstream deps are
-	// unavailable (KEK missing → no dek.Manager; pre-start failures), the
-	// helper returns a zero-valued wiring and the admin socket falls back
-	// to Unimplemented for AdminReadStream. WARN-log on OperatorReadMaxWindow
-	// > 90d (operators can configure values above the cap, but oversized
-	// windows greatly inflate row-count + memory pressure on the cold-tier
-	// reader).
-	//
-	// AdminReadStream wiring follows ADR 0017 — F bypasses HistoryReader/dispatcher
-	// entirely. See docs/adr/0017-admin-readstream-bypasses-history-reader.md for
-	// the architectural decision and the wrappers it deliberately omits.
-	const operatorReadMaxWindowWarnThreshold = 90 * 24 * time.Hour
-	if cryptoCfg.OperatorReadMaxWindow > operatorReadMaxWindowWarnThreshold {
-		slog.WarnContext(ctx, "admin readstream: OperatorReadMaxWindow > 90d — oversized windows greatly inflate cold-tier read row-count and memory pressure",
-			"configured", cryptoCfg.OperatorReadMaxWindow,
-			"threshold", operatorReadMaxWindowWarnThreshold)
-	}
-
-	readStreamW, readStreamWErr := buildReadStreamWiring(ctx, readStreamWiringDeps{
-		Pool:            dbSub.Pool(),
-		GameID:          gameID,
-		AuditChainRepo:  auditChainRepo,
-		AuditPublisher:  auditPublisher,
-		SubjectResolver: abacSub.Resolver(),
-		SessionStore:    adminSessionStore,
-		DEKManager:      rekeyW.Manager,
-		PolicyHashSrc:   policyHashSrc,
-		MaxWindow:       cryptoCfg.OperatorReadMaxWindow,
-		DefaultWindow:   cryptoCfg.OperatorReadDefaultWindow,
-		WriteDeadline:   cryptoCfg.OperatorReadWriteDeadline,
-		ApprovalTTL:     cryptoCfg.OperatorReadApprovalTTL,
-	})
-	if readStreamWErr != nil {
-		// Construction failure is fatal because it means a required
-		// invariant is incoherent (e.g., handler.Validate rejected the
-		// config). A missing dependency returns a zero wiring with nil
-		// error, NOT this branch.
-		return readStreamWErr
-	}
-	if readStreamW.Handler == nil {
-		slog.WarnContext(ctx, "admin readstream wiring incomplete — AdminReadStream RPC will return Unimplemented",
-			"dek_manager_available", rekeyW.Manager != nil)
-	}
-
-	// Construct the audit-chain verifier subsystem now that we know which
-	// chains the host registered. operator_read joins the static
-	// policy_set + rekey pair when readstream wiring succeeded; otherwise
-	// the chain stays unregistered (its DB rows would still be visible to
-	// a future verifier run, but boot-time integrity is skipped — matching
-	// the "no events yet" shape).
-	chainHandlers := []chain.Handler{
-		policy.PolicySetHandlerFor(gameID),
-		dek.RekeyHandlerFor(gameID),
-	}
-	if readStreamW.Handler != nil {
-		chainHandlers = append(chainHandlers, readStreamW.AuditChainHandler)
-	}
-	cryptoChainVerifierSub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-		Repo:     auditChainRepo,
-		Handlers: chainHandlers,
+		DepsProvider: func() (*dek.CheckpointRepo, dek.AuditEmitter, error) {
+			w, wErr := cryptoWiringFn()
+			if wErr != nil {
+				return nil, nil, wErr
+			}
+			return w.checkpointRepo, w.checkpointAuditEmitter, nil
+		},
 		Logger:   slog.Default(),
+		TTL:      cryptoCfg.RekeyCheckpointTTL,
+		Interval: cryptoCfg.RekeyCheckpointSweepInterval,
+	})
+
+	// auditchain.VerifierSubsystem walks every registered hash chain at boot
+	// time (RekeyChain + policy_set + operator_read, when readstream wiring
+	// succeeds). NewVerifier(repo) is constructed inside Start once
+	// RepoProvider resolves — no pool exists at construction time post-plan.
+	cryptoChainVerifierSub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
+		RepoProvider: func() (chain.Repo, error) {
+			w, wErr := cryptoWiringFn()
+			if wErr != nil {
+				return nil, wErr
+			}
+			return w.chainRepo, nil
+		},
+		HandlersProvider: func() []chain.Handler {
+			// Safe error-free: the memoized build already succeeded — Start
+			// resolves RepoProvider first, and its error aborts the boot
+			// before HandlersProvider is ever called.
+			w, wErr := cryptoWiringFn()
+			if wErr != nil {
+				return nil
+			}
+			return w.chainHandlers
+		},
+		Logger: slog.Default(),
 	})
 
 	// Lifted ahead of admin subsystem construction (holomush-jxo8.9) so the
@@ -1062,14 +802,19 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	defer cancel()
 
 	adminSub := socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{
-		SocketPath:          adminSocketPath,
-		LockPath:            adminLockPath,
-		Version:             version,
-		AuthenticateHandler: authenticateHandler,
-		ApproveHandler:      approveHandler,
-		ResetTOTPHandler:    resetTOTPHandler,
-		RekeyHandler:        rekeyW.RekeyHandler,
-		ReadStreamHandler:   readStreamW.Handler,
+		SocketPath: adminSocketPath,
+		LockPath:   adminLockPath,
+		Version:    version,
+		// HandlersProvider resolves all five RPC handlers together, AFTER
+		// the disabled-mode (SocketPath == "") early return — a disabled
+		// admin socket never triggers the cryptoWiring build (07-09 item 9).
+		HandlersProvider: func() (socket.Handlers, error) {
+			w, wErr := cryptoWiringFn()
+			if wErr != nil {
+				return socket.Handlers{}, wErr
+			}
+			return w.adminHandlers, nil
+		},
 		Shutdown: func(err error) {
 			errutil.LogError(slog.Default(), "admin socket failure — cancelling root context", err)
 			cancel()
@@ -1077,29 +822,38 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	})
 
 	// --- 8. Orchestrator: register + start ---
-	// The database subsystem was pre-started (step 3) because the gameID must be
-	// available before TLS cert generation. Its Start() is idempotent, so the
-	// orchestrator will skip reconnection. It remains registered so other subsystems
-	// resolve their SubsystemDatabase dependency and so StopAll shuts it down last.
+	// Zero subsystem Start calls exist outside orch.StartAll (D-09/D-12 Wave
+	// A) — every dependency edge below (including TLS -> Database,
+	// Cluster -> Database, gRPC -> TLS/Cluster/CryptoChainVerifier,
+	// admin_socket -> CryptoChainVerifier) is expressed as a real DependsOn,
+	// resolved by topoSort, never by construction-order or a hand-sequenced
+	// pre-start.
 	orch := lifecycle.NewOrchestrator()
-	for _, sub := range productionSubsystems(
-		dbSub, abacSub, authSub, worldSub,
-		sessionSub, pluginSub, bootstrapSub,
-		cryptoChainVerifierSub,
-		eventBusSub, clusterSub, auditSub,
-		cryptoPolicySub,
-		grpcSub,
-		adminSub,
-		rekeyCheckpointSweepSub,
-		outboxRelaySub,
-	) {
+	for _, sub := range productionSubsystems(productionSubsystemSet{
+		Database:             dbSub,
+		TLS:                  tlsSub,
+		ABAC:                 abacSub,
+		Auth:                 authSub,
+		World:                worldSub,
+		Sessions:             sessionSub,
+		Plugins:              pluginSub,
+		Bootstrap:            bootstrapSub,
+		CryptoChainVerifier:  cryptoChainVerifierSub,
+		EventBus:             eventBusSub,
+		Cluster:              clusterSub,
+		AuditProjection:      auditSub,
+		CryptoPolicy:         cryptoPolicySub,
+		GRPC:                 grpcSub,
+		AdminSocket:          adminSub,
+		RekeyCheckpointSweep: rekeyCheckpointSweepSub,
+		OutboxRelay:          outboxRelaySub,
+	}) {
 		orch.Register(sub)
 	}
 
 	if orchErr := orch.StartAll(ctx); orchErr != nil {
 		return orchErr
 	}
-	eventBusOwnedByOrchestrator = true
 	defer orch.StopAll(context.Background())
 
 	// --- 9. Readiness gate ---
@@ -1153,10 +907,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	telemetry.EmitStartupSpan(ctx, "holomush-core", version, bootStart)
 
 	cmd.Println("Core process started")
+	// Safe to resolve here: orch.StartAll has returned, so the database
+	// subsystem (and therefore dbSub.GameID()) is guaranteed started.
 	slog.InfoContext(
 		ctx,
 		"core process ready",
-		"game_id", gameID,
+		"game_id", gameIDProvider(),
 		"grpc_addr", cfg.GRPCAddr,
 	)
 
@@ -1380,37 +1136,59 @@ func parseAutoMigrate() bool {
 	return true
 }
 
+// productionSubsystemSet names every subsystem registered with the
+// orchestrator. Replaces the former 16-position positional parameter list
+// (LOW-8 / D-14, 07-09 Task 3): a mis-ordered field is now a compile error
+// naming the wrong field, not a silently-accepted positional swap that only
+// topoSort's real DependsOn graph happened to defuse.
+type productionSubsystemSet struct {
+	Database             lifecycle.Subsystem
+	TLS                  lifecycle.Subsystem
+	ABAC                 lifecycle.Subsystem
+	Auth                 lifecycle.Subsystem
+	World                lifecycle.Subsystem
+	Sessions             lifecycle.Subsystem
+	Plugins              lifecycle.Subsystem
+	Bootstrap            lifecycle.Subsystem
+	CryptoChainVerifier  lifecycle.Subsystem
+	EventBus             lifecycle.Subsystem
+	Cluster              lifecycle.Subsystem
+	AuditProjection      lifecycle.Subsystem
+	CryptoPolicy         lifecycle.Subsystem
+	GRPC                 lifecycle.Subsystem
+	AdminSocket          lifecycle.Subsystem
+	RekeyCheckpointSweep lifecycle.Subsystem
+	OutboxRelay          lifecycle.Subsystem
+}
+
 // productionSubsystems returns the ordered list of subsystems registered
 // with the orchestrator. Extracted as a helper so regression tests can
-// assert on the production set without spinning up the full server.
-func productionSubsystems(
-	dbSub, abacSub, authSub, worldSub,
-	sessionSub, pluginSub, bootstrapSub,
-	cryptoChainVerifierSub,
-	eventBusSub, clusterSub, auditSub,
-	cryptoPolicySub,
-	grpcSub,
-	adminSub,
-	rekeyCheckpointSweepSub,
-	outboxRelaySub lifecycle.Subsystem,
-) []lifecycle.Subsystem {
+// assert on the production set without spinning up the full server. The
+// SLICE order is cosmetic — topoSort (internal/lifecycle/orchestrator.go)
+// derives the real start order from each subsystem's DependsOn(); this is
+// documentation, not enforcement.
+func productionSubsystems(s productionSubsystemSet) []lifecycle.Subsystem {
 	return []lifecycle.Subsystem{
-		dbSub, abacSub, authSub, worldSub,
-		sessionSub, pluginSub, bootstrapSub,
-		cryptoChainVerifierSub, // runs before EventBus (chain integrity check)
-		eventBusSub, clusterSub, auditSub,
-		cryptoPolicySub, // runs after AuditProjection (policy snapshot emit)
-		grpcSub, adminSub,
+		s.Database,
+		// TLS declares DependsOn(Database) — the gameID edge that used to be
+		// a hand-sequenced DB pre-start (07-09 Task 1).
+		s.TLS,
+		s.ABAC, s.Auth, s.World,
+		s.Sessions, s.Plugins, s.Bootstrap,
+		s.CryptoChainVerifier, // runs before EventBus (chain integrity check)
+		s.EventBus, s.Cluster, s.AuditProjection,
+		s.CryptoPolicy, // runs after AuditProjection (policy snapshot emit)
+		s.GRPC, s.AdminSocket,
 		// Sweep auto-aborts non-terminal rekey checkpoints whose heartbeat
 		// has exceeded TTL. Runs after CryptoChainVerifier (chain integrity
 		// confirmed), EventBus (audit events route to JetStream), and
 		// AuditProjection (emitted events land in events_audit). Per
 		// spec §6.2 / Task 28 DependsOn declaration. Sub-epic E T37
 		// (holomush-jxo8.7.34).
-		rekeyCheckpointSweepSub,
+		s.RekeyCheckpointSweep,
 		// OutboxRelaySubsystem (MODEL-04, 05-07): DependsOn Database + EventBus;
 		// registered after eventBusSub so the relay starts once the bus is up.
-		outboxRelaySub,
+		s.OutboxRelay,
 	}
 }
 

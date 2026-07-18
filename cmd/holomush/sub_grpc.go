@@ -77,8 +77,14 @@ type grpcSubsystemConfig struct {
 	// not to the PostgreSQL events table.
 	EventBus *eventbus.Subsystem
 
-	GRPCAddr       string
+	GRPCAddr string
+	// TLSConfig is a given value for callers that already hold a resolved
+	// TLS config at construction (test literals). TLSProvider, resolved
+	// once at the top of Start, is the production path — it wins when
+	// non-nil (07-09 item 2/Task 1). Backed by tlscerts.TLSSubsystem's
+	// panic-guarded TLSConfig() accessor.
 	TLSConfig      *cryptotls.Config
+	TLSProvider    func() *cryptotls.Config
 	SessionTTL     time.Duration
 	ReaperInterval time.Duration
 	LeaseTTL       time.Duration
@@ -116,6 +122,22 @@ type grpcSubsystemConfig struct {
 	// asserts pointer-identity between the two. When nil, both paths
 	// fall back to identity decoding.
 	KeySelector codec.KeySelector
+
+	// CryptoWiring is the memoized cryptoWiring builder (cryptowiring.go).
+	// grpcSubsystem is the one consumer in package main, so it may hold
+	// func() (*cryptoWiring, error) directly rather than a narrow
+	// consumer-owned provider type (round 5, BLOCKER 4). Resolved at the
+	// top of Start; its RekeyManager output feeds AuthGuard/AuditEmitter
+	// construction, and — as a side effect of the FIRST resolution in the
+	// running system — the invalidation.Coordinator is constructed and
+	// started here too (07-09 item 4).
+	CryptoWiring func() (*cryptoWiring, error)
+
+	// CoordHolder is the late-bound holder the cryptoWiring builder
+	// publishes the invalidation.Coordinator into. Stop uses it to drive
+	// the Coordinator's shutdown (07-09 item 4 — replaces the ad-hoc
+	// runCore-level defer with orchestrator-ordered Stop).
+	CoordHolder *coordHolder
 }
 
 // grpcSubsystem is the terminal subsystem that wires the gRPC server.
@@ -169,12 +191,26 @@ func (s *grpcSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemG
 // Bootstrap transitively depends on ABAC, World, Plugins, Database.
 // EventBus is required so the Publisher is ready when ConfigureEventEmitter
 // runs (F1 cutover: plugin emits publish to JetStream).
+//
+// TLS is required because Start resolves TLSProvider (07-09 item 2). Cluster
+// is required because the invalidation.Coordinator (built as a side effect
+// of the first CryptoWiring resolution) needs Registry: clusterSub (07-09
+// item 4). CryptoChainVerifier is the T-07-51 re-scope (07-09 item 8): gRPC
+// binds its TCP listener only after the INV-CRYPTO-102 chain walk has run.
+// Database/Auth/ABAC are THE RULE's cryptoWiring consumer superset — this
+// subsystem holds a CryptoWiring provider, and whichever consumer resolves
+// it first builds it, so every consumer must declare the full set.
 func (s *grpcSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{
 		lifecycle.SubsystemBootstrap,
 		lifecycle.SubsystemSessions,
 		lifecycle.SubsystemAuth,
 		lifecycle.SubsystemEventBus,
+		lifecycle.SubsystemTLS,
+		lifecycle.SubsystemCluster,
+		lifecycle.SubsystemCryptoChainVerifier,
+		lifecycle.SubsystemDatabase,
+		lifecycle.SubsystemABAC,
 	}
 }
 
@@ -230,6 +266,31 @@ func subscriberOptionsFor(
 func (s *grpcSubsystem) Start(ctx context.Context) error {
 	if s.grpcServer != nil {
 		return nil // already started
+	}
+
+	// Resolve the TLS config provider (07-09 item 2) — wins over the given
+	// TLSConfig field when non-nil. Backed by tlscerts.TLSSubsystem's
+	// panic-guarded accessor; DependsOn(SubsystemTLS) guarantees Start has
+	// already run.
+	if s.cfg.TLSProvider != nil {
+		s.cfg.TLSConfig = s.cfg.TLSProvider()
+	}
+
+	// Resolve the cryptoWiring builder (07-09 items 4 + 9). This is the
+	// FIRST call to CryptoWiring in the running system (grpcSub depends,
+	// transitively or directly, on every other wiring consumer's
+	// dependencies), so it is also where the invalidation.Coordinator gets
+	// constructed + started, as a side effect inside the builder.
+	if s.cfg.CryptoWiring != nil {
+		w, wiringErr := s.cfg.CryptoWiring()
+		if wiringErr != nil {
+			return wiringErr
+		}
+		// Thread the production dek.Manager so Start() below can construct
+		// the AuthGuard + AuditEmitter for INV-CRYPTO-22 FallbackResolver.
+		// When nil (KEK unavailable), the history reader keeps nil-auth
+		// passthrough.
+		s.cfg.RekeyManager = w.rekeyManager
 	}
 
 	// Gather dependencies from subsystems.
@@ -823,6 +884,16 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
 			slog.DebugContext(ctx, "error closing gRPC listener", "error", err)
+		}
+	}
+	// grpcSubsystem owns the invalidation.Coordinator's lifecycle (07-09
+	// item 4) — replaces the former runCore-level ad-hoc defer with
+	// orchestrator-ordered Stop. CoordHolder.coord is nil when the wiring
+	// was never resolved (CryptoWiring nil, e.g. some unit-test configs) or
+	// when the Coordinator degraded-path construction/start failed.
+	if s.cfg.CoordHolder != nil && s.cfg.CoordHolder.coord != nil {
+		if stopErr := s.cfg.CoordHolder.coord.Stop(ctx); stopErr != nil {
+			slog.WarnContext(ctx, "invalidation.Coordinator stop error", "error", stopErr)
 		}
 	}
 	return nil

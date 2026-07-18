@@ -54,18 +54,23 @@ func TestStartOptionsApplyToConfig(t *testing.T) {
 func TestStartWithExternalNATSAndSharedDatabaseWiresBothReplicas(t *testing.T) {
 	ctx := context.Background()
 
-	env, err := natstest.StartNATS(ctx)
-	require.NoError(t, err, "start shared NATS broker")
+	// Scoped (not a bare unscoped node): a full eventbus.Subsystem.Start now
+	// runs VerifyAccountScoping (07-09) inside Start itself, which refuses a
+	// bare/unscoped broker with EVENTBUS_ACCOUNT_OVERSCOPED by design.
+	env, err := natstest.StartScopedNATS(ctx)
+	require.NoError(t, err, "start shared scoped NATS broker")
 	t.Cleanup(func() { _ = env.Terminate(context.Background()) })
 
+	scopedURL := natstest.ScopedURL(env.URL)
+
 	// Replica A: external broker + a fresh per-test database.
-	replicaA := Start(t, WithExternalNATS(env.URL))
+	replicaA := Start(t, WithExternalNATS(scopedURL))
 	require.NotNil(t, replicaA)
 	require.NotEmpty(t, replicaA.ConnStr(), "replica A exposes its fresh database connStr")
 	require.NotNil(t, replicaA.Bus(), "WithExternalNATS wires a real bus on replica A")
 
 	// Replica B: SAME broker + SAME database as replica A.
-	replicaB := Start(t, WithExternalNATS(env.URL), WithSharedDatabase(replicaA.ConnStr()))
+	replicaB := Start(t, WithExternalNATS(scopedURL), WithSharedDatabase(replicaA.ConnStr()))
 	require.NotNil(t, replicaB)
 	require.Equal(t, replicaA.ConnStr(), replicaB.ConnStr(),
 		"WithSharedDatabase joins replica A's database")

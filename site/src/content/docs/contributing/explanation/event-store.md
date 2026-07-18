@@ -86,9 +86,14 @@ Subjects follow NATS dot-delimited conventions (spec §1c):
 events.<game_id>.<domain>.<entity-id>[.<facet>...]
 ```
 
-`<game_id>` is set via `event_bus.game_id` in server config (default: `main`).
-Single-game deployments use a literal; the game-id segment is reserved for
-future multi-tenancy.
+`<game_id>` resolves from the global `game_id` config key when explicitly
+set. Otherwise it's derived from the database at first boot (`InitGameID`)
+and resolved into the bus at `Start` via its game-id provider — the
+event-bus-scoped `event_bus.game_id` key is superseded on the production boot
+path and no longer sets the subject's game-id segment. An install that needs
+a stable `events.main.*` namespace across an upgrade sets the global
+`game_id: main` explicitly. Single-game deployments use a literal; the
+game-id segment is reserved for future multi-tenancy.
 
 | Subject | Owner | Examples |
 | ------- | ----- | -------- |

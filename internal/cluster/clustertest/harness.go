@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventbus/natsconn"
 	"github.com/holomush/holomush/internal/idgen"
 )
 
@@ -113,7 +114,7 @@ func New(t TB, clusterID string, n int, opts ...Option) *Harness {
 		// production observability/metrics will see.
 		memberID := cluster.MemberID(idgen.New().String())
 		reg, err := cluster.NewSubsystem(cfg, cluster.Deps{
-			Conn:          emb.Conn,
+			ConnProvider:  cluster.ConnProviderFunc(func() natsconn.Conn { return emb.Conn }),
 			Logger:        logger,
 			Pill:          pill,
 			SelfIDForTest: memberID,

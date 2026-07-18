@@ -23,15 +23,20 @@ func (s stubSubsystem) DependsOn() []lifecycle.SubsystemID { return nil }
 func (s stubSubsystem) Start(_ context.Context) error      { return nil }
 func (s stubSubsystem) Stop(_ context.Context) error       { return nil }
 
-// allStubs returns the full 16-element stub list in production order.
+// allStubs returns the full 17-element stub list in production order.
 // Callers that only care about presence can use this; callers that care about
 // position should build the slice inline so the ordering is explicit.
 //
+// Index 1 (SubsystemTLS) was added in 07-09 Task 3 (D-12 Wave A, LOW-8):
+// productionSubsystems switched from a 16-position positional parameter list
+// to the named productionSubsystemSet struct, and TLS finally registers as a
+// real subsystem.
 // Index 14 (SubsystemRekeyCheckpointSweep) was added in sub-epic E Task 6.
 // Index 15 (SubsystemOutboxRelay) was added in Phase 5 05-07 (MODEL-04 relay).
-func allStubs() [16]stubSubsystem {
-	return [16]stubSubsystem{
+func allStubs() [17]stubSubsystem {
+	return [17]stubSubsystem{
 		{id: lifecycle.SubsystemDatabase},
+		{id: lifecycle.SubsystemTLS},
 		{id: lifecycle.SubsystemABAC},
 		{id: lifecycle.SubsystemAuth},
 		{id: lifecycle.SubsystemWorld},
@@ -50,14 +55,34 @@ func allStubs() [16]stubSubsystem {
 	}
 }
 
+// setFromStubs builds a productionSubsystemSet from allStubs()'s 17-element
+// array, mirroring the field order documented on allStubs.
+func setFromStubs(s [17]stubSubsystem) productionSubsystemSet {
+	return productionSubsystemSet{
+		Database:             s[0],
+		TLS:                  s[1],
+		ABAC:                 s[2],
+		Auth:                 s[3],
+		World:                s[4],
+		Sessions:             s[5],
+		Plugins:              s[6],
+		Bootstrap:            s[7],
+		CryptoChainVerifier:  s[8],
+		EventBus:             s[9],
+		Cluster:              s[10],
+		AuditProjection:      s[11],
+		CryptoPolicy:         s[12],
+		GRPC:                 s[13],
+		AdminSocket:          s[14],
+		RekeyCheckpointSweep: s[15],
+		OutboxRelay:          s[16],
+	}
+}
+
 // TestProductionSubsystemsIncludesCluster asserts that the production
 // subsystem slice includes SubsystemCluster.
 func TestProductionSubsystemsIncludesCluster(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	found := false
 	for _, sub := range subs {
@@ -69,8 +94,8 @@ func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 	if !found {
 		t.Fatal("productionSubsystems does not include SubsystemCluster")
 	}
-	if len(subs) != 16 {
-		t.Errorf("productionSubsystems returned %d subsystems; want 16 after Phase 5 05-07 OutboxRelay", len(subs))
+	if len(subs) != 17 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 17 after 07-09 TLS registration", len(subs))
 	}
 }
 
@@ -111,11 +136,7 @@ func TestSubsystemAdminSocketConstantExists(t *testing.T) {
 // TestProductionSubsystemsIncludesAdminSocket verifies AC-C10: the admin
 // socket subsystem is present in the production orchestrator slice.
 func TestProductionSubsystemsIncludesAdminSocket(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	found := false
 	for _, sub := range subs {
@@ -129,14 +150,27 @@ func TestProductionSubsystemsIncludesAdminSocket(t *testing.T) {
 	}
 }
 
+// TestProductionSubsystemsIncludesTLS verifies 07-09 Task 3: TLS is finally
+// registered in the production orchestrator slice.
+func TestProductionSubsystemsIncludesTLS(t *testing.T) {
+	subs := productionSubsystems(setFromStubs(allStubs()))
+
+	found := false
+	for _, sub := range subs {
+		if sub.ID() == lifecycle.SubsystemTLS {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("productionSubsystems does not include SubsystemTLS")
+	}
+}
+
 // TestProductionSubsystemsIncludesCryptoChainVerifier verifies that
 // CryptoChainVerifier appears between Bootstrap and EventBus in the slice.
 func TestProductionSubsystemsIncludesCryptoChainVerifier(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	bootstrapIdx := -1
 	verifierIdx := -1
@@ -166,11 +200,7 @@ func TestProductionSubsystemsIncludesCryptoChainVerifier(t *testing.T) {
 // TestProductionSubsystemsIncludesCryptoPolicy verifies that CryptoPolicy
 // appears between AuditProjection and gRPC in the slice.
 func TestProductionSubsystemsIncludesCryptoPolicy(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	auditIdx := -1
 	policyIdx := -1
@@ -202,11 +232,7 @@ func TestProductionSubsystemsIncludesCryptoPolicy(t *testing.T) {
 // EventBus, and AuditProjection per Task 28's DependsOn declaration
 // (sub-epic E T37 / holomush-jxo8.7.34).
 func TestProductionSubsystemsIncludesRekeyCheckpointSweep(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	indexOf := func(id lifecycle.SubsystemID) int {
 		for i, sub := range subs {
@@ -233,8 +259,8 @@ func TestProductionSubsystemsIncludesRekeyCheckpointSweep(t *testing.T) {
 	if sweepIdx <= auditProjIdx {
 		t.Errorf("sweep (%d) must run after AuditProjection (%d)", sweepIdx, auditProjIdx)
 	}
-	if len(subs) != 16 {
-		t.Errorf("productionSubsystems returned %d subsystems; want 16 after Phase 5 05-07 OutboxRelay", len(subs))
+	if len(subs) != 17 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 17 after 07-09 TLS registration", len(subs))
 	}
 }
 
@@ -242,11 +268,7 @@ func TestProductionSubsystemsIncludesRekeyCheckpointSweep(t *testing.T) {
 // MODEL-04 relay (05-07) is present AND positioned after EventBus + Database
 // (its declared dependencies).
 func TestProductionSubsystemsIncludesOutboxRelayAfterEventBus(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	indexOf := func(id lifecycle.SubsystemID) int {
 		for i, sub := range subs {

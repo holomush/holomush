@@ -1,9 +1,9 @@
+//go:build integration
+
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-//go:build integration
-
-package main
+package setup
 
 import (
 	"bytes"

@@ -98,10 +98,13 @@ type AdminDepsProvider interface {
 // contribution path (auto_focus_on_join → hostfunc.StreamRegistry call) can
 // look up a character's active session streams.
 type PluginSubsystemConfig struct {
-	DataDir            string
-	DatabaseConnStr    string   // PostgreSQL connection string for schema provisioning
-	CertsDir           string   // path to game certs directory (for loading CA)
-	GameID             string   // game ID for cert SANs
+	DataDir         string
+	DatabaseConnStr string // PostgreSQL connection string for schema provisioning
+	CertsDir        string // path to game certs directory (for loading CA)
+	// GameID resolves the game ID at Start time (07-09 item 7) — a
+	// provider, not a live value; used for cert SANs and stream
+	// qualification. A nil provider resolves to "".
+	GameID             func() string
 	TrustAllowlist     []string // server-side plugin trust escalation allowlist
 	ABAC               EngineProvider
 	PolicyInst         PolicyInstallerProvider
@@ -170,6 +173,14 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Resolve the gameID provider once, feeding all three reads below
+	// (hostfunc.WithGameID, goplugin.WithGameID, goplugin.WithCA) — 07-09
+	// item 7.
+	var gameID string
+	if s.cfg.GameID != nil {
+		gameID = s.cfg.GameID()
+	}
+
 	sessionStore := s.cfg.Sessions.SessionStore()
 
 	// 2. Create capability registry for requires-based Lua function injection.
@@ -193,7 +204,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		hostfunc.WithCapabilities(capRegistry),
 		// Qualifies domain-relative stream refs before the ambient
 		// query_stream_history ABAC gate (holomush-xakba).
-		hostfunc.WithGameID(s.cfg.GameID),
+		hostfunc.WithGameID(gameID),
 	}
 	if s.cfg.StreamRegistry != nil {
 		hostFuncOpts = append(hostFuncOpts, hostfunc.WithStreamRegistry(s.cfg.StreamRegistry))
@@ -289,7 +300,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		goplugin.WithServiceRegistry(s.registry),
 		// Game ID for stream qualification, wired unconditionally (independent of
 		// WithCA/mTLS) so stream.history works for no-mTLS binary plugins (holomush-xakba).
-		goplugin.WithGameID(s.cfg.GameID),
+		goplugin.WithGameID(gameID),
 		// Wire the ABAC engine so host.v1 EvalService.Evaluate resolves (holomush-8kkv5.18).
 		// This MUST use the same engine instance as s.cfg.ABAC.Engine() above — the Lua
 		// hostfunc bridge (hostfunc.WithEngine) is wired from the same call, and the
@@ -315,7 +326,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		if caErr != nil {
 			slog.WarnContext(ctx, "plugin mTLS disabled: could not load CA", "error", caErr)
 		} else {
-			hostOpts = append(hostOpts, goplugin.WithCA(ca, s.cfg.GameID))
+			hostOpts = append(hostOpts, goplugin.WithCA(ca, gameID))
 			slog.InfoContext(ctx, "plugin mTLS enabled", "certs_dir", s.cfg.CertsDir)
 		}
 	}

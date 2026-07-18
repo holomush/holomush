@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package main
+package setup
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/holomush/holomush/internal/auth/postgres"
+	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 )
 
 // validateCryptoOperators cross-checks the configured operator list against
@@ -37,6 +37,13 @@ import (
 // The ([]string, error) return shape is preserved for forward-compatibility
 // with sub-epic D, which may add a fail-closed mode. In Phase 5 sub-epic
 // B (lax+warn), the error is always nil — see INV-B5.
+//
+// Relocated verbatim from cmd/holomush/crypto_operator_validation.go (07-09
+// item 6) — ABAC already owns the pool + Database edge its Start needs to
+// validate against; routing validation through the wiring builder
+// instead would make ABAC a wiring consumer and close a second
+// ABAC -> wiring -> ABAC cycle (THE RULE forces every wiring consumer
+// to DependsOn SubsystemABAC).
 //
 //nolint:unparam // error result is always nil today; preserved for sub-epic D fail-closed mode.
 func validateCryptoOperators(
@@ -65,7 +72,7 @@ func validateCryptoOperators(
 	// reproducibility) — set→slice iteration order is randomized in Go.
 	sort.Strings(deduped)
 
-	repo := postgres.NewPlayerRepository(pool)
+	repo := authpostgres.NewPlayerRepository(pool)
 	found, err := repo.ExistingIDs(ctx, deduped)
 	if err != nil {
 		// Lax+warn: a transient PG failure (e.g., readiness race during

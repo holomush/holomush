@@ -52,11 +52,19 @@ func TestCryptoPolicySubsystemIDReturnsCryptoPolicy(t *testing.T) {
 	assert.Equal(t, lifecycle.SubsystemCryptoPolicy, s.ID())
 }
 
-func TestCryptoPolicySubsystemDependsOnAuditProjection(t *testing.T) {
+// TestCryptoPolicySubsystemDependsOnAuditProjectionAndCryptoWiringSuperset
+// asserts the exact grown DependsOn set (07-09 item 9) — AuditProjection
+// plus THE RULE's wiring consumer superset {Database, Auth, ABAC,
+// EventBus}.
+func TestCryptoPolicySubsystemDependsOnAuditProjectionAndCryptoWiringSuperset(t *testing.T) {
 	s := policy.NewCryptoPolicySubsystem(policy.CryptoPolicySubsystemConfig{})
-	deps := s.DependsOn()
-	require.Len(t, deps, 1)
-	assert.Equal(t, lifecycle.SubsystemAuditProjection, deps[0])
+	assert.Equal(t, []lifecycle.SubsystemID{
+		lifecycle.SubsystemAuditProjection,
+		lifecycle.SubsystemDatabase,
+		lifecycle.SubsystemAuth,
+		lifecycle.SubsystemABAC,
+		lifecycle.SubsystemEventBus,
+	}, s.DependsOn())
 }
 
 func TestCryptoPolicySubsystemStopIsNoOp(t *testing.T) {

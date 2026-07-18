@@ -35,10 +35,12 @@ type ABACSubsystemConfig struct {
 	DB        PoolProvider
 	Registry  *lifecycle.ReadinessRegistry
 	AuditMode audit.Mode
-	// CryptoOperators is the list of player IDs (ULIDs) holding the
-	// crypto.operator capability. Forwarded verbatim to ABACConfig and
-	// ultimately to PlayerAttributeProvider. Empty / nil → no operators
-	// (break-glass disabled). Sub-epic B (Phase 5).
+	// CryptoOperators is the RAW configured list of player IDs (ULIDs) —
+	// straight from crypto.operators config, not yet cross-checked against
+	// the players table. Start validates it (validateCryptoOperators,
+	// lax+warn) against this subsystem's own pool and forwards the
+	// validated/deduplicated slice to ABACConfig / PlayerAttributeProvider.
+	// Empty / nil → no operators (break-glass disabled). Sub-epic B (Phase 5).
 	CryptoOperators []string
 }
 
@@ -78,6 +80,16 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 	}
 	pool := s.cfg.DB.Pool()
 
+	// Cross-check the configured crypto.operator allow-list against the
+	// players table. Lax+warn: unknown IDs and transient PG failures emit
+	// a structured warning but MUST NOT gate startup (Phase 5 sub-epic B
+	// INV-B5 / INV-B7). validateCryptoOperators always returns nil error in
+	// Phase 5 sub-epic B (lax+warn); the signature reserves the slot for a
+	// future fail-closed mode (sub-epic D), but today there is no error
+	// path to handle. Relocated from cmd/holomush (07-09 item 6) — this is
+	// the first point after Start where the pool exists.
+	operators, _ := validateCryptoOperators(ctx, pool, s.cfg.CryptoOperators, slog.Default()) //nolint:errcheck // Phase 5 sub-epic B is lax+warn; sub-epic D will rewire to handle errors here.
+
 	roleStore := store.NewPostgresRoleStore(pool)
 	playerRepo := authpostgres.NewPlayerRepository(pool)
 	stack, err := BuildABACStack(ctx, ABACConfig{
@@ -89,7 +101,7 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 		ParentLocationResolver: postgres.NewParentLocationResolver(pool),
 		RoleStore:              roleStore,
 		AuditMode:              s.cfg.AuditMode,
-		CryptoOperators:        s.cfg.CryptoOperators,
+		CryptoOperators:        operators,
 		PlayerKindLookup: func(ctx context.Context, playerID string) (bool, error) {
 			id, err := ulid.Parse(playerID)
 			if err != nil {

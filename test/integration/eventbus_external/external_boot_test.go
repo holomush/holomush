@@ -50,8 +50,10 @@ const (
 	dupeWindow      = 30 * time.Minute
 )
 
-// startExternalNATS boots a fresh single-node NATS container and registers its
-// teardown on the spec.
+// startExternalNATS boots a fresh single-node NATS container with NO account
+// restrictions and registers its teardown on the spec. Also used by
+// scopecheck_test.go's Case A, which deliberately needs a bare/unscoped node
+// (see that file) — do NOT switch this helper to the scoped container.
 func startExternalNATS(ctx context.Context) *natstest.NATSEnv {
 	env, err := natstest.StartNATS(ctx)
 	Expect(err).NotTo(HaveOccurred(), "StartNATS should return a running container")
@@ -61,13 +63,30 @@ func startExternalNATS(ctx context.Context) *natstest.NATSEnv {
 	return env
 }
 
-// newExternalSubsystem builds an external-mode subsystem for url with the given
-// provision policy and stream retention. FileStorage matches the container's
-// -sd JetStream store.
+// startScopedExternalNATS boots a fresh single-node NATS container loading
+// the shipped CLUSTER-02 scoped account (deploy/nats/cluster-server.conf) and
+// registers its teardown on the spec. Scoped (not a bare unscoped node) so
+// that a full eventbus.Subsystem.Start — dial + EnsureStream +
+// VerifyAccountScoping (07-09) — succeeds against it; a bare node is
+// deliberately over-scoped by design (see this package's scopecheck_test.go
+// Case A) and would refuse to boot with EVENTBUS_ACCOUNT_OVERSCOPED.
+func startScopedExternalNATS(ctx context.Context) *natstest.NATSEnv {
+	env, err := natstest.StartScopedNATS(ctx)
+	Expect(err).NotTo(HaveOccurred(), "StartScopedNATS should return a running container")
+	DeferCleanup(func() {
+		_ = env.Terminate(context.Background())
+	})
+	return env
+}
+
+// newExternalSubsystem builds an external-mode subsystem for the scoped
+// server credentials at url (see startExternalNATS) with the given provision
+// policy and stream retention. FileStorage matches the container's JetStream
+// store (store_dir set in cluster-server.conf).
 func newExternalSubsystem(url string, provision *bool, maxAge time.Duration) *eventbus.Subsystem {
 	cfg := eventbus.Config{
 		Mode:         eventbus.ModeExternal,
-		URL:          url,
+		URL:          natstest.ScopedURL(url),
 		StreamMaxAge: maxAge,
 		DupeWindow:   dupeWindow,
 		Provision:    provision,
@@ -80,10 +99,12 @@ func newExternalSubsystem(url string, provision *bool, maxAge time.Duration) *ev
 func boolPtr(b bool) *bool { return &b }
 
 // eventsStreamExists reports whether the EVENTS stream is present on the broker
-// at url, dialing an independent connection so it observes broker state rather
-// than any subsystem's cached view.
+// at url, dialing an independent connection (authenticated as the scoped
+// server principal — js.Stream is a JetStream API call, requiring the
+// $JS.API.> grant) so it observes broker state rather than any subsystem's
+// cached view.
 func eventsStreamExists(ctx context.Context, url string) bool {
-	conn, err := nats.Connect(url)
+	conn, err := nats.Connect(natstest.ScopedURL(url))
 	Expect(err).NotTo(HaveOccurred())
 	defer conn.Close()
 	js, err := jetstream.New(conn)
@@ -107,7 +128,7 @@ var _ = Describe("External-mode event bus boot (CLUSTER-01)", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), specTimeout)
 			DeferCleanup(cancel)
 
-			env := startExternalNATS(ctx)
+			env := startScopedExternalNATS(ctx)
 			sub := newExternalSubsystem(env.URL, nil, streamMaxAge) // provision default (true)
 			Expect(sub.Start(ctx)).To(Succeed())
 			DeferCleanup(func() { _ = sub.Stop(context.Background()) })
@@ -140,7 +161,7 @@ var _ = Describe("External-mode event bus boot (CLUSTER-01)", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), specTimeout)
 			DeferCleanup(cancel)
 
-			env := startExternalNATS(ctx)
+			env := startScopedExternalNATS(ctx)
 
 			// Provision the stream first via a provision:true subsystem, then
 			// stop it (external Stop drains the conn; the stream persists on the
@@ -161,7 +182,7 @@ var _ = Describe("External-mode event bus boot (CLUSTER-01)", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), specTimeout)
 			DeferCleanup(cancel)
 
-			env := startExternalNATS(ctx)
+			env := startScopedExternalNATS(ctx)
 
 			// Provision EVENTS with a DIFFERENT retention than the verifier wants.
 			provisioner := newExternalSubsystem(env.URL, boolPtr(true), altStreamMaxAge)

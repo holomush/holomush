@@ -166,9 +166,9 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 		// Production verifier path (loads from events_audit, two-step decode,
 		// walks chain): clean genesis chain MUST verify.
 		verifier := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-			Repo:     chain.NewPostgresRepo(pool),
-			Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
-			Logger:   slog.Default(),
+			Repo:             chain.NewPostgresRepo(pool),
+			HandlersProvider: func() []chain.Handler { return []chain.Handler{policy.PolicySetHandlerFor(gameID)} },
+			Logger:           slog.Default(),
 		})
 		Expect(verifier.Start(ctx)).To(Succeed(),
 			"genesis chain MUST pass verifier")
@@ -213,9 +213,9 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 
 		// Production verifier path on the clean two-row chain MUST succeed.
 		verifier := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-			Repo:     chain.NewPostgresRepo(pool),
-			Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
-			Logger:   slog.Default(),
+			Repo:             chain.NewPostgresRepo(pool),
+			HandlersProvider: func() []chain.Handler { return []chain.Handler{policy.PolicySetHandlerFor(gameID)} },
+			Logger:           slog.Default(),
 		})
 		Expect(verifier.Start(ctx)).To(Succeed(),
 			"two-row chain MUST pass verifier on second-boot path")
@@ -233,9 +233,9 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 
 		// Sanity: clean chain verifies.
 		cleanVerifier := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-			Repo:     chain.NewPostgresRepo(pool),
-			Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
-			Logger:   slog.Default(),
+			Repo:             chain.NewPostgresRepo(pool),
+			HandlersProvider: func() []chain.Handler { return []chain.Handler{policy.PolicySetHandlerFor(gameID)} },
+			Logger:           slog.Default(),
 		})
 		Expect(cleanVerifier.Start(ctx)).To(Succeed(),
 			"sanity: clean chain MUST verify before tamper")
@@ -258,9 +258,9 @@ var _ = Describe("admin policy_chain integrity (E2E, INV-CRYPTO-77/INV-CRYPTO-78
 		// non-nil error; in production this propagates up through
 		// lifecycle.Run and the server refuses to boot.
 		tamperedVerifier := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-			Repo:     chain.NewPostgresRepo(pool),
-			Handlers: []chain.Handler{policy.PolicySetHandlerFor(gameID)},
-			Logger:   slog.Default(),
+			Repo:             chain.NewPostgresRepo(pool),
+			HandlersProvider: func() []chain.Handler { return []chain.Handler{policy.PolicySetHandlerFor(gameID)} },
+			Logger:           slog.Default(),
 		})
 		err := tamperedVerifier.Start(ctx)
 		Expect(err).To(HaveOccurred(),

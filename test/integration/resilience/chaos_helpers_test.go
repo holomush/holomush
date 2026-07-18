@@ -61,12 +61,17 @@ func newWorldService(s *integrationtest.Server) *world.Service {
 	})
 }
 
-// startExternalNATS boots a fresh single-node NATS JetStream container and
-// registers its teardown on the spec. Copied from the eventbus_external suite —
-// the transport-only helper that hands each replica its own connection.
+// startExternalNATS boots a fresh single-node NATS JetStream container loading
+// the shipped CLUSTER-02 scoped account (deploy/nats/cluster-server.conf) and
+// registers its teardown on the spec. Scoped (not a bare unscoped node) so
+// that a full eventbus.Subsystem.Start — dial + EnsureStream +
+// VerifyAccountScoping (07-09) — succeeds against it; a bare node is
+// deliberately over-scoped by design and would refuse to boot with
+// EVENTBUS_ACCOUNT_OVERSCOPED (see test/integration/eventbus_external's
+// scopecheck_test.go Case A).
 func startExternalNATS(ctx context.Context) *natstest.NATSEnv {
-	env, err := natstest.StartNATS(ctx)
-	Expect(err).NotTo(HaveOccurred(), "StartNATS should return a running container")
+	env, err := natstest.StartScopedNATS(ctx)
+	Expect(err).NotTo(HaveOccurred(), "StartScopedNATS should return a running container")
 	DeferCleanup(func() {
 		_ = env.Terminate(context.Background())
 	})
@@ -80,7 +85,7 @@ func startExternalNATS(ctx context.Context) *natstest.NATSEnv {
 // add WithInTreePlugins for a heavier scenario).
 func startReplica(t *testing.T, url, connStr string, extra ...integrationtest.StartOption) *integrationtest.Server {
 	t.Helper()
-	opts := []integrationtest.StartOption{integrationtest.WithExternalNATS(url)}
+	opts := []integrationtest.StartOption{integrationtest.WithExternalNATS(natstest.ScopedURL(url))}
 	if connStr != "" {
 		opts = append(opts, integrationtest.WithSharedDatabase(connStr))
 	}

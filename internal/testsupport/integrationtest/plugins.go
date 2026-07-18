@@ -323,7 +323,7 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		// host calls can qualify a domain-RELATIVE ref (channel.<id>) to the full
 		// events.<game>.channel.<id> subject. Without it the mid-session
 		// AddSessionStream fails STREAM_QUALIFY_FAILED and live delivery degrades.
-		GameID:                d.gameID,
+		GameID:                func() string { return d.gameID },
 		LuaTimeout:            5 * time.Second,
 		LuaRegistryMaxSize:    1024 * 1024,
 		PluginConfigOverrides: d.pluginConfigOverrides,

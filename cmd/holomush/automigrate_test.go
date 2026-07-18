@@ -78,9 +78,16 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		GRPCAddr:           "localhost:9000",
-		ControlAddr:        "127.0.0.1:9001",
-		MetricsAddr:        "", // Disable metrics for this test
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		// Non-empty so ObservabilityServerFactory (mockObservabilityServer,
+		// whose Registerer() returns a fresh prometheus.Registry per call)
+		// is invoked — D-09 (07-09) means construction now reaches the
+		// cluster-metrics registration step unconditionally, and an empty
+		// MetricsAddr would fall back to the shared
+		// prometheus.DefaultRegisterer, colliding with any other test in
+		// this binary that also reaches that point.
+		MetricsAddr:        "127.0.0.1:0",
 		LogFormat:          "json",
 		LuaTimeout:         1 * time.Second,
 		LuaRegistryMaxSize: 65536,
@@ -134,9 +141,13 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		GRPCAddr:           "localhost:9000",
-		ControlAddr:        "127.0.0.1:9001",
-		MetricsAddr:        "",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		// Non-empty so the mock observability server's isolated registry
+		// is used instead of the shared prometheus.DefaultRegisterer (see
+		// TestAutoMigrate_RunsByDefault's comment above for the full
+		// rationale).
+		MetricsAddr:        "127.0.0.1:0",
 		LogFormat:          "json",
 		LuaTimeout:         1 * time.Second,
 		LuaRegistryMaxSize: 65536,

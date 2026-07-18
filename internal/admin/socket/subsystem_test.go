@@ -64,11 +64,20 @@ func TestAdminSocketSubsystemIDReturnsAdminSocket(t *testing.T) {
 	assert.Equal(t, lifecycle.SubsystemAdminSocket, sub.ID())
 }
 
-// TestAdminSocketSubsystemDependsOnNone verifies the substrate declares no
-// subsystem dependencies.
-func TestAdminSocketSubsystemDependsOnNone(t *testing.T) {
+// TestAdminSocketSubsystemDependsOnCryptoWiringSupersetPlusVerifier asserts
+// the exact grown DependsOn set (07-09 items 8 + 9; renamed from
+// TestAdminSocketSubsystemDependsOnNone, ACE) — THE RULE's wiring
+// consumer superset {Database, Auth, ABAC, EventBus} plus CryptoChainVerifier
+// (T-07-51 re-scope: admin.sock binds only after the chain walk has run).
+func TestAdminSocketSubsystemDependsOnCryptoWiringSupersetPlusVerifier(t *testing.T) {
 	sub := NewAdminSocketSubsystem(newTestSubsystemConfig(t))
-	assert.Empty(t, sub.DependsOn())
+	assert.Equal(t, []lifecycle.SubsystemID{
+		lifecycle.SubsystemDatabase,
+		lifecycle.SubsystemAuth,
+		lifecycle.SubsystemABAC,
+		lifecycle.SubsystemEventBus,
+		lifecycle.SubsystemCryptoChainVerifier,
+	}, sub.DependsOn())
 }
 
 // TestAdminSocketSubsystemStartCreatesSocketAndStop verifies Start creates

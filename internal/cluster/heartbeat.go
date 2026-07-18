@@ -12,20 +12,49 @@ import (
 	"github.com/samber/oops"
 )
 
-// Start brings the registry online: subscribes to peer alive/bye/probe/poison
-// subjects, publishes the first heartbeat, and starts the heartbeat
-// ticker + eviction sweeper.
+// Start brings the registry online: resolves the connection + cluster ID
+// providers, subscribes to peer alive/bye/probe/poison subjects, publishes
+// the first heartbeat, and starts the heartbeat ticker + eviction sweeper.
 //
-// Lock discipline: Start mutates the lifecycle state-machine fields
-// (subAlive/subBye/subProbe/subPoison/hbTicker/hbDone/evTicker/evDone)
-// under r.mu. Concurrent Stop() observes a consistent state.
+// Provider resolution (Wave A shape; 07-11 moves it to Prepare) runs BEFORE
+// r.mu is taken: both ConnProvider.Conn() and ClusterIDProvider() are plain
+// getters that never re-enter the registry, but resolving them ahead of the
+// lock keeps this a separable prefix — a cut point for 07-11's
+// Prepare/Activate split — and guarantees no provider call ever happens
+// while r.mu is held.
+//
+// Lock discipline: the locked section mutates the lifecycle state-machine
+// fields (subAlive/subBye/subProbe/subPoison/hbTicker/hbDone/evTicker/evDone)
+// plus the resolved r.deps.Conn / r.cfg.ClusterID, under r.mu. Concurrent
+// Stop() observes a consistent state.
 func (r *registry) Start(ctx context.Context) error {
+	conn := r.deps.Conn
+	if r.deps.ConnProvider != nil {
+		conn = r.deps.ConnProvider.Conn()
+	}
+	if conn == nil || isNilConn(conn) {
+		return oops.Code("CLUSTER_DEPS_NIL").With("dep", "Conn").
+			Errorf("cluster.Registry.Start requires a non-nil natsconn.Conn (from Deps.Conn or Deps.ConnProvider)")
+	}
+
+	clusterID := r.cfg.ClusterID
+	if clusterID == "" && r.cfg.ClusterIDProvider != nil {
+		clusterID = r.cfg.ClusterIDProvider()
+	}
+	if clusterID == "" {
+		return oops.Code("CLUSTER_CONFIG_MISSING_CLUSTER_ID").
+			Errorf("cluster.Registry.Start requires a non-empty ClusterID (from Config.ClusterID or Config.ClusterIDProvider)")
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.subAlive != nil {
 		return nil // already started
 	}
+
+	r.deps.Conn = conn
+	r.cfg.ClusterID = clusterID
 
 	sa, err := r.deps.Conn.Subscribe(SubjectAliveWildcard(r.cfg.ClusterID), r.handleAlive)
 	if err != nil {

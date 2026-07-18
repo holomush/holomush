@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package main
+package setup
 
 import (
 	"context"
@@ -16,42 +16,33 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/pgnanos"
-	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/pkg/errutil"
+	"github.com/holomush/holomush/test/testutil"
 )
 
-// applyAllMigrations runs the embedded migration set against the given pool's
-// database. Uses the pool's connection config to derive the connStr.
-func applyAllMigrations(t *testing.T, connStr string) {
+// freshMigratedPool returns a *pgxpool.Pool on a fresh database cloned from
+// the process-wide, pre-migrated template (schema at the latest migration).
+// Mirrors internal/store/testhelpers_test.go's helper of the same name — that
+// one is package store_test (unreachable from here), so this is a same-shape
+// copy, not a shared import (07-09 item 5).
+func freshMigratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	migrator, err := store.NewMigrator(connStr)
+	env := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, env)
+	pool, err := pgxpool.New(context.Background(), connStr)
 	require.NoError(t, err)
-	defer func() { _ = migrator.Close() }()
-	require.NoError(t, migrator.Up())
+	t.Cleanup(pool.Close)
+	return pool
 }
 
 func TestBootstrapPassesWithCleanEventsAudit(t *testing.T) {
-	connStr, cleanup := startPostgresContainer(t)
-	defer cleanup()
-
-	applyAllMigrations(t, connStr)
-
-	pool, err := pgxpool.New(context.Background(), connStr)
-	require.NoError(t, err)
-	defer pool.Close()
+	pool := freshMigratedPool(t)
 
 	require.NoError(t, runBootstrapOrphanCheck(context.Background(), pool))
 }
 
 func TestBootstrapFailsWithSyntheticOrphan(t *testing.T) {
-	connStr, cleanup := startPostgresContainer(t)
-	defer cleanup()
-
-	applyAllMigrations(t, connStr)
-
-	pool, err := pgxpool.New(context.Background(), connStr)
-	require.NoError(t, err)
-	defer pool.Close()
+	pool := freshMigratedPool(t)
 
 	// Insert a synthetic plugin-kind event with NULL actor_id to simulate
 	// a legacy orphan that survived a w9ml migration mis-step. Use a REAL ULID
@@ -66,7 +57,7 @@ func TestBootstrapFailsWithSyntheticOrphan(t *testing.T) {
 	`, orphanID[:], eventbus.ActorKindPlugin.String(), pgnanos.From(time.Now()), eventMS)
 	require.NoError(t, execErr)
 
-	err = runBootstrapOrphanCheck(context.Background(), pool)
+	err := runBootstrapOrphanCheck(context.Background(), pool)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_ACTOR_ORPHAN_DETECTED")
 }
@@ -76,14 +67,7 @@ func TestBootstrapFailsWithSyntheticOrphan(t *testing.T) {
 // history off events_audit, a restore-from-old-backup orphan sits in the
 // unpartitioned table, and the pre-Start gate must still catch it.
 func TestBootstrapFailsWithOrphanInUnpartitioned(t *testing.T) {
-	connStr, cleanup := startPostgresContainer(t)
-	defer cleanup()
-
-	applyAllMigrations(t, connStr)
-
-	pool, err := pgxpool.New(context.Background(), connStr)
-	require.NoError(t, err)
-	defer pool.Close()
+	pool := freshMigratedPool(t)
 
 	// The legacy table exists after 000052 (empty). Seed a plugin-actor orphan
 	// into it (old schema: no event_ms column).
@@ -95,7 +79,7 @@ func TestBootstrapFailsWithOrphanInUnpartitioned(t *testing.T) {
 	`, orphanID[:], eventbus.ActorKindPlugin.String(), pgnanos.From(time.Now()))
 	require.NoError(t, execErr)
 
-	err = runBootstrapOrphanCheck(context.Background(), pool)
+	err := runBootstrapOrphanCheck(context.Background(), pool)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_ACTOR_ORPHAN_DETECTED")
 }
@@ -105,14 +89,7 @@ func TestBootstrapFailsWithOrphanInUnpartitioned(t *testing.T) {
 // passes when there are no orphans — the to_regclass guard keeps the legacy
 // table out of the probe when it is absent.
 func TestBootstrapPassesWhenUnpartitionedAbsent(t *testing.T) {
-	connStr, cleanup := startPostgresContainer(t)
-	defer cleanup()
-
-	applyAllMigrations(t, connStr)
-
-	pool, err := pgxpool.New(context.Background(), connStr)
-	require.NoError(t, err)
-	defer pool.Close()
+	pool := freshMigratedPool(t)
 
 	// Simulate a clean install / post-Backfill state: the legacy table is gone.
 	_, dropErr := pool.Exec(context.Background(), `DROP TABLE IF EXISTS events_audit_unpartitioned`)
