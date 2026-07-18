@@ -40,7 +40,7 @@ Phase execution artifacts: `milestones/v0.11-phases/`.
 - [x] **Phase 4: World-Model Resilience Investigation & Decision (F1)** — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR (decision gate) (completed 2026-07-11)
 - [x] **Phase 5: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction (completed 2026-07-13)
 - [x] **Phase 6: Operational Hardening & Assurance Gates** — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage gate (completed 2026-07-15)
-- [ ] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports
+- [x] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports (completed 2026-07-18)
 - [ ] **Phase 8: God-Object Decomposition** — CoreServer + plugin/manager decomposition (behavior-preserving)
 - [ ] **Phase 9: Test-Quality & Code-Health Sweep** — coverage backfill, weak-test/ACE remediation, session-lifecycle matrix, code-health batch
 
@@ -243,7 +243,7 @@ Plans:
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
-| 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | In Progress|  |
+| 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
 
