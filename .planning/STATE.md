@@ -4,16 +4,16 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 07
 current_phase_name: event-model-bootstrap-decomposition
-status: executing
-stopped_at: Completed 07-10-PLAN.md
-last_updated: "2026-07-18T04:15:29.518Z"
+status: verifying
+stopped_at: Completed 07-11-PLAN.md
+last_updated: "2026-07-18T05:14:10.100Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 36
-  completed_plans: 35
+  completed_plans: 36
 ---
 
 # Project State
@@ -31,7 +31,7 @@ trusted identically.
 
 Phase: 07 (event-model-bootstrap-decomposition) — EXECUTING
 Plan: 11 of 11
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-17 — Phase 07 execution started
 
 ## Performance Metrics
@@ -118,6 +118,7 @@ Last activity: 2026-07-17 — Phase 07 execution started
 | Phase 07 P08 | 35min | 3 tasks | 13 files |
 | Phase 07 P09 | ~5h | 3 tasks | 50 files |
 | Phase 07 P10 | ~45min | 4 tasks | 8 files |
+| Phase 07 P11 | ~4h | 3 tasks | 68 files |
 
 ## Accumulated Context
 
@@ -188,6 +189,9 @@ the next milestone yet.
 - [Phase ?]: 07-10: MEDIUM-11 closed by comment-deletion + topo-order pin (not the eventbus->CryptoChainVerifier edge rev 4 shipped, which cycles against 07-09's verifier->EventBus edge)
 - [Phase ?]: 07-10: StopAll deadline-aware (buffered one-shot result channel per Stop, raced against ctx.Done()); StartAll rollback moved to a fresh bounded context in this plan (not deferred to 07-11)
 - [Phase ?]: 07-10: grpcSubsystem.DependsOn() gains SubsystemAuditProjection (T-07-50); core_topo_order_test.go pins the real 17-subsystem topological order + proves the post-07-09 graph acyclic, reading every DependsOn() live
+- [Phase ?]: 07-11: D-12 Wave B — lifecycle.Subsystem split into Prepare/Activate/Stop; Orchestrator.StartAll runs two full topological sweeps (all Prepare, then all Activate), the structural barrier that makes acquire-before-serve unrepresentable-to-violate regardless of DependsOn edges; rollback now stops the failing subsystem itself and always runs on a fresh context
+- [Phase ?]: 07-11: all 17 production subsystems migrated per the plan's settled D-13.3 disposition table; PluginSubsystem's cleanupOnError extended to close binaryHost+luaHost on every pre-manager Prepare failure path (closed a token-store-sweeper-goroutine leak); audit.Subsystem gained preparedProjection/partitionManager phase-owned fields with lateInit capture/restore-on-failure
+- [Phase ?]: 07-11: invalidation.Coordinator's construction+Start() stays bundled inside the memoized cryptoWiring builder (deviation from the plan's literal row-16 text) because CryptoChainVerifier — not necessarily grpcSubsystem — is the actual first resolver of the builder in topological order; confining it to the Prepare sweep (which it always is) preserves D-13.0's guarantee since the Coordinator's pub/sub is process/cluster-internal signaling, not client-facing domain traffic
 
 ### Pending Todos
 
@@ -220,9 +224,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-18T04:15:29.510Z
+Last session: 2026-07-18T05:13:59.824Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 07-10-PLAN.md
+Stopped at: Completed 07-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
