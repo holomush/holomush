@@ -446,12 +446,13 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 		}
 	}
 	if s.server != nil {
-		s.server.Shutdown()
+		srv := s.server
+		srv.Shutdown()
 		done := make(chan struct{})
-		go func() {
-			s.server.WaitForShutdown()
+		go func(srv *server.Server, done chan struct{}) {
+			srv.WaitForShutdown()
 			close(done)
-		}()
+		}(srv, done)
 		select {
 		case <-done:
 		case <-ctx.Done():
