@@ -163,7 +163,7 @@ Plans:
 2. Process bootstrap runs through `lifecycle.Orchestrator` with unified start/stop ordering; startup/shutdown behavior is unchanged
 3. `internal/web` / `internal/telnet` import only protocol-translation dependencies; the gateway-boundary rule passes with zero violations
 
-**Plans**: 9/11 plans executed
+**Plans**: 10/11 plans executed
 
 > Wave numbers below are resynced to the plan frontmatter, which is the **source of
 > truth** (rev 3; an earlier revision's roadmap labels were off by one from wave 4
@@ -204,7 +204,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7)*
 
-- [ ] 07-10-PLAN.md — D-14: LOW-7 `StopAll` deadline (closure, not deferred arg), MEDIUM-11 real edge, gRPC AuditProjection edge, topo-order pin (wave 8)
+- [x] 07-10-PLAN.md — D-14: LOW-7 `StopAll` deadline (closure, not deferred arg), MEDIUM-11 real edge, gRPC AuditProjection edge, topo-order pin (wave 8)
 
 **Wave 9** *(blocked on Wave 8)*
 
@@ -243,7 +243,7 @@ Plans:
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
-| 7. Event-Model & Bootstrap Decomposition | v0.12 | 9/11 | In Progress|  |
+| 7. Event-Model & Bootstrap Decomposition | v0.12 | 10/11 | In Progress|  |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
 

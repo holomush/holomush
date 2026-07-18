@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 07
 current_phase_name: event-model-bootstrap-decomposition
 status: executing
-stopped_at: Completed 07-09-PLAN.md
-last_updated: "2026-07-18T03:41:26.090Z"
+stopped_at: Completed 07-10-PLAN.md
+last_updated: "2026-07-18T04:15:29.518Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 36
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 07 (event-model-bootstrap-decomposition) — EXECUTING
-Plan: 10 of 11
+Plan: 11 of 11
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 07 execution started
 
@@ -117,6 +117,7 @@ Last activity: 2026-07-17 — Phase 07 execution started
 | Phase 07 P07 | 46min | 3 tasks | 35 files |
 | Phase 07 P08 | 35min | 3 tasks | 13 files |
 | Phase 07 P09 | ~5h | 3 tasks | 50 files |
+| Phase 07 P10 | ~45min | 4 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -184,6 +185,9 @@ the next milestone yet.
 - [Phase ?]: 07-09: TLS is a real registered lifecycle.Subsystem (tlscerts.TLSSubsystem, DependsOn Database); productionSubsystems takes a named 17-field productionSubsystemSet instead of a 16-position positional list (LOW-8)
 - [Phase ?]: 07-09: ABAC deliberately excluded from the cryptoWiring consumer set (crypto-operator validation moved into ABACSubsystem.Start instead) to avoid a second ABAC->cryptoWiring->ABAC cycle; chain.VerifierSubsystem/socket.AdminSocketSubsystem both gate external binds on SubsystemCryptoChainVerifier, permanently forbidding the EventBus->CryptoChainVerifier reverse edge
 - [Phase ?]: 07-09: eventbus.Subsystem.Start now runs VerifyAccountScoping unconditionally in external mode, exposing that a bare/unscoped natstest.StartNATS() container is over-scoped by design; added natstest.StartScopedNATS/ScopedURL (loads deploy/nats/cluster-server.conf) for test harnesses needing a full external-mode boot to succeed
+- [Phase ?]: 07-10: MEDIUM-11 closed by comment-deletion + topo-order pin (not the eventbus->CryptoChainVerifier edge rev 4 shipped, which cycles against 07-09's verifier->EventBus edge)
+- [Phase ?]: 07-10: StopAll deadline-aware (buffered one-shot result channel per Stop, raced against ctx.Done()); StartAll rollback moved to a fresh bounded context in this plan (not deferred to 07-11)
+- [Phase ?]: 07-10: grpcSubsystem.DependsOn() gains SubsystemAuditProjection (T-07-50); core_topo_order_test.go pins the real 17-subsystem topological order + proves the post-07-09 graph acyclic, reading every DependsOn() live
 
 ### Pending Todos
 
@@ -216,9 +220,9 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-18T03:41:16.304Z
+Last session: 2026-07-18T04:15:29.510Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 07-09-PLAN.md
+Stopped at: Completed 07-10-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
