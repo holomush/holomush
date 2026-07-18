@@ -50,6 +50,18 @@ func TestNewBroadcasterPanicsOnNilPublisher(t *testing.T) {
 	}, "NewBroadcaster must reject a nil Publisher so callers fail fast at construction")
 }
 
+func TestNewBroadcasterPanicsOnTypedNilPublisher(t *testing.T) {
+	// A typed-nil (*fakePublisher)(nil) is NOT caught by a naive `== nil`
+	// guard because the interface wraps a non-nil type descriptor. The
+	// constructor uses reflection (isNilPublisher) to detect this so
+	// misconfiguration surfaces at construction time rather than on first
+	// Broadcast call (WR-02).
+	var nilPub *fakePublisher
+	assert.Panics(t, func() {
+		NewBroadcaster(nilPub, mainGameID)
+	}, "typed-nil publisher must panic at construction, not on first use")
+}
+
 func TestNewBroadcasterPanicsOnNilGameID(t *testing.T) {
 	assert.Panics(t, func() {
 		NewBroadcaster(&fakePublisher{}, nil)
