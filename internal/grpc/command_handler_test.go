@@ -78,7 +78,8 @@ func TestCommandHandlerEmitCommandResponsePublishesExactlyOneEvent(t *testing.T)
 
 	charID := core.NewULID()
 	require.NoError(t, grpcpkg.ExportEmitCommandResponse(
-		context.Background(), h, core.CharacterRef{ID: charID, Name: "Alice"}, "hi", false))
+		context.Background(), h, core.CharacterRef{ID: charID, Name: "Alice"}, "hi", false,
+	))
 
 	require.Len(t, pub.events, 1, "exactly one command_response publish")
 	assert.Equal(t, eventbus.Subject("events.main.character."+charID.String()), pub.events[0].Subject)
@@ -99,7 +100,8 @@ func TestCommandHandlerEmitCommandResponseUsesErrorTypeWhenIsErrorIsSet(t *testi
 	})
 
 	require.NoError(t, grpcpkg.ExportEmitCommandResponse(
-		context.Background(), h, core.CharacterRef{ID: core.NewULID(), Name: "Alice"}, "boom", true))
+		context.Background(), h, core.CharacterRef{ID: core.NewULID(), Name: "Alice"}, "boom", true,
+	))
 
 	require.Len(t, pub.events, 1)
 	assert.Equal(t, eventbus.Type(eventvocab.EventTypeCommandError), pub.events[0].Type)
@@ -115,7 +117,8 @@ func TestCommandHandlerEmitCommandResponseIsSilentNoOpWhenPublisherIsNil(t *test
 	h := grpcpkg.NewCommandHandler(grpcpkg.CommandDeps{})
 
 	require.NoError(t, grpcpkg.ExportEmitCommandResponse(
-		context.Background(), h, core.CharacterRef{ID: core.NewULID(), Name: "Nobody"}, "hi", false))
+		context.Background(), h, core.CharacterRef{ID: core.NewULID(), Name: "Nobody"}, "hi", false,
+	))
 }
 
 // TestCommandHandlerExecuteCommandDeliversUnknownCommandAsAnEventNotAnRPCError

@@ -103,8 +103,8 @@ func TestToSubjectRejectsInvalidSubjectCharacters(t *testing.T) {
 // nil, no panic) rather than dereference a nil s.publisher.
 func TestEmitCommandResponseNilPublisherIsSilentNoOp(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{} // publisher intentionally unset (nil)
-	err := s.emitCommandResponse(context.Background(), core.CharacterRef{ID: core.NewULID(), Name: "Nobody"}, "hi", false)
+	h := NewCommandHandler(CommandDeps{}) // publisher intentionally unset (nil)
+	err := h.emitCommandResponse(context.Background(), core.CharacterRef{ID: core.NewULID(), Name: "Nobody"}, "hi", false)
 	require.NoError(t, err)
 }
 
@@ -124,9 +124,15 @@ func TestEmitCommandResponsePublishesOnExactQualifiedSubject(t *testing.T) {
 	}
 	s := &CoreServer{}
 	WithEventPublisher(pub, func() string { return "main" })(s)
+	// Build the handlers the way NewCoreServer does (lifecycle first, since
+	// newCommandHandler takes its hook runner as a method value), so this keeps
+	// asserting that WithEventPublisher's publisher+gameID pair reaches
+	// emitCommandResponse.
+	s.lifecycleHandler = s.newLifecycleHandler()
+	h := s.newCommandHandler()
 
 	charID := core.NewULID()
-	require.NoError(t, s.emitCommandResponse(context.Background(), core.CharacterRef{ID: charID, Name: "Alice"}, "hi", false))
+	require.NoError(t, h.emitCommandResponse(context.Background(), core.CharacterRef{ID: charID, Name: "Alice"}, "hi", false))
 
 	assert.Equal(t, eventbus.Subject("events.main.character."+charID.String()), got.Subject,
 		"emitCommandResponse must qualify by exact literal, not a recomputed Qualify call")

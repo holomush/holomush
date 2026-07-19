@@ -93,7 +93,7 @@ func TestSubscribeOpenSessionErrorSurfacesWrapped(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "s1",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -122,7 +122,7 @@ func TestSubscribeHappyPathSendsReplayCompleteAndReturnsOnCtxCancel(t *testing.T
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	stream := &concurrentSubscribeStream{ctx: ctx}
@@ -166,7 +166,7 @@ func TestSubscribeReattachesDetachedSession(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -212,7 +212,7 @@ func TestSubscribeRejectsBadConnectionID(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "s1",
@@ -242,7 +242,7 @@ func TestSubscribeRejectsConnectionIDWithoutClientType(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 
 	connID := core.NewULID().String()
 	err := s.Subscribe(&corev1.SubscribeRequest{
@@ -291,7 +291,7 @@ func TestSubscribeAddConnectionErrorFailsFastWithoutOpeningSession(t *testing.T)
 		},
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "s1",
@@ -353,7 +353,7 @@ func setupSubscribeTestServer(t *testing.T) (*CoreServer, *SessionStreamRegistry
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 		streamRegistry:    registry,
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 	return s, registry
 }
 
@@ -409,7 +409,7 @@ func TestSubscribeBindingLookupFailureReturnsError(t *testing.T) {
 		bindings:          &fakeBindingRepo{err: errors.New("db down")},
 		cryptoActive:      true, // required to activate binding lookup (KEK-presence gate)
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "s1",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -443,7 +443,7 @@ func TestSubscribePassesNonZeroSessionIdentityWhenBindingsWired(t *testing.T) {
 		bindings:          &fakeBindingRepo{bindingID: bindingID},
 		cryptoActive:      true, // required to activate binding lookup (KEK-presence gate)
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	stream := &concurrentSubscribeStream{ctx: ctx}
@@ -514,7 +514,7 @@ func TestSubscribeReattachCAS_PreservesLocationArrivedAt(t *testing.T) {
 		sessionStore:      sessStore,
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

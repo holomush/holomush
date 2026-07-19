@@ -9,6 +9,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
@@ -39,6 +40,21 @@ func ExportComputeInitialFilters(ctx context.Context, h *SubscribeHandler, plan 
 // ExportToProtoSubscribeResponse exposes (*SubscribeHandler).toProtoSubscribeResponse.
 func ExportToProtoSubscribeResponse(h *SubscribeHandler, ev eventbus.Event, metadataOnly bool) *corev1.SubscribeResponse {
 	return h.toProtoSubscribeResponse(ev, metadataOnly)
+}
+
+// ExportEmitCommandResponse exposes (*CommandHandler).emitCommandResponse.
+func ExportEmitCommandResponse(ctx context.Context, h *CommandHandler, char core.CharacterRef, text string, isError bool) error {
+	return h.emitCommandResponse(ctx, char, text, isError)
+}
+
+// ExportExecuteCommand exposes (*CommandHandler).executeCommand.
+func ExportExecuteCommand(ctx context.Context, h *CommandHandler, info *session.Info, input, connectionIDStr string) error {
+	return h.executeCommand(ctx, info, input, connectionIDStr)
+}
+
+// ExportRunDisconnectHooks exposes (*LifecycleHandler).runDisconnectHooks.
+func ExportRunDisconnectHooks(ctx context.Context, h *LifecycleHandler, info session.Info) {
+	h.runDisconnectHooks(ctx, info)
 }
 
 // ExportDispatchDelivery exposes (*SubscribeHandler).dispatchDelivery. The

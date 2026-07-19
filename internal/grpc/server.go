@@ -5,14 +5,9 @@
 package grpc
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
-	"errors"
 	"log/slog"
-	"runtime/debug"
-	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -32,7 +27,6 @@ import (
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/presence"
@@ -228,11 +222,18 @@ type CoreServer struct {
 	// WithSceneMuteChecker.
 	sceneMute SceneMuteChecker
 
-	// subscribeHandler owns the subscribe/stream-delivery cluster (ARCH-01).
-	// Built at the END of NewCoreServer, after the option loop has populated
-	// every collaborator it reads — constructing it earlier would capture
-	// zero values.
+	// subscribeHandler owns the subscribe/stream-delivery cluster, commandHandler
+	// the command-execution cluster, and lifecycleHandler the session-lifecycle
+	// cluster (ARCH-01). All three are built at the END of NewCoreServer, after
+	// the option loop has populated every collaborator they read — constructing
+	// them earlier would capture zero values.
+	//
+	// Build ORDER matters: lifecycleHandler owns runDisconnectHooks and
+	// recomputeSessionLiveness, which the other two consume as function values,
+	// so it is constructed first.
 	subscribeHandler *SubscribeHandler
+	commandHandler   *CommandHandler
+	lifecycleHandler *LifecycleHandler
 }
 
 // CoreServerOption configures a CoreServer.
@@ -371,9 +372,63 @@ func NewCoreServer(pres *presence.Emitter, sessionStore session.Store, dispatche
 	}
 
 	// Built AFTER the option loop so every collaborator below is populated.
-	s.subscribeHandler = s.newSubscribeHandler()
+	s.buildHandlers()
 
 	return s
+}
+
+// buildHandlers constructs the three extracted cluster units in dependency
+// order. It MUST be called after the CoreServerOption loop — the deps structs
+// snapshot collaborator values, so building earlier captures zero values.
+//
+// Order is load-bearing: lifecycleHandler owns runDisconnectHooks and
+// recomputeSessionLiveness, which commandHandler and subscribeHandler consume
+// as method values.
+//
+// Because the deps are a SNAPSHOT, a caller that mutates a CoreServer
+// collaborator field after construction must call buildHandlers again for the
+// change to reach the units. Production never does this; several in-package
+// test fixtures do, and they call this method rather than re-deriving the order.
+func (s *CoreServer) buildHandlers() {
+	s.lifecycleHandler = s.newLifecycleHandler()
+	s.commandHandler = s.newCommandHandler()
+	s.subscribeHandler = s.newSubscribeHandler()
+}
+
+// newLifecycleHandler snapshots the collaborators the session-lifecycle cluster
+// needs into a LifecycleHandler. It MUST be called after the CoreServerOption
+// loop — WithDisconnectHook appends to disconnectHooks, so building earlier
+// would capture an empty (or partial) hook list.
+func (s *CoreServer) newLifecycleHandler() *LifecycleHandler {
+	return NewLifecycleHandler(LifecycleDeps{
+		Presence:          s.presence,
+		SessionStore:      s.sessionStore,
+		PlayerSessionRepo: s.playerSessionRepo,
+		DisconnectHooks:   s.disconnectHooks,
+	})
+}
+
+// newCommandHandler snapshots the collaborators the command-execution cluster
+// needs into a CommandHandler. It MUST be called after the CoreServerOption
+// loop, and after newLifecycleHandler — RunDisconnectHooks is the lifecycle
+// handler's own method value.
+//
+// presence.Emitter is passed as the SAME value into both handlers. It is an
+// emitter — a collaborator, not shared mutable state owned by either unit — so
+// there is nothing to coordinate and no instance to clone.
+func (s *CoreServer) newCommandHandler() *CommandHandler {
+	return NewCommandHandler(CommandDeps{
+		Dispatcher:        s.dispatcher,
+		CmdServices:       s.cmdServices,
+		Presence:          s.presence,
+		Publisher:         s.publisher,
+		SessionStore:      s.sessionStore,
+		PlayerSessionRepo: s.playerSessionRepo,
+		GameID:            s.currentGameID,
+		// Method value, not a parent pointer: the handler sees a plain function
+		// type and never learns that CoreServer or LifecycleHandler exists (D-02).
+		RunDisconnectHooks: s.lifecycleHandler.runDisconnectHooks,
+	})
 }
 
 // newSubscribeHandler snapshots the collaborators the subscribe/stream-delivery
@@ -398,10 +453,11 @@ func (s *CoreServer) newSubscribeHandler() *SubscribeHandler {
 		SceneMute:         s.sceneMute,
 		GameID:            s.currentGameID,
 		// Method values, not a parent pointer: the handler sees plain function
-		// types and never learns that CoreServer exists (D-02). Both helpers
-		// are shared with clusters that have not been extracted yet.
+		// types and never learns that CoreServer exists (D-02). BuildIdentity
+		// is shared with QueryStreamHistory (not yet extracted);
+		// RecomputeLiveness now belongs to LifecycleHandler.
 		BuildIdentity:     s.buildCharacterIdentity,
-		RecomputeLiveness: s.recomputeSessionLiveness,
+		RecomputeLiveness: s.lifecycleHandler.recomputeSessionLiveness,
 	})
 }
 
@@ -417,310 +473,13 @@ func (s *CoreServer) currentGameID() string {
 
 // HandleCommand processes a game command.
 //
-// SECURITY (bd-jv7z): Before executing, the caller's player_session_token is
-// validated against the target session via auth.ValidateSessionOwnership.
-// Any failure — missing/invalid token, expired token, unknown session, or
-// ownership mismatch — returns the enumeration-safe "session not found"
-// response. This closes the IDOR surface where one player could submit a
-// command against another player's session id.
+// The execution pipeline lives in CommandHandler (command_handler.go); this
+// method exists only to keep CoreServer's corev1.CoreServiceServer method set
+// fixed (D-03). All security commentary — notably the
+// auth.ValidateSessionOwnership preamble (SECURITY bd-jv7z) — travelled with
+// the body; see CommandHandler.HandleCommand.
 func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
-	requestID := ""
-	if req.Meta != nil {
-		requestID = req.Meta.RequestId
-	}
-
-	slog.DebugContext(
-		ctx, "handle command request",
-		"request_id", requestID,
-		"session_id", req.SessionId,
-		"command", req.Command,
-	)
-
-	info, err := auth.ValidateSessionOwnership(
-		ctx,
-		s.playerSessionRepo,
-		s.sessionStore,
-		req.GetPlayerSessionToken(),
-		req.GetSessionId(),
-	)
-	if err != nil {
-		slog.DebugContext(
-			ctx, "session ownership validation failed",
-			"request_id", requestID,
-			"session_id", req.SessionId,
-			"error", err,
-		)
-		return &corev1.HandleCommandResponse{
-			Meta:    responseMeta(requestID),
-			Success: false,
-			Error:   "session not found",
-		}, nil
-	}
-
-	// Record command in session history (best-effort)
-	if appendErr := s.sessionStore.AppendCommand(ctx, req.SessionId, req.Command, info.MaxHistory); appendErr != nil {
-		slog.WarnContext(
-			ctx, "command history append failed",
-			"session_id", req.SessionId,
-			"error", appendErr,
-		)
-	}
-
-	// Parse and execute command
-	if err := s.executeCommand(ctx, info, req.Command, req.GetConnectionId()); err != nil {
-		slog.WarnContext(
-			ctx, "command execution failed",
-			"request_id", requestID,
-			"session_id", req.SessionId,
-			"command", req.Command,
-			"error", err,
-		)
-		return &corev1.HandleCommandResponse{
-			Meta:    responseMeta(requestID),
-			Success: false,
-			Error:   err.Error(),
-		}, nil
-	}
-
-	return &corev1.HandleCommandResponse{
-		Meta:    responseMeta(requestID),
-		Success: true,
-	}, nil
-}
-
-// executeCommand parses and executes a command via the unified dispatcher.
-// Output is delivered via command_response events emitted to the character's
-// personal stream.
-func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, input, connectionIDStr string) error {
-	return s.executeViaDispatcher(ctx, info, input, connectionIDStr)
-}
-
-// executeViaDispatcher uses the unified command.Dispatcher for command
-// execution. Handler output written to the CommandExecution's io.Writer is
-// captured in a buffer and emitted as a command_response event afterward.
-// connectionIDStr is the originating gateway connection ULID string (Phase 5);
-// empty string is accepted for non-gateway callers (parsed as zero ULID).
-func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Info, input, connectionIDStr string) error {
-	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-
-	sessionID, parseErr := ulid.Parse(info.ID)
-	if parseErr != nil {
-		return oops.Code("INVALID_SESSION_ID").
-			With("session_id", info.ID).
-			Wrap(parseErr)
-	}
-
-	// Parse connectionIDStr to ULID. Empty is allowed (legacy non-gateway
-	// callers omit connection_id), but a NON-EMPTY value that fails to
-	// parse is an explicit error from the caller — failing silently with
-	// a zero ULID would silently bypass per-connection command semantics.
-	// (CodeRabbit PR #4191)
-	var connectionID ulid.ULID
-	if connectionIDStr != "" {
-		parsed, connParseErr := ulid.Parse(connectionIDStr)
-		if connParseErr != nil {
-			return oops.Code("INVALID_CONNECTION_ID").
-				With("session_id", info.ID).
-				With("connection_id", connectionIDStr).
-				Wrap(connParseErr)
-		}
-		connectionID = parsed
-	}
-
-	var buf bytes.Buffer
-	exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
-		CharacterID:   info.CharacterID,
-		PlayerID:      info.PlayerID,
-		LocationID:    info.LocationID,
-		CharacterName: info.CharacterName,
-		SessionID:     sessionID,
-		ConnectionID:  connectionID, // Phase 5 (holomush-5rh.14 T19 follow-up)
-		Output:        &buf,
-		Services:      s.cmdServices,
-	})
-	if err != nil {
-		return oops.Code("EXECUTION_SETUP_FAILED").Wrap(err)
-	}
-
-	dispatchErr := s.dispatcher.Dispatch(ctx, input, exec)
-
-	// Emit any buffered output as a command_response event.
-	if buf.Len() > 0 {
-		isError := exec.ResponseIsError() || (dispatchErr != nil && !errors.Is(dispatchErr, command.ErrSessionEnded))
-		if emitErr := s.emitCommandResponse(ctx, char, strings.TrimRight(buf.String(), "\n"), isError); emitErr != nil {
-			return oops.Wrap(emitErr)
-		}
-	}
-
-	// Quit/self-boot detection: handler signals intent, server does teardown.
-	if errors.Is(dispatchErr, command.ErrSessionEnded) {
-		if dcErr := s.presence.EmitLeave(ctx, char, "quit"); dcErr != nil {
-			slog.WarnContext(ctx, "leave event failed", "error", dcErr)
-		}
-		if endErr := s.presence.EmitSessionEnded(ctx, char, info.ID,
-			core.SessionEndedCauseQuit, "Goodbye!"); endErr != nil {
-			// If we can't append session_ended, subscribers will not receive
-			// STREAM_CLOSED. Retain the session row so the reaper can retry
-			// (or at least so the row is not orphaned from its audit event).
-			slog.WarnContext(
-				ctx, "session_ended event failed — retaining session row for reap",
-				"session_id", info.ID,
-				"error", endErr,
-			)
-			s.runDisconnectHooks(ctx, *info)
-			return nil
-		}
-		if delErr := s.sessionStore.Delete(ctx, info.ID); delErr != nil {
-			slog.WarnContext(ctx, "session delete failed", "error", delErr)
-		}
-		s.runDisconnectHooks(ctx, *info)
-		return nil
-	}
-
-	if dispatchErr != nil {
-		// User-facing errors are delivered as command_response events, not
-		// RPC-level failures. Emit the player message and return nil so
-		// HandleCommand returns Success=true.
-		if isUserFacingError(dispatchErr) {
-			if buf.Len() == 0 {
-				if emitErr := s.emitCommandResponse(ctx, char, command.PlayerMessage(dispatchErr), true); emitErr != nil {
-					return oops.Wrap(emitErr)
-				}
-			}
-			return nil
-		}
-		// Infrastructure errors propagate as RPC failures (Success=false).
-		return oops.Wrap(dispatchErr)
-	}
-
-	// Process booted sessions: emit leave events and run disconnect hooks
-	// for targets that were forcibly removed by admin boot.
-	bootedSessions := exec.BootedSessions()
-	for i := range bootedSessions {
-		booted := &bootedSessions[i]
-
-		// If CharacterRef is empty (e.g. plugin-originated boot that only
-		// provided a session ID), look up the session to populate it.
-		if booted.CharacterRef.ID.IsZero() && booted.SessionInfo.ID != "" {
-			info, lookupErr := s.sessionStore.Get(ctx, booted.SessionInfo.ID)
-			if lookupErr != nil {
-				slog.WarnContext(ctx, "failed to look up booted session",
-					"session_id", booted.SessionInfo.ID, "error", lookupErr)
-				continue
-			}
-			booted.CharacterRef = core.CharacterRef{
-				ID:         info.CharacterID,
-				Name:       info.CharacterName,
-				LocationID: info.LocationID,
-			}
-			booted.SessionInfo = *info
-		}
-
-		if dcErr := s.presence.EmitLeave(ctx, booted.CharacterRef, "booted"); dcErr != nil {
-			slog.WarnContext(ctx, "boot leave event failed",
-				"target_id", booted.CharacterRef.ID.String(),
-				"error", dcErr)
-		}
-		if endErr := s.presence.EmitSessionEnded(ctx, booted.CharacterRef, booted.SessionInfo.ID,
-			core.SessionEndedCauseKicked,
-			"You have been disconnected by an administrator."); endErr != nil {
-			// If we can't append session_ended, subscribers will not receive
-			// STREAM_CLOSED. Retain the session row so the reaper can retry
-			// (or at least so the row is not orphaned from its audit event).
-			slog.WarnContext(ctx, "boot session_ended event failed — retaining session row for reap",
-				"session_id", booted.SessionInfo.ID,
-				"target_id", booted.CharacterRef.ID.String(),
-				"error", endErr)
-			s.runDisconnectHooks(ctx, booted.SessionInfo)
-			continue
-		}
-		if delErr := s.sessionStore.Delete(ctx, booted.SessionInfo.ID); delErr != nil {
-			slog.WarnContext(ctx, "boot session delete failed",
-				"session_id", booted.SessionInfo.ID,
-				"target_id", booted.CharacterRef.ID.String(),
-				"error", delErr)
-		}
-		s.runDisconnectHooks(ctx, booted.SessionInfo)
-	}
-
-	return nil
-}
-
-// isUserFacingError returns true for errors that should be delivered to the
-// player via a command_response event rather than as an RPC-level failure.
-// Delegates to command.PlayerMessage to stay in sync with the command package's
-// error classification — if PlayerMessage returns a specific message (not the
-// generic fallback), the error is user-facing.
-func isUserFacingError(err error) bool {
-	msg := command.PlayerMessage(err)
-	return msg != "Something went wrong. Try again."
-}
-
-// emitCommandResponse emits a command_response or command_error event to the
-// character's personal stream. Returns an error if the event could not be emitted.
-func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) error {
-	payload, err := json.Marshal(eventvocab.CommandResponsePayload{
-		Text: text,
-	})
-	if err != nil {
-		slog.ErrorContext(
-			ctx, "failed to marshal command_response payload",
-			"character_id", char.ID.String(),
-			"error", err,
-		)
-		return oops.Code("COMMAND_RESPONSE_MARSHAL_FAILED").Wrap(err)
-	}
-
-	eventType := eventvocab.EventTypeCommandResponse
-	if isError {
-		eventType = eventvocab.EventTypeCommandError
-	}
-
-	if s.publisher == nil {
-		slog.DebugContext(ctx, "emitCommandResponse: publisher not configured, event not emitted")
-		return nil
-	}
-
-	sub, err := qualifyStreamSubject(s.currentGameID(), world.CharacterStream(char.ID))
-	if err != nil {
-		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").With("character_id", char.ID.String()).Wrap(err)
-	}
-	typ, err := eventbus.NewType(string(eventType))
-	if err != nil {
-		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").With("character_id", char.ID.String()).Wrap(err)
-	}
-	event := eventbus.NewEvent(sub, typ, eventbus.Actor{
-		Kind: eventbus.ActorKindSystem,
-		ID:   core.SystemActorULID,
-	}, payload)
-
-	if err := s.publisher.Publish(ctx, event); err != nil {
-		slog.WarnContext(
-			ctx, "failed to publish command_response event",
-			"character_id", char.ID.String(),
-			"error", err,
-		)
-		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").Wrap(err)
-	}
-	return nil
-}
-
-// runDisconnectHooks runs all registered disconnect hooks with panic recovery.
-func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) {
-	for _, hook := range s.disconnectHooks {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.ErrorContext(
-						ctx, "disconnect hook panicked",
-						"panic", r,
-						"stack", string(debug.Stack()),
-					)
-				}
-			}()
-			hook(info)
-		}()
-	}
+	return s.commandHandler.HandleCommand(ctx, req)
 }
 
 // actorIDString stringifies the bus-side actor for the gRPC wire.
@@ -780,285 +539,14 @@ func filterSetToSlice(set map[eventbus.Subject]struct{}) []eventbus.Subject {
 }
 
 // Disconnect removes a connection and handles session lifecycle.
-// When all terminal/telnet connections close but comms_hub remains, the
-// character phases out (leave event) but the session stays active.
-// When ALL connections close, non-guest sessions detach with TTL;
-// guest sessions are deleted immediately.
 //
-// SECURITY (bd-jv7z): Before acting, the caller's player_session_token is
-// validated against the target session via auth.ValidateSessionOwnership.
-// Any failure — missing/invalid token, expired token, unknown session, or
-// ownership mismatch — returns the enumeration-safe "session not found"
-// response (success=false) with no state change. This closes the IDOR
-// surface where one player could forcibly disconnect another player's
-// session with just the session_id.
+// The lifecycle logic lives in LifecycleHandler (lifecycle_handler.go); this
+// method exists only to keep CoreServer's corev1.CoreServiceServer method set
+// fixed (D-03). All security commentary — notably the
+// auth.ValidateSessionOwnership preamble (SECURITY bd-jv7z) — travelled with
+// the body; see LifecycleHandler.Disconnect.
 func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
-	requestID := ""
-	if req.Meta != nil {
-		requestID = req.Meta.RequestId
-	}
-
-	slog.DebugContext(
-		ctx, "disconnect request",
-		"request_id", requestID,
-		"session_id", req.SessionId,
-		"connection_id", req.ConnectionId,
-	)
-
-	// Validate session ownership before any state-changing work.
-	// Enumeration-safe: every failure mode collapses to the same
-	// "session not found" response.
-	if _, err := auth.ValidateSessionOwnership(
-		ctx,
-		s.playerSessionRepo,
-		s.sessionStore,
-		req.GetPlayerSessionToken(),
-		req.GetSessionId(),
-	); err != nil {
-		slog.DebugContext(
-			ctx, "disconnect session ownership validation failed",
-			"request_id", requestID,
-			"session_id", req.SessionId,
-			"error", err,
-		)
-		return &corev1.DisconnectResponse{
-			Meta:    responseMeta(requestID),
-			Success: false,
-		}, nil
-	}
-
-	// Remove the named connection and read the session's remaining connection
-	// counts. With a connection_id these run in ONE transaction under a
-	// sessions-row lock (RemoveConnectionAndCount): concurrent disconnects on
-	// the same session serialize, so exactly one observes totalCount==0 and
-	// runs cleanup — closing the double-cleanup race (holomush-cizj). Done
-	// BEFORE the Get below so a transient Get error still removes the
-	// connection, matching the prior remove-then-lookup ordering.
-	var totalCount, gridConns int
-	var counted bool
-	// mayCleanup gates the lifecycle transition below. The session-level
-	// (no connection_id) path removes nothing and has no removal signal, so it
-	// keeps the prior unconditional behavior.
-	mayCleanup := true
-	if connID, parseErr := ulid.Parse(req.ConnectionId); req.ConnectionId != "" && parseErr == nil {
-		counts, removed, cErr := s.sessionStore.RemoveConnectionAndCount(ctx, req.SessionId, connID)
-		if cErr != nil {
-			slog.WarnContext(
-				ctx, "failed to remove connection and count — skipping lifecycle transition",
-				"request_id", requestID,
-				"session_id", req.SessionId,
-				"connection_id", req.ConnectionId,
-				"error", cErr,
-			)
-			return &corev1.DisconnectResponse{Meta: responseMeta(requestID), Success: true}, nil
-		}
-		totalCount, gridConns = counts.Total, counts.Grid
-		counted = true
-		// Only the disconnect that actually removed the connection owns the
-		// lifecycle cleanup; a duplicate disconnect for an already-removed
-		// connection_id (removed=false) must not re-emit leave/session_ended
-		// (holomush-cizj duplicate-disconnect guard).
-		mayCleanup = removed
-	}
-
-	// Look up session — needed for the lifecycle branch below. If it is
-	// already gone, Disconnect is idempotent success.
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
-	if err != nil {
-		//nolint:nilerr // intentional: session already gone, return success (idempotent)
-		return &corev1.DisconnectResponse{
-			Meta:    responseMeta(requestID),
-			Success: true,
-		}, nil
-	}
-
-	// No-connection_id path (e.g. a session-level disconnect) removes nothing,
-	// so these separate counts carry no remove/count race.
-	if !counted {
-		totalCount, err = s.sessionStore.CountConnections(ctx, req.SessionId)
-		if err != nil {
-			slog.WarnContext(
-				ctx, "failed to count connections — skipping lifecycle transition",
-				"request_id", requestID,
-				"session_id", req.SessionId,
-				"error", err,
-			)
-			return &corev1.DisconnectResponse{Meta: responseMeta(requestID), Success: true}, nil
-		}
-		termCount, tErr := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "terminal")
-		if tErr != nil {
-			slog.WarnContext(ctx, "failed to count terminal connections", "request_id", requestID, "error", tErr)
-		}
-		telCount, tlErr := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "telnet")
-		if tlErr != nil {
-			slog.WarnContext(ctx, "failed to count telnet connections", "request_id", requestID, "error", tlErr)
-		}
-		gridConns = termCount + telCount
-	}
-
-	if mayCleanup && totalCount == 0 {
-		// No connections at all
-		if info.IsGuest {
-			// Guests can't reconnect — delete immediately
-			char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-			if err := s.presence.EmitLeave(ctx, char, "quit"); err != nil {
-				slog.WarnContext(
-					ctx, "leave event failed",
-					"request_id", requestID,
-					"error", err,
-				)
-			}
-
-			if endErr := s.presence.EmitSessionEnded(ctx, char, info.ID,
-				core.SessionEndedCauseGuestEnd, "Session ended."); endErr != nil {
-				// If we can't append session_ended, subscribers will not receive
-				// STREAM_CLOSED. Retain the session row so the reaper can retry
-				// (or at least so the row is not orphaned from its audit event).
-				slog.WarnContext(
-					ctx, "guest session_ended event failed — retaining session row for reap",
-					"request_id", requestID,
-					"session_id", info.ID,
-					"error", endErr,
-				)
-				s.runDisconnectHooks(ctx, *info)
-				return &corev1.DisconnectResponse{
-					Meta:    responseMeta(requestID),
-					Success: true,
-				}, nil
-			}
-
-			if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {
-				slog.WarnContext(
-					ctx, "failed to delete guest session",
-					"request_id", requestID,
-					"error", err,
-				)
-			}
-
-			// Run disconnect hooks for guests
-			s.runDisconnectHooks(ctx, *info)
-		} else {
-			// Non-guest: detach session with TTL instead of deleting.
-			// Do NOT emit leave event — player may reconnect.
-			// Reaper handles leave events when TTL expires.
-			if err := s.recomputeSessionLiveness(ctx, req.SessionId); err != nil {
-				slog.WarnContext(
-					ctx, "failed to recompute session liveness on disconnect",
-					"request_id", requestID,
-					"session_id", req.SessionId,
-					"error", err,
-				)
-			}
-		}
-	} else if mayCleanup && gridConns == 0 && info.GridPresent {
-		// Only comms_hub connections remain — phase out from grid.
-		// Emit the leave event (engine concern), then update grid presence via helper.
-		char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-		if err := s.presence.EmitLeave(ctx, char, "phased out"); err != nil {
-			slog.WarnContext(
-				ctx, "phase-out leave event failed",
-				"request_id", requestID,
-				"session_id", req.SessionId,
-				"error", err,
-			)
-		}
-		if err := s.recomputeSessionLiveness(ctx, req.SessionId); err != nil {
-			slog.WarnContext(
-				ctx, "failed to recompute session liveness on phase-out",
-				"request_id", requestID,
-				"session_id", req.SessionId,
-				"error", err,
-			)
-		}
-	}
-
-	slog.InfoContext(
-		ctx, "session disconnected",
-		"request_id", requestID,
-		"session_id", req.SessionId,
-		"character_id", info.CharacterID.String(),
-	)
-
-	return &corev1.DisconnectResponse{
-		Meta:    responseMeta(requestID),
-		Success: true,
-	}, nil
-}
-
-// recomputeSessionLiveness inspects the current connection counts for
-// sessionID and applies the canonical liveness transition:
-//
-//   - 0 total connections → detach (StatusDetached, grid_present=false,
-//     expires_at = now + reattach TTL). TTL is taken from info.TTLSeconds;
-//     defaults to 1800 s (30 min) when ≤0. Does NOT emit a leave event —
-//     the caller is responsible for any engine-level side effects.
-//   - >0 total connections → ensure status=active; set grid_present=true
-//     when at least one terminal or telnet connection exists, false otherwise.
-//
-// This helper is the single place that owns the connection-count →
-// session-liveness mapping. Disconnect, the lease sweep (Task 5), and
-// AddConnection all call it so the rule stays DRY.
-func (s *CoreServer) recomputeSessionLiveness(ctx context.Context, sessionID string) error {
-	info, err := s.sessionStore.Get(ctx, sessionID)
-	if err != nil {
-		return oops.With("session_id", sessionID).Wrap(err)
-	}
-
-	totalCount, err := s.sessionStore.CountConnections(ctx, sessionID)
-	if err != nil {
-		return oops.With("session_id", sessionID).Wrap(err)
-	}
-
-	if totalCount == 0 {
-		// Detach: set status + expires_at; clear grid presence.
-		now := time.Now()
-		ttlSeconds := info.TTLSeconds
-		if ttlSeconds <= 0 {
-			ttlSeconds = 1800 // default 30 minutes
-		}
-		expiresAt := now.Add(time.Duration(ttlSeconds) * time.Second)
-		err = s.sessionStore.UpdateStatus(ctx, sessionID,
-			session.StatusDetached, &now, &expiresAt)
-		if err != nil {
-			return oops.With("session_id", sessionID).Wrap(err)
-		}
-		if info.GridPresent {
-			if err = s.sessionStore.UpdateGridPresent(ctx, sessionID, false); err != nil {
-				return oops.With("session_id", sessionID).Wrap(err)
-			}
-		}
-		return nil
-	}
-
-	// >0 connections: ensure status=active + correct grid presence.
-	// This matters when the lease sweep (Task 5) or a future AddConnection
-	// caller invokes recomputeSessionLiveness on a session that is still
-	// StatusDetached because a prior recompute was interrupted or missed.
-	if info.Status != session.StatusActive {
-		if err = s.sessionStore.UpdateStatus(ctx, sessionID,
-			session.StatusActive, nil, nil); err != nil {
-			return oops.With("session_id", sessionID).Wrap(err)
-		}
-	}
-
-	termCount, err := s.sessionStore.CountConnectionsByType(ctx, sessionID, "terminal")
-	if err != nil {
-		return oops.With("session_id", sessionID).Wrap(err)
-	}
-	telCount, err := s.sessionStore.CountConnectionsByType(ctx, sessionID, "telnet")
-	if err != nil {
-		return oops.With("session_id", sessionID).Wrap(err)
-	}
-	gridConns := termCount + telCount
-	wantGrid := gridConns > 0
-
-	if info.GridPresent != wantGrid {
-		err = s.sessionStore.UpdateGridPresent(ctx, sessionID, wantGrid)
-		if err != nil {
-			return oops.With("session_id", sessionID).Wrap(err)
-		}
-	}
-	return nil
+	return s.lifecycleHandler.Disconnect(ctx, req)
 }
 
 // GetCommandHistory retrieves command history for a session.
