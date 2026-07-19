@@ -39,9 +39,9 @@ func (h *runtimeStubHost) QuerySessionStreams(context.Context, string, plugins.S
 	return nil, nil
 }
 
-func (h *runtimeStubHost) Plugins() []string                            { return nil }
-func (h *runtimeStubHost) PluginEmitRegistry(string) ([]string, bool)   { return nil, false }
-func (h *runtimeStubHost) Close(context.Context) error                  { return nil }
+func (h *runtimeStubHost) Plugins() []string                          { return nil }
+func (h *runtimeStubHost) PluginEmitRegistry(string) ([]string, bool) { return nil, false }
+func (h *runtimeStubHost) Close(context.Context) error                { return nil }
 
 // --- Behavior 1: D-02 / SC2 proof ------------------------------------------
 

@@ -340,20 +340,15 @@ func TestUnloadPluginWrapsHostUnloadFailure(t *testing.T) {
 
 	// Inject a stub host that fails Unload.
 	host := &unloadStubHost{unloadErr: errors.New("simulated host shutdown failure")}
-	mgr.mu.Lock()
-	mgr.pluginHosts["broken"] = host
-	mgr.loaded["broken"] = &DiscoveredPlugin{Manifest: &Manifest{Name: "broken"}}
-	mgr.mu.Unlock()
+	mgr.runtime.CommitLoaded(&DiscoveredPlugin{Manifest: &Manifest{Name: "broken"}}, host)
 
 	err := mgr.UnloadPlugin(context.Background(), "broken")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_UNLOAD_HOST")
 
 	// Cache MUST still be cleared (Step 1 runs unconditionally).
-	mgr.mu.RLock()
-	_, stillLoaded := mgr.loaded["broken"]
-	_, stillHosted := mgr.pluginHosts["broken"]
-	mgr.mu.RUnlock()
+	stillLoaded := mgr.runtime.IsPluginLoaded("broken")
+	stillHosted := mgr.runtime.TestHasHost("broken")
 	assert.False(t, stillLoaded, "loaded entry MUST be cleared even on Unload failure")
 	assert.False(t, stillHosted, "pluginHosts entry MUST be cleared even on Unload failure")
 }
@@ -372,10 +367,7 @@ func TestUnloadPluginWrapsPolicyRemovalFailure(t *testing.T) {
 	// Inject a stub host whose Unload succeeds, so the failure surfaces
 	// from the policy-removal step.
 	host := &unloadStubHost{}
-	mgr.mu.Lock()
-	mgr.pluginHosts["policy-broken"] = host
-	mgr.loaded["policy-broken"] = &DiscoveredPlugin{Manifest: &Manifest{Name: "policy-broken"}}
-	mgr.mu.Unlock()
+	mgr.runtime.CommitLoaded(&DiscoveredPlugin{Manifest: &Manifest{Name: "policy-broken"}}, host)
 
 	err = mgr.UnloadPlugin(context.Background(), "policy-broken")
 	require.Error(t, err)

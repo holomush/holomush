@@ -25,7 +25,6 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/focuscontract"
 	"github.com/holomush/holomush/internal/idgen"
-	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -73,9 +72,7 @@ var ErrMissingVerbRegistry = oops.Code(CodeMissingVerbRegistry).
 type Manager struct {
 	pluginsDir          string
 	luaHost             Host
-	hosts               map[Type]Host             // host registry keyed by plugin type
-	hostCaps            map[Host]hostCapabilities // optional interfaces, cached at registration
-	pluginHosts         map[string]Host           // maps plugin name → owning host
+	hosts               map[Type]Host // host registry keyed by plugin type
 	policyInstaller     PluginPolicyInstaller
 	registerProvider    RegisterPluginProviderFunc   // optional, registers plugin attribute providers
 	unregisterProvider  UnregisterPluginProviderFunc // optional, unregisters plugin attribute providers on rollback
@@ -86,11 +83,17 @@ type Manager struct {
 	aliasSeeder         AliasSeeder
 	aliasCache          *command.AliasCache
 	verbRegistry        *core.VerbRegistry
-	eventEmitter        *PluginEventEmitter
-	loaded              map[string]*DiscoveredPlugin
-	inflight            map[string]*DiscoveredPlugin
 	loadedOrder         []*DiscoveredPlugin // preserves DAG/priority load order for deterministic iteration
 	mu                  sync.RWMutex
+
+	// runtime owns the loaded-plugin registry (loaded, inflight, pluginHosts,
+	// hostCaps) and the shared event emitter, behind its OWN lock. It replaces
+	// four maps that m.mu used to guard. Every runtime-delivery and read-side
+	// lookup method on Manager is a one-line forward into it. No code path may
+	// hold m.mu and the runtime lock at the same time — see PluginRuntime's
+	// LOCK DISCIPLINE note and the hoisting comments in RegisterHost,
+	// ConfigureEventEmitter, loadPlugin and Close.
+	runtime *PluginRuntime
 
 	// identity owns the plugin name ↔ ULID registry and its persistence.
 	// It carries its OWN lock, deliberately separate from m.mu: the maps are
@@ -222,13 +225,14 @@ func (m *Manager) Registry() *ServiceRegistry {
 // option is omitted so plugin-declared verbs always have a place to land.
 func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 	m := &Manager{
-		pluginsDir:  pluginsDir,
-		capVocab:    DefaultCapabilityVocabulary(),
-		loaded:      make(map[string]*DiscoveredPlugin),
-		inflight:    make(map[string]*DiscoveredPlugin),
-		hosts:       make(map[Type]Host),
-		hostCaps:    make(map[Host]hostCapabilities),
-		pluginHosts: make(map[string]Host),
+		pluginsDir: pluginsDir,
+		capVocab:   DefaultCapabilityVocabulary(),
+		hosts:      make(map[Type]Host),
+		// The runtime is constructed BEFORE the option loop, unlike the
+		// identity store below: no ManagerOption feeds it, and WithLuaHost's
+		// capability caching (below) needs it already present. It owns its own
+		// maps, so there is nothing for an option to configure.
+		runtime: NewPluginRuntime(),
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -239,15 +243,15 @@ func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 	}
 	// If WithLuaHost was used, cache its capabilities for the same lookup path.
 	if m.luaHost != nil {
-		m.hostCaps[m.luaHost] = discoverCapabilities(m.luaHost)
+		m.runtime.CacheHostCapabilities(m.luaHost)
 	}
 
 	// Construct the identity registry AFTER the option loop, so WithPluginRepo
 	// and WithRetentionDays have already recorded their values and the
 	// retentionDays default above has been applied. Construction order within
-	// NewManager is fixed and deterministic: options first, then defaults,
-	// then host-capability caching, then the identity store, then the
-	// VerbRegistry guard.
+	// NewManager is fixed and deterministic: the runtime unit, then options,
+	// then defaults, then host-capability caching, then the identity store,
+	// then the VerbRegistry guard.
 	m.identity = NewIdentityStore(m.pluginRepo, m.retentionDays)
 	if err := m.identity.Bootstrap(context.Background()); err != nil {
 		return nil, err
@@ -269,13 +273,27 @@ func (m *Manager) RegisterHost(hostType Type, host Host) {
 	if host == nil {
 		panic("RegisterHost: host must not be nil")
 	}
+	// The two runtime-unit calls are hoisted OUT of the m.mu section below.
+	// hostCaps and eventEmitter moved to PluginRuntime, which owns a separate
+	// lock; calling into it while holding m.mu would hold two unit locks at
+	// once — the one lock-ordering hazard this decomposition exists to avoid
+	// (the same correction 08-04 made for UnloadPlugin's identity deletion).
+	//
+	// Program order is preserved: capability caching still happens before the
+	// emitter is pushed into the host. Splitting the write of m.hosts from the
+	// write of hostCaps widens an interleaving window, but RegisterHost is a
+	// wiring-phase method documented as "must be called before LoadAll", and
+	// capabilitiesFor already carries a discover-on-demand fallback for a
+	// missing hostCaps entry.
+	m.runtime.CacheHostCapabilities(host)
+	emitter := m.runtime.EventEmitter()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.hosts[hostType] = host
-	m.hostCaps[host] = discoverCapabilities(host)
-	if m.eventEmitter != nil {
+	if emitter != nil {
 		if configurer := findOptional[EventEmitterConfigurer](host); configurer != nil {
-			configurer.SetEventEmitter(m.eventEmitter)
+			configurer.SetEventEmitter(emitter)
 		}
 	}
 	if configurer := findOptional[IdentityRegistryConfigurer](host); configurer != nil {
@@ -283,31 +301,9 @@ func (m *Manager) RegisterHost(hostType Type, host Host) {
 	}
 }
 
-// capabilitiesFor returns the cached capabilities for a host, or an empty
-// hostCapabilities if the host wasn't registered (defensive — shouldn't happen
-// in practice since loadPlugin only handles hosts from m.hosts/m.luaHost).
-func (m *Manager) capabilitiesFor(h Host) hostCapabilities {
-	if caps, ok := m.hostCaps[h]; ok {
-		return caps
-	}
-	// Fallback: discover on demand. Should not happen but keeps loadPlugin safe.
-	return discoverCapabilities(h)
-}
-
 // DeliverCommand routes a command to the correct host for the named plugin.
 func (m *Manager) DeliverCommand(ctx context.Context, pluginName string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
-	m.mu.RLock()
-	host, ok := m.pluginHosts[pluginName]
-	m.mu.RUnlock()
-
-	if !ok {
-		return nil, oops.In("manager").With("plugin", pluginName).New("plugin not loaded or unknown")
-	}
-	resp, err := host.DeliverCommand(ctx, pluginName, cmd)
-	if err != nil {
-		return nil, oops.In("manager").With("plugin", pluginName).With("operation", "deliver_command").Wrap(err)
-	}
-	return resp, nil
+	return m.runtime.DeliverCommand(ctx, pluginName, cmd)
 }
 
 // BeginServiceDispatch resolves the named plugin's host and delegates to its
@@ -320,35 +316,7 @@ func (m *Manager) DeliverCommand(ctx context.Context, pluginName string, cmd plu
 // SERVICE_DISPATCH_UNSUPPORTED when the owning host lacks the capability
 // (e.g. the Lua host).
 func (m *Manager) BeginServiceDispatch(ctx context.Context, pluginName string, actor core.Actor, ownerPlayerID string) (context.Context, func(), error) {
-	m.mu.RLock()
-	host, ok := m.pluginHosts[pluginName]
-	var dispatcher ServiceDispatcher
-	if ok {
-		// hostCaps is written under m.mu in RegisterHost; read it inside the
-		// same critical section that resolves the host.
-		dispatcher = m.capabilitiesFor(host).dispatcher
-	}
-	m.mu.RUnlock()
-
-	if !ok {
-		return nil, nil, oops.Code("PLUGIN_NOT_LOADED").In("manager").
-			With("plugin", pluginName).
-			With("operation", "begin_service_dispatch").
-			New("plugin not loaded or unknown")
-	}
-
-	if dispatcher == nil {
-		return nil, nil, oops.Code("SERVICE_DISPATCH_UNSUPPORTED").In("manager").
-			With("plugin", pluginName).
-			With("operation", "begin_service_dispatch").
-			New("plugin's host does not support service dispatch (binary plugins only)")
-	}
-
-	dispatchCtx, release, err := dispatcher.BeginServiceDispatch(ctx, pluginName, actor, ownerPlayerID)
-	if err != nil {
-		return nil, nil, oops.In("manager").With("plugin", pluginName).With("operation", "begin_service_dispatch").Wrap(err)
-	}
-	return dispatchCtx, release, nil
+	return m.runtime.BeginServiceDispatch(ctx, pluginName, actor, ownerPlayerID)
 }
 
 // ConfigureEventEmitter wires the shared plugin event emitter to the provided
@@ -359,17 +327,29 @@ func (m *Manager) BeginServiceDispatch(ctx context.Context, pluginName string, a
 // remains). Callers SHOULD pass `eventBusSub.Publisher()` here; tests MAY
 // inject a fake Publisher.
 func (m *Manager) ConfigureEventEmitter(publisher eventbus.Publisher, opts ...EmitterOption) {
+	// The emitter is built with the RUNTIME's lookupManifest. That method value
+	// is the emitter's only route to a plugin's manifest, and therefore the
+	// data source behind every gate event_emitter.go::Emit enforces
+	// (actor_kinds_claimable, emits, crypto.emits). It is a single func value
+	// shared by the Lua return-value path and the binary gRPC EmitEvent path,
+	// so D-20 symmetry is preserved structurally: there is no second lookup for
+	// one runtime to diverge onto.
+	//
+	// Construction and the SetEventEmitter store happen OUTSIDE m.mu, because
+	// the emitter field moved to PluginRuntime and no path may hold both locks.
+	emitter := NewPluginEventEmitter(publisher, m.runtime.lookupManifest, actorFromContext, opts...)
+	m.runtime.SetEventEmitter(emitter)
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.eventEmitter = NewPluginEventEmitter(publisher, m.lookupManifest, actorFromContext, opts...)
 	for _, host := range m.hosts {
 		if configurer := findOptional[EventEmitterConfigurer](host); configurer != nil {
-			configurer.SetEventEmitter(m.eventEmitter)
+			configurer.SetEventEmitter(emitter)
 		}
 	}
 	if m.luaHost != nil {
 		if configurer := findOptional[EventEmitterConfigurer](m.luaHost); configurer != nil {
-			configurer.SetEventEmitter(m.eventEmitter)
+			configurer.SetEventEmitter(emitter)
 		}
 	}
 }
@@ -441,33 +421,14 @@ func (m *Manager) ConfigureSettingsDeps(
 
 // DeliverEvent routes an event to the correct host for the named plugin.
 func (m *Manager) DeliverEvent(ctx context.Context, pluginName string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
-	m.mu.RLock()
-	host, ok := m.pluginHosts[pluginName]
-	m.mu.RUnlock()
-
-	if !ok {
-		return nil, oops.In("manager").With("plugin", pluginName).New("plugin not loaded or unknown")
-	}
-	emits, err := host.DeliverEvent(ctx, pluginName, event)
-	if err != nil {
-		return nil, oops.In("manager").With("plugin", pluginName).With("operation", "deliver_event").Wrap(err)
-	}
-	return emits, nil
+	return m.runtime.DeliverEvent(ctx, pluginName, event)
 }
 
 // EmitPluginEvent routes a plugin-owned emit request through the shared host
 // emitter so manifests are validated and host-owned event fields are stamped
 // consistently across command and subscriber paths.
 func (m *Manager) EmitPluginEvent(ctx context.Context, pluginName string, event pluginsdk.EmitEvent) error {
-	m.mu.RLock()
-	emitter := m.eventEmitter
-	m.mu.RUnlock()
-
-	if emitter == nil {
-		return oops.With("plugin", pluginName).
-			New("plugin event emitter is not configured")
-	}
-	return emitter.Emit(ctx, pluginName, emitIntentFromEmitEvent(event))
+	return m.runtime.EmitPluginEvent(ctx, pluginName, event)
 }
 
 // emitIntentFromEmitEvent maps a plugin-return EmitEvent onto the host-facing
@@ -1100,24 +1061,10 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	// Reject duplicate plugin names before loading to prevent the second plugin
 	// from overwriting the first in the manager maps while leaving the original
 	// loaded inside its host but unreachable.
-	m.mu.Lock()
-	if _, duplicate := m.loaded[dp.Manifest.Name]; duplicate {
-		m.mu.Unlock()
-		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").
-			Errorf("plugin %q is already loaded", dp.Manifest.Name)
+	if claimErr := m.runtime.ClaimInflight(dp); claimErr != nil {
+		return claimErr
 	}
-	if _, inflight := m.inflight[dp.Manifest.Name]; inflight {
-		m.mu.Unlock()
-		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").
-			Errorf("plugin %q is already loading", dp.Manifest.Name)
-	}
-	m.inflight[dp.Manifest.Name] = dp
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		delete(m.inflight, dp.Manifest.Name)
-		m.mu.Unlock()
-	}()
+	defer m.runtime.ReleaseInflight(dp.Manifest.Name)
 
 	// w9ml T6: compute hashes, Upsert into plugins table, populate cache.
 	// Hash computation only runs when pluginRepo is wired; tests that construct
@@ -1295,7 +1242,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	// Registration failures are treated as hard errors — dependents resolved
 	// by ResolveDependencyOrder rely on the Provides contract being satisfied.
 	if m.registry != nil && len(dp.Manifest.Provides) > 0 {
-		connProvider := m.capabilitiesFor(host).connProvider
+		connProvider := m.runtime.capabilitiesFor(host).connProvider
 		if connProvider == nil {
 			// Rollback attribute providers registered earlier in loadPlugin.
 			m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
@@ -1334,14 +1281,25 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		}
 	}
 
-	m.mu.Lock()
-	if _, existed := m.loaded[dp.Manifest.Name]; !existed {
+	// The commit is split across the two locks. loaded/inflight/pluginHosts
+	// moved to PluginRuntime; loadedOrder stays on Manager (it is load-time
+	// wiring, read by seedAliases and BuildFocusRedirects). Pre-extraction the
+	// read of `loaded` that guards the loadedOrder append shared one critical
+	// section with the writes — a coupling the research field matrix does not
+	// model, because it records field ACCESS and not that an access sits inside
+	// a section covering fields in another cluster.
+	//
+	// CommitLoaded therefore RETURNS whether the name was already loaded, and
+	// the append happens under m.mu afterwards. Program order and the
+	// append-once semantics are preserved; the two writes are no longer atomic
+	// with respect to each other, which is inherent to D-06 and matches the
+	// widening 08-04 recorded on the unload path.
+	existed := m.runtime.CommitLoaded(dp, host)
+	if !existed {
+		m.mu.Lock()
 		m.loadedOrder = append(m.loadedOrder, dp)
+		m.mu.Unlock()
 	}
-	delete(m.inflight, dp.Manifest.Name)
-	m.loaded[dp.Manifest.Name] = dp
-	m.pluginHosts[dp.Manifest.Name] = host
-	m.mu.Unlock()
 
 	slog.InfoContext(ctx, "loaded plugin",
 		"plugin", dp.Manifest.Name,
@@ -1363,7 +1321,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 func (m *Manager) discoverAndRegisterAttributes(ctx context.Context, host Host, dp *DiscoveredPlugin) (map[string]*types.NamespaceSchema, error) {
 	pluginName := dp.Manifest.Name
 
-	arProvider := m.capabilitiesFor(host).arProvider
+	arProvider := m.runtime.capabilitiesFor(host).arProvider
 	if arProvider == nil {
 		return nil, oops.In("manager").With("plugin", pluginName).
 			Errorf("resource_types requires a host that implements AttributeResolverProvider")
@@ -1429,17 +1387,7 @@ func (m *Manager) discoverAndRegisterAttributes(ctx context.Context, host Host, 
 
 // ListPlugins returns names of all loaded plugins.
 func (m *Manager) ListPlugins() []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	names := make([]string, 0, len(m.loaded))
-	for name := range m.loaded {
-		names = append(names, name)
-	}
-
-	// Sort for deterministic output
-	sort.Strings(names)
-	return names
+	return m.runtime.ListPlugins()
 }
 
 // isValidStreamName returns true if name is a valid RELATIVE plugin session
@@ -1474,100 +1422,25 @@ func isValidStreamName(name string) bool {
 // Plugin errors are logged and skipped (degraded-subscribe policy).
 // Invalid stream names are dropped. Duplicate streams are deduplicated.
 func (m *Manager) QuerySessionStreams(ctx context.Context, req SessionStreamsRequest) []string {
-	m.mu.RLock()
-	type pluginEntry struct {
-		name        string
-		host        Host
-		emitDomains []string // manifest.Emits — the owned-namespace fence input (R3-A)
-	}
-	var opted []pluginEntry
-	for name, dp := range m.loaded {
-		if dp.Manifest.SessionStreams {
-			if host, ok := m.pluginHosts[name]; ok {
-				// Copy the manifest's emit domains under the lock so the fence
-				// reads a stable snapshot outside it.
-				emits := append([]string(nil), dp.Manifest.Emits...)
-				opted = append(opted, pluginEntry{name: name, host: host, emitDomains: emits})
-			}
-		}
-	}
-	m.mu.RUnlock()
-
-	if len(opted) == 0 {
-		return nil
-	}
-
-	type result struct {
-		name        string
-		emitDomains []string
-		streams     []string
-		err         error
-	}
-	results := make(chan result, len(opted))
-	for _, p := range opted {
-		p := p
-		go func() {
-			streams, err := p.host.QuerySessionStreams(ctx, p.name, req)
-			select {
-			case results <- result{name: p.name, emitDomains: p.emitDomains, streams: streams, err: err}:
-			case <-ctx.Done():
-			}
-		}()
-	}
-
-	seen := make(map[string]bool)
-	var merged []string
-	for range opted {
-		var r result
-		select {
-		case r = <-results:
-		case <-ctx.Done():
-			return merged
-		}
-		if r.err != nil {
-			slog.WarnContext(ctx, "plugin stream contribution failed — skipping",
-				"plugin", r.name,
-				"character_id", req.CharacterID,
-				"session_id", req.SessionID,
-				"error", r.err)
-			continue
-		}
-		for _, s := range r.streams {
-			if !isValidStreamName(s) {
-				slog.WarnContext(ctx, "plugin returned invalid stream name — dropping",
-					"plugin", r.name,
-					"stream", s)
-				continue
-			}
-			// R3-A establishment-path namespace fence: run the SAME
-			// pluginauthz.AuthorizePluginStreamContribution the mid-session
-			// stream.subscription guard uses, so the two contribution paths
-			// cannot diverge. A ref outside the plugin's owned emit domains
-			// (a forbidden system/audit/crypto or a foreign/cross-game domain)
-			// is DROPPED + logged before it can reach the Subscribe filter plan.
-			if fenceErr := pluginauthz.AuthorizePluginStreamContribution(r.name, r.emitDomains, s); fenceErr != nil {
-				slog.WarnContext(ctx, "plugin stream contribution failed namespace fence — dropping",
-					"plugin", r.name,
-					"stream", s,
-					"error", fenceErr)
-				continue
-			}
-			if !seen[s] {
-				seen[s] = true
-				merged = append(merged, s)
-			}
-		}
-	}
-	return merged
+	return m.runtime.QuerySessionStreams(ctx, req)
 }
 
 // Close shuts down the manager and all loaded plugins.
 func (m *Manager) Close(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// The loaded-name read is hoisted ABOVE the m.mu section and the map clear
+	// is performed BETWEEN two m.mu sections: both now live under the runtime
+	// unit's own lock, and no path may hold two unit locks at once. Program
+	// order is preserved exactly — policies removed, then hosts closed, then
+	// maps cleared, then the legacy luaHost closed.
+	//
+	// ListPlugins returns the names sorted; the pre-extraction loop ranged the
+	// map directly. Each name still gets exactly one RemovePluginPolicies call,
+	// so this only makes shutdown logging deterministic.
+	loadedNames := m.runtime.ListPlugins()
 
+	m.mu.Lock()
 	if m.policyInstaller != nil {
-		for name := range m.loaded {
+		for _, name := range loadedNames {
 			if err := m.policyInstaller.RemovePluginPolicies(ctx, name); err != nil {
 				slog.ErrorContext(ctx, "failed to remove plugin policies", "plugin", name, "error", err)
 			}
@@ -1581,11 +1454,13 @@ func (m *Manager) Close(ctx context.Context) error {
 			slog.ErrorContext(ctx, "failed to close host", "type", hostType, "error", err)
 		}
 	}
+	m.mu.Unlock()
 
 	// Clear loaded maps after hosts are closed.
-	m.loaded = make(map[string]*DiscoveredPlugin)
-	m.pluginHosts = make(map[string]Host)
+	m.runtime.Clear()
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// Close legacy luaHost if not already in the hosts map.
 	if m.luaHost != nil {
 		if _, inMap := m.hosts[TypeLua]; !inMap {
@@ -1613,25 +1488,7 @@ type AuditSubjectDeclaration struct {
 // did not register the service. The host audit subsystem calls this to
 // resolve the client for each manifest-declared audit block.
 func (m *Manager) PluginAuditClient(pluginName string) (pluginv1.PluginAuditServiceClient, bool) {
-	m.mu.RLock()
-	host, ok := m.pluginHosts[pluginName]
-	m.mu.RUnlock()
-	if !ok {
-		return nil, false
-	}
-	// Use the Unwrap-aware optional lookup so middleware-wrapped hosts
-	// (e.g. HostMiddleware for OTel instrumentation) still surface the
-	// underlying provider. Mirrors how ServiceConnProvider is discovered
-	// during plugin load.
-	provider := findOptional[PluginAuditClientProvider](host)
-	if provider == nil {
-		return nil, false
-	}
-	client := provider.PluginAuditClient(pluginName)
-	if client == nil {
-		return nil, false
-	}
-	return client, true
+	return m.runtime.PluginAuditClient(pluginName)
 }
 
 // AuditSubjects returns every (plugin, subject) pair declared via
@@ -1639,54 +1496,19 @@ func (m *Manager) PluginAuditClient(pluginName string) (pluginv1.PluginAuditServ
 // audit blocks contribute nothing; duplicate subjects from the same
 // plugin are de-duplicated at OwnerMap construction time, not here.
 func (m *Manager) AuditSubjects() []AuditSubjectDeclaration {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	var out []AuditSubjectDeclaration
-	for name, dp := range m.loaded {
-		if dp.Manifest == nil {
-			continue
-		}
-		for _, block := range dp.Manifest.Audit {
-			for _, subj := range block.Subjects {
-				out = append(out, AuditSubjectDeclaration{
-					PluginName: name,
-					Subject:    subj,
-				})
-			}
-		}
-	}
-	return out
+	return m.runtime.AuditSubjects()
 }
 
 // IsPluginLoaded returns true if the named plugin is currently loaded.
 // Implements attribute.PluginRegistry for ABAC attribute resolution.
 func (m *Manager) IsPluginLoaded(name string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	_, ok := m.loaded[name]
-	return ok
+	return m.runtime.IsPluginLoaded(name)
 }
 
 // GetLoadedPlugin returns the discovered plugin info for the named plugin.
 // Returns nil and false if the plugin is not loaded.
 func (m *Manager) GetLoadedPlugin(name string) (*DiscoveredPlugin, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	dp, ok := m.loaded[name]
-	return dp, ok
-}
-
-func (m *Manager) lookupManifest(name string) *Manifest {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	dp, ok := m.loaded[name]
-	if !ok {
-		dp, ok = m.inflight[name]
-	}
-	if !ok {
-		return nil
-	}
-	return dp.Manifest
+	return m.runtime.GetLoadedPlugin(name)
 }
 
 // manifestLookup mirrors authguard.ManifestLookup structurally so a
@@ -1723,18 +1545,7 @@ func (m *Manager) PluginRequestsDecryption(pluginName, eventType string) bool {
 	if m == nil {
 		return false
 	}
-	manifest := m.lookupManifest(pluginName)
-	if manifest == nil || manifest.Crypto == nil {
-		return false
-	}
-	for _, consume := range manifest.Crypto.Consumes {
-		for _, ref := range consume.RequestsDecryption {
-			if ref == eventType {
-				return true
-			}
-		}
-	}
-	return false
+	return m.runtime.PluginRequestsDecryption(pluginName, eventType)
 }
 
 // PluginCanReadBack returns true iff pluginName's manifest declares
@@ -1748,16 +1559,7 @@ func (m *Manager) PluginCanReadBack(pluginName, eventType string) bool {
 	if m == nil {
 		return false
 	}
-	manifest := m.lookupManifest(pluginName)
-	if manifest == nil || manifest.Crypto == nil {
-		return false
-	}
-	for i := range manifest.Crypto.Emits {
-		if emitEntryMatchesWireType(manifest.Name, manifest.Crypto.Emits[i].EventType, eventType) {
-			return manifest.Crypto.Emits[i].Readback
-		}
-	}
-	return false
+	return m.runtime.PluginCanReadBack(pluginName, eventType)
 }
 
 func actorFromContext(ctx context.Context, _ string) (core.Actor, error) {
@@ -1772,36 +1574,7 @@ func actorFromContext(ctx context.Context, _ string) (core.Actor, error) {
 // manifest-declared commands into the given command registry. This ensures
 // the dispatcher can route plugin-backed commands via registry.Get().
 func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for _, dp := range m.loaded {
-		for i := range dp.Manifest.Commands {
-			cmdSpec := &dp.Manifest.Commands[i]
-			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
-				Name:         cmdSpec.Name,
-				PluginName:   dp.Manifest.Name,
-				Capabilities: cmdSpec.Capabilities,
-				Help:         cmdSpec.Help,
-				Usage:        cmdSpec.Usage,
-				HelpText:     cmdSpec.HelpText,
-				Source:       dp.Manifest.Name,
-			})
-			if err != nil {
-				slog.Warn("failed to create command entry for plugin command",
-					"plugin", dp.Manifest.Name,
-					"command", cmdSpec.Name,
-					"error", err)
-				continue
-			}
-			if regErr := registry.Register(*entry); regErr != nil {
-				slog.Warn("failed to register plugin command",
-					"plugin", dp.Manifest.Name,
-					"command", cmdSpec.Name,
-					"error", regErr)
-			}
-		}
-	}
+	m.runtime.RegisterPluginCommands(registry)
 }
 
 // NameByID implements IdentityRegistry.

@@ -30,10 +30,48 @@ func (m *Manager) TestLoadPlugin(name string, manifest *Manifest) {
 		}
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.loaded[name] = &DiscoveredPlugin{Manifest: manifest}
+	// The loaded/pluginHosts write moved to PluginRuntime (phase 08 plan 06).
+	// It runs OUTSIDE m.mu: no path may hold Manager.mu and the runtime lock at
+	// once.
+	//
+	// This does NOT go through CommitLoaded, deliberately. CommitLoaded keys the
+	// maps off dp.Manifest.Name, but TestLoadPlugin keys them off its `name`
+	// PARAMETER, which callers may pass independently of the manifest's own
+	// name. Routing through CommitLoaded would silently change the key whenever
+	// the two differ. Every caller happens to pass a matching pair today, so no
+	// test would have caught the drift — hence the dedicated seam.
+	var committedHost Host
 	if ok {
-		m.pluginHosts[name] = host
+		committedHost = host
 	}
+	m.runtime.testCommitNamed(name, &DiscoveredPlugin{Manifest: manifest}, committedHost)
+}
+
+// testCommitNamed writes a loaded/pluginHosts pair under an EXPLICIT key,
+// preserving TestLoadPlugin's parameter semantics. Production code has no such
+// operation: loadPlugin always keys off the manifest name.
+func (r *PluginRuntime) testCommitNamed(name string, dp *DiscoveredPlugin, host Host) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.loaded[name] = dp
+	if host != nil {
+		r.pluginHosts[name] = host
+	}
+}
+
+// TestHasHost reports whether a pluginHosts entry exists for name. The map is
+// unexported and has no production read-only accessor; UnloadPlugin's tests
+// assert its cleanup directly.
+func (r *PluginRuntime) TestHasHost(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.pluginHosts[name]
+	return ok
+}
+
+// TestLookupManifest exposes PluginRuntime's unexported manifest lookup so
+// package plugins_test can assert its loaded-then-inflight fallback order
+// directly, rather than inferring it through a crypto gate.
+func (r *PluginRuntime) TestLookupManifest(name string) *Manifest {
+	return r.lookupManifest(name)
 }

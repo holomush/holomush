@@ -32,13 +32,12 @@ func (m *Manager) UnloadPlugin(ctx context.Context, name string) error {
 	m.identity.Deactivate(name)
 	// nameByID intentionally retained for historical resolution.
 
-	m.mu.Lock()
-	host, hostLoaded := m.pluginHosts[name]
-	if hostLoaded {
-		delete(m.loaded, name)
-		delete(m.pluginHosts, name)
-	}
-	m.mu.Unlock()
+	// The runtime deletes moved to PluginRuntime, which owns its own lock.
+	// This site previously took m.mu; it now takes neither m.mu nor the
+	// identity lock, so the "no path holds two unit locks" rule still holds
+	// with a third lock in play. Program order (identity, then runtime) and the
+	// unconditional cleanup-first contract are unchanged.
+	host, hostLoaded := m.runtime.RemoveLoaded(name)
 
 	if !hostLoaded {
 		return nil // idempotent — no host to unload
