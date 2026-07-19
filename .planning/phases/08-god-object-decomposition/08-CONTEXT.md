@@ -309,6 +309,21 @@ basket items that are not the two named god objects. See `<deferred>`.
 ### Landmines
 - **`task test` does NOT compile `//go:build integration` files.** Cross-package refactor =
   the exact shape that breaks integration silently. `task test:int` is mandatory (D-17).
+- **⚠ CORRECTED 2026-07-19 (during 08-04): the D-06 lock-split safety argument is SCOPED, not
+  global.** Research concluded — and this document originally repeated — that splitting `m.mu`
+  "preserves the current interleaving window exactly," on the evidence that `loadPlugin` takes and
+  releases `m.mu` in four disjoint short critical sections. **That holds for `loadPlugin` only.**
+  `UnloadPlugin` (`manager_unload.go`) deleted `activeByName` inside the *same* `m.mu` critical
+  section as the `pluginHosts`/`loaded` deletes. 08-04 hoisted `m.identity.Deactivate(name)` above
+  `m.mu.Lock()` to avoid nesting the identity lock inside `m.mu`. Consequences:
+  - **T-8-06 (deadlock) is genuinely mitigated** — no path holds both locks.
+  - **T-8-05: the unload path's interleaving window IS unavoidably widened.** Once identity and
+    runtime live under different locks their deletion cannot be atomic. This is inherent to D-06,
+    not an implementation defect — but it is a real behavioral delta on the unload path.
+  - **08-06 and 08-08 MUST NOT inherit "preserves the window exactly" as a global property.**
+    Derive each unit's lock story from its own call-graph read, the way 08-04 did.
+  Root cause is the same blind spot 08-03 found: the research method→field matrix records *field
+  access* but not that an access sits nested inside a critical section covering other fields.
 - **`NewManager` returns `ErrMissingVerbRegistry` when `verbRegistry == nil`**
   (`manager.go:181-201`). Any new test helper constructing a Manager must pass
   `WithVerbRegistry(...)` or it fails at `require.NoError`. **Note:** the invariant id is
