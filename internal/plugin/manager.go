@@ -1467,30 +1467,6 @@ func (m *Manager) ListPlugins() []string {
 	return names
 }
 
-// TestLoadPlugin injects a plugin directly for unit testing.
-// Only available in tests (but not build-tag restricted to keep it simple).
-func (m *Manager) TestLoadPlugin(name string, manifest *Manifest) {
-	m.mu.Lock()
-	host, ok := m.hosts[manifest.Type]
-	if !ok && manifest.Type == TypeLua && m.luaHost != nil {
-		host, ok = m.luaHost, true
-	}
-	m.mu.Unlock()
-
-	if ok {
-		if err := host.Load(context.Background(), manifest, ""); err != nil {
-			panic("TestLoadPlugin: host.Load failed: " + err.Error())
-		}
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.loaded[name] = &DiscoveredPlugin{Manifest: manifest}
-	if ok {
-		m.pluginHosts[name] = host
-	}
-}
-
 // isValidStreamName returns true if name is a valid RELATIVE plugin session
 // stream reference. Plugin contributions are domain-RELATIVE dot references
 // (e.g. "channel.<id>"): non-empty, no whitespace, at most 256 characters, NOT
