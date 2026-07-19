@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
 status: Phase 8 in progress — plan 08-01 complete
-stopped_at: Completed 08-08-PLAN.md
-last_updated: "2026-07-19T20:50:33.744Z"
+stopped_at: Completed 08-09-PLAN.md
+last_updated: "2026-07-19T21:14:11.137Z"
 last_activity: 2026-07-19
 last_activity_desc: 08-01 focuscontract seam extraction complete
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 45
-  completed_plans: 44
+  completed_plans: 45
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 8 — God-Object Decomposition
-Plan: 8 of 09 complete (Wave 0 — D-09 seam 1)
+Plan: 9 of 09 complete (Wave 0 — D-09 seam 1)
 Status: Phase 8 in progress — plan 08-01 complete
 Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 
@@ -128,6 +128,7 @@ Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 | Phase 08 P06 | ~85m | 3 tasks | 6 files |
 | Phase 08 P07 | ~75m | 3 tasks | 15 files |
 | Phase 08 P08 | ~95m | 3 tasks | 9 files |
+| Phase 08 P09 | ~70m | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -227,6 +228,10 @@ the next milestone yet.
 - [Phase ?]: RegisterHost passes the IdentityStore to hosts instead of the *Manager — behaviorally identical through the interface, and avoids a D-02 backpointer
 - [Phase ?]: Loader and identity/runtime siblings held as concrete pointers, not narrow interfaces (11 and 6 operations, same package)
 - [Phase ?]: Manager's fourth field is the managerConfig option holder rather than a bare retentionDaysSet
+- [Phase ?]: Ratchet rows target the whole internal/grpc tree, not just .../focus — strictly stronger and RED-proven to catch subpackages
+- [Phase ?]: Sixth forbidden edge added: internal/plugin -> internal/eventbus/authguard, the mirror of D-09 seam 2
+- [Phase ?]: Manager pinned by field-set equality (structural) as primary regrowth guard; LoC ceiling is the backstop
+- [Phase ?]: No method counts hard-coded in the census — the plan's 39/36 were pre-split figures (actual 31/26)
 
 ### Pending Todos
 
@@ -259,10 +264,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-19T20:50:26.392Z
+Last session: 2026-07-19T21:14:03.732Z
 Plan 08-01 executed: internal/focuscontract leaf extracted, internal/grpc/focus aliased.
 task test:int and task lint both green; zero integration-tree churn.
-Stopped at: Completed 08-08-PLAN.md
+Stopped at: Completed 08-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
