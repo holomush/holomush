@@ -41,7 +41,7 @@ Phase execution artifacts: `milestones/v0.11-phases/`.
 - [x] **Phase 5: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction (completed 2026-07-13)
 - [x] **Phase 6: Operational Hardening & Assurance Gates** — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage gate (completed 2026-07-15)
 - [x] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports (completed 2026-07-18)
-- [ ] **Phase 8: God-Object Decomposition** — CoreServer + plugin/manager decomposition (behavior-preserving)
+- [x] **Phase 8: God-Object Decomposition** — CoreServer + plugin/manager decomposition (behavior-preserving) (completed 2026-07-19)
 - [ ] **Phase 9: Test-Quality & Code-Health Sweep** — coverage backfill, weak-test/ACE remediation, session-lifecycle matrix, code-health batch
 
 ## Phase Details
@@ -221,7 +221,7 @@ Plans:
 2. `plugin/manager` is similarly decomposed; plugin load/lifecycle behavior is unchanged (whole-system plugin census stays green)
 3. Size/complexity metrics on the former god objects drop below an agreed threshold; no new gateway-boundary or plugin-runtime-symmetry violations are introduced
 
-**Plans:** 9/9 plans executed
+**Plans:** 9/9 plans complete
 
 Plans:
 **Wave 1**
@@ -278,7 +278,7 @@ Plans:
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
-| 8. God-Object Decomposition | v0.12 | 9/9 | In Progress|  |
+| 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
 
 ## Deferred (Not in This Roadmap)
