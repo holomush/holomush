@@ -92,14 +92,19 @@ type Manager struct {
 	loadedOrder         []*DiscoveredPlugin // preserves DAG/priority load order for deterministic iteration
 	mu                  sync.RWMutex
 
-	// Identity registry: name ↔ ULID maps populated at bootstrap from the
-	// plugins table; mutated on load/unload. nameByID resolves three
-	// populations (active plugins + historical plugins + system sentinels);
-	// activeByName resolves only currently-loaded plugins. Both are
-	// guarded by the existing m.mu RWMutex.
+	// identity owns the plugin name ↔ ULID registry and its persistence.
+	// It carries its OWN lock, deliberately separate from m.mu: the maps are
+	// written by the load-time half and read by the runtime half, so sharing
+	// one mutex coupled the two. See IdentityStore for the three nameByID
+	// populations and the lock discipline. No code path may hold m.mu and
+	// the identity lock at the same time.
+	identity *IdentityStore
+
+	// pluginRepo and retentionDays are option-plumbing only: WithPluginRepo
+	// and WithRetentionDays record them here, and NewManager forwards both
+	// into the IdentityStore it constructs after the option loop. Nothing
+	// else reads them.
 	pluginRepo       store.PluginRepo
-	nameByID         map[ulid.ULID]string
-	activeByName     map[string]ulid.ULID
 	retentionDays    int  // plugin row TTL (days); 0 = sweep disabled; default 3
 	retentionDaysSet bool // true iff WithRetentionDays was called explicitly
 }
@@ -237,36 +242,15 @@ func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 		m.hostCaps[m.luaHost] = discoverCapabilities(m.luaHost)
 	}
 
-	// Initialize the identity registry cache.
-	m.nameByID = make(map[ulid.ULID]string)
-	m.activeByName = make(map[string]ulid.ULID)
-
-	// Step 1: register system sentinels first (not in activeByName, not
-	// in the plugins table — different identity domain).
-	m.nameByID[core.SystemActorULID] = "system"
-	m.nameByID[core.WorldServiceActorULID] = "world-service"
-
-	// Step 2: load existing plugin rows from persistence. Reject sentinel
-	// collisions defensively.
-	if m.pluginRepo != nil {
-		ctx := context.Background()
-		rows, err := m.pluginRepo.ListAll(ctx)
-		if err != nil {
-			return nil, oops.Code("PLUGIN_MANAGER_BOOTSTRAP").Wrap(err)
-		}
-		for i := range rows {
-			row := &rows[i]
-			if core.IsSentinelULID(row.ID) {
-				return nil, oops.Code("PLUGIN_ROW_USES_SENTINEL_ID").
-					With("name", row.Name).
-					With("id", row.ID.String()).
-					Errorf("plugin row uses a reserved sentinel ULID")
-			}
-			m.nameByID[row.ID] = row.Name
-			if row.GcAt == nil {
-				m.activeByName[row.Name] = row.ID
-			}
-		}
+	// Construct the identity registry AFTER the option loop, so WithPluginRepo
+	// and WithRetentionDays have already recorded their values and the
+	// retentionDays default above has been applied. Construction order within
+	// NewManager is fixed and deterministic: options first, then defaults,
+	// then host-capability caching, then the identity store, then the
+	// VerbRegistry guard.
+	m.identity = NewIdentityStore(m.pluginRepo, m.retentionDays)
+	if err := m.identity.Bootstrap(context.Background()); err != nil {
+		return nil, err
 	}
 
 	if m.verbRegistry == nil {
@@ -721,25 +705,19 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	// so a plugin loaded in this cycle is never swept in the same cycle
 	// (INV-PLUGIN-16). Skipped on the graceful-degradation early return path
 	// because partial-load failures may leave last_seen_at stale.
-	if m.pluginRepo != nil && m.retentionDays > 0 {
-		swept, err := m.pluginRepo.SweepInactive(ctx, m.retentionDays)
-		if err != nil {
-			return oops.Code("PLUGIN_MANAGER_SWEEP").Wrap(err)
-		}
-		for i := range swept {
-			row := &swept[i]
-			m.mu.Lock()
-			delete(m.activeByName, row.Name)
-			// nameByID intentionally retained for historical resolution.
-			m.mu.Unlock()
-			slog.InfoContext(
-				ctx,
-				"plugin.gc",
-				"name", row.Name,
-				"id", row.ID.String(),
-				"last_seen_at", row.LastSeenAt.Format(time.RFC3339),
-			)
-		}
+	swept, err := m.identity.Sweep(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range swept {
+		row := &swept[i]
+		slog.InfoContext(
+			ctx,
+			"plugin.gc",
+			"name", row.Name,
+			"id", row.ID.String(),
+			"last_seen_at", row.LastSeenAt.Format(time.RFC3339),
+		)
 	}
 
 	return nil
@@ -1146,12 +1124,12 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	// Manager without WithPluginRepo take the else branch and bypass computeHashes.
 	var pluginID ulid.ULID
 	var drift *store.DriftReport
-	if m.pluginRepo != nil {
+	if m.identity.HasRepo() {
 		manifestHash, contentHash, hashErr := m.computeHashes(dp)
 		if hashErr != nil {
 			return hashErr
 		}
-		id, d, upsertErr := m.pluginRepo.Upsert(ctx, store.PluginUpsertInput{
+		id, d, upsertErr := m.identity.Upsert(ctx, store.PluginUpsertInput{
 			Name:         dp.Manifest.Name,
 			DisplayName:  dp.Manifest.Name,
 			Version:      dp.Manifest.Version,
@@ -1167,11 +1145,11 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	}
 
 	// Cache mutation BEFORE host.Load — downstream code may emit during Load
-	// and needs to resolve plugin name via IDByName.
-	m.mu.Lock()
-	m.nameByID[pluginID] = dp.Manifest.Name
-	m.activeByName[dp.Manifest.Name] = pluginID
-	m.mu.Unlock()
+	// and needs to resolve plugin name via IDByName. This takes the identity
+	// store's own lock and releases it here; m.mu is NOT held across this
+	// call, and the runtime commit further below remains a separate
+	// acquisition of m.mu.
+	m.identity.Register(pluginID, dp.Manifest.Name)
 
 	// Roll back the cache mutation if any subsequent step fails. loadPlugin
 	// returns a bare `error` (not a named return), so we cannot use
@@ -1181,10 +1159,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	var loadPluginCommitted bool
 	defer func() {
 		if !loadPluginCommitted {
-			m.mu.Lock()
-			delete(m.nameByID, pluginID)
-			delete(m.activeByName, dp.Manifest.Name)
-			m.mu.Unlock()
+			m.identity.Unregister(pluginID, dp.Manifest.Name)
 		}
 	}()
 
@@ -1831,18 +1806,12 @@ func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
 
 // NameByID implements IdentityRegistry.
 func (m *Manager) NameByID(id ulid.ULID) (string, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	name, ok := m.nameByID[id]
-	return name, ok
+	return m.identity.NameByID(id)
 }
 
 // IDByName implements IdentityRegistry.
 func (m *Manager) IDByName(name string) (ulid.ULID, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	id, ok := m.activeByName[name]
-	return id, ok
+	return m.identity.IDByName(name)
 }
 
 // displayTargetFromString converts a manifest display_target string to the

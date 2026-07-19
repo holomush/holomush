@@ -21,9 +21,18 @@ import (
 // actually registered for the name.
 func (m *Manager) UnloadPlugin(ctx context.Context, name string) error {
 	// 1. Cache cleanup FIRST and unconditionally.
-	m.mu.Lock()
-	delete(m.activeByName, name)
+	//
+	// The identity deactivation runs BEFORE the m.mu section rather than
+	// inside it. Identity state and runtime state now live under separate
+	// locks, so the two deletions can no longer be one atomic step, and
+	// nesting them would hold both locks at once — the one lock-ordering
+	// hazard this extraction exists to avoid. Program order is preserved
+	// (identity first, then runtime), as is the unconditional "cleanup
+	// first" contract: Deactivate runs whether or not a host is registered.
+	m.identity.Deactivate(name)
 	// nameByID intentionally retained for historical resolution.
+
+	m.mu.Lock()
 	host, hostLoaded := m.pluginHosts[name]
 	if hostLoaded {
 		delete(m.loaded, name)

@@ -266,10 +266,7 @@ func TestUnloadPluginRemovesActiveButPreservesHistorical(t *testing.T) {
 
 	// Manually populate cache (in real loadPlugin path this is done by T6).
 	id := core.NewULID()
-	mgr.mu.Lock()
-	mgr.nameByID[id] = "core-scenes"
-	mgr.activeByName["core-scenes"] = id
-	mgr.mu.Unlock()
+	mgr.identity.Register(id, "core-scenes")
 
 	require.NoError(t, mgr.UnloadPlugin(context.Background(), "core-scenes"))
 
@@ -403,10 +400,7 @@ func TestSweepInactiveRemovesFromActiveByNameRetainsNameByID(t *testing.T) {
 	require.NoError(t, err)
 
 	// Pre-populate cache as if "stale" had been loaded previously.
-	mgr.mu.Lock()
-	mgr.nameByID[staleID] = "stale"
-	mgr.activeByName["stale"] = staleID
-	mgr.mu.Unlock()
+	mgr.identity.Register(staleID, "stale")
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
