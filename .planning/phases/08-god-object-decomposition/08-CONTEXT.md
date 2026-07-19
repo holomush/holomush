@@ -8,7 +8,8 @@
 
 Decompose the two named god objects — `internal/grpc/server.go` (`CoreServer`, 1891 LoC,
 39 methods across 8 files, ~30 collaborator fields) and `internal/plugin/manager.go`
-(`Manager`, 1869 LoC, 37 methods, 11 `ManagerOption`s) — into cohesive, separately-testable
+(`Manager`, 1869 LoC, **36** methods — 35 in `manager.go` plus `UnloadPlugin` in
+`manager_unload.go` — and 11 `ManagerOption`s) — into cohesive, separately-testable
 units **with no behavior change**, and pin the result against regrowth.
 
 This is ARCH-01 + ARCH-02 only. It is a **behavior-preserving structural refactor**: no new
@@ -86,27 +87,42 @@ basket items that are not the two named god objects. See `<deferred>`.
 - **D-08: `TestLoadPlugin` moves behind a test build tag or into `export_test.go`** — named
   explicitly in both #4674 and MEDIUM-4's recommendation; it currently ships in the
   production binary with no build tag (`manager.go:1472`).
-  ⚠️ **Trap:** `_test.go` symbols do not cross package boundaries. Before choosing
-  `export_test.go`, enumerate the callers — any caller outside `package plugins` needs a
-  non-test file or must itself move. (This exact mistake is recorded in
-  `.claude/rules/references/plan-review-learnings.md`.)
+  **The choice is CONDITIONAL on the post-seam-2 caller set** (research finding, verified):
+  today there is exactly **one** out-of-package caller —
+  `internal/eventbus/authguard/adapter_manifest_test.go:30,50` (`package authguard_test`);
+  the other 8 call sites are all inside `internal/plugin`. That test's subject is the very
+  adapter seam 2 deletes, so **sequence seam 2 before D-08** — doing so likely removes the
+  only blocker and makes `export_test.go` viable. Prefer `export_test.go` if the caller set
+  is empty post-seam-2; a custom build tag would otherwise have to be threaded through
+  `task test` / `test:int` / `test:cover` / lint (Go sets no automatic test tag), which is
+  real plumbing cost for a cosmetic win. Re-check the caller set after seam 2 lands rather
+  than assuming either outcome.
 
 ### MEDIUM-4 — shared-seam extraction (sequenced FIRST)
 
 - **D-09: The bidirectional-coupling unwind is IN scope and is the prerequisite wave.**
-  Three seams, all cited in `docs/reviews/arch-review/2026-07-11/findings/d1-architecture.md`
-  MEDIUM-4 / LOW-6:
+  **TWO** seams, cited in `docs/reviews/arch-review/2026-07-11/findings/d1-architecture.md`
+  MEDIUM-4:
   1. **`internal/grpc/focus` types → a neutral lower package.** Seven `internal/plugin` files
      import *up* into the grpc tree (`manager.go`, `host.go`, `goplugin/host.go`,
      `hostcap/capabilities.go`, `lua/{host,focus_ops_adapter,hostcap_adapter}.go`). ARCH-02
      cannot produce a clean layering while the manager imports its own consumer's subpackage.
+     Research finding: this is a **types-only** cut — 6 of the 7 files need only
+     `focus.Coordinator`.
   2. **`internal/eventbus/authguard/adapter_manifest.go:7`'s `internal/plugin` import → a
-     neutral manifest contract.** eventbus both underlies and depends on plugin today.
-  3. **`TranslateSubscribeErr` → a neutral wire-error package.** `internal/telnet/gateway_handler.go:29`
-     imports `internal/grpc` for this one helper (used at `:718`), dragging the entire
-     CoreServer monolith — and transitively `internal/{world,access,command}` — into the
-     gateway's closure while passing the tripwire (LOW-6). Fixing this is *also* the
-     cheapest way to keep success criterion 3's "no new gateway-boundary violations" honest.
+     neutral manifest contract.** eventbus both underlies and depends on plugin today. This
+     is a **complete cut** — it is the single `eventbus → plugin` edge.
+
+  > **CORRECTED 2026-07-19 (post-research).** A third seam was originally listed here —
+  > `TranslateSubscribeErr` → neutral wire-error package, to stop `internal/telnet` importing
+  > `internal/grpc` (arch-review LOW-6). **That work is already done.** Phase 7's plan 07-01
+  > extracted `internal/grpcclient`; the helper now lives at `internal/grpcclient/client.go:133`,
+  > `internal/telnet` has **no** `internal/grpc` import, and `internal/grpc` is **already** in
+  > `gatewayForbiddenPackages` (`cmd/holomush/gateway_imports_test.go:146`, with an in-code
+  > comment crediting the 07-01 extraction). The original entry was lifted from the 2026-07-11
+  > arch-review without re-checking it against post-Phase-7 `main`. **Do not budget a task for
+  > it.** Verified live: `rg '"github.com/holomush/holomush/internal/grpc"' internal/telnet/`
+  > returns nothing.
 
 - **D-10: `internal/plugin/cryptowiring`'s reach into three eventbus subpackages is NOT
   unwound here.** It is a wiring package doing wiring and its direction is already one-way
@@ -291,14 +307,19 @@ basket items that are not the two named god objects. See `<deferred>`.
 ### Landmines
 - **`task test` does NOT compile `//go:build integration` files.** Cross-package refactor =
   the exact shape that breaks integration silently. `task test:int` is mandatory (D-17).
-- **`NewManager` returns `ErrMissingVerbRegistry` when `verbRegistry == nil`** (INV-GW-10,
-  `manager.go:181-201`). Any new test helper constructing a Manager must pass
-  `WithVerbRegistry(...)` or it fails at `require.NoError`.
+- **`NewManager` returns `ErrMissingVerbRegistry` when `verbRegistry == nil`**
+  (`manager.go:181-201`). Any new test helper constructing a Manager must pass
+  `WithVerbRegistry(...)` or it fails at `require.NoError`. **Note:** the invariant id is
+  **INV-EVENTBUS-11**, not INV-GW-10 as `plan-review-learnings.md` states.
 - **`Manager.TestLoadPlugin` silently no-ops without a registered host** — it checks
   `m.hosts[manifest.Type]` and falls back to `m.luaHost` for `TypeLua`; with neither
-  configured it inserts into `m.loaded` but NOT `m.pluginHosts`.
-- **`Manager.UnloadPlugin` does not exist.** Unloads are inline `host.Unload(ctx, name)`
-  calls in `loadPlugin`'s rollback paths. A plan that "modifies UnloadPlugin" is fabricating.
+  configured it inserts into `m.loaded` but NOT `m.pluginHosts`. (Confirmed still true.)
+- ~~**`Manager.UnloadPlugin` does not exist.**~~ **STALE — CORRECTED 2026-07-19.**
+  `UnloadPlugin` **does** exist at `internal/plugin/manager_unload.go:22` with 4 tests, and it
+  already implements the idempotent cache-cleanup-before-early-return shape that
+  `plan-review-learnings.md` recommended. The learnings file's entry predates it. Plans MAY
+  reference and modify `Manager.UnloadPlugin`. (`plan-review-learnings.md` should be corrected
+  separately — see `<deferred>`.)
 - **`m.hosts[TypeLua]` vs `m.luaHost` duplication** (#4674) — backward-compat with no
   external surface to preserve. Tempting to collapse during the split; it IS behavior-adjacent,
   so treat it as an explicit decision, not an incidental cleanup.
@@ -324,10 +345,11 @@ basket items that are not the two named god objects. See `<deferred>`.
 - **D-15's zero-assertion-edit rule needs to be checkable.** `git diff --stat test/integration/`
   on the phase branch should show no assertion churn; a plan step that runs and records this
   is cheaper than arguing about it in review.
-- **Wave 0 pays for itself immediately in LOW-6.** Extracting `TranslateSubscribeErr` lets
-  `internal/grpc` be added to `cmd/holomush/gateway_imports_test.go`'s `forbidden` list —
-  turning a documented tripwire gap into a closed one, inside a phase whose criterion 3
-  already asks about gateway-boundary violations.
+- **Criterion 3's gateway-boundary half is already banked.** The `internal/grpc` entry in
+  `gatewayForbiddenPackages` landed in Phase 7, so "no NEW gateway-boundary violations" is
+  now a *regression* check against an existing gate, not new work — Wave 0's two remaining
+  seams serve ARCH-02's layering, not the gateway. (Superseded the original LOW-6 bullet;
+  see D-09's correction note.)
 
 </specifics>
 
@@ -360,7 +382,18 @@ basket items that are not the two named god objects. See `<deferred>`.
   reversal. Tracked by issue **#4820** — do not re-file, and do not let those documents
   mislead planning for this phase.
 - **`.planning/codebase/CONCERNS.md` LoC figures are stale** (`manager.go` listed at 1838;
-  actual 1869). Cosmetic; refresh opportunistically at phase close.
+  actual 1869). Cosmetic. More broadly the whole `.planning/codebase/` map set predates
+  Phases 4–7 (the drift gate reports 379 changed structural elements) — a
+  `/gsd-map-codebase` refresh is overdue but is not Phase 8 work.
+- **`.claude/rules/references/plan-review-learnings.md` carries two stale entries**, found
+  while researching this phase: it claims `Manager.UnloadPlugin` does not exist (it does —
+  `internal/plugin/manager_unload.go:22`, 4 tests), and it labels the `NewManager`
+  verb-registry guard INV-GW-10 (actual: INV-EVENTBUS-11). Correcting that file is a docs fix
+  outside ARCH-01/02 scope — file it, don't fold it in.
+- **`gsd-tools intel api-surface` returns `symbolCount: 0`** on this repo. An empty API
+  surface is worse than none — absence reads as "this symbol doesn't exist", the exact
+  fabrication trap this repo keeps hitting — so it was deliberately withheld from the planner.
+  Worth investigating why the extractor finds nothing in a large Go codebase; not Phase 8 work.
 
 </deferred>
 
@@ -368,3 +401,6 @@ basket items that are not the two named god objects. See `<deferred>`.
 
 *Phase: 8-God-Object Decomposition*
 *Context gathered: 2026-07-19*
+*Amended 2026-07-19 post-research: D-09 reduced from 3 seams to 2 (seam 3 already closed by
+Phase 7's `internal/grpcclient` extraction); D-08 made conditional on the post-seam-2 caller
+set; `Manager.UnloadPlugin` landmine retracted (it exists); Manager method count 37 → 36.*
