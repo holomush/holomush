@@ -32,7 +32,7 @@ func ExportToSubject(h *SubscribeHandler, gameID, streamName string) (eventbus.S
 }
 
 // ExportComputeInitialFilters exposes (*SubscribeHandler).computeInitialFilters.
-func ExportComputeInitialFilters(h *SubscribeHandler, ctx context.Context, plan focus.RestorePlan) []eventbus.Subject {
+func ExportComputeInitialFilters(ctx context.Context, h *SubscribeHandler, plan focus.RestorePlan) []eventbus.Subject {
 	return h.computeInitialFilters(ctx, plan)
 }
 
@@ -45,8 +45,8 @@ func ExportToProtoSubscribeResponse(h *SubscribeHandler, ev eventbus.Event, meta
 // locationFollower argument is fixed at nil: it is an unexported type, and the
 // nil path is the one the badge-downgrade and identity-fallback proofs need.
 func ExportDispatchDelivery(
-	h *SubscribeHandler,
 	ctx context.Context,
+	h *SubscribeHandler,
 	info *session.Info,
 	delivery eventbus.Delivery,
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],

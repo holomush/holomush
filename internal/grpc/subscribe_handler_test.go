@@ -128,7 +128,7 @@ func TestSubscribeHandlerComputeInitialFiltersDropsUnqualifiableStreams(t *testi
 		{Stream: "location.01HYXLOC000000000000000001", Mode: focus.ReplayModeFromCursor},
 	}}
 
-	got := grpcpkg.ExportComputeInitialFilters(h, context.Background(), plan)
+	got := grpcpkg.ExportComputeInitialFilters(context.Background(), h, plan)
 
 	require.Len(t, got, 2, "the colon-style reference MUST be dropped, not fatal")
 	assert.Equal(t, "events.main.character.01HYXCHAR00000000000000001", string(got[0]))
@@ -183,7 +183,7 @@ func TestSubscribeHandlerDispatchDeliveryDeliversSceneBadgeWhenSceneMuteIsNil(t 
 	})
 	stream := &stubSendStream{ctx: context.Background()}
 
-	err := grpcpkg.ExportDispatchDelivery(h, context.Background(), info, delivery, stream, &connID)
+	err := grpcpkg.ExportDispatchDelivery(context.Background(), h, info, delivery, stream, &connID)
 
 	require.NoError(t, err)
 	require.Len(t, stream.sent, 1, "nil sceneMute MUST still deliver the badge (fail-open)")
@@ -206,7 +206,7 @@ func TestSubscribeHandlerDispatchDeliveryDeliversSceneBadgeWhenSceneMuteErrors(t
 	})
 	stream := &stubSendStream{ctx: context.Background()}
 
-	err := grpcpkg.ExportDispatchDelivery(h, context.Background(), info, delivery, stream, &connID)
+	err := grpcpkg.ExportDispatchDelivery(context.Background(), h, info, delivery, stream, &connID)
 
 	require.NoError(t, err)
 	require.Len(t, stream.sent, 1, "a sceneMute error MUST still deliver the badge (fail-open)")
@@ -227,7 +227,7 @@ func TestSubscribeHandlerDispatchDeliverySuppressesSceneBadgeWhenSceneMuteSaysSu
 	})
 	stream := &stubSendStream{ctx: context.Background()}
 
-	err := grpcpkg.ExportDispatchDelivery(h, context.Background(), info, delivery, stream, &connID)
+	err := grpcpkg.ExportDispatchDelivery(context.Background(), h, info, delivery, stream, &connID)
 
 	require.NoError(t, err)
 	assert.Empty(t, stream.sent, "an explicit suppress verdict drops the badge")
