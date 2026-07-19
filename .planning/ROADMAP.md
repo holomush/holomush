@@ -221,7 +221,7 @@ Plans:
 2. `plugin/manager` is similarly decomposed; plugin load/lifecycle behavior is unchanged (whole-system plugin census stays green)
 3. Size/complexity metrics on the former god objects drop below an agreed threshold; no new gateway-boundary or plugin-runtime-symmetry violations are introduced
 
-**Plans:** 6/9 plans executed
+**Plans:** 7/9 plans executed
 
 Plans:
 **Wave 1**
@@ -244,7 +244,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 08-07-PLAN.md — ARCH-01: extract `QueryHandler`, reduce `CoreServer` to a four-unit facade (wave 5)
+- [x] 08-07-PLAN.md — ARCH-01: extract `QueryHandler`, reduce `CoreServer` to a four-unit facade (wave 5)
 - [ ] 08-08-PLAN.md — ARCH-02: extract `PluginLoader`, assign `Close`/`UnloadPlugin`, reduce `Manager` to a facade (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
@@ -278,7 +278,7 @@ Plans:
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
-| 8. God-Object Decomposition | v0.12 | 6/9 | In Progress|  |
+| 8. God-Object Decomposition | v0.12 | 7/9 | In Progress|  |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
 
 ## Deferred (Not in This Roadmap)

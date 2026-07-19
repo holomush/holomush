@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
 status: Phase 8 in progress — plan 08-01 complete
-stopped_at: Completed 08-06-PLAN.md
-last_updated: "2026-07-19T19:45:06.224Z"
+stopped_at: Completed 08-07-PLAN.md
+last_updated: "2026-07-19T20:10:19.738Z"
 last_activity: 2026-07-19
 last_activity_desc: 08-01 focuscontract seam extraction complete
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 45
-  completed_plans: 42
+  completed_plans: 43
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 8 — God-Object Decomposition
-Plan: 6 of 09 complete (Wave 0 — D-09 seam 1)
+Plan: 7 of 09 complete (Wave 0 — D-09 seam 1)
 Status: Phase 8 in progress — plan 08-01 complete
 Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 
@@ -126,6 +126,7 @@ Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 | Phase 08 P04 | ~55m | 3 tasks | 5 files |
 | Phase 08 P05 | ~70m | 3 tasks | 11 files |
 | Phase 08 P06 | ~85m | 3 tasks | 6 files |
+| Phase 08 P07 | ~75m | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -219,6 +220,8 @@ the next milestone yet.
 - [Phase ?]: PluginRuntime extracted with its own lock; four m.mu sections spanning both clusters had their runtime call hoisted out (RegisterHost, ConfigureEventEmitter, loadPlugin commit, Close)
 - [Phase ?]: Crypto manifest gates relocated byte-identically; nil fail-closed guards retained at BOTH receivers plus lookupManifest
 - [Phase ?]: CommitLoaded returns 'existed' so loadedOrder's append stays under m.mu rather than nesting two unit locks
+- [Phase ?]: buildCharacterIdentity moved to QueryHandler, making buildHandlers() a two-owner ordered constructor: lifecycleHandler and queryHandler build before commandHandler and subscribeHandler
+- [Phase ?]: ARCH-01 closed: CoreServer is a facade over four constructor-injected units; server.go 1891 -> 657 LoC; exported method set fixed at 23
 
 ### Pending Todos
 
@@ -251,10 +254,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-19T19:44:59.028Z
+Last session: 2026-07-19T20:10:13.554Z
 Plan 08-01 executed: internal/focuscontract leaf extracted, internal/grpc/focus aliased.
 task test:int and task lint both green; zero integration-tree churn.
-Stopped at: Completed 08-06-PLAN.md
+Stopped at: Completed 08-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
