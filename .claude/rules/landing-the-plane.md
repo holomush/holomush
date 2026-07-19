@@ -33,6 +33,7 @@ When ending a work session, work is **NOT complete until changes are pushed**. V
 - NEVER say "ready to push when you are" — YOU must push
 - If push fails, resolve and retry until it succeeds
 - NEVER force-push (`git push --force`) a shared branch; use `--force-with-lease` only on your own feature branch after a rebase. `git reflog` recovers lost commits after a bad reset/rebase — check it before assuming work is gone.
+- **NEVER use `[ci skip]` / `[skip ci]`** (or any equivalent CI-skip directive) in any commit on a branch with an open PR — not even on a docs-only ship-note commit. `ci.yaml`'s `paths-ignore` already routes genuinely docs-only diffs to the `ci-docs-skip.yaml` stand-in; a `[ci skip]` trailer on top of that suppresses the stand-in too, and if that commit ends up as the branch tip, required status checks (Build/Lint/Test/Integration Test/E2E Test/Conventional Commit/Vuln) have no run at all for that SHA — GitHub shows `mergeStateStatus: BLOCKED` waiting on checks that will never arrive, with nothing failing to point at. (Incident: PR #4823, 2026-07-19 — a GSD-suggested `[ci skip]` ship-note commit landed as tip and blocked merge silently; fixed by pushing a real follow-up commit.) If GSD's own ship workflow suggests adding `[ci skip]`, decline it — this repo-level rule overrides that default.
 
 ## Skipping the chain
 
