@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
 status: Phase 8 in progress — plan 08-01 complete
-stopped_at: Completed 08-05-PLAN.md
-last_updated: "2026-07-19T19:14:18.057Z"
+stopped_at: Completed 08-06-PLAN.md
+last_updated: "2026-07-19T19:45:06.224Z"
 last_activity: 2026-07-19
 last_activity_desc: 08-01 focuscontract seam extraction complete
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 45
-  completed_plans: 41
+  completed_plans: 42
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 8 — God-Object Decomposition
-Plan: 5 of 09 complete (Wave 0 — D-09 seam 1)
+Plan: 6 of 09 complete (Wave 0 — D-09 seam 1)
 Status: Phase 8 in progress — plan 08-01 complete
 Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 
@@ -125,6 +125,7 @@ Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 | Phase 08 P03 | 55m | 3 tasks | 8 files |
 | Phase 08 P04 | ~55m | 3 tasks | 5 files |
 | Phase 08 P05 | ~70m | 3 tasks | 11 files |
+| Phase 08 P06 | ~85m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -215,6 +216,9 @@ the next milestone yet.
 - [Phase ?]: 08-04: pluginRepo/retentionDays stay on Manager as inert option routing slots because ManagerOption is func(*Manager) (D-07); identity state itself is fully extracted.
 - [Phase ?]: 08-05: runDisconnectHooks has three consumers (command, lifecycle, auth/Logout); LifecycleHandler owns it, others take a DisconnectHookRunner function value
 - [Phase ?]: 08-05: the Deps-snapshot pattern decouples facade fields from extracted units; CoreServer.buildHandlers() is the ordered constructor fixtures re-call after poking a field
+- [Phase ?]: PluginRuntime extracted with its own lock; four m.mu sections spanning both clusters had their runtime call hoisted out (RegisterHost, ConfigureEventEmitter, loadPlugin commit, Close)
+- [Phase ?]: Crypto manifest gates relocated byte-identically; nil fail-closed guards retained at BOTH receivers plus lookupManifest
+- [Phase ?]: CommitLoaded returns 'existed' so loadedOrder's append stays under m.mu rather than nesting two unit locks
 
 ### Pending Todos
 
@@ -247,10 +251,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-19T19:14:18.050Z
+Last session: 2026-07-19T19:44:59.028Z
 Plan 08-01 executed: internal/focuscontract leaf extracted, internal/grpc/focus aliased.
 task test:int and task lint both green; zero integration-tree churn.
-Stopped at: Completed 08-05-PLAN.md
+Stopped at: Completed 08-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
