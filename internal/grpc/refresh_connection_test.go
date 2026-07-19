@@ -68,6 +68,7 @@ func TestRefreshConnection(t *testing.T) {
 				sessionStore:      store,
 				playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
 			}
+			s.buildHandlers()
 			resp, err := s.RefreshConnection(ctx, &corev1.RefreshConnectionRequest{
 				SessionId:          tt.reqSessionID,
 				ConnectionId:       connID,

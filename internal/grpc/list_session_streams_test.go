@@ -83,6 +83,7 @@ func (f *fakeStreamContributor) QuerySessionStreams(_ context.Context, _ plugins
 
 func TestListSessionStreamsRequiresSessionID(t *testing.T) {
 	s := &CoreServer{}
+	s.buildHandlers()
 	_, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{})
 	require.Error(t, err)
 	o, ok := oops.AsOops(err)
@@ -104,6 +105,7 @@ func TestListSessionStreamsRejectsMissingToken(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 	_, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
 		SessionId: "sess-1",
 		// PlayerSessionToken intentionally omitted.
@@ -119,6 +121,7 @@ func TestListSessionStreamsReturnsSessionNotFoundOnMiss(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, nil),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 	_, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
 		SessionId:          "missing",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -139,6 +142,7 @@ func TestListSessionStreamsReturnsSessionExpiredForExpiredSession(t *testing.T) 
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-expired": expired}),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 	_, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
 		SessionId:          "sess-expired",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -174,6 +178,7 @@ func TestListSessionStreamsReturnsRestoreFocusStreams(t *testing.T) {
 		focusCoordinator:  fakeCoord,
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 
 	resp, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
 		SessionId:          "sess-1",
@@ -202,6 +207,7 @@ func TestListSessionStreamsFallsBackWhenCoordinatorNil(t *testing.T) {
 		focusCoordinator:  nil, // explicitly nil
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 
 	resp, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
 		SessionId:          "sess-2",
@@ -233,6 +239,7 @@ func TestListSessionStreamsIncludesPluginContributedStreamsInFallback(t *testing
 		streamContributor: fakeContrib,
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 
 	resp, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
 		SessionId:          "sess-plugin",
@@ -259,6 +266,7 @@ func TestListSessionStreamsEchoesRequestIDInResponseMeta(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-meta": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 
 	resp, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
 		Meta:               &corev1.RequestMeta{RequestId: "req-abc"},

@@ -64,6 +64,7 @@ func TestListAvailableCommandsReturnsSessionCharacterCommandsAndAliases(t *testi
 		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
 		commandQuerier:    newCommandQuerier(t),
 	}
+	s.buildHandlers()
 	resp, err := s.ListAvailableCommands(context.Background(), &corev1.ListAvailableCommandsRequest{
 		SessionId:          "sess-cmd-1",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -89,6 +90,7 @@ func TestListAvailableCommandsCollapsesUnknownSessionTokenToNotFound(t *testing.
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 		commandQuerier:    newCommandQuerier(t),
 	}
+	s.buildHandlers()
 	_, err := s.ListAvailableCommands(context.Background(), &corev1.ListAvailableCommandsRequest{
 		SessionId:          "nonexistent-session",
 		PlayerSessionToken: "bad-token",
@@ -111,6 +113,7 @@ func TestListAvailableCommandsFailsClosedWithoutQuerier(t *testing.T) {
 		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
 		commandQuerier:    nil, // deliberately absent
 	}
+	s.buildHandlers()
 	_, err := s.ListAvailableCommands(context.Background(), &corev1.ListAvailableCommandsRequest{
 		SessionId:          "sess-cmd-2",
 		PlayerSessionToken: testPlayerSessionToken,

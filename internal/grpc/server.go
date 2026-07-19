@@ -7,7 +7,6 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
-	"log/slog"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -223,17 +222,20 @@ type CoreServer struct {
 	sceneMute SceneMuteChecker
 
 	// subscribeHandler owns the subscribe/stream-delivery cluster, commandHandler
-	// the command-execution cluster, and lifecycleHandler the session-lifecycle
-	// cluster (ARCH-01). All three are built at the END of NewCoreServer, after
-	// the option loop has populated every collaborator they read — constructing
-	// them earlier would capture zero values.
+	// the command-execution cluster, lifecycleHandler the session-lifecycle
+	// cluster, and queryHandler the current-state query cluster (ARCH-01). All
+	// four are built at the END of NewCoreServer, after the option loop has
+	// populated every collaborator they read — constructing them earlier would
+	// capture zero values.
 	//
 	// Build ORDER matters: lifecycleHandler owns runDisconnectHooks and
-	// recomputeSessionLiveness, which the other two consume as function values,
-	// so it is constructed first.
+	// recomputeSessionLiveness and queryHandler owns buildCharacterIdentity;
+	// commandHandler and subscribeHandler consume those as function values, so
+	// the two owners are constructed first.
 	subscribeHandler *SubscribeHandler
 	commandHandler   *CommandHandler
 	lifecycleHandler *LifecycleHandler
+	queryHandler     *QueryHandler
 }
 
 // CoreServerOption configures a CoreServer.
@@ -377,13 +379,14 @@ func NewCoreServer(pres *presence.Emitter, sessionStore session.Store, dispatche
 	return s
 }
 
-// buildHandlers constructs the three extracted cluster units in dependency
+// buildHandlers constructs the four extracted cluster units in dependency
 // order. It MUST be called after the CoreServerOption loop — the deps structs
 // snapshot collaborator values, so building earlier captures zero values.
 //
-// Order is load-bearing: lifecycleHandler owns runDisconnectHooks and
-// recomputeSessionLiveness, which commandHandler and subscribeHandler consume
-// as method values.
+// Order is load-bearing. lifecycleHandler owns runDisconnectHooks and
+// recomputeSessionLiveness; queryHandler owns buildCharacterIdentity. Both are
+// consumed as method values by commandHandler and subscribeHandler, so the two
+// owners are constructed before their consumers.
 //
 // Because the deps are a SNAPSHOT, a caller that mutates a CoreServer
 // collaborator field after construction must call buildHandlers again for the
@@ -391,8 +394,35 @@ func NewCoreServer(pres *presence.Emitter, sessionStore session.Store, dispatche
 // test fixtures do, and they call this method rather than re-deriving the order.
 func (s *CoreServer) buildHandlers() {
 	s.lifecycleHandler = s.newLifecycleHandler()
+	s.queryHandler = s.newQueryHandler()
 	s.commandHandler = s.newCommandHandler()
 	s.subscribeHandler = s.newSubscribeHandler()
+}
+
+// newQueryHandler snapshots the collaborators the current-state query cluster
+// needs into a QueryHandler. It MUST be called after the CoreServerOption loop
+// — calling it earlier captures zero values.
+//
+// Shared collaborators (focusCoordinator, streamContributor, identityRegistry)
+// are passed as the SAME values that reach SubscribeHandler — no clone, no
+// wrapper, no re-derivation. Each is a read-only interface, never shared
+// mutable state, so there is nothing to coordinate. accessEngine is
+// additionally still read by the auth cluster, which stays on the facade.
+func (s *CoreServer) newQueryHandler() *QueryHandler {
+	return NewQueryHandler(QueryDeps{
+		SessionStore:          s.sessionStore,
+		PlayerSessionRepo:     s.playerSessionRepo,
+		AccessEngine:          s.accessEngine,
+		HistoryReader:         s.historyReader,
+		IdentityRegistry:      s.identityRegistry,
+		CharacterNameResolver: s.characterNameResolver,
+		CommandQuerier:        s.commandQuerier,
+		FocusCoordinator:      s.focusCoordinator,
+		StreamContributor:     s.streamContributor,
+		Bindings:              s.bindings,
+		CryptoActive:          s.cryptoActive,
+		GameID:                s.currentGameID,
+	})
 }
 
 // newLifecycleHandler snapshots the collaborators the session-lifecycle cluster
@@ -454,9 +484,9 @@ func (s *CoreServer) newSubscribeHandler() *SubscribeHandler {
 		GameID:            s.currentGameID,
 		// Method values, not a parent pointer: the handler sees plain function
 		// types and never learns that CoreServer exists (D-02). BuildIdentity
-		// is shared with QueryStreamHistory (not yet extracted);
-		// RecomputeLiveness now belongs to LifecycleHandler.
-		BuildIdentity:     s.buildCharacterIdentity,
+		// now belongs to QueryHandler (it is shared with QueryStreamHistory);
+		// RecomputeLiveness belongs to LifecycleHandler.
+		BuildIdentity:     s.queryHandler.buildCharacterIdentity,
 		RecomputeLiveness: s.lifecycleHandler.recomputeSessionLiveness,
 	})
 }
@@ -549,56 +579,41 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	return s.lifecycleHandler.Disconnect(ctx, req)
 }
 
+// The six current-state query RPCs below live in QueryHandler
+// (query_handler.go and the per-RPC files beside it); these methods exist only
+// to keep CoreServer's corev1.CoreServiceServer method set fixed (D-03). All
+// security commentary — the auth.ValidateSessionOwnership preambles (SECURITY
+// bd-jv7z), the fail-closed ABAC defaults, and the enumeration-safe error
+// collapses — travelled with the bodies; see the QueryHandler methods.
+
 // GetCommandHistory retrieves command history for a session.
-//
-// SECURITY (bd-jv7z): Before returning history, the caller's
-// player_session_token is validated against the target session via
-// auth.ValidateSessionOwnership. Any failure — missing/invalid token,
-// expired token, unknown session, or ownership mismatch — returns the
-// enumeration-safe "session not found" response (success=false) with
-// an empty command list. This closes the IDOR surface where one player
-// could read another player's typed command history with just the
-// session_id.
 func (s *CoreServer) GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
-	requestID := ""
-	if req.Meta != nil {
-		requestID = req.Meta.RequestId
-	}
+	return s.queryHandler.GetCommandHistory(ctx, req)
+}
 
-	// Validate session ownership before any store read.
-	// Enumeration-safe: every failure mode collapses to the same
-	// "session not found" response with no commands.
-	if _, err := auth.ValidateSessionOwnership(
-		ctx,
-		s.playerSessionRepo,
-		s.sessionStore,
-		req.GetPlayerSessionToken(),
-		req.GetSessionId(),
-	); err != nil {
-		slog.DebugContext(
-			ctx, "get_command_history session ownership validation failed",
-			"request_id", requestID,
-			"session_id", req.GetSessionId(),
-			"error", err,
-		)
-		return &corev1.GetCommandHistoryResponse{
-			Meta:    responseMeta(requestID),
-			Success: false,
-			Error:   "session not found",
-		}, nil
-	}
+// QueryStreamHistory reads a page of stream history for a session.
+func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
+	return s.queryHandler.QueryStreamHistory(ctx, req)
+}
 
-	sessionID := req.GetSessionId()
-	history, err := s.sessionStore.GetCommandHistory(ctx, sessionID)
-	if err != nil {
-		return nil, oops.Code("COMMAND_HISTORY_FAILED").With("session_id", sessionID).Wrap(err)
-	}
+// ListFocusPresence returns the Active sessions at the caller's location.
+func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error) {
+	return s.queryHandler.ListFocusPresence(ctx, req)
+}
 
-	return &corev1.GetCommandHistoryResponse{
-		Meta:     responseMeta(requestID),
-		Success:  true,
-		Commands: history,
-	}, nil
+// ListSessionStreams returns the stream names the session is subscribed to.
+func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSessionStreamsRequest) (*corev1.ListSessionStreamsResponse, error) {
+	return s.queryHandler.ListSessionStreams(ctx, req)
+}
+
+// ListAvailableCommands returns the commands the session's character may execute.
+func (s *CoreServer) ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
+	return s.queryHandler.ListAvailableCommands(ctx, req)
+}
+
+// RefreshConnection bumps a connection's liveness lease.
+func (s *CoreServer) RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+	return s.queryHandler.RefreshConnection(ctx, req)
 }
 
 // responseMeta creates a ResponseMeta with the request ID echoed.

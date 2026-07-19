@@ -27,7 +27,7 @@ import (
 // enumeration-safe SESSION_NOT_FOUND error. This closes the IDOR surface
 // where one player could enumerate another player's subscribed streams
 // (character/location/scene identifiers) with just the session_id.
-func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSessionStreamsRequest) (*corev1.ListSessionStreamsResponse, error) {
+func (h *QueryHandler) ListSessionStreams(ctx context.Context, req *corev1.ListSessionStreamsRequest) (*corev1.ListSessionStreamsResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
@@ -46,8 +46,8 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 	// every failure mode collapses to the same SESSION_NOT_FOUND error.
 	if _, err := auth.ValidateSessionOwnership(
 		ctx,
-		s.playerSessionRepo,
-		s.sessionStore,
+		h.playerSessionRepo,
+		h.sessionStore,
 		req.GetPlayerSessionToken(),
 		req.GetSessionId(),
 	); err != nil {
@@ -60,7 +60,7 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 		return nil, oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	info, err := h.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
 		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
 			return nil, oops.Code("SESSION_NOT_FOUND").
@@ -76,9 +76,9 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 	}
 
 	var plan focus.RestorePlan
-	if s.focusCoordinator != nil {
+	if h.focusCoordinator != nil {
 		var planErr error
-		plan, planErr = s.focusCoordinator.RestoreFocus(ctx, req.SessionId)
+		plan, planErr = h.focusCoordinator.RestoreFocus(ctx, req.SessionId)
 		if planErr != nil {
 			slog.WarnContext(ctx, "restoreFocus failed, falling back to empty plan",
 				"session_id", req.SessionId, "error", planErr)
@@ -99,12 +99,12 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 				focus.StreamWithMode{Stream: world.LocationStream(info.LocationID), Mode: focus.ReplayModeFromCursor},
 			)
 		}
-		if s.streamContributor != nil {
+		if h.streamContributor != nil {
 			playerID := ""
 			if !info.PlayerID.IsZero() {
 				playerID = info.PlayerID.String()
 			}
-			pluginStreams := s.streamContributor.QuerySessionStreams(ctx, plugins.SessionStreamsRequest{
+			pluginStreams := h.streamContributor.QuerySessionStreams(ctx, plugins.SessionStreamsRequest{
 				CharacterID: info.CharacterID.String(),
 				PlayerID:    playerID,
 				SessionID:   info.ID,

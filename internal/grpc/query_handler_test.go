@@ -42,7 +42,9 @@ func (r *stubHistoryReader) QueryHistory(_ context.Context, _ eventbus.HistoryQu
 	return nil, nil
 }
 
-const queryTestToken = "query-handler-test-token" //nolint:gosec // test fixture, not a credential
+// queryTestToken is the plaintext player-session token these fixtures hash
+// through auth.HashSessionToken. It is test data, not a credential.
+const queryTestToken = "query-handler-test-token"
 
 // ownedSession returns a non-expired session owned by playerID.
 func ownedSession(id string, playerID, characterID ulid.ULID) *session.Info {
@@ -97,7 +99,7 @@ func TestNewQueryHandlerConstructsFromOnlyItsOwnCollaborators(t *testing.T) {
 // rather than fall through to an unauthorized read. Asserting the deny (not
 // merely "no panic") is what makes an accidental permissive default a red test.
 func TestQueryStreamHistoryDeniesPublicStreamWhenAccessEngineIsNil(t *testing.T) {
-	playerID := ulid.MustParse("01HYXPLAYER00000000000001")
+	playerID := ulid.MustParse("01HYXPLYR00000000000000001")
 	charID := ulid.MustParse("01HYXCHAR00000000000000001")
 
 	store := sessionmocks.NewMockStore(t)
@@ -130,7 +132,7 @@ func TestQueryStreamHistoryDeniesPublicStreamWhenAccessEngineIsNil(t *testing.T)
 // code (per .claude/rules/grpc-errors.md) rather than matching a message
 // substring, so a differently-worded permissive return cannot pass.
 func TestListAvailableCommandsFailsClosedWhenCommandQuerierIsNil(t *testing.T) {
-	playerID := ulid.MustParse("01HYXPLAYER00000000000002")
+	playerID := ulid.MustParse("01HYXPLYR00000000000000002")
 	charID := ulid.MustParse("01HYXCHAR00000000000000002")
 
 	store := sessionmocks.NewMockStore(t)

@@ -18,7 +18,7 @@ import (
 // execute. Self-scoped (the subject is the session character, never an arbitrary
 // id) per design INV-COMMAND-3. Ownership failures collapse to SESSION_NOT_FOUND, mirroring
 // ListFocusPresence.
-func (s *CoreServer) ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
+func (h *QueryHandler) ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error) {
 	if req == nil {
 		return nil, oops.Code("INVALID_ARGUMENT").Errorf("request is required")
 	}
@@ -29,21 +29,21 @@ func (s *CoreServer) ListAvailableCommands(ctx context.Context, req *corev1.List
 	if req.SessionId == "" {
 		return nil, oops.Code("INVALID_ARGUMENT").Errorf("session_id is required")
 	}
-	if _, err := auth.ValidateSessionOwnership(ctx, s.playerSessionRepo, s.sessionStore, req.GetPlayerSessionToken(), req.GetSessionId()); err != nil {
+	if _, err := auth.ValidateSessionOwnership(ctx, h.playerSessionRepo, h.sessionStore, req.GetPlayerSessionToken(), req.GetSessionId()); err != nil {
 		return nil, oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	info, err := h.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
 		return nil, oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 	if info.IsExpired() {
 		return nil, oops.Code("SESSION_EXPIRED").With("session_id", req.SessionId).Errorf("session expired")
 	}
-	if s.commandQuerier == nil {
+	if h.commandQuerier == nil {
 		slog.ErrorContext(ctx, "list available commands: querier not configured", "request_id", requestID, "session_id", req.SessionId)
 		return nil, oops.Code("PERMISSION_DENIED").With("reason", "command_querier_not_configured").Errorf("permission denied")
 	}
-	res, err := s.commandQuerier.Available(ctx, access.CharacterSubject(info.CharacterID.String()))
+	res, err := h.commandQuerier.Available(ctx, access.CharacterSubject(info.CharacterID.String()))
 	if err != nil {
 		return nil, oops.Code("INTERNAL").Wrap(err)
 	}
