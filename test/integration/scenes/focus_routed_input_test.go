@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
@@ -201,8 +201,8 @@ var _ = Describe("holomush-g1qcw.6: focus-routed pose denies a non-participant s
 		Expect(outsider.SendCommandOnConnection(ctx, "pose waves")).To(Succeed(),
 			"a plugin-level permission denial is a user-facing command_error event, not an RPC failure")
 
-		denialFrame := outsider.WaitForEvent(ctx, string(core.EventTypeCommandError))
-		var crp core.CommandResponsePayload
+		denialFrame := outsider.WaitForEvent(ctx, string(eventvocab.EventTypeCommandError))
+		var crp eventvocab.CommandResponsePayload
 		Expect(json.Unmarshal(denialFrame.GetPayload(), &crp)).To(Succeed(),
 			"command_error payload must unmarshal as CommandResponsePayload")
 		Expect(crp.Text).To(ContainSubstring("not permitted to write to scene"),

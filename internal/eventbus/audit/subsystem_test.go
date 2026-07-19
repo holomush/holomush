@@ -18,9 +18,12 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+// Compile-time interface check: *audit.Subsystem must satisfy lifecycle.Subsystem.
+var _ lifecycle.Subsystem = (*audit.Subsystem)(nil)
+
 // stubJS/stubPool satisfy the Subsystem's provider interfaces for
-// unit tests that never actually Start the subsystem. They return nil,
-// which exercises the "dependency not started" guard in Subsystem.Start.
+// unit tests that never actually Prepare the subsystem. They return nil,
+// which exercises the "dependency not started" guard in Subsystem.Prepare.
 type stubJS struct{}
 
 func (stubJS) JS() jetstream.JetStream { return nil }
@@ -124,10 +127,10 @@ func TestConfigValidateRejectsNonPositivePurgeInterval(t *testing.T) {
 		"a zero purge_interval is also rejected")
 }
 
-func TestStartWithNilJSReturnsDepNotStartedError(t *testing.T) {
+func TestPrepareWithNilJSReturnsDepNotStartedError(t *testing.T) {
 	t.Parallel()
 	s := audit.NewSubsystem(stubJS{}, stubPool{}, audit.Config{})
-	err := s.Start(t.Context())
+	err := s.Prepare(t.Context())
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_DEP_NOT_STARTED")
 }
@@ -136,33 +139,33 @@ type stubJSValid struct{ js jetstream.JetStream }
 
 func (s stubJSValid) JS() jetstream.JetStream { return s.js }
 
-func TestStartWithNilPoolReturnsDepNotStartedError(t *testing.T) {
+func TestPrepareWithNilPoolReturnsDepNotStartedError(t *testing.T) {
 	t.Parallel()
-	// JS provider returns non-nil; pool provider returns nil. Start
+	// JS provider returns non-nil; pool provider returns nil. Prepare
 	// must reject on the pool guard.
 	fakeJS := stubJSValid{js: fakeJetStream{}}
 	s := audit.NewSubsystem(fakeJS, stubPool{}, audit.Config{})
-	err := s.Start(t.Context())
+	err := s.Prepare(t.Context())
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_DEP_NOT_STARTED")
 }
 
 // fakeJetStream is the minimum jetstream.JetStream surface needed to pass
-// the nil-check in Subsystem.Start. All methods return zero/err — the
+// the nil-check in Subsystem.Prepare. All methods return zero/err — the
 // test exits before any are called.
 type fakeJetStream struct{ jetstream.JetStream }
 
-func TestStopWithoutStartIsNoop(t *testing.T) {
+func TestStopWithoutPrepareIsNoop(t *testing.T) {
 	t.Parallel()
 	s := audit.NewSubsystem(stubJS{}, stubPool{}, audit.Config{})
-	// Stop before Start must not panic or error.
+	// Stop before Prepare must not panic or error.
 	require.NoError(t, s.Stop(t.Context()))
 }
 
-func TestAwaitDrainedBeforeStartIsNoop(t *testing.T) {
+func TestAwaitDrainedBeforePrepareIsNoop(t *testing.T) {
 	t.Parallel()
 	s := audit.NewSubsystem(stubJS{}, stubPool{}, audit.Config{})
-	// Pre-start AwaitDrained returns immediately without using t.Fatalf;
+	// Pre-prepare AwaitDrained returns immediately without using t.Fatalf;
 	// test passes simply by not hanging or panicking.
 	s.AwaitDrained(t, 10*time.Millisecond)
 }

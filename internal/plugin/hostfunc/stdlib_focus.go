@@ -13,7 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/session"
 )
@@ -46,8 +46,28 @@ type FocusOps interface {
 }
 
 // HistoryReader provides read-only event history access for Lua plugins.
+//
+// beforeSeq is the exclusive upper bound by JetStream stream sequence
+// (eventbus.HistoryQuery.BeforeSeq); zero means "no cursor — read the tail"
+// (D-07/ARCH-04). beforeID is a tripwire that validates a nonzero beforeSeq
+// still names the same event in storage; it is not itself a filter.
 type HistoryReader interface {
-	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error)
+	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error)
+}
+
+// actorIDString renders an event actor's ULID for the plugin-facing Lua
+// table, mapping the zero ULID (anonymous/system-unset) to the empty string
+// rather than its 26-char Crockford text. Mirrors the deleted
+// busEventToCoreEvent's deliberate zero→"" mapping
+// (cmd/holomush/sub_grpc.go, pre-ARCH-04) and the precedent at
+// internal/grpc/server.go's actorIDString — a bare ulid.ULID.String() would
+// surface the zero actor as "00000000000000000000000000", an observable
+// behavior change plugins do not expect (cross-AI round 7, MEDIUM).
+func actorIDString(id ulid.ULID) string {
+	if id == (ulid.ULID{}) {
+		return ""
+	}
+	return id.String()
 }
 
 // RegisterStreamHistoryFunc adds ONLY holomush.query_stream_history (the
@@ -364,7 +384,9 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 		count = 0
 	}
 
-	// Decode optional cursor from base64.
+	// Decode optional cursor from base64. beforeSeq==0 means "no cursor —
+	// read the tail" (D-07/ARCH-04); there is no fallback keyed on ID alone.
+	var beforeSeq uint64
 	var beforeID ulid.ULID
 	cursorVal := ls.GetField(args, "cursor")
 	if cursorVal != lua.LNil && cursorVal != lua.LFalse {
@@ -384,6 +406,7 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 					return 2
 				}
 				if c.Host != nil {
+					beforeSeq = c.Host.Seq
 					beforeID = c.Host.ID
 				}
 			}
@@ -414,7 +437,7 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 	ctx, cancel := context.WithTimeout(ctx, defaultPluginQueryTimeout)
 	defer cancel()
 
-	events, err := hr.ReplayTail(ctx, stream, count, notBefore, beforeID)
+	events, err := hr.ReplayTail(ctx, stream, count, notBefore, beforeSeq, beforeID)
 	if err != nil {
 		slog.WarnContext(ctx, "holomush.query_stream_history failed",
 			"stream", stream, "error", err)
@@ -424,21 +447,25 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 	}
 
 	eventsTable := ls.NewTable()
-	for i, e := range events {
+	for i := range events {
+		e := &events[i]
 		et := ls.NewTable()
 		ls.SetField(et, "id", lua.LString(e.ID.String()))
-		ls.SetField(et, "stream", lua.LString(e.Stream))
+		ls.SetField(et, "stream", lua.LString(string(e.Subject)))
 		ls.SetField(et, "type", lua.LString(string(e.Type)))
 		ls.SetField(et, "timestamp", lua.LNumber(e.Timestamp.UnixMilli()))
 		ls.SetField(et, "actor_kind", lua.LString(e.Actor.Kind.String()))
-		ls.SetField(et, "actor_id", lua.LString(e.Actor.ID))
+		ls.SetField(et, "actor_id", lua.LString(actorIDString(e.Actor.ID)))
 		ls.SetField(et, "payload", lua.LString(string(e.Payload)))
 		// Encode a per-event cursor so callers can paginate from this event.
+		// Carries the event's real JetStream stream sequence (D-07/ARCH-04) —
+		// the cursor stays opaque to the plugin, which sees only the
+		// base64 blob.
 		evtCursorBytes, encErr := cursor.Encode(cursor.Cursor{
 			Version: cursor.CurrentVersion,
 			Epoch:   cursor.CurrentEpoch(),
 			Owner:   cursor.Owner{Kind: cursor.OwnerHost},
-			Host:    &cursor.HostCursor{Seq: 0, ID: e.ID},
+			Host:    &cursor.HostCursor{Seq: e.Seq, ID: e.ID},
 		})
 		if encErr == nil {
 			ls.SetField(et, "cursor", lua.LString(base64.StdEncoding.EncodeToString(evtCursorBytes)))
@@ -451,6 +478,9 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 
 	// next_cursor: non-empty when a full page was returned (indicating more pages exist).
 	// The oldest event (index 0, ascending order) is the backward-pagination anchor.
+	// Do NOT re-point this at the last event: BeforeSeq is an exclusive upper
+	// bound, so anchoring on the newest event would re-request the page just
+	// returned (D-07's repeat bug via a different mechanism).
 	hasMore := len(events) == count && count > 0
 	result := ls.NewTable()
 	ls.SetField(result, "events", eventsTable)
@@ -460,7 +490,7 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 			Version: cursor.CurrentVersion,
 			Epoch:   cursor.CurrentEpoch(),
 			Owner:   cursor.Owner{Kind: cursor.OwnerHost},
-			Host:    &cursor.HostCursor{Seq: 0, ID: events[0].ID},
+			Host:    &cursor.HostCursor{Seq: events[0].Seq, ID: events[0].ID},
 		})
 		if encErr == nil {
 			ls.SetField(result, "next_cursor", lua.LString(base64.StdEncoding.EncodeToString(nextCursorBytes)))

@@ -27,8 +27,15 @@ import (
 
 // CheckpointSweepConfig holds the constructor arguments for CheckpointSweepSubsystem.
 type CheckpointSweepConfig struct {
+	// Repo/AuditEmitter are given values for callers that already hold the
+	// resolved storage at construction (integration-test literals).
+	// DepsProvider, resolved once at the top of Start, is the production
+	// path — it wins when non-nil (07-09 item 9). Backed by the memoized
+	// wiring builder in cmd/holomush, which this package never names
+	// directly.
 	Repo         *CheckpointRepo
 	AuditEmitter AuditEmitter
+	DepsProvider func() (*CheckpointRepo, AuditEmitter, error)
 	Logger       *slog.Logger
 	// TTL is the maximum allowed age of last_heartbeat_at for a non-terminal
 	// checkpoint before it is auto-aborted. Defaults to 24h when ≤ 0.
@@ -73,46 +80,93 @@ func (s *CheckpointSweepSubsystem) ID() lifecycle.SubsystemID {
 //     before any new emission (spec §6.2).
 //   - SubsystemEventBus: audit events route to JetStream.
 //   - SubsystemAuditProjection: emitted events land in events_audit.
+//
+// Database, Auth, and ABAC are THE RULE's wiring consumer superset
+// (07-09 item 9) — this subsystem holds a DepsProvider backed by the
+// memoized wiring builder, and whichever consumer resolves the
+// provider first builds it, so every consumer must declare the full set.
 func (s *CheckpointSweepSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{
 		lifecycle.SubsystemCryptoChainVerifier,
 		lifecycle.SubsystemEventBus,
 		lifecycle.SubsystemAuditProjection,
+		lifecycle.SubsystemDatabase,
+		lifecycle.SubsystemAuth,
+		lifecycle.SubsystemABAC,
 	}
 }
 
-// Start runs an immediate sweep then launches the background tick loop.
-// A failure in the boot-time sweep is fatal (returns non-nil error).
-func (s *CheckpointSweepSubsystem) Start(ctx context.Context) error {
+// Prepare resolves the checkpoint repo + audit emitter (DepsProvider wins
+// over the given Repo/AuditEmitter fields when non-nil) — provider
+// resolution only; it is memoized upstream and benign to re-run (D-13.3 row
+// 12). The boot-time sweep and the tick loop are domain work and belong in
+// Activate.
+func (s *CheckpointSweepSubsystem) Prepare(_ context.Context) error {
+	if s.cfg.DepsProvider != nil {
+		repo, emitter, err := s.cfg.DepsProvider()
+		if err != nil {
+			return err
+		}
+		s.cfg.Repo = repo
+		s.cfg.AuditEmitter = emitter
+	}
+	return nil
+}
+
+// Activate runs an immediate sweep, then launches the background tick loop
+// (D-13.3 row 12). A failure in the boot-time sweep is fatal (returns
+// non-nil error). Idempotent: guarded on s.done, a phase-owned field set
+// only by Activate, so a repeated Activate does not run a second boot sweep
+// or launch a second tick-loop goroutine.
+func (s *CheckpointSweepSubsystem) Activate(ctx context.Context) error {
+	if s.done != nil {
+		return nil // already activated
+	}
 	if err := s.sweepOnce(ctx); err != nil {
 		return oops.Code("DEK_REKEY_SWEEP_BOOT_FAILED").Wrap(err)
 	}
 	sctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
-	s.done = make(chan struct{})
-	go s.loop(sctx)
+	done := make(chan struct{})
+	s.done = done
+	go s.loop(sctx, done)
 	return nil
 }
 
-// Stop cancels the background loop and waits for it to drain.
+// Stop cancels the background loop and waits for it to drain. It resets
+// the Activate guard (done) and cancel to nil so a legitimate retry of
+// Activate after Stop relaunches the tick loop rather than short-circuiting
+// on an already-stopped one (WR-01).
 func (s *CheckpointSweepSubsystem) Stop(ctx context.Context) error {
 	if s.cancel != nil {
 		s.cancel()
+		s.cancel = nil
 	}
 	if s.done == nil {
 		return nil
 	}
+	done := s.done
+	s.done = nil
 	select {
-	case <-s.done:
+	case <-done:
 		return nil
 	case <-ctx.Done():
 		return oops.Code("DEK_REKEY_SWEEP_STOP_TIMEOUT").Wrap(ctx.Err())
 	}
 }
 
-// loop is the background goroutine.
-func (s *CheckpointSweepSubsystem) loop(ctx context.Context) {
-	defer close(s.done)
+// loop is the background goroutine. done is the exact channel object
+// Activate created and assigned to s.done, passed explicitly (rather than
+// read from the s.done field inside the deferred close) so this always
+// closes the channel it was launched with. Reading s.done here instead
+// would race Stop's field reset: `go s.loop(sctx)` schedules the goroutine
+// but does not guarantee it runs before Stop returns, so a `defer
+// close(s.done)` could evaluate the field AFTER Stop's WR-01 fix nils it,
+// panicking with "close of nil channel". Threading done as a parameter
+// captures the channel value synchronously in Activate, at `go` statement
+// evaluation time, immune to any later field mutation.
+func (s *CheckpointSweepSubsystem) loop(ctx context.Context, done chan struct{}) {
+	defer close(done)
 	t := time.NewTicker(s.cfg.Interval)
 	defer t.Stop()
 	for {

@@ -108,7 +108,8 @@ func setupE2EEnv(ctx context.Context, t *testing.T) *e2eEnv {
 	require.NoError(t, err)
 
 	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, hostSub.Start(ctx))
+	require.NoError(t, hostSub.Prepare(ctx))
+	require.NoError(t, hostSub.Activate(ctx))
 
 	registry, err := core.BootstrapVerbRegistry("test")
 	require.NoError(t, err)

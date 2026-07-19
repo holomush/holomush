@@ -9,20 +9,17 @@ import (
 	"time"
 
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/sessionlease"
 )
 
-// DefaultLeaseRefreshInterval is the cadence at which a live gateway connection
-// refreshes its server-side lease (CoreService.RefreshConnection → last_seen_at).
-// Both the web StreamEvents heartbeat (internal/web) and the telnet lease-refresh
-// ticker (internal/telnet) default to this value — this constant is their single
-// source of truth.
-//
-// It is the floor the session reaper's LeaseTTL and BootGrace must clear: a
-// healthy connection only touches last_seen_at once per interval, so a LeaseTTL
-// at or below it can lapse between refreshes, and a BootGrace below it lets the
-// post-restart sweep fire before any surviving gateway re-asserts (I-LIVE-4).
-// parseSessionConfig (cmd/holomush) rejects lease/grace below 2× this value.
-const DefaultLeaseRefreshInterval = 15 * time.Second
+// DefaultLeaseRefreshInterval forwards to sessionlease.DefaultRefreshInterval,
+// which is the source of truth. Kept as a documented forwarder (not a second
+// definition) so internal/session's own callers and cmd/holomush's
+// parseSessionConfig keep the session.DefaultLeaseRefreshInterval spelling;
+// the gateway (internal/telnet, internal/web) reads the leaf directly because
+// INV-EVENTBUS-1 forbids importing internal/session.
+const DefaultLeaseRefreshInterval = sessionlease.DefaultRefreshInterval
 
 // ReaperConfig configures the session reaper.
 type ReaperConfig struct {
@@ -60,13 +57,23 @@ func NewReaper(store Store, config ReaperConfig) *Reaper {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	r := &Reaper{store: store, config: config}
-	r.bootAt = config.Now()
-	return r
+	return &Reaper{store: store, config: config}
 }
 
 // Run starts the reaper loop. Blocks until context is cancelled.
+//
+// bootAt is stamped HERE, not in NewReaper (WR-03, 07-review): under the
+// Prepare/Activate lifecycle split, NewReaper is called from Prepare but
+// Run is not launched until Activate — which runs only after every
+// earlier-topo-order subsystem's own Activate has completed. Stamping
+// bootAt at construction measured the grace window from a wall-clock
+// instant strictly earlier than the moment the sweep loop actually starts
+// consulting it, silently shrinking the effective BootGrace window below
+// the configured value. Stamping it here restores the pre-split behavior,
+// where NewReaper and `go reaper.Run(...)` ran back-to-back with no
+// intervening barrier.
 func (r *Reaper) Run(ctx context.Context) {
+	r.bootAt = r.config.Now()
 	ticker := time.NewTicker(r.config.Interval)
 	defer ticker.Stop()
 

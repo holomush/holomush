@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -1360,7 +1361,7 @@ func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
 	})
 	_, err := host.DeliverEvent(ctx, "core-scenes", pluginsdk.Event{
 		Stream: "scene:01SCENE",
-		Type:   pluginsdk.EventType(core.EventTypeSystem),
+		Type:   pluginsdk.EventType(eventvocab.EventTypeSystem),
 	})
 	require.NoError(t, err)
 
@@ -2185,6 +2186,34 @@ func TestLoadPassesDeclaredCapabilitiesToInit(t *testing.T) {
 	require.NotNil(t, grpcClient.initReq.Config, "ServiceConfig must be set")
 	assert.ElementsMatch(t, []string{"focus", "stream.history"},
 		grpcClient.initReq.Config.GetDeclaredCapabilities())
+}
+
+// TestLoadPassesGameIDToInit verifies Host.Load threads h.gameID (the
+// gameIDProvider-resolved value set via WithGameID/WithCA) into
+// InitRequest.Config.GameId. This is the seam a binary plugin reads via
+// pluginsdk.ResolveGameID to qualify JetStream subjects it builds directly
+// instead of hardcoding a literal — the silence of this exact wiring was the
+// root cause of the e2e-scene-pose-regression debug session (scene/channel
+// plugin events published on "events.main...." never matching the host's
+// real-game-id subscribe filters once the host stopped defaulting to "main").
+func TestLoadPassesGameIDToInit(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	host := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithGameID("01ARZ3NDEKTSV4RRFFQ69G5FAV"))
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(tmpDir+"/test-plugin"))
+
+	manifest := &plugins.Manifest{
+		Name: "test-plugin", Version: "1.0.0", Type: plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{Executable: "test-plugin"},
+	}
+
+	require.NoError(t, host.Load(ctx, manifest, tmpDir))
+	require.NotNil(t, grpcClient.initReq, "Init must be called")
+	require.NotNil(t, grpcClient.initReq.Config, "ServiceConfig must be set")
+	assert.Equal(t, "01ARZ3NDEKTSV4RRFFQ69G5FAV", grpcClient.initReq.Config.GetGameId())
 }
 
 // Verifies: INV-PLUGIN-54 — unconditional Init: a binary plugin with no

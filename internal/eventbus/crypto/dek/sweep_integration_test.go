@@ -144,11 +144,55 @@ var _ = Describe("Sweep_Lifecycle_StartStop", func() {
 		})
 
 		ctx := context.Background()
-		Expect(sub.Start(ctx)).To(Succeed())
+		Expect(sub.Prepare(ctx)).To(Succeed())
+		Expect(sub.Activate(ctx)).To(Succeed())
 		// Stop must return quickly and cleanly (goroutine exits on cancel).
 		stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		Expect(sub.Stop(stopCtx)).To(Succeed())
+	})
+})
+
+var _ = Describe("Sweep_RepeatedActivateRunsOnlyOneBootSweepAndTickLoop", func() {
+	It("second Activate is a no-op — no second boot sweep, no second tick goroutine (D-13.2 row 12)", func() {
+		setup := newRekeyTestSetup()
+
+		rid := setup.OpenStaleCheckpoint("scene", "01RPT", 30*time.Hour)
+
+		sub := dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{
+			Repo:         setup.Repo,
+			AuditEmitter: setup.AuditEmitter,
+			Logger:       setup.Logger,
+			TTL:          24 * time.Hour,
+			Interval:     1 * time.Hour,
+		})
+
+		ctx := context.Background()
+		Expect(sub.Prepare(ctx)).To(Succeed())
+		Expect(sub.Activate(ctx)).To(Succeed())
+		DeferCleanup(func() {
+			stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			_ = sub.Stop(stopCtx)
+		})
+
+		// First Activate's boot sweep already aborted the stale checkpoint
+		// and emitted exactly one audit event.
+		events := setup.LoadEventsAuditBySubject("events.g1.system.rekey.scene.01RPT")
+		Expect(len(events)).To(Equal(1))
+
+		// Second Activate must be a no-op: no second boot sweep (which would
+		// be harmless here since the checkpoint is already terminal, but a
+		// second tick-loop goroutine would be a leak).
+		Expect(sub.Activate(ctx)).To(Succeed())
+
+		// No duplicate audit event from a second boot sweep.
+		events = setup.LoadEventsAuditBySubject("events.g1.system.rekey.scene.01RPT")
+		Expect(len(events)).To(Equal(1), "second Activate must not re-run the boot sweep")
+
+		ckpt, err := setup.Repo.Get(context.Background(), rid)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ckpt.Status).To(Equal(dek.CheckpointStatusAborted))
 	})
 })
 
@@ -167,7 +211,8 @@ var _ = Describe("Sweep_TickScanAbortsExpired", func() {
 		})
 
 		ctx := context.Background()
-		Expect(sub.Start(ctx)).To(Succeed())
+		Expect(sub.Prepare(ctx)).To(Succeed())
+		Expect(sub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() {
 			stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()

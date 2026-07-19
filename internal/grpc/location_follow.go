@@ -16,6 +16,8 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -54,26 +56,25 @@ type locationFollower struct {
 // Returns true if a location_state was sent (caller may skip duplicate forwarding).
 func (lf *locationFollower) handleEvent(
 	ctx context.Context,
-	event core.Event,
+	event eventbus.Event,
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 ) bool {
-	return lf.handleMovePayload(ctx, event.Type, event.Payload, stream)
+	return lf.handleMovePayload(ctx, eventvocab.EventType(event.Type), event.Payload, stream)
 }
 
 // handleMovePayload is the bus-friendly entry point: it takes the typed
-// event kind and raw payload bytes instead of a full core.Event literal,
-// sidestepping the I-16 ruleguard (which forbids core.Event{} outside
-// core.NewEvent). Semantically identical to handleEvent.
+// event kind and raw payload bytes instead of a full eventbus.Event literal.
+// Semantically identical to handleEvent.
 func (lf *locationFollower) handleMovePayload(
 	ctx context.Context,
-	eventType core.EventType,
+	eventType eventvocab.EventType,
 	payloadBytes []byte,
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 ) bool {
 	if lf.worldQuerier == nil {
 		return false
 	}
-	if eventType != core.EventTypeMove {
+	if eventType != eventvocab.EventTypeMove {
 		return false
 	}
 
@@ -198,36 +199,36 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 	// Location and exits are best-effort — the location may not exist in the
 	// world model yet (e.g., guest start locations that are only referenced by
 	// ID). We still build the event with whatever data we have.
-	var locInfo core.LocationStateInfo
+	var locInfo eventvocab.LocationStateInfo
 	if loc, err := lf.worldQuerier.GetLocation(sysCtx, systemSubjectID, locationID); err != nil {
 		slog.DebugContext(ctx, "location_state: location not found, using ID only",
 			"location_id", locationID.String())
-		locInfo = core.LocationStateInfo{ID: locationID.String()}
+		locInfo = eventvocab.LocationStateInfo{ID: locationID.String()}
 	} else {
-		locInfo = core.LocationStateInfo{
+		locInfo = eventvocab.LocationStateInfo{
 			ID:          loc.ID.String(),
 			Name:        loc.Name,
 			Description: loc.Description,
 		}
 	}
 
-	var exitList []core.LocationStateExit
+	var exitList []eventvocab.LocationStateExit
 	if exits, err := lf.worldQuerier.GetExitsByLocation(sysCtx, systemSubjectID, locationID); err == nil {
 		exitList = convertExits(exits)
 	}
 
 	// Presence = active sessions at this location.
 	// Guest characters exist only in sessions, not the character repository.
-	var present []core.LocationStateChar
+	var present []eventvocab.LocationStateChar
 	if lf.sessionStore != nil {
 		sessions, sessErr := lf.sessionStore.ListActiveByLocation(ctx, locationID)
 		if sessErr != nil {
 			slog.WarnContext(ctx, "location_state: failed to list sessions at location",
 				"location_id", locationID.String(), "error", sessErr)
 		} else {
-			present = make([]core.LocationStateChar, 0, len(sessions))
+			present = make([]eventvocab.LocationStateChar, 0, len(sessions))
 			for _, sess := range sessions {
-				present = append(present, core.LocationStateChar{
+				present = append(present, eventvocab.LocationStateChar{
 					CharacterID: sess.CharacterID.String(),
 					Name:        sess.CharacterName,
 					Idle:        false,
@@ -236,7 +237,7 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 		}
 	}
 
-	payload := core.LocationStatePayload{
+	payload := eventvocab.LocationStatePayload{
 		Location: locInfo,
 		Exits:    exitList,
 		Present:  present,
@@ -262,7 +263,7 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 			Event: &corev1.EventFrame{
 				Id:        core.NewULID().String(),
 				Stream:    world.LocationStream(locationID),
-				Type:      string(core.EventTypeLocationState),
+				Type:      string(eventvocab.EventTypeLocationState),
 				Timestamp: timestamppb.New(time.Now()),
 				ActorType: core.ActorSystem.String(),
 				ActorId:   "system",
@@ -286,10 +287,10 @@ func buildLocationStateRendering(registry *core.VerbRegistry) (*corev1.Rendering
 		return nil, oops.Code("LOCATION_STATE_NO_REGISTRY").
 			Errorf("verb registry not configured; synthetic location_state would fail INV-EVENTBUS-6 at gateway")
 	}
-	reg, ok := registry.Lookup(string(core.EventTypeLocationState))
+	reg, ok := registry.Lookup(string(eventvocab.EventTypeLocationState))
 	if !ok {
 		return nil, oops.Code("LOCATION_STATE_UNREGISTERED").
-			With("event_type", string(core.EventTypeLocationState)).
+			With("event_type", string(eventvocab.EventTypeLocationState)).
 			Errorf("location_state verb not registered; synthetic emit would fail INV-EVENTBUS-6 at gateway")
 	}
 	return &corev1.RenderingMetadata{
@@ -302,11 +303,11 @@ func buildLocationStateRendering(registry *core.VerbRegistry) (*corev1.Rendering
 	}, nil
 }
 
-// convertExits maps world.Exit slices to core.LocationStateExit slices.
-func convertExits(exits []*world.Exit) []core.LocationStateExit {
-	result := make([]core.LocationStateExit, 0, len(exits))
+// convertExits maps world.Exit slices to eventvocab.LocationStateExit slices.
+func convertExits(exits []*world.Exit) []eventvocab.LocationStateExit {
+	result := make([]eventvocab.LocationStateExit, 0, len(exits))
 	for _, e := range exits {
-		result = append(result, core.LocationStateExit{
+		result = append(result, eventvocab.LocationStateExit{
 			Direction: e.Name,
 			Name:      e.Name,
 			Locked:    e.Locked,

@@ -122,7 +122,8 @@ var _ = Describe("Scene log preserves ciphertext and audit headers (INV-CRYPTO-4
 		hostSub.SetLateInitProvider(func() (*audit.OwnerMap, *audit.PluginConsumerManager) {
 			return owners, pluginMgr
 		})
-		Expect(hostSub.Start(ctx)).To(Succeed())
+		Expect(hostSub.Prepare(ctx)).To(Succeed())
+		Expect(hostSub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		// Publish one sensitive event on a plugin-owned subject.

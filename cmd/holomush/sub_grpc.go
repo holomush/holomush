@@ -46,10 +46,12 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/sysbroadcast"
 	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
@@ -75,8 +77,20 @@ type grpcSubsystemConfig struct {
 	// not to the PostgreSQL events table.
 	EventBus *eventbus.Subsystem
 
-	GRPCAddr       string
+	GRPCAddr string
+	// GuestReaperInterval is the tick interval for the guest reaper (row 16,
+	// round 7 MEDIUM). Defaults to 1 * time.Minute when zero — production
+	// wiring passes nothing, preserving today's hardcoded value; the
+	// seam exists so tests can shorten the interval to make the
+	// neither-reaper-runs-after-Prepare-alone test deterministic.
+	GuestReaperInterval time.Duration
+	// TLSConfig is a given value for callers that already hold a resolved
+	// TLS config at construction (test literals). TLSProvider, resolved
+	// once at the top of Start, is the production path — it wins when
+	// non-nil (07-09 item 2/Task 1). Backed by tlscerts.TLSSubsystem's
+	// panic-guarded TLSConfig() accessor.
 	TLSConfig      *cryptotls.Config
+	TLSProvider    func() *cryptotls.Config
 	SessionTTL     time.Duration
 	ReaperInterval time.Duration
 	LeaseTTL       time.Duration
@@ -114,6 +128,22 @@ type grpcSubsystemConfig struct {
 	// asserts pointer-identity between the two. When nil, both paths
 	// fall back to identity decoding.
 	KeySelector codec.KeySelector
+
+	// CryptoWiring is the memoized cryptoWiring builder (cryptowiring.go).
+	// grpcSubsystem is the one consumer in package main, so it may hold
+	// func() (*cryptoWiring, error) directly rather than a narrow
+	// consumer-owned provider type (round 5, BLOCKER 4). Resolved at the
+	// top of Start; its RekeyManager output feeds AuthGuard/AuditEmitter
+	// construction, and — as a side effect of the FIRST resolution in the
+	// running system — the invalidation.Coordinator is constructed and
+	// started here too (07-09 item 4).
+	CryptoWiring func() (*cryptoWiring, error)
+
+	// CoordHolder is the late-bound holder the cryptoWiring builder
+	// publishes the invalidation.Coordinator into. Stop uses it to drive
+	// the Coordinator's shutdown (07-09 item 4 — replaces the ad-hoc
+	// runCore-level defer with orchestrator-ordered Stop).
+	CoordHolder *coordHolder
 }
 
 // grpcSubsystem is the terminal subsystem that wires the gRPC server.
@@ -123,6 +153,7 @@ type grpcSubsystem struct {
 
 	grpcServer    *grpc.Server
 	listener      net.Listener
+	reaperCtx     context.Context //nolint:containedctx // deliberate: shared by both reapers' Run goroutines, launched from Activate but built in Prepare; outlives the boot ctx like the audit worker's context.Background() parent
 	reaperCancel  context.CancelFunc
 	guestReaper   *auth.GuestReaper
 	sessionReaper *session.Reaper
@@ -149,8 +180,8 @@ func newGRPCSubsystem(cfg grpcSubsystemConfig) *grpcSubsystem {
 }
 
 // wrapPublisher wraps the raw EventBus publisher with RenderingPublisher
-// so all emit-site callers (pluginManager and busEventAppender) get
-// rendering-metadata enrichment for free. Returns an error if the verb
+// so all emit-site callers (pluginManager and CoreServer.emitCommandResponse)
+// get rendering-metadata enrichment for free. Returns an error if the verb
 // registry is not configured.
 func (s *grpcSubsystem) wrapPublisher(raw eventbus.Publisher) (eventbus.Publisher, error) {
 	if s.cfg.VerbRegistry == nil {
@@ -167,12 +198,30 @@ func (s *grpcSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemG
 // Bootstrap transitively depends on ABAC, World, Plugins, Database.
 // EventBus is required so the Publisher is ready when ConfigureEventEmitter
 // runs (F1 cutover: plugin emits publish to JetStream).
+//
+// TLS is required because Prepare resolves TLSProvider (07-09 item 2). Cluster
+// is required because the invalidation.Coordinator (built as a side effect
+// of the first CryptoWiring resolution) needs Registry: clusterSub (07-09
+// item 4). CryptoChainVerifier is the T-07-51 re-scope (07-09 item 8): gRPC
+// binds its TCP listener only after the INV-CRYPTO-102 chain walk has run.
+// Database/Auth/ABAC are THE RULE's cryptoWiring consumer superset — this
+// subsystem holds a CryptoWiring provider, and whichever consumer resolves
+// it first builds it, so every consumer must declare the full set.
+// AuditProjection is required (07-10, T-07-50): without this edge gRPC could
+// begin serving before the host audit projection is up, so events served in
+// that window would not be durably audited (a repudiation gap).
 func (s *grpcSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{
 		lifecycle.SubsystemBootstrap,
 		lifecycle.SubsystemSessions,
 		lifecycle.SubsystemAuth,
 		lifecycle.SubsystemEventBus,
+		lifecycle.SubsystemTLS,
+		lifecycle.SubsystemCluster,
+		lifecycle.SubsystemCryptoChainVerifier,
+		lifecycle.SubsystemDatabase,
+		lifecycle.SubsystemABAC,
+		lifecycle.SubsystemAuditProjection,
 	}
 }
 
@@ -222,18 +271,50 @@ func subscriberOptionsFor(
 	return opts
 }
 
-// Start wires all dependencies and starts the gRPC server.
-// Start is idempotent: if the gRPC server is already running, it returns nil.
+// Prepare wires all dependencies, builds the gRPC server, registers
+// services, and constructs (but does NOT launch) both reapers plus their
+// shared reaperCtx/reaperCancel state (D-13.3 row 16). It does not bind the
+// TCP listener or start serving — those are Activate's job. This is the
+// row D-11 exists for: get the split exactly right.
+//
+// Prepare is idempotent: if the gRPC server has already been built, it
+// returns nil.
 // codecov:ignore — tested by integration and E2E tests
-func (s *grpcSubsystem) Start(ctx context.Context) error {
+func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	if s.grpcServer != nil {
-		return nil // already started
+		return nil // already prepared
+	}
+
+	// Resolve the TLS config provider (07-09 item 2) — wins over the given
+	// TLSConfig field when non-nil. Backed by tlscerts.TLSSubsystem's
+	// panic-guarded accessor; DependsOn(SubsystemTLS) guarantees Start has
+	// already run.
+	if s.cfg.TLSProvider != nil {
+		s.cfg.TLSConfig = s.cfg.TLSProvider()
+	}
+
+	// Resolve the cryptoWiring builder (07-09 items 4 + 9). This is the
+	// FIRST call to CryptoWiring in the running system (grpcSub depends,
+	// transitively or directly, on every other wiring consumer's
+	// dependencies), so it is also where the invalidation.Coordinator gets
+	// constructed + started, as a side effect inside the builder.
+	if s.cfg.CryptoWiring != nil {
+		w, wiringErr := s.cfg.CryptoWiring()
+		if wiringErr != nil {
+			return wiringErr
+		}
+		// Thread the production dek.Manager so Start() below can construct
+		// the AuthGuard + AuditEmitter for INV-CRYPTO-22 FallbackResolver.
+		// When nil (KEK unavailable), the history reader keeps nil-auth
+		// passthrough.
+		s.cfg.RekeyManager = w.rekeyManager
 	}
 
 	// Gather dependencies from subsystems.
-	// F7: EventWriter and PG events table are gone. Append goes directly to
-	// JetStream via busEventAppender. rawEventStore is kept only for
-	// system-info / game-ID (GetSystemInfo / InitGameID) used by GameSettings.
+	// F7: EventWriter and PG events table are gone. CoreServer.emitCommandResponse
+	// publishes directly to JetStream via WithEventPublisher. rawEventStore is
+	// kept only for system-info / game-ID (GetSystemInfo / InitGameID) used by
+	// GameSettings.
 	rawEventStore := s.cfg.DB.EventStore()
 	pool := s.cfg.DB.Pool()
 	policyEngine := s.cfg.ABAC.Engine()
@@ -277,26 +358,29 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		plugins.WithGameID(s.cfg.EventBus.GameID),
 	)
 
-	// F7: build the JetStream-backed EventAppender. All host-engine Append
-	// calls publish directly to JetStream; the PG events table is gone.
-	eventStore := &busEventAppender{
-		publisher: publisher,
-		bus:       s.cfg.EventBus,
-	}
+	// bus is the one game-id source shared by every closure below — the
+	// presence emitter, the SessionAdmin broadcast backing, and (Task 3)
+	// command.Services' SystemBroadcaster all qualify subjects off the same
+	// EventBus.GameID(), rather than three independent sources (D-02).
+	bus := s.cfg.EventBus
 
-	// Wire the plugin SessionAdmin broadcast backing now that the event appender
+	// Wire the plugin SessionAdmin broadcast backing now that the publisher
 	// exists — the brokered SessionAdminService.Broadcast emits a system event to
-	// the reserved subject over this appender (holomush-eykuh.4.2, decision
-	// holomush-t019a). Late binding: the appender is built here, after the plugin
+	// the reserved subject over this publisher (holomush-eykuh.4.2, decision
+	// holomush-t019a). Late binding: the publisher is built here, after the plugin
 	// subsystem started, so this cannot be a host construction-time option.
-	s.cfg.Plugins.ConfigureSystemBroadcaster(eventStore)
+	s.cfg.Plugins.ConfigureSystemBroadcaster(publisher, func() string { return bus.GameID() })
 
-	// 1. Create core engine from event store.
-	engine := core.NewEngine(eventStore)
+	// 1. Create the presence emitter (arrive/leave/session_ended) over the
+	// SAME wrapped publisher CoreServer.emitCommandResponse uses (never
+	// rawPublisher — the audit projection fails closed without the
+	// App-Rendering header the wrapper stamps), plus the bus's own GameID
+	// as the qualification source (FINDING-5).
+	presenceEmitter := presence.NewEmitter(publisher, s.cfg.EventBus.GameID)
 
 	// Wire game-session fanout into the auth service so evictions emit
 	// session_ended events for child game sessions before FK cascade removes them.
-	authService.ConfigureGameSessionFanout(engine, sessionStore)
+	authService.ConfigureGameSessionFanout(presenceEmitter, sessionStore)
 
 	// 2. Create gRPC server with TLS credentials.
 	// Install GRPCServiceProxy as UnknownServiceHandler so plugin-provided
@@ -408,7 +492,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		World:              worldService,
 		Session:            sessionStore,
 		Engine:             policyEngine,
-		Events:             eventStore,
+		Broadcaster:        sysbroadcast.NewBroadcaster(publisher, func() string { return bus.GameID() }),
 		AliasCache:         aliasCache,
 		AliasRepo:          aliasRepo,
 		Registry:           cmdRegistry,
@@ -519,7 +603,10 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		s.cfg.KeySelector, alwaysSensitive, cryptoKeysLookupForFence, violationEmitterForFence)
 
 	coreServerOpts := []holoGRPC.CoreServerOption{
-		holoGRPC.WithEventStore(eventStore),
+		// The wrapped publisher (RenderingPublisher) is used here — NEVER
+		// rawPublisher — so command_response/command_error events carry the
+		// App-Rendering header the audit projection requires (round 7, MEDIUM).
+		holoGRPC.WithEventPublisher(publisher, s.cfg.EventBus.GameID),
 		holoGRPC.WithWorldQuerier(worldService),
 		holoGRPC.WithAuthService(authService),
 		holoGRPC.WithResetService(resetService),
@@ -544,6 +631,10 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 		holoGRPC.WithCommandQuerier(s.cfg.Plugins.CommandQuerier()),
 		holoGRPC.WithSubscriber(subscriber),
 		holoGRPC.WithHistoryReader(historyReader),
+		// gameID is also set by WithEventPublisher above (same source,
+		// s.cfg.EventBus.GameID); kept explicit here too since WithGameID
+		// predates WithEventPublisher and other Subscribe-path readers
+		// look for it by name.
 		holoGRPC.WithGameID(s.cfg.EventBus.GameID),
 		holoGRPC.WithIdentityRegistry(pluginManager),
 		// VerbRegistry feeds the synthetic-location_state emit path's
@@ -669,7 +760,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			"service", sceneServiceName)
 	}
 
-	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
+	coreServer := holoGRPC.NewCoreServer(presenceEmitter, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)
 
 	// 9. Create ContentService, register with gRPC.
@@ -711,8 +802,9 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 	}
 	sceneaccessv1.RegisterSceneAccessServiceServer(s.grpcServer, sceneAccessSrv)
 
-	// 10. Create and start session reaper.
+	// 10. Construct the session reaper (launch deferred to Activate — row 16).
 	reaperCtx, reaperCancel := context.WithCancel(context.Background())
+	s.reaperCtx = reaperCtx
 	s.reaperCancel = reaperCancel
 
 	s.sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{
@@ -723,7 +815,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			char := core.CharacterRef{
 				ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
 			}
-			if dcErr := engine.HandleDisconnect(reaperCtx, char, "session expired"); dcErr != nil {
+			if dcErr := presenceEmitter.EmitLeave(reaperCtx, char, "session expired"); dcErr != nil {
 				slog.WarnContext(
 					reaperCtx,
 					"reaper: leave event failed",
@@ -731,7 +823,7 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 					"error", dcErr,
 				)
 			}
-			if endErr := engine.EndSession(reaperCtx, char, info.ID,
+			if endErr := presenceEmitter.EmitSessionEnded(reaperCtx, char, info.ID,
 				core.SessionEndedCauseReaped,
 				"Session expired due to inactivity."); endErr != nil {
 				slog.WarnContext(reaperCtx, "reaper: session_ended event failed",
@@ -749,33 +841,62 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 			char := core.CharacterRef{
 				ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
 			}
-			if dcErr := engine.HandleDisconnect(reaperCtx, char, "phased out"); dcErr != nil {
+			if dcErr := presenceEmitter.EmitLeave(reaperCtx, char, "phased out"); dcErr != nil {
 				slog.WarnContext(reaperCtx, "lease sweep grid phase-out leave failed",
 					"session_id", info.ID, "error", dcErr)
 			}
 		},
 	})
-	go s.sessionReaper.Run(reaperCtx)
 
-	// 11. Create and start guest reaper. Its cleaner is the tombstone-emitting
-	// reaping service (05-16 / D-06) — each reaped guest's characters are deleted
-	// through the world CharacterWriter.Delete + a character_deleted tombstone
-	// before the player is deleted, so guest expiration cannot produce
-	// genesis-without-tombstone feed history. The lister stays the auth player repo.
+	// 11. Construct the guest reaper (launch deferred to Activate — row 16).
+	// Its cleaner is the tombstone-emitting reaping service (05-16 / D-06) —
+	// each reaped guest's characters are deleted through the world
+	// CharacterWriter.Delete + a character_deleted tombstone before the
+	// player is deleted, so guest expiration cannot produce
+	// genesis-without-tombstone feed history. The lister stays the auth
+	// player repo. GuestReaperInterval defaults to 1 minute when zero (row
+	// 16, round 7 MEDIUM) — production wiring passes nothing, preserving
+	// today's hardcoded value.
+	guestReaperInterval := s.cfg.GuestReaperInterval
+	if guestReaperInterval <= 0 {
+		guestReaperInterval = 1 * time.Minute
+	}
 	s.guestReaper = auth.NewGuestReaper(auth.GuestReaperConfig{
-		Interval: 1 * time.Minute,
+		Interval: guestReaperInterval,
 		IdleTTL:  10 * time.Minute,
 	}, authPlayerRepo, reapingService)
-	go s.guestReaper.Run(reaperCtx)
 
-	// 12. Bind TCP listener.
+	return nil
+}
+
+// Activate launches both reaper Run goroutines FIRST — so lease/guest
+// hygiene is live before external traffic lands — then binds the TCP
+// listener and starts serving (D-13.3 row 16, cross-AI round 5 BLOCKER: the
+// class of bug D-11 exists to eliminate — gRPC accepting traffic before a
+// declared dependency has finished acquiring). This subsystem is the whole
+// reason the two-sweep barrier exists; get this split exactly right.
+//
+// Idempotent: guarded on s.listener != nil.
+// codecov:ignore — tested by integration and E2E tests
+func (s *grpcSubsystem) Activate(ctx context.Context) error {
+	if s.listener != nil {
+		return nil // already activated
+	}
+
+	go s.sessionReaper.Run(s.reaperCtx)
+	go s.guestReaper.Run(s.reaperCtx)
+
+	// Bind TCP listener.
+	var err error
 	s.listener, err = net.Listen("tcp", s.cfg.GRPCAddr)
 	if err != nil {
-		reaperCancel()
+		if s.reaperCancel != nil {
+			s.reaperCancel()
+		}
 		return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", s.cfg.GRPCAddr).Wrap(err)
 	}
 
-	// 13. Start grpcServer.Serve() in goroutine.
+	// Start grpcServer.Serve() in goroutine.
 	slog.InfoContext(ctx, "gRPC server listening", "addr", s.cfg.GRPCAddr)
 	go func() {
 		if serveErr := s.grpcServer.Serve(s.listener); serveErr != nil {
@@ -788,102 +909,63 @@ func (s *grpcSubsystem) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the gRPC server, cancels reapers, and closes the listener.
 // GracefulStop is bound to the context — if the context expires, a hard Stop() is forced.
+// Resets the Prepare guard (grpcServer) and Activate guard (listener), plus
+// the reaper context fields, to nil so a legitimate retry of Prepare/Activate
+// after Stop reacquires fresh state rather than short-circuiting on an
+// already-stopped server/listener (WR-01).
+//
+// CoordHolder.coord is stopped and cleared via takeAndStop (WR-03, WR-01 —
+// mutex-guarded so it is safe even if stopCoordinatorOnBootFailure runs
+// concurrently on an abandoned Stop, see orchestrator.StopAll's own
+// documented abandonment behavior). This alone does NOT make the
+// Coordinator retry-safe: cryptoWiring's resolveCryptoWiring is a
+// sync.Once-memoized closure (cryptowiring.go) that runs the
+// Coordinator-constructing buildCryptoWiring step at most once per
+// process, predating this phase's fixes and out of scope here — a retried
+// Prepare will find the Coordinator already taken and simply skip
+// re-Stop()-ing it, but will NOT reconstruct or restart a new one, so
+// cluster invalidation fan-out does not resume.
 // codecov:ignore — tested by integration and E2E tests
 func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	if s.grpcServer != nil {
+		srv := s.grpcServer
 		done := make(chan struct{})
-		go func() {
-			s.grpcServer.GracefulStop()
+		go func(srv *grpc.Server, done chan struct{}) {
+			srv.GracefulStop()
 			close(done)
-		}()
+		}(srv, done)
 		select {
 		case <-done:
 			// graceful shutdown completed
 		case <-ctx.Done():
 			slog.WarnContext(ctx, "gRPC graceful shutdown timed out, forcing stop")
-			s.grpcServer.Stop()
+			srv.Stop()
 		}
+		s.grpcServer = nil
 	}
 	if s.reaperCancel != nil {
 		s.reaperCancel()
+		s.reaperCancel = nil
 	}
+	s.reaperCtx = nil
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
 			slog.DebugContext(ctx, "error closing gRPC listener", "error", err)
 		}
+		s.listener = nil
+	}
+	// grpcSubsystem owns the invalidation.Coordinator's lifecycle (07-09
+	// item 4) — replaces the former runCore-level ad-hoc defer with
+	// orchestrator-ordered Stop. takeAndStop no-ops when the wiring was
+	// never resolved (CryptoWiring nil, e.g. some unit-test configs), when
+	// the Coordinator degraded-path construction/start failed, or when it
+	// was already taken by a concurrent stopCoordinatorOnBootFailure call.
+	if s.cfg.CoordHolder != nil {
+		if stopErr := s.cfg.CoordHolder.takeAndStop(ctx); stopErr != nil {
+			slog.WarnContext(ctx, "invalidation.Coordinator stop error", "error", stopErr)
+		}
 	}
 	return nil
-}
-
-// busEventAppender implements core.EventAppender by publishing directly to
-// JetStream. F7 removes the PG events table and the EventWriter; all host-
-// engine Append calls go straight to the bus.
-type busEventAppender struct {
-	publisher eventbus.Publisher
-	bus       *eventbus.Subsystem
-}
-
-var _ core.EventAppender = (*busEventAppender)(nil)
-
-// Append translates a core.Event to an eventbus.Event and publishes it to
-// JetStream. The engine emits domain-relative dot stream references
-// (e.g. "location.01ABC"); eventbus.Qualify prepends `events.<gameID>.` and
-// validates the result (holomush-rops).
-func (b *busEventAppender) Append(ctx context.Context, event core.Event) error {
-	gameID := b.bus.GameID()
-	if gameID == "" {
-		gameID = "main"
-	}
-	sub, err := eventbus.Qualify(gameID, event.Stream)
-	if err != nil {
-		return oops.With("stream", event.Stream).Wrap(err)
-	}
-	typ, err := eventbus.NewType(string(event.Type))
-	if err != nil {
-		return oops.With("type", string(event.Type)).Wrap(err)
-	}
-	busEvent := eventbus.Event{
-		ID:        event.ID,
-		Subject:   sub,
-		Type:      typ,
-		Timestamp: event.Timestamp,
-		Actor:     coreToBusActor(event.Actor),
-		Payload:   event.Payload,
-	}
-	return oops.Wrap(b.publisher.Publish(ctx, busEvent))
-}
-
-// coreToBusActor bridges the legacy core.Actor (ID is a string, expected
-// to be a ULID post-w9ml) to the JetStream-side Actor (ID is a ULID; zero
-// for anonymous/system).
-//
-// Note: ULID parse failure for non-empty IDs is silently ignored at this
-// boundary. Post-w9ml, every stamp site stamps a valid ULID; a failure
-// here indicates a contract violation upstream. The structured emit-side
-// gate at coreActorToEventbusActor (in internal/plugin/event_emitter.go)
-// surfaces ACTOR_ID_NOT_ULID with full context.
-func coreToBusActor(a core.Actor) eventbus.Actor {
-	out := eventbus.Actor{Kind: coreActorKindToBus(a.Kind)}
-	if a.ID == "" {
-		return out
-	}
-	if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
-		out.ID = parsed
-	}
-	return out
-}
-
-func coreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
-	switch k {
-	case core.ActorCharacter:
-		return eventbus.ActorKindCharacter
-	case core.ActorSystem:
-		return eventbus.ActorKindSystem
-	case core.ActorPlugin:
-		return eventbus.ActorKindPlugin
-	default:
-		return eventbus.ActorKindUnknown
-	}
 }
 
 // sessionStoreMovementHook implements world.MovementHook by delegating to
@@ -911,9 +993,17 @@ type busHistoryReaderAdapter struct {
 var _ plugins.HistoryReader = (*busHistoryReaderAdapter)(nil)
 
 // ReplayTail satisfies plugins.HistoryReader. It fetches count most-recent
-// events on stream (optionally filtered by notBefore and exclusive beforeID),
-// returning them in ascending ULID order (oldest→newest).
-func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+// events on stream (optionally filtered by notBefore and an exclusive
+// (beforeSeq, beforeID) cursor), returning them in ascending ULID order
+// (oldest→newest).
+//
+// beforeSeq == 0 means "no cursor — read the tail" (D-07/ARCH-04): there is
+// no ID-only pagination fallback on either tier (see
+// internal/eventbus/bus.go's HistoryQuery doc). beforeID alone is a tripwire
+// that validates a nonzero beforeSeq still names the same event in storage;
+// it is set whenever provided (including as a stale legacy artifact of a
+// zero-seq cursor) but only takes effect once beforeSeq is also nonzero.
+func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	if count <= 0 {
 		return nil, nil
 	}
@@ -930,6 +1020,9 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 		Direction: eventbus.DirectionBackward,
 		PageSize:  count,
 		NotBefore: notBefore,
+	}
+	if beforeSeq != 0 {
+		q.BeforeSeq = beforeSeq
 	}
 	if !beforeID.IsZero() {
 		q.BeforeID = beforeID
@@ -956,52 +1049,17 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 		}
 	}
 
-	// Reverse to ascending (oldest→newest) and translate to core.Event. The
-	// frame stream is the already-qualified dot subject (holomush-rops).
-	result := make([]core.Event, len(collected))
+	// Reverse to ascending (oldest→newest). The frame's Subject is already
+	// the fully-qualified dot subject QueryHistory produced (holomush-rops);
+	// callers reading it as a plugin-facing "stream" value re-derive the
+	// relative form themselves (see eventbusEventToProto / the Lua table
+	// build in hostfunc), so no per-event reconstruction happens here.
+	result := make([]eventbus.Event, len(collected))
 	for i := range collected {
 		j := len(collected) - 1 - i
-		result[j] = busEventToCoreEvent(collected[i], string(collected[i].Subject))
+		result[j] = collected[i]
 	}
 	return result, nil
-}
-
-// busEventToCoreEvent reconstructs a core.Event from a persisted
-// eventbus.Event on the history read-back path (ReplayTail / QueryHistory).
-// It MUST copy the stored ID and Timestamp verbatim — core.NewEvent() would
-// stamp a fresh ULID + time.Now(), corrupting historical identity and breaking
-// beforeID cursor pagination. This is the read path, not the I-16 append path,
-// so the raw core.Event{} literal is correct here. The Actor ID is a ULID
-// string when present.
-func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
-	actorID := ""
-	if e.Actor.ID != (ulid.ULID{}) {
-		actorID = e.Actor.ID.String()
-	}
-	return core.Event{
-		ID:        e.ID,
-		Stream:    stream,
-		Type:      core.EventType(e.Type),
-		Timestamp: e.Timestamp,
-		Actor: core.Actor{
-			Kind: busActorKindToCore(e.Actor.Kind),
-			ID:   actorID,
-		},
-		Payload: e.Payload,
-	}
-}
-
-func busActorKindToCore(k eventbus.ActorKind) core.ActorKind {
-	switch k {
-	case eventbus.ActorKindCharacter:
-		return core.ActorCharacter
-	case eventbus.ActorKindSystem:
-		return core.ActorSystem
-	case eventbus.ActorKindPlugin:
-		return core.ActorPlugin
-	default:
-		return core.ActorSystem
-	}
 }
 
 // focusStreamContributorAdapter bridges plugins.Manager.QuerySessionStreams

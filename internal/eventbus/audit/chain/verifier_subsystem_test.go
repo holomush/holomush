@@ -111,12 +111,13 @@ func TestVerifierSubsystem_WalksAllRegisteredChains(t *testing.T) {
 
 	repo := &fakeRepo{} // both chains empty → first-boot OK
 	sub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-		Repo:     repo,
-		Handlers: []chain.Handler{h1, h2},
-		Logger:   slog.Default(),
+		Repo:             repo,
+		HandlersProvider: func() []chain.Handler { return []chain.Handler{h1, h2} },
+		Logger:           slog.Default(),
 	})
 
-	require.NoError(t, sub.Start(context.Background()))
+	require.NoError(t, sub.Prepare(context.Background()))
+	require.NoError(t, sub.Activate(context.Background()))
 	require.NoError(t, sub.Stop(context.Background()))
 }
 
@@ -139,12 +140,12 @@ func TestVerifierSubsystem_RefusesBootOnBreak(t *testing.T) {
 		scopes: []string{"scopeA"},
 	}
 	sub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-		Repo:     repo,
-		Handlers: []chain.Handler{h},
-		Logger:   slog.Default(),
+		Repo:             repo,
+		HandlersProvider: func() []chain.Handler { return []chain.Handler{h} },
+		Logger:           slog.Default(),
 	})
 
-	err := sub.Start(context.Background())
+	err := sub.Prepare(context.Background()) // Prepare-only: the chain walk fails before Activate would ever run
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_CHAIN_HASH_MISMATCH")
 }
@@ -165,12 +166,12 @@ func TestVerifierSubsystem_RejectsInvalidChainRegistration(t *testing.T) {
 		},
 	}
 	sub := chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{
-		Repo:     &fakeRepo{},
-		Handlers: []chain.Handler{bad},
-		Logger:   slog.Default(),
+		Repo:             &fakeRepo{},
+		HandlersProvider: func() []chain.Handler { return []chain.Handler{bad} },
+		Logger:           slog.Default(),
 	})
 
-	err := sub.Start(context.Background())
+	err := sub.Prepare(context.Background()) // Prepare-only: the chain walk fails before Activate would ever run
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_CHAIN_INVALID_REGISTRATION")
 }

@@ -6,7 +6,6 @@ package command
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 
@@ -19,6 +18,19 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
+
+// SystemBroadcaster is the one-method port internal/command reaches the
+// system-broadcast builder through. Implemented by *sysbroadcast.Broadcaster
+// without requiring a direct import — internal/command MUST NOT reach
+// internal/eventbus (D-01 / arch-review MEDIUM-4), so the port is declared
+// here and the concrete builder is injected at construction (mirrors
+// internal/world/setup/subsystem.go's PoolProvider/EngineProvider
+// convention).
+type SystemBroadcaster interface {
+	// Broadcast publishes a system-actor system event carrying message to
+	// subject.
+	Broadcast(ctx context.Context, subject, message string) error
+}
 
 // WorldService defines the world model operations required by command handlers.
 // This interface follows the "accept interfaces" Go idiom, enabling handlers to
@@ -520,7 +532,7 @@ type ServicesConfig struct {
 	World              WorldService             // world model queries and mutations
 	Session            session.Access           // session management
 	Engine             types.AccessPolicyEngine // ABAC policy engine for authorization
-	Events             core.EventAppender       // event persistence
+	Broadcaster        SystemBroadcaster        // system-broadcast builder
 	AliasCache         *AliasCache              // alias management (optional)
 	AliasRepo          AliasWriter              // alias persistence (optional, for alias handlers)
 	Registry           *Registry                // command registry (optional)
@@ -540,7 +552,7 @@ type Services struct {
 	world              WorldService             // world model queries and mutations
 	session            session.Access           // session management
 	engine             types.AccessPolicyEngine // ABAC policy engine for authorization
-	events             core.EventAppender       // event persistence
+	broadcaster        SystemBroadcaster        // system-broadcast builder
 	aliasCache         *AliasCache              // alias management (optional, for alias commands)
 	aliasRepo          AliasWriter              // alias persistence (optional, for alias handlers)
 	registry           *Registry                // command registry (optional, for alias shadow detection)
@@ -556,9 +568,6 @@ func (s *Services) Session() session.Access { return s.session }
 
 // Engine returns the ABAC policy engine for authorization checks.
 func (s *Services) Engine() types.AccessPolicyEngine { return s.engine }
-
-// Events returns the event appender for event persistence.
-func (s *Services) Events() core.EventAppender { return s.events }
 
 // AliasCache returns the alias cache for alias management (may be nil).
 func (s *Services) AliasCache() *AliasCache { return s.aliasCache }
@@ -594,10 +603,10 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 			With("service", "Engine").
 			Errorf("Engine service is required")
 	}
-	if cfg.Events == nil {
+	if cfg.Broadcaster == nil {
 		return nil, oops.Code(CodeNilService).
-			With("service", "Events").
-			Errorf("Events service is required")
+			With("service", "Broadcaster").
+			Errorf("Broadcaster service is required")
 	}
 	if cfg.PropertyRegistry == nil {
 		cfg.PropertyRegistry = property.SharedRegistry()
@@ -607,7 +616,7 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 		world:              cfg.World,
 		session:            cfg.Session,
 		engine:             cfg.Engine,
-		events:             cfg.Events,
+		broadcaster:        cfg.Broadcaster,
 		aliasCache:         cfg.AliasCache,
 		aliasRepo:          cfg.AliasRepo,
 		registry:           cfg.Registry,
@@ -616,27 +625,18 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 	}, nil
 }
 
-// BroadcastSystemMessage creates and appends a system event with the given message.
-// This is a convenience method for handlers that need to send system messages.
-// If the event store is nil, this method logs a debug message and returns.
+// BroadcastSystemMessage sends a system message on stream via the injected
+// SystemBroadcaster. This is a convenience method for handlers that need to
+// send system messages. If the broadcaster is nil, this method logs a debug
+// message and returns.
 func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message string) {
-	if s.events == nil {
-		slog.DebugContext(ctx, "broadcastSystemMessage: event store not configured")
+	if s.broadcaster == nil {
+		slog.DebugContext(ctx, "broadcastSystemMessage: broadcaster not configured")
 		return
 	}
 
-	//nolint:errcheck // json.Marshal cannot fail for map[string]string
-	payload, _ := json.Marshal(map[string]string{
-		"message": message,
-	})
-
-	event := core.NewEvent(stream, core.EventTypeSystem, core.Actor{
-		Kind: core.ActorSystem,
-		ID:   core.ActorSystemID,
-	}, payload)
-
-	if err := s.events.Append(ctx, event); err != nil {
-		slog.WarnContext(ctx, "broadcastSystemMessage: failed to append event",
+	if err := s.broadcaster.Broadcast(ctx, stream, message); err != nil {
+		slog.WarnContext(ctx, "broadcastSystemMessage: failed to broadcast event",
 			"stream", stream, "error", err)
 	}
 }
@@ -653,7 +653,7 @@ func NewTestServices(cfg ServicesConfig) *Services {
 		world:              cfg.World,
 		session:            cfg.Session,
 		engine:             cfg.Engine,
-		events:             cfg.Events,
+		broadcaster:        cfg.Broadcaster,
 		aliasCache:         cfg.AliasCache,
 		aliasRepo:          cfg.AliasRepo,
 		registry:           cfg.Registry,

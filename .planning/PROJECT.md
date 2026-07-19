@@ -99,6 +99,13 @@ feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
   `holomush-i4784`): Option B — CRUD-canonical + optimistic version guard + ordered atomic outbox feed, in
   the shape unanimously ratified by a three-model panel (`model-01-consensus-onepager.md` is normative).
   Phase 5 implements MODEL-03 (version guard) + MODEL-04 (transactional outbox). Shipped 2026-07-11 (Phase 4)
+- ✓ Event-model collapse & bootstrap unification (v0.12 Phase 7, ARCH-03/04/05) — single Event representation
+  (`core.Event`/`NewEvent`/`EventAppender` deleted repo-wide; `eventbus.Event` is the sole type), process
+  bootstrap unified on `lifecycle.Orchestrator` (`Subsystem.Start` split into `Prepare`/`Activate`, two-sweep
+  barrier across all 17 production subsystems, zero eager pre-starts), and the gateway-boundary import rule
+  holds with zero violations (`internal/web`/`internal/telnet` transitive closures clear of every domain
+  package; INV-EVENTBUS-1 bound). 11/11 plans, 10/10 must-haves independently verified. Validated in Phase 7:
+  Event-Model & Bootstrap Decomposition, shipped 2026-07-18
 
 ### Active
 
@@ -106,7 +113,7 @@ feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
 
 - [ ] Event-model direction decided (ADR: event sourcing vs. CRUD-with-guards), false event-sourcing docs corrected, last-write-wins version guards added, and dual-write non-atomicity addressed (F1 #4784, #4798)
 - [ ] Top operational failure modes reduced — gateway survival (#4785), events_audit retention (#4786), audit DLQ hardening (#4787), NATS CVE (#4790), resilience investigation (#4791)
-- [ ] CoreServer + plugin/manager god objects decomposed; bootstrap on `lifecycle.Orchestrator`; `core.Event`/`eventbus.Event` collapsed; gateway-boundary imports fixed (999.9)
+- [ ] CoreServer + plugin/manager god objects decomposed (999.9; Phase 8 — bootstrap/event-model/gateway-boundary portions of this item shipped in Phase 7, see Validated above)
 - [ ] Test/coverage/code health raised — coverage backfill (#4804), weak/skeleton tests remediated, ACE naming, de-slop, session-lifecycle matrix (999.10)
 
 ### Out of Scope
@@ -248,4 +255,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-07-11 — Phase 4 (World-Model Resilience Investigation & Decision) complete and shipped as PR #4814: harness + M12/M2 verdicts landed, MODEL-01 ADR accepted (Option B, panel-ratified). Next: merge #4814 when CI is green, then `/gsd-discuss-phase 5` / `/gsd-plan-phase 5` (world-model integrity fixes — MODEL-02/03/04). The milestone-level Active checklist items below stay unchecked because they span Phase 5/6 work (version guard, dual-write elimination, ops hardening) not yet done.*
+*Last updated: 2026-07-18 — Phase 7 (Event-Model & Bootstrap Decomposition) complete: 11/11 plans executed, ARCH-03/04/05 validated against the codebase. Next: `/gsd-discuss-phase 8` / `/gsd-plan-phase 8` (God-Object Decomposition — CoreServer + plugin/manager). The remaining unchecked Active items span Phase 5/6/8 work; this note was last refreshed for Phase 7 only — Phase 5/6 completion status here may be stale relative to `.planning/ROADMAP.md`, which remains the source of truth.*

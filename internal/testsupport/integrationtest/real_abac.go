@@ -57,7 +57,8 @@ func startRealABAC(t *testing.T, ctx context.Context, pool *pgxpool.Pool) *abacs
 		DB:       poolProvider{pool: pool},
 		Registry: lifecycle.NewReadinessRegistry(),
 	})
-	require.NoError(t, abacSub.Start(ctx), "startRealABAC: ABAC subsystem start")
+	require.NoError(t, abacSub.Prepare(ctx), "startRealABAC: ABAC subsystem prepare")
+	require.NoError(t, abacSub.Activate(ctx), "startRealABAC: ABAC subsystem activate")
 	t.Cleanup(func() { _ = abacSub.Stop(context.Background()) })
 	return abacSub
 }

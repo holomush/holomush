@@ -5,9 +5,7 @@ package command
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -15,8 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/core/coretest"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -70,15 +66,14 @@ func TestServicesHasAllDependencies(t *testing.T) {
 	assert.Nil(t, svc.World(), "World service should be nil when not set")
 	assert.Nil(t, svc.Session(), "Session service should be nil when not set")
 	assert.Nil(t, svc.Engine(), "Engine service should be nil when not set")
-	assert.Nil(t, svc.Events(), "Events service should be nil when not set")
 }
 
 func TestNewServicesNilWorldReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
-		World:   nil,
-		Session: &mockAccess{},
-		Engine:  &mockEngine{},
-		Events:  &mockEventStore{},
+		World:       nil,
+		Session:     &mockAccess{},
+		Engine:      &mockEngine{},
+		Broadcaster: &fakeBroadcaster{},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "World")
@@ -86,10 +81,10 @@ func TestNewServicesNilWorldReturnsError(t *testing.T) {
 
 func TestNewServicesNilSessionReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
-		World:   &world.Service{},
-		Session: nil,
-		Engine:  &mockEngine{},
-		Events:  &mockEventStore{},
+		World:       &world.Service{},
+		Session:     nil,
+		Engine:      &mockEngine{},
+		Broadcaster: &fakeBroadcaster{},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Session")
@@ -97,53 +92,52 @@ func TestNewServicesNilSessionReturnsError(t *testing.T) {
 
 func TestNewServicesNilEngineReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
-		World:   &world.Service{},
-		Session: &mockAccess{},
-		Engine:  nil,
-		Events:  &mockEventStore{},
+		World:       &world.Service{},
+		Session:     &mockAccess{},
+		Engine:      nil,
+		Broadcaster: &fakeBroadcaster{},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Engine")
 }
 
-func TestNewServicesNilEventsReturnsError(t *testing.T) {
+func TestNewServicesNilBroadcasterReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
-		World:   &world.Service{},
-		Session: &mockAccess{},
-		Engine:  &mockEngine{},
-		Events:  nil,
+		World:       &world.Service{},
+		Session:     &mockAccess{},
+		Engine:      &mockEngine{},
+		Broadcaster: nil,
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Events")
+	assert.Contains(t, err.Error(), "Broadcaster")
 }
 
 func TestNewServicesAllValidReturnsServices(t *testing.T) {
 	worldSvc := &world.Service{}
 	sessionSvc := &mockAccess{}
 	engine := &mockEngine{}
-	eventStore := &mockEventStore{}
+	broadcaster := &fakeBroadcaster{}
 
 	svc, err := NewServices(ServicesConfig{
-		World:   worldSvc,
-		Session: sessionSvc,
-		Engine:  engine,
-		Events:  eventStore,
+		World:       worldSvc,
+		Session:     sessionSvc,
+		Engine:      engine,
+		Broadcaster: broadcaster,
 	})
 	require.NoError(t, err)
 	assert.Same(t, worldSvc, svc.World())
 	assert.Same(t, sessionSvc, svc.Session())
 	assert.Same(t, engine, svc.Engine())
-	assert.Same(t, eventStore, svc.Events())
 }
 
 func TestNewServicesMultipleNilReturnsFirstError(t *testing.T) {
 	// When multiple fields are nil, should return error mentioning
 	// World since that's checked first
 	_, err := NewServices(ServicesConfig{
-		World:   nil,
-		Session: nil,
-		Engine:  nil,
-		Events:  nil,
+		World:       nil,
+		Session:     nil,
+		Engine:      nil,
+		Broadcaster: nil,
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "World")
@@ -200,11 +194,28 @@ func TestDecisionZeroValueIsDeny(t *testing.T) {
 	assert.Equal(t, types.EffectDefaultDeny, d.Effect(), "Zero-value Decision should have DefaultDeny effect")
 }
 
-type mockEventStore struct{}
+// broadcastCall records one Broadcast(ctx, subject, message) invocation.
+type broadcastCall struct {
+	subject string
+	message string
+}
 
-func (m *mockEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+// fakeBroadcaster is a minimal SystemBroadcaster fake that records every
+// Broadcast call for assertion.
+type fakeBroadcaster struct {
+	calls []broadcastCall
+	err   error
+}
 
-var _ core.EventAppender = (*mockEventStore)(nil)
+func (f *fakeBroadcaster) Broadcast(_ context.Context, subject, message string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.calls = append(f.calls, broadcastCall{subject: subject, message: message})
+	return nil
+}
+
+var _ SystemBroadcaster = (*fakeBroadcaster)(nil)
 
 func TestCommandHandlerSignature(t *testing.T) {
 	// Verify CommandHandler can be assigned a function with the correct signature
@@ -446,9 +457,9 @@ func (m *mockWriter) Write(p []byte) (n int, err error) {
 func TestServicesBroadcastSystemMessageNilEventsIsNoOp(t *testing.T) {
 	t.Parallel()
 
-	// Create services with nil Events store
+	// Create services with nil Broadcaster
 	svc := NewTestServices(ServicesConfig{
-		Events: nil,
+		Broadcaster: nil,
 	})
 
 	// Should not panic - this is a silent no-op
@@ -753,93 +764,40 @@ func TestNewCommandEntryPluginNameWithCapabilities(t *testing.T) {
 	assert.Len(t, entry.GetCapabilities(), 1)
 }
 
-func TestServicesBroadcastSystemMessageCreatesCorrectEvent(t *testing.T) {
+// TestServicesBroadcastSystemMessageDelegatesToBroadcaster proves
+// BroadcastSystemMessage forwards to the injected SystemBroadcaster
+// unchanged. The event construction it used to perform directly (payload
+// shape, actor stamp, event type, monotonic ULID) moved to
+// internal/sysbroadcast.Broadcaster (D-02) and is proven there.
+func TestServicesBroadcastSystemMessageDelegatesToBroadcaster(t *testing.T) {
 	ctx := context.Background()
-	store := coretest.NewMemoryEventStore()
 	stream := "test-stream"
 	testMessage := "Server is shutting down"
 
+	fb := &fakeBroadcaster{}
 	svc := NewTestServices(ServicesConfig{
-		Events: store,
+		Broadcaster: fb,
 	})
 
-	// Append the message
 	svc.BroadcastSystemMessage(ctx, stream, testMessage)
 
-	// Replay to retrieve the appended event
-	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
-	require.NoError(t, err, "Replay should succeed")
-	require.Len(t, events, 1, "Expected exactly one event")
-
-	event := events[0]
-
-	// Verify stream
-	assert.Equal(t, stream, event.Stream, "Stream should match input")
-
-	// Verify event type
-	assert.Equal(t, core.EventTypeSystem, event.Type, "Type should be EventTypeSystem")
-
-	// Verify actor
-	assert.Equal(t, core.ActorSystem, event.Actor.Kind, "Actor.Kind should be ActorSystem")
-	assert.Equal(t, core.ActorSystemID, event.Actor.ID, "Actor.ID should be ActorSystemID")
-
-	// Verify payload contains message
-	var payload map[string]string
-	require.NoError(t, json.Unmarshal(event.Payload, &payload), "Payload should be valid JSON")
-	assert.Equal(t, testMessage, payload["message"], "Payload should contain the message")
-
-	// Verify ID is set (non-zero)
-	assert.False(t, event.ID.IsZero(), "Event ID should be set")
-
-	// Verify timestamp is recent
-	assert.WithinDuration(t, time.Now(), event.Timestamp, time.Second,
-		"Timestamp should be recent")
+	require.Len(t, fb.calls, 1, "Expected exactly one Broadcast call")
+	assert.Equal(t, stream, fb.calls[0].subject, "subject should match input")
+	assert.Equal(t, testMessage, fb.calls[0].message, "message should match input")
 }
 
-func TestServicesBroadcastSystemMessageProducesMonotonicEventIDs(t *testing.T) {
-	// BroadcastSystemMessage must mint monotonic ULIDs so two consecutive
-	// broadcasts to the same stream do not produce lex-inverted event IDs.
-	// Non-monotonic IDs cause PostgresEventStore.Replay to silently skip
-	// events (it uses WHERE id > afterID ORDER BY id), and would cause
-	// the PostgresSessionStore.UpdateCursors CAS to reject
-	// legitimate cursor advances.
-	//
-	// Loops 1000 times because same-millisecond collisions are the
-	// failure mode: on a fast machine this loop spans ~1-5ms and produces
-	// many same-ms call pairs, exercising the regression scenario.
-	captured := &captureEventStore{}
-	svc := NewTestServices(ServicesConfig{
-		Events: captured,
-	})
+// TestServicesBroadcastSystemMessageLogsBroadcastFailure proves a
+// broadcaster failure is logged rather than propagated — BroadcastSystemMessage
+// returns nothing, matching its pre-existing error-swallowing signature.
+func TestServicesBroadcastSystemMessageLogsBroadcastFailure(t *testing.T) {
 	ctx := context.Background()
+	fb := &fakeBroadcaster{err: assert.AnError}
+	svc := NewTestServices(ServicesConfig{
+		Broadcaster: fb,
+	})
 
-	const n = 1000
-	for i := 0; i < n; i++ {
-		svc.BroadcastSystemMessage(ctx, "stream:test", "msg")
-	}
-
-	require.Len(t, captured.events, n)
-	for i := 1; i < n; i++ {
-		prev := captured.events[i-1].ID.String()
-		cur := captured.events[i].ID.String()
-		// String comparison (not ID.Compare) is deliberate — it mirrors the
-		// SQL semantics (WHERE id > afterID, COLLATE "C" CAS) that depend
-		// on this property. See core.NewULID doc comment.
-		require.True(t, prev < cur,
-			"non-monotonic event IDs at index %d: prev=%s cur=%s",
-			i, prev, cur)
-	}
+	assert.NotPanics(t, func() {
+		svc.BroadcastSystemMessage(ctx, "test-stream", "hello")
+	})
+	assert.Empty(t, fb.calls, "a failed Broadcast records no successful call")
 }
-
-// captureEventStore is a minimal core.EventAppender fake that records every
-// Append call for assertion.
-type captureEventStore struct {
-	events []core.Event
-}
-
-func (c *captureEventStore) Append(_ context.Context, ev core.Event) error {
-	c.events = append(c.events, ev)
-	return nil
-}
-
-var _ core.EventAppender = (*captureEventStore)(nil)

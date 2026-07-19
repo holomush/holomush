@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
@@ -97,10 +98,13 @@ type AdminDepsProvider interface {
 // contribution path (auto_focus_on_join → hostfunc.StreamRegistry call) can
 // look up a character's active session streams.
 type PluginSubsystemConfig struct {
-	DataDir            string
-	DatabaseConnStr    string   // PostgreSQL connection string for schema provisioning
-	CertsDir           string   // path to game certs directory (for loading CA)
-	GameID             string   // game ID for cert SANs
+	DataDir         string
+	DatabaseConnStr string // PostgreSQL connection string for schema provisioning
+	CertsDir        string // path to game certs directory (for loading CA)
+	// GameID resolves the game ID at Start time (07-09 item 7) — a
+	// provider, not a live value; used for cert SANs and stream
+	// qualification. A nil provider resolves to "".
+	GameID             func() string
 	TrustAllowlist     []string // server-side plugin trust escalation allowlist
 	ABAC               EngineProvider
 	PolicyInst         PolicyInstallerProvider
@@ -160,13 +164,34 @@ func (s *PluginSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Start builds the full plugin stack and command registry.
+// Prepare builds the full plugin stack and command registry — including
+// binary-plugin subprocess launch and Lua loading (D-13.3 row 9: a plugin
+// subprocess is a host-controlled child reachable only over the host's own
+// mTLS gRPC, no externally-reachable surface, and audit's own Prepare
+// DependsOn(SubsystemPlugins) requires loading to have completed here).
+// Prepare is idempotent: if the subsystem is already prepared, it returns
+// nil immediately (a real guard, unlike a comment-only disposition — a
+// second Prepare would launch a duplicate set of binary-plugin subprocesses
+// via goplugin.NewHost and re-run Manager.LoadAll's bootstrap-alias-seeding
+// side effects, IN-01/07-review).
 // codecov:ignore — tested by integration and E2E tests
-func (s *PluginSubsystem) Start(ctx context.Context) error {
+func (s *PluginSubsystem) Prepare(ctx context.Context) error {
+	if s.manager != nil {
+		return nil // already prepared
+	}
+
 	// 1. Resolve plugin directory.
 	pluginsDir, err := s.resolvePluginsDir()
 	if err != nil {
 		return err
+	}
+
+	// Resolve the gameID provider once, feeding all three reads below
+	// (hostfunc.WithGameID, goplugin.WithGameID, goplugin.WithCA) — 07-09
+	// item 7.
+	var gameID string
+	if s.cfg.GameID != nil {
+		gameID = s.cfg.GameID()
 	}
 
 	sessionStore := s.cfg.Sessions.SessionStore()
@@ -192,7 +217,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		hostfunc.WithCapabilities(capRegistry),
 		// Qualifies domain-relative stream refs before the ambient
 		// query_stream_history ABAC gate (holomush-xakba).
-		hostfunc.WithGameID(s.cfg.GameID),
+		hostfunc.WithGameID(gameID),
 	}
 	if s.cfg.StreamRegistry != nil {
 		hostFuncOpts = append(hostFuncOpts, hostfunc.WithStreamRegistry(s.cfg.StreamRegistry))
@@ -227,13 +252,42 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// 4a. Register WorldService as a server-internal service.
 	worldConn, worldConnErr := newWorldInProcessConn(s.cfg.World.Service())
 	if worldConnErr != nil {
+		// cleanupOnError isn't defined until below (it also closes
+		// binaryHost/aliasPool/schemaProvisioner, none of which are
+		// constructed yet at this point in Prepare) — but s.luaHost WAS
+		// already assigned above, and Stop() no-ops while s.manager == nil.
+		// Without this, a world-conn failure leaks the Lua host's
+		// state-factory pool (WR-01, 07-review).
+		if s.luaHost != nil {
+			_ = s.luaHost.Close(ctx) //nolint:errcheck // best-effort cleanup
+			s.luaHost = nil
+		}
 		return oops.Code("WORLD_INPROCESS_CONN_FAILED").Wrap(worldConnErr)
 	}
 	s.worldConn = worldConn
 
-	// cleanupOnError closes partially initialized resources when startup fails.
-	// Order matters: alias pool first because it was opened latest and holds
-	// PG connections; then schema provisioner; then world conn.
+	// binaryHost is declared here — BEFORE cleanupOnError's definition — so the
+	// closure below observes the later assignment at goplugin.NewHost(...)
+	// (Go closures capture variables, not values). This is what lets
+	// cleanupOnError close the binary host on every pre-manager error path,
+	// including the ones that occur before binaryHost is actually assigned
+	// (a nil *goplugin.Host closes as a no-op).
+	var binaryHost *goplugin.Host
+
+	// cleanupOnError closes partially initialized resources when startup
+	// fails. Order matters: alias pool first because it was opened latest
+	// and holds PG connections; then schema provisioner; then the binary
+	// host (releases its token-store sweeper goroutine,
+	// goplugin/host.go:1579-1580); then the Lua host; then world conn.
+	//
+	// D-13.2 row 9 / cross-AI round 9 BLOCKER: without closing binaryHost
+	// and s.luaHost here, a Prepare failure between goplugin.NewHost (which
+	// launches the token-store sweeper goroutine at construction) and the
+	// s.manager assignment leaked that goroutine and the live Lua host,
+	// because Stop no-ops while s.manager == nil. Every pre-manager error
+	// path now routes through this extended cleanup, making Stop's
+	// s.manager == nil early return a TRUE no-op (everything already
+	// released in-body) rather than a leak.
 	cleanupOnError := func() {
 		if s.aliasPool != nil {
 			s.aliasPool.Close()
@@ -245,8 +299,18 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 			s.schemaProvisioner.Close()
 			s.schemaProvisioner = nil
 		}
-		_ = s.worldConn.Close() //nolint:errcheck // best-effort cleanup
-		s.worldConn = nil
+		if binaryHost != nil {
+			_ = binaryHost.Close(ctx) //nolint:errcheck // best-effort cleanup; cancels the token-store sweeper
+			binaryHost = nil
+		}
+		if s.luaHost != nil {
+			_ = s.luaHost.Close(ctx) //nolint:errcheck // best-effort cleanup
+			s.luaHost = nil
+		}
+		if s.worldConn != nil {
+			_ = s.worldConn.Close() //nolint:errcheck // best-effort cleanup
+			s.worldConn = nil
+		}
 	}
 
 	if regErr := s.registry.Register(plugins.RegisteredService{
@@ -288,7 +352,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		goplugin.WithServiceRegistry(s.registry),
 		// Game ID for stream qualification, wired unconditionally (independent of
 		// WithCA/mTLS) so stream.history works for no-mTLS binary plugins (holomush-xakba).
-		goplugin.WithGameID(s.cfg.GameID),
+		goplugin.WithGameID(gameID),
 		// Wire the ABAC engine so host.v1 EvalService.Evaluate resolves (holomush-8kkv5.18).
 		// This MUST use the same engine instance as s.cfg.ABAC.Engine() above — the Lua
 		// hostfunc bridge (hostfunc.WithEngine) is wired from the same call, and the
@@ -314,12 +378,12 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		if caErr != nil {
 			slog.WarnContext(ctx, "plugin mTLS disabled: could not load CA", "error", caErr)
 		} else {
-			hostOpts = append(hostOpts, goplugin.WithCA(ca, s.cfg.GameID))
+			hostOpts = append(hostOpts, goplugin.WithCA(ca, gameID))
 			slog.InfoContext(ctx, "plugin mTLS enabled", "certs_dir", s.cfg.CertsDir)
 		}
 	}
 
-	binaryHost := goplugin.NewHost(hostOpts...)
+	binaryHost = goplugin.NewHost(hostOpts...)
 	// Wire the session stream registry so the served stream.subscription
 	// capability (AddSessionStream/RemoveSessionStream) reaches the same host
 	// SessionStreamRegistry the Lua hostfunc path uses (plugin-runtime-symmetry).
@@ -442,108 +506,150 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// cannot be threaded at construction time — use the setter instead.
 	binaryHost.SetCommandQuerier(s.commandQuerier)
 
-	slog.InfoContext(ctx, "plugin subsystem started", "plugins_dir", pluginsDir)
+	slog.InfoContext(ctx, "plugin subsystem prepared", "plugins_dir", pluginsDir)
 	return nil
 }
 
+// Activate is a documented no-op (D-13.3 row 9, cross-AI round 3 HIGH,
+// settled): PluginSubsystem runs no event-delivery or command-dispatch
+// loop of its own. Delivery is a synchronous manager method
+// (Manager.DeliverEvent, internal/plugin/manager.go) invoked by the event
+// subscriber and the command dispatcher, both of which live elsewhere. Do
+// NOT relocate a delivery loop here — that is Phase 8 / MEDIUM-4 territory.
+func (s *PluginSubsystem) Activate(_ context.Context) error { return nil }
+
 // Stop shuts down the plugin manager and server-internal connections.
+//
+// The s.manager == nil early return is a TRUE no-op for any Prepare failure
+// that occurred before the manager was assigned: every pre-manager error
+// path inside Prepare releases its own already-constructed resources
+// in-body before returning — the world-in-process-connection failure path
+// closes s.luaHost directly (WR-01, 07-review), and every later pre-manager
+// error path routes through cleanupOnError, which closes the binary host
+// (releasing its token-store sweeper goroutine), the Lua host, the schema
+// provisioner, the alias pool, and the world in-process connection
+// (D-13.2 row 9). Nothing is left for Stop to release in that case.
+//
+// Resets every field Prepare's guard (s.manager) and its downstream
+// accessors depend on to nil, so a legitimate retry of Prepare after Stop
+// rebuilds the full plugin stack (including relaunching binary-plugin
+// subprocesses) rather than short-circuiting on an already-closed manager
+// (WR-01/IN-01, 07-review). Also unregisters from the readiness registry
+// so a retried Prepare's Registry.Register call does not panic on a
+// duplicate registration (WR-02); Unregister is a no-op if Prepare failed
+// before reaching its own Register call, so this is safe to call
+// unconditionally.
 // codecov:ignore — tested by integration and E2E tests
 func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if s.manager == nil {
 		return nil
+	}
+	if s.cfg.Registry != nil {
+		s.cfg.Registry.Unregister(lifecycle.SubsystemPlugins)
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := s.manager.Close(shutdownCtx); err != nil {
 		slog.WarnContext(shutdownCtx, "error closing plugin manager", "error", err)
 	}
+	s.manager = nil
+	s.luaHost = nil
+	s.registry = nil
 	if s.worldConn != nil {
 		if err := s.worldConn.Close(); err != nil {
 			slog.WarnContext(shutdownCtx, "error closing world in-process connection", "error", err)
 		}
+		s.worldConn = nil
 	}
 	if s.schemaProvisioner != nil {
 		s.schemaProvisioner.Close()
+		s.schemaProvisioner = nil
 	}
 	if s.aliasPool != nil {
 		s.aliasPool.Close()
+		s.aliasPool = nil
 	}
+	s.aliasRepo = nil
+	s.aliasCache = nil
+	s.cmdRegistry = nil
+	s.commandQuerier = nil
+	s.health = nil
 	return nil
 }
 
-// Manager returns the plugin Manager. Panics if called before Start().
+// Manager returns the plugin Manager. Panics if called before Prepare().
 func (s *PluginSubsystem) Manager() *plugins.Manager {
 	if s.manager == nil {
-		panic("plugin/setup: Manager() called before Start()")
+		panic("plugin/setup: Manager() called before Prepare()")
 	}
 	return s.manager
 }
 
 // ConfigureSystemBroadcaster wires the SessionAdmin broadcast backing — a
-// system-event emit over appender — into the Lua host so the brokered
+// system-event emit over pub — into the Lua host so the brokered
 // SessionAdminService serves real broadcasts (holomush-eykuh.4.2, decision
-// holomush-t019a). It MUST be called from the gRPC subsystem's Start once the
-// event appender exists: the appender is built after the plugin subsystem starts,
+// holomush-t019a). It MUST be called from the gRPC subsystem's Prepare once the
+// publisher exists: the publisher is built after the plugin subsystem starts,
 // so a construction-time option cannot reach it (same late-binding rationale as
 // Manager.ConfigureEventEmitter / ConfigureFocusDeps). No-op when the Lua host is
-// not yet built or the appender is nil (leaves the server fail-closed). The
+// not yet built or pub/gameID is nil (leaves the server fail-closed). The
 // binary host needs no equivalent: SessionAdminService is Lua-only (not in
 // hostcap.BinaryDefaultSet). Disconnect stays Unimplemented — no production
 // forcible-disconnect mechanism (follow-up holomush-obo44).
-func (s *PluginSubsystem) ConfigureSystemBroadcaster(appender core.EventAppender) {
-	if s.luaHost == nil || appender == nil {
+func (s *PluginSubsystem) ConfigureSystemBroadcaster(pub eventbus.Publisher, gameID func() string) {
+	if s.luaHost == nil || pub == nil || gameID == nil {
 		return
 	}
-	s.luaHost.SetSessionAdmin(hostcap.NewSystemBroadcaster(appender))
+	s.luaHost.SetSessionAdmin(hostcap.NewSystemBroadcaster(pub, gameID))
 }
 
-// CommandRegistry returns the command Registry. Panics if called before Start().
+// CommandRegistry returns the command Registry. Panics if called before Prepare().
 func (s *PluginSubsystem) CommandRegistry() *command.Registry {
 	if s.cmdRegistry == nil {
-		panic("plugin/setup: CommandRegistry() called before Start()")
+		panic("plugin/setup: CommandRegistry() called before Prepare()")
 	}
 	return s.cmdRegistry
 }
 
-// CommandQuerier returns the shared command querier. Panics if called before Start().
+// CommandQuerier returns the shared command querier. Panics if called before Prepare().
 // Consumed by the gRPC subsystem (holoGRPC.WithCommandQuerier) and the binary
 // host.v1 CommandRegistryService (bead .8) to ensure a single
 // command-visibility filter across both surfaces (INV-COMMAND-1).
 func (s *PluginSubsystem) CommandQuerier() *commandquery.Querier {
 	if s.commandQuerier == nil {
-		panic("plugin/setup: CommandQuerier() called before Start()")
+		panic("plugin/setup: CommandQuerier() called before Prepare()")
 	}
 	return s.commandQuerier
 }
 
-// ServiceRegistry returns the ServiceRegistry. Panics if called before Start().
+// ServiceRegistry returns the ServiceRegistry. Panics if called before Prepare().
 func (s *PluginSubsystem) ServiceRegistry() *plugins.ServiceRegistry {
 	if s.registry == nil {
-		panic("plugin/setup: ServiceRegistry() called before Start()")
+		panic("plugin/setup: ServiceRegistry() called before Prepare()")
 	}
 	return s.registry
 }
 
 // AliasRepo returns the alias repository created during Start().
-// Panics if called before Start().
+// Panics if called before Prepare().
 func (s *PluginSubsystem) AliasRepo() *store.PostgresAliasRepository {
 	if s.aliasRepo == nil {
-		panic("plugin/setup: AliasRepo() called before Start()")
+		panic("plugin/setup: AliasRepo() called before Prepare()")
 	}
 	return s.aliasRepo
 }
 
 // AliasCache returns the alias cache populated during plugin loading.
-// Panics if called before Start().
+// Panics if called before Prepare().
 func (s *PluginSubsystem) AliasCache() *command.AliasCache {
 	if s.aliasCache == nil {
-		panic("plugin/setup: AliasCache() called before Start()")
+		panic("plugin/setup: AliasCache() called before Prepare()")
 	}
 	return s.aliasCache
 }
 
 // HealthStatus reports the plugin subsystem's health tier.
-// Returns Dead with reason if the subsystem has not been started.
+// Returns Dead with reason if the subsystem has not been prepared.
 func (s *PluginSubsystem) HealthStatus() lifecycle.HealthStatus {
 	if s.health == nil {
 		return lifecycle.HealthStatus{

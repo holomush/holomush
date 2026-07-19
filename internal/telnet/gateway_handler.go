@@ -24,11 +24,13 @@ import (
 
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/cmdparse"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/gatewaymetrics"
-	grpcclient "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/telnet/gamenotice"
+	"github.com/holomush/holomush/internal/ulidgen"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -403,7 +405,7 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 		return nil
 	}
 
-	cmd, arg := core.ParseCommand(line)
+	cmd, arg := cmdparse.ParseCommand(line)
 
 	switch cmd {
 	case "connect":
@@ -667,7 +669,7 @@ func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.S
 // resubscribe can classify a terminal SESSION_NOT_FOUND apart from a transient
 // core-down. A nil error with a non-nil channel means the subscription is live.
 func (h *GatewayHandler) trySubscribe(ctx context.Context) (<-chan *corev1.SubscribeResponse, error) {
-	h.connectionID = core.NewULID().String()
+	h.connectionID = ulidgen.New().String()
 	stream, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId:          h.sessionID,
 		PlayerSessionToken: h.playerSessionToken,
@@ -1244,9 +1246,9 @@ func (h *GatewayHandler) formatMovement(ev *corev1.EventFrame, rendering *corev1
 	}
 
 	switch ev.GetType() {
-	case string(core.EventTypeArrive):
+	case string(eventvocab.EventTypeArrive):
 		return fmt.Sprintf("%s has arrived.", actor)
-	case string(core.EventTypeLeave):
+	case string(eventvocab.EventTypeLeave):
 		reason := stringFromPayload(payload, "reason")
 		if reason != "" {
 			return fmt.Sprintf("%s has left (%s).", actor, reason)

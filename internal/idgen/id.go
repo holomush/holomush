@@ -22,13 +22,13 @@ import (
 // identity and there is no requirement for IDs minted in temporal order to
 // also sort in temporal order.
 //
-// Do NOT use this for event IDs (core.Event.ID). Two calls in the same
+// Do NOT use this for event IDs (eventbus.Event.ID). Two calls in the same
 // millisecond produce IDs in random lexicographic order, which silently
 // breaks PostgresEventStore.Replay (ORDER BY id, WHERE id > afterID) and
 // PostgresSessionStore.UpdateCursors monotonicity. Use core.NewULID()
-// instead. core.Event{} struct literals must use core.NewEvent() (which
-// stamps a monotonic ULID via core.NewULID()) — never construct an Event
-// literal with a manually-supplied ID.
+// instead. eventbus.Event{} struct literals must use eventbus.NewEvent()
+// (which stamps a monotonic ULID via core.NewULID()) — never construct an
+// Event literal with a manually-supplied ID.
 //
 // Panics if the system's cryptographic random source is unavailable,
 // which indicates an unrecoverable OS-level failure.

@@ -12,19 +12,63 @@ import (
 	"github.com/samber/oops"
 )
 
-// Start brings the registry online: subscribes to peer alive/bye/probe/poison
-// subjects, publishes the first heartbeat, and starts the heartbeat
-// ticker + eviction sweeper.
+// Prepare resolves and validates BOTH providers — ConnProvider.Conn() (nil
+// fails closed with CLUSTER_DEPS_NIL) and ClusterIDProvider (a
+// resolved-empty ClusterID fails closed with
+// CLUSTER_CONFIG_MISSING_CLUSTER_ID) — storing the resolved, stable values
+// on the registry (D-13.3 row 13, round 6 BLOCKER: this row previously said
+// "no-op", which composed with the eventbus split to put fallible
+// acquisition in the ACTIVATE sweep, after the barrier, violating the
+// Prepare contract — provider resolution IS acquisition and belongs here).
 //
-// Lock discipline: Start mutates the lifecycle state-machine fields
-// (subAlive/subBye/subProbe/subPoison/hbTicker/hbDone/evTicker/evDone)
-// under r.mu. Concurrent Stop() observes a consistent state.
-func (r *registry) Start(ctx context.Context) error {
+// No goroutines exist yet at this point, so there is no lock hazard from
+// resolving providers or writing the resolved fields; still takes r.mu
+// briefly for the field writes, matching the lock discipline the rest of
+// this type follows.
+func (r *registry) Prepare(_ context.Context) error {
+	conn := r.deps.Conn
+	if r.deps.ConnProvider != nil {
+		conn = r.deps.ConnProvider.Conn()
+	}
+	if conn == nil || isNilConn(conn) {
+		return oops.Code("CLUSTER_DEPS_NIL").With("dep", "Conn").
+			Errorf("cluster.Registry.Prepare requires a non-nil natsconn.Conn (from Deps.Conn or Deps.ConnProvider)")
+	}
+
+	clusterID := r.cfg.ClusterID
+	if clusterID == "" && r.cfg.ClusterIDProvider != nil {
+		clusterID = r.cfg.ClusterIDProvider()
+	}
+	if clusterID == "" {
+		return oops.Code("CLUSTER_CONFIG_MISSING_CLUSTER_ID").
+			Errorf("cluster.Registry.Prepare requires a non-empty ClusterID (from Config.ClusterID or Config.ClusterIDProvider)")
+	}
+
+	r.mu.Lock()
+	r.deps.Conn = conn
+	r.cfg.ClusterID = clusterID
+	r.mu.Unlock()
+	return nil
+}
+
+// Activate brings the registry online: subscribes to peer alive/bye/probe/
+// poison subjects, publishes the first heartbeat, and starts the heartbeat
+// ticker + eviction sweeper — the WHOLE locked subscribe/publish/goroutine
+// critical section, kept together deliberately (D-13.3 row 13: the
+// no-split settlement governs this critical section, not provider
+// resolution, which now runs in Prepare — before any goroutine exists, so
+// it cannot deadlock against them).
+//
+// Lock discipline: the locked section mutates the lifecycle state-machine
+// fields (subAlive/subBye/subProbe/subPoison/hbTicker/hbDone/evTicker/evDone),
+// under r.mu. Concurrent Stop() observes a consistent state. r.deps.Conn and
+// r.cfg.ClusterID were already resolved and stored by Prepare.
+func (r *registry) Activate(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.subAlive != nil {
-		return nil // already started
+		return nil // already activated
 	}
 
 	sa, err := r.deps.Conn.Subscribe(SubjectAliveWildcard(r.cfg.ClusterID), r.handleAlive)
@@ -88,7 +132,7 @@ func (r *registry) Start(ctx context.Context) error {
 
 	r.deps.Logger.InfoContext(
 		ctx,
-		"cluster.Registry started",
+		"cluster.Registry activated",
 		"self", string(r.self),
 		"cluster_id", r.cfg.ClusterID,
 		"heartbeat_interval", r.cfg.HeartbeatInterval.String(),

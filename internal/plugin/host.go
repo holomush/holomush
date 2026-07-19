@@ -11,6 +11,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
@@ -130,10 +131,15 @@ type EventEmitterConfigurer interface {
 }
 
 // HistoryReader provides read-only replay access for host functions (e.g.
-// query_stream_history in Lua plugins). Satisfied by coretest.MemoryEventStore
-// in tests and by a JetStream-backed reader in production.
+// query_stream_history in Lua plugins). Satisfied by a fake in tests and by
+// a JetStream-backed reader in production.
+//
+// beforeSeq is the exclusive upper bound by JetStream stream sequence
+// (eventbus.HistoryQuery.BeforeSeq); zero means "no cursor — read the tail"
+// (D-07/ARCH-04). beforeID is a tripwire that validates a nonzero beforeSeq
+// still names the same event in storage; it is not itself a filter.
 type HistoryReader interface {
-	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error)
+	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error)
 }
 
 // FocusDepsConfigurer is an optional interface for hosts that need the focus

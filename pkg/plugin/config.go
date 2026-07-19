@@ -39,3 +39,24 @@ func DecodeConfig[T any](config *pluginv1.ServiceConfig) (T, error) {
 	}
 	return out, nil
 }
+
+// ResolveGameID returns the game id a plugin should use when constructing a
+// fully-qualified "events.<game_id>.…" subject directly (rather than
+// emitting a domain-relative reference for the host to qualify). It reads
+// ServiceConfig.GameId — populated by goplugin.Host.Init from the same
+// gameIDProvider-resolved value every host-side subject qualification uses
+// (internal/eventbus.Subsystem.GameID()) — falling back to "main"
+// (eventbus.Config's own default) when config is nil or GameId is unset, so
+// a test harness constructing ServiceConfig without the field keeps working.
+//
+// A plugin that always publishes a hardcoded "main" here will silently
+// diverge from every subscriber once the host resolves a non-"main" game id
+// (holomush debug e2e-scene-pose-regression): the emit lands on
+// "events.main.…" while subscribers filter on "events.<real_game_id>.…", and
+// neither side errors.
+func ResolveGameID(config *pluginv1.ServiceConfig) string {
+	if config != nil && config.GetGameId() != "" {
+		return config.GetGameId()
+	}
+	return "main"
+}

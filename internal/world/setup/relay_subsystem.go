@@ -39,8 +39,13 @@ type EventBusProvider interface {
 type OutboxRelaySubsystemConfig struct {
 	DB       PoolProvider
 	EventBus EventBusProvider
-	GameID   string
-	Logger   *slog.Logger
+	// GameID resolves the game ID at Start time (07-09 item 7) — a provider,
+	// not a live value, since the resolved id is not known until the
+	// database subsystem's InitGameID has run. A nil provider, or one
+	// resolving to "", falls back to defaultRelayGameID at Start (the
+	// default application moved out of the constructor).
+	GameID func() string
+	Logger *slog.Logger
 }
 
 // OutboxRelaySubsystem is the dedicated lifecycle subsystem that runs the single
@@ -56,11 +61,10 @@ type OutboxRelaySubsystem struct {
 	done     chan struct{}
 }
 
-// NewOutboxRelaySubsystem constructs an OutboxRelaySubsystem.
+// NewOutboxRelaySubsystem constructs an OutboxRelaySubsystem. It does not
+// allocate or start any runtime resources; call Start to construct the relay
+// and launch the drain loop.
 func NewOutboxRelaySubsystem(cfg OutboxRelaySubsystemConfig) *OutboxRelaySubsystem {
-	if cfg.GameID == "" {
-		cfg.GameID = defaultRelayGameID
-	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -75,19 +79,27 @@ func (s *OutboxRelaySubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase, lifecycle.SubsystemEventBus}
 }
 
-// Start constructs the leased relay + the reference consumer and launches the
-// relay drain loop. codecov:ignore — exercised by integration and E2E tests.
-func (s *OutboxRelaySubsystem) Start(ctx context.Context) error {
+// Prepare constructs the leased relay + the reference consumer — lease/conn
+// acquisition and wiring, no work loop (D-13.3 row 6). Idempotent: guarded
+// on s.relay so a second Prepare does not rebuild the waker/relay.
+// codecov:ignore — exercised by integration and E2E tests.
+func (s *OutboxRelaySubsystem) Prepare(ctx context.Context) error {
+	if s.relay != nil {
+		return nil // already prepared
+	}
+
 	pool := s.cfg.DB.Pool()
 	store := worldpostgres.NewOutboxStore(pool)
 	checkpoint := worldpostgres.NewConsumerCheckpointStore(pool)
 	publisher := s.cfg.EventBus.Publisher()
 
+	gameID := s.resolveGameID()
+
 	s.waker = newOutboxWaker(pool)
 	s.relay = outbox.NewRelay(outbox.RelayConfig{
 		Store:     leaseStoreAdapter{store: store},
 		Publisher: publisher,
-		GameID:    s.cfg.GameID,
+		GameID:    gameID,
 		Waker:     s.waker,
 		Logger:    s.cfg.Logger,
 	})
@@ -96,41 +108,81 @@ func (s *OutboxRelaySubsystem) Start(ctx context.Context) error {
 	// 05-11 (this plan wires the consumer/bootstrap + subsystem plumbing only).
 	s.consumer = outbox.NewConsumer(referenceConsumerName, checkpointStoreAdapter{store: checkpoint}, nil, s.cfg.Logger)
 
-	runCtx, cancel := context.WithCancel(context.Background())
-	s.cancel = cancel
-	s.done = make(chan struct{})
-	go func() {
-		defer close(s.done)
-		_ = s.relay.Run(runCtx) //nolint:errcheck // Run returns only the ctx-cancellation reason on Stop
-	}()
-
-	slog.InfoContext(ctx, "outbox relay subsystem started", "game_id", s.cfg.GameID)
+	slog.InfoContext(ctx, "outbox relay subsystem prepared", "game_id", gameID)
 	return nil
 }
 
-// Stop cancels the relay loop, closes the waker, and releases the lease.
+// Activate launches the relay drain loop — domain traffic (D-13.3 row 6).
+// Idempotent: guarded on s.done, a phase-owned field set only by Activate,
+// so a repeated Activate does not launch a second drain goroutine.
+// codecov:ignore — exercised by integration and E2E tests.
+func (s *OutboxRelaySubsystem) Activate(ctx context.Context) error {
+	if s.done != nil {
+		return nil // already activated
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
+	done := make(chan struct{})
+	s.done = done
+	relay := s.relay
+	go func(done chan struct{}, relay *outbox.Relay) {
+		defer close(done)
+		_ = relay.Run(runCtx) //nolint:errcheck // Run returns only the ctx-cancellation reason on Stop
+	}(done, relay)
+
+	slog.InfoContext(ctx, "outbox relay subsystem activated")
+	return nil
+}
+
+// Stop cancels the relay loop, closes the waker, and releases the lease. It
+// resets the Prepare guard (relay) and Activate guard (done), plus the
+// waker/cancel/consumer fields, to nil so a legitimate retry of
+// Prepare/Activate after Stop reacquires a fresh lease and relaunches the
+// drain loop rather than short-circuiting on an already-released one
+// (WR-01).
 // codecov:ignore — exercised by integration and E2E tests.
 func (s *OutboxRelaySubsystem) Stop(ctx context.Context) error {
 	if s.cancel != nil {
 		s.cancel()
+		s.cancel = nil
 	}
 	if s.waker != nil {
 		s.waker.Close()
+		s.waker = nil
 	}
 	if s.done != nil {
 		select {
 		case <-s.done:
 		case <-time.After(relayStopTimeout):
 		}
+		s.done = nil
 	}
 	if s.relay != nil {
 		_ = s.relay.Stop(ctx) //nolint:errcheck // Stop only releases the lease; a release warning is already logged
+		s.relay = nil
 	}
+	s.consumer = nil
 	return nil
 }
 
 // Consumer exposes the reference consumer (for bootstrap wiring / tests).
 func (s *OutboxRelaySubsystem) Consumer() *outbox.Consumer { return s.consumer }
+
+// resolveGameID applies the GameID provider (if any), falling back to
+// defaultRelayGameID when the provider is nil or resolves to "" — the same
+// default OutboxRelaySubsystemConfig's constructor used to apply eagerly
+// (07-09 item 7 moves the default application to Start-time resolution).
+func (s *OutboxRelaySubsystem) resolveGameID() string {
+	gameID := ""
+	if s.cfg.GameID != nil {
+		gameID = s.cfg.GameID()
+	}
+	if gameID == "" {
+		gameID = defaultRelayGameID
+	}
+	return gameID
+}
 
 // --- setup-layer adapters: bind the concrete postgres impls to the
 // consumer-owned outbox interfaces so package postgres never imports

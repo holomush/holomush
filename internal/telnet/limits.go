@@ -6,7 +6,7 @@ package telnet
 import (
 	"time"
 
-	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/sessionlease"
 )
 
 // Limits bounds per-connection resource use. Zero values in a Limits value
@@ -34,7 +34,7 @@ type Limits struct {
 	// the connection visible to the liveness sweep. MUST be well under the
 	// sweep's LeaseTTL so at least one refresh fires per window; parseSessionConfig
 	// (cmd/holomush) enforces LeaseTTL/BootGrace ≥ 2× this interval. Defaults to
-	// session.DefaultLeaseRefreshInterval (15 s) in DefaultLimits.
+	// sessionlease.DefaultRefreshInterval (15 s) in DefaultLimits.
 	LeaseRefreshInterval time.Duration
 }
 
@@ -44,5 +44,5 @@ var DefaultLimits = Limits{
 	IdleReadTimeout:      5 * time.Minute,
 	WriteTimeout:         30 * time.Second,
 	PreAuthTimeout:       2 * time.Minute,
-	LeaseRefreshInterval: session.DefaultLeaseRefreshInterval,
+	LeaseRefreshInterval: sessionlease.DefaultRefreshInterval,
 }

@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 7
-current_phase_name: Event-Model & Bootstrap Decomposition
-status: "Phase 6 shipped — PR #4819"
-stopped_at: Phase 6 context gathered
-last_updated: "2026-07-15T14:36:40.556Z"
-last_activity: 2026-07-15
+current_phase: 8
+current_phase_name: God-Object Decomposition
+status: "Phase 7 shipped — PR #4823"
+stopped_at: Completed 07-11-PLAN.md
+last_updated: "2026-07-19T00:53:19.389Z"
+last_activity: 2026-07-19
 progress:
-  total_phases: 6
-  completed_phases: 3
-  total_plans: 25
-  completed_plans: 25
-  percent: 50
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 36
+  completed_plans: 36
+last_activity_desc: Phase 07 complete, transitioned to Phase 8
 ---
 
 # Project State
@@ -25,20 +25,20 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 06 — operational-hardening-assurance-gates
+**Current focus:** Phase 07 — event-model-bootstrap-decomposition
 
 ## Current Position
 
-Phase: 7 — Event-Model & Bootstrap Decomposition
+Phase: 8 — God-Object Decomposition
 Plan: Not started
-Status: Phase 6 shipped — PR #4819
-Last activity: 2026-07-15
+Status: Phase 7 shipped — PR #4823
+Last activity: 2026-07-19
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 51
+- Total plans completed: 62
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -52,6 +52,7 @@ Last activity: 2026-07-15
 | 04 | 4 | - | - |
 | 05 | 16 | - | - |
 | 06 | 5 | - | - |
+| 07 | 11 | - | - |
 
 **Recent Trend:**
 
@@ -104,6 +105,21 @@ Last activity: 2026-07-15
 | Phase 06 P03 | 30 | 6 tasks | 8 files |
 | Phase 06 P04 | 8min | 3 tasks | 4 files |
 | Phase 06 P05 | 35min | 2 tasks | 4 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 07 P01 | 20min | 2 tasks | 12 files |
+| Phase 07 P02 | 33min | 2 tasks | 40 files |
+| Phase 07 P03 | 25min | 3 tasks | 15 files |
+| Phase 07 P05 | 50min | 3 tasks | 22 files |
+| Phase 07 P04 | ~35min | 3 tasks | 4 files |
+| Phase 07 P06 | 50min | 3 tasks | 13 files |
+| Phase 07 P07 | 46min | 3 tasks | 35 files |
+| Phase 07 P08 | 35min | 3 tasks | 13 files |
+| Phase 07 P09 | ~5h | 3 tasks | 50 files |
+| Phase 07 P10 | ~45min | 4 tasks | 8 files |
+| Phase 07 P11 | ~4h | 3 tasks | 68 files |
 
 ## Accumulated Context
 
@@ -147,7 +163,36 @@ the next milestone yet.
 - [Phase ?]: 06-03: nats CVE GHSA-q59r-vq66-pxc2 is a git-range-only OSV record no manifest/reachability scanner can flag; remediation = bump to v2.14.3 + deterministic cmd/nats-floor-guard compensating control.
 - [Phase ?]: 06-03: task lint:vuln = 3 fail-closed legs (nats floor guard + govulncheck + osv-scanner v2); OSV allowlist scoped to osv-scanner only; 5 test-only docker/docker findings allowlisted (issue #4817).
 - [Phase ?]: 06-04: codecov project ratchet (target: auto, threshold: 1%); patch+project POST but are not required protect-main checks (gh api ruleset 11923801) — codecov ruleset add accepted-deferred, only OPS-03 Vuln mandatory (owned by 06-03)
+- [Phase 07]: rev3 D-13.0 — the Prepare/Activate barrier is scoped to EXTERNALLY-REACHABLE surfaces + domain work loops, not "anything running". Grounding: embedded NATS sets `DontListen: true` (eventbus/subsystem.go:153) so it binds no socket, and audit's own acquisition requires that server live (audit/subsystem.go:273 AUDIT_DEP_NOT_STARTED) — a universal "nothing serves until everything is acquired" barrier is circular for that chain. eventbus's whole Start body → Prepare; plugin loading/subprocess launch → Prepare (audit's DependsOn(Plugins) forces it); only grpc's listener and admin.sock bind in Activate.
+- [Phase 07]: rev3 — 07-09's ~20 pre-orchestrator live-value reads are settled by HOISTING core.go:705-1060 whole into a memoized (sync.Once) `cryptoWiring` builder in package main; the block's body moves verbatim so the dbSub.Pool()/authSub.Hasher()/abacSub.Resolver() reads inside it simply execute post-Start. No 18th subsystem; no repo signature churn. THE RULE: every cryptoWiring consumer must declare DependsOn ⊇ {Database, Auth, ABAC, EventBus} — the first consumer to resolve the provider builds it.
+- [Phase 07]: rev3 — `deps.TLSCertEnsurer` (deps.go:53,71) is a live test seam that breaks at compile time when ensureTLSCerts is deleted; the body becomes exported `tls.EnsureCerts` with the SAME signature so the Deps field type is unchanged.
+- [Phase 07]: rev3 — the promised `Seq == 0` → BeforeID pagination fallback DOES NOT EXIST (bus.go:87,94; hot_jetstream.go:334; cold_postgres.go:125 — BeforeID is a tripwire for a NONZERO seq). Policy settled: zero seq means "no cursor, read the tail" (status quo); reject-as-stale and ID→seq resolution both rejected.
+- [Phase 07]: rev3 — Go evaluates deferred ARGUMENTS at registration, so `defer orch.StopAll(shutdownCtx)` would expire ~5s into uptime and cancel every graceful stop. The closure form (core.go:255-261 telemetry / :356-362 observability) is the in-repo precedent and the mandated shape.
 - [Phase ?]: 06-05: OPS-04 audit-DLQ replay resolves game_id MIRRORING the server (--game-id override -> core.game_id via config.Load(...,core) -> persisted DB), closing the F3 external-NATS subject-prefix mismatch; tautological embedded-NATS test replaced with a divergent-game natstest test driving the real resolver seam
+- [Phase ?]: 07-01: internal/grpc/client.go extracted verbatim into new leaf package internal/grpcclient; telnet closure dropped 47->10 holomush/internal/ packages, closing the gateway.go client-import gap RESEARCH.md Pitfall-4 missed
+- [Phase ?]: 07-02: internal/eventvocab created as dependency-free event-type vocabulary leaf (D-05); internal/core repointed with zero forwarding alias; 39 consumers (9 prod + 30 test) repointed; event_payload_size_test.go deleted as exact duplicate (coverage folded into eventvocab_test.go)
+- [Phase ?]: [Phase 07]: 07-03: internal/ulidgen/cmdparse/sessionlease leaves extracted — internal/telnet and internal/web now import neither internal/core nor internal/session (production or test code); D-16's three remaining gateway leaks closed; 07-04 has no code left to change, only enforcement to add
+- [Phase ?]: 07-05: core.Engine moved to internal/presence (presence.Emitter), publishing arrive/leave/session_ended through eventbus.Publisher; internal/auth breaks the resulting import cycle with its own 2-method consumer-defined PresenceEmitter interface rather than importing presence
+- [Phase ?]: 07-05: cmd/holomush's presence emitter wraps the wrapPublisher-wrapped publisher (never rawPublisher) so events_audit still receives the App-Rendering header; harness resolves gameID from its own bus.GameID, not a hardcoded main
+- [Phase ?]: [Phase 07]: 07-04 gateway boundary closure gate + INV-EVENTBUS-1 binding — added a transitive-closure import gate (packages.NeedDeps walk) alongside the existing AST direct-import gate; forbade internal/core/session/grpc wholesale (D-15/D-17); fixed the dead internal/auth/service phantom entry (replaced with internal/auth), surfacing two genuinely core-only files that needed coreOnlyFiles classification (crypto_operator_validation.go, cmd_admin_totp_run_test.go); INV-EVENTBUS-1 flipped pending->bound with asserted_by naming both gates
+- [Phase ?]: sysbroadcast.Broadcaster copies presence.Emitter's {pub eventbus.Publisher; gameID func() string} shape verbatim (FINDING-5), including the empty-gameID->main fallback
+- [Phase ?]: cmd/holomush introduces a shared bus := s.cfg.EventBus local in grpcSubsystem.Start reused by both the SessionAdmin broadcast closure and the command-services broadcaster closure — one game-id source for the whole host
+- [Phase ?]: internal/grpc's dispatcher_test.go/test_helpers_test.go were undeclared consumers of the deleted Services.Events() accessor; registerTestCommands now takes the shared store directly as a parameter
+- [Phase ?]: 07-07: WithEventPublisher reuses CoreServer's existing gameID field rather than adding a duplicate
+- [Phase ?]: 07-07: Combined Task 1+2 into one commit (interdependent edits verified together); Task 3 committed separately
+- [Phase ?]: 07-07: event_emitter.go untouched — CoreServer builds a direct typed system-actor literal instead of exporting the plugin-private actor bridge
+- [Phase ?]: 07-08: D-07 fixed — ReplayTail (plugins.HistoryReader + hostfunc.HistoryReader, lockstep) gains beforeSeq uint64; both runtimes' cursor encoders thread each event's real Seq (encodeHostEventCursor + hostfunc's two independent encode sites) instead of a hardcoded 0; beforeSeq==0 means read-the-tail with no ID-only fallback on either tier
+- [Phase ?]: 07-08: D-08 preserved — hostv1.Event stays at exactly 8 fields, pinned by a new census meta-test (TestHostV1EventFieldCensusExcludesSequence) asserting field-set equality, not just seq-absence
+- [Phase ?]: 07-09: D-12 Wave A — killed all five eager subsystem starts (dbSub/eventBusSub/abacSub/authSub/invalidation.Coordinator); every gameID/live-value consumer resolves through gameIDProvider or the memoized cryptoWiring builder (cryptowiring.go) at its own Start, gated by a real DependsOn edge
+- [Phase ?]: 07-09: TLS is a real registered lifecycle.Subsystem (tlscerts.TLSSubsystem, DependsOn Database); productionSubsystems takes a named 17-field productionSubsystemSet instead of a 16-position positional list (LOW-8)
+- [Phase ?]: 07-09: ABAC deliberately excluded from the cryptoWiring consumer set (crypto-operator validation moved into ABACSubsystem.Start instead) to avoid a second ABAC->cryptoWiring->ABAC cycle; chain.VerifierSubsystem/socket.AdminSocketSubsystem both gate external binds on SubsystemCryptoChainVerifier, permanently forbidding the EventBus->CryptoChainVerifier reverse edge
+- [Phase ?]: 07-09: eventbus.Subsystem.Start now runs VerifyAccountScoping unconditionally in external mode, exposing that a bare/unscoped natstest.StartNATS() container is over-scoped by design; added natstest.StartScopedNATS/ScopedURL (loads deploy/nats/cluster-server.conf) for test harnesses needing a full external-mode boot to succeed
+- [Phase ?]: 07-10: MEDIUM-11 closed by comment-deletion + topo-order pin (not the eventbus->CryptoChainVerifier edge rev 4 shipped, which cycles against 07-09's verifier->EventBus edge)
+- [Phase ?]: 07-10: StopAll deadline-aware (buffered one-shot result channel per Stop, raced against ctx.Done()); StartAll rollback moved to a fresh bounded context in this plan (not deferred to 07-11)
+- [Phase ?]: 07-10: grpcSubsystem.DependsOn() gains SubsystemAuditProjection (T-07-50); core_topo_order_test.go pins the real 17-subsystem topological order + proves the post-07-09 graph acyclic, reading every DependsOn() live
+- [Phase ?]: 07-11: D-12 Wave B — lifecycle.Subsystem split into Prepare/Activate/Stop; Orchestrator.StartAll runs two full topological sweeps (all Prepare, then all Activate), the structural barrier that makes acquire-before-serve unrepresentable-to-violate regardless of DependsOn edges; rollback now stops the failing subsystem itself and always runs on a fresh context
+- [Phase ?]: 07-11: all 17 production subsystems migrated per the plan's settled D-13.3 disposition table; PluginSubsystem's cleanupOnError extended to close binaryHost+luaHost on every pre-manager Prepare failure path (closed a token-store-sweeper-goroutine leak); audit.Subsystem gained preparedProjection/partitionManager phase-owned fields with lateInit capture/restore-on-failure
+- [Phase ?]: 07-11: invalidation.Coordinator's construction+Start() stays bundled inside the memoized cryptoWiring builder (deviation from the plan's literal row-16 text) because CryptoChainVerifier — not necessarily grpcSubsystem — is the actual first resolver of the builder in topological order; confining it to the Prepare sweep (which it always is) preserves D-13.0's guarantee since the Coordinator's pub/sub is process/cluster-internal signaling, not client-facing domain traffic
 
 ### Pending Todos
 
@@ -180,10 +225,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-15T12:59:01.113Z
+Last session: 2026-07-18T05:13:59.824Z
 PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-operational-hardening-assurance-gates/06-CONTEXT.md
+Stopped at: Completed 07-11-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

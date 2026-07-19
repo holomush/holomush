@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventvocab"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -96,7 +97,7 @@ func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.NoError(t, err)
@@ -145,7 +146,7 @@ func TestPluginEventEmitterEmitsGlobalStream(t *testing.T) {
 
 	err := emitter.Emit(context.Background(), "core-broadcast", pluginsdk.EmitIntent{
 		Subject: "global",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"server restart"}`,
 	})
 	require.NoError(t, err)
@@ -173,7 +174,7 @@ func TestPluginEventEmitterRejectsNonULIDActorID(t *testing.T) {
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{}`,
 	})
 	require.Error(t, err)
@@ -198,7 +199,7 @@ func TestPluginEventEmitterIdempotentRetryIsNoOpOnStreamState(t *testing.T) {
 	// emitter, to guarantee both paths observe dedup.
 	intent := pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"n":1}`,
 	}
 	require.NoError(t, emitter.Emit(context.Background(), "core-scenes", intent))
@@ -264,7 +265,7 @@ func TestPluginEventEmitterRejectsUndeclaredNamespace(t *testing.T) {
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "notifications:01CHAR",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"nudge"}`,
 	})
 	require.Error(t, err)
@@ -279,7 +280,7 @@ func TestPluginEventEmitterRejectsMissingManifestWithoutPublishing(t *testing.T)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.Error(t, err)
@@ -293,7 +294,7 @@ func TestPluginEventEmitterRejectsMissingManifestLookupWithoutPublishing(t *test
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.Error(t, err)
@@ -309,7 +310,7 @@ func TestPluginEventEmitterRejectsActorResolverFailureWithoutPublishing(t *testi
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.Error(t, err)
@@ -327,7 +328,7 @@ func TestPluginEventEmitterRejectsNilActorResolverWithoutPublishing(t *testing.T
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.Error(t, err)
@@ -343,7 +344,7 @@ func TestPluginEventEmitterRejectsEmptyResolvedActorWithoutPublishing(t *testing
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.Error(t, err)
@@ -359,7 +360,7 @@ func TestPluginEventEmitterRejectsUnknownResolvedActorKindWithoutPublishing(t *t
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.Error(t, err)
@@ -389,7 +390,7 @@ func TestPluginEventEmitterRejectsMalformedSubjectWithoutPublishing(t *testing.T
 
 			err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 				Subject: tt.subject,
-				Type:    pluginsdk.EventType(core.EventTypeSystem),
+				Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 				Payload: `{"text":"hi"}`,
 			})
 			require.Error(t, err)
@@ -406,7 +407,7 @@ func TestPluginEventEmitterWrapsPublisherFailure(t *testing.T) {
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.Error(t, err)
@@ -418,7 +419,7 @@ func TestPluginEventEmitterRejectsMissingPublisherWithoutPanic(t *testing.T) {
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":"hi"}`,
 	})
 	require.Error(t, err)
@@ -433,13 +434,13 @@ func TestPluginEventEmitterAcceptsPayloadAtMaxPayloadSize(t *testing.T) {
 
 	prefix := []byte(`{"text":"`)
 	suffix := []byte(`"}`)
-	filler := bytes.Repeat([]byte{'a'}, core.MaxPayloadSize-len(prefix)-len(suffix))
+	filler := bytes.Repeat([]byte{'a'}, eventvocab.MaxPayloadSize-len(prefix)-len(suffix))
 	payload := append(append(prefix, filler...), suffix...)
-	require.Len(t, payload, core.MaxPayloadSize)
+	require.Len(t, payload, eventvocab.MaxPayloadSize)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: string(payload),
 	})
 	require.NoError(t, err)
@@ -454,13 +455,13 @@ func TestPluginEventEmitterRejectsOversizedPayloadWithoutPublishing(t *testing.T
 
 	prefix := []byte(`{"text":"`)
 	suffix := []byte(`"}`)
-	filler := bytes.Repeat([]byte{'a'}, core.MaxPayloadSize-len(prefix)-len(suffix)+1)
+	filler := bytes.Repeat([]byte{'a'}, eventvocab.MaxPayloadSize-len(prefix)-len(suffix)+1)
 	payload := append(append(prefix, filler...), suffix...)
-	require.Len(t, payload, core.MaxPayloadSize+1)
+	require.Len(t, payload, eventvocab.MaxPayloadSize+1)
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: string(payload),
 	})
 	require.Error(t, err)
@@ -474,7 +475,7 @@ func TestPluginEventEmitterRejectsInvalidJSONPayloadWithoutPublishing(t *testing
 
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene.01TEST",
-		Type:    pluginsdk.EventType(core.EventTypeSystem),
+		Type:    pluginsdk.EventType(eventvocab.EventTypeSystem),
 		Payload: `{"text":`,
 	})
 	require.Error(t, err)

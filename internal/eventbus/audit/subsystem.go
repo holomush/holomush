@@ -196,26 +196,41 @@ type PoolProvider interface {
 
 // Subsystem manages the host audit projection worker lifecycle.
 //
-// Start creates (or updates) the durable consumer and spawns the
-// Consume loop. Stop cancels the loop and waits up to DefaultDrainTimeout
-// for in-flight messages to finish processing.
+// Prepare runs the synchronous boot gate (partition Backfill +
+// EnsurePartitions) and constructs (or re-attaches to) the durable
+// consumer, storing it on preparedProjection. Activate spawns the Consume
+// loop from that prepared projection. Stop cancels the loop and waits up to
+// DefaultDrainTimeout for in-flight messages to finish processing — or, if
+// Prepare succeeded but Activate never ran, clears the in-memory prepared
+// aggregate without draining anything (D-13.2 row 10).
 //
-// mu guards cancel and worker so a concurrent Stop (e.g., orchestrator
-// shutdown racing with a signal handler) cannot observe worker = nil
-// while the first Stop is still inside drain().
+// mu guards cancel/worker/preparedProjection/partitionManager so a
+// concurrent Stop (e.g., orchestrator shutdown racing with a signal
+// handler) cannot observe partial state while the first Stop is still
+// inside drain().
 type Subsystem struct {
-	mu              sync.Mutex
-	jsProv          JSProvider
-	poolProv        PoolProvider
-	cfg             Config
-	cancel          context.CancelFunc
-	worker          *projection
-	pluginMgr       *PluginConsumerManager
-	retentionWorker *retaudit.RetentionWorker
-	// lateInit is called once from Start (before newProjection) so the
+	mu       sync.Mutex
+	jsProv   JSProvider
+	poolProv PoolProvider
+	cfg      Config
+	cancel   context.CancelFunc
+	worker   *projection
+	// preparedProjection is set by Prepare (the newProjection result) and
+	// consumed by Activate, which calls p.start(workerCtx) and assigns the
+	// result to worker. Prepare guards on this field — NOT on worker, which
+	// is assigned only after p.start, now an Activate-owned step (D-13.2 row
+	// 10, round 7 BLOCKER: the old s.worker != nil guard cannot guard
+	// Prepare after the split).
+	preparedProjection *projection
+	// partitionManager is set by Prepare and consumed by Activate to build
+	// the periodic RetentionWorker.
+	partitionManager *EventsAuditPartitionManager
+	pluginMgr        *PluginConsumerManager
+	retentionWorker  *retaudit.RetentionWorker
+	// lateInit is called once from Prepare (before newProjection) so the
 	// owner map and per-plugin consumer manager can be built from plugin
 	// manifests that are only available after SubsystemPlugins has
-	// started. The provider MUST NOT call back into Subsystem setters
+	// prepared. The provider MUST NOT call back into Subsystem setters
 	// (would deadlock s.mu). A nil lateInit keeps Phase A behavior.
 	lateInit func() (*OwnerMap, *PluginConsumerManager)
 }
@@ -260,26 +275,46 @@ func (s *Subsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Start creates the durable consumer and attaches the Consume callback.
-// Any Consume error from the underlying JetStream client is propagated
-// so the orchestrator does not observe a silently-dead worker as
-// "started successfully" — the spec's operability contract (§6).
-func (s *Subsystem) Start(ctx context.Context) error {
+// Prepare runs the synchronous boot gate and constructs (or re-attaches to)
+// the durable consumer — everything the code's own prior comment already
+// named as "ALL BEFORE the projection starts accepting traffic" (D-13.3 row
+// 10). It does NOT spawn the Consume loop; that is Activate's job.
+//
+// Prepare is idempotent: guarded on s.preparedProjection, a phase-owned
+// field this method itself sets (the old s.worker != nil guard cannot guard
+// Prepare — worker is assigned only after p.start, which now lives in
+// Activate).
+//
+// A Prepare failure after lateInit restores s.cfg.Owners/s.pluginMgr to
+// their pre-lateInit values (D-13.2 row 10, round 8): lateInit writes both
+// BEFORE the fallible newProjection call, so without this restoration a
+// retried Prepare whose lateInit provider returns nil would silently keep
+// stale ownership/consumer wiring from the failed attempt.
+func (s *Subsystem) Prepare(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.worker != nil {
-		return nil // already started
+	if s.preparedProjection != nil {
+		return nil // already prepared
 	}
 	js := s.jsProv.JS()
 	if js == nil {
-		return oops.Code("AUDIT_DEP_NOT_STARTED").Errorf("eventbus JetStream not available at audit.Start")
+		return oops.Code("AUDIT_DEP_NOT_STARTED").Errorf("eventbus JetStream not available at audit.Prepare")
 	}
 	pool := s.poolProv.Pool()
 	if pool == nil {
-		return oops.Code("AUDIT_DEP_NOT_STARTED").Errorf("database pool not available at audit.Start")
+		return oops.Code("AUDIT_DEP_NOT_STARTED").Errorf("database pool not available at audit.Prepare")
+	}
+	// Resolve the DLQ subject provider, if any, before config validation /
+	// DLQ setup — it wins over the Defaults()-substituted Subject (07-09
+	// item 7). The AuditProjection -> Database edge (already declared)
+	// guarantees the gameID this provider reads is resolvable by now.
+	if s.cfg.DLQ.SubjectProvider != nil {
+		if subject := s.cfg.DLQ.SubjectProvider(); subject != "" {
+			s.cfg.DLQ.Subject = subject
+		}
 	}
 	// Reject a destructive-by-accident retention config (negative window /
-	// non-positive interval) before anything starts (round-3 finding 3).
+	// non-positive interval) before anything prepares (round-3 finding 3).
 	if err := s.cfg.Validate(); err != nil {
 		return err
 	}
@@ -288,8 +323,9 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	// (Backfill), and ensure partition coverage — ALL BEFORE the projection
 	// starts accepting traffic. This is Backfill + EnsurePartitions ONLY, never
 	// a full RunOnce (no Detach/Drop on boot — a red first-boot must not prune).
-	// A gate failure returns from Start before any projection exists, so there
-	// is nothing to roll back and the rename/backfill cannot race a DLQ replay.
+	// A gate failure returns from Prepare before any projection exists, so
+	// there is nothing to roll back and the rename/backfill cannot race a
+	// DLQ replay.
 	partitionMgr := NewEventsAuditPartitionManager(pool, s.cfg.RetainWindow)
 	if err := partitionMgr.Backfill(ctx); err != nil {
 		return oops.Code("AUDIT_BACKFILL_BOOT_GATE_FAILED").Wrap(err)
@@ -299,8 +335,11 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	}
 	// Late-bind the owner map + per-plugin consumer manager if a
 	// provider was installed (F5): plugin manifests are only available
-	// after the plugin subsystem has started, which is guaranteed by the
-	// DependsOn on SubsystemPlugins.
+	// after the plugin subsystem has prepared, which is guaranteed by the
+	// DependsOn on SubsystemPlugins. Capture the pre-lateInit values first
+	// so a Prepare failure below can restore them.
+	prevOwners := s.cfg.Owners
+	prevPluginMgr := s.pluginMgr
 	if s.lateInit != nil {
 		owners, pcm := s.lateInit()
 		if owners != nil {
@@ -312,8 +351,39 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	}
 	p, err := newProjection(ctx, js, pool, s.cfg)
 	if err != nil {
+		s.cfg.Owners = prevOwners
+		s.pluginMgr = prevPluginMgr
 		return oops.Code("AUDIT_PROJECTION_START_FAILED").Wrap(err)
 	}
+
+	s.preparedProjection = p
+	s.partitionManager = partitionMgr
+	return nil
+}
+
+// Activate spawns the Consume loop from the projection Prepare constructed,
+// starts per-plugin audit consumers, and launches the periodic retention
+// worker (D-13.3 row 10). Any Consume error from the underlying JetStream
+// client is propagated so the orchestrator does not observe a silently-dead
+// worker as "activated successfully" — the spec's operability contract
+// (§6).
+//
+// Activate is idempotent: guarded on s.worker. It fails closed with a typed
+// error if Prepare never ran (s.preparedProjection == nil).
+//
+// The worker's context is deliberately parented on context.Background(), not
+// Activate's ctx — the worker must outlive the boot ctx.
+func (s *Subsystem) Activate(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.worker != nil {
+		return nil // already activated
+	}
+	if s.preparedProjection == nil {
+		return oops.Code("AUDIT_NOT_PREPARED").Errorf("audit.Activate called before Prepare")
+	}
+	p := s.preparedProjection
+
 	workerCtx, cancel := context.WithCancel(context.Background())
 	if err := p.start(workerCtx); err != nil {
 		cancel()
@@ -322,7 +392,7 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	s.worker = p
 	s.cancel = cancel
 	// F5: start per-plugin audit consumers. Failure here is treated as a
-	// hard Start failure because a misconfigured plugin consumer would
+	// hard Activate failure because a misconfigured plugin consumer would
 	// leave plugin-owned subjects without any audit sink (the host
 	// projection skips them). The error path rolls back the host
 	// projection we just started so lifecycle is all-or-nothing.
@@ -330,7 +400,7 @@ func (s *Subsystem) Start(ctx context.Context) error {
 		if err := s.pluginMgr.Start(workerCtx); err != nil {
 			cancel()
 			// Bound the rollback drain by DefaultDrainTimeout so a slow
-			// host projection cannot block Start() indefinitely on the
+			// host projection cannot block Activate() indefinitely on the
 			// plugin-manager failure path. Matches the normal Stop()
 			// drain contract.
 			rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), DefaultDrainTimeout)
@@ -347,25 +417,40 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	// cannot prune on a red deploy — the boot gate above ran only the
 	// non-destructive Backfill + EnsurePartitions. Consequently the first prune
 	// is ~one PurgeInterval (24h default) after boot; operators must NOT expect
-	// an immediate detach on deploy (round-5 LOW). Start always returns nil
-	// (it spawns the loop); later RunOnce failures are logged non-fatally.
-	worker := retaudit.NewRetentionWorker(s.cfg.retentionConfig(), partitionMgr, retaudit.WithSkipFirstRun())
+	// an immediate detach on deploy (round-5 LOW). Activate always returns nil
+	// for the worker's own Start (it spawns the loop); later RunOnce failures
+	// are logged non-fatally.
+	worker := retaudit.NewRetentionWorker(s.cfg.retentionConfig(), s.partitionManager, retaudit.WithSkipFirstRun())
 	_ = worker.Start(workerCtx) //nolint:errcheck // Start always returns nil
 	s.retentionWorker = worker
 	return nil
 }
 
-// Stop cancels the Consume loop and waits for in-flight messages to
-// drain (bounded by DefaultDrainTimeout). Idempotent; safe to call
-// multiple times even concurrently.
+// Stop is the single teardown path for all three states this subsystem can
+// be in: never prepared, prepared-but-never-activated, and activated
+// (D-13.1). Idempotent; safe to call multiple times even concurrently.
 //
-// The worker reference is cleared AFTER drain returns so a second Stop
-// racing with the first cannot observe worker=nil and report clean
+// Prepared-only: clears the in-memory prepared aggregate
+// (preparedProjection/partitionManager). The durable JetStream consumer
+// newProjection created is intentionally RETAINED server-side — drain is a
+// no-op before Consume exists, and CreateOrUpdateConsumer is idempotent, so
+// a retried Prepare re-attaches to the same durable rather than duplicating
+// it (D-13.2 row 10, round 9).
+//
+// Activated: cancels the Consume loop and waits for in-flight messages to
+// drain (bounded by DefaultDrainTimeout), same as before the split. The
+// worker/prepared references are cleared AFTER drain returns so a second
+// Stop racing with the first cannot observe nil state and report clean
 // shutdown while the first drain is still pending.
 func (s *Subsystem) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.worker == nil {
+		if s.preparedProjection != nil {
+			// Prepared but never activated: nothing running to drain.
+			s.preparedProjection = nil
+			s.partitionManager = nil
+		}
 		return nil
 	}
 	if s.cancel != nil {
@@ -387,6 +472,8 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 	w := s.worker
 	err := w.drain(ctx)
 	s.worker = nil
+	s.preparedProjection = nil
+	s.partitionManager = nil
 	if err != nil {
 		return err
 	}

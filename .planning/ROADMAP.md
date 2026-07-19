@@ -40,7 +40,7 @@ Phase execution artifacts: `milestones/v0.11-phases/`.
 - [x] **Phase 4: World-Model Resilience Investigation & Decision (F1)** — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR (decision gate) (completed 2026-07-11)
 - [x] **Phase 5: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction (completed 2026-07-13)
 - [x] **Phase 6: Operational Hardening & Assurance Gates** — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage gate (completed 2026-07-15)
-- [ ] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports
+- [x] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports (completed 2026-07-18)
 - [ ] **Phase 8: God-Object Decomposition** — CoreServer + plugin/manager decomposition (behavior-preserving)
 - [ ] **Phase 9: Test-Quality & Code-Health Sweep** — coverage backfill, weak-test/ACE remediation, session-lifecycle matrix, code-health batch
 
@@ -163,6 +163,53 @@ Plans:
 2. Process bootstrap runs through `lifecycle.Orchestrator` with unified start/stop ordering; startup/shutdown behavior is unchanged
 3. `internal/web` / `internal/telnet` import only protocol-translation dependencies; the gateway-boundary rule passes with zero violations
 
+**Plans**: 11/11 plans executed
+
+> Wave numbers below are resynced to the plan frontmatter, which is the **source of
+> truth** (rev 3; an earlier revision's roadmap labels were off by one from wave 4
+> onward). 07-03∥07-05 and 07-04∥07-06 run in parallel — verified empty
+> `files_modified` intersections.
+
+Plans:
+
+**Wave 1**
+
+- [x] 07-01-PLAN.md — ARCH-05: extract `internal/grpcclient` leaf; remove `internal/grpc` from telnet's 47-pkg closure (wave 1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [x] 07-02-PLAN.md — D-05 event-vocabulary leaf `internal/eventvocab`; resolves the ARCH-04↔ARCH-05 collision (wave 2)
+
+**Wave 3** *(blocked on Wave 2 — the two plans run in parallel)*
+
+- [x] 07-03-PLAN.md — D-16 gateway value leaves: `internal/ulidgen`, `internal/cmdparse`, `internal/sessionlease`; **owns the full gateway core/session ban** (wave 3)
+- [x] 07-05-PLAN.md — D-03/D-04: `internal/presence` + auth consumer-defined interface (breaks the FINDING-1 cycle) (wave 3)
+
+**Wave 4** *(blocked on Wave 3 — the two plans run in parallel)*
+
+- [x] 07-04-PLAN.md — D-15/D-17/D-18: `forbidden` amendment, transitive-closure gate, `INV-EVENTBUS-1` binding (wave 4)
+- [x] 07-06-PLAN.md — D-02: one broadcast builder (`internal/sysbroadcast`), two callers; `command` sheds its event dep (wave 4)
+
+**Wave 5** *(blocked on Wave 4 — depends on BOTH 07-04 and 07-06, so ARCH-05 converges before ARCH-04's deletions)*
+
+- [x] 07-07-PLAN.md — D-01/D-06: delete `core.Event`/`NewEvent`/`EventAppender`; collapse 3 actor bridges to 1; `WithEventPublisher` replaces `WithEventStore`; amend the rules (wave 5)
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [x] 07-08-PLAN.md — D-07/D-08: seq-correct plugin history pagination (TDD) + `hostv1.Event` no-seq guard (wave 6)
+
+**Wave 7** *(blocked on Wave 6)*
+
+- [x] 07-09-PLAN.md — ARCH-03 Wave A: handles-not-live-values (`cryptoWiring` hoist), TLS subsystem, all 5 eager starts die, LOW-8 (wave 7)
+
+**Wave 8** *(blocked on Wave 7)*
+
+- [x] 07-10-PLAN.md — D-14: LOW-7 `StopAll` deadline (closure, not deferred arg), MEDIUM-11 real edge, gRPC AuditProjection edge, topo-order pin (wave 8)
+
+**Wave 9** *(blocked on Wave 8)*
+
+- [x] 07-11-PLAN.md — ARCH-03 Wave B: Prepare/Activate split, two-sweep barrier scoped to external surfaces + domain loops, rollback semantics (wave 9)
+
 ### Phase 8: God-Object Decomposition
 
 **Goal**: Decompose the CoreServer and plugin/manager god objects into cohesive, separately-testable units without behavior change.
@@ -196,7 +243,7 @@ Plans:
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
-| 7. Event-Model & Bootstrap Decomposition | v0.12 | 0 | Pending | — |
+| 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
 

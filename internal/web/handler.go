@@ -18,9 +18,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/sessionlease"
 	"github.com/holomush/holomush/internal/telemetry"
+	"github.com/holomush/holomush/internal/ulidgen"
 	"github.com/holomush/holomush/pkg/errutil"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -242,7 +242,7 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	// it on any stream exit (client disconnect, context cancel, error,
 	// STREAM_CLOSED). ClientType is "terminal" because StreamEvents is
 	// the terminal-mode streaming endpoint.
-	connID := core.NewULID()
+	connID := ulidgen.New()
 
 	// Disconnect on stream exit triggers core-side session lifecycle
 	// (detach/delete based on remaining connection count). Connection
@@ -459,7 +459,7 @@ func (h *Handler) runSubscribeOnce(
 
 	hbInterval := h.heartbeatInterval
 	if hbInterval <= 0 {
-		hbInterval = session.DefaultLeaseRefreshInterval
+		hbInterval = sessionlease.DefaultRefreshInterval
 	}
 	heartbeat := time.NewTicker(hbInterval)
 	defer heartbeat.Stop()

@@ -699,3 +699,25 @@ relies on host-trusted req.character_id, SAME trust as pre-existing scene-list, 
 new surface (Low). Idle scheduler (idle_scheduler.go) = pure system sweep, no authz,
 context.Background()+timeout correct. Phase-1 channels seed:plugin-stream-subscribe
 + AuthorizePluginStreamContribution fence unchanged from CHAN-01..05 READY.
+
+## ABAC lifecycle Prepare/Activate split — two-sweep barrier is fail-closed (Phase 07, 2026-07-18)
+
+D-12/D-13 split `ABACSubsystem.Start` into `Prepare`/`Activate`
+(`internal/access/setup/subsystem.go`). Durable facts for future lifecycle reviews:
+`Orchestrator.StartAll` (`internal/lifecycle/orchestrator.go:42-120`) runs a GLOBAL
+BARRIER — every subsystem's `Prepare` in topo order, THEN every `Activate` (pinned
+by `TestStartAllRunsAllPreparesBeforeAnyActivate`, orchestrator_test.go:134). ABAC
+builds the full engine+audit logger and SYNCHRONOUSLY loads the policy corpus
+(`cache.Reload`, setup.go:125) inside `Prepare`; the poller started in `Activate`
+is a "safety net" only (setup.go:333). So no `Activate` body can route through a
+not-yet-ready engine, AND even the Prepare-done/not-Activated gap is default-deny =
+fail-closed. `Engine()`/`Resolver()` panic if stack==nil (before Prepare) — boot
+panic, not fail-open; consumers hold abacSub as a provider and only call it from
+their own Prepare/Activate (they DependsOn ABAC). `Stop` unchanged (cancel poller +
+stack.Close), runs only at shutdown/rollback (no live traffic). When reviewing a
+lifecycle refactor of a security subsystem: (1) confirm the enforcement object is
+fully built in Prepare, not Activate; (2) confirm the two-sweep barrier still holds;
+(3) confirm the not-yet-polled/stale state is default-deny. `validateCryptoOperators`
+relocated cmd/holomush→internal/access/setup verbatim (lax+warn INV-B5/B7,
+enforcement unchanged); its 07-04 `coreOnlyFiles` gateway-gate exemptions were
+correctly REMOVED when 07-09 moved the file (no stale phantom).

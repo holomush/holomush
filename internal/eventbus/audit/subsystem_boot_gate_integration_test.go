@@ -37,10 +37,11 @@ func relExistsInt(t *testing.T, pool *pgxpool.Pool, name string) bool {
 }
 
 // TestStartBootGateBackfillsBeforeProjection proves the synchronous boot gate
-// (findings 9 & 10): Subsystem.Start re-homes the legacy
+// (findings 9 & 10): Subsystem.Prepare re-homes the legacy
 // events_audit_unpartitioned history (Backfill) and ensures partition coverage
-// BEFORE the projection starts accepting traffic. The legacy row is queryable
-// via the partitioned events_audit after Start, and the legacy table is gone.
+// BEFORE the projection starts accepting traffic (Activate). The legacy row
+// is queryable via the partitioned events_audit after Prepare, and the
+// legacy table is gone.
 func TestStartBootGateBackfillsBeforeProjection(t *testing.T) {
 	pool := bootGatePool(t)
 	ctx := context.Background()
@@ -57,7 +58,8 @@ func TestStartBootGateBackfillsBeforeProjection(t *testing.T) {
 
 	bus := eventbustest.New(t)
 	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	require.NoError(t, sub.Start(ctx), "boot gate + projection start succeed")
+	require.NoError(t, sub.Prepare(ctx), "boot gate + projection prepare succeed")
+	require.NoError(t, sub.Activate(ctx), "projection activate succeeds")
 	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
 
 	// Backfill ran during Start: the legacy row is now in events_audit and the
@@ -75,12 +77,14 @@ func TestStartBootGateBackfillsBeforeProjection(t *testing.T) {
 }
 
 // TestStartBootGateFailureReturnsErrorBeforeProjection proves finding 10: a
-// first-cycle Backfill failure returns from Start before any projection exists
-// (nothing to roll back). The failure is injected via a same-named non-child
-// occupying the legacy row's month partition, which makes Backfill's
-// ensureMonthPartition fail closed (AUDIT_PARTITION_NAME_OCCUPIED). (A malformed
-// legacy id is no longer a boot-gate failure — round-6 WR-02 skips+logs it — so
-// the occupancy conflict is the durable first-cycle Backfill-abort trigger.)
+// first-cycle Backfill failure returns from Prepare before any projection
+// exists (nothing to roll back). The failure is injected via a same-named
+// non-child occupying the legacy row's month partition, which makes
+// Backfill's ensureMonthPartition fail closed (AUDIT_PARTITION_NAME_OCCUPIED).
+// (A malformed legacy id is no longer a boot-gate failure — round-6 WR-02
+// skips+logs it — so the occupancy conflict is the durable first-cycle
+// Backfill-abort trigger.) Prepare-only: Activate is never reached because
+// Prepare itself fails.
 func TestStartBootGateFailureReturnsErrorBeforeProjection(t *testing.T) {
 	pool := bootGatePool(t)
 	ctx := context.Background()
@@ -106,21 +110,23 @@ func TestStartBootGateFailureReturnsErrorBeforeProjection(t *testing.T) {
 
 	bus := eventbustest.New(t)
 	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	startErr := sub.Start(ctx)
-	require.Error(t, startErr, "boot gate failure aborts Start")
+	prepErr := sub.Prepare(ctx)
+	require.Error(t, prepErr, "boot gate failure aborts Prepare")
 	// The boot gate wraps with AUDIT_BACKFILL_BOOT_GATE_FAILED, but oops
 	// surfaces the root cause code (AUDIT_PARTITION_NAME_OCCUPIED) through the
-	// chain — the point is Start returns the failure before any projection starts.
-	errutil.AssertErrorCode(t, startErr, "AUDIT_PARTITION_NAME_OCCUPIED")
+	// chain — the point is Prepare returns the failure before any projection
+	// is constructed.
+	errutil.AssertErrorCode(t, prepErr, "AUDIT_PARTITION_NAME_OCCUPIED")
 
-	// The projection never started: Stop is a clean no-op.
+	// The projection was never prepared: Stop is a clean no-op.
 	require.NoError(t, sub.Stop(context.Background()))
 }
 
 // TestStartRejectsNonPositiveRetainWindow proves the negative-config guard
-// surfaces as a Start error (round-3 finding 3) — never a detach-all cutoff or
-// a time.NewTicker panic. NewSubsystem.Defaults() only fills zero, so a negative
-// survives to Validate() inside Start.
+// surfaces as a Prepare error (round-3 finding 3) — never a detach-all cutoff
+// or a time.NewTicker panic. NewSubsystem.Defaults() only fills zero, so a
+// negative survives to Validate() inside Prepare. Prepare-only: Activate is
+// never reached because Prepare itself fails.
 func TestStartRejectsNonPositiveRetainWindow(t *testing.T) {
 	pool := bootGatePool(t)
 	ctx := context.Background()
@@ -128,9 +134,40 @@ func TestStartRejectsNonPositiveRetainWindow(t *testing.T) {
 	bus := eventbustest.New(t)
 	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool},
 		audit.Config{RetainWindow: -1 * time.Hour})
-	startErr := sub.Start(ctx)
-	require.Error(t, startErr)
-	errutil.AssertErrorCode(t, startErr, "AUDIT_CONFIG_INVALID")
+	prepErr := sub.Prepare(ctx)
+	require.Error(t, prepErr)
+	errutil.AssertErrorCode(t, prepErr, "AUDIT_CONFIG_INVALID")
 
 	require.NoError(t, sub.Stop(context.Background()))
+}
+
+// TestAuditSubsystemRepeatedPrepareDoesNotConstructSecondProjection pins
+// D-13.2 row 10 (round 7 BLOCKER): Prepare guards on s.preparedProjection,
+// not the old worker-keyed guard, so a second Prepare is a true no-op — no
+// second durable consumer, no second boot-gate run.
+func TestAuditSubsystemRepeatedPrepareDoesNotConstructSecondProjection(t *testing.T) {
+	pool := bootGatePool(t)
+	ctx := context.Background()
+
+	bus := eventbustest.New(t)
+	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
+	require.NoError(t, sub.Prepare(ctx))
+	require.NoError(t, sub.Prepare(ctx), "second Prepare must be a no-op")
+	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
+}
+
+// TestAuditSubsystemStopAfterPrepareOnlyIsCleanNoop pins D-13.2 row 10
+// (round 9): Stop after Prepare-only clears the in-memory prepared
+// aggregate without error and without draining anything (nothing is
+// running yet — Activate never ran). The durable JetStream consumer
+// Prepare constructed is intentionally retained server-side; this test
+// does not assert its deletion.
+func TestAuditSubsystemStopAfterPrepareOnlyIsCleanNoop(t *testing.T) {
+	pool := bootGatePool(t)
+	ctx := context.Background()
+
+	bus := eventbustest.New(t)
+	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
+	require.NoError(t, sub.Prepare(ctx))
+	require.NoError(t, sub.Stop(context.Background()), "Stop after Prepare-only must be a clean no-op")
 }

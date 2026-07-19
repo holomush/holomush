@@ -68,6 +68,17 @@ message ServiceConfig {
   // every non-exempt host capability its code can consume (via an implemented
   // *Aware interface) appears here, failing load otherwise (INV-PLUGIN-54).
   repeated string declared_capabilities = 4;
+  // The game id the host resolved via gameIDProvider (cmd/holomush/core.go)
+  // for this boot, the same value eventbus.Subsystem qualifies every
+  // host-side subject with. Plugins that construct fully-qualified
+  // "events.<game_id>.…" subjects directly (rather than emitting a
+  // domain-relative reference for the host to qualify) MUST use this value
+  // instead of a hardcoded literal, or their publishes silently diverge from
+  // every subscriber's qualified filter subjects. Empty when the caller
+  // constructed ServiceConfig without setting it (e.g. a test harness); a
+  // plugin SHOULD fall back to "main" (eventbus.Config's own default) in
+  // that case. Populated by goplugin.Host.Init from Host.GameID().
+  string game_id = 5;
 }
 
 // InitRequest is the host's first call to a freshly connected plugin process.

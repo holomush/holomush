@@ -93,6 +93,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
@@ -432,7 +433,8 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			Mode: eventbus.ModeExternal,
 			URL:  cfg.externalNATSURL,
 		}.Defaults())
-		require.NoError(t, sub.Start(ctx), "integrationtest.Start: start external NATS subsystem")
+		require.NoError(t, sub.Prepare(ctx), "integrationtest.Start: prepare external NATS subsystem")
+		require.NoError(t, sub.Activate(ctx), "integrationtest.Start: activate external NATS subsystem")
 		t.Cleanup(func() {
 			// Log (not fail) on Stop error: deliberate chaos in the resilience
 			// suite may have wedged the connection before teardown.
@@ -568,8 +570,10 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// without it, command-driven plugin E2Es panic on the nil Session getter.
 	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe, Session: sessionStoreInst})
 
-	// Core engine with a no-op event appender.
-	engine := core.NewEngine(&noopEventAppender{})
+	// Presence emitter with a no-op publisher. gameID resolves from the SAME
+	// bus production does (bus.Bus.GameID), not a hardcoded "main" — otherwise
+	// task test:int would assert a subject production could never emit.
+	presenceEmitter := presence.NewEmitter(&noopPublisher{}, bus.Bus.GameID)
 
 	// HistoryReader: minimal wiring against the embedded bus's JetStream
 	// and the test Postgres pool. Without WithPluginCrypto, all crypto/audit/
@@ -659,17 +663,17 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		// Wire embedded bus subscriber so Subscribe calls succeed for
 		// WaitForEvent / DrainEvents paths.
 		holoGRPC.WithSubscriber(subscriber),
-		// Wire embedded bus publisher as the event store so emitCommandResponse
-		// (command_error / command_response events) reaches JetStream and is
-		// therefore deliverable to WaitForEvent. Without this, emitCommandResponse
-		// hits its nil-guard and silently drops the event. Mirrors production's
-		// busEventAppender in cmd/holomush/sub_grpc.go, including the
-		// RenderingPublisher wrap (wrapPublisher) so frames carry rendering
-		// metadata — the gateway drops nil-Rendering events (INV-EVENTBUS-6).
-		holoGRPC.WithEventStore(&busEventAppenderAdapter{
-			publisher: eventbus.NewRenderingPublisher(bus.Bus.Publisher(), verbRegistry),
-			gameID:    bus.Bus.GameID,
-		}),
+		// Wire embedded bus publisher so emitCommandResponse (command_error /
+		// command_response events) reaches JetStream and is therefore
+		// deliverable to WaitForEvent. Without this, emitCommandResponse hits
+		// its nil-guard and silently drops the event. Mirrors production's
+		// wiring in cmd/holomush/sub_grpc.go, including the RenderingPublisher
+		// wrap so frames carry rendering metadata — the gateway drops
+		// nil-Rendering events (INV-EVENTBUS-6).
+		holoGRPC.WithEventPublisher(
+			eventbus.NewRenderingPublisher(bus.Bus.Publisher(), verbRegistry),
+			bus.Bus.GameID,
+		),
 		// HistoryReader powers QueryStreamHistory end-to-end so privacy
 		// integration tests can exercise the full RPC path.
 		holoGRPC.WithHistoryReader(historyReader),
@@ -718,7 +722,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamContributor(pluginSub.Manager()))
 	}
 	coreServer := holoGRPC.NewCoreServer(
-		engine,
+		presenceEmitter,
 		sessionStoreInst,
 		dispatcher,
 		cmdServices,
@@ -826,10 +830,11 @@ func (s *Server) CommandRegistry() *command.Registry {
 }
 
 // CommandQuerier returns the shared, ABAC-filtered command querier built by the
-// production PluginSubsystem.Start() path (subsystem.go) and late-bound into the
-// Lua host via SetCommandQuerier. Panics if WithInTreePlugins was not passed.
-// Used by the whole-system wiring regression to prove Start() yields a non-nil
-// querier (design spec INV-COMMAND-1: single command-visibility filter).
+// production PluginSubsystem.Prepare() path (subsystem.go) and late-bound into
+// the Lua host via SetCommandQuerier. Panics if WithInTreePlugins was not
+// passed. Used by the whole-system wiring regression to prove Prepare() yields
+// a non-nil querier (design spec INV-COMMAND-1: single command-visibility
+// filter).
 func (s *Server) CommandQuerier() *commandquery.Querier {
 	s.requirePlugins("CommandQuerier")
 	return s.pluginSub.CommandQuerier()
@@ -1308,80 +1313,14 @@ func (s *Server) BackdateGuestPlayer(ctx context.Context, playerID ulid.ULID, ba
 
 // --- internal helpers ---
 
-// noopEventAppender satisfies core.EventAppender for tests that don't
-// exercise event storage. Mirrors the pattern in test/integration/auth/.
-type noopEventAppender struct{}
+// noopPublisher satisfies eventbus.Publisher for the harness's presence
+// emitter, which does not need to exercise arrive/leave/session_ended
+// delivery for most integration suites.
+type noopPublisher struct{}
 
-func (*noopEventAppender) Append(_ context.Context, _ core.Event) error { return nil }
+func (*noopPublisher) Publish(_ context.Context, _ eventbus.Event) error { return nil }
 
-var _ core.EventAppender = (*noopEventAppender)(nil)
-
-// busEventAppenderAdapter implements core.EventAppender by translating
-// core.Events to eventbus.Events and publishing them to the embedded JetStream
-// bus. This mirrors production's busEventAppender in cmd/holomush/sub_grpc.go,
-// allowing emitCommandResponse (command_error / command_response events on the
-// character stream) to reach the JetStream bus and be delivered via WaitForEvent.
-//
-// Without this adapter, s.eventStore is nil in the CoreServer, emitCommandResponse
-// hits its nil-guard and silently no-ops, and WaitForEvent for command_error events
-// always times out (holomush-5rh.8.4 root-cause analysis).
-type busEventAppenderAdapter struct {
-	publisher eventbus.Publisher
-	gameID    func() string
-}
-
-var _ core.EventAppender = (*busEventAppenderAdapter)(nil)
-
-// Append translates a core.Event to an eventbus.Event and publishes it to
-// the embedded JetStream bus. Domain-relative stream references (e.g.
-// "character.01ABC") are qualified to full subjects via eventbus.Qualify.
-func (b *busEventAppenderAdapter) Append(ctx context.Context, event core.Event) error {
-	gid := b.gameID()
-	if gid == "" {
-		gid = "main"
-	}
-	sub, err := eventbus.Qualify(gid, event.Stream)
-	if err != nil {
-		return oops.With("stream", event.Stream).Wrap(err)
-	}
-	typ, err := eventbus.NewType(string(event.Type))
-	if err != nil {
-		return oops.With("type", string(event.Type)).Wrap(err)
-	}
-	busEvent := eventbus.Event{
-		ID:        event.ID,
-		Subject:   sub,
-		Type:      typ,
-		Timestamp: event.Timestamp,
-		Actor:     harnessCoreToBusActor(event.Actor),
-		Payload:   event.Payload,
-	}
-	return oops.Wrap(b.publisher.Publish(ctx, busEvent))
-}
-
-// harnessCoreToBusActor translates a core.Actor to an eventbus.Actor.
-// Mirrors production's coreToBusActor in cmd/holomush/sub_grpc.go.
-func harnessCoreToBusActor(a core.Actor) eventbus.Actor {
-	out := eventbus.Actor{Kind: harnessCoreActorKindToBus(a.Kind)}
-	if a.ID == "" {
-		return out
-	}
-	if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
-		out.ID = parsed
-	}
-	return out
-}
-
-func harnessCoreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
-	switch k {
-	case core.ActorCharacter:
-		return eventbus.ActorKindCharacter
-	case core.ActorPlugin:
-		return eventbus.ActorKindPlugin
-	default:
-		return eventbus.ActorKindSystem
-	}
-}
+var _ eventbus.Publisher = (*noopPublisher)(nil)
 
 // authCharRepoAdapter wraps *worldpg.CharacterRepository to satisfy
 // auth.CharacterRepository. Mirrors test/integration/auth/auth_suite_test.go.
@@ -1517,9 +1456,11 @@ type focusHistoryReaderAdapter struct {
 var _ plugins.HistoryReader = (*focusHistoryReaderAdapter)(nil)
 
 // ReplayTail satisfies plugins.HistoryReader. Fetches up to count most-recent
-// events on stream (optionally filtered by notBefore and exclusive beforeID),
-// returning them in ascending ULID order (oldest→newest).
-func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+// events on stream (optionally filtered by notBefore and an exclusive
+// (beforeSeq, beforeID) cursor), returning them in ascending ULID order
+// (oldest→newest). Mirrors busHistoryReaderAdapter.ReplayTail's beforeSeq==0
+// "read the tail" contract (D-07/ARCH-04).
+func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeSeq uint64, beforeID ulid.ULID) ([]eventbus.Event, error) {
 	if count <= 0 {
 		return nil, nil
 	}
@@ -1536,6 +1477,9 @@ func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream strin
 		Direction: eventbus.DirectionBackward,
 		PageSize:  count,
 		NotBefore: notBefore,
+	}
+	if beforeSeq != 0 {
+		q.BeforeSeq = beforeSeq
 	}
 	if !beforeID.IsZero() {
 		q.BeforeID = beforeID
@@ -1561,48 +1505,11 @@ func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream strin
 		}
 	}
 	// Backward direction yields newest-first; reverse to ascending order
-	// (oldest→newest) and translate eventbus.Event → core.Event.
-	result := make([]core.Event, len(collected))
+	// (oldest→newest).
+	result := make([]eventbus.Event, len(collected))
 	for i := range collected {
 		j := len(collected) - 1 - i
-		streamName := string(collected[i].Subject)
-		result[j] = busEventToCoreEvent(collected[i], streamName)
+		result[j] = collected[i]
 	}
 	return result, nil
-}
-
-// busEventToCoreEvent translates an eventbus.Event to a core.Event for plugin
-// consumption. Like its production twin in cmd/holomush/sub_grpc.go, this is a
-// history read-back reconstruction: it copies the stored ID and Timestamp
-// verbatim (core.NewEvent() would overwrite both with a fresh ULID + time.Now()).
-// See that function's comment for the full rationale.
-func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
-	actorID := ""
-	if e.Actor.ID != (ulid.ULID{}) {
-		actorID = e.Actor.ID.String()
-	}
-	return core.Event{
-		ID:        e.ID,
-		Stream:    stream,
-		Type:      core.EventType(e.Type),
-		Timestamp: e.Timestamp,
-		Actor: core.Actor{
-			Kind: busActorKindToCore(e.Actor.Kind),
-			ID:   actorID,
-		},
-		Payload: e.Payload,
-	}
-}
-
-func busActorKindToCore(k eventbus.ActorKind) core.ActorKind {
-	switch k {
-	case eventbus.ActorKindCharacter:
-		return core.ActorCharacter
-	case eventbus.ActorKindSystem:
-		return core.ActorSystem
-	case eventbus.ActorKindPlugin:
-		return core.ActorPlugin
-	default:
-		return core.ActorSystem
-	}
 }

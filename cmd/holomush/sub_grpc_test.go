@@ -53,20 +53,33 @@ func TestGRPCSubsystemIDReturnsGRPC(t *testing.T) {
 	assert.Equal(t, lifecycle.SubsystemGRPC, s.ID())
 }
 
-// TestGRPCSubsystemDependsOnExpectedSubsystems verifies that DependsOn returns
-// exactly 4 dependencies: Bootstrap, Sessions, Auth, and EventBus.
-// EventBus was added in the F1 cutover: gRPC Start() reads the eventbus
-// Publisher when wiring the shared plugin event emitter.
+// TestGRPCSubsystemDependsOnExpectedSubsystems verifies that DependsOn
+// returns exactly the 07-09 grown set plus 07-10's AuditProjection edge:
+// Bootstrap, Sessions, Auth, EventBus (F1 cutover: gRPC Start() reads the
+// eventbus Publisher when wiring the shared plugin event emitter), TLS
+// (Start() resolves TLSProvider), Cluster (the invalidation.Coordinator
+// needs Registry: clusterSub), CryptoChainVerifier (T-07-51 re-scope: gRPC
+// binds its TCP listener only after the chain walk), Database + ABAC (THE
+// RULE's cryptoWiring consumer superset), and AuditProjection (07-10,
+// T-07-50: gRPC must not begin serving before the host audit projection is
+// up, or events served in that window would not be durably audited).
 func TestGRPCSubsystemDependsOnExpectedSubsystems(t *testing.T) {
 	s := newGRPCSubsystem(grpcSubsystemConfig{})
 
 	deps := s.DependsOn()
 
-	require.Len(t, deps, 4)
-	assert.Contains(t, deps, lifecycle.SubsystemBootstrap)
-	assert.Contains(t, deps, lifecycle.SubsystemSessions)
-	assert.Contains(t, deps, lifecycle.SubsystemAuth)
-	assert.Contains(t, deps, lifecycle.SubsystemEventBus)
+	assert.ElementsMatch(t, []lifecycle.SubsystemID{
+		lifecycle.SubsystemBootstrap,
+		lifecycle.SubsystemSessions,
+		lifecycle.SubsystemAuth,
+		lifecycle.SubsystemEventBus,
+		lifecycle.SubsystemTLS,
+		lifecycle.SubsystemCluster,
+		lifecycle.SubsystemCryptoChainVerifier,
+		lifecycle.SubsystemDatabase,
+		lifecycle.SubsystemABAC,
+		lifecycle.SubsystemAuditProjection,
+	}, deps)
 }
 
 // TestGRPCSubsystemStopBeforeStartIsSafe verifies that calling Stop on a

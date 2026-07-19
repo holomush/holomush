@@ -323,7 +323,7 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		// host calls can qualify a domain-RELATIVE ref (channel.<id>) to the full
 		// events.<game>.channel.<id> subject. Without it the mid-session
 		// AddSessionStream fails STREAM_QUALIFY_FAILED and live delivery degrades.
-		GameID:                d.gameID,
+		GameID:                func() string { return d.gameID },
 		LuaTimeout:            5 * time.Second,
 		LuaRegistryMaxSize:    1024 * 1024,
 		PluginConfigOverrides: d.pluginConfigOverrides,
@@ -339,7 +339,8 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 
 	ps := pluginsetup.NewPluginSubsystem(cfg)
 	t.Cleanup(func() { _ = ps.Stop(context.Background()) })
-	require.NoError(t, ps.Start(ctx), "startPlugins: PluginSubsystem.Start (LoadAll)")
+	require.NoError(t, ps.Prepare(ctx), "startPlugins: PluginSubsystem.Prepare (LoadAll)")
+	require.NoError(t, ps.Activate(ctx), "startPlugins: PluginSubsystem.Activate")
 
 	// Wire the plugin event emitter to the crypto-enabled publisher when
 	// WithPluginCrypto supplied one. WithGameID takes a GameIDProvider

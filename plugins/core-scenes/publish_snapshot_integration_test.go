@@ -228,7 +228,8 @@ func buildSnapshotRealEnv(ctx context.Context, pluginName string) *snapshotRealE
 
 	// Host audit subsystem populates events_audit (our ciphertext source).
 	hostSub := audit.NewSubsystem(snapFixedJS{js: bus.JS}, snapFixedPool{pool: cryptoPool}, audit.Config{})
-	Expect(hostSub.Start(ctx)).To(Succeed())
+	Expect(hostSub.Prepare(ctx)).To(Succeed())
+	Expect(hostSub.Activate(ctx)).To(Succeed())
 
 	// Production scene IC events are emitted with QUALIFIED wire types
 	// (core-scenes:scene_pose / :scene_say / :scene_emit — commands.go:516-520,

@@ -24,7 +24,8 @@ type Registry interface {
 	// Lifecycle (called by subsystem orchestrator)
 	ID() lifecycle.SubsystemID
 	DependsOn() []lifecycle.SubsystemID
-	Start(ctx context.Context) error
+	Prepare(ctx context.Context) error
+	Activate(ctx context.Context) error
 	Stop(ctx context.Context) error
 
 	// Self returns this process's MemberID.
@@ -51,16 +52,38 @@ type Registry interface {
 	Subscribe(observer MemberObserver) (cancel func())
 }
 
-// Deps groups the dependencies cluster.Registry needs at construction.
+// ConnProvider resolves a NATS connection at Start time, in place of a live
+// *nats.Conn at construction. eventbus.Subsystem.Conn() returns *nats.Conn
+// directly (not natsconn.Conn), so production callers wrap it with
+// ConnProviderFunc rather than passing the subsystem structurally.
+type ConnProvider interface {
+	Conn() natsconn.Conn
+}
+
+// ConnProviderFunc adapts a func() natsconn.Conn closure into a ConnProvider,
+// mirroring the http.HandlerFunc idiom.
+type ConnProviderFunc func() natsconn.Conn
+
+// Conn calls f.
+func (f ConnProviderFunc) Conn() natsconn.Conn { return f() }
+
+// Deps groups the dependencies cluster.Registry needs. Conn/ConnProvider are
+// resolved at Start, not at construction (D-09) — cluster.NewSubsystem no
+// longer requires a live *nats.Conn to exist yet.
 //
 // Conn is typed as natsconn.Conn (the narrow interface seam) rather
-// than *nats.Conn so unit tests MAY substitute a mock. Production
-// callers continue to pass eventbus.Subsystem.Conn() directly — the
-// concrete *nats.Conn satisfies natsconn.Conn structurally. See
+// than *nats.Conn so unit tests MAY substitute a mock. See
 // internal/eventbus/natsconn for the interface and natsmock for a
 // test-only mock implementation. (holomush-ojw1.3.23)
 type Deps struct {
-	Conn              natsconn.Conn // from eventbus.Subsystem.Conn(); test mocks via natsconn/natsmock
+	// Conn is a given value for callers that already hold a live
+	// connection at construction (test literals). ConnProvider, resolved
+	// once at Start into this same field, is the production path — it
+	// wins when non-nil. Exactly one of Conn/ConnProvider need be set;
+	// Start fails closed (CLUSTER_DEPS_NIL) if neither resolves to a
+	// non-nil connection.
+	Conn              natsconn.Conn
+	ConnProvider      ConnProvider
 	Logger            *slog.Logger
 	PillMetrics       *PillMetrics
 	SkewMetrics       *SkewMetrics
@@ -71,19 +94,16 @@ type Deps struct {
 	SelfIDForTest     MemberID                  // tests inject; production uses ulid.Make()
 }
 
-// NewSubsystem constructs a Registry-backed Subsystem. Production
-// callers pass a real *nats.Conn (which satisfies natsconn.Conn
-// structurally) and ProductionPill. Tests use the clustertest harness
-// or, for unit-level error-path tests, a natsmock.Conn.
+// NewSubsystem constructs a Registry-backed Subsystem. It does not allocate
+// or start any runtime resources — it validates only what is knowable at
+// construction time (a ClusterID source and a Pill are present); the
+// connection is not required to exist yet (see ConnProvider) and is resolved
+// (along with any ClusterIDProvider) inside Start.
 func NewSubsystem(cfg Config, deps Deps) (Registry, error) {
 	cfg = cfg.Defaults()
-	if cfg.ClusterID == "" {
+	if cfg.ClusterID == "" && cfg.ClusterIDProvider == nil {
 		return nil, oops.Code("CLUSTER_CONFIG_MISSING_CLUSTER_ID").
-			Errorf("cluster.NewSubsystem requires non-empty ClusterID; sourced from eventbus.Config.GameID")
-	}
-	if deps.Conn == nil || isNilConn(deps.Conn) {
-		return nil, oops.Code("CLUSTER_DEPS_NIL").With("dep", "Conn").
-			Errorf("cluster.NewSubsystem requires a non-nil natsconn.Conn (typically *nats.Conn from eventbus.Subsystem.Conn())")
+			Errorf("cluster.NewSubsystem requires ClusterID or ClusterIDProvider; sourced from the resolved gameID")
 	}
 	if deps.Pill == nil {
 		return nil, oops.Code("CLUSTER_DEPS_NIL").With("dep", "Pill").
@@ -171,8 +191,13 @@ type observerEntry struct {
 }
 
 func (r *registry) ID() lifecycle.SubsystemID { return lifecycle.SubsystemCluster }
+
+// DependsOn returns [SubsystemEventBus, SubsystemDatabase]. The EventBus edge
+// covers the ConnProvider read; the Database edge is new (07-09 item 7) —
+// ClusterID resolves from the gameID provider at Start, which panics before
+// the database subsystem has run InitGameID.
 func (r *registry) DependsOn() []lifecycle.SubsystemID {
-	return []lifecycle.SubsystemID{lifecycle.SubsystemEventBus}
+	return []lifecycle.SubsystemID{lifecycle.SubsystemEventBus, lifecycle.SubsystemDatabase}
 }
 func (r *registry) Self() MemberID { return r.self }
 
@@ -282,7 +307,7 @@ func (r *registry) SetLastInvalidationSeq(seq uint64) {
 // interface header, missing typed-nil values like (*nats.Conn)(nil)
 // (see internal/eventbus/natsconn/natsconn_test.go:33-37 for the
 // runtime demonstration). Mirrors the pattern in
-// internal/core/engine.go::isNilEventAppender so callers truly fail
+// internal/presence/emitter.go::isNilPublisher so callers truly fail
 // fast at construction rather than crashing on first method call.
 func isNilConn(c natsconn.Conn) bool {
 	v := reflect.ValueOf(c)

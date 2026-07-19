@@ -43,7 +43,7 @@ type EventBus interface {
 }
 ```
 
-**Ordering** is owned by JetStream's per-stream `uint64` sequence. Event ULIDs (`core.Event.ID`) are identity and dedup keys, **not** ordering keys.
+**Ordering** is owned by JetStream's per-stream `uint64` sequence. Event ULIDs (`eventbus.Event.ID`) are identity and dedup keys, **not** ordering keys.
 
 **Durable audit** lives in the `events_audit` PostgreSQL table (host-owned subjects) and in plugin-owned audit tables (plugin-declared subjects; e.g., `plugin_core_scenes.scene_log`). `HistoryReader.QueryHistory` transparently falls back from JetStream (recent) to PostgreSQL audit (older than JS retention) so callers never see the boundary.
 

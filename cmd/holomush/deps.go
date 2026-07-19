@@ -14,9 +14,10 @@ import (
 
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/control"
-	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	holoGRPC "github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/store"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/xdg"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -49,7 +50,7 @@ type CoreDeps struct {
 	CommonDeps
 
 	// TLSCertEnsurer generates or loads TLS certificates.
-	// Default: ensureTLSCerts
+	// Default: tlscerts.EnsureCerts
 	TLSCertEnsurer func(certsDir, gameID string) (*cryptotls.Config, error)
 
 	// DatabaseURLGetter returns the database URL.
@@ -68,7 +69,7 @@ type CoreDeps struct {
 // applyDefaults fills nil fields with their default implementations.
 func (d *CoreDeps) applyDefaults() {
 	if d.TLSCertEnsurer == nil {
-		d.TLSCertEnsurer = ensureTLSCerts
+		d.TLSCertEnsurer = tlscerts.EnsureCerts
 	}
 	if d.ControlTLSLoader == nil {
 		d.ControlTLSLoader = control.LoadControlServerTLS

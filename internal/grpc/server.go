@@ -34,8 +34,10 @@ import (
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -152,9 +154,9 @@ type GameIDProvider func() string
 type CoreServer struct {
 	corev1.UnimplementedCoreServiceServer
 
-	engine          *core.Engine
+	presence        *presence.Emitter
 	sessionStore    session.Store
-	eventStore      core.EventAppender
+	publisher       eventbus.Publisher
 	worldQuerier    WorldQuerier
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
@@ -246,11 +248,18 @@ func WithSessionDefaults(defaults SessionDefaults) CoreServerOption {
 	}
 }
 
-// WithEventStore sets the event appender for host-engine events (e.g.
-// command_response). Post-F7 this is wired to the JetStream bus.
-func WithEventStore(store core.EventAppender) CoreServerOption {
+// WithEventPublisher sets the event publisher for host-engine events (e.g.
+// command_response/command_error) and the game-id qualification source used
+// to turn emitCommandResponse's domain-relative stream ref into a fully
+// qualified subject (eventbus.Qualify rejects a relative ref with an empty
+// game id). gameID also feeds currentGameID/Subscribe subject qualification
+// (D-02: one game-id source for the whole host) — it is the SAME field as
+// WithGameID, not a duplicate; passing both is fine, the last one wins.
+// Post-ARCH-04 this replaces the retired event-appender-backed seam.
+func WithEventPublisher(pub eventbus.Publisher, gameID GameIDProvider) CoreServerOption {
 	return func(s *CoreServer) {
-		s.eventStore = store
+		s.publisher = pub
+		s.gameID = gameID
 	}
 }
 
@@ -340,9 +349,9 @@ func WithSceneMuteChecker(c SceneMuteChecker) CoreServerOption {
 }
 
 // NewCoreServer creates a new Core gRPC server.
-func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *command.Dispatcher, cmdServices *command.Services, opts ...CoreServerOption) *CoreServer {
+func NewCoreServer(pres *presence.Emitter, sessionStore session.Store, dispatcher *command.Dispatcher, cmdServices *command.Services, opts ...CoreServerOption) *CoreServer {
 	s := &CoreServer{
-		engine:       engine,
+		presence:     pres,
 		sessionStore: sessionStore,
 		dispatcher:   dispatcher,
 		cmdServices:  cmdServices,
@@ -509,10 +518,10 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 
 	// Quit/self-boot detection: handler signals intent, server does teardown.
 	if errors.Is(dispatchErr, command.ErrSessionEnded) {
-		if dcErr := s.engine.HandleDisconnect(ctx, char, "quit"); dcErr != nil {
+		if dcErr := s.presence.EmitLeave(ctx, char, "quit"); dcErr != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", dcErr)
 		}
-		if endErr := s.engine.EndSession(ctx, char, info.ID,
+		if endErr := s.presence.EmitSessionEnded(ctx, char, info.ID,
 			core.SessionEndedCauseQuit, "Goodbye!"); endErr != nil {
 			// If we can't append session_ended, subscribers will not receive
 			// STREAM_CLOSED. Retain the session row so the reaper can retry
@@ -571,12 +580,12 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 			booted.SessionInfo = *info
 		}
 
-		if dcErr := s.engine.HandleDisconnect(ctx, booted.CharacterRef, "booted"); dcErr != nil {
+		if dcErr := s.presence.EmitLeave(ctx, booted.CharacterRef, "booted"); dcErr != nil {
 			slog.WarnContext(ctx, "boot leave event failed",
 				"target_id", booted.CharacterRef.ID.String(),
 				"error", dcErr)
 		}
-		if endErr := s.engine.EndSession(ctx, booted.CharacterRef, booted.SessionInfo.ID,
+		if endErr := s.presence.EmitSessionEnded(ctx, booted.CharacterRef, booted.SessionInfo.ID,
 			core.SessionEndedCauseKicked,
 			"You have been disconnected by an administrator."); endErr != nil {
 			// If we can't append session_ended, subscribers will not receive
@@ -614,7 +623,7 @@ func isUserFacingError(err error) bool {
 // emitCommandResponse emits a command_response or command_error event to the
 // character's personal stream. Returns an error if the event could not be emitted.
 func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) error {
-	payload, err := json.Marshal(core.CommandResponsePayload{
+	payload, err := json.Marshal(eventvocab.CommandResponsePayload{
 		Text: text,
 	})
 	if err != nil {
@@ -626,23 +635,32 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 		return oops.Code("COMMAND_RESPONSE_MARSHAL_FAILED").Wrap(err)
 	}
 
-	eventType := core.EventTypeCommandResponse
+	eventType := eventvocab.EventTypeCommandResponse
 	if isError {
-		eventType = core.EventTypeCommandError
+		eventType = eventvocab.EventTypeCommandError
 	}
-	event := core.NewEvent(world.CharacterStream(char.ID), eventType, core.Actor{
-		Kind: core.ActorSystem,
-		ID:   core.ActorSystemID,
-	}, payload)
 
-	if s.eventStore == nil {
-		slog.DebugContext(ctx, "emitCommandResponse: eventStore not configured, event not emitted")
+	if s.publisher == nil {
+		slog.DebugContext(ctx, "emitCommandResponse: publisher not configured, event not emitted")
 		return nil
 	}
 
-	if err := s.eventStore.Append(ctx, event); err != nil {
+	sub, err := s.toSubject(s.currentGameID(), world.CharacterStream(char.ID))
+	if err != nil {
+		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").With("character_id", char.ID.String()).Wrap(err)
+	}
+	typ, err := eventbus.NewType(string(eventType))
+	if err != nil {
+		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").With("character_id", char.ID.String()).Wrap(err)
+	}
+	event := eventbus.NewEvent(sub, typ, eventbus.Actor{
+		Kind: eventbus.ActorKindSystem,
+		ID:   core.SystemActorULID,
+	}, payload)
+
+	if err := s.publisher.Publish(ctx, event); err != nil {
 		slog.WarnContext(
-			ctx, "failed to append command_response event",
+			ctx, "failed to publish command_response event",
 			"character_id", char.ID.String(),
 			"error", err,
 		)
@@ -1391,10 +1409,10 @@ func (s *CoreServer) dispatchDelivery(
 	// rather than a colon prefix. The wire frame.Stream
 	// (toProtoSubscribeResponse) now carries that same qualified subject
 	// (holomush-rops).
-	if string(event.Type) == string(core.EventTypeMove) &&
+	if string(event.Type) == string(eventvocab.EventTypeMove) &&
 		isCharacterStream(string(event.Subject)) &&
 		lf != nil {
-		handled = lf.handleMovePayload(ctx, core.EventType(event.Type), event.Payload, stream)
+		handled = lf.handleMovePayload(ctx, eventvocab.EventType(event.Type), event.Payload, stream)
 	}
 
 	if !handled {
@@ -1414,7 +1432,7 @@ func (s *CoreServer) dispatchDelivery(
 	}
 
 	// Terminal session_ended for this session → graceful close.
-	if string(event.Type) == string(core.EventTypeSessionEnded) {
+	if string(event.Type) == string(eventvocab.EventTypeSessionEnded) {
 		var payload core.SessionEndedPayload
 		if unmarshalErr := json.Unmarshal(event.Payload, &payload); unmarshalErr != nil {
 			slog.WarnContext(ctx, "grpc: session_ended payload unmarshal failed — stream left open",
@@ -1620,7 +1638,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		if info.IsGuest {
 			// Guests can't reconnect — delete immediately
 			char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-			if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
+			if err := s.presence.EmitLeave(ctx, char, "quit"); err != nil {
 				slog.WarnContext(
 					ctx, "leave event failed",
 					"request_id", requestID,
@@ -1628,7 +1646,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				)
 			}
 
-			if endErr := s.engine.EndSession(ctx, char, info.ID,
+			if endErr := s.presence.EmitSessionEnded(ctx, char, info.ID,
 				core.SessionEndedCauseGuestEnd, "Session ended."); endErr != nil {
 				// If we can't append session_ended, subscribers will not receive
 				// STREAM_CLOSED. Retain the session row so the reaper can retry
@@ -1673,7 +1691,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		// Only comms_hub connections remain — phase out from grid.
 		// Emit the leave event (engine concern), then update grid presence via helper.
 		char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-		if err := s.engine.HandleDisconnect(ctx, char, "phased out"); err != nil {
+		if err := s.presence.EmitLeave(ctx, char, "phased out"); err != nil {
 			slog.WarnContext(
 				ctx, "phase-out leave event failed",
 				"request_id", requestID,

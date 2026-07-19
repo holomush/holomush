@@ -32,10 +32,13 @@ type EngineProvider interface {
 type WorldSubsystemConfig struct {
 	DB   PoolProvider
 	ABAC EngineProvider
-	// GameID keys the outbox feed counter + the outbox row's game_id. Defaults to
-	// "main" (world.ServiceConfig applies the default when empty). MUST match the
-	// OutboxRelaySubsystem's GameID so the writer and the relay share one feed.
-	GameID string
+	// GameID resolves the game ID at Start time (07-09 item 7) — a provider,
+	// not a live value. Keys the outbox feed counter + the outbox row's
+	// game_id. A nil provider, or one resolving to "", leaves
+	// world.ServiceConfig's own "main" default in effect. MUST resolve to
+	// the same value as the OutboxRelaySubsystem's GameID so the writer and
+	// the relay share one feed.
+	GameID func() string
 }
 
 // WorldSubsystem manages the WorldService and all world repositories.
@@ -59,11 +62,19 @@ func (s *WorldSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase, lifecycle.SubsystemABAC}
 }
 
-// Start creates all world repositories, transactor, and WorldService.
+// Prepare creates all world repositories, transactor, and WorldService — the
+// cleanest split in the tree: it is all acquire+wire (D-13.3 row 5). No
+// idempotency guard is needed: re-running is benign reassignment, not a
+// duplicated side effect.
 // codecov:ignore — tested by integration and E2E tests
-func (s *WorldSubsystem) Start(ctx context.Context) error {
+func (s *WorldSubsystem) Prepare(ctx context.Context) error {
 	pool := s.cfg.DB.Pool()
 	engine := s.cfg.ABAC.Engine()
+
+	var gameID string
+	if s.cfg.GameID != nil {
+		gameID = s.cfg.GameID()
+	}
 
 	transactor := worldpostgres.NewTransactor(pool)
 
@@ -80,30 +91,34 @@ func (s *WorldSubsystem) Start(ctx context.Context) error {
 		// the postgres outbox store, replacing the dead no-emitter leg. The relay
 		// is a SEPARATE subsystem; the writer only persists the same-tx envelope.
 		OutboxWriter: worldpostgres.NewOutboxStore(pool),
-		GameID:       s.cfg.GameID,
+		GameID:       gameID,
 	})
 	s.transactor = transactor
 
-	slog.InfoContext(ctx, "world subsystem started")
+	slog.InfoContext(ctx, "world subsystem prepared")
 	return nil
 }
+
+// Activate is a no-op — the world subsystem serves nothing of its own
+// (D-13.3 row 5).
+func (s *WorldSubsystem) Activate(_ context.Context) error { return nil }
 
 // Stop is a no-op — world services are stateless after init.
 // codecov:ignore — tested by integration and E2E tests
 func (s *WorldSubsystem) Stop(_ context.Context) error { return nil }
 
-// Service returns the WorldService. Panics if called before Start().
+// Service returns the WorldService. Panics if called before Prepare().
 func (s *WorldSubsystem) Service() *world.Service {
 	if s.service == nil {
-		panic("world/setup: Service() called before Start()")
+		panic("world/setup: Service() called before Prepare()")
 	}
 	return s.service
 }
 
-// Transactor returns the world Transactor. Panics if called before Start().
+// Transactor returns the world Transactor. Panics if called before Prepare().
 func (s *WorldSubsystem) Transactor() world.Transactor {
 	if s.transactor == nil {
-		panic("world/setup: Transactor() called before Start()")
+		panic("world/setup: Transactor() called before Prepare()")
 	}
 	return s.transactor
 }

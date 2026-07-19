@@ -46,7 +46,18 @@ type DLQConfig struct {
 	// "internal.<game_id>.audit.dlq"). Captured messages publish to
 	// "<Subject>.<original-subject>" so the original event subject is
 	// recoverable for replay. Zero resolves to defaultDLQSubject.
+	//
+	// This is a given value for callers that already know the subject at
+	// construction (the offline replay CLI; test literals). SubjectProvider,
+	// resolved once in Subsystem.Start before config validation / DLQ setup,
+	// is the production path — it wins when non-nil (07-09 item 7).
 	Subject string
+
+	// SubjectProvider resolves the DLQ subject at Start time — a provider,
+	// not a live value, since the resolved game id embedded in the subject
+	// is not known until the database subsystem's InitGameID has run. Wins
+	// over Subject when non-nil and non-empty.
+	SubjectProvider func() string
 
 	// MaxAge caps how long dead letters are retained. Zero resolves to
 	// defaultDLQMaxAge via Defaults().

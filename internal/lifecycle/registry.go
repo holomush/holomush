@@ -36,6 +36,19 @@ func (r *ReadinessRegistry) Register(id SubsystemID, hr HealthReporter) {
 	r.reporters[id] = hr
 }
 
+// Unregister removes a previously registered health reporter for a
+// subsystem. It is a no-op if the subsystem was never registered (or has
+// already been unregistered), so it is safe to call unconditionally from a
+// subsystem's Stop. This exists so a subsystem whose Prepare calls Register
+// can be torn down and legitimately retried without hitting Register's
+// duplicate-registration panic on the second Prepare (WR-02).
+func (r *ReadinessRegistry) Unregister(id SubsystemID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.reporters, id)
+}
+
 // AllReady returns true when every registered reporter is Warm or Degraded.
 // Returns true if no reporters are registered (vacuous truth).
 func (r *ReadinessRegistry) AllReady() bool {

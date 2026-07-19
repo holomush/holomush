@@ -20,11 +20,11 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/pgnanos"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/web"
@@ -154,15 +154,15 @@ func setupTestEnv() (*testEnv, error) {
 		return nil, oops.Wrap(err)
 	}
 
-	// Wire a real *core.Engine. WebSelectCharacter → SelectCharacter calls
-	// engine.HandleConnect (internal/grpc/auth_handlers.go:310), which would
-	// nil-deref a nil engine. Mirrors test/integration/phase1_5_test.go:257
-	// (eventStore := &noopEventStore{}; engine := core.NewEngine(eventStore)).
-	eventStoreNoop := &noopEventStore{}
-	engine := core.NewEngine(eventStoreNoop)
+	// Wire a real *presence.Emitter. WebSelectCharacter → SelectCharacter calls
+	// presence.EmitArrive (internal/grpc/auth_handlers.go:310), which would
+	// nil-deref a nil presence emitter. Mirrors
+	// test/integration/phase1_5_test.go:257
+	// (pub := &noopPublisher{}; pres := presence.NewEmitter(pub, gameID)).
+	presenceEmitter := presence.NewEmitter(&noopPublisher{}, func() string { return "main" })
 
 	coreServer := holoGRPC.NewCoreServer(
-		engine,
+		presenceEmitter,
 		sessionStore,
 		dispatcher,
 		cmdServices,
@@ -370,13 +370,13 @@ func (a *authCharRepoAdapter) ListAll(ctx context.Context) ([]*world.Character, 
 // Compile-time interface check.
 var _ auth.CharacterRepository = (*authCharRepoAdapter)(nil)
 
-// noopEventStore is a stub EventAppender for tests that don't exercise event
-// functionality. Mirrors test/integration/phase1_5_test.go:36-41.
-type noopEventStore struct{}
+// noopPublisher is a stub eventbus.Publisher for tests that don't exercise
+// event functionality. Mirrors test/integration/phase1_5_test.go.
+type noopPublisher struct{}
 
-func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+func (n *noopPublisher) Publish(_ context.Context, _ eventbus.Event) error { return nil }
 
-var _ core.EventAppender = (*noopEventStore)(nil)
+var _ eventbus.Publisher = (*noopPublisher)(nil)
 
 // unusedSubscriber satisfies eventbus.Subscriber so the Subscribe handler
 // reaches the ownership-validation path. Returns an error if OpenSession

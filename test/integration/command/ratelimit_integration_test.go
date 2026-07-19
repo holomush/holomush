@@ -18,7 +18,6 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -27,10 +26,10 @@ import (
 // actually use the services.
 func stubServices() *command.Services {
 	svc, _ := command.NewServices(command.ServicesConfig{
-		World:   &world.Service{},
-		Session: &stubSessionService{},
-		Engine:  policytest.NewGrantEngine(),
-		Events:  &stubEventStore{},
+		World:       &world.Service{},
+		Session:     &stubSessionService{},
+		Engine:      policytest.NewGrantEngine(),
+		Broadcaster: &stubBroadcaster{},
 	})
 	return svc
 }
@@ -66,11 +65,11 @@ func (s *stubSessionService) UpdateLastWhispered(_ context.Context, _ string, _ 
 	return nil
 }
 
-type stubEventStore struct{}
+type stubBroadcaster struct{}
 
-func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+func (s *stubBroadcaster) Broadcast(_ context.Context, _, _ string) error { return nil }
 
-var _ core.EventAppender = (*stubEventStore)(nil)
+var _ command.SystemBroadcaster = (*stubBroadcaster)(nil)
 
 var _ = Describe("Rate Limiting Integration", func() {
 	var (

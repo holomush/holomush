@@ -5,7 +5,6 @@ package auth_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -18,11 +17,74 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/core/coretest"
 	"github.com/holomush/holomush/internal/session"
 	sessionmocks "github.com/holomush/holomush/internal/session/mocks"
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+// fakePresenceEmitter is a hand-rolled auth.PresenceEmitter recording every
+// EmitLeave/EmitSessionEnded call, standing in for *presence.Emitter without
+// pulling internal/presence into this test's import graph — internal/auth
+// declares its own consumer-defined interface for exactly this reason
+// (FINDING-1: internal/eventbus's transitive closure contains internal/auth,
+// so internal/auth importing internal/presence, which imports
+// internal/eventbus, would create a cycle).
+type fakePresenceEmitter struct {
+	mu                sync.Mutex
+	leaveCalls        []leaveCall
+	sessionEndedCalls []sessionEndedCall
+	sessionEndedErr   error
+}
+
+type leaveCall struct {
+	char   core.CharacterRef
+	reason string
+}
+
+type sessionEndedCall struct {
+	char      core.CharacterRef
+	sessionID string
+	cause     string
+	reason    string
+}
+
+func (f *fakePresenceEmitter) EmitLeave(_ context.Context, char core.CharacterRef, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.leaveCalls = append(f.leaveCalls, leaveCall{char: char, reason: reason})
+	return nil
+}
+
+func (f *fakePresenceEmitter) EmitSessionEnded(_ context.Context, char core.CharacterRef, sessionID, cause, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sessionEndedCalls = append(f.sessionEndedCalls, sessionEndedCall{char: char, sessionID: sessionID, cause: cause, reason: reason})
+	return f.sessionEndedErr
+}
+
+// sessionEndedCallsFor returns the EmitSessionEnded calls recorded for the
+// given character ID, in call order.
+func (f *fakePresenceEmitter) sessionEndedCallsFor(charID ulid.ULID) []sessionEndedCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []sessionEndedCall
+	for _, c := range f.sessionEndedCalls {
+		if c.char.ID == charID {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// sessionEndedCallCount returns the total number of EmitSessionEnded calls
+// recorded, regardless of character.
+func (f *fakePresenceEmitter) sessionEndedCallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.sessionEndedCalls)
+}
+
+var _ auth.PresenceEmitter = (*fakePresenceEmitter)(nil)
 
 // newTestAuthServiceWithCap builds an auth.Service configured with the given
 // per-player session cap (<= 0 disables). Returns the service plus the
@@ -308,12 +370,12 @@ func TestWithGameSessionFanoutIgnoresNilGameStore(t *testing.T) {
 	playerRepo := mocks.NewMockPlayerRepository(t)
 	playerSessionRepo := mocks.NewMockPlayerSessionRepository(t)
 	hasher := mocks.NewMockPasswordHasher(t)
-	engine := core.NewEngine(coretest.NewMemoryEventStore())
+	pres := &fakePresenceEmitter{}
 
 	// nil gameSessions — fanout must be silently ignored.
 	svc, err := auth.NewAuthService(
 		playerRepo, playerSessionRepo, hasher,
-		auth.WithGameSessionFanout(engine, nil),
+		auth.WithGameSessionFanout(pres, nil),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, svc)
@@ -327,13 +389,13 @@ func TestConfigureGameSessionFanoutIgnoresNilArgs(t *testing.T) {
 	// Both nil — no-op.
 	svc.ConfigureGameSessionFanout(nil, nil)
 
-	// nil engine — no-op.
+	// nil presence emitter — no-op.
 	gameStore := sessionmocks.NewMockStore(t)
 	svc.ConfigureGameSessionFanout(nil, gameStore)
 
 	// nil gameSessions — no-op.
-	engine := core.NewEngine(coretest.NewMemoryEventStore())
-	svc.ConfigureGameSessionFanout(engine, nil)
+	pres := &fakePresenceEmitter{}
+	svc.ConfigureGameSessionFanout(pres, nil)
 
 	// All three calls must be no-ops: the service should work normally.
 	// No panic and no unexpected calls on the mock.
@@ -348,9 +410,8 @@ func TestAuthenticatePlayerEmitsSessionEndedForEvictedSessionChildren(t *testing
 	ctx := context.Background()
 	const capN = 2
 
-	// --- set up in-memory event store + engine ---
-	eventStore := coretest.NewMemoryEventStore()
-	engine := core.NewEngine(eventStore)
+	// --- set up presence emitter fake ---
+	pres := &fakePresenceEmitter{}
 
 	// --- set up session mock ---
 	gameStore := sessionmocks.NewMockStore(t)
@@ -364,7 +425,7 @@ func TestAuthenticatePlayerEmitsSessionEndedForEvictedSessionChildren(t *testing
 		playerRepo,
 		sessionRepo,
 		hasher,
-		auth.WithGameSessionFanout(engine, gameStore),
+		auth.WithGameSessionFanout(pres, gameStore),
 	)
 	require.NoError(t, err)
 	svc.SetMaxSessionsPerPlayer(capN)
@@ -411,18 +472,11 @@ func TestAuthenticatePlayerEmitsSessionEndedForEvictedSessionChildren(t *testing
 	assert.NotEmpty(t, tok)
 	require.NotNil(t, gotPlayer)
 
-	// Verify a session_ended event was emitted on the child's character stream.
-	stream := "character." + charID.String()
-	events, replayErr := eventStore.Replay(ctx, stream, ulid.ULID{}, 100)
-	require.NoError(t, replayErr)
-	require.Len(t, events, 1, "expected exactly one session_ended event on character stream")
-
-	assert.Equal(t, core.EventTypeSessionEnded, events[0].Type)
-
-	var payload core.SessionEndedPayload
-	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
-	assert.Equal(t, core.SessionEndedCauseEvicted, payload.Cause)
-	assert.Equal(t, childSessionID, payload.SessionID)
+	// Verify a session_ended emission was recorded for the child's character.
+	calls := pres.sessionEndedCallsFor(charID)
+	require.Len(t, calls, 1, "expected exactly one session_ended emission for this character")
+	assert.Equal(t, core.SessionEndedCauseEvicted, calls[0].cause)
+	assert.Equal(t, childSessionID, calls[0].sessionID)
 }
 
 // TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet verifies that when the
@@ -434,8 +488,7 @@ func TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet(t *testing.T) {
 	ctx := context.Background()
 	const capN = 2
 
-	eventStore := coretest.NewMemoryEventStore()
-	engine := core.NewEngine(eventStore)
+	pres := &fakePresenceEmitter{}
 	gameStore := sessionmocks.NewMockStore(t)
 
 	playerRepo := mocks.NewMockPlayerRepository(t)
@@ -446,7 +499,7 @@ func TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet(t *testing.T) {
 		playerRepo,
 		sessionRepo,
 		hasher,
-		auth.WithGameSessionFanout(engine, gameStore),
+		auth.WithGameSessionFanout(pres, gameStore),
 	)
 	require.NoError(t, err)
 	svc.SetMaxSessionsPerPlayer(capN)
@@ -500,17 +553,12 @@ func TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet(t *testing.T) {
 	require.NotNil(t, gotPlayer)
 
 	// Evicted child should have session_ended.
-	evictedStream := "character." + evictedCharID.String()
-	evictedEvents, replayErr := eventStore.Replay(ctx, evictedStream, ulid.ULID{}, 100)
-	require.NoError(t, replayErr)
-	require.Len(t, evictedEvents, 1, "evicted child must have a session_ended event")
-	assert.Equal(t, core.EventTypeSessionEnded, evictedEvents[0].Type)
+	evictedCalls := pres.sessionEndedCallsFor(evictedCharID)
+	require.Len(t, evictedCalls, 1, "evicted child must have a session_ended emission")
 
 	// Kept child must NOT have session_ended.
-	keptStream := "character." + keptCharID.String()
-	keptEvents, keptErr := eventStore.Replay(ctx, keptStream, ulid.ULID{}, 100)
-	require.NoError(t, keptErr)
-	assert.Empty(t, keptEvents, "kept child must not have a session_ended event")
+	keptCalls := pres.sessionEndedCallsFor(keptCharID)
+	assert.Empty(t, keptCalls, "kept child must not have a session_ended emission")
 }
 
 // TestAuthenticatePlayerEvictionFanoutContinuesOnEndSessionError verifies that
@@ -520,9 +568,9 @@ func TestAuthenticatePlayerEvictionFanoutContinuesOnEndSessionError(t *testing.T
 	ctx := context.Background()
 	const capN = 1
 
-	// Event store that rejects all Append calls — simulates EndSession failure.
-	failingStore := &failingEventStore{}
-	engine := core.NewEngine(failingStore)
+	// Presence emitter that rejects every EmitSessionEnded call — simulates
+	// EmitSessionEnded failure.
+	pres := &fakePresenceEmitter{sessionEndedErr: errors.New("event store down")}
 	gameStore := sessionmocks.NewMockStore(t)
 
 	playerRepo := mocks.NewMockPlayerRepository(t)
@@ -533,7 +581,7 @@ func TestAuthenticatePlayerEvictionFanoutContinuesOnEndSessionError(t *testing.T
 		playerRepo,
 		sessionRepo,
 		hasher,
-		auth.WithGameSessionFanout(engine, gameStore),
+		auth.WithGameSessionFanout(pres, gameStore),
 	)
 	require.NoError(t, err)
 	svc.SetMaxSessionsPerPlayer(capN)
@@ -570,36 +618,8 @@ func TestAuthenticatePlayerEvictionFanoutContinuesOnEndSessionError(t *testing.T
 	assert.NotEmpty(t, tok)
 	require.NotNil(t, gotPlayer)
 
-	// Assert that EndSession was attempted for BOTH evicted children — the
-	// fanout loop must not stop after the first failure. One Append per
-	// child's session_ended event means we expect exactly 2 calls.
-	assert.Equal(t, 2, failingStore.SessionEndedAppendCount(),
-		"fanout must attempt EndSession for every evicted child, not stop after the first failure")
+	// Assert that EmitSessionEnded was attempted for BOTH evicted children —
+	// the fanout loop must not stop after the first failure.
+	assert.Equal(t, 2, pres.sessionEndedCallCount(),
+		"fanout must attempt EmitSessionEnded for every evicted child, not stop after the first failure")
 }
-
-// failingEventStore is a test double that rejects all Append calls. It counts
-// Append calls per event type so tests can assert that the eviction fanout
-// attempted EndSession for every child before giving up.
-type failingEventStore struct {
-	mu                  sync.Mutex
-	sessionEndedAppends int
-}
-
-func (f *failingEventStore) Append(_ context.Context, ev core.Event) error {
-	f.mu.Lock()
-	if ev.Type == core.EventTypeSessionEnded {
-		f.sessionEndedAppends++
-	}
-	f.mu.Unlock()
-	return errors.New("event store down")
-}
-
-// SessionEndedAppendCount returns the number of Append attempts for
-// session_ended events.
-func (f *failingEventStore) SessionEndedAppendCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.sessionEndedAppends
-}
-
-var _ core.EventAppender = (*failingEventStore)(nil)

@@ -16,7 +16,7 @@ import (
 
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	holoGRPC "github.com/holomush/holomush/internal/grpcclient"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"

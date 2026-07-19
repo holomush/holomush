@@ -42,14 +42,17 @@ func (s *DatabaseSubsystem) ID() lifecycle.SubsystemID { return lifecycle.Subsys
 // DependsOn returns nil — database has no dependencies.
 func (s *DatabaseSubsystem) DependsOn() []lifecycle.SubsystemID { return nil }
 
-// Start connects to the database, creates the event store, and initializes the game ID.
-// Start is idempotent: if the subsystem is already started, it returns nil immediately.
-// This allows the database subsystem to be started early (before the orchestrator)
-// while still being registered for dependency resolution and reverse-order shutdown.
+// Prepare connects to the database, creates the event store, and initializes
+// the game ID. A pgxpool is a handle — nothing external reaches it — so the
+// entire acquisition sequence belongs in Prepare (D-13.3 row 1).
+// Prepare is idempotent: if the subsystem is already prepared, it returns
+// nil immediately (a real guard: the database subsystem's own event store
+// launches no goroutine, but re-running InitGameID would be wasted work and
+// the guard keeps the accessors' single-assignment contract intact).
 // codecov:ignore — tested by integration and E2E tests
-func (s *DatabaseSubsystem) Start(ctx context.Context) error {
+func (s *DatabaseSubsystem) Prepare(ctx context.Context) error {
 	if s.eventStore != nil {
-		return nil // already started
+		return nil // already prepared
 	}
 
 	factory := s.cfg.EventStoreFactory
@@ -73,39 +76,50 @@ func (s *DatabaseSubsystem) Start(ctx context.Context) error {
 	}
 	s.gameID = gameID
 
-	slog.InfoContext(ctx, "database subsystem started", "game_id", gameID)
+	slog.InfoContext(ctx, "database subsystem prepared", "game_id", gameID)
 	return nil
 }
 
-// Stop closes the event store and its connection pool.
+// Activate is a no-op — the database subsystem serves no external surface;
+// a pgxpool handle is acquired, not activated (D-13.3 row 1).
+func (s *DatabaseSubsystem) Activate(_ context.Context) error {
+	return nil
+}
+
+// Stop closes the event store and its connection pool. It resets the
+// Prepare guard fields (eventStore, pool) to nil so a legitimate retry of
+// Prepare after Stop re-acquires a fresh event store and pool rather than
+// short-circuiting on a closed one (WR-01).
 // codecov:ignore — tested by integration and E2E tests
 func (s *DatabaseSubsystem) Stop(_ context.Context) error {
 	if s.eventStore != nil {
 		s.eventStore.Close()
+		s.eventStore = nil
+		s.pool = nil
 	}
 	return nil
 }
 
-// Pool returns the database connection pool. Panics if called before Start().
+// Pool returns the database connection pool. Panics if called before Prepare().
 func (s *DatabaseSubsystem) Pool() *pgxpool.Pool {
 	if s.pool == nil {
-		panic("store: Pool() called before Start()")
+		panic("store: Pool() called before Prepare()")
 	}
 	return s.pool
 }
 
-// EventStore returns the PostgresEventStore. Panics if called before Start().
+// EventStore returns the PostgresEventStore. Panics if called before Prepare().
 func (s *DatabaseSubsystem) EventStore() *PostgresEventStore {
 	if s.eventStore == nil {
-		panic("store: EventStore() called before Start()")
+		panic("store: EventStore() called before Prepare()")
 	}
 	return s.eventStore
 }
 
-// GameID returns the initialized game ID. Panics if called before Start().
+// GameID returns the initialized game ID. Panics if called before Prepare().
 func (s *DatabaseSubsystem) GameID() string {
 	if s.gameID == "" {
-		panic("store: GameID() called before Start()")
+		panic("store: GameID() called before Prepare()")
 	}
 	return s.gameID
 }

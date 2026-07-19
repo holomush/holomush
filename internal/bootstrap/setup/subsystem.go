@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/content"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -111,7 +112,8 @@ func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Start runs the full bootstrap sequence:
+// Prepare runs the full bootstrap sequence — one-shot DB work against a
+// prepared pool, not a loop and not external (D-13.3 row 8):
 //  1. Create BootstrapRunner
 //  2. Register policy bootstrapper (priority 200)
 //  3. Register setting bootstrapper (priority 300) if configured
@@ -119,9 +121,22 @@ func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 //  5. Run all bootstrappers
 //  6. Resolve starting location
 //
+// No idempotency guard: seeding already runs on every boot by design, and
+// re-running is harmless.
 // codecov:ignore — tested by integration and E2E tests
-func (s *BootstrapSubsystem) Start(ctx context.Context) error {
+func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	pool := s.cfg.DB.Pool()
+
+	// Defense-in-depth: refuse to start if any plugin-kind event in
+	// events_audit lacks an actor_id. Migration 000018 makes orphans
+	// impossible from a clean install; this guards against manual restore
+	// from an old backup. Relocated from cmd/holomush's pre-orchestrator
+	// call site (07-09 item 5) — it now runs first against this same pool,
+	// behind the Bootstrap -> Database edge, instead of racing a
+	// hand-sequenced DB pre-start.
+	if orphanErr := runBootstrapOrphanCheck(ctx, pool); orphanErr != nil {
+		return orphanErr
+	}
 
 	// Parse pre-configured start location if provided.
 	if s.cfg.GuestStartLocation != "" {
@@ -216,19 +231,23 @@ func (s *BootstrapSubsystem) Start(ctx context.Context) error {
 	}
 
 	s.started = true
-	slog.InfoContext(ctx, "bootstrap subsystem started")
+	slog.InfoContext(ctx, "bootstrap subsystem prepared")
 	return nil
 }
+
+// Activate is a no-op — bootstrap's work is a one-shot Prepare-time seed
+// (D-13.3 row 8).
+func (s *BootstrapSubsystem) Activate(_ context.Context) error { return nil }
 
 // Stop is a no-op — bootstrap runs once during startup.
 // codecov:ignore — tested by integration and E2E tests
 func (s *BootstrapSubsystem) Stop(_ context.Context) error { return nil }
 
 // StartLocationID returns the resolved starting location ULID.
-// Panics if called before Start().
+// Panics if called before Prepare().
 func (s *BootstrapSubsystem) StartLocationID() ulid.ULID {
 	if !s.started {
-		panic("bootstrap/setup: StartLocationID() called before Start()")
+		panic("bootstrap/setup: StartLocationID() called before Prepare()")
 	}
 	return s.startLocationID
 }
@@ -288,4 +307,70 @@ func (s *BootstrapSubsystem) registerSettingBootstrapper(ctx context.Context, ru
 	slog.InfoContext(ctx, "setting bootstrapper registered", "setting", s.cfg.Setting)
 
 	return nil
+}
+
+// runBootstrapOrphanCheck refuses to start if any plugin-kind event lacks an
+// actor_id (a legacy event that survived a w9ml migration mis-step).
+// Defense-in-depth: migration 000018 makes orphans impossible from a clean
+// install. This guards against manual restore from old backup or partial
+// migration recovery.
+//
+// After 06-01's migration 000052 renamed the pre-partition history off
+// events_audit into events_audit_unpartitioned, a restore-from-old-backup
+// lands residual orphans in the LEGACY table — invisible to a probe that only
+// scans events_audit. Since this check runs BEFORE 06-02's Backfill re-homes
+// those rows (core.go), it must scan BOTH tables. events_audit_unpartitioned is
+// referenced only when present (to_regclass guard) so a clean install — where
+// the legacy table is absent — does not error with "relation does not exist".
+//
+// Uses an EXISTS probe (returns on the first matching row) instead of a
+// full-table COUNT(*) — on large audit tables the aggregate scan can
+// noticeably delay startup. We only count on the failure path, where startup
+// is already aborting.
+//
+// Relocated verbatim from cmd/holomush/bootstrap_orphan.go (07-09 item 5) —
+// package main cannot reference it once BootstrapSubsystem.Start is the call
+// site, so the definition moved behind the Bootstrap -> Database edge.
+func runBootstrapOrphanCheck(ctx context.Context, pool *pgxpool.Pool) error {
+	pluginKind := eventbus.ActorKindPlugin.String()
+
+	// Is the legacy unpartitioned table present? (Absent on a clean install and
+	// after Backfill re-homes it.)
+	var legacyPresent *string
+	if err := pool.QueryRow(ctx,
+		`SELECT to_regclass('public.events_audit_unpartitioned')::text`).Scan(&legacyPresent); err != nil {
+		return oops.Code("BOOTSTRAP_ORPHAN_CHECK_FAILED").Wrap(err)
+	}
+
+	existsQuery := `SELECT EXISTS (
+		  SELECT 1 FROM events_audit WHERE actor_kind = $1 AND actor_id IS NULL
+		)`
+	countQuery := `SELECT COUNT(*) FROM events_audit WHERE actor_kind = $1 AND actor_id IS NULL`
+	if legacyPresent != nil {
+		slog.DebugContext(ctx, "bootstrap orphan check also scanning events_audit_unpartitioned")
+		existsQuery = `SELECT
+		  EXISTS (SELECT 1 FROM events_audit WHERE actor_kind = $1 AND actor_id IS NULL)
+		  OR EXISTS (SELECT 1 FROM events_audit_unpartitioned WHERE actor_kind = $1 AND actor_id IS NULL)`
+		countQuery = `SELECT
+		  (SELECT COUNT(*) FROM events_audit WHERE actor_kind = $1 AND actor_id IS NULL)
+		  + (SELECT COUNT(*) FROM events_audit_unpartitioned WHERE actor_kind = $1 AND actor_id IS NULL)`
+	}
+
+	var hasOrphan bool
+	if err := pool.QueryRow(ctx, existsQuery, pluginKind).Scan(&hasOrphan); err != nil {
+		return oops.Code("BOOTSTRAP_ORPHAN_CHECK_FAILED").Wrap(err)
+	}
+	if !hasOrphan {
+		return nil
+	}
+	// Only count on the failure path so the operator gets the magnitude.
+	var count int
+	if cerr := pool.QueryRow(ctx, countQuery, pluginKind).Scan(&count); cerr != nil {
+		// Fall through with count=0 if the count fails — the EXISTS probe
+		// already proved there's at least one orphan.
+		count = 0
+	}
+	return oops.Code("PLUGIN_ACTOR_ORPHAN_DETECTED").
+		With("count", count).
+		Errorf("legacy plugin-actor events present after w9ml migration")
 }

@@ -118,7 +118,14 @@ type MemberObserver interface {
 // or introduce its own ldflag variable (per Phase 3c grounding doc
 // Decision 1).
 type Config struct {
+	// ClusterID is a given value for callers that already know it at
+	// construction (test literals). ClusterIDProvider, resolved once at
+	// Start, is the production path — it wins when non-nil. At least one
+	// of the two MUST resolve to a non-empty string; NewSubsystem rejects
+	// only the both-unset case, and Start rejects a both-resolve-empty
+	// case (CLUSTER_CONFIG_MISSING_CLUSTER_ID either way).
 	ClusterID         string
+	ClusterIDProvider func() string
 	HolomushVersion   string
 	HeartbeatInterval time.Duration
 	EvictAfterMissed  int

@@ -73,19 +73,61 @@ func NewSubsystemWithStorage(cfg Config, storage jetstream.StorageType) *Subsyst
 // ID returns lifecycle.SubsystemEventBus.
 func (s *Subsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemEventBus }
 
-// DependsOn returns nil — the event bus has no subsystem dependencies.
-func (s *Subsystem) DependsOn() []lifecycle.SubsystemID { return nil }
+// DependsOn returns [SubsystemDatabase] (07-09 item 7, round 7 BLOCKER 1) —
+// GameIDProvider resolves the DB-backed gameID at Start, so the database
+// subsystem must have run InitGameID first. Acyclic: Database has no deps.
+//
+// DO NOT add SubsystemCryptoChainVerifier here. The verifier's own DependsOn
+// includes SubsystemEventBus (internal/eventbus/audit/chain/verifier_subsystem.go)
+// because its chain-handler set is built from THIS subsystem's Publisher():
+// cryptoWiring's readStreamW wiring (cmd/holomush/core.go, buildReadStreamWiring
+// in cmd/holomush/readstream_wiring.go:118) hard-requires an AuditPublisher
+// derived from eventBusSub.Publisher() (cmd/holomush/core.go:~735) — a nil
+// Publisher makes buildReadStreamWiring return an empty wiring, silently
+// unregistering operator_read from the boot gate. So the bus must start
+// BEFORE the verifier can know which chains it verifies; adding the reverse
+// edge here would close EventBus -> CryptoChainVerifier -> EventBus, a cycle
+// internal/lifecycle/orchestrator.go's topoSort refuses at boot (07-10
+// MEDIUM-11 — this is the false ordering claim that used to live at
+// cmd/holomush/core.go as a comment; the real order is pinned as a test in
+// cmd/holomush/core_topo_order_test.go, not asserted here or there in prose).
+func (s *Subsystem) DependsOn() []lifecycle.SubsystemID {
+	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
+}
 
-// Start establishes the NATS transport for the configured mode, obtains a
+// Prepare establishes the NATS transport for the configured mode, obtains a
 // JetStream context, and declares the EVENTS stream (D-03 provision policy).
 // In embedded mode it brings the in-process NATS server up; in external mode
 // (CLUSTER-01) it dials the configured cluster with creds/TLS and fails closed
 // at boot if unreachable (D-02). Any failure mid-way rolls back earlier state
 // (shutdown server if any, close conn).
+//
+// The ENTIRE Start body — including `go s.server.Start()` — belongs in
+// Prepare (D-13.3 row 2): the embedded server sets DontListen: true, so it
+// binds no socket and is reachable only in-process via
+// nats.InProcessServer(s.server); server-start and client-connect are one
+// atomic call with no seam between them. The NATS Prometheus monitor's
+// operator-facing HTTP port (HTTPPort: s.cfg.MonitorPort, set in
+// connectEmbedded) DOES bind here — that is D-13.0's exception 1
+// (observability, not domain traffic), the same class as the observability
+// server that already starts before StartAll today. Do NOT move any of this
+// to Activate: audit's own Prepare requires this live JetStream context
+// (it fails closed with AUDIT_DEP_NOT_STARTED otherwise).
 // codecov:ignore — rollback branches exercised by integration and E2E tests
-func (s *Subsystem) Start(ctx context.Context) error {
+func (s *Subsystem) Prepare(ctx context.Context) error {
 	if s.conn != nil {
-		return nil // already started (embedded or external)
+		return nil // already prepared (embedded or external)
+	}
+
+	// Resolve the gameID provider once, before connect()/EnsureStream (07-09
+	// item 7, round 7 BLOCKER 1 + round 8 correction). An empty resolve
+	// keeps whatever Defaults()-substituted (or koanf-loaded) value is
+	// already in s.cfg.GameID — the same "empty resolve keeps the default"
+	// rule used by the DLQ subject / relay gameID rows.
+	if s.cfg.GameIDProvider != nil {
+		if resolved := s.cfg.GameIDProvider(); resolved != "" {
+			s.cfg.GameID = resolved
+		}
 	}
 
 	conn, js, err := s.connect()
@@ -122,6 +164,34 @@ func (s *Subsystem) Start(ctx context.Context) error {
 		}
 		s.exporter = exp
 	}
+
+	// CLUSTER-02 (D-13c): in external mode the server authenticates as the
+	// single `holomush-server` account scoped to events.>/audit.>/internal.>/
+	// _INBOX.>. Self-verify that our own account is not over-scoped and
+	// refuse to boot if it can reach beyond the granted prefixes (fail
+	// closed). Skipped in embedded mode, which has no account model (its
+	// default-open permissions would always look over-scoped). The
+	// complementary external proof that other principals are locked out is
+	// deploy/nats/verify-scoping.sh. Moved in from cmd/holomush (07-09,
+	// design table row :475) — this package owns its own connection, so the
+	// check belongs in its own boot path rather than a caller-side
+	// post-Start step.
+	if s.cfg.Mode == ModeExternal {
+		if scopeErr := VerifyAccountScoping(ctx, s.conn); scopeErr != nil {
+			s.rollbackStart(conn)
+			return oops.Code("EVENTBUS_SCOPE_CHECK_FAILED").
+				With("operation", "verify_account_scoping").
+				Wrap(scopeErr)
+		}
+	}
+	return nil
+}
+
+// Activate is a no-op — publishing happens through consumers, not here
+// (D-13.3 row 2). The entire acquisition sequence, including bringing the
+// embedded server up, already ran in Prepare; documented here so nobody
+// "corrects" this by moving work into Activate.
+func (s *Subsystem) Activate(_ context.Context) error {
 	return nil
 }
 
@@ -252,7 +322,7 @@ func (s *Subsystem) rollbackStart(conn *nats.Conn) {
 // EVENTBUS_STREAM_CONFIG_MISMATCH — the server MUST NOT attempt stream admin.
 func (s *Subsystem) EnsureStream(ctx context.Context) error {
 	if s.js == nil {
-		return oops.Code("EVENTBUS_NOT_STARTED").Errorf("EnsureStream called before Start")
+		return oops.Code("EVENTBUS_NOT_STARTED").Errorf("EnsureStream called before Prepare")
 	}
 
 	desired := s.desiredStreamConfig()
@@ -376,12 +446,13 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 		}
 	}
 	if s.server != nil {
-		s.server.Shutdown()
+		srv := s.server
+		srv.Shutdown()
 		done := make(chan struct{})
-		go func() {
-			s.server.WaitForShutdown()
+		go func(srv *server.Server, done chan struct{}) {
+			srv.WaitForShutdown()
 			close(done)
-		}()
+		}(srv, done)
 		select {
 		case <-done:
 		case <-ctx.Done():

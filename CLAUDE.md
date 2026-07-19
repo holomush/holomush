@@ -140,10 +140,12 @@ Two ULID generators; the choice matters for correctness:
 
 | Use case | Generator | Why |
 | --- | --- | --- |
-| **Event IDs** (`core.Event.ID`), session IDs | `core.NewULID()` | Identity/dedup key (set as `Nats-Msg-Id` for JetStream dedup, stable across rebuilds). Ordering is JetStream's per-stream `uint64` seq — **not** ULID lex order. |
+| **Event IDs** (`eventbus.Event.ID`), session IDs | `core.NewULID()` | Identity/dedup key (set as `Nats-Msg-Id` for JetStream dedup, stable across rebuilds). Ordering is JetStream's per-stream `uint64` seq — **not** ULID lex order. |
 | **Entity primary keys** (players, locations, characters, exits, objects, policies) | `idgen.New()` | Identity, not ordering; fresh `crypto/rand` entropy per call. |
 
-`core.Event{}` struct literals MUST use `core.NewEvent()` rather than a raw literal — `NewEvent()` stamps a monotonic ULID via `core.NewULID()`. Never supply `Event.ID` manually (e.g., from `idgen.New()`).
+`eventbus.Event` is the single Event representation (ARCH-04 collapsed the former `core.Event`/`eventbus.Event` duplication). Publication sites MUST construct it via `eventbus.NewEvent(...)` — the canonical constructor, which stamps the monotonic ULID via `core.NewULID()` — never a raw `eventbus.Event{}` literal, never a hand-stamped `ID`, never `idgen.New()`. Construction sites: `internal/world/outbox/wire.go` (`EnvelopeToEvent`), `internal/presence`, `internal/sysbroadcast`, and `internal/grpc`'s `emitCommandResponse`.
+
+The generator itself lives in `internal/ulidgen` (a dependency-free leaf). `core.NewULID()` remains the spelling for core-side event/session IDs (forwards to `ulidgen.New()`, one entropy source). Gateway-side code (`internal/web`, `internal/telnet`) calls `ulidgen.New()` directly because INV-EVENTBUS-1 forbids importing `internal/core`.
 
 ### Error Handling
 

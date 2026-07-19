@@ -31,6 +31,13 @@ type AdminSocketSubsystemConfig struct {
 	// ReadStreamHandler dispatches the AdminReadStream RPC (holomush-jxo8.8.36).
 	// When nil, AdminReadStream returns connect.CodeUnimplemented until R.15 wires it.
 	ReadStreamHandler ReadStreamRPCHandler
+	// HandlersProvider resolves all five RPC handlers together at Start,
+	// after the disabled-mode (SocketPath == "") early return — a provider,
+	// not live values, since the handlers depend on wiring outputs
+	// that only exist once Auth/ABAC/EventBus have started (07-09 item 9).
+	// The five concrete *Handler fields above stay as a dual path for tests
+	// and backward-compat; the provider wins when non-nil.
+	HandlersProvider func() (Handlers, error)
 	// Shutdown is invoked when the admin socket server returns a post-startup
 	// error on its errCh (e.g., UDS accept loop dies, corrupted listener
 	// state). Production wires this to the parent context's cancel func so
@@ -40,6 +47,17 @@ type AdminSocketSubsystemConfig struct {
 	// break-glass with no downstream signal). When nil, the monitor logs and
 	// returns; this is the test/dev default.
 	Shutdown func(error)
+}
+
+// Handlers bundles the five admin RPC handlers HandlersProvider resolves
+// together at Start (07-09 item 9). All five field types are already
+// package-owned.
+type Handlers struct {
+	Authenticate AuthenticateHandler
+	Approve      ApproveHandler
+	ResetTOTP    ResetTOTPHandler
+	Rekey        RekeyRPCHandler
+	ReadStream   ReadStreamRPCHandler
 }
 
 // AdminSocketSubsystem manages the admin UNIX domain socket lifecycle.
@@ -60,38 +78,94 @@ func (s *AdminSocketSubsystem) ID() lifecycle.SubsystemID {
 	return lifecycle.SubsystemAdminSocket
 }
 
-// DependsOn returns nil — the substrate has no subsystem dependencies.
+// DependsOn returns [Database, Auth, ABAC, EventBus, CryptoChainVerifier].
+// The first four are THE RULE's wiring consumer superset (this
+// subsystem holds a HandlersProvider backed by the memoized wiring
+// builder — whichever consumer resolves the provider first builds it, so
+// every consumer must declare its full dependency set). CryptoChainVerifier
+// is the T-07-51 re-scope (07-09 item 8): admin.sock binds its listener
+// only after the INV-CRYPTO-102 chain walk has run.
 func (s *AdminSocketSubsystem) DependsOn() []lifecycle.SubsystemID {
-	return nil
+	return []lifecycle.SubsystemID{
+		lifecycle.SubsystemDatabase,
+		lifecycle.SubsystemAuth,
+		lifecycle.SubsystemABAC,
+		lifecycle.SubsystemEventBus,
+		lifecycle.SubsystemCryptoChainVerifier,
+	}
 }
 
-// Start creates the server, acquires admin.lock, binds admin.sock, and
-// begins serving. If SocketPath is empty (XDG runtime dir unavailable at
-// startup), Start is a no-op: the admin socket is disabled but the server
-// continues serving normally.
+// Prepare constructs the Server (Config{...}) only — NO live resources are
+// allocated (NewServer's own doc already promises this). If SocketPath is
+// empty (XDG runtime dir unavailable at startup), Prepare is a no-op: the
+// admin socket is disabled but the server continues preparing normally —
+// the disabled-mode early return runs BEFORE HandlersProvider is ever
+// resolved, so a disabled admin socket never triggers the wiring build
+// (D-13.3 row 14). admin.lock acquisition does NOT happen here — see
+// Activate.
 // codecov:ignore — tested by integration and E2E tests
-func (s *AdminSocketSubsystem) Start(ctx context.Context) error {
+func (s *AdminSocketSubsystem) Prepare(ctx context.Context) error {
 	if s.cfg.SocketPath == "" {
 		slog.WarnContext(ctx, "admin socket subsystem: disabled — no socket path configured; break-glass unavailable")
 		return nil
 	}
-	srv := NewServer(Config{
+
+	handlers := Handlers{
+		Authenticate: s.cfg.AuthenticateHandler,
+		Approve:      s.cfg.ApproveHandler,
+		ResetTOTP:    s.cfg.ResetTOTPHandler,
+		Rekey:        s.cfg.RekeyHandler,
+		ReadStream:   s.cfg.ReadStreamHandler,
+	}
+	if s.cfg.HandlersProvider != nil {
+		resolved, err := s.cfg.HandlersProvider()
+		if err != nil {
+			return err
+		}
+		handlers = resolved
+	}
+
+	s.server = NewServer(Config{
 		SocketPath:          s.cfg.SocketPath,
 		LockPath:            s.cfg.LockPath,
 		Version:             s.cfg.Version,
-		AuthenticateHandler: s.cfg.AuthenticateHandler,
-		ApproveHandler:      s.cfg.ApproveHandler,
-		ResetTOTPHandler:    s.cfg.ResetTOTPHandler,
-		RekeyHandler:        s.cfg.RekeyHandler,
-		ReadStreamHandler:   s.cfg.ReadStreamHandler,
+		AuthenticateHandler: handlers.Authenticate,
+		ApproveHandler:      handlers.Approve,
+		ResetTOTPHandler:    handlers.ResetTOTP,
+		RekeyHandler:        handlers.Rekey,
+		ReadStreamHandler:   handlers.ReadStream,
 	})
+	return nil
+}
 
-	errCh, err := srv.Start()
+// Activate acquires admin.lock, binds admin.sock, and begins serving — the
+// existing atomic srv.Start() call, unmodified (D-13.3 row 14). It FIRST
+// guards on s.server == nil (disabled mode — Prepare's early return skips
+// server construction, but the two-sweep orchestrator still calls Activate
+// on every subsystem; without this guard srv.Start() would nil-panic the
+// boot in exactly the degraded no-XDG-runtime-dir environment disabled mode
+// exists to survive — cross-AI round 5, BLOCKER). The WARN was already
+// logged in Prepare; Activate returns nil silently in disabled mode.
+//
+// This is the break-glass surface: admin.sock is the only other
+// externally-reachable bind besides the gRPC listener, and it accepting
+// before every dependency has prepared is precisely what the two-sweep
+// barrier exists to prevent. Idempotent: guarded on s.errCh != nil (already
+// activated).
+// codecov:ignore — tested by integration and E2E tests
+func (s *AdminSocketSubsystem) Activate(_ context.Context) error {
+	if s.server == nil {
+		return nil // disabled mode — never constructed in Prepare
+	}
+	if s.errCh != nil {
+		return nil // already activated
+	}
+
+	errCh, err := s.server.Start()
 	if err != nil {
 		return err
 	}
 
-	s.server = srv
 	s.errCh = errCh
 
 	go runErrMonitor(s.errCh, s.cfg.Shutdown)
@@ -127,10 +201,17 @@ func runErrMonitor(errCh <-chan error, shutdown func(error)) {
 	}
 }
 
-// Stop shuts down the admin socket server and releases admin.lock.
+// Stop shuts down the admin socket server and releases admin.lock. Resets
+// the Activate guard (errCh) and the server reference to nil so a
+// legitimate retry of Prepare/Activate after Stop reacquires admin.lock and
+// rebinds admin.sock rather than short-circuiting on an already-stopped
+// server (WR-01).
 func (s *AdminSocketSubsystem) Stop(ctx context.Context) error {
 	if s.server == nil {
 		return nil
 	}
-	return s.server.Stop(ctx)
+	err := s.server.Stop(ctx)
+	s.server = nil
+	s.errCh = nil
+	return err
 }

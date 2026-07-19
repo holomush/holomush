@@ -10,35 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/eventvocab"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
-
-func TestEventType_String(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    EventType
-		expected string
-	}{
-		// Host-owned event types (stay in internal/core)
-		{"arrive event", EventTypeArrive, "arrive"},
-		{"leave event", EventTypeLeave, "leave"},
-		{"system event", EventTypeSystem, "system"},
-		{"move event", EventTypeMove, "move"},
-		{"location_state event", EventTypeLocationState, "location_state"},
-		{"exit_update event", EventTypeExitUpdate, "exit_update"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, string(tt.input))
-		})
-	}
-}
-
-func TestEventTypeLocationStateConstantsMatchExpectedValues(t *testing.T) {
-	assert.Equal(t, EventType("location_state"), EventTypeLocationState)
-	assert.Equal(t, EventType("exit_update"), EventTypeExitUpdate)
-}
 
 func TestActorKind_String(t *testing.T) {
 	tests := []struct {
@@ -60,29 +34,29 @@ func TestActorKind_String(t *testing.T) {
 }
 
 func TestHostEventTypesMatchPluginSDKReExports(t *testing.T) {
-	// The host's authoritative event-type strings are in this file.
+	// The host's authoritative event-type strings live in internal/eventvocab.
 	// pkg/plugin re-exports them as pluginsdk.HostEventType* so plugin
-	// code (which cannot import internal/core) has typed references.
-	// Verify the two sides agree string-for-string.
+	// code (which cannot import internal/core or internal/eventvocab) has
+	// typed references. Verify the two sides agree string-for-string.
 	cases := []struct {
 		name string
-		core EventType
+		host eventvocab.EventType
 		sdk  pluginsdk.EventType
 	}{
-		{"core and sdk agree on system event type string", EventTypeSystem, pluginsdk.HostEventTypeSystem},
-		{"core and sdk agree on session_ended event type string", EventTypeSessionEnded, pluginsdk.HostEventTypeSessionEnded},
-		{"core and sdk agree on command_response event type string", EventTypeCommandResponse, pluginsdk.HostEventTypeCommandResponse},
-		{"core and sdk agree on command_error event type string", EventTypeCommandError, pluginsdk.HostEventTypeCommandError},
-		{"core and sdk agree on arrive event type string", EventTypeArrive, pluginsdk.HostEventTypeArrive},
-		{"core and sdk agree on leave event type string", EventTypeLeave, pluginsdk.HostEventTypeLeave},
-		{"core and sdk agree on move event type string", EventTypeMove, pluginsdk.HostEventTypeMove},
-		{"core and sdk agree on location_state event type string", EventTypeLocationState, pluginsdk.HostEventTypeLocationState},
-		{"core and sdk agree on exit_update event type string", EventTypeExitUpdate, pluginsdk.HostEventTypeExitUpdate},
+		{"host and sdk agree on system event type string", eventvocab.EventTypeSystem, pluginsdk.HostEventTypeSystem},
+		{"host and sdk agree on session_ended event type string", eventvocab.EventTypeSessionEnded, pluginsdk.HostEventTypeSessionEnded},
+		{"host and sdk agree on command_response event type string", eventvocab.EventTypeCommandResponse, pluginsdk.HostEventTypeCommandResponse},
+		{"host and sdk agree on command_error event type string", eventvocab.EventTypeCommandError, pluginsdk.HostEventTypeCommandError},
+		{"host and sdk agree on arrive event type string", eventvocab.EventTypeArrive, pluginsdk.HostEventTypeArrive},
+		{"host and sdk agree on leave event type string", eventvocab.EventTypeLeave, pluginsdk.HostEventTypeLeave},
+		{"host and sdk agree on move event type string", eventvocab.EventTypeMove, pluginsdk.HostEventTypeMove},
+		{"host and sdk agree on location_state event type string", eventvocab.EventTypeLocationState, pluginsdk.HostEventTypeLocationState},
+		{"host and sdk agree on exit_update event type string", eventvocab.EventTypeExitUpdate, pluginsdk.HostEventTypeExitUpdate},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, string(c.core), string(c.sdk),
-				"host event-type drift between internal/core and pkg/plugin")
+			assert.Equal(t, string(c.host), string(c.sdk),
+				"host event-type drift between internal/eventvocab and pkg/plugin")
 		})
 	}
 }

@@ -204,10 +204,10 @@ type Event struct {
 }
 
 // NewEvent constructs an Event with a monotonic ULID (from core.NewULID()),
-// the current timestamp, and the provided fields. This is the canonical
-// construction path for eventbus.Event values that will be published — it
-// mirrors the core.NewEvent() convention and prevents accidental omission of
-// the ID stamp (holomush-jxo8.7.53).
+// the current timestamp, and the provided fields. This is the canonical —
+// and, post-ARCH-04, the ONLY — construction path for eventbus.Event values
+// that will be published; it prevents accidental omission of the ID stamp
+// (holomush-jxo8.7.53).
 //
 // Callers that need to override specific fields after construction (e.g.
 // Sensitive, Headers, Rendering) MUST still use NewEvent for the base value

@@ -177,6 +177,9 @@ scopes:
       - "cmd/holomush/core.go"
       - "cmd/holomush/sub_grpc.go"
       - "cmd/holomush/sub_grpc_test.go"
+      # 07-09: the crypto/admin wiring block hoisted out of core.go into its
+      # own memoized builder (D-12 Wave A).
+      - "cmd/holomush/cryptowiring.go"
       - "cmd/holomush/phase7_fence_wiring.go"
       - "cmd/holomush/phase7_fence_wiring_test.go"
       - "cmd/holomush/gateway_imports_test.go"
@@ -633,7 +636,7 @@ scopes:
       # here): .go + plugin migration comments + Taskfile lint descs. They hold TS
       # alongside other scopes' (CRYPTO/SCENE/EVENTBUS/PRIVACY) annotations. Survey .14.7.
       - "Taskfile.yaml"
-      - "cmd/holomush/crypto_operator_validation_test.go"
+      - "internal/access/setup/crypto_operator_validation_internal_test.go"
       - "internal/admin/readstream/cold_reader.go"
       - "internal/admin/readstream/cold_reader_integration_test.go"
       - "internal/eventbus/crypto/dek/manager_integration_test.go"
@@ -1067,7 +1070,6 @@ invariants:
       - {file: "internal/eventbus/history/tier.go", token: "INV-39"}
       - {file: "test/integration/crypto/rekey_inv39_test.go", token: "INV-39"}
       - {file: "internal/eventbus/envelope.go", token: "INV-39"}
-      - {file: "cmd/holomush/core.go", token: "INV-39"}
       - {file: "cmd/holomush/sub_grpc.go", token: "INV-39"}
       - {file: "cmd/holomush/sub_grpc_test.go", token: "INV-39"}
   - id: INV-CRYPTO-23
@@ -1772,7 +1774,7 @@ invariants:
     binding: pending
     refs:
       - {file: "Taskfile.yaml", token: "INV-TS-1"}
-      - {file: "cmd/holomush/crypto_operator_validation_test.go", token: "INV-TS-1"}
+      - {file: "internal/access/setup/crypto_operator_validation_internal_test.go", token: "INV-TS-1"}
       - {file: "internal/admin/readstream/cold_reader.go", token: "INV-TS-1"}
       - {file: "internal/admin/readstream/cold_reader_integration_test.go", token: "INV-TS-1"}
       - {file: "internal/eventbus/crypto/dek/manager_integration_test.go", token: "INV-TS-1"}
@@ -2341,11 +2343,14 @@ invariants:
     scope: INV-EVENTBUS
     origin_spec: "docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"
     legacy: ["INV-GW-1@docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"]
-    summary: "The gateway process MUST NOT import internal/world, internal/access, internal/store, internal/plugin, internal/eventbus,
-      internal/auth/service, or internal/command."
-    binding: pending
+    summary: "The gateway process MUST NOT import, directly or transitively, internal/world, internal/access, internal/store,
+      internal/plugin, internal/eventbus, internal/auth, internal/command, internal/core, internal/session, or internal/grpc."
+    binding: bound
+    asserted_by:
+      - "cmd/holomush/gateway_imports_test.go"
+      - "cmd/holomush/gateway_closure_test.go"
     refs:
-      - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-GW-1"}
+      - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-EVENTBUS-1"}
   - id: INV-EVENTBUS-2
     scope: INV-EVENTBUS
     origin_spec: "docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md"
@@ -4268,7 +4273,7 @@ invariants:
     binding: pending
     refs:
       - {file: "cmd/holomush/admin_authenticate_e2e_test.go", token: "INV-D14"}
-      - {file: "cmd/holomush/core.go", token: "INV-D14"}
+      - {file: "cmd/holomush/cryptowiring.go", token: "INV-D14"}
       - {file: "internal/admin/totp_audit/auditing.go", token: "INV-D14"}
       - {file: "internal/admin/totp_audit/auditing_test.go", token: "INV-D14"}
       - {file: "internal/core/builtins.go", token: "INV-D14"}
@@ -4308,7 +4313,7 @@ invariants:
       policy_set event would silently break chain continuity on the next boot."
     binding: pending
     refs:
-      - {file: "cmd/holomush/core.go", token: "INV-D17"}
+      - {file: "cmd/holomush/cryptowiring.go", token: "INV-D17"}
       - {file: "internal/admin/policy/emitter.go", token: "INV-D17"}
       - {file: "internal/admin/policy/subsystem.go", token: "INV-D17"}
       - {file: "internal/admin/policy/subsystem_integration_test.go", token: "INV-D17"}
@@ -4688,7 +4693,7 @@ invariants:
       persisted hash."
     binding: pending
     refs:
-      - {file: "cmd/holomush/core.go", token: "INV-E25"}
+      - {file: "cmd/holomush/cryptowiring.go", token: "INV-E25"}
       - {file: "cmd/holomush/gateway_imports_test.go", token: "INV-E25"}
       - {file: "cmd/holomush/policy_hash_source.go", token: "INV-E25"}
       - {file: "cmd/holomush/readstream_wiring.go", token: "INV-E25"}

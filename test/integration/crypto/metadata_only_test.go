@@ -93,8 +93,11 @@ func buildSubscribeHarness(t *testing.T, extraVerbs ...core.VerbRegistration) *s
 	// emit_test.go). Not strictly required for subscribe assertions but keeps
 	// the test environment representative.
 	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
-	if err := hostSub.Start(ctx); err != nil {
-		t.Fatalf("buildSubscribeHarness: hostSub.Start: %v", err)
+	if err := hostSub.Prepare(ctx); err != nil {
+		t.Fatalf("buildSubscribeHarness: hostSub.Prepare: %v", err)
+	}
+	if err := hostSub.Activate(ctx); err != nil {
+		t.Fatalf("buildSubscribeHarness: hostSub.Activate: %v", err)
 	}
 	t.Cleanup(func() { _ = hostSub.Stop(context.Background()) })
 

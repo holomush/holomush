@@ -7,9 +7,27 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
+	abacsetup "github.com/holomush/holomush/internal/access/setup"
+	"github.com/holomush/holomush/internal/admin/policy"
+	"github.com/holomush/holomush/internal/admin/socket"
+	authsetup "github.com/holomush/holomush/internal/auth/setup"
+	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/cluster"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/audit"
+	"github.com/holomush/holomush/internal/eventbus/audit/chain"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/lifecycle"
+	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	sessionsetup "github.com/holomush/holomush/internal/session/setup"
+	"github.com/holomush/holomush/internal/store"
+	tlscerts "github.com/holomush/holomush/internal/tls"
+	worldsetup "github.com/holomush/holomush/internal/world/setup"
 )
 
 // stubSubsystem is a minimal lifecycle.Subsystem for testing the
@@ -20,18 +38,24 @@ type stubSubsystem struct {
 
 func (s stubSubsystem) ID() lifecycle.SubsystemID          { return s.id }
 func (s stubSubsystem) DependsOn() []lifecycle.SubsystemID { return nil }
-func (s stubSubsystem) Start(_ context.Context) error      { return nil }
+func (s stubSubsystem) Prepare(_ context.Context) error    { return nil }
+func (s stubSubsystem) Activate(_ context.Context) error   { return nil }
 func (s stubSubsystem) Stop(_ context.Context) error       { return nil }
 
-// allStubs returns the full 16-element stub list in production order.
+// allStubs returns the full 17-element stub list in production order.
 // Callers that only care about presence can use this; callers that care about
 // position should build the slice inline so the ordering is explicit.
 //
+// Index 1 (SubsystemTLS) was added in 07-09 Task 3 (D-12 Wave A, LOW-8):
+// productionSubsystems switched from a 16-position positional parameter list
+// to the named productionSubsystemSet struct, and TLS finally registers as a
+// real subsystem.
 // Index 14 (SubsystemRekeyCheckpointSweep) was added in sub-epic E Task 6.
 // Index 15 (SubsystemOutboxRelay) was added in Phase 5 05-07 (MODEL-04 relay).
-func allStubs() [16]stubSubsystem {
-	return [16]stubSubsystem{
+func allStubs() [17]stubSubsystem {
+	return [17]stubSubsystem{
 		{id: lifecycle.SubsystemDatabase},
+		{id: lifecycle.SubsystemTLS},
 		{id: lifecycle.SubsystemABAC},
 		{id: lifecycle.SubsystemAuth},
 		{id: lifecycle.SubsystemWorld},
@@ -50,14 +74,34 @@ func allStubs() [16]stubSubsystem {
 	}
 }
 
+// setFromStubs builds a productionSubsystemSet from allStubs()'s 17-element
+// array, mirroring the field order documented on allStubs.
+func setFromStubs(s [17]stubSubsystem) productionSubsystemSet {
+	return productionSubsystemSet{
+		Database:             s[0],
+		TLS:                  s[1],
+		ABAC:                 s[2],
+		Auth:                 s[3],
+		World:                s[4],
+		Sessions:             s[5],
+		Plugins:              s[6],
+		Bootstrap:            s[7],
+		CryptoChainVerifier:  s[8],
+		EventBus:             s[9],
+		Cluster:              s[10],
+		AuditProjection:      s[11],
+		CryptoPolicy:         s[12],
+		GRPC:                 s[13],
+		AdminSocket:          s[14],
+		RekeyCheckpointSweep: s[15],
+		OutboxRelay:          s[16],
+	}
+}
+
 // TestProductionSubsystemsIncludesCluster asserts that the production
 // subsystem slice includes SubsystemCluster.
 func TestProductionSubsystemsIncludesCluster(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	found := false
 	for _, sub := range subs {
@@ -69,8 +113,8 @@ func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 	if !found {
 		t.Fatal("productionSubsystems does not include SubsystemCluster")
 	}
-	if len(subs) != 16 {
-		t.Errorf("productionSubsystems returned %d subsystems; want 16 after Phase 5 05-07 OutboxRelay", len(subs))
+	if len(subs) != 17 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 17 after 07-09 TLS registration", len(subs))
 	}
 }
 
@@ -111,11 +155,7 @@ func TestSubsystemAdminSocketConstantExists(t *testing.T) {
 // TestProductionSubsystemsIncludesAdminSocket verifies AC-C10: the admin
 // socket subsystem is present in the production orchestrator slice.
 func TestProductionSubsystemsIncludesAdminSocket(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	found := false
 	for _, sub := range subs {
@@ -129,14 +169,27 @@ func TestProductionSubsystemsIncludesAdminSocket(t *testing.T) {
 	}
 }
 
+// TestProductionSubsystemsIncludesTLS verifies 07-09 Task 3: TLS is finally
+// registered in the production orchestrator slice.
+func TestProductionSubsystemsIncludesTLS(t *testing.T) {
+	subs := productionSubsystems(setFromStubs(allStubs()))
+
+	found := false
+	for _, sub := range subs {
+		if sub.ID() == lifecycle.SubsystemTLS {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("productionSubsystems does not include SubsystemTLS")
+	}
+}
+
 // TestProductionSubsystemsIncludesCryptoChainVerifier verifies that
 // CryptoChainVerifier appears between Bootstrap and EventBus in the slice.
 func TestProductionSubsystemsIncludesCryptoChainVerifier(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	bootstrapIdx := -1
 	verifierIdx := -1
@@ -166,11 +219,7 @@ func TestProductionSubsystemsIncludesCryptoChainVerifier(t *testing.T) {
 // TestProductionSubsystemsIncludesCryptoPolicy verifies that CryptoPolicy
 // appears between AuditProjection and gRPC in the slice.
 func TestProductionSubsystemsIncludesCryptoPolicy(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	auditIdx := -1
 	policyIdx := -1
@@ -202,11 +251,7 @@ func TestProductionSubsystemsIncludesCryptoPolicy(t *testing.T) {
 // EventBus, and AuditProjection per Task 28's DependsOn declaration
 // (sub-epic E T37 / holomush-jxo8.7.34).
 func TestProductionSubsystemsIncludesRekeyCheckpointSweep(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	indexOf := func(id lifecycle.SubsystemID) int {
 		for i, sub := range subs {
@@ -233,8 +278,8 @@ func TestProductionSubsystemsIncludesRekeyCheckpointSweep(t *testing.T) {
 	if sweepIdx <= auditProjIdx {
 		t.Errorf("sweep (%d) must run after AuditProjection (%d)", sweepIdx, auditProjIdx)
 	}
-	if len(subs) != 16 {
-		t.Errorf("productionSubsystems returned %d subsystems; want 16 after Phase 5 05-07 OutboxRelay", len(subs))
+	if len(subs) != 17 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 17 after 07-09 TLS registration", len(subs))
 	}
 }
 
@@ -242,11 +287,7 @@ func TestProductionSubsystemsIncludesRekeyCheckpointSweep(t *testing.T) {
 // MODEL-04 relay (05-07) is present AND positioned after EventBus + Database
 // (its declared dependencies).
 func TestProductionSubsystemsIncludesOutboxRelayAfterEventBus(t *testing.T) {
-	s := allStubs()
-	subs := productionSubsystems(
-		s[0], s[1], s[2], s[3], s[4], s[5], s[6],
-		s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15],
-	)
+	subs := productionSubsystems(setFromStubs(allStubs()))
 
 	indexOf := func(id lifecycle.SubsystemID) int {
 		for i, sub := range subs {
@@ -272,4 +313,149 @@ func TestProductionSubsystemsIncludesOutboxRelayAfterEventBus(t *testing.T) {
 	if relayIdx <= dbIdx {
 		t.Errorf("outbox relay (%d) must run after Database (%d)", relayIdx, dbIdx)
 	}
+}
+
+// phaseCallLog records a (phase, id) call in the order it happened,
+// guarded by a mutex — the property test below asserts over the FULL
+// interleaving of Prepare and Activate calls across the real production
+// graph, not just per-subsystem ordering.
+type phaseCallLog struct {
+	mu    sync.Mutex
+	calls []phaseCallEntry
+}
+
+type phaseCallEntry struct {
+	phase string
+	id    lifecycle.SubsystemID
+}
+
+func (l *phaseCallLog) record(phase string, id lifecycle.SubsystemID) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls = append(l.calls, phaseCallEntry{phase: phase, id: id})
+}
+
+func (l *phaseCallLog) snapshot() []phaseCallEntry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]phaseCallEntry, len(l.calls))
+	copy(out, l.calls)
+	return out
+}
+
+// phaseRecordingStub is a lifecycle.Subsystem whose ID/DependsOn are sourced
+// from a REAL production subsystem type (realProductionSubsystemGraph, the
+// same sourcing core_topo_order_test.go's pin uses — never a hand-copied
+// dep list) and whose Prepare/Activate both record into a SHARED log, so
+// the property test below can assert over the full cross-subsystem
+// interleaving.
+type phaseRecordingStub struct {
+	id   lifecycle.SubsystemID
+	deps []lifecycle.SubsystemID
+	log  *phaseCallLog
+}
+
+func (s *phaseRecordingStub) ID() lifecycle.SubsystemID          { return s.id }
+func (s *phaseRecordingStub) DependsOn() []lifecycle.SubsystemID { return s.deps }
+func (s *phaseRecordingStub) Prepare(_ context.Context) error {
+	s.log.record("Prepare", s.id)
+	return nil
+}
+
+func (s *phaseRecordingStub) Activate(_ context.Context) error {
+	s.log.record("Activate", s.id)
+	return nil
+}
+func (s *phaseRecordingStub) Stop(_ context.Context) error { return nil }
+
+// realProductionSubsystemGraphForPropertyTest constructs every one of the 17
+// production subsystem types with a minimal/zero-value config and reads
+// each one's real DependsOn() LIVE — the identical construction
+// realProductionSubsystemGraph (core_topo_order_test.go) uses, duplicated
+// here only because that helper returns a plain dep map, not constructed
+// subsystem instances, and both call sites independently need "one
+// authoritative list of the 17 production types" without hand-copying deps
+// between them.
+func realProductionSubsystemGraphForPropertyTest(t *testing.T) map[lifecycle.SubsystemID][]lifecycle.SubsystemID {
+	t.Helper()
+
+	pill, _ := cluster.NewTestPill()
+	clusterSub, err := cluster.NewSubsystem(
+		cluster.Config{ClusterID: "core-subsystems-property-test"},
+		cluster.Deps{Pill: pill},
+	)
+	require.NoError(t, err, "cluster.NewSubsystem must construct without touching live resources")
+
+	subs := []lifecycle.Subsystem{
+		store.NewSubsystem(store.SubsystemConfig{}),
+		tlscerts.NewTLSSubsystem(tlscerts.TLSSubsystemConfig{}),
+		abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{}),
+		authsetup.NewAuthSubsystem(authsetup.AuthSubsystemConfig{}),
+		worldsetup.NewWorldSubsystem(worldsetup.WorldSubsystemConfig{}),
+		sessionsetup.NewSessionSubsystem(sessionsetup.SessionSubsystemConfig{}),
+		pluginsetup.NewPluginSubsystem(pluginsetup.PluginSubsystemConfig{}),
+		bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{}),
+		chain.NewVerifierSubsystem(chain.VerifierSubsystemConfig{}),
+		eventbus.NewSubsystem(eventbus.Config{}),
+		clusterSub,
+		audit.NewSubsystem(nil, nil, audit.Config{}),
+		policy.NewCryptoPolicySubsystem(policy.CryptoPolicySubsystemConfig{}),
+		newGRPCSubsystem(grpcSubsystemConfig{}),
+		socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{}),
+		dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{}),
+		worldsetup.NewOutboxRelaySubsystem(worldsetup.OutboxRelaySubsystemConfig{}),
+	}
+
+	graph := make(map[lifecycle.SubsystemID][]lifecycle.SubsystemID, len(subs))
+	for _, s := range subs {
+		graph[s.ID()] = s.DependsOn()
+	}
+	require.Len(t, graph, 17,
+		"expected exactly the 17 production subsystems (productionSubsystemSet); "+
+			"a subsystem was added or removed without updating this test's construction list")
+	return graph
+}
+
+// TestStartAllActivatesNothingUntilEverySubsystemHasPrepared is D-11's
+// whole guarantee, stated as an executable property over the REAL
+// production dependency graph rather than per-subsystem inspection.
+//
+// grpcSubsystem.DependsOn() once excluded AuditProjection, so gRPC could
+// serve before the audit projection was up (07-10 fixed that ONE edge).
+// This property makes the entire CLASS of bug unrepresentable: a future
+// subsystem that forgets a DependsOn edge still cannot serve before every
+// subsystem has finished acquiring, because the two-sweep orchestrator
+// never calls any Activate until every Prepare in the whole graph has
+// returned — independent of which edges exist.
+func TestStartAllActivatesNothingUntilEverySubsystemHasPrepared(t *testing.T) {
+	graph := realProductionSubsystemGraphForPropertyTest(t)
+	log := &phaseCallLog{}
+
+	orch := lifecycle.NewOrchestrator()
+	for id, deps := range graph {
+		orch.Register(&phaseRecordingStub{id: id, deps: deps, log: log})
+	}
+
+	require.NoError(t, orch.StartAll(context.Background()))
+
+	calls := log.snapshot()
+	require.Len(t, calls, 2*len(graph), "expected one Prepare + one Activate per registered subsystem")
+
+	lastPrepareIdx := -1
+	firstActivateIdx := -1
+	for i, c := range calls {
+		switch c.phase {
+		case "Prepare":
+			lastPrepareIdx = i
+		case "Activate":
+			if firstActivateIdx == -1 {
+				firstActivateIdx = i
+			}
+		}
+	}
+	require.NotEqual(t, -1, lastPrepareIdx)
+	require.NotEqual(t, -1, firstActivateIdx)
+	require.Less(t, lastPrepareIdx, firstActivateIdx,
+		"no Activate may be observed before the LAST Prepare across the real production graph — "+
+			"this is D-11's guarantee as an executable property, not per-subsystem inspection")
 }

@@ -23,8 +23,10 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/control"
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/grpcclient"
+	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -33,12 +35,14 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// noopEventStore is a stub EventAppender for tests that don't exercise event functionality.
-type noopEventStore struct{}
+// noopPublisher is a stub eventbus.Publisher for the presence emitter and
+// CoreServer.publisher in tests that don't exercise
+// arrive/leave/session_ended or command_response/command_error delivery.
+type noopPublisher struct{}
 
-func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+func (n *noopPublisher) Publish(_ context.Context, _ eventbus.Event) error { return nil }
 
-var _ core.EventAppender = (*noopEventStore)(nil)
+var _ eventbus.Publisher = (*noopPublisher)(nil)
 
 // newMinimalDispatcher creates a dispatcher with no registered commands for tests
 // that don't exercise command functionality.
@@ -259,13 +263,12 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
-			eventStore := &noopEventStore{}
-			engine := core.NewEngine(eventStore)
+			presenceEmitter := presence.NewEmitter(&noopPublisher{}, func() string { return "main" })
 
 			// Create gRPC server with mTLS
 			disp, cmdSvc := newMinimalDispatcher()
-			coreServer := grpcpkg.NewCoreServer(engine, env.sessionStore, disp, cmdSvc,
-				grpcpkg.WithEventStore(eventStore))
+			coreServer := grpcpkg.NewCoreServer(presenceEmitter, env.sessionStore, disp, cmdSvc,
+				grpcpkg.WithEventPublisher(&noopPublisher{}, func() string { return "main" }))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -294,7 +297,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create gRPC client with mTLS
-			client, err := grpcpkg.NewClient(env.ctx, grpcpkg.ClientConfig{
+			client, err := grpcclient.NewClient(env.ctx, grpcclient.ClientConfig{
 				Address:   env.grpcAddr,
 				TLSConfig: clientTLS,
 			})
@@ -331,13 +334,12 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
-			eventStore := &noopEventStore{}
-			engine := core.NewEngine(eventStore)
+			presenceEmitter := presence.NewEmitter(&noopPublisher{}, func() string { return "main" })
 
 			// Create gRPC server with mTLS
 			disp, cmdSvc := newMinimalDispatcher()
-			coreServer := grpcpkg.NewCoreServer(engine, env.sessionStore, disp, cmdSvc,
-				grpcpkg.WithEventStore(eventStore))
+			coreServer := grpcpkg.NewCoreServer(presenceEmitter, env.sessionStore, disp, cmdSvc,
+				grpcpkg.WithEventPublisher(&noopPublisher{}, func() string { return "main" }))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -371,7 +373,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			badClientTLS, err := tlscerts.LoadClientTLS(badCertsDir, "gateway", "bad-game-id")
 			Expect(err).NotTo(HaveOccurred())
 
-			client, err := grpcpkg.NewClient(env.ctx, grpcpkg.ClientConfig{
+			client, err := grpcclient.NewClient(env.ctx, grpcclient.ClientConfig{
 				Address:   env.grpcAddr,
 				TLSConfig: badClientTLS,
 			})
@@ -495,12 +497,11 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			serverTLS, err := tlscerts.LoadServerTLS(env.certsDir, "core")
 			Expect(err).NotTo(HaveOccurred())
 
-			eventStore := &noopEventStore{}
-			engine := core.NewEngine(eventStore)
+			presenceEmitter := presence.NewEmitter(&noopPublisher{}, func() string { return "main" })
 
 			disp, cmdSvc := newMinimalDispatcher()
-			coreServer := grpcpkg.NewCoreServer(engine, env.sessionStore, disp, cmdSvc,
-				grpcpkg.WithEventStore(eventStore))
+			coreServer := grpcpkg.NewCoreServer(presenceEmitter, env.sessionStore, disp, cmdSvc,
+				grpcpkg.WithEventPublisher(&noopPublisher{}, func() string { return "main" }))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -526,7 +527,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			clientTLS, err := tlscerts.LoadClientTLS(env.certsDir, "gateway", gameID)
 			Expect(err).NotTo(HaveOccurred())
 
-			client, err := grpcpkg.NewClient(env.ctx, grpcpkg.ClientConfig{
+			client, err := grpcclient.NewClient(env.ctx, grpcclient.ClientConfig{
 				Address:   env.grpcAddr,
 				TLSConfig: clientTLS,
 			})

@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventvocab"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
@@ -128,8 +128,8 @@ var _ = Describe("holomush-5rh.8.4: observer denied emit by write-scene-as-parti
 		// any scene". This is the user-facing string produced by
 		// resolveSingleSceneMembership when ListScenesForCharacter returns empty
 		// (observer row excluded by AND p.role IN ('owner', 'member')).
-		denialFrame := observer.WaitForEvent(ctx, string(core.EventTypeCommandError))
-		var crp core.CommandResponsePayload
+		denialFrame := observer.WaitForEvent(ctx, string(eventvocab.EventTypeCommandError))
+		var crp eventvocab.CommandResponsePayload
 		Expect(json.Unmarshal(denialFrame.GetPayload(), &crp)).To(Succeed(),
 			"command_error payload must unmarshal as CommandResponsePayload")
 		Expect(crp.Text).To(ContainSubstring("not currently in any scene"),

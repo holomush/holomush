@@ -297,7 +297,8 @@ func buildFencedReaderEnv(ctx context.Context, pluginName string) *fencedReaderE
 
 	// Host audit subsystem — populates events_audit for emitted events.
 	hostSub := audit.NewSubsystem(rbPrivacyFixedJS{js: bus.JS}, rbPrivacyFixedPool{pool: pool}, audit.Config{})
-	Expect(hostSub.Start(ctx)).To(Succeed())
+	Expect(hostSub.Prepare(ctx)).To(Succeed())
+	Expect(hostSub.Activate(ctx)).To(Succeed())
 
 	// VerbRegistry — needed by RenderingPublisher.
 	registry, err := core.BootstrapVerbRegistry("test")

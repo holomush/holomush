@@ -87,7 +87,8 @@ var _ = Describe("Plugin audit isolation", func() {
 		hostSub.SetLateInitProvider(func() (*audit.OwnerMap, *audit.PluginConsumerManager) {
 			return owners, pluginMgr
 		})
-		Expect(hostSub.Start(ctx)).To(Succeed())
+		Expect(hostSub.Prepare(ctx)).To(Succeed())
+		Expect(hostSub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
 		rawPub := bus.Bus.Publisher()

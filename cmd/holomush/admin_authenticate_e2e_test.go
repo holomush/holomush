@@ -212,7 +212,7 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
-// setupAdminAuthEnv boots the full 14-subsystem server via runCoreWithDeps,
+// setupAdminAuthEnv boots the full 17-subsystem server via runCoreWithDeps,
 // pre-seeds players + characters + roles + TOTP enrollments, writes a KEK
 // file, and returns a fixture wired to the live admin UDS.
 func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {

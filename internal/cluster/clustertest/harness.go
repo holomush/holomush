@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventbus/natsconn"
 	"github.com/holomush/holomush/internal/idgen"
 )
 
@@ -113,7 +114,7 @@ func New(t TB, clusterID string, n int, opts ...Option) *Harness {
 		// production observability/metrics will see.
 		memberID := cluster.MemberID(idgen.New().String())
 		reg, err := cluster.NewSubsystem(cfg, cluster.Deps{
-			Conn:          emb.Conn,
+			ConnProvider:  cluster.ConnProviderFunc(func() natsconn.Conn { return emb.Conn }),
 			Logger:        logger,
 			Pill:          pill,
 			SelfIDForTest: memberID,
@@ -122,10 +123,13 @@ func New(t TB, clusterID string, n int, opts ...Option) *Harness {
 			t.Fatalf("NewSubsystem[%d]: %v", i, err)
 		}
 		startCtx, cancelStart := context.WithTimeout(context.Background(), 5*time.Second)
-		err = reg.Start(startCtx)
+		err = reg.Prepare(startCtx)
+		if err == nil {
+			err = reg.Activate(startCtx)
+		}
 		cancelStart()
 		if err != nil {
-			t.Fatalf("reg[%d].Start: %v", i, err)
+			t.Fatalf("reg[%d].Prepare/Activate: %v", i, err)
 		}
 		// Loop-var capture is safe under Go 1.22+ semantics (project on
 		// Go 1.26.2). Bound Stop with a timeout so a wedged shutdown
