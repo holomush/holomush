@@ -247,12 +247,11 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	p.auditSrv.store = NewSceneAuditStore(store.Pool())
 	p.auditSrv.memberLookup = store // *SceneStore satisfies sceneMembershipLookup
 
-	// Set the game ID for NATS dot-style emit subjects. Substrate uses
-	// "main" as the default game_id when unset (see internal/grpc/server.go:181).
-	// ServiceConfig does not currently carry a game_id field; this hardcode
-	// is the documented expedient until multi-tenant deployment is real
-	// (tracked as a post-Phase-4 follow-up).
-	p.service.gameID = "main"
+	// Set the game ID for NATS dot-style emit subjects, from the host-resolved
+	// value goplugin.Host.Init populates onto ServiceConfig.GameId (falls back
+	// to "main", eventbus.Config's own default, when unset — e.g. a test
+	// harness that constructs ServiceConfig directly).
+	p.service.gameID = pluginsdk.ResolveGameID(config)
 
 	// Wire the real publish eventer now that sink, store, and gameID are all
 	// set. SetEventSink runs before Init in the SDK lifecycle, so

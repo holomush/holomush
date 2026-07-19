@@ -227,8 +227,19 @@ type ServiceConfig struct {
 	// every non-exempt host capability its code can consume (via an implemented
 	// *Aware interface) appears here, failing load otherwise (INV-PLUGIN-54).
 	DeclaredCapabilities []string `protobuf:"bytes,4,rep,name=declared_capabilities,json=declaredCapabilities,proto3" json:"declared_capabilities,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// The game id the host resolved via gameIDProvider (cmd/holomush/core.go)
+	// for this boot, the same value eventbus.Subsystem qualifies every
+	// host-side subject with. Plugins that construct fully-qualified
+	// "events.<game_id>.…" subjects directly (rather than emitting a
+	// domain-relative reference for the host to qualify) MUST use this value
+	// instead of a hardcoded literal, or their publishes silently diverge from
+	// every subscriber's qualified filter subjects. Empty when the caller
+	// constructed ServiceConfig without setting it (e.g. a test harness); a
+	// plugin SHOULD fall back to "main" (eventbus.Config's own default) in
+	// that case. Populated by goplugin.Host.Init from Host.GameID().
+	GameId        string `protobuf:"bytes,5,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServiceConfig) Reset() {
@@ -287,6 +298,13 @@ func (x *ServiceConfig) GetDeclaredCapabilities() []string {
 		return x.DeclaredCapabilities
 	}
 	return nil
+}
+
+func (x *ServiceConfig) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
 }
 
 // InitRequest is the host's first call to a freshly connected plugin process.
@@ -1224,12 +1242,13 @@ var File_holomush_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x1fholomush/plugin/v1/plugin.proto\x12\x12holomush.plugin.v1\x1a\x1bbuf/validate/validate.proto\"\xb7\x03\n" +
+	"\x1fholomush/plugin/v1/plugin.proto\x12\x12holomush.plugin.v1\x1a\x1bbuf/validate/validate.proto\"\xd0\x03\n" +
 	"\rServiceConfig\x12+\n" +
 	"\x11connection_string\x18\x01 \x01(\tR\x10connectionString\x12d\n" +
 	"\x11required_services\x18\x02 \x03(\v27.holomush.plugin.v1.ServiceConfig.RequiredServicesEntryR\x10requiredServices\x12X\n" +
 	"\rplugin_config\x18\x03 \x03(\v23.holomush.plugin.v1.ServiceConfig.PluginConfigEntryR\fpluginConfig\x123\n" +
-	"\x15declared_capabilities\x18\x04 \x03(\tR\x14declaredCapabilities\x1aC\n" +
+	"\x15declared_capabilities\x18\x04 \x03(\tR\x14declaredCapabilities\x12\x17\n" +
+	"\agame_id\x18\x05 \x01(\tR\x06gameId\x1aC\n" +
 	"\x15RequiredServicesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a?\n" +

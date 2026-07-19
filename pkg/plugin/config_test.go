@@ -38,3 +38,16 @@ func TestDecodeConfigNilSafeWhenNoPluginConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, got.VoteWindow)
 }
+
+func TestResolveGameIDReturnsHostSuppliedValue(t *testing.T) {
+	sc := &pluginv1.ServiceConfig{GameId: "01KXVJHWPYXZ9NGPBC3V0C9WD0"}
+	require.Equal(t, "01KXVJHWPYXZ9NGPBC3V0C9WD0", ResolveGameID(sc))
+}
+
+func TestResolveGameIDFallsBackToMainWhenUnset(t *testing.T) {
+	require.Equal(t, "main", ResolveGameID(&pluginv1.ServiceConfig{}))
+}
+
+func TestResolveGameIDFallsBackToMainWhenConfigNil(t *testing.T) {
+	require.Equal(t, "main", ResolveGameID(nil))
+}

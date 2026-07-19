@@ -291,11 +291,12 @@ func (p *channelPlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig
 	// (01-06) rather than a second unfenced path (01-05b HIGH-4).
 	p.service.history = p.auditSrv
 
-	// Set the game id for JetStream dot-style emit subjects. Substrate uses
-	// "main" as the default game_id when unset (mirrors core-scenes main.go);
-	// ServiceConfig carries no game_id field yet — documented expedient until
-	// multi-tenant deployment is real.
-	p.service.gameID = "main"
+	// Set the game id for JetStream dot-style emit subjects, from the
+	// host-resolved value goplugin.Host.Init populates onto
+	// ServiceConfig.GameId (falls back to "main", eventbus.Config's own
+	// default, when unset — e.g. a test harness that constructs ServiceConfig
+	// directly). Mirrors core-scenes main.go.
+	p.service.gameID = pluginsdk.ResolveGameID(config)
 
 	// Build the live-emit emitter now that the sink + gameID are set.
 	// SetEventSink runs before Init in the SDK lifecycle, so eventSink is

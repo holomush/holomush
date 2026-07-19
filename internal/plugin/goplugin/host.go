@@ -1012,6 +1012,13 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			Config: &pluginv1.ServiceConfig{
 				RequiredServices:     requiredServices,
 				DeclaredCapabilities: declaredCaps,
+				// h.gameID is the same gameIDProvider-resolved value every
+				// host-side subject qualification uses (GameID(), read
+				// under h.mu above). Plugins that build fully-qualified
+				// "events.<game_id>.…" subjects directly MUST use this
+				// instead of a hardcoded literal (holomush debug
+				// e2e-scene-pose-regression).
+				GameId: h.gameID,
 			},
 		}
 
