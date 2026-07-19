@@ -304,8 +304,8 @@ scopes:
       - "internal/session/session_connection_mutator_test.go"
       - "internal/store/session_store.go"
       - "internal/store/session_store_integration_test.go"
-      # SCENE+STORE: server.go carries P5-11 + TS; privacy_test carries P4 + TS.
-      - "internal/grpc/server.go"
+      # SCENE+STORE: subscribe_handler.go carries P5-11 + TS (moved off server.go in 08-03); privacy_test carries P4 + TS.
+      - "internal/grpc/subscribe_handler.go"
       - "test/integration/privacy/privacy_test.go"
       # SCENE+EVENTBUS: query_stream_history carries P4 + ROPS; the colon-eradication meta-tests carry P4 + ROPS.
       - "internal/grpc/query_stream_history.go"
@@ -649,7 +649,7 @@ scopes:
       - "internal/eventbus/history/readback.go"
       - "internal/eventbus/publisher.go"
       - "internal/eventbus/publisher_test.go"
-      - "internal/grpc/server.go"
+      - "internal/grpc/subscribe_handler.go"
       - "internal/grpc/subscribe_loop_test.go"
       - "internal/testsupport/holomushtest/server.go"
       - "internal/testsupport/integrationtest/crypto.go"
@@ -1866,7 +1866,7 @@ invariants:
       is deleted, not stubbed."
     binding: pending
     refs:
-      - {file: "internal/grpc/server.go", token: "INV-TS-6"}
+      - {file: "internal/grpc/subscribe_handler.go", token: "INV-TS-6"}
       - {file: "internal/grpc/subscribe_loop_test.go", token: "INV-TS-6"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-6"}
       - {file: "test/integration/privacy/privacy_test.go", token: "INV-TS-6"}
@@ -1878,7 +1878,7 @@ invariants:
       floor ns is included."
     binding: pending
     refs:
-      - {file: "internal/grpc/server.go", token: "INV-TS-7"}
+      - {file: "internal/grpc/subscribe_handler.go", token: "INV-TS-7"}
       - {file: "internal/grpc/subscribe_loop_test.go", token: "INV-TS-7"}
       - {file: "internal/pgnanos/doc.go", token: "INV-TS-7"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-7"}
@@ -2951,7 +2951,7 @@ invariants:
       - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-24"}
       - {file: "internal/grpc/focus/auto_focus_on_join.go", token: "INV-P5-11"}
       - {file: "internal/grpc/focus/auto_focus_on_join_test.go", token: "INV-P5-11"}
-      - {file: "internal/grpc/server.go", token: "INV-P5-11"}
+      - {file: "internal/grpc/subscribe_handler.go", token: "INV-P5-11"}
       - {file: "internal/grpc/subscribe_server_test.go", token: "INV-P5-11"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-11"}
       - {file: "pkg/plugin/focus_client.go", token: "INV-P5-11"}
