@@ -224,15 +224,36 @@ Plans:
 **Plans:** 9 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 08-01-PLAN.md — Wave 0a: create `internal/focuscontract` leaf package + alias re-exports in `internal/grpc/focus` (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 08-02-PLAN.md — Wave 0b: rewire 7 plugin files off `internal/grpc/focus`, invert the authguard manifest seam, settle D-08 `TestLoadPlugin` (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 08-03-PLAN.md — ARCH-01: extract `SubscribeHandler` (subscribe/stream-delivery cluster, 8 methods) (wave 3)
 - [ ] 08-04-PLAN.md — ARCH-02: extract `IdentityStore` (D-06 identity registry with its own lock) (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 08-05-PLAN.md — ARCH-01: extract `CommandHandler` + `LifecycleHandler` (7 methods) (wave 4)
 - [ ] 08-06-PLAN.md — ARCH-02: extract `PluginRuntime` (delivery + read-side lookups) (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 08-07-PLAN.md — ARCH-01: extract `QueryHandler`, reduce `CoreServer` to a four-unit facade (wave 5)
 - [ ] 08-08-PLAN.md — ARCH-02: extract `PluginLoader`, assign `Close`/`UnloadPlugin`, reduce `Manager` to a facade (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 08-09-PLAN.md — Wave C: regrowth ratchet (import direction + size ceilings), census, bind `INV-PLUGIN-56` (wave 6)
+
+**Cross-cutting constraints:**
+
+- task test:int is green and git diff --stat origin/main...HEAD -- test/integration/ shows no assertion edit.
 
 ### Phase 9: Test-Quality & Code-Health Sweep
 
