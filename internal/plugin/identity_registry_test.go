@@ -161,7 +161,7 @@ func TestComputeHashesProducesNonEmptyForBinary(t *testing.T) {
 		Manifest: &Manifest{Name: "x", Version: "1", Type: TypeBinary, BinaryPlugin: &BinaryConfig{Executable: "bin/x"}},
 		Dir:      dir,
 	}
-	mh, ch, err := mgr.computeHashes(dp)
+	mh, ch, err := mgr.loader.computeHashes(dp)
 	require.NoError(t, err)
 	assert.Len(t, mh, 32, "manifest hash must be sha256 (32 bytes)")
 	assert.Len(t, ch, 32, "binary content hash must be sha256")
@@ -174,7 +174,7 @@ func TestComputeHashesNilContentForSettingPlugin(t *testing.T) {
 
 	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
 	dp := &DiscoveredPlugin{Manifest: &Manifest{Name: "x", Version: "1", Type: TypeSetting}, Dir: dir}
-	_, ch, err := mgr.computeHashes(dp)
+	_, ch, err := mgr.loader.computeHashes(dp)
 	require.NoError(t, err)
 	assert.Nil(t, ch, "setting plugins MUST have nil content_hash")
 }
@@ -188,7 +188,7 @@ func TestComputeHashesFailsWhenManifestUnreadable(t *testing.T) {
 		Manifest: &Manifest{Name: "missing-manifest", Version: "1", Type: TypeSetting},
 		Dir:      dir,
 	}
-	_, _, err := mgr.computeHashes(dp)
+	_, _, err := mgr.loader.computeHashes(dp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_HASH_MANIFEST_READ")
 }
@@ -204,7 +204,7 @@ func TestComputeHashesFailsForBinaryWithMissingExecutableField(t *testing.T) {
 		Manifest: &Manifest{Name: "x", Version: "1", Type: TypeBinary, BinaryPlugin: &BinaryConfig{}},
 		Dir:      dir,
 	}
-	_, _, err := mgr.computeHashes(dp)
+	_, _, err := mgr.loader.computeHashes(dp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_HASH_BINARY_MISSING_EXECUTABLE")
 }
@@ -220,7 +220,7 @@ func TestComputeHashesFailsForBinaryWhenExecutableUnreadable(t *testing.T) {
 		Manifest: &Manifest{Name: "x", Version: "1", Type: TypeBinary, BinaryPlugin: &BinaryConfig{Executable: "bin/missing"}},
 		Dir:      dir,
 	}
-	_, _, err := mgr.computeHashes(dp)
+	_, _, err := mgr.loader.computeHashes(dp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_HASH_BINARY_READ")
 }
@@ -235,7 +235,7 @@ func TestComputeHashesFailsForUnknownType(t *testing.T) {
 		Manifest: &Manifest{Name: "x", Version: "1", Type: Type("bogus")},
 		Dir:      dir,
 	}
-	_, _, err := mgr.computeHashes(dp)
+	_, _, err := mgr.loader.computeHashes(dp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_HASH_UNKNOWN_TYPE")
 }
@@ -250,9 +250,9 @@ func TestComputeHashesLuaContentHashIsDeterministic(t *testing.T) {
 	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
 	dp := &DiscoveredPlugin{Manifest: &Manifest{Name: "x", Version: "1", Type: TypeLua, LuaPlugin: &LuaConfig{Entry: "a.lua"}}, Dir: dir}
 
-	_, ch1, err := mgr.computeHashes(dp)
+	_, ch1, err := mgr.loader.computeHashes(dp)
 	require.NoError(t, err)
-	_, ch2, err := mgr.computeHashes(dp)
+	_, ch2, err := mgr.loader.computeHashes(dp)
 	require.NoError(t, err)
 	assert.Equal(t, ch1, ch2, "Lua content_hash MUST be deterministic")
 }

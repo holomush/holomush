@@ -597,10 +597,10 @@ func (h *Host) GameID() string {
 }
 
 // SetIdentityRegistry implements plugins.IdentityRegistryConfigurer.
-// Called by Manager.RegisterHost via findOptional after both are constructed.
-// The Manager itself implements IdentityRegistry, so passing m to the host
-// satisfies the late-binding contract (Hosts are constructed before Manager
-// RegisterHost returns).
+// Called by PluginLoader.RegisterHost via findOptional after both are
+// constructed. The loader passes its IdentityStore, which implements
+// IdentityRegistry, satisfying the late-binding contract (Hosts are
+// constructed before RegisterHost returns).
 func (h *Host) SetIdentityRegistry(reg plugins.IdentityRegistry) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

@@ -17,12 +17,12 @@ import "context"
 // luaHost fallback, it inserts into m.loaded but NOT m.pluginHosts. Existing
 // tests rely on that path.
 func (m *Manager) TestLoadPlugin(name string, manifest *Manifest) {
-	m.mu.Lock()
-	host, ok := m.hosts[manifest.Type]
-	if !ok && manifest.Type == TypeLua && m.luaHost != nil {
-		host, ok = m.luaHost, true
+	m.loader.mu.Lock()
+	host, ok := m.loader.hosts[manifest.Type]
+	if !ok && manifest.Type == TypeLua && m.loader.luaHost != nil {
+		host, ok = m.loader.luaHost, true
 	}
-	m.mu.Unlock()
+	m.loader.mu.Unlock()
 
 	if ok {
 		if err := host.Load(context.Background(), manifest, ""); err != nil {
@@ -74,4 +74,17 @@ func (r *PluginRuntime) TestHasHost(name string) bool {
 // directly, rather than inferring it through a crypto gate.
 func (r *PluginRuntime) TestLookupManifest(name string) *Manifest {
 	return r.lookupManifest(name)
+}
+
+// TestResolveLoadOrder exposes the loader's unexported dependency-ordering
+// entry point so package plugins_test can assert determinism without driving
+// LoadAll.
+func (l *PluginLoader) TestResolveLoadOrder(discovered []*DiscoveredPlugin) (*ResolveResult, error) {
+	return l.resolveLoadOrder(discovered)
+}
+
+// TestComputeHashes exposes the loader's unexported artifact hashing so package
+// plugins_test can pin its output for a fixed input.
+func (l *PluginLoader) TestComputeHashes(dp *DiscoveredPlugin) (manifestHash, contentHash []byte, err error) {
+	return l.computeHashes(dp)
 }

@@ -65,7 +65,7 @@ func TestDiscoverReturnsNilWithoutErrorWhenTheDirectoryIsAbsent(t *testing.T) {
 
 func TestDiscoverReturnsTheManifestForOneValidPlugin(t *testing.T) {
 	dir := t.TempDir()
-	writeManifest(t, dir, "alpha", "name: alpha\nversion: 1.0.0\ntype: setting\n")
+	writeManifest(t, dir, "alpha", "name: alpha\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua\n")
 	loader := newLoaderForTest(t, dir)
 
 	discovered, err := loader.Discover(context.Background())
@@ -82,7 +82,7 @@ func TestDiscoverReturnsTheManifestForOneValidPlugin(t *testing.T) {
 func TestDiscoverSkipsAMalformedManifestAndKeepsTheValidSibling(t *testing.T) {
 	dir := t.TempDir()
 	writeManifest(t, dir, "broken", "name: [unclosed\n\tversion: ??\n")
-	writeManifest(t, dir, "alpha", "name: alpha\nversion: 1.0.0\ntype: setting\n")
+	writeManifest(t, dir, "alpha", "name: alpha\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua\n")
 	loader := newLoaderForTest(t, dir)
 
 	discovered, err := loader.Discover(context.Background())
