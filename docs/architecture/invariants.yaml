@@ -276,6 +276,7 @@ scopes:
       - "docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md"
     owned_paths:
       - "plugins/core-scenes/**"
+      - "internal/focuscontract/**"
       - "internal/grpc/focus/**"
       - "internal/grpc/stream_registry*.go"
       - "internal/grpc/focus_wiring*.go"
@@ -2825,9 +2826,9 @@ invariants:
       one Store-lock."
     binding: pending
     refs:
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-14"}
       - {file: "internal/grpc/focus/auto_focus_on_join.go", token: "INV-P5-1"}
       - {file: "internal/grpc/focus/auto_focus_on_join_test.go", token: "INV-P5-1"}
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-1"}
       - {file: "internal/grpc/focus/set_connection_focus.go", token: "INV-P5-1"}
       - {file: "internal/grpc/focus/set_connection_focus_test.go", token: "INV-P5-1"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-1"}
@@ -2864,9 +2865,9 @@ invariants:
     summary: "AutoFocusOnJoin terminal-only filter: ClientType in {terminal, telnet}; comms_hub connections are NEVER auto-focused."
     binding: pending
     refs:
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-17"}
       - {file: "internal/grpc/focus/auto_focus_on_join.go", token: "INV-P5-4"}
       - {file: "internal/grpc/focus/auto_focus_on_join_test.go", token: "INV-P5-4"}
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-4"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-4"}
       - {file: "pkg/plugin/focus_client.go", token: "INV-P5-4"}
       - {file: "plugins/core-scenes/commands.go", token: "INV-P5-4"}
@@ -2880,7 +2881,7 @@ invariants:
       callback under one Store-lock; falls back to grid on failure with no read-then-mutate race."
     binding: pending
     refs:
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-5"}
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-18"}
       - {file: "internal/grpc/focus/restore_connection_focus.go", token: "INV-P5-5"}
       - {file: "internal/grpc/focus/restore_connection_focus_test.go", token: "INV-P5-5"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-5"}
@@ -2947,9 +2948,9 @@ invariants:
       skipped conn_id is reported and its FocusKey is unchanged."
     binding: pending
     refs:
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-24"}
       - {file: "internal/grpc/focus/auto_focus_on_join.go", token: "INV-P5-11"}
       - {file: "internal/grpc/focus/auto_focus_on_join_test.go", token: "INV-P5-11"}
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-11"}
       - {file: "internal/grpc/server.go", token: "INV-P5-11"}
       - {file: "internal/grpc/subscribe_server_test.go", token: "INV-P5-11"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-11"}
@@ -2965,7 +2966,7 @@ invariants:
       fallback) or restore-first (leave's scene_leave_ic reaches the subscribed connection); no torn state."
     binding: pending
     refs:
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-12"}
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-25"}
       - {file: "internal/grpc/focus/restore_connection_focus.go", token: "INV-P5-12"}
       - {file: "internal/grpc/focus/restore_connection_focus_test.go", token: "INV-P5-12"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-12"}
@@ -2978,7 +2979,7 @@ invariants:
       reconnect target is preserved."
     binding: pending
     refs:
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-13"}
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-26"}
       - {file: "internal/grpc/focus/set_connection_focus.go", token: "INV-P5-13"}
       - {file: "internal/grpc/focus/set_connection_focus_test.go", token: "INV-P5-13"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-13"}
