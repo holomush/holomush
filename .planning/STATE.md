@@ -4,9 +4,9 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
-status: "Phase 8 in progress — plan 08-01 complete"
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-07-19T17:30:00.000Z"
+status: Phase 8 in progress — plan 08-01 complete
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-07-19T17:56:14.762Z"
 last_activity: 2026-07-19
 last_activity_desc: 08-01 focuscontract seam extraction complete
 progress:
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 8 — God-Object Decomposition
-Plan: 01 of 09 complete (Wave 0 — D-09 seam 1)
+Plan: 2 of 09 complete (Wave 0 — D-09 seam 1)
 Status: Phase 8 in progress — plan 08-01 complete
 Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 
@@ -121,6 +121,7 @@ Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 | Phase 07 P10 | ~45min | 4 tasks | 8 files |
 | Phase 07 P11 | ~4h | 3 tasks | 68 files |
 | Phase 08 P01 | 35m | 3 tasks | 6 files |
+| Phase 08 P02 | ~40m | 4 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -201,6 +202,9 @@ the next milestone yet.
 - [Phase 08]: 08-01: moving the Coordinator doc comments broke TestProvenanceGuard (six INV-SCENE-14/17/18/24/25/26 refs recorded at internal/grpc/focus/coordinator.go). Resolved by retargeting the registry refs to internal/focuscontract/focuscontract.go + adding internal/focuscontract/** to INV-SCENE owned_paths — the registry follows the canonical home rather than duplicating the spec. Expect the same pattern in 08-02 if further INV-annotated comments leave internal/grpc/focus.
 - [Phase 08]: 08-01: D-17 earned its keep on the very first wave — task test was green across all four affected trees while the meta suite was red; only task test:int surfaced it
 - [Phase 08]: 08-01: D-15 zero-integration-churn record for this plan: `git diff --stat origin/main...HEAD -- test/integration/` is EMPTY
+- [Phase ?]: 08-02: moved the deleted authguard manifestAdapter's nil-guard onto Manager.PluginRequestsDecryption/PluginCanReadBack — a typed-nil *Manager in a ManifestLookup is not interface-nil, so authguard.New's AUTHGUARD_DEPENDENCY_NIL check cannot catch it
+- [Phase ?]: 08-02: declared the ManifestLookup mirror interface locally in internal/plugin rather than importing authguard, avoiding a mirror-image import edge
+- [Phase ?]: 08-02: took D-08's export_test.go branch — the post-seam-2 TestLoadPlugin caller set is empty outside internal/plugin, so no build-tag plumbing was needed
 
 ### Pending Todos
 
@@ -233,11 +237,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-19T17:30:00.000Z
+Last session: 2026-07-19T17:56:14.755Z
 Plan 08-01 executed: internal/focuscontract leaf extracted, internal/grpc/focus aliased.
 task test:int and task lint both green; zero integration-tree churn.
-Stopped at: Completed 08-01-PLAN.md
-Resume file: .planning/phases/08-god-object-decomposition/08-02-PLAN.md
+Stopped at: Completed 08-02-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
