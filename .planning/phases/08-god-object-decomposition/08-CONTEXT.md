@@ -42,8 +42,9 @@ basket items that are not the two named god objects. See `<deferred>`.
   (`GetCommandHistory`, `QueryStreamHistory`, `ListFocusPresence`, `ListSessionStreams`,
   `ListAvailableCommands`, `RefreshConnection`, `SessionIdentity`).
 
-- **D-02: Each extracted unit takes ONLY the collaborators it uses, constructor-injected —
-  not a `*CoreServer` backpointer.** This is the actual bar in success criterion 1
+- **D-02: Each unit takes ONLY its own collaborators, never a parent backpointer.**
+  Constructor-injected; no `*CoreServer` field on any extracted unit.
+  This is the actual bar in success criterion 1
   ("separately-testable"). A unit that reaches back into the parent struct is a file split,
   not a decomposition, and will not satisfy the criterion. The ~30-field struct is the
   symptom; narrow per-unit dependency sets are the cure.
@@ -61,9 +62,8 @@ basket items that are not the two named god objects. See `<deferred>`.
 
 ### ARCH-02 — plugin/manager decomposition
 
-- **D-05: Split along the load-time-wiring vs runtime-delivery line named in #4674 and
-  MEDIUM-4.** That line is already identified in the tracking issue; adopt it rather than
-  inventing a new axis.
+- **D-05: Split along the load-time-wiring vs runtime-delivery line.**
+  That axis is named in #4674 and MEDIUM-4 — adopt it rather than inventing a new one.
   - **Load-time:** `Discover`, `computeHashes`, `resolveLoadOrder`, `loadPlugin`, `LoadAll`,
     `seedAliases`, `discoverAndRegisterAttributes`, `unregisterPluginProviders`,
     `warnUnknownTrustAllowlistEntries`, `BuildFocusRedirects`, `RegisterPluginCommands`,
@@ -124,14 +124,14 @@ basket items that are not the two named god objects. See `<deferred>`.
   > it.** Verified live: `rg '"github.com/holomush/holomush/internal/grpc"' internal/telnet/`
   > returns nothing.
 
-- **D-10: `internal/plugin/cryptowiring`'s reach into three eventbus subpackages is NOT
-  unwound here.** It is a wiring package doing wiring and its direction is already one-way
+- **D-10 [informational]: `cryptowiring`'s reach into three eventbus subpackages is NOT unwound here.**
+  It is a wiring package doing wiring and its direction is already one-way
   (`cryptowiring.go:20-22`). Noted, not touched.
 
 ### Complexity threshold + regrowth ratchet (success criterion 3)
 
-- **D-11: The "agreed threshold" is enforced by a committed meta-test ratchet, not a
-  one-time review judgment.** The decisive evidence is MEDIUM-4's own: both files **grew**
+- **D-11: The threshold is a committed meta-test ratchet, not a review judgment.**
+  The decisive evidence is MEDIUM-4's own: both files **grew**
   after #4674 filed them — `manager.go` 1222 → 1869, `server.go` 1331 → 1891. A split with
   no gate demonstrably regrows in this repo. In-repo precedents to follow:
   - `test/meta/plugin_host_capability_decomp_test.go` — a decomposition census meta-test
@@ -141,12 +141,12 @@ basket items that are not the two named god objects. See `<deferred>`.
     imports without false-flagging test fixtures).
   - `cmd/holomush/gateway_closure_test.go` — Phase 7's transitive-closure gate.
 
-- **D-12: The ratchet pins BOTH the size ceilings for the decomposed units AND the import
-  direction established by D-09.** Direction without size regrows the files; size without
-  direction lets the arrows re-tangle.
+- **D-12: The ratchet pins BOTH size ceilings AND import direction.**
+  Size ceilings for the decomposed units, plus the import direction established by D-09.
+  Direction without size regrows the files; size without direction lets the arrows re-tangle.
 
-- **D-13: Do NOT enable repo-wide `funlen` / `gocognit` / `gocyclo` / `cyclop` in
-  `.golangci.yaml`.** None are configured today; turning them on repo-wide is a separate
+- **D-13: Do NOT enable repo-wide complexity linters in `.golangci.yaml`.**
+  No `funlen` / `gocognit` / `gocyclo` / `cyclop` — turning them on repo-wide is a separate
   change with large unrelated blast radius across a mature codebase. Scope the gate to this
   phase's own artifacts.
 
@@ -157,8 +157,9 @@ basket items that are not the two named god objects. See `<deferred>`.
 
 ### Behavior-preservation proof
 
-- **D-15: The contract is — `task test:int` and the whole-system plugin census pass with
-  ZERO edits to assertions under `test/integration/**`.** An assertion edit is a
+- **D-15: The contract is ZERO edits to assertions anywhere under the integration tree.**
+  That is `test/integration/` and all its subdirectories.
+  `task test:int` and the whole-system plugin census pass unchanged. An assertion edit is a
   review-blocking signal that requires written justification, because it means behavior
   moved. This is the operational reading of criteria 1 and 2 ("suites pass *unchanged*").
 
@@ -168,7 +169,8 @@ basket items that are not the two named god objects. See `<deferred>`.
   unit-testability** (each extracted unit constructible and exercisable with only its own
   narrow dependencies), not re-assert behavior the integration suite already pins.
 
-- **D-17: `task test:int` is MANDATORY, not optional.** This is a cross-package type/wiring
+- **D-17: The integration suite is a MANDATORY gate, not optional.**
+  `task test:int` runs at every wave boundary. This is a cross-package type/wiring
   refactor — the exact shape where `task test` stays green while integration breaks
   silently, because `task test` does not compile `//go:build integration` files. Same
   landmine Phase 7 flagged and hit.
@@ -337,12 +339,12 @@ basket items that are not the two named god objects. See `<deferred>`.
   is 1869 / 1891. A gate that only asserts "the split happened" (files exist, methods
   rehomed) would have passed at every point during that growth. Pin the *ceiling*, not just
   the shape.
-- **D-02 is testable as a property, not a vibe.** "Separately-testable" means a unit test can
+- **Decision D-02 is testable as a property, not a vibe.** "Separately-testable" means a unit test can
   construct the extracted unit with only its own collaborators — no `CoreServer`, no
   `Manager`, no harness. If a unit's test still needs the full wiring, the split did not
   land and criterion 1 is not met. Write at least one such test per extracted unit as the
   proof.
-- **D-15's zero-assertion-edit rule needs to be checkable.** `git diff --stat test/integration/`
+- **The zero-assertion-edit rule from D-15 needs to be checkable.** `git diff --stat test/integration/`
   on the phase branch should show no assertion churn; a plan step that runs and records this
   is cheaper than arguing about it in review.
 - **Criterion 3's gateway-boundary half is already banked.** The `internal/grpc` entry in
