@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
 status: Phase 8 in progress — plan 08-01 complete
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-07-19T18:27:30.945Z"
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-07-19T18:50:51.664Z"
 last_activity: 2026-07-19
 last_activity_desc: 08-01 focuscontract seam extraction complete
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 45
-  completed_plans: 39
+  completed_plans: 40
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 8 — God-Object Decomposition
-Plan: 3 of 09 complete (Wave 0 — D-09 seam 1)
+Plan: 4 of 09 complete (Wave 0 — D-09 seam 1)
 Status: Phase 8 in progress — plan 08-01 complete
 Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 
@@ -123,6 +123,7 @@ Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 | Phase 08 P01 | 35m | 3 tasks | 6 files |
 | Phase 08 P02 | ~40m | 4 tasks | 15 files |
 | Phase 08 P03 | 55m | 3 tasks | 8 files |
+| Phase 08 P04 | ~55m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -209,6 +210,8 @@ the next milestone yet.
 - [Phase ?]: SubscribeDeps injects buildCharacterIdentity and recomputeSessionLiveness as function values, not a CoreServer backpointer (D-02 held despite cross-cluster method edges)
 - [Phase ?]: toSubject extracted to the free function qualifyStreamSubject because emitCommandResponse is a second caller
 - [Phase ?]: Zero CoreServer fields deletable: option setters need a field to write into before newSubscribeHandler reads it (D-04 pins CoreServerOption)
+- [Phase ?]: 08-04: UnloadPlugin's identity deactivation hoisted out of the m.mu critical section — the one path the lock-split safety argument did not cover; the unload interleaving window is unavoidably widened by D-06.
+- [Phase ?]: 08-04: pluginRepo/retentionDays stay on Manager as inert option routing slots because ManagerOption is func(*Manager) (D-07); identity state itself is fully extracted.
 
 ### Pending Todos
 
@@ -241,10 +244,10 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-19T18:27:24.920Z
+Last session: 2026-07-19T18:50:43.150Z
 Plan 08-01 executed: internal/focuscontract leaf extracted, internal/grpc/focus aliased.
 task test:int and task lint both green; zero integration-tree churn.
-Stopped at: Completed 08-03-PLAN.md
+Stopped at: Completed 08-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
