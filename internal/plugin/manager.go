@@ -23,7 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/focuscontract"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/settings"
@@ -394,7 +394,7 @@ func (m *Manager) ConfigureEventEmitter(publisher eventbus.Publisher, opts ...Em
 // registered hosts. Production startup MUST call this before plugins handle
 // focus-related RPCs or host functions. Called from the gRPC subsystem's
 // Start after creating the FocusCoordinator.
-func (m *Manager) ConfigureFocusDeps(fc focus.Coordinator, hr HistoryReader) {
+func (m *Manager) ConfigureFocusDeps(fc focuscontract.Coordinator, hr HistoryReader) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, host := range m.hosts {

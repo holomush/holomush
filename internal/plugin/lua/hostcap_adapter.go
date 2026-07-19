@@ -28,7 +28,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/focuscontract"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
@@ -212,9 +212,9 @@ func (a *luaHostCapAdapter) CharacterSettings() settings.CharacterSettingsStore 
 	return s.characterStore()
 }
 
-// FocusCoordinator returns a focus.Coordinator backed by the Functions' FocusOps shim,
+// FocusCoordinator returns a focuscontract.Coordinator backed by the Functions' FocusOps shim,
 // or nil when FocusOps is unconfigured.
-func (a *luaHostCapAdapter) FocusCoordinator() focus.Coordinator {
+func (a *luaHostCapAdapter) FocusCoordinator() focuscontract.Coordinator {
 	fo := a.f.GetFocusOps()
 	if fo == nil {
 		return nil
@@ -303,8 +303,8 @@ func (a *luaHostCapAdapter) SessionAdmin() hostcap.SessionAdmin {
 
 // --- focusOpsCoordinatorAdapter -------------------------------------------
 //
-// Adapts hostfunc.FocusOps → focus.Coordinator so the host.v1 FocusService
-// server (which takes focus.Coordinator) drives focus operations through the
+// Adapts hostfunc.FocusOps → focuscontract.Coordinator so the host.v1 FocusService
+// server (which takes focuscontract.Coordinator) drives focus operations through the
 // Lua-wired FocusOps shim. The four methods the focusServer actually calls —
 // SetConnectionFocus, AutoFocusOnJoin, IsAnyConnFocused, GetConnectionFocus —
 // delegate to FocusOps with faithful return-shape translation (see each method).
@@ -319,7 +319,7 @@ type focusOpsCoordinatorAdapter struct {
 	fo hostfunc.FocusOps
 }
 
-var _ focus.Coordinator = (*focusOpsCoordinatorAdapter)(nil)
+var _ focuscontract.Coordinator = (*focusOpsCoordinatorAdapter)(nil)
 
 func (a *focusOpsCoordinatorAdapter) JoinFocus(ctx context.Context, sessionID string, target session.FocusKey) error {
 	return a.fo.JoinFocus(ctx, sessionID, target) //nolint:wrapcheck // FocusOps errors already oops-coded
@@ -337,9 +337,9 @@ func (a *focusOpsCoordinatorAdapter) PresentFocus(ctx context.Context, sessionID
 	return a.fo.PresentFocus(ctx, sessionID, target) //nolint:wrapcheck // FocusOps errors already oops-coded
 }
 
-func (a *focusOpsCoordinatorAdapter) RestoreFocus(_ context.Context, _ string) (focus.RestorePlan, error) {
+func (a *focusOpsCoordinatorAdapter) RestoreFocus(_ context.Context, _ string) (focuscontract.RestorePlan, error) {
 	// Not called by host.v1 capability servers; only used by the session manager.
-	return focus.RestorePlan{}, oops.In("lua").Code("UNSUPPORTED_OPERATION").New("RestoreFocus not supported via Lua FocusOps adapter")
+	return focuscontract.RestorePlan{}, oops.In("lua").Code("UNSUPPORTED_OPERATION").New("RestoreFocus not supported via Lua FocusOps adapter")
 }
 
 func (a *focusOpsCoordinatorAdapter) RestoreConnectionFocus(_ context.Context, _ string, _ ulid.ULID) error {
@@ -354,43 +354,43 @@ func (a *focusOpsCoordinatorAdapter) IsAnyConnFocused(ctx context.Context, chara
 }
 
 // SetConnectionFocus delegates to FocusOps and returns a zero-valued
-// focus.SetConnectionFocusResult. FocusOps.SetConnectionFocus is error-only, so
+// focuscontract.SetConnectionFocusResult. FocusOps.SetConnectionFocus is error-only, so
 // the result's three fields (OldFocusKey, SessionID, CharLocationID) have no
 // FocusOps source — they are intentionally lossy here. This is safe: those
 // fields exist so the production *defaultCoordinator can drive per-connection
 // subscription deltas in-process (INV-SCENE-38), and the host.v1 focusServer
 // (servers.go SetConnectionFocus) discards the result entirely, reading only the
 // error. A faithful zero result is therefore correct for every reachable caller.
-func (a *focusOpsCoordinatorAdapter) SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) (focus.SetConnectionFocusResult, error) {
+func (a *focusOpsCoordinatorAdapter) SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) (focuscontract.SetConnectionFocusResult, error) {
 	if err := a.fo.SetConnectionFocus(ctx, connectionID, focusKey, isSceneGrid); err != nil {
-		return focus.SetConnectionFocusResult{}, err //nolint:wrapcheck // FocusOps errors already oops-coded
+		return focuscontract.SetConnectionFocusResult{}, err //nolint:wrapcheck // FocusOps errors already oops-coded
 	}
-	return focus.SetConnectionFocusResult{}, nil
+	return focuscontract.SetConnectionFocusResult{}, nil
 }
 
 // AutoFocusOnJoin delegates to FocusOps and maps the multi-return tuple into a
-// focus.AutoFocusOnJoinResponse. The slices and total count map faithfully;
-// hostfunc.FocusFailure → focus.AutoFocusFailure (identical ConnectionID/Reason
+// focuscontract.AutoFocusOnJoinResponse. The slices and total count map faithfully;
+// hostfunc.FocusFailure → focuscontract.AutoFocusFailure (identical ConnectionID/Reason
 // fields). SessionID and CharLocationID are intentionally lossy (FocusOps does
 // not surface them) — like the SetConnectionFocus result fields, they exist for
 // the production coordinator's in-process delta driving and are NOT read by the
 // host.v1 focusServer (servers.go AutoFocusOnJoin reads only the slices + total).
-func (a *focusOpsCoordinatorAdapter) AutoFocusOnJoin(ctx context.Context, characterID, sceneID ulid.ULID) (focus.AutoFocusOnJoinResponse, error) {
+func (a *focusOpsCoordinatorAdapter) AutoFocusOnJoin(ctx context.Context, characterID, sceneID ulid.ULID) (focuscontract.AutoFocusOnJoinResponse, error) {
 	focused, skipped, failed, total, err := a.fo.AutoFocusOnJoin(ctx, characterID, sceneID)
 	if err != nil {
-		return focus.AutoFocusOnJoinResponse{}, err //nolint:wrapcheck // FocusOps errors already oops-coded
+		return focuscontract.AutoFocusOnJoinResponse{}, err //nolint:wrapcheck // FocusOps errors already oops-coded
 	}
-	var respFailed []focus.AutoFocusFailure
+	var respFailed []focuscontract.AutoFocusFailure
 	if len(failed) > 0 {
-		respFailed = make([]focus.AutoFocusFailure, len(failed))
+		respFailed = make([]focuscontract.AutoFocusFailure, len(failed))
 		for i, f := range failed {
-			respFailed[i] = focus.AutoFocusFailure{
+			respFailed[i] = focuscontract.AutoFocusFailure{
 				ConnectionID: f.ConnectionID,
 				Reason:       f.Reason,
 			}
 		}
 	}
-	return focus.AutoFocusOnJoinResponse{
+	return focuscontract.AutoFocusOnJoinResponse{
 		FocusedConnectionIDs: focused,
 		SkippedConnectionIDs: skipped,
 		FailedConnectionIDs:  respFailed,

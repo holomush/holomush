@@ -8,21 +8,21 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
-	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/focuscontract"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/session"
 )
 
-// coordinatorFocusOpsAdapter adapts a focus.Coordinator to the hostfunc.FocusOps interface.
+// coordinatorFocusOpsAdapter adapts a focuscontract.Coordinator to the hostfunc.FocusOps interface.
 // All Phase 5 methods (SetConnectionFocus, AutoFocusOnJoin, IsAnyConnFocused)
 // delegate to the wrapped coordinator. AutoFocusOnJoin translates the
 // AutoFocusOnJoinResponse struct to the FocusOps tuple shape
 // (focused, skipped []ulid.ULID, failed []FocusFailure, totalConnCount uint32, err error).
 // This adapter is the permanent Lua delegation seam: it lets the gopher-lua
-// hostfunc layer reach the same focus.Coordinator the binary host uses, so both
+// hostfunc layer reach the same focuscontract.Coordinator the binary host uses, so both
 // runtimes drive focus deltas through one common path (INV-SCENE-38).
 type coordinatorFocusOpsAdapter struct {
-	c focus.Coordinator
+	c focuscontract.Coordinator
 }
 
 var _ hostfunc.FocusOps = (*coordinatorFocusOpsAdapter)(nil)
@@ -45,9 +45,9 @@ func (a *coordinatorFocusOpsAdapter) PresentFocus(ctx context.Context, sessionID
 
 // SetConnectionFocus delegates to the coordinator. The FocusOps surface
 // returns only error; the coordinator's oldFocusKey return is consumed inside
-// focus.Coordinator.driveFocusDeltas (which the coordinator calls itself), so
+// focuscontract.Coordinator.driveFocusDeltas (which the coordinator calls itself), so
 // dropping it here is safe. Per-connection subscription deltas are driven
-// inside focus.Coordinator (INV-SCENE-38), so the adapter needs only to
+// inside focuscontract.Coordinator (INV-SCENE-38), so the adapter needs only to
 // delegate; the dropped oldFocusKey return value is not needed here.
 func (a *coordinatorFocusOpsAdapter) SetConnectionFocus(ctx context.Context, connectionID ulid.ULID, focusKey *session.FocusKey, isSceneGrid bool) error {
 	_, err := a.c.SetConnectionFocus(ctx, connectionID, focusKey, isSceneGrid)

@@ -29,7 +29,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/focuscontract"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
@@ -154,7 +154,7 @@ func WithServiceRegistry(r *plugins.ServiceRegistry) HostOption {
 
 // WithFocusCoordinator configures the host to inject a focus coordinator
 // into the plugin host service for JoinFocus/LeaveFocus/PresentFocus RPCs.
-func WithFocusCoordinator(fc focus.Coordinator) HostOption {
+func WithFocusCoordinator(fc focuscontract.Coordinator) HostOption {
 	return func(h *Host) { h.focusCoordinator = fc }
 }
 
@@ -273,7 +273,7 @@ type Host struct {
 	hostBrokerCert    *tlscerts.ServerCert
 	hostClientCert    *tlscerts.ClientCert
 	eventEmitter      plugins.PluginIntentEmitter
-	focusCoordinator  focus.Coordinator
+	focusCoordinator  focuscontract.Coordinator
 	historyReader     plugins.HistoryReader
 	streamRegistry    plugins.StreamRegistry
 	readbackDecryptor plugins.ReadbackDecryptor
@@ -459,14 +459,14 @@ func (h *Host) SetEventEmitter(emitter plugins.PluginIntentEmitter) {
 // so the coordinator is not available at Host construction time. The
 // coordinator is resolved lazily by the plugin host service when a
 // plugin calls JoinFocus/LeaveFocus/PresentFocus.
-func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
+func (h *Host) SetFocusCoordinator(fc focuscontract.Coordinator) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.focusCoordinator = fc
 }
 
 // FocusCoordinator returns the current focus coordinator, or nil if not set.
-func (h *Host) FocusCoordinator() focus.Coordinator {
+func (h *Host) FocusCoordinator() focuscontract.Coordinator {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.focusCoordinator
