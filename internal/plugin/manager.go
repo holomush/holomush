@@ -705,9 +705,9 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	// so a plugin loaded in this cycle is never swept in the same cycle
 	// (INV-PLUGIN-16). Skipped on the graceful-degradation early return path
 	// because partial-load failures may leave last_seen_at stale.
-	swept, err := m.identity.Sweep(ctx)
-	if err != nil {
-		return err
+	swept, sweepErr := m.identity.Sweep(ctx)
+	if sweepErr != nil {
+		return sweepErr
 	}
 	for i := range swept {
 		row := &swept[i]
