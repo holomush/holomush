@@ -419,8 +419,11 @@ scopes:
       - "internal/plugin/goplugin/host_test.go"
       # PLUGIN+(settings/S substrate): lua host (PC-3 + deferred bare INV-6/7/8 + INV-S5).
       - "internal/plugin/lua/host.go"
-      # PLUGIN+EVENTBUS: manager carries EVENTBUS-11 + W9ML-8.
+      # PLUGIN+EVENTBUS: manager carries EVENTBUS-11; loader.go is the load-time
+      # half ARCH-02 split off it and carries W9ML-8 (INV-PLUGIN-16) + M1
+      # (INV-PLUGIN-33) plus the EVENTBUS-11 cross-reference.
       - "internal/plugin/manager.go"
+      - "internal/plugin/loader.go"
       # PLUGIN+SCENE+EVENTBUS: plugin subsystem (PC-3 + foreign INV-1/4 + EVENTBUS-11 + SCENE-38).
       - "internal/plugin/setup/subsystem.go"
       # PLUGIN+ACCESS: whole-system plugins helper (WS-2/3 + ACCESS-4).
@@ -500,8 +503,10 @@ scopes:
       - "internal/grpc/stream_access.go"
       - "internal/test/invariants/colon_eradication_test.go"
       - "internal/test/invariants/inv_p4_coverage_meta_test.go"
-      # EVENTBUS+PLUGIN: manager / subsystem / identity (see PLUGIN.shared_files). GW-10 lives here.
+      # EVENTBUS+PLUGIN: manager / loader / subsystem / identity (see PLUGIN.shared_files).
+      # GW-10 lives here; loader.go is manager.go's ARCH-02 load-time half.
       - "internal/plugin/manager.go"
+      - "internal/plugin/loader.go"
       - "internal/plugin/manager_test.go"
       - "internal/plugin/setup/subsystem.go"
       - "internal/plugin/identity_registry_test.go"
@@ -3618,7 +3623,7 @@ invariants:
     summary: "Sweep ordering: the retention GC sweep MUST NOT collect a plugin loaded this cycle."
     binding: pending
     refs:
-      - {file: "internal/plugin/manager.go", token: "INV-W9ML-8"}
+      - {file: "internal/plugin/loader.go", token: "INV-W9ML-8"}
   - id: INV-PLUGIN-17
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
@@ -3844,7 +3849,7 @@ invariants:
       plugins without crypto.emits skip the Load-pass and validation entirely."
     binding: pending
     refs:
-      - {file: "internal/plugin/manager.go", token: "INV-M1"}
+      - {file: "internal/plugin/loader.go", token: "INV-M1"}
       - {file: "internal/plugin/manager_test.go", token: "INV-M1"}
       - {file: "pkg/plugin/emit_registry.go", token: "INV-M1"}
   - id: INV-PLUGIN-34
