@@ -1738,15 +1738,40 @@ func (m *Manager) lookupManifest(name string) *Manifest {
 	return dp.Manifest
 }
 
+// manifestLookup mirrors authguard.ManifestLookup structurally so a
+// signature drift on either crypto gate below is caught here at compile
+// time rather than at the authguard call site.
+//
+// It is declared locally on purpose: internal/plugin MUST NOT import
+// internal/eventbus/authguard. *Manager satisfies that interface by
+// structural satisfaction, which is what lets authguard sit below plugin
+// with no import edge in either direction.
+type manifestLookup interface {
+	PluginRequestsDecryption(pluginName, eventType string) bool
+	PluginCanReadBack(pluginName, eventType string) bool
+}
+
+var _ manifestLookup = (*Manager)(nil)
+
 // PluginRequestsDecryption returns true iff the plugin named pluginName
 // has a manifest declaring eventType in its
 // crypto.consumes[].requests_decryption[] list. The eventType MUST be
 // in the qualified <plugin>:<event_type> form per crypto_validator's
 // validation rules.
 //
-// Read by AuthGuard via the ManifestLookup adapter (Phase 3b grounding
-// doc Decision 1).
+// Read by AuthGuard, which consumes *Manager directly as its
+// ManifestLookup (Phase 3b grounding doc Decision 1).
+//
+// A nil receiver returns false rather than panicking. This carries the
+// fail-closed contract previously held by authguard's manifestAdapter: a
+// typed-nil *Manager stored in a ManifestLookup interface is not
+// interface-nil, so authguard.New's AUTHGUARD_DEPENDENCY_NIL check cannot
+// catch it. This is a crypto authorization gate on the decrypt path — it
+// must deny, not crash.
 func (m *Manager) PluginRequestsDecryption(pluginName, eventType string) bool {
+	if m == nil {
+		return false
+	}
 	manifest := m.lookupManifest(pluginName)
 	if manifest == nil || manifest.Crypto == nil {
 		return false
@@ -1765,7 +1790,13 @@ func (m *Manager) PluginRequestsDecryption(pluginName, eventType string) bool {
 // crypto.emits[].readback=true for eventType. Read-back authorization
 // gate g2 (plugin-readback-decrypt-design §4). Distinct from
 // PluginRequestsDecryption, which reads crypto.consumes.
+//
+// A nil receiver returns false rather than panicking, for the same
+// fail-closed reason documented on PluginRequestsDecryption.
 func (m *Manager) PluginCanReadBack(pluginName, eventType string) bool {
+	if m == nil {
+		return false
+	}
 	manifest := m.lookupManifest(pluginName)
 	if manifest == nil || manifest.Crypto == nil {
 		return false
