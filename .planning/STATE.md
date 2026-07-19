@@ -4,16 +4,16 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
-status: "Phase 7 shipped — PR #4823"
-stopped_at: Phase 8 context gathered
-last_updated: "2026-07-19T17:10:34.289Z"
+status: "Phase 8 in progress — plan 08-01 complete"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-07-19T17:30:00.000Z"
 last_activity: 2026-07-19
-last_activity_desc: Phase 8 planning complete
+last_activity_desc: 08-01 focuscontract seam extraction complete
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 36
-  completed_plans: 36
+  total_plans: 45
+  completed_plans: 38
 ---
 
 # Project State
@@ -30,9 +30,9 @@ trusted identically.
 ## Current Position
 
 Phase: 8 — God-Object Decomposition
-Plan: Not started
-Status: Phase 7 shipped — PR #4823
-Last activity: 2026-07-19 — Phase 8 planning complete
+Plan: 01 of 09 complete (Wave 0 — D-09 seam 1)
+Status: Phase 8 in progress — plan 08-01 complete
+Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
 
 ## Performance Metrics
 
@@ -120,6 +120,7 @@ Last activity: 2026-07-19 — Phase 8 planning complete
 | Phase 07 P09 | ~5h | 3 tasks | 50 files |
 | Phase 07 P10 | ~45min | 4 tasks | 8 files |
 | Phase 07 P11 | ~4h | 3 tasks | 68 files |
+| Phase 08 P01 | 35m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -194,6 +195,13 @@ the next milestone yet.
 - [Phase ?]: 07-11: all 17 production subsystems migrated per the plan's settled D-13.3 disposition table; PluginSubsystem's cleanupOnError extended to close binaryHost+luaHost on every pre-manager Prepare failure path (closed a token-store-sweeper-goroutine leak); audit.Subsystem gained preparedProjection/partitionManager phase-owned fields with lateInit capture/restore-on-failure
 - [Phase ?]: 07-11: invalidation.Coordinator's construction+Start() stays bundled inside the memoized cryptoWiring builder (deviation from the plan's literal row-16 text) because CryptoChainVerifier — not necessarily grpcSubsystem — is the actual first resolver of the builder in topological order; confining it to the Prepare sweep (which it always is) preserves D-13.0's guarantee since the Coordinator's pub/sub is process/cluster-internal signaling, not client-facing domain traffic
 
+- [Phase 08]: 08-01: internal/focuscontract created as a neutral types-only leaf holding the 7-declaration focus contract transitive closure (Coordinator + RestorePlan -> StreamWithMode -> ReplayMode + SetConnectionFocusResult + AutoFocusOnJoinResponse -> AutoFocusFailure); import set is exactly context/time/oklog-ulid/internal-session, no internal/grpc edge (D-09 seam 1)
+- [Phase 08]: 08-01: all 7 internal/grpc/focus originals converted to Go type ALIASES (= form), not defined types — alias identity keeps ~30 existing focus.* reference sites compiling untouched AND guarantees the Lua and binary plugin hosts see one identical Coordinator type (D-20 plugin-runtime symmetry); a defined type would have created a per-runtime divergence
+- [Phase 08]: 08-01: RESEARCH.md § Seam 1's "5 declarations" undercount confirmed wrong — the transitive closure is 7; a 5-symbol move does not compile
+- [Phase 08]: 08-01: moving the Coordinator doc comments broke TestProvenanceGuard (six INV-SCENE-14/17/18/24/25/26 refs recorded at internal/grpc/focus/coordinator.go). Resolved by retargeting the registry refs to internal/focuscontract/focuscontract.go + adding internal/focuscontract/** to INV-SCENE owned_paths — the registry follows the canonical home rather than duplicating the spec. Expect the same pattern in 08-02 if further INV-annotated comments leave internal/grpc/focus.
+- [Phase 08]: 08-01: D-17 earned its keep on the very first wave — task test was green across all four affected trees while the meta suite was red; only task test:int surfaced it
+- [Phase 08]: 08-01: D-15 zero-integration-churn record for this plan: `git diff --stat origin/main...HEAD -- test/integration/` is EMPTY
+
 ### Pending Todos
 
 None yet.
@@ -225,10 +233,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-19T16:14:53.501Z
-PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-god-object-decomposition/08-CONTEXT.md
+Last session: 2026-07-19T17:30:00.000Z
+Plan 08-01 executed: internal/focuscontract leaf extracted, internal/grpc/focus aliased.
+task test:int and task lint both green; zero integration-tree churn.
+Stopped at: Completed 08-01-PLAN.md
+Resume file: .planning/phases/08-god-object-decomposition/08-02-PLAN.md
 
 ## Operator Next Steps
 

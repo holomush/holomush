@@ -221,12 +221,12 @@ Plans:
 2. `plugin/manager` is similarly decomposed; plugin load/lifecycle behavior is unchanged (whole-system plugin census stays green)
 3. Size/complexity metrics on the former god objects drop below an agreed threshold; no new gateway-boundary or plugin-runtime-symmetry violations are introduced
 
-**Plans:** 9 plans
+**Plans:** 1/9 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — Wave 0a: create `internal/focuscontract` leaf package + alias re-exports in `internal/grpc/focus` (wave 1)
+- [x] 08-01-PLAN.md — Wave 0a: create `internal/focuscontract` leaf package + alias re-exports in `internal/grpc/focus` (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -278,7 +278,7 @@ Plans:
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
-| 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
+| 8. God-Object Decomposition | v0.12 | 1/9 | In Progress|  |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
 
 ## Deferred (Not in This Roadmap)
