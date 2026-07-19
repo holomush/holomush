@@ -221,6 +221,19 @@ Plans:
 2. `plugin/manager` is similarly decomposed; plugin load/lifecycle behavior is unchanged (whole-system plugin census stays green)
 3. Size/complexity metrics on the former god objects drop below an agreed threshold; no new gateway-boundary or plugin-runtime-symmetry violations are introduced
 
+**Plans:** 9 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — Wave 0a: create `internal/focuscontract` leaf package + alias re-exports in `internal/grpc/focus` (wave 1)
+- [ ] 08-02-PLAN.md — Wave 0b: rewire 7 plugin files off `internal/grpc/focus`, invert the authguard manifest seam, settle D-08 `TestLoadPlugin` (wave 2)
+- [ ] 08-03-PLAN.md — ARCH-01: extract `SubscribeHandler` (subscribe/stream-delivery cluster, 8 methods) (wave 3)
+- [ ] 08-04-PLAN.md — ARCH-02: extract `IdentityStore` (D-06 identity registry with its own lock) (wave 3)
+- [ ] 08-05-PLAN.md — ARCH-01: extract `CommandHandler` + `LifecycleHandler` (7 methods) (wave 4)
+- [ ] 08-06-PLAN.md — ARCH-02: extract `PluginRuntime` (delivery + read-side lookups) (wave 4)
+- [ ] 08-07-PLAN.md — ARCH-01: extract `QueryHandler`, reduce `CoreServer` to a four-unit facade (wave 5)
+- [ ] 08-08-PLAN.md — ARCH-02: extract `PluginLoader`, assign `Close`/`UnloadPlugin`, reduce `Manager` to a facade (wave 5)
+- [ ] 08-09-PLAN.md — Wave C: regrowth ratchet (import direction + size ceilings), census, bind `INV-PLUGIN-56` (wave 6)
+
 ### Phase 9: Test-Quality & Code-Health Sweep
 
 **Goal**: Backfill coverage and remediate test/code-health debt to the reconciled bar.
