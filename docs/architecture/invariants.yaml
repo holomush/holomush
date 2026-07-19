@@ -4075,6 +4075,15 @@ invariants:
     summary: "A Lua plugin MUST be wired only the capabilities its manifest declares (declaration-gated host-cap bridge);
       bound by holomush-eykuh.4's production Lua migration off the legacy hostfunc shim."
     binding: pending
+  - id: INV-PLUGIN-56
+    scope: INV-PLUGIN
+    origin_spec: "docs/reviews/arch-review/2026-07-11/findings/d1-architecture.md"
+    summary: "The plugin layer sits BELOW its consumers and beside the event bus: no production package in the internal/plugin
+      tree may import the internal/grpc tree, and internal/eventbus and internal/plugin MUST NOT depend on one another in
+      either direction. Test files are exempt (they may hold concrete fixtures)."
+    binding: bound
+    asserted_by:
+      - "test/meta/phase8_decomposition_test.go"
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"
