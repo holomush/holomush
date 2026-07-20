@@ -4,11 +4,11 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
-status: Phase 8 in progress — plan 08-01 complete
+status: Phase 8 complete — executed, verified, and shipped (PR #4832)
 stopped_at: Phase 8 executed and verified (9/9 plans, 3/3 must-haves)
-last_updated: "2026-07-19T21:27:35.479Z"
+last_updated: "2026-07-20T22:11:01.328Z"
 last_activity: 2026-07-19
-last_activity_desc: 08-01 focuscontract seam extraction complete
+last_activity_desc: Phase 8 closed — 9/9 plans, verifier PASSED 3/3, PR #4832 open
 progress:
   total_phases: 5
   completed_phases: 5
@@ -25,14 +25,15 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 07 — event-model-bootstrap-decomposition
+**Current focus:** Phase 08 — god-object-decomposition (complete; Phase 09 not yet started)
 
 ## Current Position
 
 Phase: 8 — God-Object Decomposition
-Plan: 9 of 09 complete (Wave 0 — D-09 seam 1)
-Status: Phase 8 in progress — plan 08-01 complete
-Last activity: 2026-07-19 — 08-01 focuscontract seam extraction complete
+Plan: 9 of 09 complete
+Status: Phase 8 complete — executed, verified, and shipped (PR #4832)
+Last activity: 2026-07-19 — Phase 8 closed; ARCH-01 and ARCH-02 delivered
+Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 
 ## Performance Metrics
 
@@ -265,8 +266,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 ## Session Continuity
 
 Last session: 2026-07-19T21:27:35.470Z
-Plan 08-01 executed: internal/focuscontract leaf extracted, internal/grpc/focus aliased.
-task test:int and task lint both green; zero integration-tree churn.
+Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
+across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
+crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
+zero integration-tree churn across all 48 commits. Shipped as PR #4832.
+Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
+#4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
 Stopped at: Phase 8 executed and verified (9/9 plans, 3/3 must-haves)
 Resume file: .planning/phases/08-god-object-decomposition/08-VERIFICATION.md
 

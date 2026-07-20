@@ -58,9 +58,21 @@ LoC. This is the second of ARCH-02's three units; 08-08 takes the load-time rema
 decrypt path**. Discharged, and verified three ways:
 
 **1. Both gate bodies are byte-identical after normalizing only the receiver name and type.**
-Mechanically diffed `git show HEAD:internal/plugin/manager.go` against `runtime.go`:
+Mechanically diffed the **pre-extraction** `manager.go` against `runtime.go`:
 
+```bash
+# a6ffaf60a is bd2b6d9cd^ — the parent of this plan's extraction commit, i.e.
+# the last commit where *Manager still carried the gate BODIES. Pinned to a SHA
+# deliberately: the check originally ran as `git show HEAD:...` while HEAD was
+# that parent, but HEAD moves. At the branch tip manager.go's gate is a 4-line
+# forwarder, so re-running the HEAD form today reports a large diff and reads as
+# a mangled gate. Use the SHA.
+git show a6ffaf60a:internal/plugin/manager.go > /tmp/pre.go
+# then normalize receiver name+type (Python `re`, NOT sed — see method note below)
+# and compare each gate body against internal/plugin/runtime.go
 ```
+
+```text
 ==================== PluginRequestsDecryption ====================
 >>> ZERO DIFF after normalizing receiver name+type — byte-identical
     lines: 17 | nil-guard present: True
