@@ -46,7 +46,7 @@ jobs:
           cache: false
 
       - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1
         with:
           cache: go
 
@@ -115,7 +115,7 @@ jobs:
           cache: false
 
       - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1
         with:
           cache: go
 
@@ -139,7 +139,7 @@ jobs:
     runs-on: namespace-profile-linux-amd64-4x8
     services:
       postgres:
-        image: postgres:18@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20
+        image: postgres:18@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
         env:
           POSTGRES_USER: holomush
           POSTGRES_PASSWORD: holomush
@@ -164,7 +164,7 @@ jobs:
           cache: false
 
       - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1
         with:
           cache: go
 
@@ -208,7 +208,7 @@ jobs:
           cache: false
 
       - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1
         with:
           cache: go
 
@@ -253,12 +253,12 @@ jobs:
           cache: false
 
       - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1
         with:
           cache: go
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
 
@@ -266,7 +266,7 @@ jobs:
         run: corepack enable && corepack prepare pnpm@11.9.0 --activate
 
       - name: Cache pnpm store
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1
         with:
           # MUST run after `Install pnpm`: nscloud-cache-action plans the pnpm
           # cache by exec'ing `pnpm --version`, so pnpm must be on PATH (the
@@ -316,12 +316,12 @@ jobs:
           cache: false
 
       - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1
         with:
           cache: go
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
 
@@ -329,7 +329,7 @@ jobs:
         run: corepack enable && corepack prepare pnpm@11.9.0 --activate
 
       - name: Cache pnpm store
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1
         with:
           # MUST run after `Install pnpm`: nscloud-cache-action plans the pnpm
           # cache by exec'ing `pnpm --version`, so pnpm must be on PATH (the
