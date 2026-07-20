@@ -111,7 +111,7 @@ services:
     # config — memory storage, OTLP receivers on 4317/4318, UI on 16686 — so the
     # v1-only COLLECTOR_OTLP_ENABLED env var is dropped (OTLP is on by default). The
     # otel-collector still forwards traces to jaeger:4317 via OTLP (docker/otel-collector/config.yaml).
-    image: jaegertracing/jaeger:latest@sha256:ede4864215be4cd85bd8c3129a2fea6c5713c5653c7282c429dba123014bc68b
+    image: jaegertracing/jaeger:latest@sha256:46a886260e04002d8f45e213fc39063fa11a50446048fdaa64786fc0840cb9f8
     profiles: [observability]
     networks:
       - backend
