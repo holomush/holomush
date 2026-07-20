@@ -99,8 +99,10 @@ func TestPluginRuntimeLookupManifestFallsBackFromLoadedToInflight(t *testing.T) 
 
 // --- Behavior 3: PluginRequestsDecryption ----------------------------------
 
-func TestPluginRuntimePluginRequestsDecryptionMatchesQualifiedRef(t *testing.T) {
-	rt := newTestRuntimeWithManifest(t, &plugins.Manifest{
+func TestPluginRuntimePluginRequestsDecryption(t *testing.T) {
+	// declaring requests decryption for exactly one qualified ref; everything
+	// else routed at this gate MUST deny.
+	declaring := &plugins.Manifest{
 		Name:    "mod-filter",
 		Version: "1.0.0",
 		Type:    plugins.TypeBinary,
@@ -112,21 +114,57 @@ func TestPluginRuntimePluginRequestsDecryptionMatchesQualifiedRef(t *testing.T) 
 				},
 			},
 		},
-	})
-
-	assert.True(t, rt.PluginRequestsDecryption("mod-filter", "core-comm:whisper"))
-	assert.False(t, rt.PluginRequestsDecryption("mod-filter", "core-comm:undeclared"))
-	assert.False(t, rt.PluginRequestsDecryption("nonexistent-plugin", "core-comm:whisper"))
-}
-
-func TestPluginRuntimePluginRequestsDecryptionFalseForNoCryptoSection(t *testing.T) {
-	rt := newTestRuntimeWithManifest(t, &plugins.Manifest{
+	}
+	noCryptoSection := &plugins.Manifest{
 		Name:    "no-crypto-plugin",
 		Version: "1.0.0",
 		Type:    plugins.TypeBinary,
-	})
+	}
 
-	assert.False(t, rt.PluginRequestsDecryption("no-crypto-plugin", "anything:event"))
+	tests := []struct {
+		name      string
+		manifest  *plugins.Manifest
+		plugin    string
+		eventType string
+		want      bool
+	}{
+		{
+			name:      "permits a qualified ref the manifest declares",
+			manifest:  declaring,
+			plugin:    "mod-filter",
+			eventType: "core-comm:whisper",
+			want:      true,
+		},
+		{
+			name:      "denies a qualified ref the manifest does not declare",
+			manifest:  declaring,
+			plugin:    "mod-filter",
+			eventType: "core-comm:undeclared",
+			want:      false,
+		},
+		{
+			name:      "denies an unknown plugin name",
+			manifest:  declaring,
+			plugin:    "nonexistent-plugin",
+			eventType: "core-comm:whisper",
+			want:      false,
+		},
+		{
+			name:      "denies every ref when the manifest has no crypto section",
+			manifest:  noCryptoSection,
+			plugin:    "no-crypto-plugin",
+			eventType: "anything:event",
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := newTestRuntimeWithManifest(t, tt.manifest)
+
+			assert.Equal(t, tt.want, rt.PluginRequestsDecryption(tt.plugin, tt.eventType))
+		})
+	}
 }
 
 // --- Behavior 4: PluginCanReadBack -----------------------------------------
