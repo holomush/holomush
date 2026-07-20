@@ -19,6 +19,26 @@ import (
 // fixture or after a load-failure rollback) still removes the cache
 // entry. Host unload + policy removal then run only if a host is
 // actually registered for the name.
+//
+// # Concurrency contract — unload is NOT atomic across identity and runtime
+//
+// Identity state and runtime state live under separate locks, so their two
+// deletions cannot be one atomic step. Callers MUST NOT assume the two agree
+// during an unload. Concretely, a concurrent reader can observe the window:
+//
+//	IDByName(name)        // false — identity already deactivated
+//	IsPluginLoaded(name)  // true  — runtime entry not yet removed
+//
+// The reverse ordering never occurs: program order is identity-then-runtime.
+// This window is accepted, not incidental — closing it means holding both unit
+// locks at once, which is the lock-ordering hazard the loader/runtime/identity
+// split exists to remove. Pre-split, both deletions shared one critical
+// section and this window did not exist; widening it is the deliberate cost of
+// that split (phase-08 threat T-8-05).
+//
+// A caller needing a consistent view MUST derive it from a single unit — query
+// the runtime alone, or the identity store alone — rather than correlating the
+// two across an unload.
 func (l *PluginLoader) UnloadPlugin(ctx context.Context, name string) error {
 	// 1. Cache cleanup FIRST and unconditionally.
 	//
@@ -67,6 +87,10 @@ func (l *PluginLoader) UnloadPlugin(ctx context.Context, name string) error {
 // to preserve historical resolution for events emitted before unload).
 //
 // Idempotent: cache cleanup runs FIRST and unconditionally.
+//
+// Unload is NOT atomic across identity and runtime state — see
+// (*PluginLoader).UnloadPlugin for the concurrency contract callers must
+// respect.
 func (m *Manager) UnloadPlugin(ctx context.Context, name string) error {
 	return m.loader.UnloadPlugin(ctx, name)
 }
