@@ -91,7 +91,8 @@ type AdminDepsProvider interface {
 // PluginSubsystemConfig configures the plugin subsystem.
 //
 // Focus-delta delivery note: per-connection focus deltas are driven inside
-// focus.Coordinator for BOTH binary and Lua plugin runtimes (INV-SCENE-38). The
+// focuscontract.Coordinator for BOTH binary and Lua plugin runtimes
+// (INV-SCENE-38). The
 // plugin host itself no longer carries a ConnectionSender — that field was
 // removed as part of the focus-delta coordinator unification (holomush-66228).
 // The host still receives StreamRegistry so the Lua hostfunc session-stream

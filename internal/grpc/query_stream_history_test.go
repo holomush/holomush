@@ -83,16 +83,19 @@ func sceneFocusMembership(t *testing.T) (string, session.FocusMembership) {
 // reader + session store for unit-testing QueryStreamHistory.
 func newQueryStreamHistoryServer(t *testing.T, reader eventbus.HistoryReader, sess session.Store) *CoreServer {
 	t.Helper()
-	return &CoreServer{
+	s := &CoreServer{
 		sessionStore:  sess,
 		historyReader: reader,
 		accessEngine:  policytest.AllowAllEngine(),
 	}
+	s.buildHandlers()
+	return s
 }
 
 func TestQueryStreamHistoryRejectsMissingHistoryReader(t *testing.T) {
 	t.Parallel()
 	s := &CoreServer{sessionStore: newTestSessionStore(t, nil)}
+	s.buildHandlers()
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "sess-1",
 		Stream:    "location.01HYXYZ0C0000000000000000C",
@@ -317,6 +320,7 @@ func TestQueryStreamHistoryRejectsPublicStreamWithoutAccessEngine(t *testing.T) 
 		sessionStore:  sess,
 		historyReader: &fakeHistoryReader{},
 	}
+	s.buildHandlers()
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
 		Stream:    "location.01HYXYZ0C0000000000000000C",
@@ -336,6 +340,7 @@ func TestQueryStreamHistoryDeniedByABAC(t *testing.T) {
 		historyReader: &fakeHistoryReader{},
 		accessEngine:  policytest.DenyAllEngine(),
 	}
+	s.buildHandlers()
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
 		Stream:    "location.01HYXYZ0C0000000000000000C",
@@ -1125,6 +1130,7 @@ func TestQueryStreamHistoryPassesIdentityFromBindingsToHistoryQuery(t *testing.T
 		bindings:      &fakeBindingRepo{bindingID: bindingID},
 		cryptoActive:  true, // required to activate binding lookup (KEK-presence gate)
 	}
+	s.buildHandlers()
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
@@ -1166,6 +1172,7 @@ func TestQueryStreamHistoryBindingLookupFailureReturnsError(t *testing.T) {
 		bindings:      &fakeBindingRepo{err: errors.New("db error")},
 		cryptoActive:  true, // required to activate binding lookup (KEK-presence gate)
 	}
+	s.buildHandlers()
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
@@ -1288,6 +1295,7 @@ func TestQueryStreamHistory_LocationHardGate_DeniedWhenNotInLocation(t *testing.
 		historyReader: &fakeHistoryReader{},
 		accessEngine:  policytest.DenyAllEngine(),
 	}
+	s.buildHandlers()
 
 	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
@@ -1334,6 +1342,7 @@ func TestQueryStreamHistory_StaffOverride_BypassesHardGate(t *testing.T) {
 		historyReader: reader,
 		accessEngine:  staffEngine,
 	}
+	s.buildHandlers()
 
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "staff-1",

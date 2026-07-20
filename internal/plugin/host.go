@@ -12,7 +12,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
-	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/focuscontract"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -146,7 +146,7 @@ type HistoryReader interface {
 // coordinator and history reader injected after construction. These dependencies
 // are created during gRPC subsystem Start, which runs after plugin loading.
 type FocusDepsConfigurer interface {
-	SetFocusCoordinator(fc focus.Coordinator)
+	SetFocusCoordinator(fc focuscontract.Coordinator)
 	SetHistoryReader(hr HistoryReader)
 }
 

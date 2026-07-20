@@ -32,8 +32,8 @@ per milestone (v0.11 used CHAN/SCENEFWD/CLUSTER; those are archived).
 
 <!-- Structural debt from the beads migration (epics holomush-1bft/dj95/wm0fi/yvdm); behavior-preserving. -->
 
-- [ ] **ARCH-01**: The `CoreServer` god object is decomposed into cohesive, separately-testable units with no behavior change (epics `holomush-1bft`/`wm0fi`)
-- [ ] **ARCH-02**: The `plugin/manager` god object is decomposed similarly, with no behavior change (epic `holomush-dj95`)
+- [x] **ARCH-01**: The `CoreServer` god object is decomposed into cohesive, separately-testable units with no behavior change (epics `holomush-1bft`/`wm0fi`)
+- [x] **ARCH-02**: The `plugin/manager` god object is decomposed similarly, with no behavior change (epic `holomush-dj95`)
 - [x] **ARCH-03**: Process bootstrap is migrated onto `lifecycle.Orchestrator`, unifying subsystem start/stop ordering (epic `holomush-yvdm`)
 - [x] **ARCH-04**: The parallel `core.Event` / `eventbus.Event` models are collapsed to a single representation, coordinated with the MODEL-01 outcome
 - [x] **ARCH-05**: Remaining gateway-boundary import violations are removed so `internal/web` / `internal/telnet` hold only protocol-translation dependencies (`.claude/rules/gateway-boundary.md`)
@@ -92,8 +92,8 @@ Which phase covers which requirement — **populated by `gsd-roadmapper` during 
 | ARCH-03 | Phase 7 | Complete |
 | ARCH-04 | Phase 7 | Complete |
 | ARCH-05 | Phase 7 | Complete |
-| ARCH-01 | Phase 8 | Pending |
-| ARCH-02 | Phase 8 | Pending |
+| ARCH-01 | Phase 8 | Complete |
+| ARCH-02 | Phase 8 | Complete |
 | QUAL-02 | Phase 9 | Pending |
 | QUAL-03 | Phase 9 | Pending |
 | QUAL-04 | Phase 9 | Pending |

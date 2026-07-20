@@ -401,7 +401,7 @@ func buildHistoryCrypto(
 
 	guard, err := authguard.New(
 		authguard.NewDEKParticipantLookup(pc.dekMgr),
-		authguard.NewPluginManifestLookup(mgr),
+		mgr,          // *plugins.Manager satisfies authguard.ManifestLookup directly
 		accessEngine, // ABACEngine — never invoked on the character/plugin-readback paths
 		auditEm,      // BackpressureChecker — fresh QueuedEmitter ⇒ no throttle
 	)

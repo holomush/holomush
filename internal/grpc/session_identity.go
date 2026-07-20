@@ -28,11 +28,11 @@ import (
 // The binding is minted at character creation (auth_handlers.go createCharacterAtomic;
 // guest_service.go CreateGuest), so a Current failure here is a misconfiguration
 // assertion, never an expected path once KEK is mandatory.
-func (s *CoreServer) buildCharacterIdentity(ctx context.Context, playerID, characterID string) (eventbus.SessionIdentity, error) {
-	if s.bindings == nil || !s.cryptoActive {
+func (h *QueryHandler) buildCharacterIdentity(ctx context.Context, playerID, characterID string) (eventbus.SessionIdentity, error) {
+	if h.bindings == nil || !h.cryptoActive {
 		return eventbus.SessionIdentity{}, nil
 	}
-	bindingID, err := s.bindings.Current(ctx, characterID)
+	bindingID, err := h.bindings.Current(ctx, characterID)
 	if err != nil {
 		return eventbus.SessionIdentity{}, oops.With("character_id", characterID).
 			With("cause", "binding_lookup_failed").Wrap(err)

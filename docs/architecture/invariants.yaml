@@ -276,6 +276,7 @@ scopes:
       - "docs/superpowers/specs/2026-06-07-web-portal-scenes-design.md"
     owned_paths:
       - "plugins/core-scenes/**"
+      - "internal/focuscontract/**"
       - "internal/grpc/focus/**"
       - "internal/grpc/stream_registry*.go"
       - "internal/grpc/focus_wiring*.go"
@@ -303,8 +304,8 @@ scopes:
       - "internal/session/session_connection_mutator_test.go"
       - "internal/store/session_store.go"
       - "internal/store/session_store_integration_test.go"
-      # SCENE+STORE: server.go carries P5-11 + TS; privacy_test carries P4 + TS.
-      - "internal/grpc/server.go"
+      # SCENE+STORE: subscribe_handler.go carries P5-11 + TS (moved off server.go in 08-03); privacy_test carries P4 + TS.
+      - "internal/grpc/subscribe_handler.go"
       - "test/integration/privacy/privacy_test.go"
       # SCENE+EVENTBUS: query_stream_history carries P4 + ROPS; the colon-eradication meta-tests carry P4 + ROPS.
       - "internal/grpc/query_stream_history.go"
@@ -418,8 +419,11 @@ scopes:
       - "internal/plugin/goplugin/host_test.go"
       # PLUGIN+(settings/S substrate): lua host (PC-3 + deferred bare INV-6/7/8 + INV-S5).
       - "internal/plugin/lua/host.go"
-      # PLUGIN+EVENTBUS: manager carries EVENTBUS-11 + W9ML-8.
+      # PLUGIN+EVENTBUS: manager carries EVENTBUS-11; loader.go is the load-time
+      # half ARCH-02 split off it and carries W9ML-8 (INV-PLUGIN-16) + M1
+      # (INV-PLUGIN-33) plus the EVENTBUS-11 cross-reference.
       - "internal/plugin/manager.go"
+      - "internal/plugin/loader.go"
       # PLUGIN+SCENE+EVENTBUS: plugin subsystem (PC-3 + foreign INV-1/4 + EVENTBUS-11 + SCENE-38).
       - "internal/plugin/setup/subsystem.go"
       # PLUGIN+ACCESS: whole-system plugins helper (WS-2/3 + ACCESS-4).
@@ -499,8 +503,10 @@ scopes:
       - "internal/grpc/stream_access.go"
       - "internal/test/invariants/colon_eradication_test.go"
       - "internal/test/invariants/inv_p4_coverage_meta_test.go"
-      # EVENTBUS+PLUGIN: manager / subsystem / identity (see PLUGIN.shared_files). GW-10 lives here.
+      # EVENTBUS+PLUGIN: manager / loader / subsystem / identity (see PLUGIN.shared_files).
+      # GW-10 lives here; loader.go is manager.go's ARCH-02 load-time half.
       - "internal/plugin/manager.go"
+      - "internal/plugin/loader.go"
       - "internal/plugin/manager_test.go"
       - "internal/plugin/setup/subsystem.go"
       - "internal/plugin/identity_registry_test.go"
@@ -648,7 +654,7 @@ scopes:
       - "internal/eventbus/history/readback.go"
       - "internal/eventbus/publisher.go"
       - "internal/eventbus/publisher_test.go"
-      - "internal/grpc/server.go"
+      - "internal/grpc/subscribe_handler.go"
       - "internal/grpc/subscribe_loop_test.go"
       - "internal/testsupport/holomushtest/server.go"
       - "internal/testsupport/integrationtest/crypto.go"
@@ -1865,7 +1871,7 @@ invariants:
       is deleted, not stubbed."
     binding: pending
     refs:
-      - {file: "internal/grpc/server.go", token: "INV-TS-6"}
+      - {file: "internal/grpc/subscribe_handler.go", token: "INV-TS-6"}
       - {file: "internal/grpc/subscribe_loop_test.go", token: "INV-TS-6"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-6"}
       - {file: "test/integration/privacy/privacy_test.go", token: "INV-TS-6"}
@@ -1877,7 +1883,7 @@ invariants:
       floor ns is included."
     binding: pending
     refs:
-      - {file: "internal/grpc/server.go", token: "INV-TS-7"}
+      - {file: "internal/grpc/subscribe_handler.go", token: "INV-TS-7"}
       - {file: "internal/grpc/subscribe_loop_test.go", token: "INV-TS-7"}
       - {file: "internal/pgnanos/doc.go", token: "INV-TS-7"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-7"}
@@ -2825,9 +2831,9 @@ invariants:
       one Store-lock."
     binding: pending
     refs:
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-14"}
       - {file: "internal/grpc/focus/auto_focus_on_join.go", token: "INV-P5-1"}
       - {file: "internal/grpc/focus/auto_focus_on_join_test.go", token: "INV-P5-1"}
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-1"}
       - {file: "internal/grpc/focus/set_connection_focus.go", token: "INV-P5-1"}
       - {file: "internal/grpc/focus/set_connection_focus_test.go", token: "INV-P5-1"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-1"}
@@ -2864,9 +2870,9 @@ invariants:
     summary: "AutoFocusOnJoin terminal-only filter: ClientType in {terminal, telnet}; comms_hub connections are NEVER auto-focused."
     binding: pending
     refs:
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-17"}
       - {file: "internal/grpc/focus/auto_focus_on_join.go", token: "INV-P5-4"}
       - {file: "internal/grpc/focus/auto_focus_on_join_test.go", token: "INV-P5-4"}
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-4"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-4"}
       - {file: "pkg/plugin/focus_client.go", token: "INV-P5-4"}
       - {file: "plugins/core-scenes/commands.go", token: "INV-P5-4"}
@@ -2880,7 +2886,7 @@ invariants:
       callback under one Store-lock; falls back to grid on failure with no read-then-mutate race."
     binding: pending
     refs:
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-5"}
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-18"}
       - {file: "internal/grpc/focus/restore_connection_focus.go", token: "INV-P5-5"}
       - {file: "internal/grpc/focus/restore_connection_focus_test.go", token: "INV-P5-5"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-5"}
@@ -2947,10 +2953,10 @@ invariants:
       skipped conn_id is reported and its FocusKey is unchanged."
     binding: pending
     refs:
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-24"}
       - {file: "internal/grpc/focus/auto_focus_on_join.go", token: "INV-P5-11"}
       - {file: "internal/grpc/focus/auto_focus_on_join_test.go", token: "INV-P5-11"}
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-11"}
-      - {file: "internal/grpc/server.go", token: "INV-P5-11"}
+      - {file: "internal/grpc/subscribe_handler.go", token: "INV-P5-11"}
       - {file: "internal/grpc/subscribe_server_test.go", token: "INV-P5-11"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-11"}
       - {file: "pkg/plugin/focus_client.go", token: "INV-P5-11"}
@@ -2965,7 +2971,7 @@ invariants:
       fallback) or restore-first (leave's scene_leave_ic reaches the subscribed connection); no torn state."
     binding: pending
     refs:
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-12"}
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-25"}
       - {file: "internal/grpc/focus/restore_connection_focus.go", token: "INV-P5-12"}
       - {file: "internal/grpc/focus/restore_connection_focus_test.go", token: "INV-P5-12"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-12"}
@@ -2978,7 +2984,7 @@ invariants:
       reconnect target is preserved."
     binding: pending
     refs:
-      - {file: "internal/grpc/focus/coordinator.go", token: "INV-P5-13"}
+      - {file: "internal/focuscontract/focuscontract.go", token: "INV-SCENE-26"}
       - {file: "internal/grpc/focus/set_connection_focus.go", token: "INV-P5-13"}
       - {file: "internal/grpc/focus/set_connection_focus_test.go", token: "INV-P5-13"}
       - {file: "internal/test/invariants/inv_p5_coverage_meta_test.go", token: "INV-P5-13"}
@@ -3617,7 +3623,7 @@ invariants:
     summary: "Sweep ordering: the retention GC sweep MUST NOT collect a plugin loaded this cycle."
     binding: pending
     refs:
-      - {file: "internal/plugin/manager.go", token: "INV-W9ML-8"}
+      - {file: "internal/plugin/loader.go", token: "INV-W9ML-8"}
   - id: INV-PLUGIN-17
     scope: INV-PLUGIN
     origin_spec: "docs/superpowers/specs/2026-05-04-legacy-id-elimination-design.md"
@@ -3843,7 +3849,7 @@ invariants:
       plugins without crypto.emits skip the Load-pass and validation entirely."
     binding: pending
     refs:
-      - {file: "internal/plugin/manager.go", token: "INV-M1"}
+      - {file: "internal/plugin/loader.go", token: "INV-M1"}
       - {file: "internal/plugin/manager_test.go", token: "INV-M1"}
       - {file: "pkg/plugin/emit_registry.go", token: "INV-M1"}
   - id: INV-PLUGIN-34
@@ -4069,6 +4075,15 @@ invariants:
     summary: "A Lua plugin MUST be wired only the capabilities its manifest declares (declaration-gated host-cap bridge);
       bound by holomush-eykuh.4's production Lua migration off the legacy hostfunc shim."
     binding: pending
+  - id: INV-PLUGIN-56
+    scope: INV-PLUGIN
+    origin_spec: "docs/reviews/arch-review/2026-07-11/findings/d1-architecture.md"
+    summary: "The plugin layer sits BELOW its consumers and beside the event bus: no production package in the internal/plugin
+      tree may import the internal/grpc tree, and internal/eventbus and internal/plugin MUST NOT depend on one another in
+      either direction. Test files are exempt (they may hold concrete fixtures)."
+    binding: bound
+    asserted_by:
+      - "test/meta/phase8_decomposition_test.go"
   - id: INV-COMMAND-1
     scope: INV-COMMAND
     origin_spec: "docs/superpowers/specs/2026-05-29-recognized-command-chip-design.md"

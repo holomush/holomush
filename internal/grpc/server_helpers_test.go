@@ -73,7 +73,7 @@ func TestActorIDStringZeroIsEmpty(t *testing.T) {
 
 func TestToSubjectQualifiesRelativeStream(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	sub, err := s.toSubject("main", "character.01HYXYZCHAR0000000000000CH")
 	require.NoError(t, err)
 	assert.Equal(t, eventbus.Subject("events.main.character.01HYXYZCHAR0000000000000CH"), sub)
@@ -81,7 +81,7 @@ func TestToSubjectQualifiesRelativeStream(t *testing.T) {
 
 func TestToSubjectRejectsColonStream(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	// Colon-style references are no longer valid stream names: Qualify produces
 	// "events.main.character:..." which NewSubject rejects (holomush-rops).
 	_, err := s.toSubject("main", "character:01HYXYZCHAR0000000000000CH")
@@ -90,7 +90,7 @@ func TestToSubjectRejectsColonStream(t *testing.T) {
 
 func TestToSubjectRejectsInvalidSubjectCharacters(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	// Invalid characters after qualification: "!" isn't in the subject token set.
 	_, err := s.toSubject("main", "character.bad!token")
 	require.Error(t, err)
@@ -103,8 +103,8 @@ func TestToSubjectRejectsInvalidSubjectCharacters(t *testing.T) {
 // nil, no panic) rather than dereference a nil s.publisher.
 func TestEmitCommandResponseNilPublisherIsSilentNoOp(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{} // publisher intentionally unset (nil)
-	err := s.emitCommandResponse(context.Background(), core.CharacterRef{ID: core.NewULID(), Name: "Nobody"}, "hi", false)
+	h := NewCommandHandler(CommandDeps{}) // publisher intentionally unset (nil)
+	err := h.emitCommandResponse(context.Background(), core.CharacterRef{ID: core.NewULID(), Name: "Nobody"}, "hi", false)
 	require.NoError(t, err)
 }
 
@@ -124,9 +124,15 @@ func TestEmitCommandResponsePublishesOnExactQualifiedSubject(t *testing.T) {
 	}
 	s := &CoreServer{}
 	WithEventPublisher(pub, func() string { return "main" })(s)
+	// Build the handlers the way NewCoreServer does (lifecycle first, since
+	// newCommandHandler takes its hook runner as a method value), so this keeps
+	// asserting that WithEventPublisher's publisher+gameID pair reaches
+	// emitCommandResponse.
+	s.lifecycleHandler = s.newLifecycleHandler()
+	h := s.newCommandHandler()
 
 	charID := core.NewULID()
-	require.NoError(t, s.emitCommandResponse(context.Background(), core.CharacterRef{ID: charID, Name: "Alice"}, "hi", false))
+	require.NoError(t, h.emitCommandResponse(context.Background(), core.CharacterRef{ID: charID, Name: "Alice"}, "hi", false))
 
 	assert.Equal(t, eventbus.Subject("events.main.character."+charID.String()), got.Subject,
 		"emitCommandResponse must qualify by exact literal, not a recomputed Qualify call")
@@ -149,7 +155,7 @@ func TestCurrentGameIDFallsBackToMain(t *testing.T) {
 
 func TestComputeInitialFiltersSkipsInvalidStreams(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	plan := focus.RestorePlan{
 		Streams: []focus.StreamWithMode{
 			{Stream: "character.01HYXYZCHAR0000000000000CH", Mode: focus.ReplayModeFromCursor},
@@ -166,7 +172,7 @@ func TestComputeInitialFiltersSkipsInvalidStreams(t *testing.T) {
 
 func TestToProtoSubscribeResponseMapsFields(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	id := core.NewULID()
 	charID := core.NewULID()
 	resp := s.toProtoSubscribeResponse(eventbus.Event{
@@ -201,7 +207,7 @@ func TestFilterSetToSliceReturnsAllSubjects(t *testing.T) {
 
 func TestSubscribeRejectsNilSubscriber(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{} // subscriber nil
+	s := NewSubscribeHandler(SubscribeDeps{}) // subscriber nil
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "s1",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -216,11 +222,11 @@ func TestSubscribeRejectsMissingSessionToken(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
 	info := &session.Info{ID: "s1", ExpiresAt: &future}
-	s := &CoreServer{
-		subscriber:        &stubSubscriber{},
-		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
-		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
-	}
+	s := NewSubscribeHandler(SubscribeDeps{
+		Subscriber:        &stubSubscriber{},
+		SessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
+		PlayerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
+	})
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId: "s1",
 		// PlayerSessionToken missing
@@ -241,11 +247,11 @@ func TestSubscribeRejectsMissingSessionToken(t *testing.T) {
 
 func TestSubscribeRejectsUnknownSession(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{
-		subscriber:        &stubSubscriber{},
-		sessionStore:      newTestSessionStore(t, nil),
-		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
-	}
+	s := NewSubscribeHandler(SubscribeDeps{
+		Subscriber:        &stubSubscriber{},
+		SessionStore:      newTestSessionStore(t, nil),
+		PlayerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
+	})
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "missing",
 		PlayerSessionToken: testPlayerSessionToken,
