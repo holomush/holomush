@@ -17,7 +17,7 @@ import (
 	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/focuscontract"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
@@ -227,7 +227,7 @@ func (h *Host) HostCapabilitiesAdapter() hostcap.HostCapabilities {
 //
 // A nil fc clears the FocusOps binding rather than wrapping nil — every
 // adapter method would otherwise NPE on its first call.
-func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
+func (h *Host) SetFocusCoordinator(fc focuscontract.Coordinator) {
 	if h.hostFuncs == nil {
 		return
 	}

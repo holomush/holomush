@@ -523,6 +523,9 @@ func TestDisconnectGatesGuestCleanupOnRemovalSignal(t *testing.T) {
 				counts:  session.ConnectionCounts{Total: 0, Grid: 0},
 				removed: tt.removed,
 			}
+			// The cluster units snapshot their collaborators at construction,
+			// so a post-construction store swap needs a rebuild to reach them.
+			server.buildHandlers()
 
 			resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
 				Meta:               &corev1.RequestMeta{RequestId: "guard-test", Timestamp: timestamppb.Now()},

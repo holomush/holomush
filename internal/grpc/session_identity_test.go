@@ -20,21 +20,21 @@ func TestBuildCharacterIdentity(t *testing.T) {
 	cid := core.NewULID().String()
 
 	t.Run("crypto inactive returns zero identity no lookup", func(t *testing.T) {
-		s := &CoreServer{bindings: &fakeBindingRepo{}, cryptoActive: false}
+		s := NewQueryHandler(QueryDeps{Bindings: &fakeBindingRepo{}, CryptoActive: false})
 		id, err := s.buildCharacterIdentity(context.Background(), pid, cid)
 		require.NoError(t, err)
 		require.Equal(t, eventbus.SessionIdentity{}, id)
 	})
 
 	t.Run("nil bindings returns zero identity", func(t *testing.T) {
-		s := &CoreServer{bindings: nil, cryptoActive: true}
+		s := NewQueryHandler(QueryDeps{Bindings: nil, CryptoActive: true})
 		id, err := s.buildCharacterIdentity(context.Background(), pid, cid)
 		require.NoError(t, err)
 		require.Equal(t, eventbus.SessionIdentity{}, id)
 	})
 
 	t.Run("active with binding returns character identity", func(t *testing.T) {
-		s := &CoreServer{bindings: &fakeBindingRepo{bindingID: "bind-1"}, cryptoActive: true}
+		s := NewQueryHandler(QueryDeps{Bindings: &fakeBindingRepo{bindingID: "bind-1"}, CryptoActive: true})
 		id, err := s.buildCharacterIdentity(context.Background(), pid, cid)
 		require.NoError(t, err)
 		require.NotEqual(t, eventbus.SessionIdentity{}, id)
@@ -45,7 +45,7 @@ func TestBuildCharacterIdentity(t *testing.T) {
 		// sites can wrap it with the appropriate surface code
 		// (SUBSCRIBE_BINDING_LOOKUP_FAILED or HISTORY_BINDING_LOOKUP_FAILED)
 		// and that code remains observable via oops.AsOops.
-		s := &CoreServer{bindings: &fakeBindingRepo{err: errors.New("boom")}, cryptoActive: true}
+		s := NewQueryHandler(QueryDeps{Bindings: &fakeBindingRepo{err: errors.New("boom")}, CryptoActive: true})
 		_, err := s.buildCharacterIdentity(context.Background(), pid, cid)
 		require.Error(t, err)
 	})

@@ -25,7 +25,7 @@ import (
 //
 // This is the T5 skeleton: subsequent beads (5b2j.9 / T6, 5b2j.10 / T7) add
 // the expired/empty-location/focus dispatch + ABAC gate + store query + response.
-func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error) {
+func (h *QueryHandler) ListFocusPresence(ctx context.Context, req *corev1.ListFocusPresenceRequest) (*corev1.ListFocusPresenceResponse, error) {
 	if req == nil {
 		return nil, oops.Code("INVALID_ARGUMENT").Errorf("request is required")
 	}
@@ -44,8 +44,8 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 	// Validate ownership — enumeration-safe collapse to SESSION_NOT_FOUND.
 	if _, err := auth.ValidateSessionOwnership(
 		ctx,
-		s.playerSessionRepo,
-		s.sessionStore,
+		h.playerSessionRepo,
+		h.sessionStore,
 		req.GetPlayerSessionToken(),
 		req.GetSessionId(),
 	); err != nil {
@@ -58,7 +58,7 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 
 	// Re-Get the session info (ValidateSessionOwnership returned the player
 	// session, not the user session). Mirrors ListSessionStreams pattern.
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	info, err := h.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
 		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
 			return nil, oops.Code("SESSION_NOT_FOUND").
@@ -97,7 +97,7 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 	// future construction sites might not. Fail-closed for the ABAC engine
 	// (missing engine = default-deny); INTERNAL for the resolver (it's a
 	// misconfiguration, not a security boundary).
-	if s.accessEngine == nil {
+	if h.accessEngine == nil {
 		slog.ErrorContext(ctx, "list focus presence: access engine not configured",
 			"request_id", requestID, "session_id", req.SessionId)
 		return nil, oops.Code("PERMISSION_DENIED").
@@ -105,7 +105,7 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 			With("reason", "access_engine_not_configured").
 			Errorf("permission denied")
 	}
-	if s.characterNameResolver == nil {
+	if h.characterNameResolver == nil {
 		slog.ErrorContext(ctx, "list focus presence: name resolver not configured",
 			"request_id", requestID, "session_id", req.SessionId)
 		return nil, oops.Code("INTERNAL").Errorf("character name resolver not configured")
@@ -122,7 +122,7 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 	if err != nil {
 		return nil, oops.Code("INTERNAL").Wrap(err)
 	}
-	decision, err := s.accessEngine.Evaluate(ctx, accessReq)
+	decision, err := h.accessEngine.Evaluate(ctx, accessReq)
 	if err != nil {
 		slog.ErrorContext(ctx, "list focus presence ABAC error",
 			"request_id", requestID, "error", err)
@@ -137,7 +137,7 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 	}
 
 	// Fetch active sessions at the location.
-	sessions, err := s.sessionStore.ListActiveByLocation(ctx, info.LocationID)
+	sessions, err := h.sessionStore.ListActiveByLocation(ctx, info.LocationID)
 	if err != nil {
 		slog.ErrorContext(ctx, "list active by location failed",
 			"request_id", requestID, "location_id", info.LocationID.String(), "error", err)
@@ -156,7 +156,7 @@ func (s *CoreServer) ListFocusPresence(ctx context.Context, req *corev1.ListFocu
 	}
 
 	// Batch character-name resolution.
-	names, err := s.characterNameResolver.Names(ctx, uniqueIDs)
+	names, err := h.characterNameResolver.Names(ctx, uniqueIDs)
 	if err != nil {
 		slog.ErrorContext(ctx, "character name resolution failed",
 			"request_id", requestID, "count", len(uniqueIDs), "error", err)

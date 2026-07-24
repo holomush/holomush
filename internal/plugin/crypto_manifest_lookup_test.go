@@ -61,3 +61,28 @@ func newTestManagerWithManifest(t *testing.T, m *plugins.Manifest) *plugins.Mana
 	mgr.TestLoadPlugin(m.Name, m)
 	return mgr
 }
+
+// TestManagerPluginRequestsDecryptionReturnsFalseOnNilReceiver pins the
+// fail-closed contract formerly held by authguard's deleted manifestAdapter.
+// A typed-nil *Manager stored in an authguard.ManifestLookup is NOT
+// interface-nil, so authguard.New's AUTHGUARD_DEPENDENCY_NIL check cannot
+// catch it; without a receiver guard this gate panics on the decrypt path.
+func TestManagerPluginRequestsDecryptionReturnsFalseOnNilReceiver(t *testing.T) {
+	var mgr *plugins.Manager
+
+	require.NotPanics(t, func() {
+		assert.False(t, mgr.PluginRequestsDecryption("any-plugin", "any-event"),
+			"nil manager must deny (fail-closed), not panic")
+	})
+}
+
+// TestManagerPluginCanReadBackReturnsFalseOnNilReceiver is the read-back
+// half of the same fail-closed contract.
+func TestManagerPluginCanReadBackReturnsFalseOnNilReceiver(t *testing.T) {
+	var mgr *plugins.Manager
+
+	require.NotPanics(t, func() {
+		assert.False(t, mgr.PluginCanReadBack("any-plugin", "any-event"),
+			"nil manager must deny (fail-closed), not panic")
+	})
+}

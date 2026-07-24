@@ -41,7 +41,7 @@ Phase execution artifacts: `milestones/v0.11-phases/`.
 - [x] **Phase 5: World-Model Integrity Fixes (M2/M12)** — version guard, dual-write elimination, event-sourcing doc correction (completed 2026-07-13)
 - [x] **Phase 6: Operational Hardening & Assurance Gates** — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage gate (completed 2026-07-15)
 - [x] **Phase 7: Event-Model & Bootstrap Decomposition** — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports (completed 2026-07-18)
-- [ ] **Phase 8: God-Object Decomposition** — CoreServer + plugin/manager decomposition (behavior-preserving)
+- [x] **Phase 8: God-Object Decomposition** — CoreServer + plugin/manager decomposition (behavior-preserving) (completed 2026-07-19)
 - [ ] **Phase 9: Test-Quality & Code-Health Sweep** — coverage backfill, weak-test/ACE remediation, session-lifecycle matrix, code-health batch
 
 ## Phase Details
@@ -221,6 +221,40 @@ Plans:
 2. `plugin/manager` is similarly decomposed; plugin load/lifecycle behavior is unchanged (whole-system plugin census stays green)
 3. Size/complexity metrics on the former god objects drop below an agreed threshold; no new gateway-boundary or plugin-runtime-symmetry violations are introduced
 
+**Plans:** 9/9 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 08-01-PLAN.md — Wave 0a: create `internal/focuscontract` leaf package + alias re-exports in `internal/grpc/focus` (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 08-02-PLAN.md — Wave 0b: rewire 7 plugin files off `internal/grpc/focus`, invert the authguard manifest seam, settle D-08 `TestLoadPlugin` (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 08-03-PLAN.md — ARCH-01: extract `SubscribeHandler` (subscribe/stream-delivery cluster, 8 methods) (wave 3)
+- [x] 08-04-PLAN.md — ARCH-02: extract `IdentityStore` (D-06 identity registry with its own lock) (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 08-05-PLAN.md — ARCH-01: extract `CommandHandler` + `LifecycleHandler` (7 methods) (wave 4)
+- [x] 08-06-PLAN.md — ARCH-02: extract `PluginRuntime` (delivery + read-side lookups) (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 08-07-PLAN.md — ARCH-01: extract `QueryHandler`, reduce `CoreServer` to a four-unit facade (wave 5)
+- [x] 08-08-PLAN.md — ARCH-02: extract `PluginLoader`, assign `Close`/`UnloadPlugin`, reduce `Manager` to a facade (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 08-09-PLAN.md — Wave C: regrowth ratchet (import direction + size ceilings), census, bind `INV-PLUGIN-56` (wave 6)
+
+**Cross-cutting constraints:**
+
+- task test:int is green and git diff --stat origin/main...HEAD -- test/integration/ shows no assertion edit.
+
 ### Phase 9: Test-Quality & Code-Health Sweep
 
 **Goal**: Backfill coverage and remediate test/code-health debt to the reconciled bar.
@@ -244,7 +278,7 @@ Plans:
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
-| 8. God-Object Decomposition | v0.12 | 0 | Pending | — |
+| 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
 
 ## Deferred (Not in This Roadmap)

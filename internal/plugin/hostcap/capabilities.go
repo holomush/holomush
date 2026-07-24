@@ -19,7 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/focuscontract"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/pluginauthz"
 	"github.com/holomush/holomush/internal/property"
@@ -111,7 +111,7 @@ type HostCapabilities interface {
 	CharacterSettings() settings.CharacterSettingsStore
 
 	// FocusCoordinator backs the FocusService RPCs (nil ⇒ not configured).
-	FocusCoordinator() focus.Coordinator
+	FocusCoordinator() focuscontract.Coordinator
 	// GameID returns the game ID used to qualify a domain-relative stream
 	// reference before the QueryStreamHistory instance-level ABAC check
 	// ("" ⇒ unqualifiable ⇒ the gate fails closed; holomush-xakba).

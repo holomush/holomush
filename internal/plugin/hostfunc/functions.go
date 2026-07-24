@@ -196,7 +196,8 @@ func (f *Functions) GetWorldMutator() WorldMutator { return f.worldMutator }
 func (f *Functions) GetPropertyRegistry() *property.Registry { return f.propertyRegistry }
 
 // GetFocusOps returns the focus coordinator ops shim, or nil when unconfigured.
-// Used by the hostcap_adapter to wrap hostfunc.FocusOps into a focus.Coordinator.
+// Used by the hostcap_adapter to wrap hostfunc.FocusOps into a
+// focuscontract.Coordinator.
 func (f *Functions) GetFocusOps() FocusOps { return f.focusOps }
 
 // GetSettingsOps returns the plugin-partitioned settings store seam, or nil when

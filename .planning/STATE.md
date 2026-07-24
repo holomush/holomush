@@ -4,16 +4,16 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
-status: "Phase 7 shipped — PR #4823"
-stopped_at: Completed 07-11-PLAN.md
-last_updated: "2026-07-19T00:53:19.389Z"
+status: Phase 8 complete — executed, verified, and shipped (PR #4832)
+stopped_at: Phase 8 executed and verified (9/9 plans, 3/3 must-haves)
+last_updated: "2026-07-20T22:11:01.328Z"
 last_activity: 2026-07-19
+last_activity_desc: Phase 8 closed — 9/9 plans, verifier PASSED 3/3, PR #4832 open
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 36
-  completed_plans: 36
-last_activity_desc: Phase 07 complete, transitioned to Phase 8
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 45
+  completed_plans: 45
 ---
 
 # Project State
@@ -25,14 +25,15 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 07 — event-model-bootstrap-decomposition
+**Current focus:** Phase 08 — god-object-decomposition (complete; Phase 09 not yet started)
 
 ## Current Position
 
 Phase: 8 — God-Object Decomposition
-Plan: Not started
-Status: Phase 7 shipped — PR #4823
-Last activity: 2026-07-19
+Plan: 9 of 09 complete
+Status: Phase 8 complete — executed, verified, and shipped (PR #4832)
+Last activity: 2026-07-19 — Phase 8 closed; ARCH-01 and ARCH-02 delivered
+Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 
 ## Performance Metrics
 
@@ -120,6 +121,15 @@ Last activity: 2026-07-19
 | Phase 07 P09 | ~5h | 3 tasks | 50 files |
 | Phase 07 P10 | ~45min | 4 tasks | 8 files |
 | Phase 07 P11 | ~4h | 3 tasks | 68 files |
+| Phase 08 P01 | 35m | 3 tasks | 6 files |
+| Phase 08 P02 | ~40m | 4 tasks | 15 files |
+| Phase 08 P03 | 55m | 3 tasks | 8 files |
+| Phase 08 P04 | ~55m | 3 tasks | 5 files |
+| Phase 08 P05 | ~70m | 3 tasks | 11 files |
+| Phase 08 P06 | ~85m | 3 tasks | 6 files |
+| Phase 08 P07 | ~75m | 3 tasks | 15 files |
+| Phase 08 P08 | ~95m | 3 tasks | 9 files |
+| Phase 08 P09 | ~70m | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -194,6 +204,36 @@ the next milestone yet.
 - [Phase ?]: 07-11: all 17 production subsystems migrated per the plan's settled D-13.3 disposition table; PluginSubsystem's cleanupOnError extended to close binaryHost+luaHost on every pre-manager Prepare failure path (closed a token-store-sweeper-goroutine leak); audit.Subsystem gained preparedProjection/partitionManager phase-owned fields with lateInit capture/restore-on-failure
 - [Phase ?]: 07-11: invalidation.Coordinator's construction+Start() stays bundled inside the memoized cryptoWiring builder (deviation from the plan's literal row-16 text) because CryptoChainVerifier — not necessarily grpcSubsystem — is the actual first resolver of the builder in topological order; confining it to the Prepare sweep (which it always is) preserves D-13.0's guarantee since the Coordinator's pub/sub is process/cluster-internal signaling, not client-facing domain traffic
 
+- [Phase 08]: 08-01: internal/focuscontract created as a neutral types-only leaf holding the 7-declaration focus contract transitive closure (Coordinator + RestorePlan -> StreamWithMode -> ReplayMode + SetConnectionFocusResult + AutoFocusOnJoinResponse -> AutoFocusFailure); import set is exactly context/time/oklog-ulid/internal-session, no internal/grpc edge (D-09 seam 1)
+- [Phase 08]: 08-01: all 7 internal/grpc/focus originals converted to Go type ALIASES (= form), not defined types — alias identity keeps ~30 existing focus.* reference sites compiling untouched AND guarantees the Lua and binary plugin hosts see one identical Coordinator type (D-20 plugin-runtime symmetry); a defined type would have created a per-runtime divergence
+- [Phase 08]: 08-01: RESEARCH.md § Seam 1's "5 declarations" undercount confirmed wrong — the transitive closure is 7; a 5-symbol move does not compile
+- [Phase 08]: 08-01: moving the Coordinator doc comments broke TestProvenanceGuard (six INV-SCENE-14/17/18/24/25/26 refs recorded at internal/grpc/focus/coordinator.go). Resolved by retargeting the registry refs to internal/focuscontract/focuscontract.go + adding internal/focuscontract/** to INV-SCENE owned_paths — the registry follows the canonical home rather than duplicating the spec. Expect the same pattern in 08-02 if further INV-annotated comments leave internal/grpc/focus.
+- [Phase 08]: 08-01: D-17 earned its keep on the very first wave — task test was green across all four affected trees while the meta suite was red; only task test:int surfaced it
+- [Phase 08]: 08-01: D-15 zero-integration-churn record for this plan: `git diff --stat origin/main...HEAD -- test/integration/` is EMPTY
+- [Phase ?]: 08-02: moved the deleted authguard manifestAdapter's nil-guard onto Manager.PluginRequestsDecryption/PluginCanReadBack — a typed-nil *Manager in a ManifestLookup is not interface-nil, so authguard.New's AUTHGUARD_DEPENDENCY_NIL check cannot catch it
+- [Phase ?]: 08-02: declared the ManifestLookup mirror interface locally in internal/plugin rather than importing authguard, avoiding a mirror-image import edge
+- [Phase ?]: 08-02: took D-08's export_test.go branch — the post-seam-2 TestLoadPlugin caller set is empty outside internal/plugin, so no build-tag plumbing was needed
+- [Phase ?]: SubscribeDeps injects buildCharacterIdentity and recomputeSessionLiveness as function values, not a CoreServer backpointer (D-02 held despite cross-cluster method edges)
+- [Phase ?]: toSubject extracted to the free function qualifyStreamSubject because emitCommandResponse is a second caller
+- [Phase ?]: Zero CoreServer fields deletable: option setters need a field to write into before newSubscribeHandler reads it (D-04 pins CoreServerOption)
+- [Phase ?]: 08-04: UnloadPlugin's identity deactivation hoisted out of the m.mu critical section — the one path the lock-split safety argument did not cover; the unload interleaving window is unavoidably widened by D-06.
+- [Phase ?]: 08-04: pluginRepo/retentionDays stay on Manager as inert option routing slots because ManagerOption is func(*Manager) (D-07); identity state itself is fully extracted.
+- [Phase ?]: 08-05: runDisconnectHooks has three consumers (command, lifecycle, auth/Logout); LifecycleHandler owns it, others take a DisconnectHookRunner function value
+- [Phase ?]: 08-05: the Deps-snapshot pattern decouples facade fields from extracted units; CoreServer.buildHandlers() is the ordered constructor fixtures re-call after poking a field
+- [Phase ?]: PluginRuntime extracted with its own lock; four m.mu sections spanning both clusters had their runtime call hoisted out (RegisterHost, ConfigureEventEmitter, loadPlugin commit, Close)
+- [Phase ?]: Crypto manifest gates relocated byte-identically; nil fail-closed guards retained at BOTH receivers plus lookupManifest
+- [Phase ?]: CommitLoaded returns 'existed' so loadedOrder's append stays under m.mu rather than nesting two unit locks
+- [Phase ?]: buildCharacterIdentity moved to QueryHandler, making buildHandlers() a two-owner ordered constructor: lifecycleHandler and queryHandler build before commandHandler and subscribeHandler
+- [Phase ?]: ARCH-01 closed: CoreServer is a facade over four constructor-injected units; server.go 1891 -> 657 LoC; exported method set fixed at 23
+- [Phase ?]: Close and UnloadPlugin assigned to the LOAD unit: both invert load-unit operations and need policyInstaller/hosts/luaHost
+- [Phase ?]: RegisterHost passes the IdentityStore to hosts instead of the *Manager — behaviorally identical through the interface, and avoids a D-02 backpointer
+- [Phase ?]: Loader and identity/runtime siblings held as concrete pointers, not narrow interfaces (11 and 6 operations, same package)
+- [Phase ?]: Manager's fourth field is the managerConfig option holder rather than a bare retentionDaysSet
+- [Phase ?]: Ratchet rows target the whole internal/grpc tree, not just .../focus — strictly stronger and RED-proven to catch subpackages
+- [Phase ?]: Sixth forbidden edge added: internal/plugin -> internal/eventbus/authguard, the mirror of D-09 seam 2
+- [Phase ?]: Manager pinned by field-set equality (structural) as primary regrowth guard; LoC ceiling is the backstop
+- [Phase ?]: No method counts hard-coded in the census — the plan's 39/36 were pre-split figures (actual 31/26)
+
 ### Pending Todos
 
 None yet.
@@ -225,10 +265,15 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-18T05:13:59.824Z
-PROJECT.md / REQUIREMENTS.md / ROADMAP.md / STATE.md written and committed (PR #4811).
-Stopped at: Completed 07-11-PLAN.md
-Resume file: None
+Last session: 2026-07-19T21:27:35.470Z
+Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
+across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
+crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
+zero integration-tree churn across all 48 commits. Shipped as PR #4832.
+Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
+#4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
+Stopped at: Phase 8 executed and verified (9/9 plans, 3/3 must-haves)
+Resume file: .planning/phases/08-god-object-decomposition/08-VERIFICATION.md
 
 ## Operator Next Steps
 

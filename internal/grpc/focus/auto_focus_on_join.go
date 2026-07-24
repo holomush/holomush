@@ -10,42 +10,17 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/focuscontract"
 	"github.com/holomush/holomush/internal/session"
 )
 
-// AutoFocusOnJoinResponse carries the fan-out result from AutoFocusOnJoin.
-// The binary plugin host translates this to the wire format
-// (host.v1 AutoFocusOnJoinResponse).
-type AutoFocusOnJoinResponse struct {
-	// SessionID is the session that owns the auto-focused connections. Consumed
-	// by focus.Coordinator.driveFocusDeltas to route SendToConnection calls
-	// without a second store round-trip (INV-SCENE-38). Empty when SESSION_NOT_FOUND
-	// (no active session).
-	SessionID string
-	// CharLocationID is the session's LocationID at mutation time. Consumed by
-	// focus.Coordinator.driveFocusDeltas to compute grid stream names for
-	// subscription delta routing (location:<charLocationID> for grid-focused
-	// connections).
-	CharLocationID ulid.ULID
-	// FocusedConnectionIDs are connections that were successfully auto-focused.
-	FocusedConnectionIDs []ulid.ULID
-	// SkippedConnectionIDs are connections that were already explicitly focused
-	// on a different target (INV-SCENE-24, D8 skip-rule).
-	SkippedConnectionIDs []ulid.ULID
-	// FailedConnectionIDs are connections that could not be focused, with reason.
-	FailedConnectionIDs []AutoFocusFailure
-	// TotalConnectionCount is the count of ALL connections on the session,
-	// regardless of client type filter. Used for diagnostic counters.
-	TotalConnectionCount uint32
-}
+// AutoFocusOnJoinResponse aliases the neutral focus contract;
+// internal/focuscontract is the canonical home.
+type AutoFocusOnJoinResponse = focuscontract.AutoFocusOnJoinResponse
 
-// AutoFocusFailure describes a per-connection failure during AutoFocusOnJoin.
-type AutoFocusFailure struct {
-	// ConnectionID is the connection that could not be focused.
-	ConnectionID ulid.ULID
-	// Reason is one of "membership_absent" or "connection_not_found".
-	Reason string
-}
+// AutoFocusFailure aliases the neutral focus contract; internal/focuscontract
+// is the canonical home.
+type AutoFocusFailure = focuscontract.AutoFocusFailure
 
 // isTerminalLike reports whether the given clientType should participate in
 // the AutoFocusOnJoin fan-out (INV-SCENE-17: terminal/telnet only).

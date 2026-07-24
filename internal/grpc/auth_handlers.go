@@ -700,7 +700,7 @@ func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*co
 					slog.WarnContext(ctx, "logout: game session delete failed",
 						"session_id", info.ID, "error", delErr)
 				}
-				s.runDisconnectHooks(ctx, *info)
+				s.lifecycleHandler.runDisconnectHooks(ctx, *info)
 			}
 		}
 	}

@@ -8,31 +8,24 @@
 package focus
 
 import (
-	"time"
-
+	"github.com/holomush/holomush/internal/focuscontract"
 	"github.com/holomush/holomush/internal/session"
 )
 
-// ReplayMode is an alias for session.ReplayMode. Defined here for
-// backward compatibility with existing focus package consumers.
-// New code SHOULD import session.ReplayMode directly.
-type ReplayMode = session.ReplayMode
+// ReplayMode aliases the neutral focus contract; internal/focuscontract is the
+// canonical home (itself an alias for session.ReplayMode).
+type ReplayMode = focuscontract.ReplayMode
 
 // Re-export constants so existing focus.ReplayModeXxx references compile.
 const (
-	ReplayModeFromCursor  = session.ReplayModeFromCursor
-	ReplayModeBoundedTail = session.ReplayModeBoundedTail
-	ReplayModeLiveOnly    = session.ReplayModeLiveOnly
+	ReplayModeFromCursor  = focuscontract.ReplayModeFromCursor
+	ReplayModeBoundedTail = focuscontract.ReplayModeBoundedTail
+	ReplayModeLiveOnly    = focuscontract.ReplayModeLiveOnly
 )
 
-// StreamWithMode pairs a stream name with its replay mode and optional
-// mode-specific parameters.
-type StreamWithMode struct {
-	Stream    string
-	Mode      ReplayMode
-	TailCount int       // for ReplayModeBoundedTail
-	NotBefore time.Time // for ReplayModeBoundedTail
-}
+// StreamWithMode aliases the neutral focus contract; internal/focuscontract is
+// the canonical home.
+type StreamWithMode = focuscontract.StreamWithMode
 
 // PolicyContext carries the preference-resolved inputs a kind policy
 // needs. Constructed by the coordinator before dispatching to the policy,

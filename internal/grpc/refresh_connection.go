@@ -16,12 +16,12 @@ import (
 
 // RefreshConnection bumps a connection's liveness lease (holomush-rsoe6).
 // Ownership failures collapse to SESSION_NOT_FOUND (enumeration-safe, I-SEC-1).
-func (s *CoreServer) RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
+func (h *QueryHandler) RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error) {
 	if req.GetSessionId() == "" || req.GetConnectionId() == "" {
 		return nil, oops.Code("INVALID_ARGUMENT").Errorf("session_id and connection_id are required")
 	}
 	if _, err := auth.ValidateSessionOwnership(
-		ctx, s.playerSessionRepo, s.sessionStore,
+		ctx, h.playerSessionRepo, h.sessionStore,
 		req.GetPlayerSessionToken(), req.GetSessionId(),
 	); err != nil {
 		slog.DebugContext(ctx, "refresh connection ownership validation failed",
@@ -39,7 +39,7 @@ func (s *CoreServer) RefreshConnection(ctx context.Context, req *corev1.RefreshC
 	// connection_id AND session_id, so a caller cannot refresh a connection
 	// owned by a different session. A foreign/absent connection affects zero
 	// rows → CONNECTION_NOT_FOUND (enumeration-safe, I-SEC-1).
-	if refreshErr := s.sessionStore.RefreshConnection(ctx, connID, req.GetSessionId()); refreshErr != nil {
+	if refreshErr := h.sessionStore.RefreshConnection(ctx, connID, req.GetSessionId()); refreshErr != nil {
 		return nil, refreshErr //nolint:wrapcheck // store returns canonical CONNECTION_NOT_FOUND oops code
 	}
 	return &corev1.RefreshConnectionResponse{Meta: responseMeta(req.GetMeta().GetRequestId())}, nil

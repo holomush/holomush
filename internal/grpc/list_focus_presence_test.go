@@ -73,6 +73,7 @@ func TestListFocusPresenceReturnsInvalidArgumentOnNilRequest(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, nil),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(), nil)
 	require.Error(t, err)
 	o, ok := oops.AsOops(err)
@@ -85,6 +86,7 @@ func TestListFocusPresenceReturnsInvalidArgumentOnEmptySessionID(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, nil),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(),
 		&corev1.ListFocusPresenceRequest{SessionId: ""})
 	require.Error(t, err)
@@ -99,6 +101,7 @@ func TestListFocusPresenceReturnsSessionNotFoundOnUnknownSession(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, nil),
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(),
 		&corev1.ListFocusPresenceRequest{
 			SessionId:          "missing",
@@ -130,6 +133,7 @@ func TestListFocusPresenceCollapsesOwnershipMismatchToNotFound(t *testing.T) {
 			ulid.MustParse("01HYXPLAYER111111111111ABC"),
 		),
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(),
 		&corev1.ListFocusPresenceRequest{
 			SessionId:          "foreign-sess",
@@ -170,6 +174,7 @@ func TestListFocusPresenceReturnsSessionExpiredForExpiredSession(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-expired": sess}),
 		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId:          "sess-expired",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -193,6 +198,7 @@ func TestListFocusPresenceReturnsUnimplementedForSceneFocus(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-1": sess}),
 		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId:          "sess-1",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -212,6 +218,7 @@ func TestListFocusPresenceReturnsEmptyEntriesWhenLocationUnset(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-1": sess}),
 		playerSessionRepo: newFakePlayerSessionRepo(ownedPlayerID),
 	}
+	s.buildHandlers()
 	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId:          "sess-1",
 		PlayerSessionToken: testPlayerSessionToken,
@@ -235,6 +242,7 @@ func TestListFocusPresenceReturnsPermissionDeniedWhenABACDenies(t *testing.T) {
 		accessEngine:          policytest.DenyAllEngine(),
 		characterNameResolver: &stubNameResolver{},
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-1", PlayerSessionToken: testPlayerSessionToken,
 	})
@@ -264,6 +272,7 @@ func TestListFocusPresenceReturnsCallerAndOtherSessions(t *testing.T) {
 		accessEngine:          grant,
 		characterNameResolver: &stubNameResolver{names: map[ulid.ULID]string{char1: "alice", char2: "bob"}},
 	}
+	s.buildHandlers()
 	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-1", PlayerSessionToken: testPlayerSessionToken,
 	})
@@ -298,6 +307,7 @@ func TestListFocusPresenceSkipsEntryWhenNameUnresolved(t *testing.T) {
 		// char2 absent — its entry must be skipped.
 		characterNameResolver: &stubNameResolver{names: map[ulid.ULID]string{char1: "alice"}},
 	}
+	s.buildHandlers()
 	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-1", PlayerSessionToken: testPlayerSessionToken,
 	})
@@ -334,6 +344,7 @@ func TestListFocusPresenceExcludesExpiredSessions(t *testing.T) {
 		accessEngine:          grant,
 		characterNameResolver: &stubNameResolver{names: map[ulid.ULID]string{char: "alice"}},
 	}
+	s.buildHandlers()
 	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-1", PlayerSessionToken: testPlayerSessionToken,
 	})
@@ -385,6 +396,7 @@ func TestListFocusPresenceDeduplicatesByCharacterID(t *testing.T) {
 		accessEngine:          grant,
 		characterNameResolver: &stubNameResolver{names: map[ulid.ULID]string{char: "alice"}},
 	}
+	s.buildHandlers()
 	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-caller", PlayerSessionToken: testPlayerSessionToken,
 	})
@@ -412,6 +424,7 @@ func TestListFocusPresenceDoesNotLeakSessionsFromOtherLocations(t *testing.T) {
 		accessEngine:          grant,
 		characterNameResolver: &stubNameResolver{names: map[ulid.ULID]string{char1: "alice"}},
 	}
+	s.buildHandlers()
 	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-1", PlayerSessionToken: testPlayerSessionToken,
 	})
@@ -432,6 +445,7 @@ func TestListFocusPresenceReturnsPermissionDeniedWhenAccessEngineIsNil(t *testin
 		accessEngine:          nil, // explicit
 		characterNameResolver: &stubNameResolver{},
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-1", PlayerSessionToken: testPlayerSessionToken,
 	})
@@ -492,6 +506,7 @@ func TestListFocusPresenceExcludesActiveButNotGridPresent(t *testing.T) {
 			commsChar: "bob-comms", // resolvable: ensures exclusion is by grid_present filter, not name-resolver skip
 		}},
 	}
+	s.buildHandlers()
 	resp, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-caller", PlayerSessionToken: testPlayerSessionToken,
 	})
@@ -514,6 +529,7 @@ func TestListFocusPresenceReturnsInternalWhenNameResolverIsNil(t *testing.T) {
 		accessEngine:          grant,
 		characterNameResolver: nil, // explicit
 	}
+	s.buildHandlers()
 	_, err := s.ListFocusPresence(context.Background(), &corev1.ListFocusPresenceRequest{
 		SessionId: "sess-1", PlayerSessionToken: testPlayerSessionToken,
 	})

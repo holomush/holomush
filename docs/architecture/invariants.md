@@ -338,6 +338,7 @@ invariants.
 | `INV-PLUGIN-53` | The per-entry least-privilege parameters (access:, scope:) are valid only on a capability: requires entry; either on a service: entry MUST be a hard manifest error at load. | — | bound |
 | `INV-PLUGIN-54` | A binary plugin's Init MUST fail closed when its provider implements a host-capability *Aware interface for a non-exempt capability absent from the manifest; capability clients are injected only for declared capabilities. emit and command-registry are self-gated and exempt. | — | bound |
 | `INV-PLUGIN-55` | A Lua plugin MUST be wired only the capabilities its manifest declares (declaration-gated host-cap bridge); bound by holomush-eykuh.4's production Lua migration off the legacy hostfunc shim. | — | pending |
+| `INV-PLUGIN-56` | The plugin layer sits BELOW its consumers and beside the event bus: no production package in the internal/plugin tree may import the internal/grpc tree, and internal/eventbus and internal/plugin MUST NOT depend on one another in either direction. Test files are exempt (they may hold concrete fixtures). | — | bound |
 
 ### `INV-EVENTBUS`
 

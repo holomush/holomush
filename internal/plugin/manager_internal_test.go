@@ -43,7 +43,7 @@ func TestResolveLoadOrderPolicyAllowsCleanResult(t *testing.T) {
 
 // Verifies: INV-PLUGIN-43
 func TestResolveLoadOrderFailsFastOnUnsatisfiedRequired(t *testing.T) {
-	m := &Manager{registry: NewServiceRegistry(), capVocab: NewCapabilityVocabulary()}
+	m := &PluginLoader{registry: NewServiceRegistry(), capVocab: NewCapabilityVocabulary()}
 	discovered := []*DiscoveredPlugin{
 		{Manifest: &Manifest{Name: "c", Requires: []Dependency{{Kind: DependencyService, Name: "holomush.absent.v1.X"}}}},
 	}
@@ -54,7 +54,7 @@ func TestResolveLoadOrderFailsFastOnUnsatisfiedRequired(t *testing.T) {
 
 // Verifies: INV-PLUGIN-43
 func TestResolveLoadOrderFailsFastOnDependencyCycle(t *testing.T) {
-	m := &Manager{registry: NewServiceRegistry(), capVocab: NewCapabilityVocabulary()}
+	m := &PluginLoader{registry: NewServiceRegistry(), capVocab: NewCapabilityVocabulary()}
 	// Mutual service cycle: a requires svc-b (provided by b); b requires svc-a
 	// (provided by a). Kahn's algorithm cannot order this — fail closed.
 	discovered := []*DiscoveredPlugin{
@@ -67,7 +67,7 @@ func TestResolveLoadOrderFailsFastOnDependencyCycle(t *testing.T) {
 }
 
 func TestResolveLoadOrderSucceedsWhenAllSatisfied(t *testing.T) {
-	m := &Manager{registry: NewServiceRegistry(), capVocab: DefaultCapabilityVocabulary()}
+	m := &PluginLoader{registry: NewServiceRegistry(), capVocab: DefaultCapabilityVocabulary()}
 	discovered := []*DiscoveredPlugin{
 		{Manifest: &Manifest{Name: "c", Requires: []Dependency{{Kind: DependencyCapability, Name: "session"}}}},
 	}

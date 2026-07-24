@@ -46,7 +46,7 @@ const (
 //   - Public streams (events.<gid>.location.<id>, global, etc.): ABAC engine.Evaluate.
 //
 // Pure read — does not mutate session cursors (invariant I-13).
-func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
+func (h *QueryHandler) QueryStreamHistory(ctx context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
@@ -60,7 +60,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	)
 
 	// Step 0: Guard — historyReader must be configured.
-	if s.historyReader == nil {
+	if h.historyReader == nil {
 		return nil, oops.Code("INTERNAL").Errorf("history reader not configured")
 	}
 
@@ -68,7 +68,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	if req.SessionId == "" {
 		return nil, oops.Code("INVALID_ARGUMENT").Errorf("session_id is required")
 	}
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	info, err := h.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
 		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
 			// INV-PRIVACY-5 wire opacity: missing-session denial collapses to
@@ -106,7 +106,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	// classifier switch, scope floor, ABAC resource, and bus fetch — operates
 	// on the qualified value. Colon-style legacy refs fail Qualify and are
 	// rejected fail-closed as InvalidArgument.
-	qualified, qErr := eventbus.Qualify(s.currentGameID(), req.Stream)
+	qualified, qErr := eventbus.Qualify(h.currentGameID(), req.Stream)
 	if qErr != nil {
 		// Generic message (no inner error) — qErr may name internal token rules;
 		// matches the ":stream is required" guard above and the §5.5 wire-opacity
@@ -216,7 +216,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		// located in the requested location. staffOverride consults the ABAC
 		// engine (read_unrestricted_history action on "stream:*") and returns
 		// false if the engine is nil or evaluation fails (fail-closed).
-		if !staffOverride(ctx, info, s.accessEngine) {
+		if !staffOverride(ctx, info, h.accessEngine) {
 			if info.LocationID.String() != extractLocationID(stream) {
 				slog.InfoContext(ctx, "stream access denied by location hard-gate",
 					"session_id", req.SessionId, "denial_reason", "wrong_location",
@@ -230,7 +230,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		}
 	default:
 		// Layer 3: ABAC policy for other public streams (global, system, …).
-		if s.accessEngine == nil {
+		if h.accessEngine == nil {
 			return nil, oops.Code("STREAM_ACCESS_DENIED").
 				With("stream", stream).
 				Errorf("access engine not configured")
@@ -244,7 +244,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		if reqErr != nil {
 			return nil, oops.Code("INTERNAL").Wrap(reqErr)
 		}
-		decision, evalErr := s.accessEngine.Evaluate(ctx, accessReq)
+		decision, evalErr := h.accessEngine.Evaluate(ctx, accessReq)
 		if evalErr != nil {
 			return nil, oops.Code("INTERNAL").
 				With("stream", stream).
@@ -342,13 +342,13 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	// Build the typed authenticated identity for the hot-tier AuthGuard path.
 	// Decision 2 (Phase 3b grounding doc): derived solely from the server-side
 	// session record — never from client-supplied fields.
-	historyIdentity, identityErr := s.buildCharacterIdentity(ctx, info.PlayerID.String(), info.CharacterID.String())
+	historyIdentity, identityErr := h.buildCharacterIdentity(ctx, info.PlayerID.String(), info.CharacterID.String())
 	if identityErr != nil {
 		return nil, oops.Code("HISTORY_BINDING_LOOKUP_FAILED").Wrap(identityErr)
 	}
 
 	frames, fetchErr := fetchHistoryFramesFromBus(
-		ctx, s.historyReader, s.identityRegistry, stream, count,
+		ctx, h.historyReader, h.identityRegistry, stream, count,
 		notBefore, notAfter, beforeSeq, beforeID, caller, historyIdentity,
 	)
 	if fetchErr != nil {

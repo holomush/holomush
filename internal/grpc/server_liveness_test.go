@@ -66,9 +66,9 @@ func TestRecomputeSessionLiveness(t *testing.T) {
 				}))
 			}
 
-			s := &CoreServer{sessionStore: store}
+			h := NewLifecycleHandler(LifecycleDeps{SessionStore: store})
 			before := time.Now()
-			require.NoError(t, s.recomputeSessionLiveness(ctx, sessionID))
+			require.NoError(t, h.recomputeSessionLiveness(ctx, sessionID))
 
 			got, err := store.Get(ctx, sessionID)
 			require.NoError(t, err)

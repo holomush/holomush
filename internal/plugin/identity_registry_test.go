@@ -161,7 +161,7 @@ func TestComputeHashesProducesNonEmptyForBinary(t *testing.T) {
 		Manifest: &Manifest{Name: "x", Version: "1", Type: TypeBinary, BinaryPlugin: &BinaryConfig{Executable: "bin/x"}},
 		Dir:      dir,
 	}
-	mh, ch, err := mgr.computeHashes(dp)
+	mh, ch, err := mgr.loader.computeHashes(dp)
 	require.NoError(t, err)
 	assert.Len(t, mh, 32, "manifest hash must be sha256 (32 bytes)")
 	assert.Len(t, ch, 32, "binary content hash must be sha256")
@@ -174,7 +174,7 @@ func TestComputeHashesNilContentForSettingPlugin(t *testing.T) {
 
 	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
 	dp := &DiscoveredPlugin{Manifest: &Manifest{Name: "x", Version: "1", Type: TypeSetting}, Dir: dir}
-	_, ch, err := mgr.computeHashes(dp)
+	_, ch, err := mgr.loader.computeHashes(dp)
 	require.NoError(t, err)
 	assert.Nil(t, ch, "setting plugins MUST have nil content_hash")
 }
@@ -188,7 +188,7 @@ func TestComputeHashesFailsWhenManifestUnreadable(t *testing.T) {
 		Manifest: &Manifest{Name: "missing-manifest", Version: "1", Type: TypeSetting},
 		Dir:      dir,
 	}
-	_, _, err := mgr.computeHashes(dp)
+	_, _, err := mgr.loader.computeHashes(dp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_HASH_MANIFEST_READ")
 }
@@ -204,7 +204,7 @@ func TestComputeHashesFailsForBinaryWithMissingExecutableField(t *testing.T) {
 		Manifest: &Manifest{Name: "x", Version: "1", Type: TypeBinary, BinaryPlugin: &BinaryConfig{}},
 		Dir:      dir,
 	}
-	_, _, err := mgr.computeHashes(dp)
+	_, _, err := mgr.loader.computeHashes(dp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_HASH_BINARY_MISSING_EXECUTABLE")
 }
@@ -220,7 +220,7 @@ func TestComputeHashesFailsForBinaryWhenExecutableUnreadable(t *testing.T) {
 		Manifest: &Manifest{Name: "x", Version: "1", Type: TypeBinary, BinaryPlugin: &BinaryConfig{Executable: "bin/missing"}},
 		Dir:      dir,
 	}
-	_, _, err := mgr.computeHashes(dp)
+	_, _, err := mgr.loader.computeHashes(dp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_HASH_BINARY_READ")
 }
@@ -235,7 +235,7 @@ func TestComputeHashesFailsForUnknownType(t *testing.T) {
 		Manifest: &Manifest{Name: "x", Version: "1", Type: Type("bogus")},
 		Dir:      dir,
 	}
-	_, _, err := mgr.computeHashes(dp)
+	_, _, err := mgr.loader.computeHashes(dp)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_HASH_UNKNOWN_TYPE")
 }
@@ -250,9 +250,9 @@ func TestComputeHashesLuaContentHashIsDeterministic(t *testing.T) {
 	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
 	dp := &DiscoveredPlugin{Manifest: &Manifest{Name: "x", Version: "1", Type: TypeLua, LuaPlugin: &LuaConfig{Entry: "a.lua"}}, Dir: dir}
 
-	_, ch1, err := mgr.computeHashes(dp)
+	_, ch1, err := mgr.loader.computeHashes(dp)
 	require.NoError(t, err)
-	_, ch2, err := mgr.computeHashes(dp)
+	_, ch2, err := mgr.loader.computeHashes(dp)
 	require.NoError(t, err)
 	assert.Equal(t, ch1, ch2, "Lua content_hash MUST be deterministic")
 }
@@ -266,10 +266,7 @@ func TestUnloadPluginRemovesActiveButPreservesHistorical(t *testing.T) {
 
 	// Manually populate cache (in real loadPlugin path this is done by T6).
 	id := core.NewULID()
-	mgr.mu.Lock()
-	mgr.nameByID[id] = "core-scenes"
-	mgr.activeByName["core-scenes"] = id
-	mgr.mu.Unlock()
+	mgr.identity.Register(id, "core-scenes")
 
 	require.NoError(t, mgr.UnloadPlugin(context.Background(), "core-scenes"))
 
@@ -343,20 +340,15 @@ func TestUnloadPluginWrapsHostUnloadFailure(t *testing.T) {
 
 	// Inject a stub host that fails Unload.
 	host := &unloadStubHost{unloadErr: errors.New("simulated host shutdown failure")}
-	mgr.mu.Lock()
-	mgr.pluginHosts["broken"] = host
-	mgr.loaded["broken"] = &DiscoveredPlugin{Manifest: &Manifest{Name: "broken"}}
-	mgr.mu.Unlock()
+	mgr.runtime.CommitLoaded(&DiscoveredPlugin{Manifest: &Manifest{Name: "broken"}}, host)
 
 	err := mgr.UnloadPlugin(context.Background(), "broken")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLUGIN_UNLOAD_HOST")
 
 	// Cache MUST still be cleared (Step 1 runs unconditionally).
-	mgr.mu.RLock()
-	_, stillLoaded := mgr.loaded["broken"]
-	_, stillHosted := mgr.pluginHosts["broken"]
-	mgr.mu.RUnlock()
+	stillLoaded := mgr.runtime.IsPluginLoaded("broken")
+	stillHosted := mgr.runtime.TestHasHost("broken")
 	assert.False(t, stillLoaded, "loaded entry MUST be cleared even on Unload failure")
 	assert.False(t, stillHosted, "pluginHosts entry MUST be cleared even on Unload failure")
 }
@@ -375,10 +367,7 @@ func TestUnloadPluginWrapsPolicyRemovalFailure(t *testing.T) {
 	// Inject a stub host whose Unload succeeds, so the failure surfaces
 	// from the policy-removal step.
 	host := &unloadStubHost{}
-	mgr.mu.Lock()
-	mgr.pluginHosts["policy-broken"] = host
-	mgr.loaded["policy-broken"] = &DiscoveredPlugin{Manifest: &Manifest{Name: "policy-broken"}}
-	mgr.mu.Unlock()
+	mgr.runtime.CommitLoaded(&DiscoveredPlugin{Manifest: &Manifest{Name: "policy-broken"}}, host)
 
 	err = mgr.UnloadPlugin(context.Background(), "policy-broken")
 	require.Error(t, err)
@@ -403,10 +392,7 @@ func TestSweepInactiveRemovesFromActiveByNameRetainsNameByID(t *testing.T) {
 	require.NoError(t, err)
 
 	// Pre-populate cache as if "stale" had been loaded previously.
-	mgr.mu.Lock()
-	mgr.nameByID[staleID] = "stale"
-	mgr.activeByName["stale"] = staleID
-	mgr.mu.Unlock()
+	mgr.identity.Register(staleID, "stale")
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
 

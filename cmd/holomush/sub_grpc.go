@@ -551,8 +551,10 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 					"error", bridgeErr)
 			} else {
 				participantLookup := authguard.NewDEKParticipantLookup(s.cfg.RekeyManager)
-				manifestLookup := authguard.NewPluginManifestLookup(pluginManager)
-				guard, guardErr := authguard.New(participantLookup, manifestLookup, policyEngine, auditEm)
+				// *plugins.Manager satisfies authguard.ManifestLookup directly;
+				// its two crypto gates carry their own fail-closed nil-receiver
+				// guards, so no adapter is needed.
+				guard, guardErr := authguard.New(participantLookup, pluginManager, policyEngine, auditEm)
 				if guardErr != nil {
 					slog.WarnContext(ctx, "history auth guard: guard construction failed — INV-CRYPTO-22 fallback disabled",
 						"error", guardErr)

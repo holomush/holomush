@@ -149,7 +149,7 @@ func makeDelivery(t *testing.T, evType, characterID string) *fakeDelivery {
 func TestDispatchDeliveryForwardsAndAcks(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
@@ -165,7 +165,7 @@ func TestDispatchDeliveryForwardsAndAcks(t *testing.T) {
 func TestDispatchDeliveryNacksOnSendError(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background(), err: errors.New("send boom")}
 	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
@@ -179,7 +179,7 @@ func TestDispatchDeliveryNacksOnSendError(t *testing.T) {
 func TestDispatchDeliveryAckFailureLogsButReturnsNil(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
@@ -193,7 +193,7 @@ func TestDispatchDeliveryAckFailureLogsButReturnsNil(t *testing.T) {
 func TestDispatchDeliveryTerminatesOnMatchingSessionEnded(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -216,7 +216,7 @@ func TestDispatchDeliveryTerminatesOnMatchingSessionEnded(t *testing.T) {
 func TestDispatchDeliveryIgnoresNonMatchingSessionEnded(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -237,7 +237,7 @@ func TestDispatchDeliveryIgnoresNonMatchingSessionEnded(t *testing.T) {
 func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -259,7 +259,7 @@ func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 func TestDispatchDeliverySkipsAuditOnlyEvents(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -334,7 +334,7 @@ func TestDispatchDeliveryDropsEventEmittedInSameNanosecondAsArrival(t *testing.T
 		LocationArrivedAt: arrivedAt,
 	}
 	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
-	s := &CoreServer{sessionStore: store}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp one ns BELOW the floor.
@@ -367,7 +367,7 @@ func TestDispatchDeliveryIncludesEventAtExactFloorNanosecond(t *testing.T) {
 		LocationArrivedAt: arrivedAt,
 	}
 	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
-	s := &CoreServer{sessionStore: store}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp exactly equal to the floor.
@@ -397,7 +397,7 @@ func TestDispatchDeliveryDropsBelowScopeFloor(t *testing.T) {
 		LocationArrivedAt: arrivedAt,
 	}
 	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
-	s := &CoreServer{sessionStore: store}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp one hour BEFORE LocationArrivedAt → below floor.
@@ -425,7 +425,7 @@ func TestDispatchDeliveryForwardsAtOrAboveScopeFloor(t *testing.T) {
 		LocationArrivedAt: arrivedAt,
 	}
 	store := newTestSessionStore(t, map[string]*session.Info{"s1": info})
-	s := &CoreServer{sessionStore: store}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp one minute AFTER LocationArrivedAt → above floor.
@@ -458,7 +458,7 @@ func TestDispatchDeliveryFallsBackToCachedInfoOnLookupFailure(t *testing.T) {
 		LocationArrivedAt: arrivedAt,
 	}
 	store := &erroringSessionStore{getErr: errors.New("session not found")}
-	s := &CoreServer{sessionStore: store}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp AFTER cached LocationArrivedAt → above cached floor.
@@ -488,7 +488,7 @@ func TestDispatchDeliveryUsesCachedFloorOnLookupFailure(t *testing.T) {
 		LocationArrivedAt: arrivedAt,
 	}
 	store := &erroringSessionStore{getErr: errors.New("session not found")}
-	s := &CoreServer{sessionStore: store}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 
 	// Event timestamp BEFORE cached LocationArrivedAt → still dropped.
@@ -506,7 +506,7 @@ func TestDispatchDeliveryUsesCachedFloorOnLookupFailure(t *testing.T) {
 func TestApplyFilterCtrlRejectsLocationStreams(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
@@ -520,7 +520,7 @@ func TestApplyFilterCtrlRejectsLocationStreams(t *testing.T) {
 func TestApplyFilterCtrlAddsAndCallsSetFilters(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
@@ -535,7 +535,7 @@ func TestApplyFilterCtrlAddsAndCallsSetFilters(t *testing.T) {
 func TestApplyFilterCtrlAddIdempotentWhenExists(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 	sub := eventbus.Subject("events.main.character." + charID)
@@ -550,7 +550,7 @@ func TestApplyFilterCtrlAddIdempotentWhenExists(t *testing.T) {
 func TestApplyFilterCtrlRemovesAndCallsSetFilters(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 	sub := eventbus.Subject("events.main.character." + charID)
@@ -566,7 +566,7 @@ func TestApplyFilterCtrlRemovesAndCallsSetFilters(t *testing.T) {
 func TestApplyFilterCtrlRemoveIdempotentWhenMissing(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
@@ -580,7 +580,7 @@ func TestApplyFilterCtrlRemoveIdempotentWhenMissing(t *testing.T) {
 func TestApplyFilterCtrlRejectsInvalidStream(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
@@ -592,7 +592,7 @@ func TestApplyFilterCtrlRejectsInvalidStream(t *testing.T) {
 func TestApplyFilterCtrlPropagatesSetFiltersError(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	bs.setFiltersErr = errors.New("js bust")
 	filterSet := map[eventbus.Subject]struct{}{}
@@ -607,7 +607,7 @@ func TestApplyFilterCtrlPropagatesSetFiltersError(t *testing.T) {
 
 func TestMakeFilterUpdaterAddsAndRemovesCorrectly(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 	updater := s.makeFilterUpdater(bs, filterSet)
@@ -632,7 +632,7 @@ func TestMakeFilterUpdaterAddsAndRemovesCorrectly(t *testing.T) {
 
 func TestMakeFilterUpdaterRejectsInvalidAdd(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 	updater := s.makeFilterUpdater(bs, filterSet)
@@ -643,7 +643,7 @@ func TestMakeFilterUpdaterRejectsInvalidAdd(t *testing.T) {
 
 func TestMakeFilterUpdaterRejectsInvalidRemove(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 	updater := s.makeFilterUpdater(bs, filterSet)
@@ -654,7 +654,7 @@ func TestMakeFilterUpdaterRejectsInvalidRemove(t *testing.T) {
 
 func TestMakeFilterUpdaterNoopForEmptyStrings(t *testing.T) {
 	t.Parallel()
-	s := &CoreServer{}
+	s := NewSubscribeHandler(SubscribeDeps{})
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 	updater := s.makeFilterUpdater(bs, filterSet)
@@ -670,7 +670,7 @@ func TestMakeFilterUpdaterNoopForEmptyStrings(t *testing.T) {
 func TestRunSubscribeLoopDeliversEventsThenReturnsOnCtxCancel(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 
@@ -711,7 +711,7 @@ func TestRunSubscribeLoopDeliversEventsThenReturnsOnCtxCancel(t *testing.T) {
 func TestRunSubscribeLoopReturnsOnSendError(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 
@@ -732,7 +732,7 @@ func TestRunSubscribeLoopReturnsOnSendError(t *testing.T) {
 func TestRunSubscribeLoopReturnsNilOnSessionEnded(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	charID := core.NewULID().String()
 
@@ -753,7 +753,7 @@ func TestRunSubscribeLoopReturnsNilOnSessionEnded(t *testing.T) {
 func TestRunSubscribeLoopAppliesFilterCtrl(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -786,7 +786,7 @@ func TestRunSubscribeLoopAppliesFilterCtrl(t *testing.T) {
 func TestRunSubscribeLoopReturnsNilOnCtrlChClose(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	ctx := context.Background()
 	stream := &fakeSubscribeStream{ctx: ctx}
@@ -800,7 +800,7 @@ func TestRunSubscribeLoopReturnsNilOnCtrlChClose(t *testing.T) {
 func TestRunSubscribeLoopReturnsNilOnDeliveriesClose(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	bs := newFakeSessionStream()
 	// Close immediately → Next returns io.EOF → loop returns nil.
 	_ = bs.Close()
@@ -815,7 +815,7 @@ func TestRunSubscribeLoopReturnsNilOnDeliveriesClose(t *testing.T) {
 func TestRunSubscribeLoopPropagatesNextError(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 
 	// Use a custom fake whose Next returns a non-EOF non-canceled error.
 	bs := &errorNextStream{err: errors.New("js bust")}
@@ -858,7 +858,7 @@ func (u ulidEntropy) Read(p []byte) (int, error) {
 func TestDispatchDeliveryStampsMetadataOnlyWhenDeliveryReportsTrue(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -875,7 +875,7 @@ func TestDispatchDeliveryStampsMetadataOnlyWhenDeliveryReportsTrue(t *testing.T)
 func TestDispatchDeliveryDoesNotStampMetadataOnlyWhenFalse(t *testing.T) {
 	t.Parallel()
 	info := &session.Info{ID: "s1"}
-	s := &CoreServer{sessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: newTestSessionStore(t, map[string]*session.Info{"s1": info})})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	charID := core.NewULID().String()
 
@@ -931,7 +931,7 @@ func TestDispatchDeliveryDowngradesSceneEventForNonFocusedMemberConnection(t *te
 		FocusKey:   nil, // not focused on any scene
 	}))
 
-	s := &CoreServer{sessionStore: store}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	d := makeSceneDelivery(t, sceneID.String())
 
@@ -999,7 +999,7 @@ func TestDispatchDeliverySuppressesBadgeWhenCheckerSuppresses(t *testing.T) {
 	info, store, connID := newNonFocusedSceneMember(t, charID, playerID, sceneID)
 
 	checker := &fakeSceneMuteChecker{suppress: true}
-	s := &CoreServer{sessionStore: store, sceneMute: checker}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store, SceneMute: checker})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	d := makeSceneDelivery(t, sceneID.String())
 
@@ -1022,7 +1022,7 @@ func TestDispatchDeliveryDeliversBadgeWhenCheckerAllows(t *testing.T) {
 	info, store, connID := newNonFocusedSceneMember(t, ulid.Make(), ulid.Make(), sceneID)
 
 	checker := &fakeSceneMuteChecker{suppress: false}
-	s := &CoreServer{sessionStore: store, sceneMute: checker}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store, SceneMute: checker})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	d := makeSceneDelivery(t, sceneID.String())
 
@@ -1045,7 +1045,7 @@ func TestDispatchDeliveryDeliversBadgeOnCheckerError(t *testing.T) {
 	// suppress=true is deliberately paired with err != nil: the error MUST
 	// dominate and the badge is delivered anyway (fail-open).
 	checker := &fakeSceneMuteChecker{suppress: true, err: errors.New("plugin dispatch boom")}
-	s := &CoreServer{sessionStore: store, sceneMute: checker}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store, SceneMute: checker})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	d := makeSceneDelivery(t, sceneID.String())
 
@@ -1081,7 +1081,7 @@ func TestDispatchDeliveryDoesNotConsultCheckerOnFocusedPath(t *testing.T) {
 	}))
 
 	checker := &fakeSceneMuteChecker{suppress: true}
-	s := &CoreServer{sessionStore: store, sceneMute: checker}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store, SceneMute: checker})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	d := makeSceneDelivery(t, sceneID.String())
 
@@ -1115,7 +1115,7 @@ func TestDispatchDeliveryForwardsFocusedSceneEventNormally(t *testing.T) {
 		FocusKey:   &fk, // focused on this scene
 	}))
 
-	s := &CoreServer{sessionStore: store}
+	s := NewSubscribeHandler(SubscribeDeps{SessionStore: store})
 	stream := &fakeSubscribeStream{ctx: context.Background()}
 	d := makeSceneDelivery(t, sceneID.String())
 
