@@ -11,7 +11,7 @@
   "perplexity": false,
   "jina": false,
   "git": {
-    "branching_strategy": "phase",
+    "branching_strategy": "milestone",
     "create_tag": false,
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "gsd/{milestone}-{slug}",
@@ -72,5 +72,8 @@
     "enabled": false,
     "auto_update": false,
     "build_timeout": 600
+  },
+  "claude_orchestration": {
+    "enabled": true
   }
 }
