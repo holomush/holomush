@@ -4,15 +4,15 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
-status: "Phase 8 complete — executed, verified, and shipped (PR #4832)"
+status: executing
 stopped_at: Phase 9 context gathered
-last_updated: "2026-07-25T21:29:34.505Z"
+last_updated: "2026-07-25T23:05:01.840Z"
 last_activity: 2026-07-19
 last_activity_desc: Phase 8 closed; ARCH-01 and ARCH-02 delivered
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 45
+  total_plans: 64
   completed_plans: 45
 ---
 
@@ -31,7 +31,7 @@ trusted identically.
 
 Phase: 8 — God-Object Decomposition
 Plan: 9 of 09 complete
-Status: Phase 8 complete — executed, verified, and shipped (PR #4832)
+Status: Ready to execute
 Last activity: 2026-07-19 — Phase 8 closed; ARCH-01 and ARCH-02 delivered
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 
