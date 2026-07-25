@@ -4,13 +4,13 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 8
 current_phase_name: God-Object Decomposition
-status: Phase 8 complete — executed, verified, and shipped (PR #4832)
-stopped_at: Phase 8 executed and verified (9/9 plans, 3/3 must-haves)
-last_updated: "2026-07-20T22:11:01.328Z"
+status: "Phase 8 complete — executed, verified, and shipped (PR #4832)"
+stopped_at: Phase 9 context gathered
+last_updated: "2026-07-25T21:29:34.505Z"
 last_activity: 2026-07-19
-last_activity_desc: Phase 8 closed — 9/9 plans, verifier PASSED 3/3, PR #4832 open
+last_activity_desc: Phase 8 closed; ARCH-01 and ARCH-02 delivered
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 5
   total_plans: 45
   completed_plans: 45
@@ -265,15 +265,15 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-19T21:27:35.470Z
+Last session: 2026-07-25T21:29:34.490Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Phase 8 executed and verified (9/9 plans, 3/3 must-haves)
-Resume file: .planning/phases/08-god-object-decomposition/08-VERIFICATION.md
+Stopped at: Phase 9 context gathered
+Resume file: .planning/phases/09-test-quality-code-health-sweep/09-CONTEXT.md
 
 ## Operator Next Steps
 
