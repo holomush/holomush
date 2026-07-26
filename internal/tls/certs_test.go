@@ -1010,6 +1010,321 @@ func TestCheckCertificateExpirationReturnsTrueWhenNotYetValid(t *testing.T) {
 	assert.Contains(t, status.Error.Error(), "not yet valid")
 }
 
+// =============================================================================
+// Certificate material failure paths (phase 9 plan 08)
+//
+// Every test below asserts the SPECIFIC failure reason via the oops context or
+// code, never a substring of the message, so a test for one failure cannot pass
+// because a different failure occurred first.
+// =============================================================================
+
+// TestGenerateCARejectsGameIDThatCannotFormASANURI proves a game ID carrying a
+// character that cannot appear in a URL aborts CA generation instead of being
+// silently embedded in — or silently dropped from — the CA's identity SAN. The
+// game ID in that SAN is what binds a certificate to one game, so a malformed
+// one must fail loudly rather than produce a CA with a weaker identity claim.
+func TestGenerateCARejectsGameIDThatCannotFormASANURI(t *testing.T) {
+	const malformedGameID = "bad\x7fgame-id" // U+007F DEL: rejected by net/url.Parse
+
+	ca, err := GenerateCA(malformedGameID)
+
+	require.Error(t, err, "GenerateCA must reject a game ID that cannot form a SAN URI")
+	assert.Nil(t, ca, "no CA may be returned alongside an error")
+	errutil.AssertErrorContext(t, err, "operation", "create game URI")
+	errutil.AssertErrorContext(t, err, "game_id", malformedGameID)
+}
+
+// TestGenerateServerCertFailsWhenCAKeyDoesNotMatchCACertificate proves a CA
+// whose private key belongs to a different certificate cannot be used to issue
+// a server certificate. This is the shape of a real deployment mistake — a
+// root-ca.crt and root-ca.key that came from different generations — and it
+// must fail at issuance rather than produce a certificate nothing can verify.
+func TestGenerateServerCertFailsWhenCAKeyDoesNotMatchCACertificate(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	require.NoError(t, err)
+	unrelated, err := GenerateCA("01HX7MZABC123DEF456GHK")
+	require.NoError(t, err)
+
+	mismatched := &CA{Certificate: ca.Certificate, PrivateKey: unrelated.PrivateKey}
+
+	serverCert, err := GenerateServerCert(mismatched, gameID, "core")
+
+	require.Error(t, err, "issuing against a mismatched CA cert/key pair must fail")
+	assert.Nil(t, serverCert, "no certificate may be returned alongside an error")
+	errutil.AssertErrorContext(t, err, "operation", "create server certificate")
+	errutil.AssertErrorContext(t, err, "server_name", "core")
+}
+
+// TestGenerateClientCertFailsWhenCAKeyDoesNotMatchCACertificate is the client
+// counterpart of the server case: the same mismatched-CA deployment mistake
+// must be rejected on the client-issuance path too.
+func TestGenerateClientCertFailsWhenCAKeyDoesNotMatchCACertificate(t *testing.T) {
+	ca, err := GenerateCA("01HX7MZABC123DEF456GHJ")
+	require.NoError(t, err)
+	unrelated, err := GenerateCA("01HX7MZABC123DEF456GHK")
+	require.NoError(t, err)
+
+	mismatched := &CA{Certificate: ca.Certificate, PrivateKey: unrelated.PrivateKey}
+
+	clientCert, err := GenerateClientCert(mismatched, "gateway")
+
+	require.Error(t, err, "issuing against a mismatched CA cert/key pair must fail")
+	assert.Nil(t, clientCert, "no certificate may be returned alongside an error")
+	errutil.AssertErrorContext(t, err, "operation", "create client certificate")
+	errutil.AssertErrorContext(t, err, "client_name", "gateway")
+}
+
+// TestSaveCertificatesFailsWhenCertsDirectoryCannotBeCreated proves an
+// unusable certs directory is reported as a directory-creation failure rather
+// than surfacing as a confusing per-file write error.
+func TestSaveCertificatesFailsWhenCertsDirectoryCannotBeCreated(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o600))
+	certsDir := filepath.Join(blocker, "certs")
+
+	ca, err := GenerateCA("01HX7MZABC123DEF456GHJ")
+	require.NoError(t, err)
+
+	err = SaveCertificates(certsDir, ca, nil)
+
+	require.Error(t, err, "SaveCertificates must fail when certsDir cannot be created")
+	errutil.AssertErrorContext(t, err, "operation", "create certs directory")
+	errutil.AssertErrorContext(t, err, "path", certsDir)
+}
+
+// TestSaveCertificatesFailsFastAndNamesTheUnwritableArtifactPath pins the
+// stop-on-first-failure semantics of the four-artifact save sequence. A
+// best-effort save that carried on past a failed write would leave a certs
+// directory holding some of the set, and EnsureCerts treats the presence of any
+// one of those files as "certificates already exist" — so a partial write is
+// not a cosmetic problem, it is a directory that boots into a broken trust
+// posture. Each subtest blocks exactly one artifact and asserts three things:
+// the error names that artifact's path, the artifacts written before it are
+// present (proving the sequence really reached the blocked branch rather than
+// failing earlier), and the artifacts after it were never created.
+//
+// The assertion is on the "path" context key, not "operation": oops merges
+// context innermost-first, so SaveCertificates' own "save CA certificate" label
+// is shadowed by saveCert's "create cert file". The path is what survives the
+// wrap, and the path is what an operator needs.
+func TestSaveCertificatesFailsFastAndNamesTheUnwritableArtifactPath(t *testing.T) {
+	tests := []struct {
+		name          string
+		blockedFile   string
+		wantOperation string
+		priorWritten  []string
+		notWritten    []string
+	}{
+		{
+			name:          "an unwritable CA certificate aborts before the CA key is written",
+			blockedFile:   "root-ca.crt",
+			wantOperation: "create cert file",
+			priorWritten:  nil,
+			notWritten:    []string{"root-ca.key", "core.crt", "core.key"},
+		},
+		{
+			name:          "an unwritable CA key aborts before the server certificate is written",
+			blockedFile:   "root-ca.key",
+			wantOperation: "create key file",
+			priorWritten:  []string{"root-ca.crt"},
+			notWritten:    []string{"core.crt", "core.key"},
+		},
+		{
+			name:          "an unwritable server certificate aborts before the server key is written",
+			blockedFile:   "core.crt",
+			wantOperation: "create cert file",
+			priorWritten:  []string{"root-ca.crt", "root-ca.key"},
+			notWritten:    []string{"core.key"},
+		},
+		{
+			name:          "an unwritable server key fails after the preceding three artifacts landed",
+			blockedFile:   "core.key",
+			wantOperation: "create key file",
+			priorWritten:  []string{"root-ca.crt", "root-ca.key", "core.crt"},
+			notWritten:    nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			certsDir := t.TempDir()
+			gameID := "01HX7MZABC123DEF456GHJ"
+
+			ca, err := GenerateCA(gameID)
+			require.NoError(t, err)
+			serverCert, err := GenerateServerCert(ca, gameID, "core")
+			require.NoError(t, err)
+
+			// A directory at the target path makes the file open fail while
+			// leaving every other write in the sequence viable.
+			blockedPath := filepath.Join(certsDir, tt.blockedFile)
+			require.NoError(t, os.Mkdir(blockedPath, 0o700))
+
+			err = SaveCertificates(certsDir, ca, serverCert)
+
+			require.Error(t, err, "writing over %s must fail", tt.blockedFile)
+			errutil.AssertErrorContext(t, err, "path", blockedPath)
+			errutil.AssertErrorContext(t, err, "operation", tt.wantOperation)
+
+			for _, name := range tt.priorWritten {
+				assert.FileExists(t, filepath.Join(certsDir, name),
+					"%s precedes %s in the save sequence and must already be on disk",
+					name, tt.blockedFile)
+			}
+			for _, name := range tt.notWritten {
+				assert.NoFileExists(t, filepath.Join(certsDir, name),
+					"%s follows %s in the save sequence and must not be written after the abort",
+					name, tt.blockedFile)
+			}
+		})
+	}
+}
+
+// TestSaveClientCertFailsFastAndNamesTheUnwritableArtifactPath is the
+// client-certificate counterpart: the gateway certificate and key each report
+// their own path, and a failed certificate write aborts before the key is
+// written rather than leaving a key without its certificate.
+func TestSaveClientCertFailsFastAndNamesTheUnwritableArtifactPath(t *testing.T) {
+	tests := []struct {
+		name          string
+		blockedFile   string
+		wantOperation string
+		priorWritten  []string
+		notWritten    []string
+	}{
+		{
+			name:          "an unwritable client certificate aborts before the client key is written",
+			blockedFile:   "gateway.crt",
+			wantOperation: "create cert file",
+			priorWritten:  nil,
+			notWritten:    []string{"gateway.key"},
+		},
+		{
+			name:          "an unwritable client key fails after the client certificate landed",
+			blockedFile:   "gateway.key",
+			wantOperation: "create key file",
+			priorWritten:  []string{"gateway.crt"},
+			notWritten:    nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			certsDir := t.TempDir()
+
+			ca, err := GenerateCA("01HX7MZABC123DEF456GHJ")
+			require.NoError(t, err)
+			clientCert, err := GenerateClientCert(ca, "gateway")
+			require.NoError(t, err)
+
+			blockedPath := filepath.Join(certsDir, tt.blockedFile)
+			require.NoError(t, os.Mkdir(blockedPath, 0o700))
+
+			err = SaveClientCert(certsDir, clientCert)
+
+			require.Error(t, err, "writing over %s must fail", tt.blockedFile)
+			errutil.AssertErrorContext(t, err, "path", blockedPath)
+			errutil.AssertErrorContext(t, err, "operation", tt.wantOperation)
+
+			for _, name := range tt.priorWritten {
+				assert.FileExists(t, filepath.Join(certsDir, name),
+					"%s precedes %s in the save sequence and must already be on disk",
+					name, tt.blockedFile)
+			}
+			for _, name := range tt.notWritten {
+				assert.NoFileExists(t, filepath.Join(certsDir, name),
+					"%s follows %s in the save sequence and must not be written after the abort",
+					name, tt.blockedFile)
+			}
+		})
+	}
+}
+
+// TestSaveClientCertFailsWhenCertsDirectoryCannotBeCreated proves the client
+// save path reports an uncreatable certs directory as a directory failure,
+// matching SaveCertificates rather than diverging from it.
+func TestSaveClientCertFailsWhenCertsDirectoryCannotBeCreated(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o600))
+	certsDir := filepath.Join(blocker, "certs")
+
+	ca, err := GenerateCA("01HX7MZABC123DEF456GHJ")
+	require.NoError(t, err)
+	clientCert, err := GenerateClientCert(ca, "gateway")
+	require.NoError(t, err)
+
+	err = SaveClientCert(certsDir, clientCert)
+
+	require.Error(t, err, "SaveClientCert must fail when certsDir cannot be created")
+	errutil.AssertErrorContext(t, err, "operation", "create certs directory")
+	errutil.AssertErrorContext(t, err, "path", certsDir)
+}
+
+// TestSaveKeyRejectsUnsupportedCurveWithoutCreatingAFile proves a key whose
+// curve cannot be marshalled is rejected BEFORE the destination file is opened.
+// The ordering is the point: a marshal failure after the open would leave a
+// zero-length file at a path an operator would reasonably read as a valid key.
+func TestSaveKeyRejectsUnsupportedCurveWithoutCreatingAFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unsupported.key")
+
+	err := saveKey(path, &ecdsa.PrivateKey{}) // zero value: no named curve
+
+	require.Error(t, err, "saveKey must reject a key with no named curve")
+	errutil.AssertErrorContext(t, err, "operation", "marshal key")
+	errutil.AssertErrorContext(t, err, "path", path)
+	assert.NoFileExists(t, path, "a rejected key must leave no file behind")
+}
+
+// TestValidateHostnameFallsBackToCommonNameOnlyForAnExactMatch pins the
+// deprecated Common Name fallback: a certificate with no SAN entries at all is
+// matched by its CN and by nothing else. Both directions are asserted, so
+// tightening or widening the fallback fails here rather than silently changing
+// which certificates are accepted.
+func TestValidateHostnameFallsBackToCommonNameOnlyForAnExactMatch(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	// The CA certificate carries a CN and a URI SAN, but no DNS names and no
+	// IP addresses — so the CN fallback is the only path that can match.
+	ca, err := GenerateCA(gameID)
+	require.NoError(t, err)
+	require.Empty(t, ca.Certificate.DNSNames, "fixture must have no DNS SANs")
+	require.Empty(t, ca.Certificate.IPAddresses, "fixture must have no IP SANs")
+
+	commonName := "HoloMUSH CA " + gameID
+	require.Equal(t, commonName, ca.Certificate.Subject.CommonName)
+
+	assert.NoError(t, ValidateHostname(ca.Certificate, commonName),
+		"an exact Common Name match must be accepted")
+
+	err = ValidateHostname(ca.Certificate, "holomush-"+gameID)
+
+	require.Error(t, err, "a hostname that is not the Common Name must be rejected")
+	errutil.AssertErrorContext(t, err, "hostname", "holomush-"+gameID)
+	errutil.AssertErrorContext(t, err, "common_name", commonName)
+}
+
+// TestValidateExtKeyUsageAcceptsCertificateCarryingTheRequiredUsage covers the
+// accepting side of the extended-key-usage check. Only its rejecting side was
+// previously asserted, so a change that made the check accept everything would
+// have passed the whole existing suite.
+func TestValidateExtKeyUsageAcceptsCertificateCarryingTheRequiredUsage(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	require.NoError(t, err)
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	require.NoError(t, err)
+	clientCert, err := GenerateClientCert(ca, "gateway")
+	require.NoError(t, err)
+
+	assert.NoError(t, ValidateExtKeyUsage(serverCert.Certificate, x509.ExtKeyUsageServerAuth),
+		"a server certificate must satisfy a ServerAuth requirement")
+	assert.NoError(t, ValidateExtKeyUsage(clientCert.Certificate, x509.ExtKeyUsageClientAuth),
+		"a client certificate must satisfy a ClientAuth requirement")
+}
+
 // generateNotYetValidCert creates a certificate that is not yet valid.
 func generateNotYetValidCert(ca *CA, gameID, name string) (*ServerCert, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
