@@ -301,6 +301,20 @@ there — it is disproven locally, not globally.
 *Phase: 09-test-quality-code-health-sweep*
 *Completed: 2026-07-26*
 
+## Requirement Bookkeeping Note
+
+`requirements.mark-complete QUAL-02` was run per the state-update protocol (this
+plan's frontmatter lists `requirements: [QUAL-02]`) and it flipped QUAL-02 to
+`[x]` / `Complete`. **That flip was reverted.** Six plans in this phase carry
+QUAL-02 — 09-01, 09-08, 09-10, 09-17, 09-19, 09-21 — and the requirement's own
+text ("packages under the reconciled bar are backfilled with genuine behavioral
+tests") is not what this plan delivered; this plan repaired the chain those
+plans measure through. Leaving the box checked would be a committed table
+asserting a property no artifact here demonstrates, which is precisely what this
+plan's prohibitions forbid. QUAL-02 stays `Pending` for the last QUAL-02 plan to
+close. `frontmatter.requirements-completed` above still records QUAL-02 as this
+plan's *contribution*, which is what that field means.
+
 ## Self-Check: PASSED
 
 All three modified files, both planning artifacts, and all three commits

@@ -267,13 +267,13 @@ Plans:
 3. A session-lifecycle test matrix covers the connect / reconnect / multi-character / idle-timeout paths
 4. The arch-review Medium cluster (secure-cookie default, ABAC empty-string sentinels, silent audit-emitter drop, DEK read-cache, `sessions.location_id` index) is addressed or explicitly deferred with rationale
 
-**Plans:** 21 plans
+**Plans:** 1/21 plans executed
 
 Plans:
 
 **Wave 1** *(tracer — the measurement chain everything else reads)*
 
-- [ ] 09-01-PLAN.md — QUAL-02: diagnose and repair the E2E coverage flush end to end; un-ignore the `cmd/holomush` wiring files (wave 1)
+- [x] 09-01-PLAN.md — QUAL-02: diagnose and repair the E2E coverage flush end to end; un-ignore the `cmd/holomush` wiring files (wave 1)
 
 **Wave 2** *(blocked on the tracer)*
 
@@ -345,7 +345,7 @@ Plans:
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
-| 9. Test-Quality & Code-Health Sweep | v0.12 | 0/19 | Planned | — |
+| 9. Test-Quality & Code-Health Sweep | v0.12 | 1/21 | In Progress|  |
 
 ## Deferred (Not in This Roadmap)
 
