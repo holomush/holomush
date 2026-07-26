@@ -26,8 +26,25 @@ coverage:
       default:
         # Rising-floor ratchet: `target: auto` requires this PR's whole-repo
         # project coverage to not fall below the base commit's, within the
-        # threshold. The baseline (~54.6%) is NOT retroactively blocked;
-        # only a PR that LOWERS project coverage beyond the tolerance fails.
+        # threshold. The baseline is NOT retroactively blocked; only a PR that
+        # LOWERS project coverage beyond the tolerance fails.
+        #
+        # Measured baseline: 78.28% on main @ 497748c6d (57,480 lines,
+        # 44,997 hits), read 2026-07-26 from codecov's own branch API —
+        # the source of this figure:
+        #
+        #   curl -s https://api.codecov.io/api/v2/github/holomush/repos/holomush/branches/main/ \
+        #     | jq .head_commit.totals.coverage
+        #
+        # That API figure is the only authoritative number for this gate,
+        # because it is the only one that applies the `ignore:` list below AND
+        # merges every uploaded session. `go tool cover -func` does NOT produce
+        # it: -func totals a single raw profile with no ignore list applied and
+        # no cross-lane merge, so its tail line reads far lower. Do not quote a
+        # -func tail as "the coverage number". This comment previously asserted
+        # a much lower baseline that was exactly that mistake — a raw unit-lane
+        # -func total read as the gated figure (corrected in plan 09-01).
+        #
         # threshold: 1% is a 1-percentage-point regression allowance (NOT
         # "no-drop" — it permits a 1-point decline). It absorbs the two-upload
         # merge jitter (unit + integration/e2e sessions merge after
@@ -62,16 +79,13 @@ ignore:
   # E2E tests exercise them end-to-end but the coverage doesn't flow
   # back across the process boundary.
   - "plugins/*/main.go"
-  # The holomush server's runCoreWithDeps is production-only wiring.
-  # E2E tests boot the binary and exercise it end-to-end, but the unit
-  # coverage profile doesn't see init-path statements (orchestrator
-  # wiring, subsystem registration). Same rationale as plugins/*/main.go.
-  - "cmd/holomush/core.go"
-  # The gRPC/history subsystem wiring (history-auth-guard, FallbackResolver,
-  # PluginDowngradeFence assembly). Same production-only-wiring class as
-  # core.go above — E2E boots and exercises it, but the unit coverage profile
-  # can't see the construction-failure WarnContext branches. (holomush-hz0v4.14.26)
-  - "cmd/holomush/sub_grpc.go"
+  # NOTE (plan 09-01): two server-wiring files used to be ignored here on the
+  # rationale that E2E exercised them but their coverage never flowed back.
+  # The second half of that claim was true only because the instrumented E2E
+  # containers were being SIGKILLed before Go's exit hook could flush
+  # GOCOVERDIR. That is fixed (stop_grace_period in compose.e2e.cover.yaml),
+  # the E2E lane now reports real counts for both files, and the entries are
+  # gone. Do not re-add them: the code is measured, not unmeasurable.
   # Metric stub hooks — intentionally unused no-op call-site anchors
   # awaiting future instrumentation. They exist so future metric wiring
   # has a stable call site; there is no behavior to test.
