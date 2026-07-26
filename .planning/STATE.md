@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-08-PLAN.md
-last_updated: "2026-07-26T21:52:03.758Z"
+stopped_at: Completed 09-09-PLAN.md
+last_updated: "2026-07-26T22:07:04.652Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 53
+  completed_plans: 54
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 9 of 21
+Plan: 10 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -138,6 +138,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P06 | 25m | 1 tasks | 2 files |
 | Phase 09 P07 | ~40m | 3 tasks tasks | 4 files files |
 | Phase 09 P08 | 1h | 2 tasks | 2 files |
+| Phase 09 P09 | 50min | 2 tasks tasks | 2 files files |
 
 ## Accumulated Context
 
@@ -269,6 +270,10 @@ the next milestone yet.
 - [Phase ?]: 09-07: QUAL-04 left Pending — this plan builds only the harness seam; the session-lifecycle matrix it unblocks is written by 09-12/13/14/15
 - [Phase ?]: 09-08: plan's coverage gate measured go-tool-cover statement ratio (83.9% at HEAD) while its 76.2% baseline was a codecov line ratio — gate could not fail; replaced with a strict-increase gate plus per-test mutation controls
 - [Phase ?]: 09-08: oops merges error context innermost-first, so SaveCertificates' outer 'operation' label is shadowed by saveCert/saveKey's — assert the surviving 'path' key instead
+- [Phase ?]: 09-09: 6 of 10 sites cited by the archived weak-test record holomush-ec22.16 no longer exist as cited (3 file-gone, 1 function-gone-file-present); surviving in-scope set is 2 functions in internal/store/alias_test.go
+- [Phase ?]: 09-09: alias interface canary moved from a runtime test to 'var _ AliasRepository = (*PostgresAliasRepository)(nil)' in alias.go:52 — strictly stronger (checked by every build, not just task test), proven load-bearing by a rename mutation that fails the build AT the assertion line
+- [Phase ?]: 09-09: the 8 TestPostgresAliasRepository_* names are NOT ratchet violations — all carry subtests (documented TestType_Method exception); a 40-line rg window initially reported 6 of 8 as subtest-free, a too-small-window false positive of the same class as a too-loose predicate
+- [Phase ?]: 09-09: 09-08's misleading TestEnsureCerts_DirectoryCreationFailure confirmed from source (fileExists returns !IsNotExist so ENOTDIR reads as 'exists' -> load-existing branch, never reaching xdg.EnsureDir); out of the derived remediation set, filed as #4860
 
 ### Pending Todos
 
@@ -301,14 +306,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-26T21:52:03.748Z
+Last session: 2026-07-26T22:06:54.221Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-08-PLAN.md
+Stopped at: Completed 09-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
