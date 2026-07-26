@@ -22,6 +22,12 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
+// latestMigrationVersion is the numeric prefix of the highest migration in
+// internal/store/migrations. Bump it in the same change that adds a migration —
+// the FullCycle spec below asserts Up() lands exactly here, so a new migration
+// fails this spec until the constant follows it.
+const latestMigrationVersion = 53
+
 // expectedTables lists every table present after all migrations have been applied.
 // NOTE: The `events` table was dropped by migration 000010 (F6 schema cutover);
 // it does NOT appear here.
@@ -154,7 +160,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(52)))
+			Expect(version).To(Equal(uint(latestMigrationVersion)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)
@@ -177,7 +183,7 @@ var _ = Describe("Migrator", func() {
 
 			version, dirty, err = migrator.Version()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(52)))
+			Expect(version).To(Equal(uint(latestMigrationVersion)))
 			Expect(dirty).To(BeFalse())
 
 			tables = queryTableNames(suiteT, ctx, connStr)
