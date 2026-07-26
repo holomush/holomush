@@ -300,3 +300,11 @@ there — it is disproven locally, not globally.
 ---
 *Phase: 09-test-quality-code-health-sweep*
 *Completed: 2026-07-26*
+
+## Self-Check: PASSED
+
+All three modified files, both planning artifacts, and all three commits
+(`3a2bd2f5c`, `a1fae0323`, `8970e84c3`) verified present. Asserted against the
+**committed** blobs, not the working tree: `git show HEAD:Taskfile.yaml` carries
+3 guard blocks; `git show HEAD:.codecov.yml` matches `cmd/holomush` 0 times and
+`78.28` once.
