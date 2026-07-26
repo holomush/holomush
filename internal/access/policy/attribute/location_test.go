@@ -114,6 +114,11 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 					}, nil
 				}
 			},
+			// Per ADR holomush-ti1b: the shadows_id key is OMITTED from the
+			// bag when is_shadow=false. The DSL evaluator's
+			// missing-attr-→-false semantics preserve default-deny; an
+			// empty-string sentinel would satisfy `"" == ""` against any
+			// other unresolved peer attribute (motivating bug holomush-9gtl).
 			expectAttrs: map[string]any{
 				"id":            locID.String(),
 				"type":          "persistent",
@@ -121,7 +126,6 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 				"description":   "A test location",
 				"owner_id":      ownerID.String(),
 				"has_owner":     true,
-				"shadows_id":    "",
 				"is_shadow":     false,
 				"replay_policy": "last:0",
 				"archived":      false,
@@ -145,14 +149,17 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 					}, nil
 				}
 			},
+			// Per ADR holomush-ti1b: both owner_id and shadows_id are OMITTED
+			// when their witnesses are false. Emitting "" for either would
+			// make two unresolved locations compare equal to each other (and
+			// to any other unresolved peer attribute), producing a fail-open
+			// permit in a default-deny system (motivating bug holomush-9gtl).
 			expectAttrs: map[string]any{
 				"id":            locID.String(),
 				"type":          "scene",
 				"name":          "RP Scene",
 				"description":   "",
-				"owner_id":      "",
 				"has_owner":     false,
-				"shadows_id":    "",
 				"is_shadow":     false,
 				"replay_policy": "last:-1",
 				"archived":      false,

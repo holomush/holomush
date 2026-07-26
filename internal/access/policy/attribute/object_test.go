@@ -176,19 +176,22 @@ func TestObjectProviderResolveResource(t *testing.T) {
 					return obj, nil
 				}
 			},
+			// Per ADR holomush-ti1b: held_by_character_id and
+			// contained_in_object_id are OMITTED when their witnesses are
+			// false. Emitting "" would make two objects that are each neither
+			// held nor contained compare equal on those attributes, producing
+			// a fail-open permit (motivating bug holomush-9gtl).
 			expectAttrs: map[string]any{
-				"id":                     objID.String(),
-				"name":                   "Lantern",
-				"description":            "A brass lantern.",
-				"owner_id":               ownerID.String(),
-				"has_owner":              true,
-				"location":               locID.String(),
-				"has_location":           true,
-				"is_container":           false,
-				"held_by_character_id":   "",
-				"is_held":                false,
-				"contained_in_object_id": "",
-				"is_contained":           false,
+				"id":           objID.String(),
+				"name":         "Lantern",
+				"description":  "A brass lantern.",
+				"owner_id":     ownerID.String(),
+				"has_owner":    true,
+				"location":     locID.String(),
+				"has_location": true,
+				"is_container": false,
+				"is_held":      false,
+				"is_contained": false,
 			},
 		},
 		{
@@ -201,12 +204,15 @@ func TestObjectProviderResolveResource(t *testing.T) {
 					return obj, nil
 				}
 			},
+			// Per ADR holomush-ti1b: owner_id is OMITTED when has_owner=false.
+			// Asserted via expectAbsent rather than simply dropped from the
+			// subset, so the absence stays pinned (motivating bug holomush-9gtl).
 			expectSubset: map[string]any{
 				"is_container": true,
 				"has_owner":    false,
-				"owner_id":     "",
 				"location":     locID.String(),
 			},
+			expectAbsent: []string{"owner_id"},
 		},
 		{
 			name:       "object held by character — resolves to character's location",
