@@ -917,3 +917,86 @@ var _ = Describe("integration harness: a timestamped direct emit lands at the ca
 				"the published event's timestamp MUST be the caller-chosen instant")
 	})
 })
+
+// QUAL-04 harness seam 1 of 3 — telnet transport differentiation.
+//
+// AuthedPlayer.OpenTelnetSession was a t.Fatalf stub, so the session-lifecycle
+// matrix's telnet column had no seam at all. The seam threads a caller-selected
+// client type through the production Subscribe request, which the Subscribe
+// handler stamps onto the session_connections row
+// (internal/grpc/subscribe_handler.go:358-364).
+//
+// Every assertion below reads client_type back out of Postgres. An assertion
+// phrased against the argument handed to the opener would pass for a session
+// that is telnet in name only — which is the exact failure this seam exists to
+// prevent, since the grid-presence roster counts connections BY client_type
+// (internal/store/session_store.go:637, :752) and so decides who is visible to
+// whom.
+var _ = Describe("QUAL-04 seam: telnet and web sessions are differentiated on the connection row", func() {
+	var (
+		ts     *integrationtest.Server
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithTimeout(context.Background(), 90*time.Second)
+		ts = integrationtest.Start(suiteT)
+	})
+
+	AfterEach(func() {
+		if ts != nil {
+			ts.Stop()
+		}
+		if cancel != nil {
+			cancel()
+		}
+	})
+
+	It("records telnet for a telnet session and terminal for a web session, read back from session_connections", func() {
+		telnetPlayer := ts.AuthedPlayer(ctx, "TelnetTamsin")
+		webPlayer := ts.AuthedPlayer(ctx, "WebWren")
+
+		telnetSess := telnetPlayer.OpenTelnetSession(ctx)
+		Expect(telnetSess).NotTo(BeNil(),
+			"OpenTelnetSession MUST return a session — a nil return is the retired t.Fatalf stub")
+		defer telnetSess.Logout(ctx)
+
+		webSess := webPlayer.OpenWebSession(ctx)
+		defer webSess.Logout(ctx)
+
+		Expect(telnetSess.SessionID).NotTo(Equal(webSess.SessionID),
+			"the two openers MUST yield distinct sessions, so the reads below cannot alias")
+
+		// Keyed by session identifier — never a table-wide read. The suite is
+		// shared and a concurrently created session would otherwise pollute the
+		// result.
+		Expect(connectionClientTypes(ctx, ts, telnetSess.SessionID)).To(ConsistOf("telnet"),
+			"the telnet session's connection row MUST carry client_type=telnet as written by the "+
+				"production Subscribe handler; this is read from Postgres, not from the opener's argument")
+		Expect(connectionClientTypes(ctx, ts, webSess.SessionID)).To(ConsistOf("terminal"),
+			"the web session's connection row MUST still carry client_type=terminal — the default is unchanged")
+	})
+})
+
+// connectionClientTypes reads the client_type column of every
+// session_connections row belonging to sessionID. It is the observation point
+// for the telnet seam: production writes this column, so reading it back is
+// what distinguishes a genuinely-telnet session from one that is telnet only
+// in the test's own intent.
+func connectionClientTypes(ctx context.Context, ts *integrationtest.Server, sessionID string) []string {
+	GinkgoHelper()
+	rows, err := ts.Pool().Query(ctx,
+		`SELECT client_type FROM session_connections WHERE session_id = $1`, sessionID)
+	Expect(err).NotTo(HaveOccurred(), "query session_connections for session %s", sessionID)
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var clientType string
+		Expect(rows.Scan(&clientType)).To(Succeed(), "scan client_type for session %s", sessionID)
+		out = append(out, clientType)
+	}
+	Expect(rows.Err()).NotTo(HaveOccurred(), "iterate session_connections for session %s", sessionID)
+	return out
+}

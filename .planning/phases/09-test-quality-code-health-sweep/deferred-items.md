@@ -67,3 +67,18 @@ operations. **Surfaced deliberately for `abac-reviewer`** — see the 09-03
 SUMMARY. Fix candidate: replace "MUST populate sentinel values for X" with
 "the seed MUST narrow its target via `resource ==` or gate on the `has_X`
 witness — populating a sentinel is forbidden by ADR holomush-ti1b".
+
+## From 09-20 (QUAL-04 harness seams)
+
+- **`TestProjectionCapturesPoisonToDLQAfterMaxDeliver` is load-dependent flaky.**
+  `internal/eventbus/audit/dlq_capture_integration_test.go:105` failed once during a
+  full `task test:int` lane (`holomush_audit_dlq_messages_total` did not increment;
+  observed delta 0, expected 1) and passed in isolation (`task test:int --
+  ./internal/eventbus/audit/...`, exit 0, 174 tests).
+  Attribution: NOT caused by 09-20. The package has zero dependency on the changed
+  package — `rg -q 'testsupport/integrationtest' internal/eventbus/audit/` exits 1.
+  Root cause appears to be a test-side race: the test polls the DLQ *stream* until a
+  message lands, then immediately reads the *metric*, which the projection increments
+  on a separate step — so the read can precede the increment.
+  Out of scope for this plan (SCOPE BOUNDARY): pre-existing, unrelated file.
+  Not quarantined (no row in `test/quarantine.yaml`), no existing issue found.

@@ -30,6 +30,21 @@ const (
 	transportDetachExitTimeout   = 5 * time.Second
 )
 
+// Client-type values a harness session may record on its session_connections
+// row. These are the production spellings, not harness-local aliases: the
+// session store validates every AddConnection against the allowlist
+// {"terminal", "comms_hub", "telnet"} (internal/store/session_store.go:519-528)
+// and rejects anything else, so a value that is wrong here fails at the
+// production write rather than being silently accepted.
+//
+// clientTypeTerminal is the canonical value the web frontend uses
+// (internal/web/handler.go:188) and stays the harness default, so every
+// pre-existing call site is byte-identical on the wire.
+const (
+	clientTypeTerminal = "terminal"
+	clientTypeTelnet   = "telnet"
+)
+
 // Session wraps an authenticated or guest game session for privacy integration
 // testing. It holds the session metadata set at connect time and exposes
 // helpers that delegate to the in-process CoreServer.
@@ -68,6 +83,15 @@ type Session struct {
 	// playerSessionToken is the raw bearer token for player-session auth.
 	// Kept internal; used by SendCommand / Logout.
 	playerSessionToken string
+
+	// clientType is the client_type this session's Subscribe call stamps on
+	// its session_connections row (see attach). Empty means "unset" and
+	// attach substitutes clientTypeTerminal, so the Session literals that do
+	// not set it — ConnectAuthedWithRoles and ConnectGuest in harness.go —
+	// keep their existing on-the-wire behaviour unchanged. Set explicitly by
+	// AuthedPlayer.openSession, which is how OpenTelnetSession differs from
+	// OpenWebSession.
+	clientType string
 
 	// Transport state — auto-managed by ConnectAuthed/ConnectGuest/
 	// OpenWebSession (via s.attach), cycled by DetachTransport/
@@ -429,10 +453,17 @@ func (s *Session) ReattachTransport(ctx context.Context) {
 // consumer's OpenSession hasn't completed yet.
 //
 // Each attach uses a fresh connection_id ULID so production's
-// session_connections row tracks per-attach lifetime correctly. The
-// client_type is "terminal" — the canonical value the web frontend uses
-// (internal/web/handler.go:188). The session_store validates against
-// {"terminal", "comms_hub", "telnet"} so any other choice is rejected.
+// session_connections row tracks per-attach lifetime correctly.
+//
+// The client_type is caller-selected: attach sends s.clientType, falling back
+// to clientTypeTerminal when the field is unset so pre-existing callers are
+// unchanged. attach does NOT validate the value — the allowlist
+// {"terminal", "comms_hub", "telnet"} is enforced by the session store on
+// AddConnection (internal/store/session_store.go:519-528), which is the same
+// gate production writes pass through. Whatever is sent here is what the
+// production Subscribe handler stamps onto the session_connections row
+// (internal/grpc/subscribe_handler.go:358-364), so a test can read the column
+// back to observe the transport identity rather than restating its own input.
 func (s *Session) attach(ctx context.Context) {
 	s.server.t.Helper()
 	s.transportMu.Lock()
@@ -451,12 +482,16 @@ func (s *Session) attach(ctx context.Context) {
 	s.transportDone = done
 	s.transportErr = nil
 	s.transportConnID = connID
+	clientType := s.clientType
 	s.transportMu.Unlock()
+	if clientType == "" {
+		clientType = clientTypeTerminal
+	}
 	req := &corev1.SubscribeRequest{
 		SessionId:          s.SessionID,
 		PlayerSessionToken: s.playerSessionToken,
 		ConnectionId:       connID.String(),
-		ClientType:         "terminal",
+		ClientType:         clientType,
 	}
 
 	go func() {
@@ -884,6 +919,39 @@ type AuthedPlayer struct {
 // uses for the same reason (per CodeRabbit thread on PR #4048).
 func (p *AuthedPlayer) OpenWebSession(ctx context.Context) *Session {
 	p.server.t.Helper()
+	return p.openSession(ctx, clientTypeTerminal)
+}
+
+// OpenTelnetSession opens a game session simulating a telnet client.
+//
+// Production note: web and telnet share the same underlying SelectCharacter
+// path; the only meaningful difference is the client_type recorded on the
+// session_connections row by Subscribe
+// (internal/grpc/subscribe_handler.go:358-364). That difference is
+// load-bearing — the grid-presence roster counts only terminal and telnet
+// connections (internal/store/session_store.go:637, :752), so the transport
+// identity decides who is visible to whom.
+//
+// The Subscribe-goroutine wiring this helper once waited on now exists: attach
+// starts the real Subscribe RPC, blocks on CONTROL_SIGNAL_REPLAY_COMPLETE, and
+// tracks a per-attach connection identifier that DetachTransport cancels. The
+// client type is therefore threaded through the production subscribe request,
+// and the differentiation is observable the way production observes it — by
+// reading client_type from the session_connections row. Assert on that column,
+// not on the argument passed here.
+func (p *AuthedPlayer) OpenTelnetSession(ctx context.Context) *Session {
+	p.server.t.Helper()
+	return p.openSession(ctx, clientTypeTelnet)
+}
+
+// openSession is the shared body behind OpenWebSession and OpenTelnetSession.
+// The two differ ONLY in the client type handed to attach; everything else —
+// the production SelectCharacter call, the persisted-row hydration and the
+// reason for it, the Session literal, the attach — is common, and is kept in
+// one place deliberately: two copies of the persisted-row sourcing logic would
+// drift, and the comment inside it explains why that logic is subtle.
+func (p *AuthedPlayer) openSession(ctx context.Context, clientType string) *Session {
+	p.server.t.Helper()
 	selResp, err := p.server.coreServer.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
 		PlayerSessionToken: p.rawToken,
 		CharacterId:        p.CharacterID.String(),
@@ -913,23 +981,10 @@ func (p *AuthedPlayer) OpenWebSession(ctx context.Context) *Session {
 		SessionCreatedAt:   persisted.CreatedAt,
 		Reattached:         selResp.GetReattached(),
 		playerSessionToken: p.rawToken,
+		clientType:         clientType,
 	}
 	sess.attach(ctx)
 	return sess
-}
-
-// OpenTelnetSession opens a game session simulating a telnet client.
-//
-// Production note: web and telnet share the same underlying SelectCharacter
-// path; the only meaningful difference is the client_type recorded on the
-// session_connections row by Subscribe (internal/grpc/server.go:749-756).
-// Since iwzt.17's QueryStreamHistory assertions don't observe
-// session_connections, this helper is currently TODO-fatal — callers wanting
-// to exercise the live-Subscribe transport differentiation belong to iwzt.16's
-// scope (Subscribe goroutine fan-out + per-connection DetachTransport).
-func (p *AuthedPlayer) OpenTelnetSession(_ context.Context) *Session {
-	p.server.t.Fatalf("integrationtest.AuthedPlayer.OpenTelnetSession: TODO iwzt-16 — telnet transport differentiation requires Subscribe goroutine wiring")
-	return nil
 }
 
 // GetSceneForViewer calls the REAL SceneAccessServer.GetSceneForViewer for
