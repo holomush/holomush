@@ -1,0 +1,453 @@
+# Session-lifecycle matrix registry — one row per position in the 12x4
+# transition matrix, each with a committed, checkable disposition.
+#
+# WHY THIS FILE EXISTS: the phase that created it named its own root theme as
+# assurance artifacts overstating what the code delivers. A prose coverage
+# table is exactly such an artifact. This file is machine-read instead, so its
+# claims can be CHECKED rather than trusted.
+#
+# BIJECTION KEY: `id`, formed as <transition-slug>.<column-slug>. The same
+# token appears on the registry row and in the in-code marker of the spec that
+# satisfies it. The marker form is exactly this, on its own line inside the
+# spec's leading comment:
+#
+#     // matrix-row: <id>
+#
+# ENFORCEMENT: test/meta/session_matrix_registry_test.go.
+#   - Shape (landed together with this file): 48 rows, unique ids, exactly one
+#     disposition per row, exactly 10 not-applicable.
+#   - Bijection (added later in the phase): a row with `disposition: spec` MUST
+#     have a matching in-code marker, and every marker MUST have a row. A
+#     `spec` row with no marker FAILS THE BUILD.
+#
+# SCHEMA — rows: list of { id, transition, column, disposition, <payload> }
+#
+#   Every row carries exactly ONE disposition, and each disposition owns
+#   exactly one payload key. The payload key of a row's own disposition MUST be
+#   present; the payload keys of the other four MUST be absent. That mutual
+#   exclusion is what makes "exactly one disposition" a checkable property
+#   rather than a promise, and the shape test enforces it.
+#
+#     disposition                              payload key   meaning
+#     ---------------------------------------  ------------  --------------------
+#     spec                                     spec          A spec in this
+#       repository exercises this transition for this column AND carries the
+#       in-code marker. spec: { file, container, name }.
+#
+#     covered-elsewhere                        covered_by    A pre-existing spec
+#       genuinely exercises it; duplicating its setup would be waste.
+#       covered_by: { file, container, name }. `notes` MUST state precisely what
+#       that spec does AND does not assert.
+#
+#     planned                                  owed_by       No spec exists yet;
+#       a named later plan owes it. This is a FIRST-CLASS state, not an absence.
+#       A row MUST NOT claim `spec` before its spec is written — an unwritten
+#       spec claimed as coverage is the exact defect this registry prevents.
+#       `blocked_on` (optional, and permitted ONLY here) names a missing seam.
+#
+#     not-applicable                           reason        The question does
+#       not arise for this transition/column pair. These are exactly the 10
+#       cells the source matrix marks `n/a` — none invented, none dropped. The
+#       source marks them without stating a rationale, so each `reason` is THIS
+#       registry's reading of that marking, not a quotation.
+#
+#     not-implementable-from-harness-defaults  gap_notes     The system DOES
+#       answer this question, but not with the semantics the row asserts and not
+#       by any route the harness can currently reach. Deliberately DISTINCT from
+#       not-applicable, which is a question that does not arise: collapsing
+#       either into the other would hide a real gap behind a legitimate one.
+#
+#   Optional on any row: `notes` (free-form annotation) and `issue` (a GitHub
+#   issue number). Neither is a payload key, so neither can imply a disposition.
+#
+# SOURCE MATRIX: the `holomush-izk0` table reproduced verbatim in
+# .planning/phases/09-test-quality-code-health-sweep/09-RESEARCH.md
+# ("The holomush-izk0 matrix, verbatim from the archive"). Column totals read
+# directly off that table: web-guest 9, web-char 11, telnet 12,
+# multi-session 6 = 38 populated cells, plus 10 n/a = 48 positions.
+#
+# TELNET COLUMN SCOPE — read before writing or reviewing any telnet cell. The
+# telnet cells assert SESSION STATE for a session whose connection row carries
+# client_type='telnet' (written by the production Subscribe handler at
+# internal/grpc/subscribe_handler.go:358-364 and validated by the store
+# allowlist at internal/store/session_store.go:519-528). No telnet gateway is
+# in the loop and `internal/telnet` is NOT exercised by any row in this file. A
+# telnet cell is never a claim about telnet PROTOCOL behaviour.
+rows:
+  # --- Transition 1: fresh character selection ---------------------------
+  - id: fresh-select.web-guest
+    transition: Fresh SelectCharacter -> Active
+    column: web-guest
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Fresh character selection to an active session
+      name: creates an active session for a guest character carrying a location arrival timestamp
+
+  - id: fresh-select.web-char
+    transition: Fresh SelectCharacter -> Active
+    column: web-char
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Fresh character selection to an active session
+      name: creates an active session for a registered player's character without reattaching
+
+  - id: fresh-select.telnet
+    transition: Fresh SelectCharacter -> Active
+    column: telnet
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Fresh character selection to an active session
+      name: creates an active session whose connection row records the telnet client type
+
+  - id: fresh-select.multi-session
+    transition: Fresh SelectCharacter -> Active
+    column: multi-session
+    disposition: not-applicable
+    reason: >-
+      A fresh selection is the act that brings the first session into existence, so there is no concurrent session for the
+      multi-session dimension to range over. #magic___^_^___line
+  # --- Transition 2: reattach within TTL, character-selection path -------
+  - id: reattach-select.web-guest
+    transition: Reattach within TTL (SelectCharacter path)
+    column: web-guest
+    disposition: planned
+    owed_by: "09-14"
+    blocked_on: >-
+      No harness seam re-runs SelectCharacter for a guest. Server.ConnectGuest performs CreateGuest and SelectCharacter in
+      one call and keeps the guest's player-session token unexported, and Server.AuthedPlayer — the handle that does allow
+      repeated OpenWebSession calls — creates a REGISTERED player. Covering this cell needs a guest equivalent of AuthedPlayer,
+      or an exported re-select on Session. #magic___^_^___line
+  - id: reattach-select.web-char
+    transition: Reattach within TTL (SelectCharacter path)
+    column: web-char
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Reattach within TTL through the character-selection path
+      name: returns the same session identifier with the location arrival timestamp unchanged
+
+  - id: reattach-select.telnet
+    transition: Reattach within TTL (SelectCharacter path)
+    column: telnet
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Reattach within TTL through the character-selection path
+      name: returns the same session for a telnet client and records a telnet type on the new connection
+
+  - id: reattach-select.multi-session
+    transition: Reattach within TTL (SelectCharacter path)
+    column: multi-session
+    disposition: covered-elsewhere
+    covered_by:
+      file: test/integration/auth/multi_tab_test.go
+      container: Multi-tab session isolation — same character in two tabs
+      name: both tabs reattach to one session and dual-tab command submission succeeds
+    notes: >-
+      Verified by reading multi_tab_test.go:81-174. The second WebSelectCharacter with the same player-session token asserts
+      GetReattached() is true and that both tabs return the SAME session id — which is this cell's transition. It does NOT
+      assert location arrival timestamp preservation; that arm is asserted for the single-session columns by reattach-select.web-char.
+
+  # --- Transition 3: reattach within TTL, Subscribe.ReattachCAS ----------
+  - id: reattach-cas.web-guest
+    transition: Reattach within TTL (Subscribe.ReattachCAS)
+    column: web-guest
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Reattach within TTL through the subscribe compare-and-swap path
+      name: returns a detached guest session to active without moving its location arrival timestamp
+    notes: >-
+      test/integration/presence/reattach_presence_test.go covers the SAME detach/reattach sequence for a guest, but its subject
+      is grid_present (I-LIVE-3) and it asserts neither session identity nor arrival-timestamp preservation. It is a partial
+      cover of this cell, so it is cross-referenced here rather than claimed as the disposition. #magic___^_^___line
+  - id: reattach-cas.web-char
+    transition: Reattach within TTL (Subscribe.ReattachCAS)
+    column: web-char
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Reattach within TTL through the subscribe compare-and-swap path
+      name: returns a detached registered character's session to active on the same session row
+
+  - id: reattach-cas.telnet
+    transition: Reattach within TTL (Subscribe.ReattachCAS)
+    column: telnet
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Reattach within TTL through the subscribe compare-and-swap path
+      name: returns a detached telnet session to active with a fresh telnet-typed connection row
+
+  - id: reattach-cas.multi-session
+    transition: Reattach within TTL (Subscribe.ReattachCAS)
+    column: multi-session
+    disposition: planned
+    owed_by: "09-14"
+    blocked_on: >-
+      integrationtest.Session models exactly one transport, and DetachTransport calls the production Disconnect RPC, which
+      detaches the whole session rather than a single connection. Exercising a reattach while a sibling connection stays live
+      needs per-connection detach in the harness. #magic___^_^___line
+  # --- Transition 4: detach all connections ------------------------------
+  - id: detach-all.web-guest
+    transition: Detach (drop all connections) -> status=Detached + TTL
+    column: web-guest
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: detach-all.web-char
+    transition: Detach (drop all connections) -> status=Detached + TTL
+    column: web-char
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: detach-all.telnet
+    transition: Detach (drop all connections) -> status=Detached + TTL
+    column: telnet
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: detach-all.multi-session
+    transition: Detach (drop all connections) -> status=Detached + TTL
+    column: multi-session
+    disposition: not-applicable
+    reason: >-
+      Dropping every connection is a property of a single session's connection set; holding a second concurrent session does
+      not change what this transition asserts about the first. #magic___^_^___line
+  # --- Transition 5: reaper sweep at TTL expiry --------------------------
+  - id: reaper-sweep.web-guest
+    transition: Reaper sweep at TTL expiry -> row deleted
+    column: web-guest
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: reaper-sweep.web-char
+    transition: Reaper sweep at TTL expiry -> row deleted
+    column: web-char
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: reaper-sweep.telnet
+    transition: Reaper sweep at TTL expiry -> row deleted
+    column: telnet
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: reaper-sweep.multi-session
+    transition: Reaper sweep at TTL expiry -> row deleted
+    column: multi-session
+    disposition: not-applicable
+    reason: >-
+      The reaper's predicate (status='detached' AND expires_at < now) is evaluated per session row, so concurrency across
+      a player's sessions does not alter the transition under test. #magic___^_^___line
+  # --- Transition 6: post-TTL re-login -----------------------------------
+  - id: post-ttl-relogin.web-guest
+    transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
+    column: web-guest
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: post-ttl-relogin.web-char
+    transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
+    column: web-char
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: post-ttl-relogin.telnet
+    transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
+    column: telnet
+    disposition: planned
+    owed_by: "09-13"
+
+  - id: post-ttl-relogin.multi-session
+    transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
+    column: multi-session
+    disposition: not-applicable
+    reason: >-
+      Re-login after expiry starts from a state with no surviving session row, so there is no concurrent session for this
+      dimension to range over. #magic___^_^___line
+  # --- Transition 7: quit command ----------------------------------------
+  - id: quit-command.web-guest
+    transition: quit command -> row deleted
+    column: web-guest
+    disposition: planned
+    owed_by: "09-14"
+
+  - id: quit-command.web-char
+    transition: quit command -> row deleted
+    column: web-char
+    disposition: planned
+    owed_by: "09-14"
+
+  - id: quit-command.telnet
+    transition: quit command -> row deleted
+    column: telnet
+    disposition: planned
+    owed_by: "09-14"
+
+  - id: quit-command.multi-session
+    transition: quit command -> row deleted
+    column: multi-session
+    disposition: not-applicable
+    reason: >-
+      quit ends the one session it is issued on; the source matrix marks the concurrent-session case as not arising for this
+      transition. #magic___^_^___line
+  # --- Transition 8: explicit logout -------------------------------------
+  - id: explicit-logout.web-guest
+    transition: Explicit logout -> row deleted
+    column: web-guest
+    disposition: planned
+    owed_by: "09-14"
+
+  - id: explicit-logout.web-char
+    transition: Explicit logout -> row deleted
+    column: web-char
+    disposition: planned
+    owed_by: "09-14"
+
+  - id: explicit-logout.telnet
+    transition: Explicit logout -> row deleted
+    column: telnet
+    disposition: planned
+    owed_by: "09-14"
+
+  - id: explicit-logout.multi-session
+    transition: Explicit logout -> row deleted
+    column: multi-session
+    disposition: covered-elsewhere
+    covered_by:
+      file: test/integration/auth/multi_tab_test.go
+      container: Multi-tab session isolation — logout in tab 1, action in tab 2
+      name: each call site from spec §4.4.5 returns SESSION_NOT_FOUND after logout
+    notes: >-
+      Verified by reading multi_tab_test.go:386-506. Logout in one tab is followed by four call sites retried from a second
+      tab, each of which must reject the now-stale token. It asserts the session is gone from every consumer surface rather
+      than reading the deleted row back directly. The companion spec at multi_tab_test.go:508 ("Subscribe rejects a stale
+      token with SESSION_NOT_FOUND before sending any frame") pins the Subscribe call site of the same transition. #magic___^_^___line
+  # --- Transition 9: administrator boot ----------------------------------
+  - id: admin-boot.web-guest
+    transition: Admin boot -> row deleted
+    column: web-guest
+    disposition: not-applicable
+    reason: >-
+      Guests have no persistent player account for an administrator command to target, so there is no subject for this transition.
+
+  - id: admin-boot.web-char
+    transition: Admin boot -> row deleted
+    column: web-char
+    disposition: not-implementable-from-harness-defaults
+    issue: 4862
+    gap_notes: >-
+      An administrator session-boot path DOES exist in this tree: `resetpassword --kick` (internal/command/handlers/resetpassword.go:197-218),
+      a capability-gated admin command (capSessionKick, checked at resetpassword.go:124) that deletes the session rows of
+      every character belonging to the target player. It falls short of THIS row on two independent counts. (1) Semantic:
+      --kick calls Session().DeleteByCharacter, a raw DELETE ... RETURNING (internal/store/session_store.go:813-827) that
+      emits nothing, so it delivers the row-deleted half and NOT the RecordBootedSession / session_ended half the row asserts
+      — no STREAM_CLOSED reaches subscribers and no disconnect hooks fire. Issue 4862 tracks that session_ended semantic gap.
+      (2) Wiring: the command is unreachable from harness defaults because RegisterAdmin panics on any nil dependency (internal/command/handlers/register.go:14-23)
+      and needs five the harness does not wire — PlayerRepo, Hasher, PlayerSessions, ResetRepo, CharLister. The two gaps have
+      different remedies and must not be conflated: closing the wiring gap alone would make the command reachable while still
+      delivering the wrong semantics, so a spec written against it would go green on a transition the system does not perform.
+      Do NOT write an approximating spec for this cell and do NOT repurpose logout or a direct row delete as a stand-in. #magic___^_^___line
+  - id: admin-boot.telnet
+    transition: Admin boot -> row deleted
+    column: telnet
+    disposition: not-implementable-from-harness-defaults
+    issue: 4862
+    gap_notes: >-
+      Same disposition and same two gaps as admin-boot.web-char — the `resetpassword --kick` path (internal/command/handlers/resetpassword.go:197-218)
+      exists and is capability-gated, but bypasses the RecordBootedSession / session_ended semantics this row asserts (issue
+      4862) and is unreachable from harness defaults because RegisterAdmin panics on the five dependencies the harness does
+      not wire. The transport column changes nothing: the shortfall is in the command path, not the connection. #magic___^_^___line
+  - id: admin-boot.multi-session
+    transition: Admin boot -> row deleted
+    column: multi-session
+    disposition: not-implementable-from-harness-defaults
+    issue: 4862
+    gap_notes: >-
+      Same disposition and same two gaps as admin-boot.web-char. The multi-session dimension is in fact the one `resetpassword
+      --kick` (internal/command/handlers/resetpassword.go:197-218) addresses most directly — it iterates every character belonging
+      to the target player — which makes the semantic shortfall sharper rather than softer: every one of those sessions is
+      deleted without the session_ended emission the row asserts (issue 4862), and the path is still unreachable from harness
+      defaults through RegisterAdmin's unwired dependencies. #magic___^_^___line
+  # --- Transition 10: character move while attached ----------------------
+  - id: move-arrival.web-guest
+    transition: Character move while attached -> LocationArrivedAt advances
+    column: web-guest
+    disposition: not-applicable
+    reason: >-
+      The source matrix places guest movement outside this row's scope; the guest start location is the only location a guest
+      session is given. #magic___^_^___line
+  - id: move-arrival.web-char
+    transition: Character move while attached -> LocationArrivedAt advances
+    column: web-char
+    disposition: planned
+    owed_by: "09-15"
+
+  - id: move-arrival.telnet
+    transition: Character move while attached -> LocationArrivedAt advances
+    column: telnet
+    disposition: planned
+    owed_by: "09-15"
+
+  - id: move-arrival.multi-session
+    transition: Character move while attached -> LocationArrivedAt advances
+    column: multi-session
+    disposition: planned
+    owed_by: "09-15"
+
+  # --- Transition 11: tmux-style telnet reattach -------------------------
+  - id: telnet-tmux-reattach.web-guest
+    transition: Tmux-style telnet reattach (same player session, new connection)
+    column: web-guest
+    disposition: not-applicable
+    reason: >-
+      A tmux-style detach and reattach is a telnet-client behaviour; there is no web-guest analogue of resuming an out-of-band
+      terminal. #magic___^_^___line
+  - id: telnet-tmux-reattach.web-char
+    transition: Tmux-style telnet reattach (same player session, new connection)
+    column: web-char
+    disposition: not-applicable
+    reason: >-
+      A tmux-style detach and reattach is a telnet-client behaviour; the web column's equivalent is the ordinary reattach
+      rows above. #magic___^_^___line
+  - id: telnet-tmux-reattach.telnet
+    transition: Tmux-style telnet reattach (same player session, new connection)
+    column: telnet
+    disposition: planned
+    owed_by: "09-14"
+
+  - id: telnet-tmux-reattach.multi-session
+    transition: Tmux-style telnet reattach (same player session, new connection)
+    column: multi-session
+    disposition: not-applicable
+    reason: >-
+      This row already asserts one player session surviving the arrival of a new connection, so the multi-session dimension
+      restates the row rather than adding a distinct case. #magic___^_^___line
+  # --- Transition 12: transport-level blip -------------------------------
+  - id: wifi-blip.web-guest
+    transition: WiFi blip (transport-level drop + reconnect, no logout)
+    column: web-guest
+    disposition: planned
+    owed_by: "09-15"
+
+  - id: wifi-blip.web-char
+    transition: WiFi blip (transport-level drop + reconnect, no logout)
+    column: web-char
+    disposition: planned
+    owed_by: "09-15"
+
+  - id: wifi-blip.telnet
+    transition: WiFi blip (transport-level drop + reconnect, no logout)
+    column: telnet
+    disposition: planned
+    owed_by: "09-15"
+
+  - id: wifi-blip.multi-session
+    transition: WiFi blip (transport-level drop + reconnect, no logout)
+    column: multi-session
+    disposition: planned
+    owed_by: "09-15"
