@@ -250,7 +250,7 @@
 | You decide | Planner picks once waves are known | |
 
 **User's choice:** One PR on the milestone branch.
-**Notes:** Recorded as D-22. Worktree created at `.worktrees/v0.12-foundation-hardening` on branch `gsd/v0.12-foundation-hardening`.
+**Notes:** Recorded as D-22. Worktree created at `.worktrees/v0.12-foundation-hardening` on branch `gsd/v0.12-milestone`. (Corrected during the reviews replan: the worktree directory carries the `v0.12-foundation-hardening` name but the branch is `gsd/v0.12-milestone`, per `git branch --show-current`. The two are not required to match and here they do not.)
 
 ### Q4 — #4796 index migration shape
 

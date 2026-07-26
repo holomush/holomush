@@ -260,7 +260,7 @@ NOT open for planning to re-scope. No new player-facing features.
 ### Phase shape
 
 - **D-22 (PR shape):** **One PR on the milestone branch.** All plans land on
-  `gsd/v0.12-foundation-hardening` and ship as a single PR — matching the
+  `gsd/v0.12-milestone` and ship as a single PR — matching the
   `git.branching_strategy: "milestone"` config that landed in #4852. Phase 9 is
   the only phase remaining in v0.12, so the milestone branch is effectively this
   phase's branch. **Worktree already created** at
