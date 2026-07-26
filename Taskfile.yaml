@@ -237,15 +237,58 @@ tasks:
             exit 1
           fi
       - mkdir -p .coverdata/core .coverdata/gateway
+      # GUARD 1 of 3 (plan 09-01). Remove the profile BEFORE the run, never after.
+      # Catches: a failed conversion leaving the PREVIOUS run's profile on disk, so
+      # the guards below read a stale non-empty file and pass. A guard that an
+      # earlier, different run can satisfy is not a guard.
+      - rm -f coverage-e2e.out
       - defer: {docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml down -v; rm -rf .coverdata;: ''}
       - cmd: |
           set +e
           E2E_EXIT=0
           docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml run --rm \
             playwright npx playwright test {{.CLI_ARGS}} || E2E_EXIT=$?
+          # Honours stop_grace_period from compose.e2e.cover.yaml, without which the
+          # -cover binaries are SIGKILLed before their counter-flush exit hook runs.
           docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml stop core gateway
           go tool covdata textfmt -i=.coverdata/core,.coverdata/gateway -o coverage-e2e.out
-          echo "E2E coverage written to coverage-e2e.out"
+          COVDATA_EXIT=$?
+          # GUARD 2 of 3 (plan 09-01). Propagate the conversion's exit status.
+          # Catches: MALFORMED coverage data — covdata exits 1 and writes a 0-byte
+          # profile. Without this the task exited with the suite's status alone, so a
+          # conversion failure was invisible on an otherwise-green run.
+          if [ "$COVDATA_EXIT" -ne 0 ]; then
+            echo "ERROR: go tool covdata textfmt failed (exit $COVDATA_EXIT) — no E2E coverage profile produced."
+            exit 1
+          fi
+          if [ ! -f coverage-e2e.out ]; then
+            echo "ERROR: go tool covdata textfmt exited 0 but wrote no coverage-e2e.out."
+            exit 1
+          fi
+          # GUARD 3 of 3 (plan 09-01). Require at least one COVERED statement — not
+          # merely a non-empty profile. `test -s` and a body-line count both fail to
+          # catch the two remaining shapes; this is the guard that catches the
+          # confirmed 09-01 root cause:
+          #   * empty coverage-data dir  -> covdata warns, exits 0, writes 0 bytes;
+          #   * SIGKILL before the flush -> only covmeta.* lands, so covdata emits a
+          #     FULL-SIZE profile (32,375 body lines, byte-for-byte the size of a good
+          #     one) in which EVERY count is 0, and exits 0. Measured 2026-07-26.
+          # Field $NF of a profile body line is that block's execution count; a good
+          # run had 3,745 non-zero body lines, the SIGKILLed run had 0.
+          COVERED=$(awk 'NR>1 && $NF+0>0 {n++} END {print n+0}' coverage-e2e.out)
+          AWK_EXIT=$?
+          if [ "$AWK_EXIT" -ne 0 ]; then
+            echo "ERROR: could not read coverage-e2e.out to count covered statements (awk exit $AWK_EXIT)."
+            exit 1
+          fi
+          if [ "$COVERED" -eq 0 ]; then
+            echo "ERROR: coverage-e2e.out records ZERO covered statements — the E2E coverage chain is broken."
+            echo "       A meta-only .coverdata (container SIGKILLed before its flush hook ran) yields exactly"
+            echo "       this: a full-size profile with every count 0. Check container exit codes for 137 and"
+            echo "       confirm stop_grace_period in compose.e2e.cover.yaml exceeds the shutdown time."
+            exit 1
+          fi
+          echo "E2E coverage written to coverage-e2e.out ($COVERED covered statements)"
           ./scripts/e2e-summary.sh
           exit $E2E_EXIT
 
