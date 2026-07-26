@@ -6,13 +6,16 @@ package tlscerts
 import (
 	"context"
 	cryptotls "crypto/tls"
+	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/lifecycle"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // Compile-time interface check: *TLSSubsystem must satisfy lifecycle.Subsystem.
@@ -92,7 +95,145 @@ func TestTLSSubsystemPrepareUsesRealEnsurerWhenNoOverride(t *testing.T) {
 	assert.NoError(t, sub.Stop(context.Background()))
 }
 
+// TestTLSSubsystemPrepareReportsSetupFailureAndLeavesTheSubsystemUnstarted
+// proves the subsystem fails to start rather than starting without TLS. The
+// second half is the security-relevant half: if Prepare returned an error but
+// still populated tlsConfig, a caller that logged the error and carried on
+// would get a config it never validated. TLSConfig() must still panic, exactly
+// as it does before Prepare has ever run.
+//
+// The ensurer returns a plain (non-oops) error here, so TLS_SETUP_FAILED is the
+// only code in the chain. The companion test below covers the case where the
+// cause carries its own stage code.
+func TestTLSSubsystemPrepareReportsSetupFailureAndLeavesTheSubsystemUnstarted(t *testing.T) {
+	certsDir := t.TempDir()
+	cause := errors.New("certificate material unavailable")
+
+	sub := NewTLSSubsystem(TLSSubsystemConfig{
+		CertsDir: certsDir,
+		GameID:   func() string { return "resolved-game-id" },
+		CertEnsurer: func(string, string) (*cryptotls.Config, error) {
+			return nil, cause
+		},
+	})
+
+	err := sub.Prepare(context.Background())
+
+	require.Error(t, err, "Prepare must fail when the ensurer fails")
+	require.ErrorIs(t, err, cause, "the underlying cause must remain in the error chain")
+	errutil.AssertErrorCode(t, err, "TLS_SETUP_FAILED")
+	errutil.AssertErrorContext(t, err, "certs_dir", certsDir)
+	assert.Panics(t, func() { sub.TLSConfig() },
+		"a failed Prepare must leave the subsystem unstarted, not holding an unvalidated config")
+}
+
+// TestTLSSubsystemPrepareSurfacesTheCertificateStageThatFailed proves an
+// operator reading Prepare's error learns WHICH certificate stage failed, not
+// merely that TLS setup failed. oops reports the deepest code in the chain, so
+// EnsureCerts' stage code survives Prepare's TLS_SETUP_FAILED wrap while
+// Prepare's certs_dir context is still attached. Without this the two failures
+// an operator most needs to tell apart — "I cannot write to the certs
+// directory" and "the game ID is malformed" — would be one opaque message.
+func TestTLSSubsystemPrepareSurfacesTheCertificateStageThatFailed(t *testing.T) {
+	certsDir := t.TempDir()
+
+	sub := NewTLSSubsystem(TLSSubsystemConfig{
+		CertsDir: certsDir,
+		// U+007F DEL cannot appear in a URL, so the CA's identity SAN cannot
+		// be formed and CA generation is the stage that fails.
+		GameID: func() string { return "bad\x7fgame-id" },
+	})
+
+	err := sub.Prepare(context.Background())
+
+	require.Error(t, err, "Prepare must fail when the real ensurer cannot generate a CA")
+	errutil.AssertErrorCode(t, err, "CA_GENERATE_FAILED")
+	errutil.AssertErrorContext(t, err, "certs_dir", certsDir)
+	assert.Panics(t, func() { sub.TLSConfig() },
+		"a failed Prepare must leave the subsystem unstarted")
+}
+
 // --- Tests relocated from cmd/holomush/core_test.go (EnsureCerts/fileExists moved here) ---
+
+// TestEnsureCertsReportsWhichGenerationStageFailed pins a distinct coded error
+// per stage of first-boot certificate generation. The stages fail for unrelated
+// operator-visible reasons — an unwritable parent directory, a malformed game
+// ID, an obstructed gateway certificate path — and collapsing them to one code
+// would leave an operator guessing which of the three to fix. Each subtest
+// asserts a code no other subtest expects, so a regression that reported the
+// wrong stage fails here rather than shipping a misleading boot error.
+func TestEnsureCertsReportsWhichGenerationStageFailed(t *testing.T) {
+	const validGameID = "01HX7MZABC123DEF456GHJ"
+
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T) (certsDir, gameID string)
+		wantCode string
+		wantKey  string
+		wantVal  any
+	}{
+		{
+			name: "a certs directory that cannot be created reports the directory stage",
+			setup: func(t *testing.T) (string, string) {
+				parent := t.TempDir()
+				//nolint:gosec // G302: a read-only parent is the condition under test
+				require.NoError(t, os.Chmod(parent, 0o500))
+				t.Cleanup(func() {
+					//nolint:gosec // G302: Need 0700 to clean up directory
+					_ = os.Chmod(parent, 0o700)
+				})
+
+				// Precondition: chmod must genuinely deny creation. Running as
+				// root defeats it, which would make this subtest pass without
+				// ever reaching the branch it claims to cover.
+				if mkErr := os.Mkdir(filepath.Join(parent, "probe"), 0o700); mkErr == nil {
+					t.Skip("filesystem allows creation under a 0500 parent (running as root?)")
+				}
+				return filepath.Join(parent, "certs"), validGameID
+			},
+			wantCode: "CERTS_DIR_CREATE_FAILED",
+			wantKey:  "operation",
+			wantVal:  "create certs directory",
+		},
+		{
+			name: "a game ID that cannot form a SAN URI reports the CA generation stage",
+			setup: func(t *testing.T) (string, string) {
+				return t.TempDir(), "bad\x7fgame-id"
+			},
+			wantCode: "CA_GENERATE_FAILED",
+			wantKey:  "game_id",
+			wantVal:  "bad\x7fgame-id",
+		},
+		{
+			name: "an obstructed gateway certificate path reports the client certificate save stage",
+			setup: func(t *testing.T) (string, string) {
+				certsDir := t.TempDir()
+				// A directory where gateway.crt belongs. None of the three
+				// files EnsureCerts probes for existence are present, so it
+				// still takes the generate-from-scratch path and only trips at
+				// the very last save.
+				require.NoError(t, os.Mkdir(filepath.Join(certsDir, "gateway.crt"), 0o700))
+				return certsDir, validGameID
+			},
+			wantCode: "CLIENT_CERT_SAVE_FAILED",
+			wantKey:  "component",
+			wantVal:  "gateway",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			certsDir, gameID := tt.setup(t)
+
+			cfg, err := EnsureCerts(certsDir, gameID)
+
+			require.Error(t, err, "EnsureCerts must fail for this stage")
+			assert.Nil(t, cfg, "no TLS config may be returned alongside an error")
+			errutil.AssertErrorCode(t, err, tt.wantCode)
+			errutil.AssertErrorContext(t, err, tt.wantKey, tt.wantVal)
+		})
+	}
+}
 
 func TestEnsureCerts(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-*")
