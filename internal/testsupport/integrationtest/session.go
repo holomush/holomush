@@ -785,6 +785,61 @@ func (s *Session) EmitDirectEvent(ctx context.Context, stream, evType string, pa
 	return pub.Publish(ctx, event) //nolint:wrapcheck // test helper: callers see bus errors directly
 }
 
+// EmitDirectEventAt is the timestamped sibling of EmitDirectEvent. It behaves
+// identically — same domain-relative stream qualification, same canonical
+// eventbus.NewEvent construction, same production publisher
+// (eventbus.Subsystem.Publisher.Publish), so JetStream persistence and audit
+// semantics match production — with two differences:
+//
+//   - at is the caller-chosen event Timestamp, written in place of the
+//     wall-clock instant NewEvent stamps. Timestamp is the field the history
+//     time-window filters read (NotBefore/NotAfter are INCLUSIVE by Timestamp;
+//     see history/hot_jetstream.go), so a spec can place an event on either
+//     side of a session's LocationArrivedAt — or of a Subscribe attach moment —
+//     deterministically, instead of emitting at "now" and separating events
+//     with a time.Sleep. Adding another sleep-based synchronisation site would
+//     extend the backlog tracked in #4665 (legacy holomush-ec22.13, "replace
+//     ~16 time.Sleep async-sync sites with deterministic patterns"); this
+//     helper exists so history-floor specs need not.
+//   - the emitted event's identifier is returned, so a spec can assert that a
+//     specific event is present or absent rather than counting frames. It
+//     matches corev1.EventFrame.Id on the read side.
+//
+// at controls Timestamp ONLY. It does NOT control the event ULID (identity and
+// dedup key, always stamped by NewEvent from the real clock) and it does NOT
+// control the JetStream per-stream sequence, which owns ordering. Publish
+// order still decides sequence order; at decides time-window visibility.
+//
+// Keep at within JetStream retention: the hot tier declines to serve events
+// older than its edge (now - streamMaxAge + safetyMargin), which routes such a
+// read to the lagging cold tier.
+func (s *Session) EmitDirectEventAt(
+	ctx context.Context,
+	stream, evType string,
+	payload []byte,
+	at time.Time,
+) (string, error) {
+	sub, err := eventbus.Qualify(s.server.bus.Bus.GameID(), stream)
+	if err != nil {
+		return "", oops.With("stream", stream).Wrap(err)
+	}
+	event := eventbus.NewEvent(
+		sub,
+		eventbus.Type(evType),
+		eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: s.CharacterID},
+		payload,
+	)
+	event.Timestamp = at
+	pub := s.server.bus.Bus.Publisher()
+	if pub == nil {
+		return "", oops.Errorf("integrationtest.Session.EmitDirectEventAt: bus has no publisher (JS not ready)")
+	}
+	if err := pub.Publish(ctx, event); err != nil {
+		return "", oops.With("stream", stream).With("at", at).Wrap(err)
+	}
+	return event.ID.String(), nil
+}
+
 // ListFocusPresence calls the snapshot RPC for the session's current focus
 // (location-scoped) and returns the response. The caller is responsible for
 // asserting on response.Entries / response.Context / response.ContextId.
