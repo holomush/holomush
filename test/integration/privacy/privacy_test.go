@@ -19,6 +19,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
@@ -1000,3 +1001,82 @@ func connectionClientTypes(ctx context.Context, ts *integrationtest.Server, sess
 	Expect(rows.Err()).NotTo(HaveOccurred(), "iterate session_connections for session %s", sessionID)
 	return out
 }
+
+// QUAL-04 harness seam 2 of 3 — a session row the reaper actually selects.
+//
+// The pre-existing ExpireSession helper sets status='expired', but ListExpired
+// selects `status='detached' AND expires_at < now`
+// (internal/store/session_store.go:445-452), so its row is invisible to the
+// sweep: any reaper assertion seeded through it would pass while proving
+// nothing. DetachAndExpireSession writes the state the predicate matches.
+//
+// This spec drives the REAL session.Reaper against the harness's own session
+// store — it does not call the internal sweep and does not perform the
+// deletion itself. Absence is asserted by a keyed lookup on the session
+// identifier, never by a row count, because the suite is shared.
+//
+// No sleep: the reaper's Interval is what makes this deterministic, and the
+// expiry instant is supplied explicitly rather than waited for.
+var _ = Describe("QUAL-04 seam: a detached, past-expiry session is deleted by the real reaper", func() {
+	var (
+		ts     *integrationtest.Server
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithTimeout(context.Background(), 90*time.Second)
+		ts = integrationtest.Start(suiteT)
+	})
+
+	AfterEach(func() {
+		if ts != nil {
+			ts.Stop()
+		}
+		if cancel != nil {
+			cancel()
+		}
+	})
+
+	It("deletes the session row when seeded detached with an expiry already past", func() {
+		sess := ts.ConnectAuthed(ctx, "ReapedRhea")
+		sessionID := sess.SessionID
+		store := ts.SessionStore()
+
+		// Precondition: the row exists and is live before anything reaps it.
+		_, err := store.Get(ctx, sessionID)
+		Expect(err).NotTo(HaveOccurred(), "the session row MUST exist before the sweep")
+
+		// Detach through the production Disconnect RPC, then backdate the
+		// expiry so ListExpired's predicate matches.
+		sess.DetachTransport(ctx)
+		ts.DetachAndExpireSession(ctx, sessionID, time.Now().Add(-time.Minute))
+
+		reaper := session.NewReaper(store, session.ReaperConfig{
+			Interval: 50 * time.Millisecond,
+		})
+		reaperCtx, reaperCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer reaperCancel()
+		reaperDone := make(chan struct{})
+		go func() {
+			defer close(reaperDone)
+			reaper.Run(reaperCtx)
+		}()
+
+		Eventually(func(g Gomega) {
+			_, getErr := store.Get(ctx, sessionID)
+			g.Expect(getErr).To(HaveOccurred(),
+				"the reaper MUST delete a detached, past-expiry session row")
+			oopsErr, ok := oops.AsOops(getErr)
+			g.Expect(ok).To(BeTrue(), "expected an oops error, got %T", getErr)
+			g.Expect(oopsErr.Code()).To(Equal("SESSION_NOT_FOUND"),
+				"the lookup MUST fail as not-found — any other code means the row "+
+					"is still there and something else went wrong")
+		}, 8*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		// Deterministic teardown: stop the reaper and wait for its goroutine so
+		// the spec leaves nothing running.
+		reaperCancel()
+		<-reaperDone
+	})
+})

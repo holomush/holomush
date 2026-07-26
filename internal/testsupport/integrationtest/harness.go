@@ -990,8 +990,19 @@ func (s *Server) DeleteSession(ctx context.Context, sessionID string) {
 		tag.RowsAffected(), sessionID)
 }
 
-// ExpireSession directly marks a session row as expired in Postgres.
-// Used by iwzt tests to force session-expiry scenarios.
+// ExpireSession directly marks a session row as expired in Postgres — it
+// forces the TERMINAL expired status, bypassing the reaper rather than
+// driving it. Used by iwzt tests that want the end state without a sweep.
+//
+// The row this writes is NOT selected by the session reaper. ListExpired's
+// predicate is `status = 'detached' AND expires_at < now`
+// (internal/store/session_store.go:445-452), and this helper sets
+// status = 'expired', so the row can never match. A test that calls
+// ExpireSession and then waits for the reaper to delete the row will wait
+// forever — or, worse, pass vacuously against an assertion that cannot fail.
+//
+// Tests that mean to exercise REAPING must use DetachAndExpireSession, which
+// writes the detached-and-past-expiry state the reaper actually selects.
 func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 	s.t.Helper()
 	now := time.Now().UTC()
@@ -1001,6 +1012,39 @@ func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 	require.NoError(s.t, err, "integrationtest.Server.ExpireSession")
 	require.Equalf(s.t, int64(1), tag.RowsAffected(),
 		"integrationtest.Server.ExpireSession: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
+}
+
+// DetachAndExpireSession puts a session row into the exact state the
+// production reaper selects: the detached status with an expiry already past.
+// This is the seam for tests that drive the REAL reaper end to end, as
+// distinct from ExpireSession, which forces the terminal expired status and is
+// therefore invisible to the sweep.
+//
+// The predicate this satisfies is ListExpired's
+// `status = 'detached' AND expires_at < now`
+// (internal/store/session_store.go:445-452). expiresAt is a caller-supplied
+// parameter rather than a computed "now minus something" so the test controls
+// the instant explicitly and needs no sleep to make the row eligible; pass an
+// instant already in the past.
+//
+// detached_at is filled in only when the row does not already carry one, so a
+// session that reached detached status through the production Disconnect RPC
+// (Session.DetachTransport) keeps its real detach moment.
+func (s *Server) DetachAndExpireSession(ctx context.Context, sessionID string, expiresAt time.Time) {
+	s.t.Helper()
+	nanos := expiresAt.UTC().UnixNano()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE sessions
+		    SET status = $1,
+		        expires_at = $2,
+		        detached_at = COALESCE(detached_at, $2),
+		        updated_at = $2
+		  WHERE id = $3`,
+		string(session.StatusDetached), nanos, sessionID)
+	require.NoError(s.t, err, "integrationtest.Server.DetachAndExpireSession")
+	require.Equalf(s.t, int64(1), tag.RowsAffected(),
+		"integrationtest.Server.DetachAndExpireSession: expected 1 row affected, got %d (sessionID=%s)",
+		tag.RowsAffected(), sessionID)
 }
 
 // SetLocationArrivedAt directly mutates a session's location_arrived_at column
