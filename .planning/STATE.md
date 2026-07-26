@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-06-PLAN.md
-last_updated: "2026-07-26T18:19:04.304Z"
+stopped_at: Completed 09-07-PLAN.md
+last_updated: "2026-07-26T18:47:21.211Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 7 of 21
+Plan: 8 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -136,6 +136,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P04 | ~15min | 3 tasks | 4 files |
 | Phase 09 P05 | ~25min | 1 tasks | 5 files |
 | Phase 09 P06 | 25m | 1 tasks | 2 files |
+| Phase 09 P07 | ~40m | 3 tasks tasks | 4 files files |
 
 ## Accumulated Context
 
@@ -260,6 +261,11 @@ the next milestone yet.
 - [Phase ?]: 09-05: no EXPLAIN/query-plan assertion added (#4796's second AC clause) — on an empty test table the planner correctly prefers a seq scan regardless of the index, so the check would be vacuous or a test of fixture row count; QUAL-05 still Pending (3 of 5 Medium items delivered: 09-03 ABAC sentinels, 09-04 secure-cookie, 09-05 index)
 - [Phase ?]: 09-06: no metric added on the plugin downgrade fence — a log record is what the finding asks for; an instrument would widen an observability fix into telemetry wiring on a crypto-review surface
 - [Phase ?]: 09-06: fence drop log message pinned as a hard-coded test constant, not imported from production, so a silent reword fails rather than passes
+- [Phase ?]: 09-07: (*Session).EmitDirectEventAt(ctx, stream, evType string, payload []byte, at time.Time) (string, error) added as a SIBLING of EmitDirectEvent (byte-identical, zero deleted lines, 36 call sites untouched); `at` sets Event.Timestamp ONLY — not the ULID (identity/dedup) and not the JetStream sequence (which owns ordering)
+- [Phase ?]: 09-07: the plan's Task-3 demonstration premise was FALSIFIED — task lint runs with NO build tags, so a production import of the integration harness fails at typecheck ('build constraints exclude all Go files') before depguard is consulted; the //go:build integration tag is the first-line control and the new deny entry is an explicit second line, proven load-bearing only under --build-tags=integration
+- [Phase ?]: 09-07: the plan's sleep guard rg -c 'time.Sleep' counts PROSE not calls (0 -> 2 from doc comments alone, with zero sleeps added); replaced with rg 'time\\.Sleep\\(' (zero call sites) — same defect class as the phase's other unfalsifiable verifies
+- [Phase ?]: 09-07: depguard meta-test needle tightened from the bare package path to '- pkg: <path>' and the pinned set widened 3 -> 5 (natstest was configured but unpinned); both falsifications observed — deleted entry fails, comment-only mention also fails
+- [Phase ?]: 09-07: QUAL-04 left Pending — this plan builds only the harness seam; the session-lifecycle matrix it unblocks is written by 09-12/13/14/15
 
 ### Pending Todos
 
@@ -292,14 +298,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-26T18:18:56.515Z
+Last session: 2026-07-26T18:47:07.622Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-06-PLAN.md
+Stopped at: Completed 09-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
