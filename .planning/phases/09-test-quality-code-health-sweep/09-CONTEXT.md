@@ -40,13 +40,36 @@ NOT open for planning to re-scope. No new player-facing features.
   `internal/xdg` @≥80%; `internal/core` @≥90%) is a **floor, not the
   definition** — those four are expected to surface in the audit and MUST be
   cleared regardless of where they rank.
-- **D-02 (project target):** **70%+**, up from the ~54.6% baseline. This is a
-  deliberately aggressive ~15-point lift — see the planner flag below.
+- **D-02 (project target):** **80% project coverage with `threshold: 0%`** — a
+  true no-drop ratchet.
+  — **AMENDED 2026-07-26. Supersedes the originally-locked "70%+, up from the
+  ~54.6% baseline."** The planner flag below required research to report the
+  audit's real numbers *before* the target was locked. It did, and the premise
+  was falsified: **~54.6% was never the project figure.** It is a raw unit-only
+  `go tool cover -func` tail line, misattributed in the `.codecov.yml` project
+  comment; it applies neither the `ignore:` list (~20,415 statements, 72% of
+  them generated protobuf) nor the merged integration upload. codecov's own API
+  reports **78.28%** project coverage on `main`. A 70% target would therefore
+  have been an ~8-point *reduction* presented as a ~15-point lift. At that
+  sizing gate the user re-decided: target **80%**, allowance **`threshold:
+  0%`**. That is the decision plans 09-01, 09-10, and 09-19 implement. The 70%
+  / ~54.6% figures are retained above only as the record of what was falsified
+  and by what evidence — they are NOT the operative target.
 - **D-03 (uncoverable code):** **Integration-flag coverage counts.** Packages
   like `cmd/holomush` whose real exercise is integration-only (`runCore()`,
   `cmd/holomush/core.go:166`) have their integration-upload coverage counted
   toward the package rather than being `codecov:ignore`d. Do NOT mark such code
   ignored to make a number move.
+  — **AMENDED 2026-07-26 — applied in its reversed form.** As originally
+  written, D-03 constrained only *future* ignores. The user extended it to the
+  two ignores already present: **`cmd/holomush/core.go` and
+  `cmd/holomush/sub_grpc.go` are un-ignored in `.codecov.yml`**, because both
+  entries' stated rationale ("E2E exercises it but coverage doesn't flow back")
+  is exactly the defect plan 09-01 repairs. Once the e2e flush works, the
+  rationale is false and the entries go out with it. This is why 09-01 and
+  09-10 describe D-03 as "reversed": the rule is unchanged, its application now
+  reaches backwards as well as forwards. Un-ignoring adds ~656 uncovered
+  statements, which is why 09-01 sequences the chain repair before the removal.
 - **D-04 (gate sequencing):** **Require first at the current threshold, tighten
   last.** Add `codecov/patch` and `codecov/project` to the protect-main ruleset
   **early** (closes the gap Phase 6 explicitly flagged and never closed) while
@@ -60,12 +83,14 @@ NOT open for planning to re-scope. No new player-facing features.
   percentage is a QUAL-03 violation being created by QUAL-02 work.
 
 > **⚠ Planner flags for QUAL-02:**
-> - **54.6% → 70% is ~15 points on a large Go codebase.** This is the single
->   largest sizing risk in the phase. Research MUST report the audit's actual
->   per-package numbers and the estimated statement count needed to reach 70%
->   **before** the plan commits to the target. If the number is implausible for
->   one phase, surface it as an explicit re-scope decision rather than silently
->   planning around it.
+> - **~~54.6% → 70% is ~15 points on a large Go codebase.~~ RESOLVED — the gate
+>   fired and the premise was falsified.** This flag did its job: research
+>   reported the real numbers before the target was locked, the ~54.6% baseline
+>   turned out to be a misattributed unit-only figure, and the true project
+>   coverage is 78.28%. The re-scope decision it asked for was taken — see the
+>   D-02 amendment above. The operative target is **80% / `threshold: 0%`**, and
+>   the remaining lift is ~1.7 points plus two named package floors, not ~15
+>   points. Do not re-plan against the 70% figure.
 > - **Ordering is load-bearing.** D-04's "require early" means every PR merged
 >   during the phase — including unrelated ones and Phase 9's own — must clear
 >   the codecov statuses. Plans that *delete* covered code or do
@@ -77,6 +102,13 @@ NOT open for planning to re-scope. No new player-facing features.
 >   `wait_for_ci: true` are load-bearing — coverage is the merge of unit +
 >   (integration/e2e) uploads. Do not raise `after_n_builds` to 3; the file's
 >   own comment explains why that blocks notification entirely.
+>   **Corollary any coverage gate MUST honour:** because codecov de-duplicates
+>   the three uploaded files into **two** sessions (the unflagged unit session
+>   and one merged flagged session covering integration + e2e), a gate asserting
+>   `totals.sessions >= 3` is unsatisfiable by construction and contradicts this
+>   flag. Assert `sessions == 2` **and** assert the `e2e` flag's own coverage is
+>   greater than zero — the flag figure is the thing actually cared about, and
+>   the session count is only a proxy for it. See the C-2 resolution in 09-19.
 > - Multi-line `slog.*Context` error branches count as many uncovered lines —
 >   budget error-branch tests explicitly or patch% tanks even with happy paths
 >   covered (carried forward from Phase 6).
@@ -103,6 +135,23 @@ NOT open for planning to re-scope. No new player-facing features.
   count BEFORE planning commits to D-08.** Above roughly **150 renames**, that
   triggers an explicit re-scope conversation rather than a silently expanded
   phase. "Fix all" is the intent; the count must be visible before it is locked.
+  — **AMENDED 2026-07-26 — the gate fired, the conversation happened, and the
+  outcome is recorded here.** The literal D-07 predicate (any `TestX_Y`
+  underscore form without subtests) returned **1,106 hits** against the ~150
+  threshold. Per D-09 that is a re-scope trigger, and the user re-scoped by
+  **tightening the predicate rather than reintroducing an allowlist**: a
+  violation is now an underscore-form name whose **final segment is a bare
+  single CamelCase token**, which returns **~114 hits**. The rationale is that
+  the convention's binding requirement is action-condition-expectation, and 658
+  of the 1,106 literal hits are already full sentences merely using `_` as a
+  separator — renaming those would be a multi-thousand-line diff that improves
+  nothing and conflicts with every concurrent branch. Two carve-outs and no
+  more: the `TestINV_*` invariant-binding prefix (32 declarations, whose
+  underscores encode registry identifiers) and the two externally-pinned
+  privacy-floor names. **This tightened predicate is the settled decision plan
+  09-18 implements**; D-07's literal form above is superseded for sweep
+  purposes. D-08's "no allowlist" is unchanged — every hit the tightened
+  predicate returns is fixed.
 - **D-10 (ordering):** **ACE sweep runs LAST, as a single pass.** Coverage
   backfill (QUAL-02) and the session matrix (QUAL-04) both *add* test files;
   the sweep *renames* existing ones. Running the sweep last avoids
