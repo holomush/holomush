@@ -77,6 +77,7 @@ import (
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
+	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
@@ -199,6 +200,13 @@ type Server struct {
 	// so Session.FacadeSetSceneFocus can build a SceneAccessServer that
 	// exercises the real JoinFocus → SetConnectionFocus path (holomush-5rh.8.26).
 	focusCoord focus.Coordinator
+
+	// cmdRegistry is the registry the dispatcher was actually built against —
+	// the default empty one, the compiled-in set under WithBuiltinCommands, or
+	// the plugin subsystem's registry when WithInTreePlugins adopted it. Unlike
+	// the CommandRegistry accessor, this is populated on every path, so a test
+	// can assert what is dispatchable without requiring plugins.
+	cmdRegistry *command.Registry
 }
 
 // StartOption tunes Start construction. Tests pass options to override
@@ -209,6 +217,7 @@ type StartOption func(*startConfig)
 type startConfig struct {
 	accessEngine              types.AccessPolicyEngine
 	withPlugins               bool
+	withBuiltinCommands       bool
 	withRealABAC              bool
 	withPluginCrypto          bool
 	withFocusDelivery         bool
@@ -236,6 +245,37 @@ type startConfig struct {
 // returns false and the hard-gate is exercised end-to-end.
 func WithPolicyEngine(eng types.AccessPolicyEngine) StartOption {
 	return func(c *startConfig) { c.accessEngine = eng }
+}
+
+// WithBuiltinCommands registers the compiled-in command handlers — exactly
+// quit and shutdown (internal/command/handlers/register.go, RegisterAll) — onto
+// the harness's default command registry, which is otherwise EMPTY. Without it
+// SendCommand("quit") reaches no handler: the dispatcher returns
+// ErrUnknownCommand, which is user-facing, so HandleCommand still answers
+// Success=true (internal/grpc/command_handler.go:291-302) and the caller sees
+// no error at all. A suite that means to drive a compiled-in command must
+// therefore opt in here AND assert on a production-observable outcome rather
+// than on the absence of an error.
+//
+// Interaction with WithInTreePlugins — the plugin option WINS. Registration
+// happens on the default registry BEFORE the plugin subsystem's registry is
+// adopted, and adoption replaces the registry wholesale
+// (cmdRegistry = pluginSub.CommandRegistry()). The adopted registry already
+// carries the same compiled-in handlers, because the plugin subsystem calls
+// RegisterAll on its own registry during Prepare. Setting both options is
+// therefore safe and cannot double-register or panic; the registrations made
+// here are simply discarded.
+//
+// Why a narrow option rather than reusing WithInTreePlugins: the
+// session-lifecycle suites need exactly these two compiled-in commands, and
+// WithInTreePlugins would require built binary plugin artifacts for no benefit
+// to those specs.
+//
+// Note this option does NOT register the admin handlers (RegisterAdmin, which
+// carries resetpassword). RegisterAdmin panics on any nil dependency and needs
+// five that the harness does not wire; see the 09-20 SUMMARY.
+func WithBuiltinCommands() StartOption {
+	return func(c *startConfig) { c.withBuiltinCommands = true }
 }
 
 // WithRealABAC boots the real seeded ABAC engine inside the harness via
@@ -490,6 +530,12 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 
 	var pluginSub *pluginsetup.PluginSubsystem
 	cmdRegistry := command.NewRegistry()
+	// Register the compiled-in handlers BEFORE any plugin-registry adoption, so
+	// the adoption below wins and the two options cannot double-register. See
+	// WithBuiltinCommands for the full interaction rule.
+	if cfg.withBuiltinCommands {
+		handlers.RegisterAll(cmdRegistry)
+	}
 	if cfg.withPlugins {
 		res, pp, aud := pluginAttrSources(abacSub)
 		// Under WithRealABAC, route plugin manifest-policy installs through the
@@ -761,6 +807,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		accessEngine:         pe,
 		guestStartLocationID: guestLocID,
 		focusCoord:           focusCoord,
+		cmdRegistry:          cmdRegistry,
 	}
 
 	// Plugin-crypto links 3+4 (Task 8): the audit projection (PluginConsumerManager

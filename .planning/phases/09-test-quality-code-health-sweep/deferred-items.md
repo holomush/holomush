@@ -82,3 +82,17 @@ witness — populating a sentinel is forbidden by ADR holomush-ti1b".
   on a separate step — so the read can precede the increment.
   Out of scope for this plan (SCOPE BOUNDARY): pre-existing, unrelated file.
   Not quarantined (no row in `test/quarantine.yaml`), no existing issue found.
+
+- **`Admin Authenticate Lifecycle (full-stack E2E)` / `admin_read_stream_e2e_test.go:889`
+  is load-dependent flaky.** Failed once during a full `task test:int` lane
+  ("F-E1: exactly one crypto.system.operator_read_completed audit row
+  (INV-CRYPTO-60)", got 0 want 1, after a 10s Eventually), and passed in
+  isolation (`task test:int -- ./cmd/holomush/...`, exit 0, 547 tests).
+  Attribution: NOT caused by 09-20 — `rg -q 'testsupport/integrationtest' cmd/holomush/`
+  exits 1, so the package has no dependency on the changed one.
+  Same class as the DLQ flake above: an audit-projection `Eventually` that is
+  timing-sensitive under full-lane concurrency.
+  Evidence it is non-deterministic rather than a regression: three full-lane runs
+  over the same tree produced one DLQ failure, one admin-e2e failure, and one
+  clean pass (exit 0, 10836 tests). Out of scope (SCOPE BOUNDARY); no issue filed
+  as neither reproduces in isolation.

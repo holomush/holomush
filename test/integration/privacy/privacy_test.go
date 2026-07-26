@@ -1080,3 +1080,63 @@ var _ = Describe("QUAL-04 seam: a detached, past-expiry session is deleted by th
 		<-reaperDone
 	})
 })
+
+// QUAL-04 harness seam 3 of 3 — dispatching a compiled-in command.
+//
+// The harness's default command registry is EMPTY, so quit was undispatchable.
+// WithBuiltinCommands registers the compiled-in handlers (quit, shutdown)
+// without pulling in binary plugin artifacts.
+//
+// The assertion is deliberately NOT "SendCommand returned no error". An unknown
+// command is a USER-FACING error, so HandleCommand emits a command_response and
+// still answers Success=true (internal/grpc/command_handler.go:291-302) — a
+// no-error assertion passes against the empty registry, which is the state this
+// seam exists to change. What distinguishes a dispatched quit is its production
+// effect: QuitHandler returns ErrSessionEnded, and the server then emits
+// session_ended and DELETES the session row (command_handler.go:267-289). That
+// deletion is the recognised-command outcome asserted here.
+var _ = Describe("QUAL-04 seam: the compiled-in quit command dispatches through the production handler", func() {
+	var (
+		ts     *integrationtest.Server
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithTimeout(context.Background(), 90*time.Second)
+		ts = integrationtest.Start(suiteT, integrationtest.WithBuiltinCommands())
+	})
+
+	AfterEach(func() {
+		// No Logout here: a dispatched quit already deleted the session row.
+		if ts != nil {
+			ts.Stop()
+		}
+		if cancel != nil {
+			cancel()
+		}
+	})
+
+	It("ends the session, proving the command reached a handler rather than falling through as unknown", func() {
+		sess := ts.ConnectAuthed(ctx, "QuittingQuinn")
+		sessionID := sess.SessionID
+		store := ts.SessionStore()
+
+		_, err := store.Get(ctx, sessionID)
+		Expect(err).NotTo(HaveOccurred(), "precondition: the session row MUST exist before quit")
+
+		Expect(sess.SendCommand(ctx, "quit")).To(Succeed(),
+			"dispatching quit MUST NOT fail at the RPC level")
+
+		// The load-bearing assertion. An unknown command leaves the row intact,
+		// so this fails against an empty registry.
+		_, err = store.Get(ctx, sessionID)
+		Expect(err).To(HaveOccurred(),
+			"quit MUST have reached QuitHandler and ended the session — a surviving session row "+
+				"means the command fell through as unknown, which is what an empty registry produces")
+		oopsErr, ok := oops.AsOops(err)
+		Expect(ok).To(BeTrue(), "expected an oops error, got %T", err)
+		Expect(oopsErr.Code()).To(Equal("SESSION_NOT_FOUND"),
+			"the session row MUST be gone, not merely unreadable for some other reason")
+	})
+})
