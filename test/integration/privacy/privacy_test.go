@@ -819,3 +819,101 @@ var _ = Describe("INV-PRIVACY-5: denial wire opacity", func() {
 		expectStreamAccessDenied(err, "session_not_found")
 	})
 })
+
+// Regression lock for the timestamped direct-emit helper added by plan 09-07
+// (decision D-15). The history-floor specs in plans 09-12/09-13/09-14 place
+// events on either side of a session's arrival or expiry boundary, and they do
+// it through Session.EmitDirectEventAt rather than by separating emits with a
+// time.Sleep — which would add a seventeenth site to the sleep-synchronisation
+// backlog tracked in #4665 (legacy holomush-ec22.13, "replace ~16 time.Sleep
+// async-sync sites with deterministic patterns").
+//
+// Those plans depend on three properties, and this single spec proves all
+// three at once:
+//
+//  1. the caller-chosen instant is what lands on the published event's
+//     Timestamp — the field the history NotBefore/NotAfter window reads;
+//  2. the identifier the helper returns is the published event's, so a spec can
+//     assert on a specific event instead of counting frames;
+//  3. QueryStreamHistoryBounded — the call the downstream specs use — filters
+//     on that chosen instant.
+//
+// The assertions are falsifiable in each direction. A helper that ignored `at`
+// and let NewEvent stamp the wall clock would give BOTH events a timestamp
+// inside the window, so the outside-the-window event would wrongly appear and
+// the exclusion assertion fails. A helper that returned some other identifier
+// fails the inclusion assertion. A bounded query that ignored its upper bound
+// fails the exclusion assertion.
+//
+// This spec uses no sleep. If ordering here ever appears to need one, the
+// timestamp parameter has stopped being honoured — that is the defect to fix.
+var _ = Describe("integration harness: a timestamped direct emit lands at the caller's chosen instant and returns that event's identifier", func() {
+	var (
+		ts  *integrationtest.Server
+		ctx context.Context
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = integrationtest.Start(suiteT)
+	})
+
+	AfterEach(func() {
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("returns the event placed inside the bounded window and omits the one placed outside it", func() {
+		sess := ts.ConnectAuthed(ctx, "Tempo")
+		defer sess.Logout(ctx)
+		locStream := "location." + sess.LocationID.String()
+
+		// Both instants sit AFTER the session's arrival so the server-side
+		// scope floor (INV-PRIVACY-1, streamScopeFloor) admits them, and the
+		// window sits strictly between the two. Minute-scale offsets mean no
+		// wall-clock drift during the run can move either event across the
+		// boundary, so the assertions below are decided purely by whether the
+		// helper honoured `at`.
+		base := time.Now().UTC()
+		insideAt := base.Add(1 * time.Minute)
+		outsideAt := base.Add(3 * time.Minute)
+		windowMs := base.Add(2 * time.Minute).UnixMilli()
+
+		insideID, err := sess.EmitDirectEventAt(ctx, locStream, "core-communication:pose",
+			[]byte(`{"character_name":"Tempo","action":"speaks inside the window."}`), insideAt)
+		Expect(err).NotTo(HaveOccurred(), "timestamped emit inside the window MUST publish")
+		Expect(insideID).NotTo(BeEmpty(),
+			"timestamped emit MUST return the published event's identifier")
+
+		outsideID, err := sess.EmitDirectEventAt(ctx, locStream, "core-communication:pose",
+			[]byte(`{"character_name":"Tempo","action":"speaks outside the window."}`), outsideAt)
+		Expect(err).NotTo(HaveOccurred(), "timestamped emit outside the window MUST publish")
+		Expect(outsideID).NotTo(Equal(insideID),
+			"each emit MUST carry its own identifier")
+
+		frames, err := sess.QueryStreamHistoryBounded(ctx, locStream, windowMs)
+		Expect(err).NotTo(HaveOccurred(), "bounded history query MUST succeed")
+
+		ids := make([]string, 0, len(frames))
+		stampByID := make(map[string]time.Time, len(frames))
+		for _, f := range frames {
+			ids = append(ids, f.GetId())
+			stampByID[f.GetId()] = f.GetTimestamp().AsTime()
+		}
+
+		Expect(ids).To(ContainElement(insideID),
+			"the event emitted at %s MUST be readable inside a window ending at %s (got ids %v)",
+			insideAt, time.UnixMilli(windowMs).UTC(), ids)
+		Expect(ids).NotTo(ContainElement(outsideID),
+			"the event emitted at %s MUST NOT be readable inside a window ending at %s — "+
+				"its presence means the caller-chosen instant was ignored and the wall clock used instead",
+			outsideAt, time.UnixMilli(windowMs).UTC())
+
+		// Direct proof of property 1: the stored timestamp IS the chosen
+		// instant, not merely on the correct side of the window boundary.
+		Expect(stampByID[insideID]).
+			To(BeTemporally("~", insideAt, time.Millisecond),
+				"the published event's timestamp MUST be the caller-chosen instant")
+	})
+})
