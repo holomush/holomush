@@ -21,12 +21,23 @@ func TestDepguardTestOnlyConstructRulesPresent(t *testing.T) {
 	require.NoError(t, err, "read .golangci.yaml")
 	cfg := string(data)
 
+	// The pinned set MUST match the CONFIGURED deny set exactly, not a subset
+	// of it. A pin that covers only some entries lets the uncovered ones be
+	// deleted silently — the same config-diverges-from-reality failure this
+	// test exists to catch. natstest was configured but unpinned until phase 09
+	// (QUAL-04); integrationtest was added there.
 	for _, pkg := range []string{
 		"github.com/holomush/holomush/internal/eventbus/eventbustest",
 		"github.com/holomush/holomush/internal/core/coretest",
 		"github.com/holomush/holomush/internal/testsupport/quarantinetest",
+		"github.com/holomush/holomush/internal/testsupport/natstest",
+		"github.com/holomush/holomush/internal/testsupport/integrationtest",
 	} {
-		require.Contains(t, cfg, pkg,
+		// Match the YAML deny-entry form, not the bare path: a bare-path
+		// Contains would also be satisfied by the package name appearing in a
+		// comment, so a deleted deny entry whose name survived in prose would
+		// pass. "- pkg: <path>" can only be an entry.
+		require.Contains(t, cfg, "- pkg: "+pkg,
 			"depguard deny rule for %q missing from .golangci.yaml (holomush-1eps2 INV-1/INV-2)", pkg)
 	}
 }

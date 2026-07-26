@@ -154,6 +154,8 @@ linters:
               desc: "quarantine skip helper; production code MUST NOT import it (holomush-b4myw)"
             - pkg: github.com/holomush/holomush/internal/testsupport/natstest
               desc: "external NATS test harness; production code MUST NOT import it (CLUSTER-03)"
+            - pkg: github.com/holomush/holomush/internal/testsupport/integrationtest
+              desc: "in-process integration harness; production code MUST NOT import it (phase 09 QUAL-04)"
 
     errcheck:
       check-type-assertions: true
