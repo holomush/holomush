@@ -267,7 +267,7 @@ Plans:
 3. A session-lifecycle test matrix covers the connect / reconnect / multi-character / idle-timeout paths
 4. The arch-review Medium cluster (secure-cookie default, ABAC empty-string sentinels, silent audit-emitter drop, DEK read-cache, `sessions.location_id` index) is addressed or explicitly deferred with rationale
 
-**Plans:** 2/21 plans executed
+**Plans:** 3/21 plans executed
 
 Plans:
 
@@ -278,7 +278,7 @@ Plans:
 **Wave 2** *(blocked on the tracer)*
 
 - [x] 09-02-PLAN.md — QUAL-03/05: file the seven prerequisite issues; record the DEK read-cache and de-slop deferrals (wave 2)
-- [ ] 09-03-PLAN.md — QUAL-05: #4793 remove the ABAC empty-string sentinels; assert key absence (wave 2)
+- [x] 09-03-PLAN.md — QUAL-05: #4793 remove the ABAC empty-string sentinels; assert key absence (wave 2)
 - [ ] 09-04-PLAN.md — QUAL-05: #4794 invert the secure-cookie/HSTS/CSP default; keep the plain-HTTP compose stacks working; document the change (wave 2)
 - [ ] 09-05-PLAN.md — QUAL-05: #4796 add the `sessions.location_id` index as migration 000053 (wave 2)
 - [ ] 09-06-PLAN.md — QUAL-05: #4797 make the plugin-downgrade-fence audit drop observable (wave 2)
@@ -345,7 +345,7 @@ Plans:
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
-| 9. Test-Quality & Code-Health Sweep | v0.12 | 2/21 | In Progress|  |
+| 9. Test-Quality & Code-Health Sweep | v0.12 | 3/21 | In Progress|  |
 
 ## Deferred (Not in This Roadmap)
 

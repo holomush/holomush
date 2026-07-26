@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-07-26T17:17:07.046Z"
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-07-26T17:39:14.853Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 47
+  completed_plans: 48
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 3 of 21
+Plan: 4 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -132,6 +132,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 08 P09 | ~70m | 3 tasks | 4 files |
 | Phase 09 P01 | 55min | 2 tasks | 3 files |
 | Phase 09 P02 | 35min | 3 tasks | 0 files |
+| Phase 09 P03 | 22 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -244,6 +245,8 @@ the next milestone yet.
 - [Phase ?]: 09-02: the plan's premise that the four eventbus_e2e skip files had no GitHub issue was FALSIFIED — all four exist (#2881/#2880/#2387/#2386), closed NOT_PLANNED 2026-05-17; a tracker-id search misses them because GH issues never carried beads ids, a behaviour-phrase search finds exact title matches
 - [Phase ?]: 09-02: #4855/#4856 cover work declined TWICE (closed NOT_PLANNED, then 'Archive only — not migrated'); their bodies state that deleting the test file outright is a legitimate resolution — 09-11 must make the delete-vs-retain call consciously
 - [Phase ?]: 09-02: two of the three ec22.9 residue items had drifted — addlicense is RESOLVED (replaced by license-eye pinned v0.8.0; lefthook.yaml deleted) and the write-timeout ask was documentation not a timeout (http2 WriteByteTimeout already covers write liveness; adding http.Server.WriteTimeout would break streaming); issues re-scoped to what is true rather than filed at the stale framing
+- [Phase ?]: ABAC providers: unresolved optional attrs are omitted from the bag, never sentinel-valued (ADR holomush-ti1b) — all five providers now conform
+- [Phase ?]: 09-03: QUAL-05 left incomplete — carried jointly with 09-04/05/06
 
 ### Pending Todos
 
@@ -276,14 +279,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-26T17:17:07.036Z
+Last session: 2026-07-26T17:39:09.572Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-02-PLAN.md
+Stopped at: Completed 09-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

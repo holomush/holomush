@@ -36,3 +36,34 @@ separate behavioural change to the same task and is not caused by this plan's
 edits. Fix candidate: a plain string form
 (`- defer: docker compose ... down -v && rm -rf .coverdata`) plus a bats
 assertion that the teardown actually ran.
+
+## `LocationProvider.ResolveResource` doc comment still prescribes sentinels (found during 09-03 Task 1)
+
+**Where:** `internal/access/policy/attribute/location.go:40-42`, in the method
+doc comment covering the `location:*` wildcard bypass (holomush-g776):
+
+> If a future seed adds a `when` clause comparing `resource.location.X` and is
+> expected to match the wildcard path, the provider **MUST populate sentinel
+> values** for X (or the seed MUST narrow its target via `resource ==`).
+
+**Observed:** 09-03 removed seven empty-string sentinels from this very file
+because ADR holomush-ti1b forbids them. This comment, on a *different* code path
+(the wildcard bypass, which returns `(nil, nil)` — no bag at all), still
+instructs a future contributor to reintroduce exactly the pattern that was just
+removed. The second half of the sentence ("or the seed MUST narrow its target")
+remains correct.
+
+**Impact:** documentation-only today — no code follows the instruction. The
+hazard is that a future contributor implementing a wildcard-matching seed reads
+it as sanction for the fail-open form, reopening issue #4793 on a path the
+regression test added in 09-03 Task 2 does not cover (that test exercises the
+resolved-ULID path, not the wildcard bypass).
+
+**Why not fixed here:** 09-03's authorized scope is the seven `else`-branch
+sentinel assignments; the wildcard bypass is a separate design decision
+(holomush-g776) with its own rationale, and rewriting security guidance outside
+the plan's scope without the `abac-reviewer` gate's input is the wrong order of
+operations. **Surfaced deliberately for `abac-reviewer`** — see the 09-03
+SUMMARY. Fix candidate: replace "MUST populate sentinel values for X" with
+"the seed MUST narrow its target via `resource ==` or gate on the `has_X`
+witness — populating a sentinel is forbidden by ADR holomush-ti1b".
