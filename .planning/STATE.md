@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-11-PLAN.md
-last_updated: "2026-07-26T22:54:09.372Z"
+stopped_at: Completed 09-20-PLAN.md
+last_updated: "2026-07-26T23:37:39.475Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 56
+  completed_plans: 57
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 12 of 21
+Plan: 13 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -141,6 +141,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P09 | 50min | 2 tasks tasks | 2 files files |
 | Phase 09 P10 | 85min | 2 tasks tasks | 1 files files |
 | Phase 09 P11 | ~40min | 1 tasks | 4 files |
+| Phase 09 P20 | 38m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -283,6 +284,9 @@ the next milestone yet.
 - [Phase ?]: 09-10: config-section tests clear DATABASE_URL as a fall-through negative control — it is the next thing RunE reaches, so a dropped section Load makes the test FAIL rather than pass on 'an error was returned' (proven by NC6)
 - [Phase ?]: 09-10: #4647's premise falsified by 09-01 — cmd/holomush/{core,sub_grpc}.go are no longer at '0-0.6%, instrumentation isn't observing it' but 88.7%/78.2% under the union; corrected in-place with a grounded comment rather than filing a duplicate, and left open because sub_grpc.go still has 62 uncovered statements
 - [Phase ?]: 09-11: retained all four unimplemented eventbus_e2e specs rather than deleting the twice-declined #4855/#4856 files; the trim dissolves the maintenance-burden case for deletion and both issue bodies reserve that call for a maintainer closing the issue
+- [Phase ?]: 09-20: telnet differentiation threaded through attach's SubscribeRequest only — the session_connections row is where production observes it
+- [Phase ?]: 09-20: WithInTreePlugins wins over WithBuiltinCommands (register before adoption), so setting both cannot double-register or panic
+- [Phase ?]: 09-20: administrator-boot matrix row dispositioned not-implementable-from-harness-defaults; resetpassword --kick exists but bypasses session_ended (issue #4862)
 
 ### Pending Todos
 
@@ -315,14 +319,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-26T22:54:01.697Z
+Last session: 2026-07-26T23:37:31.558Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-11-PLAN.md
+Stopped at: Completed 09-20-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
