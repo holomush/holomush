@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-07-26T17:04:36.896Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-07-26T17:17:07.046Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 46
+  completed_plans: 47
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 2 of 21
+Plan: 3 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -131,6 +131,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 08 P08 | ~95m | 3 tasks | 9 files |
 | Phase 08 P09 | ~70m | 3 tasks | 4 files |
 | Phase 09 P01 | 55min | 2 tasks | 3 files |
+| Phase 09 P02 | 35min | 3 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -240,6 +241,9 @@ the next milestone yet.
 - [Phase ?]: 09-01: codecovs branch API is the authoritative project figure — 78.28% on main @ 497748c6d; the retired ~54.6% was a raw unit-lane go tool cover -func tail that applies neither the ignore list nor the cross-lane session merge
 - [Phase ?]: 09-01: cmd/holomush/core.go + sub_grpc.go un-ignored in FULL form (tracer succeeded); from the E2E lane alone they measure 70.1% and 66.0%, so the 656 statements added to the denominator bring 448 covered with them — the un-ignore raises the number rather than lowering it
 - [Phase ?]: 09-01: QUAL-02 deliberately left Pending in REQUIREMENTS.md — six phase-9 plans carry it (09-01/08/10/17/19/21) and this plan repaired the measurement chain rather than backfilling tests; the protocol mark-complete flip was reverted so the table does not assert a property no artifact demonstrates
+- [Phase ?]: 09-02: the plan's premise that the four eventbus_e2e skip files had no GitHub issue was FALSIFIED — all four exist (#2881/#2880/#2387/#2386), closed NOT_PLANNED 2026-05-17; a tracker-id search misses them because GH issues never carried beads ids, a behaviour-phrase search finds exact title matches
+- [Phase ?]: 09-02: #4855/#4856 cover work declined TWICE (closed NOT_PLANNED, then 'Archive only — not migrated'); their bodies state that deleting the test file outright is a legitimate resolution — 09-11 must make the delete-vs-retain call consciously
+- [Phase ?]: 09-02: two of the three ec22.9 residue items had drifted — addlicense is RESOLVED (replaced by license-eye pinned v0.8.0; lefthook.yaml deleted) and the write-timeout ask was documentation not a timeout (http2 WriteByteTimeout already covers write liveness; adding http.Server.WriteTimeout would break streaming); issues re-scoped to what is true rather than filed at the stale framing
 
 ### Pending Todos
 
@@ -272,14 +276,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-26T17:03:25.581Z
+Last session: 2026-07-26T17:17:07.036Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-01-PLAN.md
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
