@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-04-PLAN.md
-last_updated: "2026-07-26T17:55:51.143Z"
+stopped_at: Completed 09-05-PLAN.md
+last_updated: "2026-07-26T18:06:44.092Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 49
+  completed_plans: 50
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 5 of 21
+Plan: 6 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -134,6 +134,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P02 | 35min | 3 tasks | 0 files |
 | Phase 09 P03 | 22 | 2 tasks | 6 files |
 | Phase 09 P04 | ~15min | 3 tasks | 4 files |
+| Phase 09 P05 | ~25min | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -252,6 +253,10 @@ the next milestone yet.
 - [Phase ?]: 09-04: the inversion is pinned at the config.Load level (real NewGatewayCmd -> koanf posflag -> fresh struct), not only at the pflag default — a GetBool assertion cannot see the plumbing between the flag and the running server (Rule 2)
 - [Phase ?]: 09-04: compose.yaml gateway now passes --secure-cookies=false (E2E overlay does NOT override command; PLAYWRIGHT_BASE_URL=http://gateway:8080 is non-localhost plain HTTP, where browsers drop Secure cookies); proven by task test:e2e:cover exit 0, 104 specs, 482 covered cmd/holomush statements
 - [Phase ?]: 09-04: QUAL-05 left Pending — it enumerates 5 Medium-cluster items and this plan delivers 1 (secure-cookie default); 09-05/09-06 carry the rest
+- [Phase ?]: 09-05: migration 000053 adds idx_sessions_location_id (plain idempotent CREATE INDEX IF NOT EXISTS + paired DROP IF EXISTS, no concurrent build) closing #4796 — the presence/ListActiveByLocation filter column was unindexed across all 52 prior migrations
+- [Phase ?]: 09-05: reversibility is proven by a round-trip spec (step to 52, assert absent, step to 53, assert present by KEYED pg_indexes name lookup + indexdef column check, step back, assert absent, reapply) — task test:int alone only ever migrates UP, so a no-op down passes it; falsifiability demonstrated by emptying the down body and observing the failure, then reverting
+- [Phase ?]: 09-05: three pre-existing tests hardcoded latest-migration=52 (census list, mock latest, FullCycle x2); FullCycle literals replaced with a named latestMigrationVersion constant, but the pending-migration census kept as an explicit literal list — deriving it from allMigrationVersions() would be tautological against the helper PendingMigrations() uses
+- [Phase ?]: 09-05: no EXPLAIN/query-plan assertion added (#4796's second AC clause) — on an empty test table the planner correctly prefers a seq scan regardless of the index, so the check would be vacuous or a test of fixture row count; QUAL-05 still Pending (3 of 5 Medium items delivered: 09-03 ABAC sentinels, 09-04 secure-cookie, 09-05 index)
 
 ### Pending Todos
 
@@ -284,14 +289,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-26T17:55:35.959Z
+Last session: 2026-07-26T18:06:44.081Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-04-PLAN.md
+Stopped at: Completed 09-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
