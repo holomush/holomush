@@ -43,6 +43,14 @@ type PostgresAliasRepository struct {
 	pool poolIface
 }
 
+// Compile-time check that PostgresAliasRepository satisfies AliasRepository.
+//
+// This replaces the runtime canary TestAliasRepositoryInterface, which asserted
+// nothing at runtime: it compiled if and only if the type satisfied the
+// interface, so once compiled it could never fail. Expressed here, a signature
+// drift breaks the build instead (weak-test finding holomush-ec22.16, QUAL-03).
+var _ AliasRepository = (*PostgresAliasRepository)(nil)
+
 // NewPostgresAliasRepository creates a new PostgreSQL alias repository.
 func NewPostgresAliasRepository(pool poolIface) *PostgresAliasRepository {
 	return &PostgresAliasRepository{pool: pool}
