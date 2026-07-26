@@ -65,19 +65,31 @@ func (p *LocationProvider) ResolveResource(ctx context.Context, resourceID strin
 		"archived":      loc.ArchivedAt != nil,
 	}
 
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// has_owner=false the `owner_id` key MUST be OMITTED from the bag — NOT
+	// emitted as an empty-string sentinel. The DSL evaluator's
+	// missing-attr-→-false semantics (ADR holomush-iv43 / 0010) then keep
+	// every operator false for an unresolved owner. Emitting "" would
+	// satisfy `"" == ""` against any other unresolved peer attribute and
+	// create a fail-open permit in a default-deny system.
 	if loc.OwnerID != nil {
 		attrs["owner_id"] = loc.OwnerID.String()
 		attrs["has_owner"] = true
 	} else {
-		attrs["owner_id"] = ""
 		attrs["has_owner"] = false
 	}
 
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// is_shadow=false the `shadows_id` key MUST be OMITTED — NOT emitted as
+	// an empty-string sentinel. Two non-shadow locations carrying "" would
+	// compare equal on shadows_id, which is exactly the fail-open equality
+	// the missing-attr-→-false semantics (ADR holomush-iv43 / 0010) exist to
+	// prevent. The is_shadow witness stays on both branches so a seed can
+	// still test existence via `has`.
 	if loc.ShadowsID != nil {
 		attrs["shadows_id"] = loc.ShadowsID.String()
 		attrs["is_shadow"] = true
 	} else {
-		attrs["shadows_id"] = ""
 		attrs["is_shadow"] = false
 	}
 
