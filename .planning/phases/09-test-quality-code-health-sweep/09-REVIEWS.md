@@ -1,199 +1,504 @@
 ---
 phase: 9
-reviewers: [codex, pi]
-reviewed_at: 2026-07-26T00:58:00Z
+round: 2
+supersedes: ca821ff0f
+reviewers: [codex, pi, opencode]
+reviewed_at: 2026-07-26T06:05:00Z
 reviewer_models:
   codex: cli-default
   pi: moonshotai/kimi-k3 (openrouter, --thinking high)
-plans_reviewed: [09-01, 09-02, 09-03, 09-04, 09-05, 09-06, 09-07, 09-08, 09-09, 09-10, 09-11, 09-12, 09-13, 09-14, 09-15, 09-16, 09-17, 09-18, 09-19]
+  opencode: default (github copilot)
+lanes_attempted: [codex, pi, opencode, cursor]
+lanes_dropped:
+  cursor: "unauthenticated — rendered TTY sign-in splash, exit 0, 2322 bytes of ASCII art"
+plans_reviewed: [09-01, 09-02, 09-03, 09-04, 09-05, 09-06, 09-07, 09-08, 09-09, 09-10, 09-11, 09-12, 09-13, 09-14, 09-15, 09-16, 09-17, 09-18, 09-19, 09-20, 09-21]
 verdicts:
-  codex: HIGH — not ready to execute
-  pi: LOW-to-MEDIUM — execute after narrow fixes
-orchestrator_verdict: NOT READY — replan required
+  codex: NOT READY TO EXECUTE (risk HIGH)
+  pi: NOT READY (one-plan fix + smaller concerns)
+  opencode: NOT READY (two blocking findings)
+orchestrator_verdict: NOT READY — targeted replan required
 ---
 
-# Cross-AI Plan Review — Phase 9
+# Cross-AI Plan Review — Phase 9 (Round 2)
 
-Both lanes were prompt-fed the full plan set (19 plans + CONTEXT + RESEARCH + REQUIREMENTS + PROJECT context, ~96K tokens) with repo access and an explicit instruction to verify claims against source rather than review plan text in isolation. Claude was skipped for independence (it is the executing runtime).
+**Round 2 of 2.** Round 1 (`ca821ff0f`, codex + pi) returned NOT READY on the
+19-plan set; the replan at `4e13786d3` incorporated its six blockers and grew the
+set to 21 plans. This round re-reviews that replanned set.
+
+**Deliberate method note — the lanes were NOT primed.** Round 1's findings were
+withheld from this round's prompt. Telling a reviewer "confirm these six blockers
+are fixed" invites confirmation bias (the repo's own lesson: a primed checker
+certified a falsehood in 52s, Phase 8). An unprimed re-review is the stronger
+test: genuinely-closed blockers do not resurface on their own. None of round 1's
+six blockers were re-raised as open — but three lanes found **new** defects, one
+of which the replan *introduced while fixing* round 1.
+
+Claude was skipped for independence (it is the executing runtime). The cursor
+lane was attempted and dropped — see `lanes_dropped`.
 
 ---
 
 ## Codex Review
 
-# Summary
+## Summary
 
-The plans are unusually evidence-conscious and contain several strong fail-closed checks, but they are **not ready to execute**. Two QUAL-04 assumptions are contradicted by the live harness: telnet sessions are still TODO-fatal, and `ExpireSession` bypasses rather than drives the reaper. Coverage governance also has a push/PR lifecycle gap, while plan 09-17’s automated verification does not verify status contexts at all. These are execution blockers, not editorial refinements.
+The plan set is unusually evidence-conscious: it uses behavioral tests, negative demonstrations, live status observation, and explicit anti-vacuity checks. Most QUAL-05 work and the reaper/command-registration seams are grounded correctly in current code. However, execution is blocked by four material defects: unresolved user decision gates were silently converted into new scope, the final Codecov gate contradicts the repository’s documented two-session model, late configuration changes lack a guaranteed push/CI cycle before external gate mutation, and the shared lifecycle harness can be stopped after its first spec. The move matrix also claims production behavior while bypassing the production movement pipeline. **NOT READY TO EXECUTE.**
 
-# Strengths
+## Strengths
 
-- The secure-default analysis is grounded correctly. The current CLI default is false at [`gateway.go:120`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/cmd/holomush/gateway.go:120), while the value directly controls the web server at [`gateway.go:309`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/cmd/holomush/gateway.go:309). Cookie construction already starts secure and explicitly downgrades for local HTTP at [`cookie.go:45`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/web/cookie.go:45), and HSTS/CSP are conditional at [`security_headers.go:74`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/web/security_headers.go:74). Plan 09-04 targets the actual defect.
+- The E2E coverage tracer targets a real silent-failure path. The current task neither deletes stale `coverage-e2e.out` nor propagates `covdata textfmt` failure; it exits with only the E2E status ([Taskfile.yaml:229](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/Taskfile.yaml:229)). The UID hypothesis is credible because the overlay bind-mounts host-created directories ([compose.e2e.cover.yaml:9](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/compose.e2e.cover.yaml:9)) into an image running as a non-root user ([Dockerfile:10](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/Dockerfile:10)). Plan 09-01 correctly requires diagnosis before choosing a fix.
 
-- The ABAC remediation follows the right invariant. Current providers still emit empty sentinels, while the plan preserves the boolean witnesses and replaces sentinel values with omission. Its TDD structure and mandatory ABAC review are appropriate.
+- The reaper seam addresses an actual false test path. `ExpireSession` writes `status=expired` ([harness.go:993](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/harness.go:993)), but the production query selects only detached sessions whose expiry is past ([session_store.go:444](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/store/session_store.go:444)). The real reaper then marks and deletes those rows ([reaper.go:93](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/session/reaper.go:93)). Plan 09-20’s negative demonstration using the old helper is especially valuable.
 
-- Plan 09-07’s timestamped emit design fits the existing implementation. `EmitDirectEvent` already uses `eventbus.NewEvent` and the production publisher at [`session.go:759`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/session.go:759). Adding a sibling that overrides the constructed event’s timestamp and returns its ID is narrow and testable.
+- The silent audit-drop plan follows the existing observability pattern precisely. The nil-emitter branch is currently silent ([plugin_downgrade_fence.go:423](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/eventbus/history/plugin_downgrade_fence.go:423)), while neighboring branches already use the injected logger and `WarnContext` with plugin/type fields ([plugin_downgrade_fence.go:439](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/eventbus/history/plugin_downgrade_fence.go:439)). Plan 09-06’s positive and negative log assertions are appropriately narrow.
 
-- The matrix ratchet has a good precedent. The quarantine guard already implements registry/marker equality and reports both sets at [`quarantine_registry_test.go:35`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/test/meta/quarantine_registry_test.go:35), with filesystem errors propagated during the walk at [`quarantine_registry_test.go:76`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/test/meta/quarantine_registry_test.go:76). Plan 09-16 adds the important full-grid shape check, preventing a trivially satisfied bijection after row deletion.
+- The ABAC remediation follows an established safe form rather than inventing one. The defect is visible in the current sentinel assignments ([location.go:68](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/access/policy/attribute/location.go:68)), and the correct omit-key-plus-witness pattern already exists in the character provider ([character.go:132](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/access/policy/attribute/character.go:132)).
 
-- Plan 09-19’s Codecov query is genuinely fail-closed: each `awk` stage begins in the failing state, and missing API values cannot pass accidentally. Its anchored `.codecov.yml` checks also avoid matching explanatory comments.
+- Several new meta-test gates explicitly avoid Go’s “no tests to run” false green by asserting both file existence and a top-level PASS line, such as the matrix guard ([09-12-PLAN.md:148](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-12-PLAN.md:148)) and ACE ratchet ([09-18-PLAN.md:226](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-18-PLAN.md:226)).
 
-# Concerns
+## Concerns
 
-- **HIGH — The telnet matrix cannot be implemented with the planned files.** `OpenTelnetSession` is explicitly TODO-fatal at [`session.go:866`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/session.go:866). The common attach path hardcodes `ClientType: "terminal"` at [`session.go:431`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/session.go:431) and [`session.go:455`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/session.go:455). Plan 09-14 nevertheless promises a genuine telnet reconnect while modifying only a test file. The actual telnet suite remains bootstrap-only at [`telnet_suite_test.go:15`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/test/integration/telnet/telnet_suite_test.go:15). A `"terminal"` test relabelled as telnet would create assurance theatre.
+- **HIGH — Three plan-local re-scopes lack the explicit decision required by CONTEXT.** D-02 remains locked at 70% and D-03 says integration coverage should count instead of ignoring wiring code ([09-CONTEXT.md:43](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-CONTEXT.md:43)). D-09 explicitly requires a re-scope conversation above roughly 150 ACE renames ([09-CONTEXT.md:102](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-CONTEXT.md:102)). Research found 1,106 literal hits and presented options rather than a settled outcome ([09-RESEARCH.md:334](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-RESEARCH.md:334)). Nevertheless:
+  - 09-01 raises the project target to 80% and reverses D-03 by removing existing ignores ([09-01-PLAN.md:48](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-01-PLAN.md:48)).
+  - 09-10 also calls this a “reversed” D-03 ([09-10-PLAN.md:44](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-10-PLAN.md:44)).
+  - 09-18 calls the tightened 114-hit predicate a “settled decision” ([09-18-PLAN.md:55](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-18-PLAN.md:55)).
+  
+  These may be good choices, but the plans cannot silently make them when the phase context expressly reserved them for user confirmation.
 
-- **HIGH — The expiry helper cannot exercise the reaper behavior claimed by 09-13/09-15.** `ExpireSession` directly changes the row to `expired` at [`harness.go:993`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/harness.go:993). The real reaper only selects `detached` rows whose expiry is past at [`session_store.go:444`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/store/session_store.go:444), then transitions and deletes them at [`reaper.go:116`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/session/reaper.go:116). Therefore “detach → `ExpireSession` → assert row deleted” cannot drive production reaping. The harness already exposes the pool and session store for proper reaper tests at [`harness.go:1286`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/harness.go:1286), but the plans do not use them.
+- **HIGH — Plan 09-19’s session-count gate contradicts the authoritative repository configuration.** `.codecov.yml` states that three uploaded files deduplicate to two sessions and that waiting for three would prevent notification ([.codecov.yml:11](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.codecov.yml:11)). CI does upload unit, integration, and E2E coverage separately ([ci.yaml:174](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.github/workflows/ci.yaml:174), [ci.yaml:218](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.github/workflows/ci.yaml:218), [ci.yaml:285](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.github/workflows/ci.yaml:285)). Yet 09-19 requires `totals.sessions >= 3` ([09-19-PLAN.md:107](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-19-PLAN.md:107)) while simultaneously preserving `after_n_builds: 2` as load-bearing ([09-19-PLAN.md:145](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-19-PLAN.md:145)). At least one of these premises is wrong; as written, the final gate may be unsatisfiable.
 
-- **HIGH — The default lifecycle harness cannot dispatch `quit`.** Plan 09-12 explicitly starts with harness defaults, but the default command registry is empty at [`harness.go:468`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/harness.go:468). `quit` only becomes available when compiled-in handlers are registered; its registration is at [`register.go:86`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/command/handlers/register.go:86). Yet 09-14 expects to drive quit through `SendCommand`, which calls the production command handler at [`session.go:89`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/session.go:89). The plan needs either `WithInTreePlugins`, explicit compiled-in registration, or a dedicated termination driver.
+- **HIGH — Late Codecov edits are not guaranteed to reach the PR before live verification or ruleset mutation.** Plan 09-21 performs the only unconditional push and CI wait ([09-21-PLAN.md:95](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-21-PLAN.md:95)). Plan 09-17 may then edit `.codecov.yml` and says the change must be pushed and observed on a new head ([09-17-PLAN.md:146](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-17-PLAN.md:146)), but its automated gate merely queries whatever SHA the PR currently exposes ([09-17-PLAN.md:171](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-17-PLAN.md:171)). Plan 09-19 then makes another local config change before the ruleset checkpoint. Its sequencing only mandates another push when the branch is behind main, not when local HEAD is ahead of the PR head ([09-19-PLAN.md:206](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-19-PLAN.md:206)). This permits observations against stale remote configuration.
 
-- **HIGH — Coverage verification depends on a PR that the wave graph never creates.** Plan 09-17 requires current-branch CI rollups and potentially a push/re-run at [`09-17-PLAN.md:81`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-17-PLAN.md:81) and [`09-17-PLAN.md:132`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-17-PLAN.md:132). Plan 09-19 similarly requires branch-side Codecov reports before tightening at [`09-19-PLAN.md:73`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-19-PLAN.md:73). The current local branch has no upstream, and the plan graph contains no push/open-draft-PR checkpoint before either operation. Under the normal execute-then-ship loop, these tasks cannot obtain their required evidence.
+- **HIGH — The process-wide lazy harness can be stopped after the first spec.** Plan 09-12 proposes starting it lazily and registering `DeferCleanup` at the call site ([09-12-PLAN.md:197](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-12-PLAN.md:197)). Ginkgo v2.32 invokes `DeferCleanup` registered from `It`/`BeforeEach` when that spec ends; suite-wide cleanup happens only when registered from `BeforeSuite` ([core_dsl.go:872](/Users/sean/go/pkg/mod/github.com/onsi/ginkgo/v2@v2.32.0/core_dsl.go:872)). The existing suite already has a suitable `BeforeSuite`/`AfterSuite` lifecycle ([session_persistence_suite_test.go:57](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/test/integration/session/session_persistence_suite_test.go:57)). A once-guarded lazy accessor first called inside a spec can therefore return a stopped server to every later spec.
 
-- **HIGH — Plan 09-17’s automated gates do not prove its deliverable.** Task 1’s command merely lists three PR numbers at [`09-17-PLAN.md:95`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-17-PLAN.md:95). It neither checks that those PRs changed Go nor queries their status rollups. Because the pipeline has no `pipefail`, a failed `gh` can also be masked by successful `head`. Task 2 only confirms two configuration literals at [`09-17-PLAN.md:138`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-17-PLAN.md:138); it passes without observing either Codecov context. This is the most consequential remaining false-green shell gate because the next action can block all PRs.
+- **HIGH — The move matrix test bypasses the behavior it claims to cover.** `Session.MoveTo` directly updates the `sessions` table and explicitly does not invoke `world.Service.MoveCharacter` or update `characters.location_id` ([session.go:288](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/session.go:288)). The actual production path performs the guarded world mutation and then invokes the movement hook ([service.go:971](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/world/service.go:971), [service.go:1035](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/world/service.go:1035)). Plan 09-15 nevertheless uses the direct helper and says that closes “moving while attached” ([09-15-PLAN.md:80](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-15-PLAN.md:80)). It proves privacy filtering after test-authored state mutation, not that production movement advances the session floor.
 
-- **MEDIUM — The E2E coverage repair needs stale-output protection.** The current task neither removes `coverage-e2e.out` before running nor propagates failure from `go tool covdata textfmt`; it ultimately exits only with `E2E_EXIT` at [`Taskfile.yaml:242`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/Taskfile.yaml:242) and [`Taskfile.yaml:250`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/Taskfile.yaml:250). A failed conversion can therefore leave a prior non-empty profile available to the new body check. Also, overriding the container to the host UID should be treated cautiously: the image deliberately runs as the `holomush` user with a prepared home at [`Dockerfile:10`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/Dockerfile:10).
+- **MEDIUM — The proposed client-type field has an unsafe zero-value path.** Plan 09-20 says to add a string field “defaulting” to terminal and have `attach` read it ([09-20-PLAN.md:99](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-20-PLAN.md:99)), but Go string fields default to `""`. The plan only explicitly updates the web/telnet opener; existing `ConnectGuest` and `ConnectAuthedWithRoles` construct `Session` literals independently ([harness.go:1085](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/harness.go:1085), [harness.go:1172](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/harness.go:1172)). Unless `attach` normalizes empty to terminal or every constructor is updated, these paths will send an invalid client type.
 
-- **MEDIUM — Migration rollback remains manual.** Plan 09-05’s automated verification is only `task test:int` at [`09-05-PLAN.md:89`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-05-PLAN.md:89). That proves the up migration applies, not that the down migration removes the index. The repository already exposes targeted migration movement through `Migrator.Steps` at [`migrate.go:106`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/store/migrate.go:106) and has a rollback-testing precedent at [`migrations_audit_shape_integration_test.go:109`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/store/migrations_audit_shape_integration_test.go:109).
+- **MEDIUM — The ACE plan’s declared dependency contract is false.** Its front matter lists only five dependencies ([09-18-PLAN.md:6](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-18-PLAN.md:6)), while its objective claims every test-touching plan is explicitly listed ([09-18-PLAN.md:46](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-18-PLAN.md:46)). Plans 09-05, 09-06, and 09-10 add or alter tests but are not direct dependencies. Wave ordering currently masks the error, but the claimed last-mover guarantee is not encoded in the graph.
 
-- **MEDIUM — Several plan-local gates are weaker than their acceptance criteria.** Plan 09-12 verifies only file existence plus lint at [`09-12-PLAN.md:113`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-12-PLAN.md:113), not 48 rows, uniqueness, ten `n/a` rows, or exclusive dispositions. Downstream plans consume this registry before 09-16 eventually validates it. Plan 09-11’s `rg -c | wc -l` check at [`09-11-PLAN.md:95`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-11-PLAN.md:95) also converts an `rg` read error into a zero count.
+- **LOW — Some diagnostic pipelines can mask a failed coverage producer.** The TLS and command coverage probes pipe `go tool cover` into `tail -1` without `set -o pipefail` ([09-08-PLAN.md:87](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-08-PLAN.md:87), [09-10-PLAN.md:99](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-10-PLAN.md:99)). A failing producer can be replaced by a successful empty `tail`.
 
-- **LOW — Plan metadata and acceptance wording drift from actual mutations.** Plan 09-07 lists only `session.go` in `files_modified` at [`09-07-PLAN.md:7`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-07-PLAN.md:7), although Task 2 changes the privacy suite. Plan 09-18 lists only its meta-test at [`09-18-PLAN.md:7`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-18-PLAN.md:7), despite changing roughly 114 test files. Its requirement that every old name disappear “anywhere in the repository” at [`09-18-PLAN.md:175`](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/.planning/phases/09-test-quality-code-health-sweep/09-18-PLAN.md:175) also conflicts with recording every old name in the committed summary.
+## Suggestions
 
-# Suggestions
+1. Add an explicit decision checkpoint before execution that records:
 
-1. Insert a QUAL-04 harness prerequisite before 09-12:
+   - 70% versus 80% project acceptance;
+   - whether the two existing `cmd/holomush` ignores are removed;
+   - literal D-07 versus the tightened 114-hit ACE predicate.
 
-   - parameterize attach by client type and implement `OpenTelnetSession`;
-   - add a deterministic detached-expiry/reaper-sweep seam;
-   - decide how quit, logout, and admin boot are driven through production entry points;
-   - verify each seam independently before populating the matrix.
+   Then update `09-CONTEXT.md` so the plans are not contradicting their locked source.
 
-2. Make 09-12’s shared harness option explicit. If quit is tested, register compiled-in handlers or start with the precise plugin option required. Avoid a vague “defaults” contract.
+2. Reconcile Codecov’s session model before 09-19:
 
-3. Split coverage closure into pre-PR and post-push stages. Open or push a draft PR before 09-17, wait for both uploads, observe the exact contexts, then run the operator checkpoint after the updated config has completed another CI run.
+   - If Codecov still deduplicates to two sessions, require `sessions == 2` and independently require `e2e` flag coverage greater than zero.
+   - If it now reports three, update the `.codecov.yml` explanation and re-prove that `after_n_builds: 2` does not post prematurely.
 
-4. Replace 09-17’s automated checks with a fail-closed script that:
+3. Insert explicit publish/observe checkpoints after any 09-17 config edit and after the 09-19 threshold edit. Before changing the ruleset, assert:
 
-   - selects three merged Go-changing PRs;
-   - extracts status rollups;
-   - requires both exact Codecov contexts;
-   - treats API errors and missing contexts as failures.
+   ```sh
+   test "$(git rev-parse HEAD)" = "$(gh pr view ... --json headRefOid --jq .headRefOid)"
+   ```
 
-5. In `test:e2e:cover`, remove the output profile before the run, capture the `covdata textfmt` exit status, and require at least one non-header record from the newly created file.
+   Then wait for CI and query statuses on that exact SHA.
 
-6. Add a migration integration test that migrates to 52, steps to 53, asserts `idx_sessions_location_id`, steps back to 52, asserts absence, and reapplies 53.
+4. Start the shared lifecycle harness in the suite’s existing `BeforeSuite` and stop it in `AfterSuite`, or use a fresh `BeforeEach` harness with per-spec cleanup. Also require each created session to register `DeferCleanup` for logout/transport teardown; `Server.Stop` currently stops only the plugin subsystem ([harness.go:809](/Volumes/Code/github.com/holomush/.worktrees/v0.12-foundation-hardening/internal/testsupport/integrationtest/harness.go:809)).
 
-7. Land the matrix schema/shape test with 09-12, then extend it to the full marker bijection in 09-16. Downstream plans should not consume a registry whose basic shape is manually asserted.
+5. Either drive the move row through `world.Service.MoveCharacter` plus the real movement hook, or relabel the current test as privacy-floor behavior after a simulated move and mark the production lifecycle cell uncovered/covered elsewhere.
 
-8. Correct `files_modified` metadata and scope the ACE old-name search to executable references, excluding the summary that intentionally records the old names.
+6. Make client-type normalization explicit in `attach` (`""` → `"terminal"`) and test all existing constructors, not only the new telnet opener.
 
-# Risk Assessment
+7. Add every earlier test-modifying plan as an explicit 09-18 dependency, and add `set -o pipefail` plus a non-empty `total:` assertion to the coverage probes.
 
-**HIGH.** The security-polish plans are generally strong, and the coverage end-state is designed carefully. However, the central QUAL-04 work currently depends on three unavailable harness behaviors—telnet transport differentiation, real reaper execution, and registered termination commands. The Codecov operator sequence also lacks the PR lifecycle needed to produce its evidence, while its precondition gate can pass without querying a single status. Executing the plans unchanged is likely to stall in Waves 3–4 or, worse, substitute weaker tests for the promised transport and lifecycle coverage.
+## Risk Assessment
 
+**HIGH.** The individual implementation plans are generally careful, but the remaining problems sit at assurance and release-control boundaries: an internally contradictory final coverage gate, external branch-protection mutation based on potentially stale commits, and lifecycle tests that can either reuse a stopped harness or certify simulated state as production behavior. Those failures could halt execution late, deadlock future PRs, or let the phase finish with the same kind of overstated assurance it is intended to eliminate.
+
+Codecov’s current external API semantics could not be independently checked through Context7 because the documentation request failed with DNS resolution; the Codecov concern above is therefore grounded in the repository’s own configuration and CI workflow rather than current external documentation.
 ---
 
 ## pi Review (moonshotai/kimi-k3)
 
-# Cross-AI Plan Review: Phase 9 (Test-Quality & Code-Health Sweep)
+Good — this confirms `capSessionKick` (admin, session, global) is a real, seeded capability distinct from the read_unrestricted_history one. Let's write up the final review now.
 
 ## Summary
 
-This is an unusually well-grounded set of 19 plans. I independently re-verified the vast majority of load-bearing claims against the live repository and the live codecov/GitHub APIs — file:line citations for ABAC sentinels, the plugin-downgrade-fence drop path, migration numbering, coverage figures (78.28% project / 64.25% `cmd/holomush` / 76.23% `internal/tls`, all essentially matching the review document), the four Ginkgo skip files and their dead retired-bead references, the harness helpers, the `TestINV_*` count (32 declarations / 19 files), and the ACE-predicate false-positive examples. Nearly everything checked out exactly as claimed, including several unusually precise details (drifted subtest line numbers, `after_n_builds: 2` appearing 3× unanchored vs 1× anchored, the `assert.Equal`-whole-map absence idiom). This is a plan set written by someone who actually ran the tools, not one that took the research document on faith.
+This is an unusually well-evidenced plan set — nearly every shell gate, file:line citation, and harness-signature claim I checked against the actual repo (21 plans, dozens of citations) turned out to be accurate, including several subtle corrections the plans made to their own prior research (e.g., 32 vs 25 `TestINV_` declarations, 3 vs 4 `It` blocks in `session_lease_test.go`, the exact `.codecov.yml` unfiltered-count numbers, and the live codecov API figures which I re-fetched and match exactly: 78.28% project, 64.25% `cmd/holomush`, 76.23% `internal/tls`, 0.0% e2e flag). The shell-gate hardening (PASS-line assertions instead of bare exit codes, `pipefail`, positive-then-negative assertion ordering, `rg -c … >/dev/null` instead of `rg -q` to avoid SIGPIPE-141) is correctly reasoned and I reproduced the failure modes it guards against live. However, I found one materially significant gap: plan 09-20's central "verified-against-source" claim that "there is no administrator-boot command and no administrator-boot RPC anywhere in the tree" is **false** — `internal/command/handlers/resetpassword.go`'s `--kick` flag is a real, capability-gated (`admin`, `session`, global scope), already-tested production mechanism that deletes a target character's session row, and it is never mentioned anywhere in the plan set despite being the closest real analog to the matrix's "Admin boot → row deleted" row. This causes plans 09-14/09-20 to mis-disposition that matrix row as `not-implementable` when a real (if imperfect — it bypasses the `session_ended` event path) entry point exists. This is a correctable finding, not a fundamental flaw in the plan set's design, but it must be resolved before execution locks in the wrong disposition and files a needless "no entry point" issue.
 
-The scope is large (19 plans, 7 waves) but is justified: the phase closes with a genuine bijection-style meta-test for the session matrix and a genuine AST-based naming ratchet, both modeled tightly on an existing in-repo precedent (`test/meta/quarantine_registry_test.go`). The plan set correctly identifies and corrects two premise-falsifying findings from research (the coverage target is already met; the ACE predicate needed tightening) rather than blindly executing stale CONTEXT.md numbers. I found one real gap (a depguard claim that doesn't hold), one unverifiable environmental hypothesis (the E2E coverage-flush root cause), a handful of scale/complexity concerns worth flagging, and a couple of small internal-consistency nits. None of these are severe enough to block the phase, but several are worth fixing before execution.
+**Verdict: NOT READY** — pending a one-plan fix to 09-20 Task 3 (and downstream 09-14/09-12 disposition) to account for `resetpassword --kick`, plus the smaller concerns below. Once that is resolved, this plan set is executable as designed.
 
 ## Strengths
 
-- **Coverage math is independently re-verified and correct.** Live codecov API queries against `main` today return project=78.28% (sessions:2), `cmd/holomush`=64.25%, `internal/tls`=76.23%, `internal/xdg`=97.91%, `internal/core`=91.55%, `e2e` flag=0.0 — all matching the review document's Gate 1 table within noise (`git`/query drift). Plan 09-19's Task 1 automated gate, run against `main` as-is, genuinely exits 1 at the very first sub-check (`e2e` flag > 0), and the plan's own note says so — this is a live, honest, self-aware verify block, not a decorative one.
-- **The seven ABAC sentinel sites (09-03) are exactly where claimed.** `internal/access/policy/attribute/location.go:72,80`, `object.go:117,125,133`, `property.go:93,102` — all confirmed via `grep`. The reference form at `character.go:131-148` and the omission idiom (`assert.Equal(t, tt.expectAttrs, attrs)` at `character_test.go:254`, whole-map equality, not `NotContains`) is real and the plan correctly identifies it as the pattern to mirror, including correctly noting there's no `NotContains` convention in this package.
-- **The plugin-downgrade-fence citation is exact.** `f.emitter == nil` at `internal/eventbus/history/plugin_downgrade_fence.go:423`, and the sibling `WarnContext` branch with the exact shape to copy is 12-15 lines below, confirmed.
-- **Migration 000053 is genuinely free and the precedent is genuine.** `internal/store/migrations/` tops out at `000052_events_audit_partition`; `idx_sessions_active_character`/`idx_sessions_status` exist but nothing indexes `location_id`; `000008_session_player_fk.{up,down}.sql` is a real, exact `CREATE INDEX IF NOT EXISTS` / `DROP INDEX IF EXISTS` pair to copy.
-- **The four Ginkgo skip files and their dead bead references are exactly as claimed.** All four (`audit_drift_detector_test.go:36`, `js_storage_corruption_test.go:38`, `multi_protocol_fanout_test.go:36`, `backfill_rebuild_test.go:28`) use bare Ginkgo `Skip(...)` inside `It(...)`, not `t.Skip`, and `gh issue list --search` for all four bead ids (`holomush-nko7`, `-6nds`, `-l4kx`, `-ecbg`) returns nothing live (only one false-positive substring match on a closed, unrelated issue). Plan 09-11's correction of a prior misreading ("not literally the file's first line") is itself independently verified against `backfill_rebuild_test.go:26-28`.
-- **The harness helper inventory for QUAL-04 is fully accurate.** All 8 cited helpers (`WaitForEvent:171`, `MoveTo:303`, `DetachTransport:366`, `ReattachTransport:419`, `QueryStreamHistory:705`, `QueryStreamHistoryBounded:722`, `EmitDirectEvent:770`, `ExpireSession:995`) exist at their exact cited lines, `rg 'panic\("TODO'` over the package returns zero hits, and `allowAllPolicyEngine` really is the harness default (`harness.go:314`), confirming the CONTEXT.md open question about which ABAC mode plan 09-15's floor-preservation arm needs is correctly resolved.
-- **Plan 09-07's design to add a sibling method rather than mutate `EmitDirectEvent`'s signature is well justified** — `EmitDirectEvent` has 18+ call sites across `test/integration/{privacy,streams,resilience,cursor_bounded_backfill}` and `internal/testsupport/integrationtest/harness_smoke_test.go`; changing its signature would have had a large, unnecessary blast radius.
-- **The tightened ACE predicate (~114 vs the literal 1,106) is soundly reasoned**, and the `TestINV_*` carve-out count correction (32 declarations across 19 files, not "~25") is independently confirmed exactly (`grep -c` by declaration vs by file gives 32 vs 19). Plan 09-18's Task 1 verify block deliberately counts declarations not files for this reason, and is correct to do so.
-- **Genuinely no-BS "no analog found" honesty** in `09-PATTERNS.md` for the E2E coverage-flush repair — the plan doesn't manufacture a false precedent; it names the two testable hypotheses (bind-mount uid, `stop_grace_period`) and requires the executor to gather live evidence before choosing a fix, which is the right posture for an environment-dependent bug with no in-repo analog.
-- **The 38-populated-cell correction (not 48) is exact** — I independently recomputed the izk0 matrix from the archived bead JSONL and got 10 n/a / 38 populated, matching the plan precisely, correcting an error present in CONTEXT.md itself.
-- **Real regression-locking discipline**: nearly every meta-test-landing task requires the executor to seed a violation, observe a non-zero exit, then restore — this is the right way to prove a "ratchet" is load-bearing rather than merely present.
+- **Live-verified coverage figures throughout.** I independently queried `api.codecov.io` and got 78.28% project / 64.25% `cmd/holomush` / 76.23% `internal/tls` / 0.0% e2e flag — all match the plans' cited numbers exactly (`.planning/phases/09-test-quality-code-health-sweep/09-19-PLAN.md:108`, `09-01-PLAN.md` objective). This is real evidence, not restated assumption.
+- **The codecov status-context deadlock risk is real and correctly diagnosed.** I queried 3 recently-merged Go-changing PRs' head vs merge commits: `codecov/patch` posted only on merge commits (e.g. head `0554b2c2…`→no coverage status, merge `497748c6…`→`codecov/patch`), never on any head commit, and `codecov/project` appeared on none of the 6 commits sampled. This directly validates 09-17-PLAN.md's core "assumption" block and the deadlock mitigation built into 09-19's checkpoint (`09-19-PLAN.md` T-09-19-06).
+- **The reaper-selection-predicate mismatch (B2) is real and precisely diagnosed.** `internal/store/session_store.go:447` selects `status='detached' AND expires_at < now()`; `harness.go:995-1003`'s `ExpireSession` sets `status='expired'`, which that query never matches. `test/integration/presence/lease_reaper_test.go:120-166` is a genuine, already-working precedent for the detach→backdate→real-reaper pattern plan 09-20/09-13 correctly reuse.
+- **Harness helper claims all verified present and correct**: `WaitForEvent` (session.go:171), `MoveTo` (:303), `DetachTransport` (:366), `ReattachTransport` (:419), `QueryStreamHistory` (:705), `QueryStreamHistoryBounded` (:722), `EmitDirectEvent` (:770), `ExpireSession` (harness.go:995) — all exact matches, zero TODO panics in the file.
+- **The telnet-opener defect (B1) is real**: `OpenTelnetSession` at `session.go:875-878` literally calls `t.Fatalf`; `attach()` hardcodes `ClientType: "terminal"` at line 458; `session_store.go:517-519` confirms `telnet` is a legal allowlisted value. Plan 09-20 Task 1's fix is well-targeted.
+- **The empty-command-registry defect (B3) is real**: `harness.go:468-471`'s comment confirms "otherwise it gets an empty registry (no commands registered)"; `RegisterAll` only registers `quit`/`shutdown` (`register.go:86-89`).
+- **ABAC sentinel fix sites (#4793) verified exactly**: all 7 cited `attrs[...] = ""` lines in `location.go:72,80`, `object.go:117,125,133`, `property.go:93,102` match precisely; `character.go:139` and `stream.go:40-48` are genuine, already-fixed reference forms.
+- **Cookie/security-header inversion (#4794) verified exactly**: `gateway.go:120` default-false flag, `cookie.go:52-56` already-correct downgrade logic, `security_headers.go:74-82` already-correct conditional — the plan correctly scopes the change to the default/plumbing only.
+- **Migration precedent (#4796) verified**: no index on `sessions.location_id` across all 52 migrations, `000008_session_player_fk.{up,down}.sql` is the exact precedent form cited, 000053 confirmed free.
+- **Shell-gate hardening is real engineering, not decoration.** I reproduced: `rg -c file1 file2 | wc -l` counts files not matches (2 vs 3 matches across 2 files); `go test -run NoMatch` exits 0 printing `[no tests to run]`; piping into `rg -q` under `pipefail` produces exit 141 (SIGPIPE) on the passing case. All three failure modes the plans explicitly guard against (09-11, 09-12, 09-16, 09-18 notes) are genuine and correctly mitigated by the chosen `rg -c … >/dev/null` / PASS-line-grep patterns.
+- **Wave/dependency graph is topologically sound** — I mechanically verified all 21 plans' `depends_on` edges point to strictly lower wave numbers with no cycles.
+- **The matrix cell count correction (38 not 48) is verified**: the source matrix (`09-RESEARCH.md`, reproduced from `holomush-izk0`) genuinely has 10 `n/a` cells; `09-12-PLAN.md` still asks for a 48-row *registry* (with 10 explicitly `not-applicable`), which is internally consistent even though it differs from "38 populated."
+- **Precise self-correction of prior research** in multiple places: `TestINV_*` count corrected from 25→32 (I verified 32 exactly), `session_lease_test.go` It-count corrected from 4→3, `.codecov.yml` unfiltered-count corrected to exactly 3/2 (I verified).
 
 ## Concerns
 
-- **HIGH — Plan 09-07's depguard claim is unsupported by the actual config.** Plan 09-07's acceptance criteria and threat model both assert "`task lint` exits 0, including the depguard rule forbidding production imports of test-support packages" (`09-07-PLAN.md:102`, `:158`, `:164`). I checked `.golangci.yaml:135-155`: the `no-test-only-constructs-in-production` depguard rule denies exactly four packages — `eventbustest`, `coretest`, `quarantinetest`, `natstest` — and `internal/testsupport/integrationtest` (the package this plan modifies) is **not** among them. `test/meta/depguard_config_test.go` also only pins those same three of the four. The actual protection for `EmitDirectEventAt` never reaching production is the `//go:build integration` tag (confirmed by a live `go build` reproduction: a package built only under `//go:build integration` fails to compile from a non-tagged importer), not a lint rule. This is a real gap between what the plan claims lint enforces and what lint actually enforces — the acceptance criterion should either be dropped/reworded to point at the build-tag mechanism, or (better) `internal/testsupport/integrationtest` should be added to the depguard deny list as part of this plan, closing the gap rather than asserting it's already closed.
-- **MEDIUM — The E2E coverage-flush root cause (plan 09-01) is genuinely unverified, and the plan is honest about that but the risk deserves a callout.** I could not conclusively test either hypothesis (bind-mount uid mismatch vs missing `stop_grace_period`) in this sandbox — Linux-container bind-mount uid semantics don't reproduce faithfully on macOS Docker Desktop, and I have no access to the actual CI runner. Both hypotheses are architecturally plausible and correctly identified as untested (`adduser -D` on Alpine does create uid 1000, and `stop_grace_period` is genuinely absent from all compose files, both confirmed). This is fine as a *tracer* plan design (it's explicitly typed `tracer` and instructed to diagnose from live evidence before fixing) — but if both hypotheses turn out wrong, the entire QUAL-02 09-10/09-17/09-19 chain stalls, since they all transitively depend on 09-01. The plan has no documented fallback if the uid/grace-period fixes don't resolve it (e.g., a "known workaround" or escalation path). Given this is the tracer for the whole 7-wave phase, a documented fallback (or at minimum a stated re-scope trigger) would reduce single-point-of-failure risk.
-- **MEDIUM — 19 plans for 4 requirements is real scope, and the review's own instructions flagged this for scrutiny.** Breaking it down: QUAL-02 gets 5 plans, QUAL-03 gets ~3.5 (shares 09-02), QUAL-04 gets 6, QUAL-05 gets ~4.5 (shares 09-02). QUAL-04 (the session matrix) is the largest single consumer at 6 plans (09-07, 12, 13, 14, 15, 16) — but given the matrix is genuinely 38 cells plus a from-scratch harness seam plus a bijection meta-test plus 3 named privacy floor tests, splitting it by transition-family across waves 3-5 is defensible rather than padding. The real complexity driver is that this phase does five structurally distinct things (repair a broken measurement chain, invert a security default, backfill two coverage floors, author 38 lifecycle specs with a meta-test, sweep ~114 test renames with a second meta-test) that don't decompose into fewer plans without conflating unrelated review surfaces (ABAC, crypto, migration, security-default, ACE-naming). I don't think this is over-engineered so much as an inherently five-shaped requirement set being executed faithfully. Still, an executing team should be aware that "4 requirements" undersells the actual work; ~19 plans is closer to the honest size.
-- **MEDIUM — Plan 09-19's checkpoint (Task 3) creates a live deadlock risk that the plan itself names but cannot fully de-risk from inside the phase.** Adding `codecov/patch`/`codecov/project` to ruleset `11923801` as required checks, on the SAME PR that is currently open and whose HEAD commit's statuses were the ones just verified in Task 1, has a subtle timing hazard: GitHub evaluates required-status-checks against the **current head SHA's** existing status entries. If the ruleset edit happens after the final CI run but the PR is later force-pushed/rebased for any reason (e.g., resolving a merge conflict against `main` per the "pre-push rebase" requirement in `landing-the-plane.md`), the two coverage statuses have to re-post on the new SHA before merge is possible — and if e2e coverage flakes even once post-rebase, the PR is stuck. The plan's step 4 instructs "remove it again immediately" if stuck pending, which is the right mitigation, but this is a real operational risk on the single, large PR this phase produces (D-22), not a hypothetical.
-- **LOW — Branch-name inconsistency across planning artifacts.** `09-CONTEXT.md:263` and `09-DISCUSSION-LOG.md:253` say the milestone branch is `gsd/v0.12-foundation-hardening`; `09-RESEARCH.md` and the actual repo (`git rev-parse --abbrev-ref HEAD`) say `gsd/v0.12-milestone`. The 19 plan bodies themselves never name the branch directly, so this doesn't affect execution, but it's worth cleaning up before this artifact set is archived, since a future reader following CONTEXT.md's citation would look for the wrong branch.
-- **LOW — Plan 09-01's emptiness-guard specification is slightly underspecified relative to the two candidate root causes.** The plan asks the executor to add a guard that fails when `go tool covdata textfmt` produces a header-only profile — but if the actual defect is the bind-mount uid issue, `covdata textfmt` over an *empty coverdata directory* (not a missing/malformed one) behaves differently than over a genuinely corrupt directory; I did not verify this edge case (no Linux Docker environment available here). Worth a note in the plan that the guard's behavior should be verified against whichever root cause is actually confirmed, not assumed to behave identically for both.
-- **LOW — Plan 09-17's "operator action moved to the final plan" reasoning is sound, but the plan set never states what happens to the milestone if the operator declines or is unavailable to run Task 3 of 09-19.** Given `autonomous: false` is correctly set on 09-19 and the checkpoint is correctly typed `blocking`, this is handled at the workflow level rather than being a plan defect — flagging only because it's the one plan in 19 that cannot complete autonomously, and it's also the very last plan in the phase, meaning the entire phase's "done" state hinges on a human action with no stated timeout/escalation.
+- **HIGH — `09-20-PLAN.md` Task 3's "no administrator-boot entry point" finding is factually wrong, and this propagates into 09-14 and 09-12/09-16's dispositions.** `internal/command/handlers/resetpassword.go` registers a production, capability-gated (`command.Capability{Action: "admin", Resource: "session", Scope: command.ScopeGlobal}`, line 35) `--kick` flag that calls `exec.Services().Session().DeleteByCharacter(ctx, ch.ID)` (line 209) for every character of the target player — a real "administrator boot" mechanism, already unit-tested (`resetpassword_test.go:163-201`, `t.Run("reset with --kick terminates game sessions", ...)`). The plan's search ("command registrations, admin registrations, proto service definitions... do not stop at a keyword match in a comment") apparently missed this handler despite it being registered via the exact `RegisterAdmin`/`handlers.AdminDeps` path the plan does read (`register.go:12-83`). The dispositions in 09-14 ("If administrator boot has no entry point... do NOT invent one... disposition as not-implementable") and 09-12/09-16 (registry `not-implementable` marking + filed issue) are built on this false premise. Note the nuance: `resetpassword --kick` deletes the row via a raw `DELETE` (`session_store.go:813-827`) without going through the `RecordBootedSession`/`session_ended`-event path that `internal/grpc/command_handler.go:307-350` implements for plugin-originated boots — so it is not a *perfect* match for the matrix's "row deleted" semantics, but it is unambiguously a real, capability-scoped, admin-initiated session-termination entry point that the plan's search should have surfaced and at minimum discussed.
+- **MEDIUM — 09-20's evidence-gathering instructions ("search the command registrations, the admin registrations, and the proto service definitions") were followed for `RegisterAll`/proto but evidently not exhaustively for `RegisterAdmin`'s existing `resetpassword` handler**, even though the plan explicitly reads `register.go` in full per its own `<read_first>` block (`09-20-PLAN.md` Task 3 read_first list). This suggests the verification-against-source discipline that worked well elsewhere in this plan set had one blind spot specifically on the admin-boot question, which is exactly the question three downstream plans (09-12, 09-14, 09-16) treat as settled.
+- **MEDIUM — `TestGatewayCommand_SecureCookiesFlag` (`cmd/holomush/gateway_test.go:552`) is itself a single-token-tail ACE naming violation** (`_SecureCookiesFlag` tail tokenizes to `Secure`+`Cookies`+`Flag` — arguably 3 tokens, so it may or may not trip the tightened predicate depending on exact tokenization; worth the executor double-checking against 09-18's classifier before assuming it's clean, since plan 09-04's Task 1 adds a sibling test for the opt-out with the same naming risk and neither plan flags this explicitly the way 09-08/09-09 do for their own new tests).
+- **LOW — plan 09-05's dependency on 09-01 is not obviously justified.** The migration/index work has no stated relationship to the coverage-chain repair; `depends_on: ["09-01"]` may just be the wave-1-gate convention (everything waits on the tracer plan) rather than a genuine functional dependency, but the plan doesn't say so, leaving it ambiguous whether 09-05 could run in wave 1 alongside 09-01 if 09-01 is delayed.
+- **LOW — 09-19 Task 2's `rg -q '^\s*threshold: 0%' .codecov.yml` gate is asserted to fail against the unedited file** (confirmed: I ran it, it returns exit 1) but the plan's own `<note>` says "the gate is expected to fail on first run" for a *different* plan (09-17 Task 2); for 09-19 Task 2 the plan presents the failing-first-run behavior as evidence the gate is non-vacuous, which is correct, but it's worth confirming the executor doesn't confuse the two similarly-worded "expected to fail" notes across 09-17 and 09-19 during execution.
+- **LOW — plan 09-15 Task 3 adds a new spec to `privacy_test.go` for the floor-preservation arm but doesn't require a `// Verifies: INV-PRIVACY-6` annotation**, even though the existing sibling spec in that file carries exactly that annotation (`privacy_test.go:29`) and the new spec completes the same invariant's second arm. Missing this would be a minor consistency gap, not a functional bug.
 
 ## Suggestions
 
-1. **Fix or reframe the 09-07 depguard claim.** Either (a) add `internal/testsupport/integrationtest` to the `no-test-only-constructs-in-production` depguard deny list in `.golangci.yaml` as part of this plan's Task 1 (closing the actual gap, and arguably overdue given the package has existed and grown for a while), or (b) reword the acceptance criteria and threat model to correctly attribute the protection to the `//go:build integration` tag rather than to depguard. Option (a) is stronger and cheap.
-2. **Give plan 09-01 an explicit re-scope trigger.** State a concrete signal (e.g., "if neither hypothesis produces a non-empty profile after two fix attempts, stop and escalate as a phase-blocking finding" ) so a failed tracer doesn't silently retry indefinitely or, worse, get "fixed" by loosening the emptiness guard itself.
-3. **Consider whether 09-19 Task 3's ruleset edit should be deferred to a moment strictly after the final rebase-before-push**, per `landing-the-plane.md`'s pre-push rebase step, to minimize the window in which a force-push could invalidate the just-verified statuses. The plan's own verification step re-checks after the edit, but doesn't explicitly sequence itself after the mandatory pre-push rebase.
-4. **Reconcile the branch-name drift in CONTEXT.md/DISCUSSION-LOG.md against RESEARCH.md/actual `git`** before this planning-artifact set is archived.
+1. **Before executing 09-20, re-run the admin-boot search explicitly including `grep -rn "kick" internal/command/handlers/`** (not just `RecordBootedSession`/`BootedSessions`), and update 09-20 Task 3, 09-14 Task 1, and the 09-12 registry to disposition the administrator-boot row against `resetpassword --kick` — either as `spec-covered` (if the matrix's semantics can be satisfied by this mechanism) or as an explicit note explaining why the row still needs an issue despite `resetpassword --kick` existing (e.g., "it doesn't emit `session_ended`, so it's an imperfect admin-boot and the gap is worth tracking, but it does prove the row is drivable"). Filing an issue for "no entry point exists" when one does would be a wasted issue and a subtly wrong assurance artifact — exactly the failure mode this phase is designed to eliminate.
+2. Add a one-line cross-check in 09-18 Task 1 or 09-04 to explicitly classify `TestGatewayCommand_SecureCookiesFlag` under the tightened ACE predicate before the sweep runs, since it's a pre-existing name the sweep plan didn't originate.
+3. Consider having 09-05 state explicitly whether its `depends_on: ["09-01"]` is a genuine functional dependency or just phase convention, for clarity if the wave graph is ever re-parallelized.
 
 ## Risk Assessment
 
-**LOW-to-MEDIUM.** The plan set is unusually well-grounded — nearly every load-bearing factual claim I checked against the live repository and live external APIs held up exactly, including several claims precise enough that a casual reader would assume they were approximated (drifted line numbers, exact false-positive counts, exact percentage figures). The two sizing-gate overrides (coverage target already met; ACE predicate tightened to ~114) are correctly justified and independently reproducible from the live codecov API and a local AST count, not merely asserted. The one real defect found (the 09-07 depguard mis-attribution) is narrow and easy to fix. The genuine residual risk is environmental and outside the plans' control — whether the E2E coverage-flush tracer (09-01) actually resolves with one of its two stated hypotheses, since the entire back half of the QUAL-02 chain (09-10, 09-17, 09-19) is transitively blocked on it succeeding. If it does resolve, the rest of the phase's mechanics (ABAC fix, cookie-default inversion, migration, ACE sweep, session matrix) are all soundly designed and independently low-risk.
+**MEDIUM.** The plan set's engineering discipline (live-evidence-checked shell gates, self-correcting research, precise file:line citations) is exceptionally strong and the vast majority of claims I checked against source held up exactly as stated — this is not a risk about plan quality broadly. The risk is narrowly concentrated in the one factual gap found (administrator-boot entry point), which is real, propagates through three plans (09-12, 09-14, 09-20/09-16), and would cause the phase to file a misleading "capability doesn't exist" issue and lock in an incorrect matrix disposition if executed as written. This is cheap to fix (re-scope one task in one plan plus a registry row) but must be fixed before execution, because the whole phase's stated purpose is eliminating exactly this class of unverified assurance claim.
+
+---
+
+## OpenCode Review
+
+Let me begin the systematic verification. I'll start with the key files referenced across multiple
+Now I have sufficient evidence. Let me compile the review.
+
+---
+
+# Cross-AI Plan Review: Phase 9 — Test-Quality & Code-Health Sweep
+
+## 1. Summary
+
+This is a **densely reasoned, meticulously cross-referenced** plan set. Nearly every claim about existing code (`path:line`) and every verification gate (`automated` block) has been independently verified and found accurate. The wave ordering, the "ratchet not review-judgment" posture, the deliberate "fix all, no allowlist" with a sizing-gate release valve, and the obsessive attention to vacuous-gate construction all reflect genuine engineering rigour. Two findings prevent a READY verdict: (1) the administrator-boot entry-point claim in 09-20 Task 3 is **falsified by live code** — `resetpassword --kick` is a production admin-boot path; (2) the E2E coverage-flush tracer (09-01) is a single point of failure with a stop-condition that was flagged by a prior review and remains unresolved. Addressing both is a single-day fix. **Verdict: NOT READY — two blocking findings.**
+
+---
+
+## 2. Strengths
+
+- **Comprehensive harness verification (09-20).** All three seams identified by the prior cross-AI review have been independently confirmed: `OpenTelnetSession` is fatal at `internal/testsupport/integrationtest/session.go:875-876`, `attach` hardcodes `"terminal"` at `:459`, `EmitDirectEvent` takes no timestamp at `:770`, and the `ExpireSession` helper at `harness.go:995-1003` writes `status='expired'` while the reaper's query at `internal/store/session_store.go:447` selects `status='detached'`. All four claims are precisely correct. The "smoke spec that fails without the seam" negative-demonstration requirement is the correct assurance posture.
+
+- **Verification gate construction (all plans).** The `automated` verification blocks are the best I have seen. Every gate has been defended against the vacuity class it replaces: `-run`-pattern gates require explicit `--- PASS:` line assertion (09-12, 09-16, 09-18), `pipefail` is set consistently, `rg -c` uses `>/dev/null` rather than `-q` to avoid SIGPIPE under pipefail, negative assertions are bracketed by positive controls that fail on a missing file, `awk` defaults to failure and only clears on success, and `test -f` prefix checks prevent the `-run`-no-test-exists-returns-zero` trap. This is methodical care applied to the right layer.
+
+- **Research-driven scope correction (09-RESEARCH.md).** All three GATE findings are verified. GATE 1: the 54.6% false premise is confirmed — codecov's API returns 78.28% project coverage on `main`. GATE 2: the D-07 predicate returns ~1,106 hits vs a ~150 threshold, and the tightened single-token-tail predicate producing ~114 is directionally correct. The re-scoping of QUAL-02 to the `holomush-0yo6` floor set (two actual gaps, not 15 imaginary points) is the right call.
+
+- **Dependency ordering.** The wave graph is load-bearing and internally consistent. 09-20 (harness seams) → 09-12 (registry) → 09-13/14/15 (specs) → 09-16 (bijection guard) is coherent, and 09-18 (ACE sweep) depending on all test-touching plans including wave-2 ones (09-03, 09-08) correctly enforces the "sweep last" contract.
+
+- **#4793 sentinel sites precision.** All seven sites at `internal/access/policy/attribute/location.go:72,80`, `object.go:117,125,133`, `property.go:93,102` are confirmed. `character.go:139` is already fixed with the ADR-citing comment. `stream.go:40-48` is the second reference form. 100% accurate.
+
+- **09-05 migration planning.** The `000053_sessions_location_index` gap is confirmed — no index on `location_id` across all 52 migrations, and `000052` is the last on disk. The plan correctly identifies the `CREATE INDEX IF NOT EXISTS` precedent (000008) and rejects `CONCURRENTLY` (no precedent, no non-transactional runner). The up/down/up round-trip test is correctly scoped as a task.
+
+- **Self-aware false-positive defence (09-18).** The plan explicitly addresses the arch-review false positive class — that 658 of 1,106 D-07 hits are already ACE-compliant sentences using `_` as a separator — and tightens to the single-token-tail form. The `TestINV_*` carve-out is correct (32 declarations, load-bearing for invariant registry readability at `test/meta/invariant_registry_test.go`).
+
+---
+
+## 3. Concerns
+
+### HIGH — Administrator-boot entry point claim is falsified by live code (09-20 Task 3, assumption block `verified-against-source`)
+
+**Evidence:** The plan assumptions claim *"There is no administrator-boot command and no administrator-boot RPC anywhere in the tree."* This is wrong. Two facilities exist:
+- `internal/command/handlers/resetpassword.go:197-218`: the `resetpassword --kick` admin command iterates player sessions, calls `RecordBootedSession` for each, emits `session_ended` with cause `kicked`, and counts completed squelches. This is a real, tested admin entry point: `internal/command/handlers/resetpassword_test.go:163` tests `"reset with --kick terminates game sessions"`.
+- `internal/grpc/dispatcher_test.go:643-748`: `TestAdminBootEmitsSessionEndedWithKickedCause` directly drives the boot mechanism via `exec.RecordBootedSession` and asserts the `session_ended` event with cause `kicked`. This is the canonical admin-boot integration test.
+
+**Mechanism:** `resetpassword --kick` dispatches through the same command handler as any other command (`internal/grpc/dispatcher_test.go:717-722` drives `server.HandleCommand(ctx, &corev1.HandleCommandRequest{Command: "testboot", ...})`). The admin boot row IS drivable from the harness via `Session.SendCommand(ctx, "resetpassword <player> --kick")` — assuming the harness has the admin handler registered and valid deps for `RegisterAdmin` (which panics on nil deps at `internal/command/handlers/register.go:14-23`). This is a nuance the plan should have surfaced, not a blocker for the matrix — the admin-boot row could be spec-covered by driving `resetpassword --kick`.
+
+**Impact:** 09-20 will record `"not-implementable"` for a row that IS implementable. The matrix registry (09-12/09-16) will propagate that incorrect disposition. The fix is a single-day scope change: drive `resetpassword --kick` through the harness with admin dependencies or accept the more honest classification "not-implementable from harness defaults without admin wiring."
+
+### MEDIUM — E2E coverage-flush tracer (09-01) is a single-point-of-failure for 7+ downstream plans
+
+**Evidence:** 09-01 is the `tracer` type and depends on environment-specific Docker behaviour (bind-mount uid, `stop_grace_period` on macOS Docker Desktop vs Linux CI). The prior cross-AI review flagged this: *"if both hypotheses turn out wrong, the entire QUAL-02 09-10/09-17/09-19 chain stalls."* This concern remains unresolved. The plan's `STOP CONDITION` says to escalate after two fix attempts, but there is no documented escalation path, no pre-agreed re-scope trigger, and no alternative measurement chain.
+
+**Impact:** A blocked 09-01 blocks 09-02, 09-10, 09-17, 09-19 transitively through the wave graph. The coverage backfill (09-10) and the gate wiring (09-17/09-19) are the declarative purpose of QUAL-02; without them, QUAL-02 is undelivered. The tracer is correctly typed but incorrectly risk-managed.
+
+### MEDIUM — 09-20's `resetpassword --kick` does not work from the narrow compiled-in option
+
+**Evidence:** The plan adds a harness option registering only `RegisterAll` (quit, shutdown). But driving admin boot requires `RegisterAdmin` which panics on nil dependencies (`internal/command/handlers/register.go:14-23`). Even if the harness option is widened to include admin handlers, the admin deps (PlayerRepo, Hasher, PlayerSessions, ResetRepo, CharLister) are heavy — they require a real player repository, hasher, session store etc. The plan is correct that there's no *standalone* boot command, but incorrect that there's no entry point at all. The `resetpassword --kick` path exists but requires wiring admin dependencies into the harness.
+
+**Impact:** If 09-20 were corrected to note `resetpassword --kick` exists, the matrix row would remain `not-implementable` without additional harness wiring. This is still a valid outcome — it just needs honest documentation rather than a blanket "no entry point" assertion.
+
+### MEDIUM — `depguard_config_test.go` is missing the `natstest` entry
+
+**Evidence:** At `test/meta/depguard_config_test.go:24-31`, the pinned set is `{eventbustest, coretest, quarantinetest}` — but the configured deny list at `.golangci.yaml:149-156` has FOUR entries, including `natstest` which landed in a prior phase. The plan previously claiming this was "already correctly respected" (`CLAUDE.md §Testing` docs) is wrong — the meta-test pins 3 of 4. 09-07 Task 3 correctly identifies this gap and proposes fixing it. **This is a correctness issue the plans actually catch and fix** — I call it out as a verified property of the plan quality, not a defect in the plans.
+
+### LOW — Plans talk about 48 matrix cells but the source has 38 populated (09-12, 09-16)
+
+**Evidence:** The 09-RESEARCH.md correctly identifies this: 10 of 48 positions are `n/a` in izk0's table (e.g., multi-session × fresh-SelectCharacter, web columns × tmux-style telnet reattach). D-12 in CONTEXT.md says "full 12×4 matrix as `holomush-izk0` specifies" — which IS 48 positions, 38 populated. The plan correctly handles this by saying each cell gets either a spec or a `n/a` marking, but the phrasing in a few places (e.g. 09-12 Task 1 "with exactly forty-eight rows") is fine — 48 rows with 10 `n/a` and 38 needing coverage.
+
+### LOW — 09-02 Task 1 files four issues that overlap in description domain
+
+**Evidence:** The four `eventbus_e2e` files are all about event-bus integrity patterns (audit drift, JS storage corruption, multi-protocol fanout, backfill rebuild). Filing one issue per file is deliberate per D-11. However, all four would likely be implemented together in a single eventbus sprint. This is a tooling choice, not a defect — the plan explicitly justifies the split to avoid the `holomush-ec22.9` lost-items pattern.
+
+### LOW — 09-06 does not mention that `f.log` is already injectable
+
+**Evidence:** `internal/eventbus/history/plugin_downgrade_fence.go:81` exports `WithFenceLogger(log *slog.Logger)`, `:141` stores it as `log *slog.Logger`, `:172` defaults to `slog.Default()`. The plan says "If the fence's logger is not currently injectable from a test, add the narrowest possible seam" — but it already IS injectable. This is a minor inaccuracy but doesn't affect correctness; the plan's action to capture log records from a test would use `WithFenceLogger` with a test handler.
+
+---
+
+## 4. Suggestions
+
+1. **09-20 Task 3: Correct the admin-boot finding.** The plan should record that `resetpassword --kick` IS an admin session-boot entry point, but driving it from the harness requires admin wiring (`RegisterAdmin` with full deps) that the narrow compiled-in option does not provide. The matrix row should be dispositioned as `not-implementable-from-harness-defaults` with the `resetpassword --kick` path cited, or the harness should be extended with an admin deps option. Either is a valid scope decision; "no entry point" is not accurate.
+
+2. **09-01: Document an escalation path in the STOP CONDITION.** Add a single sentence: "If both hypotheses fail, file an issue with the diagnostic evidence, skip the e2e-coverage-dependent QUAL-02 verification (09-17, 09-19 Task 1), and deliver QUAL-02 through the unit-lane-only measurement that 09-10 Task 1 records — recording the e2e gap as a tracked follow-up." This makes the stop condition actionable rather than blocking.
+
+3. **09-07 Task 3: Verify the `natstest` entry is actually present in the deny list before adding `integrationtest`.** The plan correctly notes the meta-test omits `natstest`. During execution, confirm with `rg` before editing — the plan says "While there, add the one currently-denied package the meta-test omits" which is the right action.
+
+4. **All plans using `coverage-e2e.out`: Consider that `task test:e2e:cover` requires Docker and the instrumented build (`docker:build:cover`), which may be unavailable on the executor's machine.** Several plans' verification gates reference `coverage-e2e.out` or `task test:e2e:cover`. The executor's local environment determines whether these gates can run. The RESEARCH.md's "Environment Availability" table correctly notes Docker is available, but individual plan gates may fail if Docker is unavailable mid-execution.
+
+---
+
+## 5. Risk Assessment
+
+**OVERALL: MEDIUM**
+
+The plan quality is in the top 5% of plans I have reviewed — the verification gate construction, the research-driven scope correction, and the harness-claim verification are all first-rate. The blocking findings are narrow and fixable:
+
+- **F1 (HIGH):** 09-20's administrator-boot claim is falsified. Fix: recategorize the finding to note `resetpassword --kick` exists but needs admin wiring. One plan, one task, one paragraph change.
+
+- **F2 (MEDIUM):** 09-01's single-point-of-failure for the QUAL-02 measurement chain remains as flagged by the prior review. Fix: add a documented fallback path to the STOP CONDITION. One plan, one sentence addition.
+
+Neither finding requires rewriting plans or restructuring the wave graph. Both are addressable before the first task executes. Once addressed, this phase is ready.
+
+**Additional risk:** The phase's scope is aggressive (21 plans, ~10 waves) and the ACE sweep alone touches ~114 files. The risk of merge conflicts with concurrent branches is real (D-08/D-10 flag this). However, the `gsd/v0.12-milestone` branch is the single remaining phase, so concurrent work is unlikely.
+
+**Key insurance:** The plans have three built-in circuit breakers: the GATE 1 sizing check (78.28% > 70%), the GATE 2 re-scope release valve (1,106 → 114), and the 09-01 STOP CONDITION. All three are correctly wired and would fire before wasted work. The admin-boot finding is the only one that would fire *during* execution rather than *before* it.
 
 ---
 
 ## Consensus Summary
 
-The two lanes reached **opposite verdicts** — codex HIGH / not-ready, kimi-k3 LOW-to-MEDIUM. The divergence is not noise, and resolving it is the main output of this review. The orchestrator independently verified the load-bearing findings from both lanes against source; all citations below were re-checked, not relayed.
+**All three prompt-fed lanes returned NOT READY.** No lane had repo-access
+problems; every finding below is grounded at `path:line` and the orchestrator
+independently re-verified each HIGH against source before recording it here.
 
-### Why the lanes disagree — a wrong grep pattern produced a confident false negative
+The lanes' HIGH findings barely overlap — codex audited release-control and
+lifecycle semantics, pi and opencode audited assumption-block factuality. A
+single-lane round would have missed four or five real defects regardless of which
+lane ran.
 
-kimi-k3's Strengths list asserts: *"The harness helper inventory for QUAL-04 is fully accurate… `rg 'panic("TODO'` over the package returns zero hits."*
+### Agreed Strengths
 
-That command does return zero hits. But the blocker codex found is:
+Raised by 2+ reviewers, each independently verified:
+
+- **The anti-vacuity shell-gate hardening is genuine engineering, not decoration**
+  (codex, pi, opencode). pi reproduced all three guarded failure modes live:
+  `rg -c f1 f2 | wc -l` counts files not matches; `go test -run NoMatch` exits 0
+  printing `[no tests to run]`; piping into `rg -q` under `pipefail` yields exit
+  141 (SIGPIPE). The chosen `rg -c … >/dev/null` and PASS-line-grep forms
+  correctly mitigate each. codex confirms the PASS-line assertions at
+  `09-12-PLAN.md:148` and `09-18-PLAN.md:226`.
+- **09-20's four harness-seam claims are all exactly correct** (codex, pi,
+  opencode): `OpenTelnetSession` fatal at `session.go:875-878`; `attach`
+  hardcodes `ClientType: "terminal"` (~`:458`); `EmitDirectEvent` takes no
+  timestamp at `:770`; `ExpireSession` writes `status='expired'`
+  (`harness.go:995-1003`) while the reaper selects `status='detached'`
+  (`session_store.go:447`). The negative-demonstration requirement ("a smoke spec
+  that fails without the seam") is the right assurance posture.
+- **The #4793 ABAC sentinel inventory is 100% accurate** (codex, pi, opencode):
+  all seven sites at `location.go:72,80`, `object.go:117,125,133`,
+  `property.go:93,102`; `character.go:139` and `stream.go:40-48` are genuine
+  already-fixed reference forms.
+- **Live coverage figures are real evidence, not restated assumption** (pi
+  re-queried `api.codecov.io` and matched exactly: 78.28% project, 64.25%
+  `cmd/holomush`, 76.23% `internal/tls`, **0.0% e2e flag**).
+
+### Agreed Concerns
+
+**C-1 · HIGH · 2 of 3 lanes (pi, opencode) · orchestrator-confirmed —
+`09-20-PLAN.md:21`'s "no administrator-boot entry point" assumption is FALSE.**
+
+`resetpassword --kick` is a real, capability-gated, already-tested admin
+session-termination path:
+
+| Evidence | Location |
+| --- | --- |
+| usage string declares `--kick` | `internal/command/handlers/resetpassword.go:27` |
+| capability `{admin, session, ScopeGlobal}` | `resetpassword.go:35` |
+| `--kick` requires admin on session | `resetpassword.go:111,124` |
+| terminates sessions for all player characters | `resetpassword.go:197-218` |
+| `DeleteByCharacter` per character | `resetpassword.go:209` |
+| unit test `"reset with --kick terminates game sessions"` | `resetpassword_test.go:163` |
+
+The plan's own text names the error: *"the admin registration adds
+account-management commands, not a boot."* `resetpassword` **is** an
+account-management command that also boots sessions. The search looked for the
+token `boot` and found only a proto comment; the capability is spelled `kick`.
+
+pi adds the load-bearing nuance: `--kick` deletes the row via raw `DELETE`
+(`session_store.go:813-827`) **without** the `RecordBootedSession` /
+`session_ended` path (`internal/grpc/command_handler.go:307-350`). So it is not a
+perfect match for the matrix's "Admin boot → row deleted" semantics — but it is
+unambiguously a real entry point, and the plan must discuss it rather than assert
+none exists.
+
+*Impact:* 09-20 records `not-implementable` for a drivable row; 09-12/09-14/09-16
+propagate that disposition into the committed matrix registry; a needless "no
+entry point" issue gets filed. That is precisely the overstated-assurance failure
+mode this phase exists to eliminate.
+
+*Aggravating factor:* `09-20-PLAN.md:234` pre-loads the conclusion ("which is
+what the current tree indicates"), anchoring an executor who re-searches at
+execution time.
+
+**C-2 · HIGH · codex · orchestrator-confirmed — 09-19's `totals.sessions >= 3`
+gate contradicts the repository's own authoritative config and is likely
+unsatisfiable.**
+
+`.codecov.yml:12-20` states verbatim that the three uploads **de-duplicate to two
+sessions**, and that `after_n_builds: 2` matches that count while *"3 would
+block."* Yet `09-19-PLAN.md:107` requires `sessions >= 3` while `:145` preserves
+`after_n_builds: 2` as load-bearing. At least one premise is wrong.
+
+Two independent corroborations that the gate cannot pass as written: pi's live
+API query returns **e2e flag = 0.0%**, and the project's own prior finding records
+`sessions: 2` on the merge commit `497748c6d` despite a green E2E job. The e2e
+coverage upload lands empty — so a third session may never materialise.
+
+**C-3 · HIGH · codex · orchestrator-confirmed, with a correction — 09-CONTEXT.md
+contradicts the plans on the coverage target.**
+
+`09-CONTEXT.md:44` still reads **70%** (and D-03 as originally locked), while
+`09-01-PLAN.md:48` and `09-10-PLAN.md:44` target **80%** and remove the existing
+`cmd/holomush` ignores.
+
+> **Orchestrator correction — do NOT re-litigate this.** codex proposes a new
+> user decision checkpoint. That is the wrong remedy: the user **did** make these
+> calls during the planning session (80% + `threshold: 0%`, and un-ignoring
+> `cmd/holomush` core.go + sub_grpc.go), after the sizing gate falsified the
+> ~54.6% premise. The defect is that **CONTEXT.md was never updated to record
+> decisions already taken** — a record-keeping gap, not an unauthorised re-scope.
+> The fix is to amend D-02/D-03 in CONTEXT.md, not to re-ask.
+
+The same applies to the D-09 ACE predicate: the tightened single-token-tail
+predicate (~114 hits, down from 1,106 literal) was a user decision, not a plan's
+unilateral re-scope. Record it.
+
+**C-4 · HIGH · codex · not independently re-verified — Ginkgo `DeferCleanup`
+scope would stop the shared harness after the first spec.**
+
+`09-12-PLAN.md:197` proposes starting the process-wide harness lazily and
+registering `DeferCleanup` at the call site. codex read Ginkgo v2.32's source
+(`core_dsl.go:872`): `DeferCleanup` registered from `It`/`BeforeEach` fires when
+**that spec** ends; suite-scoped cleanup requires registration from
+`BeforeSuite`. A once-guarded lazy accessor first called inside a spec therefore
+hands a **stopped** server to every later spec. The suite already has a suitable
+`BeforeSuite`/`AfterSuite` (`session_persistence_suite_test.go:57`).
+
+*Flagged as needing execution-time confirmation* — this is the one HIGH the
+orchestrator did not re-verify against Ginkgo's source.
+
+**C-5 · HIGH · codex — late `.codecov.yml` edits may be verified against a stale
+PR head SHA.**
+
+09-21 performs the only unconditional push + CI wait (`09-21-PLAN.md:95`). 09-17
+may then edit `.codecov.yml` (`:146`) but its gate queries whatever SHA the PR
+currently exposes (`:171`). 09-19 makes a further local change before the ruleset
+checkpoint, and mandates a push only when the branch is *behind main* — not when
+local HEAD is *ahead of* the PR head (`09-19-PLAN.md:206`). This permits
+observing stale remote configuration, then mutating branch protection on that
+basis. codex's suggested assertion is sound:
+`test "$(git rev-parse HEAD)" = "$(gh pr view … --jq .headRefOid)"`.
+
+**C-6 · MEDIUM · codex + opencode — 09-01 is a single point of failure with an
+unactionable stop condition.** A blocked 09-01 transitively blocks 09-02, 09-10,
+09-17, 09-19 — i.e. all of QUAL-02. The STOP CONDITION says escalate after two
+attempts but names no escalation path, re-scope trigger, or alternative
+measurement chain. opencode proposes concrete fallback text.
+
+### Other findings worth carrying
+
+- **MEDIUM** (codex) — the move-matrix row claims production behaviour while
+  bypassing the production movement pipeline; either drive
+  `world.Service.MoveCharacter` or relabel the cell honestly.
+- **MEDIUM** (codex) — `09-18-PLAN.md:6` declares five dependencies while `:46`
+  claims every test-touching plan is listed; 09-05/09-06/09-10 alter tests and
+  are absent. Wave ordering masks it, but the last-mover guarantee is not encoded
+  in the graph.
+- **MEDIUM** (opencode) — `test/meta/depguard_config_test.go:24-31` pins 3 of the
+  4 packages denied at `.golangci.yaml:149-156` (`natstest` missing). *09-07 Task
+  3 already catches and fixes this* — recorded as evidence of plan quality, not a
+  defect.
+- **MEDIUM** (pi) — `TestGatewayCommand_SecureCookiesFlag`
+  (`cmd/holomush/gateway_test.go:552`) may itself trip 09-18's tightened ACE
+  predicate, and 09-04 adds a sibling with the same naming risk; neither plan
+  flags it.
+- **LOW** (codex) — coverage probes at `09-08-PLAN.md:87` and `09-10-PLAN.md:99`
+  pipe `go tool cover` into `tail -1` without `pipefail`; a failing producer is
+  masked by a succeeding `tail`.
+- **LOW** (opencode) — `09-06`'s fence logger is already injectable via
+  `WithFenceLogger` (`plugin_downgrade_fence.go:81`); the plan's "add a seam if
+  needed" hedge is unnecessary.
+- **LOW** (pi) — 09-15 Task 3's new spec should carry `// Verifies:
+  INV-PRIVACY-6` to match its sibling at `privacy_test.go:29`.
+- **LOW** (pi) — 09-05's `depends_on: ["09-01"]` looks like wave convention
+  rather than a functional dependency; say which.
+
+### Divergent Views
+
+- **09-17's codecov assumption block.** pi rates it a **strength** — it
+  independently sampled 3 merged Go-changing PRs and confirmed `codecov/patch`
+  posts only on merge commits, never on heads, validating the deadlock diagnosis.
+  codex rates the surrounding 09-17/09-19 sequencing a **HIGH** risk. These are
+  not in conflict: pi validated the *assumption*, codex faulted the *gate and its
+  ordering*. Both stand.
+- **Severity of the admin-boot finding.** opencode calls the row "still
+  reasonably `not-implementable` without admin harness wiring" (`RegisterAdmin`
+  panics on nil deps, `register.go:14-23`); pi argues the row is drivable and the
+  disposition must change. Resolution: the *disposition wording* must change
+  either way — "no entry point exists" is false; "not implementable from harness
+  defaults without admin wiring, see `resetpassword --kick`" is true.
+
+---
+
+## Orchestrator Notes
+
+### Round 1 → Round 2 delta
+
+None of round 1's six blockers were re-raised as open by any lane. The replan's
+fixes hold. Of the two premise corrections the replan made *beyond* round 1's
+findings:
+
+- **The `OpenTelnetSession` "stale TODO" correction stands.** The helper is still
+  `t.Fatalf` at `session.go:875-878`, but the TODO's *stated* blocker (Subscribe
+  goroutine wiring) is genuinely obsolete — `attach()` wires it. The replan
+  created `09-20-PLAN.md` to implement the seam. All three lanes confirm the
+  diagnosis.
+- **The admin-boot correction is WRONG** and is now C-1 above. It was introduced
+  *by the fix round*, and it is the third instance in this phase of one defect
+  class: **searching for a token instead of a capability.** (1) round 1's
+  `rg 'panic("TODO'` missed `t.Fatalf("...TODO...")`; (2) `go test -run <pat>`
+  exits 0 when nothing matches; (3) searching `boot` missed `--kick`. Each was
+  introduced while fixing the previous one.
+
+### Lane-integrity incident (method finding)
+
+The cursor lane failed **twice, both times exit 0**, in two different signatures:
+
+1. stale flags (`--mode`/`--trust` no longer exist) → **empty** output, exit 0;
+2. unauthenticated → **2322 bytes of ASCII sign-in splash**, exit 0.
+
+The GSD review workflow's guard for this lane is `[ ! -s file ]`. Failure (2)
+**passes that guard** — a terminal logo would have been written into REVIEWS.md
+and counted as a review. Emptiness and exit codes are both unreliable signals for
+CLI-lane health; only *content shape* distinguishes a review from a splash
+screen. Worth hardening in the workflow.
+
+### Recommended next step
+
+Targeted replan, not a from-scratch one. C-1 through C-5 are localised:
+
+| Finding | Plans to amend |
+| --- | --- |
+| C-1 admin-boot | 09-20 (assumption + Task 3), 09-14, 09-12, 09-16 |
+| C-2 codecov sessions | 09-19 |
+| C-3 CONTEXT record | 09-CONTEXT.md (D-02, D-03, D-09) |
+| C-4 Ginkgo scope | 09-12 |
+| C-5 stale SHA | 09-17, 09-19, 09-21 |
 
 ```
-internal/testsupport/integrationtest/session.go:876:
-    p.server.t.Fatalf("integrationtest.AuthedPlayer.OpenTelnetSession: TODO iwzt-16 — telnet transport differentiation requires Subscribe goroutine wiring")
+/gsd-plan-phase 9 --reviews
 ```
-
-`t.Fatalf(...)` is not `panic("TODO`. The query was wrong for the codebase's idiom, and the zero-hit result was read as proof of absence. **This is the same error 09-RESEARCH.md made** — it verified the eight helpers `holomush-izk0` happened to name, found no TODO panics among them, and concluded the harness was ready. Neither asked *"what does the telnet column actually require?"* and then checked that specific thing.
-
-kimi-k3's review is otherwise excellent and independently re-verified a great deal (coverage figures against the live codecov API, the seven ABAC sentinel sites, migration numbering, the 38-cell matrix recomputed from the archived JSONL, the 32-vs-25 `TestINV_*` count). Its verdict is wrong only because one query silently under-reported.
-
-### Verified blockers — all confirmed by the orchestrator against source
-
-| # | Finding | Source | Impact |
-|---|---|---|---|
-| B1 | `OpenTelnetSession` is TODO-fatal | `internal/testsupport/integrationtest/session.go:876` | The telnet column — which D-12 calls "the highest-value column" — has **no harness**. The sole `ClientType:` (`session.go:459`) is hardcoded `"terminal"`. Plan 09-14 promises a genuine telnet reconnect while modifying only a test file. |
-| B2 | `ExpireSession` cannot drive the reaper | `harness.go:995` sets `status='expired'`; `ListExpired` (`internal/store/session_store.go:446`) selects `WHERE status = 'detached' AND expires_at < now()` | An `ExpireSession`'d row is **never selected by the reaper**. "detach → ExpireSession → assert row deleted" would pass while proving nothing about production reaping. |
-| B3 | `quit` is not dispatchable by default | `harness.go:468-470`: *"otherwise it gets an empty registry (no commands registered)"* | 09-12 starts from harness defaults; 09-14 drives `quit` through `SendCommand`. Needs `WithInTreePlugins`, explicit compiled-in registration, or a dedicated termination driver. |
-| B4 | 09-17 / 09-19 need a PR the wave graph never creates | `git rev-parse @{u}` → *no upstream configured*; `gh pr list --head gsd/v0.12-milestone` → `[]` | Both plans require branch-side codecov reports and CI status rollups. No push/draft-PR checkpoint exists anywhere in waves 1–7. |
-| B5 | 09-17's own gates do not prove its deliverable | `09-17-PLAN.md:95`, `:138` | Task 1 lists three PR numbers without checking they changed Go or querying status rollups; no `pipefail`, so a failed `gh` is masked by a successful `head`. Task 2 confirms two config literals without observing either codecov context. Same defect class the internal checker already fixed twice. |
-| B6 | 09-07 mis-attributes its threat mitigation to depguard | `.golangci.yaml` deny list = `eventbustest`, `coretest`, `quarantinetest`, `natstest` — **not** `internal/testsupport/integrationtest` | 09-07 asserts depguard enforcement at `:102`, `:158`, `:164`, `:173`, including as a **threat-model mitigation** (T-09-07-01). The real protection is the `//go:build integration` tag. A threat model citing a control that does not exist is worse than one citing none. |
-
-B1–B5 are codex's; B6 is kimi-k3's. Neither lane found the other's.
-
-### Where both lanes agree
-- The security-polish plans (09-03 ABAC, 09-04 cookie default, 09-05 migration, 09-06 audit drop) are soundly designed and correctly grounded.
-- The two sizing-gate overrides (coverage target already met; ACE predicate tightened to ~114) are correctly justified and independently reproducible.
-- 09-19 Task 1's codecov gate is genuinely fail-closed — kimi-k3 confirmed it exits 1 against `main` today, at the first sub-check.
-- The meta-test ratchets (09-16 bijection, 09-18 AST naming) follow the `test/meta/quarantine_registry_test.go` precedent correctly, and the seed-a-violation-then-restore discipline is the right way to prove a ratchet is load-bearing.
-- 19 plans is large but proportionate — kimi-k3's analysis is that the phase does five structurally distinct things that do not decompose further without conflating review surfaces (ABAC / crypto / migration / security-default / ACE-naming).
-
-### Non-blocking items worth folding in
-- **MEDIUM (codex):** `test:e2e:cover` neither removes `coverage-e2e.out` before running nor propagates `covdata textfmt` failure (`Taskfile.yaml:242,250`) — a failed conversion can leave a stale non-empty profile that satisfies the new emptiness check.
-- **MEDIUM (codex):** 09-05 verifies only `task test:int`, proving the up migration applies but not that the down migration removes the index. `Migrator.Steps` (`internal/store/migrate.go:106`) and the precedent at `migrations_audit_shape_integration_test.go:109` support a real round-trip test.
-- **MEDIUM (codex):** 09-12 verifies file existence + lint (`:113`), not 38 populated rows / 10 `n/a` / uniqueness — and downstream plans consume that registry before 09-16 validates it. 09-11 reintroduces `rg -c | wc -l` (`:95`).
-- **MEDIUM (kimi-k3):** 09-01 is the tracer for the whole phase and has no documented fallback or re-scope trigger if neither root-cause hypothesis holds. The entire QUAL-02 chain (09-10, 09-17, 09-19) is transitively blocked on it.
-- **MEDIUM (kimi-k3):** 09-19 Task 3's ruleset edit races the mandatory pre-push rebase in `landing-the-plane.md` — a force-push after the edit requires both coverage statuses to re-post on the new SHA before merge is possible.
-- **LOW (codex):** `files_modified` drift — 09-07 omits the privacy suite (`:7`); 09-18 lists only its meta-test despite renaming ~114 files (`:7`). 09-18's "every old name disappears anywhere in the repository" (`:175`) conflicts with recording old names in its own committed summary.
-- **LOW (kimi-k3):** CONTEXT.md `:263` and DISCUSSION-LOG `:253` name the branch `gsd/v0.12-foundation-hardening`; the actual branch is `gsd/v0.12-milestone` (the worktree directory carries the old name).
-
-### Orchestrator verdict: NOT READY — replan required
-
-B1–B3 are the substantive ones: **QUAL-04's telnet, reaper/TTL, and termination rows have no working harness seam**, and three plans (09-13, 09-14, 09-15) are written as though they do. Executing unchanged would either stall in waves 3–4 or — worse — substitute a `"terminal"`-labelled session for a telnet one and an `ExpireSession` row-poke for a reaper sweep, producing green specs that prove nothing. That is precisely the assurance theatre this phase exists to eliminate.
-
-The replan should:
-1. Insert a **QUAL-04 harness-prerequisite plan** before 09-12: parameterize attach by client type and implement `OpenTelnetSession`; add a detached-past-expiry seam that drives the real reaper (or reframe those rows to use `Server.Pool()`/session store directly per `harness.go:1286`); decide how quit/logout/admin-boot are driven through production entry points. Verify each seam independently before populating the matrix.
-2. Add a **push / draft-PR checkpoint** before 09-17, and sequence 09-19's operator action strictly after the final pre-push rebase.
-3. Rewrite **09-17's gates** to require both exact codecov contexts on real Go-changing PRs, treating API errors and missing contexts as failures.
-4. Fix **09-07's threat model** — either add `internal/testsupport/integrationtest` to the depguard deny list (stronger, cheap) or re-attribute the mitigation to the build tag.
-5. Fold in the MEDIUMs above; correct `files_modified` and the branch-name drift.
-
-**Method note for the next reviewer.** Every miss in this round — research's, kimi-k3's, and the internal plan-checker's — has the same shape: a query that resolves cleanly while answering a narrower question than the one that mattered. Citations resolved (18/18). No `panic("TODO` existed. Both were true and neither established that the harness could do what the plans assumed. When verifying a capability, name the capability first and check *that*; do not verify a list someone else drew up and infer coverage from it.
