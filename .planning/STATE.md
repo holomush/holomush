@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-07-26T17:39:14.853Z"
+stopped_at: Completed 09-04-PLAN.md
+last_updated: "2026-07-26T17:55:51.143Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 48
+  completed_plans: 49
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 4 of 21
+Plan: 5 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -133,6 +133,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P01 | 55min | 2 tasks | 3 files |
 | Phase 09 P02 | 35min | 3 tasks | 0 files |
 | Phase 09 P03 | 22 | 2 tasks | 6 files |
+| Phase 09 P04 | ~15min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -247,6 +248,10 @@ the next milestone yet.
 - [Phase ?]: 09-02: two of the three ec22.9 residue items had drifted — addlicense is RESOLVED (replaced by license-eye pinned v0.8.0; lefthook.yaml deleted) and the write-timeout ask was documentation not a timeout (http2 WriteByteTimeout already covers write liveness; adding http.Server.WriteTimeout would break streaming); issues re-scoped to what is true rather than filed at the stale framing
 - [Phase ?]: ABAC providers: unresolved optional attrs are omitted from the bag, never sentinel-valued (ADR holomush-ti1b) — all five providers now conform
 - [Phase ?]: 09-03: QUAL-05 left incomplete — carried jointly with 09-04/05/06
+- [Phase ?]: 09-04: gateway --secure-cookies default INVERTED to true (#4794 / arch-review D4 MEDIUM-1); flag name + koanf key unchanged, --secure-cookies=false is the documented opt-out; cookie.go/security_headers.go untouched (they already built the secure form and downgraded)
+- [Phase ?]: 09-04: the inversion is pinned at the config.Load level (real NewGatewayCmd -> koanf posflag -> fresh struct), not only at the pflag default — a GetBool assertion cannot see the plumbing between the flag and the running server (Rule 2)
+- [Phase ?]: 09-04: compose.yaml gateway now passes --secure-cookies=false (E2E overlay does NOT override command; PLAYWRIGHT_BASE_URL=http://gateway:8080 is non-localhost plain HTTP, where browsers drop Secure cookies); proven by task test:e2e:cover exit 0, 104 specs, 482 covered cmd/holomush statements
+- [Phase ?]: 09-04: QUAL-05 left Pending — it enumerates 5 Medium-cluster items and this plan delivers 1 (secure-cookie default); 09-05/09-06 carry the rest
 
 ### Pending Todos
 
@@ -279,14 +284,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-26T17:39:09.572Z
+Last session: 2026-07-26T17:55:35.959Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-03-PLAN.md
+Stopped at: Completed 09-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
