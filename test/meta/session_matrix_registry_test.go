@@ -140,6 +140,26 @@ var sessionMatrixMarkerRE = regexp.MustCompile(
 	`^[ \t]*//[ \t]*matrix-row:[ \t]*([a-z0-9]+(?:-[a-z0-9]+)*\.[a-z0-9]+(?:-[a-z0-9]+)*)[ \t]*$`,
 )
 
+// sessionMatrixSpecOpenRE matches a line that OPENS a RUNNING Ginkgo spec.
+//
+// It is a WHITELIST — the line must BEGIN with the constructor `It(` — and not
+// a substring test with a list of forms to reject. Ginkgo's pending
+// constructors (`XIt(`, `PIt(`) and its focused one (`FIt(`) all CONTAIN the
+// literal "It(", so `strings.Contains(next, "It(")` accepts every one of them.
+// A pending spec's body NEVER EXECUTES and a focused spec suppresses every
+// other spec in the suite, yet in either case the marker is still well-formed,
+// the bijection still holds, and test/session-matrix.yaml keeps advertising the
+// cell as spec-covered by a spec that runs nothing.
+//
+// That is structurally the same near-miss as `Skip(` matching inside `NotSkip(`
+// (the lesson 09-11 records, cited on sessionMatrixMarkerRE above), which is
+// exactly why this is phrased as "must begin with the running constructor"
+// rather than as `!Contains("It(") || Contains("XIt(") || ...`: a rejection
+// list has to be extended every time Ginkgo grows another prefix, and
+// forgetting to extend it fails silently. Requiring the identifier to start the
+// line cannot admit a prefixed variant at all.
+var sessionMatrixSpecOpenRE = regexp.MustCompile(`^[ \t]*It\(`)
+
 // sessionMatrixSelfPath is this file, excluded from the marker walk because its
 // regex literal and its examples are marker-shaped by construction: a walk that
 // read it would flag itself and invite the wrong fix. The registry file needs no
@@ -540,9 +560,11 @@ func scanSessionMatrixMarkers(t *testing.T, root string) sessionMatrixScan {
 			site := sessionMatrixMarkerSite{ID: m[1], File: rel, Line: i + 1}
 			scan.Markers = append(scan.Markers, site)
 
-			if next, ok := nextNonCommentLine(lines, i+1); !ok || !strings.Contains(next, "It(") {
+			if next, ok := nextNonCommentLine(lines, i+1); !ok || !sessionMatrixSpecOpenRE.MatchString(next) {
 				scan.Misplaced = append(scan.Misplaced,
-					fmt.Sprintf("%s claims %q but the next non-comment line is %q",
+					fmt.Sprintf("%s claims %q but the next non-comment line is %q, which does not "+
+						"OPEN a running Ginkgo spec (a pending XIt/PIt or focused FIt line "+
+						"contains \"It(\" but is not one)",
 						site.where(), site.ID, strings.TrimSpace(next)))
 			}
 		}
