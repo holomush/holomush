@@ -489,11 +489,13 @@ func TestSessionMatrixCitedSpecTextAppearsInTheCitedFile(t *testing.T) {
 				row.ID, cite.key, cite.ptr.File)
 
 			body := string(data)
-			require.Containsf(t, body, cite.ptr.Container,
-				"row %q cites %s.container %q, which does not appear in %s",
+			require.Truef(t, sessionMatrixCitationResolves(body, cite.ptr.Container),
+				"row %q cites %s.container %q, which does not appear in %s as a complete "+
+					"quoted string literal outside a comment",
 				row.ID, cite.key, cite.ptr.Container, cite.ptr.File)
-			require.Containsf(t, body, cite.ptr.Name,
-				"row %q cites %s.name %q, which does not appear in %s",
+			require.Truef(t, sessionMatrixCitationResolves(body, cite.ptr.Name),
+				"row %q cites %s.name %q, which does not appear in %s as a complete "+
+					"quoted string literal outside a comment",
 				row.ID, cite.key, cite.ptr.Name, cite.ptr.File)
 		}
 	}
@@ -505,6 +507,36 @@ func TestSessionMatrixCitedSpecTextAppearsInTheCitedFile(t *testing.T) {
 		checked,
 		"every `spec` and `covered-elsewhere` row MUST offer a resolvable citation; a "+
 			"lower count means a pointer failed to decode and was skipped rather than checked")
+}
+
+// sessionMatrixCitationResolves reports whether text appears in body as a
+// COMPLETE double-quoted string literal on a line that is not a whole-line
+// comment. It is how a `spec.container` / `spec.name` / `covered_by.*`
+// citation is resolved.
+//
+// A whole-file `Contains(body, text)` — what this used to be — resolves a
+// citation whose text survives only inside a comment or inside some longer
+// unrelated string. For the 32 `spec` rows the marker bijection backstops that;
+// for the 2 `covered-elsewhere` rows this is the ONLY check standing between
+// the registry and a coverage claim backed by prose. Requiring the surrounding
+// quotes means the citation has to name the Ginkgo container/spec label
+// verbatim, which is what the registry claims it does.
+//
+// Deliberately not a full Go parse: the labels cited are plain interpreted
+// string literals with no escapes (verified across all 34 pointers), so line
+// scanning is sufficient and keeps the failure message pointing at a file and
+// a citation rather than at a parse error.
+func sessionMatrixCitationResolves(body, text string) bool {
+	needle := `"` + text + `"`
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+			continue
+		}
+		if strings.Contains(line, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 // scanSessionMatrixMarkers walks the repository's Go sources once and returns
