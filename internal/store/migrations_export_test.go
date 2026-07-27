@@ -17,7 +17,7 @@ package store
 func MigrationSQLForTest(name string) (string, error) {
 	data, err := migrationsFS.ReadFile("migrations/" + name)
 	if err != nil {
-		return "", err //nolint:wrapcheck // test-only accessor; the caller asserts on the raw fs error
+		return "", err
 	}
 	return string(data), nil
 }
