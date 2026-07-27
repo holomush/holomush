@@ -36,7 +36,7 @@ func TestCORS_BlockedOrigin(t *testing.T) {
 	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
 }
 
-func TestCORS_Preflight(t *testing.T) {
+func TestCORSMiddlewareAnswersPreflightWithNoContentAndTheAllowedHeaders(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -52,7 +52,7 @@ func TestCORS_Preflight(t *testing.T) {
 	assert.Contains(t, rec.Header().Get("Access-Control-Allow-Headers"), "Cookie")
 }
 
-func TestCORS_NoOrigins_Passthrough(t *testing.T) {
+func TestCORSMiddlewareSetsNoAllowOriginWhenNoOriginsAreConfigured(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

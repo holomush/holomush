@@ -38,7 +38,7 @@ func TestFileServer_Embedded_SPAFallback(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "<!doctype html>")
 }
 
-func TestFileServer_Override(t *testing.T) {
+func TestFileServerServesIndexFromTheOverrideDirectory(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, writeTestFile(dir, "index.html", "<h1>Custom Build</h1>"))
 	handler := FileServer(dir)
@@ -60,7 +60,7 @@ func TestFileServer_Override_SPAFallback(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "Custom SPA")
 }
 
-func TestFileServer_MissingAsset_Returns404(t *testing.T) {
+func TestFileServerReturns404ForAnAssetThatDoesNotExist(t *testing.T) {
 	handler := FileServer("")
 	req := httptest.NewRequest(http.MethodGet, "/missing.js", nil)
 	rec := httptest.NewRecorder()

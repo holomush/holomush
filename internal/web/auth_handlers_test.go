@@ -33,7 +33,7 @@ func requestWithToken[T any](msg *T, token string) *connect.Request[T] {
 
 // --- playerTokenFromHeader ---
 
-func TestPlayerTokenFromHeader_Present(t *testing.T) {
+func TestPlayerTokenFromHeaderReturnsTheTokenWhenTheInjectHeaderIsSet(t *testing.T) {
 	h := http.Header{}
 	h.Set(headerInjectSessionToken, "tok-abc")
 	token, err := playerTokenFromHeader(h)
@@ -41,7 +41,7 @@ func TestPlayerTokenFromHeader_Present(t *testing.T) {
 	assert.Equal(t, "tok-abc", token)
 }
 
-func TestPlayerTokenFromHeader_Missing(t *testing.T) {
+func TestPlayerTokenFromHeaderReturnsUnauthenticatedWhenTheHeaderIsAbsent(t *testing.T) {
 	h := http.Header{}
 	token, err := playerTokenFromHeader(h)
 	assert.Empty(t, token)
@@ -51,7 +51,7 @@ func TestPlayerTokenFromHeader_Missing(t *testing.T) {
 	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 }
 
-func TestPlayerTokenFromHeader_Empty(t *testing.T) {
+func TestPlayerTokenFromHeaderReturnsUnauthenticatedWhenTheHeaderIsEmpty(t *testing.T) {
 	h := http.Header{}
 	h.Set(headerInjectSessionToken, "")
 	token, err := playerTokenFromHeader(h)
@@ -167,7 +167,7 @@ func TestWebSelectCharacterReturnsSessionIDAndCharacterNameOnSuccess(t *testing.
 	assert.False(t, resp.Msg.GetReattached())
 }
 
-func TestWebSelectCharacter_Reattached(t *testing.T) {
+func TestWebSelectCharacterForwardsTheReattachedFlagFromCore(t *testing.T) {
 	client := &mockCoreClient{
 		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,

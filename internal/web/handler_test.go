@@ -250,7 +250,7 @@ func (m *mockCoreClient) RefreshConnection(_ context.Context, req *corev1.Refres
 	return m.refreshConnectionResp, m.refreshConnectionErr
 }
 
-func TestHandler_SendCommand_Success(t *testing.T) {
+func TestSendCommandReturnsSuccessWhenCoreAcceptsTheCommand(t *testing.T) {
 	client := &mockCoreClient{
 		cmdResp: &corev1.HandleCommandResponse{
 			Success: true,
@@ -266,7 +266,7 @@ func TestHandler_SendCommand_Success(t *testing.T) {
 	assert.True(t, resp.Msg.GetSuccess())
 }
 
-func TestHandler_Disconnect_Success(t *testing.T) {
+func TestDisconnectReturnsAResponseWhenCoreAcceptsTheDisconnect(t *testing.T) {
 	client := &mockCoreClient{
 		discResp: &corev1.DisconnectResponse{Success: true},
 	}
@@ -293,7 +293,7 @@ func TestHandler_Disconnect_RPCError(t *testing.T) {
 	assert.NotNil(t, resp.Msg)
 }
 
-func TestHandler_GetCommandHistory_Success(t *testing.T) {
+func TestGetCommandHistoryReturnsTheCommandsRecordedForTheSession(t *testing.T) {
 	client := &mockCoreClient{
 		cmdHistory: []string{"look", "say hello", "go north"},
 	}
