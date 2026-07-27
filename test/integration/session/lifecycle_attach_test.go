@@ -172,6 +172,63 @@ var _ = Describe("Reattach within TTL through the character-selection path", fun
 		ts = lifecycleHarness()
 	})
 
+	// matrix-row: reattach-select.web-guest
+	//
+	// The cell this spec covers was blocked until Server.GuestPlayer existed,
+	// and the block was real rather than fussy: Server.ConnectGuest mints a NEW
+	// guest player and character on every call, so the only stand-in available
+	// was "connect a second guest" — which satisfies every assertion about
+	// identifiers and timestamps trivially, without any reattach having
+	// happened. GuestPlayer re-enters the production SelectCharacter path with
+	// the SAME guest's bearer token instead, so the reattach branch is genuinely
+	// taken. The character-identity assertion below is what pins that: a second
+	// guest would fail it.
+	It("returns the same guest session with its arrival and guest identity floors unchanged", func() {
+		guest := ts.GuestPlayer(ctx)
+
+		first := guest.OpenWebSession(ctx)
+		originalID := first.SessionID
+		originalArrival := first.LocationArrivedAt
+		Expect(first.Reattached).To(BeFalse(), "precondition: the first selection creates the session")
+
+		firstInfo, err := ts.SessionStore().Get(ctx, originalID)
+		Expect(err).NotTo(HaveOccurred(), "the guest session row MUST be readable")
+		// Unset round-trips as the UNIX EPOCH here, not Go's zero time, so
+		// NotTo(BeZero()) would pass on an unset floor. Comparing to the
+		// session's own creation instant pins a real one.
+		Expect(firstInfo.GuestCharacterCreatedAt).To(BeTemporally("~", firstInfo.CreatedAt, time.Minute),
+			"precondition: INV-PRIVACY-2 — this MUST genuinely be a guest session, or the guest "+
+				"column is covered by a registered player under a guest-sounding name")
+
+		first.DetachTransport(ctx)
+		detached, err := ts.SessionStore().Get(ctx, originalID)
+		Expect(err).NotTo(HaveOccurred(), "the detached guest session row MUST survive its TTL window")
+		Expect(detached.Status).To(Equal(session.StatusDetached),
+			"precondition: dropping the transport MUST detach rather than delete the session")
+
+		second := guest.OpenWebSession(ctx)
+		DeferCleanup(func() { second.Logout(ctx) })
+
+		Expect(second.Reattached).To(BeTrue(),
+			"the second selection MUST take SelectCharacter's reattach branch")
+		Expect(second.SessionID).To(Equal(originalID),
+			"a guest reattach within the TTL MUST resume the SAME session, never mint a second one")
+		Expect(second.CharacterID).To(Equal(guest.CharacterID),
+			"the returning guest MUST resume its OWN character — this is the assertion a "+
+				"second-guest stand-in could not satisfy, and the reason this cell waited for a "+
+				"seam that re-selects the same guest")
+
+		info, err := ts.SessionStore().Get(ctx, originalID)
+		Expect(err).NotTo(HaveOccurred(), "the reattached guest session row MUST be readable")
+		Expect(info.Status).To(Equal(session.StatusActive),
+			"reattaching MUST return the session to active")
+		Expect(info.LocationArrivedAt).To(BeTemporally("==", originalArrival),
+			"I-PRIV-3 / INV-PRIVACY-3: reattach MUST leave the location arrival timestamp unchanged")
+		Expect(info.GuestCharacterCreatedAt).To(BeTemporally("==", firstInfo.GuestCharacterCreatedAt),
+			"INV-PRIVACY-2: the guest identity floor MUST survive the reattach unchanged — a "+
+				"moved floor would mean the session was rebound to a different guest identity")
+	})
+
 	// matrix-row: reattach-select.web-char
 	It("returns the same session identifier with the location arrival timestamp unchanged", func() {
 		player := ts.AuthedPlayer(ctx, "ReselectRhea")

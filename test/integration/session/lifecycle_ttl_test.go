@@ -351,6 +351,105 @@ var _ = Describe("Logging in again after expiry produces a genuinely fresh sessi
 		ts = lifecycleHarness()
 	})
 
+	// matrix-row: post-ttl-relogin.web-guest
+	//
+	// The guest arm of the same INV-PRIVACY-1 question, and the cell that was
+	// blocked until Server.GuestPlayer existed. The block mattered: with only
+	// Server.ConnectGuest available, the sole stand-in was a SECOND guest, which
+	// would satisfy "different session identifier" and "later arrival timestamp"
+	// with no expiry involved and nothing for the reaper to have done — a spec
+	// that passes whether or not the transition works. This one takes the SAME
+	// guest character through detach, expiry and a real reaper sweep, then logs
+	// it in again on its own bearer token.
+	//
+	// Guest sessions carry a second floor, the INV-PRIVACY-2 guest identity
+	// overlay, which streamScopeFloor applies only when it is LATER than the
+	// arrival floor (internal/grpc/scope_floor.go:61-64). The guest character is
+	// created before either session, so the arrival floor governs both reads —
+	// and asserting the guest floor is UNCHANGED across the re-login while the
+	// arrival floor MOVED is what shows this is the same guest coming back
+	// rather than a new one.
+	It("mints a new guest session whose history floor excludes an event the expired session could read", func() {
+		guest := ts.GuestPlayer(ctx)
+
+		first := guest.OpenWebSession(ctx)
+		firstID := first.SessionID
+		firstArrival := first.LocationArrivedAt
+		locStream := "location." + first.LocationID.String()
+
+		firstInfo, err := ts.SessionStore().Get(ctx, firstID)
+		Expect(err).NotTo(HaveOccurred(), "the guest session row MUST be readable")
+		guestFloor := firstInfo.GuestCharacterCreatedAt
+		// Unset round-trips as the UNIX EPOCH, not Go's zero time, so
+		// NotTo(BeZero()) would pass on an unset floor.
+		Expect(guestFloor).To(BeTemporally("~", firstInfo.CreatedAt, time.Minute),
+			"precondition: INV-PRIVACY-2 — this MUST genuinely be a guest session")
+		Expect(guestFloor).To(BeTemporally("<", firstArrival),
+			"precondition: the guest identity floor MUST sit below the arrival floor, so the "+
+				"arrival floor is what governs the reads below")
+
+		plantedAt := firstArrival.Add(time.Millisecond)
+		plantedID, err := first.EmitDirectEventAt(ctx, locStream,
+			"core-communication:pose", relogPayload(first.CharacterName), plantedAt)
+		Expect(err).NotTo(HaveOccurred(), "the timestamped emit MUST publish")
+
+		notAfterMs := time.Now().Add(time.Hour).UnixMilli()
+
+		liveFrames, err := first.QueryStreamHistoryBounded(ctx, locStream, notAfterMs)
+		Expect(err).NotTo(HaveOccurred(), "the first guest session MUST read its own location history")
+		Expect(frameIDs(liveFrames)).To(ContainElement(plantedID),
+			"precondition: the planted event MUST be readable by the session that was present for it")
+
+		detachAndExpectDetached(ctx, ts, first)
+		ts.DetachAndExpireSession(ctx, firstID, time.Now().Add(-time.Minute))
+		reapSessionAndExpectRowGone(ctx, ts, firstID)
+
+		second := guest.OpenWebSession(ctx)
+		DeferCleanup(func() { second.Logout(ctx) })
+
+		Expect(second.Reattached).To(BeFalse(),
+			"with the row swept there is nothing left to reattach to")
+		Expect(second.SessionID).NotTo(Equal(firstID),
+			"a guest re-login after expiry MUST mint a NEW session, not resurrect the reaped one")
+		Expect(second.CharacterID).To(Equal(guest.CharacterID),
+			"the returning guest MUST be the SAME character — this is the assertion a "+
+				"second-guest stand-in could not satisfy")
+		Expect(second.LocationArrivedAt).To(BeTemporally(">", firstArrival),
+			"INV-PRIVACY-1: the new session MUST carry a LATER arrival floor")
+
+		secondInfo, err := ts.SessionStore().Get(ctx, second.SessionID)
+		Expect(err).NotTo(HaveOccurred(), "the fresh guest session row MUST be readable")
+		Expect(secondInfo.GuestCharacterCreatedAt).To(BeTemporally("==", guestFloor),
+			"INV-PRIVACY-2: the guest identity floor is the CHARACTER's creation time, so it MUST "+
+				"be identical across the re-login; only the arrival floor moves")
+
+		Expect(plantedAt).To(BeTemporally(">", firstArrival),
+			"the planted event MUST sit above the expired session's floor")
+		Expect(plantedAt).To(BeTemporally("<", second.LocationArrivedAt),
+			"the planted event MUST sit below the new session's floor")
+
+		// Positive control on the fresh read — see the web-char spec for why a
+		// bare absence assertion would be satisfied by an empty read.
+		afterAt := second.LocationArrivedAt.Add(time.Millisecond)
+		afterID, err := second.EmitDirectEventAt(ctx, locStream,
+			"core-communication:pose", relogPayload(second.CharacterName), afterAt)
+		Expect(err).NotTo(HaveOccurred(), "the post-relogin emit MUST publish")
+
+		freshFrames, err := second.QueryStreamHistoryBounded(ctx, locStream, notAfterMs)
+		Expect(err).NotTo(HaveOccurred(), "the new guest session MUST query its location history")
+		freshIDs := frameIDs(freshFrames)
+
+		Expect(freshIDs).To(ContainElement(afterID),
+			"positive control: the new session's read MUST return the event emitted at %s, above "+
+				"its own floor of %s",
+			afterAt, second.LocationArrivedAt)
+		Expect(freshIDs).NotTo(ContainElement(plantedID),
+			"INV-PRIVACY-1: the event emitted at %s, before the new session arrived at %s, MUST NOT "+
+				"be readable by it — its presence means the re-login inherited the expired "+
+				"session's history floor",
+			plantedAt, second.LocationArrivedAt)
+	})
+
 	// matrix-row: post-ttl-relogin.web-char
 	//
 	// INV-PRIVACY-1 is the invariant with the security content here.

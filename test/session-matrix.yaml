@@ -113,13 +113,19 @@ rows:
   - id: reattach-select.web-guest
     transition: Reattach within TTL (SelectCharacter path)
     column: web-guest
-    disposition: planned
-    owed_by: "09-14"
-    blocked_on: >-
-      No harness seam re-runs SelectCharacter for a guest. Server.ConnectGuest performs CreateGuest and SelectCharacter in
-      one call and keeps the guest's player-session token unexported, and Server.AuthedPlayer — the handle that does allow
-      repeated OpenWebSession calls — creates a REGISTERED player. Covering this cell needs a guest equivalent of AuthedPlayer,
-      or an exported re-select on Session. #magic___^_^___line
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_attach_test.go
+      container: Reattach within TTL through the character-selection path
+      name: returns the same guest session with its arrival and guest identity floors unchanged
+    notes: >-
+      UNBLOCKED BY A NEW SEAM. This cell was planned/blocked_on through 09-12 and 09-13 because no harness route re-ran SelectCharacter
+      for the SAME guest: Server.ConnectGuest mints a new guest player and character on every call. 09-14 added Server.GuestPlayer
+      — the guest counterpart of Server.AuthedPlayer — which provisions the guest WITHOUT opening a session, so OpenWebSession/OpenTelnetSession
+      can be called repeatedly on the guest's own bearer token and the production reattach branch is genuinely taken. The
+      rejected stand-in was "connect a second guest", which satisfies every identifier and timestamp assertion trivially without
+      any reattach; the spec's CharacterID assertion is what a second guest could not satisfy, so the stand-in is excluded
+      by construction rather than by convention. #magic___^_^___line
   - id: reattach-select.web-char
     transition: Reattach within TTL (SelectCharacter path)
     column: web-char
@@ -186,11 +192,19 @@ rows:
     transition: Reattach within TTL (Subscribe.ReattachCAS)
     column: multi-session
     disposition: planned
-    owed_by: "09-14"
+    owed_by: unassigned
     blocked_on: >-
       integrationtest.Session models exactly one transport, and DetachTransport calls the production Disconnect RPC, which
       detaches the whole session rather than a single connection. Exercising a reattach while a sibling connection stays live
       needs per-connection detach in the harness. #magic___^_^___line
+    notes: >-
+      OWED BY NOBODY, DELIBERATELY. 09-12 assigned this cell to 09-14 on the assumption 09-14 would build the missing seam.
+      09-14 built the guest re-authentication seam (Server.GuestPlayer) that unblocked reattach-select.web-guest and post-ttl-relogin.web-guest,
+      but did NOT build per-connection detach: that is a third, larger seam — a second live Subscribe on one session, with
+      only one of the two connections dropped — and neither 09-14's tasks nor 09-20's carry it. 09-15 covers the move-arrival
+      and wifi-blip rows, so no remaining plan in this phase owns this cell. `owed_by` is therefore recorded as `unassigned`
+      rather than naming a plan that has already closed without covering it: a completed plan named as the ower is exactly
+      the false-assurance artifact this registry exists to prevent. This cell is a real, visible gap at phase end. #magic___^_^___line
   # --- Transition 4: detach all connections ------------------------------
   - id: detach-all.web-guest
     transition: Detach (drop all connections) -> status=Detached + TTL
@@ -273,16 +287,21 @@ rows:
   - id: post-ttl-relogin.web-guest
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
     column: web-guest
-    disposition: planned
-    owed_by: "09-14"
-    blocked_on: >-
-      Same missing seam as reattach-select.web-guest: no harness route logs a GUEST in again as the SAME character. Server.ConnectGuest
-      mints a NEW guest player and character on every call (CreateGuest then SelectCharacter, harness.go:1152-1190), Session.playerSessionToken
-      is unexported with no accessor, Server exposes no coreServer handle the test package could call SelectCharacter through,
-      and Server.AuthedPlayer creates a REGISTERED player. Connecting a second guest would satisfy "different session id,
-      later arrival timestamp" trivially, with no expiry involved and nothing for the reaper to have done — a spec that cannot
-      fail. Left planned rather than covered by that stand-in. Needs a guest equivalent of AuthedPlayer, or an exported re-select
-      on Session. #magic___^_^___line
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: Logging in again after expiry produces a genuinely fresh session
+      name: mints a new guest session whose history floor excludes an event the expired session could read
+    notes: >-
+      UNBLOCKED BY THE SAME SEAM as reattach-select.web-guest (Server.GuestPlayer, added by 09-14). The rejected stand-in
+      was "connect a second guest", which satisfies "different session id, later arrival timestamp" with no expiry involved
+      and nothing for the reaper to have done. This spec instead takes the SAME guest character through detach, expiry and
+      a real reaper sweep and logs it in again on its own bearer token. Guest-specific content beyond the web-char arm: the
+      INV-PRIVACY-2 guest identity floor is the CHARACTER's creation time, so it is asserted UNCHANGED across the re-login
+      while the INV-PRIVACY-1 arrival floor MOVED — the pair is what distinguishes the same guest returning from a new guest.
+      streamScopeFloor applies the guest overlay only when it is later than the arrival floor (internal/grpc/scope_floor.go:61-64),
+      and the spec asserts the guest floor sits BELOW the arrival floor as a precondition, so the arrival floor is demonstrably
+      what governs the reads. #magic___^_^___line
   - id: post-ttl-relogin.web-char
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
     column: web-char

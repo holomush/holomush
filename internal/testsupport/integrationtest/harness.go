@@ -1189,6 +1189,65 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 	return sess
 }
 
+// GuestPlayer provisions a guest player + starter character and returns an
+// AuthedPlayer handle for it, WITHOUT opening a game session.
+//
+// This is the guest counterpart of Server.AuthedPlayer, and it exists for the
+// same reason: ConnectGuest bundles provisioning and SelectCharacter into one
+// call, so there is no way to select the SAME guest character a second time.
+// Every guest re-authentication scenario — reattaching within the time-to-live,
+// or logging in again after the session expired and was reaped — needs exactly
+// that, because the transition under test is "this character comes back", and a
+// second ConnectGuest returns a DIFFERENT character.
+//
+// Why that distinction is load-bearing rather than cosmetic: a spec that
+// substituted a second guest would satisfy "different session identifier" and
+// "later arrival timestamp" trivially, with no expiry involved and nothing for
+// the reaper to have done. It would pass whether or not the transition worked.
+// The handle returned here re-enters the production SelectCharacter path with
+// the guest's own bearer token instead, so the reattach and fresh-session
+// branches are genuinely exercised.
+//
+// The returned handle drives the same OpenWebSession / OpenTelnetSession
+// methods as a registered player's, so guest and registered coverage differ
+// only in how the player was provisioned.
+//
+// Note what is NOT set: the game session's guest identity floor
+// (GuestCharacterCreatedAt, INV-PRIVACY-2) is written by production
+// SelectCharacter from the guest character's creation time, so it appears once
+// a session is opened. Session.Info.IsGuest stays false, deliberately, exactly
+// as it does for ConnectGuest (internal/grpc/auth_handlers.go:291-296).
+func (s *Server) GuestPlayer(ctx context.Context) *AuthedPlayer {
+	s.t.Helper()
+
+	resp, err := s.coreServer.CreateGuest(ctx, &corev1.CreateGuestRequest{})
+	require.NoError(s.t, err, "integrationtest.Server.GuestPlayer: CreateGuest RPC")
+	require.True(s.t, resp.GetSuccess(),
+		"integrationtest.Server.GuestPlayer: CreateGuest failed: %s", resp.GetErrorMessage())
+
+	charID, parseErr := ulid.Parse(resp.GetDefaultCharacterId())
+	require.NoError(s.t, parseErr, "integrationtest.Server.GuestPlayer: parse character ID")
+
+	// The guest's player ID is not on the CreateGuest response and no session
+	// row exists yet to read it from, so it is taken from the character row the
+	// guest service just wrote.
+	var playerIDStr string
+	require.NoError(s.t,
+		s.pool.QueryRow(ctx, `SELECT player_id FROM characters WHERE id = $1`, charID.String()).
+			Scan(&playerIDStr),
+		"integrationtest.Server.GuestPlayer: read guest player_id for character %s", charID)
+	playerID, playerParseErr := ulid.Parse(playerIDStr)
+	require.NoError(s.t, playerParseErr, "integrationtest.Server.GuestPlayer: parse player ID")
+
+	return &AuthedPlayer{
+		PlayerID:    playerID,
+		CharacterID: charID,
+		LocationID:  s.guestStartLocationID,
+		server:      s,
+		rawToken:    resp.GetPlayerSessionToken(),
+	}
+}
+
 // ConnectAuthed creates a named player+character and opens a game session.
 // The character is placed at the server's guest start location.
 func (s *Server) ConnectAuthed(ctx context.Context, charName string) *Session {
