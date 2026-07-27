@@ -32,18 +32,15 @@ import (
 
 // Verifies: INV-PRIVACY-6
 //
-// INV-PRIVACY-6 gate-bypass arm only: a character granted
-// read_unrestricted_history MUST bypass the INV-PRIVACY-1 location hard-gate.
+// INV-PRIVACY-6 gate-bypass arm: a character granted read_unrestricted_history
+// MUST bypass the INV-PRIVACY-1 location hard-gate.
 //
-// INV-PRIVACY-6 also asserts the floor-preservation arm — staff querying a
-// location they're not in still sees only events from their own
-// LocationArrivedAt forward. That arm requires emitting events with
-// controlled timestamps across the staff session's LocationArrivedAt
-// boundary; today's integrationtest harness can't do that (the dispatcher
-// is wired with an empty command registry, so SendCommand("say ...")
-// has nothing to invoke, and direct emit helpers that bypass the
-// command layer don't yet exist). The gate-bypass half is exercised
-// here; the floor-preservation half is tracked separately.
+// The complementary floor-preservation arm — staff querying a location they are
+// not in still see only events from their own LocationArrivedAt forward — is
+// asserted by the sibling block immediately below. It was previously untestable
+// here because it needs events placed at controlled instants either side of the
+// staff session's arrival, which the harness could not do; Session.EmitDirectEventAt
+// (added by plan 09-07) is that missing capability. Tracked as issue 4682.
 //
 // Per ADR wxty. The harness uses allowAllPolicyEngine which grants
 // read_unrestricted_history for all requests, exercising the
@@ -92,6 +89,131 @@ var _ = Describe("INV-PRIVACY-6 (gate-bypass arm): staff override bypasses the l
 			"response events must be a non-nil slice (empty is fine; locB has no history)")
 		Expect(events).To(BeEmpty(),
 			"locB has no events; response should be empty")
+	})
+})
+
+// Verifies: INV-PRIVACY-6
+//
+// INV-PRIVACY-6 floor-preservation arm — the second half of the invariant whose
+// gate-bypass half the block above asserts. The invariant reads: "ABAC staff
+// override bypasses the hard-gate location-match only, NOT the temporal floor."
+// The annotation is carried here because this spec asserts BOTH clauses in one
+// read: the query against a foreign location SUCCEEDS (the location match was
+// bypassed) and it returns only the event above the staff session's own arrival
+// floor (the temporal floor was not). Closes issue 4682.
+//
+// The production path is exactly the one the invariant is about. staffOverride
+// (internal/grpc/scope_floor.go:94-109) decides only whether the hard-gate is
+// skipped; the effective NotBefore is computed afterwards and unconditionally,
+// as MAX(client-supplied, streamScopeFloor(info, stream))
+// (internal/grpc/query_stream_history.go:268-273), and for a location stream
+// streamScopeFloor returns the QUERYING session's LocationArrivedAt regardless of
+// which location was asked for. A regression that moved the floor computation
+// inside the non-override branch would leave this spec's below-floor event
+// visible.
+//
+// Access engine: the harness DEFAULT, deliberately. The default is permissive,
+// which is what grants read_unrestricted_history and therefore what gives this
+// spec its bypass in the first place; the real-policy and deny-all opt-ins are
+// what the denial specs in this file pass, and passing one here would remove the
+// very override under test. Demonstrated rather than asserted: running this
+// block against a deny-all engine fails it on the gate-bypass clause with
+// "not authorized to read stream".
+//
+// The opt-in tokens are deliberately not spelled literally above, so a search
+// for them across this directory stays a clean zero and any future real use is
+// distinguishable from a passing mention in prose.
+//
+// Both events are asserted by identifier rather than by count, and both are read
+// back in the SAME query, so the exclusion is demonstrably the floor's doing: a
+// read that returned nothing at all would fail the inclusion assertion first.
+var _ = Describe("INV-PRIVACY-6 (floor-preservation arm): staff override does not bypass the temporal floor", func() {
+	var (
+		ts    *integrationtest.Server
+		ctx   context.Context
+		staff *integrationtest.Session
+		locB  string
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = integrationtest.Start(suiteT)
+
+		locBID := ts.NewLocation(ctx)
+		locB = "location." + locBID.String()
+
+		// Staff sits at the guest start location, which is NOT locB — so every
+		// read below goes through the override path.
+		staff = ts.ConnectAuthedWithRoles(ctx, "StaffNadia", []string{"staff"})
+		Expect(staff.LocationID.String()).NotTo(Equal(locBID.String()),
+			"precondition: staff MUST be somewhere other than the location they query")
+	})
+
+	AfterEach(func() {
+		if staff != nil {
+			staff.Logout(ctx)
+		}
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("returns only the locB event emitted after the staff session's own arrival timestamp", func() {
+		// The canonical floor, read from the row the server filters against.
+		info, err := ts.SessionStore().Get(ctx, staff.SessionID)
+		Expect(err).NotTo(HaveOccurred(), "the staff session row MUST be readable")
+		floor := info.LocationArrivedAt
+
+		// One event either side of the staff session's arrival. The emitter is
+		// immaterial to what is being tested — Session.EmitDirectEventAt is a
+		// bus-level publish, and streamScopeFloor consults only the QUERYING
+		// session's row — so the staff session plants both rather than dragging a
+		// second character into locB. That the below-floor event is the staff's own
+		// and still excluded makes the point more sharply, not less.
+		belowAt := floor.Add(-time.Second)
+		belowID, err := staff.EmitDirectEventAt(ctx, locB, "core-communication:pose",
+			[]byte(`{"character_name":"StaffNadia","action":"speaks before the staff session began."}`),
+			belowAt)
+		Expect(err).NotTo(HaveOccurred(), "the below-floor emit MUST publish")
+
+		aboveAt := floor.Add(time.Second)
+		aboveID, err := staff.EmitDirectEventAt(ctx, locB, "core-communication:pose",
+			[]byte(`{"character_name":"StaffNadia","action":"speaks after the staff session began."}`),
+			aboveAt)
+		Expect(err).NotTo(HaveOccurred(), "the above-floor emit MUST publish")
+		Expect(aboveID).NotTo(Equal(belowID), "each emit MUST carry its own identifier")
+
+		// Asserted rather than assumed: if these instants ever landed on the same
+		// side of the floor the exclusion below would hold for the wrong reason.
+		Expect(belowAt).To(BeTemporally("<", floor),
+			"the below-floor event MUST sit strictly before the staff session's arrival")
+		Expect(aboveAt).To(BeTemporally(">", floor),
+			"the above-floor event MUST sit strictly after the staff session's arrival")
+
+		// A deliberately non-excluding upper bound, so the server-side scope floor
+		// is the only thing that can remove an event from the result.
+		notAfterMs := time.Now().Add(time.Hour).UnixMilli()
+
+		events, err := staff.QueryStreamHistoryBounded(ctx, locB, notAfterMs)
+		Expect(err).NotTo(HaveOccurred(),
+			"INV-PRIVACY-6 gate-bypass clause: staff with read_unrestricted_history MUST still be "+
+				"able to query a location they are not in")
+
+		ids := make([]string, 0, len(events))
+		for _, ev := range events {
+			ids = append(ids, ev.GetId())
+		}
+
+		Expect(ids).To(ContainElement(aboveID),
+			"the event at %s, after the staff session arrived at %s, MUST be returned — without "+
+				"this the exclusion below could be satisfied by a read that returned nothing",
+			aboveAt, floor)
+		Expect(ids).NotTo(ContainElement(belowID),
+			"INV-PRIVACY-6 floor-preservation clause: the event at %s predates the staff session's "+
+				"own arrival at %s and MUST NOT be returned. The override bypasses the location "+
+				"match ONLY; its presence would mean staff read history from before their session "+
+				"existed",
+			belowAt, floor)
 	})
 })
 
