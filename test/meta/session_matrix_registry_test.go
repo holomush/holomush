@@ -53,11 +53,14 @@ import (
 // `.claude/rules/invariants.md` forbids annotating a test with a binding it does
 // not genuinely prove.
 //
-// That absence is checked by grepping this file for the annotation's literal
-// form, so this comment names the annotation descriptively rather than
-// spelling it: a needle that counts mentions cannot tell a real binding from
-// prose about bindings, and writing the literal here would have killed the
-// check from this commit onward (the defect 09-15 hit with `WithRealABAC`).
+// That absence was checked by the plan that introduced this file, by grepping
+// it for the annotation's literal form. NO TEST IN THE TREE PERFORMS THAT
+// GREP — it is a one-time, plan-level verification, and a reader must not take
+// the paragraph above as describing a standing guard. Avoiding the literal here
+// is still deliberate and still worth keeping: a needle that counts mentions
+// cannot tell a real binding from prose about bindings, so spelling it out
+// would have made the plan's own check useless from that commit onward (the
+// defect 09-15 hit with `WithRealABAC`).
 
 // sessionMatrixTotalPositions is 12 transitions x 4 transport columns. Every
 // position gets a row, including the ones the source matrix marks n/a, so that
