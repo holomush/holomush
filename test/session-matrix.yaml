@@ -274,19 +274,38 @@ rows:
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
     column: web-guest
     disposition: planned
-    owed_by: "09-13"
-
+    owed_by: "09-14"
+    blocked_on: >-
+      Same missing seam as reattach-select.web-guest: no harness route logs a GUEST in again as the SAME character. Server.ConnectGuest
+      mints a NEW guest player and character on every call (CreateGuest then SelectCharacter, harness.go:1152-1190), Session.playerSessionToken
+      is unexported with no accessor, Server exposes no coreServer handle the test package could call SelectCharacter through,
+      and Server.AuthedPlayer creates a REGISTERED player. Connecting a second guest would satisfy "different session id,
+      later arrival timestamp" trivially, with no expiry involved and nothing for the reaper to have done — a spec that cannot
+      fail. Left planned rather than covered by that stand-in. Needs a guest equivalent of AuthedPlayer, or an exported re-select
+      on Session. #magic___^_^___line
   - id: post-ttl-relogin.web-char
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
     column: web-char
-    disposition: planned
-    owed_by: "09-13"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: Logging in again after expiry produces a genuinely fresh session
+      name: mints a new session whose history floor excludes an event the expired session could read
+    notes: >-
+      The privacy content is INV-PRIVACY-1. The spec plants an event STRICTLY BETWEEN the two sessions' arrival timestamps,
+      so it is readable under the expired session's floor and unreadable under a fresh one; an inherited floor therefore fails
+      the exclusion assertion. Both bracketing relationships are asserted, so wall-clock collapse fails the spec rather than
+      making it pass for the wrong reason. A second event ABOVE the new floor is read back in the SAME query as a positive
+      control, because the history read returns zero rows here and a bare absence assertion would otherwise be satisfied by
+      a read that returned nothing at all. #magic___^_^___line
   - id: post-ttl-relogin.telnet
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
     column: telnet
-    disposition: planned
-    owed_by: "09-13"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: Logging in again after expiry produces a genuinely fresh session
+      name: mints a new telnet session whose history floor excludes an event the expired session could read
 
   - id: post-ttl-relogin.multi-session
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)

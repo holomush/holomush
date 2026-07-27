@@ -13,6 +13,8 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
 
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
@@ -316,5 +318,207 @@ var _ = Describe("The reaper sweep at time-to-live expiry removes the session ro
 		ts.DetachAndExpireSession(ctx, sess.SessionID, time.Now().Add(-time.Minute))
 
 		reapSessionAndExpectRowGone(ctx, ts, sess.SessionID)
+	})
+})
+
+// frameIDs projects the event identifiers out of a history read, so a spec can
+// assert a SPECIFIC event is present or absent rather than counting frames. The
+// suite is shared, so a count would be sensitive to any other spec that happened
+// to publish into the same stream.
+func frameIDs(frames []*corev1.EventFrame) []string {
+	out := make([]string, 0, len(frames))
+	for _, f := range frames {
+		out = append(out, f.GetId())
+	}
+	return out
+}
+
+// relogPayload is the event body the post-expiry specs publish. Its shape mirrors
+// the pose payload the privacy suite uses, so the event is a realistic history
+// row rather than a synthetic one.
+func relogPayload(name string) []byte {
+	return []byte(`{"character_name":"` + name + `","action":"speaks while the first session is live."}`)
+}
+
+var _ = Describe("Logging in again after expiry produces a genuinely fresh session", func() {
+	var (
+		ctx context.Context
+		ts  *integrationtest.Server
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ts = lifecycleHarness()
+	})
+
+	// matrix-row: post-ttl-relogin.web-char
+	//
+	// INV-PRIVACY-1 is the invariant with the security content here.
+	// LocationArrivedAt is the per-session floor every location history query is
+	// filtered against (internal/grpc/scope_floor.go:34-38), so if a re-login
+	// after expiry inherited the expired session's floor, the returning player
+	// would read history from a period they were not present for. This spec
+	// decides that question rather than merely observing the new session's
+	// bookkeeping: it plants an event STRICTLY BETWEEN the two arrival
+	// timestamps, so the event is readable under the old floor and unreadable
+	// under a fresh one, and the absence assertion at the end therefore fails if
+	// the floor were inherited.
+	It("mints a new session whose history floor excludes an event the expired session could read", func() {
+		player := ts.AuthedPlayer(ctx, "RejoinRosalind")
+
+		first := player.OpenWebSession(ctx)
+		firstID := first.SessionID
+		firstArrival := first.LocationArrivedAt
+		locStream := "location." + first.LocationID.String()
+
+		// Placed just after the first session's floor with the timestamped emit
+		// helper, so its position relative to both floors is exact and no sleep
+		// is needed to order it.
+		plantedAt := firstArrival.Add(time.Millisecond)
+		plantedID, err := first.EmitDirectEventAt(ctx, locStream,
+			"core-communication:pose", relogPayload(first.CharacterName), plantedAt)
+		Expect(err).NotTo(HaveOccurred(), "the timestamped emit MUST publish")
+
+		// A deliberately NON-excluding upper bound: it sits far in the future, so
+		// the server-side scope floor is the only thing that can remove an event
+		// from either read below. A tight bound would confound the two.
+		notAfterMs := time.Now().Add(time.Hour).UnixMilli()
+
+		// Positive control. Without it, the absence assertion at the end could be
+		// satisfied by an event that was never queryable in the first place —
+		// proving nothing about the floor.
+		liveFrames, err := first.QueryStreamHistoryBounded(ctx, locStream, notAfterMs)
+		Expect(err).NotTo(HaveOccurred(), "the first session MUST be able to read its own location history")
+		Expect(frameIDs(liveFrames)).To(ContainElement(plantedID),
+			"precondition: the planted event MUST be readable by the session that was present "+
+				"for it, or its later absence would prove nothing about the history floor")
+
+		// Take the session all the way through expiry: detached, past its expiry,
+		// then genuinely swept by the real reaper — not merely marked.
+		detachAndExpectDetached(ctx, ts, first)
+		ts.DetachAndExpireSession(ctx, firstID, time.Now().Add(-time.Minute))
+		reapSessionAndExpectRowGone(ctx, ts, firstID)
+
+		// Log in again as the SAME character.
+		second := player.OpenWebSession(ctx)
+		DeferCleanup(func() { second.Logout(ctx) })
+
+		Expect(second.Reattached).To(BeFalse(),
+			"with the row swept there is nothing left to reattach to — SelectCharacter MUST take "+
+				"its create branch")
+		Expect(second.SessionID).NotTo(Equal(firstID),
+			"a re-login after expiry MUST mint a NEW session, not resurrect the reaped one")
+		Expect(second.LocationArrivedAt).To(BeTemporally(">", firstArrival),
+			"INV-PRIVACY-1: the new session MUST carry a LATER arrival floor")
+
+		// The planted event sits strictly between the two floors. Asserted rather
+		// than assumed: if wall-clock ordering ever collapsed these instants
+		// together, the exclusion below would hold for the wrong reason, and this
+		// spec would pass while proving nothing. It fails here instead.
+		Expect(plantedAt).To(BeTemporally(">", firstArrival),
+			"the planted event MUST sit above the expired session's floor")
+		Expect(plantedAt).To(BeTemporally("<", second.LocationArrivedAt),
+			"the planted event MUST sit below the new session's floor, so that inheriting the "+
+				"old floor is the only way it could still be readable")
+
+		// A second event, this one ABOVE the new session's floor. It is what makes
+		// the exclusion below attributable: a read that returned nothing at all —
+		// because it was broken, denied, or drained empty — would satisfy a bare
+		// "does not contain the planted event" assertion while proving nothing.
+		// Both events are read back in ONE query, so the floor is demonstrably
+		// what separates them.
+		afterAt := second.LocationArrivedAt.Add(time.Millisecond)
+		afterID, err := second.EmitDirectEventAt(ctx, locStream,
+			"core-communication:pose", relogPayload(second.CharacterName), afterAt)
+		Expect(err).NotTo(HaveOccurred(), "the post-relogin emit MUST publish")
+
+		freshFrames, err := second.QueryStreamHistoryBounded(ctx, locStream, notAfterMs)
+		Expect(err).NotTo(HaveOccurred(), "the new session MUST be able to query its location history")
+		freshIDs := frameIDs(freshFrames)
+
+		Expect(freshIDs).To(ContainElement(afterID),
+			"positive control: the new session's read MUST return the event emitted at %s, above "+
+				"its own floor of %s — without this, the exclusion asserted next could be "+
+				"satisfied by a read that returns nothing at all",
+			afterAt, second.LocationArrivedAt)
+		Expect(freshIDs).NotTo(ContainElement(plantedID),
+			"INV-PRIVACY-1: the event emitted at %s, before the new session arrived at %s, MUST NOT "+
+				"be readable by it — its presence means the re-login inherited the expired "+
+				"session's history floor and leaked history the returning player was not present for",
+			plantedAt, second.LocationArrivedAt)
+	})
+
+	// matrix-row: post-ttl-relogin.telnet
+	//
+	// The same INV-PRIVACY-1 question for a telnet-typed session. The transport
+	// identity is asserted through the column production writes
+	// (session_connections.client_type), never through the argument handed to
+	// OpenTelnetSession; see this file's TELNET SCOPE note for what that does and
+	// does not cover.
+	It("mints a new telnet session whose history floor excludes an event the expired session could read", func() {
+		player := ts.AuthedPlayer(ctx, "RejoinTorvald")
+
+		first := player.OpenTelnetSession(ctx)
+		firstID := first.SessionID
+		firstArrival := first.LocationArrivedAt
+		locStream := "location." + first.LocationID.String()
+
+		Expect(connectionClientTypes(ctx, ts, firstID)).To(HaveEach("telnet"),
+			"precondition: the session that expires MUST be the telnet-typed one")
+
+		plantedAt := firstArrival.Add(time.Millisecond)
+		plantedID, err := first.EmitDirectEventAt(ctx, locStream,
+			"core-communication:pose", relogPayload(first.CharacterName), plantedAt)
+		Expect(err).NotTo(HaveOccurred(), "the timestamped emit MUST publish")
+
+		notAfterMs := time.Now().Add(time.Hour).UnixMilli()
+
+		liveFrames, err := first.QueryStreamHistoryBounded(ctx, locStream, notAfterMs)
+		Expect(err).NotTo(HaveOccurred(), "the first telnet session MUST read its own location history")
+		Expect(frameIDs(liveFrames)).To(ContainElement(plantedID),
+			"precondition: the planted event MUST be readable by the session that was present for it")
+
+		detachAndExpectDetached(ctx, ts, first)
+		ts.DetachAndExpireSession(ctx, firstID, time.Now().Add(-time.Minute))
+		reapSessionAndExpectRowGone(ctx, ts, firstID)
+
+		second := player.OpenTelnetSession(ctx)
+		DeferCleanup(func() { second.Logout(ctx) })
+
+		Expect(second.Reattached).To(BeFalse(),
+			"with the row swept there is nothing left to reattach to")
+		Expect(second.SessionID).NotTo(Equal(firstID),
+			"a telnet re-login after expiry MUST mint a NEW session")
+		Expect(second.LocationArrivedAt).To(BeTemporally(">", firstArrival),
+			"INV-PRIVACY-1: the new session MUST carry a LATER arrival floor")
+		Expect(connectionClientTypes(ctx, ts, second.SessionID)).To(HaveEach("telnet"),
+			"the fresh session's connection MUST be telnet-typed; the roster counts by "+
+				"client_type, so a silent change of transport identity changes visibility")
+
+		Expect(plantedAt).To(BeTemporally(">", firstArrival),
+			"the planted event MUST sit above the expired session's floor")
+		Expect(plantedAt).To(BeTemporally("<", second.LocationArrivedAt),
+			"the planted event MUST sit below the new session's floor")
+
+		// Positive control on the fresh read — see the web-char spec for why a
+		// bare absence assertion would be satisfied by an empty read.
+		afterAt := second.LocationArrivedAt.Add(time.Millisecond)
+		afterID, err := second.EmitDirectEventAt(ctx, locStream,
+			"core-communication:pose", relogPayload(second.CharacterName), afterAt)
+		Expect(err).NotTo(HaveOccurred(), "the post-relogin emit MUST publish")
+
+		freshFrames, err := second.QueryStreamHistoryBounded(ctx, locStream, notAfterMs)
+		Expect(err).NotTo(HaveOccurred(), "the new telnet session MUST query its location history")
+		freshIDs := frameIDs(freshFrames)
+
+		Expect(freshIDs).To(ContainElement(afterID),
+			"positive control: the new session's read MUST return the event emitted at %s, above "+
+				"its own floor of %s",
+			afterAt, second.LocationArrivedAt)
+		Expect(freshIDs).NotTo(ContainElement(plantedID),
+			"INV-PRIVACY-1: the event emitted at %s, before the new session arrived at %s, MUST NOT "+
+				"be readable by it — its presence means the re-login inherited the expired "+
+				"session's history floor",
+			plantedAt, second.LocationArrivedAt)
 	})
 })
