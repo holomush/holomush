@@ -318,21 +318,39 @@ rows:
   - id: quit-command.web-guest
     transition: quit command -> row deleted
     column: web-guest
-    disposition: planned
-    owed_by: "09-14"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_termination_test.go
+      container: The quit command ends the session rather than detaching it
+      name: removes a guest session row immediately rather than leaving it detached to expire
+    notes: >-
+      Every quit cell dispatches quit through the production HandleCommand path (Session.SendCommand) and asserts the recognised-command
+      outcome as the DELETED ROW, not as SendCommand's return value: an unknown command is user-facing, so HandleCommand emits
+      a command_response and still answers Success=true (internal/grpc/command_handler.go:291-302) and SendCommand returns
+      no error at all against the empty registry. Absence is a keyed SESSION_NOT_FOUND lookup taken immediately after the
+      command, with no expiry seam applied and no reaper driven, so a detach-and-expire implementation fails these specs.
 
   - id: quit-command.web-char
     transition: quit command -> row deleted
     column: web-char
-    disposition: planned
-    owed_by: "09-14"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_termination_test.go
+      container: The quit command ends the session rather than detaching it
+      name: removes a registered player's session row immediately, leaving nothing for the reaper
 
   - id: quit-command.telnet
     transition: quit command -> row deleted
     column: telnet
-    disposition: planned
-    owed_by: "09-14"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_termination_test.go
+      container: The quit command ends the session rather than detaching it
+      name: removes a telnet session and its connection rows immediately
+    notes: >-
+      The telnet cell reads client_type back from session_connections BEFORE the quit (the rows CASCADE away with the session,
+      so afterwards is too late) and asserts the connection rows are gone after it. The grid-presence roster counts connections
+      by client_type, so a connection row outliving its session would keep a quit character visible. #magic___^_^___line
   - id: quit-command.multi-session
     transition: quit command -> row deleted
     column: multi-session
@@ -344,21 +362,33 @@ rows:
   - id: explicit-logout.web-guest
     transition: Explicit logout -> row deleted
     column: web-guest
-    disposition: planned
-    owed_by: "09-14"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_termination_test.go
+      container: Explicit logout deletes the game sessions the player session owns
+      name: removes a guest session row immediately when the player session is logged out
+    notes: >-
+      Logout is NOT a command and these specs deliberately do not blur it with quit: it is the Logout RPC on the PLAYER session
+      (Session.Logout -> CoreServer.Logout), which fans out over every game session that player session owns and deletes each
+      one (internal/grpc/auth_handlers.go:673-706). Absence is asserted the same way as the quit cells — a keyed SESSION_NOT_FOUND
+      lookup with no expiry seam and no reaper. #magic___^_^___line
   - id: explicit-logout.web-char
     transition: Explicit logout -> row deleted
     column: web-char
-    disposition: planned
-    owed_by: "09-14"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_termination_test.go
+      container: Explicit logout deletes the game sessions the player session owns
+      name: removes a registered player's session row immediately on logout
 
   - id: explicit-logout.telnet
     transition: Explicit logout -> row deleted
     column: telnet
-    disposition: planned
-    owed_by: "09-14"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_termination_test.go
+      container: Explicit logout deletes the game sessions the player session owns
+      name: removes a telnet session and its connection rows immediately on logout
   - id: explicit-logout.multi-session
     transition: Explicit logout -> row deleted
     column: multi-session
