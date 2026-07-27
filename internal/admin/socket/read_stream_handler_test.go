@@ -51,10 +51,10 @@ func newReadStreamTestServer(t *testing.T, h socket.ReadStreamRPCHandler) adminv
 	return adminv1connect.NewAdminServiceClient(srv.Client(), srv.URL)
 }
 
-// TestAdminReadStreamConnectHandler_Delegates verifies that a call to
+// TestAdminReadStreamConnectHandlerForwardsTheFinishedFrameFromTheUnderlyingRPCHandler verifies that a call to
 // AdminReadStream over a real ConnectRPC mux reaches the injected
 // ReadStreamRPCHandler (delegation not swallowed by the adapter).
-func TestAdminReadStreamConnectHandler_Delegates(t *testing.T) {
+func TestAdminReadStreamConnectHandlerForwardsTheFinishedFrameFromTheUnderlyingRPCHandler(t *testing.T) {
 	stub := &fakeReadStreamRPCHandler{
 		handle: func(
 			_ context.Context,

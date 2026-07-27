@@ -30,7 +30,7 @@ func (m *mockMigrator) Close() error {
 	return m.closeErr
 }
 
-func TestMigrationBootstrapper_Priority(t *testing.T) {
+func TestMigrationBootstrapperReportsTheSchemaBootstrapPriority(t *testing.T) {
 	bootstrapper := NewMigrationBootstrapper("postgres://localhost", nil, true)
 	assert.Equal(t, plugins.BootstrapPrioritySchema, bootstrapper.Priority())
 }

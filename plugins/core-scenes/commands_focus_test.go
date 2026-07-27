@@ -344,10 +344,10 @@ func mustParseULID(s string) ulid.ULID {
 	return id
 }
 
-// TestHandleJoin_AutoFocus_Terminal verifies the terminal-focused render branch:
+// TestSceneJoinAutoFocusesTerminalConnectionsAndReportsItInTheOutput verifies the terminal-focused render branch:
 // when AutoFocusOnJoin returns focused=[conn] and skipped+failed empty, the
 // response contains the "focused your terminal connection(s)" message.
-func TestHandleJoin_AutoFocus_Terminal(t *testing.T) {
+func TestSceneJoinAutoFocusesTerminalConnectionsAndReportsItInTheOutput(t *testing.T) {
 	p, fc := newTestPluginWithFocus(t)
 
 	// Create a scene so JoinScene succeeds.

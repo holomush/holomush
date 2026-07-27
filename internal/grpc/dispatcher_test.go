@@ -146,7 +146,7 @@ func newDispatcherTestServerWithAliases(t *testing.T, store eventbus.Publisher, 
 	return NewCoreServer(pres, sessStore, dispatcher, svc, allOpts...)
 }
 
-func TestDispatcher_HandleCommand_Say(t *testing.T) {
+func TestHandleCommandSayEmitsASayEventOnTheSpeakersLocationStream(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
@@ -185,7 +185,7 @@ func TestDispatcher_HandleCommand_Say(t *testing.T) {
 	assert.Equal(t, eventbus.Subject("location."+locationID.String()), appended[0].Subject)
 }
 
-func TestDispatcher_HandleCommand_Pose(t *testing.T) {
+func TestHandleCommandPoseEmitsAPoseEvent(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
@@ -295,7 +295,7 @@ func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp))
 }
 
-func TestDispatcher_HandleCommand_Quit(t *testing.T) {
+func TestHandleCommandQuitDeletesTheSessionAndEmitsALeaveEvent(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()

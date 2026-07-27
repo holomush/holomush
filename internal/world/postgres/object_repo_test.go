@@ -298,7 +298,7 @@ func TestObjectRepository_ListAtLocation(t *testing.T) {
 	assert.True(t, foundNames["Object 2"])
 }
 
-func TestObjectRepository_ListAtLocation_Empty(t *testing.T) {
+func TestListAtLocationReturnsANonNilEmptySliceForALocationWithNoObjects(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewObjectRepository(testPool)
 

@@ -65,7 +65,7 @@ func TestPropertyRegistry_Resolve_PrefixMatchMultipleProperties(t *testing.T) {
 	assert.ElementsMatch(t, []string{"name", "notes"}, ambigErr.Matches)
 }
 
-func TestPropertyRegistry_Resolve_Ambiguous(t *testing.T) {
+func TestPropertyRegistryResolveReportsEveryMatchForAnAmbiguousPrefix(t *testing.T) {
 	r := NewPropertyRegistry()
 	require.NoError(t, r.Register(Property{Name: "description", Type: PropertyTypeText}))
 	require.NoError(t, r.Register(Property{Name: "dark_mode", Type: PropertyTypeBool}))
@@ -160,7 +160,7 @@ func TestAmbiguousPropertyError_SortedMatches(t *testing.T) {
 	assert.Contains(t, errMsg, "apple, mango, zebra")
 }
 
-func TestProperty_Fields(t *testing.T) {
+func TestPropertyExposesItsConfiguredFieldsAndAppliesToList(t *testing.T) {
 	p := Property{
 		Name:       "test_prop",
 		Type:       PropertyTypeNumber,
@@ -239,7 +239,7 @@ func TestPropertyRegistry_ValidFor_CustomProperty(t *testing.T) {
 
 // Tests for Property validation
 
-func TestPropertyType_Constants(t *testing.T) {
+func TestPropertyTypeConstantsHoldTheirDocumentedStringValues(t *testing.T) {
 	// Verify property type constants exist and have expected values
 	assert.Equal(t, PropertyType("string"), PropertyTypeString)
 	assert.Equal(t, PropertyType("text"), PropertyTypeText)
@@ -270,7 +270,7 @@ func TestPropertyType_IsValid(t *testing.T) {
 	}
 }
 
-func TestPropertyType_String(t *testing.T) {
+func TestPropertyTypeStringReturnsTheUnderlyingStringForEachType(t *testing.T) {
 	assert.Equal(t, "string", PropertyTypeString.String())
 	assert.Equal(t, "text", PropertyTypeText.String())
 	assert.Equal(t, "number", PropertyTypeNumber.String())
@@ -426,7 +426,7 @@ func TestPropertyRegistry_Register_DifferentNamesSucceed(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestPropertyRegistry_MustRegister_Panics(t *testing.T) {
+func TestPropertyRegistryMustRegisterPanicsOnADuplicateName(t *testing.T) {
 	r := NewPropertyRegistry()
 
 	// First registration should succeed
@@ -438,7 +438,7 @@ func TestPropertyRegistry_MustRegister_Panics(t *testing.T) {
 	})
 }
 
-func TestPropertyRegistry_MustRegister_Success(t *testing.T) {
+func TestPropertyRegistryMustRegisterStoresAResolvablePropertyForAFreshName(t *testing.T) {
 	r := NewPropertyRegistry()
 
 	// Should not panic for valid registration

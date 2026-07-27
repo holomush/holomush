@@ -59,7 +59,7 @@ func TestEnvSource_Load_FailsOnNonHex(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "KEK_ENV_VAR_NOT_HEX")
 }
 
-func TestEnvSource_Persist_Refused(t *testing.T) {
+func TestEnvSourcePersistRefusesBecauseTheSourceIsReadOnly(t *testing.T) {
 	src := kek.NewEnvSource("HOLOMUSH_TEST_KEK", false)
 	err := src.Persist(context.Background(), make([]byte, 32))
 	require.Error(t, err)

@@ -75,8 +75,8 @@ func TestFileStore_GetMissing(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-// TestFileStore_Delete removes body and sidecar.
-func TestFileStore_Delete(t *testing.T) {
+// TestFileStoreDeleteRemovesTheItemSoGetReturnsNil removes body and sidecar.
+func TestFileStoreDeleteRemovesTheItemSoGetReturnsNil(t *testing.T) {
 	ctx := context.Background()
 	s := newStore(t)
 

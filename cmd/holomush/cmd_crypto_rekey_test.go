@@ -423,8 +423,8 @@ func TestNewCryptoCmdRekeySubcmdRegistered(t *testing.T) {
 
 // --- Tests for mapToExitCodeErr (INV-CRYPTO-110) ---
 
-// TestMapToExitCodeErr_TEMPFAIL verifies DEK_REKEY_PHASE5_TIMEOUT → exitCode 75.
-func TestMapToExitCodeErr_TEMPFAIL(t *testing.T) {
+// TestMapToExitCodeErrMapsPhase5TimeoutToTempFail verifies DEK_REKEY_PHASE5_TIMEOUT → exitCode 75.
+func TestMapToExitCodeErrMapsPhase5TimeoutToTempFail(t *testing.T) {
 	input := &rekeyProgressError{code: "DEK_REKEY_PHASE5_TIMEOUT", msg: "timeout"}
 	err := mapToExitCodeErr(input)
 	var exitErr *exitCodeError
@@ -432,8 +432,8 @@ func TestMapToExitCodeErr_TEMPFAIL(t *testing.T) {
 	assert.Equal(t, 75, exitErr.exitCode)
 }
 
-// TestMapToExitCodeErr_CANTCREAT verifies conflict codes → exitCode 73.
-func TestMapToExitCodeErr_CANTCREAT(t *testing.T) {
+// TestMapToExitCodeErrMapsRekeyConflictCodesToCantCreat verifies conflict codes → exitCode 73.
+func TestMapToExitCodeErrMapsRekeyConflictCodesToCantCreat(t *testing.T) {
 	for _, code := range []string{"DEK_REKEY_ALREADY_IN_PROGRESS", "DEK_REKEY_ARGS_CONFLICT"} {
 		input := &rekeyProgressError{code: code, msg: "conflict"}
 		err := mapToExitCodeErr(input)
@@ -443,8 +443,8 @@ func TestMapToExitCodeErr_CANTCREAT(t *testing.T) {
 	}
 }
 
-// TestMapToExitCodeErr_SOFTWARE verifies audit failure → exitCode 70.
-func TestMapToExitCodeErr_SOFTWARE(t *testing.T) {
+// TestMapToExitCodeErrMapsPhase7AuditFailureToSoftware verifies audit failure → exitCode 70.
+func TestMapToExitCodeErrMapsPhase7AuditFailureToSoftware(t *testing.T) {
 	input := &rekeyProgressError{code: "DEK_REKEY_PHASE7_AUDIT_FAILED", msg: "audit fail"}
 	err := mapToExitCodeErr(input)
 	var exitErr *exitCodeError
@@ -452,8 +452,8 @@ func TestMapToExitCodeErr_SOFTWARE(t *testing.T) {
 	assert.Equal(t, 70, exitErr.exitCode)
 }
 
-// TestMapToExitCodeErr_NOPERM verifies auth denial codes → exitCode 77.
-func TestMapToExitCodeErr_NOPERM(t *testing.T) {
+// TestMapToExitCodeErrMapsDenyCodesToNoPerm verifies auth denial codes → exitCode 77.
+func TestMapToExitCodeErrMapsDenyCodesToNoPerm(t *testing.T) {
 	for _, code := range []string{"DENY_SESSION_INVALID", "DENY_SESSION_EXPIRED", "DENY_CAPABILITY"} {
 		input := &rekeyProgressError{code: code, msg: "denied"}
 		err := mapToExitCodeErr(input)
@@ -463,9 +463,9 @@ func TestMapToExitCodeErr_NOPERM(t *testing.T) {
 	}
 }
 
-// TestMapToExitCodeErr_Unknown verifies unknown codes pass through unchanged
+// TestMapToExitCodeErrPassesAnUnrecognisedCodeThroughUnwrapped verifies unknown codes pass through unchanged
 // (not wrapped as exitCodeError).
-func TestMapToExitCodeErr_Unknown(t *testing.T) {
+func TestMapToExitCodeErrPassesAnUnrecognisedCodeThroughUnwrapped(t *testing.T) {
 	input := &rekeyProgressError{code: "SOME_OTHER_CODE", msg: "other"}
 	err := mapToExitCodeErr(input)
 	require.Error(t, err)
@@ -763,9 +763,9 @@ func TestCmd_CryptoRekey_Resume_InvalidRequestID(t *testing.T) {
 	assert.Contains(t, err.Error(), "request_id")
 }
 
-// TestCmd_CryptoRekey_Resume_Registered verifies that the `resume` sub-subcommand
+// TestCryptoRekeyRegistersAResumeSubcommandCarryingForceDestroyAndConfirmFlags verifies that the `resume` sub-subcommand
 // appears in the rekey command tree with its expected flags.
-func TestCmd_CryptoRekey_Resume_Registered(t *testing.T) {
+func TestCryptoRekeyRegistersAResumeSubcommandCarryingForceDestroyAndConfirmFlags(t *testing.T) {
 	factory := func() (adminv1connect.AdminServiceClient, error) { return nil, nil }
 	rekeyCmd := newCryptoRekeyCmd(factory)
 
@@ -826,9 +826,9 @@ func TestCmd_CryptoRekey_Resume_ForceDestroy_RejectedByServer(t *testing.T) {
 
 // --- Tests for rekey abort subcommand (bead holomush-jxo8.7.33) ---
 
-// TestCmd_CryptoRekey_Abort verifies that runRekeyAbort authenticates, sends
+// TestRunRekeyAbortPrintsTheAbortTimestampOnSuccess verifies that runRekeyAbort authenticates, sends
 // RekeyAbortRequest, and prints aborted_at + audit_event_id on success.
-func TestCmd_CryptoRekey_Abort(t *testing.T) {
+func TestRunRekeyAbortPrintsTheAbortTimestampOnSuccess(t *testing.T) {
 	abortedAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
 	auditEventID := []byte{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04}
 	reqID := []byte{
@@ -884,9 +884,9 @@ func TestCmd_CryptoRekey_Abort_TerminalRejection(t *testing.T) {
 
 // --- Tests for rekey status subcommand (bead holomush-jxo8.7.33) ---
 
-// TestCmd_CryptoRekey_Status verifies that runRekeyStatus authenticates, calls
+// TestRunRekeyStatusPrintsTheCheckpointPhaseReturnedByTheServer verifies that runRekeyStatus authenticates, calls
 // RekeyStatus, and prints the checkpoint fields including status.
-func TestCmd_CryptoRekey_Status(t *testing.T) {
+func TestRunRekeyStatusPrintsTheCheckpointPhaseReturnedByTheServer(t *testing.T) {
 	reqID := []byte{
 		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
 		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
@@ -943,9 +943,9 @@ func TestCmd_CryptoRekey_Status_NotFound(t *testing.T) {
 
 // --- Tests for rekey list subcommand (bead holomush-jxo8.7.33) ---
 
-// TestCmd_CryptoRekey_List verifies that runRekeyList authenticates, streams
+// TestRunRekeyListPrintsAHeaderAndOneRowPerInFlightRequest verifies that runRekeyList authenticates, streams
 // RekeyStatusResponse rows, and prints a header + one row per checkpoint.
-func TestCmd_CryptoRekey_List(t *testing.T) {
+func TestRunRekeyListPrintsAHeaderAndOneRowPerInFlightRequest(t *testing.T) {
 	reqID := []byte{
 		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
 		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
@@ -980,9 +980,9 @@ func TestCmd_CryptoRekey_List(t *testing.T) {
 	assert.GreaterOrEqual(t, strings.Count(outStr, "\n"), 2, "expect header + at least 1 row")
 }
 
-// TestCmd_CryptoRekey_List_Empty verifies that runRekeyList handles an empty
+// TestRunRekeyListPrintsOnlyTheHeaderWhenNoRequestsAreInFlight verifies that runRekeyList handles an empty
 // stream (EOF immediately) by printing only the header.
-func TestCmd_CryptoRekey_List_Empty(t *testing.T) {
+func TestRunRekeyListPrintsOnlyTheHeaderWhenNoRequestsAreInFlight(t *testing.T) {
 	h := &fakeAdminHandlerWithRekey{
 		onAuthenticate: func(_ context.Context, _ *connect.Request[adminv1.AuthenticateRequest]) (*connect.Response[adminv1.AuthenticateResponse], error) {
 			return connect.NewResponse(&adminv1.AuthenticateResponse{SessionToken: "tok-list-empty"}), nil

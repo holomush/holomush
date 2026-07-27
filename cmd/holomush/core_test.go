@@ -29,7 +29,7 @@ import (
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-func TestCoreCommand_Flags(t *testing.T) {
+func TestCoreCommandHelpListsEveryExpectedFlag(t *testing.T) {
 	cmd := NewCoreCmd()
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
@@ -98,7 +98,7 @@ func TestCoreCommand_DefaultValues(t *testing.T) {
 	assert.Empty(t, gameID)
 }
 
-func TestCoreCommand_Properties(t *testing.T) {
+func TestCoreCommandDeclaresItsUseShortAndLongDescriptions(t *testing.T) {
 	cmd := NewCoreCmd()
 
 	assert.Equal(t, "core", cmd.Use)
@@ -220,7 +220,7 @@ func TestParseLogLevel(t *testing.T) {
 	}
 }
 
-func TestCoreCommand_Help(t *testing.T) {
+func TestRootCommandCoreHelpContainsEveryExpectedSection(t *testing.T) {
 	cmd := NewRootCmd()
 	cmd.SetArgs([]string{"core", "--help"})
 
@@ -713,8 +713,8 @@ func TestSignalHandling_MultipleSignals(t *testing.T) {
 	}
 }
 
-// TestSignalStop_Cleanup verifies that signal.Stop properly unregisters signal handling.
-func TestSignalStop_Cleanup(t *testing.T) {
+// TestSignalStopStopsDeliveringOSSignalsToTheChannel verifies that signal.Stop properly unregisters signal handling.
+func TestSignalStopStopsDeliveringOSSignalsToTheChannel(t *testing.T) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 

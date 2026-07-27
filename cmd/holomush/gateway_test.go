@@ -27,7 +27,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-func TestGatewayCommand_Flags(t *testing.T) {
+func TestGatewayCommandHelpListsEveryExpectedFlag(t *testing.T) {
 	cmd := NewGatewayCmd()
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
@@ -83,7 +83,7 @@ func TestGatewayCommand_DefaultValues(t *testing.T) {
 	assert.Equal(t, "json", logFormat)
 }
 
-func TestGatewayCommand_Properties(t *testing.T) {
+func TestGatewayCommandDeclaresItsUseShortAndLongDescriptions(t *testing.T) {
 	cmd := NewGatewayCmd()
 
 	assert.Equal(t, "gateway", cmd.Use)
@@ -157,7 +157,7 @@ func TestGatewayCommand_FlagParsing(t *testing.T) {
 	}
 }
 
-func TestGatewayCommand_Help(t *testing.T) {
+func TestRootCommandGatewayHelpContainsEveryExpectedSection(t *testing.T) {
 	cmd := NewRootCmd()
 	cmd.SetArgs([]string{"gateway", "--help"})
 
@@ -517,7 +517,7 @@ func TestGatewayConfig_ValidateRejectsNonPositiveTelnetLimits(t *testing.T) {
 	}
 }
 
-func TestGatewayConfig_Defaults(t *testing.T) {
+func TestGatewayDefaultAddressConstantsHoldTheirDocumentedValues(t *testing.T) {
 	// Verify the default constants are set correctly
 	assert.Equal(t, ":4201", defaultTelnetAddr)
 	assert.Equal(t, "localhost:9000", defaultCoreAddr)

@@ -32,9 +32,9 @@ func TestLocalAEADProvider_RotateKEK_StubReturnsTrackingBead(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "phase", 4)
 }
 
-// TestNoneProvider_RotateKEK_Refuses verifies the NoneProvider's
+// TestNoneProviderRotateKEKRefusesWithTheRotateRefusedCode verifies the NoneProvider's
 // RotateKEK refusal path.
-func TestNoneProvider_RotateKEK_Refuses(t *testing.T) {
+func TestNoneProviderRotateKEKRefusesWithTheRotateRefusedCode(t *testing.T) {
 	provider := kek.NewNoneProviderForUnitTest()
 	_, err := provider.RotateKEK(context.Background())
 	require.Error(t, err)
@@ -86,7 +86,7 @@ func sanitizeTestName(s string) string {
 }
 
 // Verifies: INV-CRYPTO-17
-func TestLocalAEADProvider_WrapUnwrap_Roundtrip(t *testing.T) {
+func TestLocalAEADProviderUnwrapRecoversTheDEKWrappedByTheSameProvider(t *testing.T) {
 	// INV-CRYPTO-17: Wrap then Unwrap recovers the original DEK byte-for-byte.
 	ctx := context.Background()
 	kekBytes := newKEKBytes(t)
@@ -104,7 +104,7 @@ func TestLocalAEADProvider_WrapUnwrap_Roundtrip(t *testing.T) {
 	assert.Equal(t, dek, unwrapped)
 }
 
-func TestLocalAEADProvider_Unwrap_TamperedWrappedBytes_Fails(t *testing.T) {
+func TestLocalAEADProviderUnwrapRejectsTamperedCiphertextWithATagMismatch(t *testing.T) {
 	ctx := context.Background()
 	kekBytes := newKEKBytes(t)
 	provider, err := kek.NewLocalAEADProviderForUnitTest(ctx, envSourceWith(t, kekBytes))
@@ -121,7 +121,7 @@ func TestLocalAEADProvider_Unwrap_TamperedWrappedBytes_Fails(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "KEK_UNWRAP_AEAD_TAG_MISMATCH")
 }
 
-func TestLocalAEADProvider_Unwrap_WithUnknownKEKKeyID_Fails(t *testing.T) {
+func TestLocalAEADProviderUnwrapRejectsAnUnknownKEKKeyID(t *testing.T) {
 	ctx := context.Background()
 	kekBytes := newKEKBytes(t)
 	provider, err := kek.NewLocalAEADProviderForUnitTest(ctx, envSourceWith(t, kekBytes))
@@ -142,7 +142,7 @@ func TestLocalAEADProvider_Name_DerivesFromSource(t *testing.T) {
 	assert.Equal(t, "local-aead/env", provider.Name())
 }
 
-func TestLocalAEADProvider_HealthCheck_Succeeds(t *testing.T) {
+func TestLocalAEADProviderHealthCheckSucceedsForAConfiguredProvider(t *testing.T) {
 	ctx := context.Background()
 	provider, err := kek.NewLocalAEADProviderForUnitTest(ctx, envSourceWith(t, newKEKBytes(t)))
 	require.NoError(t, err)

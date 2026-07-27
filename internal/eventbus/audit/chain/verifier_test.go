@@ -313,10 +313,10 @@ func TestVerifier_ScopeMismatchBetweenSubjectAndPayload_RejectsRow(t *testing.T)
 	errutil.AssertErrorCode(t, err, "AUDIT_CHAIN_SCOPE_MISMATCH")
 }
 
-// TestVerifier_EmptyChain_NotInitialized_OK: an empty entries slice for a
+// TestVerifyScopeAcceptsAnEmptyChainAsGenesisEligibleOnFirstBoot: an empty entries slice for a
 // chain that has never been initialized should pass (first boot, genesis
 // eligible).
-func TestVerifier_EmptyChain_NotInitialized_OK(t *testing.T) {
+func TestVerifyScopeAcceptsAnEmptyChainAsGenesisEligibleOnFirstBoot(t *testing.T) {
 	h := makeTestHandler(t)
 	repo := &fakeRepo{entries: nil}
 	v := chain.NewVerifier(repo)

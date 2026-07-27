@@ -129,7 +129,7 @@ func TestPropertyRepository_ListByParent(t *testing.T) {
 	assert.Equal(t, "bbb-second", results[1].Name)
 }
 
-func TestPropertyRepository_ListByParent_Empty(t *testing.T) {
+func TestListByParentReturnsNoResultsForAParentWithNoProperties(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewPropertyRepository(testPool)
 
@@ -138,7 +138,7 @@ func TestPropertyRepository_ListByParent_Empty(t *testing.T) {
 	assert.Empty(t, results)
 }
 
-func TestPropertyRepository_Update(t *testing.T) {
+func TestPropertyRepositoryUpdatePersistsValueVisibilityAndFlags(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewPropertyRepository(testPool)
 
@@ -188,7 +188,7 @@ func TestPropertyRepository_Update_NotFound(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "PROPERTY_NOT_FOUND")
 }
 
-func TestPropertyRepository_Delete(t *testing.T) {
+func TestPropertyRepositoryDeleteRemovesTheRowSoGetReturnsNotFound(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewPropertyRepository(testPool)
 

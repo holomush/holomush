@@ -29,7 +29,7 @@ func TestStatus_IsValid(t *testing.T) {
 	}
 }
 
-func TestStatus_String(t *testing.T) {
+func TestStatusStringReturnsTheLowercaseNameForEachSessionStatus(t *testing.T) {
 	assert.Equal(t, "active", StatusActive.String())
 	assert.Equal(t, "detached", StatusDetached.String())
 	assert.Equal(t, "expired", StatusExpired.String())

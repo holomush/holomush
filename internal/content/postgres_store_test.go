@@ -95,7 +95,7 @@ func TestPostgresStore_Get_NotFound(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestPostgresStore_Put_Upsert(t *testing.T) {
+func TestPostgresStorePutOverwritesBodyAndMetadataForAnExistingKey(t *testing.T) {
 	pool, cleanup := setupPool(t)
 	defer cleanup()
 
@@ -177,7 +177,7 @@ func TestPostgresStore_List_EmptyPrefix(t *testing.T) {
 	assert.Empty(t, result.NextCursor)
 }
 
-func TestPostgresStore_List_Pagination(t *testing.T) {
+func TestPostgresStoreListPagesThroughItemsAndClearsTheCursorOnTheLastPage(t *testing.T) {
 	pool, cleanup := setupPool(t)
 	defer cleanup()
 
@@ -223,7 +223,7 @@ func TestPostgresStore_List_NoMatches(t *testing.T) {
 	assert.Empty(t, result.NextCursor)
 }
 
-func TestPostgresStore_Delete(t *testing.T) {
+func TestPostgresStoreDeleteRemovesTheItemSoGetReturnsNil(t *testing.T) {
 	pool, cleanup := setupPool(t)
 	defer cleanup()
 

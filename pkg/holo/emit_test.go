@@ -103,7 +103,7 @@ func TestEmitter_Character(t *testing.T) {
 	}
 }
 
-func TestEmitter_Global(t *testing.T) {
+func TestEmitterGlobalQueuesOneSystemEventOnTheGlobalStream(t *testing.T) {
 	emitter := NewEmitter()
 	emitter.Global(pluginsdk.HostEventTypeSystem, Payload{"message": "Server restart in 5 minutes"})
 

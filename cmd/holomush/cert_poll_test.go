@@ -140,7 +140,7 @@ func TestWaitForTLSCerts_ControlTLSTransientRetries(t *testing.T) {
 	assert.GreaterOrEqual(t, controlCalls.Load(), int32(3))
 }
 
-func TestWaitForTLSCerts_Timeout(t *testing.T) {
+func TestWaitForTLSCertsReturnsErrorWhenCertsNeverAppearBeforeTheDeadline(t *testing.T) {
 	deps := &GatewayDeps{}
 	deps.GameIDExtractor = func(_ string) (string, error) {
 		return "", notFoundErr("root-ca.crt not found")

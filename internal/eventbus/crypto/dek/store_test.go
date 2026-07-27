@@ -13,10 +13,10 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 )
 
-// TestIsUniqueViolation_Detects23505 verifies the helper recognises the
+// TestIsUniqueViolationRecognisesPostgresErrorCode23505 verifies the helper recognises the
 // PostgreSQL unique-constraint violation SQLSTATE used by
 // dek.Manager.GetOrCreate to detect concurrent INSERT races.
-func TestIsUniqueViolation_Detects23505(t *testing.T) {
+func TestIsUniqueViolationRecognisesPostgresErrorCode23505(t *testing.T) {
 	pgErr := &pgconn.PgError{Code: "23505"}
 	assert.True(t, dek.IsUniqueViolation(pgErr))
 }

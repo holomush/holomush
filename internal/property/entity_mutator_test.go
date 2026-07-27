@@ -157,7 +157,7 @@ func TestEntityMutatorRegistry_RegisterAndLookup(t *testing.T) {
 	assert.Equal(t, mutator, got)
 }
 
-func TestEntityMutatorRegistry_Register_Duplicate(t *testing.T) {
+func TestEntityMutatorRegistryRegisterRejectsASecondMutatorForTheSameEntityType(t *testing.T) {
 	registry := NewEntityMutatorRegistry()
 	mutator := testEntityMutator{entityType: "location"}
 
@@ -193,7 +193,7 @@ func TestEntityMutatorRegistry_DefaultRegistrations(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestEntityMutatorRegistry_RegisteredTypes_Sorted(t *testing.T) {
+func TestEntityMutatorRegistryRegisteredTypesReturnsTypesInSortedOrder(t *testing.T) {
 	registry := NewEntityMutatorRegistry()
 	require.NoError(t, registry.Register(testEntityMutator{entityType: "widget"}))
 	require.NoError(t, registry.Register(testEntityMutator{entityType: "location"}))

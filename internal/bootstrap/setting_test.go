@@ -203,7 +203,7 @@ func writeMarkdownFile(t *testing.T, dir, filename, key, body string) {
 
 // ---- tests ----
 
-func TestSettingBootstrapper_Priority(t *testing.T) {
+func TestSettingBootstrapperReportsTheWorldBootstrapPriority(t *testing.T) {
 	b := NewSettingBootstrapper(SettingBootstrapperOpts{
 		ContentStore:  newMockContentStore(),
 		MetadataStore: newMockMetadataStore(),

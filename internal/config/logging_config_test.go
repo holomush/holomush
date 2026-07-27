@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoggingConfig_Defaults(t *testing.T) {
+func TestDefaultLoggingConfigEnablesAllSinksAndFloorsSentryAtWarn(t *testing.T) {
 	c := DefaultLoggingConfig()
 	require.True(t, c.Stderr.Enabled)
 	require.True(t, c.OTel.Enabled)

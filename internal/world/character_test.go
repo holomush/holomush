@@ -487,7 +487,7 @@ func TestValidateCharacterName(t *testing.T) {
 		// Invalid: too short/long
 		{name: "too short single char", input: "A", wantErr: true, errMsg: "at least 2 characters"},
 		{name: "too long 33 chars", input: "Abcdefghijklmnopqrstuvwxyzabcdefg", wantErr: true, errMsg: "at most 32 characters"},
-		{name: "empty", input: "", wantErr: true, errMsg: "cannot be empty"},
+		{name: "empty name", input: "", wantErr: true, errMsg: "cannot be empty"},
 
 		// Invalid: numbers not allowed
 		{name: "contains numbers", input: "Alaric123", wantErr: true, errMsg: "letters and spaces only"},

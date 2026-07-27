@@ -104,9 +104,9 @@ func TestFanout_Handle_AggregatesErrors(t *testing.T) {
 	require.Len(t, failing.recorded, 1, "failing child must have been called")
 }
 
-// TestLevelGate_WithAttrs_Propagates verifies that WithAttrs is delegated
+// TestLevelGateWithAttrsPropagatesAttributesToTheBaseHandler verifies that WithAttrs is delegated
 // through the levelGate wrapper so attributes reach the underlying handler.
-func TestLevelGate_WithAttrs_Propagates(t *testing.T) {
+func TestLevelGateWithAttrsPropagatesAttributesToTheBaseHandler(t *testing.T) {
 	var buf bytes.Buffer
 	base := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})
 	gate := NewLevelGate(slog.LevelInfo, base)
@@ -116,9 +116,9 @@ func TestLevelGate_WithAttrs_Propagates(t *testing.T) {
 	require.Contains(t, buf.String(), "gateval")
 }
 
-// TestLevelGate_WithGroup_Propagates verifies that WithGroup is delegated
+// TestLevelGateWithGroupPropagatesTheGroupNameToTheBaseHandler verifies that WithGroup is delegated
 // through the levelGate wrapper so the group prefix reaches the handler.
-func TestLevelGate_WithGroup_Propagates(t *testing.T) {
+func TestLevelGateWithGroupPropagatesTheGroupNameToTheBaseHandler(t *testing.T) {
 	var buf bytes.Buffer
 	base := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})
 	gate := NewLevelGate(slog.LevelInfo, base)

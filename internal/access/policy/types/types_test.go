@@ -317,7 +317,7 @@ func TestNewAccessRequestRejectsReservedNameKey(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "ACCESS_REQUEST_RESERVED_ATTRIBUTE")
 }
 
-func TestAttributeBags_Initialization(t *testing.T) {
+func TestNewAttributeBagsReturnsFourNonNilEmptyBags(t *testing.T) {
 	bags := NewAttributeBags()
 	require.NotNil(t, bags.Subject)
 	require.NotNil(t, bags.Resource)

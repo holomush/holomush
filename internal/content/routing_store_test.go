@@ -71,7 +71,7 @@ func TestRoutingStore_Put_GlobMatch(t *testing.T) {
 	assert.Equal(t, it, imgStore.items["hero.png"])
 }
 
-func TestRoutingStore_Put_Fallback(t *testing.T) {
+func TestRoutingStorePutRoutesAnUnmappedContentTypeToTheFallbackStore(t *testing.T) {
 	fallback := newMockStore("fallback")
 	rs := NewRoutingStore(fallback, map[string]Store{
 		"text/markdown": newMockStore("markdown"),
@@ -169,7 +169,7 @@ func TestRoutingStore_List_DeduplicatesByKey(t *testing.T) {
 	assert.Equal(t, []byte("from-b"), result.Items[0].Body)
 }
 
-func TestRoutingStore_List_Pagination(t *testing.T) {
+func TestRoutingStoreListPagesThroughItemsAndClearsTheCursorOnTheLastPage(t *testing.T) {
 	mdStore := newMockStore("markdown")
 	for _, k := range []string{"a", "b", "c", "d", "e"} {
 		mdStore.items[k] = item(k, "text/markdown")

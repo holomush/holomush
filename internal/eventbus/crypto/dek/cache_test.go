@@ -13,7 +13,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 )
 
-func TestCache_PutGet_Roundtrip(t *testing.T) {
+func TestCacheGetReturnsTheMaterialStoredUnderTheSameKey(t *testing.T) {
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 4, TTL: time.Minute})
 	m := dek.NewMaterial([]byte("0123456789abcdef0123456789abcdef"))
 	ctxTest := dek.ContextID{Type: "test", ID: "01HTEST"}

@@ -359,7 +359,7 @@ func TestGetDatabaseURL(t *testing.T) {
 
 // Status command tests
 
-func TestMigrateStatusLogic_Clean(t *testing.T) {
+func TestRunMigrateStatusLogicReportsOKWhenTheSchemaIsNotDirty(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{version: 7, dirty: false}
 
@@ -372,7 +372,7 @@ func TestMigrateStatusLogic_Clean(t *testing.T) {
 	assert.NotContains(t, output, "DIRTY")
 }
 
-func TestMigrateStatusLogic_Dirty(t *testing.T) {
+func TestRunMigrateStatusLogicReportsDirtyAndTheForceRemedyWhenTheSchemaIsDirty(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{version: 5, dirty: true}
 

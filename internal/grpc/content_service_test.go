@@ -113,7 +113,7 @@ func TestContentServiceServer_ListContent(t *testing.T) {
 	assert.Empty(t, resp.GetNextCursor())
 }
 
-func TestContentServiceServer_ListContent_Pagination(t *testing.T) {
+func TestListContentReturnsTheRequestedPageSizeAndACursorForTheNextPage(t *testing.T) {
 	items := []*content.Item{
 		{Key: "docs.a", ContentType: "text/plain", Body: []byte("a")},
 		{Key: "docs.b", ContentType: "text/plain", Body: []byte("b")},

@@ -315,7 +315,7 @@ func TestParseAutoMigrate(t *testing.T) {
 }
 
 func TestRunAutoMigration(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("runs Up then closes the migrator", func(t *testing.T) {
 		migrator := &autoMigrateMockMigrator{}
 		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (bootstrap.AutoMigrator, error) {
 			return migrator, nil
