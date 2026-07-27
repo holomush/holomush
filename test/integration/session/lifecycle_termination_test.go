@@ -273,3 +273,153 @@ var _ = Describe("Explicit logout deletes the game sessions the player session o
 			"logging out MUST take the session's connection rows with it")
 	})
 })
+
+// connectionIDs reads the primary keys of every session_connections row
+// belonging to sessionID.
+//
+// The tmux-style reattach row turns on the connection being genuinely NEW while
+// the session is genuinely the SAME. connectionClientTypes answers the transport
+// half; this answers the identity half, so "a new connection resumed the
+// session" is asserted rather than assumed from having called the opener twice.
+func connectionIDs(ctx context.Context, ts *integrationtest.Server, sessionID string) []string {
+	GinkgoHelper()
+	rows, err := ts.Pool().Query(ctx,
+		`SELECT id FROM session_connections WHERE session_id = $1`, sessionID)
+	Expect(err).NotTo(HaveOccurred(), "query session_connections ids for session %s", sessionID)
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var id string
+		Expect(rows.Scan(&id)).To(Succeed(), "scan connection id for session %s", sessionID)
+		out = append(out, id)
+	}
+	Expect(rows.Err()).NotTo(HaveOccurred(), "iterate session_connections for session %s", sessionID)
+	return out
+}
+
+// countSessionsForPlayerSession counts sessions rows owned by playerSessionID,
+// across EVERY status.
+//
+// Across every status deliberately. The partial unique index
+// idx_sessions_active_character (internal/store/migrations/000001_baseline.up.sql:221)
+// already forbids two rows for one character while either is active or
+// detached, so a count restricted to those statuses could not rise above one
+// and the assertion would be decorative. Counting all statuses leaves the
+// "old row parked in some other status, new row minted alongside it" shape
+// detectable, which is the failure this row cares about.
+func countSessionsForPlayerSession(ctx context.Context, ts *integrationtest.Server, playerSessionID string) int {
+	GinkgoHelper()
+	var n int
+	Expect(ts.Pool().QueryRow(ctx,
+		`SELECT count(*) FROM sessions WHERE player_session_id = $1`, playerSessionID).Scan(&n)).
+		To(Succeed(), "count sessions for player session %s", playerSessionID)
+	return n
+}
+
+// Session-lifecycle matrix — the tmux-style telnet reattach row.
+//
+// # Why this telnet spec lives in the session suite
+//
+// test/integration/telnet/ contains exactly one file, telnet_suite_test.go, and
+// it is a bare Ginkgo suite bootstrap with no specs and no harness wiring.
+// Standing a harness up there for this single spec would duplicate the
+// suite-scoped stack this phase already built next door (lifecycleHarness), and
+// would leave two places to keep in step. So the cell lives here, and the
+// registry row says so too — a future reader looking for telnet lifecycle
+// coverage in the telnet directory is pointed at this file from both ends.
+//
+// # What this row asserts, and what it does NOT
+//
+// It asserts SESSION STATE: that a second telnet connection arriving under an
+// already-authenticated player session RESUMES the existing game session
+// instead of minting a second one, and that the resumed session's connection
+// row still records the telnet client type. It is NOT a claim about telnet
+// PROTOCOL behaviour — no telnet gateway is in the loop and internal/telnet is
+// never entered. The transport identity is real all the same: it is the column
+// the production Subscribe handler stamps on session_connections
+// (internal/grpc/subscribe_handler.go:358-364), validated against the store's
+// allowlist (internal/store/session_store.go:519-528), and the grid-presence
+// roster counts connections by it — so it decides who is visible to whom.
+var _ = Describe("Tmux-style telnet reattach under one player session", func() {
+	var (
+		ctx context.Context
+		ts  *integrationtest.Server
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ts = lifecycleHarness()
+	})
+
+	// matrix-row: telnet-tmux-reattach.telnet
+	It("resumes the one existing game session when a second telnet connection arrives", func() {
+		player := ts.AuthedPlayer(ctx, "TmuxTeagan")
+
+		first := player.OpenTelnetSession(ctx)
+		sessionID := first.SessionID
+		originalArrival := first.LocationArrivedAt
+		Expect(first.Reattached).To(BeFalse(),
+			"precondition: the first telnet connection creates the session")
+
+		before := expectActiveSessionRow(ctx, ts, sessionID)
+		playerSessionID := before.PlayerSessionID.String()
+		Expect(before.PlayerSessionID.IsZero()).To(BeFalse(),
+			"precondition: the session MUST record the player session that owns it, or the "+
+				"one-session-per-player-session assertion below would range over nothing")
+		firstConnIDs := connectionIDs(ctx, ts, sessionID)
+		Expect(firstConnIDs).To(HaveLen(1),
+			"precondition: the first telnet connection MUST have registered exactly one connection row")
+
+		// The terminal goes away. Production removes the connection row on the
+		// Subscribe defer and the Disconnect RPC parks the session in its
+		// time-to-live window — the state a tmux client returns to.
+		first.DetachTransport(ctx)
+		detached, err := ts.SessionStore().Get(ctx, sessionID)
+		Expect(err).NotTo(HaveOccurred(), "the detached telnet session row MUST survive the drop")
+		Expect(detached.Status).To(Equal(session.StatusDetached),
+			"precondition: dropping the connection MUST detach rather than delete the session")
+		Expect(connectionIDs(ctx, ts, sessionID)).To(BeEmpty(),
+			"precondition: the dropped connection's row MUST be gone, so the connection asserted "+
+				"below is demonstrably a new one rather than the original still hanging around")
+
+		// The player reattaches from a new terminal, under the SAME player
+		// session — OpenTelnetSession reuses this AuthedPlayer's bearer token.
+		second := player.OpenTelnetSession(ctx)
+		DeferCleanup(func() { second.Logout(ctx) })
+
+		Expect(second.Reattached).To(BeTrue(),
+			"the returning telnet connection MUST take SelectCharacter's reattach branch")
+		Expect(second.SessionID).To(Equal(sessionID),
+			"a tmux-style reattach MUST resume the SAME game session, never mint a second one")
+
+		info, err := ts.SessionStore().Get(ctx, sessionID)
+		Expect(err).NotTo(HaveOccurred(), "the resumed telnet session row MUST be readable")
+		Expect(info.Status).To(Equal(session.StatusActive),
+			"the returning connection MUST return the session to active")
+		Expect(info.LocationArrivedAt).To(BeTemporally("==", originalArrival),
+			"I-PRIV-3 / INV-PRIVACY-3: resuming MUST leave the location arrival timestamp "+
+				"unchanged, or the returning player silently gains or loses history")
+
+		Expect(countSessionsForPlayerSession(ctx, ts, playerSessionID)).To(Equal(1),
+			"the player session MUST own exactly one game session after the reattach; a second "+
+				"row means the return minted a session instead of resuming one")
+
+		// The connection is new; the session is not.
+		secondConnIDs := connectionIDs(ctx, ts, sessionID)
+		Expect(secondConnIDs).To(HaveLen(1),
+			"the resumed session MUST carry exactly one connection row")
+		Expect(secondConnIDs).NotTo(ContainElement(firstConnIDs[0]),
+			"the resumed session MUST be serving a NEW connection — reusing the dropped "+
+				"connection's identifier would mean nothing was actually reattached")
+
+		// Read the transport identity back out of Postgres. Without this the
+		// spec would prove only that a differently-named opener was called, and
+		// a helper that silently fell back to the terminal client type would
+		// pass.
+		Expect(connectionClientTypes(ctx, ts, sessionID)).To(HaveEach("telnet"),
+			"the returning connection MUST be recorded as telnet by the production Subscribe "+
+				"handler; the grid roster counts connections by client_type, so a session that "+
+				"came back as 'terminal' would silently change who can see it")
+	})
+})

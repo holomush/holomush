@@ -492,9 +492,21 @@ rows:
   - id: telnet-tmux-reattach.telnet
     transition: Tmux-style telnet reattach (same player session, new connection)
     column: telnet
-    disposition: planned
-    owed_by: "09-14"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_termination_test.go
+      container: Tmux-style telnet reattach under one player session
+      name: resumes the one existing game session when a second telnet connection arrives
+    notes: >-
+      WHERE TO FIND IT: this telnet cell lives in the SESSION suite, not in test/integration/telnet/. That directory holds
+      exactly one file, telnet_suite_test.go, a bare Ginkgo suite bootstrap with no specs and no harness wiring; standing
+      a harness up there for a single spec would duplicate the suite-scoped stack this phase already built (lifecycleHarness)
+      and leave two places to keep in step. WHAT IT ASSERTS: same session identifier, unchanged location arrival timestamp,
+      exactly one sessions row for the owning player_session_id, a NEW session_connections id (the dropped connection's row
+      is asserted gone first, so the returning connection is demonstrably new), and client_type='telnet' read back from session_connections.
+      The session count is taken across EVERY status on purpose: idx_sessions_active_character already forbids two active-or-detached
+      rows per character, so a status-restricted count could not rise above one and would be decorative. Like every telnet
+      cell this asserts SESSION STATE only — internal/telnet is not exercised. #magic___^_^___line
   - id: telnet-tmux-reattach.multi-session
     transition: Tmux-style telnet reattach (same player session, new connection)
     column: multi-session
