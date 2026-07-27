@@ -618,6 +618,22 @@ func TestFenceLogsDroppedViolationWhenNoEmitterConfigured(t *testing.T) {
 	assert.Equal(t, "WARN", records[0]["level"], "a lost audit record is a warning, not info")
 	assert.Equal(t, "test-plugin", records[0]["plugin"], "operator MUST be able to attribute the drop to a plugin")
 	assert.Equal(t, "test-plugin:secret", records[0]["type"], "operator MUST be able to attribute the drop to an event type")
+	// The drop record MUST stay metadata-only. Pin the exact attribute set
+	// rather than only scanning for the plaintext: the handler is a JSON
+	// handler, so a leaked []byte payload renders as base64 and a
+	// substring check for the cleartext would sail straight past it. A
+	// whitelist fails on ANY new attribute regardless of encoding, which is
+	// the property actually worth guarding — a future slog.Any("row", row)
+	// or a dek_ref/dek_version attribute breaks this test immediately.
+	gotKeys := make([]string, 0, len(records[0]))
+	for k := range records[0] {
+		gotKeys = append(gotKeys, k)
+	}
+	assert.ElementsMatch(t, []string{"time", "level", "msg", "plugin", "type"}, gotKeys,
+		"the drop log MUST carry only metadata attributes — no payload, no dek_ref, no key material")
+	// Belt and braces for the shapes a whitelist cannot see: a plaintext
+	// spliced into the message string itself, which is not a separate key.
+	assert.NotContains(t, buf.String(), "cleartext-leak", "the drop log MUST never carry payload plaintext")
 }
 
 // TestFenceOmitsDropRecordWhenViolationEmitterConfigured proves the new
