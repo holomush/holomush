@@ -24,6 +24,11 @@ const (
 	// sessionsLocationIndexPriorVersion is the schema state immediately before
 	// it — the version the round trip steps back to.
 	sessionsLocationIndexPriorVersion = 52
+	// sessionsLocationIndexMigrationName is the migration's file stem, without
+	// the .up.sql / .down.sql suffix. Binding it here keeps the version check in
+	// the first spec and the embedded-source reads in the second spec naming the
+	// SAME migration.
+	sessionsLocationIndexMigrationName = "000053_sessions_location_index"
 	// sessionsLocationIndexName is the index under test. Every assertion below
 	// is keyed on this exact name: counting indexes on the sessions table would
 	// be satisfied by a down migration that dropped the wrong one, since three
@@ -74,7 +79,7 @@ var _ = Describe("Migration 000053 sessions location index", func() {
 		// ever moved 000053, and every assertion would still pass.
 		name, err := store.MigrationName(sessionsLocationIndexVersion)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(name).To(Equal("000053_sessions_location_index"),
+		Expect(name).To(Equal(sessionsLocationIndexMigrationName),
 			"version %d must be this plan's migration", sessionsLocationIndexVersion)
 
 		// Step back to the state immediately before the index migration. The
@@ -132,10 +137,16 @@ var _ = Describe("Migration 000053 sessions location index", func() {
 			"index must be restored after reapplying migrations")
 	})
 
-	// Idempotency: the up migration uses IF NOT EXISTS, so re-running it
-	// against a database that already carries the index must succeed rather
-	// than erroring on a duplicate relation.
-	It("re-applies cleanly when the index already exists", func() {
+	// Idempotency: the up migration uses IF NOT EXISTS and the down uses
+	// IF EXISTS, so re-running either against a database already in the target
+	// state must succeed rather than erroring on a duplicate/missing relation.
+	//
+	// The statements are read out of the EMBEDDED migration source and executed
+	// verbatim. Re-typing them as Go string literals — what this spec used to do
+	// — asserts the idempotency of the string the test itself wrote: deleting
+	// IF NOT EXISTS from 000053_sessions_location_index.up.sql would leave the
+	// spec green while the repo's stated migration rule was silently broken.
+	It("re-applies the migration's own SQL cleanly when the index already exists", func() {
 		connStr := testutil.RawDatabase(suiteT, sharedPG)
 
 		migrator, err := store.NewMigrator(connStr)
@@ -149,17 +160,40 @@ var _ = Describe("Migration 000053 sessions location index", func() {
 
 		Expect(sessionsLocationIndexDef(db, sessionsLocationIndexName)).NotTo(BeEmpty())
 
-		// Step back one and forward one with the index already dropped and
-		// recreated, then execute the up migration's statement a second time
-		// directly to prove IF NOT EXISTS holds.
-		_, err = db.Exec(`CREATE INDEX IF NOT EXISTS ` + sessionsLocationIndexName +
-			` ON sessions(location_id)`)
-		Expect(err).NotTo(HaveOccurred(), "up migration statement must be idempotent")
+		up, err := store.MigrationSQLForTest(sessionsLocationIndexMigrationName + ".up.sql")
+		Expect(err).NotTo(HaveOccurred(), "the embedded up migration MUST be readable")
+		Expect(up).To(ContainSubstring(sessionsLocationIndexName),
+			"precondition: the file read back MUST be the migration under test, or the "+
+				"idempotency assertion below would be made against unrelated SQL")
 
-		// And the down statement is idempotent in the same way.
-		_, err = db.Exec(`DROP INDEX IF EXISTS ` + sessionsLocationIndexName)
-		Expect(err).NotTo(HaveOccurred())
-		_, err = db.Exec(`DROP INDEX IF EXISTS ` + sessionsLocationIndexName)
-		Expect(err).NotTo(HaveOccurred(), "down migration statement must be idempotent")
+		down, err := store.MigrationSQLForTest(sessionsLocationIndexMigrationName + ".down.sql")
+		Expect(err).NotTo(HaveOccurred(), "the embedded down migration MUST be readable")
+		Expect(down).To(ContainSubstring(sessionsLocationIndexName),
+			"precondition: the file read back MUST be the migration under test")
+
+		// The index is already present (asserted above), so this is the
+		// re-application the IF NOT EXISTS guard exists for.
+		_, err = db.Exec(up)
+		Expect(err).NotTo(HaveOccurred(),
+			"the up migration's OWN SQL must be idempotent against a database that already "+
+				"carries the index")
+
+		// And the down migration's own SQL, run twice: the second run is against
+		// a database from which the index is already gone.
+		_, err = db.Exec(down)
+		Expect(err).NotTo(HaveOccurred(), "the down migration's OWN SQL must apply")
+		Expect(sessionsLocationIndexDef(db, sessionsLocationIndexName)).To(BeEmpty(),
+			"precondition: the down migration MUST actually have dropped the index, or the "+
+				"second run below would not exercise the IF EXISTS guard")
+		_, err = db.Exec(down)
+		Expect(err).NotTo(HaveOccurred(),
+			"the down migration's OWN SQL must be idempotent against a database from which "+
+				"the index is already absent")
+
+		// Leave the database at the head schema the rest of the suite expects.
+		_, err = db.Exec(up)
+		Expect(err).NotTo(HaveOccurred(), "restoring the index MUST succeed")
+		Expect(sessionsLocationIndexDef(db, sessionsLocationIndexName)).NotTo(BeEmpty(),
+			"the index MUST be restored before this spec returns")
 	})
 })
