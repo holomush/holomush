@@ -34,9 +34,11 @@ import (
 // The ratchet therefore enforces the MUST, not the SHOULD. It flags an
 // underscore-form name whose FINAL segment tokenises to a single CamelCase word,
 // because such a name terminates in a bare topic — a method or a noun — and so
-// carries no expectation clause at all: TestStatus_String, TestClient_Subscribe,
-// TestPropertyRepository_Delete. That is the population that genuinely fails the
-// convention.
+// carries no expectation clause at all. The shapes this catches looked like
+// `TestStatus_String`, `TestClient_Subscribe` and `TestPropertyRepository_Delete`
+// — all renamed by the sweep that introduced this ratchet, so those identifiers
+// no longer exist and are reproduced here only to illustrate the anti-pattern.
+// That was the population that genuinely failed the convention.
 //
 // Two exemptions, and deliberately no mechanism for a third. A growing allowlist
 // is precisely what this requirement rejected, so a name that seems to need an
