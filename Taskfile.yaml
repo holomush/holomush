@@ -236,7 +236,23 @@ tasks:
             echo "Stop it with: docker compose -p holomush-e2e down -v"
             exit 1
           fi
-      - mkdir -p .coverdata/core .coverdata/gateway
+      # Mode 0777, not the umask default. The core/gateway containers run as the
+      # image's non-root `holomush` user (uid 1000, Dockerfile:11-14) while this
+      # directory is created by whoever runs the task — on a GitHub Actions runner
+      # that is `runner` (uid 1001), so a 0755 dir is unwritable by the container
+      # and EVERY coverage write fails with EACCES. Go's runtime/coverage emits
+      # covmeta.* from its INIT hook, so the very first write fails and the
+      # directory stays completely empty — `covdata` then reports "no applicable
+      # files found in input directories". That is a DIFFERENT signature from the
+      # SIGKILL-before-flush bug (which leaves meta-only: a full-size profile with
+      # every count zero); do not conflate them. Local macOS runs hid this because
+      # Docker Desktop maps bind-mount ownership. Silently empty on Linux CI since
+      # the coverage overlay landed (84b1be085, 2026-03-31) until the guards below
+      # made it loud. World-writable is fine here: a gitignored per-run scratch dir
+      # inside the workspace, not a sticky shared tmp. A `user:` override is the
+      # wrong fix — the image chowns /home/holomush to uid 1000 and the E2E core
+      # reads its KEK and plugin dir from there.
+      - install -d -m 0777 .coverdata/core .coverdata/gateway
       # GUARD 1 of 3 (plan 09-01). Remove the profile BEFORE the run, never after.
       # Catches: a failed conversion leaving the PREVIOUS run's profile on disk, so
       # the guards below read a stale non-empty file and pass. A guard that an
@@ -283,9 +299,26 @@ tasks:
           fi
           if [ "$COVERED" -eq 0 ]; then
             echo "ERROR: coverage-e2e.out records ZERO covered statements — the E2E coverage chain is broken."
-            echo "       A meta-only .coverdata (container SIGKILLed before its flush hook ran) yields exactly"
-            echo "       this: a full-size profile with every count 0. Check container exit codes for 137 and"
-            echo "       confirm stop_grace_period in compose.e2e.cover.yaml exceeds the shutdown time."
+            echo ""
+            echo "  Two causes produce this, with DIFFERENT signatures. Read the evidence below"
+            echo "  before assuming which one you have:"
+            echo ""
+            echo "  (a) EMPTY .coverdata — covdata warned 'no applicable files found in input"
+            echo "      directories'. The containers could not WRITE. Usually the bind-mount dir"
+            echo "      is not writable by the container's uid (the image runs non-root uid 1000;"
+            echo "      a CI runner creates the dir as its own uid at 0755). Go emits covmeta.*"
+            echo "      from its init hook, so a permission fence loses everything, not just the"
+            echo "      counters. Compare the uids below."
+            echo "  (b) META-ONLY .coverdata — covdata did NOT warn, and emitted a FULL-SIZE"
+            echo "      profile with every count 0. The containers were SIGKILLed before their"
+            echo "      flush hook ran. Check container exit codes for 137 and confirm"
+            echo "      stop_grace_period in compose.e2e.cover.yaml exceeds the shutdown time"
+            echo "      (measured ~14.4s; its tail is the OTLP exporter's own 5s timeout)."
+            echo ""
+            echo "  --- host uid/gid running this task ---"
+            id || true
+            echo "  --- .coverdata ownership and contents (numeric ids) ---"
+            ls -lnR .coverdata || true
             exit 1
           fi
           echo "E2E coverage written to coverage-e2e.out ($COVERED covered statements)"
