@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-20-PLAN.md
-last_updated: "2026-07-26T23:37:39.475Z"
+stopped_at: Completed 09-12-PLAN.md
+last_updated: "2026-07-27T00:08:04.329Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 57
+  completed_plans: 58
 ---
 
 # Project State
@@ -142,6 +142,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P10 | 85min | 2 tasks tasks | 1 files files |
 | Phase 09 P11 | ~40min | 1 tasks | 4 files |
 | Phase 09 P20 | 38m | 3 tasks | 5 files |
+| Phase 09 P12 | 26m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -287,6 +288,9 @@ the next milestone yet.
 - [Phase ?]: 09-20: telnet differentiation threaded through attach's SubscribeRequest only — the session_connections row is where production observes it
 - [Phase ?]: 09-20: WithInTreePlugins wins over WithBuiltinCommands (register before adoption), so setting both cannot double-register or panic
 - [Phase ?]: 09-20: administrator-boot matrix row dispositioned not-implementable-from-harness-defaults; resetpassword --kick exists but bypasses session_ended (issue #4862)
+- [Phase 09]: Session-matrix registry adds a fifth disposition, 'planned', so no row claims a spec before that spec is written; 09-16 can also assert zero planned rows remain at phase end
+- [Phase 09]: Matrix n/a cells follow the verbatim izk0 TABLE (9/11/12/6 populated per column), not 09-RESEARCH's derived totals (9/10/12/7), which disagree with the table they annotate
+- [Phase 09]: multi_tab_test.go:217/242 rejected as a reattach-cell citation: it creates no game session, so 09-RESEARCH's D-16 'Reattach x telnet + multi-session' claim is false
 
 ### Pending Todos
 
@@ -319,14 +323,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-26T23:37:31.558Z
+Last session: 2026-07-27T00:08:04.319Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-20-PLAN.md
+Stopped at: Completed 09-12-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
