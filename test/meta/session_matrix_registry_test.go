@@ -4,9 +4,13 @@
 package meta
 
 import (
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,16 +18,46 @@ import (
 )
 
 // This file guards test/session-matrix.yaml — the committed session-lifecycle
-// matrix registry. It lands WITH the registry rather than after it because
-// three later plans consume the registry as their division of labour: without a
-// shape test they would be reading a table whose basic integrity rests on a
+// matrix registry. It landed WITH the registry rather than after it because
+// three later plans consumed the registry as their division of labour: without
+// a shape test they would be reading a table whose basic integrity rests on a
 // human having counted 48 cells correctly once.
 //
-// Scope note: this file asserts SHAPE only (row count, id uniqueness,
-// disposition exclusivity, the not-applicable count). The marker bijection —
-// every `disposition: spec` row has a matching `// matrix-row: <id>` comment
-// and vice versa — is added to this same file by a later plan, once specs
-// carrying markers exist. Asserting it now would fail on an empty marker set.
+// WHAT THIS FILE NOW ENFORCES, and what it deliberately does not:
+//
+//   - SHAPE — 48 rows, unique ids, exactly one disposition per row, and the
+//     exact population of every disposition. Pinning every count (not only the
+//     not-applicable one) is what stops the bijection below being satisfied by
+//     DOWNGRADING an uncovered `spec` row to an excuse disposition, which is
+//     the cheapest way to make a coverage claim disappear.
+//   - MARKER WELL-FORMEDNESS — a line that looks like a marker either IS one or
+//     is documentation carrying the literal `<id>` placeholder. Without this a
+//     typo'd or trailing-comment marker would simply not be seen, and "not
+//     seen" reads identically to "not written".
+//   - MARKER PLACEMENT — every marker sits directly above the `It(` it claims.
+//     Without this the bijection is satisfiable by a comment parked anywhere in
+//     the tree, which is a coverage claim backed by nothing.
+//   - BIJECTION — the `spec` rows and the in-code markers are the same set, of
+//     the same pinned size, with no duplicates on either side.
+//   - POINTER RESOLUTION — every `spec` and `covered_by` citation names a file
+//     that exists and container/name text that actually appears in it.
+//
+// What it does NOT check: the TRUTH of a row's prose. `notes`, `reason` and
+// `gap_notes` are free text, and a row whose disposition and marker agree can
+// still describe the world wrongly. That is a human-review property; this file
+// makes no claim about it, and a reader must not read a green run as one.
+//
+// It also carries NO invariant-registry binding annotation and no entry in
+// docs/architecture/invariants.yaml — deliberately. The quarantine-registry
+// bijection this guard is modelled on is likewise unregistered, and
+// `.claude/rules/invariants.md` forbids annotating a test with a binding it does
+// not genuinely prove.
+//
+// That absence is checked by grepping this file for the annotation's literal
+// form, so this comment names the annotation descriptively rather than
+// spelling it: a needle that counts mentions cannot tell a real binding from
+// prose about bindings, and writing the literal here would have killed the
+// check from this commit onward (the defect 09-15 hit with `WithRealABAC`).
 
 // sessionMatrixTotalPositions is 12 transitions x 4 transport columns. Every
 // position gets a row, including the ones the source matrix marks n/a, so that
@@ -42,6 +76,31 @@ const sessionMatrixTotalPositions = 48
 // coverage gap into an apparent non-question.
 const sessionMatrixNotApplicable = 10
 
+// sessionMatrixExpectedCounts pins the population of EVERY disposition, not
+// only the not-applicable one.
+//
+// Why all five: the marker bijection below compares the `spec` rows against the
+// in-code markers. The cheapest way to make an unbacked `spec` claim stop
+// failing is not to write the missing spec — it is to relabel the row as
+// `not-applicable`, `planned` or `not-implementable-from-harness-defaults` and
+// let the bijection shrink to fit. Pinning each count makes that relabelling a
+// build failure that names the disposition whose population moved. The grid is
+// a fixed 12x4, so the totals cannot legitimately drift: covering a new cell
+// means moving one row between two pinned counts, which is a deliberate,
+// reviewable edit rather than an accident.
+//
+// `planned` is 1: reattach-cas.multi-session, blocked on a per-connection
+// detach seam the harness does not have. It is the matrix's one genuinely
+// uncovered cell, and it is REQUIRED to stay expressible — a guard that only
+// admitted `spec` rows would force a false claim onto it.
+var sessionMatrixExpectedCounts = map[string]int{
+	"spec":              32,
+	"covered-elsewhere": 2,
+	"planned":           1,
+	"not-applicable":    sessionMatrixNotApplicable,
+	"not-implementable-from-harness-defaults": 3,
+}
+
 // sessionMatrixPayloadKeys maps each disposition to the single payload key it
 // owns. A row MUST carry its own disposition's key and MUST NOT carry any of
 // the other four. `notes` and `issue` are deliberately absent from this map:
@@ -55,18 +114,91 @@ var sessionMatrixPayloadKeys = map[string]string{
 	"not-implementable-from-harness-defaults": "gap_notes",
 }
 
+// sessionMatrixMarkerToken is what makes a source line a MARKER CANDIDATE. The
+// colon is part of the token on purpose: prose that says "carries no matrix-row
+// marker" is a mention, not a candidate, while `matrix-row:` anywhere on a line
+// is someone trying to claim a cell and MUST therefore be well-formed.
+const sessionMatrixMarkerToken = "matrix-row:"
+
+// sessionMatrixMarkerPlaceholder is the literal a doc comment uses to describe
+// the marker form without claiming a cell. It is not a valid id, so a line
+// carrying it can never satisfy the bijection.
+const sessionMatrixMarkerPlaceholder = "<id>"
+
+// sessionMatrixMarkerRE matches a well-formed marker line and captures its id.
+//
+// It is anchored at both ends on purpose. Anchoring at the start rejects the
+// trailing-comment form (`It(...) // matrix-row: x.y`), and anchoring at the
+// end rejects trailing prose. Both are near-misses that a substring match would
+// accept — the failure mode 09-11 hit when `Skip(` matched inside `NotSkip(`.
+// A near-miss is not silently tolerated: it fails the well-formedness guard,
+// which names the file and line.
+//
+// The id grammar mirrors the registry's own: <transition-slug>.<column-slug>,
+// lowercase alphanumerics with internal hyphens and exactly one dot.
+var sessionMatrixMarkerRE = regexp.MustCompile(
+	`^[ \t]*//[ \t]*matrix-row:[ \t]*([a-z0-9]+(?:-[a-z0-9]+)*\.[a-z0-9]+(?:-[a-z0-9]+)*)[ \t]*$`,
+)
+
+// sessionMatrixSelfPath is this file, excluded from the marker walk because its
+// regex literal and its examples are marker-shaped by construction: a walk that
+// read it would flag itself and invite the wrong fix. The registry file needs no
+// entry here — the walk reads only Go sources, so a `.yaml` is excluded by
+// construction, and listing it would be dead code pretending to be a guard.
+var sessionMatrixSelfPath = filepath.Join("test", "meta", "session_matrix_registry_test.go")
+
+// sessionMatrixPointer is a `spec:` or `covered_by:` citation. All three fields
+// are required: a citation missing any of them cannot be resolved, and an
+// unresolvable citation is exactly the plausible-sounding pointer this registry
+// exists to stop standing in for coverage.
+type sessionMatrixPointer struct {
+	File      string `yaml:"file"`
+	Container string `yaml:"container"`
+	Name      string `yaml:"name"`
+}
+
 // sessionMatrixRow is decoded permissively: payload presence is checked against
 // the raw map so a typo'd key is a missing-payload failure rather than being
 // silently dropped into a struct field that was never populated.
 type sessionMatrixRow struct {
-	ID          string `yaml:"id"`
-	Transition  string `yaml:"transition"`
-	Column      string `yaml:"column"`
-	Disposition string `yaml:"disposition"`
+	ID          string                `yaml:"id"`
+	Transition  string                `yaml:"transition"`
+	Column      string                `yaml:"column"`
+	Disposition string                `yaml:"disposition"`
+	Issue       int                   `yaml:"issue"`
+	Spec        *sessionMatrixPointer `yaml:"spec"`
+	CoveredBy   *sessionMatrixPointer `yaml:"covered_by"`
 }
 
 type sessionMatrixRegistry struct {
 	Rows []map[string]any `yaml:"rows"`
+}
+
+// sessionMatrixMarkerSite is one marker occurrence, kept with its location so a
+// failure can name the offending line rather than only the offending id.
+type sessionMatrixMarkerSite struct {
+	ID   string
+	File string // repo-relative
+	Line int    // 1-based
+}
+
+func (s sessionMatrixMarkerSite) where() string {
+	return fmt.Sprintf("%s:%d", s.File, s.Line)
+}
+
+// sessionMatrixScan is one pass over the Go sources, shared by the three
+// marker-side guards so they cannot disagree about what the tree contains.
+type sessionMatrixScan struct {
+	Markers []sessionMatrixMarkerSite
+	// Malformed are marker CANDIDATE lines that are neither well-formed
+	// markers nor documentation placeholders.
+	Malformed []string
+	// Misplaced are well-formed markers whose next non-comment line is not the
+	// `It(` they claim to introduce.
+	Misplaced []string
+	// FilesScanned exists so a walk that silently matched nothing cannot let
+	// an "all lines are fine" loop pass over an empty set.
+	FilesScanned int
 }
 
 // TestSessionMatrixRegistryShape asserts the structural properties a reader of
@@ -80,8 +212,16 @@ func TestSessionMatrixRegistryShape(t *testing.T) {
 		"test/session-matrix.yaml MUST carry one row per position in the 12x4 matrix; "+
 			"a differing count means a cell was dropped or invented")
 
+	expectedTotal := 0
+	for _, n := range sessionMatrixExpectedCounts {
+		expectedTotal += n
+	}
+	require.Equal(t, sessionMatrixTotalPositions, expectedTotal,
+		"the pinned per-disposition counts MUST sum to the grid size; a map that "+
+			"does not add up would let a row change disposition without any count moving")
+
 	seen := make(map[string]int, len(rows))
-	notApplicable := 0
+	counts := make(map[string]int, len(sessionMatrixExpectedCounts))
 
 	for i, raw := range rows {
 		row := decodeSessionMatrixRow(t, i, raw)
@@ -123,15 +263,312 @@ func TestSessionMatrixRegistryShape(t *testing.T) {
 					"only on a planned row", row.ID)
 		}
 
-		if row.Disposition == "not-applicable" {
-			notApplicable++
+		// A gap the system has but the harness cannot reach is only honest
+		// while it is tracked somewhere a reader can follow. Without this the
+		// disposition degrades into a permanent excuse.
+		if row.Disposition == "not-implementable-from-harness-defaults" {
+			require.NotZerof(t, row.Issue,
+				"row %q is dispositioned %q and MUST cite the issue tracking the gap; "+
+					"an untracked gap is indistinguishable from an abandoned one",
+				row.ID, row.Disposition)
+		}
+
+		counts[row.Disposition]++
+	}
+
+	require.Equal(t, sessionMatrixExpectedCounts, counts,
+		"every disposition's population is pinned. A differing count means a row changed "+
+			"kind: most dangerously, a `spec` row with no spec relabelled as an excuse so "+
+			"the marker bijection shrinks to fit. Move a row between dispositions only as a "+
+			"deliberate edit that updates sessionMatrixExpectedCounts in the same change")
+}
+
+// TestSessionMatrixMarkerCandidateLinesAreEitherMarkersOrDocumentation rejects
+// near-miss markers.
+//
+// A line carrying `matrix-row:` is someone claiming a cell. If it does not
+// match the anchored marker form and does not carry the `<id>` placeholder that
+// marks it as documentation, it is a claim nothing can see — and an invisible
+// claim is indistinguishable from an absent one, which is precisely how a
+// bijection gets satisfied by a set that quietly shrank.
+func TestSessionMatrixMarkerCandidateLinesAreEitherMarkersOrDocumentation(t *testing.T) {
+	scan := scanSessionMatrixMarkers(t, findRepoRoot(t))
+
+	require.Empty(t, scan.Malformed,
+		"these lines carry %q but are neither an anchored marker (`// %s <id>` alone on "+
+			"its line) nor documentation carrying the literal %q. Each is a coverage claim "+
+			"the bijection cannot see:\n  %s",
+		sessionMatrixMarkerToken, sessionMatrixMarkerToken, sessionMatrixMarkerPlaceholder,
+		strings.Join(scan.Malformed, "\n  "))
+}
+
+// TestSessionMatrixEveryMarkerSitsDirectlyAboveTheSpecItClaims stops a marker
+// being parked anywhere in the tree.
+//
+// The bijection alone treats a marker as a claim of coverage no matter where it
+// sits, so a comment dropped into a helper — or into a file with no specs at
+// all — would satisfy a registry row that has no spec behind it. Requiring the
+// next non-comment line to open a Ginkgo spec ties the claim to something that
+// runs.
+func TestSessionMatrixEveryMarkerSitsDirectlyAboveTheSpecItClaims(t *testing.T) {
+	scan := scanSessionMatrixMarkers(t, findRepoRoot(t))
+
+	require.NotEmpty(t, scan.Markers,
+		"found no markers at all; an empty marker set would satisfy this guard vacuously")
+
+	require.Empty(t, scan.Misplaced,
+		"a marker claims the spec it introduces, so the next non-comment line MUST open one "+
+			"with `It(`. These markers introduce something else:\n  %s",
+		strings.Join(scan.Misplaced, "\n  "))
+}
+
+// TestSessionMatrixSpecRowsAndInCodeMarkersAreBijective is the guard the whole
+// registry exists for: a row claiming a spec must have one, and a spec's marker
+// must belong to a row.
+//
+// The comparison is deliberately symmetric about the excluded dispositions. The
+// registry side contributes only `spec` rows, because the other four kinds have
+// no marker by design — but the marker side contributes EVERYTHING it finds, so
+// a marker naming a `not-applicable`, `planned` or
+// `not-implementable-from-harness-defaults` row fails loudly instead of being
+// quietly ignored. Ignoring it is what would let a known-uncoverable cell be
+// upgraded to covered by adding a comment.
+func TestSessionMatrixSpecRowsAndInCodeMarkersAreBijective(t *testing.T) {
+	root := findRepoRoot(t)
+
+	rows := loadSessionMatrixRows(t)
+	dispositions := make(map[string]string, len(rows))
+	var specIDs []string
+	for i, raw := range rows {
+		row := decodeSessionMatrixRow(t, i, raw)
+		dispositions[row.ID] = row.Disposition
+		if row.Disposition == "spec" {
+			specIDs = append(specIDs, row.ID)
 		}
 	}
 
-	require.Equal(t, sessionMatrixNotApplicable, notApplicable,
-		"the registry MUST mark exactly the %d positions the source matrix marks n/a; "+
-			"a higher count means a coverage gap was reclassified as a non-question",
-		sessionMatrixNotApplicable)
+	scan := scanSessionMatrixMarkers(t, root)
+
+	// Non-vacuity, both sides. An empty diff over two empty sets passes
+	// trivially, so a bug that emptied both would otherwise report success.
+	require.NotEmpty(t, specIDs, "the registry contributed no `spec` rows to compare")
+	require.NotEmpty(t, scan.Markers, "the walk found no markers to compare")
+	require.Equal(t, sessionMatrixExpectedCounts["spec"], len(specIDs),
+		"the `spec` row count is pinned; see sessionMatrixExpectedCounts")
+
+	// Duplicates on the marker side would let two specs answer for one row while
+	// leaving another row silently unbacked, and the set comparison alone cannot
+	// see it.
+	byID := make(map[string][]sessionMatrixMarkerSite, len(scan.Markers))
+	for _, m := range scan.Markers {
+		byID[m.ID] = append(byID[m.ID], m)
+	}
+	for id, sites := range byID {
+		if len(sites) > 1 {
+			where := make([]string, 0, len(sites))
+			for _, s := range sites {
+				where = append(where, s.where())
+			}
+			sort.Strings(where)
+			t.Errorf("row %q is claimed by %d markers (%s); the id is the bijection key, "+
+				"so exactly one spec may claim it", id, len(sites), strings.Join(where, ", "))
+		}
+	}
+
+	markerIDs := make([]string, 0, len(byID))
+	for id := range byID {
+		markerIDs = append(markerIDs, id)
+	}
+
+	specSet := make(map[string]struct{}, len(specIDs))
+	for _, id := range specIDs {
+		specSet[id] = struct{}{}
+	}
+
+	var rowsWithoutMarker []string
+	for _, id := range specIDs {
+		if _, ok := byID[id]; !ok {
+			rowsWithoutMarker = append(rowsWithoutMarker, id)
+		}
+	}
+
+	var markersWithoutSpecRow []string
+	for _, id := range markerIDs {
+		if _, ok := specSet[id]; ok {
+			continue
+		}
+		if d, known := dispositions[id]; known {
+			markersWithoutSpecRow = append(markersWithoutSpecRow,
+				fmt.Sprintf("%s (at %s) names a row dispositioned %q; a marker cannot "+
+					"upgrade a non-spec row to covered — change the row's disposition "+
+					"deliberately or remove the marker", id, byID[id][0].where(), d))
+			continue
+		}
+		markersWithoutSpecRow = append(markersWithoutSpecRow,
+			fmt.Sprintf("%s (at %s) names no row in the registry at all", id, byID[id][0].where()))
+	}
+
+	sort.Strings(rowsWithoutMarker)
+	sort.Strings(markersWithoutSpecRow)
+
+	require.Empty(t, rowsWithoutMarker,
+		"these rows declare `disposition: spec` but no spec in the tree carries their "+
+			"marker. Resolve by WRITING the spec or by moving the row to an honest "+
+			"disposition — never by deleting the row:\n  %s",
+		strings.Join(rowsWithoutMarker, "\n  "))
+
+	require.Empty(t, markersWithoutSpecRow,
+		"these markers claim a cell the registry does not record as spec-covered:\n  %s",
+		strings.Join(markersWithoutSpecRow, "\n  "))
+
+	// Belt and braces: after the two diffs the sets must be identical, which
+	// also catches any ordering or counting mistake in the loops above.
+	sort.Strings(specIDs)
+	sort.Strings(markerIDs)
+	require.Equal(t, specIDs, markerIDs,
+		"the `spec` row set and the marker set MUST be identical")
+}
+
+// TestSessionMatrixCitedSpecTextAppearsInTheCitedFile resolves every pointer the
+// registry offers as evidence.
+//
+// It covers `covered_by` (a pre-existing spec cited instead of writing a new
+// one) and `spec` alike: both are claims about text in a file, and a claim about
+// a file nobody opens is the plausible-sounding pointer this registry exists to
+// stop. A citation that drifted when a spec was renamed fails here rather than
+// quietly aging into fiction.
+func TestSessionMatrixCitedSpecTextAppearsInTheCitedFile(t *testing.T) {
+	root := findRepoRoot(t)
+	rows := loadSessionMatrixRows(t)
+
+	checked := 0
+	for i, raw := range rows {
+		row := decodeSessionMatrixRow(t, i, raw)
+
+		for _, cite := range []struct {
+			key string
+			ptr *sessionMatrixPointer
+		}{{"spec", row.Spec}, {"covered_by", row.CoveredBy}} {
+			if cite.ptr == nil {
+				continue
+			}
+			checked++
+
+			require.NotEmptyf(t, cite.ptr.File, "row %q: %s.file is empty", row.ID, cite.key)
+			require.NotEmptyf(t, cite.ptr.Container, "row %q: %s.container is empty", row.ID, cite.key)
+			require.NotEmptyf(t, cite.ptr.Name, "row %q: %s.name is empty", row.ID, cite.key)
+
+			abs := filepath.Join(root, filepath.FromSlash(cite.ptr.File))
+			data, err := os.ReadFile(abs)
+			require.NoErrorf(t, err,
+				"row %q cites %s.file %q, which cannot be read; a citation to a file that "+
+					"is not there is not evidence of coverage",
+				row.ID, cite.key, cite.ptr.File)
+
+			body := string(data)
+			require.Containsf(t, body, cite.ptr.Container,
+				"row %q cites %s.container %q, which does not appear in %s",
+				row.ID, cite.key, cite.ptr.Container, cite.ptr.File)
+			require.Containsf(t, body, cite.ptr.Name,
+				"row %q cites %s.name %q, which does not appear in %s",
+				row.ID, cite.key, cite.ptr.Name, cite.ptr.File)
+		}
+	}
+
+	// Without this a registry whose pointers all failed to decode would sail
+	// through the loop above having checked nothing.
+	require.Equal(t,
+		sessionMatrixExpectedCounts["spec"]+sessionMatrixExpectedCounts["covered-elsewhere"],
+		checked,
+		"every `spec` and `covered-elsewhere` row MUST offer a resolvable citation; a "+
+			"lower count means a pointer failed to decode and was skipped rather than checked")
+}
+
+// scanSessionMatrixMarkers walks the repository's Go sources once and returns
+// every marker, every near-miss, and every misplaced marker.
+//
+// Scope: Go sources only, including non-test files — a marker in production
+// code claims a cell just as loudly as one in a spec, and it would have no
+// `It(` under it, so it is caught by the placement guard rather than ignored.
+func scanSessionMatrixMarkers(t *testing.T, root string) sessionMatrixScan {
+	t.Helper()
+
+	var scan sessionMatrixScan
+
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			if _, skip := skipDirs[d.Name()]; skip {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if rel == sessionMatrixSelfPath {
+			return nil
+		}
+
+		data, readErr := os.ReadFile(path) //nolint:gosec // path comes from the repo-root walk
+		if readErr != nil {
+			return readErr
+		}
+		scan.FilesScanned++
+
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			if !strings.Contains(line, sessionMatrixMarkerToken) {
+				continue
+			}
+			m := sessionMatrixMarkerRE.FindStringSubmatch(line)
+			if m == nil {
+				if strings.Contains(line, sessionMatrixMarkerPlaceholder) {
+					continue // documentation of the marker form, not a claim
+				}
+				scan.Malformed = append(scan.Malformed,
+					fmt.Sprintf("%s:%d: %s", rel, i+1, strings.TrimSpace(line)))
+				continue
+			}
+
+			site := sessionMatrixMarkerSite{ID: m[1], File: rel, Line: i + 1}
+			scan.Markers = append(scan.Markers, site)
+
+			if next, ok := nextNonCommentLine(lines, i+1); !ok || !strings.Contains(next, "It(") {
+				scan.Misplaced = append(scan.Misplaced,
+					fmt.Sprintf("%s claims %q but the next non-comment line is %q",
+						site.where(), site.ID, strings.TrimSpace(next)))
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err, "walk the repository for session-matrix markers")
+
+	require.NotZero(t, scan.FilesScanned,
+		"the walk read no Go files; every marker-side assertion would pass vacuously")
+
+	return scan
+}
+
+// nextNonCommentLine returns the first line at or after from that is neither
+// blank nor a whole-line comment. A marker is often followed by further
+// explanatory comment lines, so "directly above" means "with nothing but
+// commentary in between", not "on the adjacent line".
+func nextNonCommentLine(lines []string, from int) (string, bool) {
+	for i := from; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		return lines[i], true
+	}
+	return "", false
 }
 
 // loadSessionMatrixRows reads and parses the registry. Every failure is fatal:
