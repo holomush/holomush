@@ -1248,6 +1248,67 @@ func (s *Server) GuestPlayer(ctx context.Context) *AuthedPlayer {
 	}
 }
 
+// AdditionalCharacter provisions a SECOND character for the player this handle
+// already represents, and returns a handle that opens sessions for it under the
+// SAME player-session bearer token.
+//
+// # Why this seam exists
+//
+// Server.AuthedPlayer and Server.GuestPlayer each provision one player with one
+// character, so two calls yield two DIFFERENT players holding two DIFFERENT
+// tokens. That shape cannot express the matrix's multi-session column, whose
+// subject is two concurrent game sessions belonging to ONE player session — the
+// same shape test/integration/auth/multi_tab_test.go builds by hand from raw
+// repositories ("two characters of one player", multi_tab_test.go:282-340).
+//
+// The distinction is load-bearing rather than cosmetic. Production's Disconnect
+// takes a session id AND the caller's player-session token, and validates the
+// pairing through auth.ValidateSessionOwnership
+// (internal/grpc/lifecycle_handler.go:106-123). With two separate players the
+// two tokens differ, so an implementation that keyed the teardown on the TOKEN
+// instead of the session id would still leave the other player's session alone
+// and the spec would pass. With two characters under one token that mistake
+// takes both sessions down, which is what makes a multi-session spec built on
+// this seam falsifiable.
+//
+// The returned handle shares PlayerID and the bearer token and carries the new
+// CharacterID, so it drives the same OpenWebSession / OpenTelnetSession methods
+// as its sibling. The receiver is not mutated: the caller keeps a working handle
+// for the original character.
+//
+// Scope: the character is seeded directly through the world character
+// repository — the same route AuthedPlayer uses, and outside the production
+// genesis fence by design. No session is opened here.
+func (p *AuthedPlayer) AdditionalCharacter(ctx context.Context, charName string) *AuthedPlayer {
+	p.server.t.Helper()
+
+	startLocID := p.server.guestStartLocationID
+	char, err := world.NewCharacter(p.PlayerID, charName)
+	require.NoError(p.server.t, err, "integrationtest.AuthedPlayer.AdditionalCharacter: NewCharacter")
+	char.LocationID = &startLocID
+	_, seedErr := p.server.worldCharRepo.Create(ctx, char)
+	require.NoError(p.server.t, seedErr,
+		"integrationtest.AuthedPlayer.AdditionalCharacter: persist character %q", charName)
+
+	// Mirror AuthedPlayer/ConnectAuthedWithRoles: under WithPluginCrypto the
+	// CoreServer resolves a typed CHARACTER identity through BindingRepository,
+	// which the direct repo seed above bypasses.
+	if p.server.pluginCrypto != nil {
+		_, bindErr := worldpg.NewBindingRepository(p.server.pool).Create(ctx,
+			p.PlayerID.String(), char.ID.String(), "integrationtest.AuthedPlayer.AdditionalCharacter")
+		require.NoError(p.server.t, bindErr,
+			"integrationtest.AuthedPlayer.AdditionalCharacter: create binding")
+	}
+
+	return &AuthedPlayer{
+		PlayerID:    p.PlayerID,
+		CharacterID: char.ID,
+		LocationID:  startLocID,
+		server:      p.server,
+		rawToken:    p.rawToken,
+	}
+}
+
 // ConnectAuthed creates a named player+character and opens a game session.
 // The character is placed at the server's guest start location.
 func (s *Server) ConnectAuthed(ctx context.Context, charName string) *Session {

@@ -478,21 +478,63 @@ rows:
   - id: move-arrival.web-char
     transition: Character move while attached -> LocationArrivedAt advances
     column: web-char
-    disposition: planned
-    owed_by: "09-15"
-
+    disposition: spec
+    issue: 4788
+    spec:
+      file: test/integration/session/lifecycle_privacy_floor_test.go
+      container: Moving while attached advances the history floor of the session that moved
+      name: stops returning a destination event that predates arrival once the session's location changes
+    notes: >-
+      WHAT THIS CELL COVERS, PRECISELY: the privacy floor applied to a session whose location changed. The spec drives Session.MoveTo,
+      which writes sessions.location_id and sessions.location_arrived_at directly and — per its own doc comment at internal/testsupport/integrationtest/session.go:312-339
+      — deliberately does NOT invoke world.Service.MoveCharacter and never touches characters.location_id. WHAT IT DOES NOT
+      COVER: that the PRODUCTION movement pipeline advances the floor. That pipeline is not reachable here and is currently
+      unreachable from a player at all. world.Service.MoveCharacter propagates to the session store through a MovementHook
+      (internal/world/movement_hook.go:13-33) whose only implementation is wired exclusively in cmd/holomush/sub_grpc.go:331;
+      the integration harness builds its world service without one (internal/testsupport/integrationtest/plugins.go:267),
+      so MoveCharacter there runs against NoopMovementHook and would leave location_arrived_at UNCHANGED — proving the opposite
+      of this row. The production movement-lifecycle claim is tracked by issue 4788, which records that MoveCharacter has
+      zero production callers, is not integration-tested, that no plugin registers a movement command, and whose acceptance
+      includes "a command-to-move integration test". session.Store.UpdateLocationOnMove, the tail of that pipeline and the
+      statement that actually writes the new floor, has no test reference anywhere in the tree. The hard-gate arm of a move
+      (a query against the PRIOR location is denied) is covered by test/integration/privacy/privacy_test.go's "INV-PRIVACY-1:
+      character move resets location floor", which runs a deny-all engine so the gate can fire; this suite's harness runs
+      the permissive default, under which staffOverride bypasses the gate for every session. #magic___^_^___line
   - id: move-arrival.telnet
     transition: Character move while attached -> LocationArrivedAt advances
     column: telnet
-    disposition: planned
-    owed_by: "09-15"
+    disposition: spec
+    issue: 4788
+    spec:
+      file: test/integration/session/lifecycle_privacy_floor_test.go
+      container: Moving while attached advances the history floor of the session that moved
+      name: applies the same advanced floor to a telnet-typed session and leaves its transport identity intact
+    notes: >-
+      Same scope and same limitation as move-arrival.web-char — a simulated move with the privacy floor as the property under
+      test, NOT the production movement pipeline (tracked by issue 4788). Adds the telnet-specific content: client_type is
+      read back from session_connections both before and after the move, so a move that dropped or retyped the connection
+      would be caught. The grid-presence roster counts connections by client_type, so transport identity decides who can see
+      the character at the destination. Like every telnet cell this asserts SESSION STATE only — internal/telnet is not exercised.
 
   - id: move-arrival.multi-session
     transition: Character move while attached -> LocationArrivedAt advances
     column: multi-session
-    disposition: planned
-    owed_by: "09-15"
-
+    disposition: spec
+    issue: 4788
+    spec:
+      file: test/integration/session/lifecycle_privacy_floor_test.go
+      container: Moving while attached advances the history floor of the session that moved
+      name: leaves a sibling session's floor and history view untouched when the other session's character moves
+    notes: >-
+      Two concurrent game sessions under ONE player session (two characters of one player, built with AuthedPlayer.AdditionalCharacter
+      — the shape test/integration/auth/multi_tab_test.go:282 assembles by hand for the other multi-session cells). The shared
+      player_session_id is read back from both rows rather than assumed. HONEST SCOPE, stated because half of this cell is
+      weaker than it looks: the PRODUCTION half is that each session's view is floored by its OWN row — streamScopeFloor takes
+      one session.Info (internal/grpc/scope_floor.go:34) — so the sibling's read is decided by the sibling's arrival regardless
+      of the mover's row. The sibling's row being untouched in the first place is a property of Session.MoveTo's WHERE clause,
+      i.e. the test's own setup, not production behaviour. Production's real write, session.Store.UpdateLocationOnMove, is
+      keyed by CHARACTER and updates every active session of that character; it is untested and unreachable from this harness
+      (issue 4788). The same production-pipeline limitation as move-arrival.web-char applies. #magic___^_^___line #magic___^_^___line
   # --- Transition 11: tmux-style telnet reattach -------------------------
   - id: telnet-tmux-reattach.web-guest
     transition: Tmux-style telnet reattach (same player session, new connection)
@@ -537,23 +579,61 @@ rows:
   - id: wifi-blip.web-guest
     transition: WiFi blip (transport-level drop + reconnect, no logout)
     column: web-guest
-    disposition: planned
-    owed_by: "09-15"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_privacy_floor_test.go
+      container: A transport-level blip preserves the session and its history floor
+      name: returns a guest session to active on the same row with an event from the gap still readable
+    notes: >-
+      The drop is asserted to be REAL before any continuity claim is made: the session's connection rows are read back and
+      required to be EMPTY during the gap, so a DetachTransport that silently no-opped would fail there rather than sail through
+      the assertions that follow. Continuity is then asserted by a KEYED lookup on the original session identifier (status
+      back to active, created_at unchanged so the row is the original and not a recreation, arrival floor unchanged), and
+      finally by reading back — by event identifier — an event published while the transport was away. That event's chosen
+      instant sits just above the ORIGINAL arrival floor, so a blip that reset the floor to the reattach moment would swallow
+      exactly it. Guest-specific: the INV-PRIVACY-2 guest identity overlay is asserted to sit BELOW the arrival floor, because
+      streamScopeFloor applies the overlay only when it is the later of the two (internal/grpc/scope_floor.go:62-64) — so
+      the arrival floor is demonstrably what governs the read rather than assumed to be. #magic___^_^___line
   - id: wifi-blip.web-char
     transition: WiFi blip (transport-level drop + reconnect, no logout)
     column: web-char
-    disposition: planned
-    owed_by: "09-15"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_privacy_floor_test.go
+      container: A transport-level blip preserves the session and its history floor
+      name: returns a registered player's session to active on the same row with an event from the gap still readable
+    notes: >-
+      Same shared body and same assertions as wifi-blip.web-guest (real drop proven by empty connection rows during the gap;
+      keyed lookup on the original session identifier; arrival floor unchanged; a gap event read back by identifier), plus
+      the character binding asserted to survive the blip. #magic___^_^___line
   - id: wifi-blip.telnet
     transition: WiFi blip (transport-level drop + reconnect, no logout)
     column: telnet
-    disposition: planned
-    owed_by: "09-15"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_privacy_floor_test.go
+      container: A transport-level blip preserves the session and its history floor
+      name: returns a telnet session to active with a new connection carrying the same transport identity
+    notes: >-
+      Same shared body as the other blip cells, with the telnet content layered on. The connection row is asserted gone during
+      the gap, so the client_type read AFTER the reattach is necessarily the RETURNING connection's, not a survivor of the
+      original. The roster counts connections by client_type, so a reconnect that silently retyped the transport would change
+      who can see the character. Like every telnet cell this asserts SESSION STATE only — internal/telnet is not exercised.
 
   - id: wifi-blip.multi-session
     transition: WiFi blip (transport-level drop + reconnect, no logout)
     column: multi-session
-    disposition: planned
-    owed_by: "09-15"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_privacy_floor_test.go
+      container: A transport-level blip preserves the session and its history floor
+      name: drops and restores one session while a concurrent session under the same player session stays live
+    notes: >-
+      Unlike move-arrival.multi-session, the multi-session content of THIS cell is production's rather than the harness's.
+      Session.DetachTransport calls the production Disconnect RPC, which takes a session id AND the caller's player-session
+      token and validates the pairing through auth.ValidateSessionOwnership (internal/grpc/lifecycle_handler.go:106-123).
+      Both sessions here are two characters of ONE player sharing ONE token (AuthedPlayer.AdditionalCharacter; shared player_session_id
+      read back from both rows), so an implementation that keyed the teardown on the token rather than the session id would
+      take the steady session down with the blipped one. The steady session's status, connection row and arrival floor are
+      read WHILE THE GAP IS STILL OPEN, because a collateral teardown would be invisible once the blipped session has already
+      come back. #magic___^_^___line
