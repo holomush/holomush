@@ -721,3 +721,40 @@ fully built in Prepare, not Activate; (2) confirm the two-sweep barrier still ho
 relocated cmd/holomush→internal/access/setup verbatim (lax+warn INV-B5/B7,
 enforcement unchanged); its 07-04 `coreOnlyFiles` gateway-gate exemptions were
 correctly REMOVED when 07-09 moved the file (no stale phantom).
+
+## In-file comment can MUST you back into a fixed bug (v0.12 Phase 09-03, 2026-07-26) — NOT READY
+Sentinel-removal sweep (`location.go` owner_id/shadows_id, `object.go`
+owner_id/held_by_character_id/contained_in_object_id, `property.go` value/owner)
+was itself CLEAN: keys genuinely omitted, every has_X/is_X witness on BOTH
+branches, no replacement placeholder, tests use full-map `assert.Equal` (+
+`expectAbsent` loop object_test.go:492) so absence is really pinned. Schema()
+still declaring an omitted key is fine — the registry is an ALLOWLIST for keys
+PRESENT (resolver.go:492), never a completeness check, so omission adds no error
+path. BLOCKER was a DOC COMMENT: `location.go:39-42` still said the provider
+"MUST populate sentinel values" for the `location:*` wildcard path — the only
+such string left in `internal/access/` and a direct MUST-vs-MUST contradiction of
+ADR ti1b + `.claude/rules/abac-providers.md`, sitting 25 lines above the code that
+removed them. Ruled ACTIVELY WRONG (not merely confusing): (a) a sentinel can't
+make a `when` match in the general case (`type == "persistent"` ≠ `""`) — it only
+"works" when the peer is equally unresolved, i.e. the 9gtl fail-open itself; (b)
+the correct alternative it lists second (`resource == "<type>:*"` ResourceExact,
+seed.go:343-349) is already sufficient; (c) `helpers.go:36-48` describes the same
+wildcard case correctly with no sentinel advice, and the 3 sibling ULID providers
+carry no such comment — isolated straggler. DURABLE LESSON: after a
+provider-invariant sweep, `rg -i 'sentinel' <pkg> --glob '!*_test.go'` and read
+EVERY hit — the fix commits add correct prose but a pre-existing contradictory
+MUST elsewhere in the same file survives and becomes citable precedent.
+LATENT-CLAIM VERIFICATION RECIPE (reusable): `rg -o 'resource\.(ns)\.[a-z_]+'`
+repo-wide minus tests/docs → policy hits land ONLY in `internal/access/policy/seed.go`
++ `plugins/*/plugin.yaml`; none of the 7 attrs appeared; sole live consumer
+`resource.property.owner == principal.character.id` (seed.go:119,131) is safe only
+because `character.id` = `char.ID.String()` (character.go:125) and
+`parseEntityResource` (helpers.go:50-60) rejects non-ULID before the bag builds —
+incidental, confirmed. Secure-cookie inversion (`defaultSecureCookies=true`,
+gateway.go:92) verified through the REAL path: `posflag.ProviderWithFlag(...,k,...)`
+with non-nil k skips an unchanged flag ONLY when the key already exists in koanf,
+so absent-config → flag default true lands; opt-out confined to compose.yaml
+(dev+e2e overlay, which overrides only ports/depends_on/healthcheck) while deploy
+copies compose.prod.yaml standalone. Registry gap noted: omit-don't-sentinel has
+NO `INV-ACCESS-*` entry (only stream-scoped INV-EVENTBUS-23, invariants.yaml:2597)
+— that absence is WHY a contradictory in-file MUST had nothing canonical to fail against.

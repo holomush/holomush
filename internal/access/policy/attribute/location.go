@@ -36,10 +36,16 @@ func (p *LocationProvider) ResolveSubject(_ context.Context, _ string) (map[stri
 // (notably "location:*" wildcard from bootstrap permission grants).
 // See [parseEntityResource] for the three-branch grammar; the wildcard
 // bypass exists because the engine evaluates target-type seed matches
-// without per-instance attributes (holomush-g776). If a future seed adds
-// a `when` clause comparing `resource.location.X` and is expected to
-// match the wildcard path, the provider MUST populate sentinel values
-// for X (or the seed MUST narrow its target via `resource ==`).
+// without per-instance attributes (holomush-g776).
+//
+// A seed intended to match the wildcard path MUST be attribute-free
+// (target-only), or MUST narrow its target with `resource == "location:*"`
+// — the ResourceExact shape the seed:plugin-cap-* permits use
+// (internal/access/policy/seed.go:343-349). A provider MUST NOT synthesize
+// sentinel attribute values to make a `when` clause match: ADR
+// holomush-ti1b / .claude/rules/abac-providers.md forbid it, and a sentinel
+// only produces a match when the peer operand is equally unresolved, which
+// is exactly the fail-open (holomush-9gtl) the omit rule exists to prevent.
 func (p *LocationProvider) ResolveResource(ctx context.Context, resourceID string) (map[string]any, error) {
 	id, ok, err := parseEntityResource(resourceID, "location")
 	if err != nil {
