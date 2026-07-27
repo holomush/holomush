@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-15-PLAN.md
-last_updated: "2026-07-27T02:08:47.393Z"
+stopped_at: Completed 09-16-PLAN.md
+last_updated: "2026-07-27T02:38:09.025Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 61
+  completed_plans: 62
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 16 of 21
+Plan: 17 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -146,6 +146,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P13 | 71m | 2 tasks | 2 files |
 | Phase 09 P14 | 96m | 3 tasks | 5 files |
 | Phase 09 P15 | 71m | 3 tasks | 5 files |
+| Phase 09 P16 | 62m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -302,6 +303,9 @@ the next milestone yet.
 - [Phase ?]: 09-15: added AuthedPlayer.AdditionalCharacter — two game sessions under ONE player session, the only shape that makes a token-keyed Disconnect teardown detectable (proven by negative control).
 - [Phase ?]: 09-15: INV-PRIVACY-6 flipped pending -> bound; the new floor-preservation spec asserts BOTH clauses of the invariant in one read, so it is not a partial binding.
 - [Phase ?]: 09-15: the two named privacy specs are Ginkgo containers carrying their identifier verbatim, not func Test symbols — no meta-test binds the names today (plan claim did not check out); recorded as EXEMPT from the 09-18 naming sweep.
+- [Phase ?]: 09-16: pinned ALL five session-matrix disposition counts, not just not-applicable — relabelling an unbacked spec row is the cheapest way to satisfy a bijection, and it now fails three guards
+- [Phase ?]: 09-16: the matrix guard carries no invariant-registry entry or binding annotation, following the quarantine bijection it models; the absence is grep-checked, so the file names the annotation descriptively rather than quoting it
+- [Phase ?]: 09-16: no 'uncovered' disposition added — planned + owed_by:unassigned + blocked_on + issue #4863 already is the honest marking for reattach-cas.multi-session
 
 ### Pending Todos
 
@@ -334,14 +338,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-27T02:08:37.593Z
+Last session: 2026-07-27T02:38:09.016Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-15-PLAN.md
+Stopped at: Completed 09-16-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
