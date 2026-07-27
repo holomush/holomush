@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-17-PLAN.md
-last_updated: "2026-07-27T16:30:44.870Z"
+stopped_at: Completed 09-19-PLAN.md — phase 09 final plan
+last_updated: "2026-07-27T16:45:21.847Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 64
+  completed_plans: 65
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 19 of 21
+Plan: 20 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -149,6 +149,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P16 | 62m | 2 tasks | 2 files |
 | Phase 09 P18 | 150min | 3 tasks tasks | 71 files files |
 | Phase 09 P17 | 55m | 2 tasks | 1 files |
+| Phase 09 P19 | 70m | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -319,6 +320,10 @@ the next milestone yet.
 - [Phase ?]: 09-17: ruleset 11923801 already proves check-RUN names are matchable — 7 of its 8 required checks are check runs (integration_id 15368/none) and only CodeRabbit is a commit status, so requiring codecov/patch is mechanically sound
 - [Phase ?]: 09-17: PR #4874 head eee76d23e measures 79.11% (codecov LINE ratio, 3 sessions) vs main base 78.28% — coverage ROSE 0.83 points; the 69.12% figure seen earlier was a mid-merge read before all three upload sessions landed
 - [Phase ?]: 09-17: QUAL-02 restored to Pending — 09-08's mark-complete was a protocol side-effect that re-created the flip 09-01 had deliberately reverted; 09-19 owns the ruling, gaps are #4861 and #4875
+- [Phase 09]: Coverage measurement chain proven repaired: e2e flag 32.27% (was 0.0); whole-repo rose 0.83pt to 79.11%
+- [Phase 09]: codecov project ratchet tightened to threshold: 0% (true no-drop); inert until #4875 resolves
+- [Phase 09]: D-04 deferred BOTH halves: codecov/project never posts (#4875); codecov/patch would deadlock docs-only PRs (#4876)
+- [Phase 09]: QUAL-02 stays Pending — cmd/holomush 70.09% and whole-repo 79.11% are measurably below their named floors
 
 ### Pending Todos
 
@@ -331,6 +336,8 @@ None yet.
 - 259/334 registered invariants are `binding: pending` (concentrated in INV-CRYPTO and INV-SCENE) — tracked
   epic `holomush-hz0v4`, not a blocker, but phases touching crypto/scenes should bind relevant invariants as
   part of their own definition of done
+
+- Operator action outstanding: ruleset 11923801 unchanged; no coverage context gates merges (#4875, #4876)
 
 ### Quick Tasks Completed
 
@@ -351,14 +358,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-27T16:30:44.354Z
+Last session: 2026-07-27T16:45:13.288Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-17-PLAN.md
+Stopped at: Completed 09-19-PLAN.md — phase 09 final plan
 Resume file: None
 
 ## Operator Next Steps
