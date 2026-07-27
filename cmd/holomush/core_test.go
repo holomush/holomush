@@ -1170,14 +1170,18 @@ func TestApplyLogSinkFlagsRoutesEachSinkOverrideToItsOwnField(t *testing.T) {
 	lc.Sentry.Level = "warn"
 	applyLogSinkFlags(cmd, &lc)
 
-	assert.Equal(t, "debug", lc.Stderr.Level)
-	assert.Equal(t, "error", lc.OTel.Level)
+	// These three ARE the cross-wiring guard. The two level overrides are
+	// deliberately given DIFFERENT values, so pinning each sink to its own value
+	// already fails if either override lands on the sibling — the NotEqual pair
+	// that used to sit below was implied by these lines and added no coverage,
+	// while its "cross-wiring guard" framing suggested it did.
+	assert.Equal(t, "debug", lc.Stderr.Level,
+		"--log-stderr-level MUST land on the stderr sink and nowhere else")
+	assert.Equal(t, "error", lc.OTel.Level,
+		"--log-otel-level MUST land on the OTel sink and nowhere else")
 	assert.False(t, lc.Sentry.Enabled)
 
-	// Cross-wiring guards: an override must not land on a sibling sink, and a
-	// flag that was never set must not disturb the configured value.
-	assert.NotEqual(t, "error", lc.Stderr.Level, "the OTel level override must not overwrite the stderr level")
-	assert.NotEqual(t, "debug", lc.OTel.Level, "the stderr level override must not overwrite the OTel level")
+	// A flag that was never set must not disturb the configured value.
 	assert.Equal(t, "warn", lc.Sentry.Level, "an unset --log-sentry-level must leave the configured Sentry level intact")
 	assert.True(t, lc.Stderr.Enabled, "an unset --log-stderr must leave the stderr sink as configured")
 	assert.True(t, lc.OTel.Enabled, "an unset --log-otel must leave the OTel sink as configured")
