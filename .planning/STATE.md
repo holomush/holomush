@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-16-PLAN.md
-last_updated: "2026-07-27T02:38:09.025Z"
+stopped_at: Completed 09-18-PLAN.md
+last_updated: "2026-07-27T03:16:02.118Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 62
+  completed_plans: 63
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 17 of 21
+Plan: 18 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -147,6 +147,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P14 | 96m | 3 tasks | 5 files |
 | Phase 09 P15 | 71m | 3 tasks | 5 files |
 | Phase 09 P16 | 62m | 2 tasks | 2 files |
+| Phase 09 P18 | 150min | 3 tasks tasks | 71 files files |
 
 ## Accumulated Context
 
@@ -306,6 +307,11 @@ the next milestone yet.
 - [Phase ?]: 09-16: pinned ALL five session-matrix disposition counts, not just not-applicable — relabelling an unbacked spec row is the cheapest way to satisfy a bijection, and it now fails three guards
 - [Phase ?]: 09-16: the matrix guard carries no invariant-registry entry or binding annotation, following the quarantine bijection it models; the absence is grep-checked, so the file names the annotation descriptively rather than quoting it
 - [Phase ?]: 09-16: no 'uncovered' disposition added — planned + owed_by:unassigned + blocked_on + issue #4863 already is the honest marking for reattach-cas.multi-session
+- [Phase ?]: 09-18: tightened ACE predicate = underscore-form AND no-subtests AND single-token CamelCase tail; reproduced 09-RESEARCH exactly (1572/466/1106), TestGatewayCommand_SecureCookiesFlag correctly NOT a hit (3-token tail)
+- [Phase ?]: 09-18: the predicate's 'web' skipDirs entry matched by BASENAME, silently skipping internal/web and hiding 22 real violations — the ratchet (reusing meta_helpers' shared skipDirs, which has no 'web') caught it; total 116 -> 138
+- [Phase ?]: 09-18: table-case label detection must be restricted to elements of a SLICE literal — matching any name:/desc: field returns 45 hits, 32 of them domain fixtures like world.Location{Name: "Test"}; restricted it is exactly the 13 sites 09-RESEARCH enumerated
+- [Phase ?]: 09-18: TestINV_ carve-out is DEFENSIVE, not load-bearing — the only two single-token-tail INV names (P4/P5_Coverage_Meta) declare subtests at line 170+ and are excluded by the sanctioned exception first (an rg -A25 window falsely reported them subtest-free)
+- [Phase ?]: 09-18: ACE ratchet carries no invariant-registry entry and no // Verifies: annotation, following the quarantine and matrix ratchets; asserts a non-vacuous corpus (>500 files/>1000 decls/>500 labels) so an empty walk cannot pass as clean
 
 ### Pending Todos
 
@@ -338,14 +344,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-27T02:38:09.016Z
+Last session: 2026-07-27T03:15:49.530Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-16-PLAN.md
+Stopped at: Completed 09-18-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
