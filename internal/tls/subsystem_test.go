@@ -393,26 +393,28 @@ func TestEnsureCerts_SaveCertificatesFailure(t *testing.T) {
 
 // TestEnsureCerts_PartialCertState verifies behavior when only some
 // certificate files exist (e.g., CA exists but server cert doesn't).
+//
+// EVERY partial state MUST error. The table used to carry an `expectError`
+// field that every case set to true, so the else-arm asserting NoError was
+// unreachable — a field a reader takes for a matrix of both outcomes while it
+// only ever expressed one. The property is unconditional, so it is asserted
+// unconditionally.
 func TestEnsureCerts_PartialCertState(t *testing.T) {
 	tests := []struct {
 		name          string
 		filesToCreate []string
-		expectError   bool
 	}{
 		{
 			name:          "only CA cert exists",
 			filesToCreate: []string{"root-ca.crt"},
-			expectError:   true,
 		},
 		{
 			name:          "only core cert exists",
 			filesToCreate: []string{"core.crt"},
-			expectError:   true,
 		},
 		{
 			name:          "core cert and key but no CA",
 			filesToCreate: []string{"core.crt", "core.key"},
-			expectError:   true,
 		},
 	}
 
@@ -430,11 +432,9 @@ func TestEnsureCerts_PartialCertState(t *testing.T) {
 			}
 
 			_, err = EnsureCerts(tmpDir, "test-game-id")
-			if tt.expectError {
-				assert.Error(t, err, "Expected error for partial cert state")
-			} else {
-				assert.NoError(t, err)
-			}
+			assert.Error(t, err,
+				"a partial certificate state MUST error rather than silently regenerating over "+
+					"the material that is already there")
 		})
 	}
 }
