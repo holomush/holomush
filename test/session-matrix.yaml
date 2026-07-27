@@ -13,12 +13,32 @@
 #
 #     // matrix-row: <id>
 #
-# ENFORCEMENT: test/meta/session_matrix_registry_test.go.
-#   - Shape (landed together with this file): 48 rows, unique ids, exactly one
-#     disposition per row, exactly 10 not-applicable.
-#   - Bijection (added later in the phase): a row with `disposition: spec` MUST
-#     have a matching in-code marker, and every marker MUST have a row. A
-#     `spec` row with no marker FAILS THE BUILD.
+# ENFORCEMENT: test/meta/session_matrix_registry_test.go. All of the following
+# are landed and green; each was demonstrated failing on a seeded breakage
+# before being accepted.
+#   - SHAPE — 48 rows, unique ids, exactly one disposition per row, and the
+#     exact population of EVERY disposition (32 spec / 2 covered-elsewhere /
+#     1 planned / 10 not-applicable / 3 not-implementable). Pinning all five,
+#     not just not-applicable, is what stops the bijection being satisfied by
+#     RELABELLING an unbacked `spec` row as an excuse — the cheapest way to make
+#     a coverage claim disappear. Moving a row between dispositions is a
+#     deliberate edit that must update the pinned counts in the same change.
+#   - MARKER WELL-FORMEDNESS — any line carrying `matrix-row:` must be an
+#     anchored marker or documentation carrying the literal `<id>`. A
+#     trailing-comment or typo'd marker fails rather than being silently unseen.
+#   - MARKER PLACEMENT — every marker's next non-comment line opens an `It(`, so
+#     a marker cannot be parked somewhere with no spec under it.
+#   - BIJECTION — the `spec` rows and the in-code markers are the same set, with
+#     no duplicates on either side. A `spec` row with no marker FAILS THE BUILD;
+#     so does a marker naming a row of any other disposition, which is what
+#     stops a not-implementable cell being upgraded by adding a comment.
+#   - POINTER RESOLUTION — every `spec` and `covered_by` citation names a file
+#     that exists and container/name text that appears in it.
+#
+# WHAT ENFORCEMENT DOES NOT COVER: the truth of a row's prose. `notes`,
+# `reason` and `gap_notes` are free text. A row whose disposition and marker
+# agree can still describe the world wrongly, and no green run is evidence
+# otherwise — that remains a human-review property.
 #
 # SCHEMA — rows: list of { id, transition, column, disposition, <payload> }
 #
@@ -108,7 +128,7 @@ rows:
     disposition: not-applicable
     reason: >-
       A fresh selection is the act that brings the first session into existence, so there is no concurrent session for the
-      multi-session dimension to range over. #magic___^_^___line
+      multi-session dimension to range over.
   # --- Transition 2: reattach within TTL, character-selection path -------
   - id: reattach-select.web-guest
     transition: Reattach within TTL (SelectCharacter path)
@@ -125,7 +145,7 @@ rows:
       can be called repeatedly on the guest's own bearer token and the production reattach branch is genuinely taken. The
       rejected stand-in was "connect a second guest", which satisfies every identifier and timestamp assertion trivially without
       any reattach; the spec's CharacterID assertion is what a second guest could not satisfy, so the stand-in is excluded
-      by construction rather than by convention. #magic___^_^___line
+      by construction rather than by convention.
   - id: reattach-select.web-char
     transition: Reattach within TTL (SelectCharacter path)
     column: web-char
@@ -169,7 +189,7 @@ rows:
     notes: >-
       test/integration/presence/reattach_presence_test.go covers the SAME detach/reattach sequence for a guest, but its subject
       is grid_present (I-LIVE-3) and it asserts neither session identity nor arrival-timestamp preservation. It is a partial
-      cover of this cell, so it is cross-referenced here rather than claimed as the disposition. #magic___^_^___line
+      cover of this cell, so it is cross-referenced here rather than claimed as the disposition.
   - id: reattach-cas.web-char
     transition: Reattach within TTL (Subscribe.ReattachCAS)
     column: web-char
@@ -193,18 +213,21 @@ rows:
     column: multi-session
     disposition: planned
     owed_by: unassigned
+    issue: 4863
     blocked_on: >-
       integrationtest.Session models exactly one transport, and DetachTransport calls the production Disconnect RPC, which
       detaches the whole session rather than a single connection. Exercising a reattach while a sibling connection stays live
-      needs per-connection detach in the harness. #magic___^_^___line
+      needs per-connection detach in the harness.
     notes: >-
-      OWED BY NOBODY, DELIBERATELY. 09-12 assigned this cell to 09-14 on the assumption 09-14 would build the missing seam.
-      09-14 built the guest re-authentication seam (Server.GuestPlayer) that unblocked reattach-select.web-guest and post-ttl-relogin.web-guest,
-      but did NOT build per-connection detach: that is a third, larger seam — a second live Subscribe on one session, with
-      only one of the two connections dropped — and neither 09-14's tasks nor 09-20's carry it. 09-15 covers the move-arrival
-      and wifi-blip rows, so no remaining plan in this phase owns this cell. `owed_by` is therefore recorded as `unassigned`
-      rather than naming a plan that has already closed without covering it: a completed plan named as the ower is exactly
-      the false-assurance artifact this registry exists to prevent. This cell is a real, visible gap at phase end. #magic___^_^___line
+      OWED BY NOBODY, DELIBERATELY — AND NOW TRACKED. 09-12 assigned this cell to 09-14 on the assumption 09-14 would build
+      the missing seam. 09-14 built the guest re-authentication seam (Server.GuestPlayer) that unblocked reattach-select.web-guest
+      and post-ttl-relogin.web-guest, but did NOT build per-connection detach: that is a third, larger seam — a second live
+      Subscribe on one session, with only one of the two connections dropped — and neither 09-14's tasks nor 09-20's carry
+      it. 09-15 covers the move-arrival and wifi-blip rows, so no remaining plan in this phase owns this cell. `owed_by` is
+      therefore recorded as `unassigned` rather than naming a plan that has already closed without covering it: a completed
+      plan named as the ower is exactly the false-assurance artifact this registry exists to prevent. This is the matrix's
+      ONE genuinely uncovered cell at phase end, and 09-16 filed issue 4863 so it is followable rather than merely visible.
+      It MUST stay expressible: a guard that admitted only `spec` rows would force a false claim onto it.
   # --- Transition 4: detach all connections ------------------------------
   - id: detach-all.web-guest
     transition: Detach (drop all connections) -> status=Detached + TTL
@@ -235,14 +258,14 @@ rows:
     notes: >-
       The telnet cell additionally asserts that every session_connections row is gone after the drop, which is the "drop ALL
       connections" half of the transition observed where production observes it: the grid-presence roster counts rows by client_type,
-      so a surviving telnet row would keep a disconnected character visible. #magic___^_^___line
+      so a surviving telnet row would keep a disconnected character visible.
   - id: detach-all.multi-session
     transition: Detach (drop all connections) -> status=Detached + TTL
     column: multi-session
     disposition: not-applicable
     reason: >-
       Dropping every connection is a property of a single session's connection set; holding a second concurrent session does
-      not change what this transition asserts about the first. #magic___^_^___line
+      not change what this transition asserts about the first.
   # --- Transition 5: reaper sweep at TTL expiry --------------------------
   - id: reaper-sweep.web-guest
     transition: Reaper sweep at TTL expiry -> row deleted
@@ -257,7 +280,7 @@ rows:
       and asserts absence by a keyed Get returning SESSION_NOT_FOUND rather than by a row count. The row is seeded with Server.DetachAndExpireSession,
       never Server.ExpireSession, which forces the terminal 'expired' status that ListExpired's predicate can never match;
       the shared helper asserts the row IS in ListExpired's result set before starting the sweep, so a mis-seeded row fails
-      loudly instead of timing out. #magic___^_^___line
+      loudly instead of timing out.
   - id: reaper-sweep.web-char
     transition: Reaper sweep at TTL expiry -> row deleted
     column: web-char
@@ -282,7 +305,7 @@ rows:
     disposition: not-applicable
     reason: >-
       The reaper's predicate (status='detached' AND expires_at < now) is evaluated per session row, so concurrency across
-      a player's sessions does not alter the transition under test. #magic___^_^___line
+      a player's sessions does not alter the transition under test.
   # --- Transition 6: post-TTL re-login -----------------------------------
   - id: post-ttl-relogin.web-guest
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
@@ -301,7 +324,7 @@ rows:
       while the INV-PRIVACY-1 arrival floor MOVED — the pair is what distinguishes the same guest returning from a new guest.
       streamScopeFloor applies the guest overlay only when it is later than the arrival floor (internal/grpc/scope_floor.go:61-64),
       and the spec asserts the guest floor sits BELOW the arrival floor as a precondition, so the arrival floor is demonstrably
-      what governs the reads. #magic___^_^___line
+      what governs the reads.
   - id: post-ttl-relogin.web-char
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
     column: web-char
@@ -316,7 +339,7 @@ rows:
       the exclusion assertion. Both bracketing relationships are asserted, so wall-clock collapse fails the spec rather than
       making it pass for the wrong reason. A second event ABOVE the new floor is read back in the SAME query as a positive
       control, because the history read returns zero rows here and a bare absence assertion would otherwise be satisfied by
-      a read that returned nothing at all. #magic___^_^___line
+      a read that returned nothing at all.
   - id: post-ttl-relogin.telnet
     transition: Post-TTL re-login -> fresh session (new LocationArrivedAt)
     column: telnet
@@ -332,7 +355,7 @@ rows:
     disposition: not-applicable
     reason: >-
       Re-login after expiry starts from a state with no surviving session row, so there is no concurrent session for this
-      dimension to range over. #magic___^_^___line
+      dimension to range over.
   # --- Transition 7: quit command ----------------------------------------
   - id: quit-command.web-guest
     transition: quit command -> row deleted
@@ -369,14 +392,14 @@ rows:
     notes: >-
       The telnet cell reads client_type back from session_connections BEFORE the quit (the rows CASCADE away with the session,
       so afterwards is too late) and asserts the connection rows are gone after it. The grid-presence roster counts connections
-      by client_type, so a connection row outliving its session would keep a quit character visible. #magic___^_^___line
+      by client_type, so a connection row outliving its session would keep a quit character visible.
   - id: quit-command.multi-session
     transition: quit command -> row deleted
     column: multi-session
     disposition: not-applicable
     reason: >-
       quit ends the one session it is issued on; the source matrix marks the concurrent-session case as not arising for this
-      transition. #magic___^_^___line
+      transition.
   # --- Transition 8: explicit logout -------------------------------------
   - id: explicit-logout.web-guest
     transition: Explicit logout -> row deleted
@@ -390,7 +413,7 @@ rows:
       Logout is NOT a command and these specs deliberately do not blur it with quit: it is the Logout RPC on the PLAYER session
       (Session.Logout -> CoreServer.Logout), which fans out over every game session that player session owns and deletes each
       one (internal/grpc/auth_handlers.go:673-706). Absence is asserted the same way as the quit cells — a keyed SESSION_NOT_FOUND
-      lookup with no expiry seam and no reaper. #magic___^_^___line
+      lookup with no expiry seam and no reaper.
   - id: explicit-logout.web-char
     transition: Explicit logout -> row deleted
     column: web-char
@@ -420,7 +443,7 @@ rows:
       Verified by reading multi_tab_test.go:386-506. Logout in one tab is followed by four call sites retried from a second
       tab, each of which must reject the now-stale token. It asserts the session is gone from every consumer surface rather
       than reading the deleted row back directly. The companion spec at multi_tab_test.go:508 ("Subscribe rejects a stale
-      token with SESSION_NOT_FOUND before sending any frame") pins the Subscribe call site of the same transition. #magic___^_^___line
+      token with SESSION_NOT_FOUND before sending any frame") pins the Subscribe call site of the same transition.
   # --- Transition 9: administrator boot ----------------------------------
   - id: admin-boot.web-guest
     transition: Admin boot -> row deleted
@@ -445,7 +468,7 @@ rows:
       and needs five the harness does not wire — PlayerRepo, Hasher, PlayerSessions, ResetRepo, CharLister. The two gaps have
       different remedies and must not be conflated: closing the wiring gap alone would make the command reachable while still
       delivering the wrong semantics, so a spec written against it would go green on a transition the system does not perform.
-      Do NOT write an approximating spec for this cell and do NOT repurpose logout or a direct row delete as a stand-in. #magic___^_^___line
+      Do NOT write an approximating spec for this cell and do NOT repurpose logout or a direct row delete as a stand-in.
   - id: admin-boot.telnet
     transition: Admin boot -> row deleted
     column: telnet
@@ -455,7 +478,7 @@ rows:
       Same disposition and same two gaps as admin-boot.web-char — the `resetpassword --kick` path (internal/command/handlers/resetpassword.go:197-218)
       exists and is capability-gated, but bypasses the RecordBootedSession / session_ended semantics this row asserts (issue
       4862) and is unreachable from harness defaults because RegisterAdmin panics on the five dependencies the harness does
-      not wire. The transport column changes nothing: the shortfall is in the command path, not the connection. #magic___^_^___line
+      not wire. The transport column changes nothing: the shortfall is in the command path, not the connection.
   - id: admin-boot.multi-session
     transition: Admin boot -> row deleted
     column: multi-session
@@ -466,7 +489,7 @@ rows:
       --kick` (internal/command/handlers/resetpassword.go:197-218) addresses most directly — it iterates every character belonging
       to the target player — which makes the semantic shortfall sharper rather than softer: every one of those sessions is
       deleted without the session_ended emission the row asserts (issue 4862), and the path is still unreachable from harness
-      defaults through RegisterAdmin's unwired dependencies. #magic___^_^___line
+      defaults through RegisterAdmin's unwired dependencies.
   # --- Transition 10: character move while attached ----------------------
   - id: move-arrival.web-guest
     transition: Character move while attached -> LocationArrivedAt advances
@@ -474,7 +497,7 @@ rows:
     disposition: not-applicable
     reason: >-
       The source matrix places guest movement outside this row's scope; the guest start location is the only location a guest
-      session is given. #magic___^_^___line
+      session is given.
   - id: move-arrival.web-char
     transition: Character move while attached -> LocationArrivedAt advances
     column: web-char
@@ -499,7 +522,7 @@ rows:
       statement that actually writes the new floor, has no test reference anywhere in the tree. The hard-gate arm of a move
       (a query against the PRIOR location is denied) is covered by test/integration/privacy/privacy_test.go's "INV-PRIVACY-1:
       character move resets location floor", which runs a deny-all engine so the gate can fire; this suite's harness runs
-      the permissive default, under which staffOverride bypasses the gate for every session. #magic___^_^___line
+      the permissive default, under which staffOverride bypasses the gate for every session.
   - id: move-arrival.telnet
     transition: Character move while attached -> LocationArrivedAt advances
     column: telnet
@@ -534,7 +557,7 @@ rows:
       of the mover's row. The sibling's row being untouched in the first place is a property of Session.MoveTo's WHERE clause,
       i.e. the test's own setup, not production behaviour. Production's real write, session.Store.UpdateLocationOnMove, is
       keyed by CHARACTER and updates every active session of that character; it is untested and unreachable from this harness
-      (issue 4788). The same production-pipeline limitation as move-arrival.web-char applies. #magic___^_^___line #magic___^_^___line
+      (issue 4788). The same production-pipeline limitation as move-arrival.web-char applies.
   # --- Transition 11: tmux-style telnet reattach -------------------------
   - id: telnet-tmux-reattach.web-guest
     transition: Tmux-style telnet reattach (same player session, new connection)
@@ -542,14 +565,14 @@ rows:
     disposition: not-applicable
     reason: >-
       A tmux-style detach and reattach is a telnet-client behaviour; there is no web-guest analogue of resuming an out-of-band
-      terminal. #magic___^_^___line
+      terminal.
   - id: telnet-tmux-reattach.web-char
     transition: Tmux-style telnet reattach (same player session, new connection)
     column: web-char
     disposition: not-applicable
     reason: >-
       A tmux-style detach and reattach is a telnet-client behaviour; the web column's equivalent is the ordinary reattach
-      rows above. #magic___^_^___line
+      rows above.
   - id: telnet-tmux-reattach.telnet
     transition: Tmux-style telnet reattach (same player session, new connection)
     column: telnet
@@ -567,14 +590,14 @@ rows:
       is asserted gone first, so the returning connection is demonstrably new), and client_type='telnet' read back from session_connections.
       The session count is taken across EVERY status on purpose: idx_sessions_active_character already forbids two active-or-detached
       rows per character, so a status-restricted count could not rise above one and would be decorative. Like every telnet
-      cell this asserts SESSION STATE only — internal/telnet is not exercised. #magic___^_^___line
+      cell this asserts SESSION STATE only — internal/telnet is not exercised.
   - id: telnet-tmux-reattach.multi-session
     transition: Tmux-style telnet reattach (same player session, new connection)
     column: multi-session
     disposition: not-applicable
     reason: >-
       This row already asserts one player session surviving the arrival of a new connection, so the multi-session dimension
-      restates the row rather than adding a distinct case. #magic___^_^___line
+      restates the row rather than adding a distinct case.
   # --- Transition 12: transport-level blip -------------------------------
   - id: wifi-blip.web-guest
     transition: WiFi blip (transport-level drop + reconnect, no logout)
@@ -593,7 +616,7 @@ rows:
       instant sits just above the ORIGINAL arrival floor, so a blip that reset the floor to the reattach moment would swallow
       exactly it. Guest-specific: the INV-PRIVACY-2 guest identity overlay is asserted to sit BELOW the arrival floor, because
       streamScopeFloor applies the overlay only when it is the later of the two (internal/grpc/scope_floor.go:62-64) — so
-      the arrival floor is demonstrably what governs the read rather than assumed to be. #magic___^_^___line
+      the arrival floor is demonstrably what governs the read rather than assumed to be.
   - id: wifi-blip.web-char
     transition: WiFi blip (transport-level drop + reconnect, no logout)
     column: web-char
@@ -605,7 +628,7 @@ rows:
     notes: >-
       Same shared body and same assertions as wifi-blip.web-guest (real drop proven by empty connection rows during the gap;
       keyed lookup on the original session identifier; arrival floor unchanged; a gap event read back by identifier), plus
-      the character binding asserted to survive the blip. #magic___^_^___line
+      the character binding asserted to survive the blip.
   - id: wifi-blip.telnet
     transition: WiFi blip (transport-level drop + reconnect, no logout)
     column: telnet
@@ -636,4 +659,4 @@ rows:
       read back from both rows), so an implementation that keyed the teardown on the token rather than the session id would
       take the steady session down with the blipped one. The steady session's status, connection row and arrival floor are
       read WHILE THE GAP IS STILL OPEN, because a collateral teardown would be invisible once the blipped session has already
-      come back. #magic___^_^___line
+      come back.
