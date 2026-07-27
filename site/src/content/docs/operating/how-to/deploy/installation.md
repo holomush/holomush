@@ -232,6 +232,20 @@ DATABASE_URL="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable
 holomush gateway
 ```
 
+:::caution[Serving plain HTTP on a non-localhost host?]
+`--secure-cookies` defaults to **`true`**, which sets the `Secure` attribute on
+the session cookie. Browsers grant the secure-context exemption only to
+`localhost` and the loopback address, so a `Secure` cookie sent over plain HTTP
+to any other hostname is **silently dropped** — users authenticate, get
+redirected, and are logged out again with no error anywhere.
+
+The local walkthrough above is on `localhost`, so it is unaffected. If you serve
+the gateway over plain HTTP at any other address (a LAN hostname, a container IP),
+pass `--secure-cookies=false`. If you terminate TLS in front of the gateway, keep
+the default. See
+[`--secure-cookies`](/operating/reference/configuration/#--secure-cookies).
+:::
+
 ### Verify Installation
 
 Check server health:
@@ -316,6 +330,9 @@ Requires=holomush-core.service
 Type=simple
 User=holomush
 Group=holomush
+# Add --secure-cookies=false if this host serves plain HTTP at a non-localhost
+# address; see the caution below. Keep the default when TLS is terminated in
+# front of the gateway.
 ExecStart=/usr/local/bin/holomush gateway
 Restart=on-failure
 RestartSec=5
@@ -323,6 +340,16 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+
+:::caution[The gateway's session cookies are `Secure` by default]
+Unlike the local two-terminal walkthrough, a systemd deployment usually serves a
+non-`localhost` address. `--secure-cookies` defaults to **`true`**, so if this
+host speaks plain HTTP (no TLS terminator in front of it) browsers silently drop
+the session cookie and **logins fail with no error message**. Add
+`--secure-cookies=false` to `ExecStart` in that case. Full behaviour table and
+the config-file equivalent:
+[`--secure-cookies`](/operating/reference/configuration/#--secure-cookies).
+:::
 
 Enable and start:
 
