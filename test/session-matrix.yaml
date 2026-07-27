@@ -195,21 +195,33 @@ rows:
   - id: detach-all.web-guest
     transition: Detach (drop all connections) -> status=Detached + TTL
     column: web-guest
-    disposition: planned
-    owed_by: "09-13"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: Dropping every connection detaches the session and starts its time-to-live
+      name: leaves a guest session detached with a future expiry and an unmoved arrival timestamp
 
   - id: detach-all.web-char
     transition: Detach (drop all connections) -> status=Detached + TTL
     column: web-char
-    disposition: planned
-    owed_by: "09-13"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: Dropping every connection detaches the session and starts its time-to-live
+      name: leaves a registered player's session detached and still bound to the same character
 
   - id: detach-all.telnet
     transition: Detach (drop all connections) -> status=Detached + TTL
     column: telnet
-    disposition: planned
-    owed_by: "09-13"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: Dropping every connection detaches the session and starts its time-to-live
+      name: removes the telnet connection row while the detached session and its arrival timestamp survive
+    notes: >-
+      The telnet cell additionally asserts that every session_connections row is gone after the drop, which is the "drop ALL
+      connections" half of the transition observed where production observes it: the grid-presence roster counts rows by client_type,
+      so a surviving telnet row would keep a disconnected character visible. #magic___^_^___line
   - id: detach-all.multi-session
     transition: Detach (drop all connections) -> status=Detached + TTL
     column: multi-session
@@ -221,20 +233,34 @@ rows:
   - id: reaper-sweep.web-guest
     transition: Reaper sweep at TTL expiry -> row deleted
     column: web-guest
-    disposition: planned
-    owed_by: "09-13"
-
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: The reaper sweep at time-to-live expiry removes the session row
+      name: deletes a detached guest session whose expiry has passed
+    notes: >-
+      Every reaper cell drives the REAL production session.Reaper (session.NewReaper + Run) against the harness session store,
+      and asserts absence by a keyed Get returning SESSION_NOT_FOUND rather than by a row count. The row is seeded with Server.DetachAndExpireSession,
+      never Server.ExpireSession, which forces the terminal 'expired' status that ListExpired's predicate can never match;
+      the shared helper asserts the row IS in ListExpired's result set before starting the sweep, so a mis-seeded row fails
+      loudly instead of timing out. #magic___^_^___line
   - id: reaper-sweep.web-char
     transition: Reaper sweep at TTL expiry -> row deleted
     column: web-char
-    disposition: planned
-    owed_by: "09-13"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: The reaper sweep at time-to-live expiry removes the session row
+      name: deletes a detached registered player's session whose expiry has passed
 
   - id: reaper-sweep.telnet
     transition: Reaper sweep at TTL expiry -> row deleted
     column: telnet
-    disposition: planned
-    owed_by: "09-13"
+    disposition: spec
+    spec:
+      file: test/integration/session/lifecycle_ttl_test.go
+      container: The reaper sweep at time-to-live expiry removes the session row
+      name: deletes a detached telnet session whose expiry has passed
 
   - id: reaper-sweep.multi-session
     transition: Reaper sweep at TTL expiry -> row deleted
