@@ -46,6 +46,20 @@ services:
     environment:
       PLAYWRIGHT_BASE_URL: http://gateway:8080
       E2E_DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush_test?sslmode=disable
+      # Forward the runner's CI flag INTO the container. Without this,
+      # `process.env.CI` is undefined inside the playwright image and every
+      # CI-widened timeout silently takes its LOCAL branch on CI hardware:
+      #   playwright.config.ts:18  per-test timeout  60s -> 30s
+      #   terminal.spec.ts:25      RECONNECT_TIMEOUT 30s -> 10s
+      #   terminal.spec.ts:26      RECONNECT_POLL    15s ->  5s
+      #   terminal.spec.ts:27      RECONNECT_TEST   150s -> 60s
+      #   scenes.spec.ts:579       output-match wait  30s -> 10s
+      # Each of those widenings was added in response to a documented flake
+      # (holomush-mwmzt, holomush-hjk6x) and none had ever taken effect — the
+      # 10000ms timeout in PR #4874's E2E failure is the 10s local branch, not
+      # the 30s the call site asks for on CI. Empty default so a local run
+      # (where CI is unset) keeps the shorter, faster budgets.
+      CI: ${CI:-}
     networks:
       - frontend
       - backend
