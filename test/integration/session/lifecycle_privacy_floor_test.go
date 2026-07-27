@@ -88,6 +88,30 @@ import (
 // Every instant is chosen through Session.EmitDirectEventAt. Nothing here waits
 // for the wall clock to separate two events.
 
+// # The two named privacy-floor tests
+//
+// The two containers at the foot of this file are the specifications named
+// verbatim in docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md
+// §8 — TestPrivacy_ReattachWithinTTLPreservesFloor and
+// TestPrivacy_TTLExpiryEndsSessionFreshFloor. They are the two halves of one
+// question: a session that comes BACK keeps its floor, and a session that
+// EXPIRED does not hand its floor to the one that replaces it.
+//
+// They carry NO matrix-row marker. The registry has no row for them — they are
+// acceptance items of the source work item, not cells of the 12x4 matrix — so a
+// marker would fail the bijection meta-test.
+//
+// WHY THEY ARE GINKGO CONTAINERS RATHER THAN `func TestPrivacy_...(t *testing.T)`.
+// The names read as Go test functions, but this package is a Ginkgo suite whose
+// Gomega fail handler is registered inside RunSpecs; a plain Test function in the
+// same package would run outside that registration and, if it ran first, would
+// panic instead of failing. Carrying the identifier verbatim in the container
+// description keeps the repo's Ginkgo requirement for full-stack integration
+// tests, keeps the shared suite harness, and leaves the token greppable — which
+// is what any consumer looking these up by name needs. Nothing in the tree binds
+// these names today: the identifiers appear only in the spec document above
+// (verified: they occur in no file under test/meta/).
+
 // historyCeiling returns a NotAfter bound far enough in the future that it can
 // never exclude anything these specs publish. It is passed to every bounded read
 // deliberately: with a non-excluding ceiling, the server-side scope floor is the
@@ -571,5 +595,215 @@ var _ = Describe("A transport-level blip preserves the session and its history f
 		Expect(steadyIDs).To(ContainElement(gapID),
 			"and MUST see the event published during the gap: it never left, so nothing about "+
 				"its sibling's blip may narrow what it reads")
+	})
+})
+
+// TestPrivacy_ReattachWithinTTLPreservesFloor, from the history-scope privacy
+// specification §8, reproduced there as:
+//
+//	character A connects at T0 in location L (LocationArrivedAt=T0), a third
+//	party emits events at T1, A's transport drops at T2 (status=Detached), the
+//	third party emits events at T3, A's Subscribe.ReattachCAS at T4 (within TTL);
+//	A's subsequent history query for location L returns events with timestamps in
+//	[T0, T4] — INCLUDING the T1 and T3 events. The session row stayed alive
+//	through the disconnect; floor preserved at T0.
+//
+// Every instant is placed explicitly with the timestamped emit rather than by
+// letting the wall clock separate the events, and both third-party events are
+// asserted by IDENTIFIER — a count of returned frames would be satisfied by an
+// unrelated event landing in this shared start-location stream.
+//
+// The upper bound of the read is T4 ITSELF: the attach moment the production
+// Subscribe handler stamps on the REPLAY_COMPLETE control frame, which is the
+// value a real client passes as not_after_ms on its reconnect backfill. Using it
+// rather than an arbitrary future bound is what makes the read genuinely the
+// spec's [T0, T4] window.
+var _ = Describe("TestPrivacy_ReattachWithinTTLPreservesFloor: a reattach within the time-to-live returns the events emitted while the player was detached", func() {
+	var (
+		ctx context.Context
+		ts  *integrationtest.Server
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ts = lifecycleHarness()
+	})
+
+	It("returns both the pre-detach and the during-detach third-party events after the transport returns", func() {
+		alice := ts.AuthedPlayer(ctx, "FloorAlice")
+		sess := alice.OpenWebSession(ctx)
+		DeferCleanup(func() { sess.Logout(ctx) })
+
+		// A different character in the same location. The third party is the one
+		// that emits, so the events under test are not the reader's own.
+		third := ts.AuthedPlayer(ctx, "FloorBartholomew").OpenWebSession(ctx)
+		DeferCleanup(func() { third.Logout(ctx) })
+		Expect(third.LocationID).To(Equal(sess.LocationID),
+			"precondition: both characters MUST share a location so the third party's emits land "+
+				"in the stream under test")
+
+		atT0, err := ts.SessionStore().Get(ctx, sess.SessionID)
+		Expect(err).NotTo(HaveOccurred(), "the session row MUST be readable at T0")
+		t0 := atT0.LocationArrivedAt
+		locStream := "location." + sess.LocationID.String()
+
+		// T1 — before the drop, above the floor.
+		t1 := t0.Add(time.Millisecond)
+		t1ID := plantEvent(ctx, third, locStream, t1)
+
+		// T2 — the transport drops. No logout.
+		sess.DetachTransport(ctx)
+		atT2, err := ts.SessionStore().Get(ctx, sess.SessionID)
+		Expect(err).NotTo(HaveOccurred(),
+			"the session row MUST stay alive through the disconnect — that is the premise of "+
+				"the whole scenario")
+		Expect(atT2.Status).To(Equal(session.StatusDetached),
+			"the drop MUST leave the session detached, not ended")
+		Expect(atT2.ExpiresAt).NotTo(BeNil(),
+			"the detach MUST start a time-to-live for the reattach below to be within")
+
+		// T3 — emitted while A is away.
+		t3 := t0.Add(2 * time.Millisecond)
+		t3ID := plantEvent(ctx, third, locStream, t3)
+
+		// T4 — the production Subscribe path, whose ReattachCAS flips the row back.
+		sess.ReattachTransport(ctx)
+
+		atT4, err := ts.SessionStore().Get(ctx, sess.SessionID)
+		Expect(err).NotTo(HaveOccurred(), "the same session row MUST still be there at T4")
+		Expect(atT4.Status).To(Equal(session.StatusActive),
+			"Subscribe's ReattachCAS MUST return the session to active")
+		Expect(atT4.LocationArrivedAt).To(BeTemporally("==", t0),
+			"floor preserved at T0: the reattach MUST NOT move the arrival timestamp")
+
+		t4Ms := sess.AttachMomentMs()
+		Expect(t4Ms).To(BeNumerically(">", int64(0)),
+			"the production Subscribe handler MUST have stamped an attach moment on "+
+				"REPLAY_COMPLETE; without it the bound below would silently become unbounded and "+
+				"the [T0, T4] window would not be the window actually read")
+		t4 := time.UnixMilli(t4Ms).UTC()
+		Expect(t1).To(BeTemporally("<=", t4), "T1 MUST fall inside the [T0, T4] window")
+		Expect(t3).To(BeTemporally("<=", t4), "T3 MUST fall inside the [T0, T4] window")
+
+		frames, err := sess.QueryStreamHistoryBounded(ctx, locStream, t4Ms)
+		Expect(err).NotTo(HaveOccurred(),
+			"the reattached session MUST be able to query its own location history")
+		ids := frameIDs(frames)
+
+		Expect(ids).To(ContainElement(t1ID),
+			"the third party's event at T1 (%s) MUST be returned: it is above the preserved "+
+				"floor of %s", t1, t0)
+		Expect(ids).To(ContainElement(t3ID),
+			"the third party's event at T3 (%s), emitted while A was detached, MUST be returned "+
+				"too — its absence would mean the reattach reset the floor and cost the player "+
+				"the conversation they dropped out of", t3)
+	})
+})
+
+// TestPrivacy_TTLExpiryEndsSessionFreshFloor, from the history-scope privacy
+// specification §8, reproduced there as:
+//
+//	character A connects at T0, A's transport drops at T1, no reattach for TTL+1,
+//	the reaper deletes the row at T2; A logs in again at T3 -> a fresh
+//	SelectCharacter creates a new session with LocationArrivedAt=T3; events with
+//	timestamps in [T0, T3) are NOT visible to the new session.
+//
+// The expired state is reached the way production reaches it, because the
+// specification's own wording is that the REAPER deleted the session: detach
+// through the production Disconnect RPC, backdate the expiry with
+// Server.DetachAndExpireSession, and drive the real session.Reaper.
+//
+// Server.ExpireSession — the older helper with the confusingly similar name —
+// MUST NOT be used here. It forces the terminal 'expired' status, which
+// ListExpired's predicate (status='detached' AND expires_at < now,
+// internal/store/session_store.go:445-452) can never match, so a spec seeded
+// through it would be asserting against a state production never produces.
+// reapSessionAndExpectRowGone additionally asserts the row is genuinely in
+// ListExpired's result set BEFORE the sweep, so that mistake fails loudly rather
+// than timing out on an unreachable assertion.
+var _ = Describe("TestPrivacy_TTLExpiryEndsSessionFreshFloor: a session that expired hands no history floor to the login that replaces it", func() {
+	var (
+		ctx context.Context
+		ts  *integrationtest.Server
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		ts = lifecycleHarness()
+	})
+
+	It("hides an event from before the new arrival timestamp after the reaper deleted the expired session", func() {
+		alice := ts.AuthedPlayer(ctx, "ExpiryAlice")
+
+		// T0 — A connects.
+		first := alice.OpenWebSession(ctx)
+		firstID := first.SessionID
+		locStream := "location." + first.LocationID.String()
+
+		atT0, err := ts.SessionStore().Get(ctx, firstID)
+		Expect(err).NotTo(HaveOccurred(), "the first session row MUST be readable at T0")
+		t0 := atT0.LocationArrivedAt
+		ceiling := historyCeiling()
+
+		// An event inside [T0, T3). Planted by a third party so the assertion is
+		// about visibility rather than about the reader's own output.
+		third := ts.AuthedPlayer(ctx, "ExpiryBartholomew").OpenWebSession(ctx)
+		DeferCleanup(func() { third.Logout(ctx) })
+		Expect(third.LocationID).To(Equal(first.LocationID),
+			"precondition: both characters MUST share a location")
+
+		earlyAt := t0.Add(time.Millisecond)
+		earlyID := plantEvent(ctx, third, locStream, earlyAt)
+
+		// Positive control: readable by the session that was present for it. Without
+		// it the absence asserted at the end could be satisfied by an event that was
+		// never queryable in the first place.
+		liveFrames, err := first.QueryStreamHistoryBounded(ctx, locStream, ceiling)
+		Expect(err).NotTo(HaveOccurred(), "the first session MUST read its own location history")
+		Expect(frameIDs(liveFrames)).To(ContainElement(earlyID),
+			"precondition: the event at %s MUST be readable by the session that was present for it",
+			earlyAt)
+
+		// T1 — the transport drops. T2 — the real reaper deletes the row.
+		detachAndExpectDetached(ctx, ts, first)
+		ts.DetachAndExpireSession(ctx, firstID, time.Now().Add(-time.Minute))
+		reapSessionAndExpectRowGone(ctx, ts, firstID)
+
+		// T3 — A logs in again. With the row swept there is nothing to reattach to,
+		// so SelectCharacter must take its create branch.
+		second := alice.OpenWebSession(ctx)
+		DeferCleanup(func() { second.Logout(ctx) })
+
+		Expect(second.Reattached).To(BeFalse(),
+			"the reaper deleted the row, so the re-login MUST take SelectCharacter's create branch")
+		Expect(second.SessionID).NotTo(Equal(firstID),
+			"the re-login MUST mint a NEW session, not resurrect the reaped one")
+
+		atT3, err := ts.SessionStore().Get(ctx, second.SessionID)
+		Expect(err).NotTo(HaveOccurred(), "the fresh session row MUST be readable at T3")
+		t3 := atT3.LocationArrivedAt
+		Expect(t3).To(BeTemporally(">", t0),
+			"the fresh session MUST carry a LATER arrival floor than the expired one")
+		Expect(earlyAt).To(BeTemporally("<", t3),
+			"the planted event MUST sit strictly inside [T0, T3), so inheriting the expired "+
+				"session's floor is the only way it could still be readable")
+
+		// A second event, above the NEW floor, read back in the SAME query. A read
+		// that returned nothing at all — broken, denied, or drained empty — would
+		// satisfy the absence assertion below while proving nothing.
+		lateAt := t3.Add(time.Millisecond)
+		lateID := plantEvent(ctx, third, locStream, lateAt)
+
+		freshFrames, err := second.QueryStreamHistoryBounded(ctx, locStream, ceiling)
+		Expect(err).NotTo(HaveOccurred(), "the fresh session MUST query its location history")
+		freshIDs := frameIDs(freshFrames)
+
+		Expect(freshIDs).To(ContainElement(lateID),
+			"positive control: the event at %s, above the new floor of %s, MUST be readable",
+			lateAt, t3)
+		Expect(freshIDs).NotTo(ContainElement(earlyID),
+			"the event at %s falls in [T0, T3) and MUST NOT be visible to the session created "+
+				"at %s — its presence means the re-login inherited the expired session's floor",
+			earlyAt, t3)
 	})
 })
