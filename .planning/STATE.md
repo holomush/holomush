@@ -5,15 +5,15 @@ milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
 status: executing
-stopped_at: Completed 09-18-PLAN.md
-last_updated: "2026-07-27T03:16:02.118Z"
+stopped_at: Completed 09-17-PLAN.md
+last_updated: "2026-07-27T16:30:44.870Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 66
-  completed_plans: 63
+  completed_plans: 64
 ---
 
 # Project State
@@ -30,7 +30,7 @@ trusted identically.
 ## Current Position
 
 Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 18 of 21
+Plan: 19 of 21
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 09 execution started
 Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
@@ -148,6 +148,7 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 09 P15 | 71m | 3 tasks | 5 files |
 | Phase 09 P16 | 62m | 2 tasks | 2 files |
 | Phase 09 P18 | 150min | 3 tasks tasks | 71 files files |
+| Phase 09 P17 | 55m | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -312,6 +313,12 @@ the next milestone yet.
 - [Phase ?]: 09-18: table-case label detection must be restricted to elements of a SLICE literal — matching any name:/desc: field returns 45 hits, 32 of them domain fixtures like world.Location{Name: "Test"}; restricted it is exactly the 13 sites 09-RESEARCH enumerated
 - [Phase ?]: 09-18: TestINV_ carve-out is DEFENSIVE, not load-bearing — the only two single-token-tail INV names (P4/P5_Coverage_Meta) declare subtests at line 170+ and are excluded by the sanctioned exception first (an rg -A25 window falsely reported them subtest-free)
 - [Phase ?]: 09-18: ACE ratchet carries no invariant-registry entry and no // Verifies: annotation, following the quarantine and matrix ratchets; asserts a non-vacuous corpus (>500 files/>1000 decls/>500 labels) so an empty walk cannot pass as clean
+- [Phase ?]: 09-17: codecov posts coverage results through TWO GitHub endpoints — codecov/patch is a CHECK RUN on PR head commits and a COMMIT STATUS on main pushes; querying only /commits/{sha}/status reports it absent, which is exactly what this plan's own gate did (patch=0, a false negative)
+- [Phase ?]: 09-17: codecov/patch GO for the ruleset (14/14 live head commits, exact string codecov/patch, app id 254); codecov/project NO-GO — zero of 64 observations across 32 commits x 2 endpoints spanning 2026-04-26..07-27, issue #4875
+- [Phase ?]: 09-17: the 'no base commit to compare against' explanation for the missing project status is FALSIFIED — codecov's own API reports base_totals 78.28 / head_totals 79.11 / ci_passed true for PR #4874; leading cause is the vendor-documented Team-plan patch-only limit, an account condition no .codecov.yml edit can fix
+- [Phase ?]: 09-17: ruleset 11923801 already proves check-RUN names are matchable — 7 of its 8 required checks are check runs (integration_id 15368/none) and only CodeRabbit is a commit status, so requiring codecov/patch is mechanically sound
+- [Phase ?]: 09-17: PR #4874 head eee76d23e measures 79.11% (codecov LINE ratio, 3 sessions) vs main base 78.28% — coverage ROSE 0.83 points; the 69.12% figure seen earlier was a mid-merge read before all three upload sessions landed
+- [Phase ?]: 09-17: QUAL-02 restored to Pending — 09-08's mark-complete was a protocol side-effect that re-created the flip 09-01 had deliberately reverted; 09-19 owns the ruling, gaps are #4861 and #4875
 
 ### Pending Todos
 
@@ -344,14 +351,14 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-27T03:15:49.530Z
+Last session: 2026-07-27T16:30:44.354Z
 Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
 across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
 crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
 zero integration-tree churn across all 48 commits. Shipped as PR #4832.
 Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
 #4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-18-PLAN.md
+Stopped at: Completed 09-17-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
