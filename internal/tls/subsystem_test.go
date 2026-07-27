@@ -9,6 +9,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -289,15 +291,23 @@ func TestEnsureCerts_CorruptedCertFile(t *testing.T) {
 	_, err = EnsureCerts(tmpDir, gameID)
 	require.Error(t, err, "EnsureCerts() should return error for corrupted cert file, not silently regenerate")
 
-	assert.True(t, assert.Condition(t, func() bool {
-		return assert.Contains(t, err.Error(), "certificate") || assert.Contains(t, err.Error(), "load")
-	}), "Error should mention certificate/load issue, got: %v", err)
+	// strings.Contains, not assert.Contains: assert.Contains REPORTS a failure
+	// on t when it does not match, so in an || chain the first non-matching
+	// alternative already fails the test even when a later one matches. The
+	// either/or intent was never what the code did.
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "certificate") || strings.Contains(errMsg, "load"),
+		"Error should mention certificate/load issue, got: %v", err)
 }
 
 // TestEnsureCerts_PermissionDenied verifies that EnsureCerts returns an error
 // when certificate files exist but are not readable due to permissions.
 func TestEnsureCerts_PermissionDenied(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
+	// runtime.GOOS, not os.Getenv("GOOS"): GOOS is a build constant, not an
+	// environment variable, so os.Getenv("GOOS") returns "" unconditionally and
+	// this guard never fired on any platform.
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission test on Windows")
 	}
 
@@ -319,12 +329,14 @@ func TestEnsureCerts_PermissionDenied(t *testing.T) {
 	_, err = EnsureCerts(tmpDir, gameID)
 	require.Error(t, err, "EnsureCerts() should return error for permission denied, not silently regenerate")
 
-	assert.True(t, assert.Condition(t, func() bool {
-		errMsg := err.Error()
-		return assert.Contains(t, errMsg, "permission") ||
-			assert.Contains(t, errMsg, "denied") ||
-			assert.Contains(t, errMsg, "certificate")
-	}), "Error should mention permission/denied/certificate issue, got: %v", err)
+	// See TestEnsureCerts_CorruptedCertFile: assert.Contains inside an || chain
+	// fails the test on the first non-matching alternative.
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "permission") ||
+			strings.Contains(errMsg, "denied") ||
+			strings.Contains(errMsg, "certificate"),
+		"Error should mention permission/denied/certificate issue, got: %v", err)
 }
 
 // TestEnsureCerts_DirectoryCreationFailure verifies that EnsureCerts returns
@@ -340,15 +352,19 @@ func TestEnsureCerts_DirectoryCreationFailure(t *testing.T) {
 	_, err = EnsureCerts(badDir, "test-game-id")
 	require.Error(t, err, "EnsureCerts() should fail when directory cannot be created")
 
-	assert.True(t, assert.Condition(t, func() bool {
-		return assert.Contains(t, err.Error(), "directory") || assert.Contains(t, err.Error(), "not a directory")
-	}), "Error should mention directory issue, got: %v", err)
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "directory") || strings.Contains(errMsg, "not a directory"),
+		"Error should mention directory issue, got: %v", err)
 }
 
 // TestEnsureCerts_SaveCertificatesFailure verifies that EnsureCerts returns an
 // error when certificates cannot be saved to a read-only directory.
 func TestEnsureCerts_SaveCertificatesFailure(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
+	// runtime.GOOS, not os.Getenv("GOOS"): GOOS is a build constant, not an
+	// environment variable, so os.Getenv("GOOS") returns "" unconditionally and
+	// this guard never fired on any platform.
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission test on Windows")
 	}
 
@@ -366,13 +382,13 @@ func TestEnsureCerts_SaveCertificatesFailure(t *testing.T) {
 	_, err = EnsureCerts(tmpDir, "test-game-id")
 	require.Error(t, err, "EnsureCerts() should fail when certs cannot be saved")
 
-	assert.True(t, assert.Condition(t, func() bool {
-		errMsg := err.Error()
-		return assert.Contains(t, errMsg, "permission") ||
-			assert.Contains(t, errMsg, "save") ||
-			assert.Contains(t, errMsg, "create") ||
-			assert.Contains(t, errMsg, "denied")
-	}), "Error should mention save/permission issue, got: %v", err)
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "permission") ||
+			strings.Contains(errMsg, "save") ||
+			strings.Contains(errMsg, "create") ||
+			strings.Contains(errMsg, "denied"),
+		"Error should mention save/permission issue, got: %v", err)
 }
 
 // TestEnsureCerts_PartialCertState verifies behavior when only some
