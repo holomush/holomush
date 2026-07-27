@@ -298,6 +298,7 @@ Two deferred items, both filed rather than hidden:
 
 QUAL-04 was marked **Complete** by 09-15. This plan does not change that assessment; it
 makes it enforceable. The requirement's coverage claim is now machine-checked rather than
-asserted: 47 of 48 positions carry a spec with a verified marker, a resolved
-covered-elsewhere pointer, or a committed non-applicability, and the 48th carries a named
-blocker and a filed issue.
+asserted: 47 of 48 positions are non-planned — 32 carry a spec with a verified marker, 2 a
+resolved covered-elsewhere pointer, 10 a committed non-applicability, and 3 an explicit
+`not-implementable-from-harness-defaults` disposition — and the 48th, the only `planned` row,
+carries a named blocker and a filed issue.

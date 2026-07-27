@@ -47,7 +47,8 @@ metrics:
 The phase's measurement-chain repair is **proven**: the e2e flag reports **32.27%** where it
 reported **0.0**. Three of the five figures the gate demands are still short, and the two most
 consequential findings are ones the plan did not anticipate — `.codecov.yml`'s session model is
-falsified, and making `codecov/patch` required would deadlock every docs-only pull request.
+falsified, and making `codecov/patch` required would deadlock the docs-only pull requests that
+carry no coverage upload — 11 of the 13 sampled.
 The ruleset was **not** touched.
 
 ## The five figures
@@ -151,8 +152,12 @@ Go-changing PRs by construction.
 
 `ci.yaml`'s `paths-ignore` (`site/**`, `docs/**`, `.planning/**`, `**/*.md`, parts of `.claude/**`)
 routes docs-only diffs to `ci-docs-skip.yaml`, which uploads no coverage — so codecov posts nothing.
-A required `codecov/patch` would leave **every docs-only PR blocked with nothing visibly failing**:
-precisely the PR #4823 failure mode already documented in `.claude/rules/landing-the-plane.md`.
+A required `codecov/patch` would leave **11 of the 13 sampled docs-only commits blocked with nothing
+visibly failing**: precisely the PR #4823 failure mode already documented in
+`.claude/rules/landing-the-plane.md`. The 2 that did carry the context are the exception the routing
+predicts — a diff classified docs-only here still reached the coverage-uploading lane — and they
+neither narrow the blast radius to something tolerable nor make the outcome predictable per PR,
+which is what a required check needs.
 
 This is the common case, not an edge case — 09-17 had to scan 20 merged PRs to find 3 that changed
 Go source. Threat **T-09-19-01** would have been realised had the operator acted on 09-17's

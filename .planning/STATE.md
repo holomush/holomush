@@ -4,16 +4,16 @@ milestone: v0.12
 milestone_name: Foundation Hardening
 current_phase: 09
 current_phase_name: Test-Quality & Code-Health Sweep
-status: executing
-stopped_at: Completed 09-19-PLAN.md — phase 09 final plan
+status: complete
+stopped_at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
 last_updated: "2026-07-27T16:45:21.847Z"
-last_activity: 2026-07-26
-last_activity_desc: Phase 09 execution started
+last_activity: 2026-07-27
+last_activity_desc: Phase 09 complete — all 21 plans executed, shipped as PR #4874
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 66
-  completed_plans: 65
+  completed_plans: 66
 ---
 
 # Project State
@@ -29,17 +29,18 @@ trusted identically.
 
 ## Current Position
 
-Phase: 09 (Test-Quality & Code-Health Sweep) — EXECUTING
-Plan: 20 of 21
-Status: Ready to execute
-Last activity: 2026-07-26 — Phase 09 execution started
-Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
+Phase: 09 (Test-Quality & Code-Health Sweep) — COMPLETE
+Plan: 21 of 21
+Status: Complete — shipped as PR #4874 on branch `gsd/v0.12-milestone`
+Last activity: 2026-07-27 — Phase 09 closed out by 09-19 (the coverage gate)
+Next: Merge PR #4874, then close the v0.12 milestone. QUAL-04 is Complete; QUAL-02, QUAL-03 and
+QUAL-05 stay Pending deliberately, with the open gaps tracked as #4861, #4875 and #4876.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 62
+- Total plans completed: 66
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -359,17 +360,27 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 ## Session Continuity
 
 Last session: 2026-07-27T16:45:13.288Z
-Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
-across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
-crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
-zero integration-tree churn across all 48 commits. Shipped as PR #4832.
-Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
-#4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Completed 09-19-PLAN.md — phase 09 final plan
+Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
+The measurement-chain repair is proven — the e2e flag reports 32.27% where it reported 0.0, and
+project coverage rose 0.83 points to 79.11% against a 78.28% base (`497748c6d`). Two named floors
+remain short, `cmd/holomush` at 70.09% against 80% being the consequential one (#4861). QUAL-04 is
+Complete; QUAL-02, QUAL-03 and QUAL-05 stay Pending deliberately. Both halves of decision D-04 are
+deferred and ruleset 11923801 is unchanged: `codecov/project` has never posted (0 of 64
+observations — a codecov Team-plan limit, #4875), and requiring `codecov/patch` would block
+docs-only pull requests, which `paths-ignore` routes to a lane that uploads no coverage (#4876).
+Archived — Phase 8: all 9 plans executed, CoreServer 1891 → 657 LoC and plugin Manager 1876 → 702;
+shipped as PR #4832 with follow-ups #4828, #4829, #4830, #4831.
+Stopped at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
 Resume file: None
 
 ## Operator Next Steps
 
-- Merge PR #4811 (milestone-init planning docs).
-- Ship the F2 gateway DoS cap (#4785) as a `/gsd-quick` fix — the immediate opener.
-- Then `/gsd-plan-phase 4` (or `/gsd-discuss-phase 4`) — the F1 resilience pass + event-sourcing-vs-CRUD ADR.
+- Merge PR #4874 (Phase 9 — test-quality & code-health sweep). All 18 CI checks green.
+- **Operator-only, cannot be done from a PR:** decide the ruleset `11923801` required-check
+  question. Both halves of decision D-04 are currently deferred (#4876) — `codecov/project` has
+  never posted (codecov Team-plan limit, #4875) and requiring `codecov/patch` would deadlock
+  docs-only PRs, which `paths-ignore` routes to `ci-docs-skip.yaml` with no coverage upload.
+- Two named coverage floors remain unmet and are tracked, not waived: whole-project 79.11% vs
+  the 80% target, and `cmd/holomush` 70.09% vs 80% (#4861 — the remainder is `runCoreWithDeps`
+  boot branches needing live Postgres/NATS/TLS).
+- QUAL-02, QUAL-03 and QUAL-05 stay Pending deliberately; QUAL-04 is Complete.

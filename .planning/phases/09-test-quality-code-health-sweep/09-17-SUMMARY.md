@@ -8,7 +8,7 @@ requires:
   - 09-21 (pushed the branch and opened PR #4874 — the only live rollup this phase has)
   - 09-01 (repaired the E2E coverage chain, so the head commit carries a real 3-session report)
 provides:
-  - "GO verdict for `codecov/patch` as a required check, grounded in 14/14 live head-commit observations"
+  - "GO verdict for `codecov/patch` as a required check ON GO-CHANGING PULL REQUESTS ONLY, grounded in 14/14 live head-commit observations — the sample excludes docs-only pull requests by construction, so it is not evidence that the context is globally safe to require. Plan 09-19 sampled the excluded population and found it absent on 11 of 13 docs-only commits, deferring the requirement — issue #4876"
   - "NO-GO verdict for `codecov/project`, grounded in 64 observations across two endpoints and three months — issue #4875"
   - "The corrected two-endpoint verdict command 09-19 must use; the single-endpoint form in this plan's own gate reports a FALSE NEGATIVE for codecov/patch"
   - "SHA eee76d23e40d6c5cb2e98283cc4181bf28b608fa — the head every rollup here was observed against"
@@ -163,8 +163,14 @@ them.** It is not "did not appear yet". It has never been observed posting in th
 Of the four outcomes the plan enumerates, the fourth holds for one context and the first for
 the other — a split the plan's list did not anticipate:
 
-- **`codecov/patch` — GO.** Exact string an operator enters: `codecov/patch`. Observed present
-  and `success` on 14/14 pull-request head commits, including this phase's own.
+- **`codecov/patch` — GO for the sampled population only.** Exact string an operator enters:
+  `codecov/patch`. Observed present and `success` on 14/14 pull-request head commits, including
+  this phase's own. Every one of those 14 changed Go source — docs-only pull requests were
+  excluded by this plan's own sample-selection filter — so this verdict is silent about them and
+  MUST NOT be read as "safe to require" in general. Plan 09-19 sampled exactly that excluded
+  population and found the context absent on 11 of 13 docs-only commits, because `paths-ignore`
+  routes those diffs to `ci-docs-skip.yaml`, which uploads no coverage. The requirement is
+  therefore deferred rather than confirmed — issue **#4876**.
 - **`codecov/project` — NO-GO.** Follow-up issue **#4875**. It posts on no ref, on neither
   endpoint, and has not done so at any point in the repository's observable history.
 
@@ -385,7 +391,7 @@ checked before the numbers above were recorded.
 
 | Threat | Outcome |
 |---|---|
-| T-09-17-01 (requiring a status that never posts) | **Mitigated.** `codecov/project` is a recorded NO-GO with issue #4875; only `codecov/patch`, observed on 14/14 heads, is offered to the operator. |
+| T-09-17-01 (requiring a status that never posts) | **Mitigated for the sampled population only.** `codecov/project` is a recorded NO-GO with issue #4875; only `codecov/patch`, observed on 14/14 heads, is offered to the operator — but all 14 changed Go source, so the offer does not cover docs-only pull requests. 09-19 found the gap there and withdrew the offer (#4876). |
 | T-09-17-02 (configuration read as evidence of behaviour) | **Mitigated.** Every claim cites an observed rollup or a vendor API response; the one configuration-derived claim (the YAML is valid) is sourced to codecov's validator, not to reading the file. |
 | T-09-17-03 (raising the upload-count threshold) | **Not triggered.** `.codecov.yml` unchanged; both pinned literals verified intact under the comment-filtered form. |
 | T-09-17-04 (this plan's own gates passing without observing a status) | **Partially realised.** Both gates queried the status API as designed and passed — but the Task 2 gate still recorded a false `patch=0`, because the endpoint the plan chose is the wrong one. The gate was hardened against every failure mode except a wrong instrument. |

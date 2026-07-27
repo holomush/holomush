@@ -326,6 +326,16 @@ func TestEnsureCerts_PermissionDenied(t *testing.T) {
 	certPath := tmpDir + "/core.crt"
 	require.NoError(t, os.Chmod(certPath, 0o000), "Failed to remove permissions")
 
+	// chmod does not fence a root-equivalent user: root reads a 0o000 file
+	// regardless, so EnsureCerts would succeed and the require.Error below would
+	// fail for a reason that has nothing to do with the behaviour under test.
+	// Probe the actual operation rather than inferring from euid — a container
+	// with CAP_DAC_OVERRIDE bypasses the mode without being uid 0.
+	if f, probeErr := os.Open(certPath); probeErr == nil {
+		_ = f.Close()
+		t.Skip("skipping: this user bypasses the 0o000 mode, so the permission path is unreachable")
+	}
+
 	_, err = EnsureCerts(tmpDir, gameID)
 	require.Error(t, err, "EnsureCerts() should return error for permission denied, not silently regenerate")
 
@@ -378,6 +388,17 @@ func TestEnsureCerts_SaveCertificatesFailure(t *testing.T) {
 
 	//nolint:gosec // G302: Intentionally setting restrictive permissions for test
 	require.NoError(t, os.Chmod(tmpDir, 0o500), "Failed to make dir read-only")
+
+	// As in TestEnsureCerts_PermissionDenied: a root-equivalent user writes into
+	// a 0o500 directory regardless of the mode, so the require.Error below would
+	// fail for an unrelated reason. Probe the write rather than inferring from
+	// euid — CAP_DAC_OVERRIDE bypasses the mode without being uid 0.
+	probePath := tmpDir + "/.write-probe"
+	if f, probeErr := os.Create(probePath); probeErr == nil {
+		_ = f.Close()
+		_ = os.Remove(probePath)
+		t.Skip("skipping: this user bypasses the 0o500 mode, so the save-failure path is unreachable")
+	}
 
 	_, err = EnsureCerts(tmpDir, "test-game-id")
 	require.Error(t, err, "EnsureCerts() should fail when certs cannot be saved")

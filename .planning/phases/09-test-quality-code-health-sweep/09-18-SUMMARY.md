@@ -225,8 +225,9 @@ annotation inside a renamed function's file (`INV-CRYPTO-17`,
 
 ## Blast-radius checks (all clear)
 
-- **Session-matrix registry (09-16):** no file under `test/` was touched by the
-  sweep; all five guards green.
+- **Session-matrix registry (09-16):** the rename sweep touched no file under
+  `test/` — this plan's own new ratchet, `test/meta/ace_naming_registry_test.go`,
+  is the sole addition there; all five guards green.
 - **Invariant bindings:** 32 `TestINV_` declarations unchanged; no registry entry
   names a renamed test.
 - **Quarantine registry:** untouched; bijection guard green.
