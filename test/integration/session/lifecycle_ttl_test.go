@@ -191,8 +191,7 @@ var _ = Describe("Dropping every connection detaches the session and starts its 
 		DeferCleanup(func() { sess.Logout(ctx) })
 
 		originalArrival := sess.LocationArrivedAt
-		Expect(originalArrival).NotTo(BeZero(),
-			"precondition: the guest session carries an arrival floor to compare against")
+		expectRealArrivalFloor(originalArrival, "the guest session")
 
 		info := detachAndExpectDetached(ctx, ts, sess)
 
@@ -217,6 +216,7 @@ var _ = Describe("Dropping every connection detaches the session and starts its 
 		DeferCleanup(func() { sess.Logout(ctx) })
 
 		originalArrival := sess.LocationArrivedAt
+		expectRealArrivalFloor(originalArrival, "the registered player's session")
 
 		info := detachAndExpectDetached(ctx, ts, sess)
 
@@ -241,6 +241,7 @@ var _ = Describe("Dropping every connection detaches the session and starts its 
 		DeferCleanup(func() { sess.Logout(ctx) })
 
 		originalArrival := sess.LocationArrivedAt
+		expectRealArrivalFloor(originalArrival, "the telnet session")
 
 		// Precondition read through the column production writes, not through
 		// the argument this spec passed to OpenTelnetSession.

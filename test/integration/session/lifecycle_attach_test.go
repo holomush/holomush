@@ -67,6 +67,29 @@ func connectionClientTypes(ctx context.Context, ts *integrationtest.Server, sess
 	return out
 }
 
+// expectRealArrivalFloor asserts that a captured location arrival floor is a
+// REAL instant rather than the UNIX epoch.
+//
+// It exists because `NotTo(BeZero())` on the time.Time cannot fail here.
+// sessions.location_arrived_at is a NOT NULL BIGINT of UNIX nanoseconds
+// (migration 000041) scanned through pgnanos.Time.Scan -> time.Unix(0, v), so
+// an UNSET floor materialises as 1970-01-01T00:00:00Z — which is not Go's zero
+// time (year 1). Gomega's BeZero() is a DeepEqual against the type's zero
+// value, so the vacuous form passes on a completely unset floor. .Unix() moves
+// the comparison onto the representation where "unset" IS zero.
+//
+// Every spec that later asserts floor PRESERVATION with
+// BeTemporally("==", original) needs this first: epoch == epoch is true, so
+// without it the preservation assertion is satisfied by a floor that was never
+// set on either side.
+func expectRealArrivalFloor(arrival time.Time, subject string) {
+	GinkgoHelper()
+	Expect(arrival.Unix()).NotTo(BeZero(),
+		"INV-PRIVACY-1 precondition: %s MUST carry a REAL location arrival floor; the column "+
+			"round-trips as the UNIX epoch when unset, so this is asserted on .Unix() rather "+
+			"than on the time.Time", subject)
+}
+
 var _ = Describe("Fresh character selection to an active session", func() {
 	var (
 		ctx context.Context
@@ -105,8 +128,13 @@ var _ = Describe("Fresh character selection to an active session", func() {
 				"the guest character's creation time")
 		Expect(info.CharacterID).To(Equal(sess.CharacterID),
 			"the session MUST be bound to the character that was selected")
-		Expect(info.LocationArrivedAt).NotTo(BeZero(),
-			"INV-PRIVACY-1: a fresh session MUST carry a location arrival timestamp, "+
+		// Same epoch-not-zero trap as the guest floor above: location_arrived_at
+		// is NOT NULL bigint-nanos, so an unset floor round-trips as
+		// 1970-01-01, which is NOT Go's zero time — NotTo(BeZero()) would pass
+		// on it. Comparing to the session's own creation instant pins a real
+		// floor and also catches a floor set to a wrong-but-non-epoch value.
+		Expect(info.LocationArrivedAt).To(BeTemporally("~", info.CreatedAt, time.Minute),
+			"INV-PRIVACY-1: a fresh session MUST carry a real location arrival timestamp, "+
 				"which is the floor every later history query is filtered against")
 	})
 
@@ -132,8 +160,9 @@ var _ = Describe("Fresh character selection to an active session", func() {
 			"INV-PRIVACY-2: a registered player's session MUST NOT carry a guest identity floor")
 		Expect(info.CharacterID).To(Equal(player.CharacterID),
 			"the session MUST be bound to the character that was selected")
-		Expect(info.LocationArrivedAt).NotTo(BeZero(),
-			"INV-PRIVACY-1: a fresh session MUST carry a location arrival timestamp")
+		// Unset is the UNIX EPOCH, not Go's zero time — see the guest spec.
+		Expect(info.LocationArrivedAt).To(BeTemporally("~", info.CreatedAt, time.Minute),
+			"INV-PRIVACY-1: a fresh session MUST carry a real location arrival timestamp")
 	})
 
 	// matrix-row: fresh-select.telnet
@@ -146,8 +175,9 @@ var _ = Describe("Fresh character selection to an active session", func() {
 		Expect(err).NotTo(HaveOccurred(), "the freshly created telnet session row MUST be readable")
 		Expect(info.Status).To(Equal(session.StatusActive),
 			"a fresh selection MUST leave the session active regardless of transport")
-		Expect(info.LocationArrivedAt).NotTo(BeZero(),
-			"INV-PRIVACY-1: a fresh session MUST carry a location arrival timestamp")
+		// Unset is the UNIX EPOCH, not Go's zero time — see the guest spec.
+		Expect(info.LocationArrivedAt).To(BeTemporally("~", info.CreatedAt, time.Minute),
+			"INV-PRIVACY-1: a fresh session MUST carry a real location arrival timestamp")
 
 		// Read the transport identity back out of Postgres. The grid-presence
 		// roster counts connections BY client_type, so this column decides who
@@ -189,6 +219,7 @@ var _ = Describe("Reattach within TTL through the character-selection path", fun
 		first := guest.OpenWebSession(ctx)
 		originalID := first.SessionID
 		originalArrival := first.LocationArrivedAt
+		expectRealArrivalFloor(originalArrival, "the guest session's first selection")
 		Expect(first.Reattached).To(BeFalse(), "precondition: the first selection creates the session")
 
 		firstInfo, err := ts.SessionStore().Get(ctx, originalID)
@@ -236,6 +267,7 @@ var _ = Describe("Reattach within TTL through the character-selection path", fun
 		first := player.OpenWebSession(ctx)
 		originalID := first.SessionID
 		originalArrival := first.LocationArrivedAt
+		expectRealArrivalFloor(originalArrival, "the first selection")
 		Expect(first.Reattached).To(BeFalse(), "precondition: the first selection creates the session")
 
 		// Drop the transport so the session is detached and holding its TTL
@@ -272,6 +304,7 @@ var _ = Describe("Reattach within TTL through the character-selection path", fun
 		first := player.OpenTelnetSession(ctx)
 		originalID := first.SessionID
 		originalArrival := first.LocationArrivedAt
+		expectRealArrivalFloor(originalArrival, "the first telnet selection")
 
 		first.DetachTransport(ctx)
 		detached, err := ts.SessionStore().Get(ctx, originalID)
@@ -326,7 +359,7 @@ var _ = Describe("Reattach within TTL through the subscribe compare-and-swap pat
 
 		originalID := sess.SessionID
 		originalArrival := sess.LocationArrivedAt
-		Expect(originalArrival).NotTo(BeZero(), "precondition: the guest session has an arrival floor")
+		expectRealArrivalFloor(originalArrival, "the guest session")
 
 		sess.DetachTransport(ctx)
 		detached, err := ts.SessionStore().Get(ctx, originalID)
@@ -358,6 +391,7 @@ var _ = Describe("Reattach within TTL through the subscribe compare-and-swap pat
 
 		originalID := sess.SessionID
 		originalArrival := sess.LocationArrivedAt
+		expectRealArrivalFloor(originalArrival, "the session under compare-and-swap reattach")
 
 		sess.DetachTransport(ctx)
 		detached, err := ts.SessionStore().Get(ctx, originalID)
@@ -389,6 +423,7 @@ var _ = Describe("Reattach within TTL through the subscribe compare-and-swap pat
 
 		originalID := sess.SessionID
 		originalArrival := sess.LocationArrivedAt
+		expectRealArrivalFloor(originalArrival, "the telnet session under compare-and-swap reattach")
 
 		sess.DetachTransport(ctx)
 		detached, err := ts.SessionStore().Get(ctx, originalID)

@@ -359,6 +359,7 @@ var _ = Describe("Tmux-style telnet reattach under one player session", func() {
 		first := player.OpenTelnetSession(ctx)
 		sessionID := first.SessionID
 		originalArrival := first.LocationArrivedAt
+		expectRealArrivalFloor(originalArrival, "the first telnet connection's session")
 		Expect(first.Reattached).To(BeFalse(),
 			"precondition: the first telnet connection creates the session")
 
