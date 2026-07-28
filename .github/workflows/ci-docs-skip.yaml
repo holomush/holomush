@@ -5,14 +5,23 @@ name: CI
 
 # Same-name companion workflow for docs-only PRs. When ci.yaml is path-skipped,
 # branch-protection required checks (Build, Lint, Test, Integration Test, E2E
-# Test) would otherwise stay 'Pending' forever. Job names here are byte-identical
-# to ci.yaml's required-check job names so GitHub treats them as the same check.
+# Test, Vuln) would otherwise stay 'Pending' forever. Job names here are
+# byte-identical to ci.yaml's required-check job names so GitHub treats them as
+# the same check.
+#
+# EVERY ci.yaml-sourced context required by protect-main ruleset 11923801 MUST
+# have a job here. The ruleset requires eight contexts; CodeRabbit and
+# Conventional Commit (PR title) post independently of ci.yaml, so the remaining
+# six are this workflow's responsibility. Adding a required check to the ruleset
+# without adding its stand-in here silently blocks every docs-only PR — GitHub
+# reports BLOCKED with nothing failing to point at (issue #4878; same failure
+# mode as the PR #4823 incident in .claude/rules/landing-the-plane.md).
 #
 # Lint is NOT a no-op: it runs the real docs lint lane (task pr-prep:docs —
 # markdown, ADR, docs-symmetry, fmt, license, docs-paths-sync) so markdown/ADR
 # violations can no longer land on main unchecked (holomush-3zrvh — the gap that
 # let PR #4281's MD038 + missing-ADR-Rationale through). Test/Build/Integration/
-# E2E stay no-op stand-ins — docs changes don't exercise those.
+# E2E/Vuln stay no-op stand-ins — docs changes don't exercise those.
 #
 # DOCS_ONLY_PATHS — must remain byte-identical with ci.yaml's paths-ignore
 # blocks and Taskfile.yaml's DOCS_ONLY_PATHS var. Enforced by
@@ -106,3 +115,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "docs-only PR — E2E skipped (no code changes)"
+  Vuln:
+    name: Vuln
+    # No-op is semantically correct here (unlike Lint): the OPS-03 gate scans Go
+    # dependencies with govulncheck + osv-scanner, and DOCS_ONLY_PATHS cannot
+    # match go.mod / go.sum, so a docs-only PR provably changes no dependency
+    # surface. Required by ruleset 11923801; without this job every docs-only PR
+    # hangs on a check that never arrives (#4878).
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR — Vuln skipped (no dependency changes)"
