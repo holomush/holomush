@@ -193,10 +193,10 @@ func TestOrchestrator_Phase1_GenesisPolicy_ZeroHash(t *testing.T) {
 		"genesis case: policy_hash must be 32 zero bytes sentinel")
 }
 
-// TestOrchestrator_Phase1_ConcurrentSameContext_Rejected verifies:
+// TestRunPhase1FreshRejectsASecondRekeyForAContextAlreadyInProgress verifies:
 //   - a second RunPhase1Fresh on the same context while the first is active
 //     returns DEK_REKEY_ALREADY_IN_PROGRESS (INV-CRYPTO-92)
-func TestOrchestrator_Phase1_ConcurrentSameContext_Rejected(t *testing.T) {
+func TestRunPhase1FreshRejectsASecondRekeyForAContextAlreadyInProgress(t *testing.T) {
 	pool := testIntegrationPool(t)
 	const gameID = "g1"
 	dek.SetGameIDForTest(gameID)

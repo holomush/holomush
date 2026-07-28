@@ -110,27 +110,41 @@ func (p *ObjectProvider) ResolveResource(ctx context.Context, resourceID string)
 		"is_container": obj.IsContainer,
 	}
 
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// has_owner=false the `owner_id` key MUST be OMITTED from the bag — NOT
+	// emitted as an empty-string sentinel. The DSL evaluator's
+	// missing-attr-→-false semantics (ADR holomush-iv43 / 0010) then keep
+	// every operator false for an unowned object. Emitting "" would satisfy
+	// `"" == ""` against any other unresolved peer attribute and create a
+	// fail-open permit in a default-deny system.
 	if obj.OwnerID != nil {
 		attrs["owner_id"] = obj.OwnerID.String()
 		attrs["has_owner"] = true
 	} else {
-		attrs["owner_id"] = ""
 		attrs["has_owner"] = false
 	}
 
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// is_held=false the `held_by_character_id` key MUST be OMITTED — NOT
+	// emitted as an empty-string sentinel. Every object lying in a location
+	// is un-held, so a sentinel would make all of them compare equal on the
+	// holder attribute. The is_held witness stays on both branches.
 	if held := obj.HeldByCharacterID(); held != nil {
 		attrs["held_by_character_id"] = held.String()
 		attrs["is_held"] = true
 	} else {
-		attrs["held_by_character_id"] = ""
 		attrs["is_held"] = false
 	}
 
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// is_contained=false the `contained_in_object_id` key MUST be OMITTED —
+	// NOT emitted as an empty-string sentinel, for the same reason as
+	// held_by_character_id above. The is_contained witness stays on both
+	// branches so a seed can still test existence via `has`.
 	if container := obj.ContainedInObjectID(); container != nil {
 		attrs["contained_in_object_id"] = container.String()
 		attrs["is_contained"] = true
 	} else {
-		attrs["contained_in_object_id"] = ""
 		attrs["is_contained"] = false
 	}
 

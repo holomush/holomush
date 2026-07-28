@@ -18,7 +18,7 @@ func TestSentryLogsTarget(t *testing.T) { // INV-L8
 	require.Equal(t, "sentry sentry_key=abc123", header)
 }
 
-func TestSentryLogsTarget_Invalid(t *testing.T) {
+func TestSentryLogsTargetReturnsErrorForAMalformedDSN(t *testing.T) {
 	_, _, err := sentryLogsTarget("not a dsn")
 	require.Error(t, err)
 }

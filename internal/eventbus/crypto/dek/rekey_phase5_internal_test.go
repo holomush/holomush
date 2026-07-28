@@ -33,10 +33,10 @@ func TestExtractMissingMembers_NamedStringSlice(t *testing.T) {
 	require.Equal(t, []string{"node-a", "node-b"}, got)
 }
 
-// TestExtractMissingMembers_Missing — defensive: an error without the
+// TestExtractMissingMembersReturnsNilWhenTheErrorCarriesNoMemberList — defensive: an error without the
 // missing_members context (or with a nil value) returns nil rather than
 // panicking. RunPhase5 treats nil as "unknown set" and persists "[]".
-func TestExtractMissingMembers_Missing(t *testing.T) {
+func TestExtractMissingMembersReturnsNilWhenTheErrorCarriesNoMemberList(t *testing.T) {
 	plainErr := oops.Code("SOMETHING_ELSE").Errorf("no context")
 	require.Nil(t, extractMissingMembers(plainErr))
 
@@ -116,9 +116,9 @@ func TestCheckpoint_Phase5HasMissingMembers_Null(t *testing.T) {
 	}
 }
 
-// TestCheckpoint_Phase5MissingMembers_Decodes — accessor decodes the
+// TestCheckpointPhase5MissingMembersDecodesJSONAndReportsADecodeFailureCode — accessor decodes the
 // JSON blob to []string and surfaces parse errors via a typed oops code.
-func TestCheckpoint_Phase5MissingMembers_Decodes(t *testing.T) {
+func TestCheckpointPhase5MissingMembersDecodesJSONAndReportsADecodeFailureCode(t *testing.T) {
 	c := Checkpoint{phase5MissingMembers: []byte(`["alpha","beta"]`)}
 	got, err := c.Phase5MissingMembers()
 	require.NoError(t, err)

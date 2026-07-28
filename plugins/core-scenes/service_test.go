@@ -2331,10 +2331,10 @@ func TestGetPoseOrder_HappyPath_FreeMode(t *testing.T) {
 	assert.Nil(t, entry.GetLastPosedAt(), "never-posed: last_posed_at is nil")
 }
 
-// TestGetPoseOrder_StoreError_Internal verifies that an unexpected
+// TestGetPoseOrderMapsAStoreFailureToInternalRatherThanPermissionDenied verifies that an unexpected
 // store error from the participant check is surfaced as Internal,
 // not silently mapped to PermissionDenied.
-func TestGetPoseOrder_StoreError_Internal(t *testing.T) {
+func TestGetPoseOrderMapsAStoreFailureToInternalRatherThanPermissionDenied(t *testing.T) {
 	t.Parallel()
 	store := &erroringIsParticipantStore{
 		fakeStore: newFakeStore(),

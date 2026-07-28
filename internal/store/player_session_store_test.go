@@ -63,7 +63,7 @@ func TestPostgresPlayerSessionStore_Create(t *testing.T) {
 		errMsg    string
 	}{
 		{
-			name:    "happy path",
+			name:    "inserts the session row",
 			session: ps,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`INSERT INTO player_sessions`).
@@ -134,7 +134,7 @@ func TestPostgresPlayerSessionStore_GetByTokenHash(t *testing.T) {
 		check     func(t *testing.T, got *auth.PlayerSession)
 	}{
 		{
-			name:      "happy path",
+			name:      "returns the session matching the token hash",
 			tokenHash: ps.TokenHash,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows(playerSessionColumns()).AddRow(playerSessionRow(ps)...)
@@ -275,7 +275,7 @@ func TestPostgresPlayerSessionStore_Delete(t *testing.T) {
 		errMsg    string
 	}{
 		{
-			name: "happy path",
+			name: "deletes the session row by id",
 			id:   sessionID,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`DELETE FROM player_sessions WHERE id = \$1`).
@@ -330,7 +330,7 @@ func TestPostgresPlayerSessionStore_DeleteByPlayer(t *testing.T) {
 		errMsg    string
 	}{
 		{
-			name:     "happy path",
+			name:     "deletes every session belonging to the player",
 			playerID: playerID,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`DELETE FROM player_sessions WHERE player_id = \$1`).
@@ -446,7 +446,7 @@ func TestPostgresPlayerSessionStore_GetByID(t *testing.T) {
 		check     func(t *testing.T, got *auth.PlayerSession)
 	}{
 		{
-			name: "happy path",
+			name: "returns the session matching the id",
 			id:   ps.ID,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows(playerSessionColumns()).AddRow(playerSessionRow(ps)...)
@@ -765,7 +765,7 @@ func TestPostgresPlayerSessionStore_RefreshTTL(t *testing.T) {
 		errMsg    string
 	}{
 		{
-			name: "happy path",
+			name: "extends expires_at for the session",
 			id:   sessionID,
 			ttl:  ttl,
 			setupMock: func(mock pgxmock.PgxPoolIface) {

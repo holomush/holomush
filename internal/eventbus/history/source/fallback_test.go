@@ -168,7 +168,7 @@ func TestFallback_Case6_OrphanRef_NoCold(t *testing.T) {
 }
 
 // Case 7: DB transient error propagates.
-func TestFallback_Case7_TransientError_Propagates(t *testing.T) {
+func TestFallbackResolverPropagatesATransientHotDEKErrorWithoutMaskingItAsMetadataOnly(t *testing.T) {
 	env := makeCiphertextEnvelope(t, 42, 3)
 	transient := errors.New("connection reset")
 	dm := &fakeDEKManager{fn: func(codec.KeyID, uint32) (codec.Key, error) {
@@ -181,7 +181,7 @@ func TestFallback_Case7_TransientError_Propagates(t *testing.T) {
 }
 
 // Case 8: cold reader transient error.
-func TestFallback_Case8_ColdReaderError_Wrapped(t *testing.T) {
+func TestFallbackResolverWrapsAColdReaderLookupFailureAsColdLookupFailed(t *testing.T) {
 	env := makeCiphertextEnvelope(t, 42, 3)
 	dm := &fakeDEKManager{fn: func(codec.KeyID, uint32) (codec.Key, error) {
 		return codec.Key{}, oops.Code("DEK_DESTROYED").Errorf("rekey'd")
@@ -197,7 +197,7 @@ func TestFallback_Case8_ColdReaderError_Wrapped(t *testing.T) {
 
 // Case 9: cold DEK resolution returns a transient (non-typed) error.
 // The error MUST propagate as DEK_RESOLVE_TRANSIENT, NOT be masked as ErrMetadataOnly.
-func TestFallback_Case9_ColdTransientError_Propagates(t *testing.T) {
+func TestFallbackResolverPropagatesATransientColdDEKErrorAsDEKResolveTransient(t *testing.T) {
 	env := makeCiphertextEnvelope(t, 42, 3)
 	coldEnv := makeCiphertextEnvelope(t, 99, 4)
 	transient := errors.New("pg: connection reset by peer")

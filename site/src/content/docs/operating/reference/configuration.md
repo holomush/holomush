@@ -77,7 +77,56 @@ holomush gateway [flags]
 | `--control-addr` | `127.0.0.1:9002` | Control plane gRPC address (mTLS)              |
 | `--metrics-addr` | `127.0.0.1:9101` | Metrics and health HTTP endpoint               |
 | `--log-format`   | `json`           | Log format: `json` or `text`                   |
+| `--secure-cookies` | `true`         | Secure session cookies plus HSTS and CSP headers (see below) |
 | `--config`       | XDG default      | Path to YAML config file                       |
+
+#### `--secure-cookies`
+
+One switch over three browser-facing protections on the web gateway:
+
+| Controlled behaviour | Enabled (the default) | Disabled |
+| -------------------- | --------------------- | -------- |
+| Session cookie `Secure` attribute and `SameSite` mode | `Secure` set, `SameSite=Strict` | `Secure` omitted, `SameSite=Lax` |
+| `Strict-Transport-Security` response header | `max-age=31536000; includeSubDomains` | Not sent |
+| `Content-Security-Policy` response header | `frame-ancestors 'none'; base-uri 'self'; object-src 'none'` | Not sent |
+
+The setting is a deployment declaration, not a probe: the gateway does not infer
+it from its own listener or from `X-Forwarded-Proto`. A client can spoof that
+header, so the security decision is never steered by request content.
+
+Disable it explicitly — this is the only supported spelling for the opt-out:
+
+```bash
+holomush gateway --secure-cookies=false
+```
+
+The bare `--secure-cookies` form still enables the set; it is now redundant
+rather than wrong. The config-file key is unchanged and still works:
+
+```yaml
+gateway:
+  secure_cookies: false
+```
+
+:::caution[Behaviour change — the default inverted]
+`--secure-cookies` previously defaulted to **`false`**. It now defaults to
+**`true`** ([#4794](https://github.com/holomush/holomush/issues/4794)).
+
+**If you serve the gateway over plain HTTP** on any host other than `localhost`
+or the loopback address, this breaks logins on upgrade: browsers only grant the
+secure-context exemption to localhost, so a `Secure` cookie sent over plain HTTP
+elsewhere is silently dropped — the browser never stores or returns the session
+cookie, and users cannot stay logged in. There is no error message. Restore the
+previous behaviour by passing `--secure-cookies=false` (or setting
+`gateway.secure_cookies: false` in your config file).
+
+**If you terminate TLS in front of the gateway** (nginx, haproxy, a Kubernetes
+ingress, a Cloudflare tunnel — anything that leaves the gateway's own listener
+speaking plain HTTP), you previously had to remember `--secure-cookies` or
+silently ship session cookies without `Secure` and no HSTS or CSP at all. You no
+longer need the flag; the secure behaviour is what you get by default. Passing
+it explicitly remains valid.
+:::
 
 **Example:**
 
@@ -434,6 +483,14 @@ gateway:
   # Example for development:
   # cors_origins:
   #   - "http://localhost:5173"
+
+  # Secure session cookies (Secure attribute + SameSite=Strict) plus the
+  # Strict-Transport-Security and Content-Security-Policy response headers.
+  # Set to false ONLY when serving plain HTTP on a non-localhost host, where
+  # browsers would otherwise drop the Secure session cookie.
+  # Flag: --secure-cookies
+  # Default: true
+  secure_cookies: true
 
 # Game world configuration.
 game:

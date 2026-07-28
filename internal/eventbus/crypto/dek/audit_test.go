@@ -131,8 +131,8 @@ func TestRekeyHandlerFor_ScopeFromPayload(t *testing.T) {
 	require.Equal(t, "scene:01ABC", scope)
 }
 
-// TestRekeyHandlerFor_Canonicalize verifies Canonicalize returns stable JCS bytes.
-func TestRekeyHandlerFor_Canonicalize(t *testing.T) {
+// TestRekeyHandlerCanonicalizeProducesIdenticalBytesForReorderedJSONKeys verifies Canonicalize returns stable JCS bytes.
+func TestRekeyHandlerCanonicalizeProducesIdenticalBytesForReorderedJSONKeys(t *testing.T) {
 	h := dek.RekeyHandlerFor("mygame")
 	a := []byte(`{"b":2,"a":1}`)
 	b := []byte(`{"a":1,"b":2}`)

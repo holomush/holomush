@@ -330,7 +330,7 @@ func TestParseManifest_ValidNames(t *testing.T) {
 		name     string
 		plugName string
 	}{
-		{name: "simple", plugName: "echo"},
+		{name: "lowercase letters only", plugName: "echo"},
 		{name: "with dash", plugName: "echo-bot"},
 		{name: "with numbers", plugName: "echo123"},
 		{name: "mixed", plugName: "echo-bot-v2"},

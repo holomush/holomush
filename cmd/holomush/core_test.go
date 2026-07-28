@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -20,12 +21,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/config"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/pkg/errutil"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
-func TestCoreCommand_Flags(t *testing.T) {
+func TestCoreCommandHelpListsEveryExpectedFlag(t *testing.T) {
 	cmd := NewCoreCmd()
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
@@ -94,7 +98,7 @@ func TestCoreCommand_DefaultValues(t *testing.T) {
 	assert.Empty(t, gameID)
 }
 
-func TestCoreCommand_Properties(t *testing.T) {
+func TestCoreCommandDeclaresItsUseShortAndLongDescriptions(t *testing.T) {
 	cmd := NewCoreCmd()
 
 	assert.Equal(t, "core", cmd.Use)
@@ -216,7 +220,7 @@ func TestParseLogLevel(t *testing.T) {
 	}
 }
 
-func TestCoreCommand_Help(t *testing.T) {
+func TestRootCommandCoreHelpContainsEveryExpectedSection(t *testing.T) {
 	cmd := NewRootCmd()
 	cmd.SetArgs([]string{"core", "--help"})
 
@@ -709,8 +713,8 @@ func TestSignalHandling_MultipleSignals(t *testing.T) {
 	}
 }
 
-// TestSignalStop_Cleanup verifies that signal.Stop properly unregisters signal handling.
-func TestSignalStop_Cleanup(t *testing.T) {
+// TestSignalStopStopsDeliveringOSSignalsToTheChannel verifies that signal.Stop properly unregisters signal handling.
+func TestSignalStopStopsDeliveringOSSignalsToTheChannel(t *testing.T) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -992,4 +996,310 @@ func TestResolveLogLevel(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- rekeyAuditPublisherAdapter -------------------------------------------
+//
+// The adapter is the only thing standing between dek.AuditPublisher and the
+// bus: it validates the subject and type, overrides NewEvent's wall clock with
+// the injected one, and hands back the minted ULID so a rekey operation can be
+// correlated with its audit row. Production wires it at cryptowiring.go:213
+// with a real clock, so none of these paths are reachable from a unit boot.
+
+// fixedClock is a deterministic Now() source satisfying the anonymous clock
+// interface on rekeyAuditPublisherAdapter.
+type fixedClock struct{ at time.Time }
+
+func (c fixedClock) Now() time.Time { return c.at }
+
+// recordingPublisher captures every event handed to Publish so a test can
+// assert on what actually reached the bus, and optionally fails the publish.
+type recordingPublisher struct {
+	published []eventbus.Event
+	err       error
+}
+
+func (p *recordingPublisher) Publish(_ context.Context, event eventbus.Event) error {
+	p.published = append(p.published, event)
+	return p.err
+}
+
+func TestRekeyAuditPublisherStampsTheInjectedClockAndReturnsThePublishedEventID(t *testing.T) {
+	at := time.Date(2026, time.March, 14, 15, 9, 26, 0, time.UTC)
+	pub := &recordingPublisher{}
+	adapter := &rekeyAuditPublisherAdapter{publisher: pub, clock: fixedClock{at: at}}
+	payload := []byte(`{"request_id":"01JQ0000000000000000000000"}`)
+
+	id, err := adapter.PublishAudit(context.Background(),
+		"events.main.system.rekey.completed", "crypto.system.rekey", payload)
+
+	require.NoError(t, err)
+	require.Len(t, pub.published, 1, "a successful PublishAudit must emit exactly one event")
+	got := pub.published[0]
+
+	assert.Equal(t, got.ID, id,
+		"the returned ULID must be the published event's ID, or a caller cannot correlate the audit row")
+	assert.NotEqual(t, ulid.ULID{}, id, "a published audit event must carry a minted ULID")
+	assert.True(t, at.Equal(got.Timestamp),
+		"the injected clock must override NewEvent's time.Now(); want %s got %s", at, got.Timestamp)
+	assert.Equal(t, eventbus.Subject("events.main.system.rekey.completed"), got.Subject)
+	assert.Equal(t, eventbus.Type("crypto.system.rekey"), got.Type)
+	assert.Equal(t, eventbus.ActorKindSystem, got.Actor.Kind,
+		"rekey audit is host-emitted, so the actor kind must be system")
+	assert.Equal(t, payload, got.Payload)
+}
+
+func TestRekeyAuditPublisherRejectsAMalformedSubjectOrTypeWithoutPublishing(t *testing.T) {
+	tests := []struct {
+		name     string
+		subject  string
+		evType   string
+		wantCode string
+	}{
+		{
+			name:     "rejects a subject outside the events namespace",
+			subject:  "audit.main.system.rekey",
+			evType:   "crypto.system.rekey",
+			wantCode: "DEK_REKEY_AUDIT_INVALID_SUBJECT",
+		},
+		{
+			name:     "rejects an event type carrying uppercase characters",
+			subject:  "events.main.system.rekey.completed",
+			evType:   "Crypto.System.Rekey",
+			wantCode: "DEK_REKEY_AUDIT_INVALID_TYPE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pub := &recordingPublisher{}
+			adapter := &rekeyAuditPublisherAdapter{
+				publisher: pub,
+				clock:     fixedClock{at: time.Unix(0, 0).UTC()},
+			}
+
+			id, err := adapter.PublishAudit(context.Background(), tt.subject, tt.evType, []byte(`{}`))
+
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, tt.wantCode)
+			assert.Equal(t, ulid.ULID{}, id, "a rejected audit emit must not report an event ID")
+			assert.Empty(t, pub.published, "a rejected audit emit must never reach the bus")
+		})
+	}
+}
+
+func TestRekeyAuditPublisherReportsAPublishFailureAndMintsNoEventID(t *testing.T) {
+	cause := errors.New("jetstream unavailable")
+	pub := &recordingPublisher{err: cause}
+	adapter := &rekeyAuditPublisherAdapter{
+		publisher: pub,
+		clock:     fixedClock{at: time.Unix(0, 0).UTC()},
+	}
+
+	id, err := adapter.PublishAudit(context.Background(),
+		"events.main.system.rekey.completed", "crypto.system.rekey", []byte(`{}`))
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "DEK_REKEY_AUDIT_PUBLISH_FAILED")
+	assert.ErrorIs(t, err, cause, "the underlying publish failure must stay in the chain for diagnosis")
+	assert.Equal(t, ulid.ULID{}, id,
+		"a failed publish must not report an event ID the caller could record as durable")
+	assert.Len(t, pub.published, 1, "the adapter must have attempted the publish before reporting failure")
+}
+
+// --- pluginAuditClientAdapter ---------------------------------------------
+
+// stubPluginAuditClient is a PluginAuditServiceClient whose AuditEvent result
+// is fixed by the test. QueryHistory is not part of the dispatch adapter's
+// surface and fails loudly if anything reaches for it.
+type stubPluginAuditClient struct {
+	resp *pluginv1.AuditEventResponse
+	err  error
+}
+
+func (c stubPluginAuditClient) AuditEvent(
+	_ context.Context, _ *pluginv1.AuditEventRequest, _ ...grpc.CallOption,
+) (*pluginv1.AuditEventResponse, error) {
+	return c.resp, c.err
+}
+
+func (c stubPluginAuditClient) QueryHistory(
+	_ context.Context, _ *pluginv1.QueryHistoryRequest, _ ...grpc.CallOption,
+) (grpc.ServerStreamingClient[pluginv1.QueryHistoryResponse], error) {
+	return nil, errors.New("QueryHistory is not part of the audit dispatch adapter")
+}
+
+func TestPluginAuditClientAdapterWrapsAFailedRPCAndPassesASuccessThroughUnchanged(t *testing.T) {
+	t.Run("wraps a transport failure with the audit dispatch code", func(t *testing.T) {
+		cause := errors.New("plugin unreachable")
+		adapter := pluginAuditClientAdapter{client: stubPluginAuditClient{err: cause}}
+
+		resp, err := adapter.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{})
+
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUDIT_PLUGIN_RPC_FAILED")
+		assert.ErrorIs(t, err, cause, "the transport failure must remain diagnosable through the wrap")
+		assert.Nil(t, resp, "no response may be handed back alongside an error")
+	})
+
+	t.Run("returns the plugin response without substituting a value", func(t *testing.T) {
+		want := &pluginv1.AuditEventResponse{}
+		adapter := pluginAuditClientAdapter{client: stubPluginAuditClient{resp: want}}
+
+		resp, err := adapter.AuditEvent(context.Background(), &pluginv1.AuditEventRequest{})
+
+		require.NoError(t, err)
+		assert.Same(t, want, resp, "the adapter forwards the RPC and must not rebuild the response")
+	})
+}
+
+// --- applyLogSinkFlags ------------------------------------------------------
+//
+// TestCoreCommand_LogSinkFlagsBind already covers --log-stderr, --log-otel and
+// --log-sentry-level. The three remaining branches are covered here, and both
+// tests assert the routing rather than only the value: a sink override landing
+// on a sibling sink's field would satisfy a single-field assertion.
+
+func TestApplyLogSinkFlagsRoutesEachSinkOverrideToItsOwnField(t *testing.T) {
+	cmd := NewCoreCmd()
+	require.NoError(t, cmd.Flags().Parse([]string{
+		"--log-stderr-level=debug", "--log-otel-level=error", "--log-sentry=false",
+	}))
+
+	lc := config.DefaultLoggingConfig()
+	lc.Sentry.Level = "warn"
+	applyLogSinkFlags(cmd, &lc)
+
+	// These three ARE the cross-wiring guard. The two level overrides are
+	// deliberately given DIFFERENT values, so pinning each sink to its own value
+	// already fails if either override lands on the sibling — the NotEqual pair
+	// that used to sit below was implied by these lines and added no coverage,
+	// while its "cross-wiring guard" framing suggested it did.
+	assert.Equal(t, "debug", lc.Stderr.Level,
+		"--log-stderr-level MUST land on the stderr sink and nowhere else")
+	assert.Equal(t, "error", lc.OTel.Level,
+		"--log-otel-level MUST land on the OTel sink and nowhere else")
+	assert.False(t, lc.Sentry.Enabled)
+
+	// A flag that was never set must not disturb the configured value.
+	assert.Equal(t, "warn", lc.Sentry.Level, "an unset --log-sentry-level must leave the configured Sentry level intact")
+	assert.True(t, lc.Stderr.Enabled, "an unset --log-stderr must leave the stderr sink as configured")
+	assert.True(t, lc.OTel.Enabled, "an unset --log-otel must leave the OTel sink as configured")
+}
+
+func TestApplyLogSinkFlagsLeavesAConfiguredLoggingSectionUntouchedWhenNoSinkFlagIsSet(t *testing.T) {
+	cmd := NewCoreCmd()
+	require.NoError(t, cmd.Flags().Parse(nil))
+
+	// Every value below differs from the corresponding --log-* flag default,
+	// so dropping a Changed() guard would visibly clobber it (spec §5 requires
+	// CLI > config > default, not flag-default > config).
+	lc := config.DefaultLoggingConfig()
+	lc.Stderr.Enabled, lc.Stderr.Level = false, "error"
+	lc.OTel.Enabled, lc.OTel.Level = false, "debug"
+	lc.Sentry.Enabled, lc.Sentry.Level = false, "info"
+
+	applyLogSinkFlags(cmd, &lc)
+
+	assert.False(t, lc.Stderr.Enabled)
+	assert.Equal(t, "error", lc.Stderr.Level)
+	assert.False(t, lc.OTel.Enabled)
+	assert.Equal(t, "debug", lc.OTel.Level)
+	assert.False(t, lc.Sentry.Enabled)
+	assert.Equal(t, "info", lc.Sentry.Level)
+}
+
+// --- NewCoreCmd config-section loading -------------------------------------
+//
+// RunE loads six config sections in sequence and returns on the first failure.
+// Each test below breaks exactly one section and asserts that the run stops
+// there. DATABASE_URL is deliberately cleared: it is the next thing RunE
+// reaches, so if the section under test stopped being loaded the run would
+// fall through to the database check and the NotContains assertion would fail
+// rather than pass silently.
+
+func TestCoreCommandSurfacesAMalformedConfigSectionInsteadOfStartingTheServer(t *testing.T) {
+	tests := []struct {
+		name        string
+		yaml        string
+		wantSection string
+	}{
+		{
+			name:        "reports a core section whose grpc_addr is not a scalar",
+			yaml:        "core:\n  grpc_addr: [1, 2]\n",
+			wantSection: "core",
+		},
+		{
+			name:        "reports a game section whose guest_start_location is not a scalar",
+			yaml:        "game:\n  guest_start_location: [1, 2]\n",
+			wantSection: "game",
+		},
+		{
+			name:        "reports an auth section whose session cap is not a number",
+			yaml:        "auth:\n  max_player_sessions_per_player: \"abc\"\n",
+			wantSection: "auth",
+		},
+		{
+			name:        "reports an event_bus section whose monitor_port is not a number",
+			yaml:        "event_bus:\n  monitor_port: \"abc\"\n",
+			wantSection: "event_bus",
+		},
+		{
+			name:        "reports a crypto section whose operators is not a list",
+			yaml:        "crypto:\n  operators:\n    nested: 1\n",
+			wantSection: "crypto",
+		},
+		{
+			name:        "reports a logging section whose stderr toggle is not a boolean",
+			yaml:        "logging:\n  stderr:\n    enabled: \"notabool\"\n",
+			wantSection: "logging",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("DATABASE_URL", "")
+			t.Cleanup(func() { configFile = "" })
+
+			cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+			require.NoError(t, os.WriteFile(cfgPath, []byte(tt.yaml), 0o600))
+
+			cmd := NewRootCmd()
+			cmd.SetOut(new(bytes.Buffer))
+			cmd.SetErr(new(bytes.Buffer))
+			cmd.SetArgs([]string{"core", "--config", cfgPath})
+
+			err := cmd.Execute()
+
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, "CONFIG_UNMARSHAL_FAILED")
+			errutil.AssertErrorContext(t, err, "section", tt.wantSection)
+			assert.NotContains(t, err.Error(), "DATABASE_URL",
+				"the run must stop at the malformed section, not fall through to the database check")
+		})
+	}
+}
+
+func TestCoreCommandRejectsAnUnrecognisedEventBusModeBeforeStartingTheServer(t *testing.T) {
+	t.Setenv("DATABASE_URL", "")
+	t.Cleanup(func() { configFile = "" })
+
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte("event_bus:\n  mode: \"externl\"\n"), 0o600))
+
+	cmd := NewRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{"core", "--config", cfgPath})
+
+	err := cmd.Execute()
+
+	// The mode unmarshals fine — only Validate() rejects it, and RunE calls
+	// Validate BEFORE Defaults() precisely so a typo cannot silently boot
+	// embedded. Dropping that call would let the run reach DATABASE_URL.
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_CONFIG_INVALID")
+	errutil.AssertErrorContext(t, err, "mode", "externl")
+	assert.NotContains(t, err.Error(), "DATABASE_URL",
+		"an unrecognised event_bus mode must fail closed before the server starts")
 }

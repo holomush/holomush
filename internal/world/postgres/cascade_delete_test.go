@@ -304,7 +304,7 @@ func TestCascadeDelete_Character_RollsBackPropertiesOnParentDeleteFail(t *testin
 	assert.True(t, exists, "character should remain after rollback")
 }
 
-func TestWorldService_DeleteLocation_Integration(t *testing.T) {
+func TestDeleteLocationCascadesToItsEntityProperties(t *testing.T) {
 	ctx := context.Background()
 
 	locID := createCascadeTestLocation(ctx, t)
@@ -341,7 +341,7 @@ func TestWorldService_DeleteLocation_Integration(t *testing.T) {
 	assert.False(t, exists, "location should be deleted")
 }
 
-func TestWorldService_DeleteObject_Integration(t *testing.T) {
+func TestDeleteObjectCascadesToItsEntityProperties(t *testing.T) {
 	ctx := context.Background()
 
 	locID := createCascadeTestLocation(ctx, t)
@@ -380,7 +380,7 @@ func TestWorldService_DeleteObject_Integration(t *testing.T) {
 	assert.False(t, exists, "object should be deleted")
 }
 
-func TestWorldService_DeleteCharacter_Integration(t *testing.T) {
+func TestDeleteCharacterCascadesToItsEntityProperties(t *testing.T) {
 	ctx := context.Background()
 
 	locID := createCascadeTestLocation(ctx, t)

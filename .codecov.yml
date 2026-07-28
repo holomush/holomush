@@ -9,10 +9,33 @@ codecov:
     # uploads would push the patch above target.
     #
     # We upload three coverage files (unit, integration via flag, e2e via
-    # flag) but codecov de-duplicates to two sessions — the unflagged unit
-    # session and one merged flagged session covering integration+e2e.
-    # Setting after_n_builds: 2 matches that session count; 3 would block
-    # codecov from ever notifying.
+    # flag). This block previously claimed codecov de-duplicates them to TWO
+    # sessions and that `after_n_builds: 3` "would block codecov from ever
+    # notifying". Plan 09-19 falsified both halves against codecov's own API:
+    #
+    #   curl -s https://api.codecov.io/api/v2/github/holomush/repos/holomush/commits/eee76d23e40d6c5cb2e98283cc4181bf28b608fa/ \
+    #     | jq '.totals.sessions'      # => 3   (state: complete)
+    #
+    # Three uploads produce THREE sessions. The de-duplication model was an
+    # artifact of the broken e2e lane: while the e2e upload landed empty
+    # (plan 09-01's root cause) only two sessions ever materialised, and the
+    # comment mistook that breakage for codecov behaviour.
+    #
+    # CONSEQUENCE, and it is not cosmetic: at `after_n_builds: 2` codecov
+    # notifies once the SECOND upload merges, i.e. before the third. A status
+    # or API read taken in that window evaluates on PARTIAL coverage. This is
+    # observed, not theoretical — plan 09-17 recorded a 69.12% reading on the
+    # commit above before its three sessions had merged; the final figure is
+    # 79.11%. Treat any codecov reading as final only once `state: complete`
+    # AND the expected session count are both observed.
+    #
+    # `after_n_builds` is deliberately LEFT AT 2 rather than raised to 3:
+    # the upload steps in .github/workflows/ci.yaml carry no `if: always()`,
+    # so a failing lane skips its upload and a value of 3 would suppress
+    # notification entirely on exactly the runs where coverage feedback is
+    # most wanted. Closing the partial-evaluation window is tracked as a
+    # follow-up rather than fixed by a value change whose failure mode is
+    # silence. See issue #4876.
     #
     # Note: per-status-target after_n_builds is rejected by codecov's
     # validator as an unknown field — the top-level codecov.notify.* is
@@ -26,19 +49,54 @@ coverage:
       default:
         # Rising-floor ratchet: `target: auto` requires this PR's whole-repo
         # project coverage to not fall below the base commit's, within the
-        # threshold. The baseline (~54.6%) is NOT retroactively blocked;
-        # only a PR that LOWERS project coverage beyond the tolerance fails.
-        # threshold: 1% is a 1-percentage-point regression allowance (NOT
-        # "no-drop" — it permits a 1-point decline). It absorbs the two-upload
-        # merge jitter (unit + integration/e2e sessions merge after
-        # `notify.after_n_builds: 2`). Tighten toward `threshold: 0%` (a true
-        # no-drop ratchet) once coverage stabilizes.
+        # threshold. The baseline is NOT retroactively blocked; only a PR that
+        # LOWERS project coverage beyond the tolerance fails.
+        #
+        # Measured baseline: 78.28% on main @ 497748c6d (57,480 lines,
+        # 44,997 hits), read 2026-07-26 from codecov's own branch API —
+        # the source of this figure:
+        #
+        #   curl -s https://api.codecov.io/api/v2/github/holomush/repos/holomush/branches/main/ \
+        #     | jq .head_commit.totals.coverage
+        #
+        # That API figure is the only authoritative number for this gate,
+        # because it is the only one that applies the `ignore:` list below AND
+        # merges every uploaded session. `go tool cover -func` does NOT produce
+        # it: -func totals a single raw profile with no ignore list applied and
+        # no cross-lane merge, so its tail line reads far lower. Do not quote a
+        # -func tail as "the coverage number". This comment previously asserted
+        # a much lower baseline that was exactly that mistake — a raw unit-lane
+        # -func total read as the gated figure (corrected in plan 09-01).
+        #
+        # threshold: 0% is a TRUE no-drop ratchet: any change that lowers
+        # whole-repo project coverage at all — by even a fraction of a point —
+        # fails this status. The former 1-percentage-point regression
+        # allowance is gone (tightened in plan 09-19).
+        #
+        # The enforced floor is NOT the 78.28% recorded above. `target: auto`
+        # compares against whatever the BASE commit measured, so the floor
+        # rises with every merge and the figure in this comment is historical
+        # context, not the gate's value.
+        #
+        # Caveat a future reader needs: this status does not currently POST
+        # anywhere in this repository — 64 observations across 32 commits and
+        # two GitHub endpoints found it on no ref (issue #4875; leading cause
+        # is codecov's Team plan, which shows patch-only coverage). So this
+        # tightening changes no observable behaviour until #4875 is resolved.
+        # It is correct-in-waiting, not an active gate.
         target: auto
-        threshold: 1%
+        threshold: 0%
     patch:
       # Coverage on changed lines only. codecov POSTS this status on PRs; it
       # is NOT a required protect-main check today, so it does not block
       # merges (see 06-04 Task 3). Do not describe it as an enforced gate.
+      #
+      # Before making it required (ruleset 11923801), read issue #4876. It
+      # posts reliably on code-changing PRs (14/14 head commits, plan 09-17)
+      # but is ABSENT on 11 of 13 docs-only commits sampled on main, because
+      # ci.yaml's `paths-ignore` routes docs-only diffs to ci-docs-skip.yaml,
+      # which uploads no coverage. Required + never-posting = every docs-only
+      # PR blocked with nothing visibly failing — the PR #4823 failure mode.
       default:
         target: 80%
         threshold: 5%
@@ -62,16 +120,13 @@ ignore:
   # E2E tests exercise them end-to-end but the coverage doesn't flow
   # back across the process boundary.
   - "plugins/*/main.go"
-  # The holomush server's runCoreWithDeps is production-only wiring.
-  # E2E tests boot the binary and exercise it end-to-end, but the unit
-  # coverage profile doesn't see init-path statements (orchestrator
-  # wiring, subsystem registration). Same rationale as plugins/*/main.go.
-  - "cmd/holomush/core.go"
-  # The gRPC/history subsystem wiring (history-auth-guard, FallbackResolver,
-  # PluginDowngradeFence assembly). Same production-only-wiring class as
-  # core.go above — E2E boots and exercises it, but the unit coverage profile
-  # can't see the construction-failure WarnContext branches. (holomush-hz0v4.14.26)
-  - "cmd/holomush/sub_grpc.go"
+  # NOTE (plan 09-01): two server-wiring files used to be ignored here on the
+  # rationale that E2E exercised them but their coverage never flowed back.
+  # The second half of that claim was true only because the instrumented E2E
+  # containers were being SIGKILLed before Go's exit hook could flush
+  # GOCOVERDIR. That is fixed (stop_grace_period in compose.e2e.cover.yaml),
+  # the E2E lane now reports real counts for both files, and the entries are
+  # gone. Do not re-add them: the code is measured, not unmeasurable.
   # Metric stub hooks — intentionally unused no-op call-site anchors
   # awaiting future instrumentation. They exist so future metric wiring
   # has a stable call site; there is no behavior to test.

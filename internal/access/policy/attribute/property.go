@@ -85,21 +85,35 @@ func (p *PropertyProvider) ResolveResource(ctx context.Context, resourceID strin
 		"visibility":  prop.Visibility,
 	}
 
-	// Handle optional Value
+	// Handle optional Value.
+	//
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// has_value=false the `value` key MUST be OMITTED from the bag — NOT
+	// emitted as an empty-string sentinel. The DSL evaluator's
+	// missing-attr-→-false semantics (ADR holomush-iv43 / 0010) then keep
+	// every operator false for an unset value. Emitting "" would satisfy
+	// `"" == ""` against any other unresolved peer attribute and create a
+	// fail-open permit in a default-deny system.
 	if prop.Value != nil {
 		attrs["value"] = *prop.Value
 		attrs["has_value"] = true
 	} else {
-		attrs["value"] = ""
 		attrs["has_value"] = false
 	}
 
-	// Handle optional Owner
+	// Handle optional Owner.
+	//
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// has_owner=false the `owner` key MUST be OMITTED — NOT emitted as an
+	// empty-string sentinel. This one is directly load-bearing:
+	// seed:property-private-read and seed:property-owner-write both gate on
+	// `resource.property.owner == principal.character.id` (see
+	// internal/access/policy/seed.go), so an ownerless property MUST NOT be
+	// comparable at all. The has_owner witness stays on both branches.
 	if prop.Owner != nil {
 		attrs["owner"] = *prop.Owner
 		attrs["has_owner"] = true
 	} else {
-		attrs["owner"] = ""
 		attrs["has_owner"] = false
 	}
 

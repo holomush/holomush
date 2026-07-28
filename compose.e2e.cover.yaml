@@ -12,9 +12,25 @@ services:
       GOCOVERDIR: /coverdata
     volumes:
       - ./.coverdata/core:/coverdata
+    # A -cover binary flushes its counters from a Go exit hook, which only runs
+    # on a graceful exit (main.go's os.Exit(run())). `docker compose stop`
+    # defaults to a 10s grace before SIGKILL and no compose file set this key,
+    # so core was killed mid-shutdown every run: exit 137, only covmeta.* on the
+    # mount, never covcounters.* (plan 09-01 Task 1, measured 2026-07-26).
+    #
+    # Observed graceful shutdown: ~14.4s for core (SIGTERM 16:20:31.3 ->
+    # exit 0 at 16:20:45.7). The tail is the OTLP exporter's own 5s export
+    # timeout draining to an otel-collector that is not up under the E2E
+    # profile. 60s leaves ample headroom over that ~15s.
+    stop_grace_period: 60s
 
   gateway:
     environment:
       GOCOVERDIR: /coverdata
     volumes:
       - ./.coverdata/gateway:/coverdata
+    # Same flush-on-graceful-exit requirement as core above. Observed graceful
+    # shutdown ~7.6s — under the 10s default, but only barely, and the very
+    # first measured run did SIGKILL it (exit 137). Pinned rather than left to
+    # chance.
+    stop_grace_period: 60s

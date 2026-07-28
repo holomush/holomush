@@ -14,7 +14,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-func TestParseAuditHeaders_Identity(t *testing.T) {
+func TestParseAuditHeadersLeavesDEKFieldsNilForTheIdentityCodec(t *testing.T) {
 	h := nats.Header{}
 	h.Set(headerCodec, "identity")
 	h.Set(headerSchemaVersion, "1")
@@ -27,7 +27,7 @@ func TestParseAuditHeaders_Identity(t *testing.T) {
 	assert.Nil(t, got.DEKVersion)
 }
 
-func TestParseAuditHeaders_Encrypted(t *testing.T) {
+func TestParseAuditHeadersPopulatesDEKRefAndVersionForAnEncryptedCodec(t *testing.T) {
 	h := nats.Header{}
 	h.Set(headerCodec, "xchacha20poly1305-v1")
 	h.Set(headerSchemaVersion, "2")

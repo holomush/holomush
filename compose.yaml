@@ -63,7 +63,20 @@ services:
 
   gateway:
     image: holomush
-    command: ["gateway", "--log-format", "text", "--core-addr", "core:9000", "--metrics-addr", "0.0.0.0:9101"]
+    command:
+      - gateway
+      - --log-format=text
+      - --core-addr=core:9000
+      - --metrics-addr=0.0.0.0:9101
+      # Explicit opt-out from the secure-cookie/HSTS/CSP set, which defaults ON
+      # since #4794. This stack — and the E2E overlay, which does NOT override
+      # this command — serves plain HTTP, and the E2E browser reaches the
+      # gateway at http://gateway:8080. Browsers grant the secure-context
+      # exemption only to localhost and the loopback address, so a Secure cookie
+      # on a docker-network hostname is silently dropped: the browser never
+      # stores or returns the session cookie and every authenticated E2E spec
+      # fails. Production passes the flag in its ON form (compose.prod.yaml).
+      - --secure-cookies=false
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       # Same-origin browser trace relay (/api/otlp/v1/traces). Empty by

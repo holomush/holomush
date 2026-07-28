@@ -25,8 +25,8 @@ func makeEntry(charID, charName string, eligible bool, posesSinceLast *uint32) *
 	}
 }
 
-// TestRenderPoseOrder_Empty verifies the "(no participants)" branch.
-func TestRenderPoseOrder_Empty(t *testing.T) {
+// TestRenderPoseOrderReportsNoParticipantsForAnEmptyScene verifies the "(no participants)" branch.
+func TestRenderPoseOrderReportsNoParticipantsForAnEmptyScene(t *testing.T) {
 	t.Parallel()
 	resp := &scenev1.GetPoseOrderResponse{
 		Mode:           "free",

@@ -138,7 +138,7 @@ func TestReconnect_FallsBackToGridWhenMembershipRevoked(t *testing.T) {
 	assert.Nil(t, conn.FocusKey, "INV-SCENE-18: FocusKey must stay nil when membership is revoked (grid fallback)")
 }
 
-// TestReconnect_VsConcurrentLeave_Serializes pins INV-SCENE-25: concurrent
+// TestRestoreConnectionFocusSerializesAgainstAConcurrentSceneLeave pins INV-SCENE-25: concurrent
 // RestoreConnectionFocus and LeaveFocus serialize via the SessionConnectionMutator
 // / FocusMutator path under the store-side lock. Both orderings are valid:
 //   - leave-first: restoration's mutator sees no membership → grid fallback.
@@ -148,7 +148,7 @@ func TestReconnect_FallsBackToGridWhenMembershipRevoked(t *testing.T) {
 //     not Connection.FocusKey).
 //
 // The test asserts no corruption and consistent post-state for each outcome.
-func TestReconnect_VsConcurrentLeave_Serializes(t *testing.T) {
+func TestRestoreConnectionFocusSerializesAgainstAConcurrentSceneLeave(t *testing.T) {
 	t.Parallel()
 
 	sceneID := ulid.Make()

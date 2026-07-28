@@ -179,12 +179,15 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 				Owner:      &owner,
 				Visibility: "public",
 			},
+			// Per ADR holomush-ti1b: the value key is OMITTED when
+			// has_value=false. An empty-string sentinel would satisfy
+			// `"" == ""` against any other unresolved peer attribute,
+			// producing a fail-open permit (motivating bug holomush-9gtl).
 			expectedAttrs: map[string]any{
 				"id":                  propID.String(),
 				"parent_type":         "location",
 				"parent_id":           parentID.String(),
 				"name":                "test-prop",
-				"value":               "",
 				"has_value":           false,
 				"owner":               "owner:01ABC",
 				"has_owner":           true,
@@ -206,6 +209,12 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 				Owner:      nil,
 				Visibility: "public",
 			},
+			// Per ADR holomush-ti1b: the owner key is OMITTED when
+			// has_owner=false. This one is load-bearing for a live seed —
+			// seed:property-private-read and seed:property-owner-write both
+			// gate on `resource.property.owner == principal.character.id`
+			// (internal/access/policy/seed.go:119,131) — so an unresolved
+			// owner MUST NOT be comparable (motivating bug holomush-9gtl).
 			expectedAttrs: map[string]any{
 				"id":                  propID.String(),
 				"parent_type":         "location",
@@ -213,7 +222,6 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 				"name":                "test-prop",
 				"value":               "test-value",
 				"has_value":           true,
-				"owner":               "",
 				"has_owner":           false,
 				"visibility":          "public",
 				"parent_location":     parentID.String(),

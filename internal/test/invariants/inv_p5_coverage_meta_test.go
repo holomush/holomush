@@ -137,7 +137,7 @@ func TestINV_P5_Coverage_Meta(t *testing.T) {
 		// but the actual file is internal/grpc/focus/restore_connection_focus_test.go.
 		{
 			inv:      "INV-SCENE-25",
-			testName: "TestReconnect_VsConcurrentLeave_Serializes",
+			testName: "TestRestoreConnectionFocusSerializesAgainstAConcurrentSceneLeave",
 			note:     "in internal/grpc/focus/restore_connection_focus_test.go (not session/)",
 		},
 		// INV-SCENE-26: scene grid (D10) MUST NOT modify info.PresentingFocus. Per-Connection

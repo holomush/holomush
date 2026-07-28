@@ -347,7 +347,7 @@ func TestFmt_Table_ColumnAlignment(t *testing.T) {
 	require.GreaterOrEqual(t, len(lines), 3, "table should have at least header, separator, and rows")
 }
 
-func TestFmt_Separator(t *testing.T) {
+func TestFmtSeparatorRendersANonEmptyHorizontalRule(t *testing.T) {
 	result := Fmt.Separator()
 	rendered := result.RenderANSI()
 
@@ -385,7 +385,7 @@ func TestFmt_Header(t *testing.T) {
 	}
 }
 
-func TestStyledText_Append(t *testing.T) {
+func TestStyledTextAppendPreservesBothOperandsInTheRenderedOutput(t *testing.T) {
 	bold := Fmt.Bold("hello")
 	italic := Fmt.Italic("world")
 

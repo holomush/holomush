@@ -11,7 +11,7 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
-func TestCommandRequest_Fields(t *testing.T) {
+func TestCommandRequestCarriesEveryCallerSuppliedFieldVerbatim(t *testing.T) {
 	req := pluginsdk.CommandRequest{
 		Command:       "say",
 		Args:          "hello world",
@@ -31,7 +31,7 @@ func TestCommandRequest_Fields(t *testing.T) {
 	assert.Equal(t, "say", req.InvokedAs)
 }
 
-func TestCommandResponse_Fields(t *testing.T) {
+func TestCommandResponseCarriesEventsOutputBootedSessionsAndEndSession(t *testing.T) {
 	resp := pluginsdk.CommandResponse{
 		Events: []pluginsdk.EmitEvent{
 			{Stream: "location:test", Type: "say", Payload: `{"message":"hi"}`},

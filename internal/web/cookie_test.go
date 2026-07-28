@@ -25,7 +25,7 @@ func TestSetSessionCookie(t *testing.T) {
 	assert.Equal(t, 86400, cookies[0].MaxAge)
 }
 
-func TestSetSessionCookie_Insecure(t *testing.T) {
+func TestSetSessionCookieOmitsTheSecureAttributeWhenSecureIsFalse(t *testing.T) {
 	w := httptest.NewRecorder()
 	SetSessionCookie(w, "test-token", false, 86400)
 	cookies := w.Result().Cookies()
@@ -86,7 +86,7 @@ func TestGetSessionToken(t *testing.T) {
 	assert.Equal(t, "my-token", GetSessionToken(req))
 }
 
-func TestGetSessionToken_Missing(t *testing.T) {
+func TestGetSessionTokenReturnsEmptyWhenTheRequestCarriesNoCookie(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	assert.Equal(t, "", GetSessionToken(req))
 }

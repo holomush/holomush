@@ -16,7 +16,7 @@ func TestFormatAllowedEntityTypes(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "empty",
+			name:     "no allowed types",
 			allowed:  nil,
 			expected: "",
 		},

@@ -114,6 +114,11 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 					}, nil
 				}
 			},
+			// Per ADR holomush-ti1b: the shadows_id key is OMITTED from the
+			// bag when is_shadow=false. The DSL evaluator's
+			// missing-attr-→-false semantics preserve default-deny; an
+			// empty-string sentinel would satisfy `"" == ""` against any
+			// other unresolved peer attribute (motivating bug holomush-9gtl).
 			expectAttrs: map[string]any{
 				"id":            locID.String(),
 				"type":          "persistent",
@@ -121,7 +126,6 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 				"description":   "A test location",
 				"owner_id":      ownerID.String(),
 				"has_owner":     true,
-				"shadows_id":    "",
 				"is_shadow":     false,
 				"replay_policy": "last:0",
 				"archived":      false,
@@ -145,14 +149,17 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 					}, nil
 				}
 			},
+			// Per ADR holomush-ti1b: both owner_id and shadows_id are OMITTED
+			// when their witnesses are false. Emitting "" for either would
+			// make two unresolved locations compare equal to each other (and
+			// to any other unresolved peer attribute), producing a fail-open
+			// permit in a default-deny system (motivating bug holomush-9gtl).
 			expectAttrs: map[string]any{
 				"id":            locID.String(),
 				"type":          "scene",
 				"name":          "RP Scene",
 				"description":   "",
-				"owner_id":      "",
 				"has_owner":     false,
-				"shadows_id":    "",
 				"is_shadow":     false,
 				"replay_policy": "last:-1",
 				"archived":      false,
@@ -276,4 +283,91 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 			assert.Equal(t, tt.expectAttrs, attrs)
 		})
 	}
+}
+
+// TestTwoLocationsWithUnresolvedOptionalAttributesDoNotCompareEqualToEachOther
+// pins the security property behind the omit-don't-sentinel rule, not merely
+// the shape of a single bag.
+//
+// Motivating issue: holomush/holomush#4793 ("attribute providers emit
+// empty-string sentinel — latent fail-open"). Per ADR holomush-ti1b providers
+// MUST omit an unresolved optional attribute; per ADR holomush-iv43 the DSL
+// evaluator's fail-safe semantics then render every operator false for that
+// missing attribute. The two ADRs only compose if the key is genuinely absent:
+// a sentinel of ANY value (empty string or otherwise) makes two independently
+// unresolved resources satisfy an equality comparison, which is what a
+// colocation-style permit seed would match on. If you are here because you want
+// to reintroduce a placeholder value so a seed "sees" the attribute, that is the
+// bug this test exists to prevent — add a `has_X` witness check to the seed
+// instead.
+func TestTwoLocationsWithUnresolvedOptionalAttributesDoNotCompareEqualToEachOther(t *testing.T) {
+	t.Parallel()
+
+	// Two DISTINCT locations, each unowned and each shadowing nothing —
+	// the exact pair a fail-open equality would wrongly match.
+	firstID := ulid.Make()
+	secondID := ulid.Make()
+
+	resolve := func(t *testing.T, id ulid.ULID) map[string]any {
+		t.Helper()
+		repo := &mockLocationRepository{
+			getFunc: func(_ context.Context, got ulid.ULID) (*world.Location, error) {
+				require.Equal(t, id, got)
+				return &world.Location{
+					ID:           id,
+					Type:         world.LocationTypeScene,
+					Name:         "Unowned " + id.String(),
+					ReplayPolicy: "last:0",
+					OwnerID:      nil,
+					ShadowsID:    nil,
+				}, nil
+			},
+		}
+		attrs, err := NewLocationProvider(repo).ResolveResource(context.Background(), "location:"+id.String())
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+		return attrs
+	}
+
+	first := resolve(t, firstID)
+	second := resolve(t, secondID)
+
+	for _, key := range []string{"owner_id", "shadows_id"} {
+		_, inFirst := first[key]
+		_, inSecond := second[key]
+
+		// The guarantee: a seed comparing resource.location.<key> across two
+		// unresolved locations must find nothing to compare. Both sides
+		// carrying the key is the fail-open condition regardless of value.
+		assert.False(t, inFirst && inSecond,
+			"both bags carry %q while unresolved — a seed comparing this attribute "+
+				"across the two locations would match (ADR holomush-ti1b / holomush-iv43, issue #4793)", key)
+		assert.False(t, inFirst, "%q MUST be omitted when its witness is false", key)
+		assert.False(t, inSecond, "%q MUST be omitted when its witness is false", key)
+	}
+
+	// Witnesses are still emitted on the unresolved path, so a seed can test
+	// existence explicitly rather than reaching for a sentinel.
+	assert.Equal(t, false, first["has_owner"])
+	assert.Equal(t, false, first["is_shadow"])
+
+	// Positive control: the fix omits the key only on the unresolved branch.
+	// A resolved owner must still be present and must still differ between two
+	// distinct locations, proving the attribute was not dropped unconditionally.
+	ownerID := ulid.Make()
+	repo := &mockLocationRepository{
+		getFunc: func(_ context.Context, got ulid.ULID) (*world.Location, error) {
+			return &world.Location{
+				ID:           got,
+				Type:         world.LocationTypeScene,
+				Name:         "Owned",
+				ReplayPolicy: "last:0",
+				OwnerID:      &ownerID,
+			}, nil
+		},
+	}
+	owned, err := NewLocationProvider(repo).ResolveResource(context.Background(), "location:"+firstID.String())
+	require.NoError(t, err)
+	assert.Equal(t, ownerID.String(), owned["owner_id"])
+	assert.Equal(t, true, owned["has_owner"])
 }

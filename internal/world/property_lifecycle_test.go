@@ -34,14 +34,14 @@ func (m *mockOrphanFinder) DeleteOrphans(_ context.Context, olderThan time.Durat
 	return m.deleteResult, m.deleteErr
 }
 
-func TestOrphanConfig_Defaults(t *testing.T) {
+func TestDefaultOrphanConfigUsesADayLongGracePeriodAndIntervalWithA100Threshold(t *testing.T) {
 	config := DefaultOrphanConfig()
 	assert.Equal(t, 24*time.Hour, config.GracePeriod)
 	assert.Equal(t, 100, config.Threshold)
 	assert.Equal(t, 24*time.Hour, config.Interval)
 }
 
-func TestOrphanDetector_Construction(t *testing.T) {
+func TestNewOrphanDetectorReturnsANonNilDetector(t *testing.T) {
 	detector := NewOrphanDetector(DefaultOrphanConfig())
 	require.NotNil(t, detector)
 }

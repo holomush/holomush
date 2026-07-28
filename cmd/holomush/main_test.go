@@ -95,7 +95,7 @@ func TestRootCommand_NoArgs(t *testing.T) {
 // Gateway command tests are now in gateway_test.go
 // Core command tests are now in core_test.go
 
-func TestMigrateCommand_Help(t *testing.T) {
+func TestRootCommandMigrateHelpMentionsTheUpAndDownSubcommands(t *testing.T) {
 	cmd := NewRootCmd()
 	cmd.SetArgs([]string{"migrate", "--help"})
 
@@ -109,7 +109,7 @@ func TestMigrateCommand_Help(t *testing.T) {
 	assert.Contains(t, output, "down", "Migrate help should mention 'down' subcommand")
 }
 
-func TestMigrateCommand_Properties(t *testing.T) {
+func TestMigrateCommandDeclaresItsUseShortAndLongDescriptions(t *testing.T) {
 	cmd := NewMigrateCmd()
 
 	assert.Equal(t, "migrate", cmd.Use)

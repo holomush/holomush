@@ -4,9 +4,12 @@
 package history_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"sync"
 	"testing"
 
@@ -530,4 +533,140 @@ func TestFenceForwardsEOF(t *testing.T) {
 	t.Cleanup(func() { _ = out.Close() })
 	_, err = out.Next(context.Background())
 	assert.ErrorIs(t, err, io.EOF)
+}
+
+// fenceDropLogMsg pins the static message the fence emits when an
+// INV-CRYPTO-42 violation record is discarded because no audit emitter
+// is configured (issue #4797). Hard-coded here on purpose: the message
+// text IS the operator-facing contract, so a silent reword must fail
+// this test rather than pass by reading the constant back from the
+// production file.
+const fenceDropLogMsg = "plugin downgrade fence: violation emit dropped, no emitter configured"
+
+// captureFenceLogs returns a logger whose records land in buf as JSON,
+// following the repo's established log-assertion precedent
+// (internal/eventbus/crypto/invalidation/coordinator_internal_test.go:27).
+func captureFenceLogs(buf *bytes.Buffer) *slog.Logger {
+	return slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+// logRecordsWithMessage decodes the captured JSON log lines and returns
+// only those whose "msg" equals want.
+func logRecordsWithMessage(t *testing.T, buf *bytes.Buffer, want string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var rec map[string]any
+		require.NoError(t, json.Unmarshal(line, &rec), "captured log line MUST be valid JSON")
+		if rec["msg"] == want {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// downgradeRow builds the identity-codec, always-sensitive row that
+// drives the INV-CRYPTO-42 refusal path — the only path that reaches
+// the violation emit.
+func downgradeRow() *pluginauditpb.AuditRow {
+	return &pluginauditpb.AuditRow{
+		Id:      []byte("DROP000000000000"),
+		Subject: "events.test.scene.01ABC.ic",
+		Type:    "test-plugin:secret",
+		Codec:   "identity",
+		Payload: []byte("cleartext-leak"),
+	}
+}
+
+// TestFenceLogsDroppedViolationWhenNoEmitterConfigured — issue #4797.
+// With no audit emitter wired the fence still refuses the row, but the
+// violation record it built goes nowhere. A discarded audit record makes
+// the plugin's downgrade attempt unattributable and indistinguishable
+// from "no violation occurred", so the drop MUST be observable.
+func TestFenceLogsDroppedViolationWhenNoEmitterConfigured(t *testing.T) {
+	t.Parallel()
+
+	row := downgradeRow()
+	stream := &fakeFenceStream{events: []eventbus.Event{stampedEvent(row)}}
+	var buf bytes.Buffer
+	fence := history.NewPluginDowngradeFence(
+		&fakeRouter{stream: stream},
+		history.WithAlwaysSensitiveTypes(sensitiveSet("test-plugin:secret")),
+		history.WithCryptoKeysLookup(&stubLookupAlwaysFound{}),
+		history.WithFenceLogger(captureFenceLogs(&buf)),
+		// No WithViolationEmitter — this is the drop path under test.
+	)
+
+	out, err := fence.QueryHistory(context.Background(), "test-plugin", eventbus.HistoryQuery{
+		Subject: "events.test.scene.01ABC.ic",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = out.Close() })
+
+	ev, err := out.Next(context.Background())
+	require.NoError(t, err, "refusal MUST stay per-row, not stream-fatal")
+	// Security behaviour is unchanged by the added observability.
+	assert.True(t, ev.MetadataOnly, "refused row MUST stamp metadata_only=true")
+	assert.Equal(t, eventbus.NoPlaintextReasonDowngradeRefused, ev.NoPlaintextReason)
+	assert.Nil(t, ev.Payload, "refused row MUST drop payload")
+
+	records := logRecordsWithMessage(t, &buf, fenceDropLogMsg)
+	require.Len(t, records, 1, "dropped violation record MUST produce exactly one log line")
+	assert.Equal(t, "WARN", records[0]["level"], "a lost audit record is a warning, not info")
+	assert.Equal(t, "test-plugin", records[0]["plugin"], "operator MUST be able to attribute the drop to a plugin")
+	assert.Equal(t, "test-plugin:secret", records[0]["type"], "operator MUST be able to attribute the drop to an event type")
+	// The drop record MUST stay metadata-only. Pin the exact attribute set
+	// rather than only scanning for the plaintext: the handler is a JSON
+	// handler, so a leaked []byte payload renders as base64 and a
+	// substring check for the cleartext would sail straight past it. A
+	// whitelist fails on ANY new attribute regardless of encoding, which is
+	// the property actually worth guarding — a future slog.Any("row", row)
+	// or a dek_ref/dek_version attribute breaks this test immediately.
+	gotKeys := make([]string, 0, len(records[0]))
+	for k := range records[0] {
+		gotKeys = append(gotKeys, k)
+	}
+	assert.ElementsMatch(t, []string{"time", "level", "msg", "plugin", "type"}, gotKeys,
+		"the drop log MUST carry only metadata attributes — no payload, no dek_ref, no key material")
+	// Belt and braces for the shapes a whitelist cannot see: a plaintext
+	// spliced into the message string itself, which is not a separate key.
+	assert.NotContains(t, buf.String(), "cleartext-leak", "the drop log MUST never carry payload plaintext")
+}
+
+// TestFenceOmitsDropRecordWhenViolationEmitterConfigured proves the new
+// branch does not fire on the normal path: the same refusal with an
+// emitter wired MUST reach the emitter and MUST NOT log a drop.
+func TestFenceOmitsDropRecordWhenViolationEmitterConfigured(t *testing.T) {
+	t.Parallel()
+
+	row := downgradeRow()
+	stream := &fakeFenceStream{events: []eventbus.Event{stampedEvent(row)}}
+	rec := &recordingEmitter{}
+	var buf bytes.Buffer
+	fence := history.NewPluginDowngradeFence(
+		&fakeRouter{stream: stream},
+		history.WithAlwaysSensitiveTypes(sensitiveSet("test-plugin:secret")),
+		history.WithCryptoKeysLookup(&stubLookupAlwaysFound{}),
+		history.WithViolationEmitter(rec),
+		history.WithFenceLogger(captureFenceLogs(&buf)),
+	)
+
+	out, err := fence.QueryHistory(context.Background(), "test-plugin", eventbus.HistoryQuery{
+		Subject: "events.test.scene.01ABC.ic",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = out.Close() })
+
+	_, err = out.Next(context.Background())
+	require.NoError(t, err)
+
+	// Precondition: the emit path really was reached, so an empty log
+	// below means "the branch did not fire", not "nothing ran at all".
+	require.Len(t, rec.snapshot(), 1, "configured emitter MUST receive the violation")
+
+	records := logRecordsWithMessage(t, &buf, fenceDropLogMsg)
+	assert.Empty(t, records, "drop record MUST NOT fire when an emitter is configured")
 }

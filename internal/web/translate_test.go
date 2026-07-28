@@ -78,7 +78,7 @@ func withRendering(ev *corev1.EventFrame) *corev1.EventFrame {
 	return ev
 }
 
-func TestTranslateEvent_Say(t *testing.T) {
+func TestTranslateEventRendersSayWithSpeakerActorIDAndSaysLabel(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:      "core-communication:say",
@@ -103,7 +103,7 @@ func TestTranslateEvent_Say(t *testing.T) {
 	assert.Equal(t, "says", got.GetMetadata().AsMap()["label"])
 }
 
-func TestTranslateEvent_Pose(t *testing.T) {
+func TestTranslateEventRendersPoseAsACommunicationActionCarryingTheActor(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "core-communication:pose",
@@ -134,7 +134,7 @@ func TestTranslateEvent_PoseNoSpace(t *testing.T) {
 	assert.Equal(t, true, got.GetMetadata().AsMap()["no_space"])
 }
 
-func TestTranslateEvent_Arrive(t *testing.T) {
+func TestTranslateEventRendersArriveAsAMovementNotificationOnBothChannels(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "arrive",
@@ -150,7 +150,7 @@ func TestTranslateEvent_Arrive(t *testing.T) {
 	assert.Equal(t, "Carol", got.GetActor())
 }
 
-func TestTranslateEvent_Leave(t *testing.T) {
+func TestTranslateEventRendersLeaveAsAMovementEventOnBothChannels(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "leave",
@@ -165,7 +165,7 @@ func TestTranslateEvent_Leave(t *testing.T) {
 	assert.Equal(t, "Dave", got.GetActor())
 }
 
-func TestTranslateEvent_System(t *testing.T) {
+func TestTranslateEventRendersSystemAsATerminalOnlyNotification(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "system",
@@ -181,7 +181,7 @@ func TestTranslateEvent_System(t *testing.T) {
 	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
 }
 
-func TestTranslateEvent_Move(t *testing.T) {
+func TestTranslateEventRendersMoveWithItsMessageOnBothChannels(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "move",
@@ -304,7 +304,7 @@ func TestTranslateEvent_ExitUpdate(t *testing.T) {
 	assert.Len(t, exits, 1)
 }
 
-func TestTranslateEvent_OOC(t *testing.T) {
+func TestTranslateEventRendersOOCAsAnActionCarryingTheStyleMetadata(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "core-communication:ooc",
@@ -336,7 +336,7 @@ func TestTranslateEvent_OOC_PoseStyle(t *testing.T) {
 	assert.Equal(t, "pose", got.GetMetadata().AsMap()["style"])
 }
 
-func TestTranslateEvent_Pemit(t *testing.T) {
+func TestTranslateEventRendersPemitAsATerminalOnlyNarrative(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type: "core-communication:pemit",
@@ -355,7 +355,7 @@ func TestTranslateEvent_Pemit(t *testing.T) {
 	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
 }
 
-func TestTranslateEvent_Page(t *testing.T) {
+func TestTranslateEventRendersPageAsSpeechCarryingThePagesLabel(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type: "core-communication:page",

@@ -2056,11 +2056,19 @@ invariants:
     origin_spec: "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
     legacy: ["I-PRIV-6@docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"]
     summary: "ABAC staff override bypasses the hard-gate location-match only, NOT the temporal floor."
-    # binding: pending — only the gate-bypass arm is exercised; the
-    # floor-preservation arm (staff still bounded by their own LocationArrivedAt)
-    # is NOT tested (the integrationtest harness can't emit timestamp-controlled
-    # events across a session boundary yet). Re-bind once that arm has a test.
-    binding: pending
+    # binding: bound — BOTH arms are now exercised in
+    # test/integration/privacy/privacy_test.go. The gate-bypass arm (staff may
+    # query a location they are not in) was always covered; the
+    # floor-preservation arm (staff are still bounded by their own
+    # LocationArrivedAt) was blocked on the harness's inability to place events
+    # at controlled instants across a session's arrival, which
+    # Session.EmitDirectEventAt supplied. The floor-preservation spec asserts
+    # both clauses in ONE read — the foreign-location query succeeds AND the
+    # below-floor event is absent — so this is not a partial binding on a
+    # multi-clause invariant. Closes issue 4682.
+    binding: bound
+    asserted_by:
+      - "test/integration/privacy/privacy_test.go"
     refs:
       - {file: "internal/access/policy/seed.go", token: "I-PRIV-6"}
       - {file: "internal/access/policy/seed_test.go", token: "I-PRIV-6"}

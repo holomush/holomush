@@ -415,14 +415,25 @@ func refuseEvent(ev eventbus.Event, reason eventbus.NoPlaintextReason) eventbus.
 // with a 100ms bounded timeout. On timeout / error the row refusal
 // still proceeds — the audit signal is best-effort. WARN-level log
 // captures the failure for operator visibility.
+//
+// The no-emitter path is observable on the same terms (issue #4797):
+// discarding the violation record silently made a plugin's downgrade
+// attempt unattributable and indistinguishable from "no violation
+// occurred". All three non-delivery branches now log plugin + type —
+// metadata only, never payload or key material.
 func (f *PluginDowngradeFence) emitViolationBounded(
 	parent context.Context,
 	pluginName string,
 	row *pluginauditpb.AuditRow,
 ) {
 	if f.emitter == nil {
-		// No emitter configured — silent. Tests may intentionally
-		// omit; production wiring always supplies one.
+		// No emitter configured — the violation record is discarded.
+		// Tests may intentionally omit the emitter; production wiring
+		// always supplies one, so this branch firing in production is
+		// itself the operator signal.
+		f.log.WarnContext(parent, "plugin downgrade fence: violation emit dropped, no emitter configured",
+			slog.String("plugin", pluginName),
+			slog.String("type", row.GetType()))
 		return
 	}
 	emitCtx, cancel := context.WithTimeout(parent, violationEmitTimeout)

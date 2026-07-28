@@ -267,6 +267,72 @@ Plans:
 3. A session-lifecycle test matrix covers the connect / reconnect / multi-character / idle-timeout paths
 4. The arch-review Medium cluster (secure-cookie default, ABAC empty-string sentinels, silent audit-emitter drop, DEK read-cache, `sessions.location_id` index) is addressed or explicitly deferred with rationale
 
+**Plans:** 20/21 plans executed
+
+Plans:
+
+**Wave 1** *(tracer — the measurement chain everything else reads)*
+
+- [x] 09-01-PLAN.md — QUAL-02: diagnose and repair the E2E coverage flush end to end; un-ignore the `cmd/holomush` wiring files (wave 1)
+
+**Wave 2** *(blocked on the tracer)*
+
+- [x] 09-02-PLAN.md — QUAL-03/05: file the seven prerequisite issues; record the DEK read-cache and de-slop deferrals (wave 2)
+- [x] 09-03-PLAN.md — QUAL-05: #4793 remove the ABAC empty-string sentinels; assert key absence (wave 2)
+- [x] 09-04-PLAN.md — QUAL-05: #4794 invert the secure-cookie/HSTS/CSP default; keep the plain-HTTP compose stacks working; document the change (wave 2)
+- [x] 09-05-PLAN.md — QUAL-05: #4796 add the `sessions.location_id` index as migration 000053 (wave 2)
+- [x] 09-06-PLAN.md — QUAL-05: #4797 make the plugin-downgrade-fence audit drop observable (wave 2)
+- [x] 09-07-PLAN.md — QUAL-04: add the timestamped direct-emit helper to the integration harness (wave 2)
+- [x] 09-08-PLAN.md — QUAL-02: raise `internal/tls` to the 80% floor with negative-path tests (wave 2)
+- [x] 09-09-PLAN.md — QUAL-03: remediate the surviving weak tests; re-derive the stale site list (wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [x] 09-10-PLAN.md — QUAL-02: raise `cmd/holomush` to the 80% floor, or record an honest residual (wave 3)
+- [x] 09-11-PLAN.md — QUAL-03: trim the four dead-scaffolding eventbus specs to skip plus a live issue (wave 3)
+- [x] 09-20-PLAN.md — QUAL-04: build the three missing harness seams — telnet client type, detached-past-expiry reaper drive, compiled-in command registration (wave 3)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [x] 09-12-PLAN.md — QUAL-04: commit the session-lifecycle matrix registry and its shape test; add the harness seam; cover the attach and reattach rows (wave 4)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [x] 09-13-PLAN.md — QUAL-04: cover the detach, reaper-sweep, and post-expiry re-login rows (wave 5)
+- [x] 09-14-PLAN.md — QUAL-04: cover the quit, logout, and telnet-reattach rows; disposition admin-boot from evidence (wave 5)
+- [x] 09-15-PLAN.md — QUAL-04: cover the move and transport-blip rows; land the three named privacy-floor assertions (wave 5)
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [x] 09-16-PLAN.md — QUAL-04: extend the shape test into a full spec-bijection meta-test; reconcile the registry (wave 6)
+
+**Wave 7** *(blocked on Wave 6 — last test-modifying pass)*
+
+- [x] 09-18-PLAN.md — QUAL-03: the ACE naming sweep and its ratchet (wave 7)
+
+**Wave 8** *(blocked on Wave 7 — publishes the branch)*
+
+- [ ] 09-21-PLAN.md — QUAL-02: operator pushes the branch and opens the draft PR, so coverage statuses have a commit to post on (wave 8)
+
+**Wave 9** *(blocked on Wave 8)*
+
+- [x] 09-17-PLAN.md — QUAL-02: verify from live evidence which coverage statuses actually post, and on which ref (wave 9)
+
+**Wave 10** *(final plan)*
+
+- [x] 09-19-PLAN.md — QUAL-02: verify every coverage floor; tighten the project ratchet to no-drop; operator makes the go-verdict statuses required (wave 10)
+
+**Cross-cutting constraints:**
+
+- The E2E coverage chain must be proven to produce a non-empty profile before the `cmd/holomush` ignore entries are removed; a green E2E job is not evidence.
+- The four skip-file issues must exist and be open before 09-11 trims those files.
+- The ACE sweep runs last among test-modifying plans, as a single pass.
+- The three QUAL-04 harness seams (09-20) must land and be independently proven before the matrix registry (09-12) dispositions any row against them. Cross-AI review found the telnet opener test-fatal, the expiry helper unable to drive the reaper, and the quit command undispatchable from harness defaults — three plans were written as though all three worked.
+- The branch must be pushed with an open PR and a completed CI run (09-21) before any plan observes a coverage status (09-17) or asks an operator to make one required (09-19).
+- 09-19's ruleset edit is sequenced strictly after the final pre-push rebase: required checks are evaluated against the current head commit, so a force-push after the edit strands the PR behind statuses that must re-post.
+- `abac-reviewer` must run for 09-03; `crypto-reviewer` must run for 09-06.
+- All plans land on `gsd/v0.12-milestone` and ship as one PR.
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -279,7 +345,7 @@ Plans:
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
-| 9. Test-Quality & Code-Health Sweep | v0.12 | 0 | Pending | — |
+| 9. Test-Quality & Code-Health Sweep | v0.12 | 20/21 | In Progress|  |
 
 ## Deferred (Not in This Roadmap)
 

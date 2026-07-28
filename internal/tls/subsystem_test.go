@@ -6,13 +6,18 @@ package tlscerts
 import (
 	"context"
 	cryptotls "crypto/tls"
+	"errors"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/lifecycle"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // Compile-time interface check: *TLSSubsystem must satisfy lifecycle.Subsystem.
@@ -92,7 +97,145 @@ func TestTLSSubsystemPrepareUsesRealEnsurerWhenNoOverride(t *testing.T) {
 	assert.NoError(t, sub.Stop(context.Background()))
 }
 
+// TestTLSSubsystemPrepareReportsSetupFailureAndLeavesTheSubsystemUnstarted
+// proves the subsystem fails to start rather than starting without TLS. The
+// second half is the security-relevant half: if Prepare returned an error but
+// still populated tlsConfig, a caller that logged the error and carried on
+// would get a config it never validated. TLSConfig() must still panic, exactly
+// as it does before Prepare has ever run.
+//
+// The ensurer returns a plain (non-oops) error here, so TLS_SETUP_FAILED is the
+// only code in the chain. The companion test below covers the case where the
+// cause carries its own stage code.
+func TestTLSSubsystemPrepareReportsSetupFailureAndLeavesTheSubsystemUnstarted(t *testing.T) {
+	certsDir := t.TempDir()
+	cause := errors.New("certificate material unavailable")
+
+	sub := NewTLSSubsystem(TLSSubsystemConfig{
+		CertsDir: certsDir,
+		GameID:   func() string { return "resolved-game-id" },
+		CertEnsurer: func(string, string) (*cryptotls.Config, error) {
+			return nil, cause
+		},
+	})
+
+	err := sub.Prepare(context.Background())
+
+	require.Error(t, err, "Prepare must fail when the ensurer fails")
+	require.ErrorIs(t, err, cause, "the underlying cause must remain in the error chain")
+	errutil.AssertErrorCode(t, err, "TLS_SETUP_FAILED")
+	errutil.AssertErrorContext(t, err, "certs_dir", certsDir)
+	assert.Panics(t, func() { sub.TLSConfig() },
+		"a failed Prepare must leave the subsystem unstarted, not holding an unvalidated config")
+}
+
+// TestTLSSubsystemPrepareSurfacesTheCertificateStageThatFailed proves an
+// operator reading Prepare's error learns WHICH certificate stage failed, not
+// merely that TLS setup failed. oops reports the deepest code in the chain, so
+// EnsureCerts' stage code survives Prepare's TLS_SETUP_FAILED wrap while
+// Prepare's certs_dir context is still attached. Without this the two failures
+// an operator most needs to tell apart — "I cannot write to the certs
+// directory" and "the game ID is malformed" — would be one opaque message.
+func TestTLSSubsystemPrepareSurfacesTheCertificateStageThatFailed(t *testing.T) {
+	certsDir := t.TempDir()
+
+	sub := NewTLSSubsystem(TLSSubsystemConfig{
+		CertsDir: certsDir,
+		// U+007F DEL cannot appear in a URL, so the CA's identity SAN cannot
+		// be formed and CA generation is the stage that fails.
+		GameID: func() string { return "bad\x7fgame-id" },
+	})
+
+	err := sub.Prepare(context.Background())
+
+	require.Error(t, err, "Prepare must fail when the real ensurer cannot generate a CA")
+	errutil.AssertErrorCode(t, err, "CA_GENERATE_FAILED")
+	errutil.AssertErrorContext(t, err, "certs_dir", certsDir)
+	assert.Panics(t, func() { sub.TLSConfig() },
+		"a failed Prepare must leave the subsystem unstarted")
+}
+
 // --- Tests relocated from cmd/holomush/core_test.go (EnsureCerts/fileExists moved here) ---
+
+// TestEnsureCertsReportsWhichGenerationStageFailed pins a distinct coded error
+// per stage of first-boot certificate generation. The stages fail for unrelated
+// operator-visible reasons — an unwritable parent directory, a malformed game
+// ID, an obstructed gateway certificate path — and collapsing them to one code
+// would leave an operator guessing which of the three to fix. Each subtest
+// asserts a code no other subtest expects, so a regression that reported the
+// wrong stage fails here rather than shipping a misleading boot error.
+func TestEnsureCertsReportsWhichGenerationStageFailed(t *testing.T) {
+	const validGameID = "01HX7MZABC123DEF456GHJ"
+
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T) (certsDir, gameID string)
+		wantCode string
+		wantKey  string
+		wantVal  any
+	}{
+		{
+			name: "a certs directory that cannot be created reports the directory stage",
+			setup: func(t *testing.T) (string, string) {
+				parent := t.TempDir()
+				//nolint:gosec // G302: a read-only parent is the condition under test
+				require.NoError(t, os.Chmod(parent, 0o500))
+				t.Cleanup(func() {
+					//nolint:gosec // G302: Need 0700 to clean up directory
+					_ = os.Chmod(parent, 0o700)
+				})
+
+				// Precondition: chmod must genuinely deny creation. Running as
+				// root defeats it, which would make this subtest pass without
+				// ever reaching the branch it claims to cover.
+				if mkErr := os.Mkdir(filepath.Join(parent, "probe"), 0o700); mkErr == nil {
+					t.Skip("filesystem allows creation under a 0500 parent (running as root?)")
+				}
+				return filepath.Join(parent, "certs"), validGameID
+			},
+			wantCode: "CERTS_DIR_CREATE_FAILED",
+			wantKey:  "operation",
+			wantVal:  "create certs directory",
+		},
+		{
+			name: "a game ID that cannot form a SAN URI reports the CA generation stage",
+			setup: func(t *testing.T) (string, string) {
+				return t.TempDir(), "bad\x7fgame-id"
+			},
+			wantCode: "CA_GENERATE_FAILED",
+			wantKey:  "game_id",
+			wantVal:  "bad\x7fgame-id",
+		},
+		{
+			name: "an obstructed gateway certificate path reports the client certificate save stage",
+			setup: func(t *testing.T) (string, string) {
+				certsDir := t.TempDir()
+				// A directory where gateway.crt belongs. None of the three
+				// files EnsureCerts probes for existence are present, so it
+				// still takes the generate-from-scratch path and only trips at
+				// the very last save.
+				require.NoError(t, os.Mkdir(filepath.Join(certsDir, "gateway.crt"), 0o700))
+				return certsDir, validGameID
+			},
+			wantCode: "CLIENT_CERT_SAVE_FAILED",
+			wantKey:  "component",
+			wantVal:  "gateway",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			certsDir, gameID := tt.setup(t)
+
+			cfg, err := EnsureCerts(certsDir, gameID)
+
+			require.Error(t, err, "EnsureCerts must fail for this stage")
+			assert.Nil(t, cfg, "no TLS config may be returned alongside an error")
+			errutil.AssertErrorCode(t, err, tt.wantCode)
+			errutil.AssertErrorContext(t, err, tt.wantKey, tt.wantVal)
+		})
+	}
+}
 
 func TestEnsureCerts(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-*")
@@ -148,15 +291,23 @@ func TestEnsureCerts_CorruptedCertFile(t *testing.T) {
 	_, err = EnsureCerts(tmpDir, gameID)
 	require.Error(t, err, "EnsureCerts() should return error for corrupted cert file, not silently regenerate")
 
-	assert.True(t, assert.Condition(t, func() bool {
-		return assert.Contains(t, err.Error(), "certificate") || assert.Contains(t, err.Error(), "load")
-	}), "Error should mention certificate/load issue, got: %v", err)
+	// strings.Contains, not assert.Contains: assert.Contains REPORTS a failure
+	// on t when it does not match, so in an || chain the first non-matching
+	// alternative already fails the test even when a later one matches. The
+	// either/or intent was never what the code did.
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "certificate") || strings.Contains(errMsg, "load"),
+		"Error should mention certificate/load issue, got: %v", err)
 }
 
 // TestEnsureCerts_PermissionDenied verifies that EnsureCerts returns an error
 // when certificate files exist but are not readable due to permissions.
 func TestEnsureCerts_PermissionDenied(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
+	// runtime.GOOS, not os.Getenv("GOOS"): GOOS is a build constant, not an
+	// environment variable, so os.Getenv("GOOS") returns "" unconditionally and
+	// this guard never fired on any platform.
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission test on Windows")
 	}
 
@@ -175,15 +326,27 @@ func TestEnsureCerts_PermissionDenied(t *testing.T) {
 	certPath := tmpDir + "/core.crt"
 	require.NoError(t, os.Chmod(certPath, 0o000), "Failed to remove permissions")
 
+	// chmod does not fence a root-equivalent user: root reads a 0o000 file
+	// regardless, so EnsureCerts would succeed and the require.Error below would
+	// fail for a reason that has nothing to do with the behaviour under test.
+	// Probe the actual operation rather than inferring from euid — a container
+	// with CAP_DAC_OVERRIDE bypasses the mode without being uid 0.
+	if f, probeErr := os.Open(certPath); probeErr == nil {
+		_ = f.Close()
+		t.Skip("skipping: this user bypasses the 0o000 mode, so the permission path is unreachable")
+	}
+
 	_, err = EnsureCerts(tmpDir, gameID)
 	require.Error(t, err, "EnsureCerts() should return error for permission denied, not silently regenerate")
 
-	assert.True(t, assert.Condition(t, func() bool {
-		errMsg := err.Error()
-		return assert.Contains(t, errMsg, "permission") ||
-			assert.Contains(t, errMsg, "denied") ||
-			assert.Contains(t, errMsg, "certificate")
-	}), "Error should mention permission/denied/certificate issue, got: %v", err)
+	// See TestEnsureCerts_CorruptedCertFile: assert.Contains inside an || chain
+	// fails the test on the first non-matching alternative.
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "permission") ||
+			strings.Contains(errMsg, "denied") ||
+			strings.Contains(errMsg, "certificate"),
+		"Error should mention permission/denied/certificate issue, got: %v", err)
 }
 
 // TestEnsureCerts_DirectoryCreationFailure verifies that EnsureCerts returns
@@ -199,15 +362,19 @@ func TestEnsureCerts_DirectoryCreationFailure(t *testing.T) {
 	_, err = EnsureCerts(badDir, "test-game-id")
 	require.Error(t, err, "EnsureCerts() should fail when directory cannot be created")
 
-	assert.True(t, assert.Condition(t, func() bool {
-		return assert.Contains(t, err.Error(), "directory") || assert.Contains(t, err.Error(), "not a directory")
-	}), "Error should mention directory issue, got: %v", err)
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "directory") || strings.Contains(errMsg, "not a directory"),
+		"Error should mention directory issue, got: %v", err)
 }
 
 // TestEnsureCerts_SaveCertificatesFailure verifies that EnsureCerts returns an
 // error when certificates cannot be saved to a read-only directory.
 func TestEnsureCerts_SaveCertificatesFailure(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" {
+	// runtime.GOOS, not os.Getenv("GOOS"): GOOS is a build constant, not an
+	// environment variable, so os.Getenv("GOOS") returns "" unconditionally and
+	// this guard never fired on any platform.
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission test on Windows")
 	}
 
@@ -222,40 +389,53 @@ func TestEnsureCerts_SaveCertificatesFailure(t *testing.T) {
 	//nolint:gosec // G302: Intentionally setting restrictive permissions for test
 	require.NoError(t, os.Chmod(tmpDir, 0o500), "Failed to make dir read-only")
 
+	// As in TestEnsureCerts_PermissionDenied: a root-equivalent user writes into
+	// a 0o500 directory regardless of the mode, so the require.Error below would
+	// fail for an unrelated reason. Probe the write rather than inferring from
+	// euid — CAP_DAC_OVERRIDE bypasses the mode without being uid 0.
+	probePath := tmpDir + "/.write-probe"
+	if f, probeErr := os.Create(probePath); probeErr == nil {
+		_ = f.Close()
+		_ = os.Remove(probePath)
+		t.Skip("skipping: this user bypasses the 0o500 mode, so the save-failure path is unreachable")
+	}
+
 	_, err = EnsureCerts(tmpDir, "test-game-id")
 	require.Error(t, err, "EnsureCerts() should fail when certs cannot be saved")
 
-	assert.True(t, assert.Condition(t, func() bool {
-		errMsg := err.Error()
-		return assert.Contains(t, errMsg, "permission") ||
-			assert.Contains(t, errMsg, "save") ||
-			assert.Contains(t, errMsg, "create") ||
-			assert.Contains(t, errMsg, "denied")
-	}), "Error should mention save/permission issue, got: %v", err)
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "permission") ||
+			strings.Contains(errMsg, "save") ||
+			strings.Contains(errMsg, "create") ||
+			strings.Contains(errMsg, "denied"),
+		"Error should mention save/permission issue, got: %v", err)
 }
 
 // TestEnsureCerts_PartialCertState verifies behavior when only some
 // certificate files exist (e.g., CA exists but server cert doesn't).
+//
+// EVERY partial state MUST error. The table used to carry an `expectError`
+// field that every case set to true, so the else-arm asserting NoError was
+// unreachable — a field a reader takes for a matrix of both outcomes while it
+// only ever expressed one. The property is unconditional, so it is asserted
+// unconditionally.
 func TestEnsureCerts_PartialCertState(t *testing.T) {
 	tests := []struct {
 		name          string
 		filesToCreate []string
-		expectError   bool
 	}{
 		{
 			name:          "only CA cert exists",
 			filesToCreate: []string{"root-ca.crt"},
-			expectError:   true,
 		},
 		{
 			name:          "only core cert exists",
 			filesToCreate: []string{"core.crt"},
-			expectError:   true,
 		},
 		{
 			name:          "core cert and key but no CA",
 			filesToCreate: []string{"core.crt", "core.key"},
-			expectError:   true,
 		},
 	}
 
@@ -273,11 +453,9 @@ func TestEnsureCerts_PartialCertState(t *testing.T) {
 			}
 
 			_, err = EnsureCerts(tmpDir, "test-game-id")
-			if tt.expectError {
-				assert.Error(t, err, "Expected error for partial cert state")
-			} else {
-				assert.NoError(t, err)
-			}
+			assert.Error(t, err,
+				"a partial certificate state MUST error rather than silently regenerating over "+
+					"the material that is already there")
 		})
 	}
 }

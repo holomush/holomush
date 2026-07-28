@@ -575,22 +575,20 @@ func TestPostgresAliasRepository_RowsErr(t *testing.T) {
 	})
 }
 
-// Test that the interface is correctly implemented
-func TestAliasRepositoryInterface(t *testing.T) {
-	mock, err := pgxmock.NewPool()
-	require.NoError(t, err, "failed to create mock")
-	defer mock.Close()
+// The interface-satisfaction guarantee formerly asserted here by
+// TestAliasRepositoryInterface now lives in alias.go as a package-scope
+// `var _ AliasRepository = (*PostgresAliasRepository)(nil)` declaration, where
+// the compiler enforces it (weak-test finding holomush-ec22.16, QUAL-03).
 
-	var _ AliasRepository = NewPostgresAliasRepository(mock)
-}
-
-// Test the constructor works with nil (for edge case coverage)
-func TestNewPostgresAliasRepository(t *testing.T) {
-	// Test with mock pool
+func TestNewPostgresAliasRepositoryStoresTheSuppliedPoolOnTheReturnedRepository(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err, "failed to create mock")
 	defer mock.Close()
 
 	repo := NewPostgresAliasRepository(mock)
-	require.NotNil(t, repo)
+
+	require.NotNil(t, repo, "constructor returned a nil repository")
+	require.NotNil(t, repo.pool, "constructor left the pool field unset")
+	assert.Same(t, mock, repo.pool,
+		"constructor did not wire the supplied pool onto the returned repository")
 }

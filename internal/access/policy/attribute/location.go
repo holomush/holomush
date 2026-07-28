@@ -36,10 +36,16 @@ func (p *LocationProvider) ResolveSubject(_ context.Context, _ string) (map[stri
 // (notably "location:*" wildcard from bootstrap permission grants).
 // See [parseEntityResource] for the three-branch grammar; the wildcard
 // bypass exists because the engine evaluates target-type seed matches
-// without per-instance attributes (holomush-g776). If a future seed adds
-// a `when` clause comparing `resource.location.X` and is expected to
-// match the wildcard path, the provider MUST populate sentinel values
-// for X (or the seed MUST narrow its target via `resource ==`).
+// without per-instance attributes (holomush-g776).
+//
+// A seed intended to match the wildcard path MUST be attribute-free
+// (target-only), or MUST narrow its target with `resource == "location:*"`
+// — the ResourceExact shape the seed:plugin-cap-* permits use
+// (internal/access/policy/seed.go:343-349). A provider MUST NOT synthesize
+// sentinel attribute values to make a `when` clause match: ADR
+// holomush-ti1b / .claude/rules/abac-providers.md forbid it, and a sentinel
+// only produces a match when the peer operand is equally unresolved, which
+// is exactly the fail-open (holomush-9gtl) the omit rule exists to prevent.
 func (p *LocationProvider) ResolveResource(ctx context.Context, resourceID string) (map[string]any, error) {
 	id, ok, err := parseEntityResource(resourceID, "location")
 	if err != nil {
@@ -65,19 +71,31 @@ func (p *LocationProvider) ResolveResource(ctx context.Context, resourceID strin
 		"archived":      loc.ArchivedAt != nil,
 	}
 
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// has_owner=false the `owner_id` key MUST be OMITTED from the bag — NOT
+	// emitted as an empty-string sentinel. The DSL evaluator's
+	// missing-attr-→-false semantics (ADR holomush-iv43 / 0010) then keep
+	// every operator false for an unresolved owner. Emitting "" would
+	// satisfy `"" == ""` against any other unresolved peer attribute and
+	// create a fail-open permit in a default-deny system.
 	if loc.OwnerID != nil {
 		attrs["owner_id"] = loc.OwnerID.String()
 		attrs["has_owner"] = true
 	} else {
-		attrs["owner_id"] = ""
 		attrs["has_owner"] = false
 	}
 
+	// Per ADR holomush-ti1b (motivating bug holomush-9gtl): when
+	// is_shadow=false the `shadows_id` key MUST be OMITTED — NOT emitted as
+	// an empty-string sentinel. Two non-shadow locations carrying "" would
+	// compare equal on shadows_id, which is exactly the fail-open equality
+	// the missing-attr-→-false semantics (ADR holomush-iv43 / 0010) exist to
+	// prevent. The is_shadow witness stays on both branches so a seed can
+	// still test existence via `has`.
 	if loc.ShadowsID != nil {
 		attrs["shadows_id"] = loc.ShadowsID.String()
 		attrs["is_shadow"] = true
 	} else {
-		attrs["shadows_id"] = ""
 		attrs["is_shadow"] = false
 	}
 

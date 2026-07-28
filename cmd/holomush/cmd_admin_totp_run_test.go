@@ -81,7 +81,7 @@ func TestRunBootstrapEnroll(t *testing.T) {
 		assertOut func(t *testing.T, out string)
 	}{
 		{
-			name: "happy path",
+			name: "prepares, prints, then commits the bootstrap enrollment",
 			setup: func(repo *mocks.MockRepository, svc *stubTOTPService) {
 				repo.EXPECT().PlayerIDFromUsername(mock.Anything, "alice").Return(pid.String(), nil)
 				// Prepare returns the displayed Enrollment; Commit is then
@@ -178,7 +178,7 @@ func TestRunEnroll(t *testing.T) {
 		assertOut func(t *testing.T, out string)
 	}{
 		{
-			name:      "happy path",
+			name:      "prepares, prints, then commits the enrollment for the validated player",
 			validator: &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}},
 			setupSvc: func(svc *stubTOTPService) {
 				svc.prepareEnrollResult = totp.EnrollPreparation{Enrollment: sampleEnrollment()}

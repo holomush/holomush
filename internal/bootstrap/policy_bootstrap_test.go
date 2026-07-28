@@ -14,7 +14,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
-func TestPolicyBootstrapper_Priority(t *testing.T) {
+func TestPolicyBootstrapperReportsThePolicyBootstrapPriority(t *testing.T) {
 	pb := NewPolicyBootstrapper(func(_ context.Context, _ bool) error {
 		return nil
 	}, false)

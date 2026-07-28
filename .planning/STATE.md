@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.12
 milestone_name: Foundation Hardening
-current_phase: 8
-current_phase_name: God-Object Decomposition
-status: Phase 8 complete — executed, verified, and shipped (PR #4832)
-stopped_at: Phase 8 executed and verified (9/9 plans, 3/3 must-haves)
-last_updated: "2026-07-20T22:11:01.328Z"
-last_activity: 2026-07-19
-last_activity_desc: Phase 8 closed — 9/9 plans, verifier PASSED 3/3, PR #4832 open
+current_phase: 09
+current_phase_name: Test-Quality & Code-Health Sweep
+status: complete
+stopped_at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
+last_updated: "2026-07-27T16:45:21.847Z"
+last_activity: 2026-07-27
+last_activity_desc: Phase 09 complete — all 21 plans executed, shipped as PR #4874
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 45
-  completed_plans: 45
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 66
+  completed_plans: 66
 ---
 
 # Project State
@@ -25,21 +25,22 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 08 — god-object-decomposition (complete; Phase 09 not yet started)
+**Current focus:** Phase 09 — Test-Quality & Code-Health Sweep
 
 ## Current Position
 
-Phase: 8 — God-Object Decomposition
-Plan: 9 of 09 complete
-Status: Phase 8 complete — executed, verified, and shipped (PR #4832)
-Last activity: 2026-07-19 — Phase 8 closed; ARCH-01 and ARCH-02 delivered
-Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
+Phase: 09 (Test-Quality & Code-Health Sweep) — COMPLETE
+Plan: 21 of 21
+Status: Complete — shipped as PR #4874 on branch `gsd/v0.12-milestone`
+Last activity: 2026-07-27 — Phase 09 closed out by 09-19 (the coverage gate)
+Next: Merge PR #4874, then close the v0.12 milestone. QUAL-04 is Complete; QUAL-02, QUAL-03 and
+QUAL-05 stay Pending deliberately, with the open gaps tracked as #4861, #4875 and #4876.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 62
+- Total plans completed: 66
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -130,6 +131,26 @@ Next: Phase 9 — Test-Quality & Code-Health Sweep (Pending, not yet started)
 | Phase 08 P07 | ~75m | 3 tasks | 15 files |
 | Phase 08 P08 | ~95m | 3 tasks | 9 files |
 | Phase 08 P09 | ~70m | 3 tasks | 4 files |
+| Phase 09 P01 | 55min | 2 tasks | 3 files |
+| Phase 09 P02 | 35min | 3 tasks | 0 files |
+| Phase 09 P03 | 22 | 2 tasks | 6 files |
+| Phase 09 P04 | ~15min | 3 tasks | 4 files |
+| Phase 09 P05 | ~25min | 1 tasks | 5 files |
+| Phase 09 P06 | 25m | 1 tasks | 2 files |
+| Phase 09 P07 | ~40m | 3 tasks tasks | 4 files files |
+| Phase 09 P08 | 1h | 2 tasks | 2 files |
+| Phase 09 P09 | 50min | 2 tasks tasks | 2 files files |
+| Phase 09 P10 | 85min | 2 tasks tasks | 1 files files |
+| Phase 09 P11 | ~40min | 1 tasks | 4 files |
+| Phase 09 P20 | 38m | 3 tasks | 5 files |
+| Phase 09 P12 | 26m | 3 tasks | 5 files |
+| Phase 09 P13 | 71m | 2 tasks | 2 files |
+| Phase 09 P14 | 96m | 3 tasks | 5 files |
+| Phase 09 P15 | 71m | 3 tasks | 5 files |
+| Phase 09 P16 | 62m | 2 tasks | 2 files |
+| Phase 09 P18 | 150min | 3 tasks tasks | 71 files files |
+| Phase 09 P17 | 55m | 2 tasks | 1 files |
+| Phase 09 P19 | 70m | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -233,6 +254,77 @@ the next milestone yet.
 - [Phase ?]: Sixth forbidden edge added: internal/plugin -> internal/eventbus/authguard, the mirror of D-09 seam 2
 - [Phase ?]: Manager pinned by field-set equality (structural) as primary regrowth guard; LoC ceiling is the backstop
 - [Phase ?]: No method counts hard-coded in the census — the plan's 39/36 were pre-split figures (actual 31/26)
+- [Phase ?]: 09-01: E2E coverage was empty because docker compose stop SIGKILLed the -cover binaries at the 10s default grace before Gos exit hook could flush GOCOVERDIR (exit 137, covmeta without covcounters); fixed with stop_grace_period: 60s on core+gateway in compose.e2e.cover.yaml against a measured ~14.4s core shutdown whose tail is the OTLP exporters own 5s export timeout
+- [Phase ?]: 09-01: the bind-mount uid hypothesis was ELIMINATED on macOS Docker Desktop (it maps mount ownership; a live touch /coverdata as uid 1000 returned WRITE_OK) so no user: override was added and the production images non-root posture is untouched — note this is disproven locally, not on a Linux CI runner
+- [Phase ?]: 09-01: a meta-only .coverdata makes go tool covdata textfmt emit a FULL-SIZE all-zero profile (2,692,028 B / 32,375 body lines) and exit 0, so test -s, a body-line count and exit-status propagation ALL pass the broken shape; the coverage guard must assert a non-zero COVERED-statement count (Rule 2 deviation from the plans specified emptiness guard)
+- [Phase ?]: 09-01: codecovs branch API is the authoritative project figure — 78.28% on main @ 497748c6d; the retired ~54.6% was a raw unit-lane go tool cover -func tail that applies neither the ignore list nor the cross-lane session merge
+- [Phase ?]: 09-01: cmd/holomush/core.go + sub_grpc.go un-ignored in FULL form (tracer succeeded); from the E2E lane alone they measure 70.1% and 66.0%, so the 656 statements added to the denominator bring 448 covered with them — the un-ignore raises the number rather than lowering it
+- [Phase ?]: 09-01: QUAL-02 deliberately left Pending in REQUIREMENTS.md — six phase-9 plans carry it (09-01/08/10/17/19/21) and this plan repaired the measurement chain rather than backfilling tests; the protocol mark-complete flip was reverted so the table does not assert a property no artifact demonstrates
+- [Phase ?]: 09-02: the plan's premise that the four eventbus_e2e skip files had no GitHub issue was FALSIFIED — all four exist (#2881/#2880/#2387/#2386), closed NOT_PLANNED 2026-05-17; a tracker-id search misses them because GH issues never carried beads ids, a behaviour-phrase search finds exact title matches
+- [Phase ?]: 09-02: #4855/#4856 cover work declined TWICE (closed NOT_PLANNED, then 'Archive only — not migrated'); their bodies state that deleting the test file outright is a legitimate resolution — 09-11 must make the delete-vs-retain call consciously
+- [Phase ?]: 09-02: two of the three ec22.9 residue items had drifted — addlicense is RESOLVED (replaced by license-eye pinned v0.8.0; lefthook.yaml deleted) and the write-timeout ask was documentation not a timeout (http2 WriteByteTimeout already covers write liveness; adding http.Server.WriteTimeout would break streaming); issues re-scoped to what is true rather than filed at the stale framing
+- [Phase ?]: ABAC providers: unresolved optional attrs are omitted from the bag, never sentinel-valued (ADR holomush-ti1b) — all five providers now conform
+- [Phase ?]: 09-03: QUAL-05 left incomplete — carried jointly with 09-04/05/06
+- [Phase ?]: 09-04: gateway --secure-cookies default INVERTED to true (#4794 / arch-review D4 MEDIUM-1); flag name + koanf key unchanged, --secure-cookies=false is the documented opt-out; cookie.go/security_headers.go untouched (they already built the secure form and downgraded)
+- [Phase ?]: 09-04: the inversion is pinned at the config.Load level (real NewGatewayCmd -> koanf posflag -> fresh struct), not only at the pflag default — a GetBool assertion cannot see the plumbing between the flag and the running server (Rule 2)
+- [Phase ?]: 09-04: compose.yaml gateway now passes --secure-cookies=false (E2E overlay does NOT override command; PLAYWRIGHT_BASE_URL=http://gateway:8080 is non-localhost plain HTTP, where browsers drop Secure cookies); proven by task test:e2e:cover exit 0, 104 specs, 482 covered cmd/holomush statements
+- [Phase ?]: 09-04: QUAL-05 left Pending — it enumerates 5 Medium-cluster items and this plan delivers 1 (secure-cookie default); 09-05/09-06 carry the rest
+- [Phase ?]: 09-05: migration 000053 adds idx_sessions_location_id (plain idempotent CREATE INDEX IF NOT EXISTS + paired DROP IF EXISTS, no concurrent build) closing #4796 — the presence/ListActiveByLocation filter column was unindexed across all 52 prior migrations
+- [Phase ?]: 09-05: reversibility is proven by a round-trip spec (step to 52, assert absent, step to 53, assert present by KEYED pg_indexes name lookup + indexdef column check, step back, assert absent, reapply) — task test:int alone only ever migrates UP, so a no-op down passes it; falsifiability demonstrated by emptying the down body and observing the failure, then reverting
+- [Phase ?]: 09-05: three pre-existing tests hardcoded latest-migration=52 (census list, mock latest, FullCycle x2); FullCycle literals replaced with a named latestMigrationVersion constant, but the pending-migration census kept as an explicit literal list — deriving it from allMigrationVersions() would be tautological against the helper PendingMigrations() uses
+- [Phase ?]: 09-05: no EXPLAIN/query-plan assertion added (#4796's second AC clause) — on an empty test table the planner correctly prefers a seq scan regardless of the index, so the check would be vacuous or a test of fixture row count; QUAL-05 still Pending (3 of 5 Medium items delivered: 09-03 ABAC sentinels, 09-04 secure-cookie, 09-05 index)
+- [Phase ?]: 09-06: no metric added on the plugin downgrade fence — a log record is what the finding asks for; an instrument would widen an observability fix into telemetry wiring on a crypto-review surface
+- [Phase ?]: 09-06: fence drop log message pinned as a hard-coded test constant, not imported from production, so a silent reword fails rather than passes
+- [Phase ?]: 09-07: (*Session).EmitDirectEventAt(ctx, stream, evType string, payload []byte, at time.Time) (string, error) added as a SIBLING of EmitDirectEvent (byte-identical, zero deleted lines, 36 call sites untouched); `at` sets Event.Timestamp ONLY — not the ULID (identity/dedup) and not the JetStream sequence (which owns ordering)
+- [Phase ?]: 09-07: the plan's Task-3 demonstration premise was FALSIFIED — task lint runs with NO build tags, so a production import of the integration harness fails at typecheck ('build constraints exclude all Go files') before depguard is consulted; the //go:build integration tag is the first-line control and the new deny entry is an explicit second line, proven load-bearing only under --build-tags=integration
+- [Phase ?]: 09-07: the plan's sleep guard rg -c 'time.Sleep' counts PROSE not calls (0 -> 2 from doc comments alone, with zero sleeps added); replaced with rg 'time\\.Sleep\\(' (zero call sites) — same defect class as the phase's other unfalsifiable verifies
+- [Phase ?]: 09-07: depguard meta-test needle tightened from the bare package path to '- pkg: <path>' and the pinned set widened 3 -> 5 (natstest was configured but unpinned); both falsifications observed — deleted entry fails, comment-only mention also fails
+- [Phase ?]: 09-07: QUAL-04 left Pending — this plan builds only the harness seam; the session-lifecycle matrix it unblocks is written by 09-12/13/14/15
+- [Phase ?]: 09-08: plan's coverage gate measured go-tool-cover statement ratio (83.9% at HEAD) while its 76.2% baseline was a codecov line ratio — gate could not fail; replaced with a strict-increase gate plus per-test mutation controls
+- [Phase ?]: 09-08: oops merges error context innermost-first, so SaveCertificates' outer 'operation' label is shadowed by saveCert/saveKey's — assert the surviving 'path' key instead
+- [Phase ?]: 09-09: 6 of 10 sites cited by the archived weak-test record holomush-ec22.16 no longer exist as cited (3 file-gone, 1 function-gone-file-present); surviving in-scope set is 2 functions in internal/store/alias_test.go
+- [Phase ?]: 09-09: alias interface canary moved from a runtime test to 'var _ AliasRepository = (*PostgresAliasRepository)(nil)' in alias.go:52 — strictly stronger (checked by every build, not just task test), proven load-bearing by a rename mutation that fails the build AT the assertion line
+- [Phase ?]: 09-09: the 8 TestPostgresAliasRepository_* names are NOT ratchet violations — all carry subtests (documented TestType_Method exception); a 40-line rg window initially reported 6 of 8 as subtest-free, a too-small-window false positive of the same class as a too-loose predicate
+- [Phase ?]: 09-09: 09-08's misleading TestEnsureCerts_DirectoryCreationFailure confirmed from source (fileExists returns !IsNotExist so ENOTDIR reads as 'exists' -> load-existing branch, never reaching xdg.EnsureDir); out of the derived remediation set, filed as #4860
+- [Phase ?]: 09-10: cmd/holomush 80% floor NOT met and not faked — codecov merged (line, main) 64.82%; unit∪E2E (statement) 70.6%; reaching 80% needs +244 statements while the plan's two authorized files could supply at most +64, an arithmetic certainty established in Task 1 before any test was written; residual recorded per file in #4861
+- [Phase ?]: 09-10: codecov's API ?path= filter is a PREFIX match — ?path=cmd/holomush silently includes cmd/holomush-cutover/main.go (30 files, 64.25%); the package-only figure needs select(startswith("cmd/holomush/")) => 29 files, 64.82%
+- [Phase ?]: 09-10: deps_test.go (one of the plan's two authorized files) deliberately left untouched — deps.go is already 100% (20/20) under the union, so any test added there would be the assertion-free coverage theatre QUAL-03 exists to remove
+- [Phase ?]: 09-10: rekeyAuditPublisherAdapter.PublishAudit was 0% covered — its clock override (ev.Timestamp = a.clock.Now(), which overrides NewEvent's time.Now()) and its three oops failure codes are now pinned; all 8 added tests proven falsifiable by mutation with each failure attributed to the intended test by name
+- [Phase ?]: 09-10: config-section tests clear DATABASE_URL as a fall-through negative control — it is the next thing RunE reaches, so a dropped section Load makes the test FAIL rather than pass on 'an error was returned' (proven by NC6)
+- [Phase ?]: 09-10: #4647's premise falsified by 09-01 — cmd/holomush/{core,sub_grpc}.go are no longer at '0-0.6%, instrumentation isn't observing it' but 88.7%/78.2% under the union; corrected in-place with a grounded comment rather than filing a duplicate, and left open because sub_grpc.go still has 62 uncovered statements
+- [Phase ?]: 09-11: retained all four unimplemented eventbus_e2e specs rather than deleting the twice-declined #4855/#4856 files; the trim dissolves the maintenance-burden case for deletion and both issue bodies reserve that call for a maintainer closing the issue
+- [Phase ?]: 09-20: telnet differentiation threaded through attach's SubscribeRequest only — the session_connections row is where production observes it
+- [Phase ?]: 09-20: WithInTreePlugins wins over WithBuiltinCommands (register before adoption), so setting both cannot double-register or panic
+- [Phase ?]: 09-20: administrator-boot matrix row dispositioned not-implementable-from-harness-defaults; resetpassword --kick exists but bypasses session_ended (issue #4862)
+- [Phase 09]: Session-matrix registry adds a fifth disposition, 'planned', so no row claims a spec before that spec is written; 09-16 can also assert zero planned rows remain at phase end
+- [Phase 09]: Matrix n/a cells follow the verbatim izk0 TABLE (9/11/12/6 populated per column), not 09-RESEARCH's derived totals (9/10/12/7), which disagree with the table they annotate
+- [Phase 09]: multi_tab_test.go:217/242 rejected as a reattach-cell citation: it creates no game session, so 09-RESEARCH's D-16 'Reattach x telnet + multi-session' claim is false
+- [Phase ?]: 09-13: post-ttl-relogin.web-guest left planned with blocked_on — no harness route re-logs a guest as the same character; a second-guest stand-in would pass with nothing for the reaper to have done
+- [Phase ?]: 09-13: a bare absence assertion on a history read is untrustworthy — the fresh read returns zero rows, so a positive control rides in the same query
+- [Phase ?]: 09-14: built Server.GuestPlayer, the guest counterpart of AuthedPlayer, to unblock the two reassigned guest re-authentication matrix cells rather than accept a stand-in that could not fail
+- [Phase ?]: 09-14: reattach-cas.multi-session stays planned with owed_by: unassigned — per-connection detach was not built, and naming a closed plan as its ower would be false assurance
+- [Phase ?]: 09-15: move-arrival cells take route (b) — MoveTo kept and the cells relabelled as privacy-floor-after-simulated-move; the harness world service has no MovementHook, so driving MoveCharacter would leave location_arrived_at unchanged and prove the opposite. Production movement-lifecycle claim cited to issue #4788.
+- [Phase ?]: 09-15: added AuthedPlayer.AdditionalCharacter — two game sessions under ONE player session, the only shape that makes a token-keyed Disconnect teardown detectable (proven by negative control).
+- [Phase ?]: 09-15: INV-PRIVACY-6 flipped pending -> bound; the new floor-preservation spec asserts BOTH clauses of the invariant in one read, so it is not a partial binding.
+- [Phase ?]: 09-15: the two named privacy specs are Ginkgo containers carrying their identifier verbatim, not func Test symbols — no meta-test binds the names today (plan claim did not check out); recorded as EXEMPT from the 09-18 naming sweep.
+- [Phase ?]: 09-16: pinned ALL five session-matrix disposition counts, not just not-applicable — relabelling an unbacked spec row is the cheapest way to satisfy a bijection, and it now fails three guards
+- [Phase ?]: 09-16: the matrix guard carries no invariant-registry entry or binding annotation, following the quarantine bijection it models; the absence is grep-checked, so the file names the annotation descriptively rather than quoting it
+- [Phase ?]: 09-16: no 'uncovered' disposition added — planned + owed_by:unassigned + blocked_on + issue #4863 already is the honest marking for reattach-cas.multi-session
+- [Phase ?]: 09-18: tightened ACE predicate = underscore-form AND no-subtests AND single-token CamelCase tail; reproduced 09-RESEARCH exactly (1572/466/1106), TestGatewayCommand_SecureCookiesFlag correctly NOT a hit (3-token tail)
+- [Phase ?]: 09-18: the predicate's 'web' skipDirs entry matched by BASENAME, silently skipping internal/web and hiding 22 real violations — the ratchet (reusing meta_helpers' shared skipDirs, which has no 'web') caught it; total 116 -> 138
+- [Phase ?]: 09-18: table-case label detection must be restricted to elements of a SLICE literal — matching any name:/desc: field returns 45 hits, 32 of them domain fixtures like world.Location{Name: "Test"}; restricted it is exactly the 13 sites 09-RESEARCH enumerated
+- [Phase ?]: 09-18: TestINV_ carve-out is DEFENSIVE, not load-bearing — the only two single-token-tail INV names (P4/P5_Coverage_Meta) declare subtests at line 170+ and are excluded by the sanctioned exception first (an rg -A25 window falsely reported them subtest-free)
+- [Phase ?]: 09-18: ACE ratchet carries no invariant-registry entry and no // Verifies: annotation, following the quarantine and matrix ratchets; asserts a non-vacuous corpus (>500 files/>1000 decls/>500 labels) so an empty walk cannot pass as clean
+- [Phase ?]: 09-17: codecov posts coverage results through TWO GitHub endpoints — codecov/patch is a CHECK RUN on PR head commits and a COMMIT STATUS on main pushes; querying only /commits/{sha}/status reports it absent, which is exactly what this plan's own gate did (patch=0, a false negative)
+- [Phase ?]: 09-17: codecov/patch GO for the ruleset (14/14 live head commits, exact string codecov/patch, app id 254); codecov/project NO-GO — zero of 64 observations across 32 commits x 2 endpoints spanning 2026-04-26..07-27, issue #4875
+- [Phase ?]: 09-17: the 'no base commit to compare against' explanation for the missing project status is FALSIFIED — codecov's own API reports base_totals 78.28 / head_totals 79.11 / ci_passed true for PR #4874; leading cause is the vendor-documented Team-plan patch-only limit, an account condition no .codecov.yml edit can fix
+- [Phase ?]: 09-17: ruleset 11923801 already proves check-RUN names are matchable — 7 of its 8 required checks are check runs (integration_id 15368/none) and only CodeRabbit is a commit status, so requiring codecov/patch is mechanically sound
+- [Phase ?]: 09-17: PR #4874 head eee76d23e measures 79.11% (codecov LINE ratio, 3 sessions) vs main base 78.28% — coverage ROSE 0.83 points; the 69.12% figure seen earlier was a mid-merge read before all three upload sessions landed
+- [Phase ?]: 09-17: QUAL-02 restored to Pending — 09-08's mark-complete was a protocol side-effect that re-created the flip 09-01 had deliberately reverted; 09-19 owns the ruling, gaps are #4861 and #4875
+- [Phase 09]: Coverage measurement chain proven repaired: e2e flag 32.27% (was 0.0); whole-repo rose 0.83pt to 79.11%
+- [Phase 09]: codecov project ratchet tightened to threshold: 0% (true no-drop); inert until #4875 resolves
+- [Phase 09]: D-04 deferred BOTH halves: codecov/project never posts (#4875); codecov/patch would deadlock docs-only PRs (#4876)
+- [Phase 09]: QUAL-02 stays Pending — cmd/holomush 70.09% and whole-repo 79.11% are measurably below their named floors
 
 ### Pending Todos
 
@@ -245,6 +337,8 @@ None yet.
 - 259/334 registered invariants are `binding: pending` (concentrated in INV-CRYPTO and INV-SCENE) — tracked
   epic `holomush-hz0v4`, not a blocker, but phases touching crypto/scenes should bind relevant invariants as
   part of their own definition of done
+
+- Operator action outstanding: ruleset 11923801 unchanged; no coverage context gates merges (#4875, #4876)
 
 ### Quick Tasks Completed
 
@@ -265,18 +359,28 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-19T21:27:35.470Z
-Phase 8 closed: all 9 plans executed. CoreServer 1891 → 657 LoC, plugin Manager 1876 → 702,
-across seven units with zero parent-backpointer fields. gsd-verifier PASSED 3/3,
-crypto-reviewer READY, code review 0 blockers. task test:int and task lint green throughout;
-zero integration-tree churn across all 48 commits. Shipped as PR #4832.
-Follow-ups filed rather than fixed, so the pushed tree matches what the verifier certified:
-#4828, #4829, #4830 (INV-PLUGIN-56 partial binding — fix before merge), #4831.
-Stopped at: Phase 8 executed and verified (9/9 plans, 3/3 must-haves)
-Resume file: .planning/phases/08-god-object-decomposition/08-VERIFICATION.md
+Last session: 2026-07-27T16:45:13.288Z
+Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
+The measurement-chain repair is proven — the e2e flag reports 32.27% where it reported 0.0, and
+project coverage rose 0.83 points to 79.11% against a 78.28% base (`497748c6d`). Two named floors
+remain short, `cmd/holomush` at 70.09% against 80% being the consequential one (#4861). QUAL-04 is
+Complete; QUAL-02, QUAL-03 and QUAL-05 stay Pending deliberately. Both halves of decision D-04 are
+deferred and ruleset 11923801 is unchanged: `codecov/project` has never posted (0 of 64
+observations — a codecov Team-plan limit, #4875), and requiring `codecov/patch` would block
+docs-only pull requests, which `paths-ignore` routes to a lane that uploads no coverage (#4876).
+Archived — Phase 8: all 9 plans executed, CoreServer 1891 → 657 LoC and plugin Manager 1876 → 702;
+shipped as PR #4832 with follow-ups #4828, #4829, #4830, #4831.
+Stopped at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
+Resume file: None
 
 ## Operator Next Steps
 
-- Merge PR #4811 (milestone-init planning docs).
-- Ship the F2 gateway DoS cap (#4785) as a `/gsd-quick` fix — the immediate opener.
-- Then `/gsd-plan-phase 4` (or `/gsd-discuss-phase 4`) — the F1 resilience pass + event-sourcing-vs-CRUD ADR.
+- Merge PR #4874 (Phase 9 — test-quality & code-health sweep). All 18 CI checks green.
+- **Operator-only, cannot be done from a PR:** decide the ruleset `11923801` required-check
+  question. Both halves of decision D-04 are currently deferred (#4876) — `codecov/project` has
+  never posted (codecov Team-plan limit, #4875) and requiring `codecov/patch` would deadlock
+  docs-only PRs, which `paths-ignore` routes to `ci-docs-skip.yaml` with no coverage upload.
+- Two named coverage floors remain unmet and are tracked, not waived: whole-project 79.11% vs
+  the 80% target, and `cmd/holomush` 70.09% vs 80% (#4861 — the remainder is `runCoreWithDeps`
+  boot branches needing live Postgres/NATS/TLS).
+- QUAL-02, QUAL-03 and QUAL-05 stay Pending deliberately; QUAL-04 is Complete.

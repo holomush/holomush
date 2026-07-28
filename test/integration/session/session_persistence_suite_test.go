@@ -76,9 +76,17 @@ var _ = BeforeSuite(func() {
 		charRepo:           bootstrapsetup.NewCharRepoAdapter(pool, worldpg.NewCharacterRepository(pool)),
 		locRepo:            worldpg.NewLocationRepository(pool),
 	}
+
+	// The session-lifecycle specs drive the full in-process stack rather than
+	// raw stores. It is started HERE, at suite scope, and stopped in AfterSuite
+	// below — never lazily from a spec, because a DeferCleanup registered from
+	// inside an It or a BeforeEach fires at that spec's end and would hand every
+	// later spec a stopped server. See lifecycle_harness_test.go.
+	startLifecycleHarness()
 })
 
 var _ = AfterSuite(func() {
+	stopLifecycleHarness()
 	if env == nil {
 		return
 	}

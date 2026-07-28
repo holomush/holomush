@@ -14,14 +14,14 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-// TestGemstoneElementTheme_Name verifies the theme name.
-func TestGemstoneElementTheme_Name(t *testing.T) {
+// TestGemstoneElementThemeReportsItsRegisteredThemeName verifies the theme name.
+func TestGemstoneElementThemeReportsItsRegisteredThemeName(t *testing.T) {
 	theme := naming.NewGemstoneElementTheme()
 	assert.Equal(t, "gemstone_element", theme.Name())
 }
 
-// TestGemstoneElementTheme_Generate verifies generated names are non-empty and distinct.
-func TestGemstoneElementTheme_Generate(t *testing.T) {
+// TestGemstoneElementThemeGenerateReturnsTwoDistinctNonEmptyWords verifies generated names are non-empty and distinct.
+func TestGemstoneElementThemeGenerateReturnsTwoDistinctNonEmptyWords(t *testing.T) {
 	theme := naming.NewGemstoneElementTheme()
 	first, second := theme.Generate()
 	assert.NotEmpty(t, first)
@@ -69,7 +69,7 @@ func TestGuestAuthenticator_GenerateName(t *testing.T) {
 	assert.Contains(t, name, "_") // themed names use underscore separator
 }
 
-func TestGuestAuthenticator_GenerateName_Unique(t *testing.T) {
+func TestGuestAuthenticatorGenerateNameReturnsNoDuplicatesAcrossRepeatedCalls(t *testing.T) {
 	startLocation := ulid.Make()
 	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
 

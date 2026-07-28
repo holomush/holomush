@@ -75,11 +75,21 @@ func (cfg *gatewayConfig) Validate() error {
 
 // Default values for gateway command flags.
 const (
-	defaultTelnetAddr           = ":4201"
-	defaultCoreAddr             = "localhost:9000"
-	defaultGatewayControlAddr   = "127.0.0.1:9002"
-	defaultGatewayMetricsAddr   = "127.0.0.1:9101"
-	defaultWebAddr              = ":8080"
+	defaultTelnetAddr         = ":4201"
+	defaultCoreAddr           = "localhost:9000"
+	defaultGatewayControlAddr = "127.0.0.1:9002"
+	defaultGatewayMetricsAddr = "127.0.0.1:9101"
+	defaultWebAddr            = ":8080"
+	// defaultSecureCookies is TRUE: fail-safe, matching the default-deny posture
+	// the rest of the codebase holds. It gates the session cookie's Secure
+	// attribute and SameSite=Strict mode plus the HSTS and Content-Security-Policy
+	// response headers. The previous default-false was fail-open — a deployment
+	// behind a TLS-terminating proxy (nginx/haproxy/k8s ingress, where the
+	// gateway's own listener only ever sees plain HTTP) shipped session cookies
+	// without Secure and emitted neither HSTS nor CSP unless the operator
+	// remembered the flag (#4794). Plain-HTTP stacks opt out explicitly with
+	// --secure-cookies=false.
+	defaultSecureCookies        = true
 	defaultTelnetMaxConns       = 1000
 	defaultTelnetIdleTimeout    = 5 * time.Minute
 	defaultTelnetWriteTimeout   = 30 * time.Second
@@ -117,7 +127,7 @@ from telnet and web clients, forwarding commands to the core process.`,
 	cmd.Flags().StringVar(&cfg.WebAddr, "web-addr", defaultWebAddr, "web HTTP listen address")
 	cmd.Flags().StringVar(&cfg.WebDir, "web-dir", "", "override embedded static files with directory path")
 	cmd.Flags().StringSliceVar(&cfg.CORSOrigins, "cors-origins", nil, "allowed CORS origins (e.g., http://localhost:5173)")
-	cmd.Flags().BoolVar(&cfg.SecureCookies, "secure-cookies", false, "set the Secure flag + SameSite=Strict on session cookies (MUST be true for any TLS-served deployment; default false for local plain-HTTP dev)")
+	cmd.Flags().BoolVar(&cfg.SecureCookies, "secure-cookies", defaultSecureCookies, "set the Secure flag + SameSite=Strict on session cookies and emit the HSTS and Content-Security-Policy response headers (default true; pass --secure-cookies=false only for local plain-HTTP development, where browsers reject Secure cookies on any non-localhost host)")
 	cmd.Flags().IntVar(&cfg.TelnetMaxConns, "telnet-max-conns", defaultTelnetMaxConns, "max concurrent telnet connections")
 	cmd.Flags().DurationVar(&cfg.TelnetIdleTimeout, "telnet-idle-timeout", defaultTelnetIdleTimeout, "per-connection idle read timeout")
 	cmd.Flags().DurationVar(&cfg.TelnetWriteTimeout, "telnet-write-timeout", defaultTelnetWriteTimeout, "per-send write deadline")

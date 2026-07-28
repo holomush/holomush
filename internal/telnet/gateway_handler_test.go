@@ -1301,7 +1301,7 @@ func TestFormatEvent_Command(t *testing.T) {
 	}
 }
 
-func TestFormatEvent_State_Suppressed(t *testing.T) {
+func TestFormatEventSuppressesLocationStateEventsForTelnet(t *testing.T) {
 	h := &GatewayHandler{}
 
 	ev := &corev1.EventFrame{
@@ -1312,7 +1312,7 @@ func TestFormatEvent_State_Suppressed(t *testing.T) {
 	assert.Equal(t, "", got, "state events should produce empty string for telnet")
 }
 
-func TestFormatEvent_System(t *testing.T) {
+func TestFormatEventRendersASystemEventsMessageText(t *testing.T) {
 	h := &GatewayHandler{}
 
 	ev := &corev1.EventFrame{
@@ -1735,9 +1735,9 @@ func TestHandleLogout_LogoutRPCError(t *testing.T) {
 	}
 }
 
-// TestRefreshCharacterList_Success verifies that after QUIT in playing mode,
+// TestRefreshCharacterListShowsTheNewlyAddedCharacterWhenQuitReturnsToCharacterSelect verifies that after QUIT in playing mode,
 // refreshCharacterList is called and the new character list is displayed.
-func TestRefreshCharacterList_Success(t *testing.T) {
+func TestRefreshCharacterListShowsTheNewlyAddedCharacterWhenQuitReturnsToCharacterSelect(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()
 
@@ -1812,9 +1812,9 @@ func TestRefreshCharacterList_Success(t *testing.T) {
 	<-done
 }
 
-// TestRefreshCharacterList_Error verifies that when ListCharacters fails,
+// TestRefreshCharacterListReportsAFailureMessageWhenListCharactersErrors verifies that when ListCharacters fails,
 // an error is shown and selectMode still activates with an empty list.
-func TestRefreshCharacterList_Error(t *testing.T) {
+func TestRefreshCharacterListReportsAFailureMessageWhenListCharactersErrors(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()
 

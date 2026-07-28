@@ -54,7 +54,7 @@ func TestCheckpoint_LastProcessedEventID_UnsetVsSet(t *testing.T) {
 // TestCheckpoint_Phase5MissingMembers_InvalidJSON verifies the decode-error
 // path: malformed JSON in the persisted column surfaces the typed
 // DEK_REKEY_PHASE5_MISSING_MEMBERS_DECODE_FAILED code. The happy and NULL
-// paths are covered by TestCheckpoint_Phase5MissingMembers_Decodes in
+// paths are covered by TestCheckpointPhase5MissingMembersDecodesJSONAndReportsADecodeFailureCode in
 // rekey_phase5_internal_test.go; this test pins the error branch.
 func TestCheckpoint_Phase5MissingMembers_InvalidJSON(t *testing.T) {
 	c := Checkpoint{phase5MissingMembers: []byte("not-json")}

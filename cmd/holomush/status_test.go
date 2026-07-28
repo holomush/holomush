@@ -20,7 +20,7 @@ import (
 	tlscerts "github.com/holomush/holomush/internal/tls"
 )
 
-func TestStatus_Properties(t *testing.T) {
+func TestStatusCommandDeclaresItsUseShortAndLongDescriptions(t *testing.T) {
 	cmd := NewStatusCmd()
 
 	assert.Equal(t, "status", cmd.Use)
@@ -28,7 +28,7 @@ func TestStatus_Properties(t *testing.T) {
 	assert.Contains(t, cmd.Long, "health", "Long description should mention health")
 }
 
-func TestStatus_Help(t *testing.T) {
+func TestRootCommandStatusHelpContainsEveryExpectedSection(t *testing.T) {
 	cmd := NewRootCmd()
 	cmd.SetArgs([]string{"status", "--help"})
 
@@ -50,7 +50,7 @@ func TestStatus_Help(t *testing.T) {
 	}
 }
 
-func TestStatus_Flags(t *testing.T) {
+func TestStatusCommandHelpListsEveryExpectedFlag(t *testing.T) {
 	cmd := NewStatusCmd()
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
@@ -475,7 +475,7 @@ func TestRunStatus_CustomAddresses(t *testing.T) {
 	assert.Contains(t, output, "core", "output should mention core")
 }
 
-func TestStatusConfig_Defaults(t *testing.T) {
+func TestStatusCommandFlagsDefaultToJSONOffAndTheControlAddresses(t *testing.T) {
 	cmd := newStatusCmd()
 
 	jsonOutput, err := cmd.Flags().GetBool("json")

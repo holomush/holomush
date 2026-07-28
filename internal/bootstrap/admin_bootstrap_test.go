@@ -13,7 +13,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
-func TestAdminBootstrapper_Priority(t *testing.T) {
+func TestAdminBootstrapperReportsTheContentBootstrapPriority(t *testing.T) {
 	deps, _, _, _ := makeDeps()
 	ab := NewAdminBootstrapper(deps)
 	assert.Equal(t, plugins.BootstrapPriorityContent, ab.Priority())

@@ -77,6 +77,7 @@ import (
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
+	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
@@ -199,6 +200,13 @@ type Server struct {
 	// so Session.FacadeSetSceneFocus can build a SceneAccessServer that
 	// exercises the real JoinFocus → SetConnectionFocus path (holomush-5rh.8.26).
 	focusCoord focus.Coordinator
+
+	// cmdRegistry is the registry the dispatcher was actually built against —
+	// the default empty one, the compiled-in set under WithBuiltinCommands, or
+	// the plugin subsystem's registry when WithInTreePlugins adopted it. Unlike
+	// the CommandRegistry accessor, this is populated on every path, so a test
+	// can assert what is dispatchable without requiring plugins.
+	cmdRegistry *command.Registry
 }
 
 // StartOption tunes Start construction. Tests pass options to override
@@ -209,6 +217,7 @@ type StartOption func(*startConfig)
 type startConfig struct {
 	accessEngine              types.AccessPolicyEngine
 	withPlugins               bool
+	withBuiltinCommands       bool
 	withRealABAC              bool
 	withPluginCrypto          bool
 	withFocusDelivery         bool
@@ -236,6 +245,37 @@ type startConfig struct {
 // returns false and the hard-gate is exercised end-to-end.
 func WithPolicyEngine(eng types.AccessPolicyEngine) StartOption {
 	return func(c *startConfig) { c.accessEngine = eng }
+}
+
+// WithBuiltinCommands registers the compiled-in command handlers — exactly
+// quit and shutdown (internal/command/handlers/register.go, RegisterAll) — onto
+// the harness's default command registry, which is otherwise EMPTY. Without it
+// SendCommand("quit") reaches no handler: the dispatcher returns
+// ErrUnknownCommand, which is user-facing, so HandleCommand still answers
+// Success=true (internal/grpc/command_handler.go:291-302) and the caller sees
+// no error at all. A suite that means to drive a compiled-in command must
+// therefore opt in here AND assert on a production-observable outcome rather
+// than on the absence of an error.
+//
+// Interaction with WithInTreePlugins — the plugin option WINS. Registration
+// happens on the default registry BEFORE the plugin subsystem's registry is
+// adopted, and adoption replaces the registry wholesale
+// (cmdRegistry = pluginSub.CommandRegistry()). The adopted registry already
+// carries the same compiled-in handlers, because the plugin subsystem calls
+// RegisterAll on its own registry during Prepare. Setting both options is
+// therefore safe and cannot double-register or panic; the registrations made
+// here are simply discarded.
+//
+// Why a narrow option rather than reusing WithInTreePlugins: the
+// session-lifecycle suites need exactly these two compiled-in commands, and
+// WithInTreePlugins would require built binary plugin artifacts for no benefit
+// to those specs.
+//
+// Note this option does NOT register the admin handlers (RegisterAdmin, which
+// carries resetpassword). RegisterAdmin panics on any nil dependency and needs
+// five that the harness does not wire; see the 09-20 SUMMARY.
+func WithBuiltinCommands() StartOption {
+	return func(c *startConfig) { c.withBuiltinCommands = true }
 }
 
 // WithRealABAC boots the real seeded ABAC engine inside the harness via
@@ -490,6 +530,12 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 
 	var pluginSub *pluginsetup.PluginSubsystem
 	cmdRegistry := command.NewRegistry()
+	// Register the compiled-in handlers BEFORE any plugin-registry adoption, so
+	// the adoption below wins and the two options cannot double-register. See
+	// WithBuiltinCommands for the full interaction rule.
+	if cfg.withBuiltinCommands {
+		handlers.RegisterAll(cmdRegistry)
+	}
 	if cfg.withPlugins {
 		res, pp, aud := pluginAttrSources(abacSub)
 		// Under WithRealABAC, route plugin manifest-policy installs through the
@@ -761,6 +807,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		accessEngine:         pe,
 		guestStartLocationID: guestLocID,
 		focusCoord:           focusCoord,
+		cmdRegistry:          cmdRegistry,
 	}
 
 	// Plugin-crypto links 3+4 (Task 8): the audit projection (PluginConsumerManager
@@ -990,8 +1037,19 @@ func (s *Server) DeleteSession(ctx context.Context, sessionID string) {
 		tag.RowsAffected(), sessionID)
 }
 
-// ExpireSession directly marks a session row as expired in Postgres.
-// Used by iwzt tests to force session-expiry scenarios.
+// ExpireSession directly marks a session row as expired in Postgres — it
+// forces the TERMINAL expired status, bypassing the reaper rather than
+// driving it. Used by iwzt tests that want the end state without a sweep.
+//
+// The row this writes is NOT selected by the session reaper. ListExpired's
+// predicate is `status = 'detached' AND expires_at < now`
+// (internal/store/session_store.go:445-452), and this helper sets
+// status = 'expired', so the row can never match. A test that calls
+// ExpireSession and then waits for the reaper to delete the row will wait
+// forever — or, worse, pass vacuously against an assertion that cannot fail.
+//
+// Tests that mean to exercise REAPING must use DetachAndExpireSession, which
+// writes the detached-and-past-expiry state the reaper actually selects.
 func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 	s.t.Helper()
 	now := time.Now().UTC()
@@ -1001,6 +1059,39 @@ func (s *Server) ExpireSession(ctx context.Context, sessionID string) {
 	require.NoError(s.t, err, "integrationtest.Server.ExpireSession")
 	require.Equalf(s.t, int64(1), tag.RowsAffected(),
 		"integrationtest.Server.ExpireSession: expected 1 row affected, got %d (sessionID=%s)", tag.RowsAffected(), sessionID)
+}
+
+// DetachAndExpireSession puts a session row into the exact state the
+// production reaper selects: the detached status with an expiry already past.
+// This is the seam for tests that drive the REAL reaper end to end, as
+// distinct from ExpireSession, which forces the terminal expired status and is
+// therefore invisible to the sweep.
+//
+// The predicate this satisfies is ListExpired's
+// `status = 'detached' AND expires_at < now`
+// (internal/store/session_store.go:445-452). expiresAt is a caller-supplied
+// parameter rather than a computed "now minus something" so the test controls
+// the instant explicitly and needs no sleep to make the row eligible; pass an
+// instant already in the past.
+//
+// detached_at is filled in only when the row does not already carry one, so a
+// session that reached detached status through the production Disconnect RPC
+// (Session.DetachTransport) keeps its real detach moment.
+func (s *Server) DetachAndExpireSession(ctx context.Context, sessionID string, expiresAt time.Time) {
+	s.t.Helper()
+	nanos := expiresAt.UTC().UnixNano()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE sessions
+		    SET status = $1,
+		        expires_at = $2,
+		        detached_at = COALESCE(detached_at, $2),
+		        updated_at = $2
+		  WHERE id = $3`,
+		string(session.StatusDetached), nanos, sessionID)
+	require.NoError(s.t, err, "integrationtest.Server.DetachAndExpireSession")
+	require.Equalf(s.t, int64(1), tag.RowsAffected(),
+		"integrationtest.Server.DetachAndExpireSession: expected 1 row affected, got %d (sessionID=%s)",
+		tag.RowsAffected(), sessionID)
 }
 
 // SetLocationArrivedAt directly mutates a session's location_arrived_at column
@@ -1096,6 +1187,126 @@ func (s *Server) ConnectGuest(ctx context.Context) *Session {
 	}
 	sess.attach(ctx)
 	return sess
+}
+
+// GuestPlayer provisions a guest player + starter character and returns an
+// AuthedPlayer handle for it, WITHOUT opening a game session.
+//
+// This is the guest counterpart of Server.AuthedPlayer, and it exists for the
+// same reason: ConnectGuest bundles provisioning and SelectCharacter into one
+// call, so there is no way to select the SAME guest character a second time.
+// Every guest re-authentication scenario — reattaching within the time-to-live,
+// or logging in again after the session expired and was reaped — needs exactly
+// that, because the transition under test is "this character comes back", and a
+// second ConnectGuest returns a DIFFERENT character.
+//
+// Why that distinction is load-bearing rather than cosmetic: a spec that
+// substituted a second guest would satisfy "different session identifier" and
+// "later arrival timestamp" trivially, with no expiry involved and nothing for
+// the reaper to have done. It would pass whether or not the transition worked.
+// The handle returned here re-enters the production SelectCharacter path with
+// the guest's own bearer token instead, so the reattach and fresh-session
+// branches are genuinely exercised.
+//
+// The returned handle drives the same OpenWebSession / OpenTelnetSession
+// methods as a registered player's, so guest and registered coverage differ
+// only in how the player was provisioned.
+//
+// Note what is NOT set: the game session's guest identity floor
+// (GuestCharacterCreatedAt, INV-PRIVACY-2) is written by production
+// SelectCharacter from the guest character's creation time, so it appears once
+// a session is opened. Session.Info.IsGuest stays false, deliberately, exactly
+// as it does for ConnectGuest (internal/grpc/auth_handlers.go:291-296).
+func (s *Server) GuestPlayer(ctx context.Context) *AuthedPlayer {
+	s.t.Helper()
+
+	resp, err := s.coreServer.CreateGuest(ctx, &corev1.CreateGuestRequest{})
+	require.NoError(s.t, err, "integrationtest.Server.GuestPlayer: CreateGuest RPC")
+	require.True(s.t, resp.GetSuccess(),
+		"integrationtest.Server.GuestPlayer: CreateGuest failed: %s", resp.GetErrorMessage())
+
+	charID, parseErr := ulid.Parse(resp.GetDefaultCharacterId())
+	require.NoError(s.t, parseErr, "integrationtest.Server.GuestPlayer: parse character ID")
+
+	// The guest's player ID is not on the CreateGuest response and no session
+	// row exists yet to read it from, so it is taken from the character row the
+	// guest service just wrote.
+	var playerIDStr string
+	require.NoError(s.t,
+		s.pool.QueryRow(ctx, `SELECT player_id FROM characters WHERE id = $1`, charID.String()).
+			Scan(&playerIDStr),
+		"integrationtest.Server.GuestPlayer: read guest player_id for character %s", charID)
+	playerID, playerParseErr := ulid.Parse(playerIDStr)
+	require.NoError(s.t, playerParseErr, "integrationtest.Server.GuestPlayer: parse player ID")
+
+	return &AuthedPlayer{
+		PlayerID:    playerID,
+		CharacterID: charID,
+		LocationID:  s.guestStartLocationID,
+		server:      s,
+		rawToken:    resp.GetPlayerSessionToken(),
+	}
+}
+
+// AdditionalCharacter provisions a SECOND character for the player this handle
+// already represents, and returns a handle that opens sessions for it under the
+// SAME player-session bearer token.
+//
+// # Why this seam exists
+//
+// Server.AuthedPlayer and Server.GuestPlayer each provision one player with one
+// character, so two calls yield two DIFFERENT players holding two DIFFERENT
+// tokens. That shape cannot express the matrix's multi-session column, whose
+// subject is two concurrent game sessions belonging to ONE player session — the
+// same shape test/integration/auth/multi_tab_test.go builds by hand from raw
+// repositories ("two characters of one player", multi_tab_test.go:282-340).
+//
+// The distinction is load-bearing rather than cosmetic. Production's Disconnect
+// takes a session id AND the caller's player-session token, and validates the
+// pairing through auth.ValidateSessionOwnership
+// (internal/grpc/lifecycle_handler.go:106-123). With two separate players the
+// two tokens differ, so an implementation that keyed the teardown on the TOKEN
+// instead of the session id would still leave the other player's session alone
+// and the spec would pass. With two characters under one token that mistake
+// takes both sessions down, which is what makes a multi-session spec built on
+// this seam falsifiable.
+//
+// The returned handle shares PlayerID and the bearer token and carries the new
+// CharacterID, so it drives the same OpenWebSession / OpenTelnetSession methods
+// as its sibling. The receiver is not mutated: the caller keeps a working handle
+// for the original character.
+//
+// Scope: the character is seeded directly through the world character
+// repository — the same route AuthedPlayer uses, and outside the production
+// genesis fence by design. No session is opened here.
+func (p *AuthedPlayer) AdditionalCharacter(ctx context.Context, charName string) *AuthedPlayer {
+	p.server.t.Helper()
+
+	startLocID := p.server.guestStartLocationID
+	char, err := world.NewCharacter(p.PlayerID, charName)
+	require.NoError(p.server.t, err, "integrationtest.AuthedPlayer.AdditionalCharacter: NewCharacter")
+	char.LocationID = &startLocID
+	_, seedErr := p.server.worldCharRepo.Create(ctx, char)
+	require.NoError(p.server.t, seedErr,
+		"integrationtest.AuthedPlayer.AdditionalCharacter: persist character %q", charName)
+
+	// Mirror AuthedPlayer/ConnectAuthedWithRoles: under WithPluginCrypto the
+	// CoreServer resolves a typed CHARACTER identity through BindingRepository,
+	// which the direct repo seed above bypasses.
+	if p.server.pluginCrypto != nil {
+		_, bindErr := worldpg.NewBindingRepository(p.server.pool).Create(ctx,
+			p.PlayerID.String(), char.ID.String(), "integrationtest.AuthedPlayer.AdditionalCharacter")
+		require.NoError(p.server.t, bindErr,
+			"integrationtest.AuthedPlayer.AdditionalCharacter: create binding")
+	}
+
+	return &AuthedPlayer{
+		PlayerID:    p.PlayerID,
+		CharacterID: char.ID,
+		LocationID:  startLocID,
+		server:      p.server,
+		rawToken:    p.rawToken,
+	}
 }
 
 // ConnectAuthed creates a named player+character and opens a game session.

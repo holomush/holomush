@@ -162,7 +162,7 @@ func TestClient_HandleCommand(t *testing.T) {
 	assert.True(t, resp.GetSuccess(), "HandleCommand() success = false, want true")
 }
 
-func TestClient_Disconnect(t *testing.T) {
+func TestClientDisconnectReturnsSuccessFromTheCoreService(t *testing.T) {
 	// Start a mock server
 	lis, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err, "failed to listen")
@@ -347,7 +347,7 @@ func TestClient_CoreClient(t *testing.T) {
 	assert.True(t, resp.GetSuccess(), "CoreClient().HandleCommand() success = false, want true")
 }
 
-func TestClient_Subscribe(t *testing.T) {
+func TestClientSubscribeReceivesEventFramesCarryingAnID(t *testing.T) {
 	// Start a mock server with Subscribe implementation
 	lis, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err, "failed to listen")

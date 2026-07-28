@@ -153,7 +153,7 @@ func TestContainment_ID(t *testing.T) {
 	}
 }
 
-func TestObject_Containment(t *testing.T) {
+func TestObjectContainmentReportsOnlyTheLocationForAnObjectPlacedInALocation(t *testing.T) {
 	locID := ulid.Make()
 	obj, err := world.NewObject("Sword", world.InLocation(locID))
 	require.NoError(t, err)

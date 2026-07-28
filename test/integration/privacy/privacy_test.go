@@ -19,6 +19,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 )
 
@@ -31,18 +32,15 @@ import (
 
 // Verifies: INV-PRIVACY-6
 //
-// INV-PRIVACY-6 gate-bypass arm only: a character granted
-// read_unrestricted_history MUST bypass the INV-PRIVACY-1 location hard-gate.
+// INV-PRIVACY-6 gate-bypass arm: a character granted read_unrestricted_history
+// MUST bypass the INV-PRIVACY-1 location hard-gate.
 //
-// INV-PRIVACY-6 also asserts the floor-preservation arm — staff querying a
-// location they're not in still sees only events from their own
-// LocationArrivedAt forward. That arm requires emitting events with
-// controlled timestamps across the staff session's LocationArrivedAt
-// boundary; today's integrationtest harness can't do that (the dispatcher
-// is wired with an empty command registry, so SendCommand("say ...")
-// has nothing to invoke, and direct emit helpers that bypass the
-// command layer don't yet exist). The gate-bypass half is exercised
-// here; the floor-preservation half is tracked separately.
+// The complementary floor-preservation arm — staff querying a location they are
+// not in still see only events from their own LocationArrivedAt forward — is
+// asserted by the sibling block immediately below. It was previously untestable
+// here because it needs events placed at controlled instants either side of the
+// staff session's arrival, which the harness could not do; Session.EmitDirectEventAt
+// (added by plan 09-07) is that missing capability. Tracked as issue 4682.
 //
 // Per ADR wxty. The harness uses allowAllPolicyEngine which grants
 // read_unrestricted_history for all requests, exercising the
@@ -91,6 +89,131 @@ var _ = Describe("INV-PRIVACY-6 (gate-bypass arm): staff override bypasses the l
 			"response events must be a non-nil slice (empty is fine; locB has no history)")
 		Expect(events).To(BeEmpty(),
 			"locB has no events; response should be empty")
+	})
+})
+
+// Verifies: INV-PRIVACY-6
+//
+// INV-PRIVACY-6 floor-preservation arm — the second half of the invariant whose
+// gate-bypass half the block above asserts. The invariant reads: "ABAC staff
+// override bypasses the hard-gate location-match only, NOT the temporal floor."
+// The annotation is carried here because this spec asserts BOTH clauses in one
+// read: the query against a foreign location SUCCEEDS (the location match was
+// bypassed) and it returns only the event above the staff session's own arrival
+// floor (the temporal floor was not). Closes issue 4682.
+//
+// The production path is exactly the one the invariant is about. staffOverride
+// (internal/grpc/scope_floor.go:94-109) decides only whether the hard-gate is
+// skipped; the effective NotBefore is computed afterwards and unconditionally,
+// as MAX(client-supplied, streamScopeFloor(info, stream))
+// (internal/grpc/query_stream_history.go:268-273), and for a location stream
+// streamScopeFloor returns the QUERYING session's LocationArrivedAt regardless of
+// which location was asked for. A regression that moved the floor computation
+// inside the non-override branch would leave this spec's below-floor event
+// visible.
+//
+// Access engine: the harness DEFAULT, deliberately. The default is permissive,
+// which is what grants read_unrestricted_history and therefore what gives this
+// spec its bypass in the first place; the real-policy and deny-all opt-ins are
+// what the denial specs in this file pass, and passing one here would remove the
+// very override under test. Demonstrated rather than asserted: running this
+// block against a deny-all engine fails it on the gate-bypass clause with
+// "not authorized to read stream".
+//
+// The opt-in tokens are deliberately not spelled literally above, so a search
+// for them across this directory stays a clean zero and any future real use is
+// distinguishable from a passing mention in prose.
+//
+// Both events are asserted by identifier rather than by count, and both are read
+// back in the SAME query, so the exclusion is demonstrably the floor's doing: a
+// read that returned nothing at all would fail the inclusion assertion first.
+var _ = Describe("INV-PRIVACY-6 (floor-preservation arm): staff override does not bypass the temporal floor", func() {
+	var (
+		ts    *integrationtest.Server
+		ctx   context.Context
+		staff *integrationtest.Session
+		locB  string
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = integrationtest.Start(suiteT)
+
+		locBID := ts.NewLocation(ctx)
+		locB = "location." + locBID.String()
+
+		// Staff sits at the guest start location, which is NOT locB — so every
+		// read below goes through the override path.
+		staff = ts.ConnectAuthedWithRoles(ctx, "StaffNadia", []string{"staff"})
+		Expect(staff.LocationID.String()).NotTo(Equal(locBID.String()),
+			"precondition: staff MUST be somewhere other than the location they query")
+	})
+
+	AfterEach(func() {
+		if staff != nil {
+			staff.Logout(ctx)
+		}
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("returns only the locB event emitted after the staff session's own arrival timestamp", func() {
+		// The canonical floor, read from the row the server filters against.
+		info, err := ts.SessionStore().Get(ctx, staff.SessionID)
+		Expect(err).NotTo(HaveOccurred(), "the staff session row MUST be readable")
+		floor := info.LocationArrivedAt
+
+		// One event either side of the staff session's arrival. The emitter is
+		// immaterial to what is being tested — Session.EmitDirectEventAt is a
+		// bus-level publish, and streamScopeFloor consults only the QUERYING
+		// session's row — so the staff session plants both rather than dragging a
+		// second character into locB. That the below-floor event is the staff's own
+		// and still excluded makes the point more sharply, not less.
+		belowAt := floor.Add(-time.Second)
+		belowID, err := staff.EmitDirectEventAt(ctx, locB, "core-communication:pose",
+			[]byte(`{"character_name":"StaffNadia","action":"speaks before the staff session began."}`),
+			belowAt)
+		Expect(err).NotTo(HaveOccurred(), "the below-floor emit MUST publish")
+
+		aboveAt := floor.Add(time.Second)
+		aboveID, err := staff.EmitDirectEventAt(ctx, locB, "core-communication:pose",
+			[]byte(`{"character_name":"StaffNadia","action":"speaks after the staff session began."}`),
+			aboveAt)
+		Expect(err).NotTo(HaveOccurred(), "the above-floor emit MUST publish")
+		Expect(aboveID).NotTo(Equal(belowID), "each emit MUST carry its own identifier")
+
+		// Asserted rather than assumed: if these instants ever landed on the same
+		// side of the floor the exclusion below would hold for the wrong reason.
+		Expect(belowAt).To(BeTemporally("<", floor),
+			"the below-floor event MUST sit strictly before the staff session's arrival")
+		Expect(aboveAt).To(BeTemporally(">", floor),
+			"the above-floor event MUST sit strictly after the staff session's arrival")
+
+		// A deliberately non-excluding upper bound, so the server-side scope floor
+		// is the only thing that can remove an event from the result.
+		notAfterMs := time.Now().Add(time.Hour).UnixMilli()
+
+		events, err := staff.QueryStreamHistoryBounded(ctx, locB, notAfterMs)
+		Expect(err).NotTo(HaveOccurred(),
+			"INV-PRIVACY-6 gate-bypass clause: staff with read_unrestricted_history MUST still be "+
+				"able to query a location they are not in")
+
+		ids := make([]string, 0, len(events))
+		for _, ev := range events {
+			ids = append(ids, ev.GetId())
+		}
+
+		Expect(ids).To(ContainElement(aboveID),
+			"the event at %s, after the staff session arrived at %s, MUST be returned — without "+
+				"this the exclusion below could be satisfied by a read that returned nothing",
+			aboveAt, floor)
+		Expect(ids).NotTo(ContainElement(belowID),
+			"INV-PRIVACY-6 floor-preservation clause: the event at %s predates the staff session's "+
+				"own arrival at %s and MUST NOT be returned. The override bypasses the location "+
+				"match ONLY; its presence would mean staff read history from before their session "+
+				"existed",
+			belowAt, floor)
 	})
 })
 
@@ -817,5 +940,325 @@ var _ = Describe("INV-PRIVACY-5: denial wire opacity", func() {
 		ts.DeleteSession(ctx, sess.SessionID)
 		_, err := sess.QueryStreamHistory(ctx, "location."+sess.LocationID.String())
 		expectStreamAccessDenied(err, "session_not_found")
+	})
+})
+
+// Regression lock for the timestamped direct-emit helper added by plan 09-07
+// (decision D-15). The history-floor specs in plans 09-12/09-13/09-14 place
+// events on either side of a session's arrival or expiry boundary, and they do
+// it through Session.EmitDirectEventAt rather than by separating emits with a
+// time.Sleep — which would add a seventeenth site to the sleep-synchronisation
+// backlog tracked in #4665 (legacy holomush-ec22.13, "replace ~16 time.Sleep
+// async-sync sites with deterministic patterns").
+//
+// Those plans depend on three properties, and this single spec proves all
+// three at once:
+//
+//  1. the caller-chosen instant is what lands on the published event's
+//     Timestamp — the field the history NotBefore/NotAfter window reads;
+//  2. the identifier the helper returns is the published event's, so a spec can
+//     assert on a specific event instead of counting frames;
+//  3. QueryStreamHistoryBounded — the call the downstream specs use — filters
+//     on that chosen instant.
+//
+// The assertions are falsifiable in each direction. A helper that ignored `at`
+// and let NewEvent stamp the wall clock would give BOTH events a timestamp
+// inside the window, so the outside-the-window event would wrongly appear and
+// the exclusion assertion fails. A helper that returned some other identifier
+// fails the inclusion assertion. A bounded query that ignored its upper bound
+// fails the exclusion assertion.
+//
+// This spec uses no sleep. If ordering here ever appears to need one, the
+// timestamp parameter has stopped being honoured — that is the defect to fix.
+var _ = Describe("integration harness: a timestamped direct emit lands at the caller's chosen instant and returns that event's identifier", func() {
+	var (
+		ts  *integrationtest.Server
+		ctx context.Context
+	)
+
+	BeforeEach(func() {
+		ctx, _ = context.WithTimeout(context.Background(), 90*time.Second) //nolint:govet // cancel unused in test lifecycle
+		ts = integrationtest.Start(suiteT)
+	})
+
+	AfterEach(func() {
+		if ts != nil {
+			ts.Stop()
+		}
+	})
+
+	It("returns the event placed inside the bounded window and omits the one placed outside it", func() {
+		sess := ts.ConnectAuthed(ctx, "Tempo")
+		defer sess.Logout(ctx)
+		locStream := "location." + sess.LocationID.String()
+
+		// Both instants sit AFTER the session's arrival so the server-side
+		// scope floor (INV-PRIVACY-1, streamScopeFloor) admits them, and the
+		// window sits strictly between the two. Minute-scale offsets mean no
+		// wall-clock drift during the run can move either event across the
+		// boundary, so the assertions below are decided purely by whether the
+		// helper honoured `at`.
+		base := time.Now().UTC()
+		insideAt := base.Add(1 * time.Minute)
+		outsideAt := base.Add(3 * time.Minute)
+		windowMs := base.Add(2 * time.Minute).UnixMilli()
+
+		insideID, err := sess.EmitDirectEventAt(ctx, locStream, "core-communication:pose",
+			[]byte(`{"character_name":"Tempo","action":"speaks inside the window."}`), insideAt)
+		Expect(err).NotTo(HaveOccurred(), "timestamped emit inside the window MUST publish")
+		Expect(insideID).NotTo(BeEmpty(),
+			"timestamped emit MUST return the published event's identifier")
+
+		outsideID, err := sess.EmitDirectEventAt(ctx, locStream, "core-communication:pose",
+			[]byte(`{"character_name":"Tempo","action":"speaks outside the window."}`), outsideAt)
+		Expect(err).NotTo(HaveOccurred(), "timestamped emit outside the window MUST publish")
+		Expect(outsideID).NotTo(Equal(insideID),
+			"each emit MUST carry its own identifier")
+
+		frames, err := sess.QueryStreamHistoryBounded(ctx, locStream, windowMs)
+		Expect(err).NotTo(HaveOccurred(), "bounded history query MUST succeed")
+
+		ids := make([]string, 0, len(frames))
+		stampByID := make(map[string]time.Time, len(frames))
+		for _, f := range frames {
+			ids = append(ids, f.GetId())
+			stampByID[f.GetId()] = f.GetTimestamp().AsTime()
+		}
+
+		Expect(ids).To(ContainElement(insideID),
+			"the event emitted at %s MUST be readable inside a window ending at %s (got ids %v)",
+			insideAt, time.UnixMilli(windowMs).UTC(), ids)
+		Expect(ids).NotTo(ContainElement(outsideID),
+			"the event emitted at %s MUST NOT be readable inside a window ending at %s — "+
+				"its presence means the caller-chosen instant was ignored and the wall clock used instead",
+			outsideAt, time.UnixMilli(windowMs).UTC())
+
+		// Direct proof of property 1: the stored timestamp IS the chosen
+		// instant, not merely on the correct side of the window boundary.
+		Expect(stampByID[insideID]).
+			To(BeTemporally("~", insideAt, time.Millisecond),
+				"the published event's timestamp MUST be the caller-chosen instant")
+	})
+})
+
+// QUAL-04 harness seam 1 of 3 — telnet transport differentiation.
+//
+// AuthedPlayer.OpenTelnetSession was a t.Fatalf stub, so the session-lifecycle
+// matrix's telnet column had no seam at all. The seam threads a caller-selected
+// client type through the production Subscribe request, which the Subscribe
+// handler stamps onto the session_connections row
+// (internal/grpc/subscribe_handler.go:358-364).
+//
+// Every assertion below reads client_type back out of Postgres. An assertion
+// phrased against the argument handed to the opener would pass for a session
+// that is telnet in name only — which is the exact failure this seam exists to
+// prevent, since the grid-presence roster counts connections BY client_type
+// (internal/store/session_store.go:637, :752) and so decides who is visible to
+// whom.
+var _ = Describe("QUAL-04 seam: telnet and web sessions are differentiated on the connection row", func() {
+	var (
+		ts     *integrationtest.Server
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithTimeout(context.Background(), 90*time.Second)
+		ts = integrationtest.Start(suiteT)
+	})
+
+	AfterEach(func() {
+		if ts != nil {
+			ts.Stop()
+		}
+		if cancel != nil {
+			cancel()
+		}
+	})
+
+	It("records telnet for a telnet session and terminal for a web session, read back from session_connections", func() {
+		telnetPlayer := ts.AuthedPlayer(ctx, "TelnetTamsin")
+		webPlayer := ts.AuthedPlayer(ctx, "WebWren")
+
+		telnetSess := telnetPlayer.OpenTelnetSession(ctx)
+		Expect(telnetSess).NotTo(BeNil(),
+			"OpenTelnetSession MUST return a session — a nil return is the retired t.Fatalf stub")
+		defer telnetSess.Logout(ctx)
+
+		webSess := webPlayer.OpenWebSession(ctx)
+		defer webSess.Logout(ctx)
+
+		Expect(telnetSess.SessionID).NotTo(Equal(webSess.SessionID),
+			"the two openers MUST yield distinct sessions, so the reads below cannot alias")
+
+		// Keyed by session identifier — never a table-wide read. The suite is
+		// shared and a concurrently created session would otherwise pollute the
+		// result.
+		Expect(connectionClientTypes(ctx, ts, telnetSess.SessionID)).To(ConsistOf("telnet"),
+			"the telnet session's connection row MUST carry client_type=telnet as written by the "+
+				"production Subscribe handler; this is read from Postgres, not from the opener's argument")
+		Expect(connectionClientTypes(ctx, ts, webSess.SessionID)).To(ConsistOf("terminal"),
+			"the web session's connection row MUST still carry client_type=terminal — the default is unchanged")
+	})
+})
+
+// connectionClientTypes reads the client_type column of every
+// session_connections row belonging to sessionID. It is the observation point
+// for the telnet seam: production writes this column, so reading it back is
+// what distinguishes a genuinely-telnet session from one that is telnet only
+// in the test's own intent.
+func connectionClientTypes(ctx context.Context, ts *integrationtest.Server, sessionID string) []string {
+	GinkgoHelper()
+	rows, err := ts.Pool().Query(ctx,
+		`SELECT client_type FROM session_connections WHERE session_id = $1`, sessionID)
+	Expect(err).NotTo(HaveOccurred(), "query session_connections for session %s", sessionID)
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var clientType string
+		Expect(rows.Scan(&clientType)).To(Succeed(), "scan client_type for session %s", sessionID)
+		out = append(out, clientType)
+	}
+	Expect(rows.Err()).NotTo(HaveOccurred(), "iterate session_connections for session %s", sessionID)
+	return out
+}
+
+// QUAL-04 harness seam 2 of 3 — a session row the reaper actually selects.
+//
+// The pre-existing ExpireSession helper sets status='expired', but ListExpired
+// selects `status='detached' AND expires_at < now`
+// (internal/store/session_store.go:445-452), so its row is invisible to the
+// sweep: any reaper assertion seeded through it would pass while proving
+// nothing. DetachAndExpireSession writes the state the predicate matches.
+//
+// This spec drives the REAL session.Reaper against the harness's own session
+// store — it does not call the internal sweep and does not perform the
+// deletion itself. Absence is asserted by a keyed lookup on the session
+// identifier, never by a row count, because the suite is shared.
+//
+// No sleep: the reaper's Interval is what makes this deterministic, and the
+// expiry instant is supplied explicitly rather than waited for.
+var _ = Describe("QUAL-04 seam: a detached, past-expiry session is deleted by the real reaper", func() {
+	var (
+		ts     *integrationtest.Server
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithTimeout(context.Background(), 90*time.Second)
+		ts = integrationtest.Start(suiteT)
+	})
+
+	AfterEach(func() {
+		if ts != nil {
+			ts.Stop()
+		}
+		if cancel != nil {
+			cancel()
+		}
+	})
+
+	It("deletes the session row when seeded detached with an expiry already past", func() {
+		sess := ts.ConnectAuthed(ctx, "ReapedRhea")
+		sessionID := sess.SessionID
+		store := ts.SessionStore()
+
+		// Precondition: the row exists and is live before anything reaps it.
+		_, err := store.Get(ctx, sessionID)
+		Expect(err).NotTo(HaveOccurred(), "the session row MUST exist before the sweep")
+
+		// Detach through the production Disconnect RPC, then backdate the
+		// expiry so ListExpired's predicate matches.
+		sess.DetachTransport(ctx)
+		ts.DetachAndExpireSession(ctx, sessionID, time.Now().Add(-time.Minute))
+
+		reaper := session.NewReaper(store, session.ReaperConfig{
+			Interval: 50 * time.Millisecond,
+		})
+		reaperCtx, reaperCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer reaperCancel()
+		reaperDone := make(chan struct{})
+		go func() {
+			defer close(reaperDone)
+			reaper.Run(reaperCtx)
+		}()
+
+		Eventually(func(g Gomega) {
+			_, getErr := store.Get(ctx, sessionID)
+			g.Expect(getErr).To(HaveOccurred(),
+				"the reaper MUST delete a detached, past-expiry session row")
+			oopsErr, ok := oops.AsOops(getErr)
+			g.Expect(ok).To(BeTrue(), "expected an oops error, got %T", getErr)
+			g.Expect(oopsErr.Code()).To(Equal("SESSION_NOT_FOUND"),
+				"the lookup MUST fail as not-found — any other code means the row "+
+					"is still there and something else went wrong")
+		}, 8*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		// Deterministic teardown: stop the reaper and wait for its goroutine so
+		// the spec leaves nothing running.
+		reaperCancel()
+		<-reaperDone
+	})
+})
+
+// QUAL-04 harness seam 3 of 3 — dispatching a compiled-in command.
+//
+// The harness's default command registry is EMPTY, so quit was undispatchable.
+// WithBuiltinCommands registers the compiled-in handlers (quit, shutdown)
+// without pulling in binary plugin artifacts.
+//
+// The assertion is deliberately NOT "SendCommand returned no error". An unknown
+// command is a USER-FACING error, so HandleCommand emits a command_response and
+// still answers Success=true (internal/grpc/command_handler.go:291-302) — a
+// no-error assertion passes against the empty registry, which is the state this
+// seam exists to change. What distinguishes a dispatched quit is its production
+// effect: QuitHandler returns ErrSessionEnded, and the server then emits
+// session_ended and DELETES the session row (command_handler.go:267-289). That
+// deletion is the recognised-command outcome asserted here.
+var _ = Describe("QUAL-04 seam: the compiled-in quit command dispatches through the production handler", func() {
+	var (
+		ts     *integrationtest.Server
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithTimeout(context.Background(), 90*time.Second)
+		ts = integrationtest.Start(suiteT, integrationtest.WithBuiltinCommands())
+	})
+
+	AfterEach(func() {
+		// No Logout here: a dispatched quit already deleted the session row.
+		if ts != nil {
+			ts.Stop()
+		}
+		if cancel != nil {
+			cancel()
+		}
+	})
+
+	It("ends the session, proving the command reached a handler rather than falling through as unknown", func() {
+		sess := ts.ConnectAuthed(ctx, "QuittingQuinn")
+		sessionID := sess.SessionID
+		store := ts.SessionStore()
+
+		_, err := store.Get(ctx, sessionID)
+		Expect(err).NotTo(HaveOccurred(), "precondition: the session row MUST exist before quit")
+
+		Expect(sess.SendCommand(ctx, "quit")).To(Succeed(),
+			"dispatching quit MUST NOT fail at the RPC level")
+
+		// The load-bearing assertion. An unknown command leaves the row intact,
+		// so this fails against an empty registry.
+		_, err = store.Get(ctx, sessionID)
+		Expect(err).To(HaveOccurred(),
+			"quit MUST have reached QuitHandler and ended the session — a surviving session row "+
+				"means the command fell through as unknown, which is what an empty registry produces")
+		oopsErr, ok := oops.AsOops(err)
+		Expect(ok).To(BeTrue(), "expected an oops error, got %T", err)
+		Expect(oopsErr.Code()).To(Equal("SESSION_NOT_FOUND"),
+			"the session row MUST be gone, not merely unreadable for some other reason")
 	})
 })

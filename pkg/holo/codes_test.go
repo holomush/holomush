@@ -274,7 +274,7 @@ func TestFmt_Parse_UnknownCodes(t *testing.T) {
 	}
 }
 
-func TestFmt_Parse_Combined(t *testing.T) {
+func TestFmtParseRendersBoldColourAndNewlineCodesInOneString(t *testing.T) {
 	input := "This is %xhbold%xn and %xrred%xn text with%ra newline"
 	result := Fmt.Parse(input)
 	rendered := result.RenderANSI()
@@ -284,12 +284,12 @@ func TestFmt_Parse_Combined(t *testing.T) {
 	assert.Contains(t, rendered, "\n")
 }
 
-func TestFmt_Parse_Empty(t *testing.T) {
+func TestFmtParseRendersAnEmptyStringForEmptyInput(t *testing.T) {
 	result := Fmt.Parse("")
 	assert.Equal(t, "", result.RenderANSI())
 }
 
-func TestCodeToANSI_Coverage(t *testing.T) {
+func TestCodeToANSIContainsEveryDocumentedFormatCode(t *testing.T) {
 	// Ensure all expected codes are in the map
 	expectedCodes := []string{"n", "h", "u", "i", "d", "r", "g", "b", "c", "m", "y", "w", "x", "R", "G", "B", "C", "M", "Y", "W"}
 

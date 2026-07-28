@@ -293,16 +293,21 @@ func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testin
 	// world_timestamps_to_bigint + totp_misc_timestamps_to_bigint + pregfo6_gap_timestamps_to_bigint +
 	// character_preferences + session_connection_last_seen + disable_unconditional_scene_write_seed
 	// + disable_unconditional_scene_read_seed + world_version_guard + world_outbox
-	// + player_reaping + events_audit_partition)
+	// + player_reaping + events_audit_partition + sessions_location_index)
+	//
+	// This census is written out literally rather than derived from the embedded
+	// filesystem: deriving it from the same helper PendingMigrations() uses would
+	// make the assertion tautological and blind to a migration file that went
+	// missing. Extend it in the same change that adds a migration.
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 52 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 52}}
+	// At version 53 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 53}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)

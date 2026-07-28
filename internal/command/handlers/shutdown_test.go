@@ -109,7 +109,7 @@ func TestShutdownHandler_InvalidDelay(t *testing.T) {
 		args string
 	}{
 		{name: "not a number", args: "abc"},
-		{name: "negative", args: "-5"},
+		{name: "negative number of seconds", args: "-5"},
 	}
 
 	for _, tt := range tests {

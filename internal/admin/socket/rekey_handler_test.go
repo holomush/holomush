@@ -182,10 +182,10 @@ func TestRekeyHandler_Rejects_NoCryptoOperatorCap(t *testing.T) {
 	require.Equal(t, "DENY_NOT_OPERATOR", oopsErr.Code())
 }
 
-// TestRekeyHandler_Streams_Progress verifies the happy path: a valid session
+// TestRekeyHandlerStreamsACompletedEventCarryingTheRunCounters verifies the happy path: a valid session
 // with crypto.operator + RoleAdmin drives OrchestratorRunner.Run and emits a
 // RekeyCompleted event on the stream.
-func TestRekeyHandler_Streams_Progress(t *testing.T) {
+func TestRekeyHandlerStreamsACompletedEventCarryingTheRunCounters(t *testing.T) {
 	rid := [16]byte{
 		0x01, 0x93, 0xAB, 0xCD, 0xEF, 0x01, 0x02, 0x03,
 		0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,
@@ -320,10 +320,10 @@ func TestRekeyResumeHandler_ForceDestroy_PassThrough(t *testing.T) {
 		"ForceDestroy=true must be forwarded to OrchestratorRunner.Run (INV-CRYPTO-98)")
 }
 
-// TestRekeyResumeHandler_Streams_Completed verifies the happy path for
+// TestRekeyResumeHandlerStreamsACompletedEventMarkedResumedAndForceDestroyed verifies the happy path for
 // RekeyResume: valid session + crypto.operator + successful run emits
 // RekeyCompleted with Resumed=true.
-func TestRekeyResumeHandler_Streams_Completed(t *testing.T) {
+func TestRekeyResumeHandlerStreamsACompletedEventMarkedResumedAndForceDestroyed(t *testing.T) {
 	rid := [16]byte{
 		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
 		0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
@@ -402,10 +402,10 @@ func newAbortHandlerWithOperator(t *testing.T, abort socket.RekeyAbortRunner) *s
 	return socket.NewRekeyHandler(sessions, grants, roles, orch, abort, nil)
 }
 
-// TestRekeyHandler_Abort_SingleControl_Allowed verifies INV-CRYPTO-104: a session with
+// TestRekeyAbortAcceptsSingleControlEvenWhereRekeyMandatesDualControl verifies INV-CRYPTO-104: a session with
 // only crypto.operator capability (no dual-control approval) can abort an
 // in-flight checkpoint even when site policy mandates dual-control for rekey.
-func TestRekeyHandler_Abort_SingleControl_Allowed(t *testing.T) {
+func TestRekeyAbortAcceptsSingleControlEvenWhereRekeyMandatesDualControl(t *testing.T) {
 	abortedAt := timestamppb.Now()
 	eventID := [16]byte{
 		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
@@ -476,9 +476,9 @@ func TestRekeyHandler_Abort_Rejects_NoCryptoOperatorCap(t *testing.T) {
 	require.Equal(t, "DENY_NOT_OPERATOR", oopsErr.Code())
 }
 
-// TestRekeyHandler_Abort_Terminal verifies that when the abort runner returns
+// TestRekeyAbortSurfacesTheTerminalCheckpointCodeFromTheRunner verifies that when the abort runner returns
 // DEK_REKEY_CHECKPOINT_TERMINAL the handler surfaces it to the caller.
-func TestRekeyHandler_Abort_Terminal(t *testing.T) {
+func TestRekeyAbortSurfacesTheTerminalCheckpointCodeFromTheRunner(t *testing.T) {
 	abort := &fakeAbortRunner{
 		err: oops.Code("DEK_REKEY_CHECKPOINT_TERMINAL").Errorf("checkpoint already terminal"),
 	}

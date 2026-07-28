@@ -47,7 +47,7 @@ func TestParseContextFlag_NoColon(t *testing.T) {
 	assert.Contains(t, err.Error(), "type>:<id")
 }
 
-func TestParseContextFlag_Empty(t *testing.T) {
+func TestParseContextFlagRejectsAnEmptyValue(t *testing.T) {
 	_, err := parseContextFlag("")
 	require.Error(t, err)
 }
@@ -104,12 +104,12 @@ func TestExitCodeForError_SessionInvalid(t *testing.T) {
 	assert.Equal(t, 77, exitCodeForError(err))
 }
 
-func TestExitCodeForError_Unknown(t *testing.T) {
+func TestExitCodeForErrorMapsAnUnrecognisedCodeToSoftwareFailure(t *testing.T) {
 	err := oops.Code("SOMETHING_UNKNOWN").Errorf("unknown")
 	assert.Equal(t, 70, exitCodeForError(err))
 }
 
-func TestExitCodeForError_Nil(t *testing.T) {
+func TestExitCodeForErrorReturnsZeroForANilError(t *testing.T) {
 	assert.Equal(t, 0, exitCodeForError(nil))
 }
 
@@ -139,7 +139,7 @@ func TestExitCodeForTerminatedBy_AuditEmitFailure(t *testing.T) {
 	assert.Equal(t, 70, exitCodeForTerminatedBy(adminv1.ReadFinished_TERMINATED_BY_AUDIT_EMIT_FAILURE))
 }
 
-func TestExitCodeForTerminatedBy_Unspecified(t *testing.T) {
+func TestExitCodeForTerminatedByMapsUnspecifiedToSoftwareFailure(t *testing.T) {
 	assert.Equal(t, 70, exitCodeForTerminatedBy(adminv1.ReadFinished_TERMINATED_BY_UNSPECIFIED))
 }
 

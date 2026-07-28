@@ -257,7 +257,7 @@ func TestRateLimiter_Cleanup(t *testing.T) {
 	})
 }
 
-func TestRateLimiter_Concurrency(_ *testing.T) {
+func TestRateLimiterAllowsConcurrentCallsForOneSessionWithoutRacing(_ *testing.T) {
 	rl := NewRateLimiter(RateLimiterConfig{
 		BurstCapacity: 100,
 		SustainedRate: 10.0,

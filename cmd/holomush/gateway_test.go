@@ -27,7 +27,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-func TestGatewayCommand_Flags(t *testing.T) {
+func TestGatewayCommandHelpListsEveryExpectedFlag(t *testing.T) {
 	cmd := NewGatewayCmd()
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
@@ -83,7 +83,7 @@ func TestGatewayCommand_DefaultValues(t *testing.T) {
 	assert.Equal(t, "json", logFormat)
 }
 
-func TestGatewayCommand_Properties(t *testing.T) {
+func TestGatewayCommandDeclaresItsUseShortAndLongDescriptions(t *testing.T) {
 	cmd := NewGatewayCmd()
 
 	assert.Equal(t, "gateway", cmd.Use)
@@ -157,7 +157,7 @@ func TestGatewayCommand_FlagParsing(t *testing.T) {
 	}
 }
 
-func TestGatewayCommand_Help(t *testing.T) {
+func TestRootCommandGatewayHelpContainsEveryExpectedSection(t *testing.T) {
 	cmd := NewRootCmd()
 	cmd.SetArgs([]string{"gateway", "--help"})
 
@@ -517,7 +517,7 @@ func TestGatewayConfig_ValidateRejectsNonPositiveTelnetLimits(t *testing.T) {
 	}
 }
 
-func TestGatewayConfig_Defaults(t *testing.T) {
+func TestGatewayDefaultAddressConstantsHoldTheirDocumentedValues(t *testing.T) {
 	// Verify the default constants are set correctly
 	assert.Equal(t, ":4201", defaultTelnetAddr)
 	assert.Equal(t, "localhost:9000", defaultCoreAddr)
@@ -540,16 +540,23 @@ func TestGatewayCommand_WebDefaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, corsOrigins)
 
-	// secure-cookies defaults false so local plain-HTTP dev keeps working;
-	// TLS deployments (the sandbox) MUST pass --secure-cookies (holomush-w8ywo).
+	// secure-cookies defaults TRUE: an unconfigured gateway must be secure by
+	// default. The previous default-false was fail-open — a deployment behind a
+	// TLS-terminating proxy (the normal production shape, where the gateway's own
+	// listener sees plain HTTP) silently served session cookies without the
+	// Secure attribute and emitted neither HSTS nor CSP whenever the operator
+	// forgot the flag (#4794). Plain-HTTP local dev opts out explicitly with
+	// --secure-cookies=false.
 	secureCookies, err := cmd.Flags().GetBool("secure-cookies")
 	require.NoError(t, err)
-	assert.False(t, secureCookies)
+	assert.True(t, secureCookies)
 }
 
 // TestGatewayCommand_SecureCookiesFlag verifies --secure-cookies binds to the
 // gateway config so the gateway can set web.Config.Secure on TLS deployments
-// (holomush-w8ywo regression lock).
+// (holomush-w8ywo regression lock). The bare spelling remains supported after
+// the #4794 default inversion: operators already passing it are unaffected, it
+// is merely redundant now.
 func TestGatewayCommand_SecureCookiesFlag(t *testing.T) {
 	cmd := NewGatewayCmd()
 	err := cmd.Flags().Parse([]string{"--secure-cookies"})
@@ -558,6 +565,64 @@ func TestGatewayCommand_SecureCookiesFlag(t *testing.T) {
 	secureCookies, err := cmd.Flags().GetBool("secure-cookies")
 	require.NoError(t, err)
 	assert.True(t, secureCookies)
+}
+
+// TestGatewayCommandSecureCookiesExplicitFalseDisablesTheSecureAttributeSet
+// pins the opt-out path introduced by the #4794 default inversion. This is the
+// escape hatch a plain-HTTP local or E2E stack passes; browsers only grant the
+// secure-context exemption to localhost and the loopback address, so a stack
+// reached at a docker-network hostname needs it or the browser refuses to store
+// the session cookie.
+func TestGatewayCommandSecureCookiesExplicitFalseDisablesTheSecureAttributeSet(t *testing.T) {
+	cmd := NewGatewayCmd()
+	err := cmd.Flags().Parse([]string{"--secure-cookies=false"})
+	require.NoError(t, err)
+
+	secureCookies, err := cmd.Flags().GetBool("secure-cookies")
+	require.NoError(t, err)
+	assert.False(t, secureCookies)
+}
+
+// TestGatewayConfigLoadDefaultsSecureCookiesOnWhenNeitherFlagNorConfigKeyIsSet
+// proves the inversion survives the whole plumbing path RunE actually uses, not
+// merely the pflag default. It drives the REAL gateway command through
+// config.Load and unmarshals into a fresh zero-valued struct: had the flag
+// registration kept its old default, koanf's posflag provider would supply
+// false for the unchanged flag and the field would stay false. Asserting on
+// cmd.Flags().GetBool alone would not reach this far (#4794).
+func TestGatewayConfigLoadDefaultsSecureCookiesOnWhenNeitherFlagNorConfigKeyIsSet(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	// A gateway section that says nothing about cookies at all.
+	err := os.WriteFile(cfgFile, []byte("gateway:\n  telnet_addr: \":5555\"\n"), 0o600)
+	require.NoError(t, err)
+
+	cmd := NewGatewayCmd()
+	cfg := &gatewayConfig{}
+	require.False(t, cfg.SecureCookies, "precondition: the target struct starts zero-valued")
+
+	require.NoError(t, config.Load(cfgFile, cmd, cfg, "gateway"))
+
+	assert.True(t, cfg.SecureCookies)
+}
+
+// TestGatewayConfigLoadHonoursSecureCookiesFalseFromTheConfigFile pins the
+// configuration-file compatibility half of the #4794 inversion: the koanf key is
+// unchanged, so an operator who disables the behaviour in config.yaml rather
+// than on the command line still gets the opt-out. An explicitly-set config key
+// must beat the flag's new default.
+func TestGatewayConfigLoadHonoursSecureCookiesFalseFromTheConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte("gateway:\n  secure_cookies: false\n"), 0o600)
+	require.NoError(t, err)
+
+	cmd := NewGatewayCmd()
+	cfg := &gatewayConfig{}
+
+	require.NoError(t, config.Load(cfgFile, cmd, cfg, "gateway"))
+
+	assert.False(t, cfg.SecureCookies)
 }
 
 // TestControlServerError_TriggersShutdown verifies that when the control gRPC server

@@ -63,7 +63,7 @@ func (h *adapterTestHandler) HandleEvent(_ context.Context, _ Event) ([]EmitEven
 	return h.response, nil
 }
 
-func TestPluginServerAdapter_HandleEvent_Success(t *testing.T) {
+func TestPluginServerAdapterHandleEventReturnsTheHandlersEmitEvents(t *testing.T) {
 	handler := &adapterTestHandler{
 		response: []EmitEvent{
 			{Stream: "location:123", Type: "say", Payload: `{"text":"hello"}`},

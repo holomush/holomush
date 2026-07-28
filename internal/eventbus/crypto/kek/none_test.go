@@ -29,7 +29,7 @@ func TestNoneProvider_Unwrap_RefusesWithTypedError(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "CRYPTO_NONE_PROVIDER_UNWRAP_REFUSED")
 }
 
-func TestNoneProvider_HealthCheck_Succeeds(t *testing.T) {
+func TestNoneProviderHealthCheckSucceedsBecauseRefusingCryptoIsItsDesign(t *testing.T) {
 	// HealthCheck has no preconditions; NoneProvider is "healthy" in
 	// the sense that it functions as designed (refuses crypto ops).
 	provider := kek.NewNoneProviderForUnitTest()
