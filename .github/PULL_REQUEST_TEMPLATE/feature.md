@@ -8,6 +8,7 @@
 > **Using the wrong template?**
 > — Bug fix: use [fix.md](?template=fix.md)
 > — Enhancement to existing behavior: use [enhancement.md](?template=enhancement.md)
+> — Internal maintenance, no behavior change: use [chore.md](?template=chore.md)
 
 ---
 

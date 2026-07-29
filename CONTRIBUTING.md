@@ -92,11 +92,20 @@ revised by maintainers.
 Internal work that improves project health without changing user-facing behavior —
 test refactoring, CI/CD, dependency updates, tooling, tech debt.
 
+**The bar:** lower than a feature or enhancement — a chore needs a triaged issue, not a
+design review. But it still needs one, because "no user-facing change" is a claim a
+maintainer should agree with before you invest the work.
+
 **Process:**
 
 1. Open a [Chore issue](https://github.com/holomush/holomush/issues/new?template=chore.yml) describing the current state, proposed work, and what "done" means.
-2. Wait for a maintainer to triage it.
-3. Open a PR using the typed template that best fits the change.
+2. **Wait for maintainer triage.** A maintainer applies `approved-chore` once the scope is agreed.
+3. Open a PR using the [Chore PR template](.github/PULL_REQUEST_TEMPLATE/chore.md) — link the approved issue with `Closes #NNN`.
+
+If the work turns out to change user-facing behavior, it is not a chore — refile it as an
+enhancement or a feature.
+
+**Rejection reasons:** issue not labeled `approved-chore`, the change alters user-facing behavior, scope exceeds what was triaged.
 
 Documentation content problems use the
 [Documentation Issue template](https://github.com/holomush/holomush/issues/new?template=docs_issue.yml).
@@ -110,6 +119,7 @@ Documentation content problems use the
 - For **fixes**: open the issue, get `confirmed-bug`, then fix it.
 - For **enhancements**: open the issue, get `approved-enhancement`, then code.
 - For **features**: open the issue, get `approved-feature`, then code.
+- For **chores**: open the issue, get `approved-chore`, then code.
 
 PRs that arrive without a properly-labeled linked issue are closed. This is not a
 bureaucratic hurdle — it protects you from spending time on work that will be rejected,
@@ -135,6 +145,7 @@ any other cross-cutting PR that genuinely does not fit, paste
 | `confirmed-bug` | Maintainer confirmed this is a real bug — a fix PR may be opened |
 | `approved-feature` | Feature spec approved — implementation may begin |
 | `approved-enhancement` | Enhancement proposal approved — implementation may begin |
+| `approved-chore` | Chore triaged and accepted — implementation may begin |
 | `gate-violation` | PR opened without a linked, approved issue |
 
 ## Your first pull request

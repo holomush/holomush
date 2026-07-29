@@ -8,6 +8,7 @@
 > **Using the wrong template?**
 > — Enhancement: use [enhancement.md](?template=enhancement.md)
 > — Feature: use [feature.md](?template=feature.md)
+> — Internal maintenance, no behavior change: use [chore.md](?template=chore.md)
 
 ---
 

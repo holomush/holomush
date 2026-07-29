@@ -14,6 +14,7 @@ Select the template that matches your PR:
 | **Fix** | Correcting a bug, crash, or behavior that doesn't match documentation | [Use fix template](?template=fix.md) |
 | **Enhancement** | Improving an existing feature — better output, expanded edge cases, performance | [Use enhancement template](?template=enhancement.md) |
 | **Feature** | Adding something new — command, event type, plugin capability, RPC, or client surface | [Use feature template](?template=feature.md) |
+| **Chore** | Internal maintenance — refactoring, test quality, CI/CD, tooling, tech debt | [Use chore template](?template=chore.md) |
 
 ---
 
@@ -22,6 +23,7 @@ Select the template that matches your PR:
 - If it **corrects broken behavior** → Fix
 - If it **improves existing behavior** without adding new commands, events, or concepts → Enhancement
 - If it **adds something that doesn't exist today** → Feature
+- If it **changes no user-facing behavior at all** (refactor, test quality, CI, tooling) → Chore
 - If you are not sure → open a [Discussion](https://github.com/holomush/holomush/discussions) first
 
 ---
@@ -33,6 +35,8 @@ For **features**: the linked issue must have the `approved-feature` label before
 For **enhancements**: the linked issue must have the `approved-enhancement` label before you open this PR.
 
 For **fixes**: the linked issue must have the `confirmed-bug` label.
+
+For **chores**: the linked issue must have the `approved-chore` label.
 
 PRs that arrive without a linked, approved issue are closed without review.
 
