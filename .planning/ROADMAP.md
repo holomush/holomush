@@ -91,16 +91,24 @@ Promote an entry with `/gsd-review-backlog` when ready.
 The 2026-07-11 L7 architecture review (PR #4807) filed 23 discrete issues #4784–#4806
 (epic E1 #4806) that overlap the foundation clusters below; per-cluster `**Related
 issues:**` lines cross-link them. The issues track the discrete work; these clusters carry
-the strategic frame. Reviewed 2026-07-11 (`/gsd-review-backlog`): all 19 entries kept — none stale.
+the strategic frame. Reviewed 2026-07-28 (`/gsd-review-backlog`): 18 entries kept, **999.9 removed** (see below).
 
 > **v0.12 outcome (shipped 2026-07-28):** milestone **v0.12 Foundation Hardening** (Phases 4–9, archived at
 > `milestones/v0.12-ROADMAP.md`) pulled the bulk of **999.9** (architecture decomposition → ARCH-01..05) and
 > **999.10** (code health & test quality → QUAL-01..05), and addressed the arch-review operational Highs
-> (→ OPS-01..05) plus the F1 event-model decision (→ MODEL-01..04). Both clusters are **kept** — v0.12 did
-> not exhaust them. **999.9** residual: none blocking. **999.10** residual is material and now the larger
-> of the two: QUAL-02/03/05 shipped only partially (#4860, #4861, #4792), and the repo-wide coverage gate
-> QUAL-01 aimed at **does not exist** — no codecov context is required on `main` (#4875, #4876). Detail in
-> `milestones/v0.12-REQUIREMENTS.md`.
+> (→ OPS-01..05) plus the F1 event-model decision (→ MODEL-01..04).
+>
+> **999.9 is now REMOVED — exhausted.** v0.12 delivered five of its six named goals; the sixth
+> (focus-redirect hot-path cache) was split out to #4886 rather than keeping a one-item cluster alive. That
+> issue is explicit that the path is **unprofiled**, and that closing it unmeasured is an acceptable outcome
+> — a cache on an unmeasured path trades invalidation surface for an unmeasured gain.
+>
+> **999.10 is kept and is now the larger residual of the two.** QUAL-02/03/05 shipped only partially
+> (#4860, #4861, #4792), and the repo-wide coverage gate QUAL-01 aimed at **does not exist** — no codecov
+> context is required on `main` (#4875, #4876). Detail in `milestones/v0.12-REQUIREMENTS.md`.
+>
+> **999.13's arch-review overlap also closed** (#4785/#4786/#4787/#4790, all shipped as OPS-01..04); its
+> DR/backup/KMS core is untouched and the cluster stays.
 
 ### Phase 999.1: Web Client Portal completion (BACKLOG)
 
@@ -108,7 +116,7 @@ the strategic frame. Reviewed 2026-07-11 (`/gsd-review-backlog`): all 19 entries
 **Source:** beads migration — 7 item(s) incl. epic(s) `holomush-qve`; member list in TRIAGE.md
 **Related issues:** arch-review F6 PWA/offline #4803 (overlaps the offline-support + web-surface goals).
 **Requirements:** TBD
-**Plans:** 4/4 plans complete
+**Plans:** 0 plans
 
 Plans:
 
@@ -191,18 +199,6 @@ Plans:
 
 - [ ] TBD (promote with /gsd-review-backlog when ready)
 
-### Phase 999.9: Architecture decomposition program (BACKLOG)
-
-**Goal:** Repo-audit architecture follow-ups: decompose CoreServer + plugin/manager god objects, migrate bootstrap to lifecycle.Orchestrator, collapse parallel core.Event/eventbus.Event models, fix gateway-boundary imports, focus-redirect hot-path cache.
-**Source:** beads migration — 9 item(s) incl. epic(s) `holomush-1bft`, `holomush-dj95`, `holomush-wm0fi`, `holomush-yvdm`; member list in TRIAGE.md
-**Related issues:** arch-review F1 event-sourcing-never-built #4784 (event-sourcing-vs-CRUD ADR decision; overlaps the parallel core.Event/eventbus.Event model-collapse goal).
-**Requirements:** TBD
-**Plans:** 0 plans
-
-Plans:
-
-- [ ] TBD (promote with /gsd-review-backlog when ready)
-
 ### Phase 999.10: Code health & test-quality program (BACKLOG)
 
 **Goal:** Codebase humanization/de-slop, ACE naming violations, weak/skeleton tests, security polish batch, coverage backfill on Phase-1.5 infra packages, session-lifecycle test matrix.
@@ -241,7 +237,7 @@ Plans:
 
 **Goal:** Disaster recovery + backup/restore guides, background DB sync to object storage, gateway-survival deploy strategy, Tailscale admin access, remote KMS substrate (VaultTransitProvider + rotation CLIs).
 **Source:** beads migration — 6 item(s) incl. epic(s) `holomush-aub5`; member list in TRIAGE.md
-**Related issues:** arch-review F2 gateway OOM #4785, F3 DLQ #4787, F4 events_audit unbounded #4786, F8 nats CVE #4790 (overlap the gateway-survival + backup/DR goals).
+**Related issues:** none open. The arch-review overlap (F2 gateway OOM #4785, F3 DLQ #4787, F4 events_audit unbounded #4786, F8 nats CVE #4790) all shipped in v0.12 as OPS-01..04 and is closed — this cluster's remaining scope is the DR/backup/object-storage/Tailscale/KMS core, which is untouched.
 **Requirements:** TBD
 **Plans:** 0 plans
 
