@@ -1,19 +1,23 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.12
-milestone_name: Foundation Hardening
-current_phase: 09
-current_phase_name: Test-Quality & Code-Health Sweep
-status: complete
-stopped_at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
-last_updated: "2026-07-27T16:45:21.847Z"
-last_activity: 2026-07-27
-last_activity_desc: Phase 09 complete — all 21 plans executed, shipped as PR #4874
+milestone: null
+milestone_name: null
+current_phase: null
+current_phase_name: null
+status: milestone_complete
+stopped_at: v0.12 Foundation Hardening archived — no milestone active; next is /gsd-new-milestone
+last_updated: "2026-07-28T23:40:00Z"
+last_activity: 2026-07-28
+last_activity_desc: v0.12 archived as override_closeout (Phase 09 gaps_found by design); ROADMAP collapsed, REQUIREMENTS archived
+last_milestone: v0.12
+last_milestone_name: Foundation Hardening
+last_milestone_closeout: override_closeout
+last_milestone_shipped: 2026-07-28
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 66
-  completed_plans: 66
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -25,16 +29,38 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 09 — Test-Quality & Code-Health Sweep
+**Current focus:** None — v0.12 shipped 2026-07-28; next milestone not yet defined.
 
 ## Current Position
 
-Phase: 09 (Test-Quality & Code-Health Sweep) — COMPLETE
-Plan: 21 of 21
-Status: Complete — shipped as PR #4874 on branch `gsd/v0.12-milestone`
-Last activity: 2026-07-27 — Phase 09 closed out by 09-19 (the coverage gate)
-Next: Merge PR #4874, then close the v0.12 milestone. QUAL-04 is Complete; QUAL-02, QUAL-03 and
-QUAL-05 stay Pending deliberately, with the open gaps tracked as #4861, #4875 and #4876.
+Milestone: **none active**. v0.12 Foundation Hardening shipped 2026-07-28 and is archived
+(`milestones/v0.12-ROADMAP.md`, `milestones/v0.12-REQUIREMENTS.md`, `milestones/v0.12-MILESTONE-AUDIT.md`;
+phase artifacts in `milestones/v0.12-phases/`).
+
+`REQUIREMENTS.md` has been removed — `/gsd-new-milestone` creates a fresh one for the next milestone.
+
+Last activity: 2026-07-28 — v0.12 archived as `override_closeout`.
+Next: `/gsd-new-milestone`, or `/gsd-review-backlog` to promote from the 999.x parking lot first.
+
+## Deferred Items
+
+Items acknowledged and deferred at milestone close on 2026-07-28:
+
+| Category | Item | Status |
+|----------|------|--------|
+| verification override | Phase 09 `09-VERIFICATION.md` | `gaps_found` (3/4 must-haves) — accepted. Criterion 1 failed: coverage backfilled but the repo-wide gate it promised does not exist. Criteria 2/3/4 passed, 3 verified by execution. |
+| requirement | QUAL-02 — coverage backfill | Deferred. `cmd/holomush` 70.09% (9.91 under floor) → #4861; both halves of the D-04 gate → #4875, #4876 |
+| requirement | QUAL-03 — weak-test / ACE remediation | Deferred. Zero-assertion sweep clean, but scope is one predicate, not a clean bill of health → #4860 |
+| requirement | QUAL-05 — code-health batch | Deferred. 4 of 5 arch-review Mediums landed; DEK read-cache → #4792; de-slop half deliberately not started |
+| artifact | `09-21-SUMMARY.md` | Never written; plan executed (opened PR #4874). Must_haves re-derived live into `09-VERIFICATION.md`. Not backfilled — a reconstruction would read as a contemporaneous record it is not. |
+| tech debt | `CLAUDE.md` event-construction rule | Wrong about `EnvelopeToEvent`; following it breaks outbox dedup → #4880 |
+| tech debt | ruleset ↔ CI context reconciliation | Nothing checks that every required context is producible → #4881 |
+| tech debt | two load-dependent flakes | No quarantine row, now tracked → #4882, #4883 |
+
+**Audit-tool note:** `gsd-tools query audit-open` reports `.planning/debug/knowledge-base.md` as an open
+debug session. It is not one — it is the debug *knowledge base* of resolved sessions, consumed by
+`gsd-debugger`. The query scans `.planning/debug/*.md` and treats every file as a session. False positive;
+no action needed.
 
 ## Performance Metrics
 

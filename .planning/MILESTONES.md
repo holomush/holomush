@@ -1,5 +1,32 @@
 # Milestones
 
+## v0.12 Foundation Hardening (Shipped: 2026-07-28)
+
+**Phases completed:** 6 phases (4–9), 66 plans
+**Delivered via:** PR #4814 (P4), #4816 (P5), #4819 (P6), #4825 (P7), #4832 (P8), #4874 (P9); closeout via #4877 (audit + Phase 09 verification) and #4879 (CI `Vuln` stand-in)
+**Timeline:** 2026-07-11 → 2026-07-28 (L7 architecture review → shipped)
+**Requirements:** 15/19 satisfied; QUAL-02/03/05 deliberately deferred with tracking; OPS-01 satisfied on direct code evidence (shipped outside the phase loop, so no phase VERIFICATION attests it)
+**Closeout:** `override_closeout` — Phase 9 verified `gaps_found` (3/4 must-haves) by design; Phases 4–8 all verified `passed`. **Known verification overrides: 1** (see STATE.md "Deferred Items")
+**Audit:** [milestones/v0.12-MILESTONE-AUDIT.md](milestones/v0.12-MILESTONE-AUDIT.md) — `gaps_found`; integration INTEGRATED across 13 seams, 0 broken seams, 2/2 E2E flows whole
+
+**Key accomplishments:**
+
+- **The world-state model was decided, not assumed** — ADR `holomush-i4784` resolved the event-sourcing-vs-CRUD divergence in favour of CRUD-canonical + optimistic concurrency + transactional outbox, at a blocking human checkpoint, grounded in a two-replica resilience harness that **empirically reproduced** M12 last-write-wins rather than arguing it (MODEL-01, OPS-05)
+- **Last-write-wins and the dual-write window closed** — version-predicated CAS across all four world repos with a typed `WORLD_CONCURRENT_EDIT` signal; a transactional outbox whose intent is written in the same transaction as the state change, drained by a leased relay publishing in `feed_position` order with `Nats-Msg-Id` dedup. The post-commit emit path was deleted, not deprecated. INV-WORLD-1..4 bound (MODEL-03, MODEL-04)
+- **Operational Highs closed and CI gates stood up** — `events_audit` partitioned with a retention worker, nats-server CVE remediated with a `Vuln` supply-chain gate (govulncheck + osv-scanner) now required on `main`, DLQ replay's `game_id` split bridged and its tautological test replaced (OPS-02/03/04)
+- **The parallel Event models collapsed and bootstrap unified** — `core.Event` deleted outright, leaving `eventbus.Event` as the single representation; all 17 subsystems moved onto `lifecycle.Orchestrator`'s two-sweep Prepare/Activate with zero `Start` calls outside it; the gateway boundary is now enforced by a transitive-closure gate, INV-EVENTBUS-1 bound (ARCH-03/04/05)
+- **Two god objects decomposed behind a regrowth ratchet** — `CoreServer` 1891→657 lines into four handlers, `plugin/manager` 1876→702 into three units, with a size ratchet **mutation-proven to fail** on all three halves rather than merely asserted (ARCH-01, ARCH-02)
+- **A four-month-old measurement blind spot found and fixed** — the E2E coverage upload had been landing *empty* since ~March: `docker compose stop`'s 10s grace SIGKILLed the `-cover` binaries before Go flushed `GOCOVERDIR`, a bind-mount uid mismatch, and CI never forwarding env into the playwright container (which silently disabled five widened timeouts). Result: 9,790 covered statements, e2e flag 32.27%, project 79.11%. The pipeline had been fully wired and green throughout — a passing job proved nothing (QUAL-02)
+- **Session lifecycle pinned by a real matrix** — a 48-row registry with a bijection meta-test and 42 integration specs covering connect / reconnect / multi-character / idle-timeout; the one genuinely uncoverable cell is declared in plain text rather than left silently green (QUAL-04)
+
+**Known deferred items** (all adjudicated at phase gates, all issue-tracked): QUAL-02 coverage backfill — `cmd/holomush` 9.91 points under its floor (#4861) and both halves of the D-04 coverage gate deferred (#4875, #4876); QUAL-03 weak-test remediation residual (#4860); QUAL-05 DEK read-cache (#4792) and the de-slop half, deliberately not started. Carried forward from the audit: #4880 (`CLAUDE.md`'s event-construction rule would break outbox dedup if followed), #4881 (nothing reconciles required CI contexts against what CI can emit), #4882/#4883 (two unquarantined load-dependent flakes).
+
+**The theme worth remembering:** Phase 9 catalogued ~17 instances of *"a verification that cannot fail"* — `go test -run` exits 0 when nothing matches; `test -s` passes on a metadata-only coverage profile; a green job proves it ran, not that it uploaded. The milestone audit found the same shape one level up: success criterion 1 promised a repo-wide coverage gate that **does not exist**, and the `Vuln` bug (#4878) was its exact inverse — a required check that could never *pass*, silently blocking every docs-only PR. Both are the same question left unasked: is this check's passing state reachable without the property holding?
+
+**Archives:** [v0.12-ROADMAP.md](milestones/v0.12-ROADMAP.md) · [v0.12-REQUIREMENTS.md](milestones/v0.12-REQUIREMENTS.md) · [v0.12-MILESTONE-AUDIT.md](milestones/v0.12-MILESTONE-AUDIT.md) · phases in `milestones/v0.12-phases/`
+
+---
+
 ## v0.11 Social Spaces & Platform Hardening (Shipped: 2026-07-11)
 
 **Phases completed:** 3 phases, 26 plans, 28 tasks
