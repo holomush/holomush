@@ -16,6 +16,13 @@ body:
         > 3. Or run your logs through an anonymizer — we recommend
         >    **[presidio-anonymizer](https://microsoft.github.io/presidio/)** (open-source, local-only)
 
+        **What happens after you submit:**
+        A maintainer confirms the bug and applies `confirmed-bug`. For clearly reproducible bugs
+        this is usually quick.
+
+        **Do not open a fix PR until this issue is labeled `confirmed-bug`.** Then use the
+        [Fix PR template](../PULL_REQUEST_TEMPLATE/fix.md).
+
   - type: checkboxes
     id: preflight
     attributes:

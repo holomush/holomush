@@ -25,6 +25,14 @@ body:
         > the issue-first gate — you can open those directly without filing here. Use this
         > template for them only if you want the work tracked.
 
+        **What happens after you submit:**
+        A maintainer triages this and applies `approved-chore` once the scope is agreed. The bar
+        is lower than a feature or enhancement — this is a scope check, not a design review.
+
+        **Do not open a PR until this issue is labeled `approved-chore`**, unless the change is
+        exempt by file path per the note above. Then use the
+        [Chore PR template](../PULL_REQUEST_TEMPLATE/chore.md).
+
   - type: checkboxes
     id: preflight
     attributes:

@@ -13,6 +13,9 @@ body:
         `extending/` (plugin developers), `contributing/` (codebase contributors),
         and `reference/` (generated API and event references).
 
+        **Documentation-only PRs are exempt from the issue-first gate.** If you already know the
+        correction, you can open the PR directly and link this issue — no approval label needed.
+
   - type: checkboxes
     id: preflight
     attributes:
