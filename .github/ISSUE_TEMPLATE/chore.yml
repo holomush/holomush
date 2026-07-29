@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Chore / Maintenance
-description: Internal improvements — refactoring, test quality, CI/CD, dependency updates, tech debt.
+description: Internal improvements — refactoring, test quality, tech debt, and the tooling around them.
 labels: ["type: chore", "needs-triage"]
 body:
   - type: markdown
@@ -11,27 +11,25 @@ body:
         Use this template for work that improves the **project's health** without changing
         user-facing behavior. Examples:
         - Test suite refactoring or standardization
-        - CI/CD pipeline improvements
-        - Dependency updates
-        - Code quality or linting changes
-        - Build system or `Taskfile` tooling updates
-        - Documentation infrastructure (not content — use Documentation Issue for content)
+        - Refactoring, code quality, or linting changes
         - Tech debt paydown
+        - Build system or `Taskfile` tooling updates
 
         If this changes how HoloMUSH **works** for players, operators, or plugin developers, use
-        [Enhancement](./enhancement.yml) or [Feature Request](./feature_request.yml) instead.
+        [Enhancement](https://github.com/holomush/holomush/issues/new?template=enhancement.yml) or
+        [Feature Request](https://github.com/holomush/holomush/issues/new?template=feature_request.yml)
+        instead.
 
-        > **Already exempt?** Dependency, CI/tooling-only, and documentation-only PRs bypass
-        > the issue-first gate — you can open those directly without filing here. Use this
-        > template for them only if you want the work tracked.
+        > **Already exempt?** Dependency-only, CI/tooling-only, and documentation-only PRs bypass
+        > the issue-first gate — you can open those directly without filing here, and they do not
+        > use a typed PR template. File them here only if you want the work tracked.
 
         **What happens after you submit:**
         A maintainer triages this and applies `approved-chore` once the scope is agreed. The bar
         is lower than a feature or enhancement — this is a scope check, not a design review.
 
-        **Do not open a PR until this issue is labeled `approved-chore`**, unless the change is
-        exempt by file path per the note above. Then use the
-        [Chore PR template](../PULL_REQUEST_TEMPLATE/chore.md).
+        **Do not open a PR until this issue is labeled `approved-chore`.** Once it is, use the
+        [Chore PR template](https://github.com/holomush/holomush/blob/main/.github/PULL_REQUEST_TEMPLATE/chore.md).
 
   - type: checkboxes
     id: preflight
@@ -58,12 +56,12 @@ body:
       label: Type of maintenance
       options:
         - Test quality (coverage, patterns, harness)
-        - CI/CD pipeline
-        - Dependency update
         - Refactoring / code quality
-        - Build system / tooling (Taskfile, scripts)
-        - Documentation infrastructure
         - Tech debt
+        - Build system / tooling (Taskfile, scripts)
+        - CI/CD pipeline (exempt from the gate — tracking only)
+        - Dependency update (exempt from the gate — tracking only)
+        - Documentation infrastructure (exempt from the gate — tracking only)
         - Other
     validations:
       required: true

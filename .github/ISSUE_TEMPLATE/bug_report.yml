@@ -20,8 +20,8 @@ body:
         A maintainer confirms the bug and applies `confirmed-bug`. For clearly reproducible bugs
         this is usually quick.
 
-        **Do not open a fix PR until this issue is labeled `confirmed-bug`.** Then use the
-        [Fix PR template](../PULL_REQUEST_TEMPLATE/fix.md).
+        **Do not open a fix PR until this issue is labeled `confirmed-bug`.** Once it is, use
+        the [Fix PR template](https://github.com/holomush/holomush/blob/main/.github/PULL_REQUEST_TEMPLATE/fix.md).
 
   - type: checkboxes
     id: preflight
@@ -35,7 +35,7 @@ body:
     id: version
     attributes:
       label: Version / commit
-      description: "Release tag or `git` commit SHA you're running. Run: `holomush version` or `git rev-parse --short HEAD`"
+      description: "Release tag or `git` commit SHA you're running. Run: `holomush --version` or `git rev-parse --short HEAD`"
       placeholder: "e.g., v0.11.0, or 41b985ba5"
     validations:
       required: true
@@ -202,7 +202,7 @@ body:
         Anything else — screenshots, recordings, related issues, or links.
 
         **Useful diagnostics to include (if applicable):**
-        - `holomush version` — confirms the running build
+        - `holomush --version` — confirms the running build
         - `go version` — confirms local toolchain
         - `docker compose ps` — confirms which services are up
         - Migration state, if the bug involves the database

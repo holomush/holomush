@@ -6,23 +6,21 @@
 # Feature PR
 
 > **Using the wrong template?**
-> — Bug fix: use [fix.md](?template=fix.md)
-> — Enhancement to existing behavior: use [enhancement.md](?template=enhancement.md)
-> — Internal maintenance, no behavior change: use [chore.md](?template=chore.md)
+>
+> - Bug fix: use [fix.md](?expand=1&template=fix.md)
+> - Enhancement to existing behavior: use [enhancement.md](?expand=1&template=enhancement.md)
+> - Internal maintenance, no behavior change: use [chore.md](?expand=1&template=chore.md)
 
 ---
 
 ## Linked Issue
 
-> **Required.** This PR will be auto-closed if no valid issue link is found.
-> The linked issue **must** have the `approved-feature` label. If it does not, this PR will be
-> closed without review — no exceptions.
-
 Closes #
 
-> ⛔ **No `approved-feature` label on the issue = immediate close.**
-> Do not open this PR if a maintainer has not yet approved the feature spec.
-> Do not open this PR if you wrote code before the issue was approved.
+> **Required.** A PR with no valid issue link is closed without review, and the linked
+> issue must carry the `approved-feature` label. If it is not labeled yet, close this tab
+> and wait — a PR opened ahead of approval gets closed, and re-opening it later loses your
+> place in the review queue.
 
 ---
 
@@ -65,15 +63,13 @@ Closes #
 
 ### Test coverage
 
-<!-- Describe what is tested and where. New features require new tests — no exceptions.
-     Tests are written before implementation (TDD) per CONTRIBUTING.md. -->
+<!-- Describe what is tested and where. Features need new tests; they are written before the
+     implementation (TDD) per CONTRIBUTING.md. -->
 
-### Test tiers run
+### Checks run
 
-- [ ] `task test` (unit)
-- [ ] `task test:int` (integration — requires Docker)
-- [ ] `task test:e2e` (Playwright)
-- [ ] `task pr-prep` run locally and green
+- [ ] `task pr-prep` run locally and green — **this is the gate**
+- [ ] `task test:int` / `task test:e2e` — only if your change touches those surfaces (CI runs both regardless)
 
 ### Platforms tested
 
@@ -114,8 +110,7 @@ Documentation lives in `site/src/content/docs/`, organized by audience.
 
 ## Checklist
 
-- [ ] Issue linked above with `Closes #NNN` — **PR will be auto-closed if missing**
-- [ ] Linked issue has the `approved-feature` label — **PR will be closed if missing**
+- [ ] Issue linked above with `Closes #NNN`, and it carries `approved-feature`
 - [ ] All acceptance criteria from the issue are met (listed above)
 - [ ] Implementation scope matches the approved spec exactly
 - [ ] Tests were written before the implementation (TDD)

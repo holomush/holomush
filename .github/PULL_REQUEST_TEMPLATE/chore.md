@@ -6,20 +6,24 @@
 # Chore PR
 
 > **Using the wrong template?**
-> — Bug fix: use [fix.md](?template=fix.md)
-> — Enhancement to existing behavior: use [enhancement.md](?template=enhancement.md)
-> — New feature: use [feature.md](?template=feature.md)
+>
+> - Bug fix: use [fix.md](?expand=1&template=fix.md)
+> - Enhancement to existing behavior: use [enhancement.md](?expand=1&template=enhancement.md)
+> - New feature: use [feature.md](?expand=1&template=feature.md)
 
 ---
 
 ## Linked Issue
 
-> **Required.** This PR will be auto-closed if no valid issue link is found.
-
 Closes #
 
-> The linked issue must have the `approved-chore` label. If it doesn't, ask a maintainer to
-> triage the chore before continuing.
+> **Required.** A PR with no valid issue link is closed without review. The linked issue
+> must carry the `approved-chore` label — if it does not, ask a maintainer to triage the
+> chore before continuing.
+>
+> Dependency, CI/tooling-only, and documentation-only PRs are exempt from the gate
+> entirely and do not use this template — see
+> [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md#exempt-by-file-path).
 
 ---
 
@@ -31,7 +35,7 @@ Closes #
 
 **Before:**
 <!-- The debt, gap, or inconsistency as it stands. Include numbers where useful
-     (file count, coverage %, build time, dependency version). -->
+     (file count, coverage %, build time). -->
 
 **After:**
 <!-- The state once this lands. -->
@@ -39,7 +43,7 @@ Closes #
 ## Why now
 
 <!-- Brief. What does this unblock, or what risk does it retire?
-     Skip for routine dependency bumps and mechanical sweeps. -->
+     Skip for mechanical sweeps. -->
 
 ## Testing
 
@@ -48,12 +52,10 @@ Closes #
 <!-- For mechanical or refactoring work, say how you established equivalence —
      existing tests, a negative control, a before/after comparison. -->
 
-### Test tiers run
+### Checks run
 
-- [ ] `task test` (unit)
-- [ ] `task test:int` (integration — requires Docker)
-- [ ] `task test:e2e` (Playwright)
-- [ ] `task pr-prep` run locally and green
+- [ ] `task pr-prep` run locally and green — **this is the gate**
+- [ ] `task test:int` / `task test:e2e` — only if your change touches those surfaces (CI runs both regardless)
 
 ### Platforms tested
 
@@ -74,14 +76,13 @@ Closes #
 
 ## Documentation
 
-- [ ] Updated any contributor-facing docs this affects (`site/src/content/docs/contributing/`, `.claude/rules/`)
+- [ ] Updated any contributor-facing docs this affects (`site/src/content/docs/contributing/`)
 - [ ] If a new or changed invariant is involved, updated `docs/architecture/invariants.yaml` and ran `go run ./cmd/inv-render`
 - [ ] N/A — no documentation impact
 
 ## Checklist
 
-- [ ] Issue linked above with `Closes #NNN` — **PR will be auto-closed if missing**
-- [ ] Linked issue has the `approved-chore` label
+- [ ] Issue linked above with `Closes #NNN`, and it carries `approved-chore`
 - [ ] Every acceptance condition from the issue's "Done when" is met
 - [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`)
 - [ ] `task fmt` run and any resulting edits committed (SPDX headers, table reflow)

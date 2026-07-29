@@ -6,29 +6,31 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## ⚠️ Read this before you fill anything out
+        ## Read this before you fill anything out
+
+        Feature proposals are the highest-bar contribution here, so this form is long. Everything
+        it asks for is something a reviewer would otherwise have to ask you for.
 
         A feature adds something new to HoloMUSH — a new command, event type, plugin capability,
-        RPC, or client surface. Features have the **highest bar** for acceptance because every
-        feature adds permanent maintenance burden.
+        RPC, or client surface. The bar is high because every feature adds permanent maintenance
+        burden.
 
         **Before opening this issue:**
         - Check [Discussions](https://github.com/holomush/holomush/discussions) — has this been proposed and declined before?
-        - Read [CONTRIBUTING.md](../../CONTRIBUTING.md#feature) — understand what `approved-feature` means and why you must wait for it before writing code.
-        - Ask yourself: *does this solve a real problem for players, game operators, or plugin developers, or is it a feature I personally want?*
+        - Read [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md#feature) — what `approved-feature` means and why you wait for it before writing code.
+        - This form asks who benefits. If the honest answer is "me", say so — that is sometimes still a good reason, but the spec has to argue it.
 
         **What happens after you submit:**
-        A maintainer will review this spec. If it is incomplete, it will be **closed**, not revised.
-        If it conflicts with HoloMUSH's architecture, it will be declined. If it is approved, it
-        will be labeled `approved-feature` and you may begin coding.
-
-        **Do not open a PR until this issue is labeled `approved-feature`.**
+        A maintainer reads the spec. Incomplete ones get closed — we will not fill in the gaps for
+        you, so it is worth over-explaining. If it conflicts with HoloMUSH's architecture it gets
+        declined, and that is not a comment on the idea. If it is approved you will see the
+        `approved-feature` label, and that is your green light to start coding.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Pre-submission checklist
-      description: You must check every box. Unchecked boxes are an immediate close.
+      description: All four are required.
       options:
         - label: I have searched existing issues and discussions — this has not been proposed and declined before
           required: true
@@ -114,7 +116,10 @@ body:
       label: Full scope of changes
       description: |
         List every file, system, and area of the codebase this feature would touch. Be exhaustive.
-        If you cannot fill this out, you do not understand the codebase well enough to propose this yet.
+        This is the hardest field on the form and we do mean exhaustive — an approved spec has to be
+        implementable from the issue alone. If you cannot map the change onto the codebase yet, open a
+        [Discussion](https://github.com/holomush/holomush/discussions) instead and we will work out
+        the scope together.
       placeholder: |
         Files that would be created:
         - `plugins/core-scenes/transcript.go` — command handler
@@ -173,8 +178,6 @@ body:
         - Telnet gateway
         - Web client (SvelteKit PWA)
         - gRPC / ConnectRPC API (proto)
-        - CI / tooling
-        - Documentation only
         - Multiple areas (describe in scope section above)
     validations:
       required: true
@@ -235,7 +238,8 @@ body:
       label: Alternatives considered
       description: |
         What other approaches did you consider? Why did you reject them?
-        If the answer is "I didn't consider any alternatives", this issue will be closed.
+        If you truly considered none, say that — but expect the first review question to be
+        "why this way?"
       placeholder: |
         1. Exposing the audit table over a generic query RPC — rejected because it would let any
            plugin read any other plugin's audit rows, breaking plugin isolation.

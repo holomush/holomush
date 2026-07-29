@@ -6,22 +6,21 @@
 # Enhancement PR
 
 > **Using the wrong template?**
-> — Bug fix: use [fix.md](?template=fix.md)
-> — New feature: use [feature.md](?template=feature.md)
-> — Internal maintenance, no behavior change: use [chore.md](?template=chore.md)
+>
+> - Bug fix: use [fix.md](?expand=1&template=fix.md)
+> - New feature: use [feature.md](?expand=1&template=feature.md)
+> - Internal maintenance, no behavior change: use [chore.md](?expand=1&template=chore.md)
 
 ---
 
 ## Linked Issue
 
-> **Required.** This PR will be auto-closed if no valid issue link is found.
-> The linked issue **must** have the `approved-enhancement` label. If it does not, this PR will be
-> closed without review.
-
 Closes #
 
-> ⛔ **No `approved-enhancement` label on the issue = immediate close.**
-> Do not open this PR if a maintainer has not yet approved the enhancement proposal.
+> **Required.** A PR with no valid issue link is closed without review, and the linked
+> issue must carry the `approved-enhancement` label. If it is not labeled yet, close this
+> tab and wait — a PR opened ahead of approval gets closed, and re-opening it later loses
+> your place in the review queue.
 
 ---
 
@@ -47,12 +46,10 @@ Closes #
 
 <!-- Manual steps or automated tests. -->
 
-### Test tiers run
+### Checks run
 
-- [ ] `task test` (unit)
-- [ ] `task test:int` (integration — requires Docker)
-- [ ] `task test:e2e` (Playwright)
-- [ ] `task pr-prep` run locally and green
+- [ ] `task pr-prep` run locally and green — **this is the gate**
+- [ ] `task test:int` / `task test:e2e` — only if your change touches those surfaces (CI runs both regardless)
 
 ### Platforms tested
 
@@ -90,12 +87,11 @@ Documentation lives in `site/src/content/docs/`, organized by audience.
   - Architectural change → `contributing/explanation/` and/or `docs/adr/`
   - Changed invariant → `docs/architecture/invariants.yaml` (then `go run ./cmd/inv-render`)
 - [ ] Proto changes regenerated and committed (`task proto && task web:generate`)
-- [ ] If genuinely no documentation impact (internal refactor, test-only), explain why in this PR
+- [ ] If genuinely no documentation impact (the improvement is not observable in any doc), explain why in this PR
 
 ## Checklist
 
-- [ ] Issue linked above with `Closes #NNN` — **PR will be auto-closed if missing**
-- [ ] Linked issue has the `approved-enhancement` label — **PR will be closed if missing**
+- [ ] Issue linked above with `Closes #NNN`, and it carries `approved-enhancement`
 - [ ] Changes are scoped to the approved enhancement — nothing extra included
 - [ ] New or updated tests cover the enhanced behavior
 - [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`)

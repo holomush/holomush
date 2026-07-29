@@ -5,30 +5,40 @@
 
 # Contributing to HoloMUSH
 
-Thanks for your interest in contributing! HoloMUSH is open source (Apache-2.0)
-and welcomes contributions of all kinds — code, documentation, bug reports, and
-feature ideas.
+Thanks for your interest in contributing. HoloMUSH is open source (Apache-2.0) and takes
+code, documentation, bug reports, and ideas.
 
-Find work to do, or report a bug or idea, via
-[GitHub Issues](https://github.com/holomush/holomush/issues).
+One thing to know before you start: **work begins with an issue, not a pull request.**
+Open an issue, wait for a maintainer to sign off, then write the code. It is a real
+constraint and we hold everyone to it, including maintainers. It exists so nobody spends a
+weekend on a change that was never going to land. A PR that shows up without an approved
+issue gets closed, and that is a bad outcome for you, so please start with the issue.
+Details in [The Issue-First Rule](#the-issue-first-rule--no-exceptions).
 
-> **Read [The Issue-First Rule](#the-issue-first-rule--no-exceptions) before you write any
-> code.** Every pull request needs a linked, approved issue. PRs that arrive without one
-> are closed.
+A caution about the backlog: nearly all of the 200+ open issues were filed by the
+maintainer as working notes, so they assume a lot of context and are not curated for
+newcomers. If you want to help and do not have something specific in mind, open a
+[Discussion](https://github.com/holomush/holomush/discussions) and ask — that is a faster
+route in than reading the issue list.
 
 ## Prerequisites
 
 - Go — the required version is pinned in [`go.mod`](go.mod)
 - [Task](https://taskfile.dev/) (the task runner this project uses)
-- PostgreSQL
-- Docker (only needed to run the integration and E2E tests locally)
+- Docker — required. Some unit tests stand up a Postgres container, and the integration
+  and E2E suites need the full stack. The Compose file provides PostgreSQL, so you do not
+  need to install it separately.
 
 ## Types of contributions
 
 HoloMUSH accepts four types of contributions. Each has a different process and a
 different bar for acceptance. **Read this section before opening anything.**
 
-### 🐛 Fix (bug report)
+Anything that is not one of the four — a question, a half-formed idea, a "would you be
+open to…" — starts as a [Discussion](https://github.com/holomush/holomush/discussions).
+Blank issues are disabled, so the five templates are the only way in.
+
+### Fix (bug report)
 
 A fix corrects something that is broken, crashes, produces wrong output, or behaves
 contrary to documented behavior.
@@ -40,11 +50,11 @@ contrary to documented behavior.
 3. Fix it. Write a test that fails without the fix and passes with it.
 4. Open a PR using the [Fix PR template](.github/PULL_REQUEST_TEMPLATE/fix.md) — link the confirmed issue with `Fixes #NNN`.
 
-**Rejection reasons:** not reproducible, works-as-designed, duplicate of an existing issue.
+**Why these get declined:** not reproducible, works-as-designed, duplicate of an existing issue.
 
 ---
 
-### ⚡ Enhancement
+### Enhancement
 
 An enhancement improves an existing feature — better output, faster execution, cleaner
 UX, expanded edge-case handling. It does **not** add new commands, event types, RPCs,
@@ -61,19 +71,19 @@ does not carry the `approved-enhancement` label.
 3. Write the code. Keep the scope exactly as approved. If scope creep occurs, comment on the issue and get re-approval before continuing.
 4. Open a PR using the [Enhancement PR template](.github/PULL_REQUEST_TEMPLATE/enhancement.md) — link the approved issue with `Closes #NNN`.
 
-**Rejection reasons:** issue not labeled `approved-enhancement`, scope exceeds what was approved, no written proposal, duplicates existing behavior.
+**Why these get declined:** issue not labeled `approved-enhancement`, scope exceeds what was approved, no written proposal, duplicates existing behavior.
 
 ---
 
-### ✨ Feature
+### Feature
 
 A feature adds something new — a command, event type, plugin capability, RPC, or client
 surface. Features have the highest bar because they add permanent maintenance burden.
 
 **The bar:** features require a complete written specification approved by a maintainer
 before any code is written. A PR for a feature is closed without review if the linked
-issue does not carry the `approved-feature` label. Incomplete specs are closed, not
-revised by maintainers.
+issue does not carry the `approved-feature` label. Maintainers do not fill in an
+incomplete spec; they close it.
 
 **Process:**
 
@@ -83,14 +93,14 @@ revised by maintainers.
 4. Write the code. Implement exactly the approved spec. Scope changes require re-approval.
 5. Open a PR using the [Feature PR template](.github/PULL_REQUEST_TEMPLATE/feature.md) — link the approved issue with `Closes #NNN`.
 
-**Rejection reasons:** issue not labeled `approved-feature`, spec is incomplete, scope exceeds what was approved, maintenance burden too high.
+**Why these get declined:** issue not labeled `approved-feature`, spec is incomplete, scope exceeds what was approved, maintenance burden too high.
 
 ---
 
-### 🔧 Chore / maintenance
+### Chore / maintenance
 
 Internal work that improves project health without changing user-facing behavior —
-test refactoring, CI/CD, dependency updates, tooling, tech debt.
+refactoring, test quality, tech debt, and the tooling around them.
 
 **The bar:** lower than a feature or enhancement — a chore needs a triaged issue, not a
 design review. But it still needs one, because "no user-facing change" is a claim a
@@ -98,9 +108,9 @@ maintainer should agree with before you invest the work.
 
 **Already exempt?** Dependency updates, CI/tooling-only changes, and documentation-only
 changes bypass the issue-first gate entirely (see
-[Exempt by file path](#the-issue-first-rule--no-exceptions)) — open those PRs directly, with
-no chore intake. File a chore issue for them only if you want the work tracked. Maintenance
-that touches product code — refactoring, test quality, tech debt — does need intake.
+[Exempt by file path](#exempt-by-file-path)) — open those PRs directly, with no chore
+intake. File a chore issue for them only if you want the work tracked. Maintenance that
+touches product code — refactoring, test quality, tech debt — does need intake.
 
 **Process:**
 
@@ -111,7 +121,7 @@ that touches product code — refactoring, test quality, tech debt — does need
 If the work turns out to change user-facing behavior, it is not a chore — refile it as an
 enhancement or a feature.
 
-**Rejection reasons:** issue not labeled `approved-chore`, the change alters user-facing behavior, scope exceeds what was triaged.
+**Why these get declined:** issue not labeled `approved-chore`, the change alters user-facing behavior, scope exceeds what was triaged.
 
 Documentation content problems use the
 [Documentation Issue template](https://github.com/holomush/holomush/issues/new?template=docs_issue.yml).
@@ -127,16 +137,28 @@ Documentation content problems use the
 - For **features**: open the issue, get `approved-feature`, then code.
 - For **chores**: open the issue, get `approved-chore`, then code.
 
-PRs that arrive without a properly-labeled linked issue are closed. This is not a
-bureaucratic hurdle — it protects you from spending time on work that will be rejected,
-and it protects maintainers from reviewing code for changes that were never agreed to.
+PRs that arrive without a properly-labeled linked issue are closed. The point is to keep
+you from spending a weekend on something that was never going to be merged, and to keep
+maintainers from reviewing code for a change nobody agreed to.
 
 This rule binds everyone, including maintainers and AI-agent-driven work.
 
-**Exempt by file path:** dependency updates (including automated Renovate PRs), CI/tooling
-changes, and documentation-only PRs do not need a typed template or an approved issue. For
-any other cross-cutting PR that genuinely does not fit, paste
-`<!-- pr-template-exempt: your reason here -->` into the PR body.
+### Exempt by file path
+
+Three kinds of PR skip the typed template and the issue-first gate:
+
+- **Documentation-only** — the diff is confined to `site/**`, `docs/**`, `**/*.md`,
+  `.planning/**`, `.claude/{agents,commands,rules,agent-memory}/**`, `LICENSE`, or
+  `LICENSE_HEADER`. This list mirrors `DOCS_ONLY_PATHS` in
+  [`Taskfile.yaml`](Taskfile.yaml), which is the authoritative version.
+- **Dependency-only** — the diff is confined to `go.mod`, `go.sum`, `web/package.json`,
+  `web/bun.lock`, or `site/bun.lock`. Renovate PRs are exempt by definition.
+- **CI/tooling-only** — the diff is confined to `.github/workflows/**`, `Taskfile.yaml`,
+  or `scripts/**`.
+
+If your diff touches anything outside those paths, it is not exempt. For a cross-cutting
+PR that genuinely does not fit a typed template, paste
+`<!-- pr-template-exempt: your reason here -->` into the PR body with a real reason.
 
 This exemption takes precedence over the chore route above: a PR touching only exempt paths
 needs no issue and no typed template, even when the work would otherwise read as a chore.
@@ -157,6 +179,9 @@ needs no issue and no typed template, even when the work would otherwise read as
 | `approved-chore` | Chore triaged and accepted — implementation may begin |
 | `gate-violation` | PR opened without a linked, approved issue |
 
+Each issue template also applies a type label on filing: `bug`, `enhancement`,
+`feature-request`, `type: chore`, or `documentation`.
+
 ## Your first pull request
 
 HoloMUSH uses a standard GitHub fork-and-pull-request workflow. The only addition is the
@@ -169,23 +194,23 @@ issue-first step.
 git clone https://github.com/<your-username>/holomush.git
 cd holomush
 
-# 3. Install tools and git hooks
+# 3. Install the dev tools. `task setup` uses Homebrew; on Linux or WSL install the
+#    equivalents by hand — the pinned Go tools live in the go.tool*.mod modules.
 task setup
 
 # 4. Create a branch
 git checkout -b fix/1234-exit-list-truncated
 
-# 5. Make your change test-first, then run the local checks
-task lint
-task test
-task pr-prep        # the local pre-PR gate; CI also runs integration + E2E
+# 5. Make your change test-first, then run the local gate
+task pr-prep        # lint, format, unit tests, build — the gate that matters
 
 # 6. Push to your fork and open a pull request using a typed template
 git push -u origin fix/1234-exit-list-truncated
 ```
 
-All PRs target `main` and are squash-merged. CI runs the full suite (including integration
-and E2E tests) on every pull request.
+All PRs target `main` and are squash-merged. CI runs the full suite — lint, unit,
+integration, and E2E — on any PR that touches code. Documentation-only PRs skip it; a
+stand-in job reports the required checks so they can still merge.
 
 **No draft PRs.** Open a PR only when the code is complete, `task pr-prep` is green, and
 the correct typed template is used.
@@ -200,9 +225,9 @@ A few conventions keep the codebase coherent. Rather than restating them here
 (where they'd drift), see the canonical docs:
 
 - **[Pull Request Guide](https://holomush.dev/contributing/how-to/pr-guide/)** —
-  PR workflow, review, and merge process; conventional-commit titles.
+  review and merge process; conventional-commit titles.
 - **[Coding standards](https://holomush.dev/contributing/reference/coding-standards/)** —
-  style, error handling, test naming, the >80% coverage expectation.
+  style, error handling, test naming, and the coverage bar.
 - **[Integration tests](https://holomush.dev/contributing/how-to/integration-tests/)** —
   how the Docker-backed integration suite works.
 - **[System architecture](https://holomush.dev/contributing/explanation/architecture/)** —

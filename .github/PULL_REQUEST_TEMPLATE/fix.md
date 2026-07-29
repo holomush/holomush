@@ -6,20 +6,20 @@
 # Fix PR
 
 > **Using the wrong template?**
-> — Enhancement: use [enhancement.md](?template=enhancement.md)
-> — Feature: use [feature.md](?template=feature.md)
-> — Internal maintenance, no behavior change: use [chore.md](?template=chore.md)
+>
+> - Enhancement: use [enhancement.md](?expand=1&template=enhancement.md)
+> - Feature: use [feature.md](?expand=1&template=feature.md)
+> - Internal maintenance, no behavior change: use [chore.md](?expand=1&template=chore.md)
 
 ---
 
 ## Linked Issue
 
-> **Required.** This PR will be auto-closed if no valid issue link is found.
-
 Fixes #
 
-> The linked issue must have the `confirmed-bug` label. If it doesn't, ask a maintainer to confirm
-> the bug before continuing.
+> **Required.** A PR with no valid issue link is closed without review. The linked issue
+> must carry the `confirmed-bug` label — if it does not, ask a maintainer to confirm the
+> bug before continuing.
 
 ---
 
@@ -46,12 +46,10 @@ Fixes #
 - [ ] Yes — added a test that fails without the fix and passes with it
 - [ ] No — explain why: <!-- e.g., environment-specific, non-deterministic -->
 
-### Test tiers run
+### Checks run
 
-- [ ] `task test` (unit)
-- [ ] `task test:int` (integration — requires Docker)
-- [ ] `task test:e2e` (Playwright)
-- [ ] `task pr-prep` run locally and green
+- [ ] `task pr-prep` run locally and green — **this is the gate**
+- [ ] `task test:int` / `task test:e2e` — only if your change touches those surfaces (CI runs both regardless)
 
 ### Platforms tested
 
@@ -72,8 +70,7 @@ Fixes #
 
 ## Checklist
 
-- [ ] Issue linked above with `Fixes #NNN` — **PR will be auto-closed if missing**
-- [ ] Linked issue has the `confirmed-bug` label
+- [ ] Issue linked above with `Fixes #NNN`, and it carries `confirmed-bug`
 - [ ] Fix is scoped to the reported bug — no unrelated changes included
 - [ ] Regression test added (or explained why not)
 - [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`)

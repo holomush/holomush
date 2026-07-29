@@ -6,28 +6,28 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## ⚠️ Read this before you fill anything out
+        ## Read this before you fill anything out
 
         An enhancement improves something that already exists — better output, expanded edge-case
         handling, improved performance, cleaner UX. It does **not** add new commands, new event
         types, new RPCs, or new concepts. If you are proposing something new, use the
-        [Feature Request](./feature_request.yml) template instead.
+        [Feature Request](https://github.com/holomush/holomush/issues/new?template=feature_request.yml)
+        form instead.
 
         **Before opening this issue:**
         - Confirm the thing you want to improve actually exists and works today.
-        - Read [CONTRIBUTING.md](../../CONTRIBUTING.md#enhancement) — understand what `approved-enhancement` means and why you must wait for it before writing any code.
+        - Read [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md#enhancement) — what `approved-enhancement` means and why you wait for it before writing any code.
 
         **What happens after you submit:**
-        A maintainer will review this proposal. If it is incomplete or out of scope, it will be
-        **closed**. If approved, it will be labeled `approved-enhancement` and you may begin coding.
-
-        **Do not open a PR until this issue is labeled `approved-enhancement`.**
+        A maintainer reads the proposal. Incomplete or out-of-scope ones get closed. If it is
+        approved you will see the `approved-enhancement` label, and that is your green light to
+        start coding.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Pre-submission checklist
-      description: You must check every box. Unchecked boxes are an immediate close.
+      description: All four are required.
       options:
         - label: I have confirmed this improves existing behavior — it does not add a new command, event type, RPC, or concept
           required: true
@@ -153,8 +153,6 @@ body:
         - Web client (SvelteKit PWA)
         - gRPC / ConnectRPC API (proto)
         - Output / formatting
-        - CI / tooling
-        - Documentation
         - Other
     validations:
       required: true
