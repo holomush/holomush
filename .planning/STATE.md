@@ -346,6 +346,7 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260709-sqg | Fix holomush-9hygy — convert core-channels migrations TIMESTAMPTZ→BIGINT epoch-ns (lint:no-timestamptz ship blocker) | 2026-07-10 | 1284ba341 | [260709-sqg-…](./quick/260709-sqg-fix-bead-holomush-9hygy-convert-core-cha/) |
 | 260711-hg1 | GH-4785 (F2): cap gateway ConnectRPC request-body size (`WithReadMaxBytes` 4 MiB + `ReadTimeout`) to prevent unauthenticated OOM | 2026-07-11 | 0e3806ebf | [260711-hg1-…](./quick/260711-hg1-gh-4785-cap-gateway-connectrpc-request-b/) |
+| 260728-sec | Add root `SECURITY.md` — vulnerability disclosure policy pointing at the repo's already-enabled GitHub private vulnerability reporting | 2026-07-28 | (this commit) | [260728-sec-…](./quick/260728-sec-add-security-md-vulnerability-disclosure/) |
 
 ## Deferred Items
 
