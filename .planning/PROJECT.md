@@ -20,7 +20,36 @@ roleplay in scenes — through either telnet or the web client, with every
 access-control decision default-deny and every plugin (Lua or binary)
 trusted identically by the host.
 
-## Current Milestone: v0.12 Foundation Hardening
+## Current State: v0.12 Foundation Hardening shipped (2026-07-28)
+
+**No milestone is currently active.** Define the next with `/gsd-new-milestone`.
+
+v0.12 made the v0.11 foundation durable. The world-model gap is closed by decision and by code: ADR
+`holomush-i4784` chose CRUD-canonical world state with optimistic concurrency and a transactional outbox,
+and Phase 5 implemented it — version-predicated CAS across all four world repos, outbox intent written in
+the same transaction as the state change, and the post-commit emit path deleted. The top operational
+failure modes from the 2026-07-11 L7 review are closed (`events_audit` retention, nats CVE + a required
+`Vuln` supply-chain gate, DLQ `game_id` bridge). `core.Event` is gone and all 17 subsystems start through
+`lifecycle.Orchestrator`. `CoreServer` and `plugin/manager` are decomposed behind a mutation-proven
+regrowth ratchet.
+
+**What did not fully land, and should shape the next milestone:**
+
+- **Coverage is measured but not enforced.** Phase 9 repaired an E2E coverage upload that had been landing
+  empty for ~4 months (project now 79.11%), but no codecov context is a required check on `main` —
+  `codecov/project` posts on no ref (#4875) and requiring `codecov/patch` would deadlock docs-only PRs
+  (#4876). QUAL-01 reconciled the *documentation* to reality; the gate itself does not exist.
+- **QUAL-02/03/05 shipped partially** and are tracked (#4860, #4861, #4792). Backlog cluster 999.10 is now
+  the larger residual of the two clusters v0.12 drew from.
+- **Two structural gaps found by the closing audit:** `CLAUDE.md`'s event-construction rule would break
+  outbox dedup if followed (#4880), and nothing reconciles required CI contexts against what CI can
+  actually emit (#4881) — the gap that silently blocked every docs-only PR until #4879.
+
+Full detail: `milestones/v0.12-ROADMAP.md` · `milestones/v0.12-REQUIREMENTS.md` ·
+`milestones/v0.12-MILESTONE-AUDIT.md`.
+
+<details>
+<summary>v0.12 original milestone goal and target features (as written at kickoff)</summary>
 
 **Goal:** Make the freshly-shipped v0.11 foundation durable — resolve the
 event-sourcing-vs-CRUD world-model gap (ADR + version guards + dual-write fix),
@@ -52,6 +81,8 @@ raise test/coverage/code health.
 **Deferred (explicitly out of this milestone):** Ops & DR resilience (999.13 —
 backup/restore, object-storage DB sync, remote KMS/Vault, Tailscale admin);
 feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
+
+</details>
 
 ## Requirements
 
@@ -255,4 +286,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-07-18 — Phase 7 (Event-Model & Bootstrap Decomposition) complete: 11/11 plans executed, ARCH-03/04/05 validated against the codebase. Next: `/gsd-discuss-phase 8` / `/gsd-plan-phase 8` (God-Object Decomposition — CoreServer + plugin/manager). The remaining unchecked Active items span Phase 5/6/8 work; this note was last refreshed for Phase 7 only — Phase 5/6 completion status here may be stale relative to `.planning/ROADMAP.md`, which remains the source of truth.*
+*Last updated: 2026-07-28 — v0.12 Foundation Hardening shipped and archived (6 phases, 66 plans, 15/19 requirements; `override_closeout`). No milestone active. `.planning/ROADMAP.md` remains the source of truth for phase status; `milestones/v0.12-MILESTONE-AUDIT.md` records what shipped, what was deferred, and why.*
