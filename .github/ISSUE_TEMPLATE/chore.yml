@@ -21,6 +21,10 @@ body:
         If this changes how HoloMUSH **works** for players, operators, or plugin developers, use
         [Enhancement](./enhancement.yml) or [Feature Request](./feature_request.yml) instead.
 
+        > **Already exempt?** Dependency, CI/tooling-only, and documentation-only PRs bypass
+        > the issue-first gate — you can open those directly without filing here. Use this
+        > template for them only if you want the work tracked.
+
   - type: checkboxes
     id: preflight
     attributes:

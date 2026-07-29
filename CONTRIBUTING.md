@@ -96,6 +96,12 @@ test refactoring, CI/CD, dependency updates, tooling, tech debt.
 design review. But it still needs one, because "no user-facing change" is a claim a
 maintainer should agree with before you invest the work.
 
+**Already exempt?** Dependency updates, CI/tooling-only changes, and documentation-only
+changes bypass the issue-first gate entirely (see
+[Exempt by file path](#the-issue-first-rule--no-exceptions)) — open those PRs directly, with
+no chore intake. File a chore issue for them only if you want the work tracked. Maintenance
+that touches product code — refactoring, test quality, tech debt — does need intake.
+
 **Process:**
 
 1. Open a [Chore issue](https://github.com/holomush/holomush/issues/new?template=chore.yml) describing the current state, proposed work, and what "done" means.
@@ -131,6 +137,9 @@ This rule binds everyone, including maintainers and AI-agent-driven work.
 changes, and documentation-only PRs do not need a typed template or an approved issue. For
 any other cross-cutting PR that genuinely does not fit, paste
 `<!-- pr-template-exempt: your reason here -->` into the PR body.
+
+This exemption takes precedence over the chore route above: a PR touching only exempt paths
+needs no issue and no typed template, even when the work would otherwise read as a chore.
 
 > **Transitional note:** issues filed before this policy was adopted predate the gate
 > labels and are being triaged retroactively. A missing gate label on an older issue is a
