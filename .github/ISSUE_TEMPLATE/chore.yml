@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Chore / Maintenance
+description: Internal improvements — refactoring, test quality, CI/CD, dependency updates, tech debt.
+labels: ["type: chore", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Internal maintenance work
+
+        Use this template for work that improves the **project's health** without changing
+        user-facing behavior. Examples:
+        - Test suite refactoring or standardization
+        - CI/CD pipeline improvements
+        - Dependency updates
+        - Code quality or linting changes
+        - Build system or `Taskfile` tooling updates
+        - Documentation infrastructure (not content — use Documentation Issue for content)
+        - Tech debt paydown
+
+        If this changes how HoloMUSH **works** for players, operators, or plugin developers, use
+        [Enhancement](./enhancement.yml) or [Feature Request](./feature_request.yml) instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: This does not change user-facing behavior (commands, output, event shapes, proto schemas, config)
+          required: true
+        - label: I have searched existing issues — this has not already been filed
+          required: true
+
+  - type: input
+    id: chore_title
+    attributes:
+      label: What is the maintenance task?
+      description: A short, concrete description of what needs to happen.
+      placeholder: "e.g., Migrate remaining table tests to ACE naming, Add depguard rule for testsupport imports, Bump testcontainers-go"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chore_type
+    attributes:
+      label: Type of maintenance
+      options:
+        - Test quality (coverage, patterns, harness)
+        - CI/CD pipeline
+        - Dependency update
+        - Refactoring / code quality
+        - Build system / tooling (Taskfile, scripts)
+        - Documentation infrastructure
+        - Tech debt
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_state
+    attributes:
+      label: Current state
+      description: |
+        Describe the current situation. What is the problem or debt? Include numbers where possible
+        (test count, coverage %, build time, dependency age).
+      placeholder: |
+        41 of 260 test functions use underscore-separated names (`TestEngine_Evaluate`) outside the
+        documented `TestType_Method`-with-subtests exception. `.claude/rules/testing.md` requires ACE
+        sentence naming, but nothing enforces it, so new tests keep drifting.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_work
+    attributes:
+      label: Proposed work
+      description: |
+        What changes will be made? List files, patterns, or systems affected.
+      placeholder: |
+        - Rename the 41 non-conforming test functions to ACE sentence form
+        - Add a `test/meta/` guard asserting no `Test[A-Za-z]+_` outside the subtest exception
+        - Verify `task test` and `task test:int` still pass
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Done when
+      description: |
+        List the specific conditions that mean this work is complete. These should be verifiable.
+      placeholder: |
+        - [ ] All test functions follow ACE naming or the documented subtest exception
+        - [ ] Meta-test fails on a deliberately misnamed fixture (negative control)
+        - [ ] `task pr-prep` green
+        - [ ] No change to user-facing behavior
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area affected
+      options:
+        - Test suite
+        - CI/CD
+        - Build system / Taskfile
+        - Core library code
+        - Plugins
+        - Database / migrations
+        - Documentation tooling
+        - Multiple areas
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Related issues, prior art, or anything else that helps scope this work.
+    validations:
+      required: false

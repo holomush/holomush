@@ -1,49 +1,215 @@
 # SPDX-License-Identifier: Apache-2.0
-name: Bug report
-description: Report a problem with HoloMUSH
-labels: ["bug"]
+name: Bug Report
+description: Report something that is not working correctly
+labels: ["bug", "needs-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to file a bug. Please fill in the sections
-        below so we can reproduce and fix it quickly.
-  - type: textarea
-    id: summary
+        Thanks for taking the time to report a bug. The more detail you provide, the faster we can fix it.
+
+        > **⚠️ Privacy Notice:** Some fields below ask for logs or config that may contain
+        > **personally identifiable information (PII)** — file paths containing your username,
+        > database credentials, character or player names, or host details. Before pasting output:
+        > 1. Review it for sensitive data
+        > 2. Redact usernames, paths, and secrets (e.g. replace `/Users/yourname/` with `/Users/REDACTED/`)
+        > 3. Or run your logs through an anonymizer — we recommend
+        >    **[presidio-anonymizer](https://microsoft.github.io/presidio/)** (open-source, local-only)
+
+  - type: checkboxes
+    id: preflight
     attributes:
-      label: Summary
-      description: A clear, concise description of the bug.
-    validations:
-      required: true
-  - type: textarea
-    id: reproduction
-    attributes:
-      label: Steps to reproduce
-      description: Minimal steps that trigger the behavior.
-      placeholder: |
-        1. Connect via telnet ...
-        2. Run command ...
-        3. Observe ...
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected vs. actual behavior
-      description: What you expected to happen, and what actually happened.
-    validations:
-      required: true
+      label: Pre-submission checklist
+      options:
+        - label: I have searched existing issues and this bug has not already been reported
+          required: true
+
   - type: input
     id: version
     attributes:
       label: Version / commit
-      description: Release tag or `git` commit SHA you're running.
+      description: "Release tag or `git` commit SHA you're running. Run: `holomush version` or `git rev-parse --short HEAD`"
+      placeholder: "e.g., v0.11.0, or 41b985ba5"
     validations:
-      required: false
-  - type: textarea
-    id: environment
+      required: true
+
+  - type: dropdown
+    id: interface
     attributes:
-      label: Environment
-      description: OS, deployment style (Docker / local), and anything else relevant.
+      label: Interface
+      description: Which client surface were you using when the bug occurred?
+      options:
+        - Telnet
+        - Web client (PWA)
+        - gRPC / ConnectRPC API
+        - holomush CLI (admin / operator commands)
+        - Multiple (specify in description)
+        - Not interface-specific (server-side)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: The OS the HoloMUSH server is running on.
+      options:
+        - macOS
+        - Linux (Ubuntu/Debian)
+        - Linux (Fedora/RHEL)
+        - Linux (Arch)
+        - Linux (Other)
+        - Windows / WSL
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment method
+      options:
+        - Docker Compose
+        - Local development (`task dev`)
+        - Prebuilt binary
+        - Kubernetes
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: go_version
+    attributes:
+      label: Go version
+      description: "Only needed if you build from source. Run: `go version`"
+      placeholder: "e.g., go1.24.4"
     validations:
       required: false
+
+  - type: input
+    id: postgres_version
+    attributes:
+      label: PostgreSQL version
+      description: "Run: `psql --version`, or `SELECT version();` against your server."
+      placeholder: "e.g., 17.2"
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe what went wrong. Be specific about the command, request, or action that triggered it.
+      placeholder: |
+        When I ran the `look` command in a location with two exits ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: Describe what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Exact steps that trigger the behavior. Include the command or request used.
+      placeholder: |
+        1. Start the server with `task dev`
+        2. Connect via telnet on port 4000
+        3. Create a character and move to a location with two exits
+        4. Run `look`
+        5. Only one exit is listed
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / logs
+      description: |
+        Paste any relevant server or client output. This will be rendered as code.
+
+        **⚠️ PII Warning:** HoloMUSH logs are structured JSON and may include character names,
+        player IDs, session IDs, and file paths containing your username. Redact before pasting.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Server configuration
+      description: |
+        If the bug relates to startup, plugins, the event bus, or access control, paste the
+        relevant portion of your server config.
+
+        **⚠️ PII Warning:** This may contain database credentials and secrets.
+        **Remove all passwords, connection strings, and tokens before pasting.**
+      render: yaml
+    validations:
+      required: false
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does this happen?
+      options:
+        - Every time (100% reproducible)
+        - Most of the time
+        - Sometimes / intermittent
+        - Only happened once
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Impact
+      description: How much does this affect your use of HoloMUSH?
+      options:
+        - Blocker — Server will not run, or data is being lost
+        - Major — Core functionality is broken, no workaround
+        - Moderate — Broken but I have a workaround
+        - Minor — Cosmetic or edge case
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround (if any)
+      description: Have you found any way to work around this issue?
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: |
+        Anything else — screenshots, recordings, related issues, or links.
+
+        **Useful diagnostics to include (if applicable):**
+        - `holomush version` — confirms the running build
+        - `go version` — confirms local toolchain
+        - `docker compose ps` — confirms which services are up
+        - Migration state, if the bug involves the database
+
+        **⚠️ PII Warning:** Command output often contains your home directory path.
+        Replace your username with `REDACTED`.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: pii_check
+    attributes:
+      label: Privacy Checklist
+      description: Please confirm you've reviewed your submission for sensitive data.
+      options:
+        - label: I have reviewed all pasted output for PII (usernames, paths, credentials, tokens) and redacted where necessary
+          required: true

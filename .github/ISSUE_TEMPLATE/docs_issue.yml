@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Documentation Issue
+description: Report incorrect, missing, or unclear documentation
+labels: ["documentation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve the docs. Point us to what's wrong or missing.
+
+        HoloMUSH documentation lives in `site/src/content/docs/`, split by audience:
+        `guide/` (players and designers), `operating/` (server operators),
+        `extending/` (plugin developers), `contributing/` (codebase contributors),
+        and `reference/` (generated API and event references).
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: I have searched existing issues and this documentation problem has not already been reported
+          required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Issue type
+      options:
+        - Incorrect information
+        - Missing documentation
+        - Unclear or confusing
+        - Outdated (no longer matches behavior)
+        - Typo or formatting
+    validations:
+      required: true
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Which audience is affected?
+      options:
+        - Players / designers (guide/)
+        - Server operators (operating/)
+        - Plugin developers (extending/)
+        - Codebase contributors (contributing/)
+        - Generated reference (reference/)
+        - README / repository root
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Where is the issue?
+      description: File path, URL, or section name
+      placeholder: "e.g., site/src/content/docs/extending/tutorials/plugin-guide.md, or https://holomush.dev/operating/..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What's wrong?
+      description: Describe the documentation issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested fix
+      description: If you know what the correct information should be, include it here.
+    validations:
+      required: false
