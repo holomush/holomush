@@ -31,7 +31,7 @@ Before creating a PR, verify:
 - [ ] Tests pass locally (`task test`)
 - [ ] Linting passes (`task lint`)
 - [ ] Code is formatted (`task fmt`)
-- [ ] New code has appropriate test coverage (> 80%)
+- [ ] New code has appropriate test coverage (codecov targets 80% on changed lines)
 - [ ] Documentation updated if behavior changed
 - [ ] No debug code or commented-out code left behind
 - [ ] Code is as simple as possible
@@ -50,12 +50,15 @@ process tree (see [Pre-Push Quality Gate](/contributing/how-to/pr-prep/) for det
 
 Use descriptive branch names:
 
-| Pattern           | Example                    | Use Case          |
-| ----------------- | -------------------------- | ----------------- |
-| `feature/<name>`  | `feature/add-dark-mode`    | New features      |
-| `fix/<name>`      | `fix/login-redirect`       | Bug fixes         |
-| `refactor/<name>` | `refactor/auth-middleware` | Code improvements |
-| `docs/<name>`     | `docs/api-reference`       | Documentation     |
+Name the branch after the contribution type and the issue it closes:
+
+| Pattern                     | Example                        | Contribution type |
+| --------------------------- | ------------------------------ | ----------------- |
+| `feature/<issue#>-<slug>`   | `feature/1234-scene-transcript`| Feature           |
+| `fix/<issue#>-<slug>`       | `fix/1234-login-redirect`      | Fix               |
+| `enhancement/<issue#>-<slug>` | `enhancement/1234-exit-locks` | Enhancement      |
+| `chore/<issue#>-<slug>`     | `chore/1234-ace-test-naming`   | Chore             |
+| `docs/<slug>`               | `docs/api-reference`           | Docs-only (exempt) |
 
 ### PR Title Format
 
@@ -71,31 +74,16 @@ Examples:
 - `fix(telnet): handle connection reset gracefully`
 - `docs(api): add authentication examples`
 
-### PR Description Template
+### PR Description
 
-```markdown
-## Summary
+PR bodies come from a typed template — fix, enhancement, feature, or chore. GitHub offers
+the list when you open the PR; pick the one that matches your change and fill it in. Each
+template requires a linked, approved issue.
 
-Brief description of what this PR does and why.
-
-## Changes
-
-- Bullet points of specific changes
-- Include file paths for significant changes
-
-## Testing
-
-How was this tested? Include:
-
-- Unit tests added/modified
-- Manual testing performed
-- Edge cases considered
-
-## Related Issues
-
-- Closes #123
-- Related to #456
-```
+Dependency-only, repo-config-only (`.github/**`), and documentation-only PRs are exempt from the typed template
+and the issue-first gate. See
+[CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md) for the
+full process and the exempt path list.
 
 ## Code Review Process
 
