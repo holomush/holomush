@@ -80,7 +80,7 @@ PR bodies come from a typed template — fix, enhancement, feature, or chore. Gi
 the list when you open the PR; pick the one that matches your change and fill it in. Each
 template requires a linked, approved issue.
 
-Dependency, CI/tooling-only, and documentation-only PRs are exempt from the typed template
+Dependency, repo-config/tooling-only, and documentation-only PRs are exempt from the typed template
 and the issue-first gate. See
 [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md) for the
 full process and the exempt path list.

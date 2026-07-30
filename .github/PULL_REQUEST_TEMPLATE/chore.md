@@ -21,7 +21,7 @@ Closes #
 > must carry the `approved-chore` label — if it does not, ask a maintainer to triage the
 > chore before continuing.
 >
-> Dependency, CI/tooling-only, and documentation-only PRs are exempt from the gate
+> Dependency, repo-config/tooling-only, and documentation-only PRs are exempt from the gate
 > entirely and do not use this template — see
 > [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md#exempt-by-file-path).
 

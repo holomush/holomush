@@ -106,8 +106,8 @@ refactoring, test quality, tech debt, and the tooling around them.
 design review. But it still needs one, because "no user-facing change" is a claim a
 maintainer should agree with before you invest the work.
 
-**Already exempt?** Dependency updates, CI/tooling-only changes, and documentation-only
-changes bypass the issue-first gate entirely (see
+**Already exempt?** Dependency updates, repo-config/tooling-only changes, and
+documentation-only changes bypass the issue-first gate entirely (see
 [Exempt by file path](#exempt-by-file-path)) — open those PRs directly, with no chore
 intake. File a chore issue for them only if you want the work tracked. Maintenance that
 touches product code — refactoring, test quality, tech debt — does need intake.
@@ -153,8 +153,11 @@ Three kinds of PR skip the typed template and the issue-first gate:
   [`Taskfile.yaml`](Taskfile.yaml), which is the authoritative version.
 - **Dependency-only** — the diff is confined to `go.mod`, `go.sum`, `web/package.json`,
   `web/bun.lock`, or `site/bun.lock`. Renovate PRs are exempt by definition.
-- **CI/tooling-only** — the diff is confined to `.github/workflows/**`, `Taskfile.yaml`,
-  or `scripts/**`.
+- **Repo configuration and tooling-only** — the diff is confined to `.github/**`,
+  `Taskfile.yaml`, or `scripts/**`. This covers workflows, composite actions, the issue and
+  PR templates, and Renovate config. One carve-out: if a `CODEOWNERS` file is ever added it
+  is **not** exempt, because changing review ownership is a governance decision and needs an
+  issue.
 
 If your diff touches anything outside those paths, it is not exempt — you still need a
 linked, approved issue.

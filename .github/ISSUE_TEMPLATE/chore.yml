@@ -20,7 +20,7 @@ body:
         [Feature Request](https://github.com/holomush/holomush/issues/new?template=feature_request.yml)
         instead.
 
-        > **Already exempt?** Dependency-only, CI/tooling-only, and documentation-only PRs bypass
+        > **Already exempt?** Dependency-only, repo-config/tooling-only, and documentation-only PRs bypass
         > the issue-first gate — you can open those directly without filing here, and they do not
         > use a typed PR template. File them here only if you want the work tracked.
 

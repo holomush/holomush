@@ -49,8 +49,9 @@ Three kinds of PR skip the typed template and the issue-first gate:
   `LICENSE_HEADER`.
 - **Dependency-only** — the diff is confined to `go.mod`, `go.sum`, `web/package.json`,
   `web/bun.lock`, or `site/bun.lock`. Renovate PRs are exempt by definition.
-- **CI/tooling-only** — the diff is confined to `.github/workflows/**`, `Taskfile.yaml`,
-  or `scripts/**`.
+- **Repo configuration and tooling-only** — the diff is confined to `.github/**`,
+  `Taskfile.yaml`, or `scripts/**`. Covers workflows, composite actions, the issue and PR
+  templates, and Renovate config. A `CODEOWNERS` change is **not** exempt.
 
 If your diff touches anything outside those paths, it is not exempt — you still need a
 linked, approved issue.
