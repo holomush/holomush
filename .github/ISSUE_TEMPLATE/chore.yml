@@ -20,9 +20,12 @@ body:
         [Feature Request](https://github.com/holomush/holomush/issues/new?template=feature_request.yml)
         instead.
 
-        > **Already exempt?** Dependency-only, repo-config/tooling-only, and documentation-only PRs bypass
-        > the issue-first gate — you can open those directly without filing here, and they do not
-        > use a typed PR template. File them here only if you want the work tracked.
+        > **Already exempt?** Dependency-only, repo-config-only (`.github/**`, but **not**
+        > `CODEOWNERS`), and documentation-only PRs bypass the issue-first gate — you can open those
+        > directly without filing here, and they do not use a typed PR template. File them here only
+        > if you want the work tracked. `Taskfile.yaml` and `scripts/**` are **not** exempt and do
+        > belong here. Full path lists:
+        > [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md#exempt-by-file-path).
 
         **What happens after you submit:**
         A maintainer triages this and applies `approved-chore` once the scope is agreed. The bar
@@ -59,9 +62,9 @@ body:
         - Refactoring / code quality
         - Tech debt
         - Build system / tooling (Taskfile, scripts)
-        - CI/CD pipeline (exempt from the gate — tracking only)
-        - Dependency update (exempt from the gate — tracking only)
-        - Documentation infrastructure (exempt from the gate — tracking only)
+        - CI/CD pipeline
+        - Dependency update
+        - Documentation infrastructure
         - Other
     validations:
       required: true
