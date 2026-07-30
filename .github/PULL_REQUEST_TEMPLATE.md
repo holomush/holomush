@@ -52,15 +52,21 @@ Three kinds of PR skip the typed template and the issue-first gate:
 - **CI/tooling-only** — the diff is confined to `.github/workflows/**`, `Taskfile.yaml`,
   or `scripts/**`.
 
-If your diff touches anything outside those paths, it is not exempt.
+If your diff touches anything outside those paths, it is not exempt — you still need a
+linked, approved issue.
 
 **If your PR is exempt,** replace this text with a short summary of the change and why it
 is exempt. You do not need a linked issue or a typed template.
 
-For a cross-cutting PR that genuinely does not fit a typed template, paste the following
-line into your PR body with a real reason:
+### Cross-cutting PRs
+
+For a PR where no typed template fits the *shape* of the change, add this line with a real
+reason and use the closest template:
 
 `<!-- pr-template-exempt: your reason here -->`
+
+The marker explains a template mismatch only. It is informational, it does not waive the
+issue-first gate, and a maintainer may reject the claim.
 
 See [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md) for
 the full process.
