@@ -1,0 +1,334 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: Issue Gate
+
+# Enforcement for the issue-first gate documented in CONTRIBUTING.md
+# "### Exempt by file path" and the four typed PR templates. Before this
+# workflow the gate was prose only: the `gate-violation` label existed and
+# nothing applied it (GH #4890).
+#
+# This check is NOT yet a required context on protect-main ruleset 11923801.
+# Making it one is an ordered POST-MERGE step tracked by GH #4895: GitHub
+# sources a `pull_request_target` workflow from the DEFAULT BRANCH, so this
+# workflow cannot run on its own PR, and requiring the context before the
+# workflow is live on main leaves it permanently `Pending` (#4878).
+#
+# Trigger types, each for a specific reason:
+#   opened / reopened     — evaluate every PR that enters the review surface.
+#   edited                — a `Closes #N` link is added or removed by a TITLE or
+#                           BODY edit. Without this type a PR opened without a
+#                           link and then fixed by an edit keeps a stale red
+#                           check forever, with no way for the author to clear it.
+#   synchronize           — the exemption verdict is DIFF-derived, so a new push
+#                           can add a non-exempt file to a previously-exempt PR.
+#   ready_for_review      — drafts are skipped (see the draft step below); this
+#   converted_to_draft      is that decision in both directions, so a PR flipped
+#                           back to draft gets its check turned green again
+#                           rather than left red.
+#
+# There is deliberately NO `paths` / `paths-ignore` filter on this workflow, and
+# there must never be one. Exemption has to mean the check reports GREEN FROM
+# THIS SAME JOB. A path-filtered workflow does not run at all on a filtered PR,
+# which leaves its required context permanently `Pending` — GitHub then reports
+# the PR as BLOCKED with nothing failing to point at. That is the #4878 failure
+# mode recorded verbatim in ci-docs-skip.yaml:12-18.
+#
+# It follows that this workflow needs NO ci-docs-skip.yaml-style stand-in, and
+# must not be given one: GitHub merges same-named checks across workflows, so a
+# stand-in job named `Issue Gate` would produce two check runs under one
+# required context and the ruleset would require both.
+on:
+  pull_request_target:
+    branches: [main]
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+      - converted_to_draft
+
+permissions:
+  contents: read
+  # Needed to apply/remove `gate-violation` and to upsert the explanation
+  # comment. `checks: write` is deliberately ABSENT: this job's own conclusion
+  # IS the check, so there is nothing to publish by hand. Adding an explicit
+  # check-run would create a second context. Precedent for this pair: buf.yml:22-24.
+  pull-requests: write
+
+jobs:
+  issue-gate:
+    # ┌──────────────────────────────────────────────────────────────────────┐
+    # │ THIS EXACT STRING is what becomes the required status-check context  │
+    # │ on protect-main ruleset 11923801. Branch protection matches the job's │
+    # │ DISPLAY NAME byte-for-byte, with no workflow-name prefix — the same   │
+    # │ shape as commit-lint.yaml's `Conventional Commit (PR title)`.         │
+    # │ Renaming this job SILENTLY DETACHES the gate from branch protection:  │
+    # │ the ruleset then waits forever on a context nobody emits. Rename only │
+    # │ together with a ruleset update.                                       │
+    # └──────────────────────────────────────────────────────────────────────┘
+    name: Issue Gate
+    runs-on: ubuntu-latest
+
+    # SECURITY — this is the repository's FIRST `pull_request_target` workflow.
+    #
+    # `pull_request_target` runs the BASE branch's workflow file with a
+    # WRITE-scoped GITHUB_TOKEN, while the PR's head contains untrusted,
+    # attacker-controlled content. Therefore this job MUST NOT:
+    #   - check out the PR head ref (`github.event.pull_request.head.*`),
+    #   - run any script, task, action, or dependency that lives on the PR head,
+    #   - `source` or otherwise evaluate any PR-authored file.
+    #
+    # It never needs to. The changed-file list comes from the REST API as data,
+    # and the matcher (`scripts/pr-gate-paths.sh`) is executed from the trusted
+    # base checkout. PR-authored file NAMES are treated as data throughout: they
+    # are written to a file and piped, never interpolated into a shell command.
+    steps:
+      # Drafts are not evaluated. This is a STEP-level short-circuit, not a
+      # job-level `if:`, and that distinction is load-bearing: a skipped JOB
+      # never reports its check context at all, which reintroduces the #4878
+      # permanently-Pending failure. A skipped STEP still lets the job conclude
+      # successfully, so a draft PR gets a real GREEN check.
+      - name: Skip drafts
+        if: github.event.pull_request.draft == true
+        run: |-
+          echo "PR is a draft — the issue gate is not evaluated."
+          echo "It runs on ready_for_review."
+
+      # Checks out the BASE ref (the `pull_request_target` default), i.e.
+      # trusted code already on main. The PR head is never fetched or checked
+      # out. `persist-credentials: false` mirrors ci-docs-skip.yaml:69-74
+      # (zizmor artipacked hardening).
+      - name: Check out base ref
+        if: github.event.pull_request.draft != true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Collect changed files
+        id: files
+        if: github.event.pull_request.draft != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |-
+          set -euo pipefail
+          out="$RUNNER_TEMP/changed-files.txt"
+          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' > "$out"
+
+          # TRUNCATION GUARD. The REST files endpoint caps at 3000 files, and a
+          # silently under-reported list would make a large PR look exempt —
+          # failing in the permissive direction, which is the one failure
+          # direction this gate must never have. Compare against the PR's own
+          # declared count and fail LOUD on any mismatch.
+          declared="$(gh api "repos/$REPO/pulls/$PR" --jq '.changed_files')"
+          collected="$(wc -l < "$out" | tr -d ' ')"
+          echo "changed files: declared=$declared collected=$collected"
+          if [ "$declared" -ne "$collected" ]; then
+            echo "ERROR: changed-file list is incomplete (declared $declared, collected $collected)." >&2
+            echo "Refusing to evaluate the gate against a partial diff." >&2
+            exit 1
+          fi
+          echo "list=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Path-exemption verdict
+        id: paths
+        if: github.event.pull_request.draft != true
+        env:
+          LIST: ${{ steps.files.outputs.list }}
+        run: |-
+          # No `set -e` here: the matcher's non-zero exits are VERDICTS, not
+          # failures, and must be inspected rather than aborted on.
+          set -uo pipefail
+          verdict="$RUNNER_TEMP/path-verdict.txt"
+          rc=0
+          scripts/pr-gate-paths.sh < "$LIST" > "$verdict" 2>&1 || rc=$?
+          cat "$verdict"
+
+          # Branch on all THREE values. Collapsing this to a boolean would let a
+          # matcher malfunction (exit 1) read as an exemption (exit 0), which is
+          # precisely the "enforcement that cannot fire" defect this task closes.
+          case "$rc" in
+            0)
+              echo "exempt=true" >> "$GITHUB_OUTPUT"
+              ;;
+            10)
+              echo "exempt=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "ERROR: scripts/pr-gate-paths.sh malfunctioned (exit $rc)." >&2
+              echo "This is neither an exemption nor a violation — failing loudly." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Linked-issue verdict
+        id: link
+        if: github.event.pull_request.draft != true && steps.paths.outputs.exempt == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          NAME: ${{ github.event.repository.name }}
+          NWO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |-
+          set -euo pipefail
+          resp="$RUNNER_TEMP/links.json"
+
+          # GitHub's OWN link resolution, not a regex over the PR body. The
+          # templates are full of inline code and HTML comments, so any
+          # `Closes #N` regex is a latent false-positive/false-negative bug;
+          # closingIssuesReferences is the same resolution that drives
+          # auto-close on merge, so the gate cannot disagree with GitHub.
+          # Variables are passed as typed GraphQL parameters — never
+          # string-interpolated into the query.
+          #
+          # shellcheck disable=SC2016 # $owner/$name/$number are GraphQL
+          # variables consumed by the server, NOT shell expansions — the single
+          # quotes are the point. Expanding them here is exactly the injection
+          # this shape avoids.
+          gh api graphql \
+            -F owner="$OWNER" -F name="$NAME" -F number="$PR" \
+            -f query='
+              query($owner:String!, $name:String!, $number:Int!) {
+                repository(owner: $owner, name: $name) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 20) {
+                      nodes {
+                        number
+                        state
+                        repository { nameWithOwner }
+                        labels(first: 50) { nodes { name } }
+                      }
+                    }
+                  }
+                }
+              }' > "$resp"
+
+          # SAME-REPO FILTER — a real bypass guard, not a hypothetical.
+          # closingIssuesReferences happily returns cross-repo nodes, so without
+          # this filter a PR satisfies the gate by linking an approved-looking
+          # issue in a repository the maintainers do not control.
+          #
+          # Issue STATE is deliberately NOT part of the predicate. A legitimate
+          # follow-up PR against an early-closed issue must not be blocked;
+          # PR #4894 links a CLOSED #4892 and is correctly gated by its
+          # `confirmed-bug` label.
+          #
+          # ANY ONE of the four gate labels suffices, and the PR's own type is
+          # deliberately not classified: the linked issue's approval label
+          # already encodes the type, and inferring PR type from editable body
+          # markers would manufacture false reds with no compensating safety.
+          gated="$(jq -r --arg nwo "$NWO" '
+            [ .data.repository.pullRequest.closingIssuesReferences.nodes[]
+              | select(.repository.nameWithOwner == $nwo)
+              | select(
+                  ( [ .labels.nodes[].name ]
+                    | map(select(
+                        . == "approved-feature"
+                        or . == "approved-enhancement"
+                        or . == "approved-chore"
+                        or . == "confirmed-bug"))
+                    | length ) > 0)
+              | "#\(.number)" ]
+            | join(", ")' "$resp")"
+
+          all="$(jq -r '
+            [ .data.repository.pullRequest.closingIssuesReferences.nodes[]
+              | "\(.repository.nameWithOwner)#\(.number) [\(.state)] labels: \([.labels.nodes[].name] | join(", "))" ]
+            | join("\n")' "$resp")"
+          echo "linked issues:"
+          echo "${all:-  (none)}"
+
+          if [ -n "$gated" ]; then
+            echo "gated=true" >> "$GITHUB_OUTPUT"
+            echo "gate satisfied by $gated"
+          else
+            echo "gated=false" >> "$GITHUB_OUTPUT"
+            echo "no linked $NWO issue carries a gate label"
+          fi
+
+      - name: Apply verdict
+        if: github.event.pull_request.draft != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          EXEMPT: ${{ steps.paths.outputs.exempt }}
+          GATED: ${{ steps.link.outputs.gated }}
+        run: |-
+          set -euo pipefail
+          marker='<!-- holomush:issue-gate -->'
+
+          if [ "$EXEMPT" = "true" ] || [ "$GATED" = "true" ]; then
+            echo "PASS: the issue gate is satisfied."
+            # Clear a stale label from a previously-violating PR that has since
+            # been fixed. Guarded so a PR that never had the label does not fail
+            # on `--remove-label`.
+            present="$(gh api "repos/$REPO/issues/$PR/labels" \
+              --jq '[.[].name] | index("gate-violation") // empty')"
+            if [ -n "$present" ]; then
+              gh pr edit "$PR" --repo "$REPO" --remove-label gate-violation
+              echo "removed the stale gate-violation label"
+            fi
+            exit 0
+          fi
+
+          echo "FAIL: the issue gate is not satisfied."
+
+          # NOTE: no `|| true` on any of the calls below. A swallowed permission
+          # error would produce a red check with no label and no explanation —
+          # the same unattributable-failure shape as #4878.
+          gh pr edit "$PR" --repo "$REPO" --add-label gate-violation
+
+          body="$RUNNER_TEMP/comment.md"
+          {
+            echo "$marker"
+            echo
+            echo "## Issue Gate: this PR is flagged and blocked from merge"
+            echo
+            echo "**Nothing has been closed.** This check labels, explains, and goes red."
+            echo "Closing a PR remains a maintainer decision — no automation closes PRs here."
+            echo
+            echo "### Why"
+            echo
+            echo "This PR's diff is not covered by any [exempt path set](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md#exempt-by-file-path), and no issue it closes in \`$REPO\` carries one of the gate labels \`approved-feature\`, \`approved-enhancement\`, \`approved-chore\`, or \`confirmed-bug\`."
+            echo
+            echo "Files outside the exempt path sets:"
+            echo
+            echo '```'
+            head -n 21 "$RUNNER_TEMP/path-verdict.txt"
+            total="$(wc -l < "$RUNNER_TEMP/path-verdict.txt" | tr -d ' ')"
+            if [ "$total" -gt 21 ]; then
+              echo "... and $((total - 21)) more line(s); see the check log for the full list."
+            fi
+            echo '```'
+            echo
+            echo "### How to clear it"
+            echo
+            echo "1. Link an issue in \`$REPO\` with a closing keyword (\`Closes #N\`, \`Fixes #N\`)."
+            echo "2. Ask a maintainer to apply the matching gate label to that issue."
+            echo "3. Push, or edit the PR body — this check re-runs on \`synchronize\` and \`edited\`."
+            echo
+            echo "If the issue you linked predates this policy, that is expected: per CONTRIBUTING.md's **transitional note**, issues filed before the policy was adopted are being triaged retroactively, and a missing gate label on an older issue is a backlog artifact rather than an approval. Ask a maintainer to triage it — the remedy is a label on the issue, not a change to this PR."
+          } > "$body"
+
+          payload="$RUNNER_TEMP/comment.json"
+          jq -n --rawfile body "$body" '{body: $body}' > "$payload"
+
+          # Upsert: one comment per PR, updated in place, keyed by the HTML
+          # marker above — so a PR that is pushed to repeatedly does not
+          # accumulate a wall of identical bot comments.
+          existing="$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.body | contains("<!-- holomush:issue-gate -->")) | .id] | .[0] // empty')"
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" --input "$payload" --silent
+            echo "updated the existing issue-gate comment ($existing)"
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" --input "$payload" --silent
+            echo "posted a new issue-gate comment"
+          fi
+
+          exit 1

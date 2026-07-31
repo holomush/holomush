@@ -9,6 +9,10 @@ on:
       - "scripts/**"
       - "Taskfile.yaml"
       - ".github/workflows/scripts-tests.yaml"
+      # issue-gate.yaml is the sole consumer of scripts/pr-gate-paths.sh's
+      # 0/10/1 exit-code contract, and pr-gate-paths.bats is the only thing
+      # pinning that contract. A change to the workflow must re-run the suite.
+      - ".github/workflows/issue-gate.yaml"
       # The Bats job consumes local composite actions (install-task,
       # install-cog, install-formatters); edits to them must re-run this
       # workflow, so trigger on the whole actions dir.
