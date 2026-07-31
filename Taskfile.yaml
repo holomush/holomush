@@ -124,8 +124,12 @@ vars:
   # workflow files and IS covered by `task lint:docs-paths-sync`. Only the prose
   # mirrors above can drift, and those are reviewed by humans.
   #
-  # The CODEOWNERS carve-out (.github/CODEOWNERS and a root-level CODEOWNERS are
-  # NEVER exempt — changing review ownership is a governance decision) is
+  # The CODEOWNERS carve-out (.github/CODEOWNERS, a root-level CODEOWNERS, and
+  # docs/CODEOWNERS are NEVER exempt — changing review ownership is a governance
+  # decision). GitHub honors CODEOWNERS at exactly those THREE locations, so all
+  # three must be carved out; naming only the first two left docs/** swallowing
+  # the third, which made docs/CODEOWNERS a self-exempting route to reassigning
+  # ownership of anything. The carve-out is
   # deliberately NOT expressed here. Git applies every `:(exclude)` pathspec term
   # LAST and ANDs them together, so there is no "exclude .github/** then
   # re-include CODEOWNERS" ordering available: an inline exclusion is impossible,

@@ -63,8 +63,13 @@ closing the gap where the `gate-violation` label existed and nothing applied it 
 | `10156dde6` | 2 | `feat(ci): enforce the issue-first gate with a required Issue Gate check` |
 | `e03301ae1` | 3 | `docs(contributing): state the Issue Gate consequence alongside the human one` |
 
-No `.planning/` artifact was committed, per instruction. `STATE.md` and `ROADMAP.md` were
-deliberately left untouched.
+No `.planning/` artifact was committed **by the executor**, per instruction, and `ROADMAP.md`
+is untouched (quick tasks are separate from planned phases).
+
+> **Superseded for `STATE.md`.** The orchestrator committed the planning artifacts and
+> `STATE.md` afterwards in `b57c5f435` and `251a6002d`, which is the division of labour the
+> instruction described — the executor does not commit docs, the orchestrator does. The
+> sentence above is scoped to the executor's own commits, not to the branch.
 
 ## The three demonstrated-RED observations
 
@@ -180,8 +185,11 @@ Exit codes were read directly; no verdict was inferred by grepping stdout.
 - Violating PR gets `gate-violation`, a marker-keyed upserted comment, and `exit 1`.
   A passing PR has a stale label removed. **No PR is ever closed by automation** —
   asserted by the workflow verify (`pr close|--state closed` must not appear).
-- `.github/CODEOWNERS` and root `CODEOWNERS` are non-exempt, pinned by the mixed-diff bats
-  case whose input the exclusion query alone returns EMPTY for.
+- `.github/CODEOWNERS`, root `CODEOWNERS`, **and `docs/CODEOWNERS`** are non-exempt, pinned by
+  the mixed-diff bats case whose input the exclusion query alone returns EMPTY for. (As
+  originally written this listed only the first two — which was not merely an incomplete note
+  but an accurate description of a real hole: GitHub honors CODEOWNERS at all three locations,
+  and `docs/**` was swallowing the third. Closed in `e6464335b`; see the post-execution section.)
 - No glob compiler was written; git's own `:(glob)` engine matches.
 - All twelve human-closure sentences survive and each now states the automated
   consequence. No auto-close wording exists anywhere.
