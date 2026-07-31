@@ -23,7 +23,8 @@ Closes #
 >
 > Dependency-only, repo-config-only (`.github/**`, but **not** `CODEOWNERS`), and
 > documentation-only PRs are exempt from the gate entirely and do not use this template.
-> `Taskfile.yaml` and `scripts/**` are **not** exempt. Full path lists:
+> `Taskfile.yaml` and `scripts/**` are **not** exempt — except a **lockfile** under
+> `scripts/` matching the dependency-only shapes, which is exempt. Full path lists:
 > [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md#exempt-by-file-path).
 
 ---

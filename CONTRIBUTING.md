@@ -111,7 +111,8 @@ repo-config-only changes under `.github/**`, and documentation-only changes bypa
 issue-first gate entirely (see [Exempt by file path](#exempt-by-file-path)) — open those PRs
 directly, with no chore intake. File a chore issue for them only if you want the work
 tracked. Maintenance that touches product code — refactoring, test quality, tech debt — does
-need intake, and so do `Taskfile.yaml` and `scripts/**`.
+need intake, and so do `Taskfile.yaml` and `scripts/**` — except a **lockfile** under
+`scripts/` matching the dependency-only shapes, which is exempt.
 
 **Process:**
 
@@ -152,16 +153,28 @@ Three kinds of PR skip the typed template and the issue-first gate:
   `.planning/**`, `.claude/{agents,commands,rules,agent-memory}/**`, `LICENSE`, or
   `LICENSE_HEADER`. This list mirrors `DOCS_ONLY_PATHS` in
   [`Taskfile.yaml`](Taskfile.yaml), which is the authoritative version.
-- **Dependency-only** — the diff is confined to `go.mod`, `go.sum`, `web/package.json`,
-  `web/bun.lock`, or `site/bun.lock`. Renovate PRs are exempt by definition.
+- **Dependency-only** — the diff is confined to dependency manifests and lockfiles, defined
+  by file *shape* rather than by a fixed enumeration: `**/go.mod`, `**/go.sum`,
+  `**/package.json`, `**/pnpm-lock.yaml`, `**/pnpm-workspace.yaml`, `**/bun.lock`,
+  `**/uv.lock`, `compose*.yaml`, `Dockerfile`, or `**/Dockerfile`. This list mirrors
+  `DEPENDENCY_ONLY_PATHS` in [`Taskfile.yaml`](Taskfile.yaml), which is the authoritative
+  version. The rule is path-derived: a Renovate PR is exempt if and only if its diff stays
+  inside those shapes — being a Renovate PR is not itself an exemption. In particular, a
+  dependency PR that **also** carries regenerated code (`pkg/proto/**/*.pb.go`,
+  `web/**/*_pb.ts`) is **not** exempt. The buf codegen bumps in `.github/renovate.json` set
+  `automerge: false` precisely so a human runs `task proto` / `task web:generate` and
+  commits the regenerated stubs on those PRs — those are real source diffs.
 - **Repo configuration-only** — the diff is confined to `.github/**`: workflows, composite
   actions, the issue and PR templates, and Renovate config. One carve-out inside that tree:
   if a `CODEOWNERS` file is ever added it is **not** exempt, because changing review
   ownership is a governance decision.
 
-`Taskfile.yaml` and `scripts/**` are deliberately **not** exempt. They define `task pr-prep`
-and the checks CI runs, so changing them changes the gate itself — that needs a chore issue
-like any other maintenance work.
+`Taskfile.yaml` and `scripts/**` are deliberately **not** exempt, with one lockfile
+carve-out. They define `task pr-prep` and the checks CI runs, so changing them changes the
+gate itself — that needs a chore issue like any other maintenance work. The carve-out: a
+**lockfile** under `scripts/` matching the dependency-only shapes above (for example
+`scripts/uv.lock`) **is** exempt, because a lockfile is not a gate definition. Any
+non-lockfile change under `scripts/` stays gated.
 
 If your diff touches anything outside those paths, it is not exempt — you still need a
 linked, approved issue.
