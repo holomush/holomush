@@ -244,13 +244,18 @@ Plans:
 ### Phase 999.11: Invariant registry backfill program (BACKLOG)
 
 **Goal:** Bind pending INV-* registry entries per scope, migrate INV-DOCS/INV-BRANDING scopes, reclassify entries that fail the invariant bar (epic holomush-hz0v4).
-**Scope (recounted 2026-07-31 from `docs/architecture/invariants.yaml` — 254 pending, 103 bound):**
+**Scope (recounted 2026-07-31 from `docs/architecture/invariants.yaml` — 243 pending, 103 bound, 346 total):**
 CRYPTO 102 · SCENE 60 · PLUGIN 29 · EVENTBUS 19 · ACCESS 8 · STORE 8 · TELEMETRY 8 ·
 COMMAND 3 · SESSION 3 · CLUSTER 1 · COMM 1 · PRESENCE 1. CHANNEL/PRIVACY/WORLD are fully bound.
-**CRYPTO is 40% of the remaining work** and is the correct entry point, not a long-tail
+(Sum checks: 102+60+29+19+8+8+8+3+3+1+1+1 = 243.) INV-BRANDING and INV-DOCS are *declared*
+scopes carrying `status: pending` with ZERO numbered entries — they contribute nothing to the
+count above; migrating them is separate work from binding entries, hence both goals.
+**CRYPTO is 42% of the remaining work** and is the correct entry point, not a long-tail
 afterthought — an earlier version of this entry led with SCENE and buried crypto, and also
 carried stale PLUGIN/EVENTBUS counts (39/28) that had since been partially backfilled.
-Recount before scoping; these numbers move under normal test work.
+Recount before scoping; these numbers move under normal test work. **Anchor the pattern**
+(`^\s+binding:\s*pending`) — an unanchored count also matches 11 YAML comments that discuss
+pending bindings in prose, which is how this entry first shipped "254".
 **Source:** beads migration — 11 item(s) incl. epic(s) `holomush-hz0v4`, `holomush-s6wp`; member list in TRIAGE.md
 **Requirements:** TBD
 **Plans:** 0 plans
