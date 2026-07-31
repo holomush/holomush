@@ -50,31 +50,61 @@ vars:
   # #4890 MUST NOT simply point scripts/docs-paths-regex.sh at this var:
   #   - That script hard-errors with `unsupported '**' position` (exit 1) on
   #     any leading `**/` glob other than its one hardcoded `**/*.md` special
-  #     case — that is eight of the ten entries below.
-  #   - Worse, `compose*.yaml` contains no `**` at all, so the script falls
+  #     case — that is most of the entries below.
+  #   - Worse, a `foo*.bar` shape contains no `**` at all, so the script falls
   #     through to its literal branch and escapes only dots, yielding the ERE
-  #     `compose*\.yaml`. In ERE that reads as `compos` + `e*` + `\.yaml`: it
-  #     matches compose.yaml but NOT compose.prod.yaml. That is a silently
-  #     wrong matcher, not an error.
+  #     `foo*\.bar`. In ERE that reads as `fo` + `o*` + `\.bar`: it matches
+  #     foo.bar but NOT foo.baz.bar. That is a silently wrong matcher, not an
+  #     error. (`go.tool*.mod` below has exactly this shape.)
   # #4890 must generalize the compiler (a real `**/foo` prefix branch plus
   # genuine glob-to-ERE translation) or write a separate matcher.
+  #
+  # LOCKFILE vs MANIFEST — this split is load-bearing, not cosmetic.
+  # `scripts/**` is NOT exempt (it defines `task pr-prep` and the checks CI
+  # runs), with one carve-out: a LOCKFILE under scripts/ is exempt, because a
+  # lockfile records resolved versions and cannot change what the gate does.
+  # A MANIFEST under scripts/ stays GATED — it can change what the gate
+  # executes. The lockfile subset is exactly:
+  #     **/go.sum  go.tool*.sum  **/pnpm-lock.yaml  **/bun.lock  **/uv.lock
+  # Every other entry below is a manifest. Without this enumeration "lockfile"
+  # is undecidable for go.sum and the prose contradicts this var (GH #4892).
+  #
+  # compose files are listed INDIVIDUALLY, not as `compose*.yaml`. That glob
+  # would also match compose.e2e.yaml and compose.e2e.cover.yaml, which the
+  # `test:e2e` / `test:e2e:cover` tasks in this file consume to run the
+  # required `E2E Test` check (.github/workflows/ci.yaml). Exempting those would
+  # contradict the very rationale that keeps Taskfile.yaml gated. A NEW
+  # compose file must be added here deliberately; that friction is the point.
+  #
+  # `go.tool*.mod` IS exempt even though bumping a pinned tool can change what
+  # `task lint` enforces. The distinction from compose.e2e*.yaml: a tool bump
+  # is judged by the full lint suite running on that same PR, so a regression
+  # surfaces immediately as a red check. compose.e2e*.yaml configures the
+  # harness that does the judging — a weakened harness cannot catch itself.
   #
   # `Dockerfile` and `**/Dockerfile` are BOTH listed deliberately. Git
   # `:(glob)` pathspec and Go's doublestar treat `**/Dockerfile` as also
   # matching a root-level Dockerfile, but not every glob dialect does; the
   # bare entry is belt-and-braces for a dialect that requires at least one
-  # leading path component.
+  # leading path component. The same hedge is NOT repeated for `**/go.mod`,
+  # `**/go.sum`, `**/package.json` or `**/pyproject.toml`: both dialects this
+  # repo uses match those at root (verified), and #4890 must preserve that.
   DEPENDENCY_ONLY_PATHS: |
-    **/go.mod
     **/go.sum
-    **/package.json
+    go.tool*.sum
     **/pnpm-lock.yaml
-    **/pnpm-workspace.yaml
     **/bun.lock
     **/uv.lock
-    compose*.yaml
+    **/go.mod
+    go.tool*.mod
+    **/package.json
+    **/pyproject.toml
+    **/pnpm-workspace.yaml
     Dockerfile
     **/Dockerfile
+    compose.yaml
+    compose.prod.yaml
+    compose.cluster.yaml
 
 tasks:
   default:

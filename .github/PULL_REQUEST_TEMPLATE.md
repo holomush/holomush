@@ -48,12 +48,17 @@ Three kinds of PR skip the typed template and the issue-first gate:
   `.planning/**`, `.claude/{agents,commands,rules,agent-memory}/**`, `LICENSE`, or
   `LICENSE_HEADER`.
 - **Dependency-only** — the diff is confined to dependency manifests and lockfiles, defined
-  by file *shape* rather than by a fixed enumeration: `**/go.mod`, `**/go.sum`,
-  `**/package.json`, `**/pnpm-lock.yaml`, `**/pnpm-workspace.yaml`, `**/bun.lock`,
-  `**/uv.lock`, `compose*.yaml`, `Dockerfile`, or `**/Dockerfile`. The authoritative version
-  of this list is `DEPENDENCY_ONLY_PATHS` in `Taskfile.yaml`. The rule is path-derived: a
-  Renovate PR is exempt if and only if its diff stays inside those shapes — being a Renovate
-  PR is not itself an exemption. A dependency PR that **also** carries regenerated code
+  by file *shape* rather than by a fixed enumeration. **Lockfiles:** `**/go.sum`,
+  `go.tool*.sum`, `**/pnpm-lock.yaml`, `**/bun.lock`, `**/uv.lock`. **Manifests:**
+  `**/go.mod`, `go.tool*.mod`, `**/package.json`, `**/pyproject.toml`,
+  `**/pnpm-workspace.yaml`, `Dockerfile`, `**/Dockerfile`, `compose.yaml`,
+  `compose.prod.yaml`, `compose.cluster.yaml`. The authoritative version of this list is
+  `DEPENDENCY_ONLY_PATHS` in `Taskfile.yaml`; the lockfile / manifest split matters only for
+  the `scripts/` carve-out below. `compose.e2e.yaml` and `compose.e2e.cover.yaml` are
+  deliberately **absent** — they configure the required `E2E Test` check, so they are gate
+  definitions, not dependencies. The rule is path-derived: a Renovate PR is exempt if and
+  only if its diff stays inside those shapes — being a Renovate PR is not itself an
+  exemption. A dependency PR that **also** carries regenerated code
   (`pkg/proto/**/*.pb.go`, `web/**/*_pb.ts`) is **not** exempt: the buf codegen bumps in
   `.github/renovate.json` set `automerge: false` precisely so a human runs `task proto` /
   `task web:generate` and commits the regenerated stubs, which are real source diffs.
@@ -63,9 +68,10 @@ Three kinds of PR skip the typed template and the issue-first gate:
 
 `Taskfile.yaml` and `scripts/**` are **not** exempt, with one lockfile carve-out — they
 define `task pr-prep` and the checks CI runs, so changing them changes the gate itself. The
-carve-out: a **lockfile** under `scripts/` matching the dependency-only shapes above (for
-example `scripts/uv.lock`) **is** exempt, because a lockfile is not a gate definition. Any
-non-lockfile change under `scripts/` stays gated.
+carve-out: a **lockfile** under `scripts/` (for example `scripts/uv.lock`) **is** exempt,
+because a lockfile records already-resolved versions and cannot change what the gate does. A
+**manifest** under `scripts/` — `scripts/pyproject.toml`, a hypothetical
+`scripts/package.json` — stays gated, because it can change what the gate executes.
 
 If your diff touches anything outside those paths, it is not exempt — you still need a
 linked, approved issue.
