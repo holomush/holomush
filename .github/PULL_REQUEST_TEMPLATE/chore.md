@@ -21,6 +21,10 @@ Closes #
 > must carry the `approved-chore` label — if it does not, ask a maintainer to triage the
 > chore before continuing.
 >
+> The `Issue Gate` check enforces this automatically: it applies the `gate-violation`
+> label, comments with the reason, and goes red, blocking merge. It never closes the PR —
+> closing stays a maintainer decision.
+>
 > Dependency-only, repo-config-only (`.github/**`, but **not** `CODEOWNERS`), and
 > documentation-only PRs are exempt from the gate entirely and do not use this template.
 > `Taskfile.yaml` and `scripts/**` are **not** exempt — except a file under `scripts/`

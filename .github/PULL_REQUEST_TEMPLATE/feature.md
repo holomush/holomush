@@ -21,6 +21,10 @@ Closes #
 > issue must carry the `approved-feature` label. If it is not labeled yet, close this tab
 > and wait — a PR opened ahead of approval gets closed, and re-opening it later loses your
 > place in the review queue.
+>
+> The `Issue Gate` check enforces this automatically: it applies the `gate-violation`
+> label, comments with the reason, and goes red, blocking merge. It never closes the PR —
+> closing stays a maintainer decision.
 
 ---
 

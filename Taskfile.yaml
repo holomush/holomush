@@ -111,6 +111,34 @@ vars:
     compose.yaml
     compose.prod.yaml
     compose.cluster.yaml
+  # Canonical repo-configuration-only path globs — the authoritative version of
+  # the "Repo configuration-only" exemption. Prose mirrors live in
+  # CONTRIBUTING.md's "### Exempt by file path" section and
+  # .github/PULL_REQUEST_TEMPLATE.md's "## Exemptions" section; when they
+  # disagree with this var, THIS var wins.
+  #
+  # Its sole machine consumer is .github/workflows/issue-gate.yaml, via
+  # scripts/pr-gate-paths.sh, which reads this var out of THIS FILE at runtime.
+  # There is therefore no second machine copy to drift and no byte-identity sync
+  # gate — contrast DOCS_ONLY_PATHS at lines 25-29, which IS mirrored into two
+  # workflow files and IS covered by `task lint:docs-paths-sync`. Only the prose
+  # mirrors above can drift, and those are reviewed by humans.
+  #
+  # The CODEOWNERS carve-out (.github/CODEOWNERS, a root-level CODEOWNERS, and
+  # docs/CODEOWNERS are NEVER exempt — changing review ownership is a governance
+  # decision). GitHub honors CODEOWNERS at exactly those THREE locations, so all
+  # three must be carved out; naming only the first two left docs/** swallowing
+  # the third, which made docs/CODEOWNERS a self-exempting route to reassigning
+  # ownership of anything. The carve-out is
+  # deliberately NOT expressed here. Git applies every `:(exclude)` pathspec term
+  # LAST and ANDs them together, so there is no "exclude .github/** then
+  # re-include CODEOWNERS" ordering available: an inline exclusion is impossible,
+  # and folding one in fails SILENTLY (the exclude query simply returns empty).
+  # The consumer therefore implements the carve-out as a SEPARATE positive query.
+  # See scripts/pr-gate-paths.sh and its bats case
+  # ".github/CODEOWNERS hidden among exempt .github files is still not exempt".
+  REPO_CONFIG_ONLY_PATHS: |
+    .github/**
 
 tasks:
   default:

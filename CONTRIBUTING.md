@@ -12,7 +12,10 @@ One thing to know before you start: **work begins with an issue, not a pull requ
 Open an issue, wait for a maintainer to sign off, then write the code. It is a real
 constraint and we hold everyone to it, including maintainers. It exists so nobody spends a
 weekend on a change that was never going to land. A PR that shows up without an approved
-issue gets closed, and that is a bad outcome for you, so please start with the issue.
+issue gets closed, and that is a bad outcome for you, so please start with the issue. An
+automated `Issue Gate` check gets there first: it labels such a PR `gate-violation`,
+comments with the reason, and goes red so the PR cannot be merged. It never closes the PR
+— that stays a maintainer decision.
 Details in [The Issue-First Rule](#the-issue-first-rule--no-exceptions).
 
 A caution about the backlog: nearly all of the 200+ open issues were filed by the
@@ -62,7 +65,8 @@ or concepts.
 
 **The bar:** enhancements need a scoped written proposal approved by a maintainer before
 any code is written. A PR for an enhancement is closed without review if the linked issue
-does not carry the `approved-enhancement` label.
+does not carry the `approved-enhancement` label. The `Issue Gate` check marks such a PR
+`gate-violation` and blocks merge with a red check before any human gets to it.
 
 **Process:**
 
@@ -83,7 +87,9 @@ surface. Features have the highest bar because they add permanent maintenance bu
 **The bar:** features require a complete written specification approved by a maintainer
 before any code is written. A PR for a feature is closed without review if the linked
 issue does not carry the `approved-feature` label. Maintainers do not fill in an
-incomplete spec; they close it.
+incomplete spec; they close it. Both of those are human decisions, and the `Issue Gate`
+check precedes both: it applies `gate-violation` and blocks merge with a red check. The
+automation flags and blocks; only a maintainer closes.
 
 **Process:**
 
@@ -139,9 +145,11 @@ Documentation content problems use the
 - For **features**: open the issue, get `approved-feature`, then code.
 - For **chores**: open the issue, get `approved-chore`, then code.
 
-PRs that arrive without a properly-labeled linked issue are closed. The point is to keep
-you from spending a weekend on something that was never going to be merged, and to keep
-maintainers from reviewing code for a change nobody agreed to.
+PRs that arrive without a properly-labeled linked issue are closed. The `Issue Gate` check
+gets there first: it applies the `gate-violation` label, comments with the specific reason,
+and goes red so the PR cannot be merged — it never closes the PR itself. The point is to
+keep you from spending a weekend on something that was never going to be merged, and to
+keep maintainers from reviewing code for a change nobody agreed to.
 
 This rule binds everyone, including maintainers and AI-agent-driven work.
 
@@ -190,6 +198,13 @@ all. Anything else under `scripts/` stays gated.
 If your diff touches anything outside those paths, it is not exempt — you still need a
 linked, approved issue.
 
+The exemption is evaluated mechanically by the `Issue Gate` check, which reads the
+authoritative globs out of `Taskfile.yaml`'s `DOCS_ONLY_PATHS`, `DEPENDENCY_ONLY_PATHS`,
+and `REPO_CONFIG_ONLY_PATHS` vars at runtime. The path lists above are a prose mirror of
+those vars; when the two disagree, the vars win. An exempt PR gets a **green** `Issue Gate`
+check from that same job — the job is never skipped and the workflow is never
+path-filtered, so the check always reports a real conclusion instead of sitting `Pending`.
+
 For a cross-cutting PR where no typed template fits the *shape* of the change, add
 `<!-- pr-template-exempt: your reason here -->` to the PR body with a real reason and use
 the closest template. The marker explains a template mismatch only. It is informational, it
@@ -212,7 +227,7 @@ needs no issue and no typed template, even when the work would otherwise read as
 | `approved-feature` | Feature spec approved — implementation may begin |
 | `approved-enhancement` | Enhancement proposal approved — implementation may begin |
 | `approved-chore` | Chore triaged and accepted — implementation may begin |
-| `gate-violation` | PR opened without a linked, approved issue |
+| `gate-violation` | Applied by the `Issue Gate` check to a PR that is not path-exempt and has no linked, approved issue. The check also comments with the reason and goes red, blocking merge; it never closes the PR. Removed automatically once the PR is fixed |
 
 Each issue template also applies a type label on filing: `bug`, `enhancement`,
 `feature-request`, `type: chore`, or `documentation`.
