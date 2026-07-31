@@ -35,6 +35,10 @@ The linked issue needs the matching label before you open the PR — `confirmed-
 fix, `approved-enhancement`, `approved-feature`, or `approved-chore`. A PR that arrives
 without a linked, approved issue is closed without review.
 
+The `Issue Gate` check enforces this on every non-draft PR. On a violation it applies the
+`gate-violation` label, comments with the specific reason, and goes red — blocking merge.
+It never closes the PR; closing stays a maintainer decision.
+
 **No draft PRs.** Open a PR only when the code is complete, `task pr-prep` is green, and
 the correct template is used.
 

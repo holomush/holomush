@@ -20,6 +20,10 @@ Fixes #
 > **Required.** A PR with no valid issue link is closed without review. The linked issue
 > must carry the `confirmed-bug` label — if it does not, ask a maintainer to confirm the
 > bug before continuing.
+>
+> The `Issue Gate` check enforces this automatically: it applies the `gate-violation`
+> label, comments with the reason, and goes red, blocking merge. It never closes the PR —
+> closing stays a maintainer decision.
 
 ---
 
