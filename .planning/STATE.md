@@ -1,23 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: null
-milestone_name: null
-current_phase: null
-current_phase_name: null
-status: milestone_complete
-stopped_at: v0.12 Foundation Hardening archived — no milestone active; next is /gsd-new-milestone
-last_updated: "2026-07-28T23:40:00Z"
-last_activity: 2026-07-28
-last_activity_desc: v0.12 archived as override_closeout (Phase 09 gaps_found by design); ROADMAP collapsed, REQUIREMENTS archived
-last_milestone: v0.12
-last_milestone_name: Foundation Hardening
-last_milestone_closeout: override_closeout
-last_milestone_shipped: 2026-07-28
+milestone: v0.13
+milestone_name: "Web Portal: Identity & Admin Foundations"
+status: planning
+last_updated: "2026-07-31T23:25:54.738Z"
+last_activity: 2026-07-31
 progress:
   total_phases: 0
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -33,14 +26,10 @@ trusted identically.
 
 ## Current Position
 
-Milestone: **none active**. v0.12 Foundation Hardening shipped 2026-07-28 and is archived
-(`milestones/v0.12-ROADMAP.md`, `milestones/v0.12-REQUIREMENTS.md`, `milestones/v0.12-MILESTONE-AUDIT.md`;
-phase artifacts in `milestones/v0.12-phases/`).
-
-`REQUIREMENTS.md` has been removed — `/gsd-new-milestone` creates a fresh one for the next milestone.
-
-Last activity: 2026-07-31 — Completed quick task 260731-ea8: GH-4890 issue-first gate enforcement workflow (`Issue Gate`). Required-status-check step is deliberately NOT done — tracked in #4895, because a `pull_request_target` workflow is sourced from the default branch and so cannot run on its own PR.
-Next: `/gsd-new-milestone`, or `/gsd-review-backlog` to promote from the 999.x parking lot first.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-31 — Milestone v0.13 started
 
 ## Deferred Items
 
@@ -409,7 +398,9 @@ Resume file: None
   question. Both halves of decision D-04 are currently deferred (#4876) — `codecov/project` has
   never posted (codecov Team-plan limit, #4875) and requiring `codecov/patch` would deadlock
   docs-only PRs, which `paths-ignore` routes to `ci-docs-skip.yaml` with no coverage upload.
+
 - Two named coverage floors remain unmet and are tracked, not waived: whole-project 79.11% vs
   the 80% target, and `cmd/holomush` 70.09% vs 80% (#4861 — the remainder is `runCoreWithDeps`
   boot branches needing live Postgres/NATS/TLS).
+
 - QUAL-02, QUAL-03 and QUAL-05 stay Pending deliberately; QUAL-04 is Complete.
