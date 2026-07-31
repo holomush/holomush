@@ -56,6 +56,24 @@ permissions:
   # IS the check, so there is nothing to publish by hand. Adding an explicit
   # check-run would create a second context. Precedent for this pair: buf.yml:22-24.
   pull-requests: write
+  # Needed because the linked-issue step resolves `closingIssuesReferences` to
+  # **Issue** nodes and reads their labels. `pull-requests: write` does not cover
+  # Issue reads: declaring an explicit `permissions:` block sets every unlisted
+  # scope to `none`, so without this line `issues` is denied.
+  #
+  # This repo is public, so an unauthenticated read of that data would succeed —
+  # which is exactly why the omission is dangerous rather than obviously broken.
+  # It would work or fail depending on how the token is scoped against public
+  # resources, and the failure would not look like a permissions problem.
+  #
+  # The failure shape if this is missing (measured): the step's jq exits 5 on a
+  # null response, `set -euo pipefail` aborts the step, the implicit `success()`
+  # on `Apply verdict` skips it, and the job goes RED with NO label and NO
+  # comment. Fail-closed is the right direction for a gate, but an unattributable
+  # red is the thing this workflow's own design notes say it must never produce.
+  #
+  # Read-only, and the minimum for what the step actually does.
+  issues: read
 
 jobs:
   issue-gate:
