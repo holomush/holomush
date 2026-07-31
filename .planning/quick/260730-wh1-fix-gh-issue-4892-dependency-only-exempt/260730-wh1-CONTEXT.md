@@ -1,5 +1,18 @@
 # Quick Task 260730-wh1: fix GH issue 4892 dependency-only exempt path list - Context
 
+> ### 📌 Pre-fix snapshot — records the decisions as LOCKED before execution
+>
+> Captured before planning. Its verified-path table and matcher-limitation examples use
+> `compose*.yaml` and the pre-review 10-entry set. Two refinements were agreed later, after
+> code review surfaced contradictions: the compose files are listed individually (the glob
+> also matched the gate-defining `compose.e2e{,.cover}.yaml`), and the lockfile subset is
+> enumerated so "lockfile" is decidable under `scripts/`. `**/pyproject.toml` and
+> `go.tool*.{mod,sum}` were also added.
+>
+> The three locked decisions themselves still hold — only their implementation surface
+> widened. `Taskfile.yaml` `vars.DEPENDENCY_ONLY_PATHS` is authoritative for the path set.
+
+
 **Gathered:** 2026-07-30
 **Status:** Ready for planning
 

@@ -160,8 +160,12 @@ introduced — this change is one YAML variable and four prose mirrors.
 - `Taskfile.yaml`, `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
   `.github/PULL_REQUEST_TEMPLATE/chore.md`, `.github/ISSUE_TEMPLATE/chore.yml` — all present
   and modified as claimed.
-- Commits `2255f14f7` and `b8fdbc486` both verified present in `git log`.
+- Commits `2255f14f7`, `b8fdbc486` and `9cb8d8f53` (the post-review revision) all verified
+  present in `git log`.
 - No `.planning/` artifact was committed; the orchestrator owns that commit.
+- `task pr-prep` **was** subsequently run inline by the parent session against the
+  post-review tree: `status=pass`, `lane=fast`, `exit=0`, tree clean against both index and
+  HEAD afterwards. This resolves the pre-push reminder recorded in `VERIFICATION.md`.
 
 ## Post-review revision (commit `9cb8d8f53`)
 

@@ -22,6 +22,28 @@ definition", false for three of four open Renovate PRs).
 codes recorded are the ones the verifier OBSERVED, not the ones SUMMARY.md claimed. No
 observed value contradicted a SUMMARY claim.
 
+> ### ⚠️ Addendum — this record is pinned to `b8fdbc486`, the 10-entry policy
+>
+> Everything below verifies the tree at `b8fdbc486`. Code review then found two
+> contradictions in that tree, and commit `9cb8d8f53` changed the policy to the shipped
+> **15-entry** set. The findings below remain accurate *for the commit they name*; they do
+> not describe what shipped. Read `SUMMARY.md` §"Post-review revision" for the final state.
+>
+> **What changed after this verification ran:** `compose*.yaml` → three individual compose
+> literals (the glob also matched `compose.e2e{,.cover}.yaml`, which define the required
+> `E2E Test` check); the lockfile subset was enumerated so "lockfile" is decidable under
+> `scripts/`; `**/pyproject.toml` and `go.tool*.{mod,sum}` were added.
+>
+> **`task pr-prep` has since been run** by the parent session against the post-review tree —
+> `status=pass`, `lane=fast`, `exit=0` — resolving observation 2 below. Every gate in this
+> record was also re-executed by the orchestrator against the final tree and re-observed
+> green, including the negative controls and the E2E-compose-exclusion check added for the
+> 15-entry set.
+>
+> This record is deliberately **not** rewritten to match the outcome: it is the evidence that
+> the pre-review tree passed its own gates, which is what makes the review findings
+> meaningful rather than hindsight.
+
 ## Goal Achievement
 
 ### Observable Truths
@@ -150,11 +172,12 @@ unreferenced debt markers.
    correct and PR #4550 resolves as exempt. Recorded so #4890 picks a matcher that preserves
    it rather than rediscovering the asymmetry. Not a gap: the ten globs are a LOCKED D-01
    decision and every one matches ≥1 tracked file.
-2. **`task pr-prep` was not run.** It is named in the plan's `<success_criteria>` but it is
-   NOT one of the seven `must_haves.truths` (which name only the four lint/format gates, all
-   observed exit 0). The plan assigns it explicitly to the parent session as the final
-   pre-push gate, and CLAUDE.md forbids accepting a sub-agent's claim that it passed — so it
-   correctly remains the orchestrator's ship-time step. Flagged as a pre-push reminder, not a
+2. **`task pr-prep` was not run** *(at the time of this verification — since resolved, see
+   the addendum below)*. It is named in the plan's `<success_criteria>` but it is NOT one of
+   the seven `must_haves.truths` (which name only the four lint/format gates, all observed
+   exit 0). The plan assigns it explicitly to the parent session as the final pre-push gate,
+   and CLAUDE.md forbids accepting a sub-agent's claim that it passed — so it correctly
+   remains the orchestrator's ship-time step. Flagged as a pre-push reminder, not a
    verification gap.
 
 ### Gaps Summary

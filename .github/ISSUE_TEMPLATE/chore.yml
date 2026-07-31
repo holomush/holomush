@@ -24,8 +24,9 @@ body:
         > `CODEOWNERS`), and documentation-only PRs bypass the issue-first gate — you can open those
         > directly without filing here, and they do not use a typed PR template. File them here only
         > if you want the work tracked. `Taskfile.yaml` and `scripts/**` are **not** exempt and do
-        > belong here — except a **lockfile** under `scripts/`, which is exempt; a manifest
-        > there is not. Full path lists:
+        > belong here — except a file under `scripts/` matching one of the listed
+        > **lockfile** shapes, which is exempt; a manifest there is not, and neither is a
+        > lockfile whose shape is unlisted. Full path lists:
         > [CONTRIBUTING.md](https://github.com/holomush/holomush/blob/main/CONTRIBUTING.md#exempt-by-file-path).
 
         **What happens after you submit:**

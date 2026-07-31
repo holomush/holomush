@@ -20,6 +20,22 @@ status: issues_found
 
 # Code Review — #4892 dependency-only exemption path list
 
+> ### 📌 Pre-fix snapshot — these findings CAUSED the final policy
+>
+> This review examined commits `2255f14f7` and `b8fdbc486`, which carried the 10-entry set.
+> Its statements that there are "ten patterns" and that `**/pyproject.toml` is missing were
+> **true of the tree it reviewed** and are what prompted commit `9cb8d8f53`. Both are fixed
+> in the shipped policy.
+>
+> The same applies to the options weighed under H-1: option (a) — exempting all
+> dependency-shaped files under `scripts/` — was **considered and rejected**. The shipped
+> policy takes the lockfile-only route and enumerates that subset in `Taskfile.yaml`, so a
+> `scripts/` manifest stays gated.
+>
+> Deliberately **not** rewritten: erasing a finding because it was acted on would remove the
+> evidence that review caught two contradictions before merge.
+
+
 **Reviewed:** 2026-07-31
 **Depth:** quick (policy/config change)
 **Branch:** `fix-4892-dep-exempt-paths` @ `b8fdbc486`

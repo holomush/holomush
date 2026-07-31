@@ -7,12 +7,19 @@
 
 **Verdict: VERIFIED (both halves).**
 
-`scripts/docs-paths-regex.sh:34-56` supports exactly three shapes, case-matched in order:
+`scripts/docs-paths-regex.sh:34-56` has **four** branches, case-matched in order. Three of
+them *accept* a glob; the third rejects:
 
 1. `'**/*.md'` → hardcoded `.*\.md` (`:39-41`)
-2. `*'/**'` → `foo/** ` → `foo/.*`, dots escaped (`:42-48`)
+2. `*'/**'` → `foo/**` → `foo/.*`, dots escaped (`:42-48`)
 3. any other `**` occurrence → hard error `unsupported '**' position`, `exit 1` (`:49-52`)
 4. anything else falls to the literal-path branch, only dots escaped (`:53-56`)
+
+> **Correction (post-review, CodeRabbit thread 2).** An earlier draft of this section said
+> "exactly three shapes" while listing four branches, and claimed that *none* of the
+> dependency patterns could be compiled. Both were wrong. Branch 4 handles a true literal
+> correctly, and the final 15-entry set contains four such literals. The corrected
+> per-pattern classification is the table below.
 
 So `**/go.mod`, `**/package.json`, `**/uv.lock`, `**/pnpm-lock.yaml`, `**/Dockerfile`,
 `**/bun.lock` all hit branch 3 (leading `**/` that isn't the hardcoded `**/*.md` case) and
@@ -36,15 +43,49 @@ the preceding `e` allows zero-or-more `e`s, so `compos` + `e` + `.yaml`) but doe
 match `compose.prod.yaml`. A silently-wrong matcher, not a hard error — exactly as CONTEXT.md
 claimed.
 
-**Implication for the plan:** none of the new `DEPENDENCY_ONLY_PATHS` glob shapes
-(`**/go.mod`, `**/package.json`, `**/pnpm-lock.yaml`, `**/pnpm-workspace.yaml`,
-`**/bun.lock`, `**/uv.lock`, `compose*.yaml`, `Dockerfile`, `**/Dockerfile`) can be fed
-through the existing compiler today without either a hard error or a silent false-negative.
-This is fine for THIS task (no machine consumer of `DEPENDENCY_ONLY_PATHS` exists yet —
-confirmed in Q2), but the docs MUST say so explicitly per the locked decision, and #4890's
-plan must NOT casually extend `docs-paths-regex.sh` to also read `DEPENDENCY_ONLY_PATHS`
-without first generalizing it (new `**/foo` prefix-glob branch + a real `compose*.yaml`-shape
-branch, e.g. via `sed`/extended glob-to-ERE translation, not a literal-escape fallback).
+### Per-pattern classification against the FINAL 15-entry set
+
+Every entry classified as **supported**, **hard-failing**, or **silently miscompiled**.
+`compose*.yaml` is absent from the shipped set — it was replaced by three literals during
+the post-review revision, precisely because the glob also matched the E2E compose files.
+
+| Pattern | Branch | Verdict |
+| --- | --- | --- |
+| `**/go.sum` | 3 | hard-fail `exit 1` |
+| `**/pnpm-lock.yaml` | 3 | hard-fail |
+| `**/bun.lock` | 3 | hard-fail |
+| `**/uv.lock` | 3 | hard-fail |
+| `**/go.mod` | 3 | hard-fail |
+| `**/package.json` | 3 | hard-fail |
+| `**/pyproject.toml` | 3 | hard-fail |
+| `**/pnpm-workspace.yaml` | 3 | hard-fail |
+| `**/Dockerfile` | 3 | hard-fail |
+| `go.tool*.sum` | 4 | **silently miscompiled** |
+| `go.tool*.mod` | 4 | **silently miscompiled** |
+| `Dockerfile` | 4 | **supported** (exact literal, no metacharacters) |
+| `compose.yaml` | 4 | **supported** |
+| `compose.prod.yaml` | 4 | **supported** |
+| `compose.cluster.yaml` | 4 | **supported** |
+
+Totals: **9 hard-fail, 2 silent miscompile, 4 supported.**
+
+The two silent cases have the same shape as the retired `compose*.yaml`. Verified:
+
+```
+go\.tool*\.mod  →  go.tool.mod MATCH  |  go.tool-lint.mod MISS
+go\.tool*\.sum  →  go.tool.sum MATCH  |  go.tool-lint.sum MISS
+```
+
+`go\.too` + `l*` + `\.mod` consumes the single `l` and then requires `.mod` immediately, so
+the `-lint` variants never match. Both files exist and are tracked.
+
+**Implication for #4890:** the compiler cannot be pointed at `DEPENDENCY_ONLY_PATHS`
+unqualified — it aborts on the first of nine leading-`**/` entries, and would silently
+half-cover the two `go.tool*` entries even if the hard failures were removed. This is inert
+for THIS task (no machine consumer exists yet — Q2), but #4890 must generalize the compiler
+(a real `**/foo` prefix branch plus genuine glob→ERE translation, not a literal-escape
+fallback) or write a separate matcher. The four supported literals are not a reason to reuse
+it: partial support is what makes the failure silent.
 
 ## Q2 — Every consumer of `DOCS_ONLY_PATHS` / the dependency exemption list
 
@@ -140,6 +181,13 @@ edited — both are bullet-list prose, so `dprint`/rumdl table-column-alignment 
 `task lint:yaml`, `task fmt:check` (covers both markdown-fmt-check and would surface any
 YAML drift caught separately by `task fmt:yaml`), and full `task lint` / `task pr-prep`
 per the repo's standard gate (this repo's CLAUDE.md landing-the-plane requirement).
+
+**On the `task test` requirement** (CodeRabbit thread 3): CLAUDE.md requires `task test`
+before claiming completion, and it is satisfied here rather than omitted — `task pr-prep`'s
+fast lane runs schema/license/lint/fmt/**unit**/build/bats, so running `task pr-prep` runs
+the unit suite. It is listed above as the umbrella gate rather than as a separate step. This
+diff touches no Go code, so `task test` in isolation would add no signal beyond what
+pr-prep already executed (observed `status=pass`, `exit=0`).
 
 ## Q5 — Strict/exhaustive `vars:` parsing risk
 

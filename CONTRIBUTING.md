@@ -177,11 +177,15 @@ Three kinds of PR skip the typed template and the issue-first gate:
 `Taskfile.yaml` and `scripts/**` are deliberately **not** exempt, with one lockfile
 carve-out. They define `task pr-prep` and the checks CI runs, so changing them changes the
 gate itself — that needs a chore issue like any other maintenance work. The carve-out: a
-**lockfile** under `scripts/` (for example `scripts/uv.lock`) **is** exempt, because a
-lockfile records already-resolved versions and cannot change what the gate does. A
-**manifest** under `scripts/` — `scripts/pyproject.toml`, a hypothetical
-`scripts/package.json` — stays gated, because it can change what the gate executes. Use
-the lockfile / manifest split listed above; anything else under `scripts/` stays gated.
+file under `scripts/` matching one of the **lockfile** shapes listed above — `**/go.sum`,
+`go.tool*.sum`, `**/pnpm-lock.yaml`, `**/bun.lock`, `**/uv.lock`, for example
+`scripts/uv.lock` — **is** exempt, because a lockfile records already-resolved versions and
+cannot change what the gate does. A **manifest** under `scripts/` — `scripts/pyproject.toml`,
+a hypothetical `scripts/package.json` — stays gated, because it can change what the gate
+executes. The carve-out is bounded by that list, not by the word "lockfile": a file that is
+colloquially a lockfile but matches no listed shape (`scripts/poetry.lock`,
+`scripts/Cargo.lock`) is **not** exempt, because it is not in the dependency-only set at
+all. Anything else under `scripts/` stays gated.
 
 If your diff touches anything outside those paths, it is not exempt — you still need a
 linked, approved issue.
