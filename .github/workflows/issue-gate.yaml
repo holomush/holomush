@@ -379,13 +379,37 @@ jobs:
           # author suppresses the bot's own message on their own PR.
           #
           # So the author predicate is the real key and the marker only
-          # disambiguates among this bot's comments. `github-actions[bot]` is
-          # the author for anything posted with the workflow GITHUB_TOKEN and
-          # is not spoofable by a PR author.
-          existing="$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq '[.[]
-                   | select(.user.login == "github-actions[bot]")
-                   | select(.body | contains("<!-- holomush:issue-gate -->"))
+          # disambiguates among this bot's own comments.
+          #
+          # `.user.type == "Bot"` rather than a hardcoded `github-actions[bot]`
+          # login. The login is correct for the GITHUB_TOKEN used above, but
+          # hardcoding it couples this query to that choice silently: swap to a
+          # GitHub App token or PAT and the predicate stops matching the bot's
+          # OWN comment, so every run appends instead of updating and the
+          # comment wall this upsert exists to prevent grows back with no error.
+          # `Bot` survives any token swap, still excludes every human (posting
+          # as a Bot user requires an installed App), and the marker makes a
+          # collision with some other bot's comment vanishingly unlikely.
+          #
+          # `--slurp` is REQUIRED with `--paginate`: without it `gh` runs the
+          # jq filter ONCE PER PAGE and emits one line per matching page, so two
+          # bot gate-comments landing on different pages make `existing` the
+          # two-line string "10\n20". The PATCH URL then contains a newline, the
+          # step dies before `exit 1`, and the PR keeps its label and red check
+          # but never gets its explanation updated. Two such comments are
+          # reachable: this workflow declares no `concurrency:` group, so two
+          # rapid `synchronize` events can both read "none existing" and both
+          # POST. `--slurp` wraps the pages in an outer array, hence `.[][]`.
+          # Piped to a standalone jq rather than `gh --jq`, because `gh api` has
+          # no passthrough for jq's `--arg` and the marker must not be a second
+          # hardcoded literal (editing `marker=` above would otherwise leave
+          # this query searching the old string — silent append, same shape as
+          # every other failure guarded here). `set -o pipefail` is in force, so
+          # a gh failure still fails the step.
+          existing="$(gh api "repos/$REPO/issues/$PR/comments" --paginate --slurp \
+            | jq -r --arg marker "$marker" '[.[][]
+                   | select(.user.type == "Bot")
+                   | select(.body | contains($marker))
                    | .id] | .[0] // empty')"
           if [ -n "$existing" ]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$existing" --input "$payload" --silent
