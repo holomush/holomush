@@ -98,11 +98,20 @@ with both designed to absorb the deferred portal surfaces without rework.
   architecture with named slots for the deferred sections, character data model, per-field privacy model,
   media-ready profile schema, and the full new RPC surface.
 - **Character creation + management UI** (backlog 999.1 / `holomush-qve.15`, non-roster) — plus the
-  backend mutation RPCs that do not exist today (rename, set description, retire). Only `CreateCharacter`
-  currently ships; `GetCharacter`/`ListCharacters`/`ListAllCharacters`/`SelectCharacter` are read-only.
-- **Public character profiles + sheets** (`holomush-qve.9`) — profile page, sheet display, owner edit,
-  public/private toggle with per-field privacy. Schema shaped for 1 primary image + up to 10 gallery
-  images; no upload path built in this milestone.
+  missing RPC surface. *Corrected by research 2026-07-31:* the service layer is further along than the
+  kickoff assumed — `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799`) and
+  `DeleteCharacter` (`:745`) already exist and are already ABAC-gated. The real gap is the proto/BFF RPC
+  surface plus **rename** and **soft-retire**. Retire MUST be modelled distinctly from purge and MUST NOT
+  release the name back to the pool (that would foreclose rostering, 999.6).
+- **Public character profiles + sheets** (`holomush-qve.9`) — profile page, sheet display, owner edit, and
+  per-field visibility. *Corrected by research 2026-07-31:* per-field privacy is largely **reuse, not
+  invention** — `entity_properties` already carries per-row `visibility`/`visible_to`/`excluded_from`
+  (`migrations/000001_baseline.up.sql:350-373`), resolved by `PropertyProvider`
+  (`attribute/property.go:61-147`) and governed by six seed policies (`seed.go:110-145`). Profile and
+  sheet are distinct: ship the split with the sheet **empty** (mechanical stats need a system that does
+  not exist yet). Storage shape for the 1-primary + 10-gallery media model is an OPEN QUESTION for the
+  SPEC phase — the research pass produced two incompatible answers (a new `character_profiles` table with
+  `media JSONB`, vs. `entity_properties` rows needing zero DDL) and it must be adjudicated, not averaged.
 - **Admin portal shell + character administration** (`holomush-qve.10`, subset) — `/admin` route,
   `RoleAdmin`-gated nav, and the character admin surface (list/search, edit, delete/disable). The nav and
   IA carry declared, empty room for stats, player management, moderation, audit viewer, config, and
@@ -119,6 +128,30 @@ partially consumed — shell only); and the rest of 999.1 (`qve.7` offline/PWA, 
 
 **Carried in from v0.12:** 3 open Broken Windows (#4861 `cmd/holomush` coverage floor, #4788 movement
 pipeline untested, #4864 yamlfmt block-scalar leak) block `/gsd-ship` until fixed or waived.
+
+**Pre-existing hazards this milestone must decide on (surfaced by the 2026-07-31 research pass, all
+verified in-tree — none are new defects introduced by v0.13, but v0.13 is the first work to load them):**
+
+- **`PlayerHasRole` is player-wide, not character-wide.** `internal/store/role_store.go:83-103` returns
+  true iff *any* character of the player holds the role, so a role on a throwaway alt confers it
+  everywhere (incl. `internal/admin/auth/ingame.go:116`). Any admin surface exposing role mutation is an
+  escalation vector until this is decided.
+- **Character name uniqueness has no database constraint** — check-then-insert races across
+  `internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`, with no
+  unique index and no `LOWER(name)` index (`000001_baseline.up.sql:68-76`), and normalization that does
+  no NFKC or confusable folding (`internal/world/validation.go:114-126`). Adding `Rename` doubles the
+  writers into that race.
+- **Rename/retire cannot reach denormalized history** — display names are copied into immutable event
+  payloads (`actor_display_name`) and `scene_log`, the latter served publicly via
+  `WebGetPublicSceneArchive`.
+- **Hard-delete is already broken** — `locations.owner_id`/`objects.owner_id` reference `characters(id)`
+  with no `ON DELETE` (baseline:99, 143), while `character_roles` cascades and silently drops roles.
+- **A public profile page is currently DENIED by default-deny** — `seed:player-character-colocation`
+  requires co-location. One new seed policy plus an audit of already-public character properties.
+- **`internal/web/` contains zero `RoleAdmin` references** — `/admin` is a net-new trust boundary with no
+  existing precedent or test coverage.
+- New mutation RPCs MUST carry `expected_version` (migration `000049`) and emit through the transactional
+  outbox in-transaction, or they silently regress v0.12's MODEL-03/04.
 
 ## Requirements
 
