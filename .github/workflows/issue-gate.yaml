@@ -370,8 +370,23 @@ jobs:
           # Upsert: one comment per PR, updated in place, keyed by the HTML
           # marker above — so a PR that is pushed to repeatedly does not
           # accumulate a wall of identical bot comments.
+          # The marker ALONE is not a safe key: it lives in a comment body, and
+          # a PR author can post a comment containing it. Selecting on the
+          # marker only, this query returns THEIR comment, and the PATCH below
+          # either rewrites someone else's comment or 403s — and a 403 under
+          # `set -euo pipefail` kills the step AFTER the label was applied,
+          # leaving a flagged PR with no explanation of why. Either way the
+          # author suppresses the bot's own message on their own PR.
+          #
+          # So the author predicate is the real key and the marker only
+          # disambiguates among this bot's comments. `github-actions[bot]` is
+          # the author for anything posted with the workflow GITHUB_TOKEN and
+          # is not spoofable by a PR author.
           existing="$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq '[.[] | select(.body | contains("<!-- holomush:issue-gate -->")) | .id] | .[0] // empty')"
+            --jq '[.[]
+                   | select(.user.login == "github-actions[bot]")
+                   | select(.body | contains("<!-- holomush:issue-gate -->"))
+                   | .id] | .[0] // empty')"
           if [ -n "$existing" ]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$existing" --input "$payload" --silent
             echo "updated the existing issue-gate comment ($existing)"
