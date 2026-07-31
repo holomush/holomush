@@ -96,8 +96,30 @@ YAML
   [ "$status" -eq 10 ]
 }
 
-@test "docs/CODEOWNERS is exempt — the carve-out is path-exact, not a name match" {
+# GitHub honors CODEOWNERS at exactly three locations: root, .github/, docs/.
+# An earlier revision of this suite asserted the opposite for docs/ — that it
+# was "an ordinary docs file" and exempt — which pinned a real hole as intended
+# behavior: `docs/**` became a self-exempting route to changing review
+# ownership. Inverted deliberately; this is a fix, not a regression.
+@test "docs/CODEOWNERS alone is never exempt — GitHub honors it there" {
   run gate "docs/CODEOWNERS"
+  [ "$status" -eq 10 ]
+}
+
+@test "docs/CODEOWNERS mixed with an otherwise-exempt docs file is not exempt" {
+  run gate "docs/guide.md" "docs/CODEOWNERS"
+  [ "$status" -eq 10 ]
+}
+
+# The carve-out is path-exact, not a name match: GitHub ignores a CODEOWNERS
+# file anywhere else, so flagging one would be a false positive.
+@test "a CODEOWNERS-named file GitHub ignores does not trip the carve-out" {
+  run gate "internal/CODEOWNERS"
+  [ "$status" -eq 10 ]
+}
+
+@test "CODEOWNERS-named file under an exempt tree GitHub ignores stays exempt" {
+  run gate "site/src/content/docs/CODEOWNERS"
   [ "$status" -eq 0 ]
 }
 

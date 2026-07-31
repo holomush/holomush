@@ -46,8 +46,16 @@ fi
 # runner has none, so this must work with awk alone.
 extract_var() {
   local key="$1"
+  # A blank line inside a YAML block scalar is LEGAL and part of the block —
+  # grouping globs with one is an ordinary edit. An earlier revision terminated
+  # on any non-matching line, so a blank line silently truncated the pattern
+  # list at that point: the globs below it vanished and files they covered
+  # started reading as non-exempt. Fail-closed, but invisible, and triggered by
+  # a formatting change nobody would think to re-test. Blank lines are skipped;
+  # the block ends only at a line that is non-blank and not 4-space indented.
   awk -v key="$key" '
     $0 ~ "^  " key ": \\|$" { inblock=1; next }
+    inblock && /^[[:space:]]*$/ { next }
     inblock && /^    #/      { next }
     inblock && /^    [^ ]/   { sub(/^    /, ""); sub(/[[:space:]]+$/, ""); print; next }
     inblock                  { exit }
@@ -64,8 +72,12 @@ while IFS= read -r line || [ -n "$line" ]; do
   # is about to be materialized as filesystem paths. GitHub cannot produce an
   # absolute path or a `..` component in a tree, so either one means something is
   # wrong — fail loud rather than write outside the scratch directory.
+  # `..` is listed bare as well as in the three positional forms: an earlier
+  # revision omitted it and a lone `..` reached mkdir, which refused only
+  # because the filesystem happened to say no. A guard that relies on the
+  # operation it guards failing is not a guard.
   case "$line" in
-    /* | ../* | */../* | */..)
+    /* | .. | ../* | */../* | */..)
       echo "ERROR: refusing to materialize suspicious path: $line" >&2
       exit 1
       ;;
@@ -126,7 +138,10 @@ trap cleanup EXIT
 git -C "$scratch" init -q -b gate
 
 for p in "${paths[@]}"; do
-  mkdir -p "$scratch/$(dirname "$p")"
+  # `--` because $p is PR-author-influenced: a file named `-e` makes dirname
+  # parse it as an option ("dirname: illegal option -- e"), and that stderr is
+  # folded into the verdict the workflow posts as a public PR comment.
+  mkdir -p "$scratch/$(dirname -- "$p")"
   : > "$scratch/$p"
 done
 git -C "$scratch" add -A --force
@@ -142,9 +157,19 @@ nonexempt="$(git -C "$scratch" -c core.quotePath=false ls-files -- "${exclude_sp
 # `.github/CODEOWNERS` with no way to re-include it: a diff of
 # `.github/CODEOWNERS` + `.github/workflows/ci.yaml` makes query 1 return EMPTY,
 # and a matcher without this second query calls that exempt and reports success.
-# `CODEOWNERS` is a bare (non-glob) pathspec so it matches the ROOT file only —
-# `docs/CODEOWNERS` is an ordinary docs file and stays exempt.
-owners="$(git -C "$scratch" -c core.quotePath=false ls-files -- ':(glob).github/CODEOWNERS' 'CODEOWNERS')"
+# GitHub honors a CODEOWNERS file in exactly THREE locations: the repository
+# root, `.github/`, and `docs/`. All three must appear here. An earlier revision
+# listed only the first two and asserted in this very comment that
+# "`docs/CODEOWNERS` is an ordinary docs file and stays exempt" — which was
+# false, and made `docs/**` a self-exempting route to changing review ownership:
+# a PR adding `docs/CODEOWNERS` assigning `internal/**` to its own author passed
+# the gate GREEN. That is the same shape of hole the carve-out exists to close.
+#
+# The bare (non-glob) pathspecs match those exact paths and nothing else, so a
+# file merely NAMED CODEOWNERS elsewhere (`internal/CODEOWNERS`) is not caught
+# here — correctly, since GitHub ignores it. Do not widen this to
+# `**/CODEOWNERS`: that would flag files GitHub does not honor.
+owners="$(git -C "$scratch" -c core.quotePath=false ls-files -- ':(glob).github/CODEOWNERS' 'CODEOWNERS' 'docs/CODEOWNERS')"
 
 # --- verdict ---------------------------------------------------------------
 
