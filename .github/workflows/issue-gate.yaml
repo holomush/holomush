@@ -144,6 +144,24 @@ jobs:
           declared="$(gh api "repos/$REPO/pulls/$PR" --jq '.changed_files')"
           collected="$(wc -l < "$out" | tr -d ' ')"
           echo "changed files: declared=$declared collected=$collected"
+
+          # Validate BOTH operands are integers before comparing. `[ x -ne y ]`
+          # exits 2 on a non-integer, and because it is an `if` CONDITION,
+          # `set -e` is suspended there and 2 reads as FALSE. So a `declared` of
+          # `null` — which `--jq '.changed_files'` yields on an HTTP 200 whose
+          # body lacks the field — would make this guard silently no-op and let
+          # a short or empty list through to the matcher, which reports
+          # `exempt: empty changed-file list`. That is fail-OPEN inside the very
+          # guard written to prevent fail-open. Verified:
+          #   declared=null collected=3 → "[: null: integer expected", NOT TRIPPED, step exit 0
+          case "$declared$collected" in
+            *[!0-9]* | "")
+              echo "ERROR: non-numeric changed-file count (declared='$declared', collected='$collected')." >&2
+              echo "Refusing to evaluate the gate against an uncountable diff." >&2
+              exit 1
+              ;;
+          esac
+
           if [ "$declared" -ne "$collected" ]; then
             echo "ERROR: changed-file list is incomplete (declared $declared, collected $collected)." >&2
             echo "Refusing to evaluate the gate against a partial diff." >&2
@@ -316,13 +334,26 @@ jobs:
             echo
             echo "Files outside the exempt path sets:"
             echo
-            echo '```'
-            head -n 21 "$RUNNER_TEMP/path-verdict.txt"
+            # The lines below are filenames from a fork-authored diff, so their
+            # content is attacker-chosen. A file named with a triple backtick
+            # closes a backtick fence early, and everything after it renders as
+            # markdown inside a message posted by `github-actions[bot]` — a fork
+            # author writing formatted text under a trusted identity.
+            #
+            # Two independent defences, because either alone is only probabilistic:
+            #   1. A tilde fence cannot be closed by any backtick.
+            #   2. Every content line is indented four spaces. Per CommonMark a
+            #      closing fence may carry AT MOST three spaces of indentation,
+            #      so a four-space-indented line cannot close the block whatever
+            #      it contains — including a name made entirely of tildes.
+            # (2) is the load-bearing one; (1) makes the common case obvious.
+            echo '~~~'
+            head -n 21 "$RUNNER_TEMP/path-verdict.txt" | sed 's/^/    /'
             total="$(wc -l < "$RUNNER_TEMP/path-verdict.txt" | tr -d ' ')"
             if [ "$total" -gt 21 ]; then
-              echo "... and $((total - 21)) more line(s); see the check log for the full list."
+              echo "    ... and $((total - 21)) more line(s); see the check log for the full list."
             fi
-            echo '```'
+            echo '~~~'
             echo
             echo "### How to clear it"
             echo
