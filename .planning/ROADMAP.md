@@ -92,6 +92,32 @@ The 2026-07-11 L7 architecture review (PR #4807) filed 23 discrete issues #4784�
 (epic E1 #4806) that overlap the foundation clusters below; per-cluster `**Related
 issues:**` lines cross-link them. The issues track the discrete work; these clusters carry
 the strategic frame. Reviewed 2026-07-28 (`/gsd-review-backlog`): 18 entries kept, **999.9 removed** (see below).
+Re-reviewed 2026-07-31 (`/gsd-review-backlog`): **17 entries kept, 999.3 removed** (see below).
+
+> **2026-07-31 review — scope reconciliation.** This pass verified cluster contents against the
+> tree rather than re-reading goal prose, and three entries were wrong:
+>
+> - **999.3 is REMOVED.** Its only real content was scene templates (SCENEFWD-01, descoped
+>   2026-07-08). Filed standalone as **#4897** and dropped from the backlog as someday/maybe —
+>   a one-item cluster, the same disposition 999.9's last item got via #4886. `holomush-5rh`'s
+>   other children were already separately filed (#4643, #4728) or shipped (`.19` → Phase 2).
+> - **999.2 was 8 items and is actually 1.** Seven were Epic 10's *pre-implementation* breakdown
+>   and shipped in Phase 1; only full-text search remains. See its entry.
+> - **999.11's per-scope counts had drifted** and buried CRYPTO (102 pending, 40% of the total)
+>   as a "long tail". Recounted in its entry.
+>
+> **Generalized lesson — beads-migrated item counts are an UPPER bound, not a residual.** Epics
+> were migrated as whole clusters *including* their build-the-schema/build-the-commands children,
+> so an epic that was subsequently implemented still lists them as pending. The count is exactly
+> the number that inflates when sizing a milestone. Re-verify against the tree before promoting
+> any 999.x cluster sourced from the beads migration.
+
+> **v0.13 candidate spine (selected 2026-07-31, not yet promoted):** **999.1 Web Client Portal
+> completion** — the only player-facing cluster with substantial *verified* unbuilt scope (6
+> concrete items: offline/PWA #4803, wiki/help, character profiles, character creation UI, admin
+> portal, DM web surface). Promotion deferred to `/gsd-new-milestone`, which assigns real phase
+> numbers; promoting now would mint them into a milestone that does not exist
+> (`STATE.md: status: milestone_complete`).
 
 > **v0.12 outcome (shipped 2026-07-28):** milestone **v0.12 Foundation Hardening** (Phases 4–9, archived at
 > `milestones/v0.12-ROADMAP.md`) pulled the bulk of **999.9** (architecture decomposition → ARCH-01..05) and
@@ -124,19 +150,23 @@ Plans:
 
 ### Phase 999.2: Channels — remaining scope (BACKLOG)
 
-**Goal:** Close the gap between the shipped Phase-1 channels subsystem and the full Epic-10 vision (moderation depth, history replay UX, channel types, message search). Verify each item against what Phase 1 already delivered before planning.
+**Goal:** Full-text search over channel message history. **This is the only member of the
+original 8-item cluster that Phase 1 did not deliver.**
+**Scope reconciled 2026-07-31** (the entry's own "verify against what Phase 1 delivered"
+caution, finally acted on). The other 7 beads members were Epic 10's *pre-implementation*
+breakdown and shipped in Phase 1 (10/10 plans, 2026-07-09), verified against the tree:
+`.3` schema → `migrations/000001_channels.up.sql`; `.4` join/leave/list/say →
+`commands.go:63-85`; `.5` channel types → `types.go`; `.6` moderation mute/ban/ops →
+`mute`/`ban`/`kick`/`transfer` subcommands + `moderate-own-channel` policy; `.7` history +
+replay-on-join → `history` subcommand; `.2` implementation plan → consumed by Phase 1.
+Only `.8` (full-text search) remains: no `tsvector`, `GIN`, or `pg_trgm` exists in
+`plugins/core-channels/migrations/` (earlier greps for "search" matched `search_path`, the
+Postgres schema setting — a false positive worth not repeating).
+**Sizing caution:** beads epics were migrated as whole clusters *including* their
+pre-implementation task breakdowns, so an implemented epic still lists "build the schema"
+children. Item counts on any 999.x cluster sourced from beads migration are an UPPER bound,
+not a residual — re-verify against the tree before sizing a milestone off them.
 **Source:** beads migration — 8 item(s) incl. epic(s) `holomush-0sc`; member list in TRIAGE.md
-**Requirements:** TBD
-**Plans:** 0 plans
-
-Plans:
-
-- [ ] TBD (promote with /gsd-review-backlog when ready)
-
-### Phase 999.3: Scenes & RP — remaining scope (BACKLOG)
-
-**Goal:** Long-tail scenes work not covered by the shipped lineage: remaining epic scope under holomush-5rh (templates were explicitly descoped to backlog on 2026-07-08).
-**Source:** beads migration — 1 item(s) incl. epic(s) `holomush-5rh`; member list in TRIAGE.md
 **Requirements:** TBD
 **Plans:** 0 plans
 
@@ -213,7 +243,19 @@ Plans:
 
 ### Phase 999.11: Invariant registry backfill program (BACKLOG)
 
-**Goal:** Bind pending INV-* registry entries per scope (SCENE 60, PLUGIN 39, EVENTBUS 28, crypto + long tail), migrate INV-DOCS/INV-BRANDING scopes, reclassify entries that fail the invariant bar (epic holomush-hz0v4).
+**Goal:** Bind pending INV-* registry entries per scope, migrate INV-DOCS/INV-BRANDING scopes, reclassify entries that fail the invariant bar (epic holomush-hz0v4).
+**Scope (recounted 2026-07-31 from `docs/architecture/invariants.yaml` — 243 pending, 103 bound, 346 total):**
+CRYPTO 102 · SCENE 60 · PLUGIN 29 · EVENTBUS 19 · ACCESS 8 · STORE 8 · TELEMETRY 8 ·
+COMMAND 3 · SESSION 3 · CLUSTER 1 · COMM 1 · PRESENCE 1. CHANNEL/PRIVACY/WORLD are fully bound.
+(Sum checks: 102+60+29+19+8+8+8+3+3+1+1+1 = 243.) INV-BRANDING and INV-DOCS are *declared*
+scopes carrying `status: pending` with ZERO numbered entries — they contribute nothing to the
+count above; migrating them is separate work from binding entries, hence both goals.
+**CRYPTO is 42% of the remaining work** and is the correct entry point, not a long-tail
+afterthought — an earlier version of this entry led with SCENE and buried crypto, and also
+carried stale PLUGIN/EVENTBUS counts (39/28) that had since been partially backfilled.
+Recount before scoping; these numbers move under normal test work. **Anchor the pattern**
+(`^\s+binding:\s*pending`) — an unanchored count also matches 11 YAML comments that discuss
+pending bindings in prose, which is how this entry first shipped "254".
 **Source:** beads migration — 11 item(s) incl. epic(s) `holomush-hz0v4`, `holomush-s6wp`; member list in TRIAGE.md
 **Requirements:** TBD
 **Plans:** 0 plans
