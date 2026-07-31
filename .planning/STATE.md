@@ -39,7 +39,7 @@ phase artifacts in `milestones/v0.12-phases/`).
 
 `REQUIREMENTS.md` has been removed — `/gsd-new-milestone` creates a fresh one for the next milestone.
 
-Last activity: 2026-07-28 — v0.12 archived as `override_closeout`.
+Last activity: 2026-07-30 — Completed quick task 260730-wh1: GH-4892 dependency-only exempt path list.
 Next: `/gsd-new-milestone`, or `/gsd-review-backlog` to promote from the 999.x parking lot first.
 
 ## Deferred Items
@@ -373,6 +373,7 @@ None yet.
 | 260709-sqg | Fix holomush-9hygy — convert core-channels migrations TIMESTAMPTZ→BIGINT epoch-ns (lint:no-timestamptz ship blocker) | 2026-07-10 | 1284ba341 | [260709-sqg-…](./quick/260709-sqg-fix-bead-holomush-9hygy-convert-core-cha/) |
 | 260711-hg1 | GH-4785 (F2): cap gateway ConnectRPC request-body size (`WithReadMaxBytes` 4 MiB + `ReadTimeout`) to prevent unauthenticated OOM | 2026-07-11 | 0e3806ebf | [260711-hg1-…](./quick/260711-hg1-gh-4785-cap-gateway-connectrpc-request-b/) |
 | 260728-sec | Add root `SECURITY.md` — vulnerability disclosure policy pointing at the repo's already-enabled GitHub private vulnerability reporting | 2026-07-28 | (this commit) | [260728-sec-…](./quick/260728-sec-add-security-md-vulnerability-disclosure/) |
+| 260730-wh1 | GH-4892: replace the drifted dependency-only exempt path list with shape-based globs anchored in `vars.DEPENDENCY_ONLY_PATHS`; exclude the E2E compose files, define the lockfile subset, qualify the `scripts/**` claim at all five sites | 2026-07-30 | 9cb8d8f53 | [260730-wh1-…](./quick/260730-wh1-fix-gh-issue-4892-dependency-only-exempt/) |
 
 ## Deferred Items
 
