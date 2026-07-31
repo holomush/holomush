@@ -38,6 +38,43 @@ vars:
     .claude/agent-memory/**
     LICENSE
     LICENSE_HEADER
+  # Canonical dependency-only path globs — the authoritative version of the
+  # "Dependency-only" exemption. Prose mirrors live in CONTRIBUTING.md's
+  # "### Exempt by file path" section and .github/PULL_REQUEST_TEMPLATE.md's
+  # "## Exemptions" section; when they disagree with this var, THIS var wins.
+  #
+  # Unlike DOCS_ONLY_PATHS, this var has NO machine consumer yet and is NOT
+  # covered by any sync gate. GH #4890 (the exemption-enforcement workflow)
+  # will be its first consumer.
+  #
+  # #4890 MUST NOT simply point scripts/docs-paths-regex.sh at this var:
+  #   - That script hard-errors with `unsupported '**' position` (exit 1) on
+  #     any leading `**/` glob other than its one hardcoded `**/*.md` special
+  #     case — that is eight of the ten entries below.
+  #   - Worse, `compose*.yaml` contains no `**` at all, so the script falls
+  #     through to its literal branch and escapes only dots, yielding the ERE
+  #     `compose*\.yaml`. In ERE that reads as `compos` + `e*` + `\.yaml`: it
+  #     matches compose.yaml but NOT compose.prod.yaml. That is a silently
+  #     wrong matcher, not an error.
+  # #4890 must generalize the compiler (a real `**/foo` prefix branch plus
+  # genuine glob-to-ERE translation) or write a separate matcher.
+  #
+  # `Dockerfile` and `**/Dockerfile` are BOTH listed deliberately. Git
+  # `:(glob)` pathspec and Go's doublestar treat `**/Dockerfile` as also
+  # matching a root-level Dockerfile, but not every glob dialect does; the
+  # bare entry is belt-and-braces for a dialect that requires at least one
+  # leading path component.
+  DEPENDENCY_ONLY_PATHS: |
+    **/go.mod
+    **/go.sum
+    **/package.json
+    **/pnpm-lock.yaml
+    **/pnpm-workspace.yaml
+    **/bun.lock
+    **/uv.lock
+    compose*.yaml
+    Dockerfile
+    **/Dockerfile
 
 tasks:
   default:
