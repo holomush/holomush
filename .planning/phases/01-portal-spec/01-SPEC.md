@@ -2199,7 +2199,7 @@ rather than advisory.
 ### 12.1 The six rules
 
 The rules are numbered **1 through 6**, in the order `.planning/REQUIREMENTS.md`
-PORTAL-10 (`:49-71`) fixes them. **The numbering is part of the contract** — see
+PORTAL-10 (`:51-78`) fixes them. **The numbering is part of the contract** — see
 §12.2. Each rule carries a **non-vacuity clause** naming what a fake satisfaction
 of that rule looks like, because every one of these rules can itself be
 satisfied vacuously.
@@ -2586,7 +2586,7 @@ decision rather than a scoping one:
   returns true iff *any* character of the player holds the role. A role granted
   to a throwaway alt therefore confers it **everywhere**. That is deliberate and
   documented in the operator/break-glass path
-  (`internal/admin/auth/ingame.go:115` — *"RoleAdmin (any character)"*), not a
+  (`internal/admin/auth/ingame.go:116` — *"RoleAdmin (any character)"*), not a
   defect; v0.13 is simply the first work that would load those semantics onto a
   new surface.
 - The decision on player-wide versus per-character role semantics is tracked as
