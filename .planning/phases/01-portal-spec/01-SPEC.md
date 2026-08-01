@@ -349,8 +349,8 @@ Row order is presentational; the census comparison is order-independent (§2.6).
 
 | RPC | Proto location | Audience | Character-shaped message returned | Notes |
 | --- | --- | --- | --- | --- |
-| `holomush.world.v1.WorldService.GetCharacter` | `api/proto/holomush/world/v1/world.proto:30` | `public` | `CharacterInfo` (`world.proto:157-160`) | ABAC-gated `read` on the character resource. Carries `player_id` (`world.proto:81`) — an OOC player↔character linkage. Phase 4 MUST decide whether `PublicCharacter` retains it; it is not identity the `public` audience obviously needs. |
-| `holomush.world.v1.WorldService.ListCharactersAtLocation` | `api/proto/holomush/world/v1/world.proto:38` | `public` | `repeated CharacterInfo` (`world.proto:177-181`) | Returns an empty list, never `NOT_FOUND`, for an empty location — a rule-1 member with a routinely-empty result. |
+| `holomush.world.v1.WorldService.GetCharacter` | `api/proto/holomush/world/v1/world.proto:30` | `public` | `CharacterInfo` (`world/v1/world.proto:157-160`) | ABAC-gated `read` on the character resource. Carries `player_id` (`world/v1/world.proto:81`) — an OOC player↔character linkage. Phase 4 MUST decide whether `PublicCharacter` retains it; it is not identity the `public` audience obviously needs. |
+| `holomush.world.v1.WorldService.ListCharactersAtLocation` | `api/proto/holomush/world/v1/world.proto:38` | `public` | `repeated CharacterInfo` (`world/v1/world.proto:177-181`) | Returns an empty list, never `NOT_FOUND`, for an empty location — a rule-1 member with a routinely-empty result. |
 | `holomush.plugin.host.v1.WorldQueryService.QueryCharacter` | `api/proto/holomush/plugin/host/v1/world.proto:28` | `public` | inline id/player_id/name/description/location_id (`plugin/host/v1/world.proto:96-108`) | The plugin-facing twin of `GetCharacter`. A plugin is neither owner nor admin, so it receives the `public` projection. Per `.claude/rules/plugin-runtime-symmetry.md` the Lua `holomush.query_character` host function and this RPC MUST land on the same projection. |
 | `holomush.plugin.host.v1.WorldQueryService.QueryLocationCharacters` | `api/proto/holomush/plugin/host/v1/world.proto:33` | `public` | `repeated CharacterSummary` (`plugin/host/v1/world.proto:131-134`) | Already identity-only (`id`, `name`). |
 | `holomush.core.v1.CoreService.AuthenticatePlayer` | `api/proto/holomush/core/v1/core.proto:74` | `owner` | `repeated CharacterSummary` (`core.proto:742`) | The login response carries the authenticating player's own roster with presence telemetry. Owner-audience, and correctly so — but it means `CharacterSummary` is load-bearing on the auth path and cannot simply be narrowed without reshaping this response too. |
@@ -370,7 +370,7 @@ Row order is presentational; the census comparison is order-independent (§2.6).
 | `holomush.web.v1.WebService.WebCreateCharacter` | `api/proto/holomush/web/v1/web.proto:177` | `owner` | `character_name` scalar (`web.proto:656`) | Name-reachable. |
 | `holomush.web.v1.WebService.WebListCharacters` | `api/proto/holomush/web/v1/web.proto:182` | `owner` | `repeated CharacterSummary` (`web.proto:669`) | The web roster. |
 | `holomush.web.v1.WebService.WebCheckSession` | `api/proto/holomush/web/v1/web.proto:207` | `owner` | `repeated CharacterSummary` (`web.proto:745`) | |
-| `holomush.web.v1.WebService.WebQueryStreamHistory` | `api/proto/holomush/web/v1/web.proto:222` | `public` | `repeated GameEvent` (`web.proto:832-834`), whose `actor` field is *"the DISPLAY NAME of the acting character, extracted from the event payload"* (`web.proto:427-429`) | Name-reachable, and the clearest case that a type predicate alone is insufficient: the leaked value is a bare `string`. |
+| `holomush.web.v1.WebService.WebQueryStreamHistory` | `api/proto/holomush/web/v1/web.proto:222` | `public` | `repeated GameEvent` (`web.proto:832-835`), whose `actor` field is *"the DISPLAY NAME of the acting character, extracted from the event payload"* (`web.proto:427-429`) | Name-reachable, and the clearest case that a type predicate alone is insufficient: the leaked value is a bare `string`. |
 | `holomush.web.v1.WebService.WebListFocusPresence` | `api/proto/holomush/web/v1/web.proto:252` | `public` | `repeated WebPresenceEntry` (`web.proto:987`) | Web twin of `ListFocusPresence`. |
 
 #### The `WebListAllCharacters` split (§2.4)
@@ -383,20 +383,32 @@ Row order is presentational; the census comparison is order-independent (§2.6).
 
 #### The three existing public export surfaces
 
-These are **already live and already unauthenticated**. Each publishes
-denormalized character names to any reader, and each is the reason §5 exists.
+These are **already live and already unauthenticated**. Each publishes a
+denormalized character identity to any reader — a **name** by proto contract, a
+character **id** in today's implementation, a mismatch §5.4 records and issue
+**#4901** tracks — and each is the reason §5 exists.
+
+**Which of the two the column holds does not affect census membership.** The
+surface is character-returning either way, so every row below is a member on the
+same grounds, and none of them may be dropped from the expected set on the
+argument that it publishes ids rather than names today. §5.4 states why that
+argument would be wrong even prospectively: the documented follow-up resolves
+names into these surfaces, and the frozen rows have no update path.
+
 Every one is inventoried in **both** this table and §5's name-capture table.
 
 | RPC | Proto location | Audience | Character-shaped message returned | Notes |
 | --- | --- | --- | --- | --- |
 | `holomush.web.v1.WebService.WebExportScene` | `api/proto/holomush/web/v1/web.proto:329` | `public` | rendered `bytes content` (`web.proto:1136-1143`) containing per-line speaker labels | Proxies `holomush.sceneaccess.v1.SceneAccessService.ExportScene` (`api/proto/holomush/sceneaccess/v1/sceneaccess.proto:143`). Name-reachable through opaque bytes — no proto field names a character, so only an explicit enumeration reaches it. Publishes other characters' names to the requesting participant. |
-| `holomush.web.v1.WebService.WebGetPublicSceneArchive` | `api/proto/holomush/web/v1/web.proto:345` | `public` | `repeated string participants_snapshot` (`web.proto:1195`) and `repeated PublishedSceneEntry content_entries` (`web.proto:1197`), each entry carrying `speaker` (`scene.proto:822`) | Proxies `SceneAccessService.GetPublicSceneArchive` (`sceneaccess.proto:164`). **Unauthenticated.** Publishes a frozen list of participant character names to anonymous readers. A later privacy change cannot reach this snapshot. |
+| `holomush.web.v1.WebService.WebGetPublicSceneArchive` | `api/proto/holomush/web/v1/web.proto:345` | `public` | `repeated string participants_snapshot` (`web.proto:1195`) and `repeated PublishedSceneEntry content_entries` (`web.proto:1197`), each entry carrying `speaker` (`scene.proto:822`) | Proxies `SceneAccessService.GetPublicSceneArchive` (`sceneaccess.proto:164`). **Unauthenticated.** Publishes a frozen participant list to anonymous readers — character **ids** as implemented today, **names** by proto contract (§5.4, issue **#4901**). A later privacy change cannot reach this snapshot under either. |
 | `holomush.web.v1.WebService.WebDownloadPublicSceneArchive` | `api/proto/holomush/web/v1/web.proto:351` | `public` | rendered `bytes content` (`web.proto:1216-1221`) | Proxies `SceneAccessService.DownloadPublicSceneArchive` (`sceneaccess.proto:171`). **Unauthenticated.** The download form of the row above; same names, rendered rather than structured, so likewise reachable only by explicit enumeration. |
 
 `holomush.web.v1.WebService.WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`,
 proxying `sceneaccess.proto:157`) returns `repeated holomush.scene.v1.PublicSceneArchive`
 (`web.proto:1176`), whose `participants_snapshot` (`scene.proto:1053`) carries the
-same frozen names in list form. It is a **fourth** public export surface, and it is
+same frozen participant column in bulk form — one entry per published scene,
+under the identical §5.4 id-versus-name caveat. It is a **fourth** public export
+surface, and it is
 a census member with audience `public` on the same grounds as the three above. It
 is named separately here because research enumerated three; the tree carries four,
 and the fourth is the one that returns them in bulk.
@@ -1749,8 +1761,8 @@ cannot gate a server-side decision, which is the specific hazard
 `.planning/research/PITFALLS.md` Pitfall 7 names.
 
 **Mirror the shape, not the location.** `web/src/lib/nav/sections.ts:41-47`
-already implements the pattern: an ordered `as const satisfies readonly
-WorkspaceSection[]` literal whose derived `SectionId` union
+already implements the pattern (`web/src/lib/nav/sections.ts:35-47`): an ordered
+`as const satisfies readonly WorkspaceSection[]` literal whose derived `SectionId` union
 (`web/src/lib/nav/sections.ts:47`) is the *"exhaustive key type for any
 per-section map"*, so — in that file's own words — *"a section without an icon
 then fails to compile rather than crashing the rail at runtime"*. That is the
@@ -2339,7 +2351,7 @@ invisible to the orphan check — which walks only `docs/superpowers/specs/`
 v0.13 `PLAN.md` from Phase 2 onward, and the copying phase specializes each rule
 to its own subject matter.** `gsd-plan-checker` verifies both — that the block is
 present, and that it is specialized rather than pasted unchanged. This is D-17
-(`01-CONTEXT.md:163-169`).
+(`.planning/phases/01-portal-spec/01-CONTEXT.md:163-169`).
 
 Three properties make the copy load-bearing rather than ceremonial:
 
