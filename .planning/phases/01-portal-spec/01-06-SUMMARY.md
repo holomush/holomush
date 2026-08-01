@@ -548,3 +548,186 @@ records amendments the SPEC makes to *sibling* artifacts, and the create carve-o
 is a correction to the SPEC's own normative text discovered by verification, with
 no §14 row to cite. Minting one would misuse the table. Flagged here so a later
 pass can decide deliberately rather than inherit it silently.
+
+## ABAC review closure
+
+A follow-up `abac-reviewer` pass over **§8 (Profile Visibility Model)** returned
+four blocking findings and two non-blocking ones. All six are closed below. The
+diagnosis in every blocking case was the same shape: §8 specified the visibility
+**policy** correctly and completely, then stopped one level short of the **ABAC
+mechanism** — leaving a paragraph a Phase-2..6 implementer would otherwise invent,
+where each plausible invention fails **open** against the shipped deny-overrides
+engine. §8.1, §8.3, §8.9–§8.12 were sound and are unchanged.
+
+**Specification text only.** No Go, proto, SQL or UI was written. `STATE.md` and
+`ROADMAP.md` were not touched. `docs/architecture/invariants.yaml` was **not**
+edited — see the INV-PRIVACY-9 note below — so no `inv-render` regeneration and no
+registry meta-test run was required.
+
+### The four blocking findings
+
+**F1 — tier "clears" was unspecified, and the DSL's only string ordering is
+lexicographic.** §8.2 said only that a viewer clears a floor "when the viewer's own
+tier is at or above it," never translated to a DSL form. `compareStrings`
+(`internal/access/policy/dsl/evaluator.go:185-201`) implements `>=` as Go byte
+order; `anonymous < guest < player` holds by **alphabetical accident**, and
+`spectator` / `unverified` / `visitor` all sort *above* `player` — so §8.2's own
+"adding a fourth rung later is an append" would grant a new token top clearance
+silently. **Closed by new §8.2.1:** explicit set membership
+(`principal.viewer.tier in ["guest", "player"]` for a `guest` floor) is mandated;
+ordinal string comparison on the tier is forbidden **normatively**; a numeric rank
+attribute is rejected with its own rationale (a second source of truth for one
+ladder, failing open the same way). The cost — editing N clearing sets per new rung
+— is stated as the feature: the new token clears **nothing** until each floor is
+explicitly re-decided. A Phase-2 test obligation appends a synthetic fourth token
+sorting lexicographically above `player` and asserts it does not clear a `player`
+floor, **demonstrated RED against an ordinal-comparison implementation** first.
+
+**F2 — the glob catch-all was a permit that never inspects the row.** §8.6's last
+table row (*"every other `profile.*` field"*) plus the totality rule mandated a
+name-keyed catch-all that reads no `visibility` / `visible_to` / `excluded_from`.
+The engine is deny-overrides (`combineDecisions`,
+`internal/access/policy/engine.go:591-611`): **any** satisfied permit permits, so
+that row would have been **additive to** — not conjunctive with — the shipped
+row-keyed `seed:property-*` family. Combined with `seed:property-owner-write`
+(`internal/access/policy/seed.go:128-133`, owner writes **any** property) and
+§7.1's open namespace (a new field is an `INSERT`), any `profile.` row carrying
+`visibility='private'` or `'admin'` would publish to every guest on the open web;
+only `restricted` + `excluded_from` survives, being the family's one `forbid`.
+**Closed with both remedies**, not one: new **§8.5.1** states the composition is
+**conjunctive** and ANDed by the caller across **two** evaluations (explicitly not
+one evaluation with two permits); **§8.6** replaces the catch-all with **exact
+enumeration** of every §7.2 field and every §7.3 media name, matched as whole
+strings, with globs/prefixes/wildcards forbidden in the family.
+
+The **totality rule is deliberately flipped** and the flip is explained in place as
+a correction rather than left to read as drift: it previously said an unassigned
+`profile.*` attribute defaults to `guest`. Over an **open** namespace reached by a
+**name-keyed permit**, `guest` is *more permissive than the engine's own
+default-deny* — the wrong direction. It now reads: every governed attribute MUST
+carry an explicit floor, and an attribute with no floor **is denied, not
+defaulted**. The original intent (adding a field must never silently publish it) is
+preserved verbatim; only the mechanism meant to carry it is fixed.
+
+Two table rows were also made byte-exact, which the new whole-string matching rule
+makes load-bearing: `pronouns` → `profile.pronouns` (§7.2's actual property name)
+and `name` → name (`characters.name`, a column). The eleven media names are stated
+to be a **closed enumerable set**, not a pattern — `profile.image.gallery.10` is
+explicitly not a member and is therefore denied, which is the §7.3 exact-bytes rule
+carried through to authorization.
+
+**F3 — the viewer principal was never specified, and the engine rejects an
+identity-less subject.** `validateRequest`
+(`internal/access/policy/engine.go:550-573`) and `CanPerformAction` (`:418-425`)
+both reject a subject not in `type:id` form with non-empty parts
+(`INVALID_ENTITY_REF`); an `anonymous` viewer has no such identity. **Closed by new
+§8.4.1**, which fixes the subject form per rung — `viewer:anonymous`,
+`viewer:guest:<player-ulid>`, `viewer:player:<player-ulid>` — and shows all three
+parse under `SplitN(subject, ":", 2)`. Both likely implementer resolutions are
+named and rejected with citations: `character:<id>` activates
+`seed:admin-full-access` (`seed.go:104-109`) and `seed:player-character-colocation`
+(`seed.go:50-55`), bypassing the ladder; `player:<id>` carries the crypto-operator
+grant axis and has no anonymous representation. Because every shipped seed is
+`principal is character` / `plugin` / `system`, a `viewer:` subject matches **no**
+existing policy — which is what makes the default-deny floor genuinely the floor.
+
+The namespace and provider are grounded in the package's real conventions rather
+than invented: `principal.viewer.tier` is supplied by a new `ViewerTierProvider`
+whose `Namespace()` returns `"viewer"`, shaped after `PlayerAttributeProvider`
+(`internal/access/policy/attribute/player.go:80-107`), with the resolver's
+merge-time namespacing cited (`resolver.go:52-74`). Per
+`.claude/rules/abac-providers.md` / ADR holomush-ti1b, `player_id` is **omitted**
+on the anonymous rung (never `""`) with a `has_player_id` witness present on every
+path, and all keys must be declared in `Schema()` or the resolver drops them
+(`abac_rejected_provider_attributes_total`). The tier MUST be server-derived, never
+client-supplied. Three Phase-2 obligations are stated: register the provider in
+`BuildABACStack` (`internal/access/setup/setup.go:108-262`) and confirm
+`warnOnMissingSeedCoverage` does not WARN for `viewer`; add `SubjectViewer` to the
+constants **and** to `knownPrefixes` (`internal/access/prefix.go:12-61`, since
+`ParseEntityRef` rejects unlisted prefixes); ship a `ViewerSubject` constructor.
+
+**F4 — the reachability facet had no ABAC expression.** §8.6 listed a *profile
+reachability* row and §8.7 evaluates it before any per-field floor, but §8.4/§8.5
+define the family only over `resource is property` keyed by attribute name.
+Reachability is neither. **Closed by new §8.4.2**: resource `profile:<character_id>`
+(a distinct resource type), action `read`, principal the `viewer:` subject, seeded
+policy `seed:profile-reachable`, with the policy text given verbatim. It needs no
+`profile`-namespace provider — `resource is profile` is a target match on
+`parseEntityType` (`engine.go:542-548`). Reusing `character:<id>` + `read` is
+rejected with its seed citations. The section states reachability is **evaluated
+independently** — its own `Evaluate` call, never derived from per-field results —
+and names why: deriving it from "did any field clear its floor" pins it at
+`anonymous` under the seeded defaults (`name` is at `anonymous`, so something always
+clears), the §8.7 not-found-equivalent can never fire, and **INV-PRIVACY-9 binds to
+a gate that cannot deny**. Evaluation order (reachability first, DENY short-circuits
+per-field) is fixed. A Phase-2 obligation adds `ResourceProfile` to the prefix
+constants and `knownPrefixes`.
+
+**INV-PRIVACY-9 was checked and left unchanged, id and summary both.** Its registry
+summary (`docs/architecture/invariants.yaml:2120-2126`) pins the *guarantee* — a
+below-floor profile returns a not-found-equivalent indistinguishable from a
+nonexistent character. §8.4.2 specifies the *mechanism* that guarantee now rests
+on; it does not change what is guaranteed, so the summary remains accurate and no
+renumbering (a registry migration) was warranted.
+
+### The two non-blocking items, recorded
+
+Recorded as explicit obligations; **not** redesigned around.
+
+1. **Census "no more" half for the name-reachable class (§3.2).** §3.2 itself
+   concedes the descriptor predicate cannot reach bare-string identity fields, so a
+   literal implementation is RED day one and the natural repair — union both sides
+   — makes the class **self-certifying**. §3.2 now states the seeding mechanically
+   for both sides (expected: both categories from §3.3; derived: the descriptor
+   walk **unioned with** the same explicitly-named list), states plainly that the
+   "no more" half does not hold over that class while the type-reachable class
+   keeps both halves, and adds a standing **Phase-4 obligation** that a new
+   scalar-identity field requires a manual §3.3 row in the same change.
+2. **§8.8's hard floor is unenforceable against a `source='admin'` row.** Under
+   deny-overrides an admin-authored forbid beats the seeded permit. It fails
+   **closed** (the viewer sees less), so it is not a disclosure hole — but
+   INV-PRIVACY-10 is phrased as a system guarantee while resting on **operator
+   discipline**. §8.8 now says so plainly, and notes §8.12 ships no editing surface,
+   so the only way to author such a row in v0.13 is a direct `access_policies`
+   write.
+
+### Verification
+
+41 assertions, run as a two-pass harness and judged **by exit code only**. The
+pre-fix state was extracted read-only with `git show HEAD:<path>` (no `git stash`,
+which is prohibited in a worktree) and the harness run against it **first**.
+
+| Run | Result |
+| --- | --- |
+| RED, against pre-fix content from `HEAD` | **41/41 fail** — every presence anchor absent, both removal anchors present |
+| GREEN, against the working tree | **41/41 pass**, exit 0 |
+
+A wholly-RED first pass is the point: an assertion never observed failing cannot
+distinguish a fix from a no-op.
+
+Trap-avoidance carried forward from the earlier gap pass:
+
+- **Section slicing, not whole-file grep.** Presence anchors are checked against an
+  `awk`-extracted slice of the owning subsection (`### 8.2.1` … `### 8.3`, etc.),
+  with an empty slice counted as a failure. Without it, `profile.biography` would
+  match its §7.2 row and pass while §8.6 said nothing — the substring trap in its
+  most convincing form, since the string genuinely exists in the file.
+- **Line-wrap awareness.** `rg` is line-based with multiline off, so every anchor
+  phrase was placed to sit on one source line (`sorts lexicographically above`,
+  `is denied, not defaulted`, `evaluated independently`).
+- **Absence anchors distinguished from their supersession prose.** The removal
+  check is the fixed string ``**MUST** default to `guest` ``; the new supersession
+  paragraph deliberately writes "would default to `guest`" so the corrected text
+  cannot satisfy the assertion that its predecessor is gone.
+- `! rg -qF PATTERN FILE` is used for absence throughout. The `cmd; test $? -eq 1`
+  shape appears nowhere — it passes when the string survives.
+
+| Gate | Exit |
+| --- | --- |
+| Closure harness, RED pass against `HEAD` content | 1 (expected) |
+| Closure harness, GREEN pass against working tree | 0 |
+| `task lint:markdown` | 0 (`.planning` is excluded from its scope; run for repo-wide regression only) |
+
+`docs/architecture/invariants.yaml` and `docs/architecture/invariants.md` are
+untouched, so `cmd/inv-render` and the registry meta-tests were not in scope for
+this pass.

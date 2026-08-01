@@ -324,6 +324,33 @@ expected set with both categories. Stating this limit is the point: a census who
 predicate silently cannot reach a whole class of surface is a census that reports
 green over a leak.
 
+**How the census seeds this class, on both sides — and what that costs.** §2.6's
+set-equality guarantee has two halves, and for the name-reachable class the derived
+side cannot come from the descriptors: the paragraph above says so itself, no typed
+message exists for the predicate to find. The census therefore seeds:
+
+| Side | Source |
+| --- | --- |
+| expected | the §3.3 rows of **both** categories — type-reachable and name-reachable |
+| derived | the descriptor walk for the type-reachable category, **unioned with the same explicitly-named name-reachable list** |
+
+The consequence **MUST** be stated here rather than discovered under a red test:
+for the name-reachable class the two sides share one source, so that class is
+**self-certifying**. The census's "no more" half does not hold over it, and a new
+bare-scalar identity field cannot make the census RED. The type-reachable class
+keeps both halves intact, and it is the majority of the inventory.
+
+A literal implementation that tried to derive the name-reachable side from the tree
+would be RED on day one, and the natural repair is precisely the union above — so
+the union is specified rather than left to be invented by whoever meets the red
+test first, under pressure to make it green.
+
+**Standing Phase-4 obligation.** Because no mechanical gate covers it, a new
+**scalar-identity** field on a response message — a bare character name, a rendered
+speaker string, an identifier whose display form is a name — **MUST** be
+accompanied by a new §3.3 row in the same change. This is a review obligation, not
+a test, and it is recorded here so a reviewer has something to cite.
+
 **Deliberately outside the predicate.** `holomush.scene.v1.ParticipantInfo`
 (`api/proto/holomush/scene/v1/scene.proto:325-338`),
 `holomush.scene.v1.PublishedSceneEntry.speaker`
@@ -1201,6 +1228,55 @@ A viewer **clears** a floor when the viewer's own tier is at or above it. A floo
 of `anonymous` is therefore readable by everyone; a floor of `player` is readable
 only by an authenticated player.
 
+### 8.2.1 Clearing a floor is set membership, never string ordering
+
+"At or above it" is English. This subsection fixes its ABAC form, because the two
+obvious translations differ and one of them fails open.
+
+**The clearing test MUST be expressed as explicit set membership over the tier
+token.** It **MUST NOT** be an ordinal string comparison — `>=`, `>`, `<`, `<=` on
+the tier — and it **MUST NOT** be a numeric rank attribute derived from the enum.
+
+Each floor names the exact set of tiers that clear it, and the policy carries that
+set literally:
+
+| Floor | The clearing test, verbatim |
+| --- | --- |
+| `anonymous` | `principal.viewer.tier in ["anonymous", "guest", "player"]` |
+| `guest` | `principal.viewer.tier in ["guest", "player"]` |
+| `player` | `principal.viewer.tier in ["player"]` |
+
+**Why ordinal comparison is forbidden rather than merely discouraged.** The DSL's
+only string ordering is byte order: `compareStrings`
+(`internal/access/policy/dsl/evaluator.go:185-201`) implements `>=` as Go's
+`l >= r` on the raw strings. The three v0.13 tokens sort in ladder order —
+`anonymous` then `guest` then `player` — **by alphabetical accident, not by
+design.** §8.2's own next move is the trap: adding a fourth rung later is an
+append. Each of `spectator`, `unverified` and `visitor`
+sorts lexicographically above `player`, so a `>=` test would hand a newly appended
+rung the highest clearance in the system on the day the token is added, silently,
+with no policy edit anywhere.
+
+**Why not a numeric rank attribute.** A numeric rank reintroduces the ordering in a
+second place: the enum and the rank table become two sources of truth for one
+ladder, and a mis-assigned rank fails open in exactly the same direction as byte
+order. Set membership has no second source to drift from.
+
+**The cost is the feature.** Appending a fourth rung means editing N clearing sets
+— one per governed row of §8.6 — and until someone does, the new token clears
+**nothing**. That is fail-closed on append. It forces an explicit re-decision per
+floor instead of a silent widening, which is precisely the property byte-order
+comparison destroys.
+
+**Phase 2 obligation.** Phase 2 **MUST** ship a test that introduces a synthetic
+fourth tier token sorting lexicographically above `player` — `spectator` is the
+worked example — and asserts a viewer at that tier does **not** clear a `player`
+floor. The test **MUST** be demonstrated RED against an ordinal-comparison
+implementation of the clearing test before the set-membership implementation
+lands. A fourth-rung test never observed failing cannot distinguish the two
+implementations, and it is the only assertion in the suite that can tell them
+apart at all.
+
 ### 8.3 The floor is game-wide and per-attribute
 
 The floor is **game-wide and keyed by attribute name**. One configuration governs
@@ -1237,6 +1313,153 @@ value that projection code consults. A settings-store configuration consumed by 
 projection would relocate an authorization decision out of the engine — the exact
 pattern ADMIN-01 exists to prevent.
 
+### 8.4.1 The viewer principal
+
+§8.5 grounds the family's *resource* side. This subsection fixes its *subject*
+side, which is not optional detail: the engine rejects a subject it cannot parse,
+and an `anonymous` web viewer has no in-game identity to present.
+
+**Subject form, per rung.** Every tier-floor evaluation presents a subject in the
+`viewer:` namespace:
+
+| Rung | Subject string |
+| --- | --- |
+| `anonymous` | `viewer:anonymous` |
+| `guest` | `viewer:guest:<player-ulid>` |
+| `player` | `viewer:player:<player-ulid>` |
+
+All three parse. `SplitN(subject, ":", 2)` yields type `viewer` and a non-empty
+id, which is what `validateRequest` (`internal/access/policy/engine.go:550-573`)
+and `CanPerformAction` (`internal/access/policy/engine.go:418-425`) require —
+either rejects a subject whose type or id is empty with `INVALID_ENTITY_REF`. The
+anonymous rung has no player identifier and carries the literal token instead.
+
+**The `viewer:` namespace is new, and its newness is the point.** The two subject
+forms a Phase-2 implementer would otherwise reach for are both wrong, and both
+fail **open**:
+
+- **`character:<id>`** — the acting character. This activates
+  `seed:admin-full-access` (`internal/access/policy/seed.go:104-109`,
+  `permit(principal is character, action, resource)` with no resource guard at all)
+  and `seed:player-character-colocation` (`internal/access/policy/seed.go:50-55`).
+  Both are `principal is character`, so for those viewers the ladder is bypassed
+  entirely and the profile answer comes from grid semantics.
+- **`player:<id>`** — carries `player.grants` and the crypto-operator allow-list
+  (`internal/access/policy/attribute/player.go`), an unrelated authorization axis,
+  and has no representation for the anonymous rung at all.
+
+Every shipped seed is `principal is character`, `principal is plugin` or
+`principal is system` (`internal/access/policy/seed.go`). A `viewer:` subject
+therefore matches **no** existing policy, which is what makes the tier-floor family
+the only thing that can permit a profile read — and makes the default-deny floor
+genuinely the floor.
+
+**The attribute namespace and the provider that supplies it.** The tier arrives as
+`principal.viewer.tier`. The resolver namespaces a provider's un-namespaced keys at
+merge time under that provider's `Namespace()`
+(`internal/access/policy/attribute/resolver.go:52-74`), so `tier` is supplied by a
+new **`ViewerTierProvider`** whose `Namespace()` returns `"viewer"`, following the
+shape of `PlayerAttributeProvider`
+(`internal/access/policy/attribute/player.go:80-107`).
+
+`ViewerTierProvider.ResolveSubject` parses the post-`viewer:` remainder and emits:
+
+| Key | Type | Presence |
+| --- | --- | --- |
+| `tier` | string | **Always** — exactly one of `anonymous`, `guest`, `player`. |
+| `player_id` | string | Only on the `guest` and `player` rungs. |
+| `has_player_id` | bool | Always, true or false on every code path. |
+
+`player_id` follows the omit-don't-sentinel rule
+(`.claude/rules/abac-providers.md`, ADR holomush-ti1b): on the anonymous rung the
+key is **absent**, never `""`. An empty-string sentinel satisfies `"" == ""`
+against any other unresolved peer attribute and creates a fail-open match in a
+default-deny system. The `has_player_id` witness is emitted on every path, so a
+policy that needs to distinguish absent from present has something to test.
+
+`ResolveResource` returns `(nil, nil)` — a viewer is a Subject, never a Resource.
+All three keys **MUST** be declared in `ViewerTierProvider.Schema()`: the resolver
+drops and counts (`abac_rejected_provider_attributes_total`) any provider attribute
+whose key is not in the namespace schema, so an undeclared `tier` is silently
+absent rather than loudly wrong.
+
+**The tier is server-derived.** The token **MUST** be derived from the server-side
+session state the gateway already authenticated. It **MUST NOT** be read from a
+client-supplied header, query parameter, cookie value or request field. The subject
+string is built at the facade, in the same trust position as `access.PlayerSubject`
+(`internal/access/prefix.go:82-94`) occupies today.
+
+**Phase 2 obligations.** Phase 2 **MUST**:
+
+1. **Register `ViewerTierProvider` in `BuildABACStack`**
+   (`internal/access/setup/setup.go:108-262`), alongside the other
+   `resolver.RegisterProvider` calls. An unregistered namespace does not error:
+   `principal.viewer.tier` is simply absent from the bag, every condition
+   referencing it evaluates false, and the whole family silently default-denies in
+   production while a unit test that stubs the bag stays green. The corpus sweep
+   `warnOnMissingSeedCoverage` (holomush-xxel) WARNs at construction for a
+   namespace referenced by a seed but not registered; Phase 2 **MUST** confirm that
+   WARN does not fire for `viewer`.
+2. **Add `SubjectViewer = "viewer:"`** to the subject-prefix constants **and to
+   `knownPrefixes`** (`internal/access/prefix.go:12-61`), extending the
+   known-prefix table test. `access.ParseEntityRef`
+   (`internal/access/prefix.go:196-220`) returns `INVALID_ENTITY_REF` for an
+   unlisted prefix.
+3. **Ship a `ViewerSubject` constructor** beside `PlayerSubject` and
+   `CharacterSubject` (`internal/access/prefix.go:63-94`), panicking on an empty
+   identifier, so no call site builds the subject string by concatenation.
+
+### 8.4.2 Profile reachability is its own resource
+
+The *profile reachability* row of §8.6 is neither an `entity_properties` row nor an
+attribute name. §7.1 puts `name` and `description` in `characters` columns, and
+reachability governs whether the profile resolves at all rather than what one field
+publishes. The name-keyed family of §8.5 has no key that can match it, so
+reachability carries its own resource, its own action and its own policy.
+
+| Element | Value |
+| --- | --- |
+| Resource | `profile:<character_id>` — a distinct resource type, **not** `character:<id>` |
+| Action | `read` |
+| Principal | the `viewer:` subject of §8.4.1 |
+| Seeded policy | `seed:profile-reachable` |
+
+The seeded v0.13 policy, expressing §8.6's `anonymous` reachability floor:
+
+```text
+permit(principal is viewer, action in ["read"], resource is profile)
+  when { principal.viewer.tier in ["anonymous", "guest", "player"] };
+```
+
+Raising the reachability floor is an edit to that clearing set and nothing else.
+The policy reads no resource attributes, so it needs no `profile`-namespace
+AttributeProvider: `resource is profile` is a target match on the parsed resource
+type (`parseEntityType`, `internal/access/policy/engine.go:542-548`).
+
+**Why not `character:<id>` with action `read`.** That pair is already permitted for
+character subjects by `seed:admin-full-access` and
+`seed:player-character-colocation` (`internal/access/policy/seed.go:50-55`,
+`:104-109`). More fundamentally it means "may read the character entity", which is
+a different question from "does this character's profile resolve on the web".
+Reusing it would let a future change to co-location or admin semantics move the
+reachability floor without anyone editing the visibility configuration.
+
+**Reachability is evaluated independently.** It is its own `Evaluate` call. Its
+result **MUST NOT** be derived from any per-field result, and no per-field result
+**MUST** be derived from it beyond the ordering fixed below. Deriving reachability
+from "did any field clear its floor" pins it permanently at `anonymous` under the
+seeded defaults of §8.6 — `name` sits at `anonymous`, so something always clears —
+the §8.7 not-found-equivalent can then never fire, and **INV-PRIVACY-9 binds to a
+gate that cannot deny**. That is the false-green the registry's binding ratchet
+exists to catch, arrived at by construction rather than by a bad annotation.
+
+**Order.** Reachability is evaluated **first**. A DENY returns the §8.7
+not-found-equivalent, and no per-field evaluation runs.
+
+**Phase 2 obligation.** Add `ResourceProfile = "profile:"` to the resource-prefix
+constants and to `knownPrefixes` (`internal/access/prefix.go:21-61`), with a
+`ProfileResource` constructor beside the others.
+
 ### 8.5 The floor is evaluated at read time
 
 The floor **MUST** be evaluated **at read time against the attribute name**. It
@@ -1261,6 +1484,35 @@ as an ABAC resource attribute before seeding the family. It is reachable today:
 `parent_id` and `visibility`. Phase 2 confirms this still holds at the version it
 builds against rather than inheriting the claim.
 
+### 8.5.1 The tier floor composes conjunctively with the row-keyed decision
+
+**A profile attribute is published only when BOTH decisions permit: the viewer
+clears the attribute's tier floor, AND the underlying `entity_properties` row's own
+`visibility` / `visible_to` / `excluded_from` permits the read. Either one denying
+denies the read.** The composition is **conjunctive**, and it is the caller that
+ANDs the two — it is **not** the engine's own permit combining, and the tier-floor
+family **MUST NOT** be implemented as one more permit inside the same evaluation as
+the shipped `seed:property-*` family.
+
+Stating this is load-bearing because the engine combines permits **disjunctively**:
+`combineDecisions` (`internal/access/policy/engine.go:591-611`) returns the first
+satisfied forbid, otherwise the first satisfied permit — so any satisfied permit
+permits. A tier-floor permit is keyed on the attribute **name** and never inspects
+the row. Dropped into the same evaluation it would be **additive to** the row-keyed
+family rather than **conjunctive with** it: a `profile.` row carrying
+`visibility='private'` or `'admin'` would be published to every viewer that clears
+that name's floor, because the tier permit is satisfied and nothing forbids. Only
+`restricted` plus `excluded_from` would survive, and only because it is the
+family's one `forbid` (`internal/access/policy/seed.go:140-145`).
+
+The exposure that shape creates is concrete rather than theoretical.
+`seed:property-owner-write` (`internal/access/policy/seed.go:128-133`) lets a
+character owner write **any** property on their own character, and §7.1 makes a new
+profile field an `INSERT` — an open namespace an owner or a plugin can write into
+at will. An additive tier-floor permit publishes those rows to the open web.
+
+Two evaluations, ANDed by the caller. Not one evaluation with two permits in it.
+
 ### 8.6 The configured postures
 
 The table below is the whole configuration surface. Its rows are the governed
@@ -1270,14 +1522,26 @@ expressing three different games; the final column is what v0.13 seeds.
 | Governed attribute | Scrape-friendly game | Guest-floor game | Players-only game | **Seeded v0.13 default** |
 | --- | --- | --- | --- | --- |
 | *profile reachability* | `anonymous` | `guest` | `player` | **`anonymous`** |
-| `name` | `anonymous` | `guest` | `player` | **`anonymous`** |
-| `pronouns` | `anonymous` | `guest` | `player` | **`anonymous`** |
+| name (`characters.name`) | `anonymous` | `guest` | `player` | **`anonymous`** |
+| `profile.pronouns` | `anonymous` | `guest` | `player` | **`anonymous`** |
 | in-world description (`characters.description`) | `anonymous` | `guest` | `player` | **`anonymous`** |
 | `profile.rumors` | `anonymous` | `guest` | `player` | **`guest`** |
 | `profile.currently` | `anonymous` | `guest` | `player` | **`guest`** |
 | `profile.rp_preferences` | `anonymous` | `guest` | `player` | **`guest`** |
 | `profile.timezone` | `anonymous` | `guest` | `player` | **`guest`** |
-| every other `profile.*` field (§7) | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.concept` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.species` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.age` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.faction` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.appearance` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.personality` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.biography` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.image.primary` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.image.gallery.00` … `profile.image.gallery.09`, each name a row | `anonymous` | `guest` | `player` | **`guest`** |
+
+The media line is eleven rows, not a pattern: §7.3 fixes the eleven names as exact
+bytes, so the set is closed and enumerable. `profile.image.gallery.10` is **not** a
+member — it is an unenumerated name, and by the rule below it is denied.
 
 Read the postures as columns, not as three configurations: it is **one** table,
 and a game picks a floor per row. The three columns exist to show that the same
@@ -1285,15 +1549,43 @@ mechanism expresses a game that wants a character fully scrapable by anonymous
 visitors, a game that wants guests as the floor for most things, and a game that
 wants authenticated players as the floor for everything.
 
-**Totality rule.** Every governed attribute **MUST** carry an explicit floor. Any
-`profile.*` attribute not individually assigned one **MUST** default to `guest`,
-never to `anonymous`. An unset floor **MUST NOT** be read as "allow" — a
-zero-value-means-allow default is the fail-open shape this milestone forbids
-elsewhere, and it would mean that adding a profile field silently publishes it.
+**Totality rule.** Every governed attribute **MUST** carry an explicit floor, and
+the rows above are an **exact enumeration of attribute names**, matched as whole
+strings. The tier-floor family **MUST NOT** contain a glob, prefix, wildcard or
+catch-all pattern over `profile.*`. An attribute name appearing in no row above
+**is denied, not defaulted** — there is no residual floor for it to fall back to.
+
+**This supersedes the earlier formulation, and the direction of the change is the
+correction.** The rule previously read: any `profile.*` attribute not individually
+assigned a floor would default to `guest`, never to `anonymous`. That was written
+for a closed field list, where `guest` is a tightening. Over the namespace §7.1
+actually ships it is not. §7.1 makes a new profile field an `INSERT`, so the
+namespace is open and an owner or a plugin can write into it
+(`seed:property-owner-write`, `internal/access/policy/seed.go:128-133`); and the
+floor is reached by a **name-keyed permit**, so a residual `guest` default is a
+permit for a name nobody has ever considered. That is *more permissive than the
+engine's own default-deny* — the wrong direction — and it means a row inserted
+outside this table is published to every guest on the public web the moment it
+exists.
+
+The corrected rule keeps the original intent exactly (adding a profile field
+**MUST NOT** silently publish it) and fixes the mechanism that was supposed to
+carry it. An unset floor still **MUST NOT** be read as "allow"; it is now read as
+nothing at all, which the engine already resolves as deny.
+
+Adding a field to §7.2 therefore means adding a row here in the same change. That
+is friction by design, and it is the same shape as §3's census rule 3: the correct
+response is to add the row, never to widen the match.
 
 *Note on the profile-reachability row.* Reachability is a facet **above** the
 fields: it governs whether the profile resolves at all, and it is evaluated
-before any per-field floor. §8.7 and §8.8 constrain it.
+before any per-field floor. It is not an attribute name and not a property row —
+§8.4.2 gives it its own resource, action and seeded policy, and fixes that it is
+evaluated independently of every per-field result. §8.7 and §8.8 constrain it.
+
+*Note on the two `characters`-column rows.* Name and the in-world description are
+columns, not `entity_properties` rows (§7.1), so they carry a tier floor but no
+row-keyed peer decision — §8.5.1's conjunction has only one term for them.
 
 ### 8.7 Unreachable profiles are opaque
 
@@ -1317,6 +1609,20 @@ web. It **MUST NOT** raise `name` or `pronouns` above that reachability floor.
 This is a constraint on the configuration, not a configurable attribute. It
 guarantees that every profile a viewer can reach is non-empty, and it guarantees
 the initial-letter avatar placeholder always has a letter to render.
+
+**What enforces this, and what does not — recorded, not redesigned around.** v0.13
+ships no mechanism that enforces this constraint against a configuration that
+violates it deliberately. The engine is deny-overrides
+(`combineDecisions`, `internal/access/policy/engine.go:591-611`), so an
+admin-authored `forbid` row carrying `source='admin'` beats the seeded permit: an
+operator writing one against `name` or `pronouns` puts them out of reach of a
+viewer who reaches the profile, and nothing in the system objects. That failure is
+**closed** — the viewer sees less, never more — so it is not a disclosure hole and
+it is not a defect to fix here. It is recorded because INV-PRIVACY-10 is phrased as
+a system guarantee while in fact resting on **operator discipline**, and a reader
+who assumes a mechanism enforces it would be wrong about the shape of the
+protection. Nothing is exposed in v0.13: §8.12 ships no editing surface, so the
+only way to author such a row is a direct write to `access_policies`.
 
 ### 8.9 Enforcement is by absence, not by emptiness
 
