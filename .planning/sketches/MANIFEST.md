@@ -59,6 +59,23 @@ Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim
 | **There is no delete in the admin portal.** §9.3's census has `AdminUpdateCharacter` / `AdminRetireCharacter` / `AdminUnretireCharacter` and **no** `AdminDeleteCharacter`; §4.4 and §10.6 both forbid wiring `world.Service.DeleteCharacter` to an admin button. The destructive action is **Retire, which is reversible**. Earlier hand-off notes calling 004 "the irreversible delete" were wrong. | 004 |
 | **`characters` has no `last seen` column** and presence is current-only, so sketch 001's first draft fabricated one. Corrected to `version`. | 002 |
 
+## Where these findings are routed
+
+Sketch READMEs are not read by any phase workflow. `discuss-phase` only checks
+whether `.planning/sketches/MANIFEST.md` **exists** and warns if the findings are
+unpackaged — it does not load their content. So every finding above is also
+routed somewhere a phase workflow or a human will actually encounter it:
+
+| Route | Reaches | Carries |
+| --- | --- | --- |
+| `**Sketch findings**` lines on ROADMAP Phases **2, 3, 4, 6** | `discuss-phase` and `plan-phase` both read the phase's ROADMAP section | the phase-specific questions, verbatim |
+| GitHub [#4904](https://github.com/holomush/holomush/issues/4904) | issue lists, `abac-reviewer` routing | defect D1 |
+| GitHub [#4903](https://github.com/holomush/holomush/issues/4903) | issue lists | missing `+error.svelte` |
+| `/gsd-sketch --wrap-up` → `.claude/skills/sketch-findings-*/SKILL.md` | `discuss-phase:251`, `plan-phase:611,753` | the design decisions, as `<prior_decisions>` |
+
+**The wrap-up has not been run yet** — until it is, phase discussions get a
+warning that unpackaged sketches exist but none of their content.
+
 ## ⚠ Open SPEC amendments raised by sketches
 
 These are maintainer-directed decisions that exceed the SPEC as written. They
@@ -68,5 +85,5 @@ MUST be amended into `01-SPEC.md` before Phase 6 implements them.
 | --- | --- | --- |
 | A1 | 002 | `characters.last_active_at` — new durable column (Phase 2 migration, epoch-ns `BIGINT`), written at **session start** (never on lease refresh), plus a §11.3 row permitting sort + filter. Cannot be derived: `sessions` rows are reaped and `session_connections.last_seen_at` is a gateway lease — both mean "online now". `never` must render as `never` and sort to the END in both directions. |
 | A2 | 002 | Sorting the admin list by player. §11.3 forbids ordering `characters.player_id`; what the UI sorts is the joined `players.username`, which §11.3 never enumerates. Justified by §11.3's own test — the admin audience already sees usernames, so the ordering discloses nothing. Leave the `player_id` row as written; add a new one. |
-| **D1** | **003** | **SPEC DEFECT, not a widening.** §10.3 requires a planned-section refusal to "reveal nothing about which sections exist", but §10.4 defines two distinguishable denial codes (`DENY_ADMIN_SECTION` vs `DENY_ADMIN_SECTION_UNREGISTERED`). A non-admin probing an arbitrary id versus a real one enumerates the registry. §13's eight invariants pin none of this, though `INV-PRIVACY-9` does exactly this job for profiles. Fix: collapse the codes for unauthorized callers, **and** add an `INV-ACCESS-<n>` mirroring `INV-PRIVACY-9`. **Route to `abac-reviewer`** as a *spec-consistency defect with a latent disclosure channel*, **not** an active registry leak — the section ids are already public (in the SPEC, and shipped in the client bundle for nav). It still matters because §10.3 asserts a property the system lacks, and because the core-side registry may hold sections the client mirror does not. Hiding `/admin` does **not** mitigate it — it concentrates the denial path onto callers deliberately bypassing the UI. |
+| **D1** ([#4904](https://github.com/holomush/holomush/issues/4904)) | **003** | **SPEC DEFECT, not a widening.** §10.3 requires a planned-section refusal to "reveal nothing about which sections exist", but §10.4 defines two distinguishable denial codes (`DENY_ADMIN_SECTION` vs `DENY_ADMIN_SECTION_UNREGISTERED`). A non-admin probing an arbitrary id versus a real one enumerates the registry. §13's eight invariants pin none of this, though `INV-PRIVACY-9` does exactly this job for profiles. Fix: collapse the codes for unauthorized callers, **and** add an `INV-ACCESS-<n>` mirroring `INV-PRIVACY-9`. **Route to `abac-reviewer`** as a *spec-consistency defect with a latent disclosure channel*, **not** an active registry leak — the section ids are already public (in the SPEC, and shipped in the client bundle for nav). It still matters because §10.3 asserts a property the system lacks, and because the core-side registry may hold sections the client mirror does not. Hiding `/admin` does **not** mitigate it — it concentrates the denial path onto callers deliberately bypassing the UI. |
 | A3 | 002 | `AdminSearchCharacters` (§9.2) currently "searches names" (character names). Extend to player usernames. |
