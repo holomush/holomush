@@ -2,7 +2,7 @@
 sketch: 001
 name: admin-shell-frame
 question: "How does the three-column admin frame read, and how do `available` vs `planned` sections differentiate in nav?"
-winner: "C"
+winner: "C2"
 tags: [layout, nav, admin, phase-6, registry, responsive]
 ---
 
@@ -32,12 +32,12 @@ open .planning/sketches/001-admin-shell-frame/index.html
   `7 sections · 1 available · registry: core-authoritative`. Infrastructure-honest.
 - **B: Quiet Extension** — the nav reads like the app's existing sidebar. No
   grouping, no badges; planned sections simply recede in color. Lowest ceremony.
-- **C: Command Deck ★ WINNER** — identity header (`seanb · administrator`), a `⌘K`
-  jump affordance wired to the existing command palette, per-row `planned` badges,
-  and a standing "you are acting as an administrator" notice above the content.
-- **C2: merge into rail** — C in every respect except the collapse: instead of
-  leaving a second icon column, the admin sections are absorbed *into* the rail
-  below a divider.
+- **C: Command Deck** — identity header (`seanb · administrator`), a `⌘K` jump
+  affordance wired to the existing command palette, per-row `planned` badges, and
+  a standing "you are acting as an administrator" notice above the content.
+- **C2: merge into rail ★ WINNER** — C's design in every respect; differs *only*
+  in the collapse. Instead of leaving a second icon column, the admin sections
+  are absorbed **into** the rail below a divider.
 
 All four render the **same** character table so the nav treatment is the only
 variable.
@@ -56,18 +56,38 @@ statically mocking them.
 | **< 768px** | width 0 | width 0 | `.mobilebar` with hamburger + `Admin › Characters`; `Created` / `Last seen` columns drop |
 
 C and C2 differ **only** in the 768–1023px band — that band is the entire
-question. Compare them at 768:
+question:
 
 - **C (two icon columns)** keeps the app/admin hierarchy visible: the rail is
   "where in HoloMUSH", the second column is "where in Admin". Costs 96px of chrome.
-- **C2 (merged)** reclaims 48px and reads as one nav, but flattens the hierarchy —
-  the Admin rail button and the Characters section button become visual peers
-  despite being different levels, and the divider is doing all the work.
+- **C2 (merged) — CHOSEN** reclaims 48px and reads as one nav.
 
 The `< 768px` behavior is shared and matches the app's existing pattern
 (`(authed)/+layout.svelte` puts the Rail inside a `Sheet` drawer via
 `mobileNavOpen`) — so the phone drawer should hold rail sections **and** admin
 sections together.
+
+### Two defects the merge exposed — both fixed
+
+Merging is not free, and building it surfaced two concrete problems that would
+otherwise have been inherited by Phase 6:
+
+1. **Two active indicators in one column.** The Admin rail button and the
+   Characters section button were both `is-active`, each drawing the cyan active
+   bar — two "you are here" markers at two different levels of hierarchy. Fixed
+   with `.rail-btn.is-context`, scoped **inside** the `max-width: 1023px`
+   container query: once merged, Admin keeps the primary tint (you *are* in
+   Admin) but surrenders the active bar to the section you're actually on. At
+   ≥1024 it keeps its bar, because there it is the only thing telling you where
+   you are.
+2. **The identity header and `⌘K` vanished.** `.adminnav.is-merge` collapses to
+   `width: 0`, taking the `seanb · administrator` block and the jump affordance
+   with it. Given the trust-boundary framing, that signal is load-bearing — both
+   return to the rail foot (`.rail-identity`), rendered only at the collapsed
+   breakpoint so they never duplicate the nav's own copies at ≥1024.
+
+This is the honest cost of C2: the merged column needs an explicit hierarchy
+device (`is-context`) that C got for free from having two columns.
 
 ## What to Look For
 
