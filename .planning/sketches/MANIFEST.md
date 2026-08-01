@@ -36,6 +36,8 @@ Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim
 | Character list | Dense data table |
 | Component budget | Open — add whatever makes it genuinely good; log adds per sketch |
 | Row actions | Inline on hover (sketch 002, variant A). No multi-select, no bulk operations |
+| Admin edit surface | Sheet, two groups: **Managed elsewhere first and collapsed**, then Editable here (sketch 004, variant C). `version` is header metadata, not a row — never editable, never actionable |
+| Status control | Click → **transition** picker → confirm. Sends `AdminRetireCharacter` / `AdminUnretireCharacter`, **never a status value** (§10.6 keeps the lifecycle vocabulary off the wire). `idle` is shown but never selectable |
 | Planned-section state | Minimal (sketch 003, variant A) — glyph, name, "Registered and gated. No handler yet." No trace, no scope preview |
 | `/admin` visibility | **Invisible without permission** — no rail icon, no nav entry, and a deep link renders the **ordinary not-found page** (the same one any unknown path gets), never a redirect and never a bespoke "forbidden" page. `adapter-static` + `fallback: 'index.html'` means every route is already HTTP 200 + `index.html`, so indistinguishability is structural. Route guard is UX only; the ABAC gate on `admin_section:*` remains the boundary. **Requires a `+error.svelte`, which does not exist yet.** |
 | Narrow-viewport collapse | Admin nav collapses **against the section rail**, merging its sections **into** the rail below a divider (sketch 001, variant C2) |
@@ -48,7 +50,7 @@ Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim
 | 001 | admin-shell-frame | How does the three-column frame read, and how do available vs planned sections differentiate? | **C2 — Command Deck, merged collapse** | layout, nav, registry, responsive |
 | 002 | admin-character-table | How should the dense admin list surface row actions and its non-data states? | **A — Inline actions** ⚠ needs 3 SPEC amendments | table, density, row-actions, empty-state, spec-amendment |
 | 003 | planned-section-empty | What does "registered and gated, no handler yet" look like without reading as a dead end? | **A — Minimal** ⚠ raises SPEC defect D1 | empty-state, extensibility, abac, spec-defect |
-| 004 | character-edit-destructive | How does a form that deliberately cannot edit name/status/version avoid reading as broken — and what is the destructive action, given there is no delete? | _pending_ | forms, field-mask, destructive, audit, concurrency |
+| 004 | character-edit-destructive | How does a form that deliberately cannot edit name/status/version avoid reading as broken — and what is the destructive action, given there is no delete? | **C — Two groups** (refined) | forms, field-mask, destructive, audit, concurrency |
 
 ## Corrections made by sketches
 

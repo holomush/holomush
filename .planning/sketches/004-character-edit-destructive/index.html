@@ -206,6 +206,105 @@
         height: 1px;
         background: var(--color-border);
       }
+      .grouphead.clickable {
+        cursor: pointer;
+        user-select: none;
+      }
+      .grouphead.clickable:hover {
+        color: var(--color-muted-foreground);
+      }
+      .chev {
+        transition: transform 140ms;
+      }
+      .chev.open {
+        transform: rotate(90deg);
+      }
+
+      /* collapsed summary — recovers the vertical space */
+      .lockedsummary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border: 1px dashed var(--color-border);
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--color-muted) 35%, transparent);
+        font-size: 12px;
+        color: var(--color-status-text);
+        cursor: pointer;
+      }
+      .lockedsummary:hover {
+        border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+      }
+      .lockedsummary b {
+        color: var(--color-muted-foreground);
+        font-weight: 500;
+      }
+
+      /* status transition picker */
+      .statuspick {
+        position: relative;
+      }
+      .statusbtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--color-border);
+        border-radius: 5px;
+        background: var(--color-input-background);
+        color: var(--color-foreground);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .statusbtn:hover {
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+      }
+      .statusmenu {
+        position: absolute;
+        right: 0;
+        top: 30px;
+        z-index: 40;
+        width: 262px;
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        background: var(--color-popover);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+        padding: 4px;
+      }
+      .statusopt {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 7px 9px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 12.5px;
+      }
+      .statusopt:hover:not(.is-disabled) {
+        background: var(--color-secondary);
+      }
+      .statusopt.is-current {
+        color: var(--color-primary);
+      }
+      .statusopt.is-disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .statusopt .so-note {
+        font-size: 10.5px;
+        color: var(--color-status-text);
+        margin-top: 2px;
+        line-height: 1.5;
+      }
+      .statusopt .so-mark {
+        width: 13px;
+        flex-shrink: 0;
+        text-align: center;
+        margin-top: 1px;
+      }
 
       .conflict {
         display: flex;
@@ -320,6 +419,7 @@
   </head>
   <body>
     <svg style="display: none" aria-hidden="true">
+      <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></symbol>
       <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></symbol>
       <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4" /><path d="M12 17h.01" /><circle cx="12" cy="12" r="10" /></symbol>
@@ -328,9 +428,9 @@
 
     <div id="variant-nav">
       <span class="lbl">SKETCH 004 · edit &amp; retire</span>
-      <button class="variant-tab active" onclick="setVariant('a', this)">A: Omit excluded</button>
+      <button class="variant-tab" onclick="setVariant('a', this)">A: Omit excluded</button>
       <button class="variant-tab" onclick="setVariant('b', this)">B: Show, locked + route</button>
-      <button class="variant-tab" onclick="setVariant('c', this)">C: Two groups</button>
+      <button class="variant-tab active" onclick="setVariant('c', this)">C: Two groups ★</button>
       <span style="flex: 1"></span>
       <select class="pick" id="statepick" onchange="render()">
         <option value="edit">state: editing</option>
@@ -369,30 +469,36 @@
         'profile.timezone',
       ];
 
-      // Excluded, each with the SPEC's own stated reason and its real route.
+      // Excluded from the mask. `version` is NOT here — it is never editable and
+      // never actionable, so it is pure metadata and lives in the sheet header
+      // rather than occupying a row that implies you might do something to it.
       const LOCKED = [
         {
+          key: 'name',
           label: 'Name',
           value: 'Ashwood, Miren',
           why: 'A rename runs the §6.1 normalization pipeline, mixed-script and skeleton checks, the block list, and collides against the §6.1.3 unique index. A mask write would reach the column and run none of them.',
           via: 'Rename…',
         },
-        {
-          label: 'Status',
-          value: 'active',
-          why: '§9.3 keeps the lifecycle vocabulary off the wire so `idle` stays unreachable. Admin disable goes through AdminRetireCharacter (ADMIN-05).',
-          via: 'Retire…',
-        },
-        {
-          label: 'Version',
-          value: '7',
-          why: 'The concurrency guard, carried as expected_version on the request (§9.4) — never an editable field.',
-          via: null,
-        },
+        { key: 'status', label: 'Status', value: 'active', why: null, via: null },
       ];
 
-      let VARIANT = 'a';
+      // The picker is a TRANSITION picker wearing a state picker's clothes.
+      // §10.6 keeps the lifecycle vocabulary off the wire, so selecting an option
+      // sends AdminRetireCharacter / AdminUnretireCharacter — never a status
+      // value. `idle` is shown so the model is legible, and is never selectable:
+      // §4.4 makes it system-invoked on inactivity and unimplemented in v0.13.
+      const STATUS_STATES = [
+        { id: 'active', label: 'Active', note: 'In play.', rpc: 'AdminUnretireCharacter' },
+        { id: 'retired', label: 'Retired', note: 'Out of play. Name stays reserved. Reversible.', rpc: 'AdminRetireCharacter' },
+        { id: 'idle', label: 'Idle', note: 'System-invoked on inactivity — not implemented in v0.13.', rpc: null, disabled: true },
+      ];
+
+      let VARIANT = 'c';
+      let LOCKED_OPEN = false;
+      let PICKER_OPEN = false;
       const state = () => document.getElementById('statepick').value;
+      const currentStatus = () => (state() === 'retired' ? 'retired' : 'active');
 
       const fieldHtml = (path, label, val, multi, dirty) => `
         <div class="field ${dirty ? 'dirty' : ''}">
@@ -413,15 +519,52 @@
       }
 
       function lockedHtml(compact) {
-        return LOCKED.map(
-          (l) => `<div class="locked">
+        return LOCKED.map((l) => {
+          const control =
+            l.key === 'status'
+              ? statusPickerHtml()
+              : l.via
+                ? `<button class="btn-xs">${l.via}</button>`
+                : '';
+          const val = l.key === 'status' ? '' : ` — ${l.value}`;
+          return `<div class="locked">
             <div class="lk">
-              <div class="lv"><b style="color:var(--color-foreground);font-weight:500">${l.label}</b> — ${l.value}</div>
-              ${compact ? '' : `<div class="lw">${l.why}</div>`}
+              <div class="lv"><b style="color:var(--color-foreground);font-weight:500">${l.label}</b>${val}</div>
+              ${compact || !l.why ? '' : `<div class="lw">${l.why}</div>`}
             </div>
-            ${l.via ? `<button class="btn-xs">${l.via}</button>` : ''}
-          </div>`,
-        ).join('<div style="height:8px"></div>');
+            ${control}
+          </div>`;
+        }).join('<div style="height:8px"></div>');
+      }
+
+      function statusPickerHtml() {
+        const cur = currentStatus();
+        const menu = !PICKER_OPEN
+          ? ''
+          : `<div class="statusmenu">
+              ${STATUS_STATES.map((s) => {
+                const isCur = s.id === cur;
+                const cls = s.disabled ? 'is-disabled' : isCur ? 'is-current' : '';
+                const mark = s.disabled ? '⊘' : isCur ? '●' : '○';
+                return `<div class="statusopt ${cls}" ${s.disabled || isCur ? '' : `onclick="chooseStatus('${s.id}')"`}>
+                  <div class="so-mark">${mark}</div>
+                  <div>
+                    <div>${s.label}${isCur ? ' <span style="font-size:10.5px;opacity:.75">— current</span>' : ''}</div>
+                    <div class="so-note">${s.note}</div>
+                  </div>
+                </div>`;
+              }).join('')}
+              <div style="border-top:1px solid var(--color-border);margin:4px 0 0;padding:7px 9px;font-size:10.5px;line-height:1.55" class="mono muted">
+                sends <b style="color:var(--color-primary)">${cur === 'active' ? 'AdminRetireCharacter' : 'AdminUnretireCharacter'}</b><br />never a status value
+              </div>
+            </div>`;
+        return `<div class="statuspick">
+          <button class="statusbtn" onclick="togglePicker(event)">
+            ${cur === 'active' ? '<span class="badge badge-available">active</span>' : '<span class="badge badge-danger">retired</span>'}
+            <span style="opacity:.6">▾</span>
+          </button>
+          ${menu}
+        </div>`;
       }
 
       function sheetHtml() {
@@ -436,10 +579,25 @@
                   <div style="height:14px"></div>
                   ${lockedHtml(false)}`;
         } else {
-          body = `<div class="grouphead">Editable here</div>
-                  <div class="fieldgroup">${editableHtml(d)}</div>
-                  <div class="grouphead">Managed elsewhere</div>
-                  ${lockedHtml(true)}`;
+          // C: managed-elsewhere FIRST and collapsed by default, so the
+          // exclusions are declared up front without spending the vertical space.
+          const locked = LOCKED_OPEN
+            ? lockedHtml(true)
+            : `<div class="lockedsummary" onclick="toggleLocked()">
+                 <svg width="11" height="11" class="chev"><use href="#i-chev"/></svg>
+                 <span><b>Name</b> ${LOCKED[0].value}</span>
+                 <span style="opacity:.5">·</span>
+                 <span><b>Status</b> ${currentStatus()}</span>
+                 <span style="flex:1"></span>
+                 <span style="font-size:10.5px">managed by their own operations</span>
+               </div>`;
+          body = `<div class="grouphead clickable" onclick="toggleLocked()">
+                    Managed elsewhere
+                    <svg width="10" height="10" class="chev ${LOCKED_OPEN ? 'open' : ''}"><use href="#i-chev"/></svg>
+                  </div>
+                  ${locked}
+                  <div class="grouphead">Editable here</div>
+                  <div class="fieldgroup">${editableHtml(d)}</div>`;
         }
 
         const conflict =
@@ -454,7 +612,9 @@
           <div class="sheet-head">
             <div>
               <div style="font-size:15px;font-weight:600">Edit character</div>
-              <div style="font-size:11.5px;color:var(--color-status-text);margin-top:2px" class="mono">01JQ7X…8F2 · v7</div>
+              <div style="font-size:11.5px;color:var(--color-status-text);margin-top:2px" class="mono">
+                01JQ7X…8F2 · <span title="Concurrency guard — carried as expected_version on the request (§9.4). Never editable, never actionable, so it is metadata here rather than a row.">v7</span>
+              </div>
             </div>
             <button class="btn-xs" style="width:26px;padding:0;display:flex;align-items:center;justify-content:center"><svg width="13" height="13"><use href="#i-x"/></svg></button>
           </div>
@@ -539,10 +699,34 @@
       }
       function setVariant(v, btn) {
         VARIANT = v;
+        PICKER_OPEN = false;
         document.querySelectorAll('.variant-tab').forEach((t) => t.classList.remove('active'));
         btn.classList.add('active');
         render();
       }
+      function toggleLocked() {
+        LOCKED_OPEN = !LOCKED_OPEN;
+        PICKER_OPEN = false;
+        render();
+      }
+      function togglePicker(e) {
+        e.stopPropagation();
+        PICKER_OPEN = !PICKER_OPEN;
+        render();
+      }
+      // Selecting a transition never applies it directly — it routes to the
+      // confirmation, which is where the intent-named RPC is actually sent.
+      function chooseStatus(id) {
+        PICKER_OPEN = false;
+        document.getElementById('statepick').value = id === 'retired' ? 'retire' : 'retired';
+        render();
+      }
+      document.addEventListener('click', () => {
+        if (PICKER_OPEN) {
+          PICKER_OPEN = false;
+          render();
+        }
+      });
       render();
     </script>
   </body>

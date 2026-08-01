@@ -2,7 +2,7 @@
 sketch: 004
 name: character-edit-destructive
 question: "How does a form that deliberately cannot edit name, status or version avoid reading as broken — and what is the destructive action, given there is no delete?"
-winner: null
+winner: "C"
 tags: [forms, field-mask, destructive, audit, concurrency, phase-6]
 ---
 
@@ -56,8 +56,59 @@ Sheet in every variant — only the treatment of the excluded fields differs.
 - **B: Show, locked + route** — `Name`, `Status`, `Version` appear as locked rows
   carrying the SPEC's own reason and a button to the intent-named operation
   (`Rename…`, `Retire…`). Most self-teaching; longest.
-- **C: Two groups** — `Editable here` / `Managed elsewhere`, with the locked rows
-  compact and reasons dropped. Middle ground.
+- **C: Two groups ★ WINNER** — `Managed elsewhere` / `Editable here`. See the
+  round-2 refinements below; A and B are preserved as the first-round comparison
+  and were not revised.
+
+## Round 2 — C refined (maintainer, 2026-08-01)
+
+Three changes, each answering a specific note:
+
+### 1. Managed-elsewhere goes **first**, and collapses
+
+The exclusions are declared **up front** — an admin learns what this surface
+cannot do before scrolling a form — but collapsed to a single summary line
+(`Name Ashwood, Miren · Status active · managed by their own operations`) so it
+costs ~30px instead of ~120px. Click either the group header or the summary to
+expand into the full rows with their actions.
+
+### 2. `version` is demoted out of the group entirely
+
+It was a locked row; it is now header metadata beside the id (`01JQ7X…8F2 · v7`).
+Rationale: `name` and `status` are *managed elsewhere* — there is another place
+to go and something to do. `version` is **never editable and never actionable**;
+it is the concurrency guard carried as `expected_version` (§9.4). Giving it a row
+with the others implied a door that does not exist.
+
+### 3. Status becomes a click → pick list → confirm
+
+**This works only as a transition picker wearing a state picker's clothes**, and
+the distinction is load-bearing:
+
+> §10.6 — *"`status` is excluded. §9.3 keeps the lifecycle vocabulary **off the
+> wire** so `idle` stays unreachable; a maskable `status` path would put it back
+> on."*
+
+So the menu **must not send a status value.** Selecting `Retired` sends
+`AdminRetireCharacter`; selecting `Active` from a retired character sends
+`AdminUnretireCharacter`. The footer of the menu says so literally — *"sends
+`AdminRetireCharacter` — never a status value"* — because this is exactly the
+control an implementer would naturally wire to a `status` field.
+
+`idle` **appears and is never selectable** (`⊘`, dimmed, "System-invoked on
+inactivity — not implemented in v0.13"). Showing it makes the three-state model
+legible; making it selectable would put the unreachable value back on the wire,
+which is the precise thing §10.6 forbids.
+
+Selecting a transition does not apply it — it routes to the confirmation, which
+is where the RPC is sent.
+
+**Note the degenerate case:** with `idle` unselectable, a character in any state
+has exactly **one** legal transition, so the "pick list" always offers a single
+choice. It earns its shape only as a *model-teaching* surface — showing all three
+states with the current one marked — not as a chooser. If that reads as
+ceremony in use, the honest fallback is a plain `Retire…` / `Un-retire` button,
+which is what variant B had.
 
 ## What to Look For
 
