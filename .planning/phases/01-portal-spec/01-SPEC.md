@@ -64,7 +64,146 @@ declared there exists in `docs/architecture/invariants.yaml`.
 
 ## 7. Profile and Media Data Model
 
-> *Placeholder — authored by plan 01-01 (Task 3).*
+This section is normative. It fixes where profile data lives, what the complete
+field set is, and how media is named.
+
+### 7.1 The committed shape
+
+**Every profile field and every media reference is an `entity_properties` row
+under a `profile.` name prefix.** Intrinsic values stay columns on `characters`.
+
+The split is:
+
+| Lives as | What |
+| --- | --- |
+| A column on `characters` | The character's `name`; the in-world `description` (`internal/store/migrations/000001_baseline.up.sql:72`); the lifecycle `status` (added by Phase 2 per the §4 vocabulary); the optimistic-concurrency `version` (`internal/store/migrations/000049_world_version_guard.up.sql:20`, `version INTEGER NOT NULL DEFAULT 1`). |
+| An `entity_properties` row | Every `profile.*` field in §7.2 and every media reference in §7.3. |
+
+The rule separating them: a value the world model itself reads — to render a
+`look`, to decide whether a character may be selected for play, to guard a
+concurrent write — is a column. A value only the profile publishes is a row.
+
+**This requires zero DDL for a twelfth field or an eleventh image.** That is what
+makes the "no migration later" claim literally true rather than aspirational: the
+`entity_properties` table already ships the whole mechanism
+(`internal/store/migrations/000001_baseline.up.sql:350-371`) — `parent_type` /
+`parent_id` / `name` / `value`, a per-row `visibility` CHECK over
+`('public', 'private', 'restricted', 'system', 'admin')`, the `visible_to` /
+`excluded_from` lists, and
+`CONSTRAINT entity_properties_parent_name_unique UNIQUE(parent_type, parent_id, name)`
+at `:364`. A new profile field is an `INSERT`. So is an eleventh image. Neither
+is an `ALTER TABLE`, and neither is a migration.
+
+Profile rows are addressed as `parent_type='character'`, `parent_id=<character
+id>`, `name='profile.<field>'`.
+
+### 7.2 The complete `profile.*` field set
+
+**There are twelve `profile.*` text fields.** The count is stated here as a
+number because Phase 5 selects its form approach from it — twelve fields is a
+sectioned form, not a single-column stack, and that choice should not require
+counting table rows by hand.
+
+Every field's `value` is stored as `entity_properties.value` (`TEXT`, nullable).
+The Type column below is the semantic shape a renderer should assume, not a
+distinct storage type. No field is required — see §7.4.
+
+| Property name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `profile.pronouns` | short text, single line | No | The character's pronouns. Together with the character's name this is the minimum public identity, and the configuration cannot raise it above the profile's reachability floor (§8.8). |
+| `profile.concept` | short text, single line | No | The one-line "what this character is" pitch. |
+| `profile.species` | short text, single line | No | Species / race / kind, as the game's setting defines it. Free text — the platform ships no species vocabulary. |
+| `profile.age` | short text, single line | No | Apparent or stated age. Free text, not an integer: settings routinely want "ageless", "early 30s", or a century. |
+| `profile.faction` | short text, single line | No | Affiliation, house, crew, or allegiance. Free text; the platform ships no faction registry. |
+| `profile.appearance` | long text, multi-paragraph | No | Extended appearance beyond the in-world description — detail a viewer would not get from a single `look`. |
+| `profile.personality` | long text, multi-paragraph | No | Disposition and manner. |
+| `profile.biography` | long text, multi-paragraph | No | History and background. |
+| `profile.rumors` | long text, multi-paragraph | No | Rumors and RP hooks — the "reasons to approach this character" block (PROFILE-06). |
+| `profile.currently` | short text, single line | No | The volatile "Currently" status line (PROFILE-07): what the character is up to right now. Expected to change often; carries no history. |
+| `profile.rp_preferences` | long text, multi-paragraph | No | The **OOC** RP-preferences block (PROFILE-08): style, availability, content limits, walk-up-friendliness. Out-of-character text about the player's preferences, not about the character. |
+| `profile.timezone` | short text, single line | No | Time zone, supporting the availability half of the OOC preferences (PROFILE-09). |
+
+**Naming collision, called out deliberately.** `profile.rp_preferences` is **not**
+`characters.preferences`. The latter is a shipped `JSONB` column
+(`internal/store/migrations/000045_character_preferences.up.sql:5`) holding the
+owner-partitioned **settings** scope — client and display settings. The OOC
+RP-preferences block is published profile prose. Phase 5 **MUST NOT** write the
+RP block into the settings column, and the property name carries the `rp_`
+qualifier specifically so the two cannot be conflated by name alone.
+
+### 7.3 Media naming
+
+v0.13 ships **one primary image row and ten gallery rows**:
+
+| Property name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `profile.image.primary` | media reference | No | The single primary image. Exactly one per character, enforced by the database (below). |
+| `profile.image.gallery.00` … `profile.image.gallery.09` | media reference | No | Ten gallery slots. The index is **two-digit zero-padded**, running `00` through `09` — never `0`, never `1`, never `10`. |
+
+The zero-padded two-digit form is fixed, not a stylistic preference: property
+names are compared as **exact bytes**. `profile.image.gallery.0` and
+`profile.image.gallery.00` are two different rows that both coexist happily,
+because the uniqueness constraint is over the byte string. There is no
+normalization step anywhere in the read path that would collapse them, so the
+format has to be fixed at specification time rather than discovered at insert
+time.
+
+**Exactly-one-primary is enforced by the database, not by application code.**
+`CONSTRAINT entity_properties_parent_name_unique UNIQUE(parent_type, parent_id, name)`
+(`internal/store/migrations/000001_baseline.up.sql:364`) makes a second
+`profile.image.primary` row for the same character an insert error. No service
+layer check is required, and none **SHOULD** be added — a hand-written check
+beside a database constraint is a second source of truth that can disagree with
+the first.
+
+**v0.13 ships the schema and the proto shape only, with zero upload behavior.**
+There is no uploader, no storage backend, and no media-serving path. The proto
+carries `ProfileImage{media_id, alt_text, content_warning}` plus `primary_image`
+and `repeated gallery [max_items = 10]` so that alt-text and content-warning have
+somewhere to live before moderation exists (EXT-06). The model is proven in
+v0.13 by inserting one primary and ten gallery rows through the real schema
+(EXT-05) — demonstrating the no-migration-later claim rather than asserting it.
+
+### 7.4 The in-world description is always public on the profile
+
+The in-world description (`characters.description`, the `look` text) **is always
+public on the profile, with no per-owner control.**
+
+The reasoning is about what the existing gate actually means.
+`seed:player-character-colocation` (`internal/access/policy/seed.go:51-54`)
+permits a character to read a co-located character:
+`when { resource.character.location == principal.character.location }`. That
+gates **where a viewer has to be standing** — it does not gate **who may know**.
+Treating it as a privacy boundary would retrofit a meaning it never carried. The
+web surface removes the co-location *requirement*; it does not remove a privacy
+control, because there was never a privacy control there to remove.
+
+**The consequence is stated here so no phase can treat it as a formality:**
+PROFILE-11's audit of existing character descriptions is now the **only** gate on
+that text. The seed policy that permits off-location profile reads widens read
+access to every existing description at once. That audit is a precondition of
+shipping the policy, not a checkbox beside it.
+
+The description's floor is configurable like any other governed attribute (§8.6)
+— "always public on the profile" means it carries no *per-owner* control and no
+paired per-row visibility property, not that a game cannot raise its floor.
+
+### 7.5 The empty profile
+
+A character with **zero** `profile.*` rows still resolves a profile. That profile
+carries the character's name and pronouns, per the §8.8 minimum-identity floor.
+A profile read **MUST NOT** return a not-found for a reachable character merely
+because no profile rows exist.
+
+A blank field **MUST be omitted from the response**, never emitted as an empty
+value. This is the same absence-not-emptiness discipline §8.9 applies to withheld
+fields, and it is deliberate that the two cases are indistinguishable to a
+viewer: a field the character left blank and a field the viewer may not see
+**MUST** look identical on the wire. If they differed, the response shape itself
+would disclose which fields exist but are withheld.
+
+A renderer therefore has exactly two states per field — present, or absent — and
+**MUST NOT** infer anything from absence beyond "do not render this."
 
 ## 8. Profile Visibility Model
 
