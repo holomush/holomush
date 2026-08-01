@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sketch 004 — Admin Character Edit &amp; Retire</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      body {
+        padding-top: 42px;
+        background: var(--color-background);
+      }
+      #variant-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9998;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 12px;
+        background: #07080a;
+        border-bottom: 1px solid var(--color-border);
+      }
+      #variant-nav .lbl {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--color-status-text);
+        margin-right: 6px;
+      }
+      .variant-tab {
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 5px;
+        border: 1px solid var(--color-border);
+        background: transparent;
+        color: var(--color-muted-foreground);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .variant-tab:hover {
+        background: var(--color-secondary);
+        color: var(--color-foreground);
+      }
+      .variant-tab.active {
+        background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+        color: var(--color-primary);
+      }
+      .pick {
+        height: 26px;
+        border-radius: 5px;
+        border: 1px solid var(--color-border);
+        background: #101418;
+        color: var(--color-muted-foreground);
+        font-family: inherit;
+        font-size: 11.5px;
+        padding: 0 6px;
+      }
+
+      .stage {
+        display: flex;
+        gap: 20px;
+        padding: 22px;
+        align-items: flex-start;
+      }
+      .sheet {
+        width: 460px;
+        flex-shrink: 0;
+        border: 1px solid var(--color-border);
+        border-radius: 10px;
+        background: var(--color-card);
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 100px);
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5);
+      }
+      .sheet-head {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--color-border);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .sheet-body {
+        padding: 14px 16px;
+        overflow: auto;
+      }
+      .sheet-foot {
+        padding: 12px 16px;
+        border-top: 1px solid var(--color-border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .fieldgroup {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .field label {
+        display: block;
+        font-size: 11.5px;
+        color: var(--color-muted-foreground);
+        margin-bottom: 4px;
+      }
+      .field .path {
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        color: var(--color-status-text);
+        margin-left: 6px;
+      }
+      .field input,
+      .field textarea {
+        width: 100%;
+        padding: 7px 9px;
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        background: var(--color-input-background);
+        color: var(--color-foreground);
+        font-family: inherit;
+        font-size: 13px;
+        outline: none;
+      }
+      .field input:focus,
+      .field textarea:focus {
+        border-color: var(--color-ring);
+      }
+      .field textarea {
+        resize: vertical;
+        min-height: 62px;
+        line-height: 1.55;
+      }
+      .field.dirty input,
+      .field.dirty textarea {
+        border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+      }
+      .field.dirty label::after {
+        content: ' • edited';
+        color: var(--color-primary);
+        font-size: 10px;
+      }
+
+      .locked {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 1px dashed var(--color-border);
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--color-muted) 40%, transparent);
+      }
+      .locked .lk {
+        min-width: 0;
+      }
+      .locked .lv {
+        font-size: 13px;
+        color: var(--color-muted-foreground);
+      }
+      .locked .lw {
+        font-size: 10.5px;
+        color: var(--color-status-text);
+        margin-top: 2px;
+        line-height: 1.5;
+      }
+      .btn-xs {
+        height: 25px;
+        padding: 0 8px;
+        font-size: 11.5px;
+        border-radius: 5px;
+        border: 1px solid var(--color-border);
+        background: transparent;
+        color: var(--color-muted-foreground);
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .btn-xs:hover {
+        background: var(--color-secondary);
+        color: var(--color-foreground);
+      }
+
+      .grouphead {
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--color-status-text);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 20px 0 9px;
+      }
+      .grouphead:first-child {
+        margin-top: 0;
+      }
+      .grouphead::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--color-border);
+      }
+      .grouphead.clickable {
+        cursor: pointer;
+        user-select: none;
+      }
+      .grouphead.clickable:hover {
+        color: var(--color-muted-foreground);
+      }
+      .chev {
+        transition: transform 140ms;
+      }
+      .chev.open {
+        transform: rotate(90deg);
+      }
+
+      /* collapsed summary — recovers the vertical space */
+      .lockedsummary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border: 1px dashed var(--color-border);
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--color-muted) 35%, transparent);
+        font-size: 12px;
+        color: var(--color-status-text);
+        cursor: pointer;
+      }
+      .lockedsummary:hover {
+        border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+      }
+      .lockedsummary b {
+        color: var(--color-muted-foreground);
+        font-weight: 500;
+      }
+
+      /* status transition picker */
+      .statuspick {
+        position: relative;
+      }
+      .statusbtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--color-border);
+        border-radius: 5px;
+        background: var(--color-input-background);
+        color: var(--color-foreground);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .statusbtn:hover {
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+      }
+      .statusmenu {
+        position: absolute;
+        right: 0;
+        top: 30px;
+        z-index: 40;
+        width: 262px;
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        background: var(--color-popover);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+        padding: 4px;
+      }
+      .statusopt {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 7px 9px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 12.5px;
+      }
+      .statusopt:hover:not(.is-disabled) {
+        background: var(--color-secondary);
+      }
+      .statusopt.is-current {
+        color: var(--color-primary);
+      }
+      .statusopt.is-disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .statusopt .so-note {
+        font-size: 10.5px;
+        color: var(--color-status-text);
+        margin-top: 2px;
+        line-height: 1.5;
+      }
+      .statusopt .so-mark {
+        width: 13px;
+        flex-shrink: 0;
+        text-align: center;
+        margin-top: 1px;
+      }
+
+      .conflict {
+        display: flex;
+        gap: 9px;
+        padding: 10px 12px;
+        border: 1px solid color-mix(in srgb, var(--color-destructive) 45%, transparent);
+        background: color-mix(in srgb, var(--color-destructive) 9%, transparent);
+        border-radius: 7px;
+        font-size: 12.5px;
+        line-height: 1.6;
+        color: var(--color-muted-foreground);
+        margin-bottom: 14px;
+      }
+      .conflict b {
+        color: var(--color-foreground);
+      }
+
+      .confirm {
+        width: 420px;
+        border: 1px solid var(--color-border);
+        border-radius: 10px;
+        background: var(--color-card);
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5);
+        padding: 18px;
+      }
+      .confirm h3 {
+        margin: 0 0 8px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .confirm p {
+        margin: 0 0 12px;
+        font-size: 12.5px;
+        line-height: 1.65;
+        color: var(--color-muted-foreground);
+      }
+      .reversible {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 9px 11px;
+        border-radius: 6px;
+        border: 1px solid color-mix(in srgb, var(--color-status-online) 35%, transparent);
+        background: color-mix(in srgb, var(--color-status-online) 8%, transparent);
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--color-muted-foreground);
+        margin-bottom: 14px;
+      }
+      .reversible b {
+        color: var(--color-status-online);
+      }
+
+      .side {
+        flex: 1;
+        min-width: 0;
+        max-width: 520px;
+      }
+      .note {
+        padding: 11px 13px;
+        border-left: 2px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+        font-size: 11.5px;
+        line-height: 1.7;
+        color: var(--color-muted-foreground);
+        margin-bottom: 12px;
+      }
+      .note.warn {
+        border-left-color: color-mix(in srgb, var(--color-destructive) 60%, transparent);
+        background: color-mix(in srgb, var(--color-destructive) 7%, transparent);
+      }
+      .note code {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--color-primary);
+      }
+      .note b {
+        color: var(--color-foreground);
+      }
+      .masklist {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        line-height: 1.75;
+        color: var(--color-status-text);
+        margin: 6px 0 0;
+        padding: 9px 11px;
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        background: var(--color-input-background);
+        max-height: 168px;
+        overflow: auto;
+      }
+      .masklist .on {
+        color: var(--color-primary);
+      }
+
+      #sketch-tools {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        z-index: 9999;
+        font-family: system-ui;
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.78);
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 8px;
+        opacity: 0.35;
+        transition: opacity 0.2s;
+      }
+    </style>
+  </head>
+  <body>
+    <svg style="display: none" aria-hidden="true">
+      <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4" /><path d="M12 17h.01" /><circle cx="12" cy="12" r="10" /></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-15-6.7L3 13" /></symbol>
+    </svg>
+
+    <div id="variant-nav">
+      <span class="lbl">SKETCH 004 · edit &amp; retire</span>
+      <button class="variant-tab" onclick="setVariant('a', this)">A: Omit excluded</button>
+      <button class="variant-tab" onclick="setVariant('b', this)">B: Show, locked + route</button>
+      <button class="variant-tab active" onclick="setVariant('c', this)">C: Two groups ★</button>
+      <span style="flex: 1"></span>
+      <select class="pick" id="statepick" onchange="render()">
+        <option value="edit">state: editing</option>
+        <option value="dirty">state: edited (mask = 2 paths)</option>
+        <option value="conflict">state: version conflict</option>
+        <option value="retire">state: retire confirm</option>
+        <option value="retired">state: retired → unretire</option>
+      </select>
+    </div>
+
+    <div class="stage">
+      <div id="panel"></div>
+      <div class="side" id="side"></div>
+    </div>
+
+    <div id="sketch-tools" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.35'">
+      sketch 004 · surface is a Sheet in every variant
+    </div>
+
+    <script>
+      // The allowlist, verbatim from SPEC §10.6. Thirteen paths: the in-world
+      // description plus the twelve profile.* fields of §7.2.
+      const ALLOW = [
+        'description',
+        'profile.pronouns',
+        'profile.concept',
+        'profile.species',
+        'profile.age',
+        'profile.faction',
+        'profile.appearance',
+        'profile.personality',
+        'profile.biography',
+        'profile.rumors',
+        'profile.currently',
+        'profile.rp_preferences',
+        'profile.timezone',
+      ];
+
+      // Excluded from the mask. `version` is NOT here — it is never editable and
+      // never actionable, so it is pure metadata and lives in the sheet header
+      // rather than occupying a row that implies you might do something to it.
+      const LOCKED = [
+        {
+          key: 'name',
+          label: 'Name',
+          value: 'Ashwood, Miren',
+          why: 'A rename runs the §6.1 normalization pipeline, mixed-script and skeleton checks, the block list, and collides against the §6.1.3 unique index. A mask write would reach the column and run none of them.',
+          via: 'Rename…',
+        },
+        { key: 'status', label: 'Status', value: 'active', why: null, via: null },
+      ];
+
+      // The picker is a TRANSITION picker wearing a state picker's clothes.
+      // §10.6 keeps the lifecycle vocabulary off the wire, so selecting an option
+      // sends AdminRetireCharacter / AdminUnretireCharacter — never a status
+      // value. `idle` is shown so the model is legible, and is never selectable:
+      // §4.4 makes it system-invoked on inactivity and unimplemented in v0.13.
+      const STATUS_STATES = [
+        { id: 'active', label: 'Active', note: 'In play.', rpc: 'AdminUnretireCharacter' },
+        { id: 'retired', label: 'Retired', note: 'Out of play. Name stays reserved. Reversible.', rpc: 'AdminRetireCharacter' },
+        { id: 'idle', label: 'Idle', note: 'System-invoked on inactivity — not implemented in v0.13.', rpc: null, disabled: true },
+      ];
+
+      let VARIANT = 'c';
+      let LOCKED_OPEN = false;
+      let PICKER_OPEN = false;
+      const state = () => document.getElementById('statepick').value;
+      const currentStatus = () => (state() === 'retired' ? 'retired' : 'active');
+
+      const fieldHtml = (path, label, val, multi, dirty) => `
+        <div class="field ${dirty ? 'dirty' : ''}">
+          <label>${label}<span class="path">${path}</span></label>
+          ${multi ? `<textarea>${val}</textarea>` : `<input value="${val}" />`}
+        </div>`;
+
+      function editableHtml(d) {
+        return `
+          ${fieldHtml('description', 'Description', 'A rangy woman in a salt-stained coat, hair cropped close.', true, d)}
+          ${fieldHtml('profile.pronouns', 'Pronouns', 'she/her', false, false)}
+          ${fieldHtml('profile.concept', 'Concept', 'Dockside fixer', false, d)}
+          ${fieldHtml('profile.species', 'Species', 'Human', false, false)}
+          ${fieldHtml('profile.currently', 'Currently', 'Owed money by the wrong people.', false, false)}
+          <div style="font-size:11px;color:var(--color-status-text);margin-top:2px">
+            + 8 more profile fields
+          </div>`;
+      }
+
+      function lockedHtml(compact) {
+        return LOCKED.map((l) => {
+          const control =
+            l.key === 'status'
+              ? statusPickerHtml()
+              : l.via
+                ? `<button class="btn-xs">${l.via}</button>`
+                : '';
+          const val = l.key === 'status' ? '' : ` — ${l.value}`;
+          return `<div class="locked">
+            <div class="lk">
+              <div class="lv"><b style="color:var(--color-foreground);font-weight:500">${l.label}</b>${val}</div>
+              ${compact || !l.why ? '' : `<div class="lw">${l.why}</div>`}
+            </div>
+            ${control}
+          </div>`;
+        }).join('<div style="height:8px"></div>');
+      }
+
+      function statusPickerHtml() {
+        const cur = currentStatus();
+        const menu = !PICKER_OPEN
+          ? ''
+          : `<div class="statusmenu">
+              ${STATUS_STATES.map((s) => {
+                const isCur = s.id === cur;
+                const cls = s.disabled ? 'is-disabled' : isCur ? 'is-current' : '';
+                const mark = s.disabled ? '⊘' : isCur ? '●' : '○';
+                return `<div class="statusopt ${cls}" ${s.disabled || isCur ? '' : `onclick="chooseStatus('${s.id}')"`}>
+                  <div class="so-mark">${mark}</div>
+                  <div>
+                    <div>${s.label}${isCur ? ' <span style="font-size:10.5px;opacity:.75">— current</span>' : ''}</div>
+                    <div class="so-note">${s.note}</div>
+                  </div>
+                </div>`;
+              }).join('')}
+              <div style="border-top:1px solid var(--color-border);margin:4px 0 0;padding:7px 9px;font-size:10.5px;line-height:1.55" class="mono muted">
+                sends <b style="color:var(--color-primary)">${cur === 'active' ? 'AdminRetireCharacter' : 'AdminUnretireCharacter'}</b><br />never a status value
+              </div>
+            </div>`;
+        return `<div class="statuspick">
+          <button class="statusbtn" onclick="togglePicker(event)">
+            ${cur === 'active' ? '<span class="badge badge-available">active</span>' : '<span class="badge badge-danger">retired</span>'}
+            <span style="opacity:.6">▾</span>
+          </button>
+          ${menu}
+        </div>`;
+      }
+
+      function sheetHtml() {
+        const st = state();
+        const d = st === 'dirty';
+
+        let body = '';
+        if (VARIANT === 'a') {
+          body = `<div class="fieldgroup">${editableHtml(d)}</div>`;
+        } else if (VARIANT === 'b') {
+          body = `<div class="fieldgroup">${editableHtml(d)}</div>
+                  <div style="height:14px"></div>
+                  ${lockedHtml(false)}`;
+        } else {
+          // C: managed-elsewhere FIRST and collapsed by default, so the
+          // exclusions are declared up front without spending the vertical space.
+          const locked = LOCKED_OPEN
+            ? lockedHtml(true)
+            : `<div class="lockedsummary" onclick="toggleLocked()">
+                 <svg width="11" height="11" class="chev"><use href="#i-chev"/></svg>
+                 <span><b>Name</b> ${LOCKED[0].value}</span>
+                 <span style="opacity:.5">·</span>
+                 <span><b>Status</b> ${currentStatus()}</span>
+                 <span style="flex:1"></span>
+                 <span style="font-size:10.5px">managed by their own operations</span>
+               </div>`;
+          body = `<div class="grouphead clickable" onclick="toggleLocked()">
+                    Managed elsewhere
+                    <svg width="10" height="10" class="chev ${LOCKED_OPEN ? 'open' : ''}"><use href="#i-chev"/></svg>
+                  </div>
+                  ${locked}
+                  <div class="grouphead">Editable here</div>
+                  <div class="fieldgroup">${editableHtml(d)}</div>`;
+        }
+
+        const conflict =
+          st === 'conflict'
+            ? `<div class="conflict">
+                 <svg width="15" height="15" style="flex-shrink:0;margin-top:1px;color:var(--color-destructive)"><use href="#i-alert"/></svg>
+                 <div><b>Someone else edited this character.</b> Your copy is version 7; the server is now at 9. Your changes were <b>not</b> applied — reload to see the current values, then re-apply.</div>
+               </div>`
+            : '';
+
+        return `<div class="sheet">
+          <div class="sheet-head">
+            <div>
+              <div style="font-size:15px;font-weight:600">Edit character</div>
+              <div style="font-size:11.5px;color:var(--color-status-text);margin-top:2px" class="mono">
+                01JQ7X…8F2 · <span title="Concurrency guard — carried as expected_version on the request (§9.4). Never editable, never actionable, so it is metadata here rather than a row.">v7</span>
+              </div>
+            </div>
+            <button class="btn-xs" style="width:26px;padding:0;display:flex;align-items:center;justify-content:center"><svg width="13" height="13"><use href="#i-x"/></svg></button>
+          </div>
+          <div class="sheet-body">${conflict}${body}</div>
+          <div class="sheet-foot">
+            <span style="font-size:11px;color:var(--color-status-text)">
+              ${d ? 'update_mask: 2 paths' : 'update_mask: empty — no-op'}
+            </span>
+            <span style="flex:1"></span>
+            <button class="btn">Cancel</button>
+            <button class="btn btn-primary" ${d ? '' : 'style="opacity:.5"'}>Save</button>
+          </div>
+        </div>`;
+      }
+
+      function retireHtml() {
+        return `<div class="confirm">
+          <h3>Retire Ashwood, Miren?</h3>
+          <div class="reversible">
+            <svg width="14" height="14" style="flex-shrink:0;margin-top:1px;color:var(--color-status-online)"><use href="#i-undo"/></svg>
+            <div><b>This is reversible.</b> Retiring sets the character's status to <code>retired</code>. Un-retiring sets it back to <code>active</code>.</div>
+          </div>
+          <p>The name <b>stays reserved</b> — no one else can claim it. The character disappears from play but the row, its properties and its history are untouched.</p>
+          <p style="font-size:12px;color:var(--color-status-text)">This is the same lifecycle transition the player's own retire uses (ADMIN-05), and it will be recorded to the audit log with your player id.</p>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+            <button class="btn">Cancel</button>
+            <button class="btn" style="border-color:color-mix(in srgb,var(--color-destructive) 45%,transparent);color:var(--color-destructive)">
+              <svg width="13" height="13"><use href="#i-archive"/></svg> Retire
+            </button>
+          </div>
+        </div>`;
+      }
+
+      function retiredHtml() {
+        return `<div class="confirm">
+          <h3>Ashwood, Miren is retired</h3>
+          <div class="reversible">
+            <svg width="14" height="14" style="flex-shrink:0;margin-top:1px;color:var(--color-status-online)"><use href="#i-undo"/></svg>
+            <div><b>Nothing was destroyed.</b> The row, its properties and its history are intact, and the name is still reserved.</div>
+          </div>
+          <p>Un-retiring returns the character to <code>active</code> and back into play.</p>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+            <button class="btn">Close</button>
+            <button class="btn btn-primary"><svg width="13" height="13"><use href="#i-undo"/></svg> Un-retire</button>
+          </div>
+        </div>`;
+      }
+
+      function sideHtml() {
+        const st = state();
+        const maskOn = st === 'dirty' ? ['description', 'profile.concept'] : [];
+        return `
+          <div class="note warn">
+            <b>⚠ There is no delete in this portal — by design.</b>
+            §4.4: <i>"an admin surface whose button says 'delete' <b>MUST NOT</b> call it without the SPEC-level decision that this section deliberately does not make."</i>
+            The §9.3 census carries <code>AdminUpdateCharacter</code>, <code>AdminRetireCharacter</code> and <code>AdminUnretireCharacter</code> — <b>no</b> <code>AdminDeleteCharacter</code>.
+            <code>world.Service.DeleteCharacter</code> (purge) exists and is irreversible, but it is <b>not</b> wired to any affordance here.
+            Its blast radius is why: it errors at runtime for any character owning a location or object (<code>locations.owner_id</code> and <code>objects.owner_id</code> have no <code>ON DELETE</code> clause), silently nulls <code>players.default_character_id</code>, and cascades <code>character_roles</code> away.
+          </div>
+
+          <div class="note">
+            <b>The field mask is an allowlist of exactly 13 paths</b> (§10.6). A path qualifies only if writing it has <b>no side condition beyond a length cap</b> — anything with a normalization pipeline, a uniqueness constraint or a state machine gets its own intent-named RPC instead.
+            <div class="masklist">${ALLOW.map((p) => `<div class="${maskOn.includes(p) ? 'on' : ''}">${maskOn.includes(p) ? '▸ ' : '  '}${p}</div>`).join('')}</div>
+            <div style="margin-top:8px">Matching is <b>exact-string</b> (§9.5 rule 2), so no prefix or wildcard can expand into a role path. <b>No</b> <code>role</code>, <code>roles</code>, <code>character_roles</code>, <code>grant</code>, <code>permission</code> or <code>capability</code> path exists in the list.</div>
+          </div>
+
+          <div class="note">
+            <b>Every mutation carries <code>expected_version</code></b> (§9.4) — try <code>state: version conflict</code>. <code>CreateCharacter</code> is the sole carve-out, since a create has no prior row.
+            An empty mask is a <b>no-op</b>, which is why Save is inert until something is edited.
+          </div>
+
+          <div class="note">
+            <b>Audit is transactional</b> (§10.7): the envelope commits in the <b>same transaction</b> as the state change, carrying before-values and the acting <b>player</b> id — not just the character.
+          </div>`;
+      }
+
+      function render() {
+        const st = state();
+        document.getElementById('panel').innerHTML =
+          st === 'retire' ? retireHtml() : st === 'retired' ? retiredHtml() : sheetHtml();
+        document.getElementById('side').innerHTML = sideHtml();
+      }
+      function setVariant(v, btn) {
+        VARIANT = v;
+        PICKER_OPEN = false;
+        document.querySelectorAll('.variant-tab').forEach((t) => t.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      }
+      function toggleLocked() {
+        LOCKED_OPEN = !LOCKED_OPEN;
+        PICKER_OPEN = false;
+        render();
+      }
+      function togglePicker(e) {
+        e.stopPropagation();
+        PICKER_OPEN = !PICKER_OPEN;
+        render();
+      }
+      // Selecting a transition never applies it directly — it routes to the
+      // confirmation, which is where the intent-named RPC is actually sent.
+      function chooseStatus(id) {
+        PICKER_OPEN = false;
+        document.getElementById('statepick').value = id === 'retired' ? 'retire' : 'retired';
+        render();
+      }
+      document.addEventListener('click', () => {
+        if (PICKER_OPEN) {
+          PICKER_OPEN = false;
+          render();
+        }
+      });
+      render();
+    </script>
+  </body>
+</html>

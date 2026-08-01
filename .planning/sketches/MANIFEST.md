@@ -25,7 +25,11 @@ Grounded in-repo rather than borrowed from outside products:
 
 SvelteKit 2.69 · Svelte 5.56 (runes) · Tailwind 4.3 · shadcn-svelte style `nova`
 (baseColor `slate`) · `bits-ui` 2.18 · icons `@lucide/svelte`.
-Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim.
+Sketches are plain HTML. `themes/default.css` carries **34 of `web/src/app.css`'s 39
+`--color-*` tokens at byte-identical values** (verified 2026-08-01; the 5 absent ones are
+unused by every sketch) — but it is **not** a verbatim mirror: it restructures `@theme` into
+plain `:root` and drops `@layer base`, the density tokens and the reduced-motion keyframes.
+Trust it for color; it is not an `app.css` substitute.
 
 ## Locked Decisions (intake, 2026-08-01)
 
@@ -71,10 +75,11 @@ routed somewhere a phase workflow or a human will actually encounter it:
 | `**Sketch findings**` lines on ROADMAP Phases **2, 3, 4, 6** | `discuss-phase` and `plan-phase` both read the phase's ROADMAP section | the phase-specific questions, verbatim |
 | GitHub [#4904](https://github.com/holomush/holomush/issues/4904) | issue lists, `abac-reviewer` routing | defect D1 |
 | GitHub [#4903](https://github.com/holomush/holomush/issues/4903) | issue lists | missing `+error.svelte` |
-| `/gsd-sketch --wrap-up` → `.claude/skills/sketch-findings-*/SKILL.md` | `discuss-phase:251`, `plan-phase:611,753` | the design decisions, as `<prior_decisions>` |
+| `.claude/skills/sketch-findings-holomush/SKILL.md` | `discuss-phase:251`, `plan-phase:611,753` | the design decisions, as `<prior_decisions>` |
 
-**The wrap-up has not been run yet** — until it is, phase discussions get a
-warning that unpackaged sketches exist but none of their content.
+**Wrap-up run 2026-08-01** — all four sketches included in full and packaged into
+`.claude/skills/sketch-findings-holomush/` (6 reference files + winning sources + theme).
+See [WRAP-UP-SUMMARY.md](WRAP-UP-SUMMARY.md).
 
 ## ⚠ Open SPEC amendments raised by sketches
 
