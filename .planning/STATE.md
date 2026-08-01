@@ -4,11 +4,11 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 1
 current_phase_name: Portal SPEC
-status: planning
+status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-08-01T15:01:13.053Z"
-last_activity: 2026-07-31
-last_activity_desc: v0.13 roadmap created (6 phases, 50/50 requirements mapped)
+last_updated: "2026-08-01T15:03:13.243Z"
+last_activity: 2026-08-01
+last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 6
   completed_phases: 0
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6). Give web players a
+**Current focus:** Phase 1 — Portal SPEC
 complete character identity surface (creation, management, public profiles with privacy) and stand up the
 `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 1 — Portal SPEC (not started)
-Plan: —
-Status: Roadmap created; ready to plan Phase 1
+Phase: 1 (Portal SPEC) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 1
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0% (0/6 phases)
-Last activity: 2026-07-31 — v0.13 roadmap created (6 phases, 50/50 requirements mapped)
+Last activity: 2026-08-01 — Phase 1 execution started
 
 **Next action:** `/gsd-discuss-phase 1` then `/gsd-plan-phase 1`.
 
