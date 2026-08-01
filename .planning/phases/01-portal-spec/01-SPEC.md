@@ -884,14 +884,16 @@ ratchet exists to catch. A `pending` entry carries no `asserted_by`.
 
 > *Placeholder — authored by plan 01-05.*
 
-> **Queued for plan 01-05 — FIVE amendments, not four.** `01-CONTEXT.md:197-202`
+> **Queued for plan 01-05 — SIX amendments, not four.** `01-CONTEXT.md:197-202`
 > drafts four rows (ROADMAP Phase 4 criterion 3, ROADMAP Phase 5 criterion 4,
 > REQUIREMENTS PROFILE-12, research SUMMARY CONFLICT 4). Plan 01-01 added a
-> **fifth**, which 01-05 MUST carry:
+> **fifth** and plan 01-02's tree enumeration forced a **sixth**. 01-05 MUST
+> carry both:
 >
 > | Artifact | Amendment |
 > | --- | --- |
 > | `docs/architecture/invariants.yaml` — the `INV-PRIVACY` scope record | The `boundary:` first sentence read *"Privacy-relevant gating on history reads."* and now reads *"Privacy-relevant gating on reads."* The scope is named PRIVACY; it was narrowed to history reads only because stream-history work minted it. The `"Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe authorization (→ INV-EVENTBUS)"` clause is **preserved verbatim and MUST NOT be widened** — that clause is what routes this SPEC's tier-floor evaluation to `ACCESS` (§13), and it is why splitting the four guarantees across two scopes is coherent rather than a fudge. The `description:` enumeration was extended in the same edit so the scope record describes the entry family it now owns. Landed by plan 01-01. |
+> | `.planning/REQUIREMENTS.md:31` (PORTAL-02) and `.planning/ROADMAP.md:132` (Phase 1 success criterion 1) | Both read *"including the **three** existing public export surfaces"*. The tree has **four**. Plan 01-02's enumeration found `WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`) returning `repeated PublicSceneArchive`, whose `participants_snapshot` (`api/proto/holomush/scene/v1/scene.proto:1053`) carries the same frozen participant names as `WebGetPublicSceneArchive` — **in bulk**. Amend both to *"four"*. This is not cosmetic: a Phase-4 census built to the requirement's letter would enumerate three and miss the highest-volume unauthenticated name-export surface of the set, which is precisely the missing-census-member failure PORTAL-10 rule 1 exists to prevent. Verified against the tree by the orchestrator at the wave-2 boundary, not relayed. |
 
 ## 15. Out of Scope
 
