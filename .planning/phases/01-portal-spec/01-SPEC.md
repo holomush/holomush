@@ -1513,6 +1513,32 @@ at will. An additive tier-floor permit publishes those rows to the open web.
 
 Two evaluations, ANDed by the caller. Not one evaluation with two permits in it.
 
+#### 8.5.1.1 Phase-2 obligation: term B's request shape, and why it MUST NOT be removed
+
+This section fixes the **composition** but deliberately does not fix the second
+evaluation's **request shape**, which Phase 2 MUST settle before seeding.
+
+The hazard is specific. All six shipped property policies are
+`principal is character` (`internal/access/policy/seed.go:110-145`). Term B issued
+with §8.4.1's `viewer:` subject therefore matches **zero** policies and resolves
+`EffectDefaultDeny` (`internal/access/policy/engine.go:591-611`), making `A AND B`
+permanently false: **no profile attribute publishes to anyone.**
+
+That is fail-closed, so it leaks nothing. The danger is the *repair*. Confronted
+with a profile that renders empty for every viewer, the cheapest-looking fix is to
+drop term B — which restores precisely the additive-permit exposure this section
+exists to close, and does so quietly, because the symptom it relieves looks like a
+bug and the hole it reopens has no symptom at all.
+
+**Removing term B is a normative violation of this section, not a tuning decision.**
+Phase 2 MUST instead give term B a shape that can match: either viewer-flavored
+row-keyed policies alongside the existing character-flavored ones, or an explicit
+rule that term B evaluates against a co-located character subject where one exists
+and **DENIES** where one does not. Whichever is chosen, the conjunction stands.
+
+Identified by `abac-reviewer` at the Phase 1 hand-off gate (2026-08-01) as the one
+residual after the four blocking §8 findings were closed.
+
 ### 8.6 The configured postures
 
 The table below is the whole configuration surface. Its rows are the governed
