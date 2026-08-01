@@ -602,7 +602,186 @@ the fact of retirement, not the operational history behind it.
 
 ## 5. Name-Capture Surface Inventory
 
-> *Placeholder — authored by plan 01-03.*
+This section is normative, and like §3 it is also **data**: it is the checked-in
+list of every place the system stores a character's display name instead of
+referencing the character by id. §3 answers *"what does this projection publish
+now"*; this section answers the different question §3.2 routes here — *"was this
+name frozen at capture time, and is it therefore beyond the reach of any later
+rename or privacy change"*.
+
+The answer for the frozen half is **yes, and deliberately so**. The event bus is
+append-only by design; rewriting it to chase a rename would be a far worse bug
+than a stale name.
+
+### 5.1 The four normative rules
+
+**Rule 1 — the tie-break. Every site carries exactly ONE verdict.** A site is
+`live` **only when an update path actually exists that a rename reaches**;
+otherwise it is `historical`. A site that looks like both is `historical`. No
+site is ever both, and no site is unclassified — an unlisted surface is an unmade
+decision, not an implicitly-live one.
+
+The test is mechanical, and it is about the **write** path, not the read path: if
+renaming the character changes what this site subsequently serves without any
+further write, it is `live`. If the value was written once and no rename touches
+that write, it is `historical` — **even if the surface that serves it is
+recomputed on every read**, because recomputation from frozen bytes yields the
+frozen name.
+
+**Rule 2 — two different equality relations, and they MUST NOT be conflated.**
+
+| Verdict | Compared how |
+| --- | --- |
+| `historical` | As the **stored bytes**, exactly. A historical captured name is **NEVER re-normalized on read.** It was frozen at capture time under whatever policy was in force then, and re-normalizing it on read would silently rewrite the historical record in the reader's memory — producing a name the archive does not contain, differing between two readers running different code versions. |
+| `live` | Under §6's normalized form. |
+
+These are two relations over the same-looking strings. A single shared
+"names are equal" helper used for both is a bug: it either re-normalizes history
+or it leaves live comparison unnormalized, and there is no third outcome.
+
+**Rule 3 — the concurrency verdict.** A rename running concurrently with a
+name-capture write **may leave the captured name stale** — the capture may record
+the pre-rename name after the rename has committed. **This outcome is accepted**
+under the `historical` verdict: no compensating update runs, no reconciliation
+job is scheduled, and the append-only log is **never** mass-updated.
+
+This is a **deliberate scope decision, not an unhandled race.** The window is one
+in-flight emit; the stale value it produces is indistinguishable from the stale
+values every earlier capture already holds by design, which is exactly why no
+special handling is warranted. Serializing renames against every in-flight emit
+would put a lock on the emit path to buy consistency in a log whose whole
+contract is that it is not consistent with live state.
+
+**Rule 4 — the idempotency verdict for a same-name rename.** A rename whose
+requested name normalizes to the character's **current stored display name,
+byte-for-byte, is a no-op**: it emits no rename event, does not bump
+`characters.version`, and returns success.
+
+- The `expected_version` precondition is **still evaluated**. A stale
+  `expected_version` on a same-name rename is still a conflict error; the no-op
+  is about the write, not about the guard.
+- A request whose normalized **uniqueness key** matches the current one but whose
+  **display form differs** — a case or spacing variant — is a **real rename**: it
+  writes the new display form, emits the event, and bumps the version. It does
+  not collide with itself in the uniqueness index, because the row it would
+  collide with is its own.
+
+Rejection was the alternative and it is rejected: a client retrying after a lost
+response would receive an error for a request that already succeeded, which turns
+a harmless retry into a user-visible failure. Stating one outcome here is the
+point — silence would become two implementations, one in Phase 3 and a different
+one in Phase 6.
+
+### 5.2 The inventory
+
+Row order is presentational only. **No rule anywhere in this SPEC references a
+row of this table by position**, and reordering the table changes nothing.
+
+#### Historical — frozen at capture, unreachable by rename
+
+| Capture site | Where the name is stored | Verdict | Reachable by rename | Consequence |
+| --- | --- | --- | --- | --- |
+| `actor_display_name` on the communication-content payload, stamped at emit time from the acting character's name | `api/proto/holomush/comm/v1/comm.proto:25-28`; stamped at `pkg/plugin/comm/builder.go:41`, `:48`, `:55` (each passing `a.Name`) | `historical` | no | The canonical name capture. Every say / pose / OOC line carries the name the character had when the line was emitted. |
+| The same payload, durably projected into the **host** audit table | `internal/store/migrations/000052_events_audit_partition.up.sql:114` (`envelope BYTEA NOT NULL` — the name is inside the opaque envelope, not a column) | `historical` | no | Append-only. There is no column to update and no update path; a rename reaches none of it. |
+| The same payload, durably projected into the **plugin-owned** scene log | `plugins/core-scenes/migrations/000004_create_scene_log.up.sql:23` (`payload BYTEA NOT NULL`) | `historical` | no | Same shape as the host table, in the plugin's own schema. Served publicly through the export surfaces below. |
+| The legacy payload keys `character_name` and `sender_name`, still read by the web translator for un-migrated emitters | `internal/web/translate.go:25-26` (the `genericPayload` fields), consumed at `internal/web/translate.go:88-96` | `historical` | no | The same frozen value under two older key names. Migrating an emitter to the new key does **not** rewrite what earlier emits already stored. |
+| `GameEvent.actor`, the rendered read-side of the three rows above | `api/proto/holomush/web/v1/web.proto:426-429` — documented as *"the DISPLAY NAME of the acting character, extracted from the event payload… For stable identity use `actor_id`, not this field"* | `historical` | no | Recomputed on every read, yet still `historical` by Rule 1: it is recomputed **from frozen bytes**. This is the row that makes Rule 1's write-path test necessary — a read-path test would classify it `live` and be wrong. |
+| `published_scenes.participants_snapshot` — the frozen participant list of a published scene | `plugins/core-scenes/migrations/000008_scene_publication.up.sql:23` (`participants_snapshot JSONB`); written once at the PUBLISHED transition from `plugins/core-scenes/publish_snapshot.go:152` | `historical` | no | **Unauthenticated on read** through three of §3.3's four public export surfaces. See §5.4 — what this column stores today is not what its proto contract says. |
+| `published_scenes.content_entries[].speaker` — the per-line speaker label of a published scene | `plugins/core-scenes/migrations/000008_scene_publication.up.sql:21` (`content_entries JSONB`); written at `plugins/core-scenes/publish_snapshot.go:375` and `plugins/core-scenes/commands.go:107` | `historical` | no | **Unauthenticated on read.** Same §5.4 caveat. |
+
+#### Live — re-resolved on every read
+
+| Capture site | Where the name is read from | Verdict | Reachable by rename | Consequence |
+| --- | --- | --- | --- | --- |
+| `characters.name` — the source of truth every live surface resolves against | `internal/store/migrations/000001_baseline.up.sql:71` | `live` | yes | The anchor row. A rename is a write here and nowhere else. |
+| The whole §3 character-projection family — `CharacterInfo.name`, `CharacterSummary.name`, `CharacterDirectoryEntry.name`, `PresenceEntry`, and the v0.13 `PublicCharacter` / `OwnCharacter` / `AdminCharacter` replacements | §3.2's type-reachable table | `live` | yes | Projected from the character row per read. A rename is visible on the next read with no further work. |
+| `SelectCharacterResponse.character_name` and its three siblings (§3.3's name-reachable scalar rows) | `internal/grpc/auth_handlers.go:352`, `:380`, `:413`, `:505` — each assigning from the freshly-read character row's `Name` | `live` | yes | A bare `string` on the wire, but resolved live, so a rename reaches it. |
+| `ParticipantInfo.character_name` — the scene roster | `plugins/core-scenes/service.go:522-528`, `:534-538`, `:1504-1513` | `live` | yes | Resolved per read, best-effort. Today no name resolver is wired in the plugin, so it falls back to the character id — the proto documents that fallback (`api/proto/holomush/scene/v1/scene.proto:328-330`). Wiring a resolver later keeps it `live`; it does not move the verdict. |
+| `PoseOrderEntry.character_name` — the pose queue | `plugins/core-scenes/poseorder.go:18-23`, populated at `:76` from the caller-supplied `names` map, which `plugins/core-scenes/service.go:2015` passes as `nil` today | `live` | yes | Same shape as the roster row: a per-read lookup with an id fallback. |
+
+#### Explicitly checked and **not** a name-capture surface
+
+Stated so that a later reader does not have to re-derive the negative:
+
+| Candidate | Why it is not a member |
+| --- | --- |
+| `events_audit.rendering` (`internal/store/migrations/000052_events_audit_partition.up.sql:119`, `JSONB NOT NULL`) | Carries `RenderingMetadata` — `Category`, `Format`, `Label`, `DisplayTarget`, `SourcePlugin`, `SourcePluginVersion` (`internal/eventbus/types.go:127-134`). Verb-level presentation metadata; no character name and no actor field. |
+| Every foreign key referencing `characters(id)` | They hold the **id**, which a rename does not touch. `players.default_character_id` (`:80`), `character_roles.character_id` (`:84`), `locations.owner_id` (`:99`), `objects.owner_id` (`:143`) — all in `internal/store/migrations/000001_baseline.up.sql`. Correct by construction; listed so the enumeration is visibly complete rather than visibly silent about them. |
+
+### 5.3 Cross-listing: which capture site each public export surface serves
+
+§3.2 requires that the public export surfaces appear in **both** §3 and §5 —
+being in one table only is the defect the cross-listing exists to prevent. All
+four are unauthenticated or near-unauthenticated read paths over rows this
+section classifies `historical`.
+
+| Public export surface (§3.3) | Serves which §5.2 capture site | Verdict inherited |
+| --- | --- | --- |
+| `holomush.web.v1.WebService.WebGetPublicSceneArchive` (`api/proto/holomush/web/v1/web.proto:345`) | `published_scenes.participants_snapshot` + `content_entries[].speaker` | `historical` |
+| `holomush.web.v1.WebService.WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`) | the same two columns, returned **in bulk** across every published scene | `historical` |
+| `holomush.web.v1.WebService.WebDownloadPublicSceneArchive` (`api/proto/holomush/web/v1/web.proto:351`) | the same two columns, rendered to opaque `bytes` | `historical` |
+| `holomush.web.v1.WebService.WebExportScene` (`api/proto/holomush/web/v1/web.proto:329`) | the **scene-log payload** rather than the publication columns — it renders live from `scene_log` rows (`plugins/core-scenes/export.go:103`, *"Read IC `scene_log` rows (live read, ORDER BY id ASC)"*), decoding each payload's actor field | `historical` |
+
+The last row is the one worth reading twice. `WebExportScene` performs a **live
+read** of the log — and the verdict is still `historical`, because Rule 1's test
+is about the write path: a live read of frozen bytes returns frozen values.
+
+### 5.4 The scene-archive rows say "name" and store an id
+
+This is recorded rather than corrected, because it changes what a Phase-3 or
+Phase-6 planner should expect to find.
+
+**The proto contract says names.** `participants_snapshot` is documented as *"The
+participant character names snapshotted at publish time"* at all three of its
+declarations — `api/proto/holomush/scene/v1/scene.proto:873-874`, `:957-958`, and
+`:1052-1053` — and `PublishedSceneEntry.speaker` as *"The speaking character's
+display label for this line"* (`api/proto/holomush/scene/v1/scene.proto:821`).
+
+**The implementation stores ids.** `ReadSceneMetaForSnapshot` populates the
+participant list with `SELECT character_id FROM scene_participants`
+(`plugins/core-scenes/publish_store.go:987-1002`), and its own type comment says
+so outright: *"Name resolution is a follow-up; character IDs are the available
+identity surface"* (`plugins/core-scenes/publish_store.go:956-960`). `speaker` is
+assigned from `pl.ActorID` — the payload's actor id — at
+`plugins/core-scenes/publish_snapshot.go:375` and
+`plugins/core-scenes/commands.go:107`. The communication-content proto records
+the same state from the other side: `actor_display_name` is *"Empty when name
+resolution is deferred (scenes today)"* (`api/proto/holomush/comm/v1/comm.proto:25-27`).
+
+**Three consequences, all normative.**
+
+1. **The verdict does not change.** These rows are `historical` either way. What
+   is frozen at the PUBLISHED transition stays frozen, whether the frozen bytes
+   are an id or a name.
+2. **The exposure today is smaller than the requirement assumes, and the exposure
+   tomorrow is exactly as large.** PORTAL-03 and the source research both
+   describe these surfaces as publishing names to anonymous readers. Today they
+   publish ids. The moment the documented "follow-up" name resolution lands, they
+   publish **frozen names with no update path** — which is why §4.4's rule that
+   retire MUST NOT release the name is load-bearing prospectively and not only
+   retrospectively.
+3. **The follow-up MUST NOT backfill.** When name resolution lands, it applies to
+   publications made from that point forward. It **MUST NOT** resolve names into
+   already-written `participants_snapshot` or `content_entries` rows: that is the
+   mass update Rule 3 forbids, wearing the costume of a data-quality improvement.
+
+The proto-versus-handler disagreement itself is filed per
+`.claude/rules/proto-doc-comments.md`, which requires an issue capturing the
+mismatch and documenting the current behavior; this SPEC documents the current
+behavior and does not change the schema.
+
+### 5.5 The inventory adds no new denormalizations
+
+**v0.13 adds no new name-capture surface.** No profile field, no media reference,
+no admin row, and no notification payload copies a character display name. Where
+a name is needed, it is resolved at read time through the projection functions of
+§2.3.
+
+**Any future surface that would store a display name instead of an id MUST add a
+row to §5.2 first**, with a verdict, before the code that writes it lands. A
+denormalization introduced without a row here is a surface that no rename, no
+retirement, and no privacy change can reach, and that nothing in this document
+says so — which is the precise failure this inventory exists to prevent.
 
 ## 6. Name Normalization Policy
 
