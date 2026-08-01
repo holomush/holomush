@@ -135,11 +135,16 @@ the property is false**.
 4. Every mutation request message in the SPEC's RPC surface carries **`expected_version`**; the SPEC records role mutation as an **explicit exclusion** from character administration; and it answers "does any v0.13 surface sort or filter on a profile field?" with a stated verdict rather than silence.
 5. The SPEC mandates the six **verification-integrity rules** (census set-equality, paired positive controls, marshaled-bytes assertions, gates demonstrated RED pre-fix, top-level `oops.AsOops(err).Code()`, invariant-scope discipline) as binding acceptance criteria that every later phase plan inherits.
 
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 1`)
+- [ ] 01-01-PLAN.md — SPEC skeleton + profile/media data model + profile visibility model, declared and registered (tracer)
+- [ ] 01-02-PLAN.md — audience matrix + per-audience message shape + exhaustive read-surface inventory
+- [ ] 01-03-PLAN.md — character lifecycle + name-capture surface inventory + name normalization policy
+- [ ] 01-04-PLAN.md — full RPC surface with `expected_version` + admin IA and exclusions + sorting/filtering verdict
+- [ ] 01-05-PLAN.md — verification-integrity rules + amendments/divergences table + applying the four amendments
+- [ ] 01-06-PLAN.md — citation verification sweep + grounding trace + spec-location pointer edit + completeness gate
 
 ### Phase 2: ABAC & Schema Vocabulary
 
