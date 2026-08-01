@@ -256,7 +256,182 @@ asserted over marshaled bytes precisely so that a hint field cannot satisfy it.
 
 ## 3. Read-Surface Inventory
 
-> *Placeholder — authored by plan 01-02.*
+This section is normative, and it is also **data**: the tables below are the
+checked-in expected set the Phase-4 census (§2.6) compares against.
+The comparison is **set equality** on the fully-qualified proto method name. A row
+here is a census member; a member absent from here is a RED census.
+
+### 3.1 Membership rules
+
+**Rule 1 — membership is decided by response type, never by runtime
+cardinality.** An RPC whose response transitively contains a character-shaped
+message is a census member **even when it returns zero characters at runtime**. An
+RPC that returns zero characters is **still a census member**: an empty list never
+removes a member, a nil field never removes a member, and a surface that happens
+to return nothing in the current fixture is still a member.
+
+The rule matters because the alternative — deriving membership from observed
+responses — makes the census's coverage depend on fixture richness, which is the
+exact defect `.planning/research/PITFALLS.md` Pitfall 3 records for
+snapshot-shaped tests. `holomush.web.v1.WebService.WebListMyScenes` is the worked
+example: its `CharacterSceneInfo` documents that *"the roster fields
+(participants, observers) are unset on this surface"*
+(`api/proto/holomush/scene/v1/scene.proto:1013-1015`), so it returns no character
+projection at runtime today. Membership is nonetheless decided by the response
+type, and §3.4 records why that particular surface is governed by §5 rather than
+by this census.
+
+**Rule 2 — each RPC carries exactly one audience verdict, and RPCs sharing an
+audience share one projection function.** The verdict names the audience of the
+**character data carried in the response**, not the caller's relationship to the
+RPC. A player reading their own roster is `owner`; the same player reading a
+directory of everyone else's characters is `public`, because the character data
+is not theirs. Two RPCs with the same verdict MUST call the same one of
+`projectPublic` / `projectOwner` / `projectAdmin` (§2.3) rather than each
+assembling its own message — a second assembly site is a second place the
+audience contract can drift.
+
+**Rule 3 — this table IS the expected set.** Adding a character-returning RPC
+without adding a row here makes the census RED. **That is the intended behavior**,
+not a friction to be worked around. The correct response to a RED census is to add
+the row and give the surface an audience verdict and a projection; it is never to
+relax the comparison, never to widen the predicate, and never to delete the
+inventory row that went stale.
+
+### 3.2 What counts as a character-shaped message
+
+The census predicate is mechanical, so it must be stated mechanically.
+
+**Type-reachable members.** A response transitively containing any of these
+messages is a census member:
+
+| Message | Defined at |
+| --- | --- |
+| `holomush.world.v1.CharacterInfo` | `api/proto/holomush/world/v1/world.proto:77-91` |
+| `holomush.core.v1.CharacterSummary` | `api/proto/holomush/core/v1/core.proto:688-710` |
+| `holomush.core.v1.CharacterDirectoryEntry` | `api/proto/holomush/core/v1/core.proto:902-907` |
+| `holomush.core.v1.PresenceEntry` | `api/proto/holomush/core/v1/core.proto:428-441` |
+| `holomush.web.v1.CharacterSummary` | `api/proto/holomush/web/v1/web.proto:496-513` |
+| `holomush.web.v1.WebPresenceEntry` | `api/proto/holomush/web/v1/web.proto:960-968` |
+| `holomush.plugin.host.v1.CharacterSummary` | `api/proto/holomush/plugin/host/v1/world.proto:123-128` |
+| the v0.13 replacements: `PublicCharacter`, `PublicCharacterSummary`, `OwnCharacter`, `AdminCharacter` (§2.2, §2.4) | Phase 4 |
+
+**Name-reachable members.** Some surfaces carry character identity as a bare
+scalar or as rendered bytes, where no typed message exists for a predicate to
+find. **A type-driven predicate alone would miss every one of them**, so they are
+census members **enumerated by name** in §3.3, and the census MUST seed its
+expected set with both categories. Stating this limit is the point: a census whose
+predicate silently cannot reach a whole class of surface is a census that reports
+green over a leak.
+
+**Deliberately outside the predicate.** `holomush.scene.v1.ParticipantInfo`
+(`api/proto/holomush/scene/v1/scene.proto:325-338`),
+`holomush.scene.v1.PublishedSceneEntry.speaker`
+(`api/proto/holomush/scene/v1/scene.proto:820-827`), and
+`holomush.scene.v1.CharacterSceneInfo`
+(`api/proto/holomush/scene/v1/scene.proto:1012-1027`) are **not** character
+projections. They are scene-membership and scene-content rows that **denormalize a
+character display name** at their own layer. They are governed by §5's
+name-capture inventory, not by this census, because the question they raise is
+"was this name captured at emit time and is it therefore unreachable by a later
+privacy change" — which is a different question with a different answer from "what
+does this projection publish now".
+
+The exception is the three public export surfaces: they denormalize names **and**
+publish them to unauthenticated readers, so they are inventoried in **both** §3 and
+§5. Being in one table only is the defect that cross-listing exists to prevent.
+
+### 3.3 The inventory
+
+Row order is presentational; the census comparison is order-independent (§2.6).
+
+#### Host-owned character projections
+
+| RPC | Proto location | Audience | Character-shaped message returned | Notes |
+| --- | --- | --- | --- | --- |
+| `holomush.world.v1.WorldService.GetCharacter` | `api/proto/holomush/world/v1/world.proto:30` | `public` | `CharacterInfo` (`world.proto:157-160`) | ABAC-gated `read` on the character resource. Carries `player_id` (`world.proto:81`) — an OOC player↔character linkage. Phase 4 MUST decide whether `PublicCharacter` retains it; it is not identity the `public` audience obviously needs. |
+| `holomush.world.v1.WorldService.ListCharactersAtLocation` | `api/proto/holomush/world/v1/world.proto:38` | `public` | `repeated CharacterInfo` (`world.proto:177-181`) | Returns an empty list, never `NOT_FOUND`, for an empty location — a rule-1 member with a routinely-empty result. |
+| `holomush.plugin.host.v1.WorldQueryService.QueryCharacter` | `api/proto/holomush/plugin/host/v1/world.proto:28` | `public` | inline id/player_id/name/description/location_id (`plugin/host/v1/world.proto:96-108`) | The plugin-facing twin of `GetCharacter`. A plugin is neither owner nor admin, so it receives the `public` projection. Per `.claude/rules/plugin-runtime-symmetry.md` the Lua `holomush.query_character` host function and this RPC MUST land on the same projection. |
+| `holomush.plugin.host.v1.WorldQueryService.QueryLocationCharacters` | `api/proto/holomush/plugin/host/v1/world.proto:33` | `public` | `repeated CharacterSummary` (`plugin/host/v1/world.proto:131-134`) | Already identity-only (`id`, `name`). |
+| `holomush.core.v1.CoreService.AuthenticatePlayer` | `api/proto/holomush/core/v1/core.proto:74` | `owner` | `repeated CharacterSummary` (`core.proto:742`) | The login response carries the authenticating player's own roster with presence telemetry. Owner-audience, and correctly so — but it means `CharacterSummary` is load-bearing on the auth path and cannot simply be narrowed without reshaping this response too. |
+| `holomush.core.v1.CoreService.SelectCharacter` | `api/proto/holomush/core/v1/core.proto:80` | `owner` | `character_name` scalar (`core.proto:781`) | Name-reachable: a bare display-name scalar, not a typed projection. |
+| `holomush.core.v1.CoreService.CreatePlayer` | `api/proto/holomush/core/v1/core.proto:85` | `owner` | `repeated CharacterSummary` (`core.proto:817`) | Roster is empty at creation — a rule-1 member whose result is always empty today. |
+| `holomush.core.v1.CoreService.CreateGuest` | `api/proto/holomush/core/v1/core.proto:90` | `owner` | `repeated CharacterSummary` (`core.proto:843`) | The provisioned starter character. |
+| `holomush.core.v1.CoreService.CreateCharacter` | `api/proto/holomush/core/v1/core.proto:95` | `owner` | `character_name` scalar (`core.proto:872`) | Name-reachable. |
+| `holomush.core.v1.CoreService.ListCharacters` | `api/proto/holomush/core/v1/core.proto:99` | `owner` | `repeated CharacterSummary` (`core.proto:887`) | The player's own roster, enriched with session status and last location. |
+| `holomush.core.v1.CoreService.ListAllCharacters` | `api/proto/holomush/core/v1/core.proto:107` | `public` | `repeated CharacterDirectoryEntry` (`core.proto:912`) | The directory. Already identity-only; §3.5 records the doc-comment rule that made it so. |
+| `holomush.core.v1.CoreService.CheckPlayerSession` | `api/proto/holomush/core/v1/core.proto:129` | `owner` | `repeated CharacterSummary` (`core.proto:980`) | The cookie-auth check returns the caller's own roster. |
+| `holomush.core.v1.CoreService.ListFocusPresence` | `api/proto/holomush/core/v1/core.proto:169` | `public` | `repeated PresenceEntry` (`core.proto:471`) | Other characters present in the caller's focus context. `PresenceEntry` deliberately omits an arrival timestamp (`core.proto:439-440`) — a precedent for the same omit-don't-publish discipline §2.7 states. |
+| `holomush.core.v1.CoreService.QueryStreamHistory` | `api/proto/holomush/core/v1/core.proto:154` | `public` | `repeated EventFrame` (`core.proto:1102`), carrying `actor_id` (`core.proto:279`) and a payload with a denormalized display name | Name-reachable. Historical frames; the names in them were captured at emit time — see §5. |
+| `holomush.web.v1.WebService.WebAuthenticatePlayer` | `api/proto/holomush/web/v1/web.proto:157` | `owner` | `repeated CharacterSummary` (`web.proto:540`) | Web twin of `AuthenticatePlayer`. |
+| `holomush.web.v1.WebService.WebSelectCharacter` | `api/proto/holomush/web/v1/web.proto:162` | `owner` | `character_name` scalar (`web.proto:580`) | Name-reachable. |
+| `holomush.web.v1.WebService.WebCreatePlayer` | `api/proto/holomush/web/v1/web.proto:167` | `owner` | `repeated CharacterSummary` (`web.proto:607`) | |
+| `holomush.web.v1.WebService.WebCreateGuest` | `api/proto/holomush/web/v1/web.proto:173` | `owner` | `repeated CharacterSummary` (`web.proto:631`) | |
+| `holomush.web.v1.WebService.WebCreateCharacter` | `api/proto/holomush/web/v1/web.proto:177` | `owner` | `character_name` scalar (`web.proto:656`) | Name-reachable. |
+| `holomush.web.v1.WebService.WebListCharacters` | `api/proto/holomush/web/v1/web.proto:182` | `owner` | `repeated CharacterSummary` (`web.proto:669`) | The web roster. |
+| `holomush.web.v1.WebService.WebCheckSession` | `api/proto/holomush/web/v1/web.proto:207` | `owner` | `repeated CharacterSummary` (`web.proto:745`) | |
+| `holomush.web.v1.WebService.WebQueryStreamHistory` | `api/proto/holomush/web/v1/web.proto:222` | `public` | `repeated GameEvent` (`web.proto:832-834`), whose `actor` field is *"the DISPLAY NAME of the acting character, extracted from the event payload"* (`web.proto:427-429`) | Name-reachable, and the clearest case that a type predicate alone is insufficient: the leaked value is a bare `string`. |
+| `holomush.web.v1.WebService.WebListFocusPresence` | `api/proto/holomush/web/v1/web.proto:252` | `public` | `repeated WebPresenceEntry` (`web.proto:987`) | Web twin of `ListFocusPresence`. |
+
+#### The `WebListAllCharacters` split (§2.4)
+
+| RPC | Proto location | Audience | Character-shaped message returned | Notes |
+| --- | --- | --- | --- | --- |
+| `holomush.web.v1.WebService.WebListAllCharacters` | `api/proto/holomush/web/v1/web.proto:187` | `public` | `repeated holomush.core.v1.CharacterDirectoryEntry` (`web.proto:682`) | **Removed in v0.13.** Present in this table so the census's expected set describes the pre-split tree; Phase 4 deletes this row in the same change that deletes the RPC. |
+| `holomush.web.v1.WebService.WebListCharacterDirectory` | Phase 4 | `public` | `repeated PublicCharacterSummary` | Replacement. Identity only; drops `has_active_session`, `session_status`, `last_location`, `last_played_at`. |
+| `holomush.web.v1.WebService.WebAdminListCharacters` | Phase 4 | `admin` | `repeated AdminCharacter` | Replacement. The rich row, reached through the admin surface (§10). |
+
+#### The three existing public export surfaces
+
+These are **already live and already unauthenticated**. Each publishes
+denormalized character names to any reader, and each is the reason §5 exists.
+Every one is inventoried in **both** this table and §5's name-capture table.
+
+| RPC | Proto location | Audience | Character-shaped message returned | Notes |
+| --- | --- | --- | --- | --- |
+| `holomush.web.v1.WebService.WebExportScene` | `api/proto/holomush/web/v1/web.proto:329` | `public` | rendered `bytes content` (`web.proto:1136-1143`) containing per-line speaker labels | Proxies `holomush.sceneaccess.v1.SceneAccessService.ExportScene` (`api/proto/holomush/sceneaccess/v1/sceneaccess.proto:143`). Name-reachable through opaque bytes — no proto field names a character, so only an explicit enumeration reaches it. Publishes other characters' names to the requesting participant. |
+| `holomush.web.v1.WebService.WebGetPublicSceneArchive` | `api/proto/holomush/web/v1/web.proto:345` | `public` | `repeated string participants_snapshot` (`web.proto:1195`) and `repeated PublishedSceneEntry content_entries` (`web.proto:1197`), each entry carrying `speaker` (`scene.proto:822`) | Proxies `SceneAccessService.GetPublicSceneArchive` (`sceneaccess.proto:164`). **Unauthenticated.** Publishes a frozen list of participant character names to anonymous readers. A later privacy change cannot reach this snapshot. |
+| `holomush.web.v1.WebService.WebDownloadPublicSceneArchive` | `api/proto/holomush/web/v1/web.proto:351` | `public` | rendered `bytes content` (`web.proto:1216-1221`) | Proxies `SceneAccessService.DownloadPublicSceneArchive` (`sceneaccess.proto:171`). **Unauthenticated.** The download form of the row above; same names, rendered rather than structured, so likewise reachable only by explicit enumeration. |
+
+`holomush.web.v1.WebService.WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`,
+proxying `sceneaccess.proto:157`) returns `repeated holomush.scene.v1.PublicSceneArchive`
+(`web.proto:1176`), whose `participants_snapshot` (`scene.proto:1053`) carries the
+same frozen names in list form. It is a **fourth** public export surface, and it is
+a census member with audience `public` on the same grounds as the three above. It
+is named separately here because research enumerated three; the tree carries four,
+and the fourth is the one that returns them in bulk.
+
+### 3.4 The v0.13 surfaces §9 adds
+
+§9 defines the new profile and administration RPCs. **Every one whose response
+carries a character-shaped message is a census member**, and §9's own surface
+table carries the audience verdict for each. The Phase-4 census's expected set is
+the **union** of §3.3 and §9's character-returning rows, minus the rows §2.4
+deletes.
+
+This is stated rather than pre-listed because §9's RPC names are fixed by plan
+01-04, and inventing them here would produce two tables that could disagree. What
+is fixed here is the obligation: a new RPC in §9 that returns character data
+without an audience verdict is an incomplete section, and the census will say so.
+
+### 3.5 The privacy line the codebase already draws
+
+The `ListAllCharacters` doc comment already states the rule this SPEC is
+promoting (`api/proto/holomush/core/v1/core.proto:105-106`):
+
+> *"Connection/online state is NOT included; that is a separately-permissioned
+> attribute."*
+
+That is a correct privacy line, drawn in the right place, and it is today enforced
+by **nothing but two hand-written field lists** — `CharacterDirectoryEntry`
+(`core.proto:902-907`), which honors it, and `CharacterSummary`
+(`core.proto:688-710`, mirrored at `web.proto:496-513`), which carries exactly the
+four connection-state fields the comment excludes. Nothing prevents a future field
+from being added to the wrong one of the two. A comment is not a gate.
+
+**This SPEC promotes that comment into the census-bound guarantee of §13.** The
+rule survives unchanged; what changes is that it acquires an enforcement mechanism
+that fails RED rather than a reader who has to notice.
 
 ## 4. Character Lifecycle
 
@@ -660,10 +835,11 @@ v0.13 allocates its invariants into the **existing `ACCESS`, `PRIVACY` and
 prevent: pre-2026-05 specs each minted their own un-indexed family and a
 migration had to dig them all out.
 
-The four guarantees below are split by what each one **is**. The two disclosure
+The guarantees below are split by what each one **is**. The disclosure
 guarantees — what the response reveals about existence and about minimum identity
-— are `PRIVACY`. The two evaluation guarantees — the read-time authorization
-decision and the wire shape that decision enforces — are `ACCESS`, which is where
+— are `PRIVACY`. The evaluation guarantees — the read-time authorization
+decision, the wire shape that decision enforces, and the completeness of the
+surface set that decision must cover — are `ACCESS`, which is where
 `INV-PRIVACY`'s own boundary forwards ABAC policy evaluation by name.
 
 - **INV-ACCESS-10 (read-time tier-floor evaluation):** the viewer-tier floor for
@@ -690,8 +866,16 @@ decision and the wire shape that decision enforces — are `ACCESS`, which is wh
   above it. Bound by a test that sets the reachability floor at each rung of the
   ladder and asserts every reachable response carries both fields. **Binding
   lands in Phase 4.**
+- **INV-ACCESS-12 (character read-surface census):** the set of RPCs whose
+  response transitively contains a character-shaped message equals the set
+  enumerated in §3 — no more and no fewer. Bound by the Phase-4 census test,
+  which derives the set from the generated service descriptors plus §3.2's
+  explicitly-named non-type-reachable surfaces, and compares it against the §3
+  inventory by **set equality** on the fully-qualified proto method name in
+  `package.Service.Method` form — order-independent, never a substring match,
+  never a Go handler identifier. **Binding lands in Phase 4.**
 
-**All four ship `binding: pending`.** Their asserting tests do not exist until
+**All five ship `binding: pending`.** Their asserting tests do not exist until
 Phase 4, and a `// Verifies:` annotation on a test that does not genuinely assert
 the guarantee is a false-green — the documented failure this registry's binding
 ratchet exists to catch. A `pending` entry carries no `asserted_by`.

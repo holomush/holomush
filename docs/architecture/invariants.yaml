@@ -2245,6 +2245,15 @@ invariants:
       present-and-empty — asserted over marshaled bytes rather than the Go struct, since a present-empty field is indistinguishable
       from a blank one and discloses that a withheld value exists."
     binding: pending
+  - id: INV-ACCESS-12
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "The set of RPCs whose response transitively contains a character-shaped message equals the set enumerated in
+      the portal SPEC's read-surface inventory (§3) — no more and no fewer. Compared by SET EQUALITY on the fully-qualified
+      proto method name (package.Service.Method), order-independent, never a substring match and never a Go handler identifier:
+      set equality is what carries both halves, where a loop over a hand-written list carries neither. A character-returning
+      RPC added without an inventory row fails the census RED rather than shipping."
+    binding: pending
 
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
