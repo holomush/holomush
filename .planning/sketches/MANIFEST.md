@@ -45,7 +45,7 @@ Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim
 |---|------|----------------|--------|------|
 | 001 | admin-shell-frame | How does the three-column frame read, and how do available vs planned sections differentiate? | **C2 — Command Deck, merged collapse** | layout, nav, registry, responsive |
 | 002 | admin-character-table | How should the dense admin list surface row actions and its non-data states? | **A — Inline actions** ⚠ needs 3 SPEC amendments | table, density, row-actions, empty-state, spec-amendment |
-| 003 | planned-section-empty | What does "registered and gated, no handler yet" look like without reading as a dead end? | _not built_ | empty-state, extensibility |
+| 003 | planned-section-empty | What does "registered and gated, no handler yet" look like without reading as a dead end? | _pending_ ⚠ raises a SPEC defect | empty-state, extensibility, abac, spec-defect |
 | 004 | character-edit-destructive | How do the field-mask edit surface and the irreversible delete read? | _not built_ | forms, destructive, audit |
 
 ## ⚠ Open SPEC amendments raised by sketches
@@ -57,4 +57,5 @@ MUST be amended into `01-SPEC.md` before Phase 6 implements them.
 | --- | --- | --- |
 | A1 | 002 | `characters.last_active_at` — new durable column (Phase 2 migration, epoch-ns `BIGINT`), written at **session start** (never on lease refresh), plus a §11.3 row permitting sort + filter. Cannot be derived: `sessions` rows are reaped and `session_connections.last_seen_at` is a gateway lease — both mean "online now". `never` must render as `never` and sort to the END in both directions. |
 | A2 | 002 | Sorting the admin list by player. §11.3 forbids ordering `characters.player_id`; what the UI sorts is the joined `players.username`, which §11.3 never enumerates. Justified by §11.3's own test — the admin audience already sees usernames, so the ordering discloses nothing. Leave the `player_id` row as written; add a new one. |
+| **D1** | **003** | **SPEC DEFECT, not a widening.** §10.3 requires a planned-section refusal to "reveal nothing about which sections exist", but §10.4 defines two distinguishable denial codes (`DENY_ADMIN_SECTION` vs `DENY_ADMIN_SECTION_UNREGISTERED`). A non-admin probing an arbitrary id versus a real one enumerates the registry. §13's eight invariants pin none of this, though `INV-PRIVACY-9` does exactly this job for profiles. Fix: collapse the codes for unauthorized callers, **and** add an `INV-ACCESS-<n>` mirroring `INV-PRIVACY-9`. **Route to `abac-reviewer`.** |
 | A3 | 002 | `AdminSearchCharacters` (§9.2) currently "searches names" (character names). Extend to player usernames. |
