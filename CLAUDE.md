@@ -19,7 +19,7 @@ HoloMUSH is a modern MUSH platform: Go core with event-oriented architecture, du
 
 ## Documentation Structure
 
-`site/src/content/docs/` is the public Astro-Starlight website, by audience: `guide/` (players/designers), `operating/` (server operators), `extending/` (plugin devs), `contributing/` (codebase contributors), `reference/` (auto-generated API/event refs). Internal contributor docs: `.planning/ROADMAP.md` (GSD-owned strategic backlog + phases), `docs/plans/` + `docs/superpowers/plans/` (plans), `docs/specs/` + `docs/superpowers/specs/` (specs); the `docs/superpowers/` subdirs are AI-tooling-generated and equally valid.
+`site/src/content/docs/` is the public Astro-Starlight website, by audience: `guide/` (players/designers), `operating/` (server operators), `extending/` (plugin devs), `contributing/` (codebase contributors), `reference/` (auto-generated API/event refs). Internal contributor docs: `.planning/ROADMAP.md` (GSD-owned strategic backlog + phases), `.planning/phases/<phase>/<NN>-SPEC.md` (**GSD milestone specs — where new specs go**), `docs/plans/` + `docs/superpowers/plans/` (plans), `docs/specs/` + `docs/superpowers/specs/` (**historical** specs — still authoritative for what they describe, but not where new work lands).
 
 **Branding:** software brand (logo, favicon, palette) defined in `.claude/rules/branding.md` + `site/CLAUDE.md` — cyan tile + `>holomush_` wordmark, amber cursor only.
 
@@ -49,7 +49,7 @@ Tests MUST be written before implementation and MUST pass before a task is compl
 
 ### Spec-Driven Development
 
-Work MUST NOT start without a spec/design/plan. Specs live in `docs/specs/` or `docs/superpowers/specs/`; plans in `docs/plans/` or `docs/superpowers/plans/` (the `docs/superpowers/` subdirs are AI-tooling and equally valid). All specs and plans MUST use RFC2119 keywords. When a spec introduces or changes a **system-level invariant**, capture it in the registry (`docs/architecture/invariants.yaml`), consulting existing entries first (`.claude/rules/invariants.md`) — do NOT mint ad-hoc invariant families.
+Work MUST NOT start without a spec/design/plan. **GSD milestone specs live at `.planning/phases/<phase>/<NN>-SPEC.md`** — that is where a new spec goes. `docs/specs/` and `docs/superpowers/specs/` are **historical**: the specs already there remain authoritative for what they describe and are not being rewritten, but new spec work does not land in them. Plans live in `docs/plans/` or `docs/superpowers/plans/` (the `docs/superpowers/` subdirs are AI-tooling-generated and equally valid). All specs and plans MUST use RFC2119 keywords. When a spec introduces or changes a **system-level invariant**, capture it in the registry (`docs/architecture/invariants.yaml`), consulting existing entries first (`.claude/rules/invariants.md`) — do NOT mint ad-hoc invariant families.
 
 ### RFC2119 Keywords
 
