@@ -44,8 +44,30 @@ treats a `+layout.ts` redirect as **UX, not the boundary**. So:
 | Layer | Behavior | Status |
 | --- | --- | --- |
 | Rail + nav | Admin is not drawn, filtered from the registry contract (never a template `{#if}`) | Ph6 SC5 |
-| Deep link `/admin/moderation` | Redirect to `/terminal`, **silently** — a distinct "admin forbidden" page would itself disclose that the area exists | new, this sketch |
+| Deep link `/admin/moderation` | Renders the **ordinary not-found page** — the same one `/blahblah` gets | new, this sketch |
 | The actual boundary | ABAC gate on `admin_section:*`; every admin RPC still denies independently | §10.4 |
+
+### Not-found, not a redirect — and why
+
+A redirect to `/terminal` is a **distinctive** response. If `/admin/moderation`
+bounces while `/nonsense` renders not-found, the bounce itself confirms
+`/admin/*` is a real route family — the prober learns the area exists and they
+are merely excluded. A not-found makes the two **indistinguishable**, which is
+`INV-PRIVACY-9`'s pattern ("identical to the response for a character id that
+does not exist") applied at the route layer.
+
+**"404" here means a client-rendered page, not an HTTP status.** `web/svelte.config.js`
+uses `adapter-static` with `fallback: 'index.html'`, so **every** unknown path
+already returns **HTTP 200 + `index.html`** and the client router decides what to
+render. A real 404 status is not available for any route in this app.
+
+That is not a weakness for this property — it is a strength. Because every route
+resolves through the same fallback, `/admin/moderation` and `/blahblah` are
+identical at the HTTP layer *by construction*, with no per-route work to keep
+them that way.
+
+**Gap:** there is no `+error.svelte` anywhere under `web/src/routes/` today. The
+not-found page this design depends on **does not exist yet** and is Phase 6 work.
 
 **The redirect must not be mistaken for enforcement.** §10.4 is explicit that a
 route guard is *"bypassable by any caller who skips the route"*. SC5's rule —
@@ -53,10 +75,10 @@ route guard is *"bypassable by any caller who skips the route"*. SC5's rule —
 has an inverse that matters just as much: **not drawing the link does not remove
 the need for that denial.**
 
-A consequence worth stating plainly: because the nav is now hidden and deep links
-bounce, **the only callers still reaching the denial path are those deliberately
-bypassing the UI.** That does not mitigate D1 below — it concentrates it onto
-exactly the population the leaky codes disclose to.
+A consequence worth stating plainly: because the nav is hidden and deep links
+render not-found, **the only callers still reaching the denial path are those
+deliberately bypassing the UI.** That does not mitigate D1 below — it concentrates
+it onto exactly the population the leaky codes disclose to.
 
 ## Variants (permitted state)
 
@@ -122,6 +144,29 @@ are indistinguishable across status, error code and body."*
 That is the exact property admin sections need, already written, already given a
 binding strategy — and simply not applied here.
 
+### Severity — calibrated down, but still real
+
+An earlier draft of this README implied the exploit value is registry disclosure.
+On reflection that overstates it, and an inflated finding wastes reviewer time:
+
+- The seven section ids are **in the SPEC, in a public repo**. They are not secret.
+- The web client mirrors them to render nav, so they ship **in the client bundle**
+  to every user regardless. Anyone can read them without probing anything.
+
+So the oracle mostly discloses what is already public. The finding is still worth
+fixing, for three reasons that do not depend on exploitability:
+
+1. **§10.3 asserts a property the system does not have.** A spec that states
+   something untrue is a defect regardless of blast radius, because a later
+   author will build on the claim. That is the primary reason.
+2. **The authoritative registry is core-side** (§10.1); the client mirror is
+   *derived*. A section added core-side before the client ships it **would** be
+   disclosed by the oracle and by nothing else.
+3. **It is a built oracle.** Cheap to not have.
+
+Characterize it to `abac-reviewer` as a **spec-consistency defect with a latent
+disclosure channel**, not as an active registry leak.
+
 ### Suggested resolution (Phase 2 or 6)
 
 One of:
@@ -179,11 +224,14 @@ No new ones beyond sketch 001's list. This exercises `empty` and `alert`.
 not drawn and a deep link bounces to `/terminal`. The sketch's non-admin view now
 shows that outcome rather than a denial page.
 
-## Open question
+## Open questions
 
-**What the redirect target should be for a *guest* versus a logged-in non-admin
-player.** `/terminal` is right for a player. A guest session may not have a
-meaningful `/terminal` to land on — `nav/sections.ts` already carries
-`requiresPlayer` for exactly this reason, gating Scenes away from guests. Phase 6
-should confirm the guest path lands somewhere real rather than bouncing into
-another guarded route.
+1. **The not-found page does not exist.** No `+error.svelte` anywhere under
+   `web/src/routes/`. Phase 6 must build one, and it must be the *ordinary* one —
+   the moment `/admin` gets its own bespoke not-found, the indistinguishability
+   this design rests on is gone.
+2. **Does the guest path differ?** The not-found is viewer-agnostic, so the
+   guest-vs-player question that a redirect design would have raised mostly
+   dissolves — but the "← Back to HoloMUSH" affordance on that page still needs a
+   sensible target per viewer, and `nav/sections.ts` already carries
+   `requiresPlayer` for exactly this class of problem.

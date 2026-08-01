@@ -544,18 +544,20 @@
       // boundary and every admin RPC still denies on its own.
       function nonAdminHtml() {
         return `<div class="state">
-            <div class="glyph"><svg width="20" height="20"><use href="#i-home"/></svg></div>
-            <h2>Room</h2>
-            <p>A viewer without permission never sees <code class="mono">/admin</code>: no rail icon, no nav entry. A deep link to it lands here instead.</p>
-            <div class="sub">Silently — a distinct "admin forbidden" page would itself disclose that the area exists.</div>
+            <div class="glyph"><svg width="20" height="20"><use href="#i-hex"/></svg></div>
+            <h2>Page not found</h2>
+            <p>The page you're looking for doesn't exist.</p>
+            <div class="sub"><a style="color:var(--color-primary);text-decoration:none">← Back to HoloMUSH</a></div>
           </div>
 
-          <div class="trace" style="max-width:520px">
+          <div class="trace" style="max-width:560px">
             <div class="trace-head">what actually happens</div>
-            <dl style="grid-template-columns:104px 1fr">
+            <dl style="grid-template-columns:112px 1fr">
               <dt>nav</dt><dd>Admin is <b>not drawn</b> — filtered from the registry contract, not a template <code>{#if}</code></dd>
-              <dt>deep link</dt><dd><code>/admin/moderation</code> → redirect to <code>/terminal</code>, no message</dd>
-              <dt>route guard</dt><dd class="muted">UX only — §10.4: "bypassable by any caller who skips the route"</dd>
+              <dt>deep link</dt><dd><code>/admin/moderation</code> renders the <b>same not-found</b> as <code>/blahblah</code></dd>
+              <dt>HTTP status</dt><dd class="muted">200 + <code>index.html</code> for <b>every</b> route — <code>adapter-static</code> uses <code>fallback: 'index.html'</code>, so a real 404 status does not exist here. "404" is client-rendered.</dd>
+              <dt>why not a redirect</dt><dd>a bounce to <code>/terminal</code> is a <b>distinctive</b> response — it confirms <code>/admin/*</code> is a real route family. Not-found is indistinguishable from any unknown path.</dd>
+              <dt>route guard</dt><dd class="muted">still UX only — §10.4: "bypassable by any caller who skips the route"</dd>
               <dt>the boundary</dt><dd class="no">the ABAC gate on <code>admin_section:*</code>, which still denies every RPC</dd>
             </dl>
           </div>`;
@@ -572,7 +574,7 @@
 
         document.getElementById('crumb').innerHTML = isAdmin
           ? `<span>Admin</span><svg width="12" height="12"><use href="#i-chev"/></svg><b>${s.label}</b>`
-          : `<span class="mono" style="opacity:.6">/admin/${s.id}</span><svg width="12" height="12"><use href="#i-chev"/></svg><b>redirected to /terminal</b>`;
+          : `<span class="mono" style="opacity:.6">/admin/${s.id}</span><svg width="12" height="12"><use href="#i-chev"/></svg><b>not found</b>`;
 
         document.getElementById('statezone').innerHTML =
           !isAdmin ? nonAdminHtml() : s.status === 'available'
@@ -581,7 +583,7 @@
             : permittedHtml(s);
 
         document.getElementById('findingnote').innerHTML = isAdmin
-          ? `<b>Try the viewer switch.</b> Set <code>viewer: non-admin</code> to see what someone without permission gets: no rail icon, no nav, and a deep link bounced to <code>/terminal</code>.`
+          ? `<b>Try the viewer switch.</b> Set <code>viewer: non-admin</code> to see what someone without permission gets: no rail icon, no nav, and a deep link that renders the ordinary not-found page.`
           : `<b>⚠ Hiding the UI does not fix the §10.3 / §10.4 defect — it concentrates it.</b>
              §10.3 requires a refusal to reveal nothing about which sections exist, but §10.4 defines <b>two distinct denial codes</b>:
              <code>DENY_ADMIN_SECTION</code> (ABAC denied) and <code>DENY_ADMIN_SECTION_UNREGISTERED</code> (id not in the registry).
