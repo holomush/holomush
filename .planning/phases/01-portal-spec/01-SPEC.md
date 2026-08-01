@@ -1714,7 +1714,346 @@ claim of §7.1 rather than asserting it.
 
 ## 10. Admin Information Architecture
 
-> *Placeholder — authored by plan 01-04.*
+This section is normative. It fixes the admin section registry, the descriptor
+that makes a registered section incapable of being wired without authorization,
+where the authorization decision is made, whether the gate is evaluated per
+acting character or per player, what the character-edit surface may reach, and
+what is excluded outright.
+
+A Phase-6 planner writes the registry and its descriptors from this section
+without choosing a gating model.
+
+### 10.1 The registry is exactly seven sections
+
+The table below **is** the registry. Its first cell is the section id and nothing
+else, so the id set is extractable from the rows rather than inferred from prose
+— the same set-equality discipline §2.6 mandates for the RPC census, applied to
+this registry census.
+
+| Section id | Status | Authorization descriptor | Handler disposition |
+| --- | --- | --- | --- |
+| `characters` | available | `{read, admin_section:characters}` | Serves §9's admin RPCs. |
+| `stats` | planned | `{read, admin_section:stats}` | Returns `NOT_IMPLEMENTED` **after** the gate. |
+| `players` | planned | `{read, admin_section:players}` | Returns `NOT_IMPLEMENTED` **after** the gate. |
+| `moderation` | planned | `{read, admin_section:moderation}` | Returns `NOT_IMPLEMENTED` **after** the gate. |
+| `audit` | planned | `{read, admin_section:audit}` | Returns `NOT_IMPLEMENTED` **after** the gate. |
+| `config` | planned | `{read, admin_section:config}` | Returns `NOT_IMPLEMENTED` **after** the gate. The visibility-configuration editor of §8.12 is this section's first tenant. |
+| `plugins` | planned | `{read, admin_section:plugins}` | Returns `NOT_IMPLEMENTED` **after** the gate. |
+
+**Seven ids, one available and six planned. There is no eighth**, and a v0.13 PR
+adding one adds a row here in the same change.
+
+**The authoritative registry is core-side.** The nav the web draws is *derived*
+from it. A registry that lives only in `web/src/` is a client-side artifact that
+cannot gate a server-side decision, which is the specific hazard
+`.planning/research/PITFALLS.md` Pitfall 7 names.
+
+**Mirror the shape, not the location.** `web/src/lib/nav/sections.ts:41-47`
+already implements the pattern: an ordered `as const satisfies readonly
+WorkspaceSection[]` literal whose derived `SectionId` union
+(`web/src/lib/nav/sections.ts:47`) is the *"exhaustive key type for any
+per-section map"*, so — in that file's own words — *"a section without an icon
+then fails to compile rather than crashing the rail at runtime"*. That is the
+mechanism §10.2 needs, one field over. **No library is added.**
+
+### 10.2 The authorization descriptor is mandatory
+
+**A registry entry REQUIRES an authorization descriptor. The descriptor has no
+default, and no zero value means allow. A section registered without one fails at
+compile time or at boot.**
+
+All three clauses are load-bearing and none is redundant:
+
+- **Required** — the descriptor is a field of the entry, not a lookup in a
+  parallel table that can be missing a key.
+- **No default** — there is no "if unset, use `admin`". A default is a value
+  somebody stops thinking about.
+- **No zero value meaning allow** — an empty action, an empty resource, or a
+  zero-valued descriptor struct **MUST** be rejected, never read as permissive.
+  This is the same fail-open shape §8.6's totality rule forbids for visibility
+  floors and §4.3 forbids for lifecycle reads; it is forbidden here for the same
+  reason.
+
+**Failure is at compile time or at boot, not at request time.** The typed literal
+carries the compile-time half: a `satisfies` constraint over a descriptor type
+with no optional fields makes an entry missing its descriptor a type error. The
+boot-time half validates the registry once at start and refuses to start on a
+zero-valued descriptor. A request-time check would mean the misconfiguration is
+discovered by the first unauthorized caller, which is the wrong party to learn it
+from.
+
+**A meta-test asserts set equality between the registry and the descriptor set**
+(EXT-04). Because the descriptor is a required field of the entry, that equality
+is trivially satisfiable — so the mandated test is the stronger, non-vacuous form
+Pitfall 7 specifies: **enumerate the registry, and for every registered section
+assert an unprivileged caller receives a typed denial from that section's
+endpoint.** Today that is seven assertions, six of them against sections with no
+content — which is precisely the point. The test is non-vacuous from day one, and
+a new section that skips the gate turns it RED before the section has anything to
+review.
+
+### 10.3 The six planned sections refuse after the gate
+
+**Order is the specification.** A planned section evaluates its gate **first**,
+and returns `NOT_IMPLEMENTED` only to a caller the gate permitted.
+
+Two consequences, both normative:
+
+1. **A non-admin hitting a planned section is DENIED, not told it is
+   unimplemented.** The refusal reveals nothing about which sections exist or
+   what is being built.
+2. **Wiring a section later replaces a handler body.** The gate is already there,
+   already called, already covered by §10.2's denial test. Nobody has to remember
+   to add a check, which is the thing nobody remembers.
+
+This is the same move §4.3 makes for the unreachable `idle` value: ship the
+structure, prove it with a fixture that reaches the otherwise-unreachable state,
+and do not rely on the state staying unreachable.
+
+Reserved capacity carries an implicit and false promise that the hard part is
+done. Shipping the six gated-and-refusing is what makes the promise true instead.
+
+### 10.4 The authorization shape
+
+**The decision is an ABAC evaluation on an admin-section resource, made by one
+shared helper called first at every entry point.**
+
+| Element | Value |
+| --- | --- |
+| Resource family | `admin_section:<id>`, joining the shipped resource-prefix family at `internal/access/prefix.go:23-33`. Phase 2 adds the prefix and `AdminSectionResource()`. |
+| Action | `read` to reach a section; `write` for a mutation within it. Both on the section resource. |
+| Policy | `seed:admin-section-access`, scoped by resource **type** rather than by enumerated id, so it covers all seven sections and every future section at zero additional policy cost (EXT-07). |
+| Denial codes | `DENY_ADMIN_SECTION` when the ABAC decision denies; `DENY_ADMIN_SECTION_UNREGISTERED` when the section id is not in the registry. |
+
+Three prohibitions, each naming a real alternative:
+
+- **Never a bare role lookup.** `PlayerHasRole` is a storage query, not an
+  authorization decision. Calling it directly puts the decision outside the
+  default-deny engine, where a *missing* policy would read as permissive instead
+  of denying.
+- **Never a route-guard or gateway decision.** A SvelteKit `+layout.ts` redirect
+  and an `internal/web/` check are both UX, not the boundary. Beyond being
+  bypassable by any caller who skips the route, an authorization decision in
+  `internal/web/` is business logic in the process
+  `.claude/rules/gateway-boundary.md` designates as protocol translation only —
+  and that process is designed to be horizontally scaled and replaceable, which
+  makes it the least trustworthy place to hold a decision. **The route guard
+  MUST carry a comment saying it is UX and not the control**, so the next reader
+  does not mistake it for one.
+- **Never "the facade is the only caller, so the facade checking is enough."**
+  The RPCs are reachable directly.
+
+**Every admin RPC re-asserts its own gate, through the same helper, as its first
+statement.** The redundancy is the point: keeping the call sites in lockstep is
+what prevents one of them from silently losing a check. The tree already carries
+this exact pattern with its rationale — `AssertOperatorAdmin`
+(`internal/admin/auth/operator_admin.go:37-64`) is called first at every operator
+entry point, and the comment at its call site records that *"Both gates are
+re-asserted at every admin RPC entry point per INV-CRYPTO-83; the shared helper
+keeps the three sites in lockstep"* (`internal/admin/auth/ingame.go:117-118`).
+The web admin surface transposes that shape onto a different auth model; it does
+not invent a new one.
+
+**Denial tests carry a paired positive control.** A test asserting a non-admin is
+denied proves nothing unless the *same fixture* succeeds once granted the role —
+otherwise `err != nil` cannot distinguish "denied for lack of the admin role"
+from "denied for lack of a session". The denial assertion itself follows §9.6.1:
+assert the wire, not the oops chain.
+
+### 10.5 The gate is evaluated per player, not per acting character
+
+Research assigned this question to Phase 1 explicitly, and it cannot be deferred:
+the session role field's shape follows from the answer, and reshaping that field
+after Phase 4 or 6 writes it is a wire-compat change to every caller.
+
+**Verdict: the admin gate is evaluated PER PLAYER.**
+
+**This is what the tree already does, at every site the check exists.** Roles are
+*stored* per character — `character_roles` is keyed `(character_id, role)`
+(`internal/store/migrations/000001_baseline.up.sql:83-87`) — but the only shipped
+lookup reads them per player:
+
+- `PostgresRoleStore.PlayerHasRole` says so in its own comment: *"PlayerHasRole
+  returns true iff any character of playerID has role"*
+  (`internal/store/role_store.go:83`), and its query joins `character_roles` to
+  `characters` on `WHERE c.player_id = $1`
+  (`internal/store/role_store.go:86-93`).
+- The shipped operator path depends on that semantics and documents it: *"Steps
+  4-5: capability allow-list + RoleAdmin (any character)"*
+  (`internal/admin/auth/ingame.go:116`), calling `AssertOperatorAdmin` with a
+  **player** id (`internal/admin/auth/ingame.go:119`), which in turn calls
+  `roleStore.PlayerHasRole(ctx, playerID, access.RoleAdmin)`
+  (`internal/admin/auth/operator_admin.go:53`).
+
+Specifying a per-character gate for the web would put two different answers to
+"is this caller an admin" over one table — the operator socket saying yes and the
+web saying no for the same human at the same moment. That is a second source of
+truth about a trust boundary, and the cheaper of the two ways to remove it is to
+match what exists.
+
+**The character-scoped storage with a player-scoped read is not an accident to be
+tidied away here.** It is a known asymmetry, tracked as issue **#4899**, and it
+is precisely why §10.8 excludes role mutation: a character-scoped write into
+`character_roles` has **player-scoped blast radius**.
+
+#### 10.5.1 What follows from the verdict
+
+1. **The session role field is player-scoped and singular.**
+   `WebCheckSessionResponse` (`api/proto/holomush/web/v1/web.proto:733-746`)
+   carries `player_name`, `player_id`, `is_guest` and the character roster today
+   — **no role field at all**. Phase 4 or 6 adds `repeated string roles`
+   carrying the roles the **player** holds. It is **NOT** a per-character map and
+   **MUST NOT** be shaped as one. The field is computed once per session check,
+   not once per character.
+
+2. **Switching alts does not change admin reach, and the UI MUST NOT imply it
+   does.** The alt switcher changes the acting character; the player is
+   unchanged, so the roles are unchanged. Admin navigation that appeared and
+   disappeared as the user switched alts would be describing a boundary that does
+   not exist — worse than a wrong label, because a user who saw it vanish would
+   reasonably conclude they had dropped a privilege they still hold.
+
+3. **The roles field changes only what is drawn.** It is a nav-hiding input and
+   **never** the authorization boundary (ADMIN-08). Drawing a link the viewer may
+   not use still results in a denial at the RPC — the link is a wrong affordance,
+   not an escalation. The converse is also true and worth stating: hiding a link
+   the viewer *may* use is a UX defect, not a security control, and MUST NOT be
+   relied on as one.
+
+4. **Admin navigation is filtered from the registry contract**, not from template
+   `{#if}` blocks (ADMIN-07). One derivation, consumed by every surface that
+   draws a section, so a section can never be visible in one surface and hidden
+   in another — the same single-gate discipline
+   `web/src/lib/nav/sections.ts:63-67`'s `visibleSections` already applies to the
+   workspace rail.
+
+### 10.6 Character administration and the field-mask allowlist
+
+The admin character-edit surface is `AdminUpdateCharacter` (§9.3), driven by an
+`update_mask` under §9.5's four rules — allowlist, exact-string path matching,
+order-independent evaluation, empty mask is a no-op.
+
+**The rule that generates the allowlist:** a path is eligible only if writing it
+has **no side condition beyond a length cap**. Anything carrying a normalization
+pipeline, a uniqueness constraint, or a state machine gets its own intent-named
+RPC instead, because a generic mask write would reach the column while bypassing
+the rule that governs it.
+
+Applying that rule, the allowlist is exactly:
+
+```text
+description
+profile.pronouns
+profile.concept
+profile.species
+profile.age
+profile.faction
+profile.appearance
+profile.personality
+profile.biography
+profile.rumors
+profile.currently
+profile.rp_preferences
+profile.timezone
+```
+
+Thirteen paths: the in-world description plus the twelve `profile.*` fields of
+§7.2. Three exclusions follow from the rule and are stated so they read as
+decisions:
+
+- **`name` is excluded.** A rename runs §6.1's normalization pipeline, the
+  mixed-script and skeleton checks, the block list, and collides against §6.1.3's
+  unique index. A mask write would reach the column and run none of them.
+- **`status` is excluded.** §9.3 keeps the lifecycle vocabulary off the wire so
+  `idle` stays unreachable; a maskable `status` path would put it back on. Admin
+  disable goes through `AdminRetireCharacter`, which moves the character through
+  the **same** lifecycle states as owner-initiated retire (ADMIN-05).
+- **`version` is excluded.** It is the concurrency guard, carried as
+  `expected_version` on the request (§9.4), never as an editable field.
+
+**No path may reach a role.** No `role`, `roles`, `character_roles`, `grant`,
+`permission`, or `capability` path is in the allowlist, and §9.5 rule 2's
+exact-string matching means no prefix or wildcard can expand into one. Because
+the real risk is a *future* field rather than a present one, the durable
+verification is schema-level: **a meta-test that fails if the admin character
+message ever gains a field whose name matches `role|grant|permission|capability`,
+paired with an allowlist test asserting set equality against the checked-in list
+above.**
+
+**The escalation test needs a positive control.** A test that calls
+`AdminUpdateCharacter` with a `roles` field the message does not have proves
+nothing — the request never carried the payload, the assertion "role unchanged"
+is satisfied by the field being silently dropped, and the test passes whether or
+not the property holds. The mandated shape is: first demonstrate the write path
+works at all on a field it *is* allowed to change, then attempt the escalation on
+the same call.
+
+**The irreversible delete is reachable from no player-facing affordance.**
+`world.Service.DeleteCharacter` (`internal/world/service.go:745-777`) is not the
+implementation of an admin "delete" button (§4.4). Admin disable is retire.
+
+### 10.7 Audit emission
+
+**Every admin mutation emits its audit envelope in the same transaction as the
+state change**, through the transactional outbox seam §9.3 mandates for every
+mutation. The state change and its envelope commit or roll back together; an
+admin mutation that committed without its audit envelope is impossible.
+
+The envelope **MUST** carry:
+
+- **The before-values.** An audit record saying "admin X updated character Y"
+  answers nothing. The before-values are the whole point, and they are available
+  only at write time — the row is already overwritten by the time anything else
+  could look.
+- **The acting player id, not only the acting character.** §10.5 makes the
+  authority player-scoped, so an audit trail keyed on the character records the
+  wrong subject: it names which alt was in the chair, not who exercised the
+  authority. Record both; the player id is the required one.
+- **The section and action** that were evaluated, so the record ties back to the
+  §10.4 decision that permitted it.
+
+**Audit emission ships in v0.13 even though the audit *viewer* is deferred.** The
+`audit` section returns `NOT_IMPLEMENTED` after its gate (§10.1) — but if
+emission waited for it, the viewer would ship later with no history behind it.
+Emission first is what makes the deferred viewer worth building.
+
+The durable audit row lands in the existing `events_audit` table, reached through
+the shipped audit pipeline rather than a bespoke table — retention, DLQ capture,
+and replay come free. Note precisely what "in-transaction" does and does not
+mean here: **the envelope is transactional; the `events_audit` row is projected
+from it.** §14 carries the amendment, because two artifacts state this
+differently.
+
+### 10.8 Notably absent
+
+> **Notably absent — four exclusions, each stated because an omission is not an
+> exclusion.** Silence is read as "nobody thought about it", which is an
+> invitation; a stated exclusion is a decision a later PR has to argue with.
+>
+> - **Role mutation is NOT part of character administration in this milestone
+>   (PORTAL-08).** *Reason:* the read is player-wide (§10.5), so granting a role
+>   to any one character — a throwaway alt included — grants it to the **player**
+>   everywhere the check is player-scoped, including the operator path. A
+>   character-scoped write with player-scoped blast radius is an escalation
+>   vector, and the character-admin UI is exactly where a role field would
+>   naturally be edited. The underlying per-player-versus-per-character question
+>   is open as issue **#4899**; role management belongs in the deferred `players`
+>   section, with its own design, after that is decided.
+> - **Admin impersonation is NOT admitted.** *Reason:* it attributes actions to
+>   the wrong actor, which launders the audit trail §10.7 exists to produce —
+>   every record it generates names a subject that did not act.
+> - **A hardcoded break-glass admin identifier is NOT admitted.** *Reason:* it is
+>   an authorization decision made outside the default-deny engine, in a place no
+>   policy query can see and no policy change can revoke.
+> - **A raw SQL console or database-console surface is NOT admitted.** *Reason:*
+>   it bypasses the ABAC gate, the field-mask allowlist, the lifecycle state
+>   machine, and the audit emission simultaneously — every control this section
+>   specifies, at once.
+>
+> The reviewer for this SPEC **MUST** verify that no v0.13 PR adds any of the
+> four. Each would be individually reasonable-looking as a "small admin
+> convenience", and each removes a control that the rest of this section spends
+> its length establishing.
 
 ## 11. Sorting and Filtering Verdict
 
@@ -1809,19 +2148,21 @@ registry's binding ratchet exists to catch. A `pending` entry carries no
 
 > *Placeholder — authored by plan 01-05.*
 
-> **Queued for plan 01-05 — EIGHT amendments, not four.** `01-CONTEXT.md:197-202`
+> **Queued for plan 01-05 — NINE amendments, not four.** `01-CONTEXT.md:197-202`
 > drafts four rows (ROADMAP Phase 4 criterion 3, ROADMAP Phase 5 criterion 4,
 > REQUIREMENTS PROFILE-12, research SUMMARY CONFLICT 4). Plan 01-01 added a
 > **fifth**, plan 01-02's tree enumeration forced a **sixth**, plan 01-03's
-> writer enumeration forced a **seventh**, and plan 01-04's error-surface
-> grounding forced an **eighth**. 01-05 MUST carry all four:
+> writer enumeration forced a **seventh**, and plan 01-04 forced an **eighth**
+> (error surface) and a **ninth** (audit durability boundary). 01-05 MUST carry
+> all five:
 >
 > | Artifact | Amendment |
 > | --- | --- |
 > | `docs/architecture/invariants.yaml` — the `INV-PRIVACY` scope record | The `boundary:` first sentence read *"Privacy-relevant gating on history reads."* and now reads *"Privacy-relevant gating on reads."* The scope is named PRIVACY; it was narrowed to history reads only because stream-history work minted it. The `"Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe authorization (→ INV-EVENTBUS)"` clause is **preserved verbatim and MUST NOT be widened** — that clause is what routes this SPEC's tier-floor evaluation to `ACCESS` (§13), and it is why splitting the four guarantees across two scopes is coherent rather than a fudge. The `description:` enumeration was extended in the same edit so the scope record describes the entry family it now owns. Landed by plan 01-01. |
 > | `.planning/REQUIREMENTS.md:31` (PORTAL-02) and `.planning/ROADMAP.md:132` (Phase 1 success criterion 1) | Both read *"including the **three** existing public export surfaces"*. The tree has **four**. Plan 01-02's enumeration found `WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`) returning `repeated PublicSceneArchive`, whose `participants_snapshot` (`api/proto/holomush/scene/v1/scene.proto:1053`) is a frozen participant projection served unauthenticated — **in bulk**, one entry per published scene rather than one per request. Amend both to *"four"*. This is not cosmetic: a Phase-4 census built to the requirement's letter would enumerate three and miss the highest-volume unauthenticated export surface of the set, which is precisely the missing-census-member failure PORTAL-10 rule 1 exists to prevent. **Correction, wave 3:** this row originally asserted the surface exports frozen *names*. It does not, today — `ReadSceneMetaForSnapshot` writes `SELECT character_id` (`plugins/core-scenes/publish_store.go:988`, comment at `:959`: *"Name resolution is a follow-up"*) while the proto doc comment at `scene.proto:957`/`:1052` claims names. That mismatch is tracked as issue **#4901**; the census obligation and the `four`-not-`three` amendment stand regardless of which the field holds, because the surface is character-returning either way. See §5.4's prohibition against backfilling already-written rows when name resolution lands. Verified against the tree by the orchestrator at the wave-2 and wave-3 boundaries, not relayed. |
 > | `.planning/REQUIREMENTS.md:95-99` (IDENT-09) and `.planning/research/SUMMARY.md:277-281` ("Must carry forward" item 3) | Both describe the character-name check-then-insert race as spanning *"`internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`"*. Those two sites are the shared existence **query** and **one** writer — not two writers. Plan 01-03's enumeration found a **second** writer: `internal/auth/guest_service.go:227`, which calls the same `ExistsByName` inside the guest-name retry-on-collision loop. Amend both to enumerate one query and two writers, so the count reads three participants today and four once `Rename` lands. This is not cosmetic: SUMMARY item 3's own argument is *"adding `Rename` doubles the writers into that race"* — the true statement is that it takes the writers from two to three, and a Phase-2 planner sizing the duplicate-detection job from the requirement's letter would audit one creation path and miss the guest one, which is the path that provisions characters automatically and at volume. §6.1.3 carries the corrected enumeration. |
-> | **PORTAL-10 rule 5** — `.planning/REQUIREMENTS.md:67-68`, restated at `.planning/ROADMAP.md:119`, `:136` and `:250`, sourced from `.planning/research/SUMMARY.md:162` / `.planning/research/PITFALLS.md:406-408`, and originating in `.claude/rules/grpc-errors.md:54-70` | Rule 5 reads *"**Top-level oops code assertions** via `oops.AsOops(err).Code()`; `errutil.AssertErrorCode` chain-walks and passes on double-wrap."* **Both halves are false against the pinned dependency.** Under `github.com/samber/oops v1.22.0` (`go.mod:32`), `OopsError.Code()` is documented in the dependency itself as *"returns the error code from the deepest error in the chain"* and is implemented as a recursive `getDeepestErrorCode` walk. `errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) is a thin wrapper over the same two calls (`oops.AsOops`, then compare `.Code()`), so the two spellings are **behaviorally identical** and **both** pass on a double-wrap: given `oops.Code("INTERNAL").Wrap(oops.Code("DENY_NOT_ADMIN_ROLE")…)` both return `DENY_NOT_ADMIN_ROLE` while the wire carries `INTERNAL`. Verified empirically against the pinned version, 2026-08-01. Additionally `oops.AsOops` returns `(OopsError, bool)`, so the single-expression spelling is not a compilable call at any of these sites. **Restate rule 5 around the wire** — `status.Code(err)` plus a generic `status.Convert(err).Message()` with the internal code string absent from it, and a differential two-viewer assertion where the contract is indistinguishability — per §9.6.1, keeping `errutil.AssertErrorCode` endorsed for asserting *which* internal code was produced. **This is the single most load-bearing amendment in this table**: rule 5 is one of the six verification-integrity rules §12 copies verbatim into every v0.13 plan, so leaving it as written propagates an assertion that cannot fail on the leak it exists to catch into every phase — the exact *"verification that cannot fail"* failure PORTAL-10 was written to end. Tracked as issue **#4902**; the SPEC documents current behavior and changes no rule file. **Plan 01-05 MUST reconcile §12's rule-5 text with this row before writing it** — the two cannot ship disagreeing. |
+> | **PORTAL-10 rule 5** — `.planning/REQUIREMENTS.md:67-68`, restated at `.planning/ROADMAP.md:119`, `:136` and `:250`, sourced from `.planning/research/SUMMARY.md:162` / `.planning/research/PITFALLS.md:406-408`, and originating in `.claude/rules/grpc-errors.md:54-67` | Rule 5 reads *"**Top-level oops code assertions** via `oops.AsOops(err).Code()`; `errutil.AssertErrorCode` chain-walks and passes on double-wrap."* **Both halves are false against the pinned dependency.** Under `github.com/samber/oops v1.22.0` (`go.mod:32`), `OopsError.Code()` is documented in the dependency itself as *"returns the error code from the deepest error in the chain"* and is implemented as a recursive `getDeepestErrorCode` walk. `errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) is a thin wrapper over the same two calls (`oops.AsOops`, then compare `.Code()`), so the two spellings are **behaviorally identical** and **both** pass on a double-wrap: given `oops.Code("INTERNAL").Wrap(oops.Code("DENY_NOT_ADMIN_ROLE")…)` both return `DENY_NOT_ADMIN_ROLE` while the wire carries `INTERNAL`. Verified empirically against the pinned version, 2026-08-01. Additionally `oops.AsOops` returns `(OopsError, bool)`, so the single-expression spelling is not a compilable call at any of these sites. **Restate rule 5 around the wire** — `status.Code(err)` plus a generic `status.Convert(err).Message()` with the internal code string absent from it, and a differential two-viewer assertion where the contract is indistinguishability — per §9.6.1, keeping `errutil.AssertErrorCode` endorsed for asserting *which* internal code was produced. **This is the single most load-bearing amendment in this table**: rule 5 is one of the six verification-integrity rules §12 copies verbatim into every v0.13 plan, so leaving it as written propagates an assertion that cannot fail on the leak it exists to catch into every phase — the exact *"verification that cannot fail"* failure PORTAL-10 was written to end. Tracked as issue **#4902**; the SPEC documents current behavior and changes no rule file. **Plan 01-05 MUST reconcile §12's rule-5 text with this row before writing it** — the two cannot ship disagreeing. |
+> | `.planning/REQUIREMENTS.md:152-153` (ADMIN-06) and `.planning/ROADMAP.md:252` (Phase 6 success criterion 3) | ADMIN-06 requires every admin mutation to emit *"to the existing `events_audit` … in-transaction"*, and the criterion sharpens that to *"writes an `events_audit` row **in the same transaction**"*. **No such write path exists, and one would be the wrong thing to build.** `events_audit` is written by the asynchronous JetStream audit projection — `projection.persist` (`internal/eventbus/audit/projection.go:319-331`) calls `writeAuditRow`, whose `INSERT INTO events_audit` is at `internal/eventbus/audit/projection.go:434` — consuming published events, plus the retention-partition mover (`internal/eventbus/audit/retention_partitions.go:546`). Nothing in a mutation's transaction touches the table. What **is** transactional is the **envelope**: the state change and its one outbox envelope commit or roll back together (`INV-WORLD-1`), and the audit row is projected from that envelope at-least-once with DLQ capture. Restate both to place the durability boundary at the outbox envelope — *"emits its audit envelope in the same transaction as the state change; the `events_audit` row is projected from that envelope"* — per §10.7. This is not cosmetic in either direction: a Phase-6 planner building to the criterion's letter would find no transactional path into `events_audit` and would either invent a bespoke direct insert — bypassing the codec / `dek_ref` / dedup contract `writeAuditRow` maintains, and creating a second writer to a partitioned table — or quietly weaken the criterion to whatever was built. The guarantee ADMIN-06 actually wants (an admin mutation cannot commit without its audit record being durably queued) is fully delivered by the envelope boundary; only the sentence naming the wrong table needs to change. |
 
 ## 15. Out of Scope
 
