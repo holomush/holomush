@@ -210,10 +210,15 @@ Deferred. Tracked, with the seam v0.13 must leave for each.
 - **The six deferred admin sections** (backlog 999.8) — stats, player management, moderation, audit
   viewer, config editor, plugin management. Registered and gated in v0.13; handler bodies later.
 - **Audit log viewer** — the emission lands in v0.13 (ADMIN-06) precisely so the viewer has history.
-- **Player-wide vs per-character role semantics** — `PlayerHasRole` (`internal/store/role_store.go:83-103`)
-  returns true iff *any* character of the player holds the role, so a role on a throwaway alt confers it
-  everywhere, including the operator path (`internal/admin/auth/ingame.go:116`). Excluded from v0.13 by
-  PORTAL-08/ADMIN-04 and **filed as a GitHub issue** rather than left as a silent omission.
+- **Player-wide vs per-character role semantics** (**#4899**) — `PlayerHasRole`
+  (`internal/store/role_store.go:83-93`) returns true iff *any* character of the player holds the role,
+  so a role on a throwaway alt confers it everywhere. This is **deliberate and documented** in the
+  operator/break-glass path (`internal/admin/auth/ingame.go:115` — *"RoleAdmin (any character)"*), not a
+  defect; v0.13 is simply the first work that would load those semantics onto a new surface. Excluded
+  from v0.13 by PORTAL-08/ADMIN-04, and tracked in #4899 rather than left as a silent omission. The
+  decision must land before any admin surface exposes role mutation, because
+  `WebCheckSessionResponse` needs a role field shaped to match and adding it later is a wire-compat
+  change to every caller.
 
 ### Portal
 
