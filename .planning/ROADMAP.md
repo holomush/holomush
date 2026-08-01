@@ -79,7 +79,7 @@ reconciliation), #4882/#4883 (unquarantined flakes).
 public profiles with privacy — and stand up the admin portal shell that gives character administration a
 home, with both designed to absorb the deferred portal surfaces without rework.
 
-- [ ] **Phase 1: Portal SPEC** — settle every shape decision whose cost explodes after code exists, and discharge PROJECT.md's Out-of-Scope precondition
+- [x] **Phase 1: Portal SPEC** — settle every shape decision whose cost explodes after code exists, and discharge PROJECT.md's Out-of-Scope precondition — completed 2026-08-01 (6/6 plans; `01-SPEC.md`, 16 sections; 9 amendments applied; 4 issues opened)
 - [ ] **Phase 2: ABAC & Schema Vocabulary** — admin-section + public-profile policy, name normalization + unique index, character lifecycle column
 - [ ] **Phase 3: World Character Commands** — domain-layer `RenameCharacter` + soft `RetireCharacter`, version-guarded and outbox-emitting
 - [ ] **Phase 4: Shared Facade Helpers & `CharacterAccessService`** — one guest/ownership gate; character read/write BFF with privacy enforced by absence
@@ -135,32 +135,32 @@ the property is false**.
 4. Every mutation request message in the SPEC's RPC surface carries **`expected_version`**; the SPEC records role mutation as an **explicit exclusion** from character administration; and it answers "does any v0.13 surface sort or filter on a profile field?" with a stated verdict rather than silence.
 5. The SPEC mandates the six **verification-integrity rules** (census set-equality, paired positive controls, marshaled-bytes assertions, gates demonstrated RED pre-fix, wire-level opacity assertions, invariant-scope discipline) as binding acceptance criteria that every later phase plan inherits.
 
-**Plans**: 6 plans
+**Plans**: 6/6 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — SPEC skeleton + profile/media data model + profile visibility model, declared and registered (tracer)
+- [x] 01-01-PLAN.md — SPEC skeleton + profile/media data model + profile visibility model, declared and registered (tracer)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — audience matrix + per-audience message shape + exhaustive read-surface inventory
+- [x] 01-02-PLAN.md — audience matrix + per-audience message shape + exhaustive read-surface inventory
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — character lifecycle + name-capture surface inventory + name normalization policy
+- [x] 01-03-PLAN.md — character lifecycle + name-capture surface inventory + name normalization policy
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-04-PLAN.md — full RPC surface with `expected_version` + admin IA and exclusions + sorting/filtering verdict
+- [x] 01-04-PLAN.md — full RPC surface with `expected_version` + admin IA and exclusions + sorting/filtering verdict
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-05-PLAN.md — verification-integrity rules + amendments/divergences table + applying the nine amendments
+- [x] 01-05-PLAN.md — verification-integrity rules + amendments/divergences table + applying the nine amendments
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 01-06-PLAN.md — citation verification sweep + grounding trace + spec-location pointer edit + completeness gate
+- [x] 01-06-PLAN.md — citation verification sweep + grounding trace + spec-location pointer edit + completeness gate
 
 ### Phase 2: ABAC & Schema Vocabulary
 
@@ -270,7 +270,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Channels Subsystem | v0.11 | 10/10 | Complete | 2026-07-09 |
+| 1. Channels Subsystem | v0.11 | 6/6 | In Progress|  |
 | 2. Scenes Lineage Completion | v0.11 | 7/7 | Complete | 2026-07-09 |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
