@@ -2467,27 +2467,163 @@ registry's binding ratchet exists to catch. A `pending` entry carries no
 
 ## 14. Amendments and Divergences
 
-> *Placeholder — authored by plan 01-05.*
+This SPEC supersedes text in four live planning artifacts and records one
+deliberate divergence from a principle its own maintainer stated. **Each entry is
+listed with its rationale, and the reviewer is expected to evaluate it as
+intentional, not a defect.**
 
-> **Queued for plan 01-05 — NINE amendments, not four.** `01-CONTEXT.md:197-202`
-> drafts four rows (ROADMAP Phase 4 criterion 3, ROADMAP Phase 5 criterion 4,
-> REQUIREMENTS PROFILE-12, research SUMMARY CONFLICT 4). Plan 01-01 added a
-> **fifth**, plan 01-02's tree enumeration forced a **sixth**, plan 01-03's
-> writer enumeration forced a **seventh**, and plan 01-04 forced an **eighth**
-> (error surface) and a **ninth** (audit durability boundary). 01-05 MUST carry
-> all five:
->
-> | Artifact | Amendment |
-> | --- | --- |
-> | `docs/architecture/invariants.yaml` — the `INV-PRIVACY` scope record | The `boundary:` first sentence read *"Privacy-relevant gating on history reads."* and now reads *"Privacy-relevant gating on reads."* The scope is named PRIVACY; it was narrowed to history reads only because stream-history work minted it. The `"Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe authorization (→ INV-EVENTBUS)"` clause is **preserved verbatim and MUST NOT be widened** — that clause is what routes this SPEC's tier-floor evaluation to `ACCESS` (§13), and it is why splitting the four guarantees across two scopes is coherent rather than a fudge. The `description:` enumeration was extended in the same edit so the scope record describes the entry family it now owns. Landed by plan 01-01. |
-> | `.planning/REQUIREMENTS.md:31` (PORTAL-02) and `.planning/ROADMAP.md:132` (Phase 1 success criterion 1) | Both read *"including the **three** existing public export surfaces"*. The tree has **four**. Plan 01-02's enumeration found `WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`) returning `repeated PublicSceneArchive`, whose `participants_snapshot` (`api/proto/holomush/scene/v1/scene.proto:1053`) is a frozen participant projection served unauthenticated — **in bulk**, one entry per published scene rather than one per request. Amend both to *"four"*. This is not cosmetic: a Phase-4 census built to the requirement's letter would enumerate three and miss the highest-volume unauthenticated export surface of the set, which is precisely the missing-census-member failure PORTAL-10 rule 1 exists to prevent. **Correction, wave 3:** this row originally asserted the surface exports frozen *names*. It does not, today — `ReadSceneMetaForSnapshot` writes `SELECT character_id` (`plugins/core-scenes/publish_store.go:988`, comment at `:959`: *"Name resolution is a follow-up"*) while the proto doc comment at `scene.proto:957`/`:1052` claims names. That mismatch is tracked as issue **#4901**; the census obligation and the `four`-not-`three` amendment stand regardless of which the field holds, because the surface is character-returning either way. See §5.4's prohibition against backfilling already-written rows when name resolution lands. Verified against the tree by the orchestrator at the wave-2 and wave-3 boundaries, not relayed. |
-> | `.planning/REQUIREMENTS.md:95-99` (IDENT-09) and `.planning/research/SUMMARY.md:277-281` ("Must carry forward" item 3) | Both describe the character-name check-then-insert race as spanning *"`internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`"*. Those two sites are the shared existence **query** and **one** writer — not two writers. Plan 01-03's enumeration found a **second** writer: `internal/auth/guest_service.go:227`, which calls the same `ExistsByName` inside the guest-name retry-on-collision loop. Amend both to enumerate one query and two writers, so the count reads three participants today and four once `Rename` lands. This is not cosmetic: SUMMARY item 3's own argument is *"adding `Rename` doubles the writers into that race"* — the true statement is that it takes the writers from two to three, and a Phase-2 planner sizing the duplicate-detection job from the requirement's letter would audit one creation path and miss the guest one, which is the path that provisions characters automatically and at volume. §6.1.3 carries the corrected enumeration. |
-> | **PORTAL-10 rule 5** — `.planning/REQUIREMENTS.md:67-68`, restated at `.planning/ROADMAP.md:119`, `:136` and `:250`, sourced from `.planning/research/SUMMARY.md:162` / `.planning/research/PITFALLS.md:406-408`, and originating in `.claude/rules/grpc-errors.md:54-67` | Rule 5 reads *"**Top-level oops code assertions** via `oops.AsOops(err).Code()`; `errutil.AssertErrorCode` chain-walks and passes on double-wrap."* **Both halves are false against the pinned dependency.** Under `github.com/samber/oops v1.22.0` (`go.mod:32`), `OopsError.Code()` is documented in the dependency itself as *"returns the error code from the deepest error in the chain"* and is implemented as a recursive `getDeepestErrorCode` walk. `errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) is a thin wrapper over the same two calls (`oops.AsOops`, then compare `.Code()`), so the two spellings are **behaviorally identical** and **both** pass on a double-wrap: given `oops.Code("INTERNAL").Wrap(oops.Code("DENY_NOT_ADMIN_ROLE")…)` both return `DENY_NOT_ADMIN_ROLE` while the wire carries `INTERNAL`. Verified empirically against the pinned version, 2026-08-01. Additionally `oops.AsOops` returns `(OopsError, bool)`, so the single-expression spelling is not a compilable call at any of these sites. **Restate rule 5 around the wire** — `status.Code(err)` plus a generic `status.Convert(err).Message()` with the internal code string absent from it, and a differential two-viewer assertion where the contract is indistinguishability — per §9.6.1, keeping `errutil.AssertErrorCode` endorsed for asserting *which* internal code was produced. **This is the single most load-bearing amendment in this table**: rule 5 is one of the six verification-integrity rules §12 copies verbatim into every v0.13 plan, so leaving it as written propagates an assertion that cannot fail on the leak it exists to catch into every phase — the exact *"verification that cannot fail"* failure PORTAL-10 was written to end. Tracked as issue **#4902**; the SPEC documents current behavior and changes no rule file. **Plan 01-05 MUST reconcile §12's rule-5 text with this row before writing it** — the two cannot ship disagreeing. |
-> | `.planning/REQUIREMENTS.md:152-153` (ADMIN-06) and `.planning/ROADMAP.md:252` (Phase 6 success criterion 3) | ADMIN-06 requires every admin mutation to emit *"to the existing `events_audit` … in-transaction"*, and the criterion sharpens that to *"writes an `events_audit` row **in the same transaction**"*. **No such write path exists, and one would be the wrong thing to build.** `events_audit` is written by the asynchronous JetStream audit projection — `projection.persist` (`internal/eventbus/audit/projection.go:319-331`) calls `writeAuditRow`, whose `INSERT INTO events_audit` is at `internal/eventbus/audit/projection.go:434` — consuming published events, plus the retention-partition mover (`internal/eventbus/audit/retention_partitions.go:546`). Nothing in a mutation's transaction touches the table. What **is** transactional is the **envelope**: the state change and its one outbox envelope commit or roll back together (`INV-WORLD-1`), and the audit row is projected from that envelope at-least-once with DLQ capture. Restate both to place the durability boundary at the outbox envelope — *"emits its audit envelope in the same transaction as the state change; the `events_audit` row is projected from that envelope"* — per §10.7. This is not cosmetic in either direction: a Phase-6 planner building to the criterion's letter would find no transactional path into `events_audit` and would either invent a bespoke direct insert — bypassing the codec / `dek_ref` / dedup contract `writeAuditRow` maintains, and creating a second writer to a partitioned table — or quietly weaken the criterion to whatever was built. The guarantee ADMIN-06 actually wants (an admin mutation cannot commit without its audit record being durably queued) is fully delivered by the envelope boundary; only the sentence naming the wrong table needs to change. |
+**Recording an amendment is not applying it.** A downstream planner reads
+`.planning/ROADMAP.md` and `.planning/REQUIREMENTS.md` directly; a criterion that
+still says an owner can toggle field visibility will be planned regardless of
+what a table here says about it. `.claude/rules/references/design-review-learnings.md`
+names exactly this — an amendment row whose superseded string is still live in a
+sibling artifact — as a recurring review failure. Every row below has therefore
+been **applied to its own artifact**, and each application is proven by a
+recorded search for the superseded string rather than asserted. The exception is
+row 8's rule-file half, which is deliberately not applied; the row says why.
+
+The first column quotes the superseded text **verbatim** alongside its artifact
+and location. The quoting is not decoration: it is what forces the search that
+catches a string still live somewhere nobody inventoried.
+
+> **On the quotations.** The source artifacts are hard-wrapped, so several quotes
+> below span a line break in their source and are reproduced here with the break
+> normalized to a space. The searches that prove each amendment landed therefore
+> target a substring lying on a **single** source line — a multi-line quote
+> searched line-wise returns zero matches whether or not the text survives, which
+> would be a proof that cannot fail. Each row's single-line search target and its
+> result are recorded in `01-05-SUMMARY.md`.
+
+| Artifact and superseded text | v0.13 SPEC | Rationale |
+| --- | --- | --- |
+| **1.** `.planning/ROADMAP.md` — Phase 4 success criterion 3, opening clause: *"An owner can set any profile field to `public` or `private` except `name` and `pronouns`, which the server refuses to make private"* | The **game-configured, per-attribute viewer-tier floor** of §8.3 — visibility is configuration, never an owner control (§8.1) — with `name` and `pronouns` re-seated as the hard floor of §8.8 that the configuration cannot raise above the profile's own reachability floor. **The exhaustive-`switch`-with-`default: deny` clause survives verbatim** and is retained in the restated criterion. | D-09: v0.13 allows **no player or character agency** over profile visibility. A criterion granting an owner a control that will not exist would be built as one — a settings surface, a mutation RPC, a per-row `visibility` write path — none of which this SPEC specifies, and each of which would then need unwinding. The half of the criterion that is about *evaluating* a tier value is correct as written and is the half that survives: §8.6's postures are exactly the exhaustive switch the clause demands, and an unrecognized tier still denies. |
+| **2.** `.planning/ROADMAP.md` — Phase 5 success criterion 4, opening clause: *"An owner flips a field between public and private and the change is what a logged-out visitor sees on the next load"* | A **configuration** change taking effect on the next read, per §8.5 — the floor is evaluated at read time against the live configuration and is never stamped onto a row, so no backfill exists and "next load" is exactly right about the timing. | Same root as row 1: the toggle does not exist. The criterion's *observable* claim — that a visibility change is visible to a logged-out visitor on the next load without any republish step — is a real and testable property of the read-time model, and restating it around the configuration keeps it. What changes is who performs the change, not when it takes effect. |
+| **3.** `.planning/REQUIREMENTS.md` — PROFILE-12: *"The visibility toggle and the retirement flow **state in the UI** that privacy is not retroactive over already-published history."* | The not-retroactive statement is re-seated onto the two surfaces that will exist: the **retirement flow**, and the **surface where a player authors profile fields**. §5's name-capture inventory is what makes the statement true — display names are denormalized into immutable event payloads and `scene_log`, and there is no update path. | The retirement half stands unchanged and is **not** weakened. The "visibility toggle" half has no toggle to attach its statement to under D-09. Deleting the clause would lose the requirement's actual point, which is that a player MUST be told before authoring content that publishing is one-way; the profile-authoring surface is where that warning belongs once the toggle is gone. |
+| **4.** `.planning/research/SUMMARY.md` — CONFLICT 4 resolution: *"ship `public` and `private` in the v0.13 UI"* | The **tier vocabulary** decision survives intact — two tiers with real evaluators, `restricted` present in the `entity_properties` CHECK but not surfaced, exhaustive `switch` with `default: deny`. Its **owner-facing UI expression** does not: there is no v0.13 surface on which a player selects a tier. | This is a **dated research record** (2026-07-31). It is annotated with a superseded-by note placed immediately after the affected clause and is **never rewritten** — rewriting a dated artifact destroys the ability to reconstruct why a decision was made, and the reasoning here (PITFALLS' fail-open unimplemented-tier argument beating FEATURES' three-tier proposal) is reasoning this SPEC still relies on. Only the clause's UI expression is superseded. |
+| **5.** `docs/architecture/invariants.yaml` — the `INV-PRIVACY` scope record, `boundary:` first sentence: *"Privacy-relevant gating on history reads."* | *"Privacy-relevant gating on reads."* The `"Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe authorization (→ INV-EVENTBUS)"` clause is **preserved verbatim and MUST NOT be widened**. The `description:` enumeration was extended in the same edit so the record describes the entry family it now owns. | The scope is named PRIVACY, not PRIVACY-OF-HISTORY; it was narrowed to history reads only because stream-history work happened to mint it. §13 files two disclosure guarantees there, and a boundary statement that excluded them would have made the registry's own ownership record false — the failure `.claude/rules/invariants.md` calls out as "never leave the registry describing a guarantee the code no longer makes". The preserved exclusion clause is what routes this SPEC's tier-floor *evaluation* to `ACCESS`, and it is why splitting four guarantees across two scopes is coherent rather than a fudge. **Landed by plan 01-01**; the generated companion is already regenerated. |
+| **6.** `.planning/REQUIREMENTS.md` PORTAL-02 and `.planning/ROADMAP.md` Phase 1 success criterion 1 — both: *"the three existing public export surfaces"* | **Four.** §3's inventory enumerates them. The fourth is `WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`), which returns `repeated PublicSceneArchive` whose `participants_snapshot` (`api/proto/holomush/scene/v1/scene.proto:1053`) is a frozen participant projection served unauthenticated — **in bulk**, one entry per published scene rather than one per request. | Not cosmetic. A Phase-4 census built to the requirement's letter would enumerate three and miss the highest-volume unauthenticated export surface of the set — precisely the missing-census-member failure §12 rule 1 exists to prevent, and precisely the shape research warned about when it said a per-endpoint suite cannot detect the endpoint nobody wrote a test for. Found by plan 01-02's tree enumeration and verified against the tree at the wave boundary, not relayed. **Note:** the surface carries participant **ids** today, not names — `ReadSceneMetaForSnapshot` selects `character_id` (`plugins/core-scenes/publish_store.go:988`) while the proto doc comment claims names; that mismatch is tracked as issue **#4901** and does not affect this row, because the surface is character-returning either way. |
+| **7.** `.planning/REQUIREMENTS.md` IDENT-09 and `.planning/research/SUMMARY.md` "Must carry forward" item 3 — both locate the check-then-insert race *"across `internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`"*, and item 3 argues *"Adding `Rename` doubles the writers into that race."* | Those two sites are the shared existence **query** and **one** writer. There is a **second** writer: `internal/auth/guest_service.go:227`, which calls the same `ExistsByName` inside the guest-name retry-on-collision loop. The race has **one query and two writers** today, and three once `Rename` lands — not two becoming four. §6.1.3 carries the corrected enumeration. | Not cosmetic. A Phase-2 planner sizing the duplicate-detection and index work from the requirement's letter would audit one creation path and miss the guest one — the path that provisions characters **automatically and at volume**, and therefore the one most likely to have produced the pre-existing duplicates the one-shot job must resolve before the unique index can be created. Found by plan 01-03's writer enumeration. The research summary is a dated record and is annotated in place, not rewritten. |
+| **8.** **PORTAL-10 rule 5** — `.planning/REQUIREMENTS.md`: *"**Top-level oops code assertions** via `oops.AsOops(err).Code()`; `errutil.AssertErrorCode` chain-walks and passes on double-wrap."* Restated at `.planning/ROADMAP.md` in the PORTAL-10 preamble, Phase 1 criterion 5 and Phase 6 criterion 1; sourced from `.planning/research/SUMMARY.md` and `.planning/research/PITFALLS.md`; originating in `.claude/rules/grpc-errors.md` §*"Wire opacity needs TOP-LEVEL code assertions"*. | **Both halves are false against the pinned dependency**, and rule 5 is restated around the **wire** per §9.6.1 and §12.1: `status.Code(err)`, a generic `status.Convert(err).Message()` with the internal code string absent from it, and a differential two-viewer assertion where the contract is indistinguishability. `errutil.AssertErrorCode` stays **endorsed** for asserting *which* internal code a handler produced. | Under `github.com/samber/oops v1.22.0` (`go.mod:32`), `OopsError.Code()` is documented in the dependency as *"returns the error code from the deepest error in the chain"* and is implemented as a recursive `getDeepestErrorCode` walk; `errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) is a thin wrapper over `oops.AsOops` plus that same `.Code()`. The two spellings are behaviorally identical and **both** pass on a double-wrap. Additionally `oops.AsOops` returns `(OopsError, bool)`, so the single-expression spelling does not compile. **This is the most load-bearing row in this table:** rule 5 is one of the six §12 copies verbatim into every v0.13 plan, so shipping it as written would seed an assertion that cannot fail on the leak it exists to catch into all five remaining phases — the exact *"verification that cannot fail"* PORTAL-10 was written to end. Verified empirically against the pinned version, 2026-08-01. Tracked as issue **#4902**. **The `.claude/rules/grpc-errors.md` half is deliberately NOT applied here:** §9.6.1 already committed to documenting current behavior without changing the rule file, a repo rule file is outside a SPEC-authoring phase's blast radius, and #4902 owns that edit. The planning artifacts, which downstream planners read as directives, are amended. |
+| **9.** `.planning/REQUIREMENTS.md` ADMIN-06 — *"in-transaction"* against *"the existing `events_audit`"* — and `.planning/ROADMAP.md` Phase 6 success criterion 3: *"Every admin mutation writes an `events_audit` row **in the same transaction**"* | The durability boundary is the **outbox envelope**, per §10.7: an admin mutation emits its audit envelope in the same transaction as the state change, and the `events_audit` row is **projected** from that envelope. | **No transactional write path into `events_audit` exists, and one would be the wrong thing to build.** The table is written by the asynchronous JetStream audit projection — `projection.persist` (`internal/eventbus/audit/projection.go:319-331`) calling `writeAuditRow`, whose `INSERT INTO events_audit` is at `internal/eventbus/audit/projection.go:434` — plus the retention-partition mover (`internal/eventbus/audit/retention_partitions.go:546`). A Phase-6 planner building to the criterion's letter would find no path and would either invent a bespoke direct insert — bypassing the codec / `dek_ref` / dedup contract `writeAuditRow` maintains, and creating a second writer to a partitioned table — or quietly weaken the criterion to whatever got built. The guarantee ADMIN-06 actually wants, that an admin mutation cannot commit without its audit record being durably queued, is fully delivered by the envelope boundary (`INV-WORLD-1`, at-least-once projection with DLQ capture). Only the sentence naming the wrong table changes. |
+| **10.** *Divergence, not an amendment.* The maintainer's stated grid-parity principle: *"Anything that is readable in the same location 'on grid' is visible to other logged in users on the web."* Strict grid-parity puts the in-world `description` at a **player** floor. | The seeded default places `description` at **anonymous** — more open than the principle requires (§8.6, §8.12). | Surfaced and confirmed at context-gathering (D-14). **Grid-parity is the floor the principle guarantees, not a ceiling on what a game may publish**, and an open default is what makes a shareable profile URL worth having. A game wanting strict grid-parity raises `description` to `player` in configuration — one row of the posture table, no code change. This is recorded here so it reads as a **choice rather than an oversight**, which is the whole reason D-14 asked for it in writing. §8.11 carries the same divergence in its own section; this row exists so a reviewer scanning only §14 still finds it. |
+
+### 14.1 What is NOT amended
+
+The blast radius stops here. Three requirements a reader might expect to be
+casualties of D-09's no-agency decision survive **unamended**, and a planner
+should treat their text as current:
+
+- **PROFILE-03** — *"Each profile field carries server-enforced visibility of
+  `public` or `private`, with sane defaults. Enforcement is by omission from the
+  response, never client-side hiding."* It never names **who** sets the
+  visibility. Server-enforced, sane defaults, and enforcement-by-omission are
+  precisely what §8 specifies; the requirement was always about the mechanism.
+- **PROFILE-04** — the profile-reachability facet. Re-seated, not rewritten: the
+  facet becomes the profile-level tier floor (§8.7), and the not-found-equivalent
+  it demands is exactly what `CHARACTER_PROFILE_NOT_FOUND` delivers (§9.6).
+- **PROFILE-05** — *"Name and pronouns cannot be set private."* Re-seated as a
+  constraint on the **configuration** rather than on an owner (D-13, §8.8). The
+  guarantee it states — every reachable profile carries both fields — is
+  strictly stronger under the configured model than under an owner-controlled
+  one, because no per-character setting can override it.
+
+Nothing else in `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md` or the
+research corpus is superseded by this SPEC. In particular the **v2 requirements**
+and the **Out of Scope** table are carried forward unchanged, the latter into §15.
 
 ## 15. Out of Scope
 
-> *Placeholder — authored by plan 01-05.*
+Explicitly excluded, each with its reason. This is a numbered section rather than
+a footnote because **an omission is not an exclusion** — a reader who cannot find
+a feature here has no way to tell whether it was considered and rejected or
+simply forgotten, and the difference is what stops it being smuggled back in
+during planning.
+
+### 15.1 Carried forward from the milestone requirements
+
+Every entry from `.planning/REQUIREMENTS.md`'s Out-of-Scope table, with its
+reason, unchanged:
+
+| Excluded | Reason |
+| --- | --- |
+| Freeform HTML/CSS in profiles | Samy-worm class; CSS alone still exfiltrates under CSP. |
+| Over-granular privacy matrices | Nextcloud's own docs concede their 3×4 cross-product confuses users. |
+| Per-character-pair visibility | IC-knowledge modelling wearing a privacy hat; not a privacy control. |
+| Relationship-web graphs | Consent, staleness, and N² privacy-filtered reads. |
+| Raw DB/SQL console in the admin panel | Bypasses every ABAC gate and all audit emission. |
+| Hardcoded break-glass admin identifiers | Unauditable standing privilege. |
+| Admin impersonation | Launders the audit trail — actions attribute to the wrong actor. |
+| Hard-delete on retire | Irreversible; FK references from `character_roles` (CASCADE), `scene_participants`, `player_character_bindings`, and `locations.owner_id`/`objects.owner_id` (no `ON DELETE` — errors at runtime). §4.4 keeps retire, idle-out and purge three distinct operations for this reason. |
+| Dashboard-first MVP with stub sections | A dashboard of empty cards is the rot pattern EXT-02 exists to prevent; §10.3 requires the six planned sections to refuse **after** the gate instead. |
+| Nav nesting deeper than 2 levels | Both surveyed admin-IA libraries explicitly reject it. |
+| Role mutation in character administration | PORTAL-08 — see §15.3, which states this one emphatically because it is the one most likely to be mistaken for an oversight. |
+| World/building editing surfaces | Still SPEC-less; unchanged from the PROJECT.md Out-of-Scope entry. |
+| `@testing-library/svelte`, `vitest-browser-svelte` | The repo already has a working `mount`/`unmount` component-test project (17 files); the latter is a whole-suite migration, filed separately. |
+| Any query-cache layer in the web client | Creates a second source of truth against the live `StreamEvents` push feed. |
+| Proto `reserved` ranges as an extensibility claim | Hygiene only — see §15.4, which states what actually carries the extensibility constraint. |
+
+### 15.2 Deferred by this phase
+
+Four exclusions this SPEC adds, each with the seam it leaves:
+
+| Deferred | Seam left, and why it is deferred |
+| --- | --- |
+| **An admin editing surface for the visibility-floor configuration** | v0.13 ships the model plus seeded defaults only (D-15, §8.12). The editor arrives when the `config` admin section — already registered, role-gated and returning `NOT_IMPLEMENTED` after the gate per EXT-01/EXT-02 — gets its handler body. That makes this a **body replacement, not new wiring**, and gives the deferred section its first concrete tenant. Rejected: a minimal editor in Phase 6, which the roadmap already flags as the highest-risk phase. |
+| **The full `docs/superpowers/` retirement sweep** | Phase 1 does the **pointer update only** (D-19). The sweep touches ~20 files, several of them live gates — the orphan-check walk root (`test/meta/invariant_registry_test.go:341`), `scripts/docs-paths-regex.sh` and `scripts/lint-docs-paths-sync.sh` (which decide whether a PR takes the docs fast lane), `scripts/adr-doctor.sh`, `gorules/plugin.go`, `Taskfile.yaml` — plus relocation of 140 spec files. It gets its own issue precisely because it touches the gates where a silent fail-open would live. |
+| **A struct-literal lint** banning character-shaped proto literals outside the projection package | Considered and **consciously not mandated** (D-04, §2.6). The census already fails RED for every case that matters. A future PR adding the lint is an **increment, not a correction**: it does not indicate this SPEC was wrong, and it MUST NOT be treated as a prerequisite for anything in v0.13, nor as grounds for relaxing the census. |
+| **A fourth viewer-tier rung**, and the representation of the visibility configuration for the future editor | Raised as possible discussion topics and not pursued. The tier ladder is a **string enum** (§8.2), so a fourth rung is an append — provided §8.6's exhaustive `switch` with a denying `default` is honored, which is what keeps an unimplemented rung from failing **open**. |
+
+### 15.3 Role mutation — stated emphatically
+
+**Role mutation is not part of character administration in this milestone. An
+omission is not an exclusion.**
+
+This is PORTAL-08, and it is stated in this form because it is the exclusion most
+likely to be read as an oversight and quietly added. Two facts make it a security
+decision rather than a scoping one:
+
+- `PlayerHasRole` (`internal/store/role_store.go:83-93`) is **player-wide**: it
+  returns true iff *any* character of the player holds the role. A role granted
+  to a throwaway alt therefore confers it **everywhere**. That is deliberate and
+  documented in the operator/break-glass path
+  (`internal/admin/auth/ingame.go:115` — *"RoleAdmin (any character)"*), not a
+  defect; v0.13 is simply the first work that would load those semantics onto a
+  new surface.
+- The decision on player-wide versus per-character role semantics is tracked as
+  issue **#4899** and **MUST land before any admin surface exposes role
+  mutation**, because `WebCheckSessionResponse` needs a role field shaped to
+  match and adding it later is a wire-compat change to every caller.
+
+The mechanism enforcing the exclusion is ADMIN-04's **field-mask allowlist that
+excludes roles** (§10.6) — an allowlist, so a role path is excluded by not being
+enumerated rather than by a deny-list someone must remember to extend.
+
+### 15.4 Proto field-number reservation is hygiene, not extensibility
+
+**A `reserved` range in a `.proto` file MUST NOT be presented as discharging this
+milestone's extensibility constraint, and MUST NOT be cited in any REQ-ID,
+success criterion or plan as if it had.**
+
+All three researchers who considered it agreed it is a **documentation
+convention** only: reserve numbers, with a comment naming the deferral issue, and
+nothing more. Two reasons it cannot carry more weight:
+
+- Reserved capacity carries an implicit false promise that *"the hard part is
+  done"* — the reserved-capacity-that-rots pattern. The hard part is the
+  authorization descriptor, the policy family, and the projection; a number is
+  not any of them.
+- Under this SPEC's **absence-means-hidden** semantics (§2.7, §8.9), a reserved
+  non-`optional` scalar that later becomes real **serializes an empty value from
+  day one**. That is a fail-open placeholder in precisely the position where
+  absence is the enforcement mechanism.
+
+What actually carries the extensibility constraint, and where each is specified:
+
+| Carrier | Where |
+| --- | --- |
+| The admin **section registry** with a mandatory authorization descriptor — no default, no zero value meaning allow — and the registry↔descriptor set-equality census | §10.1, §10.2; EXT-01, EXT-03, EXT-04 |
+| The **ABAC namespace** — `admin_section:` as a resource type, with `seed:admin-section-access` covering every future section at zero additional policy cost | §10.4; EXT-07 |
+| The **property-row media model** — proven by inserting one primary and ten gallery rows through the real schema, demonstrating the no-migration-later claim rather than asserting it | §7.3, §9.7; EXT-05, EXT-06 |
 
 ## 16. Grounding Trace
 
