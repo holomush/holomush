@@ -2168,7 +2168,221 @@ three reasons in §11.2 come back, and the third one does not weaken with time.
 
 ## 12. Verification Integrity
 
-> *Placeholder — authored by plan 01-05.*
+This section is normative, and it is the one section of this SPEC written to be
+**read somewhere else**. Its six rules are copied verbatim into every v0.13
+`PLAN.md` from Phase 2 onward (§12.2), so each rule is written to stand alone: a
+reader of a Phase-6 plan who never opens this document must still be able to act
+on the copied text.
+
+**Why the section exists.** v0.12's audit catalogued **seventeen** instances of
+*"a verification that cannot fail"* — and it catalogued them with these same
+review gates already in place. Research then found that the natural test for
+nearly every privacy and authorization property in this milestone **passes while
+the property is false** (`.planning/research/PITFALLS.md`, the *"Inverted test
+question"* paragraph carried by all fourteen pitfalls). Three of them, in one
+line each:
+
+- A private-field test asserting `resp.Bio == ""` passes because **the fixture's
+  bio was empty to begin with** — it never fails, including against a handler
+  with the redaction deleted (`PITFALLS.md:89-100`).
+- A per-endpoint leak suite **cannot detect the endpoint nobody wrote a test
+  for** — it is structurally incapable of finding a missing member of its own set
+  (`PITFALLS.md`, Pitfall 2; `.planning/research/SUMMARY.md:153-154`).
+- A denial test passes on a subject that **would have been denied anyway** — for
+  a missing token rather than a missing role, a distinction `err != nil` cannot
+  draw (`PITFALLS.md:392-400`).
+
+None of these is a sloppy test. Each is the *obvious* test, written first, by
+someone who understood the property. That is what makes the rules below binding
+rather than advisory.
+
+### 12.1 The six rules
+
+The rules are numbered **1 through 6**, in the order `.planning/REQUIREMENTS.md`
+PORTAL-10 (`:49-71`) fixes them. **The numbering is part of the contract** — see
+§12.2. Each rule carries a **non-vacuity clause** naming what a fake satisfaction
+of that rule looks like, because every one of these rules can itself be
+satisfied vacuously.
+
+---
+
+1. **Census with set equality.**
+
+Every property that must hold across a *set* of surfaces MUST be verified by a
+**census** that derives the set from the tree and compares it against a
+checked-in expected set by **set equality** — order-independent, exact-string
+keys, symmetric-difference diff on failure. Inequality in **either** direction is
+RED. A per-endpoint test suite MUST NOT be substituted: it iterates the expected
+set, so an unexpected member is never visited. The v0.13 instances are the
+character-returning RPC census (§2.6, §3) and the admin section-registry ↔
+authorization-descriptor census (EXT-04, §10.2).
+
+> **Non-vacuity.** A census over an **empty or hand-written set** satisfies this
+> rule while proving nothing. The derived side MUST come from the tree —
+> generated service descriptors, the registry's own entries — never from a second
+> hand-maintained list, which merely compares a list to its own copy. A phase
+> whose census set is empty at the moment the test is written MUST say so and say
+> why, rather than shipping a green comparison of two empty sets.
+
+2. **Paired positive control on every denial test.**
+
+Every test asserting that a subject is **denied** MUST be paired, on the **same
+fixture**, with a positive control proving that subject would otherwise have been
+**permitted** — typically the same call after granting the one attribute under
+test. Without the pair, the denial test cannot distinguish *"denied for lack of
+the admin role"* from *"denied for lack of a session"*, and it stays green when
+the gate is deleted. The negative test MUST also target the **privileged**
+endpoint: a denial test aimed at an endpoint that has nothing to deny is the
+purest form of a verification that cannot fail (`PITFALLS.md:338-344`). The same
+pairing applies to negative *content* assertions — assert the fixture is
+non-degenerate first (`PITFALLS.md:233-240`).
+
+> **Non-vacuity.** A phase that has **no denial tests at all** MUST state that
+> explicitly in its plan rather than omitting this rule. An omitted rule is
+> indistinguishable from a rule nobody got to; a stated absence is a claim
+> someone made and a reviewer can challenge. Rule 2 MUST NOT be satisfied by the
+> absence of the tests it governs.
+
+3. **Assertions against marshaled response bytes.**
+
+Every assertion that a field is **absent** for a viewer MUST be made against the
+**marshaled response bytes**, not against a populated Go struct and not against
+rendered UI. Absence is this milestone's entire enforcement mechanism (§2.7,
+§8.9): a field cleared in a projection helper the handler never calls, or hidden
+by the client, MUST NOT be able to pass. Seed a distinctive sentinel value and
+assert the sentinel does not appear anywhere in the serialized response, rather
+than asserting a named field equals its zero value.
+
+> **Non-vacuity.** An assertion against a **populated Go struct** — or against
+> the DOM in a Playwright test — satisfies the sentence but not the rule. So does
+> asserting `field == ""` on a fixture that never set the field: that is rule 1's
+> empty-set failure wearing rule 3's clothes, and it is the exact shape of
+> `PITFALLS.md:89-100`.
+
+4. **Gates demonstrated RED against the pre-fix state.**
+
+Every new gate — test, lint, census, meta-test, CI check — MUST be **observed
+failing** against the state that precedes its fix, and that observation MUST be
+recorded in the plan's SUMMARY. **A gate never seen failing is
+indistinguishable from a gate that cannot fail.** The named v0.13 instance is the
+name-uniqueness gate: it MUST be demonstrated RED against **today's unindexed
+schema**, before the unique index lands (IDENT-09, §6.3).
+
+> **Non-vacuity.** A gate whose RED state was **assumed rather than observed**
+> fails this rule, and so does a gate demonstrated red against a *hypothetical*
+> pre-fix state constructed for the demonstration rather than against the tree as
+> it actually stood. "The test would have failed before" is not the observation;
+> the recorded non-zero exit is.
+
+5. **Wire-level assertion of every opacity and authorization contract.**
+
+An opacity or authorization contract MUST be asserted **over the wire**, per
+§9.6.1: the mapped status via `status.Code(err)`, the generic message via
+`status.Convert(err).Message()`, and the internal code string **absent** from
+that message. Where the contract is *indistinguishability* — an unreachable
+profile from a nonexistent character (§8.7) — the assertion MUST be
+**differential**: drive both cases through the same RPC and assert the two
+responses are identical across status, message and body.
+
+**An oops-code assertion is not evidence about what the wire carried.** Under the
+pinned `github.com/samber/oops v1.22.0` (`go.mod:32`), `OopsError.Code()` is
+documented in the dependency as *"returns the error code from the deepest error
+in the chain"* and is implemented as a recursive `getDeepestErrorCode` walk;
+`errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) is a thin wrapper over
+`oops.AsOops` plus that same `.Code()`. The two spellings are therefore
+**behaviorally identical**, and **both** return the inner code on a double-wrap —
+`oops.Code("INTERNAL").Wrap(oops.Code("DENY_NOT_ADMIN_ROLE")…)` yields
+`DENY_NOT_ADMIN_ROLE` while the wire carries `INTERNAL`. `errutil.AssertErrorCode`
+remains the correct and endorsed tool for asserting **which internal code** a
+handler produced; it simply MUST NOT be cited as proof of what a caller saw.
+
+> **Restated.** PORTAL-10's original rule 5 read *"Top-level oops code
+> assertions via `oops.AsOops(err).Code()`; `errutil.AssertErrorCode` chain-walks
+> and passes on double-wrap."* Both halves are false against the pinned
+> dependency, and a test written to that prescription **asserts the inner code
+> and passes while the wire leaks** — a verification that cannot fail, living
+> inside the rule written to end them. This SPEC restates rule 5 around the wire
+> and changes no rule file; the mismatch with
+> `.claude/rules/grpc-errors.md` §*"Wire opacity needs TOP-LEVEL code
+> assertions"* is tracked as issue **#4902**. §14 carries the amendment.
+
+> **Non-vacuity.** An assertion that **passes on a double-wrapped error** fails
+> this rule no matter which helper spells it. So does a **one-sided** assertion
+> on a differential contract: *"the unreachable profile returns NotFound"* is
+> satisfied by an implementation that returns NotFound with a distinguishable
+> message, which is the leak.
+
+6. **Invariant-scope discipline.**
+
+Every guarantee this milestone pins MUST be allocated into an **existing**
+registry scope (`ACCESS`, `PRIVACY`, `WORLD` — §13) or declare a boundary. Ad-hoc
+families (`INV-PROFILE-*`, `INV-ADMIN-*`, `INV-PORTAL-*`) MUST NOT be minted;
+that is precisely the debt `.claude/rules/invariants.md` exists to prevent. An
+entry whose asserting test does not exist yet ships `binding: pending` with **no**
+`asserted_by`. Because this SPEC lives under `.planning/`, its entries are
+invisible to the orphan check — which walks only `docs/superpowers/specs/`
+(`test/meta/invariant_registry_test.go:341`) — and MUST be **hand-registered** in
+`docs/architecture/invariants.yaml`.
+
+> **Non-vacuity.** A **fabricated `// Verifies:` annotation** on a test that
+> merely touches the code, rather than asserting the guarantee, satisfies the
+> ratchet and defeats it — the documented false-green the binding ratchet exists
+> to catch. A `Skip`-only placeholder carrying the annotation is the same
+> failure. When no test genuinely asserts the invariant, that is a real coverage
+> gap: leave it `pending` and file it.
+
+---
+
+### 12.2 The binding mechanism
+
+**The block above is copied verbatim into an acceptance-criteria block in every
+v0.13 `PLAN.md` from Phase 2 onward, and the copying phase specializes each rule
+to its own subject matter.** `gsd-plan-checker` verifies both — that the block is
+present, and that it is specialized rather than pasted unchanged. This is D-17
+(`01-CONTEXT.md:163-169`).
+
+Three properties make the copy load-bearing rather than ceremonial:
+
+| Property | Requirement |
+| --- | --- |
+| Specialized, not pasted | Each rule names the concrete v0.13 artifact it governs **in that phase** — which census, which denial test, which gate. A rule copied without a named subject is a rule nobody owns. |
+| Census scope named per phase | Each copied block **names the census scope its own phase owns**, so two phases do not both claim the same census set. Phase 4 owns the character-returning-RPC census (§2.6); Phase 6 owns the admin section-registry census (EXT-04). Neither restates the other's, and neither may cite the other's as discharging its own rule 1. |
+| Numbering preserved | The rules stay numbered **1 through 6** in **every** copy. A cross-artifact reference — a SUMMARY saying *"rule 4 demonstrated RED at commit X"*, a review comment saying *"rule 2 unsatisfied"* — is only unambiguous if the numbering is stable. A phase MUST NOT renumber, reorder, or drop a rule; a rule that does not apply is stated as not applying (see rule 2's non-vacuity clause) rather than removed. |
+
+**No meta-test asserts on planning-document markdown.** The enforcement is the
+copied block plus plan-checker review, and nothing else. Both alternatives were
+considered and rejected:
+
+| Rejected | Reason |
+| --- | --- |
+| A `test/meta/` check over the plan markdown | Asserting on planning documents is unusual here — the nearest relative, `internal/access/spec_amendments_test.go`, substring-asserts a `docs/superpowers/specs/` file, not a plan. Worse, **rule 4 wants gates demonstrated RED**, and this one is hard to see fail meaningfully: a substring check over prose goes green the moment the substring appears, whether or not the rule was applied. It would be a gate that cannot fail, guarding the rules against gates that cannot fail. |
+| Prose only — state the rules and trust the review | v0.12 catalogued seventeen verifications that could not fail **with these same review gates already in place**. Prose is what was already in place. |
+
+The honest limit: a copied block is enforced by a reviewer reading it. This SPEC
+records that limit rather than dressing it up, which is why every rule carries a
+non-vacuity clause — the clause is what gives that reviewer something specific to
+check.
+
+### 12.3 Test plan by tier
+
+Tier names are `.claude/rules/testing.md`'s exactly. Where a rule spans tiers,
+the row names the tier at which the rule's **binding** check lives.
+
+| Rule | Tier | Runner | Concrete v0.13 instance |
+| --- | --- | --- | --- |
+| 1 — census | `unit` | `task test` | The character-returning-RPC census derives from generated service descriptors and needs no dependencies (§2.6); the section-registry ↔ descriptor census reads the registry in-process (EXT-04). Both belong beside the other set-equality meta-tests. |
+| 2 — paired positive control | `full-stack integration` | `task test:int` | The admin-gate denial tests (ADMIN-02) need the real `CoreServer` and a real ABAC engine, because the property is *which* gate denied. Pure policy-evaluation pairs (`seed:admin-section-access`, Phase 2) also run at `unit` against the engine directly. |
+| 3 — marshaled bytes | `unit` for projections, `full-stack integration` for reads | `task test`, `task test:int` | A projection function's output marshals in-process; the end-to-end guarantee that no v0.13 read path reintroduces a field needs the real handler chain. **`E2E` does not satisfy this rule** — a Playwright assertion reads the DOM, which is the client, which §2.7 removes from the decision. |
+| 4 — gate RED pre-fix | tier of the gate itself | — | The name-uniqueness gate is `full-stack integration` (real Postgres, `//go:build integration`) and MUST be run against the pre-index schema. For a lint or a census the tier is `unit`; the rule is about the *observation*, not the tier. |
+| 5 — wire-level assertion | `full-stack integration` | `task test:int` | `status.Code` / `status.Convert(...).Message()` over the real handler chain, plus the §8.7 differential pair. An in-process gRPC call is sufficient **because §9.6.1 requires the handler to return a mapped status**; an oops error returned bare would surface as `codes.Unknown`, which is itself a failure of this rule. |
+| 6 — invariant-scope discipline | `unit` | `task test` | `test/meta/invariant_registry_test.go` — drift, provenance, binding-presence and the `Skip`-only-placeholder guard all run under `task test` with no build tag. The `pending`-versus-`bound` judgement itself is a review judgement, not a test. |
+| — | `E2E` | `task test:e2e` | Named here only to fix its boundary: `E2E` verifies that the surface a logged-out visitor loads renders (PROFILE-01) and that the UI states the not-retroactive fact (PROFILE-12). It MUST NOT be cited as satisfying rules 1, 3 or 5. |
+
+> **Notably absent:** there is **no** meta-test over `.planning/` markdown, **no**
+> lint asserting the six-rule block's presence, and **no** CI check counting
+> rules. The reviewer for this SPEC **MUST** verify no v0.13 PR adds one and then
+> relaxes the plan-checker review on the grounds that the check covers it — a
+> substring check over prose is the weaker gate, not the stronger one.
 
 ## 13. Invariants
 
