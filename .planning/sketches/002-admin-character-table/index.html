@@ -694,9 +694,8 @@
 
     <div id="variant-nav">
       <span class="lbl">SKETCH 002 · admin character table</span>
-      <button class="variant-tab active" onclick="showVariant('a', this)">A: Inline actions</button>
+      <button class="variant-tab active" onclick="showVariant('a', this)">A: Inline actions ★</button>
       <button class="variant-tab" onclick="showVariant('b', this)">B: Row → detail pane</button>
-      <button class="variant-tab" onclick="showVariant('c', this)">C: Multi-select + bulk</button>
       <span style="flex: 1"></span>
       <select class="statepick" id="statepick" onchange="render()">
         <option value="data">state: data (412)</option>
@@ -779,11 +778,11 @@
               <div id="pagerzone"></div>
 
               <div class="note">
-                <b>Sort/filter affordances are constrained by SPEC §11.3</b>, not by convention.
-                Sortable: <code>name</code>, <code>status</code>, <code>created_at</code>.
-                <code>player_id</code> is <b>filter-only</b> — "equality filter only, grouping a player's alts, never an ordering" — so its header carries no sort affordance at all.
-                <code>description</code>, <code>location_id</code> and every <code>profile.*</code> row are excluded outright.
-                There is deliberately <b>no sort dropdown and no facet panel</b>: §11.3 names a sort control drawn from the §7.2 field list as "the specific warning sign".
+                <b>This table now sorts on more than SPEC §11.3 permits — three amendments are required before Phase 6 builds it.</b><br />
+                <b>A1 · <code>last_active_at</code> does not exist.</b> It cannot be derived: <code>sessions</code> rows are reaped and <code>session_connections.last_seen_at</code> is a gateway lease, so both answer "online now", not "last active". Needs a durable column on <code>characters</code>, a write path at session start, and a §11.3 row.<br />
+                <b>A2 · sorting by player.</b> §11.3 says <code>characters.player_id</code> is "equality filter only … never an ordering". What this column actually sorts is <code>players.username</code>, a joined column §11.3 never enumerates — so it is excluded by default rather than by that row. Ordering by it discloses nothing to an audience that already sees it, which is §11.3's own stated safety test.<br />
+                <b>A3 · <code>AdminSearchCharacters</code> "searches names"</b> (§9.2) — meaning character names. Searching player usernames extends it.<br />
+                Unchanged and honored: <code>description</code>, <code>location_id</code> and every <code>profile.*</code> row stay excluded, and there is deliberately <b>no sort dropdown and no facet panel</b> — §11.3 names a sort control drawn from the §7.2 field list as "the specific warning sign".
               </div>
             </div>
           </div>
@@ -813,24 +812,38 @@
       // Columns are exactly what `characters` actually has (id, player_id, name,
       // description, location_id, created_at, version, preferences) plus Phase 2's
       // `status`. There is NO last-seen column in the schema, so none is shown.
+      // `la` (last active) is NEW SCOPE — see README amendment A1. It cannot be
+      // derived from `sessions`/`session_connections`: sessions are reaped (the
+      // unique index only covers status IN ('active','detached')) and
+      // session_connections.last_seen_at is a gateway lease that dies with the
+      // socket. Both answer "online now", not "last active". A durable
+      // characters.last_active_at is required. `null` = never logged in.
       const ROWS = [
-        { n: 'Ashwood, Miren', id: '01JQ7X…8F2', p: 'seanb', s: 'active', c: '12 Jun 2026', v: 7 },
-        { n: 'Bramble Teak', id: '01JR2A…3D1', p: 'ktrn', s: 'active', c: '02 Jul 2026', v: 2 },
-        { n: 'Corvid-9', id: '01JH4M…A1C', p: 'ktrn', s: 'retired', c: '03 Mar 2026', v: 19 },
-        { n: 'Dessa Rill', id: '01JN8P…6B4', p: 'mmilne', s: 'active', c: '21 Apr 2026', v: 4 },
-        { n: 'Ordinal Grey', id: '01JW5K…5E9', p: 'mmilne', s: 'active', c: '05 May 2026', v: 11 },
-        { n: 'Pellum Vosk', id: '01JC1D…9A7', p: 'ariah', s: 'retired', c: '14 Feb 2026', v: 3 },
-        { n: 'Quill Sedge', id: '01JT6R…2C8', p: 'seanb', s: 'active', c: '30 Jun 2026', v: 1 },
-        { n: 'Thessaly Vane', id: '01K2B9…07B', p: 'seanb', s: 'active', c: '28 Jul 2026', v: 1 },
-        { n: 'Umber Fane', id: '01JF3S…4E2', p: 'ariah', s: 'active', c: '08 Mar 2026', v: 6 },
-        { n: 'Vellum', id: '01J8H2…D44', p: '—', s: 'idle', c: '19 Jan 2026', v: 2 },
-        { n: 'Wren Calloway', id: '01JY7T…1F5', p: 'dpike', s: 'active', c: '17 Jul 2026', v: 5 },
-        { n: 'Yarrow Kest', id: '01JZ4V…8B3', p: 'dpike', s: 'active', c: '25 Jul 2026', v: 2 },
+        { n: 'Ashwood, Miren', id: '01JQ7X…8F2', p: 'seanb', s: 'active', c: '12 Jun 2026', la: 1, v: 7 },
+        { n: 'Bramble Teak', id: '01JR2A…3D1', p: 'ktrn', s: 'active', c: '02 Jul 2026', la: 26, v: 2 },
+        { n: 'Corvid-9', id: '01JH4M…A1C', p: 'ktrn', s: 'retired', c: '03 Mar 2026', la: 337, v: 19 },
+        { n: 'Dessa Rill', id: '01JN8P…6B4', p: 'mmilne', s: 'active', c: '21 Apr 2026', la: 4, v: 4 },
+        { n: 'Ordinal Grey', id: '01JW5K…5E9', p: 'mmilne', s: 'active', c: '05 May 2026', la: 143, v: 11 },
+        { n: 'Pellum Vosk', id: '01JC1D…9A7', p: 'ariah', s: 'retired', c: '14 Feb 2026', la: 902, v: 3 },
+        { n: 'Quill Sedge', id: '01JT6R…2C8', p: 'seanb', s: 'active', c: '30 Jun 2026', la: null, v: 1 },
+        { n: 'Thessaly Vane', id: '01K2B9…07B', p: 'seanb', s: 'active', c: '28 Jul 2026', la: 0, v: 1 },
+        { n: 'Umber Fane', id: '01JF3S…4E2', p: 'ariah', s: 'active', c: '08 Mar 2026', la: 71, v: 6 },
+        { n: 'Vellum', id: '01J8H2…D44', p: '—', s: 'idle', c: '19 Jan 2026', la: 744, v: 2 },
+        { n: 'Wren Calloway', id: '01JY7T…1F5', p: 'dpike', s: 'active', c: '17 Jul 2026', la: 9, v: 5 },
+        { n: 'Yarrow Kest', id: '01JZ4V…8B3', p: 'dpike', s: 'active', c: '25 Jul 2026', la: null, v: 2 },
       ];
+
+      // hours-ago -> human. null renders as an explicit "never", not a blank.
+      function ago(h) {
+        if (h === null) return '<span class="muted" title="No session has ever been opened for this character">never</span>';
+        if (h === 0) return '<span style="color:var(--color-status-online)">online now</span>';
+        if (h < 24) return h + 'h ago';
+        const d = Math.round(h / 24);
+        return d < 60 ? d + 'd ago' : Math.round(d / 30) + 'mo ago';
+      }
 
       let VARIANT = 'a';
       let SORT = { key: 'n', dir: 'asc' };
-      let SELECTED = new Set();
       let OPEN = null;
       let PLAYER_FILTER = null;
 
@@ -844,7 +857,17 @@
       function sorted(rows) {
         const k = SORT.key;
         const m = SORT.dir === 'asc' ? 1 : -1;
-        return [...rows].sort((a, b) => (a[k] > b[k] ? m : a[k] < b[k] ? -m : 0));
+        return [...rows].sort((a, b) => {
+          const x = a[k],
+            y = b[k];
+          // "never" (null last-active) sorts to the END in both directions —
+          // it is an absence, not a very-old value, and burying it under a
+          // desc sort would hide exactly the rows an admin is hunting for.
+          if (x === null && y === null) return 0;
+          if (x === null) return 1;
+          if (y === null) return -1;
+          return x > y ? m : x < y ? -m : 0;
+        });
       }
 
       function toolrowHtml(state) {
@@ -873,10 +896,10 @@
           return `<th class="sortable ${cls} ${on ? 'sorted' : ''}" onclick="setSort('${key}')">${label}<span class="arrow">${ar}</span></th>`;
         };
         return `
-          ${VARIANT === 'c' ? '<th style="width:30px"><input type="checkbox" onclick="toggleAll(this)"></th>' : ''}
           ${th('n', 'Character', '')}
-          <th class="nosort" title="SPEC §11.3 — player_id is equality-filter only, never an ordering">Player</th>
+          ${th('p', 'Player')}
           ${th('s', 'Status')}
+          ${th('la', 'Last active')}
           ${th('c', 'Created', 'col-created')}
           <th style="width:${VARIANT === 'a' ? '92' : '34'}px"></th>`;
       }
@@ -890,12 +913,11 @@
                  <button class="iconbtn" title="More"><svg width="14" height="14"><use href="#i-dots"/></svg></button>
                </div>`
             : `<div class="rowact"><button class="iconbtn" title="More"><svg width="14" height="14"><use href="#i-dots"/></svg></button></div>`;
-        const sel = VARIANT === 'c' && SELECTED.has(r.id);
-        return `<tr class="${sel || OPEN === r.id ? 'is-selected' : ''}" onclick="rowClick('${r.id}')">
-          ${VARIANT === 'c' ? `<td onclick="event.stopPropagation()"><input type="checkbox" ${sel ? 'checked' : ''} onclick="toggleOne('${r.id}')"></td>` : ''}
+        return `<tr class="${OPEN === r.id ? 'is-selected' : ''}" onclick="rowClick('${r.id}')">
           <td><div class="cname">${r.n}</div><div class="cid">${r.id}</div></td>
           <td><a class="playerlink" onclick="event.stopPropagation();setPlayer('${r.p}')">${r.p}</a></td>
           <td>${badgeFor(r.s)}</td>
+          <td class="muted">${ago(r.la)}</td>
           <td class="muted col-created">${r.c}</td>
           <td>${acts}</td>
         </tr>`;
@@ -906,9 +928,9 @@
         return `<table class="chars"><thead><tr>${headHtml()}</tr></thead><tbody>${Array.from(
           { length: 8 },
           () =>
-            `<tr>${VARIANT === 'c' ? '<td><div class="sk" style="width:14px;height:14px"></div></td>' : ''}
+            `<tr>
              <td><div class="sk" style="width:56%"></div><div class="sk" style="width:32%;margin-top:5px;height:8px"></div></td>
-             ${cell('42%')}${cell('54px')}${cell('68%')}<td></td></tr>`,
+             ${cell('42%')}${cell('54px')}${cell('56%')}${cell('68%')}<td></td></tr>`,
         ).join('')}</tbody></table>`;
       }
 
@@ -995,16 +1017,7 @@
         rows = sorted(rows);
         tz.innerHTML = `<table class="chars"><thead><tr>${headHtml()}</tr></thead><tbody>${rows
           .map(rowHtml)
-          .join('')}</tbody></table>${
-          VARIANT === 'c' && SELECTED.size
-            ? `<div class="bulkbar">
-                 <b>${SELECTED.size} selected</b>
-                 <span style="flex:1"></span>
-                 <button class="btn"><svg width="13" height="13"><use href="#i-archive"/></svg> Retire selected</button>
-                 <button class="btn btn-ghost" onclick="clearSel()">Clear</button>
-               </div>`
-            : ''
-        }`;
+          .join('')}</tbody></table>`;
         pz.innerHTML = pagerHtml();
 
         if (VARIANT === 'b' && OPEN) {
@@ -1025,19 +1038,7 @@
         if (VARIANT === 'b') {
           OPEN = OPEN === id ? null : id;
           render();
-        } else if (VARIANT === 'c') toggleOne(id);
-      }
-      function toggleOne(id) {
-        SELECTED.has(id) ? SELECTED.delete(id) : SELECTED.add(id);
-        render();
-      }
-      function toggleAll(el) {
-        SELECTED = el.checked ? new Set(ROWS.map((r) => r.id)) : new Set();
-        render();
-      }
-      function clearSel() {
-        SELECTED = new Set();
-        render();
+        }
       }
       function closeDetail() {
         OPEN = null;
@@ -1059,7 +1060,6 @@
 
       function showVariant(v, btn) {
         VARIANT = v;
-        SELECTED = new Set();
         OPEN = v === 'b' ? ROWS[0].id : null;
         document.querySelectorAll('.variant-tab').forEach((t) => t.classList.remove('active'));
         btn.classList.add('active');
