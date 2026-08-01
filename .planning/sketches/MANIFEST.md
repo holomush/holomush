@@ -48,7 +48,14 @@ Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim
 | 001 | admin-shell-frame | How does the three-column frame read, and how do available vs planned sections differentiate? | **C2 — Command Deck, merged collapse** | layout, nav, registry, responsive |
 | 002 | admin-character-table | How should the dense admin list surface row actions and its non-data states? | **A — Inline actions** ⚠ needs 3 SPEC amendments | table, density, row-actions, empty-state, spec-amendment |
 | 003 | planned-section-empty | What does "registered and gated, no handler yet" look like without reading as a dead end? | **A — Minimal** ⚠ raises SPEC defect D1 | empty-state, extensibility, abac, spec-defect |
-| 004 | character-edit-destructive | How do the field-mask edit surface and the irreversible delete read? | _not built_ | forms, destructive, audit |
+| 004 | character-edit-destructive | How does a form that deliberately cannot edit name/status/version avoid reading as broken — and what is the destructive action, given there is no delete? | _pending_ | forms, field-mask, destructive, audit, concurrency |
+
+## Corrections made by sketches
+
+| Correction | Raised by |
+| --- | --- |
+| **There is no delete in the admin portal.** §9.3's census has `AdminUpdateCharacter` / `AdminRetireCharacter` / `AdminUnretireCharacter` and **no** `AdminDeleteCharacter`; §4.4 and §10.6 both forbid wiring `world.Service.DeleteCharacter` to an admin button. The destructive action is **Retire, which is reversible**. Earlier hand-off notes calling 004 "the irreversible delete" were wrong. | 004 |
+| **`characters` has no `last seen` column** and presence is current-only, so sketch 001's first draft fabricated one. Corrected to `version`. | 002 |
 
 ## ⚠ Open SPEC amendments raised by sketches
 
