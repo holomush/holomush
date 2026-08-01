@@ -194,13 +194,14 @@ scopes:
   - name: INV-PRIVACY
     description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics,
       web profile read-surface disclosure shape (existence non-disclosure, minimum-identity floor)"
-    boundary: "Privacy-relevant gating on reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe
-      authorization (→ INV-EVENTBUS)."
+    boundary: "Privacy-relevant gating on reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe authorization
+      (→ INV-EVENTBUS)."
     # Family I-PRIV-N (history-scope privacy). owned_paths = privacy-core files;
     # most I-PRIV sites ride on other-domain files (shared_files). See .14.9.
     status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+      - ".planning/phases/01-portal-spec/01-SPEC.md"
     owned_paths:
       - "internal/grpc/query_stream_history.go"
       - "internal/grpc/query_stream_history_test.go"
@@ -582,6 +583,7 @@ scopes:
       - "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
       - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
       - "docs/superpowers/specs/2026-05-07-event-payload-crypto-phase5-totp-substrate-design.md"
+      - ".planning/phases/01-portal-spec/01-SPEC.md"
     owned_paths:
       # The real-ABAC harness files (where INV-RA-1..6 live).
       - "internal/testsupport/integrationtest/real_abac.go"
@@ -2110,6 +2112,25 @@ invariants:
       - {file: "internal/eventbus/subscriber_consumer_config_test.go", token: "I-PRIV-8"}
       - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-8",}
 
+  # -- v0.13 web portal (milestone v0.13, Phase 1). Born canonical; no legacy tokens.
+  # The two DISCLOSURE guarantees of the profile visibility model land here; the two
+  # EVALUATION guarantees land in INV-ACCESS (this scope's boundary forwards ABAC
+  # policy evaluation there by name). binding: pending — asserting tests land in Phase 4.
+  - id: INV-PRIVACY-9
+    scope: INV-PRIVACY
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "A character profile below its configured reachability floor returns a not-found-equivalent whose wire shape
+      is identical to the response for a character id that does not exist — no distinct 'this profile is private' signal,
+      error code or status, which would disclose that the character exists."
+    binding: pending
+  - id: INV-PRIVACY-10
+    scope: INV-PRIVACY
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "If a viewer can reach a character profile at all, that profile carries name and pronouns. The game configuration
+      MAY set the profile's own reachability floor arbitrarily high but MUST NOT raise name or pronouns above that floor,
+      so every reachable profile is non-empty."
+    binding: pending
+
   # -- INV-ACCESS -- migrated from INV-RA-N (family RA, real-ABAC harness) (holomush-hz0v4.14.10).
   # Origin: docs/superpowers/specs/2026-05-26-harness-real-abac-design.md. binding: pending — backfill .11.
   # NOTE: all INV-RA sites live in internal/testsupport/integrationtest/ (the real-ABAC
@@ -2204,6 +2225,26 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/grpc/auth_handlers_test.go"
+
+  # -- v0.13 web portal (milestone v0.13, Phase 1). Born canonical; no legacy tokens.
+  # The two EVALUATION guarantees of the profile visibility model: the read-time
+  # authorization decision and the wire shape that decision enforces. The paired
+  # DISCLOSURE guarantees live in INV-PRIVACY-9/10.
+  # binding: pending — asserting tests land in Phase 4 (policy family seeded in Phase 2).
+  - id: INV-ACCESS-10
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "The viewer-tier floor governing a profile attribute is evaluated at READ TIME by the default-deny ABAC engine
+      against the attribute name and the viewer's tier (anonymous < guest < player), never stamped onto entity_properties.visibility
+      per row; and an infrastructure failure in that evaluation resolves DENY, never permit and never a silently sparse profile."
+    binding: pending
+  - id: INV-ACCESS-11
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "A profile attribute whose tier floor the viewer does not clear is ABSENT from the marshaled response, never
+      present-and-empty — asserted over marshaled bytes rather than the Go struct, since a present-empty field is indistinguishable
+      from a blank one and discloses that a withheld value exists."
+    binding: pending
 
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the

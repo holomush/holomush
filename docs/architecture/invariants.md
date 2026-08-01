@@ -188,6 +188,8 @@ invariants.
 | `INV-PRIVACY-6` | ABAC staff override bypasses the hard-gate location-match only, NOT the temporal floor. | `I-PRIV-6` | bound |
 | `INV-PRIVACY-7` | Plugin-owned subjects with divergent history-replay semantics MUST declare history_scope in the manifest and be exercised by a test; silent inheritance of permissive semantics is forbidden. | `I-PRIV-7` | bound |
 | `INV-PRIVACY-8` | OpenSession (incl. reattach) and SetFilters query the existing durable before CreateOrUpdateConsumer; an existing durable's DeliverPolicy/OptStartTime/OptStartSeq are copied verbatim (only FilterSubjects mutates); NATS is the source of truth. | `I-PRIV-8` | bound |
+| `INV-PRIVACY-9` | A character profile below its configured reachability floor returns a not-found-equivalent whose wire shape is identical to the response for a character id that does not exist — no distinct 'this profile is private' signal, error code or status, which would disclose that the character exists. | — | pending |
+| `INV-PRIVACY-10` | If a viewer can reach a character profile at all, that profile carries name and pronouns. The game configuration MAY set the profile's own reachability floor arbitrarily high but MUST NOT raise name or pronouns above that floor, so every reachable profile is non-empty. | — | pending |
 
 ### `INV-PRESENCE`
 
@@ -403,6 +405,8 @@ invariants.
 | `INV-ACCESS-7` | ABAC denies subscribe to events.*.system.* (and audit.>) streams for kind={plugin\|character} at the gRPC subscribe boundary; the Rekey system audit event lands on a subject those principals cannot read. | `INV-15` | pending |
 | `INV-ACCESS-8` | Two ABAC seed forbid policies MUST deny character and plugin principals from reading events.*.system.crypto_totp.* streams (sub-epic A; A16 extends INV-15's system-namespace deny across crypto audit namespaces). | `INV-A16` | pending |
 | `INV-ACCESS-9` | The character-directory read (CoreService.ListAllCharacters) is ABAC-gated by action=list_character_directory on resource=character_directory, seeded default-permit for any authenticated character principal (registered or guest); it exposes character id+name only — connection/online state is NOT included and requires a separate, more-restrictive permission. | — | bound |
+| `INV-ACCESS-10` | The viewer-tier floor governing a profile attribute is evaluated at READ TIME by the default-deny ABAC engine against the attribute name and the viewer's tier (anonymous < guest < player), never stamped onto entity_properties.visibility per row; and an infrastructure failure in that evaluation resolves DENY, never permit and never a silently sparse profile. | — | pending |
+| `INV-ACCESS-11` | A profile attribute whose tier floor the viewer does not clear is ABSENT from the marshaled response, never present-and-empty — asserted over marshaled bytes rather than the Go struct, since a present-empty field is indistinguishable from a blank one and discloses that a withheld value exists. | — | pending |
 
 ### `INV-SESSION`
 
