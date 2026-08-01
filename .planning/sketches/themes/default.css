@@ -1,0 +1,251 @@
+/*
+  HoloMUSH sketch theme — MIRRORS web/src/app.css @theme block verbatim.
+  If these drift from the real app, the sketches stop being honest.
+
+  Branding constraint (.claude/rules/branding.md INV-1):
+    --color-cursor (#ffb300 amber) is the CURSOR ONLY.
+    Never an accent, link, button, badge, or status color. Accent is cyan.
+*/
+
+:root {
+  /* ---- verbatim from web/src/app.css @theme ---- */
+  --color-primary: #3dd6f7;
+  --color-primary-foreground: #04222e;
+  --color-secondary: #18202a;
+  --color-secondary-foreground: #e8edf2;
+  --color-muted: #1a2128;
+  --color-muted-foreground: #9aa7b2;
+  --color-accent: #3dd6f7;
+  --color-accent-foreground: #04222e;
+  --color-destructive: #fc7f7f;
+  --color-destructive-foreground: #04222e;
+  --color-card: #101418;
+  --color-card-foreground: #e8edf2;
+  --color-popover: #101418;
+  --color-popover-foreground: #e8edf2;
+  --color-border: #1d2a33;
+  --color-input: #1d2a33;
+  --color-ring: #3dd6f7;
+  --color-background: #0b0c0e;
+  --color-foreground: #e8edf2;
+  --color-sidebar: #101418;
+  --color-sidebar-foreground: #e8edf2;
+  --color-sidebar-primary: #3dd6f7;
+  --color-sidebar-accent: #18202a;
+  --color-sidebar-border: #1d2a33;
+  --color-input-text: #e8edf2;
+  --color-input-background: #07080a;
+  --color-input-prompt: #3dd6f7;
+  --color-cursor: #ffb300; /* CURSOR ONLY — see INV-1 */
+  --color-surface: #101418;
+  --color-status-text: #9aa7b2;
+  --color-status-background: #101418;
+  --color-status-online: #7fd98f;
+  --color-status-offline: #fc7f7f;
+  --color-sidebar-background: #101418;
+  --radius: 0.5rem;
+
+  /* ---- layout tokens, verbatim from app.css :root ---- */
+  --topbar-h: 44px;
+  --rail-w: 48px;
+  --sidebar-w-default: 280px;
+
+  /* ---- sketch-only: the admin nav column width under exploration ---- */
+  --adminnav-w: 232px;
+
+  --font-sans: -apple-system, 'Inter', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--color-border);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Shared primitives used across variants ------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.badge-available {
+  color: var(--color-status-online);
+  background: color-mix(in srgb, var(--color-status-online) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-status-online) 28%, transparent);
+}
+.badge-planned {
+  color: var(--color-status-text);
+  background: color-mix(in srgb, var(--color-status-text) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-status-text) 24%, transparent);
+}
+.badge-outline {
+  color: var(--color-muted-foreground);
+  border-color: var(--color-border);
+}
+.badge-danger {
+  color: var(--color-destructive);
+  background: color-mix(in srgb, var(--color-destructive) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-destructive) 30%, transparent);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.dot-available {
+  background: var(--color-status-online);
+}
+.dot-planned {
+  background: transparent;
+  border: 1px solid var(--color-status-text);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-foreground);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.btn:hover {
+  background: var(--color-secondary);
+}
+.btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-weight: 500;
+}
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--color-primary) 88%, white);
+}
+.btn-ghost {
+  border-color: transparent;
+  color: var(--color-muted-foreground);
+}
+.btn-ghost:hover {
+  background: var(--color-secondary);
+  color: var(--color-foreground);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--color-muted-foreground);
+}
+
+/* Shell chrome shared by every variant ---------------------------------- */
+
+.topbar {
+  height: var(--topbar-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.wordmark {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-primary);
+  letter-spacing: -0.02em;
+}
+.wordmark .cursor {
+  color: var(--color-cursor); /* the ONE sanctioned amber use */
+}
+
+.shell {
+  display: flex;
+  height: calc(100vh - var(--topbar-h));
+  min-height: 0;
+}
+
+.rail {
+  width: var(--rail-w);
+  flex-shrink: 0;
+  background: var(--color-sidebar-background);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0 4px;
+  gap: 4px;
+}
+.rail-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  color: var(--color-status-text);
+  cursor: pointer;
+  position: relative;
+  transition: background 120ms, color 120ms;
+}
+.rail-btn:hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-input-text);
+}
+.rail-btn.is-active {
+  color: var(--color-primary);
+}
+.rail-btn.is-active::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--color-primary);
+  border-radius: 1px;
+}
+.rail-spacer {
+  flex: 1;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
