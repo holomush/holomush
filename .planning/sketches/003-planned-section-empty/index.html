@@ -378,7 +378,7 @@
 
     <div id="variant-nav">
       <span class="lbl">SKETCH 003 · planned-section state</span>
-      <button class="variant-tab active" onclick="setVariant('a', this)">A: Minimal</button>
+      <button class="variant-tab active" onclick="setVariant('a', this)">A: Minimal ★</button>
       <button class="variant-tab" onclick="setVariant('b', this)">B: Gate provenance</button>
       <button class="variant-tab" onclick="setVariant('c', this)">C: Scope preview</button>
       <span style="flex: 1"></span>
@@ -398,7 +398,7 @@
         <nav class="rail">
           <button class="rail-btn" title="Room"><svg width="18" height="18"><use href="#i-home" /></svg></button>
           <button class="rail-btn" title="Scenes"><svg width="18" height="18"><use href="#i-clap" /></svg></button>
-          <button class="rail-btn is-active is-context" title="Admin"><svg width="18" height="18"><use href="#i-shield" /></svg></button>
+          <button class="rail-btn is-active is-context" id="railadmin" title="Admin"><svg width="18" height="18"><use href="#i-shield" /></svg></button>
           <div class="rail-admin-group" id="railgroup"></div>
           <div class="rail-spacer"></div>
           <button class="rail-btn" title="Settings"><svg width="18" height="18"><use href="#i-gear" /></svg></button>
@@ -533,15 +533,32 @@
         </div>`;
       }
 
-      // Identical for every section AND for an unregistered id. That identity
-      // IS the requirement (§10.3): the refusal must reveal nothing about which
-      // sections exist or what is being built.
-      function deniedHtml() {
+      // DECISION (maintainer, 2026-08-01): /admin is not shown at all to a viewer
+      // without permission — no rail icon, no nav entry — and a deep link is
+      // bounced. So a non-admin never reaches an in-frame "denied" panel; they
+      // land back in the app. Aligns with ROADMAP Ph6 SC5 ("the roles exposed on
+      // WebCheckSessionResponse change only what is drawn").
+      //
+      // The redirect is UX ONLY. Per §10.4 a route guard is "bypassable by any
+      // caller who skips the route", so the server-side ABAC gate remains the
+      // boundary and every admin RPC still denies on its own.
+      function nonAdminHtml() {
         return `<div class="state">
-          <div class="glyph"><svg width="20" height="20"><use href="#i-lock"/></svg></div>
-          <h2>Not available</h2>
-          <p>You don't have access to this area.</p>
-        </div>`;
+            <div class="glyph"><svg width="20" height="20"><use href="#i-home"/></svg></div>
+            <h2>Room</h2>
+            <p>A viewer without permission never sees <code class="mono">/admin</code>: no rail icon, no nav entry. A deep link to it lands here instead.</p>
+            <div class="sub">Silently — a distinct "admin forbidden" page would itself disclose that the area exists.</div>
+          </div>
+
+          <div class="trace" style="max-width:520px">
+            <div class="trace-head">what actually happens</div>
+            <dl style="grid-template-columns:104px 1fr">
+              <dt>nav</dt><dd>Admin is <b>not drawn</b> — filtered from the registry contract, not a template <code>{#if}</code></dd>
+              <dt>deep link</dt><dd><code>/admin/moderation</code> → redirect to <code>/terminal</code>, no message</dd>
+              <dt>route guard</dt><dd class="muted">UX only — §10.4: "bypassable by any caller who skips the route"</dd>
+              <dt>the boundary</dt><dd class="no">the ABAC gate on <code>admin_section:*</code>, which still denies every RPC</dd>
+            </dl>
+          </div>`;
       }
 
       function render() {
@@ -549,19 +566,28 @@
         const s = sel();
         const isAdmin = viewer() === 'admin';
 
+        // The Admin rail entry itself disappears for a non-admin.
+        document.getElementById('railadmin').style.display = isAdmin ? '' : 'none';
+        document.getElementById('railgroup').style.display = isAdmin ? '' : 'none';
+
         document.getElementById('crumb').innerHTML = isAdmin
           ? `<span>Admin</span><svg width="12" height="12"><use href="#i-chev"/></svg><b>${s.label}</b>`
-          : `<span>Admin</span>`;
+          : `<span class="mono" style="opacity:.6">/admin/${s.id}</span><svg width="12" height="12"><use href="#i-chev"/></svg><b>redirected to /terminal</b>`;
 
         document.getElementById('statezone').innerHTML =
-          !isAdmin ? deniedHtml() : s.status === 'available'
+          !isAdmin ? nonAdminHtml() : s.status === 'available'
             ? `<div class="state"><div class="glyph"><svg width="20" height="20"><use href="#i-users"/></svg></div>
                  <h2>Characters</h2><p>This section is <b>available</b> — it has a handler. See sketch 002 for its contents.</p></div>`
             : permittedHtml(s);
 
         document.getElementById('findingnote').innerHTML = isAdmin
-          ? `<b>Try the viewer switch.</b> Set <code>viewer: non-admin</code> and then flip <code>section</code> between <code>moderation</code> and <code>(unregistered id)</code>. The two panels are byte-identical — which is what §10.3 requires: <i>"the refusal reveals nothing about which sections exist or what is being built."</i>`
-          : `<b>⚠ Finding — §10.3 and §10.4 disagree.</b> §10.3 requires this refusal to reveal nothing about which sections exist. But §10.4 defines <b>two distinct denial codes</b>: <code>DENY_ADMIN_SECTION</code> (ABAC denied) and <code>DENY_ADMIN_SECTION_UNREGISTERED</code> (id not in the registry). If a caller can tell those apart, probing an arbitrary id versus <code>moderation</code> enumerates the registry — the exact disclosure §10.3 forbids. The UI above is identical in both cases; <b>the wire is not</b>. §13 declares eight invariants and <b>none pins this</b>, though <code>INV-PRIVACY-9</code> does exactly this job for profiles ("a not-found-equivalent whose wire shape is identical to the response for a character id that does not exist"). See the README.`;
+          ? `<b>Try the viewer switch.</b> Set <code>viewer: non-admin</code> to see what someone without permission gets: no rail icon, no nav, and a deep link bounced to <code>/terminal</code>.`
+          : `<b>⚠ Hiding the UI does not fix the §10.3 / §10.4 defect — it concentrates it.</b>
+             §10.3 requires a refusal to reveal nothing about which sections exist, but §10.4 defines <b>two distinct denial codes</b>:
+             <code>DENY_ADMIN_SECTION</code> (ABAC denied) and <code>DENY_ADMIN_SECTION_UNREGISTERED</code> (id not in the registry).
+             A caller who can tell them apart enumerates the registry by probing an arbitrary id against <code>moderation</code>.
+             Now that the nav is hidden and deep links bounce, <b>the only callers still reaching that denial path are the ones deliberately bypassing the UI</b> — which is to say, exactly the population the codes leak to.
+             §13 declares eight invariants and <b>none pins this</b>, though <code>INV-PRIVACY-9</code> does exactly this job for profiles. See the README (D1).`;
       }
 
       function setVariant(v, btn) {

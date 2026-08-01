@@ -2,7 +2,7 @@
 sketch: 003
 name: planned-section-empty
 question: "What does 'registered and gated, no handler yet' look like without reading as a dead end or a coming-soon vacancy?"
-winner: null
+winner: "A"
 raises_spec_defect: "10.3-vs-10.4-denial-code-disclosure"
 tags: [empty-state, extensibility, abac, denial, phase-6, spec-defect]
 ---
@@ -32,10 +32,40 @@ Two pickers, top-right: **section** (all six planned, plus Characters and an
 apply to the *permitted* state only — by design, the denied state is identical
 in all three.
 
+## Decision — `/admin` is invisible without permission
+
+**Maintainer call (2026-08-01):** a viewer without permission sees no `/admin` at
+all — **no rail icon, no nav entry** — and a **deep link is bounced**.
+
+This is not a deviation. ROADMAP Ph6 SC5 already says *"the roles exposed on
+`WebCheckSessionResponse` change only what is drawn"*, and §10.4's own wording
+treats a `+layout.ts` redirect as **UX, not the boundary**. So:
+
+| Layer | Behavior | Status |
+| --- | --- | --- |
+| Rail + nav | Admin is not drawn, filtered from the registry contract (never a template `{#if}`) | Ph6 SC5 |
+| Deep link `/admin/moderation` | Redirect to `/terminal`, **silently** — a distinct "admin forbidden" page would itself disclose that the area exists | new, this sketch |
+| The actual boundary | ABAC gate on `admin_section:*`; every admin RPC still denies independently | §10.4 |
+
+**The redirect must not be mistaken for enforcement.** §10.4 is explicit that a
+route guard is *"bypassable by any caller who skips the route"*. SC5's rule —
+*"drawing a link the viewer may not use still results in a denial at the RPC"* —
+has an inverse that matters just as much: **not drawing the link does not remove
+the need for that denial.**
+
+A consequence worth stating plainly: because the nav is now hidden and deep links
+bounce, **the only callers still reaching the denial path are those deliberately
+bypassing the UI.** That does not mitigate D1 below — it concentrates it onto
+exactly the population the leaky codes disclose to.
+
 ## Variants (permitted state)
 
-- **A: Minimal** — glyph, section name, `Registered and gated. No handler yet.`
-  Nothing else. Least to write, least to rot.
+- **A: Minimal ★ WINNER** — glyph, section name, `Registered and gated. No handler
+  yet.` Nothing else. Least to write, least to rot. Chosen for restraint: the
+  screen's job is to be unremarkable and honest, and B's trace — while the
+  strongest *proof* of gate-then-refuse ordering — puts implementation detail in
+  front of an operator who did not ask for it. The ordering is better proven by
+  the §10.2 denial test than by narrating itself in the UI.
 - **B: Gate provenance** — adds an authorization trace: subject, action,
   `admin_section:<id>`, policy, `PERMIT`, then `NOT_IMPLEMENTED`. Makes the
   gate-then-refuse *ordering* visible to the operator.
@@ -142,11 +172,18 @@ requirement.
 
 No new ones beyond sketch 001's list. This exercises `empty` and `alert`.
 
+## Resolved
+
+**Where the denial renders** — settled by the decision above. There is no in-frame
+"denied" panel, because a non-admin never reaches the admin chrome: the nav is
+not drawn and a deep link bounces to `/terminal`. The sketch's non-admin view now
+shows that outcome rather than a denial page.
+
 ## Open question
 
-**Where does the denial actually render?** This sketch shows it inside the admin
-frame, which implies the shell itself loaded and only the section refused. If the
-`/admin` route as a whole is denied, the operator never sees this chrome at all
-and the denial belongs at the app level. §10.4's prohibition on route-guard
-decisions means the *decision* is server-side either way — but the *presentation*
-differs, and Phase 6 must pick one.
+**What the redirect target should be for a *guest* versus a logged-in non-admin
+player.** `/terminal` is right for a player. A guest session may not have a
+meaningful `/terminal` to land on — `nav/sections.ts` already carries
+`requiresPlayer` for exactly this reason, gating Scenes away from guests. Phase 6
+should confirm the guest path lands somewhere real rather than bouncing into
+another guarded route.
