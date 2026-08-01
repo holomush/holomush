@@ -192,8 +192,9 @@ scopes:
       - "internal/auth/guest_service_test.go"
 
   - name: INV-PRIVACY
-    description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
-    boundary: "Privacy-relevant gating on history reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe
+    description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics,
+      web profile read-surface disclosure shape (existence non-disclosure, minimum-identity floor)"
+    boundary: "Privacy-relevant gating on reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe
       authorization (→ INV-EVENTBUS)."
     # Family I-PRIV-N (history-scope privacy). owned_paths = privacy-core files;
     # most I-PRIV sites ride on other-domain files (shared_files). See .14.9.
