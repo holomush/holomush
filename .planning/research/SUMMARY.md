@@ -357,6 +357,18 @@ policy; the full new RPC surface with `expected_version` on every mutation reque
 **Explicit SPEC exclusion to write down:** **role mutation is not part of character administration in this
 milestone.** An omission is not an exclusion.
 
+> **SUPERSEDED IN PART — see `.planning/phases/01-portal-spec/01-SPEC.md` §14, row 6.** The count in
+> **Delivers** — *"every character-returning RPC including the **three** existing public export
+> surfaces"* — is short by one: the tree carries **four**. The three this record reaches are
+> `WebExportScene`, `WebGetPublicSceneArchive` (`api/proto/holomush/web/v1/web.proto:345`) and
+> `WebDownloadPublicSceneArchive`. The fourth is `WebListPublishedScenes` (`web.proto:339`), which
+> returns the same frozen `participants_snapshot` column in bulk — one entry per published scene —
+> and is a census member on the same grounds as the other three. **The deliverable itself is
+> unchanged** — an exhaustive read-surface inventory — and the reasoning that produced it stands;
+> only the count is superseded, which is why this record is annotated rather than rewritten. §3.3
+> carries the corrected enumeration and names the fourth explicitly. Annotated 2026-08-01 by the
+> phase-1 gap-closure pass.
+
 ### Phase 2: ABAC + schema vocabulary
 **Rationale:** Every later phase's authorization is expressed in this vocabulary. No UI, no RPCs — pure
 policy plus tests, which is where an unverified assumption surfaces cheapest.

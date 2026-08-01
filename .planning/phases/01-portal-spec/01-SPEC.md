@@ -1275,7 +1275,7 @@ expressing three different games; the final column is what v0.13 seeds.
 | in-world description (`characters.description`) | `anonymous` | `guest` | `player` | **`anonymous`** |
 | `profile.rumors` | `anonymous` | `guest` | `player` | **`guest`** |
 | `profile.currently` | `anonymous` | `guest` | `player` | **`guest`** |
-| `profile.preferences` | `anonymous` | `guest` | `player` | **`guest`** |
+| `profile.rp_preferences` | `anonymous` | `guest` | `player` | **`guest`** |
 | `profile.timezone` | `anonymous` | `guest` | `player` | **`guest`** |
 | every other `profile.*` field (§7) | `anonymous` | `guest` | `player` | **`guest`** |
 
@@ -1457,12 +1457,17 @@ stable for the row's whole life and is released only when the row is.
 
 ### 9.3 The mutation surface
 
-Every row below is a **mutation**, and every mutation request message carries
-`expected_version` per §9.4.
+Every row below is a **mutation**. Every mutation that targets an **existing
+character row** carries `expected_version` on its request per §9.4.
+`CreateCharacter` is the one exclusion — the table marks it — because a create
+has no prior row and therefore no prior version to be guarded against. What
+guards a create instead is §6.1.3's `UNIQUE` index on the stored normalized name,
+the same index the `RenameCharacter` row below collides against. §9.4.2 states
+the exclusion normatively.
 
 | RPC | Caller | Audience of the response | Gate | Description |
 | --- | --- | --- | --- | --- |
-| `CharacterAccessService.CreateCharacter` | authenticated player | `owner` | session resolution | Structured identity card (IDENT-01): name, pronouns, concept, species, age, faction. **Reshaped, not new** — see below. |
+| `CharacterAccessService.CreateCharacter` | authenticated player | `owner` | session resolution | **No `expected_version` — it creates the row a version guard would protect (§9.4.2).** Structured identity card (IDENT-01): name, pronouns, concept, species, age, faction. **Reshaped, not new** — see below. |
 | `CharacterAccessService.UpdateCharacterProfile` | owner | `owner` | ABAC `write` on `character:<id>` | Partial update of the `profile.*` prose fields (§7.2), driven by an update mask (§9.5). Server-enforced length caps (IDENT-02). |
 | `CharacterAccessService.UpdateCharacterDescription` | owner | `owner` | ABAC `write` on `character:<id>` | The in-world `look` text — the intrinsic `characters.description` column, **not** a `profile.*` row (IDENT-02a). Reaches the shipped `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799-836`), never a parallel write path. |
 | `CharacterAccessService.RenameCharacter` | owner | `owner` | ABAC `write` on `character:<id>` | Rename (IDENT-03). Runs §6.1's pipeline, the mixed-script and skeleton checks, and the block list; collides against the §6.1.3 unique index. |
@@ -1504,11 +1509,13 @@ inherited by assumption.
 
 ### 9.4 The concurrency contract
 
-**Every mutation request message in §9.3 carries `expected_version`.**
+**Every §9.3 mutation that targets an existing character row carries
+`expected_version` on its request message.** `CreateCharacter` is excluded;
+§9.4.2 states the exclusion and its reason.
 
 #### 9.4.1 Carriage: a scalar field on each request message
 
-`expected_version` is an **`int32` scalar field on each mutation request
+`expected_version` is an **`int32` scalar field on each guarded mutation request
 message.** It is **NOT** a shared embedded precondition message, and no
 `Precondition`/`WriteOptions` wrapper is introduced.
 
@@ -1534,11 +1541,34 @@ zero is not a legal input.
 
 #### 9.4.2 Absent or zero is rejected, and never means "skip the guard"
 
-**A mutation request whose `expected_version` is absent or zero MUST be
+**A guarded mutation request whose `expected_version` is absent or zero MUST be
 rejected** with `CHARACTER_VERSION_REQUIRED` (§9.6) at the RPC boundary, before
 the request reaches the domain layer. It **MUST NOT** be treated as an
 instruction to write without the guard, and it **MUST NOT** be silently defaulted
 to the row's current version.
+
+**A *guarded mutation* is one that targets a character row that already exists**
+— every §9.3 row except `CreateCharacter`. Creation is **outside this rule's
+scope**, and `CreateCharacter` **MUST NOT** carry `expected_version` at all: the
+field is absent from its request message, so there is nothing for this rule to
+reject and no ignored field for a client to read meaning into.
+
+The exclusion is not a relaxation of the guard. `expected_version` is an
+optimistic-concurrency predicate **against a row that already exists** — it
+answers "has this row changed since I read it". A create has no prior row, no
+prior version, and nothing it could be stale against; the row comes into being at
+`version = 1` from the `DEFAULT` in migration `000049`. Applying the rule to
+creation would reject **every legal create request**, because there is no value a
+well-behaved client could send: zero is not a legal input (§9.4.1), and any
+non-zero value would be a fabrication about a row that does not exist yet.
+
+**What guards a create instead.** Two concurrent creates do not race over a
+version — they race over a **name**, and §6.1.3's `UNIQUE` index on the stored
+normalized name is what decides them, surfacing as `CHARACTER_NAME_TAKEN` (§9.6).
+That is the same index the `RenameCharacter` row collides against. Creation's
+concurrency safety is therefore already specified, in the section that specifies
+it for rename; it is not missing, and Phase 4 **MUST NOT** invent a
+version-shaped substitute for it.
 
 **This rule is load-bearing against a live affordance, not hypothetical.** The
 shipped repository layer treats a zero version as an *unversioned* write:
@@ -1636,7 +1666,7 @@ All codes are `oops.Code(...)` values, following the repo convention.
 | Code | Wire status | When |
 | --- | --- | --- |
 | `WORLD_CONCURRENT_EDIT` | `Aborted` | A mutation's `expected_version` does not match the row's current version (§9.4.3). Already stamped by the repos (`internal/world/postgres/character_repo.go:135`); Phase 4 adds the wire mapping. |
-| `CHARACTER_VERSION_REQUIRED` | `InvalidArgument` | A mutation request carries an absent or zero `expected_version` (§9.4.2). **New in v0.13.** |
+| `CHARACTER_VERSION_REQUIRED` | `InvalidArgument` | A **guarded** mutation request — one targeting an existing character row — carries an absent or zero `expected_version` (§9.4.2). Not reachable from `CreateCharacter`, which carries no such field. **New in v0.13.** |
 | `CHARACTER_NOT_FOUND` | `NotFound` | The character id names no row. Already stamped (`internal/world/postgres/character_repo.go:97`, `:129`). |
 | `CHARACTER_NOT_OWNED` | `PermissionDenied` | An `owner`-audience mutation names a character the calling player does not own. **New in v0.13.** |
 | `CHARACTER_MASK_PATH_UNSUPPORTED` | `InvalidArgument` | An `update_mask` path falls outside the allowlist (§9.5 rule 2). **New in v0.13**; mirrors the precedent at `internal/grpc/sceneaccess_service.go:872`. |
@@ -2460,10 +2490,15 @@ surface set that decision must cover — are `ACCESS`, which is where
   positive half — that the delete path does release it — so the test pins the
   boundary rather than one side of it. **Binding lands in Phase 2.**
 - **INV-WORLD-7 (guarded character mutation):** every new character mutation RPC
-  carries `expected_version` on its request, rejects an absent or zero value
-  rather than writing unguarded, rejects a stale value with the typed
-  `WORLD_CONCURRENT_EDIT` signal so exactly one of two concurrent mutations
-  sharing a version succeeds, and commits its state change together with its one
+  **that targets an existing character row** carries `expected_version` on its
+  request, rejects an absent or zero value rather than writing unguarded, and
+  rejects a stale value with the typed `WORLD_CONCURRENT_EDIT` signal so exactly
+  one of two concurrent mutations sharing a version succeeds. `CreateCharacter`
+  is **excluded from the version guard** — it creates the row the guard would
+  protect, so it carries no `expected_version` and is guarded instead by
+  §6.1.3's unique index on the stored normalized name (§9.4.2). The
+  same-transaction obligation is **not** scoped that way: **every** new character
+  mutation RPC, creation included, commits its state change together with its one
   outbox envelope in the same transaction. Bound by a test that drives two
   concurrent mutations at the same version and asserts exactly one commits and
   the other carries the typed code at the **top level**, paired with a

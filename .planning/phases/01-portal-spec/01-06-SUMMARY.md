@@ -407,3 +407,144 @@ Commits claimed, verified in `git log`:
 - `5817edab` — FOUND (citation corrections + §3 reconciliation)
 - `d46f85cb` — FOUND (§16 grounding trace + Status line)
 - `d522bf6a` — FOUND (D-19 pointer edit)
+
+---
+
+## Gap closure (post-verification pass, 2026-08-01)
+
+`01-VERIFICATION.md` scored the phase 5/5 on must-haves and found three gaps. This
+pass closed exactly those three. It is a targeted correction, not a replan: no
+section was re-authored, no settled decision re-litigated, and `STATE.md` /
+`ROADMAP.md` were not touched.
+
+### Gap 1 — one spelling of the governed attribute
+
+§8.6's tier-floor table named `profile.preferences`; §7.2, §9.5 and §10.6 all name
+`profile.rp_preferences`. Corrected §8.6 to `profile.rp_preferences`. A
+document-wide sweep found no other occurrence in the SPEC.
+
+Two other files carry the bare string and were **deliberately left alone**: they
+are dated records where the rejected name is the *subject* of the sentence —
+`01-01-SUMMARY.md:133` (the rationale for why the `rp_` qualifier exists at all)
+and `01-VERIFICATION.md` (the gap report). Rewriting either would destroy the
+record of why the name was chosen. The negative assertion is therefore scoped to
+the SPEC.
+
+### Gap 2 — `expected_version` was unimplementable for `CreateCharacter`
+
+§9.3 asserted the guard universally over a table whose first row is
+`CreateCharacter`, and §9.4.2 mandated rejection of an absent-or-zero value — so
+every legal create request was rejectable. The rule is now scoped to **mutations
+that target an existing character row**, with creation excluded and its reason
+stated: `expected_version` is an optimistic-concurrency predicate against a row
+that already exists, and a create has nothing to be stale against. Creation's
+concurrency safety comes from §6.1.3's `UNIQUE` index on the stored normalized
+name — the same index `RenameCharacter` collides against, surfacing as
+`CHARACTER_NAME_TAKEN`.
+
+The alternative "creates pass `expected_version = 0` meaning must-not-exist" was
+**not** taken: it contradicts §9.4.1's "zero is not a legal input" and would have
+required a decision this pass was not authorized to make.
+
+Applied at five sites — the three the verifier named, plus two more that carried
+the same universal form and would have reintroduced the contradiction:
+
+| Site | Change |
+| --- | --- |
+| §9.3 preamble | Scoped to existing-row mutations; names the create exclusion and its §6.1.3 guard |
+| §9.3 `CreateCharacter` row | Exclusion marked **in the table cell**, not only in prose |
+| §9.4 lead-in *(not verifier-named)* | Same universal sentence, scoped |
+| §9.4.1 | "each mutation request message" → "each **guarded** mutation request message" |
+| §9.4.2 | Defines *guarded mutation*; states the exclusion, its reason, and what guards a create instead |
+| §9.6 error table *(not verifier-named)* | `CHARACTER_VERSION_REQUIRED` scoped; noted unreachable from `CreateCharacter` |
+| §13 `INV-WORLD-7` | Version clauses scoped; **same-transaction clause deliberately left universal** |
+| `invariants.yaml` `INV-WORLD-7` summary | Same scoping, same wording split |
+
+**The same-transaction obligation was deliberately NOT scoped.** Creates emit
+through the transactional outbox exactly like every other mutation; only the
+*version guard* excludes creation. Both the SPEC declaration and the registry
+summary now state that split explicitly, so a future reader cannot infer that
+creation escapes `INV-WORLD-1`.
+
+`INV-WORLD-7` **keeps its id** — renumbering is a registry migration, not an
+edit. Verified: `binding: pending`, no `asserted_by`, and the eight-id set for
+this phase is byte-identical to the pre-fix set.
+
+### Gap 3 — amendment row 6's superseded count in the research corpus
+
+`.planning/research/SUMMARY.md:352` still described the read-surface inventory as
+covering "the three existing public export surfaces". Annotated superseded-in-part
+in the style rows 4 and 7 already used on this same dated record — original text
+left intact, blockquote appended, closing attribution line. Placed at the end of
+the Phase-1 block rather than mid-paragraph, matching row 4's shape (blank line
+before and after) rather than fracturing the `Delivers:`/`Addresses:`/`Avoids:`
+run.
+
+The annotation names all four surfaces. The first draft misnamed the three
+research-known ones (guessed `WebGetPublicCharacter` / `WebGetPublicCharacterList`);
+corrected against §3.3's actual table to `WebExportScene`,
+`WebGetPublicSceneArchive` (`web.proto:345`) and `WebDownloadPublicSceneArchive`,
+with `WebListPublishedScenes` (`web.proto:339`) as the fourth.
+
+### Verification
+
+Every assertion was run twice — against the pre-fix state (materialized read-only
+via `git show HEAD:<path>`; `git stash` is forbidden in a worktree because the
+stash stack is shared across worktrees) and against the working tree. An
+assertion counts only if it goes **RED pre-fix and GREEN post-fix**; one that is
+already true pre-fix is reported as vacuous and fails the harness.
+
+| Assertion | Result |
+| --- | --- |
+| `! rg -q 'profile\.preferences'` over the SPEC | RED → GREEN |
+| Same, backtick-anchored | RED → GREEN |
+| §9.3 preamble no longer states the universal form | RED → GREEN |
+| §9.4 lead-in no longer states the universal form | RED → GREEN |
+| `INV-WORLD-7` (SPEC) no longer states the universal form | RED → GREEN |
+| `INV-WORLD-7` (registry) no longer states the universal form | RED → GREEN |
+| A row-6 superseded-by marker exists in `research/SUMMARY.md` | RED → GREEN |
+| That marker sits within 20 lines of the superseded count | RED → GREEN |
+
+Two assertion-design traps the harness caught, both of which would have produced
+a **false green** if the checks had only been run post-fix:
+
+1. **Line-wrap.** `three existing public export surfaces` never matches: the
+   source hard-wraps between `export` and `surfaces`, and `rg` is line-based with
+   multiline off. The anchor was shortened to `three existing public export`. A
+   post-fix-only run would have "passed" while testing nothing.
+2. **Annotation style vs. a bare negative.** Rows 4/7 keep the superseded line
+   intact, so `! rg -q '<superseded phrase>'` is the *wrong* assertion — it would
+   demand a rewrite the amendment style forbids. An **adjacency** assertion is
+   used instead: the phrase's line number is located, and the marker must appear
+   within the following 20 lines. Stated here because the brief asked which form
+   was used and why.
+
+The two-run harness also caught a genuine defect in this pass's own work: the
+first placement of the gap-3 blockquote split the Phase-1 paragraph block, which
+the adjacency check surfaced as a failure before commit.
+
+`! rg -q PATTERN FILE` is used throughout. The `cmd; test $? -eq 1` shape is
+**not** used anywhere — it passes when the string survives.
+
+Gate results, all judged by exit code (never by grepping stdout):
+
+| Gate | Exit |
+| --- | --- |
+| `go run ./cmd/inv-render -check` | 0 |
+| `task lint:yaml` (after `task fmt:yaml` reflowed the summary to 120 cols) | 0 |
+| `task lint:markdown` | 0 |
+| `task test -- -run 'TestEveryRegistryInvariantHasBinding\|TestProvenanceGuard\|TestBoundInvariantsAreGenuinelyAsserted\|TestInvariantRegistry\|TestScope' ./test/meta/` | 0 |
+| Gap harness (16 checks) | 0 |
+
+`docs/architecture/invariants.md` was **regenerated** via `go run ./cmd/inv-render`,
+never hand-edited inside its generated regions.
+
+### Observation left open (non-blocking, not in scope for this pass)
+
+`.planning/research/SUMMARY.md:354` ("the full new RPC surface with
+`expected_version` on every mutation request") and item 6 at `:323` carry the same
+universal phrasing gap 2 corrected in the SPEC. They were **not** annotated: §14
+records amendments the SPEC makes to *sibling* artifacts, and the create carve-out
+is a correction to the SPEC's own normative text discovered by verification, with
+no §14 row to cite. Minting one would misuse the table. Flagged here so a later
+pass can decide deliberately rather than inherit it silently.
