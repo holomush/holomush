@@ -35,6 +35,7 @@ Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim
 | Planned sections | Navigable → honest empty state (round-trips the real gate) |
 | Character list | Dense data table |
 | Component budget | Open — add whatever makes it genuinely good; log adds per sketch |
+| Row actions | Inline on hover (sketch 002, variant A). No multi-select, no bulk operations |
 | Narrow-viewport collapse | Admin nav collapses **against the section rail**, merging its sections **into** the rail below a divider (sketch 001, variant C2) |
 | Merged-collapse hierarchy | The Admin rail button becomes `is-context` (tint, no active bar) only once merged; identity + `⌘K` relocate to the rail foot |
 
@@ -43,6 +44,17 @@ Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim
 | # | Name | Design Question | Winner | Tags |
 |---|------|----------------|--------|------|
 | 001 | admin-shell-frame | How does the three-column frame read, and how do available vs planned sections differentiate? | **C2 — Command Deck, merged collapse** | layout, nav, registry, responsive |
-| 002 | admin-character-table | With only four sortable/filterable columns permitted by §11.3, how should the dense admin list surface row actions and its non-data states? | _pending_ | table, density, row-actions, empty-state |
+| 002 | admin-character-table | How should the dense admin list surface row actions and its non-data states? | **A — Inline actions** ⚠ needs 3 SPEC amendments | table, density, row-actions, empty-state, spec-amendment |
 | 003 | planned-section-empty | What does "registered and gated, no handler yet" look like without reading as a dead end? | _not built_ | empty-state, extensibility |
 | 004 | character-edit-destructive | How do the field-mask edit surface and the irreversible delete read? | _not built_ | forms, destructive, audit |
+
+## ⚠ Open SPEC amendments raised by sketches
+
+These are maintainer-directed decisions that exceed the SPEC as written. They
+MUST be amended into `01-SPEC.md` before Phase 6 implements them.
+
+| Id | Raised by | Amendment |
+| --- | --- | --- |
+| A1 | 002 | `characters.last_active_at` — new durable column (Phase 2 migration, epoch-ns `BIGINT`), written at **session start** (never on lease refresh), plus a §11.3 row permitting sort + filter. Cannot be derived: `sessions` rows are reaped and `session_connections.last_seen_at` is a gateway lease — both mean "online now". `never` must render as `never` and sort to the END in both directions. |
+| A2 | 002 | Sorting the admin list by player. §11.3 forbids ordering `characters.player_id`; what the UI sorts is the joined `players.username`, which §11.3 never enumerates. Justified by §11.3's own test — the admin audience already sees usernames, so the ordering discloses nothing. Leave the `player_id` row as written; add a new one. |
+| A3 | 002 | `AdminSearchCharacters` (§9.2) currently "searches names" (character names). Extend to player usernames. |

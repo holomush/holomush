@@ -2,8 +2,9 @@
 sketch: 002
 name: admin-character-table
 question: "With only four sortable/filterable columns permitted by SPEC §11.3, how should the dense admin list surface row actions and its non-data states?"
-winner: null
-tags: [table, density, row-actions, empty-state, phase-6]
+winner: "A"
+requires_spec_amendments: [A1-last-active, A2-sort-by-player, A3-search-usernames]
+tags: [table, density, row-actions, empty-state, phase-6, spec-amendment]
 ---
 
 # Sketch 002: Admin Character Table
@@ -30,15 +31,77 @@ demonstrate the inherited C2 collapse.
 
 ## Variants
 
-- **A: Inline row actions** — hover reveals Edit / Retire / ⋯ at the row end.
-  Fewest clicks for a single-row operation.
+- **A: Inline row actions ★ WINNER** — hover reveals Edit / Retire / ⋯ at the row
+  end. Fewest clicks for a single-row operation, which is the common case here.
 - **B: Row → detail pane** — clicking a row opens a 330px right-hand pane showing
-  the administrative detail and carrying the mutations. Scan left, act right.
-- **C: Multi-select + bulk bar** — checkbox column; selecting rows raises a
-  sticky bulk action bar.
+  the administrative detail and carrying the mutations. Preserved for comparison.
+- ~~**C: Multi-select + bulk bar**~~ — **removed** at maintainer request. Removing
+  it also retires this sketch's open question about bulk operations having no
+  SPEC backing: §9's admin RPCs are all singular, so a bulk bar would have
+  implied either N sequential calls with partial-failure UX or a batch RPC the
+  census does not contain. Not needed, so not a problem.
 
-Click a **player name** in any variant to apply the equality filter, and the
-column headers to sort — both are wired.
+Click a **player name** to apply the equality filter, and any column header to
+sort — both are wired.
+
+---
+
+# ⚠ THREE SPEC AMENDMENTS ARE REQUIRED BEFORE PHASE 6 BUILDS THIS
+
+The table as it now stands **exceeds what SPEC §11.3 permits**. That is a
+deliberate, maintainer-directed choice, recorded here so nobody implements it
+believing it is already sanctioned.
+
+### A1 — `last_active_at` does not exist and cannot be derived
+
+Requested: a "last active / logged in" column. It is not in the schema, and the
+obvious derivations do not work:
+
+| Candidate source | Why it fails |
+| --- | --- |
+| `sessions.updated_at` | Sessions are **reaped**. `idx_sessions_active_character` is a partial unique index over `status IN ('active','detached')`; once a session ends the row does not survive as history. |
+| `session_connections.last_seen_at` (`000046`) | A **gateway lease**, refreshed while the socket is open and reaped by the lease sweep (`internal/session/reaper.go:29`). Dies with the connection. |
+
+Both answer *"online now"*, not *"last active"*. Required:
+
+1. A durable column — `characters.last_active_at BIGINT NOT NULL DEFAULT 0`
+   (Phase 2 migration; nullable-or-defaulted per the migration rules, and note
+   the repo stores epoch **nanoseconds** as `BIGINT` after `000042`).
+2. A write path at **session start** — not on every lease refresh, which would be
+   a hot write per character per lease interval.
+3. A §11.3 row permitting sort + filter on it. It qualifies on §11.3's own
+   terms: intrinsic row metadata carrying no profile content, exactly like
+   `created_at`.
+
+**`0` / never must render as `never`, not as a blank or as the epoch.** In this
+sketch, `never` sorts to the **end in both directions** — it is an absence, not a
+very-old value, and burying it under a descending sort hides precisely the rows
+an admin is hunting for (created-but-never-played characters).
+
+### A2 — sorting by player
+
+§11.3's `characters.player_id` row reads Sort: **No** — *"Equality filter only —
+grouping a player's alts — never an ordering."*
+
+The distinction that matters: **what this column sorts is `players.username`, not
+`characters.player_id`.** Ordering by an opaque ULID is useless; ordering by
+username is what an admin means. `players.username` is on a different table that
+§11.3 never enumerates, so it falls under "every other column is excluded" by
+default rather than under the `player_id` row's explicit prohibition.
+
+An amendment is well-founded on §11.3's own stated safety test: *"the admin list
+is the permitted surface precisely because its audience already sees every field
+it could order by — there is no withheld value for an ordering to disclose."* An
+admin already sees usernames. The amendment should say so explicitly rather than
+silently relaxing the `player_id` row, which remains correct as written.
+
+### A3 — searching player usernames
+
+`AdminSearchCharacters` (§9.2) *"searches **names**, not profile prose"* — meaning
+character names. Filtering/searching by player username extends its scope. Small,
+but it is a census-visible RPC contract and should not drift silently.
+
+---
 
 ## What to Look For
 
@@ -72,20 +135,23 @@ and it has been corrected to `Ver` (`version`) in the same commit as this sketch
 the default instinct for any admin list — and §11.3's enumeration would exclude
 it from sorting even if it existed.
 
-### 2. §11.3 makes the affordances asymmetric, and the UI must show that
+### 2. What the table does now, versus what §11.3 says today
 
-| Column | Sort | Filter | Rendered as |
+| Column | §11.3 today | This sketch | Needs |
 | --- | --- | --- | --- |
-| `name` | Yes | Yes (matches the **normalized** name, §6.1.3) | sortable header |
-| `player_id` | **No** | Yes — equality only, "grouping a player's alts, never an ordering" | header with **no** sort affordance; the cell is a click-to-filter link |
-| `status` | Yes | Yes | sortable header |
-| `created_at` | Yes | Yes | sortable header |
-| `description`, `location_id`, all `profile.*` | No | No | absent |
+| `name` | Sort ✓ Filter ✓ (matches the **normalized** name, §6.1.3) | sortable | — |
+| player (`players.username`) | `player_id`: Sort ✗, Filter ✓ equality | **sortable** + click-to-filter | **A2, A3** |
+| `status` | Sort ✓ Filter ✓ | sortable | — |
+| `last_active_at` | **not in schema, not in §11.3** | **sortable** | **A1** |
+| `created_at` | Sort ✓ Filter ✓ | sortable | — |
+| `description`, `location_id`, all `profile.*` | excluded | absent | — |
 
-Also normative, and implemented here: **no sort dropdown and no facet panel.**
-§11.3 names "a sort control whose options are drawn from the §7.2 field list" as
-*the specific warning sign*, because that list is the privacy-bearing set. So
-sorting is click-header only and filters are inline controls.
+Still normative and still honored: **no sort dropdown and no facet panel.** §11.3
+names "a sort control whose options are drawn from the §7.2 field list" as *the
+specific warning sign*, because that list is the privacy-bearing set. So sorting
+is click-header only and filters are inline controls. The amendments above widen
+*which intrinsic columns* may be ordered; none of them touches a `profile.*` row,
+so §11.2's three reasons are untouched.
 
 ### 3. A count is safe *here* specifically
 
@@ -108,11 +174,16 @@ Beyond sketch 001's list: nothing new. This sketch exercises `table`,
 `pagination`, `empty`, `skeleton`, `select`, `checkbox` (already installed),
 `badge` (installed), and `separator` (installed).
 
-## Open question
+## Resolved
 
-**Bulk operations have no SPEC backing.** §9's admin RPCs are all singular —
-`AdminUpdateCharacter`, `AdminRetireCharacter`, `AdminUnretireCharacter`. Variant
-C's bulk bar implies either N sequential calls (each needing its own
-`expected_version`, and partial failure is then a real UX problem) or a new
-batch RPC that §9's census does not contain. If C wins, that is a SPEC amendment,
-not an implementation detail.
+**Bulk operations** — closed by dropping variant C. §9's admin RPCs are all
+singular, and no bulk surface is wanted, so no batch RPC or partial-failure UX is
+needed.
+
+## Still open
+
+**Where the `last_active_at` write lands.** Session start is the right hook, but
+the specific seam is a Phase 2/3 decision: the session store's create path is the
+obvious candidate, and it must **not** be the lease-refresh path
+(`RefreshConnection`, `session.go:485`) or every character becomes a hot write
+every lease interval.
