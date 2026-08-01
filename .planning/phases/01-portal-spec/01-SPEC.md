@@ -1,6 +1,6 @@
 # HoloMUSH v0.13 Web Portal — Portal SPEC
 
-- **Status:** Draft — sections 1, 7, 8 and the section-13 opening authored (plan 01-01); remaining sections filled by plans 01-02 through 01-06
+- **Status:** Complete — all sixteen sections authored across plans 01-01 through 01-06. §14's nine amendments are applied to their own artifacts and its one divergence is recorded; §13's eight invariants are registered `binding: pending`; every citation is swept and stamped in §16.
 - **Date:** 2026-08-01
 - **Milestone:** v0.13
 - **Phase:** 1
@@ -1760,9 +1760,9 @@ from it. A registry that lives only in `web/src/` is a client-side artifact that
 cannot gate a server-side decision, which is the specific hazard
 `.planning/research/PITFALLS.md` Pitfall 7 names.
 
-**Mirror the shape, not the location.** `web/src/lib/nav/sections.ts:41-47`
-already implements the pattern (`web/src/lib/nav/sections.ts:35-47`): an ordered
-`as const satisfies readonly WorkspaceSection[]` literal whose derived `SectionId` union
+**Mirror the shape, not the location.** `web/src/lib/nav/sections.ts:35-47`
+already implements the pattern: an ordered `as const satisfies readonly
+WorkspaceSection[]` literal whose derived `SectionId` union
 (`web/src/lib/nav/sections.ts:47`) is the *"exhaustive key type for any
 per-section map"*, so — in that file's own words — *"a section without an icon
 then fails to compile rather than crashing the rail at runtime"*. That is the
@@ -2639,4 +2639,260 @@ What actually carries the extensibility constraint, and where each is specified:
 
 ## 16. Grounding Trace
 
-> *Placeholder — authored by plan 01-06.*
+Every `path:line` citation in this document was extracted mechanically from the
+document itself and opened against the tree at commit **`5817edab`** on branch
+`gsd/v0.13-web-portal-identity-admin-foundations`, on **2026-08-01**. The sweep
+covered every citation in §§1–15: **189 distinct path-bearing citations**,
+appearing **220 times**, plus **20** written as a bare `` `:N` `` continuing the
+path named immediately before them — **56 files** in all. **Six** were
+corrected, **none** was removed, and the remaining 183 resolved unchanged, as did
+all 20 bare continuations. The per-citation dispositions are recorded in
+`01-06-SUMMARY.md`. This section restates a subset of those citations and
+introduces no new one.
+
+**These citations are point-in-time and are expected to drift.** This SPEC is a
+design record, not a file whose citations a CI gate keeps green: no check
+re-resolves them, and the tree will move underneath them. A reader who finds a
+citation that no longer lands where this document says it does should re-derive
+the construct by name rather than assume the claim is wrong — the line moved, the
+argument did not. Where a claim depends on a construct's *content* rather than
+its location, the content is quoted inline in the section that makes the claim,
+so the quote survives the line number.
+
+The list below is grouped by what each citation grounds. It is flat by design: a
+reviewer can walk it and re-verify the grounding without reading the sections
+that consume it. Line lists sharing one bullet name one construct shape repeated
+across those lines.
+
+### 16.1 Access control, ABAC and profile visibility (§7.4, §8, §10.4)
+
+- `internal/access/policy/seed.go:51-54` — the `seed:player-character-colocation`
+  policy whose `resource.character.location == principal.character.location`
+  clause §7.4 argues is a location gate, not a privacy gate.
+- `internal/access/policy/seed.go:110-145` — the six shipped `seed:property-*`
+  policies the §8.4 tier-floor family extends.
+- `internal/access/policy/attribute/property.go:80-86` — `PropertyProvider`'s
+  attribute bag, emitting `name` alongside `parent_type` / `parent_id` /
+  `visibility`; the reachability §8.5's Phase-2 obligation confirms.
+- `internal/access/prefix.go:23-33` — the shipped resource-prefix family
+  `admin_section:` joins (§10.4).
+- `internal/store/migrations/000001_baseline.up.sql:261` — `CHECK (source IN
+  ('seed', 'lock', 'admin', 'plugin'))`, the vocabulary that already models the
+  `source='admin'` override rows §8.4 uses.
+- `internal/store/migrations/000001_baseline.up.sql:350-371` — the whole
+  `entity_properties` table: the per-row `visibility` CHECK (`:358`) and
+  `entity_properties_parent_name_unique` (`:364`).
+- `internal/world/service.go:1144-1171` — `ListPropertiesByParent`'s three-way
+  filter loop; the `ErrAccessEvaluationFailed` arm that aborts is the shipped
+  precedent for §8.10's fail-closed rule and binds INV-ACCESS-10.
+
+### 16.2 World model, lifecycle and concurrency (§4, §9.4)
+
+- `internal/store/migrations/000001_baseline.up.sql:67-76` — the `characters`
+  table as it stands: seven columns, no `status`, and only
+  `idx_characters_location` (`:76`).
+- `internal/store/migrations/000001_baseline.up.sql:259`, `:294`, `:358` — the
+  three further enum-by-`CHECK` precedents §4.1 follows.
+- `internal/store/migrations/000001_baseline.up.sql:80`, `:84`, `:99`, `:143` —
+  the four foreign keys into `characters(id)`: `ON DELETE SET NULL`, `ON DELETE
+  CASCADE`, and two with no `ON DELETE` clause at all (§4.4's purge blast radius).
+- `internal/store/migrations/000001_baseline.up.sql:83-87` — `character_roles`
+  keyed `(character_id, role)`: roles stored per character (§10.5).
+- `internal/store/migrations/000049_world_version_guard.up.sql:20` —
+  `version INTEGER NOT NULL DEFAULT 1`, the column §9.4.1 transcribes `int32` from.
+- `internal/world/character.go:29` — `Version int` on the domain type.
+- `internal/world/service.go:745-777` — `DeleteCharacter`: the ABAC `delete` gate,
+  the property cascade, and the tombstone envelope in one transaction (§4.4).
+- `internal/world/service.go:799-836` — `UpdateCharacterDescription`, the shipped
+  same-transaction outbox seam §9.3 mandates, with the CAS-guard comment and the
+  `ErrConcurrentEdit` mapping at `:820-828`.
+- `internal/world/errors.go:19-20`, `:20-21`, `:22`, `:26` — the propagate-unchanged
+  comment, the deliberately-distinct-from-`ErrNotFound` rationale, the
+  `ErrConcurrentEdit` sentinel, and `CodeConcurrentEdit = "WORLD_CONCURRENT_EDIT"`.
+- `internal/world/postgres/character_repo.go:82-85` — the CAS predicate appended
+  **only** when `char.Version > 0`; the live zero-means-unguarded affordance
+  §9.4.2 rejects at the RPC boundary.
+- `internal/world/postgres/character_repo.go:120`, `:134` — the same affordance on
+  `Delete`, documented and enforced only above zero.
+- `internal/world/postgres/character_repo.go:97`, `:129`, `:135` — the
+  `CHARACTER_NOT_FOUND` and `WORLD_CONCURRENT_EDIT` stamps §9.6 inherits.
+
+### 16.3 The read-surface inventory (§3)
+
+- `api/proto/holomush/core/v1/core.proto:74`, `:80`, `:85`, `:90`, `:95`, `:99`,
+  `:107`, `:129`, `:154`, `:169` — the ten `CoreService` rpc declarations
+  inventoried in §3.3, one `rpc <Name>(...) returns (...);` per line.
+- `api/proto/holomush/web/v1/web.proto:157`, `:162`, `:167`, `:173`, `:177`,
+  `:182`, `:187`, `:207`, `:222`, `:252`, `:329`, `:339`, `:345`, `:351` — the
+  fourteen `WebService` rpc declarations, same shape.
+- `api/proto/holomush/world/v1/world.proto:30`, `:38` and
+  `api/proto/holomush/plugin/host/v1/world.proto:28`, `:33` — the world-service
+  and plugin-host-service rpc declarations.
+- `api/proto/holomush/core/v1/core.proto:688-710` and `web.proto:496-513` — the
+  two `CharacterSummary` messages, each carrying the four presence-telemetry
+  fields §2.4 removes from the `public` audience (`web.proto:503`, `:506`,
+  `:509`, `:512`).
+- `api/proto/holomush/core/v1/core.proto:902-907` — `CharacterDirectoryEntry`,
+  already identity-only.
+- `api/proto/holomush/core/v1/core.proto:428-441` — `PresenceEntry`, whose
+  `:439-440` comment records the deliberately-omitted arrival timestamp §2.7 cites
+  as an in-tree omit-don't-publish precedent.
+- `api/proto/holomush/core/v1/core.proto:105-106` — the `ListAllCharacters` doc
+  comment drawing the privacy line §3.5 promotes into INV-ACCESS-12.
+- `api/proto/holomush/world/v1/world.proto:77-91` — `CharacterInfo`, including the
+  `player_id` field at `world/v1/world.proto:81`.
+- `api/proto/holomush/plugin/host/v1/world.proto:96-108`, `:123-128` — the
+  plugin-facing inline character response and `CharacterSummary`.
+- `api/proto/holomush/web/v1/web.proto:960-968` — `WebPresenceEntry`.
+- `core.proto:279`, `:471`, `:742`, `:781`, `:817`, `:843`, `:872`, `:887`,
+  `:912`, `:980`, `:1102` and `web.proto:540`, `:580`, `:607`, `:631`, `:656`,
+  `:669`, `:682`, `:745`, `:832-835`, `:987` — the response fields each
+  inventory row names, one field declaration per line.
+- `api/proto/holomush/web/v1/web.proto:426-429` — `GameEvent.actor`, the bare
+  `string` display name that makes a type-driven census predicate insufficient
+  (§3.2's name-reachable category).
+- `web.proto:1136-1143`, `:1176`, `:1195`, `:1197`, `:1216-1221` and
+  `api/proto/holomush/sceneaccess/v1/sceneaccess.proto:143`, `sceneaccess.proto:157`,
+  `:164`, `:171` — the four public export surfaces' response messages and the
+  facade RPCs they proxy.
+- `api/proto/holomush/scene/v1/scene.proto:325-338`, `:820-827`, `:1012-1027` —
+  `ParticipantInfo`, `PublishedSceneEntry` and `CharacterSceneInfo`: the three
+  messages §3.2 places deliberately outside the census predicate, with
+  `:1013-1015` carrying the roster-fields-unset comment §3.1 uses as its
+  worked rule-1 example.
+- `api/proto/holomush/web/v1/web.proto:733-746` — `WebCheckSessionResponse` as it
+  stands, with no role field, which §10.5.1 adds one to.
+- `docs/superpowers/specs/2026-05-23-scenes-phase-6-logs-vote-privacy-design.md:262-267`
+  — the deliberately-separate-handlers argument §2.2 extends one layer down.
+
+### 16.4 Name capture and normalization (§5, §6)
+
+- `api/proto/holomush/comm/v1/comm.proto:25-28` — `actor_display_name`, the
+  canonical capture; `:25-27` is the comment recording that it is empty while
+  scene name resolution is deferred.
+- `pkg/plugin/comm/builder.go:41`, `:48`, `:55` — the three builders stamping
+  `a.Name` into that field at emit time.
+- `internal/store/migrations/000052_events_audit_partition.up.sql:114` — the
+  opaque `envelope BYTEA` the host audit table freezes the payload into; `:119` is
+  the `rendering JSONB` column §5.2 checks and excludes.
+- `internal/eventbus/types.go:127-134` — `RenderingMetadata`'s six fields, none a
+  character name, grounding that exclusion.
+- `plugins/core-scenes/migrations/000004_create_scene_log.up.sql:23` — the
+  plugin-owned `payload BYTEA`.
+- `plugins/core-scenes/migrations/000008_scene_publication.up.sql:21`, `:23` —
+  `content_entries JSONB` and `participants_snapshot JSONB`.
+- `plugins/core-scenes/publish_snapshot.go:152` — the single write of
+  `ParticipantsSnapshot` at the PUBLISHED transition; `:375` and
+  `plugins/core-scenes/commands.go:107` assign `speaker` from `pl.ActorID`.
+- `plugins/core-scenes/publish_store.go:956-960` — the type comment stating name
+  resolution is a follow-up; `:987-1002` and `:988` are the
+  `SELECT character_id FROM scene_participants` query that makes it so (§5.4,
+  issue #4901).
+- `api/proto/holomush/scene/v1/scene.proto:873-874`, `:957-958`, `:1052-1053` —
+  the three `participants_snapshot` declarations whose doc comments claim names,
+  and `:821` / `scene.proto:822` for `speaker`; the disagreement §5.4 records.
+- `internal/web/translate.go:25-26`, `:88-96` — the legacy `character_name` /
+  `sender_name` keys and the fallback chain that still reads them.
+- `plugins/core-scenes/export.go:103` — the live-read-of-frozen-bytes comment that
+  makes §5.1 rule 1 a write-path test rather than a read-path one.
+- `plugins/core-scenes/service.go:522-528`, `:534-538`, `:1504-1513` and
+  `api/proto/holomush/scene/v1/scene.proto:328-330` — the roster's per-read
+  best-effort name lookup with its documented id fallback.
+- `plugins/core-scenes/poseorder.go:18-23`, `:76` and
+  `plugins/core-scenes/service.go:2015` — the pose queue's same shape, with `nil`
+  passed for the names map today.
+- `internal/grpc/auth_handlers.go:352`, `:380`, `:413`, `:505` — the four
+  `CharacterName` assignments from a freshly-read row, which is why §5.2 classes
+  those scalars `live`.
+- `internal/store/migrations/000001_baseline.up.sql:71` — `characters.name`, the
+  anchor row a rename writes.
+- `internal/world/validation.go:114-126` — `NormalizeCharacterName`: whitespace
+  collapse plus per-word title case, and nothing else; `:69-105` is
+  `ValidateCharacterName`; `:60` is `characterNameRegex`, the letters-and-spaces
+  shape §6.1.5's honest note turns on.
+- `internal/bootstrap/setup/adapters.go:38-50` — the shared `ExistsByName` query
+  comparing `LOWER(name)`; `internal/auth/character_service.go:112-121` and
+  `internal/auth/guest_service.go:227` are the **two** writers racing on it
+  (§6.1.3, §14 row 7).
+- `internal/auth/player.go:24-25`, `:31`, `:167` — the username length bounds, the
+  ASCII regex, and its application; `internal/store/migrations/000001_baseline.up.sql:54`
+  is the real `UNIQUE` constraint §6.2 contrasts with the character-name race.
+
+### 16.5 Profile storage and media (§7)
+
+- `internal/store/migrations/000001_baseline.up.sql:72` — `characters.description`,
+  the in-world `look` text §7.4 governs.
+- `internal/store/migrations/000001_baseline.up.sql:350-371`, `:364` — the
+  `entity_properties` mechanism and the uniqueness constraint that makes
+  exactly-one-primary a database guarantee (§7.3), with no DDL for a twelfth
+  field or an eleventh image (§7.1).
+- `internal/store/migrations/000045_character_preferences.up.sql:5` —
+  `characters.preferences JSONB`, the settings column §7.2 forbids the OOC
+  RP-preferences block from being written into.
+
+### 16.6 Admin surface (§10)
+
+- `internal/store/role_store.go:83`, `:83-93`, `:86-93` — `PlayerHasRole`'s
+  own comment (*"true iff any character of playerID has role"*) and the query
+  joining on `c.player_id`: the shipped per-player read §10.5 matches.
+- `internal/admin/auth/ingame.go:116`, `:117-118`, `:119` — the
+  capability-plus-role step comment, the re-assert-at-every-entry-point rationale
+  §10.4 transposes, and the call passing a **player** id.
+- `internal/admin/auth/operator_admin.go:37-64`, `:53` — `AssertOperatorAdmin` in
+  full and its `PlayerHasRole` call.
+- `web/src/lib/nav/sections.ts:35-47`, `:47`, `:63-67` — the ordered
+  `as const satisfies` registry with its compile-time rationale, the derived
+  `SectionId` union, and `visibleSections`; §10.1 mirrors the shape, not the
+  location.
+- `internal/eventbus/audit/projection.go:319-331`, `:434` and
+  `internal/eventbus/audit/retention_partitions.go:546` — the asynchronous
+  projection and partition mover that are the **only** writers into
+  `events_audit`, which is why §10.7 and §14 row 9 put the durability boundary at
+  the outbox envelope.
+
+### 16.7 The update mask, the error surface and verification (§9.5, §9.6, §12)
+
+- `internal/grpc/sceneaccess_service.go:843-845` — the rejection rationale §9.5
+  adopts verbatim; `:846-853` is the closed allowlist map; `:861-902` is
+  `UpdateScene` entire; `:870-874` and `:872` are the exact-string check and its
+  `InvalidArgument`; `:878-880` and `:862-880` are the empty-mask short-circuit
+  and the ownership-first ordering §9.5 makes normative.
+- `go.mod:32` — `github.com/samber/oops v1.22.0`, the pinned version §9.6.1 and
+  §12.1 rule 5 were verified against.
+- `pkg/errutil/testing.go:15-20` — `AssertErrorCode`, a thin wrapper over
+  `oops.AsOops` plus `.Code()`; `:17` and `internal/session/reaper.go:167` show
+  `oops.AsOops` returning `(OopsError, bool)`, which is why the single-expression
+  spelling does not compile (§14 row 8, issue #4902).
+- `.planning/REQUIREMENTS.md` PORTAL-10 (`:51-78`) — the source ordering the six
+  §12.1 rules preserve.
+- `.planning/research/PITFALLS.md:89-100`, `:233-240`, `:338-344`, `:392-400` —
+  the four inverted-test-question passages §12 quotes: the empty-fixture private
+  field, the non-degenerate-fixture pairing, the denial test aimed at an endpoint
+  with nothing to deny, and the `err != nil` that cannot say which gate fired.
+- `.planning/research/SUMMARY.md:153-154` — the census-with-set-equality
+  recommendation §2.6 and §12.1 rule 1 implement.
+- `.planning/phases/01-portal-spec/01-CONTEXT.md:163-169` — D-17, the decision
+  that binds §12 by verbatim copy into every downstream plan.
+- `test/meta/invariant_registry_test.go:341` — the orphan check's hard-coded walk
+  root, `docs/superpowers/specs`, which is why §12.1 rule 6 and §13 require this
+  SPEC's registry entries to be hand-registered.
+
+### 16.8 What this trace does not cover
+
+Three classes of claim in this document are **not** grounded by a `path:line`
+citation, deliberately:
+
+- **Forward references to Phase-2-through-6 artifacts.** `PublicCharacter`,
+  `projectPublic`, `CharacterAccessService`, `admin_section:`,
+  `AdminSectionResource()` and the tier-floor policy family do not exist yet.
+  §3.3 and §9 mark them `Phase 4` or `Phase 2` in place of a line number, which
+  is the honest form: a citation would have to be invented.
+- **Rule-file references without a line.** `.claude/rules/abac-providers.md`,
+  `gateway-boundary.md`, `grpc-errors.md`, `plugin-runtime-symmetry.md`,
+  `database-migrations.md`, `proto-doc-comments.md`, `testing.md` and
+  `invariants.md` are cited by file and section heading rather than by line,
+  because rule files are reorganized often and a heading survives what a line
+  number does not.
+- **External standards.** UTS #24, UTS #39 and its Moderately Restrictive profile
+  are named as specifications so Phase 2 implements against the document rather
+  than against this one's paraphrase (§6.1.2).
