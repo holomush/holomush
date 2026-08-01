@@ -57,7 +57,9 @@ Last activity: 2026-08-01 — Phase 1 execution started
 
 **Binding across every phase (PORTAL-10):** census with set equality; paired positive control on every
 denial test; assertions against marshaled response bytes; gates demonstrated RED against the pre-fix state;
-top-level `oops.AsOops(err).Code()` assertions; invariant-scope discipline (no ad-hoc `INV-PROFILE-*` /
+wire-level assertion of every opacity and authorization contract (rule 5 was corrected in Phase 1 — `oops.AsOops(err).Code()`
+resolves the *deepest* chain code, not the top-level one, so the original prescription asserted the opposite
+of the property it guarded; see #4902 and `01-SPEC.md` §12.1); invariant-scope discipline (no ad-hoc `INV-PROFILE-*` /
 `INV-ADMIN-*` — allocate in `ACCESS`/`PRIVACY` or declare a boundary, and ship `binding: pending` rather
 than fabricating a `// Verifies:`).
 

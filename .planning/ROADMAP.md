@@ -156,7 +156,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-05-PLAN.md — verification-integrity rules + amendments/divergences table + applying the four amendments
+- [ ] 01-05-PLAN.md — verification-integrity rules + amendments/divergences table + applying the nine amendments
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
