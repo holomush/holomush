@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 status: planning
-last_updated: "2026-07-31T23:25:54.738Z"
+last_updated: "2026-07-31T00:00:00.000Z"
 last_activity: 2026-07-31
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -22,14 +22,51 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** None — v0.12 shipped 2026-07-28; next milestone not yet defined.
+**Current focus:** v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6). Give web players a
+complete character identity surface (creation, management, public profiles with privacy) and stand up the
+`RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
+Phase: 1 — Portal SPEC (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-31 — Milestone v0.13 started
+Status: Roadmap created; ready to plan Phase 1
+Progress: [░░░░░░░░░░░░░░░░░░░░] 0% (0/6 phases)
+Last activity: 2026-07-31 — v0.13 roadmap created (6 phases, 50/50 requirements mapped)
+
+**Next action:** `/gsd-discuss-phase 1` then `/gsd-plan-phase 1`.
+
+**Milestone shape (phases 1–6):**
+
+> Phase numbers **restart at 1 per milestone as of v0.13**; v0.11 (Phases 1–3) and v0.12 (Phases 4–9)
+> used the retired continuous global numbering and are not renumbered. A bare "Phase N" below means v0.13.
+
+| Phase | Name | Reqs | Notes |
+|-------|------|------|-------|
+| 1 | Portal SPEC | 10 | Opens the milestone — discharges PROJECT.md's Out-of-Scope precondition; 8 of 14 catalogued pitfalls are SPEC-phase decisions |
+| 2 | ABAC & Schema Vocabulary | 6 | Lifecycle column + normalized-name unique index land here (load-bearing for two phases each); narrow data audit needed |
+| 3 | World Character Commands | 3 | `Rename`/soft `Retire`; `--research-phase` (writeCommands census bijection) |
+| 4 | Shared Facade Helpers & `CharacterAccessService` | 7 | Verbatim copy of the shipped `sceneaccess_service.go` path |
+| 5 | Character Identity UI & Public Profiles | 12 | UI phase — first user-visible slice; ships the media-schema proof with no uploader |
+| 6 | Admin Portal Shell & Character Administration | 12 | UI phase; net-new trust boundary (zero `RoleAdmin` refs in `internal/web/` today); `--research-phase` |
+
+**Binding across every phase (PORTAL-10):** census with set equality; paired positive control on every
+denial test; assertions against marshaled response bytes; gates demonstrated RED against the pre-fix state;
+top-level `oops.AsOops(err).Code()` assertions; invariant-scope discipline (no ad-hoc `INV-PROFILE-*` /
+`INV-ADMIN-*` — allocate in `ACCESS`/`PRIVACY` or declare a boundary, and ship `binding: pending` rather
+than fabricating a `// Verifies:`).
+
+**Pre-existing hazards this milestone is the first to load** (all verified in-tree 2026-07-31, none new
+defects): `PlayerHasRole` is player-wide not character-wide (`internal/store/role_store.go:83-103`) —
+excluded from scope by PORTAL-08/ADMIN-04 and to be filed as a GitHub issue; character-name uniqueness has
+no DB constraint and `Rename` doubles the writers into that race (Phase 2); rename/retire cannot reach
+denormalized history (`actor_display_name`, `scene_log` via `WebGetPublicSceneArchive`); hard-delete is
+already broken (`locations.owner_id`/`objects.owner_id` have no `ON DELETE`); a public profile page is
+currently DENIED by `seed:player-character-colocation`; `internal/web/` has zero `RoleAdmin` references.
+
+**Carried in from v0.12:** 3 open Broken Windows block `/gsd-ship` until fixed or waived — #4861
+(`cmd/holomush` coverage floor), #4788 (movement pipeline untested), #4864 (yamlfmt block-scalar leak).
 
 ## Deferred Items
 
@@ -52,6 +89,9 @@ debug session. It is not one — it is the debug *knowledge base* of resolved se
 no action needed.
 
 ## Performance Metrics
+
+> Phase numbers in the tables below are **v0.11/v0.12** phases under the retired
+> continuous global scheme (v0.11 Phases 1–3, v0.12 Phases 4–9) — not v0.13's Phases 1–6.
 
 **Velocity:**
 
@@ -377,7 +417,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-27T16:45:13.288Z
+Last session: 2026-07-31 — v0.13 roadmap created. Six phases (1–6) derived from the 50 v0.13 REQ-IDs;
+100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
+v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
+Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
+Stopped at: roadmap written; awaiting `/gsd-discuss-phase 1`.
+
+Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
 The measurement-chain repair is proven — the e2e flag reports 32.27% where it reported 0.0, and
 project coverage rose 0.83 points to 79.11% against a 78.28% base (`497748c6d`). Two named floors

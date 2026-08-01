@@ -7,28 +7,43 @@ HoloMUSH is a mature, actively-developed platform — the event-sourced core, AB
 (full context: `milestones/v0.11-ROADMAP.md` "Shipped Foundation"). The v0.11 milestone (Channels, Scenes
 lineage completion, platform hardening) shipped 2026-07-11.
 
-The v0.12 milestone (Foundation Hardening, Phases 4–9) shipped 2026-07-28 — the event-model decision and
+The v0.12 milestone (Foundation Hardening, v0.12 Phases 4–9) shipped 2026-07-28 — the event-model decision and
 its integrity fixes, operational hardening and CI assurance gates, architecture decomposition, and the
 code-health sweep. Full detail: `milestones/v0.12-ROADMAP.md`.
 
-**No milestone is currently active.** Define the next one with `/gsd-new-milestone`, which also produces a
-fresh `REQUIREMENTS.md` (the v0.12 one is archived at `milestones/v0.12-REQUIREMENTS.md`). Not-yet-scheduled
-scope stays in `## Backlog` — promote entries with `/gsd-review-backlog`.
+**Active milestone — v0.13 Web Portal: Identity & Admin Foundations (Phases 1–6):** give web players a
+complete character identity surface — creation, management, and public profiles with privacy — and stand up
+the admin portal shell that gives character administration a home, with both designed to absorb the deferred
+portal surfaces without rework. The milestone **opens by producing the portal SPEC** that PROJECT.md's
+Out-of-Scope entry named as its precondition, rather than waiving it. Requirements: `REQUIREMENTS.md`
+(50 REQ-IDs across PORTAL / IDENT / PROFILE / ADMIN / EXT). Research basis: `research/SUMMARY.md`.
+Remaining not-yet-scheduled scope stays in `## Backlog` — promote entries with `/gsd-review-backlog`.
 
 ## Milestones
 
-- ✅ **v0.11 Social Spaces & Platform Hardening** — Phases 1–3 (shipped 2026-07-11) — [archive](milestones/v0.11-ROADMAP.md) · [audit](milestones/v0.11-MILESTONE-AUDIT.md)
-- ✅ **v0.12 Foundation Hardening** — Phases 4–9 (shipped 2026-07-28) — [archive](milestones/v0.12-ROADMAP.md) · [audit](milestones/v0.12-MILESTONE-AUDIT.md)
-- 📋 **Next milestone** — not yet defined (`/gsd-new-milestone`)
+> **Phase-numbering convention (changed at v0.13).** Phase numbers **restart at 1 for every milestone as of
+> v0.13** — a phase id is unique *within its milestone*, not across project history. **v0.11 and v0.12 used
+> continuous global numbering** (v0.11 Phases 1–3, v0.12 Phases 4–9) and are **not** renumbered: they shipped
+> under those numbers, and the archives, PRs, and `milestones/v0.1x-phases/` directories all reference them.
+> Wherever an archived phase is named below, its milestone is stated explicitly (e.g. "v0.12 Phase 4"); a
+> bare "Phase N" always means the **active milestone**. The `999.x` backlog entries are parking-lot ids, not
+> milestone phases — their numbering is independent of both schemes.
+
+- ✅ **v0.11 Social Spaces & Platform Hardening** — v0.11 Phases 1–3 (shipped 2026-07-11) — [archive](milestones/v0.11-ROADMAP.md) · [audit](milestones/v0.11-MILESTONE-AUDIT.md)
+- ✅ **v0.12 Foundation Hardening** — v0.12 Phases 4–9 (shipped 2026-07-28) — [archive](milestones/v0.12-ROADMAP.md) · [audit](milestones/v0.12-MILESTONE-AUDIT.md)
+- 🚧 **v0.13 Web Portal: Identity & Admin Foundations** — Phases 1–6 (in progress, started 2026-07-31)
 
 ## Phases
 
 <details>
-<summary>✅ v0.11 Social Spaces & Platform Hardening (Phases 1–3) — SHIPPED 2026-07-11</summary>
+<summary>✅ v0.11 Social Spaces & Platform Hardening (v0.11 Phases 1–3) — SHIPPED 2026-07-11</summary>
 
-- [x] Phase 1: Channels Subsystem (10/10 plans) — `core-channels` as the social-spaces substrate's second consumer — completed 2026-07-09
-- [x] Phase 2: Scenes Lineage Completion (7/7 plans) — notifications + telnet polish (templates descoped to backlog) — completed 2026-07-09
-- [x] Phase 3: Platform Hardening & Deployment Scaling (9/9 plans) — external/clustered NATS, multi-node crypto invalidation, audit DLQ — completed 2026-07-10
+> **Numbering:** these are **v0.11** phase numbers under the retired continuous global scheme. They are
+> *not* the active milestone's Phases 1–6 and are deliberately left un-renumbered.
+
+- [x] v0.11 Phase 1: Channels Subsystem (10/10 plans) — `core-channels` as the social-spaces substrate's second consumer — completed 2026-07-09
+- [x] v0.11 Phase 2: Scenes Lineage Completion (7/7 plans) — notifications + telnet polish (templates descoped to backlog) — completed 2026-07-09
+- [x] v0.11 Phase 3: Platform Hardening & Deployment Scaling (9/9 plans) — external/clustered NATS, multi-node crypto invalidation, audit DLQ — completed 2026-07-10
 
 Full phase details, requirements mapping, and success criteria: [milestones/v0.11-ROADMAP.md](milestones/v0.11-ROADMAP.md).
 Phase execution artifacts: `milestones/v0.11-phases/`.
@@ -36,26 +51,201 @@ Phase execution artifacts: `milestones/v0.11-phases/`.
 </details>
 
 <details>
-<summary>✅ v0.12 Foundation Hardening (Phases 4–9) — SHIPPED 2026-07-28</summary>
+<summary>✅ v0.12 Foundation Hardening (v0.12 Phases 4–9) — SHIPPED 2026-07-28</summary>
 
-- [x] Phase 4: World-Model Resilience Investigation & Decision (F1) (4/4 plans) — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR (decision gate) — completed 2026-07-11
-- [x] Phase 5: World-Model Integrity Fixes (M2/M12) (16/16 plans) — version guard, transactional outbox, event-sourcing doc correction — completed 2026-07-13
-- [x] Phase 6: Operational Hardening & Assurance Gates (5/5 plans) — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage reconciliation — completed 2026-07-15
-- [x] Phase 7: Event-Model & Bootstrap Decomposition (11/11 plans) — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports — completed 2026-07-18
-- [x] Phase 8: God-Object Decomposition (9/9 plans) — CoreServer + plugin/manager decomposition (behavior-preserving) — completed 2026-07-19
-- [x] Phase 9: Test-Quality & Code-Health Sweep (21/21 plans) — coverage-chain repair, ABAC fail-open fix, session-lifecycle matrix — completed 2026-07-27
+> **Numbering:** these are **v0.12** phase numbers under the retired continuous global scheme. They are
+> *not* the active milestone's Phases 1–6 and are deliberately left un-renumbered.
+
+- [x] v0.12 Phase 4: World-Model Resilience Investigation & Decision (F1) (4/4 plans) — resilience/concurrency pass + the event-sourcing-vs-CRUD ADR (decision gate) — completed 2026-07-11
+- [x] v0.12 Phase 5: World-Model Integrity Fixes (M2/M12) (16/16 plans) — version guard, transactional outbox, event-sourcing doc correction — completed 2026-07-13
+- [x] v0.12 Phase 6: Operational Hardening & Assurance Gates (5/5 plans) — `events_audit` retention, nats CVE + vuln-scan gate, DLQ bridge, coverage reconciliation — completed 2026-07-15
+- [x] v0.12 Phase 7: Event-Model & Bootstrap Decomposition (11/11 plans) — `core.Event`/`eventbus.Event` collapse, bootstrap→`lifecycle.Orchestrator`, gateway-boundary imports — completed 2026-07-18
+- [x] v0.12 Phase 8: God-Object Decomposition (9/9 plans) — CoreServer + plugin/manager decomposition (behavior-preserving) — completed 2026-07-19
+- [x] v0.12 Phase 9: Test-Quality & Code-Health Sweep (21/21 plans) — coverage-chain repair, ABAC fail-open fix, session-lifecycle matrix — completed 2026-07-27
 
 Full phase details, requirements mapping, and success criteria: [milestones/v0.12-ROADMAP.md](milestones/v0.12-ROADMAP.md).
 Phase execution artifacts: `milestones/v0.12-phases/`. Completion audit: [milestones/v0.12-MILESTONE-AUDIT.md](milestones/v0.12-MILESTONE-AUDIT.md).
 
-**Closed as `override_closeout`:** Phase 9 verified `gaps_found` (3/4) because QUAL-02/03/05 were
+**Closed as `override_closeout`:** v0.12 Phase 9 verified `gaps_found` (3/4) because QUAL-02/03/05 were
 deliberately deferred with tracking (#4860, #4861, #4875, #4876, #4792); all other phases verified
 `passed`. Carried forward: #4880 (CLAUDE.md event-construction rule defect), #4881 (no ruleset↔CI
 reconciliation), #4882/#4883 (unquarantined flakes).
 
 </details>
 
+### 🚧 v0.13 Web Portal: Identity & Admin Foundations (Phases 1–6) — IN PROGRESS
+
+**Milestone Goal:** Give web players a complete character identity surface — creation, management, and
+public profiles with privacy — and stand up the admin portal shell that gives character administration a
+home, with both designed to absorb the deferred portal surfaces without rework.
+
+- [ ] **Phase 1: Portal SPEC** — settle every shape decision whose cost explodes after code exists, and discharge PROJECT.md's Out-of-Scope precondition
+- [ ] **Phase 2: ABAC & Schema Vocabulary** — admin-section + public-profile policy, name normalization + unique index, character lifecycle column
+- [ ] **Phase 3: World Character Commands** — domain-layer `RenameCharacter` + soft `RetireCharacter`, version-guarded and outbox-emitting
+- [ ] **Phase 4: Shared Facade Helpers & `CharacterAccessService`** — one guest/ownership gate; character read/write BFF with privacy enforced by absence
+- [ ] **Phase 5: Character Identity UI & Public Profiles** — creation identity card, multi-alt management, public profile page, per-field visibility
+- [ ] **Phase 6: Admin Portal Shell & Character Administration** — ABAC-gated `/admin`, character administration, six deferred sections registered and denied-after-gate
+
+## Phase Details
+
+**Dependency spine.** The milestone opens on the **SPEC** (Phase 1) because eight of the fourteen
+catalogued pitfalls are shape decisions — message shape, audience matrix, lifecycle vocabulary,
+`expected_version` placement — whose cost explodes once code exists, and because PROJECT.md's Out-of-Scope
+entry for non-scene portal surfaces named exactly this SPEC as its precondition. **Vocabulary before
+surfaces** (Phase 2): privacy and admin-section policy must exist before anything reads or gates on them,
+and the **character lifecycle column** and **normalized-name unique index** are each load-bearing for two
+later phases, so they land once here rather than being rediscovered per consumer. **Domain before facade
+before UI** (Phases 3 → 4 → 5) mirrors the shipped scenes path exactly. **Admin goes last** (Phase 6)
+because it consumes the most and because `internal/web/` contains **zero `RoleAdmin` references today** —
+a net-new trust boundary with no existing test suite that would notice if it were wrong.
+
+Phase 3 is *planning*-parallelizable with Phase 2, but its `Rename` MUST NOT land before Phase 2's
+unique index (adding a second writer to a live check-then-insert race), and its `Retire` needs Phase 2's
+lifecycle column.
+
+**Scheduling note (not a dependency):** `WebCheckSessionResponse.roles` (ADMIN-08) can be pulled into
+Phase 4's proto work to avoid a second `web.proto` regeneration cycle in Phase 6. Likewise, Phase 4
+should land the full SPEC-defined profile field set — including the PROFILE-06..09 fields that Phase 5
+verifies — in one regeneration pass.
+
+**Research posture.** Phases 3 and 6 carry `--research-phase` flags (below); Phase 2 needs a narrow
+data audit only. Phases 1, 4, and 5 have well-understood patterns and should skip research — Phase 1 is
+synthesis of `research/SUMMARY.md` rather than new research, Phase 4 is a verbatim copy of a fully-traced
+shipped path (`internal/grpc/sceneaccess_service.go`), and Phase 5 is established shadcn/runes patterns
+plus the existing `web/src/lib/scenes/createFlow.ts` idiom.
+
+**PORTAL-10 is binding on every phase.** The six verification-integrity rules (census with set equality;
+paired positive controls on every denial test; assertions against marshaled response bytes; gates
+demonstrated RED against the pre-fix state; top-level `oops.AsOops(err).Code()` assertions; invariant-scope
+discipline) are SPEC content, not a capability — but every phase plan below carries them as acceptance
+criteria. v0.12's audit catalogued 17 instances of *"a verification that cannot fail"*, and research found
+that the natural test for nearly every privacy and authorization property in this milestone **passes while
+the property is false**.
+
+### Phase 1: Portal SPEC
+
+**Goal**: Produce the committed portal SPEC that fixes the audience/message shape, character data and lifecycle model, per-field privacy model, media-ready profile schema, and the full new RPC surface — the precondition PROJECT.md's Out-of-Scope entry demanded, satisfied rather than waived.
+**Depends on**: Nothing (opens the milestone)
+**Requirements**: PORTAL-01, PORTAL-02, PORTAL-03, PORTAL-04, PORTAL-05, PORTAL-06, PORTAL-07, PORTAL-08, PORTAL-09, PORTAL-10
+**Success Criteria** (what must be TRUE):
+
+1. The SPEC names an **audience matrix** (public / owner / admin) with a distinct message shape per audience, such that a field a viewer may not see is **absent from the response** rather than present-and-hidden by the client — and backs it with a **read-surface inventory** enumerating every character-returning RPC, including the three existing public export surfaces, with the audience each serves.
+2. The SPEC fixes the character **lifecycle** as three distinct operations — `retire`, `idle-out`, `purge` — states in normative language that **retire MUST NOT release the name**, and carries a **name-capture surface inventory** giving each denormalized-name site (immutable event payloads, `scene_log` via `WebGetPublicSceneArchive`) a historical-vs-live verdict.
+3. The SPEC defines the profile/media data model as `entity_properties` rows (`profile.*`, `profile.image.primary`, `profile.image.gallery.00..09`) with intrinsic values (`name`, `description`, lifecycle status, `version`) staying columns, and states character-name and player-username normalization as **two separate policies**.
+4. Every mutation request message in the SPEC's RPC surface carries **`expected_version`**; the SPEC records role mutation as an **explicit exclusion** from character administration; and it answers "does any v0.13 surface sort or filter on a profile field?" with a stated verdict rather than silence.
+5. The SPEC mandates the six **verification-integrity rules** (census set-equality, paired positive controls, marshaled-bytes assertions, gates demonstrated RED pre-fix, top-level `oops.AsOops(err).Code()`, invariant-scope discipline) as binding acceptance criteria that every later phase plan inherits.
+
+**Plans**: TBD
+
+Plans:
+
+- [ ] TBD (run `/gsd-plan-phase 1`)
+
+### Phase 2: ABAC & Schema Vocabulary
+
+**Goal**: Land the authorization vocabulary, name policy, and schema primitives every later phase gates on — `admin_section:` + `seed:admin-section-access`, `seed:profile-public-read`, the character **lifecycle column**, and the **normalized-name unique index** — with no UI and no new RPCs, which is where an unverified assumption surfaces cheapest.
+**Depends on**: Phase 1
+**Requirements**: IDENT-06, IDENT-07, IDENT-08, IDENT-09, PROFILE-11, EXT-07
+**Success Criteria** (what must be TRUE):
+
+1. A character name that is visually identical to an existing one — differing only by NFKC-normalizable codepoints, `Cf` format characters, or a mixed-script confusable — is rejected server-side, and a name matching the configurable regex block list is rejected server-side, both at create and at rename.
+2. Two concurrent attempts to claim the same normalized name against real Postgres cannot both succeed; the gate is **demonstrated RED against today's unindexed schema before the unique index lands**, and any pre-existing duplicates are detected and resolved by a one-shot job first (migrations forbid in-migration backfills).
+3. Player usernames still reject non-ASCII input — the existing `^[a-zA-Z][a-zA-Z0-9_]*$` rule is pinned by a regression guard rather than re-implemented.
+4. An off-location viewer can read a character's public properties and in-world description where `seed:player-character-colocation` previously **denied** it — shipped only after an audit establishes exactly which existing `parent_type='character' AND visibility='public'` rows and which existing character descriptions the widened policy exposes.
+5. `seed:admin-section-access` permits an admin and denies a builder, a plain player, and a guest across **all seven section ids** — each denial paired with a positive control proving the subject would otherwise have been permitted, and the id list asserted by set equality — and an eighth section added later needs no new policy.
+
+**Plans**: TBD
+**Research flag**: narrow slice only — the existing-public-character-property audit is a *data* question, not a design one, but it must be answered before `seed:profile-public-read` merges. Full `--research-phase` is not warranted.
+
+Plans:
+
+- [ ] TBD (run `/gsd-plan-phase 2`)
+
+### Phase 3: World Character Commands
+
+**Goal**: `world.Service` gains `RenameCharacter` and soft `RetireCharacter` at the domain layer, both version-guarded and emitting through the transactional outbox in-transaction, with the `writeCommands` census row and taxonomy kind landed in the same change.
+**Depends on**: Phase 1 (SPEC). Planning parallelizes with Phase 2; execution requires Phase 2's normalized-name unique index before `Rename` and its lifecycle column before `Retire`.
+**Requirements**: IDENT-03, IDENT-04, IDENT-10
+**Success Criteria** (what must be TRUE):
+
+1. A player can rename their own character through the domain layer: the new name passes Phase 2's normalization and block-list policy, the write is version-guarded, and a `character.renamed` event carrying `{id, old_name, new_name}` reaches the outbox in the same transaction as the state change.
+2. A retired character leaves active play with its record intact and **its name still reserved**, and the retirement is reversible — retire, idle-out, and purge stay three distinct operations, and the irreversible `DeleteCharacter` path (which cascades `entity_properties` and emits a tombstone) is untouched by the retire flow.
+3. A stale `expected_version` on any new character mutation is rejected with the typed `WORLD_CONCURRENT_EDIT` signal rather than silently overwriting — v0.12's existing two-replica resilience harness, pointed at the new commands, passes.
+4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
+
+**Plans**: TBD
+**Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
+
+Plans:
+
+- [ ] TBD (run `/gsd-plan-phase 3`)
+
+### Phase 4: Shared Facade Helpers & `CharacterAccessService`
+
+**Goal**: Extract `resolveAndGate`/`ownedCharacter` into one shared place, then build the `CharacterAccessService` BFF facade and its `WebCharacter*` proxies so character read and write reach the web with unauthorized fields absent from the marshaled response by construction.
+**Depends on**: Phase 2 (ABAC vocabulary + `profile.*` convention), Phase 3 (domain commands)
+**Requirements**: IDENT-02, IDENT-02a, PROFILE-03, PROFILE-04, PROFILE-05, PROFILE-10, EXT-06
+**Success Criteria** (what must be TRUE):
+
+1. The guest gate and ownership check exist in **exactly one place**, and a census with **set equality** over every character-returning RPC proves each one routes through it — so an RPC added later that skips the gate fails the test rather than shipping.
+2. A field the viewer may not see is **absent from the marshaled response bytes** — asserted against the wire, not a populated Go struct — and a character whose profile is unreachable returns a not-found-equivalent, never "this profile is private".
+3. An owner can set any profile field to `public` or `private` except `name` and `pronouns`, which the server refuses to make private; an unrecognized tier is denied by an exhaustive `switch` with `default: deny`.
+4. An owner can edit prose profile fields and the in-world `characters.description` over the web, with over-cap input rejected server-side and the description write reaching the existing `world.Service.UpdateCharacterDescription` rather than a parallel path.
+5. The profile read path is built **exclusively** from the viewer-filtered property slice — a direct `PropertyReader.ListByParent`/`PropertyRepository.ListByParent` call from the facade fails the build or the test — and the proto ships the media shape now, empty: `ProfileImage{media_id, alt_text, content_warning}` + `primary_image` + `repeated gallery [max_items = 10]`.
+
+**Plans**: TBD
+
+Plans:
+
+- [ ] TBD (run `/gsd-plan-phase 4`)
+
+### Phase 5: Character Identity UI & Public Profiles
+
+**Goal**: Web players get the whole identity surface — a structured creation card replacing the name-only stub, one place to manage every alt, and a public profile page a logged-out visitor can read — plus the media-schema proof with no uploader.
+**Depends on**: Phase 4
+**Requirements**: IDENT-01, IDENT-05, PROFILE-01, PROFILE-02, PROFILE-06, PROFILE-07, PROFILE-08, PROFILE-09, PROFILE-10a, PROFILE-12, EXT-05, EXT-08
+**Success Criteria** (what must be TRUE):
+
+1. A player creates a character through a **structured identity card** (name, pronouns as its own field, concept, species, age, faction) instead of the name-only stub, and manages every one of their characters — including which is default — from one place.
+2. A **logged-out visitor** loads a character's public profile at a stable URL and sees the in-world description alongside the public `profile.*` fields — rumors / RP-hooks, the volatile "Currently" line, the OOC RP-preferences block, and time zone — with blank fields hiding themselves and an initial-letter avatar placeholder where no image exists.
+3. Profile and sheet are **separate surfaces** and the sheet ships **empty**; the profile action bar carries a named empty slot for web DMs rather than a dead "message this character" button.
+4. An owner flips a field between public and private and the change is what a logged-out visitor sees on the next load; both the visibility toggle and the retirement flow **state in the UI** that privacy is not retroactive over already-published history.
+5. One primary plus ten gallery image property rows insert through the **real schema** and read back, and an eleventh primary is rejected by `UNIQUE(parent_type,parent_id,name)` — demonstrating the "no migration later" claim rather than asserting it, with no uploader.
+
+**Plans**: TBD
+**UI hint**: yes
+
+Plans:
+
+- [ ] TBD (run `/gsd-plan-phase 5`)
+
+### Phase 6: Admin Portal Shell & Character Administration
+
+**Goal**: Stand up `/admin` as an ABAC-gated trust boundary with character administration as its working section, six deferred sections registered / gated / refusing **after** the gate, and audit emission with before-values on every admin mutation.
+**Depends on**: Phase 2 (`admin_section:` vocabulary + `seed:admin-section-access`), Phase 4 (shared facade helpers). The authorization gate is the **first thing built in this phase**, before any section, so every subsequent section inherits it.
+**Requirements**: ADMIN-01, ADMIN-02, ADMIN-03, ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-07, ADMIN-08, EXT-01, EXT-02, EXT-03, EXT-04
+**Success Criteria** (what must be TRUE):
+
+1. A non-admin calling an admin RPC **directly, bypassing the route entirely**, is denied — the decision is ABAC on an `admin_section:` resource, never a bare `PlayerHasRole` lookup and never a route-guard or gateway decision — with a typed `DENY_*` code asserted at the **top level** via `oops.AsOops(err).Code()` and a paired positive control proving an admin would have been permitted.
+2. An admin lists, searches, opens, and edits characters; the edit surface accepts only an explicit **field-mask allowlist that excludes roles**, and admin disable/delete moves a character through the **same lifecycle states** as player-initiated retire — the irreversible `DeleteCharacter` path is reachable from no player-facing button.
+3. Every admin mutation writes an `events_audit` row **in the same transaction**, carrying the **before-values** and the acting **player** id, not only the character.
+4. All six deferred sections (stats, players, moderation, audit, config, plugins) are registered, role-gated, and return `NOT_IMPLEMENTED` **after** the gate — a non-admin hitting one is *denied*, not told it is unimplemented — and a meta-test asserts **set equality** between the section registry and the authorization-descriptor set, so a section registered without a descriptor fails at compile time or at boot.
+5. Admin navigation is filtered from the **registry contract**, not template `{#if}` blocks; the roles exposed on `WebCheckSessionResponse` change only what is drawn, and drawing a link the viewer may not use still results in a denial at the RPC.
+
+**Plans**: TBD
+**UI hint**: yes
+**Research flag**: `--research-phase` recommended — there is no in-repo precedent for the web gateway making an admin decision (`internal/web/` has zero `RoleAdmin` references); `AssertOperatorAdmin`'s shape must be transposed across a different auth model, and the reserved-section descriptor mechanism needs a concrete fail-at-boot design.
+
+Plans:
+
+- [ ] TBD (run `/gsd-plan-phase 6`)
+
 ## Progress
+
+> **Reading this table.** Phase numbers **restart at 1 per milestone as of v0.13**; v0.11 and v0.12 used the
+> retired continuous global numbering and are **not** renumbered. The `Phase` column is therefore only
+> unique *within* a milestone — always read it together with the `Milestone` column (rows `1.`–`9.` under
+> v0.11/v0.12 are archived phases; rows `1.`–`6.` under v0.13 are the active milestone).
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -68,6 +258,12 @@ reconciliation), #4882/#4883 (unquarantined flakes).
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 21/21 [^p9] | Complete | 2026-07-27 |
+| 1. Portal SPEC | v0.13 | 0/TBD | Not started | - |
+| 2. ABAC & Schema Vocabulary | v0.13 | 0/TBD | Not started | - |
+| 3. World Character Commands | v0.13 | 0/TBD | Not started | - |
+| 4. Shared Facade Helpers & CharacterAccessService | v0.13 | 0/TBD | Not started | - |
+| 5. Character Identity UI & Public Profiles | v0.13 | 0/TBD | Not started | - |
+| 6. Admin Portal Shell & Character Administration | v0.13 | 0/TBD | Not started | - |
 
 [^p9]: All 21 plans executed, but plan 09-21 produced no SUMMARY (it performed the phase's only
 unconditional push and opened PR #4874). Hence "20/21" appears in some records and "21/21" in others —
@@ -112,12 +308,15 @@ Re-reviewed 2026-07-31 (`/gsd-review-backlog`): **17 entries kept, 999.3 removed
 > the number that inflates when sizing a milestone. Re-verify against the tree before promoting
 > any 999.x cluster sourced from the beads migration.
 
-> **v0.13 candidate spine (selected 2026-07-31, not yet promoted):** **999.1 Web Client Portal
-> completion** — the only player-facing cluster with substantial *verified* unbuilt scope (6
+> **v0.13 spine (selected 2026-07-31, PARTIALLY PROMOTED 2026-07-31):** **999.1 Web Client Portal
+> completion** was the only player-facing cluster with substantial *verified* unbuilt scope (6
 > concrete items: offline/PWA #4803, wiki/help, character profiles, character creation UI, admin
-> portal, DM web surface). Promotion deferred to `/gsd-new-milestone`, which assigns real phase
-> numbers; promoting now would mint them into a milestone that does not exist
-> (`STATE.md: status: milestone_complete`).
+> portal, DM web surface). `/gsd-new-milestone` promoted **two and a half of the six** into milestone
+> v0.13 (Phases 1–6): character creation/management UI (`qve.15`, non-roster), public character
+> profiles (`qve.9`, no avatars), and the **shell only** of the admin portal (`qve.10`) — taken so
+> character administration has a home. **Still in the backlog:** offline/PWA (`qve.7`), wiki
+> (`qve.8`), web DMs (`qve.17`), and the six non-character admin sections (which overlap 999.8).
+> See the 999.1 entry below for the residual.
 
 > **v0.12 outcome (shipped 2026-07-28):** milestone **v0.12 Foundation Hardening** (Phases 4–9, archived at
 > `milestones/v0.12-ROADMAP.md`) pulled the bulk of **999.9** (architecture decomposition → ARCH-01..05) and
@@ -136,13 +335,15 @@ Re-reviewed 2026-07-31 (`/gsd-review-backlog`): **17 entries kept, 999.3 removed
 > **999.13's arch-review overlap also closed** (#4785/#4786/#4787/#4790, all shipped as OPS-01..04); its
 > DR/backup/KMS core is untouched and the cluster stays.
 
-### Phase 999.1: Web Client Portal completion (BACKLOG)
+### Phase 999.1: Web Client Portal completion (BACKLOG — PARTIALLY PROMOTED to v0.13)
 
 **Goal:** Round out the web portal beyond scenes: offline support, wiki/help pages, character profiles + creation/management UI, admin portal, and a web surface for 1:1 direct messages.
 **Source:** beads migration — 7 item(s) incl. epic(s) `holomush-qve`; member list in TRIAGE.md
 **Related issues:** arch-review F6 PWA/offline #4803 (overlaps the offline-support + web-surface goals).
-**Requirements:** TBD
-**Plans:** 0 plans
+**Promoted to v0.13 (2026-07-31):** `qve.15` character creation + management UI (non-roster scope — roster integration stays deferred to 999.6), `qve.9` public character profiles (per-field privacy; avatars deferred to 999.16), and `qve.10` admin portal **shell + character administration only**.
+**Residual (still backlog):** `qve.7` offline support / PWA (#4803), `qve.8` wiki portal, `qve.17` web surface for 1:1 direct messages, and the six non-character admin sections — stats, player management, moderation, audit viewer, config editor, plugin management — which overlap 999.8 and ship in v0.13 as *registered, role-gated, `NOT_IMPLEMENTED`-after-the-gate* stubs so wiring one later replaces a handler body rather than adding a check.
+**Requirements:** v0.13 portion → IDENT-*/PROFILE-*/ADMIN-*/EXT-* (see `REQUIREMENTS.md`); residual TBD
+**Plans:** 0 plans (residual)
 
 Plans:
 
@@ -218,11 +419,13 @@ Plans:
 
 - [ ] TBD (promote with /gsd-review-backlog when ready)
 
-### Phase 999.8: Admin Web UI & Config (BACKLOG)
+### Phase 999.8: Admin Web UI & Config (BACKLOG — substrate consumed by v0.13)
 
 **Goal:** Operator tools: /admin route, server stats, player management, config surface (epics holomush-g4pb + holomush-7nub; overlaps the web-portal admin page — consolidate at design time).
 **Source:** beads migration — 3 item(s) incl. epic(s) `holomush-g4pb`; member list in TRIAGE.md
-**Requirements:** TBD
+**Consumed by v0.13 (2026-07-31):** the `/admin` route, its ABAC trust boundary (`admin_section:` resource + `seed:admin-section-access`, which covers every future section at zero policy cost), the section registry, and the shared authorization helper. The "consolidate at design time" note this entry carried is now discharged — v0.13's Phase 1 SPEC is that design point.
+**Residual (still backlog):** the six section *bodies* — server stats, player management, moderation, audit log viewer, config editor, plugin management. v0.13 ships each **registered, role-gated, returning `NOT_IMPLEMENTED` after the gate**, so implementing one later replaces a handler body rather than standing up a surface. Audit *emission* (with before-values) also lands in v0.13, so the deferred audit viewer inherits real history rather than launching empty.
+**Requirements:** TBD (residual)
 **Plans:** 0 plans
 
 Plans:

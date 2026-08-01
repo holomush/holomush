@@ -256,6 +256,66 @@ Explicitly excluded, with reasoning. Named anti-features come from the research 
 
 Which phases cover which requirements. Filled during roadmap creation.
 
+**Coverage: 50/50 v1 requirements mapped — every requirement maps to exactly one phase; no orphans, no duplicates.**
+
+| Phase | Name | Requirements |
+|-------|------|--------------|
+| 1 | Portal SPEC | 10 (PORTAL-01..10) |
+| 2 | ABAC & Schema Vocabulary | 6 (IDENT-06..09, PROFILE-11, EXT-07) |
+| 3 | World Character Commands | 3 (IDENT-03, IDENT-04, IDENT-10) |
+| 4 | Shared Facade Helpers & `CharacterAccessService` | 7 (IDENT-02, IDENT-02a, PROFILE-03/04/05/10, EXT-06) |
+| 5 | Character Identity UI & Public Profiles | 12 (IDENT-01, IDENT-05, PROFILE-01/02/06/07/08/09/10a/12, EXT-05, EXT-08) |
+| 6 | Admin Portal Shell & Character Administration | 12 (ADMIN-01..08, EXT-01..04) |
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(pending roadmap)_ | — | Pending |
+| PORTAL-01 | Phase 1 | Pending |
+| PORTAL-02 | Phase 1 | Pending |
+| PORTAL-03 | Phase 1 | Pending |
+| PORTAL-04 | Phase 1 | Pending |
+| PORTAL-05 | Phase 1 | Pending |
+| PORTAL-06 | Phase 1 | Pending |
+| PORTAL-07 | Phase 1 | Pending |
+| PORTAL-08 | Phase 1 | Pending |
+| PORTAL-09 | Phase 1 | Pending |
+| PORTAL-10 | Phase 1 | Pending |
+| IDENT-01 | Phase 5 | Pending |
+| IDENT-02 | Phase 4 | Pending |
+| IDENT-02a | Phase 4 | Pending |
+| IDENT-03 | Phase 3 | Pending |
+| IDENT-04 | Phase 3 | Pending |
+| IDENT-05 | Phase 5 | Pending |
+| IDENT-06 | Phase 2 | Pending |
+| IDENT-07 | Phase 2 | Pending |
+| IDENT-08 | Phase 2 | Pending |
+| IDENT-09 | Phase 2 | Pending |
+| IDENT-10 | Phase 3 | Pending |
+| PROFILE-01 | Phase 5 | Pending |
+| PROFILE-02 | Phase 5 | Pending |
+| PROFILE-03 | Phase 4 | Pending |
+| PROFILE-04 | Phase 4 | Pending |
+| PROFILE-05 | Phase 4 | Pending |
+| PROFILE-06 | Phase 5 | Pending |
+| PROFILE-07 | Phase 5 | Pending |
+| PROFILE-08 | Phase 5 | Pending |
+| PROFILE-09 | Phase 5 | Pending |
+| PROFILE-10 | Phase 4 | Pending |
+| PROFILE-10a | Phase 5 | Pending |
+| PROFILE-11 | Phase 2 | Pending |
+| PROFILE-12 | Phase 5 | Pending |
+| ADMIN-01 | Phase 6 | Pending |
+| ADMIN-02 | Phase 6 | Pending |
+| ADMIN-03 | Phase 6 | Pending |
+| ADMIN-04 | Phase 6 | Pending |
+| ADMIN-05 | Phase 6 | Pending |
+| ADMIN-06 | Phase 6 | Pending |
+| ADMIN-07 | Phase 6 | Pending |
+| ADMIN-08 | Phase 6 | Pending |
+| EXT-01 | Phase 6 | Pending |
+| EXT-02 | Phase 6 | Pending |
+| EXT-03 | Phase 6 | Pending |
+| EXT-04 | Phase 6 | Pending |
+| EXT-05 | Phase 5 | Pending |
+| EXT-06 | Phase 4 | Pending |
+| EXT-07 | Phase 2 | Pending |
+| EXT-08 | Phase 5 | Pending |
