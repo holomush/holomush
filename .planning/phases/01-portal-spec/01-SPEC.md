@@ -44,7 +44,215 @@ declared there exists in `docs/architecture/invariants.yaml`.
 
 ## 2. Audience Matrix and Message Shape
 
-> *Placeholder — authored by plan 01-02.*
+This section is normative. It fixes how many audiences exist, what message each
+one receives, who builds those messages, and the single mechanism that binds the
+whole arrangement.
+
+### 2.1 There are exactly three audiences
+
+| Audience | Who | What it may see |
+| --- | --- | --- |
+| `public` | Any reader who is not the character's owner and is not acting as an admin — including an anonymous web visitor and a guest session. Reachability and per-attribute floors are then evaluated per §8. | Identity and whatever the game's configured tier floors publish to that viewer. Never presence telemetry. |
+| `owner` | The authenticated player who owns the character. | Everything `public` sees, plus the owner-only operational fields — session state, last location, last-played time — and the character's own lifecycle status. |
+| `admin` | A caller holding the admin role, reached through the admin surface. | The rich administrative row: everything `owner` sees, plus the administrative fields §10 defines. |
+
+Three is the whole vocabulary. Every read surface enumerated in §3 carries
+**exactly one** of these three verdicts, and no surface may invent a fourth.
+
+The audiences are **not** a ladder that a single message walks up by adding
+fields. They are three separate shapes, for the reason §2.2 gives.
+
+### 2.2 One proto message per audience
+
+**The system MUST define a distinct proto message per audience:
+`PublicCharacter`, `OwnCharacter`, and `AdminCharacter`.** A response destined
+for one audience MUST carry that audience's message type and no other.
+
+This is the decision that makes absence a **type-system property** rather than a
+runtime discipline. A `PublicCharacter` has no field in which an owner-only value
+could be placed, so a projection that tried to leak one does not compile. The
+guarantee is therefore checked by the Go compiler on every build, by everyone, on
+every branch — not by a reviewer noticing.
+
+This mirrors the structural argument the scenes privacy boundary already makes in
+this tree for its participant-gated versus public RPC pair
+(`docs/superpowers/specs/2026-05-23-scenes-phase-6-logs-vote-privacy-design.md:262-267`,
+§5.1 "Two-pair RPC architecture"): *"deliberately separate handlers"* whose proto
+contract carries *"separate request/response messages with different field
+sets"*, justified because the separation is what prevents a future refactor from
+silently widening the private path. The same reasoning applies one layer down, to
+the row-to-message projection.
+
+**The rejected alternative, and why.** The obvious cheaper design is one
+`Character` message whose privacy-bearing scalars are declared `optional` and
+cleared server-side for viewers who may not see them. It is rejected. Its
+guarantee is a **per-field discipline that nothing in the build enforces**: a
+proto3 scalar that someone forgets to mark `optional` does not marshal as absent
+when cleared — it marshals as `""`, which is **present**. The absence guarantee
+then fails silently, for exactly the one field whose declaration was wrong, with
+no compile error, no test failure, and no visible difference from a field the
+character legitimately left blank. One forgotten keyword produces one silent
+leak. The per-audience split has no equivalent failure mode because there is no
+per-field keyword to forget.
+
+This is the same rule `.claude/rules/abac-providers.md` mandates for ABAC
+attribute providers — *omit, do not sentinel* — expressed here at the wire rather
+than in the attribute bag. There it exists because an empty-string sentinel
+satisfies `"" == ""` against any unresolved peer and creates a fail-open match in
+a default-deny system. Here it exists because a present-empty field discloses that
+a withheld value exists. Both are the same shape of bug; §8.9 states the read-time
+half and this section states the message-shape half.
+
+### 2.3 One projection function per (row → audience)
+
+**Exactly three projection functions exist, one per audience:**
+
+| Function | Produces | Reads |
+| --- | --- | --- |
+| `projectPublic` | `PublicCharacter` | the character row plus the viewer-filtered property slice (§8) |
+| `projectOwner` | `OwnCharacter` | the character row plus the owner's full property slice |
+| `projectAdmin` | `AdminCharacter` | the character row plus the administrative fields §10 defines |
+
+**No handler MAY construct a character-shaped response message by struct
+literal.** Every construction site goes through one of the three functions above.
+A handler that needs a character-shaped message in a new response calls the
+projection for its audience; it does not assemble the fields itself, and it does
+not copy another handler's assembly.
+
+The rule exists because the failure mode is not "a handler redacts wrongly" but
+"a handler that constructs its own message never learns that redaction is a thing
+that happens" — which is precisely how the list-and-search surfaces diverge from
+the detail surface they were supposed to match (`.planning/research/PITFALLS.md`
+Pitfall 2). Two RPCs serving the same audience share one projection function; see
+§3's second membership rule.
+
+### 2.4 `WebListAllCharacters` splits into two RPCs
+
+Today one directory RPC serves every caller. It is replaced by two, one per
+audience.
+
+The message it hands back on the web side is
+`holomush.core.v1.CharacterDirectoryEntry` (`api/proto/holomush/core/v1/core.proto:902-907`),
+which is already identity-only — `character_id` and `name`. The leak is not in
+that message; it is in the *roster* message that the surrounding auth and
+character-management responses carry. `holomush.web.v1.CharacterSummary`
+(`api/proto/holomush/web/v1/web.proto:496-513`, mirroring
+`api/proto/holomush/core/v1/core.proto:688-710`) carries four presence-telemetry
+fields beside the identity pair:
+
+- `has_active_session` (`web.proto:503`)
+- `session_status` (`web.proto:506`)
+- `last_location` (`web.proto:509`)
+- `last_played_at` (`web.proto:512`)
+
+Those four are **owner-audience or admin-audience fields**. They MUST NOT appear
+in any message served to the `public` audience.
+
+The replacement surface is:
+
+| New RPC | Audience | Response carries |
+| --- | --- | --- |
+| `WebListCharacterDirectory` | `public` | `repeated PublicCharacterSummary` — identity fields only; all four telemetry fields above are dropped. |
+| `WebAdminListCharacters` | `admin` | `repeated AdminCharacter` — the rich row, reached through the admin surface and gated per §10. |
+
+`WebListAllCharacters` is removed. It is not deprecated, not aliased, and not
+kept as a thin forwarder — see §2.5.
+
+`PublicCharacterSummary` is the list-shaped `public` projection; it is
+`PublicCharacter` restricted to what a list row needs. Both are produced by
+`projectPublic`; a list is not a second audience.
+
+### 2.5 Breaking-change posture
+
+**Existing message shapes MAY be replaced outright.** v0.13 ships **no
+compatibility shim, no deprecation window, and no grandfathering.**
+
+The system has no users other than its maintainer, which is what makes the
+per-audience split of §2.2 and the RPC split of §2.4 cheap rather than a
+migration programme. A removed RPC is removed; a reshaped message is reshaped;
+every call site is updated in the same change.
+
+The posture is stated here so that a downstream planner does not spend a task
+budget preserving a contract nobody depends on. A "keep the old RPC forwarding to
+the new one" task is **out of scope** and MUST NOT be planned.
+
+### 2.6 The binding mechanism: a census compared by set equality
+
+**The census over character-returning RPCs, compared by set equality, is the
+SOLE mandated enforcement gate for this section.**
+
+**What the census is.** A test that derives, from the generated service
+descriptors, the set of every RPC whose response transitively contains a
+character-shaped message, and compares that derived set against the checked-in
+expected set — which is the §3 inventory. Inequality in either direction is RED.
+
+**The comparison key.** The key is the **fully-qualified proto method name** in
+`package.Service.Method` form — for example
+`holomush.web.v1.WebService.WebListCharacters`. It is compared as an **exact
+string**.
+
+- It MUST NOT be a substring or prefix match. `…ListCharacters` is a substring of
+  `…ListAllCharacters`, so a substring key silently collapses two distinct
+  members into one and the census stops counting one of them.
+- It MUST NOT be a Go handler identifier. Handler names are not stable against
+  refactor, several are shared across services, and a Go name cannot be derived
+  from the descriptor set the census reads.
+
+**The comparison semantics.** The comparison is **set equality** —
+**order-independent**, and explicitly **not** a list or sequence comparison, and
+explicitly not a loop over the expected entries checking each one is present. The
+§3 inventory's row order is presentational; reordering it MUST NOT change the
+census verdict.
+
+Set equality is what carries **both** halves of the guarantee at once:
+
+| Half | What it catches |
+| --- | --- |
+| no more | An RPC exists in the tree that is not in §3 — a new character-returning endpoint that skipped the projection. |
+| no fewer | An RPC is in §3 but no longer in the tree — an inventory row gone stale, which quietly shrinks what the census covers. |
+
+A `for` loop over a hand-written list carries **neither**: it iterates the
+expected set, so an unexpected member is never visited, and a stale expected
+member fails for the wrong reason or is deleted to make the suite green. This is
+the structural point `.planning/research/PITFALLS.md` Pitfall 2 makes about
+per-endpoint suites — *"a per-endpoint test suite is structurally incapable of
+detecting a missing member of its own set"* — and it is why the census, not a
+per-endpoint suite, is the gate.
+
+The comparison MUST be implemented as a set-equality assertion producing a
+symmetric-difference diff on failure, so a RED census names which member is
+extra and which is missing.
+
+> **Notably absent:** there is **no** lint or meta-test banning character-shaped
+> proto struct literals outside the projection package. Such a lint was
+> considered and **deliberately not mandated**. The census already fails RED for
+> every case that matters — a new character-returning RPC cannot ship without an
+> inventory row — and a second gate over the same property costs a rule, a
+> suppression vocabulary, and a maintenance surface for coverage the census
+> already has. A future PR adding the lint is an **increment, not a correction**:
+> it does not indicate this SPEC was wrong, and it MUST NOT be treated as a
+> prerequisite for anything in v0.13. The reviewer for this SPEC **MUST** verify
+> that no v0.13 PR silently adds a second mandated gate and then relaxes the
+> census on the grounds that the lint covers it.
+
+### 2.7 No visibility hints travel on the wire
+
+**No response message MAY carry a per-field visibility hint, mask, flag map, or
+hidden-field list telling the client which fields to hide.**
+
+Enforcement is **absence from the marshaled bytes**. A field the viewer may not
+see is not in the response at all. The client is not a participant in the
+decision, is not told a decision was made, and cannot be made to cooperate
+incorrectly.
+
+This section deliberately names **no** placeholder field for such a map. A named
+placeholder is an invitation; a downstream planner who finds one will populate
+it. There is nothing to populate.
+
+The reviewer for this SPEC **MUST** verify that no v0.13 PR adds a map, repeated
+string, or bitmask field to any character-shaped response message whose purpose is
+to describe the visibility of sibling fields. §13's per-field-absence invariant is
+asserted over marshaled bytes precisely so that a hint field cannot satisfy it.
 
 ## 3. Read-Surface Inventory
 
