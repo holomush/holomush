@@ -5043,3 +5043,14 @@ invariants:
       Retire MUST NOT release the name — a freed name claimed by a new character inherits the identity of every display name
       already denormalized into immutable event payloads and published scene archives, which no later write can reach."
     binding: pending
+  - id: INV-WORLD-7
+    scope: INV-WORLD
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "GUARDED-CHARACTER-MUTATION: every v0.13 character mutation RPC carries expected_version as an int32 scalar on
+      its own request message (matching characters.version, migration 000049), REJECTS an absent or zero value instead of
+      writing unguarded (the repo layer's Version==0 unversioned-write affordance MUST NOT be reachable from a web mutation
+      boundary), rejects a stale value with the typed WORLD_CONCURRENT_EDIT signal so exactly ONE of two concurrent mutations
+      sharing a version succeeds and the other is refused without auto-retry, and commits its state change together with its
+      one outbox envelope in the SAME transaction (INV-WORLD-1) so a committed character mutation without its envelope is
+      impossible."
+    binding: pending

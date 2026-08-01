@@ -1366,7 +1366,351 @@ ABAC vocabulary it already owns.
 
 ## 9. RPC Surface
 
-> *Placeholder — authored by plan 01-04.*
+This section is normative. It fixes the whole new RPC surface v0.13 adds, the
+concurrency contract every mutation carries, the update-mask rules, the error
+surface, and the media proto shape that ships now and empty.
+
+A Phase-4 planner writes every new request and response message from this section
+without choosing a field type.
+
+### 9.1 Where the surface lives, and what it is not
+
+**Every new surface is a typed RPC on the character facade. None of them is a
+command.**
+
+The facade is `holomush.characteraccess.v1.CharacterAccessService`, built to the
+shape `holomush.sceneaccess.v1.SceneAccessService` already ships
+(`api/proto/holomush/sceneaccess/v1/sceneaccess.proto`), with `Web*`-prefixed
+proxies on `holomush.web.v1.WebService`. The proxies translate protocol; the
+facade holds the decisions.
+
+`.claude/rules/gateway-boundary.md` §"Structural writes use typed RPCs, not the
+command path" is the governing rule, and it is unambiguous: a GUI button or form
+is a **machine-initiated structural write** and MUST reach a typed RPC. The
+command path — `HandleCommand` / `sendCommand` — is reserved for **human
+conversational verbs typed into a terminal** (`pose`, `say`, `join`). Creating,
+renaming, retiring, or editing a character from a web form is structural. None of
+it may be string-built into a command.
+
+The rule is restated here rather than cited-and-left because the anti-pattern is
+cheap and available: `sendCommand` already exists, already works, and already
+reaches the core. Routing a form submission through it would send a
+machine-initiated mutation through the human text-command parser — the exact
+shape ADR `holomush-v4qmu` records as rejected. **If a required operation has no
+typed RPC in this section, the correct response is to add the RPC, not to reach
+for the command path.**
+
+Two further boundaries hold throughout:
+
+- **The gateway computes nothing.** `internal/web/` translates protocol and holds
+  gRPC clients. Every audience decision, every tier-floor evaluation, and every
+  authorization decision is core-side.
+- **Projection, not assembly.** Every character-shaped response message on this
+  surface is built by one of §2.3's three projection functions. No handler in
+  this section constructs one by struct literal.
+
+### 9.2 The read surface
+
+| RPC | Caller | Audience | Gate | Description |
+| --- | --- | --- | --- | --- |
+| `CharacterAccessService.ListCharacterDirectory` | any web reader | `public` | tier floor (§8.4) on the directory resource | The public character directory. Returns `repeated PublicCharacterSummary` — identity only. Replaces `WebListAllCharacters` (§2.4). |
+| `CharacterAccessService.GetCharacterProfile` | any web reader | `public` | profile reachability floor, then per-attribute floors (§8.6) | The public profile read. Returns `PublicCharacter` plus the viewer-filtered `profile.*` slice. Below the reachability floor it returns the §8.7 not-found-equivalent. |
+| `CharacterAccessService.ListMyCharacters` | authenticated player | `owner` | session resolution + ownership | The owner's own roster, including retired characters with their lifecycle status (§4.5 property 1). |
+| `CharacterAccessService.GetMyCharacter` | authenticated player | `owner` | session resolution + ownership | One owned character in full, for the edit surfaces. Returns `OwnCharacter`. |
+| `CharacterAccessService.AdminListCharacters` | admin | `admin` | ABAC on `admin_section:characters` (§10.4) | The rich administrative list. Returns `repeated AdminCharacter`. |
+| `CharacterAccessService.AdminSearchCharacters` | admin | `admin` | ABAC on `admin_section:characters` | Search over the administrative list. Bounded by §11's field list. |
+| `CharacterAccessService.AdminGetCharacter` | admin | `admin` | ABAC on `admin_section:characters` | One character's administrative detail. Returns `AdminCharacter`. |
+
+Each row's web proxy carries the same audience, the same gate, and the same
+response message under a `Web`-prefixed name —
+`WebListCharacterDirectory`, `WebGetCharacterProfile`, `WebListMyCharacters`,
+`WebGetMyCharacter`, `WebAdminListCharacters`, `WebAdminSearchCharacters`,
+`WebAdminGetCharacter`. The proxy pair is a **census pair**: §3's inventory
+already lists core-side and web-side twins as separate members
+(`CoreService.ListCharacters` beside `WebService.WebListCharacters`), and these
+follow that precedent. Both halves of every pair are census members under §3.4.
+
+**The profile URL is keyed on the character id, never on the name.** A stable
+profile URL (PROFILE-01) cannot be keyed on a mutable value: §6.1 makes the name
+renameable, and §4.4 makes it releasable by the purge path — so a name-keyed URL
+would break on rename and, worse, would silently resolve to a **different
+character** after a purge frees the name and a new character claims it. The id is
+stable for the row's whole life and is released only when the row is.
+
+> **Notably absent:** there is **no** name-keyed profile lookup RPC, and no
+> `GetCharacterProfileByName`. A future rostering feature (backlog 999.6) that
+> wants name resolution MUST answer the reclaim question above before adding one.
+> The reviewer for this SPEC **MUST** verify no v0.13 PR adds a name-keyed
+> character lookup to this surface.
+
+### 9.3 The mutation surface
+
+Every row below is a **mutation**, and every mutation request message carries
+`expected_version` per §9.4.
+
+| RPC | Caller | Audience of the response | Gate | Description |
+| --- | --- | --- | --- | --- |
+| `CharacterAccessService.CreateCharacter` | authenticated player | `owner` | session resolution | Structured identity card (IDENT-01): name, pronouns, concept, species, age, faction. **Reshaped, not new** — see below. |
+| `CharacterAccessService.UpdateCharacterProfile` | owner | `owner` | ABAC `write` on `character:<id>` | Partial update of the `profile.*` prose fields (§7.2), driven by an update mask (§9.5). Server-enforced length caps (IDENT-02). |
+| `CharacterAccessService.UpdateCharacterDescription` | owner | `owner` | ABAC `write` on `character:<id>` | The in-world `look` text — the intrinsic `characters.description` column, **not** a `profile.*` row (IDENT-02a). Reaches the shipped `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799-836`), never a parallel write path. |
+| `CharacterAccessService.RenameCharacter` | owner | `owner` | ABAC `write` on `character:<id>` | Rename (IDENT-03). Runs §6.1's pipeline, the mixed-script and skeleton checks, and the block list; collides against the §6.1.3 unique index. |
+| `CharacterAccessService.RetireCharacter` | owner | `owner` | ABAC `write` on `character:<id>` | Soft retire (IDENT-04). Sets `status` to `retired`. Does **not** release the name (§4.4). |
+| `CharacterAccessService.UnretireCharacter` | owner | `owner` | ABAC `write` on `character:<id>` | Returns `status` to `active` (§4.5 property 1). |
+| `CharacterAccessService.AdminUpdateCharacter` | admin | `admin` | ABAC on `admin_section:characters` | Administrative character edit, driven by the §10.6 field-mask allowlist. |
+| `CharacterAccessService.AdminRetireCharacter` | admin | `admin` | ABAC on `admin_section:characters` | Admin disable. Moves the character through the **same** lifecycle states as owner-initiated retire (ADMIN-05). |
+| `CharacterAccessService.AdminUnretireCharacter` | admin | `admin` | ABAC on `admin_section:characters` | The reverse. |
+
+Each row's web proxy carries the same name under a `Web` prefix.
+
+**`CreateCharacter` is a reshape, not an addition.** `WebCreateCharacter`
+(`api/proto/holomush/web/v1/web.proto:177`) exists today and returns a bare
+`character_name` scalar (`web.proto:656`). v0.13 replaces its request with the
+identity card and its response with `OwnCharacter`. Per §2.5 the old shape is
+replaced outright. It keeps its §3.3 census membership through the reshape — a
+reshaped RPC is the same member, and deleting its inventory row would make the
+census RED for the wrong reason.
+
+**Retire and un-retire are two RPCs, not one `SetCharacterStatus(status)`.** A
+single status-setting RPC would put the lifecycle vocabulary **on the wire**,
+which makes `idle` a client-supplied value. §4.2 ships `idle` with **no
+transition into it** in v0.13; a wire-settable status field is exactly such a
+transition, added by accident, reachable by `curl`, and bypassing §4.3's
+exhaustiveness rule because the write side never consults it. Two intent-named
+RPCs keep the vocabulary server-side, give each operation its own audit meaning,
+and leave `idle` unreachable — which is the precondition §4.3's
+direct-construction test is written against.
+
+**Every mutation emits through the transactional outbox in the same transaction
+as the state change.** The state change and its one semantic envelope commit or
+roll back together; a committed state change without its envelope is impossible.
+This is the shipped `INV-WORLD-1` guarantee, and it is reached by routing the
+write through the world write executor's same-transaction outbox seam — the shape
+`UpdateCharacterDescription` already uses (`internal/world/service.go:820-828`).
+A new mutation that writes state outside that seam silently regresses v0.12's
+MODEL-03/04 guarantees, which is why this is stated as a MUST here rather than
+inherited by assumption.
+
+### 9.4 The concurrency contract
+
+**Every mutation request message in §9.3 carries `expected_version`.**
+
+#### 9.4.1 Carriage: a scalar field on each request message
+
+`expected_version` is an **`int32` scalar field on each mutation request
+message.** It is **NOT** a shared embedded precondition message, and no
+`Precondition`/`WriteOptions` wrapper is introduced.
+
+| Property | Value | Grounding |
+| --- | --- | --- |
+| Storage column | `characters.version` | `internal/store/migrations/000049_world_version_guard.up.sql:20` — `ALTER TABLE characters ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;` |
+| Column type | Postgres `INTEGER` (32-bit signed) | same line |
+| Domain type | `Version int` on `world.Character` | `internal/world/character.go:29` |
+| Proto type | `int32 expected_version` | transcribed from the column |
+
+Phase 4 transcribes `int32`; it does not choose a width. The scalar carriage
+matches the shape the migration already models — one integer per row, read back
+into the CAS predicate — and matching it means the request field, the struct
+field, and the column are the same value with no wrapper to unwrap in between.
+
+The field is **not** declared `optional`, and does not need to be. §2.2 rejects
+proto3 `optional` scalars as an absence mechanism because an unset scalar
+marshals as its zero value and is indistinguishable from an explicit zero. Here
+that indistinguishability is **harmless**, because §9.4.2 sends both cases down
+the same branch: both are rejected. This is the one place in the SPEC where the
+proto3 zero-value property costs nothing, and it costs nothing precisely because
+zero is not a legal input.
+
+#### 9.4.2 Absent or zero is rejected, and never means "skip the guard"
+
+**A mutation request whose `expected_version` is absent or zero MUST be
+rejected** with `CHARACTER_VERSION_REQUIRED` (§9.6) at the RPC boundary, before
+the request reaches the domain layer. It **MUST NOT** be treated as an
+instruction to write without the guard, and it **MUST NOT** be silently defaulted
+to the row's current version.
+
+**This rule is load-bearing against a live affordance, not hypothetical.** The
+shipped repository layer treats a zero version as an *unversioned* write:
+
+- `CharacterRepository.Update` appends the CAS predicate **only when
+  `char.Version > 0`** (`internal/world/postgres/character_repo.go:82-85`); at
+  zero the `UPDATE` matches on id alone.
+- `CharacterRepository.Delete` documents `expectedVersion == 0` as "an
+  unversioned delete (existence-checked only)"
+  (`internal/world/postgres/character_repo.go:120`) and enforces the expectation
+  only when `expectedVersion > 0` (`:134`).
+
+That affordance exists for callers that had not yet threaded a read version
+through, and it is correct at the layer it lives in. It is **not** correct at a
+web mutation boundary: a request that omits the field would not fail there — it
+would succeed, unguarded, and the lost update it permits would be invisible. The
+new RPCs therefore reject at their own entry point rather than relying on a
+downstream layer that is documented to accept zero.
+
+#### 9.4.3 Exactly one of two concurrent mutations succeeds
+
+**Of two concurrent mutations carrying the same `expected_version`, exactly one
+succeeds.** The other is rejected with the typed concurrent-edit signal:
+
+- oops code **`WORLD_CONCURRENT_EDIT`** — `internal/world/errors.go:26`,
+  `const CodeConcurrentEdit = "WORLD_CONCURRENT_EDIT"`.
+- wrapping the sentinel `world.ErrConcurrentEdit`
+  (`internal/world/errors.go:22`), which is *"deliberately distinct from
+  ErrNotFound so a lost update is never mistaken for a missing row"*
+  (`internal/world/errors.go:20-21`).
+
+The loser is **not** auto-retried and **not** silently reapplied. Surfacing the
+conflict is the behavior; a retry loop at the facade would reintroduce
+last-write-wins one layer up, which is the guard this milestone must not regress.
+
+**Phase 4 introduces the wire mapping for this code.** No facade maps it today —
+`world.Service` propagates it unchanged by design
+(`internal/world/errors.go:19-20`: *"The world.Service boundary propagates it
+unchanged (D-02: no UX mapping in this phase)"*). §9.6 fixes the mapping as
+`Aborted`. This is stated as an addition rather than an inherited behavior so
+Phase 4 does not go looking for a mapping that is not there.
+
+**The existing two-replica resilience harness is pointed at these RPCs** rather
+than reimplemented as fresh concurrency tests. The concurrency property is the
+same property v0.12 already proves; what changes is the entry point.
+
+### 9.5 The update-mask contract
+
+The edit RPCs — `UpdateCharacterProfile` and `AdminUpdateCharacter` — take a
+`google.protobuf.FieldMask update_mask`, copying the shape the shipped scene
+update already uses.
+
+**The precedent, verbatim.** `SceneAccessServer.UpdateScene`
+(`internal/grpc/sceneaccess_service.go:861-902`) validates the mask against a
+closed allowlist declared as a map keyed by the exact path string
+(`updateSceneMaskablePaths`, `internal/grpc/sceneaccess_service.go:846-853`),
+rejects any path outside it with `InvalidArgument`
+(`internal/grpc/sceneaccess_service.go:870-874`), and short-circuits an empty
+mask as a no-op success **after** the ownership check
+(`internal/grpc/sceneaccess_service.go:878-880`). The rationale in its own
+comment is the one this SPEC adopts: reject an unlisted path *"rather than let a
+direct gRPC caller drive an unadvertised mutation through the mask"*
+(`internal/grpc/sceneaccess_service.go:843-845`).
+
+Four rules, all normative:
+
+1. **Allowlist, never a whole-message write.** The set of acceptable paths is
+   checked in, closed, and compared against. A handler that writes whatever
+   fields the request carries writes fields the UI never exposes.
+2. **Paths are matched as exact strings.** No prefix matching, no wildcard, no
+   glob, no dotted-subtree expansion. `profile` MUST NOT reach
+   `profile.rp_preferences`; `role` MUST NOT be reachable from anything. An
+   exact-string map lookup is the mechanism, as in the precedent above.
+3. **Mask evaluation is order-independent.** The mask is a **set** of paths. The
+   handler's verdict — which fields are written, whether the request is accepted
+   — MUST NOT depend on the order the paths appear in. Reordering a mask's
+   entries MUST produce an identical outcome, and duplicate entries MUST be
+   idempotent rather than applying twice.
+4. **An empty mask is a no-op success, not update-everything.** A request with no
+   paths changes nothing and returns success. It MUST NOT be interpreted as
+   "apply every field in the message", which would turn an under-populated client
+   request into a silent full-row overwrite.
+
+The gate ordering matters and is normative: **authorization is asserted before
+the mask is applied, and the empty-mask short-circuit happens after
+authorization.** The precedent does exactly this (`:862-880`) — ownership is
+resolved first, so a no-op request cannot be used by an unauthorized caller to
+drive downstream validation or store work, and cannot be used as an existence
+oracle.
+
+### 9.6 The error surface
+
+All codes are `oops.Code(...)` values, following the repo convention.
+
+| Code | Wire status | When |
+| --- | --- | --- |
+| `WORLD_CONCURRENT_EDIT` | `Aborted` | A mutation's `expected_version` does not match the row's current version (§9.4.3). Already stamped by the repos (`internal/world/postgres/character_repo.go:135`); Phase 4 adds the wire mapping. |
+| `CHARACTER_VERSION_REQUIRED` | `InvalidArgument` | A mutation request carries an absent or zero `expected_version` (§9.4.2). **New in v0.13.** |
+| `CHARACTER_NOT_FOUND` | `NotFound` | The character id names no row. Already stamped (`internal/world/postgres/character_repo.go:97`, `:129`). |
+| `CHARACTER_NOT_OWNED` | `PermissionDenied` | An `owner`-audience mutation names a character the calling player does not own. **New in v0.13.** |
+| `CHARACTER_MASK_PATH_UNSUPPORTED` | `InvalidArgument` | An `update_mask` path falls outside the allowlist (§9.5 rule 2). **New in v0.13**; mirrors the precedent at `internal/grpc/sceneaccess_service.go:872`. |
+| `CHARACTER_NAME_INVALID` | `InvalidArgument` | A create or rename fails §6.1's pipeline, the mixed-script rule, the skeleton check, or the block list — including a name that normalizes to empty. **New in v0.13.** |
+| `CHARACTER_NAME_TAKEN` | `AlreadyExists` | A create or rename collides with the §6.1.3 unique index on the stored normalized name. **New in v0.13.** |
+| `CHARACTER_PROFILE_NOT_FOUND` | `NotFound` | The profile is below its reachability floor, **or** the character id names no row. One uniform code for both — see below. **New in v0.13.** |
+
+**`CHARACTER_PROFILE_NOT_FOUND` is deliberately one code for two causes.** §8.7
+requires an unreachable profile to be indistinguishable from a nonexistent
+character. Two codes, or two wire messages, or two response sizes, would separate
+the cases and disclose that the character exists — which is the fact the floor
+was set to withhold. The uniform code is the mechanism, not a convenience.
+
+**Wire opacity.** Per `.claude/rules/grpc-errors.md`: the wire-level
+`Status.message` is **generic**, and the structured reason is an **internal
+attribute only**, logged with `errutil.LogErrorContext(ctx, msg, err, ...)` so
+the oops code and context map survive as structured fields rather than being
+flattened into a string. A handler MUST NOT interpolate an inner error into the
+returned status message.
+
+#### 9.6.1 The mandated assertion, and the one that does not work
+
+**An opacity or authorization contract on this surface MUST be asserted over the
+wire, not over the oops chain.**
+
+| Assert | With |
+| --- | --- |
+| The mapped status | `status.Code(err)` equals the row's Wire-status value. |
+| The generic message | `status.Convert(err).Message()` equals the generic literal the handler returns. |
+| No leak | The internal code string does **not** appear anywhere in that message. |
+
+For `CHARACTER_PROFILE_NOT_FOUND` specifically, the assertion is the
+**differential** one §8.7 implies: drive an unreachable profile and a nonexistent
+character id through the same RPC and assert the two responses are identical
+across status, message and body. A one-sided "the unreachable profile returns
+NotFound" assertion is satisfied by an implementation that returns NotFound with
+a distinguishable message, which is the leak.
+
+**Why not an oops-code assertion.** Neither
+`errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) nor the
+`oops.AsOops(err)` + `.Code()` form asserts the **outermost** code. Under the
+pinned `github.com/samber/oops v1.22.0` (`go.mod:32`), `OopsError.Code()` is
+documented in the dependency as *"returns the error code from the deepest error
+in the chain"* and is implemented as a recursive `getDeepestErrorCode` walk. Both
+spellings therefore resolve the same value, and both pass on a double-wrap: given
+`oops.Code("INTERNAL").Wrap(oops.Code("CHARACTER_PROFILE_NOT_FOUND")…)` they
+return `CHARACTER_PROFILE_NOT_FOUND` while the wire carries `INTERNAL`. Verified
+empirically against the pinned version on 2026-08-01.
+
+This contradicts `.claude/rules/grpc-errors.md` §"Wire opacity needs TOP-LEVEL
+code assertions", which presents `oops.AsOops(err).Code()` as the
+non-chain-walking alternative to `errutil.AssertErrorCode`; the two are
+behaviorally identical here, and the single-expression spelling is not even a
+compilable call, because `oops.AsOops` returns `(OopsError, bool)`
+(`pkg/errutil/testing.go:17`, `internal/session/reaper.go:167`). The mismatch is
+tracked as issue **#4902**; this SPEC documents current behavior and does not
+change the rule. §14 carries the corresponding ROADMAP amendment.
+
+**`errutil.AssertErrorCode` remains correct** for asserting *which* internal code
+a handler produced — it resolves the specific, deepest code, which is usually the
+one a test means. It is simply not evidence about what the wire carried, and MUST
+NOT be cited as such.
+
+### 9.7 The media proto shape ships now, and empty
+
+The proto carries the media shape from v0.13 so that alt-text and content
+warnings have somewhere to live before moderation exists (EXT-06):
+
+| Element | Shape |
+| --- | --- |
+| `ProfileImage` | `{ media_id, alt_text, content_warning }` — three fields, all strings. |
+| `primary_image` | A single `ProfileImage` on the character-profile response. Backed by the `profile.image.primary` row (§7.3), which the database constrains to exactly one per character. |
+| `gallery` | `repeated ProfileImage gallery [(buf.validate.field).repeated.max_items = 10]`. **Ten is the maximum item count**, matching the ten `profile.image.gallery.00`…`.09` rows §7.3 fixes. |
+
+**v0.13 ships zero upload behavior.** There is no uploader, no storage backend,
+no media-serving path, and no `media_id` minting. `media_id` is an opaque string
+whose format v0.13 does not fix, because nothing in v0.13 produces one. The model
+is proven instead by inserting one primary and ten gallery rows through the real
+schema and reading them back (EXT-05) — which demonstrates the no-migration-later
+claim of §7.1 rather than asserting it.
+
+> **Notably absent:** there is **no** upload RPC, no signed-URL endpoint, no
+> multipart handler, and no image-processing dependency in v0.13. The reviewer
+> for this SPEC **MUST** verify no v0.13 PR adds one — the shape ships early
+> specifically so that the *schema* need not change when upload arrives, not as a
+> signal that upload is in scope.
 
 ## 10. Admin Information Architecture
 
@@ -1443,8 +1787,19 @@ surface set that decision must cover — are `ACCESS`, which is where
   character and asserts a second character cannot take its name, paired with the
   positive half — that the delete path does release it — so the test pins the
   boundary rather than one side of it. **Binding lands in Phase 2.**
+- **INV-WORLD-7 (guarded character mutation):** every new character mutation RPC
+  carries `expected_version` on its request, rejects an absent or zero value
+  rather than writing unguarded, rejects a stale value with the typed
+  `WORLD_CONCURRENT_EDIT` signal so exactly one of two concurrent mutations
+  sharing a version succeeds, and commits its state change together with its one
+  outbox envelope in the same transaction. Bound by a test that drives two
+  concurrent mutations at the same version and asserts exactly one commits and
+  the other carries the typed code at the **top level**, paired with a
+  zero-version request asserting rejection — the paired half is what proves the
+  guard is not satisfied vacuously by a caller that simply never omits the field.
+  **Binding lands in Phase 4**, with the domain commands landing in Phase 3.
 
-**All seven ship `binding: pending`.** Their asserting tests do not exist until
+**All eight ship `binding: pending`.** Their asserting tests do not exist until
 Phase 2 or Phase 4, and a `// Verifies:` annotation on a test that does not
 genuinely assert the guarantee is a false-green — the documented failure this
 registry's binding ratchet exists to catch. A `pending` entry carries no
@@ -1454,17 +1809,19 @@ registry's binding ratchet exists to catch. A `pending` entry carries no
 
 > *Placeholder — authored by plan 01-05.*
 
-> **Queued for plan 01-05 — SEVEN amendments, not four.** `01-CONTEXT.md:197-202`
+> **Queued for plan 01-05 — EIGHT amendments, not four.** `01-CONTEXT.md:197-202`
 > drafts four rows (ROADMAP Phase 4 criterion 3, ROADMAP Phase 5 criterion 4,
 > REQUIREMENTS PROFILE-12, research SUMMARY CONFLICT 4). Plan 01-01 added a
-> **fifth**, plan 01-02's tree enumeration forced a **sixth**, and plan 01-03's
-> writer enumeration forced a **seventh**. 01-05 MUST carry all three:
+> **fifth**, plan 01-02's tree enumeration forced a **sixth**, plan 01-03's
+> writer enumeration forced a **seventh**, and plan 01-04's error-surface
+> grounding forced an **eighth**. 01-05 MUST carry all four:
 >
 > | Artifact | Amendment |
 > | --- | --- |
 > | `docs/architecture/invariants.yaml` — the `INV-PRIVACY` scope record | The `boundary:` first sentence read *"Privacy-relevant gating on history reads."* and now reads *"Privacy-relevant gating on reads."* The scope is named PRIVACY; it was narrowed to history reads only because stream-history work minted it. The `"Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe authorization (→ INV-EVENTBUS)"` clause is **preserved verbatim and MUST NOT be widened** — that clause is what routes this SPEC's tier-floor evaluation to `ACCESS` (§13), and it is why splitting the four guarantees across two scopes is coherent rather than a fudge. The `description:` enumeration was extended in the same edit so the scope record describes the entry family it now owns. Landed by plan 01-01. |
 > | `.planning/REQUIREMENTS.md:31` (PORTAL-02) and `.planning/ROADMAP.md:132` (Phase 1 success criterion 1) | Both read *"including the **three** existing public export surfaces"*. The tree has **four**. Plan 01-02's enumeration found `WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`) returning `repeated PublicSceneArchive`, whose `participants_snapshot` (`api/proto/holomush/scene/v1/scene.proto:1053`) is a frozen participant projection served unauthenticated — **in bulk**, one entry per published scene rather than one per request. Amend both to *"four"*. This is not cosmetic: a Phase-4 census built to the requirement's letter would enumerate three and miss the highest-volume unauthenticated export surface of the set, which is precisely the missing-census-member failure PORTAL-10 rule 1 exists to prevent. **Correction, wave 3:** this row originally asserted the surface exports frozen *names*. It does not, today — `ReadSceneMetaForSnapshot` writes `SELECT character_id` (`plugins/core-scenes/publish_store.go:988`, comment at `:959`: *"Name resolution is a follow-up"*) while the proto doc comment at `scene.proto:957`/`:1052` claims names. That mismatch is tracked as issue **#4901**; the census obligation and the `four`-not-`three` amendment stand regardless of which the field holds, because the surface is character-returning either way. See §5.4's prohibition against backfilling already-written rows when name resolution lands. Verified against the tree by the orchestrator at the wave-2 and wave-3 boundaries, not relayed. |
 > | `.planning/REQUIREMENTS.md:95-99` (IDENT-09) and `.planning/research/SUMMARY.md:277-281` ("Must carry forward" item 3) | Both describe the character-name check-then-insert race as spanning *"`internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`"*. Those two sites are the shared existence **query** and **one** writer — not two writers. Plan 01-03's enumeration found a **second** writer: `internal/auth/guest_service.go:227`, which calls the same `ExistsByName` inside the guest-name retry-on-collision loop. Amend both to enumerate one query and two writers, so the count reads three participants today and four once `Rename` lands. This is not cosmetic: SUMMARY item 3's own argument is *"adding `Rename` doubles the writers into that race"* — the true statement is that it takes the writers from two to three, and a Phase-2 planner sizing the duplicate-detection job from the requirement's letter would audit one creation path and miss the guest one, which is the path that provisions characters automatically and at volume. §6.1.3 carries the corrected enumeration. |
+> | **PORTAL-10 rule 5** — `.planning/REQUIREMENTS.md:67-68`, restated at `.planning/ROADMAP.md:119`, `:136` and `:250`, sourced from `.planning/research/SUMMARY.md:162` / `.planning/research/PITFALLS.md:406-408`, and originating in `.claude/rules/grpc-errors.md:54-70` | Rule 5 reads *"**Top-level oops code assertions** via `oops.AsOops(err).Code()`; `errutil.AssertErrorCode` chain-walks and passes on double-wrap."* **Both halves are false against the pinned dependency.** Under `github.com/samber/oops v1.22.0` (`go.mod:32`), `OopsError.Code()` is documented in the dependency itself as *"returns the error code from the deepest error in the chain"* and is implemented as a recursive `getDeepestErrorCode` walk. `errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) is a thin wrapper over the same two calls (`oops.AsOops`, then compare `.Code()`), so the two spellings are **behaviorally identical** and **both** pass on a double-wrap: given `oops.Code("INTERNAL").Wrap(oops.Code("DENY_NOT_ADMIN_ROLE")…)` both return `DENY_NOT_ADMIN_ROLE` while the wire carries `INTERNAL`. Verified empirically against the pinned version, 2026-08-01. Additionally `oops.AsOops` returns `(OopsError, bool)`, so the single-expression spelling is not a compilable call at any of these sites. **Restate rule 5 around the wire** — `status.Code(err)` plus a generic `status.Convert(err).Message()` with the internal code string absent from it, and a differential two-viewer assertion where the contract is indistinguishability — per §9.6.1, keeping `errutil.AssertErrorCode` endorsed for asserting *which* internal code was produced. **This is the single most load-bearing amendment in this table**: rule 5 is one of the six verification-integrity rules §12 copies verbatim into every v0.13 plan, so leaving it as written propagates an assertion that cannot fail on the leak it exists to catch into every phase — the exact *"verification that cannot fail"* failure PORTAL-10 was written to end. Tracked as issue **#4902**; the SPEC documents current behavior and changes no rule file. **Plan 01-05 MUST reconcile §12's rule-5 text with this row before writing it** — the two cannot ship disagreeing. |
 
 ## 15. Out of Scope
 
