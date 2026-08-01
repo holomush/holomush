@@ -435,7 +435,170 @@ that fails RED rather than a reader who has to notice.
 
 ## 4. Character Lifecycle
 
-> *Placeholder — authored by plan 01-03.*
+This section is normative. It fixes the storage shape, the state vocabulary, the
+rule that makes the vocabulary safe, the three distinct operations, and what a
+retired character looks like from every read surface.
+
+### 4.1 The storage shape
+
+**The lifecycle is a single text column on `characters`, NOT NULL, defaulting to
+the active value, constrained by a `CHECK` over a closed vocabulary.**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `characters.status` | `TEXT` | Yes | The character's lifecycle state. Phase 2 transcribes this DDL fragment verbatim: `status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retired', 'idle'))`. Exactly three values; see §4.2 for the vocabulary and §4.3 for the exhaustiveness rule that makes shipping all three safe. |
+
+There is no status column on `characters` today
+(`internal/store/migrations/000001_baseline.up.sql:67-76` — `id`, `player_id`,
+`name`, `description`, `location_id`, `created_at`, and nothing else). Phase 2
+adds this one.
+
+**This follows the repo's existing enum-by-CHECK convention**, which has four
+in-tree precedents in the baseline migration alone:
+
+| Precedent | Location |
+| --- | --- |
+| `access_policies.effect` | `internal/store/migrations/000001_baseline.up.sql:259` |
+| `access_policies.source` | `internal/store/migrations/000001_baseline.up.sql:261` |
+| `access_audit_log.effect` | `internal/store/migrations/000001_baseline.up.sql:294` |
+| `entity_properties.visibility` | `internal/store/migrations/000001_baseline.up.sql:358` |
+
+**The rejected alternatives, and why.**
+
+| Alternative | Why rejected |
+| --- | --- |
+| A paired `retired_at TIMESTAMPTZ` beside a boolean or beside the status | Two columns that can disagree. Nothing prevents `status='active'` with a non-null `retired_at`, and a reader consulting the wrong one of the two is a bug with no failing test. |
+| Timestamp-only derivation — no status column, state inferred from `retired_at IS NULL` | No database backstop: the vocabulary is unconstrained, an impossible combination is representable, and **every reader must derive the state identically**. That is the same per-site discipline §2.2 rejects at the wire, one layer down. |
+
+**No character can exist without a status.** The column is `NOT NULL` with a
+`DEFAULT`, so an insert that names no status gets `'active'` and an insert that
+names `NULL` fails. There is no "unknown", no empty string, and no absent-state
+case for a reader to handle.
+
+### 4.2 The vocabulary
+
+**Exactly three values, shipped from day one:**
+
+| Value | Means | Reachable in v0.13 |
+| --- | --- | --- |
+| `active` | In play. The default for every character, existing and new. | Yes — the default, and the target of un-retire. |
+| `retired` | The owner has stepped the character out of active play. Reversible; see §4.4 and §4.5. | Yes — the `retire` operation. |
+| `idle` | The character has been idled out by the system for inactivity. | **No.** v0.13 ships **no** transition into `idle`. See §4.3 — this is precisely why the exhaustiveness rule is not optional. |
+
+**They are compared as exact lowercase string literals.** A comparison **MUST
+NOT** case-fold, **MUST NOT** trim, and **MUST NOT** accept any other spelling.
+`'Retired'`, `'RETIRED'` and `' retired'` are not the retired state; they are
+values the `CHECK` rejects at write time, and any reader that would have accepted
+them is comparing wrong.
+
+### 4.3 The exhaustiveness rule — the other half of shipping `idle` early
+
+Shipping a value nothing can reach is safe **only** when paired with the rule
+below. Stated separately, the value alone is a latent fail-open.
+
+**Rule 1 — every read of the lifecycle status MUST be an exhaustive `switch`
+whose `default` arm denies.** Not `if status == "retired" { deny }`. Not
+`status != "active"` in one query's `WHERE` and a different predicate in the
+next. An exhaustive `switch` over the three values, with a `default` that denies
+and does not fall through to permit.
+
+**Rule 2 — Phase 2 MUST ship a test that constructs a character directly in
+`idle`** — bypassing the (nonexistent) transition by writing the row — **and
+asserts it is excluded from selection.** A value no test can reach is a value no
+test covers; the direct construction is what makes the coverage non-vacuous
+rather than trivially satisfied by the fact that no fixture can produce it.
+
+**Why both halves.** An unreachable enum value plus a non-exhaustive check is
+**structurally identical to the `members` privacy tier research CONFLICT 4
+rejected**: a vocabulary token that no code path exercises, guarded by a
+predicate that enumerates the values it knows about. It reads correct for as long
+as the value stays unreachable, and it **fails open on the day the value becomes
+reachable** — which is a later milestone's change, made by someone who has no
+reason to audit every lifecycle read. The exhaustive `switch` fails closed
+instead, and the direct-construction test proves it does so today rather than
+promising it will.
+
+This is the same move EXT-03/EXT-04 make for the deferred admin sections: ship
+the registration, gate it, and prove the gate with a fixture that reaches the
+otherwise-unreachable state.
+
+### 4.4 Three distinct operations
+
+**`retire`, `idle-out` and `purge` are three different operations.** Conflating
+any two of them is unrecoverable, because they differ in reversibility, in what
+they touch, and in who may invoke them.
+
+| Operation | What it does | Reversible | Touches the name |
+| --- | --- | --- | --- |
+| `retire` | Sets `status` to `retired`. Owner-invoked. | Yes — un-retire sets `status` back to `active` (§4.5). | **No.** The name stays reserved. |
+| `idle-out` | Sets `status` to `idle`. System-invoked on inactivity. **Not implemented in v0.13** — the value ships, the transition does not. | Yes, by the same shape as un-retire. | **No.** |
+| `purge` | **Not a lifecycle state.** The existing irreversible character delete. The row is gone. | **No.** | The name is released, because the row that held it no longer exists. |
+
+**`purge` is NOT a state, and the SPEC declares no `purged` value.** It is
+`world.Service.DeleteCharacter` (`internal/world/service.go:745-777`), which is
+already shipped, already ABAC-gated on the `delete` action, and already
+irreversible. It deletes the character row and cascades its `entity_properties`
+in one transaction and emits a `character_deleted` tombstone envelope in that
+same transaction. Its blast radius beyond the character row is real and is not
+hypothetical:
+
+| Referencing column | On delete | Consequence |
+| --- | --- | --- |
+| `character_roles.character_id` | `ON DELETE CASCADE` (`internal/store/migrations/000001_baseline.up.sql:84`) | The character's roles are dropped silently. |
+| `players.default_character_id` | `ON DELETE SET NULL` (`internal/store/migrations/000001_baseline.up.sql:80`) | The player's default character is silently nulled. |
+| `locations.owner_id` | **no `ON DELETE` clause** (`internal/store/migrations/000001_baseline.up.sql:99`) — Postgres defaults to `NO ACTION` | The delete **errors at runtime** for any character that owns a location. |
+| `objects.owner_id` | **no `ON DELETE` clause** (`internal/store/migrations/000001_baseline.up.sql:143`) | Same — the delete errors for any character that owns an object. |
+
+**`purge` MUST NOT be wired to any player-facing affordance.** It is not the
+implementation of a "delete my character" button, and an admin surface whose
+button says "delete" **MUST NOT** call it without the SPEC-level decision that
+this section deliberately does not make. Erasure-on-request is a separate feature
+with separate requirements; v0.13 does not ship it.
+
+**Retire MUST NOT release the name.** This is normative and it has two
+independent reasons, either of which is sufficient:
+
+1. **The name stays reserved for rostering.** Releasing it forecloses the
+   deferred rostering work (backlog 999.6), which needs the historical binding to
+   remain resolvable.
+2. **Releasing it creates an impersonation vector.** Character display names are
+   denormalized into surfaces no later write can reach — §5 inventories every
+   one. A freed name claimed by a new character inherits the identity of every
+   captured occurrence: every archived pose, every published scene, every
+   rendered export. Neither retirement nor denormalized history is a bug alone;
+   the two together are, and the cheap defense is to never release the name.
+
+### 4.5 What a retired character looks like
+
+A retired character is **out of active play, not hidden.** Three properties,
+each normative:
+
+1. **Roster-visible, with an un-retire affordance.** The owner's own roster
+   (`owner` audience, §2.1) shows the retired character, labelled retired, with a
+   control that returns it to `active`. Retirement is not a one-way door and the
+   UI **MUST NOT** present it as one.
+2. **Unselectable for play.** Character selection **MUST** exclude any character
+   whose status is not `active`, by the exhaustive `switch` of §4.3 — so `idle`
+   is excluded by the same code path that excludes `retired`, without a second
+   predicate to keep in sync.
+3. **Its public profile still resolves, and says retired.** A retired character's
+   profile is reachable exactly as an active one is (§8's floors apply
+   unchanged), and it carries a retired indication. It **MUST NOT** return the
+   not-found-equivalent of §8.7.
+
+**Why the profile stays up.** Scene archives publish the character's name to
+anonymous readers regardless of its lifecycle state — `WebGetPublicSceneArchive`
+and its three siblings (§3.3) serve frozen participant lists that retirement
+cannot reach and §5 states will never be rewritten. A profile that 404s beside a
+live archive naming the same character is an **inconsistency**, not privacy: the
+name is already out, and the only thing the 404 removes is the reader's ability
+to learn that the character is no longer in play. Retire means *left active
+play*, and the profile says so.
+
+The retired indication is a projection concern, not a new visibility tier. It is
+carried by the character's own lifecycle status, which §2.1 already assigns to
+the `owner` and `admin` audiences in full; what the `public` audience receives is
+the fact of retirement, not the operational history behind it.
 
 ## 5. Name-Capture Surface Inventory
 
@@ -875,10 +1038,27 @@ surface set that decision must cover — are `ACCESS`, which is where
   `package.Service.Method` form — order-independent, never a substring match,
   never a Go handler identifier. **Binding lands in Phase 4.**
 
-**All five ship `binding: pending`.** Their asserting tests do not exist until
-Phase 4, and a `// Verifies:` annotation on a test that does not genuinely assert
-the guarantee is a false-green — the documented failure this registry's binding
-ratchet exists to catch. A `pending` entry carries no `asserted_by`.
+- **INV-WORLD-5 (exhaustive lifecycle reads):** every read of
+  `characters.status` is an exhaustive `switch` over the closed vocabulary whose
+  `default` arm denies, and a character in the third, otherwise-unreachable
+  `idle` state is excluded from character selection. Bound by a test that
+  **constructs a character directly in `idle`** — bypassing the transition v0.13
+  does not ship — and asserts the exclusion, so the unreachable value is covered
+  non-vacuously rather than by the absence of a fixture that can reach it.
+  **Binding lands in Phase 2**, with the migration that adds the column.
+- **INV-WORLD-6 (retire preserves the name reservation):** retiring a character
+  leaves its row and its name reservation intact; the irreversible character
+  delete (`internal/world/service.go:745-777`) is the only path by which a
+  character name becomes claimable again. Bound by a test that retires a
+  character and asserts a second character cannot take its name, paired with the
+  positive half — that the delete path does release it — so the test pins the
+  boundary rather than one side of it. **Binding lands in Phase 2.**
+
+**All seven ship `binding: pending`.** Their asserting tests do not exist until
+Phase 2 or Phase 4, and a `// Verifies:` annotation on a test that does not
+genuinely assert the guarantee is a false-green — the documented failure this
+registry's binding ratchet exists to catch. A `pending` entry carries no
+`asserted_by`.
 
 ## 14. Amendments and Divergences
 

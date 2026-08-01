@@ -787,6 +787,7 @@ scopes:
     origin_specs:
       - "docs/adr/holomush-i4784-world-state-model-decision.md"
       - "docs/reviews/arch-review/2026-07-11/verification/model-01-consensus-onepager.md"
+      - ".planning/phases/01-portal-spec/01-SPEC.md"
     owned_paths:
       - "internal/world/**"
       - "internal/world/outbox/**"
@@ -5025,3 +5026,20 @@ invariants:
       - "test/meta/world_sql_fence_test.go"
       - "test/meta/world_import_graph_test.go"
       - "test/integration/auth/guest_reaper_tombstone_test.go"
+  - id: INV-WORLD-5
+    scope: INV-WORLD
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "LIFECYCLE-EXHAUSTIVE: every read of characters.status is an exhaustive switch over the closed vocabulary ('active','retired','idle')
+      whose default arm DENIES, and a character in the third, otherwise-unreachable 'idle' state is excluded from character
+      selection. v0.13 ships the 'idle' value with no transition into it, so the binding test MUST construct a character directly
+      in 'idle' (bypassing the absent transition) and assert the exclusion — an unreachable enum value guarded by a non-exhaustive
+      check is the fail-open shape research CONFLICT 4 rejected."
+    binding: pending
+  - id: INV-WORLD-6
+    scope: INV-WORLD
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "RETIRE-PRESERVES-NAME: retiring a character leaves its row and its name reservation intact; the irreversible
+      character delete (world.Service.DeleteCharacter) is the ONLY path by which a character name becomes claimable again.
+      Retire MUST NOT release the name — a freed name claimed by a new character inherits the identity of every display name
+      already denormalized into immutable event payloads and published scene archives, which no later write can reach."
+    binding: pending
