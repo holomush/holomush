@@ -2057,7 +2057,114 @@ differently.
 
 ## 11. Sorting and Filtering Verdict
 
-> *Placeholder — authored by plan 01-04.*
+This section is normative. PORTAL-09 asks whether any v0.13 surface sorts or
+filters on a profile field. It is answered here as a verdict, because silence on
+the question would be indistinguishable from nobody having asked it.
+
+### 11.1 The verdict
+
+**No. No v0.13 surface sorts, filters, groups, or counts on a profile field.**
+
+Stated as a prohibition: a v0.13 surface **MUST NOT** place a `profile.*`
+property row — or any value derived from one — in an `ORDER BY`, a `WHERE`, a
+`GROUP BY`, a `COUNT`, a facet tally, or a pagination total.
+
+### 11.2 The three reasons, in order
+
+**First — property rows are not cheaply sortable or filterable.** §7.1 puts every
+profile field in `entity_properties` as a name/value row, which is what buys the
+no-migration-later guarantee. The cost of that shape is that ordering or
+filtering on a field means joining or pivoting the property table per attribute.
+This is the acknowledged residual of the research conflict that chose property
+rows over JSONB: the shape won decisively on every other axis and lost on this
+one. Paying an index and a pivot for a capability nothing in v0.13 needs is the
+wrong trade.
+
+**Second — read-time tier evaluation makes it incoherent as well as expensive.**
+§8.5 evaluates the viewer-tier floor **at read time** against the attribute name,
+which is what makes a configuration change take effect on the next read with no
+backfill. The consequence for ordering is structural: **the visible set differs
+per viewer.** There is no single ordering of characters by `profile.currently`,
+because for an anonymous visitor most of those values do not exist and for an
+authenticated player they do. A sort would have to be computed per viewer over a
+per-viewer set, or computed once over the unfiltered set and then filtered — and
+the second is the leak. Sorting is not merely expensive under this model; it has
+no viewer-independent meaning to compute.
+
+Note what the alternative would have cost. A sortable profile field would have to
+be **stamped** — materialized into a column or an indexed row with its visibility
+resolved at write time — which is exactly the per-row stamping §8.5 rejects,
+reintroducing the backfill-on-every-configuration-change that read-time
+evaluation exists to avoid.
+
+**Third — aggregate operations over privacy-bearing fields are themselves a side
+channel.** This is the decisive reason, and it would hold even if the first two
+did not. Redaction is applied to the response; sorting, filtering, and counting
+happen in SQL, before the redactor runs, over the unredacted value. The redactor
+cannot see that it has already leaked:
+
+- An **ordering** over a withheld field discloses the relative values of that
+  field for every row in the list.
+- A **filter** discloses the predicate's value for every row returned — and, by
+  absence, for every row not returned.
+- A **facet count** over a privacy-partitioned set lets a reader binary-search a
+  single character's withheld value by differencing counts across queries.
+- A **pagination total** on a filtered privacy-partitioned list is itself the
+  leak, even when every returned page is correctly filtered.
+
+Each of these defeats §8.9's per-field omission without ever placing the withheld
+value in a response. §8.9 guarantees the field is absent from the marshaled
+bytes; none of the four channels above puts it there.
+
+### 11.3 The one surface that MAY sort and filter, and exactly on what
+
+**The admin character list MAY sort and filter — on intrinsic columns only,
+never on a profile property row.** The permitted set is enumerated here so Phase 6
+does not have to infer it:
+
+| Field | Sort | Filter | Why it is safe |
+| --- | --- | --- | --- |
+| `characters.name` | Yes | Yes | Identity. Public at every tier §8.8 permits a profile to be reached at. Filtering matches against the stored normalized name of §6.1.3, not the display name. |
+| `characters.created_at` | Yes | Yes | Intrinsic row metadata, carrying no profile content. |
+| `characters.status` | Yes | Yes | The lifecycle column of §4.1. Administration needs to separate active from retired; the value is `admin`-audience already. |
+| `characters.player_id` | No | Yes | The OOC player↔character linkage, already visible to the `admin` audience. Equality filter only — grouping a player's alts — never an ordering. |
+
+That is the whole list. **Every other column and every `profile.*` row is
+excluded**, including the in-world `characters.description`: it is an intrinsic
+column, but it is prose whose ordering is meaningless and whose filtering is a
+content search, which is a different feature with a different design.
+`characters.location_id` is likewise excluded — administration does not need it,
+and it is the worked example the facet-count attack above is built on.
+
+`AdminSearchCharacters` (§9.2) searches **names**, not profile prose. A prose
+search over profile fields would be a filter over privacy-bearing rows wearing a
+different name, and §11.1's prohibition reaches it.
+
+The admin list is the permitted surface precisely because its audience already
+sees every field it could order by (§2.1) — there is no withheld value for an
+ordering to disclose. That property is what makes it safe, so it is the property
+that must still hold if the list ever grows a new sort key.
+
+### 11.4 What this leaves open
+
+The deferred searchable character directory is unaffected, and deliberately so.
+Its indexing need stays **additive and non-blocking** exactly because nothing in
+v0.13 depends on it: no v0.13 surface sorts or filters on a profile field, so no
+v0.13 schema, policy, or projection is shaped around making one cheap. A later
+milestone adds indexing without undoing anything decided here.
+
+**Any future directory MUST answer this question again before it ships**, against
+the model as it stands then. This verdict is not a permanent property of the
+system — it is a decision for v0.13, made cheap by the fact that v0.13 promises
+no sorting. The moment a surface wants to order or filter on a profile field, all
+three reasons in §11.2 come back, and the third one does not weaken with time.
+
+> **Notably absent:** there is **no** sort dropdown, no facet panel, no
+> `total_count` on any filtered privacy-partitioned list, and no
+> `?has_<field>=true`-style query parameter on any v0.13 character surface. The
+> reviewer for this SPEC **MUST** verify no v0.13 PR adds one — a sort control
+> whose options are drawn from the §7.2 field list is the specific warning sign,
+> because that list is the privacy-bearing set.
 
 ## 12. Verification Integrity
 
